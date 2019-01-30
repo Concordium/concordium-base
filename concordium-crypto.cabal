@@ -28,6 +28,7 @@ Library
   cc-options:     -m64 -O3 
   if os(windows)
     cc-options:   -m64 -O3 -mdll
+    Build-depends: Win64
   ghc-options:   -Wall -fwarn-tabs -optc-O3 -fno-warn-unused-imports
   C-sources:       Concordium/Crypto/VRF/ec_vrf_ed25519-sha256.c
                 , Concordium/Crypto/Ed25519/ed25519.c
