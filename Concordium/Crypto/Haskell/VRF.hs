@@ -55,6 +55,7 @@ foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_verify" c_verify :: Ptr Word
 --import System.Random
 
 
+
 wordToHex :: Word8 -> [Char]
 wordToHex x = printf "%.2x" x 
 
@@ -74,6 +75,26 @@ withByteStringPtr :: ByteString -> (Ptr Word8 -> IO a) -> IO a
 withByteStringPtr b f =  withForeignPtr fptr $ \ptr -> f (ptr `plusPtr` off)
     where (fptr, off, _) = toForeignPtr b
 
+-- PublicKey 32 bytes
+data PublicKey = PublicKey ByteString
+    deriving (Eq, Ord, Generic)
+instance Serialize PublicKey where
+
+-- PrivateKey 32 bytes
+data PrivateKey = PrivateKey ByteString
+    deriving (Eq, Generic)
+
+instance Serialize PrivateKey where
+
+
+newtype Proof = Proof Hash
+    deriving (Eq, Generic, Serialize, Show)
+
+data KeyPair = KeyPair {
+    privateKey :: PrivateKey,
+    publicKey :: PublicKey
+}
+
     {-
 newKeyPair :: IO (PrivateKey, PublicKey)
 newKeyPair = do maybeSk <- newPrivKey 
@@ -91,8 +112,6 @@ newKeyPair = do maybeSk <- newPrivKey
 newKeyPair :: IO (PrivateKey, PublicKey)
 newKeyPair = do sk <- newPrivKey 
                 pk <- pubKey sk
-                _  <- putStrLn ("SK: " ++ privKeyToHex sk)
-                _  <- putStrLn ("PK: " ++ pubKeyToHex pk)
                 return (sk, pk)
 
 newPrivKey :: IO PrivateKey
@@ -102,11 +121,11 @@ newPrivKey =
            do rc <-  c_priv_key priv 
               case rc of
                    1 ->  do writeIORef suc 1 
-                   0 ->  do writeIORef suc 0 
+                   _ ->  do writeIORef suc 0 
        suc' <- readIORef suc
        case suc' of
            0 -> error "Private key generation failed"
-           1 -> return (PrivateKey sk)
+           _ -> return (PrivateKey sk)
 
 pubKey :: PrivateKey -> IO PublicKey
 pubKey (PrivateKey sk) = do suc <- newIORef (0::Int)
@@ -117,36 +136,19 @@ pubKey (PrivateKey sk) = do suc <- newIORef (0::Int)
                                        else writeIORef suc 0
                             suc' <- readIORef suc
                             case suc' of 
-                                  0 -> error "Public key generation failed"
                                   1 -> return (PublicKey pk)
+                                  _ -> error "Public key generation failed"
                                  
-
-data PublicKey = PublicKey ByteString
-    deriving (Eq, Ord, Generic)
-instance Serialize PublicKey where
-
-data PrivateKey = PrivateKey ByteString
-    deriving (Eq, Generic)
-
-instance Serialize PrivateKey where
-
-
-newtype Proof = Proof Hash
-    deriving (Eq, Generic, Serialize, Show)
-
-data KeyPair = KeyPair {
-    privateKey :: PrivateKey,
-    publicKey :: PublicKey
-}
-
 
 test :: IO () 
 test = do (sk,pk) <- newKeyPair
+          _ <- putStrLn("SK: " ++ privKeyToHex sk)
+          _ <- putStrLn("PK: " ++ pubKeyToHex sk)
           _ <- putStrLn("MESSAGE:") 
           alpha <- B.getLine 
           let prf@(Proof (Hash b)) = prove pk sk alpha  
               valid = verify pk alpha prf 
-              h@(Hash h') = proofToHash prf 
+              Hash h' = proofToHash prf 
            in
               putStrLn ("Proof: " ++ byteStringToHex b) >>
               putStrLn ("PK IS " ++ if verifyKey pk then "OK" else "BAD") >>
