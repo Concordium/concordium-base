@@ -81,11 +81,11 @@ newPrivKey =
             do rc <-  c_priv_key priv
                case rc of
                     1 ->  do writeIORef suc 1
-                    0 ->  do writeIORef suc 0
+                    _ ->  do writeIORef suc 0
         suc' <- readIORef suc
         case suc' of
-            0 -> error "Private key generation failed"
             1 -> return (SignKey sk)
+            _ -> error "Private key generation failed"
 
 pubKey :: SignKey -> IO VerifyKey
 pubKey (SignKey sk) = do pk <- create 32 $ \pub -> 

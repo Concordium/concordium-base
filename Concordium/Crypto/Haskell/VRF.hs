@@ -44,7 +44,7 @@ import           Text.Printf
 import           Concordium.Crypto.Haskell.SHA256
 foreign import ccall "ec_vrf_ed25519-sha256.h priv_key" c_priv_key :: Ptr Word8 -> IO CInt
 foreign import ccall "ec_vrf_ed25519-sha256.h public_key" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
-foreign import ccall "ec_vrf_ed25519-sha256.h keyPair" c_key_pair :: Ptr Word8 -> Ptr Word8 -> IO () 
+--foreign import ccall "ec_vrf_ed25519-sha256.h keyPair" c_key_pair :: Ptr Word8 -> Ptr Word8 -> IO () 
 foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_prove" c_prove :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO () 
 foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_proof_to_hash" c_proof_to_hash :: Ptr Word8 -> Ptr Word8 -> IO CInt
 foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_verify_key" c_verify_key :: Ptr Word8 -> IO CInt
@@ -143,7 +143,7 @@ pubKey (PrivateKey sk) = do suc <- newIORef (0::Int)
 test :: IO () 
 test = do (sk,pk) <- newKeyPair
           _ <- putStrLn("SK: " ++ privKeyToHex sk)
-          _ <- putStrLn("PK: " ++ pubKeyToHex sk)
+          _ <- putStrLn("PK: " ++ pubKeyToHex pk)
           _ <- putStrLn("MESSAGE:") 
           alpha <- B.getLine 
           let prf@(Proof (Hash b)) = prove pk sk alpha  
