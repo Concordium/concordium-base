@@ -1,6 +1,6 @@
 #include "ec_vrf_ed25519-sha256.h"
 //#include "ed25519-donna.h" 
-//#include "ed25519.h" 
+//#include "../Ed25519/ed25519.h" 
 #include "../Ed25519/ed25519-hash.h" 
 #include "string.h"
 #include <inttypes.h>
@@ -8,6 +8,14 @@
 #include "openssl/rand.h" 
 #include "stdio.h"
 #include "../Ed25519/ed25519_cryptonite_exts.h"
+
+
+void ed25519_extsk(hash_512bits extsk, const ed25519_secret_key sk) {
+    ed25519_hash(extsk, sk, 32);
+    extsk[0] &= 248;
+    extsk[31] &= 127;
+    extsk[31] |= 64;
+}
 
 static const bignum256modm zero = {
     0x00000000000000,
@@ -231,13 +239,22 @@ ed25519_point_copy (ge25519 *r, const ge25519 *p) {
 }
 ge25519 co;
 
+void expand_sk(bignum256modm out, const ed25519_secret_key sk){
+    ge25519 ALIGN(16) A;
+    hash_512bits extsk;
+
+    /* A = aB */
+    ed25519_extsk(extsk, sk);
+    expand256_modm(out, extsk, 32);
+}
 
 void ecvrf_prove(unsigned char pi[80], const ed25519_public_key pk, const ed25519_secret_key sk, uint8_t *alpha, size_t len){
     ge25519 ALIGN(16) h; 
     ge25519 ALIGN(16) gamma; 
     bignum256modm x;
     ecvrf_hash_to_curve (&h, pk, alpha, len);
-    expand256_modm(x, sk, 32);
+    //expand256_modm(x, sk, 32);
+    expand_sk(x,sk);
     ge25519_scalarmult_vartime(&gamma, &h, x);   
     unsigned char kk[32];
     int rc=RAND_bytes(kk, 32); 
@@ -364,30 +381,32 @@ int priv_key(ed25519_secret_key sk){
 }
 
 int public_key(ed25519_secret_key pk, ed25519_public_key sk){
-    print_bytes(sk,32);printf("\n");
+    //print_bytes(sk,32);printf("\n");
     bignum256modm x;
-    os2bignum256modmp(x,sk,sizeof(ed25519_secret_key));
+    //os2bignum256modmp(x,sk,sizeof(ed25519_secret_key));
+    expand_sk(x,sk);
     ge25519 ALIGN(16) pk_point;
     ge25519_scalarmult_base_niels(&pk_point, ge25519_niels_base_multiples, x);
     ec2osp(pk,&pk_point);
-    print_bytes(pk,32);printf("\n");
+    //print_bytes(pk,32);printf("\n");
     return 1;
 }
 
 int keyPair(ed25519_secret_key sk, ed25519_public_key pk){
-    int rc = RAND_bytes(sk,sizeof(ed25519_secret_key));
-    print_bytes(sk,32);printf("\n");
+    //int rc = RAND_bytes(sk,sizeof(ed25519_secret_key));
+    //print_bytes(sk,32);printf("\n");
+    int rc = priv_key(sk);
     if(rc != 1)
         return 0;
-    bignum256modm x;
-    os2bignum256modmp(x,sk,sizeof(ed25519_secret_key));
-    ge25519 ALIGN(16) pk_point;
-    ge25519_scalarmult_base_niels(&pk_point, ge25519_niels_base_multiples, x);
-    ec2osp(pk,&pk_point);
-    print_bytes(pk,32);printf("\n");
-    return 1;
+    //bignum256modm x;
+    //os2bignum256modmp(x,sk,sizeof(ed25519_secret_key));
+    //ge25519 ALIGN(16) pk_point;
+    //ge25519_scalarmult_base_niels(&pk_point, ge25519_niels_base_multiples, x);
+    //ec2osp(pk,&pk_point);
+    //print_bytes(pk,32);printf("\n");
+    return public_key(pk, sk);
 }
-/*
+
 int main(){
     //int x = testEc2OS();
     //printf("result %d\n", x);
@@ -429,4 +448,4 @@ int main(){
      }
      return 1;
  }
-}*/
+}
