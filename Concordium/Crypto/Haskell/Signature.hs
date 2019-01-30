@@ -2,11 +2,12 @@
 -- |This module provides a dummy signature scheme for
 -- prototyping purposes.  It provides NO SECURITY and
 -- obviously should be replaced with a real implementation.
-module Concordium.Crypto.Signature(
+module Concordium.Crypto.Haskell.Signature(
     SignKey,
     VerifyKey,
     KeyPair(..),
     Signature,
+    test,
     newKeyPair,
     sign,
     verify
@@ -33,10 +34,10 @@ import           Foreign.Marshal.Array
 import           Foreign.Marshal.Alloc
 import           Foreign.C.Types
 
-foreign import ccall "priv_key" c_priv_key :: Ptr Word8 -> IO CInt
-foreign import ccall "ed25519_publickey" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO () 
-foreign import ccall "ed25519_sign" c_sign :: Ptr Word8 -> Word32 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> IO () 
-foreign import ccall "ed25519_sign_open" c_verify :: Ptr Word8 -> Word32 -> Ptr Word8 -> Ptr Word8 -> IO CInt 
+foreign import ccall "ec_vrf_ed25519-sha256.h priv_key" c_priv_key :: Ptr Word8 -> IO CInt
+foreign import ccall "ed25519.h ed25519_publickey" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO () 
+foreign import ccall "ed25519.h ed25519_sign" c_sign :: Ptr Word8 -> Word32 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> IO () 
+foreign import ccall "ed25519.h ed25519_sign_open" c_verify :: Ptr Word8 -> Word32 -> Ptr Word8 -> Ptr Word8 -> IO CInt 
 
 wordToHex :: Word8 -> [Char]
 wordToHex x = printf "%.2x" x
@@ -114,7 +115,7 @@ sign (SignKey sk) (VerifyKey pk)  m = Signature $ Hash.Hash $ unsafeDupablePerfo
 
 
 verify :: VerifyKey -> ByteString -> Signature -> Bool
-verify (VerifyKey pk) m (Signature (Hash.Hash sig)) = fromIntegral suc > -1
+verify (VerifyKey pk) m (Signature (Hash.Hash sig)) =  suc > -1
    where
        mlen = fromIntegral $ B.length m
        suc  = unsafeDupablePerformIO $ 

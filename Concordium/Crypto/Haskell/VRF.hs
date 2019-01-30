@@ -19,6 +19,7 @@ module Concordium.Crypto.Haskell.VRF(
     verifyKey,
     hashToDouble,
     hashToInt,
+    test
 ) where
 import           Data.String.Builder
 import           Data.ByteString.Builder
@@ -41,13 +42,13 @@ import           Data.Maybe
 import           Numeric
 import           Text.Printf
 import           Concordium.Crypto.Haskell.SHA256
-foreign import ccall "priv_key" c_priv_key :: Ptr Word8 -> IO CInt
-foreign import ccall "public_key" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
-foreign import ccall "keyPair" c_key_pair :: Ptr Word8 -> Ptr Word8 -> IO () 
-foreign import ccall "ecvrf_prove" c_prove :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO () 
-foreign import ccall "ecvrf_proof_to_hash" c_proof_to_hash :: Ptr Word8 -> Ptr Word8 -> IO CInt
-foreign import ccall "ecvrf_verify_key" c_verify_key :: Ptr Word8 -> IO CInt
-foreign import ccall "ecvrf_verify" c_verify :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO CInt
+foreign import ccall "ec_vrf_ed25519-sha256.h priv_key" c_priv_key :: Ptr Word8 -> IO CInt
+foreign import ccall "ec_vrf_ed25519-sha256.h public_key" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
+foreign import ccall "ec_vrf_ed25519-sha256.h keyPair" c_key_pair :: Ptr Word8 -> Ptr Word8 -> IO () 
+foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_prove" c_prove :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO () 
+foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_proof_to_hash" c_proof_to_hash :: Ptr Word8 -> Ptr Word8 -> IO CInt
+foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_verify_key" c_verify_key :: Ptr Word8 -> IO CInt
+foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_verify" c_verify :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO CInt
 --import Data.ByteString as BS
 --import Data.ByteString.Builder
 --import Data.Word
@@ -155,20 +156,20 @@ test = do (sk,pk) <- newKeyPair
 
 prove :: PublicKey -> PrivateKey -> ByteString -> Proof
 prove (PublicKey pk) (PrivateKey sk) b = Proof $ Hash $ unsafeDupablePerformIO $
-                                        create 80 $ \pi -> 
+                                        create 80 $ \prf -> 
                                            withByteStringPtr pk $ \pk' -> 
                                                withByteStringPtr sk $ \sk' -> 
                                                    withByteStringPtr b $ \b' -> 
-                                                       c_prove pi pk' sk' b' (fromIntegral $ B.length b)
+                                                       c_prove prf pk' sk' b' (fromIntegral $ B.length b)
 
 verify :: PublicKey -> ByteString -> Proof -> Bool
-verify (PublicKey pk) alpha (Proof (Hash pi)) = cIntToBool $ unsafeDupablePerformIO $ 
+verify (PublicKey pk) alpha (Proof (Hash prf)) = cIntToBool $ unsafeDupablePerformIO $ 
                                                 withByteStringPtr pk $ \pk' ->
-                                                   withByteStringPtr pi $ \pi' ->
+                                                   withByteStringPtr prf $ \pi' ->
                                                      withByteStringPtr alpha $ \alpha'->
                                                        c_verify pk' pi' alpha' (fromIntegral $ B.length alpha)
               where
-                  cIntToBool x = (fromIntegral x) > 0
+                  cIntToBool x =  x > 0
                                                            
                                                    
 
@@ -179,7 +180,7 @@ proofToHash (Proof (Hash p)) =  Hash $ unsafeDupablePerformIO $
         withByteStringPtr p $ \p' -> c_proof_to_hash x p' >> return()
 
 verifyKey :: PublicKey -> Bool
-verifyKey (PublicKey pk) = fromIntegral x > 0 
+verifyKey (PublicKey pk) =  x > 0 
             where
                x = unsafeDupablePerformIO $  withByteStringPtr pk $ \pk' -> c_verify_key pk'
 
