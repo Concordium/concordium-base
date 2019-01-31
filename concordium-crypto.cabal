@@ -36,6 +36,8 @@ Library
     Extra-libraries: libeay32 ssleay32
   if os(windows)
     Extra-libraries: libeay32 ssleay32
+  if os(mingw32)
+    Extra-Libraries: eay32 ssl32
   else
     Extra-libraries: crypto
          
