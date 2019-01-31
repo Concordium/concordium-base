@@ -15,6 +15,11 @@ source-repository head
 
 Library
   --Hs-Source-Dirs: Concordium/Crypto/Haskell
+  install-includes: Concordium/Crypto/Ed25519/ed25519.h
+                   ,Concordium/Crypto/Ed25519/ed25519-hash.h 
+                   ,Concordium/Crypto/VRF/ec_vrf_ed25519-sha256.h
+  extensions:      ForeignFunctionInterface
+
   Exposed-modules: Concordium.Crypto.Haskell.SHA256	
                    Concordium.Crypto.Haskell.Signature
                    Concordium.Crypto.Haskell.VRF
@@ -26,18 +31,14 @@ Library
                 , random >= 1.1
                 , stringbuilder >=0.5.0
   cc-options:     -m64 -O3 
-  ghc-options:   -Wall -fwarn-tabs -optc-O3 -fno-warn-unused-imports
-  C-sources:       Concordium/Crypto/VRF/ec_vrf_ed25519-sha256.c
+  ghc-options:   -fwarn-tabs -optc-O3 -fno-warn-unused-imports
+  C-sources:      Concordium/Crypto/VRF/ec_vrf_ed25519-sha256.c
                 , Concordium/Crypto/Ed25519/ed25519.c
  
-  include-dirs:    Concordium/Crypto/VRF
+  include-dirs:   Concordium/Crypto/VRF
                 , Concordium/Crypto/Ed25519
-  if os(mingw-w64)
-    Extra-libraries: libeay32 ssleay32
   if os(windows)
-    Extra-libraries: libeay32 ssleay32
-  if os(mingw32)
-    Extra-Libraries: eay32 ssl32
+    Extra-libraries: libcrypto
   else
     Extra-libraries: crypto
          
