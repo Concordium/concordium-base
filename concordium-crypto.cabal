@@ -26,15 +26,16 @@ Library
                 , random >= 1.1
                 , stringbuilder >=0.5.0
   cc-options:     -m64 -O3 
-  if os(windows)
-    cc-options:   -m64 -O3 -mdll
-    Build-depends: Win64
   ghc-options:   -Wall -fwarn-tabs -optc-O3 -fno-warn-unused-imports
   C-sources:       Concordium/Crypto/VRF/ec_vrf_ed25519-sha256.c
                 , Concordium/Crypto/Ed25519/ed25519.c
  
   include-dirs:    Concordium/Crypto/VRF
                 , Concordium/Crypto/Ed25519
- 
-  Extra-libraries: crypto 
+  if os(mingw-w64)
+    Extra-libraries: libeay32 ssleay32
+  if os(windows)
+    Extra-libraries: libeay32 ssleay32
+  else
+    Extra-libraries: crypto
          
