@@ -412,7 +412,7 @@ int keyPair(ed25519_secret_key sk, ed25519_public_key pk){
     //print_bytes(pk,32);printf("\n");
     return public_key(pk, sk);
 }
-
+/*
 int main(){
     //int x = testEc2OS();
     //printf("result %d\n", x);
@@ -456,3 +456,4 @@ int main(){
  }
 }
 
+*/
