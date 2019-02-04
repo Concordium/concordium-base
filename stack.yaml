@@ -23,22 +23,25 @@ resolver: lts-13.5
 # User packages to be built.
 # Various formats can be used as shown in the example below.
 #
-# packages:
-# - some-directory
+#packages:
+#    - location: . 
 # - https://example.com/foo/bar/baz-0.0.2.tar.gz
-# - location:
-#    git: https://github.com/commercialhaskell/stack.git
 #    commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 # - location: https://github.com/commercialhaskell/stack/commit/e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 #  subdirs:
 #  - auto-update
 #  - wai
 packages:
-- .
+  - .
+extra-deps:
+    - git: ./openssl/https://github.com/openssl/openssl.git
+      commit: a28e4890eed847e6122a1c4d50653566e0813f45
+      location: ./openssl
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
-# extra-deps: []
+
+#extra-deps: true 
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

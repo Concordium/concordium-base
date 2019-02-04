@@ -1,4 +1,34 @@
-module Concordiun.Crypto.Hash where  
+class Hash where
+	Alg :: String
+        
+hashWith :: 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+module Concordium.Crypto.Util.VRF
+
+module Concordium.Crypto.Util.Hash where  
 	{--we could add the particular Hash protocol as an argument--}
 --non incremental
 --input: list of Parameters, e.g. Hash family, digest length..etc 
@@ -16,10 +46,10 @@ update   :: Ctx -> ByteString -> Ctx
 --returns the hash digest and flushes the memory
 finalize :: Ctx -> ByteString 
 
-module Concordium.Crypto.Util where
-
 --Random Oracle Replacement
 hRO :: ByteString -> ByteString
+
+module Concordium.Crypto.Util where
 
 -- returns a pair (privateKey, publicKey)
 -- publicKey = g^privateKey
@@ -88,17 +118,26 @@ genSignatureScheme :: (SignatureScheme a) => SchemeId -> a
 -- signing and verifying
 sign_acc :: (SignatureScheme a) => SignKey a -> ByteString -> Signature a
 
-verify_acc :: (SignatureScheme a) => VerifKey a -> ByteString -> Signature a -> bool
+module Concordium.Crypto.Util.VRF
 
--- From 
-fromByteString :: (SignatureScheme a) -> SchemeID -> ByteString -> Signature a
+module Concordium.Crypto.Util.Hash where  
+	{--we could add the particular Hash protocol as an argument--}
+--non incremental
+--input: list of Parameters, e.g. Hash family, digest length..etc 
+--input: message to hash
+--output: hash digest
+hash :: [HashParam] -> ByteString -> ByteString
 
+--incremental
+--initialized a hash context
+-- input: list of Parameters, e.g. Hash family, digest length...etc
+-- output: Hash context
+init     :: [HashParams]-> Ctx
+--hashes the bytestring into the context and returns a new context
+update   :: Ctx -> ByteString -> Ctx
+--returns the hash digest and flushes the memory
+finalize :: Ctx -> ByteString 
 
-
-
-module Concrodium.Id.Ip
-import Concordium.Crypto.Util
-
-genSignatureScheme :: (SignatureScheme a) => SchemeId -> a   
-
+--Random Oracle Replacement
+hRO :: ByteString -> ByteString
 

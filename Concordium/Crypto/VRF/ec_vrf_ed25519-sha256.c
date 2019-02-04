@@ -1,21 +1,26 @@
 #include "ec_vrf_ed25519-sha256.h"
-//#include "ed25519-donna.h" 
-//#include "../Ed25519/ed25519.h" 
-#include "../Ed25519/ed25519-hash.h" 
 #include "string.h"
 #include <inttypes.h>
-#include "openssl/sha.h" 
-#include "openssl/rand.h" 
 #include "stdio.h"
 #include "../Ed25519/ed25519_cryptonite_exts.h"
+#include "../Hacl/hacl_test_utils.h"
+#include "../Hacl/Hacl_SHA2_256.h"
 
+int randombytes(uint8_t * x,uint64_t len) {
+  if (! (read_random_bytes(len, x)))
+    return 0;
+  else 
+      return 1;
+}
 
+/*
 void ed25519_extsk(hash_512bits extsk, const ed25519_secret_key sk) {
     ed25519_hash(extsk, sk, 32);
     extsk[0] &= 248;
     extsk[31] &= 127;
     extsk[31] |= 64;
 }
+*/
 
 static const bignum256modm zero = {
     0x00000000000000,
@@ -85,11 +90,12 @@ static int os2ecp(ge25519 *r, const unsigned char p[32]) {
    int success = ge25519_unpack_negative_vartime (r, pcopy);
    return success;
 }
-
+/*
 void print_bytes(unsigned char *b, size_t len){
    for(size_t i = 0; i < len; i++)
         printf("%.2x",b[i]); 
 }
+*/
 void print_bignum25519(const bignum25519 y){
     for(int i =0; i< 5; i++)
        printf("%" PRIu64, y[i]);
@@ -115,7 +121,7 @@ int testEc2OS(){
     int i = 0;
     ge25519 points[10];
     while(i < 10){
-        RAND_bytes(testbytes,32);
+        randombytes(testbytes,32);
         ge25519 ALIGN(16) point;
         int x = os2ecp(&point, testbytes);
         if(x){
@@ -136,7 +142,7 @@ int testEc2OS(){
 }
 
 static void hash(unsigned char *digest, const unsigned char *m, size_t n){
-    SHA256(m, n, digest);
+    Hacl_SHA2_256_hash(digest, m, n);
 }
 
 static void os2bignum256modmp(bignum256modm out, const unsigned char  *in, size_t inLen){
@@ -172,7 +178,7 @@ int testuint322osp(){
    unsigned char testBytes[4]; 
    unsigned char compare[4];
    for(int i = 0; i< 100; i++){
-      RAND_bytes(testBytes,4);
+      randombytes(testBytes,4);
       int res = os2uint32p(testBytes, 4);
       uint322osp(compare, res);
       if(memcmp(compare, testBytes, 4)!=0)
@@ -244,7 +250,7 @@ void expand_sk(bignum256modm out, const ed25519_secret_key sk){
     hash_512bits extsk;
 
     /* A = aB */
-    ed25519_extsk(extsk, sk);
+    ecvrf_extsk(extsk, sk);
     expand256_modm(out, extsk, 32);
 }
 
@@ -257,7 +263,7 @@ void ecvrf_prove(unsigned char pi[80], const ed25519_public_key pk, const ed2551
     expand_sk(x,sk);
     ge25519_scalarmult_vartime(&gamma, &h, x);   
     unsigned char kk[32];
-    int rc=RAND_bytes(kk, 32); 
+    int rc=randombytes(kk, 32); 
     if(rc !=1)
         printf("RAND BYTES FAILED");
     bignum256modm k;
@@ -375,7 +381,7 @@ int ecvrf_verify(const ed25519_public_key pk, const unsigned char pi[80], uint8_
 }
 
 int priv_key(ed25519_secret_key sk){
-    int rc = RAND_bytes(sk,sizeof(ed25519_secret_key));
+    int rc = randombytes(sk,sizeof(ed25519_secret_key));
     //print_bytes(sk,32);
     return rc;
 }
@@ -393,7 +399,7 @@ int public_key(ed25519_secret_key pk, ed25519_public_key sk){
 }
 
 int keyPair(ed25519_secret_key sk, ed25519_public_key pk){
-    //int rc = RAND_bytes(sk,sizeof(ed25519_secret_key));
+    //int rc = randombytes(sk,sizeof(ed25519_secret_key));
     //print_bytes(sk,32);printf("\n");
     int rc = priv_key(sk);
     if(rc != 1)
@@ -449,3 +455,4 @@ int main(){
      return 1;
  }
 }
+

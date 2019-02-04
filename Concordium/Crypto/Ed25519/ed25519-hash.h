@@ -1,3 +1,6 @@
+#ifndef ED25519_HASH_H
+#define ED25519_HASH_H
+
 #if defined(ED25519_REFHASH)
 
 /* reference/slow SHA-512. really, do not use this */
@@ -216,4 +219,4 @@ ed25519_hash(uint8_t *hash, const uint8_t *in, size_t inlen) {
 }
 
 #endif
-
+#endif /*ED25519-HASH_H */
