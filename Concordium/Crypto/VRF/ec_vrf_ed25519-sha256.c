@@ -4,7 +4,7 @@
 #include "stdio.h"
 #include "../Ed25519/ed25519_cryptonite_exts.h"
 #include "../Hacl/hacl_test_utils.h"
-#include "../Hacl/Hacl_SHA2_256.h"
+#include "Hacl_SHA2_256.h"
 
 int randombytes(uint8_t * x,uint64_t len) {
   if (! (read_random_bytes(len, x)))

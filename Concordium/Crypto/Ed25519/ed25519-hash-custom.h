@@ -1,4 +1,4 @@
-#include "../Hacl/Hacl_SHA2_512.h"
+#include "Hacl_SHA2_512.h"
 /*
 	a custom hash must have a 512bit digest and implement:
 
@@ -55,3 +55,4 @@ void ed25519_hash_final(ed25519_hash_context *ctx, uint8_t *hash){
 void ed25519_hash(uint8_t *hash, const uint8_t *in, size_t inlen){
     Hacl_SHA2_512_hash(hash, in, inlen);
 }
+

@@ -15,8 +15,8 @@ source-repository head
   location: https://gitlab.com/Concordium/crypto
 
 Library
-  install-includes: Concordium/Crypto/Ed25519/ed25519.h
-                   ,Concordium/Crypto/VRF/ec_vrf_ed25519-sha256.h
+  install-includes: Concordium/Crypto/include/ed25519.h
+                   ,Concordium/Crypto/include/ec_vrf_ed25519-sha256.h
                    ,Concordium/Crypto/Hacl/hacl_test_utils.h
   extensions:      ForeignFunctionInterface
 
@@ -40,7 +40,5 @@ Library
                 , Concordium/Crypto/Ed25519/ed25519.c
                 , Concordium/Crypto/Hacl/kremlib.c
  
-  include-dirs:   Concordium/Crypto/VRF
-                , Concordium/Crypto/Ed25519
-                , Concordium/Crypto/Hacl
+  include-dirs:   Concordium/Crypto/include
          

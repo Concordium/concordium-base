@@ -41,7 +41,7 @@ import           GHC.Generics
 import           Data.Maybe
 import           Numeric
 import           Text.Printf
-import           Concordium.Crypto.Haskell.SHA256
+import           Concordium.Crypto.Haskell.SHA256 hiding (withByteStringPtr)
 foreign import ccall "ec_vrf_ed25519-sha256.h priv_key" c_priv_key :: Ptr Word8 -> IO CInt
 foreign import ccall "ec_vrf_ed25519-sha256.h public_key" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
 --foreign import ccall "ec_vrf_ed25519-sha256.h keyPair" c_key_pair :: Ptr Word8 -> Ptr Word8 -> IO () 
