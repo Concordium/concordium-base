@@ -32,7 +32,12 @@ ctxSize = 137
 blckSize :: Int
 blckSize = 64
 
-newtype Hash = Hash B.ByteString deriving (Eq, Ord, Serialize)
+-- |A SHA256 hash.  64 bytes.
+newtype Hash = Hash B.ByteString deriving (Eq, Ord)
+
+instance Serialize Hash where
+    put (Hash h) = putByteString h
+    get = Hash <$> getByteString 64
 
 instance Show Hash where
     show (Hash h) = LC.unpack (toLazyByteString $ byteStringHex h)

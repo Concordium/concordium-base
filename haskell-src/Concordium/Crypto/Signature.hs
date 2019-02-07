@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, GeneralizedNewtypeDeriving, ForeignFunctionInterface #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, ForeignFunctionInterface #-}
 -- |This module provides a dummy signature scheme for
 -- prototyping purposes.  It provides NO SECURITY and
 -- obviously should be replaced with a real implementation.
@@ -30,7 +30,6 @@ import qualified Data.ByteString  as B
 import           Data.ByteString (ByteString) 
 import           Data.ByteString.Builder
 import           Data.Word
-import           GHC.Generics
 import           System.Random
 import           Foreign.Marshal.Array
 import           Foreign.Marshal.Alloc
@@ -48,23 +47,33 @@ privKeyToHex (SignKey sk) = byteStringToHex sk
 pubKeyToHex :: VerifyKey -> String
 pubKeyToHex (VerifyKey pk) = byteStringToHex pk
 
-
+-- |Signature private key.  32 bytes
 data SignKey = SignKey ByteString
-    deriving (Eq, Generic)
+    deriving (Eq)
 instance Serialize SignKey where
+    put (SignKey key) = putByteString key
+    get = SignKey <$> getByteString 32
 
+-- |Signature public (verification) key. 32 bytes
 data VerifyKey = VerifyKey ByteString
-    deriving (Eq, Ord, Generic)
+    deriving (Eq, Ord)
 instance Serialize VerifyKey where
+    put (VerifyKey key) = putByteString key
+    get = VerifyKey <$> getByteString 32
 
 newtype Signature = Signature Hash.Hash
-    deriving (Eq, Generic, Serialize, Show)
+    deriving (Eq, Serialize, Show)
 
 data KeyPair = KeyPair {
     signKey :: SignKey,
     verifyKey :: VerifyKey
-} deriving (Eq, Generic)
-instance Serialize KeyPair
+} deriving (Eq)
+instance Serialize KeyPair where
+    put (KeyPair sk vk) = put sk >> put vk
+    get = do
+        sk <- get
+        vk <- get
+        return $ KeyPair sk vk
 
 newPrivKey :: IO SignKey
 newPrivKey =

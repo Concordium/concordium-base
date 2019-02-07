@@ -13,7 +13,6 @@ module Concordium.Crypto.VRF(
     Proof,
     randomKeyPair,
     newKeyPair,
-    --hash,
     prove,
     proofToHash,
     verify,
@@ -61,28 +60,46 @@ privKeyToHex (PrivateKey sk) = byteStringToHex sk
 pubKeyToHex :: PublicKey -> String
 pubKeyToHex (PublicKey pk) = byteStringToHex pk
 
--- PublicKey 32 bytes
+-- |A VRF public key. 32 bytes.
 data PublicKey = PublicKey ByteString
-    deriving (Eq, Ord, Generic)
+    deriving (Eq, Ord)
 instance Serialize PublicKey where
+    put (PublicKey key) = putByteString key
+    get = PublicKey <$> getByteString 32
 
--- PrivateKey 32 bytes
+-- |A VRF private key. 32 bytes.
 data PrivateKey = PrivateKey ByteString
-    deriving (Eq, Generic)
-
+    deriving (Eq)
 instance Serialize PrivateKey where
+    put (PrivateKey key) = putByteString key
+    get = PrivateKey <$> getByteString 32
 
+-- |A VRF proof. 80 bytes.
+newtype Proof = Proof ByteString
+    deriving (Eq)
 
-newtype Proof = Proof Hash
-    deriving (Eq, Generic, Serialize, Show)
+instance Serialize Proof where
+    put (Proof p) = putByteString p
+    get = Proof <$> getByteString 80
 
+instance Show Proof where
+    show (Proof p) = byteStringToHex p
+
+-- |A VRF key pair.
 data KeyPair = KeyPair {
     privateKey :: PrivateKey,
     publicKey :: PublicKey
-} deriving (Eq, Generic)
+} deriving (Eq)
 
-instance Serialize KeyPair
+instance Serialize KeyPair where
+    put (KeyPair priv pub) = put priv >> put pub
+    get = do
+        priv <- get
+        pub <- get
+        return $ KeyPair priv pub
 
+-- |Generate a key pair using a given random generator.
+-- Useful for generating deterministic pseudo-random keys.
 randomKeyPair :: RandomGen g => g -> (KeyPair, g)
 randomKeyPair gen = (key, gen')
         where
@@ -90,21 +107,7 @@ randomKeyPair gen = (key, gen')
             privKey = PrivateKey $ B.pack $ take 32 $ randoms gen0
             key = KeyPair privKey (unsafePerformIO $ pubKey privKey)
 
-
-    {-
-newKeyPair :: IO (PrivateKey, PublicKey)
-newKeyPair = do maybeSk <- newPrivKey 
-                case maybeSk of
-                  Nothing -> return Nothing
-                  Just sk -> do maybePk <- pubKey sk
-                                case maybePk of 
-                                  Nothing -> return Nothing
-                                  Just pk -> do _ <- putStrLn(privKeyToHex sk)
-                                                _ <- putStrLn(pubKeyToHex pk) 
-                                                return (Just (sk,  pk))
-
--}
-
+-- |Generate a new key pair using the system random number generator.
 newKeyPair :: IO KeyPair
 newKeyPair = do sk <- newPrivKey 
                 pk <- pubKey sk
@@ -142,7 +145,7 @@ test = do kp@(KeyPair sk pk) <- newKeyPair
           _ <- putStrLn("PK: " ++ pubKeyToHex pk)
           _ <- putStrLn("MESSAGE:") 
           alpha <- B.getLine 
-          let prf@(Proof (Hash b)) = prove kp alpha  
+          let prf@(Proof b) = prove kp alpha  
               valid = verify pk alpha prf 
               Hash h' = proofToHash prf 
            in
@@ -151,17 +154,18 @@ test = do kp@(KeyPair sk pk) <- newKeyPair
               putStrLn ("Verification: " ++ if valid then "VALID" else "INVALID") >>
               putStrLn ("Proof hash: " ++ byteStringToHex h')
 
-
+-- |Generate a VRF proof.
 prove :: KeyPair -> ByteString -> Proof
-prove (KeyPair (PrivateKey sk) (PublicKey pk)) b = Proof $ Hash $ unsafeDupablePerformIO $
+prove (KeyPair (PrivateKey sk) (PublicKey pk)) b = Proof $ unsafeDupablePerformIO $
                                         create 80 $ \prf -> 
                                            withByteStringPtr pk $ \pk' -> 
                                                withByteStringPtr sk $ \sk' -> 
                                                    withByteStringPtr b $ \b' -> 
                                                        c_prove prf pk' sk' b' (fromIntegral $ B.length b)
 
+-- |Verify a VRF proof.
 verify :: PublicKey -> ByteString -> Proof -> Bool
-verify (PublicKey pk) alpha (Proof (Hash prf)) = cIntToBool $ unsafeDupablePerformIO $ 
+verify (PublicKey pk) alpha (Proof prf) = cIntToBool $ unsafeDupablePerformIO $ 
                                                 withByteStringPtr pk $ \pk' ->
                                                    withByteStringPtr prf $ \pi' ->
                                                      withByteStringPtr alpha $ \alpha'->
@@ -169,14 +173,13 @@ verify (PublicKey pk) alpha (Proof (Hash prf)) = cIntToBool $ unsafeDupablePerfo
               where
                   cIntToBool x =  x > 0
                                                            
-                                                   
-
-
+-- |Generate a 256-bit hash from a VRF proof.
 proofToHash :: Proof -> Hash
-proofToHash (Proof (Hash p)) =  Hash $ unsafeDupablePerformIO $ 
+proofToHash (Proof p) =  Hash $ unsafeDupablePerformIO $ 
     create 32 $ \x -> 
         withByteStringPtr p $ \p' -> c_proof_to_hash x p' >> return()
 
+-- |Verify a VRF public key.
 verifyKey :: PublicKey -> Bool
 verifyKey (PublicKey pk) =  x > 0 
             where
@@ -192,7 +195,7 @@ hashToDouble (Hash  h) = case runGet getWord64be h of
     Left e -> error e
     Right w -> encodeFloat (toInteger w) (-64)
 
-
+-- |Convert a 'Hash' to an 'Int'.
 hashToInt :: Hash -> Int
 hashToInt (Hash h) = case runGet getInt64be h of
     Left e -> error e
