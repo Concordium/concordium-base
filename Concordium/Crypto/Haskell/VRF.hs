@@ -21,6 +21,8 @@ module Concordium.Crypto.Haskell.VRF(
     hashToInt,
     test
 ) where
+
+import           Concordium.Crypto.Haskell.ByteStringHelpers
 import           Data.String.Builder
 import           Data.ByteString.Builder
 import           Data.ByteString            (ByteString)
@@ -41,39 +43,21 @@ import           GHC.Generics
 import           Data.Maybe
 import           Numeric
 import           Text.Printf
-import           Concordium.Crypto.Haskell.SHA256 hiding (withByteStringPtr)
+import           Concordium.Crypto.Haskell.SHA256 
+
 foreign import ccall "ec_vrf_ed25519-sha256.h priv_key" c_priv_key :: Ptr Word8 -> IO CInt
 foreign import ccall "ec_vrf_ed25519-sha256.h public_key" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
---foreign import ccall "ec_vrf_ed25519-sha256.h keyPair" c_key_pair :: Ptr Word8 -> Ptr Word8 -> IO () 
 foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_prove" c_prove :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO () 
 foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_proof_to_hash" c_proof_to_hash :: Ptr Word8 -> Ptr Word8 -> IO CInt
 foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_verify_key" c_verify_key :: Ptr Word8 -> IO CInt
 foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_verify" c_verify :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO CInt
---import Data.ByteString as BS
---import Data.ByteString.Builder
---import Data.Word
---import System.Random
 
-
-
-wordToHex :: Word8 -> [Char]
-wordToHex x = printf "%.2x" x 
-
-              
-byteStringToHex :: ByteString -> String
-byteStringToHex b= concatMap wordToHex ls
-    where
-        ls = B.unpack b
 
 privKeyToHex :: PrivateKey -> String
 privKeyToHex (PrivateKey sk) = byteStringToHex sk
 
 pubKeyToHex :: PublicKey -> String
 pubKeyToHex (PublicKey pk) = byteStringToHex pk
-
-withByteStringPtr :: ByteString -> (Ptr Word8 -> IO a) -> IO a
-withByteStringPtr b f =  withForeignPtr fptr $ \ptr -> f (ptr `plusPtr` off)
-    where (fptr, off, _) = toForeignPtr b
 
 -- PublicKey 32 bytes
 data PublicKey = PublicKey ByteString

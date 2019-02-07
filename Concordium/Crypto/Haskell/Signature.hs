@@ -14,6 +14,7 @@ module Concordium.Crypto.Haskell.Signature(
    --emptySignature
 ) where
 
+import           Concordium.Crypto.Haskell.ByteStringHelpers
 import           Text.Printf
 import           Data.IORef
 import           Data.ByteString.Internal   (create, toForeignPtr)
@@ -39,14 +40,6 @@ foreign import ccall "ed25519.h ed25519_publickey" c_public_key :: Ptr Word8 -> 
 foreign import ccall "ed25519.h ed25519_sign" c_sign :: Ptr Word8 -> Word32 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> IO () 
 foreign import ccall "ed25519.h ed25519_sign_open" c_verify :: Ptr Word8 -> Word32 -> Ptr Word8 -> Ptr Word8 -> IO CInt 
 
-wordToHex :: Word8 -> [Char]
-wordToHex x = printf "%.2x" x
-
-
-byteStringToHex :: ByteString -> String
-byteStringToHex b= concatMap wordToHex ls
-    where
-        ls = B.unpack b
 
 privKeyToHex :: SignKey -> String
 privKeyToHex (SignKey sk) = byteStringToHex sk
@@ -54,9 +47,6 @@ privKeyToHex (SignKey sk) = byteStringToHex sk
 pubKeyToHex :: VerifyKey -> String
 pubKeyToHex (VerifyKey pk) = byteStringToHex pk
 
-withByteStringPtr :: ByteString -> (Ptr Word8 -> IO a) -> IO a
-withByteStringPtr b f =  withForeignPtr fptr $ \ptr -> f (ptr `plusPtr` off)
-    where (fptr, off, _) = toForeignPtr b
 
 data SignKey = SignKey ByteString
     deriving (Eq, Generic)

@@ -1,7 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface , GeneralizedNewtypeDeriving #-}
 
 module Concordium.Crypto.Haskell.SHA256 where
-
+import           Concordium.Crypto.Haskell.ByteStringHelpers
 import           Data.ByteString            (ByteString)
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Lazy       as L
@@ -44,13 +44,10 @@ instance Hashable Hash where
         Left _ -> hashWithSalt 0 b
         Right v -> v
 
+
 hash :: ByteString -> Hash
 hash b = Hash $ unsafeDupablePerformIO $ create digestSize $ \h -> withByteStringPtr b $ \input -> c_hash h input len 
      where len = fromIntegral $ B.length b
-
-withByteStringPtr :: ByteString -> (Ptr Word8 -> IO a) -> IO a
-withByteStringPtr b f =  withForeignPtr fptr $ \ptr -> f (ptr `plusPtr` off)
-    where (fptr, off, _) = toForeignPtr b
 
 hash_update :: Ptr Word32 -> ByteString -> IO ByteString
 hash_update ptr b = withByteStringPtr trimmed $ \t -> c_hash_update ptr t (fromIntegral $ numBlcks) >> return leftover 
@@ -73,4 +70,8 @@ hashLazy b =  Hash $ unsafeDupablePerformIO $ create digestSize $ \hash ->
                   free state
        where 
          f ptr leftover chunk = hash_update ptr (leftover `B.append` chunk)
+hashTest ::FilePath ->  IO ()
+hashTest path = do b <- L.readFile path
+                   let (Hash b') = hashLazy b
+                   putStrLn(byteStringToHex b')
 
