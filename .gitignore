@@ -1,0 +1,9 @@
+.stack-work/
+Concordium.cabal
+*~
+*.swp
+*.out
+*.dll
+*.exe
+*.a
+*.pdf
