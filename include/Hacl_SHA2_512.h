@@ -21,7 +21,7 @@
  * SOFTWARE.
  */
 
-#include "../Hacl/kremlib.h"
+#include "kremlib.h"
 #ifndef __Hacl_SHA2_512_H
 #define __Hacl_SHA2_512_H
 

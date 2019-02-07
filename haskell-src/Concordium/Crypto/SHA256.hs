@@ -1,7 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface , GeneralizedNewtypeDeriving #-}
 
-module Concordium.Crypto.Haskell.SHA256 where
-import           Concordium.Crypto.Haskell.ByteStringHelpers
+module Concordium.Crypto.SHA256 where
+import           Concordium.Crypto.ByteStringHelpers
 import           Data.ByteString            (ByteString)
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Lazy       as L

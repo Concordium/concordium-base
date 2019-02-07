@@ -1,4 +1,4 @@
-module Concordium.Crypto.Haskell.ByteStringHelpers where
+module Concordium.Crypto.ByteStringHelpers where
 
 import           Text.Printf
 import           Data.ByteString

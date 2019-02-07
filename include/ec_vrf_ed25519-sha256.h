@@ -1,4 +1,4 @@
-#include "../Ed25519/ed25519-donna.h"
+#include "ed25519-donna.h"
 #include "ed25519.h"
 #include "string.h"
 #include <inttypes.h>

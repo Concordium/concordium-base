@@ -1,4 +1,4 @@
-#include "../Hacl/hacl_test_utils.h"
+#include "hacl_test_utils.h"
 void
 ED25519_FN(ed25519_randombytes_unsafe) (void *p, size_t len) {
 

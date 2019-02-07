@@ -2,7 +2,7 @@
 -- |This module provides a dummy signature scheme for
 -- prototyping purposes.  It provides NO SECURITY and
 -- obviously should be replaced with a real implementation.
-module Concordium.Crypto.Haskell.Signature(
+module Concordium.Crypto.Signature(
     SignKey,
     VerifyKey,
     KeyPair(..),
@@ -14,7 +14,7 @@ module Concordium.Crypto.Haskell.Signature(
    --emptySignature
 ) where
 
-import           Concordium.Crypto.Haskell.ByteStringHelpers
+import           Concordium.Crypto.ByteStringHelpers
 import           Text.Printf
 import           Data.IORef
 import           Data.ByteString.Internal   (create, toForeignPtr)
@@ -22,7 +22,7 @@ import           Data.Word
 import           System.IO.Unsafe
 import           Foreign.Ptr
 import           Foreign.ForeignPtr
-import qualified Concordium.Crypto.Haskell.SHA256 as Hash
+import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Data.ByteString.Lazy as L
 import           Data.Serialize
 import qualified Data.ByteString  as B

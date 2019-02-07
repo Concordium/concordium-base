@@ -2,8 +2,8 @@
 #include "string.h"
 #include <inttypes.h>
 #include "stdio.h"
-#include "../Ed25519/ed25519_cryptonite_exts.h"
-#include "../Hacl/hacl_test_utils.h"
+#include "ed25519_cryptonite_exts.h"
+#include "hacl_test_utils.h"
 #include "Hacl_SHA2_256.h"
 
 int randombytes(uint8_t * x,uint64_t len) {

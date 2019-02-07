@@ -3,7 +3,7 @@
      The implementation is intended to immitate the behaviour of
      a real implementation, but does not provide any security.
 -}
-module Concordium.Crypto.Haskell.VRF(
+module Concordium.Crypto.VRF(
     PublicKey,
     PrivateKey,
     newPrivKey,
@@ -22,7 +22,7 @@ module Concordium.Crypto.Haskell.VRF(
     test
 ) where
 
-import           Concordium.Crypto.Haskell.ByteStringHelpers
+import           Concordium.Crypto.ByteStringHelpers
 import           Data.String.Builder
 import           Data.ByteString.Builder
 import           Data.ByteString            (ByteString)
@@ -43,7 +43,7 @@ import           GHC.Generics
 import           Data.Maybe
 import           Numeric
 import           Text.Printf
-import           Concordium.Crypto.Haskell.SHA256 
+import           Concordium.Crypto.SHA256 
 
 foreign import ccall "ec_vrf_ed25519-sha256.h priv_key" c_priv_key :: Ptr Word8 -> IO CInt
 foreign import ccall "ec_vrf_ed25519-sha256.h public_key" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
