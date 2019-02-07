@@ -6,9 +6,9 @@ License:        BSD3
 Author:         Concordium.com
 Stability:      Experimental
 Cabal-Version:       >=1.18
-extra-source-files:  Concordium/Crypto/Ed25519/*.h
-                     Concordium/Crypto/VRF/*.h
-                     Concordium/Crypto/Hacl/*.h
+--extra-source-files:  Concordium/Crypto/Ed25519/*.h
+--                     Concordium/Crypto/VRF/*.h
+--                     Concordium/Crypto/Hacl/*.h
 
 source-repository head
   type: git
@@ -17,20 +17,20 @@ source-repository head
 Library
   install-includes: Concordium/Crypto/include/ed25519.h
                    ,Concordium/Crypto/include/ec_vrf_ed25519-sha256.h
-                   ,Concordium/Crypto/Hacl/hacl_test_utils.h
+--                   ,Concordium/Crypto/Hacl/hacl_test_utils.h
   extensions:      ForeignFunctionInterface
 
   Exposed-modules: Concordium.Crypto.Haskell.SHA256	
                    Concordium.Crypto.Haskell.Signature
                    Concordium.Crypto.Haskell.VRF
+  Other-modules:   Concordium.Crypto.Haskell.ByteStringHelpers
   Build-depends:  base >=4.7
                 , bytestring >=0.10
-                , cryptohash-sha256 >=0.11
                 , cereal >=0.5.7
                 , hashable >= 1.0.1.1
                 , random >= 1.1
                 , stringbuilder >=0.5.0
-  cc-options:     -m64 -O3 -DED25519_CUSTOMHASH -DED25519_CUSTOMRANDOM
+  cc-options:     -m64 -O3 -DED25519_CUSTOMHASH -DED25519_CUSTOMRANDOM -w
   ghc-options:   -fwarn-tabs -optc-O3 -fno-warn-unused-imports
 
   C-sources:      Concordium/Crypto/Hacl/hacl_test_utils.c
