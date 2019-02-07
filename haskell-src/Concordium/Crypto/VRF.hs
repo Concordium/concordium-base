@@ -11,6 +11,7 @@ module Concordium.Crypto.VRF(
     KeyPair(..),
     Hash,
     Proof,
+    randomKeyPair,
     newKeyPair,
     --hash,
     prove,
@@ -43,7 +44,8 @@ import           GHC.Generics
 import           Data.Maybe
 import           Numeric
 import           Text.Printf
-import           Concordium.Crypto.SHA256 
+import           Concordium.Crypto.SHA256
+import           System.Random
 
 foreign import ccall "ec_vrf_ed25519-sha256.h priv_key" c_priv_key :: Ptr Word8 -> IO CInt
 foreign import ccall "ec_vrf_ed25519-sha256.h public_key" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
@@ -77,7 +79,17 @@ newtype Proof = Proof Hash
 data KeyPair = KeyPair {
     privateKey :: PrivateKey,
     publicKey :: PublicKey
-}
+} deriving (Eq, Generic)
+
+instance Serialize KeyPair
+
+randomKeyPair :: RandomGen g => g -> (KeyPair, g)
+randomKeyPair gen = (key, gen')
+        where
+            (gen0, gen') = split gen
+            privKey = PrivateKey $ B.pack $ take 32 $ randoms gen0
+            key = KeyPair privKey (unsafePerformIO $ pubKey privKey)
+
 
     {-
 newKeyPair :: IO (PrivateKey, PublicKey)
@@ -93,10 +105,10 @@ newKeyPair = do maybeSk <- newPrivKey
 
 -}
 
-newKeyPair :: IO (PrivateKey, PublicKey)
+newKeyPair :: IO KeyPair
 newKeyPair = do sk <- newPrivKey 
                 pk <- pubKey sk
-                return (sk, pk)
+                return (KeyPair sk pk)
 
 newPrivKey :: IO PrivateKey
 newPrivKey = 
@@ -125,12 +137,12 @@ pubKey (PrivateKey sk) = do suc <- newIORef (0::Int)
                                  
 
 test :: IO () 
-test = do (sk,pk) <- newKeyPair
+test = do kp@(KeyPair sk pk) <- newKeyPair
           _ <- putStrLn("SK: " ++ privKeyToHex sk)
           _ <- putStrLn("PK: " ++ pubKeyToHex pk)
           _ <- putStrLn("MESSAGE:") 
           alpha <- B.getLine 
-          let prf@(Proof (Hash b)) = prove pk sk alpha  
+          let prf@(Proof (Hash b)) = prove kp alpha  
               valid = verify pk alpha prf 
               Hash h' = proofToHash prf 
            in
@@ -140,8 +152,8 @@ test = do (sk,pk) <- newKeyPair
               putStrLn ("Proof hash: " ++ byteStringToHex h')
 
 
-prove :: PublicKey -> PrivateKey -> ByteString -> Proof
-prove (PublicKey pk) (PrivateKey sk) b = Proof $ Hash $ unsafeDupablePerformIO $
+prove :: KeyPair -> ByteString -> Proof
+prove (KeyPair (PrivateKey sk) (PublicKey pk)) b = Proof $ Hash $ unsafeDupablePerformIO $
                                         create 80 $ \prf -> 
                                            withByteStringPtr pk $ \pk' -> 
                                                withByteStringPtr sk $ \sk' -> 

@@ -8,6 +8,7 @@ module Concordium.Crypto.Signature(
     KeyPair(..),
     Signature,
     test,
+    randomKeyPair,
     newKeyPair,
     sign,
     verify
@@ -62,7 +63,8 @@ newtype Signature = Signature Hash.Hash
 data KeyPair = KeyPair {
     signKey :: SignKey,
     verifyKey :: VerifyKey
-}
+} deriving (Eq, Generic)
+instance Serialize KeyPair
 
 newPrivKey :: IO SignKey
 newPrivKey =
@@ -82,19 +84,21 @@ pubKey (SignKey sk) = do pk <- create 32 $ \pub ->
                                  withByteStringPtr sk $ \y -> c_public_key y pub
                          return (VerifyKey pk)
 
-newKeyPair :: IO (SignKey, VerifyKey)
+randomKeyPair :: RandomGen g => g -> (KeyPair, g)
+randomKeyPair gen = (key, gen')
+        where
+            (gen0, gen') = split gen
+            privKey = SignKey $ B.pack $ take 32 $ randoms gen0
+            key = KeyPair privKey (unsafePerformIO $ pubKey privKey)
+
+
+newKeyPair :: IO KeyPair
 newKeyPair = do sk <- newPrivKey
                 pk <- pubKey sk
-                _  <- putStrLn ("SK: " ++ privKeyToHex sk)
-                _  <- putStrLn ("PK: " ++ pubKeyToHex pk)
-                return (sk, pk)
+                return (KeyPair sk pk)
 
-
-mySign :: ByteString -> ByteString -> Signature
-mySign key doc = Signature $ Hash.hashLazy $ toLazyByteString $ (stringUtf8 "SIGN") <> byteString key <> byteString doc
-
-sign :: SignKey -> VerifyKey -> ByteString -> Signature
-sign (SignKey sk) (VerifyKey pk)  m = Signature $ Hash.Hash $ unsafeDupablePerformIO $ 
+sign :: KeyPair -> ByteString -> Signature
+sign (KeyPair (SignKey sk) (VerifyKey pk)) m = Signature $ Hash.Hash $ unsafeDupablePerformIO $ 
     create 64 $ \sig ->
        withByteStringPtr m $ \m' -> 
           withByteStringPtr pk $ \pk' ->
@@ -117,10 +121,12 @@ verify (VerifyKey pk) m (Signature (Hash.Hash sig)) =  suc > -1
 
 
 test :: IO ()
-test = do (sk,pk) <- newKeyPair
-          _ <- putStrLn("MESSAGE:")
+test = do kp@(KeyPair sk pk) <- newKeyPair
+          putStrLn ("SK: " ++ privKeyToHex sk)
+          putStrLn ("PK: " ++ pubKeyToHex pk)
+          putStrLn("MESSAGE:")
           alpha <- B.getLine
-          let sig@(Signature (Hash.Hash b)) = sign sk pk alpha
+          let sig@(Signature (Hash.Hash b)) = sign kp alpha
               suc = verify pk alpha sig
            in
               putStrLn ("signature: " ++ byteStringToHex b) >>
