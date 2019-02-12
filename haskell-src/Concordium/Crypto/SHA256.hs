@@ -37,7 +37,7 @@ newtype Hash = Hash B.ByteString deriving (Eq, Ord)
 
 instance Serialize Hash where
     put (Hash h) = putByteString h
-    get = Hash <$> getByteString 32
+    get = Hash <$> getByteString digestSize 
 
 instance Show Hash where
     show (Hash h) = LC.unpack (toLazyByteString $ byteStringHex h)
