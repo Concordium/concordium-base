@@ -13,14 +13,6 @@ int randombytes(uint8_t * x,uint64_t len) {
       return 1;
 }
 
-/*
-void ed25519_extsk(hash_512bits extsk, const ed25519_secret_key sk) {
-    ed25519_hash(extsk, sk, 32);
-    extsk[0] &= 248;
-    extsk[31] &= 127;
-    extsk[31] |= 64;
-}
-*/
 
 static const bignum256modm zero = {
     0x00000000000000,
@@ -50,18 +42,6 @@ void inv256_modm(bignum256modm out, bignum256modm in){
     /*if(!iszero256_modm_batch(sum))
        printf("\n NOT ZERO \n ");*/
     
-}
-void additive_inverse(bignum256modm out, bignum256modm in){
-   out[0]=(uint64_t) -in[0]; 
-   out[1]=(uint64_t) -in[1]; 
-   out[2]=(uint64_t) -in[2]; 
-   out[3]=(uint64_t) -in[3]; 
-   out[4]=(uint64_t) -in[4]; 
-   reduce256_modm(out);
-   bignum256modm sum;
-   add256_modm(sum,in,out);
-   /*if(!iszero256_modm_batch(sum))
-       printf("\n NOT ZERO \n ");*/
 }
 
 void subtract256_modm(bignum256modm out, bignum256modm a, bignum256modm  b){
@@ -287,9 +267,6 @@ void ecvrf_prove(unsigned char pi[80], const ed25519_public_key pk, const ed2551
     bignum256modm kcx;
     mul256_modm(cx, c, x);
     subtract256_modm(kcx,k,cx);
-    //curve25519_sub_reduce(kcx, k,cx);
-    //reduce256_modm(kcx);
-    //sub256_modm_batch (kcx,k,cx,bignum256modm_limb_size);
     unsigned char tmp[32];
     /* pi = ec2osp(gamma) || i2osp(c,16) || i2osp(s,32) */
     ec2osp(tmp, &gamma); 
@@ -362,10 +339,6 @@ int ecvrf_verify(const ed25519_public_key pk, const unsigned char pi[80], uint8_
     ge25519_scalarmult_vartime(&gammac, &gamma, c);
     ge25519_scalarmult_vartime(&hs, &h, s);
     ge25519_add(&v, &gammac, &hs); /*should be equal to h^k*/
-    /* 
-    for(int i = 0; i < 32; i++)
-        printf("%.2x",toPrint[i]);
-    */ 
     ge25519 points[6];
     points[0] = ge25519_basepoint;
     points[1] = h;
@@ -382,78 +355,22 @@ int ecvrf_verify(const ed25519_public_key pk, const unsigned char pi[80], uint8_
 
 int priv_key(ed25519_secret_key sk){
     int rc = randombytes(sk,sizeof(ed25519_secret_key));
-    //print_bytes(sk,32);
     return rc;
 }
 
 int public_key(ed25519_secret_key pk, ed25519_public_key sk){
-    //print_bytes(sk,32);printf("\n");
     bignum256modm x;
-    //os2bignum256modmp(x,sk,sizeof(ed25519_secret_key));
     expand_sk(x,sk);
     ge25519 ALIGN(16) pk_point;
     ge25519_scalarmult_base_niels(&pk_point, ge25519_niels_base_multiples, x);
     ec2osp(pk,&pk_point);
-    //print_bytes(pk,32);printf("\n");
     return 1;
 }
 
 int keyPair(ed25519_secret_key sk, ed25519_public_key pk){
-    //int rc = randombytes(sk,sizeof(ed25519_secret_key));
-    //print_bytes(sk,32);printf("\n");
     int rc = priv_key(sk);
     if(rc != 1)
         return 0;
-    //bignum256modm x;
-    //os2bignum256modmp(x,sk,sizeof(ed25519_secret_key));
-    //ge25519 ALIGN(16) pk_point;
-    //ge25519_scalarmult_base_niels(&pk_point, ge25519_niels_base_multiples, x);
-    //ec2osp(pk,&pk_point);
-    //print_bytes(pk,32);printf("\n");
     return public_key(pk, sk);
 }
-/*
-int main(){
-    //int x = testEc2OS();
-    //printf("result %d\n", x);
-    //return x;
- printf( "length?");
- int length;
- int result = scanf("%d", &length);
- if (result == EOF)
- { 
-     printf("ERROR");
-     return -1;
- }
- else
- {
-     ed25519_secret_key sk;
-     ed25519_public_key pk;
-     int success = keyPair(sk,pk);
-     if (success !=1)
-         printf("ERROR GENERATING KEY PAIR");
-     if(ecvrf_verify_key(pk)==0)
-         printf("KEY NOT VALID");
-     while(1)
-     {
-         uint8_t alpha[length];
-         printf("message?");
-         scanf("%s", alpha);
-         unsigned char pi[80];
-         ecvrf_prove(pi,pk ,sk , alpha, length);
-         unsigned char proofHash[32];
-         int pth = ecvrf_proof_to_hash(proofHash,pi);
-         if (pth){
-             for(int i =0;i<32;i++)
-               printf("%.2x",proofHash[i]);
-         }
 
-         int val= ecvrf_verify(pk, pi, alpha, length); 
-         printf("\n **** %d ****\n", val);
-             
-     }
-     return 1;
- }
-}
-
-*/
