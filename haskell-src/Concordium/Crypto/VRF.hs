@@ -66,6 +66,8 @@ data PublicKey = PublicKey ByteString
 instance Serialize PublicKey where
     put (PublicKey key) = putByteString key
     get = PublicKey <$> getByteString 32
+instance Show PublicKey where
+    show (PublicKey key) = byteStringToHex key
 
 -- |A VRF private key. 32 bytes.
 data PrivateKey = PrivateKey ByteString
@@ -73,6 +75,8 @@ data PrivateKey = PrivateKey ByteString
 instance Serialize PrivateKey where
     put (PrivateKey key) = putByteString key
     get = PrivateKey <$> getByteString 32
+instance Show PrivateKey where
+    show (PrivateKey key) = byteStringToHex key
 
 -- |A VRF proof. 80 bytes.
 newtype Proof = Proof ByteString
@@ -89,7 +93,7 @@ instance Show Proof where
 data KeyPair = KeyPair {
     privateKey :: PrivateKey,
     publicKey :: PublicKey
-} deriving (Eq)
+} deriving (Eq, Show)
 
 instance Serialize KeyPair where
     put (KeyPair priv pub) = put priv >> put pub

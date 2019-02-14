@@ -60,3 +60,4 @@ Test-Suite tests
   other-modules:
     ConcordiumTests.Crypto.SHA256
     ConcordiumTests.Crypto.Signature
+    ConcordiumTests.Crypto.VRF
