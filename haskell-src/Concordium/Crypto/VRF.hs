@@ -1,8 +1,8 @@
 {-# LANGUAGE DeriveGeneric, GeneralizedNewtypeDeriving, ForeignFunctionInterface #-}
-{- | This module implements a dummy verifiable random function.
-     The implementation is intended to immitate the behaviour of
-     a real implementation, but does not provide any security.
--}
+-- | This module is a prototype implementantion of  verifiable random function.
+-- draft-irtf-cfrg-vrf-01
+
+
 module Concordium.Crypto.VRF(
     PublicKey,
     PrivateKey,
