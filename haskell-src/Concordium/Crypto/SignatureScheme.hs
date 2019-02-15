@@ -25,7 +25,8 @@ class SignatureScheme scheme where
 -- FiniteGroup is just and identifier G (g, p) where g is a generator and p is the order
 -- What shoudl BinlinearMap be???
 --data CL = (Int, FiniteGroup, FiniteGroup, BilinearMap)
-data Ed25519 = Ed25519
+data Ed25519 
+data CL
 
 instance SignatureScheme Ed25519 where
     data VerifyKey Ed25519    = Ed25519_PK ByteString
@@ -35,6 +36,16 @@ instance SignatureScheme Ed25519 where
     publicKey (Ed25519_SK x) = Ed25519_PK x
     sign (Ed25519_SK x) (Ed25519_PK y) b = Ed25519_Sig b
     verify (Ed25519_PK x) b s = True
+
+instance SignatureScheme CL where
+    data VerifyKey CL    = CL_PK ByteString
+    data SignKey CL      = CL_SK ByteString
+    data Signature CL    = CL_Sig ByteString
+    generatePrivateKey        = CL_SK B.empty
+    publicKey (CL_SK x) = CL_PK x
+    sign (CL_SK x) (CL_PK y) b = CL_Sig b
+    verify (CL_PK x) b s = True
+
 -- Example instance CL signature scheme
 -- Scheme B in Camenische-Lysyanskaya 04 paper
     {-
