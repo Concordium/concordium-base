@@ -53,6 +53,9 @@ data SignKey = SignKey ByteString
 instance Serialize SignKey where
     put (SignKey key) = putByteString key
     get = SignKey <$> getByteString 32
+instance Show SignKey where
+    show (SignKey sk) = byteStringToHex sk
+
 
 -- |Signature public (verification) key. 32 bytes
 data VerifyKey = VerifyKey ByteString
@@ -60,14 +63,23 @@ data VerifyKey = VerifyKey ByteString
 instance Serialize VerifyKey where
     put (VerifyKey key) = putByteString key
     get = VerifyKey <$> getByteString 32
+instance Show VerifyKey where
+    show (VerifyKey vk) = byteStringToHex vk
 
-newtype Signature = Signature Hash.Hash
-    deriving (Eq, Serialize, Show)
+-- |Signature. 64 bytes
+newtype Signature = Signature ByteString
+    deriving (Eq)
+
+instance Serialize Signature where
+    put (Signature sig) = putByteString sig
+    get = Signature <$> getByteString 64
+instance Show Signature where
+    show (Signature sig) = byteStringToHex sig
 
 data KeyPair = KeyPair {
     signKey :: SignKey,
     verifyKey :: VerifyKey
-} deriving (Eq)
+} deriving (Eq, Show)
 instance Serialize KeyPair where
     put (KeyPair sk vk) = put sk >> put vk
     get = do
@@ -107,7 +119,7 @@ newKeyPair = do sk <- newPrivKey
                 return (KeyPair sk pk)
 
 sign :: KeyPair -> ByteString -> Signature
-sign (KeyPair (SignKey sk) (VerifyKey pk)) m = Signature $ Hash.Hash $ unsafeDupablePerformIO $ 
+sign (KeyPair (SignKey sk) (VerifyKey pk)) m = Signature $ unsafeDupablePerformIO $ 
     create 64 $ \sig ->
        withByteStringPtr m $ \m' -> 
           withByteStringPtr pk $ \pk' ->
@@ -118,7 +130,7 @@ sign (KeyPair (SignKey sk) (VerifyKey pk)) m = Signature $ Hash.Hash $ unsafeDup
 
 
 verify :: VerifyKey -> ByteString -> Signature -> Bool
-verify (VerifyKey pk) m (Signature (Hash.Hash sig)) =  suc > -1
+verify (VerifyKey pk) m (Signature sig) =  suc > -1
    where
        mlen = fromIntegral $ B.length m
        suc  = unsafeDupablePerformIO $ 
@@ -135,7 +147,7 @@ test = do kp@(KeyPair sk pk) <- newKeyPair
           putStrLn ("PK: " ++ pubKeyToHex pk)
           putStrLn("MESSAGE:")
           alpha <- B.getLine
-          let sig@(Signature (Hash.Hash b)) = sign kp alpha
+          let sig@(Signature b) = sign kp alpha
               suc = verify pk alpha sig
            in
               putStrLn ("signature: " ++ byteStringToHex b) >>
