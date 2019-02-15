@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ForeignFunctionInterface #-}
--- |This module provides a dummy signature scheme for
--- prototyping purposes.  It provides NO SECURITY and
--- obviously should be replaced with a real implementation.
+-- |This module provides a prototype implementation of 
+-- ECDSA scheme of Curve Ed25519 
+--  IRTF RFC 8032
 module Concordium.Crypto.Signature(
     SignKey,
     VerifyKey,
