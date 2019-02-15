@@ -29,10 +29,10 @@ int main(){
        printf("PROOF: "); print_bytes(pi, 80); printf("\n");
        printf("PROOF Hash: "); print_bytes(proofHash, 32); printf("\n");
        int val = ecvrf_verify(pk,pi, m, j);
-       printf(val==1? "SUCCESS":"FAILURE"); 
+       printf(val==1? "SUCCESS\n":"FAILURE\n"); 
        succ = succ + val;
      }
 
-     printf("total succ number: %d", succ);
+     printf("total succ number: %d\n", succ);
 }
 
