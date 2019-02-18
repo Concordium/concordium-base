@@ -1,17 +1,18 @@
 {-# LANGUAGE TypeFamilies #-}
-module SignatureScheme where
+module Concordium.Crypto.SignatureScheme where
 import           Data.ByteString (ByteString) 
 import qualified Data.ByteString as B
 
 
 data SchemeID = Schnorr | CamenischeLysyanskaya | ECDSA_Ed25519
+
 class SignatureScheme scheme where
     data VerifyKey scheme :: *
     data SignKey scheme :: *
     data Signature scheme :: *
     generatePrivateKey ::  SignKey scheme
     publicKey :: SignKey scheme -> VerifyKey scheme
-    sign :: SignKey scheme -> VerifyKey scheme -> ByteString -> Signature scheme
+    sign ::  SignKey scheme -> VerifyKey scheme -> ByteString -> Signature scheme
     verify :: VerifyKey scheme -> ByteString -> Signature scheme -> Bool
 
 
@@ -25,9 +26,20 @@ class SignatureScheme scheme where
 -- FiniteGroup is just and identifier G (g, p) where g is a generator and p is the order
 -- What shoudl BinlinearMap be???
 --data CL = (Int, FiniteGroup, FiniteGroup, BilinearMap)
+
+data Curve 
+data Point
+data Bignum
+
+data ECDSA = ECDSA Curve Point Bignum 
 data Ed25519 
 data CL
-
+    {-
+instance Signature Scheme ECDSA where
+    data VerifyKey ECDSA  =  ECDSA_PK ByteString
+    data SignKey ECDSA    = ECDSA_SK ByteString
+    data Signature ECDSA  = ECDSA_Sig ByteString
+-}
 instance SignatureScheme Ed25519 where
     data VerifyKey Ed25519    = Ed25519_PK ByteString
     data SignKey Ed25519      = Ed25519_SK ByteString
@@ -45,14 +57,3 @@ instance SignatureScheme CL where
     publicKey (CL_SK x) = CL_PK x
     sign (CL_SK x) (CL_PK y) b = CL_Sig b
     verify (CL_PK x) b s = True
-
--- Example instance CL signature scheme
--- Scheme B in Camenische-Lysyanskaya 04 paper
-    {-
-instance SignatureScheme CL where
-	schemeID = CamenischeLysyanskaya
-        data VerifKey CL = VK { order :: Int, group :: FiniteGroupd, group' :: FiniteGroup, e :: BilinearMap, _X :: Int, _Y :: Int, _Z :: Int}
-        data SignKey CL = SK { x :: Int, y :: Int, z :: Int}
-            .....
-
---}
