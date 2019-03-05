@@ -20,6 +20,8 @@ set_target_properties( concordium-crypto
     VERSION 0.1
     SOVERSION 0) 
 
+install( TARGETS concordium-crypto DESTINATION lib)
+
 # Unit test
 set( TEST_SRCS c-src/test-internals.c)
 add_executable( test-internals ${TEST_SRCS})

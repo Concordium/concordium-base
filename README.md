@@ -25,6 +25,15 @@ $ crypto/build > cmake --build .
 These steps will generate target file `libconcordium-crypto.so.0.1` and some
 links in linux SOs.
 
+To install into your system, you will need call as `root` (or administrative
+roll):
+
+```bash
+$ crypto/build > sudo cmake --build . --target install
+```
+*NOTE:* In this case we are use `sudo` to get administrative privileges to copy
+target library into default prefix `/usr/local/lib/`
+
 # How to Run Unit Test in C Part
 
 As any other `CMake` project, you just need to follow next steps:
