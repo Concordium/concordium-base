@@ -26,6 +26,7 @@ set( HEADERS
     include/ed25519-donna-32bit-sse2.h
     include/ed25519-donna-64bit-x86-32bit.h
     include/ed25519-donna.h
+    include/ed25519-donna-basepoint-table.h
     include/ed25519-donna-portable-identify.h
 
     include/ed25519-hash.h
@@ -55,6 +56,9 @@ set( HEADERS
     include/test-ticks.h)
 
 add_library( concordium-crypto SHARED ${SRCS} ${HEADERS})
+
+target_compile_definitions( concordium-crypto
+    PUBLIC ED25519_CUSTOMHASH=1 ED25519_CUSTOMRANDOM=1)
 
 set_target_properties( concordium-crypto PROPERTIES
     FRAMEWORK TRUE
