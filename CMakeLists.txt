@@ -12,15 +12,60 @@ set( SRCS
     c-src/Hacl_SHA2_512.c
     c-src/hacl_test_utils.c
     c-src/kremlib.c)
+set( HEADERS
+    include/ed25519.h
+    include/ed25519_cryptonite_exts.h
+    include/ed25519-donna-64bit-tables.h
+    include/ed25519-donna-batchverify.h
+    include/ed25519-donna-portable.h
+    include/ed25519-donna-32bit-tables.h
+    include/ed25519-donna-64bit-x86.h
+    include/ed25519-donna-64bit-sse2.h
+    include/ed25519-donna-impl-sse2.h
+    include/ed25519-donna-impl-base.h
+    include/ed25519-donna-32bit-sse2.h
+    include/ed25519-donna-64bit-x86-32bit.h
+    include/ed25519-donna.h
+    include/ed25519-donna-portable-identify.h
 
-add_library( concordium-crypto SHARED ${SRCS})
+    include/ed25519-hash.h
+    include/ed25519-hash-custom.h
+    
+    include/ed25519-randombytes.h
+    include/ed25519-randombytes-custom.h
 
-set_target_properties( concordium-crypto
-    PROPERTIES
+    include/curve25519-donna-helpers.h
+    include/curve25519-donna-sse2.h
+    include/curve25519-donna-32bit.h
+    include/curve25519-donna-64bit.h
+   
+    include/ec_vrf_ed25519-sha256.h
+    include/Hacl_SHA2_256.h
+    
+    include/kremlib_base.h
+    include/kremlib.h
+   
+    include/modm-donna-32bit.h
+    include/modm-donna-64bit.h
+    
+    include/Hacl_SHA2_512.h
+    include/hacl_test_utils.h
+    
+    include/regression.h
+    include/test-ticks.h)
+
+add_library( concordium-crypto SHARED ${SRCS} ${HEADERS})
+
+set_target_properties( concordium-crypto PROPERTIES
+    FRAMEWORK TRUE
+    FRAMEWORK_VERSION C
     VERSION 0.1
-    SOVERSION 0) 
+    SOVERSION 0
+    PUBLIC_HEADER "${HEADERS}")
 
-install( TARGETS concordium-crypto DESTINATION lib)
+install( TARGETS concordium-crypto 
+    LIBRARY DESTINATION lib
+    PUBLIC_HEADER DESTINATION include/concordium-crypto)
 
 # Unit test
 set( TEST_SRCS c-src/test-internals.c)
