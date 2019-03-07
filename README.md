@@ -8,7 +8,7 @@ This project can use `CMake` tool for building. You only need to follow next
 steps:
 
 ```bash
-$ crypto > make build
+$ crypto > mkdir build
 $ crypto > cd build 
 $ crypto/build > cmake  ..
 $ crypto/build > cmake --build .

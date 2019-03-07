@@ -61,8 +61,6 @@ target_compile_definitions( concordium-crypto
     PUBLIC ED25519_CUSTOMHASH=1 ED25519_CUSTOMRANDOM=1)
 
 set_target_properties( concordium-crypto PROPERTIES
-    FRAMEWORK TRUE
-    FRAMEWORK_VERSION C
     VERSION 0.1
     SOVERSION 0
     PUBLIC_HEADER "${HEADERS}")
