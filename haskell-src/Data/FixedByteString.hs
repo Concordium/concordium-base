@@ -10,7 +10,9 @@ import Data.Word
 import Data.Bits
 import System.IO.Unsafe
 import Control.Monad
-
+import qualified Data.ByteString as BS
+import Data.ByteString.Internal (fromForeignPtr)
+import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 
 
 class FixedLength a where
@@ -38,8 +40,8 @@ unsafeCreate = unsafeDupablePerformIO . create
 -- |Create a 'FixedByteString' from a list of bytes.  If the list is too short,
 -- the remaining bytes are filled with @0@.  If it is too long, only the first
 -- @fixedLength (undefined :: a)@ bytes are used.
-fromBytes :: forall a. (FixedLength a) => [Word8] -> FixedByteString a
-fromBytes = unsafeCreate . fill 0
+pack :: forall a. (FixedLength a) => [Word8] -> FixedByteString a
+pack = unsafeCreate . fill 0
     where
         limit = fixedLength (undefined :: a)
         fill n l ptr = when (n < limit) $
@@ -51,8 +53,8 @@ fromBytes = unsafeCreate . fill 0
                             fill (n+1) bs ptr
 
 -- |Convert a 'FixedByteString' to a list of bytes.
-toBytes :: forall a. (FixedLength a) => FixedByteString a -> [Word8]
-toBytes (FixedByteString fbs) = toB 0
+unpack :: forall a. (FixedLength a) => FixedByteString a -> [Word8]
+unpack (FixedByteString fbs) = toB 0
     where
         len = fixedLength (undefined :: a)
         toB n
@@ -136,35 +138,35 @@ decodeIntegerSigned (FixedByteString fbs) = unsafeDupablePerformIO $ withForeign
                 doDecode (i+1) (shiftL v 8 .|. toInteger b) ptr
 
 instance (FixedLength a) => Eq (FixedByteString a) where
-    f1 == f2 = toBytes f1 == toBytes f2
+    f1 == f2 = unpack f1 == unpack f2
 
 instance (FixedLength a) => Ord (FixedByteString a) where
-    compare f1 f2 = compare (toBytes f1) (toBytes f2)
+    compare f1 f2 = compare (unpack f1) (unpack f2)
 
 mapBytes :: forall a. (FixedLength a) => (Word8 -> Word8) -> FixedByteString a -> FixedByteString a
-mapBytes f fbs = unsafeCreate (doMap (toBytes fbs))
+mapBytes f fbs = unsafeCreate (doMap (unpack fbs))
     where
         doMap [] _ = return ()
         doMap (b : bs) ptr = poke ptr (f b) >> doMap bs (plusPtr ptr 1)
 
 zipWithBytes :: forall a. (FixedLength a) => (Word8 -> Word8 -> Word8) -> FixedByteString a -> FixedByteString a -> FixedByteString a
-zipWithBytes f fbs1 fbs2 = fromBytes $ zipWith f (toBytes fbs1) (toBytes fbs2)
+zipWithBytes f fbs1 fbs2 = pack $ zipWith f (unpack fbs1) (unpack fbs2)
 
 instance (FixedLength a) => Bounded (FixedByteString a) where
     minBound = unsafeCreate $ \p -> fillBytes p 0x00 (fixedLength (undefined :: a))
     maxBound = unsafeCreate $ \p -> fillBytes p 0xff (fixedLength (undefined :: a))
 
 instance (FixedLength a) => Enum (FixedByteString a) where
-    succ fbs = if overflow then error "succ: overflow" else fromBytes newBytes
+    succ fbs = if overflow then error "succ: overflow" else pack newBytes
         where
             doSucc b (True, l) = (b == 0xff, (b+1) : l)
             doSucc b (False, l) = (False, b : l)
-            (overflow, newBytes) = foldr doSucc (True, []) (toBytes fbs)
-    pred fbs = if underflow then error "pred: underflow" else fromBytes newBytes
+            (overflow, newBytes) = foldr doSucc (True, []) (unpack fbs)
+    pred fbs = if underflow then error "pred: underflow" else pack newBytes
         where
             doPred b (True, l) = (b == 0x00, (b-1) : l)
             doPred b (False, l) = (False, b : l)
-            (underflow, newBytes) = foldr doPred (True, []) (toBytes fbs)
+            (underflow, newBytes) = foldr doPred (True, []) (unpack fbs)
     toEnum = encodeInteger . toInteger
     fromEnum = fromInteger . decodeIntegerSigned
 
@@ -176,8 +178,8 @@ instance (FixedLength a) => Bits (FixedByteString a) where
     shiftL fbs n = fromReversedBytes $
         (take (n `div` 8) (repeat 0)) ++ fst (foldr (\b (r, carry) -> ((shiftL b (n `mod` 8) .|. carry) : r, shiftR b (8 - (n `mod` 8)))) ([], 0) (toReversedBytes fbs))
     -- We treat FixedByteStrings as unsigned, meaning shiftR does not do sign extension
-    shiftR fbs n = fromBytes $
-        (take (n `div` 8) (repeat 0)) ++ fst (foldr (\b (r, carry) -> ((shiftR b (n `mod` 8) .|. carry) : r, shiftL b (8 - (n `mod` 8)))) ([], 0) (toBytes fbs))
+    shiftR fbs n = pack $
+        (take (n `div` 8) (repeat 0)) ++ fst (foldr (\b (r, carry) -> ((shiftR b (n `mod` 8) .|. carry) : r, shiftL b (8 - (n `mod` 8)))) ([], 0) (unpack fbs))
     rotateL fbs n0 = shiftL fbs n .|. shiftR fbs (bitLen - n)
         where
             bitLen = (8 * fixedLength (undefined :: a))
@@ -189,7 +191,7 @@ instance (FixedLength a) => Bits (FixedByteString a) where
     isSigned _ = False
     bitSize _ = 8 * fixedLength (undefined :: a)
     bitSizeMaybe _ = Just (8 * fixedLength (undefined :: a))
-    popCount fbs = sum (popCount <$> toBytes fbs)
+    popCount fbs = sum (popCount <$> unpack fbs)
     testBit fbs n
             | n >= 8 * fixedLength (undefined :: a) = False
             | otherwise = testBit (getByte fbs ((n `div` 8) `mod` (fixedLength (undefined :: a)))) (n `mod` 8)
@@ -199,3 +201,23 @@ instance (FixedLength a) => Bits (FixedByteString a) where
                 | n < 0 = []
                 | n < 8 = [bit n]
                 | otherwise = 0 : bitBytes (n - 8)
+
+-- |Convert to a strict 'BS.ByteString'.  The 'ByteString' will share the underlying
+-- pointer of the 'FixedByteString'.
+toByteString :: forall a. (FixedLength a) => FixedByteString a -> BS.ByteString
+toByteString (FixedByteString ptr) = fromForeignPtr ptr 0 (fixedLength (undefined :: a))
+
+
+-- |Copy a 'BS.ByteString' into a 'FixedByteString'.  If the 'ByteString' is too short,
+-- the later bytes will be filled with @0@; if it is too long, only the first bytes
+-- will be copied.
+fromByteString :: forall a. (FixedLength a) => BS.ByteString -> FixedByteString a
+fromByteString bs = unsafeDupablePerformIO $ unsafeUseAsCStringLen bs $ \(ptr, len) -> create $ \fbsptr -> do
+        copyBytes fbsptr (castPtr ptr) (min len fixedLen)
+        when (len < fixedLen) $ fillBytes (fbsptr `plusPtr` len) 0 (fixedLen - len)
+    where
+        fixedLen = fixedLength (undefined :: a)
+
+-- |Access the pointer encapsulated by a 'FixedByteString'.
+withPtr :: FixedByteString s -> (Ptr Word8 -> IO a) -> IO a
+withPtr (FixedByteString p) = withForeignPtr p

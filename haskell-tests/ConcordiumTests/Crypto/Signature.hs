@@ -53,6 +53,7 @@ testSignVerify = property $ ck
         ck kp doc0 = let doc = BS.pack doc0 in
                         Sig.verify (Sig.verifyKey kp) doc (Sig.sign kp doc)
 
+tests :: Spec
 tests = parallel $ describe "Concordium.Crypto.SHA256" $ do
             describe "serialization" $ do
                 it "sign key" $ testSerializeSignKey

@@ -26,8 +26,8 @@ Library
   Exposed-modules: Concordium.Crypto.SHA256	
                    Concordium.Crypto.Signature
                    Concordium.Crypto.VRF
-  Other-modules:   Concordium.Crypto.ByteStringHelpers
                    Data.FixedByteString
+  Other-modules:   Concordium.Crypto.ByteStringHelpers
   Build-depends:  base >=4.7
                 , bytestring >=0.10
                 , cereal >=0.5.7
