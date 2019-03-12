@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, ForeignFunctionInterface #-}
 module Data.FixedByteString where
 
 import Foreign.ForeignPtr
@@ -138,10 +138,14 @@ decodeIntegerSigned (FixedByteString fbs) = unsafeDupablePerformIO $ withForeign
                 doDecode (i+1) (shiftL v 8 .|. toInteger b) ptr
 
 instance (FixedLength a) => Eq (FixedByteString a) where
-    f1 == f2 = unpack f1 == unpack f2
+    f1@(FixedByteString p1) == f2@(FixedByteString p2)
+        | p1 == p2 = True
+        | otherwise = compare (toByteString f1) (toByteString f2) == EQ
+    {-# INLINE (==) #-}
 
 instance (FixedLength a) => Ord (FixedByteString a) where
-    compare f1 f2 = compare (unpack f1) (unpack f2)
+    compare f1 f2 = compare (toByteString f1) (toByteString f2)
+    {-# INLINE compare #-}
 
 mapBytes :: forall a. (FixedLength a) => (Word8 -> Word8) -> FixedByteString a -> FixedByteString a
 mapBytes f fbs = unsafeCreate (doMap (unpack fbs))
@@ -206,7 +210,7 @@ instance (FixedLength a) => Bits (FixedByteString a) where
 -- pointer of the 'FixedByteString'.
 toByteString :: forall a. (FixedLength a) => FixedByteString a -> BS.ByteString
 toByteString (FixedByteString ptr) = fromForeignPtr ptr 0 (fixedLength (undefined :: a))
-
+{-# INLINE toByteString #-}
 
 -- |Copy a 'BS.ByteString' into a 'FixedByteString'.  If the 'ByteString' is too short,
 -- the later bytes will be filled with @0@; if it is too long, only the first bytes
