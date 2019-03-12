@@ -19,6 +19,7 @@ import           Data.Serialize
 import           Data.Hashable               
 import           Data.Bits
 import qualified Data.FixedByteString       as FBS
+import           Foreign.Storable           (peek)
 
 foreign import ccall "Hacl_SHA2_256.h Hacl_SHA2_256_hash"    c_hash        :: Ptr Word8 -> Ptr Word8 -> Word32 -> IO ()
 foreign import ccall "Hacl_SHA2_256.h Hacl_SHA2_256_update_multi"  c_hash_update :: Ptr Word32 -> Ptr Word8 -> Word32 -> IO () 
@@ -51,10 +52,7 @@ instance Show Hash where
 
 instance Hashable Hash where
     hashWithSalt s (Hash b) = hashWithSalt s (FBS.toByteString b)
-    hash (Hash b) = let bs = FBS.toByteString b in case decode bs of
-        Left _ -> hashWithSalt 0 bs
-        Right v -> v
-
+    hash (Hash b) = unsafeDupablePerformIO $ FBS.withPtr b $ \p -> peek (castPtr p)
 
 hash :: ByteString -> Hash
 hash b = Hash $ FBS.unsafeCreate $ \h -> withByteStringPtr b $ \input -> c_hash h input len 
