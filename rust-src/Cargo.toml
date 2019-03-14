@@ -1,0 +1,6 @@
+[workspace]
+
+members=[
+   "ec_vrf_ed25519_sha256",
+   "eddsa_ed25519"]
+
