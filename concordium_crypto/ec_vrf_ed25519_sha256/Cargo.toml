@@ -1,0 +1,16 @@
+[dependencies]
+rand      = "0"
+rand_core = { version = "0.3.0", default-features = false }
+clear_on_drop = "0"
+failure       = "0"
+sha2      = "0"
+signatory = "0"
+curve25519-dalek = "1"
+
+
+
+
+
+
+
+
