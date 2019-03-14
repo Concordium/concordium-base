@@ -1,3 +1,8 @@
+[package]
+name="ec_vrf_ed25519_sha256"
+authors=["concordium AB"]
+version="0.0.1"
+
 [dependencies]
 rand      = "0"
 rand_core = { version = "0.3.0", default-features = false }
@@ -7,6 +12,9 @@ sha2      = "0"
 signatory = "0"
 curve25519-dalek = "1"
 
+[lib]
+name = "ec_vrf_ed25519"
+crate-type = ["staticlib"]
 
 
 

@@ -2,7 +2,5 @@
 
 members=[
    "ec_vrf_ed25519_sha256",
-   "eddsa"
-]
+   "eddsa_ed25519"]
 
-[dependencies]

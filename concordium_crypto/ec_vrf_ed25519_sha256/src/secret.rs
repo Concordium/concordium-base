@@ -1,11 +1,7 @@
 // -*- mode: rust; -*-
 //
-// This file is part of ed25519-dalek.
-// Copyright (c) 2017-2019 isis lovecruft
-// See LICENSE for licensing information.
-//
 // Authors:
-// - isis agora lovecruft <isis@patternsinthevoid.net>
+// - bm@concordium.com
 
 //! ed25519 secret key types.
 
@@ -126,33 +122,9 @@ impl SecretKey {
         Ok(SecretKey(bits))
     }
 
-    fn mangle_scalar_bits_and_return_scalar(&self)->Scalar{
-       let mut b:[u8;32] = self.to_bytes().clone();
-       b[0] &=248;
-       b[31] &= 127;
-       b[31] |= 64;
-       Scalar::from_bits(b)
-   }
     #[allow(non_snake_case)]
     pub fn prove<R: RngCore + CryptoRng>(&self, public_key:&PublicKey, message: &[u8], rng: &mut R) -> Result<Proof, ProofError>{
         ExpandedSecretKey::from(self).prove(&public_key, &message,  rng)
-        //let h:EdwardsPoint = public_key.hash_to_curve(message).expect("prove failed");
-        //let x = ExpandedSecretKey::from(self).key;
-        //let h_to_x = x * h; //h^x
-        //let k = Scalar::random(rng); //nonce
-        //let h_to_k = &k * &h; //h^k
-        //let g_to_k = &k *&constants::ED25519_BASEPOINT_TABLE; //g^k
-        //let c = hash_points(vec![
-        //                    constants::ED25519_BASEPOINT_COMPRESSED,
-        //                    h.compress(),
-        //                    public_key.0,
-        //                    h_to_x.compress(),
-        //                    g_to_k.compress(),
-        //                    h_to_k.compress()
-        //]);
-        //let k_minus_cx = k - (c * x);
-
-        //Ok (Proof(h_to_x, c, k_minus_cx))
     }
 
 
