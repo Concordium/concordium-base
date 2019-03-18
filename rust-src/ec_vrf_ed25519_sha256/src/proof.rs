@@ -34,7 +34,7 @@ pub fn hash_points(pts: Vec<CompressedEdwardsY>) -> Scalar{
         }
         let mut c_bytes: [u8;32]=[0;32];
         //taking firt 16 bytes of the hash
-        c_bytes[16..32].copy_from_slice(&hash.result().as_slice()[0..16]);
+        c_bytes[0..16].copy_from_slice(&hash.result().as_slice()[0..16]);
         Scalar::from_bytes_mod_order(c_bytes)
 }
 
@@ -62,7 +62,7 @@ impl Proof {
     pub fn to_bytes(&self) -> [u8; PROOF_LENGTH] {
         let c = &self.1.reduce().to_bytes();
         //assert c is within range 
-        assert_eq!(c[16..], [0u8;16]);
+        assert_eq!(c[16..32], [0u8;16]);
         let mut proof_bytes: [u8; PROOF_LENGTH] = [0u8; PROOF_LENGTH];
         proof_bytes[..32].copy_from_slice(&self.0.compress().to_bytes()[..]);
         proof_bytes[32..48].copy_from_slice(&c[..16]);
@@ -74,7 +74,7 @@ impl Proof {
         let mut point_bytes : [u8;32]=[0u8;32];
         point_bytes.copy_from_slice(&proof_bytes[..32]);
         let mut scalar_bytes1: [u8; 32]=[0u8;32];
-        scalar_bytes1.copy_from_slice(&proof_bytes[32..48]);
+        scalar_bytes1[0..16].copy_from_slice(&proof_bytes[32..48]);
         let mut scalar_bytes2: [u8; 32]=[0u8;32];
         scalar_bytes2.copy_from_slice(&proof_bytes[48..PROOF_LENGTH]);
         let compressed_point = CompressedEdwardsY(point_bytes);
@@ -82,7 +82,7 @@ impl Proof {
             None => Err (ProofError(InternalError::PointDecompressionError)),
             Some(p) => match Scalar::from_canonical_bytes(scalar_bytes1) {
                 None => Err (ProofError(InternalError::ScalarFormatError)),
-                Some(s1) => match Scalar::from_canonical_bytes(scalar_bytes1){
+                Some(s1) => match Scalar::from_canonical_bytes(scalar_bytes2){
                     None => Err (ProofError(InternalError::ScalarFormatError)),
                     Some(s2) => Ok (Proof(p, s1, s2))
                 }
