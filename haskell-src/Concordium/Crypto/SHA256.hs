@@ -16,21 +16,36 @@ import           Control.Monad
 import           Foreign.Marshal.Array
 import           Foreign.Marshal.Alloc
 import           Data.Serialize
-import           Data.Hashable               
+import           Data.Hashable 
 
-foreign import ccall "Hacl_SHA2_256.h Hacl_SHA2_256_hash"    c_hash        :: Ptr Word8 -> Ptr Word8 -> Word32 -> IO ()
-foreign import ccall "Hacl_SHA2_256.h Hacl_SHA2_256_update_multi"  c_hash_update :: Ptr Word32 -> Ptr Word8 -> Word32 -> IO () 
-foreign import ccall "Hacl_SHA2_256.h Hacl_SHA2_256_update_last"  c_hash_update_last :: Ptr Word32 -> Ptr Word8 ->  Word32 -> IO () 
-foreign import ccall "Hacl_SHA2_256.h Hacl_SHA2_256_init"    c_hash_init   :: Ptr Word32 -> IO () 
-foreign import ccall "Hacl_SHA2_256.h Hacl_SHA2_256_finish"    c_hash_finish   :: Ptr Word32 -> Ptr Word8 -> IO () 
+data SHA256Ctx
 
+foreign import ccall unsafe "sha256_new"
+   rs_sha256_init :: IO (Ptr SHA256Ctx)
+
+foreign import ccall unsafe "&sha256_free"
+   rs_sha256_free :: FunPtr (Ptr SHA256Ctx -> IO ())
+
+foreign import ccall unsafe "sha256_input"
+   rs_sha256_update :: Ptr SHA256Ctx -> Ptr Word8 -> Word32 -> IO ()
+
+foreign import ccall unsafe "sha256_result"
+   rs_sha256_final :: Ptr Word8 -> Ptr SHA256Ctx -> IO ()
+
+
+createSha256Ctx :: IO (Maybe (ForeignPtr SHA256Ctx))
+createSha256Ctx = do
+  ptr <- rs_sha256_init
+  if ptr /= nullPtr
+    then do
+      foreignPtr <- newForeignPtr_  ptr
+      return $ Just foreignPtr
+    else
+      return Nothing
 
 digestSize :: Int
 digestSize = 32
-ctxSize :: Int
-ctxSize = 137
-blckSize :: Int
-blckSize = 64
+
 
 -- |A SHA256 hash.  32 bytes.
 newtype Hash = Hash B.ByteString deriving (Eq, Ord)
@@ -51,32 +66,38 @@ instance Hashable Hash where
 
 
 hash :: ByteString -> Hash
-hash b = Hash $ unsafeDupablePerformIO $ create digestSize $ \h -> withByteStringPtr b $ \input -> c_hash h input len 
-     where len = fromIntegral $ B.length b
+hash b = Hash $ unsafeDupablePerformIO $ 
+                   do maybe_ctx <- createSha256Ctx
+                      case maybe_ctx of
+                        Nothing -> error "Failed to initialize hash"
+                        Just ctx_ptr -> withForeignPtr ctx_ptr  (\ctx -> hash_update b ctx)  >>
+                            withForeignPtr ctx_ptr  (\ctx -> hash_final ctx)
 
-hash_update :: Ptr Word32 -> ByteString -> IO ByteString
-hash_update ptr b = withByteStringPtr trimmed $ \t -> c_hash_update ptr t (fromIntegral $ numBlcks) >> return leftover 
-    where  len = B.length b
-           numBlcks = len `quot` blckSize
-           (trimmed,leftover) = B.splitAt (numBlcks * blckSize ) b 
 
+hash_final :: Ptr SHA256Ctx -> IO ByteString
+hash_final ptr = create digestSize $ \hash -> rs_sha256_final hash ptr 
+
+hash_update :: ByteString -> Ptr SHA256Ctx ->  IO ()
+hash_update b ptr = withByteStringPtr b $ \message -> rs_sha256_update ptr message (fromIntegral $ B.length b) 
+
+{-
 hash_update_last :: Ptr Word32 -> ByteString -> IO ()
 hash_update_last ptr x =  withByteStringPtr x $ \bsp -> c_hash_update_last ptr bsp (fromIntegral len)
                 where len = B.length x
+-}
 
 
 hashLazy :: L.ByteString -> Hash
-hashLazy b =  Hash $ unsafeDupablePerformIO $ create digestSize $ \hash -> 
-               do state <- callocBytes (ctxSize * 4)   
-                  _ <- c_hash_init state 
-                  x <- foldM (f state) B.empty (L.toChunks b)  
-                  _ <- hash_update_last state x  
-                  c_hash_finish state hash 
-                  free state
+hashLazy b =  Hash $ unsafeDupablePerformIO $  
+               do maybe_ctx <- createSha256Ctx   
+                  case maybe_ctx of 
+                    Nothing -> error "Failed to initialize hash"
+                    Just ctx -> do x <- mapM_ (f ctx)  (L.toChunks b)  
+                                   withForeignPtr ctx $ \ctx' -> hash_final ctx' 
        where 
-         f ptr leftover chunk = hash_update ptr (leftover `B.append` chunk)
+         f ptr chunk = withForeignPtr ptr $ \ptr' -> hash_update chunk ptr'
+
 hashTest ::FilePath ->  IO ()
 hashTest path = do b <- L.readFile path
                    let (Hash b') = hashLazy b
                    putStrLn(byteStringToHex b')
-
