@@ -1,6 +1,6 @@
 
 //extern crate std;
-
+extern crate rand_core;
 extern crate clear_on_drop;
 extern crate curve25519_dalek;
 extern crate failure;
