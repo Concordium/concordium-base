@@ -11,6 +11,9 @@ use core::default::Default;
 use rand::CryptoRng;
 use rand::RngCore;
 use rand::Rng;
+use rand::thread_rng;
+
+use std::slice;
 
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
@@ -193,9 +196,78 @@ impl<'d> Deserialize<'d> for Keypair {
 }
 
 
-//foriegn interface
+//foreign interface
 #[no_mangle]
-pub extern fn ec_vrf_prove(proof: &mut [u8;80], public_key: &[u8;32], secret_skey: &[u8;32], message: *const u8, len: usize){
+
+//Error encoding
+//-1 secret key extraction failed
+//-2 public key extraction failed
+//0 proving failed
+//1 success
+pub extern fn ec_vrf_prove(proof: &mut [u8;PROOF_LENGTH], public_key_bytes: &[u8;PUBLIC_KEY_LENGTH], secret_key_bytes: &[u8;SECRET_KEY_LENGTH], message: *const u8, len: usize)->i32{
+   let res_sk = SecretKey::from_bytes(secret_key_bytes);
+   let res_pk = PublicKey::from_bytes(public_key_bytes);
+   if res_sk.is_err() { return -1 };
+   if res_pk.is_err() { return -2 };
+   let sk = res_sk.unwrap();
+   let pk = res_pk.unwrap();
+                
+   assert!(!message.is_null(), "Null pointer in ec_vrf_prove");
+   let data: &[u8]= unsafe { slice::from_raw_parts(message, len)};
+   let mut csprng = thread_rng();
+   match sk.prove(&pk, data, &mut csprng){
+       Err(_) => 0,
+       p    => {proof.copy_from_slice(&p.unwrap().to_bytes()); 
+                 1
+       }
+    }
+}
+
+#[no_mangle]
+pub extern fn ec_vrf_priv_key(secret_key_bytes: &mut[u8;SECRET_KEY_LENGTH])-> i32{
+   let mut csprng = thread_rng();
+   let sk = SecretKey::generate(&mut csprng); 
+   secret_key_bytes.copy_from_slice(&sk.to_bytes());
+   1
+}
+
+//error encodeing
+//bad input
+#[no_mangle]
+pub extern fn ec_vrf_pub_key(public_key_bytes: &mut[u8;32], secret_key_bytes: &[u8;32])->i32{
+    let res_sk = SecretKey::from_bytes(secret_key_bytes);
+    if res_sk.is_err() { return -1 };
+    let sk = res_sk.unwrap();
+    let pk = PublicKey::from(&sk); 
+    public_key_bytes.copy_from_slice(&pk.to_bytes());
+    1
+}
+
+#[no_mangle]
+pub extern fn ec_vrf_proof_to_hash(hash: &mut[u8;32], pi: &[u8;80]) {
+    let proof = Proof::from_bytes(&pi).expect("Proof Parsing failed");
+    hash.copy_from_slice(&proof.to_hash());
+}
+
+#[no_mangle]
+pub extern fn ec_vrf_verify_key(key: &[u8;32]) -> i32{
+   if PublicKey::verify_key(key) { 1 } else { 0 } 
+}
+
+#[no_mangle]
+pub extern fn ec_vrf_verify(public_key_bytes: &[u8;32], proof_bytes: &[u8;80], message: *const u8, len:usize)-> i32{
+    let res_pk = PublicKey::from_bytes(public_key_bytes);
+    if res_pk.is_err() { return -2 };
+    let pk = res_pk.unwrap();
+
+    let res_proof = Proof::from_bytes(&proof_bytes);
+    if res_proof.is_err() { return -1 };
+    let proof = res_proof.unwrap();
+
+    assert!(!message.is_null(), "Null pointer in ec_vrf_prove");
+    let data: &[u8]= unsafe { slice::from_raw_parts(message, len)};
+
+    if pk.verify(proof, data) { 1 } else { 0 }
 }
 
 #[cfg(test)]
