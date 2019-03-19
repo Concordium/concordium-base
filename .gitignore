@@ -7,3 +7,8 @@ Concordium.cabal
 *.exe
 *.a
 *.pdf
+*.swo
+*.hi
+*.o
+*.lock
+
