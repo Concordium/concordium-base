@@ -35,10 +35,10 @@ import           Foreign.Marshal.Array
 import           Foreign.Marshal.Alloc
 import           Foreign.C.Types
 
-foreign import ccall "ec_vrf_ed25519-sha256.h priv_key" c_priv_key :: Ptr Word8 -> IO CInt
-foreign import ccall "ed25519.h ed25519_publickey" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO () 
-foreign import ccall "ed25519.h ed25519_sign" c_sign :: Ptr Word8 -> Word32 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> IO () 
-foreign import ccall "ed25519.h ed25519_sign_open" c_verify :: Ptr Word8 -> Word32 -> Ptr Word8 -> Ptr Word8 -> IO CInt 
+foreign import ccall "eddsa_priv_key" c_priv_key :: Ptr Word8 -> IO CInt
+foreign import ccall "eddsa_pub_key" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO () 
+foreign import ccall "eddsa_sign" c_sign :: Ptr Word8 -> Word32 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> IO () 
+foreign import ccall "eddsa_verify" c_verify :: Ptr Word8 -> Word32 -> Ptr Word8 -> Ptr Word8 -> IO CInt 
 
 
 privKeyToHex :: SignKey -> String
