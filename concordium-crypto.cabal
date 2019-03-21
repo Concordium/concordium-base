@@ -20,10 +20,11 @@ Library
   default-extensions:      ForeignFunctionInterface
 
   hs-source-dirs: haskell-src
-  Exposed-modules: Concordium.Crypto.VRF,
-                   Concordium.Crypto.Signature,
-                   Concordium.Crypto.SHA256
-  Other-modules:  Concordium.Crypto.ByteStringHelpers
+  Exposed-modules:Concordium.Crypto.VRF,
+                  Concordium.Crypto.Signature,
+                  Concordium.Crypto.SHA256
+  Other-modules:  Concordium.Crypto.ByteStringHelpers,
+                  Data.FixedByteString
   Build-depends:  base >=4.7
                 , bytestring >=0.10
                 , cereal >=0.5.7
