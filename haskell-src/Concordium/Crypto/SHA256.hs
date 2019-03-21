@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface , GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ForeignFunctionInterface , GeneralizedNewtypeDeriving, OverloadedStrings #-}
 
 module Concordium.Crypto.SHA256 where
 import           Concordium.Crypto.ByteStringHelpers
@@ -16,7 +16,11 @@ import           Control.Monad
 import           Foreign.Marshal.Array
 import           Foreign.Marshal.Alloc
 import           Data.Serialize
-import           Data.Hashable 
+import           Data.Hashable               
+import           Data.Bits
+import qualified Data.FixedByteString       as FBS
+import           Data.FixedByteString  (FixedByteString)
+import           Foreign.Storable           (peek)
 
 data SHA256Ctx
 
@@ -46,58 +50,72 @@ createSha256Ctx = do
 digestSize :: Int
 digestSize = 32
 
+data DigestSize
+
+instance FBS.FixedLength DigestSize where
+    fixedLength _ = digestSize
 
 -- |A SHA256 hash.  32 bytes.
-newtype Hash = Hash B.ByteString deriving (Eq, Ord)
+newtype Hash = Hash (FBS.FixedByteString DigestSize) deriving (Eq, Ord, Bits, Bounded, Enum)
 
 instance Serialize Hash where
-    put (Hash h) = putByteString h
-    get = Hash <$> getByteString digestSize 
+    put (Hash h) = putByteString $ FBS.toByteString h
+    get = Hash . FBS.fromByteString <$> getByteString digestSize 
 
 instance Show Hash where
-    show (Hash h) = LC.unpack (toLazyByteString $ byteStringHex h)
-
+    show (Hash h) = LC.unpack (toLazyByteString $ byteStringHex $ FBS.toByteString h)
 
 instance Hashable Hash where
-    hashWithSalt s (Hash b) = hashWithSalt s b
-    hash (Hash b) = case decode b of
-        Left _ -> hashWithSalt 0 b
-        Right v -> v
-
+    hashWithSalt s (Hash b) = hashWithSalt s (FBS.toByteString b)
+    hash (Hash b) = unsafeDupablePerformIO $ FBS.withPtr b $ \p -> peek (castPtr p)
 
 hash :: ByteString -> Hash
-hash b = Hash $ unsafeDupablePerformIO $ 
+hash b = Hash $ unsafeDupablePerformIO $
                    do maybe_ctx <- createSha256Ctx
                       case maybe_ctx of
                         Nothing -> error "Failed to initialize hash"
-                        Just ctx_ptr -> withForeignPtr ctx_ptr  (\ctx -> hash_update b ctx)  >>
-                            withForeignPtr ctx_ptr  (\ctx -> hash_final ctx)
-
-
-hash_final :: Ptr SHA256Ctx -> IO ByteString
-hash_final ptr = create digestSize $ \hash -> rs_sha256_final hash ptr 
+                        Just ctx_ptr -> withForeignPtr ctx_ptr  (\ctx -> hash_update b ctx) >>
+                                           withForeignPtr ctx_ptr  (\ctx -> hash_final ctx)
 
 hash_update :: ByteString -> Ptr SHA256Ctx ->  IO ()
-hash_update b ptr = withByteStringPtr b $ \message -> rs_sha256_update ptr message (fromIntegral $ B.length b) 
+hash_update b ptr = withByteStringPtr b $ \message -> rs_sha256_update ptr message (fromIntegral $ B.length b)
 
-{-
-hash_update_last :: Ptr Word32 -> ByteString -> IO ()
-hash_update_last ptr x =  withByteStringPtr x $ \bsp -> c_hash_update_last ptr bsp (fromIntegral len)
-                where len = B.length x
--}
+hash_final :: Ptr SHA256Ctx -> IO (FixedByteString DigestSize)
+hash_final ptr = FBS.create  $ \hash -> rs_sha256_final hash ptr
 
 
 hashLazy :: L.ByteString -> Hash
-hashLazy b =  Hash $ unsafeDupablePerformIO $  
-               do maybe_ctx <- createSha256Ctx   
-                  case maybe_ctx of 
-                    Nothing -> error "Failed to initialize hash"
-                    Just ctx -> do x <- mapM_ (f ctx)  (L.toChunks b)  
-                                   withForeignPtr ctx $ \ctx' -> hash_final ctx' 
-       where 
-         f ptr chunk = withForeignPtr ptr $ \ptr' -> hash_update chunk ptr'
+hashLazy b = Hash $ unsafeDupablePerformIO $
+                   do maybe_ctx <- createSha256Ctx
+                      case maybe_ctx of
+                        Nothing -> error "Failed to initialize hash"
+                        Just ctx -> mapM_ (f ctx)  (L.toChunks b) >> 
+                                    withForeignPtr ctx ( \ctx' -> hash_final ctx')
+           where
+             f ptr chunk = withForeignPtr ptr $ \ptr' -> hash_update chunk ptr'
 
+    
 hashTest ::FilePath ->  IO ()
 hashTest path = do b <- L.readFile path
                    let (Hash b') = hashLazy b
-                   putStrLn(byteStringToHex b')
+                   putStrLn(byteStringToHex $ FBS.toByteString b')
+
+
+-- |Convert a 'Hash' into a 'Double' value in the range [0,1].
+-- This implementation takes the first 64-bit word (big-endian) and uses it
+-- as the significand, with an exponent of -64.  Since the precision of a
+-- 'Double' is only 53 bits, there is inevitably some loss.  This also means
+-- that the outcome 1 is not possible.
+hashToDouble :: Hash -> Double
+hashToDouble (Hash h) = case runGet getWord64be (FBS.toByteString h) of
+    Left e -> error e
+    Right w -> encodeFloat (toInteger w) (-64)
+
+-- |Convert a 'Hash' to an 'Int'.
+hashToInt :: Hash -> Int
+hashToInt (Hash h) = case runGet getInt64be (FBS.toByteString h) of
+    Left e -> error e
+    Right i -> fromIntegral i
+
+
+
