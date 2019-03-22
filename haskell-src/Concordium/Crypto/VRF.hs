@@ -48,12 +48,12 @@ import           Concordium.Crypto.SHA256
 import           System.Random
 
 
-foreign import ccall "ec_vrf_priv_key" c_priv_key :: Ptr Word8 -> IO CInt
-foreign import ccall "ec_vrf_pub_key" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
-foreign import ccall "ec_vrf_prove" c_prove :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO ()
-foreign import ccall "ec_vrf_proof_to_hash" c_proof_to_hash :: Ptr Word8 -> Ptr Word8 -> IO CInt
-foreign import ccall "ec_vrf_verify_key" c_verify_key :: Ptr Word8 -> IO CInt
-foreign import ccall "ec_vrf_verify" c_verify :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO CInt
+foreign import ccall "ec_vrf_priv_key" rs_priv_key :: Ptr Word8 -> IO CInt
+foreign import ccall "ec_vrf_pub_key" rs_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
+foreign import ccall "ec_vrf_prove" rs_prove :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO ()
+foreign import ccall "ec_vrf_proof_to_hash" rs_proof_to_hash :: Ptr Word8 -> Ptr Word8 -> IO CInt
+foreign import ccall "ec_vrf_verify_key" rs_verify_key :: Ptr Word8 -> IO CInt
+foreign import ccall "ec_vrf_verify" rs_verify :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO CInt
 
 -- |The size of a VRF public key in bytes (32).
 publicKeySize :: Int
@@ -143,7 +143,7 @@ newPrivKey :: IO PrivateKey
 newPrivKey = 
     do suc <- newIORef (0::Int)
        sk <- FBS.create $ \priv -> 
-           do rc <-  c_priv_key priv 
+           do rc <-  rs_priv_key priv 
               case rc of
                    1 ->  do writeIORef suc 1 
                    _ ->  do writeIORef suc 0 
@@ -155,7 +155,7 @@ newPrivKey =
 pubKey :: PrivateKey -> IO PublicKey
 pubKey (PrivateKey sk) = do suc <- newIORef (0::Int)
                             pk  <- FBS.create $ \pub -> 
-                                 do pc <- FBS.withPtr sk $ \y -> c_public_key pub y
+                                 do pc <- FBS.withPtr sk $ \y -> rs_public_key pub y
                                     if (pc == 1) 
                                        then writeIORef suc 1
                                        else writeIORef suc 0
@@ -187,7 +187,7 @@ prove (KeyPair (PrivateKey sk) (PublicKey pk)) b = Proof $
                                            FBS.withPtr pk $ \pk' -> 
                                                FBS.withPtr sk $ \sk' -> 
                                                    withByteStringPtr b $ \b' -> 
-                                                       c_prove prf pk' sk' b' (fromIntegral $ B.length b)
+                                                       rs_prove prf pk' sk' b' (fromIntegral $ B.length b)
 
 -- |Verify a VRF proof.
 verify :: PublicKey -> ByteString -> Proof -> Bool
@@ -195,17 +195,17 @@ verify (PublicKey pk) alpha (Proof prf) = cIntToBool $ unsafeDupablePerformIO $
                                                 FBS.withPtr pk $ \pk' ->
                                                    FBS.withPtr prf $ \pi' ->
                                                      withByteStringPtr alpha $ \alpha'->
-                                                       c_verify pk' pi' alpha' (fromIntegral $ B.length alpha)
+                                                       rs_verify pk' pi' alpha' (fromIntegral $ B.length alpha)
               where
                   cIntToBool x =  x > 0
                                                            
 -- |Generate a 256-bit hash from a VRF proof.
 proofToHash :: Proof -> Hash
 proofToHash (Proof p) =  Hash $ FBS.unsafeCreate $ \x -> 
-        FBS.withPtr p $ \p' -> c_proof_to_hash x p' >> return()
+        FBS.withPtr p $ \p' -> rs_proof_to_hash x p' >> return()
 
 -- |Verify a VRF public key.
 verifyKey :: PublicKey -> Bool
 verifyKey (PublicKey pk) =  x > 0 
             where
-               x = unsafeDupablePerformIO $ FBS.withPtr pk $ \pk' -> c_verify_key pk'
+               x = unsafeDupablePerformIO $ FBS.withPtr pk $ \pk' -> rs_verify_key pk'
