@@ -47,12 +47,13 @@ import           Text.Printf
 import           Concordium.Crypto.SHA256
 import           System.Random
 
-foreign import ccall "ec_vrf_ed25519-sha256.h priv_key" c_priv_key :: Ptr Word8 -> IO CInt
-foreign import ccall "ec_vrf_ed25519-sha256.h public_key" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
-foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_prove" c_prove :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO () 
-foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_proof_to_hash" c_proof_to_hash :: Ptr Word8 -> Ptr Word8 -> IO CInt
-foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_verify_key" c_verify_key :: Ptr Word8 -> IO CInt
-foreign import ccall "ec_vrf_ed25519-sha256.h ecvrf_verify" c_verify :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO CInt
+
+foreign import ccall "ec_vrf_priv_key" c_priv_key :: Ptr Word8 -> IO CInt
+foreign import ccall "ec_vrf_pub_key" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
+foreign import ccall "ec_vrf_prove" c_prove :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO ()
+foreign import ccall "ec_vrf_proof_to_hash" c_proof_to_hash :: Ptr Word8 -> Ptr Word8 -> IO CInt
+foreign import ccall "ec_vrf_verify_key" c_verify_key :: Ptr Word8 -> IO CInt
+foreign import ccall "ec_vrf_verify" c_verify :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO CInt
 
 -- |The size of a VRF public key in bytes (32).
 publicKeySize :: Int
@@ -65,9 +66,11 @@ instance FBS.FixedLength PublicKeySize where
 -- |A VRF public key. 32 bytes.
 data PublicKey = PublicKey (FBS.FixedByteString PublicKeySize)
     deriving (Eq, Ord)
+
 instance Serialize PublicKey where
     put (PublicKey key) = putByteString $ FBS.toByteString key
     get = PublicKey . FBS.fromByteString <$> getByteString (publicKeySize)
+
 instance Show PublicKey where
     show (PublicKey key) = byteStringToHex $ FBS.toByteString key
 
