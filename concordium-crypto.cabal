@@ -31,14 +31,10 @@ Library
                 , hashable >= 1.0.1.1
                 , random >= 1.1
                 , stringbuilder >=0.5.0
-  --cc-options:     -m64 -O3 -DED25519_CUSTOMHASH=1 -DED25519_CUSTOMRANDOM=1 -w
-  ghc-options:   -fwarn-tabs -optc-O3 -fno-warn-unused-imports 
  
---  include-dirs:   /Users/bassel/shit/crypto/rust-src/target/release/
   extra-libraries: ec_vrf_ed25519
                    sha_2, 
                    eddsa_ed25519
---  extra-lib-dirs: /Users/bassel/shit/crypto/rust-src/target/release/
          
 
 Test-Suite tests
