@@ -11,11 +11,8 @@ use clear_on_drop::clear::Clear;
 
 
 
-use curve25519_dalek::traits::Identity;
 use curve25519_dalek::constants;
-use curve25519_dalek::digest::generic_array::typenum::U64;
 use curve25519_dalek::digest::Digest;
-use curve25519_dalek::edwards::CompressedEdwardsY;
 use curve25519_dalek::edwards::EdwardsPoint;
 use curve25519_dalek::scalar::Scalar;
 
@@ -37,7 +34,6 @@ use serde::{Deserializer, Serializer};
 use crate::constants::*;
 use crate::errors::*;
 use crate::public::*;
-use crate::proof::*;
 
 /// An EdDSA secret key.
 #[derive(Default)] // we derive Default in order to use the clear() method in Drop

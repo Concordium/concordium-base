@@ -12,7 +12,6 @@
 use core::fmt::Debug;
 
 use curve25519_dalek::constants;
-use curve25519_dalek::digest::generic_array::typenum::U64;
 use curve25519_dalek::digest::Digest;
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use curve25519_dalek::edwards::EdwardsPoint;
@@ -177,7 +176,7 @@ impl PublicKey {
             if let Some(ed_point)= p_candidate.decompress(){
                 return Ok(ed_point.mul_by_cofactor());
             }
-            if (ctr== u32::max_value()) {done=true;} else {ctr = ctr + 1;}
+            if ctr== u32::max_value() {done=true;} else {ctr = ctr + 1;}
         }
         Err(ProofError(InternalError::PointDecompressionError))
     }

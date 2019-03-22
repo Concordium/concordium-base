@@ -1,7 +1,6 @@
 use sha2::Sha256;
 use sha2::*;
 
-use std::os::raw::c_int;
 use std::slice;
 
 #[no_mangle]

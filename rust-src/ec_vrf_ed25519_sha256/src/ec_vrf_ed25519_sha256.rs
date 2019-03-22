@@ -6,7 +6,6 @@
 
 //! ed25519 VRF 
 
-use core::default::Default;
 
 use rand::CryptoRng;
 use rand::RngCore;
@@ -26,12 +25,8 @@ use serde::{Deserializer, Serializer};
 
 pub use sha2::Sha512;
 
-use curve25519_dalek::digest::generic_array::typenum::U64;
 pub use curve25519_dalek::digest::Digest;
 
-use curve25519_dalek::constants;
-use curve25519_dalek::edwards::EdwardsPoint;
-use curve25519_dalek::scalar::Scalar;
 
 pub use crate::constants::*;
 pub use crate::errors::*;
