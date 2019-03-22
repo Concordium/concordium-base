@@ -11,7 +11,9 @@ cargo build --release
 This will build the following rust libraries
 
 -VRF : libec_vrf_ed25519_sha256
+
 -SHA-2: libsha_2
+
 -Ed Signature: libeddsa_ed25519
 
 # How to Build for Haskell
