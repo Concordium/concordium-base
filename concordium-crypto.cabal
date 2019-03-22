@@ -34,11 +34,11 @@ Library
   --cc-options:     -m64 -O3 -DED25519_CUSTOMHASH=1 -DED25519_CUSTOMRANDOM=1 -w
   ghc-options:   -fwarn-tabs -optc-O3 -fno-warn-unused-imports 
  
-  include-dirs:   /Users/bassel/Concordium/crypto/rust-src/target/release/
+  include-dirs:   rust-src/target/release/
   extra-libraries: ec_vrf_ed25519
                    sha_2, 
                    eddsa_ed25519
-  extra-lib-dirs: /Users/bassel/Concordium/crypto/rust-src/target/release/
+  extra-lib-dirs: rust-src/target/release/
          
 
 Test-Suite tests
