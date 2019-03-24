@@ -6,10 +6,7 @@ License:        BSD3
 Author:         Concordium.com
 Stability:      Experimental
 Cabal-Version:       >=1.18
-Build-Type:     Simple
---extra-source-files:  Concordium/Crypto/Ed25519/*.h
---                     Concordium/Crypto/VRF/*.h
---                     Concordium/Crypto/Hacl/*.h
+Build-Type:     Custom
 
 source-repository head
   type: git
@@ -24,6 +21,7 @@ Library
                    Concordium.Crypto.Signature
                    Concordium.Crypto.VRF
                    Data.FixedByteString
+
   Other-modules:   Concordium.Crypto.ByteStringHelpers
   Build-depends:  base >=4.7
                 , bytestring >=0.10
@@ -31,11 +29,10 @@ Library
                 , hashable >= 1.0.1.1
                 , random >= 1.1
                 , stringbuilder >=0.5.0
- 
+
   extra-libraries: ec_vrf_ed25519
                    sha_2, 
                    eddsa_ed25519
-         
 
 Test-Suite tests
   type: exitcode-stdio-1.0
