@@ -18,6 +18,9 @@ This will build the following rust libraries
 
 # How to Build for Haskell
 
-first build the Rust part as shown above. then run
-
 stack build
+
+This should build both rust and haskell code. 
+
+For runtime linking (Depending on your OS) 
+you may need to add rust-src/target/release/ to your library path.
