@@ -11,6 +11,8 @@ import Data.Word
 import Test.QuickCheck
 import Test.Hspec
 import Test.Hspec.Expectations
+import Text.Read hiding (get)
+import Data.Char
 
 testSerialize :: Property
 testSerialize = property $ ck
@@ -26,9 +28,33 @@ testStrictLazy = property ck
         ck :: [Word8] -> Property
         ck doc = Hash.hash (BS.pack doc) === Hash.hashLazy (LBS.pack doc)
 
+testReadShow :: Property
+testReadShow = property ck
+    where
+        ck :: [Word8] -> Property
+        ck doc = let hsh = Hash.hash (BS.pack doc) in
+            Just hsh === readMaybe (show hsh)
+
+testReadLowerShow :: Property
+testReadLowerShow = property ck
+    where
+        ck :: [Word8] -> Property
+        ck doc = let hsh = Hash.hash (BS.pack doc) in
+            Just hsh === readMaybe (toLower <$> show hsh)
+
+testReadUpperShow :: Property
+testReadUpperShow = property ck
+    where
+        ck :: [Word8] -> Property
+        ck doc = let hsh = Hash.hash (BS.pack doc) in
+            Just hsh === readMaybe (toUpper <$> show hsh)
+
 tests = parallel $ describe "Concordium.Crypto.SHA256" $ do
             it "serialization" $ withMaxSuccess 100000 $ testSerialize
             it "strict vs lazy" $ withMaxSuccess 100000 $ testStrictLazy
+            it "show then read" $ withMaxSuccess 100000 $ testReadShow
+            it "show -> lowercase -> read" $ withMaxSuccess 100000 $ testReadLowerShow
+            it "show -> uppercase -> read" $ withMaxSuccess 100000 $ testReadUpperShow
             describe "known values" $ do
                 it "SHA-256 \"abc\"" $ Hash.hash "abc" `shouldBe` Hash.Hash (FBS.pack [0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23, 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad])
                 it "SHA-256 \"\"" $ Hash.hash "" `shouldBe` Hash.Hash (FBS.pack [0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55])

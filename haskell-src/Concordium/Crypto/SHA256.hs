@@ -21,6 +21,8 @@ import           Data.Bits
 import qualified Data.FixedByteString       as FBS
 import           Data.FixedByteString       (FixedByteString)
 import           Foreign.Storable           (peek)
+import           Text.Read
+import           Data.Char
 
 data SHA256Ctx
 
@@ -64,6 +66,20 @@ instance Serialize Hash where
 
 instance Show Hash where
     show (Hash h) = LC.unpack (toLazyByteString $ byteStringHex $ FBS.toByteString h)
+
+instance Read Hash where
+    readPrec = Hash . FBS.pack <$> mapM (const readHexByte) [1..digestSize]
+        where
+            readHexByte = do
+                ms <- nibble =<< Text.Read.get
+                ls <- nibble =<< Text.Read.get
+                return (shiftL ms 4 .|. ls)
+            nibble c
+                | '0' <= c && c <= '9' = return (fromIntegral $ ord c - ord '0')
+                | 'a' <= c && c <= 'f' = return (fromIntegral $ ord c - ord 'a' + 10)
+                | 'A' <= c && c <= 'F' = return (fromIntegral $ ord c - ord 'A' + 10)
+                | otherwise = mzero
+    readListPrec = readListPrecDefault
 
 instance Hashable Hash where
     hashWithSalt s (Hash b) = hashWithSalt s (FBS.toByteString b)
