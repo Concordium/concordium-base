@@ -18,3 +18,4 @@ build/
 *.lock
 
 >>>>>>> rust_migration
+rust-src/target/
