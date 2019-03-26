@@ -2,6 +2,7 @@
 module Concordium.ID.Attributes where
 
 import           Data.Dates
+import           Data.Set
 
 -- Class Attribute
 class (Eq a) => Attribute_ a where
@@ -49,32 +50,26 @@ instance Attribute_ MaxAccount where
     data Predicate MaxAccount = LessThan Int deriving (Show)
     is (LessThan n) (MaxAccount m) = m < n
 
-
+    {-
 -- Attr Data type
 data Attr  =  Attr_0 MaxAccount 
             | Attr_1 Citizenships
             | Attr_2 BirthDate
-
+-}
 
 data Policy = forall a. Attribute_  a => Atomic (Predicate a)
              | Conj Policy Policy
              | Disj Policy Policy
 
 x = Conj (Atomic AgeOver18) (Atomic EU)
--- Policy Data type
-    {-
-data Policy =  Atomic_2 (Predicate BirthDate)
-             | Atomic_1 (Predicate Citizenships)
-             | Atomic_0 (Predicate MaxAccount)
-             | Conj Policy Policy
-             | Disj Policy Policy
-             d
 
-newtype AttributeList = AL [Attr]
+type AttributeList = Set Attribute 
+y = [Attribute (Citizen [NZ, US]), (Attribute (MaxAccount 12))]
+
 
 -- sanity check, only one Attr_i ..etc
 isValid :: AttributeList -> Bool
 isValid x = True
 
-
--}
+satisfy :: AttributeList -> Policy -> Bool
+satisfy = true
