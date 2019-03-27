@@ -35,7 +35,7 @@ import           System.Random
 import           Foreign.Marshal.Array
 import           Foreign.Marshal.Alloc
 import           Foreign.C.Types
-import           Concordium.Crypto.SignatureScheme (SignatureScheme)
+import           Concordium.Crypto.SignatureScheme (SignatureScheme, SignatureScheme_)
 import qualified Concordium.Crypto.SignatureScheme as S 
 
 
@@ -173,13 +173,14 @@ test = do kp@(KeyPair sk pk) <- newKeyPair
 
 
 data Ed25519
-instance SignatureScheme Ed25519 where
-    data VerifyKey Ed25519    = Ed25519_PK ByteString
-    data SignKey Ed25519      = Ed25519_SK ByteString
-    data Signature Ed25519    = Ed25519_Sig ByteString
+instance SignatureScheme_ Ed25519 where
+    data VerifyKey Ed25519    = Ed25519_PK (FBS.FixedByteString VerifyKeySize)
+    data SignKey Ed25519      = Ed25519_SK (FBS.FixedByteString SignKeySize)
+    data Signature Ed25519    = Ed25519_Sig (FBS.FixedByteString SignatureSize)
     generatePrivateKey        = unsafePerformIO $ do (SignKey x) <- newPrivKey
                                                      return (Ed25519_SK x)
     publicKey (Ed25519_SK x) = unsafePerformIO $ do (VerifyKey y) <- pubKey (SignKey x)
                                                     return (Ed25519_PK y)
-    sign (Ed25519_SK x) (Ed25519_PK y) b = Ed25519_Sig b
-    verify (Ed25519_PK x) b s = True
+    sign (Ed25519_SK x) (Ed25519_PK y) b = let (Signature s ) = sign KeyPair{signKey=(SignKey x), verifyKey=(VerifyKey y)} b
+                                           in (Ed25519_Sig s)
+    verify (Ed25519_PK x) b (Ed25519_Sig s) = verify (VerifyKey x) b (Signature s)
