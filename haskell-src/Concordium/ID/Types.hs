@@ -1,13 +1,13 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification #-}
 module Concordium.ID.Types where
 
 import qualified Data.ByteString    as BS
 import           Data.ByteString    (ByteString)
 import           Data.Time
 import           Concordium.ID.Attributes
---import           Concoridum.Crypto.Signature
+import           Concordium.Crypto.SignatureScheme
 
-data AccountHolderCertificate 
+newtype AccountHolderIdentity = AH ByteString
 
 -- Secret Key of Account Holder
 newtype SecretIdenityCredentials = IdCredSec ByteString
@@ -42,10 +42,10 @@ data IdentityProvider = IP IdentityProviderIdentity IdentityProviderPublicKey
                          
 
 -- Signing key for accounts (eddsa key)
-newtype AccountSigningKey = SigKeyAcc ByteString
+data AccountSigningKey = forall a. SignatureScheme_ a => AccSignKey (SignKey a)
 
 -- Verification key for accounts (eddsa key)
-newtype AccountVerificationKey = VerifKeyAcc ByteString
+data AccountVerificationKey = forall a. SignatureScheme_ a => AccVerifyKey (VerifyKey a)
 
 
 -- decryption key for accounts (Elgamal?)
@@ -71,13 +71,26 @@ data Witness = Witness ByteString
 
 data ZKProof = Proof ByteString
 
-data AccountCreationInformation = ACI { regId     :: AccountRegistrationID,
-                                        arData    :: AccountAnonimityRevocationData,
-                                        ipId      :: IdentityProviderIdentity, 
-                                    --    sigScheme :: 
-                                        verifKey ::  AccountVerificationKey,
-                                        encKey   :: AccountEncryptionKey,
-                                        auxData  :: ByteString,
-                                        policy   :: Policy, 
-                                        proof    :: ZKProof
+data AccountHolderInformation = AHI { ahi_id :: AccountHolderIdentity,
+                                      ahi_idCredPub:: PublicIdenityCredentials, 
+                                      ahi_idCredSec:: SecretIdenityCredentials, 
+                                      ahi_prfKey   :: PseudoRandomFunctionKey, 
+                                      ahi_attributeList :: AttributeList 
+                                     }
+
+
+data AccountCreationInformation = ACI { aci_regId     :: AccountRegistrationID,
+                                        aci_arData    :: AccountAnonimityRevocationData,
+                                        aci_ipId      :: IdentityProviderIdentity, 
+                                        aci_sigScheme :: SchemeId,
+                                        aci_verifKey  :: AccountVerificationKey,
+                                        aci_encKey    :: AccountEncryptionKey,
+                                        aci_policy    :: Policy, 
+                                        aci_auxData   :: ByteString,
+                                        aci_proof     :: ZKProof
                                       }
+
+data AccountHolderCertificate = AHC { ahc_ipId :: IdentityProviderIdentity,
+                                      ahc_ahi  :: AccountHolderInformation,
+                                      ahc_sig  :: Signature CL
+                                     }
