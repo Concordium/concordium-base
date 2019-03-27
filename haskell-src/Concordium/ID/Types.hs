@@ -3,7 +3,7 @@ module Concordium.ID.Types where
 
 import qualified Data.ByteString    as BS
 import           Data.ByteString    (ByteString)
-import           Data.Dates
+import           Data.Time
 import           Concordium.ID.Attributes
 --import           Concoridum.Crypto.Signature
 

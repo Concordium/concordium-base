@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, ExistentialQuantification #-}
 module Concordium.ID.Attributes where
 
-import           Data.Dates
+import           Data.Time
 import           Data.Set
 
 -- Class Attribute
@@ -12,7 +12,7 @@ class (Eq a) => Attribute_ a where
 data Attribute = forall a. Attribute_ a => Attribute a
 
 -- Birth date attribute
-newtype BirthDate = BD DateTime deriving (Eq)
+newtype BirthDate = BD Day deriving (Eq)
 
 instance Attribute_ BirthDate where
     data Predicate BirthDate = AgeOver18 | AgeOver21 | OlderThan Int deriving (Show)
