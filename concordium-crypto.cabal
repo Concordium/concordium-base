@@ -19,8 +19,11 @@ Library
   hs-source-dirs: haskell-src
   Exposed-modules: Concordium.Crypto.SHA256	
                    Concordium.Crypto.Signature
+                   Concordium.Crypto.SignatureScheme
                    Concordium.Crypto.VRF
                    Data.FixedByteString
+                   Concordium.ID.Attributes
+                   Concordium.ID.Types
 
   Other-modules:   Concordium.Crypto.ByteStringHelpers
   Build-depends:  base >=4.7
@@ -29,6 +32,8 @@ Library
                 , hashable >= 1.0.1.1
                 , random >= 1.1
                 , stringbuilder >=0.5.0
+                , containers >= 0.5.11.0 
+                , time       >= 1.7
 
   extra-libraries: ec_vrf_ed25519
                    sha_2, 
