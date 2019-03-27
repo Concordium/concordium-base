@@ -1,11 +1,11 @@
 {-# LANGUAGE TypeFamilies, ExistentialQuantification #-}
 module Concordium.Crypto.SignatureScheme where
 import           Data.ByteString (ByteString) 
+import           Data.Word
 import qualified Data.ByteString as B
 
 
-data SchemeID = Schnorr | CamenischeLysyanskaya | EDDSA_Ed25519
-
+newtype SchemeId = SchemeId Word8
 class SignatureScheme_ scheme where
     data VerifyKey scheme :: *
     data SignKey scheme :: *
@@ -14,6 +14,7 @@ class SignatureScheme_ scheme where
     publicKey :: SignKey scheme -> VerifyKey scheme
     sign ::  SignKey scheme -> VerifyKey scheme -> ByteString -> Signature scheme
     verify :: VerifyKey scheme -> ByteString -> Signature scheme -> Bool
+    schemeId :: scheme -> SchemeId
 
 
 data SignatureScheme = forall a. SignatureScheme_ a => SignatureScheme a
@@ -30,3 +31,4 @@ instance SignatureScheme_ CL where
     publicKey (CL_SK x) = CL_PK x
     sign (CL_SK x) (CL_PK y) b = CL_Sig b
     verify (CL_PK x) b s = True
+    schemeId _ = SchemeId (fromIntegral 3)
