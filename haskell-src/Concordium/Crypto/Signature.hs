@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, GeneralizedNewtypeDeriving, ForeignFunctionInterface #-}
+{-# LANGUAGE DeriveGeneric, GeneralizedNewtypeDeriving, ForeignFunctionInterface , TypeFamilies  #-}
 -- |This module provides a dummy signature scheme for
 -- prototyping purposes.  It provides NO SECURITY and
 -- obviously should be replaced with a real implementation.
@@ -35,6 +35,8 @@ import           System.Random
 import           Foreign.Marshal.Array
 import           Foreign.Marshal.Alloc
 import           Foreign.C.Types
+import           Concordium.Crypto.SignatureScheme (SignatureScheme)
+import qualified Concordium.Crypto.SignatureScheme as S 
 
 foreign import ccall "ec_vrf_ed25519-sha256.h priv_key" c_priv_key :: Ptr Word8 -> IO CInt
 foreign import ccall "ed25519.h ed25519_publickey" c_public_key :: Ptr Word8 -> Ptr Word8 -> IO () 
@@ -131,3 +133,17 @@ test = do kp@(KeyPair sk pk) <- newKeyPair
            in
               putStrLn ("signature: " ++ byteStringToHex b) >>
               putStrLn ("Good?: " ++ if suc then "YES" else "NO")
+
+
+
+data Ed25519
+instance SignatureScheme Ed25519 where
+    data VerifyKey Ed25519    = Ed25519_PK ByteString
+    data SignKey Ed25519      = Ed25519_SK ByteString
+    data Signature Ed25519    = Ed25519_Sig ByteString
+    generatePrivateKey        = unsafePerformIO $ do (SignKey x) <- newPrivKey
+                                                     return (Ed25519_SK x)
+    publicKey (Ed25519_SK x) = unsafePerformIO $ do (VerifyKey y) <- pubKey (SignKey x)
+                                                    return (Ed25519_PK y)
+    sign (Ed25519_SK x) (Ed25519_PK y) b = Ed25519_Sig b
+    verify (Ed25519_PK x) b s = True

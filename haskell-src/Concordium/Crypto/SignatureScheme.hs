@@ -4,7 +4,7 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 
 
-data SchemeID = Schnorr | CamenischeLysyanskaya | ECDSA_Ed25519
+data SchemeID = Schnorr | CamenischeLysyanskaya | EDDSA_Ed25519
 
 class SignatureScheme scheme where
     data VerifyKey scheme :: *
@@ -26,29 +26,23 @@ class SignatureScheme scheme where
 -- FiniteGroup is just and identifier G (g, p) where g is a generator and p is the order
 -- What shoudl BinlinearMap be???
 --data CL = (Int, FiniteGroup, FiniteGroup, BilinearMap)
+--
 
-data Curve 
-data Point
-data Bignum
-
-data ECDSA = ECDSA Curve Point Bignum 
-data Ed25519 
+--data Ed25519
 data CL
+
     {-
-instance Signature Scheme ECDSA where
-    data VerifyKey ECDSA  =  ECDSA_PK ByteString
-    data SignKey ECDSA    = ECDSA_SK ByteString
-    data Signature ECDSA  = ECDSA_Sig ByteString
--}
 instance SignatureScheme Ed25519 where
     data VerifyKey Ed25519    = Ed25519_PK ByteString
     data SignKey Ed25519      = Ed25519_SK ByteString
     data Signature Ed25519    = Ed25519_Sig ByteString
-    generatePrivateKey        = Ed25519_SK B.empty
-    publicKey (Ed25519_SK x) = Ed25519_PK x
+    generatePrivateKey        = unsafePerfomIO $ do (Ed25519.SignKey x) <- Ed25519.newPrivKey 
+                                                    return (Ed25519_SK x)
+    publicKey (Ed25519_SK x) = unsafePerformIO $ do (Ed25519.VerifyKey y) <- pubKey (Ed25519.SignKey y) 
+                                                    return (Ed25519_PK y)
     sign (Ed25519_SK x) (Ed25519_PK y) b = Ed25519_Sig b
     verify (Ed25519_PK x) b s = True
-
+-}
 instance SignatureScheme CL where
     data VerifyKey CL    = CL_PK ByteString
     data SignKey CL      = CL_SK ByteString
