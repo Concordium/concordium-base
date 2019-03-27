@@ -6,10 +6,7 @@ License:        BSD3
 Author:         Concordium.com
 Stability:      Experimental
 Cabal-Version:       >=1.18
-Build-Type:     Simple
---extra-source-files:  Concordium/Crypto/Ed25519/*.h
---                     Concordium/Crypto/VRF/*.h
---                     Concordium/Crypto/Hacl/*.h
+Build-Type:     Custom
 
 source-repository head
   type: git
@@ -17,15 +14,14 @@ source-repository head
 
 Library
   default-language: Haskell2010
-  install-includes: include/ed25519.h
-                   ,include/ec_vrf_ed25519-sha256.h
---                   ,Concordium/Crypto/Hacl/hacl_test_utils.h
   default-extensions:      ForeignFunctionInterface
 
   hs-source-dirs: haskell-src
   Exposed-modules: Concordium.Crypto.SHA256	
                    Concordium.Crypto.Signature
                    Concordium.Crypto.VRF
+                   Data.FixedByteString
+
   Other-modules:   Concordium.Crypto.ByteStringHelpers
   Build-depends:  base >=4.7
                 , bytestring >=0.10
@@ -33,15 +29,25 @@ Library
                 , hashable >= 1.0.1.1
                 , random >= 1.1
                 , stringbuilder >=0.5.0
-  cc-options:     -m64 -O3 -DED25519_CUSTOMHASH=1 -DED25519_CUSTOMRANDOM=1 -w
-  ghc-options:   -fwarn-tabs -optc-O3 -fno-warn-unused-imports
 
-  C-sources:      c-src/hacl_test_utils.c
-                , c-src/Hacl_SHA2_512.c
-                , c-src/Hacl_SHA2_256.c
-                , c-src/ec_vrf_ed25519-sha256.c
-                , c-src/ed25519.c
-                , c-src/kremlib.c
- 
-  include-dirs:   include
-         
+  extra-libraries: ec_vrf_ed25519
+                   sha_2, 
+                   eddsa_ed25519
+
+Test-Suite tests
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs: haskell-tests
+  build-depends:    hspec >= 2.5
+                    , QuickCheck >= 2.10
+                    , hspec-expectations >= 0.8
+                    , base >= 4.7
+                    , concordium-crypto
+                    , bytestring >=0.10
+                    , cereal >=0.5.7
+                    , random >= 1.1
+  other-modules:
+    ConcordiumTests.Crypto.SHA256
+    ConcordiumTests.Crypto.Signature
+    ConcordiumTests.Crypto.VRF
+

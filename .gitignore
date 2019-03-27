@@ -7,3 +7,15 @@ Concordium.cabal
 *.exe
 *.a
 *.pdf
+<<<<<<< HEAD
+
+# CMake build folder
+build/
+=======
+*.swo
+*.hi
+*.o
+*.lock
+
+>>>>>>> rust_migration
+rust-src/target/
