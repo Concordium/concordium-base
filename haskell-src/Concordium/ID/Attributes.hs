@@ -72,4 +72,4 @@ isValid :: AttributeList -> Bool
 isValid x = True
 
 satisfy :: AttributeList -> Policy -> Bool
-satisfy = true
+satisfy x y = True

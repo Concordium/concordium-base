@@ -5,7 +5,7 @@ import qualified Data.ByteString    as BS
 import           Data.ByteString    (ByteString)
 import           Data.Dates
 import           Concordium.ID.Attributes
-import           Concoridum.Crypto.Signature
+--import           Concoridum.Crypto.Signature
 
 data AccountHolderCertificate 
 
@@ -25,23 +25,34 @@ newtype AnonimityRevokerPublicKey = AR_PK ByteString
 newtype AnonimityRevokerPrivateKey = AR_SK ByteString
 
 -- Name of Identity Revoker
-newtype AnonimityRevokerIdentity  = AR_ID String
+newtype AnonimityRevokerIdentity  = AR_ID ByteString
 
 data AnonimityRevoker = AR AnonimityRevokerIdentity AnonimityRevokerPublicKey
+
+-- Name of Idenity Provider
+newtype IdentityProviderIdentity  = IP_ID ByteString
+
+-- Public key of Identity provider ()
+newtype IdentityProviderPublicKey = IP_PK ByteString
+
+-- Private key of Identity provider ()
+newtype IdentityProviderSecretKey = IP_SK ByteString
+
+data IdentityProvider = IP IdentityProviderIdentity IdentityProviderPublicKey
                          
 
 -- Signing key for accounts (eddsa key)
-newtype AccountSignatureKey = SigKeyAcc ByteString
+newtype AccountSigningKey = SigKeyAcc ByteString
 
 -- Verification key for accounts (eddsa key)
-newtype AccountVerificationKey = SerifKeyAcc ByteString
+newtype AccountVerificationKey = VerifKeyAcc ByteString
 
 
 -- decryption key for accounts (Elgamal?)
 newtype AccountDecryptionKey = DecKeyAcc ByteString 
 
 -- encryption key for accounts (Elgamal?)
-newtype AccountencryptionKey = EncKeyAcc ByteString 
+newtype AccountEncryptionKey = EncKeyAcc ByteString 
 
 -- Account Registration ID
 newtype AccountRegistrationID = RegIdAcc ByteString
@@ -49,7 +60,7 @@ newtype AccountRegistrationID = RegIdAcc ByteString
 newtype SecretShare = Share ByteString
 
 --AR Data
-newtype AccountAnonimityRevocationData = [(AnonimityRevoker, SecretShare)] 
+type AccountAnonimityRevocationData = [(AnonimityRevokerIdentity, SecretShare)] 
 
 
 -- ZK proofs
@@ -60,3 +71,13 @@ data Witness = Witness ByteString
 
 data ZKProof = Proof ByteString
 
+data AccountCreationInformation = ACI { regId     :: AccountRegistrationID,
+                                        arData    :: AccountAnonimityRevocationData,
+                                        ipId      :: IdentityProviderIdentity, 
+                                    --    sigScheme :: 
+                                        verifKey ::  AccountVerificationKey,
+                                        encKey   :: AccountEncryptionKey,
+                                        auxData  :: ByteString,
+                                        policy   :: Policy, 
+                                        proof    :: ZKProof
+                                      }
