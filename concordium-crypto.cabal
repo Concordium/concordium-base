@@ -23,6 +23,7 @@ Library
                    Concordium.Crypto.VRF
                    Data.FixedByteString
                    Concordium.ID.Attributes
+                   Concordium.ID.AccountHolder
                    Concordium.ID.Types
 
   Other-modules:   Concordium.Crypto.ByteStringHelpers
