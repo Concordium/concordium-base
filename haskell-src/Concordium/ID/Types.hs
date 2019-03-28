@@ -134,7 +134,7 @@ data AccountCreationInformation = ACI { aci_regId     :: AccountRegistrationID,
                                         aci_auxData   :: ByteString,
                                         aci_proof     :: ZKProof
                                       }
-    deriving (Generic)
+    deriving (Generic )
 
 instance Serialize AccountCreationInformation where
 
