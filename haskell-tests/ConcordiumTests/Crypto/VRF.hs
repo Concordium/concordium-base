@@ -5,7 +5,6 @@ import qualified Concordium.Crypto.VRF as VRF
 
 import Data.Serialize
 import qualified Data.ByteString as BS
-import Data.Word
 import Test.QuickCheck
 import Test.Hspec
 import System.Random
