@@ -16,7 +16,7 @@ createAccount :: AccountHolderCertificate -> AccountCreationInformation
 createAccount ahc = undefined
 
 verifyAccount :: AccountCreationInformation -> Bool 
-verifyAccount = true
+verifyAccount _ = True
 
 
 ar :: AnonimityRevoker
