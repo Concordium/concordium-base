@@ -11,7 +11,8 @@ module Concordium.Crypto.Signature(
     randomKeyPair,
     newKeyPair,
     sign,
-    verify
+    verify,
+    Ed25519
    --emptySignature
 ) where
 
@@ -185,3 +186,11 @@ instance SignatureScheme_ Ed25519 where
                                            in (Ed25519_Sig s)
     verify (Ed25519_PK x) b (Ed25519_Sig s) = verify (VerifyKey x) b (Signature s)
     schemeId _ = S.SchemeId (fromIntegral 2)
+    putVerifyKey (Ed25519_PK s) = putByteString $ FBS.toByteString s
+    getVerifyKey  = Ed25519_PK . FBS.fromByteString <$> getByteString verifyKeySize
+    putSignKey (Ed25519_SK s) = putByteString $ FBS.toByteString s
+    getSignKey  = Ed25519_SK . FBS.fromByteString <$> getByteString signKeySize
+    signKeyEq (Ed25519_SK sk0) (Ed25519_SK sk1) = sk0==sk1   
+    verifyKeyEq (Ed25519_PK pk0) (Ed25519_PK pk1) = pk0==pk1   
+
+
