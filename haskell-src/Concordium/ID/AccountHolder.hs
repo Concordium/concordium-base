@@ -10,6 +10,7 @@ import Concordium.ID.Attributes
 import qualified Concordium.Crypto.SHA224 as SHA224
 import qualified Data.ByteString as BS
 import qualified Data.FixedByteString as FBS
+import Data.Base58String.Bitcoin
 
 
 
@@ -30,7 +31,7 @@ createAccount ahc = ACI { aci_regId = regId,
                           aci_proof = proof
                         }
 
-accountAddressSize = 161
+accountAddressSize = 21
 
 data AccountAddressSize 
 instance FBS.FixedLength AccountAddressSize where
@@ -39,7 +40,7 @@ instance FBS.FixedLength AccountAddressSize where
 data AccountAddress =  AccountAddress (FBS.FixedByteString AccountAddressSize)
 
 accountAddress :: AccountVerificationKey -> SchemeId -> AccountAddress 
-accountAddress (AccVerifyKey x) (SchemeId y) =  AccountAddress (FBS.fromByteString $ BS.cons y (BS.take 160 bs))
+accountAddress (AccVerifyKey x) (SchemeId y) =  AccountAddress (FBS.fromByteString $ BS.cons y (BS.take (accountAddressSize - 1) bs))
     where 
         (SHA224.Hash r) = SHA224.hash (toByteString x) 
         bs = FBS.toByteString r
@@ -73,4 +74,13 @@ proof = Proof $ pack "proof of bot"
 randomAcc = unsafePerformIO $ do keypair <- S.newKeyPair
                                  return $ createAccount (S.verifyKey keypair)
 
+address :: AccountCreationInformation-> AccountAddress
+address aci =  accountAddress vk sc
+    where vk = aci_verifKey aci 
+          sc = aci_sigScheme aci
 
+
+printAddress :: AccountAddress -> Base58String 
+printAddress (AccountAddress x) = fromBytes bs 
+    where
+        bs = FBS.toByteString x
