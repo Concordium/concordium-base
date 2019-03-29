@@ -39,8 +39,8 @@ instance FBS.FixedLength AccountAddressSize where
 
 data AccountAddress =  AccountAddress (FBS.FixedByteString AccountAddressSize)
 
-accountAddress :: AccountVerificationKey -> SchemeId -> AccountAddress 
-accountAddress (AccVerifyKey x) (SchemeId y) =  AccountAddress (FBS.fromByteString $ BS.cons y (BS.take (accountAddressSize - 1) bs))
+accountAddress' :: AccountVerificationKey -> SchemeId -> AccountAddress 
+accountAddress' (AccVerifyKey x) (SchemeId y) =  AccountAddress (FBS.fromByteString $ BS.cons y (BS.take (accountAddressSize - 1) bs))
     where 
         (SHA224.Hash r) = SHA224.hash (toByteString x) 
         bs = FBS.toByteString r
@@ -74,8 +74,8 @@ proof = Proof $ pack "proof of bot"
 randomAcc = unsafePerformIO $ do keypair <- S.newKeyPair
                                  return $ createAccount (S.verifyKey keypair)
 
-address :: AccountCreationInformation-> AccountAddress
-address aci =  accountAddress vk sc
+accountAddress :: AccountCreationInformation-> AccountAddress
+accountAddress aci =  accountAddress' vk sc
     where vk = aci_verifKey aci 
           sc = aci_sigScheme aci
 
