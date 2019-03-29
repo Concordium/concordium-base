@@ -22,11 +22,9 @@ module Concordium.Crypto.Signature(
     verify,
 ) where
 
---import           Data.Typeable
 import           Concordium.Crypto.ByteStringHelpers
 import           Text.Printf
 import           Data.IORef
---import           Data.ByteString.Internal   (create, toForeignPtr)
 import           Data.Word
 import           System.IO.Unsafe
 import           Foreign.Ptr
@@ -43,8 +41,6 @@ import           System.Random
 import           Foreign.Marshal.Array
 import           Foreign.Marshal.Alloc
 import           Foreign.C.Types
---import           Concordium.Crypto.SignatureScheme (SignatureScheme, SignatureScheme_, SchemeId)
---import qualified Concordium.Crypto.SignatureScheme as S 
 
 
 foreign import ccall "eddsa_priv_key" c_priv_key :: Ptr Word8 -> IO CInt

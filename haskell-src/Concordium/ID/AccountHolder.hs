@@ -80,7 +80,7 @@ accountAddress aci =  accountAddress' vk sc
           sc = aci_sigScheme aci
 
 
-printAddress :: AccountAddress -> Base58String 
-printAddress (AccountAddress x) = fromBytes bs 
+addressToBase58 :: AccountAddress -> Base58String 
+addressToBase58 (AccountAddress x) = fromBytes bs 
     where
         bs = FBS.toByteString x
