@@ -106,28 +106,7 @@ instance Serialize (Predicate MaxAccount) where
     put = putMaxAccountPredicate
     get  = getMaxAccountPredicate
 
-    {-
-data Policy = forall a. Attribute_  a => Atomic (Predicate a)
-             | Conj Policy Policy
-             | Disj Policy Policy
--}
 
---data Predicate_ = Atomic (Predicate BirthDate) | Atomic (Predicate Citizenship) 
-    {-
-instance Serialize Predicate_ where
-    put (Atomic AgeOver18)= put "Over18"
-    put (Atomic AgeOver21)= put "Over21"
-    get = do ls <- get :: (Get String)
-             case ls of 
-               "AgeOver18" ->  AgeOver18
-               _       -> error "ooo"
-     -}          
-         {-
-type Policy =  [Predicate_]
-instance Serialize Policy where
-    put ls = put ls
-    get  = mapM_ get
--}
 
 data Policy = AtomicBD (Predicate BirthDate) | AtomicMaxAccount (Predicate MaxAccount) | AtomicCitizenship (Predicate Citizenships)
               | Conj Policy Policy  | Disj Policy Policy
@@ -137,18 +116,7 @@ instance Serialize Policy where
 
 
 
-data At = forall a. (Attribute_ a) => At (Predicate a)
 
-blink :: String -> Predicate BirthDate
-blink = undefined
-blank :: String -> Predicate Citizenships 
-blank = undefined
-
-bla :: String -> At
-bla "" = At $ blink "s"
-bla _  = At $ blank "r"
-
---x = Conj (Atomic AgeOver18) (Atomic EU)
 
 type AttributeList = Set Attribute 
 y = [Attribute (Citizen [NZ, US]), (Attribute (MaxAccount 12))]

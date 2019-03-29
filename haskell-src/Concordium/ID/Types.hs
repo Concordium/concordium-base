@@ -6,11 +6,12 @@ import           Data.ByteString    (ByteString)
 import           Data.Time
 import           Data.Word
 import           Concordium.ID.Attributes
-import qualified Concordium.Crypto.Signature as S
-import           Concordium.Crypto.Signature (Ed25519)
+--import qualified Concordium.Crypto.Signature as S
+--import           Concordium.Crypto.Signature (Ed25519)
 import           Concordium.Crypto.SignatureScheme
 import           Data.Serialize
 import           GHC.Generics
+import           Data.Typeable
 
 
 newtype AccountHolderIdentity = AH ByteString
@@ -58,12 +59,22 @@ data IdentityProvider = IP IdentityProviderIdentity IdentityProviderPublicKey
                          
 
 -- Signing key for accounts (eddsa key)
---data AccountSigningKey = forall a. (SignatureScheme_ a, Serialize (SignKey a), Eq (SignKey a))  => AccSignKey (SignKey a) 
-type AccountSigningKey = S.SignKey
+data AccountSigningKey = forall a. (SignatureScheme_ a)  => AccSignKey (SignKey a) 
+--type AccountSigningKey = S.SignKey
 
 -- Verification key for accounts (eddsa key)
---data AccountVerificationKey = forall a. (SignatureScheme_ a, Serialize (VerifyKey a), Eq (VerifyKey a)) => AccVerifyKey (VerifyKey a)
-type AccountVerificationKey = S.VerifyKey
+data AccountVerificationKey = forall a. (SignatureScheme_ a, Typeable (VerifyKey a),  Serialize (VerifyKey a) ) => AccVerifyKey (VerifyKey a)
+
+sigScheme (AccVerifyKey x) = schemeId x
+
+instance Serialize AccountVerificationKey where
+    put (AccVerifyKey x) = put (schemeId x, x)
+    get = do (scheme, bs) <- get
+             case (schemeNameFromId scheme) of
+               Schnorr -> return $ AccVerifyKey (bs:: VerifyKey Ed25519)
+               _       -> error "parsy parsy error"
+
+--type AccountVerificationKey = S.VerifyKey
 
     {-
 instance Serialize AccountVerificationKey where

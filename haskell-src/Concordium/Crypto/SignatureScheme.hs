@@ -1,12 +1,19 @@
-{-# LANGUAGE TypeFamilies, ExistentialQuantification #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances #-}
 module Concordium.Crypto.SignatureScheme where
 import           Data.ByteString (ByteString) 
+import           Concordium.Crypto.ByteStringHelpers
 import           Data.Word
+import qualified Data.FixedByteString as FBS
 import           Data.Serialize
+import qualified Concordium.Crypto.Signature as S
 import qualified Data.ByteString as B
+import           Data.Typeable
+import           System.IO.Unsafe
 
 data SchemeIdName = Schnorr | CL
 
+schemeNameFromId (SchemeId x) | x == fromIntegral 2  = Schnorr
+                              | x == fromIntegral 1 = CL
 
 newtype SchemeId = SchemeId Word8  
     deriving (Eq, Show)
@@ -23,33 +30,42 @@ class SignatureScheme_ scheme where
     publicKey :: SignKey scheme -> VerifyKey scheme
     sign ::  SignKey scheme -> VerifyKey scheme -> ByteString -> Signature scheme
     verify :: VerifyKey scheme -> ByteString -> Signature scheme -> Bool
-    schemeId :: scheme -> SchemeId
+    schemeId :: VerifyKey scheme -> SchemeId
     putVerifyKey :: Putter (VerifyKey scheme)
     getVerifyKey :: Get (VerifyKey scheme)
-    putSignKey :: Putter (SignKey scheme)
-    getSignKey :: Get (SignKey scheme)
-    signKeyEq :: SignKey scheme -> SignKey scheme -> Bool
-    verifyKeyEq :: VerifyKey scheme -> VerifyKey scheme -> Bool
 
 
 data SignatureScheme = forall a. SignatureScheme_ a => SignatureScheme a
+
 -- A setup takes a scheme id and returns an element of the corresponding signature scheme
 --setup :: (SignatureScheme a) => [SecurityParam] -> SchemeId -> a
-
-instance (SignatureScheme_ a) => Eq (SignKey a) where
-    a == b = signKeyEq a b
-
-instance (SignatureScheme_ a) => Eq (VerifyKey a) where
-    a == b = verifyKeyEq a b
-    
-
-instance (SignatureScheme_ a) => Serialize (SignKey a) where
-    put = putSignKey
-    get = getSignKey
 
 instance (SignatureScheme_ a) => Serialize (VerifyKey a) where
     put = putVerifyKey
     get = getVerifyKey
+
+
+data Ed25519
+
+instance SignatureScheme_ Ed25519 where
+    data VerifyKey Ed25519    = Ed25519_PK (FBS.FixedByteString S.VerifyKeySize) deriving (Typeable)
+    data SignKey Ed25519      = Ed25519_SK (FBS.FixedByteString S.SignKeySize)
+    data Signature Ed25519    = Ed25519_Sig (FBS.FixedByteString S.SignatureSize)
+    generatePrivateKey        = unsafePerformIO $ do (S.SignKey x) <- S.newPrivKey
+                                                     return (Ed25519_SK x)
+    publicKey (Ed25519_SK x) = unsafePerformIO $ do (S.VerifyKey y) <- S.pubKey (S.SignKey x)
+                                                    return (Ed25519_PK y)
+    sign (Ed25519_SK x) (Ed25519_PK y) b = let (S.Signature s ) = S.sign S.KeyPair{S.signKey=(S.SignKey x), S.verifyKey=(S.VerifyKey y)} b
+                                           in (Ed25519_Sig s)
+    verify (Ed25519_PK x) b (Ed25519_Sig s) = S.verify (S.VerifyKey x) b (S.Signature s)
+    schemeId _ = SchemeId (fromIntegral 2)
+    putVerifyKey (Ed25519_PK s) = putByteString $ FBS.toByteString s
+    getVerifyKey  = Ed25519_PK . FBS.fromByteString <$> getByteString S.verifyKeySize
+
+
+
+instance Show (VerifyKey Ed25519) where
+    show (Ed25519_PK pk) = byteStringToHex $ FBS.toByteString pk
 
 
 data CL
@@ -65,7 +81,3 @@ instance SignatureScheme_ CL where
     schemeId _ = SchemeId (fromIntegral 3)
     putVerifyKey (CL_PK s) = put s
     getVerifyKey  = CL_PK <$> get 
-    putSignKey (CL_SK s) = put s
-    getSignKey  =  CL_SK <$> get 
-    signKeyEq (CL_SK sk0) (CL_SK sk1) = sk0 == sk1
-    verifyKeyEq (CL_PK pk0) (CL_PK pk1) = pk0 == pk1

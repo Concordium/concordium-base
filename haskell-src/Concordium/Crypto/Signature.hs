@@ -1,25 +1,32 @@
-{-# LANGUAGE DeriveGeneric, GeneralizedNewtypeDeriving, ForeignFunctionInterface , TypeFamilies  #-}
+{-# LANGUAGE DeriveGeneric, GeneralizedNewtypeDeriving, ForeignFunctionInterface , TypeFamilies, FlexibleContexts, FlexibleInstances  #-}
 -- |This module provides a prototype implementation of 
 -- EDDSA scheme of Curve Ed25519 
 --  IRTF RFC 8032
 module Concordium.Crypto.Signature(
-    SignKey,
-    VerifyKey,
+    SignKey (..),
+    VerifyKey (..),
     KeyPair(..),
-    Signature,
+    Signature (..),
     test,
     randomKeyPair,
     newKeyPair,
+    newPrivKey,
+    pubKey,
+    SignatureSize, 
+    signatureSize,
+    SignKeySize,
+    signKeySize,
+    VerifyKeySize,
+    verifyKeySize,
     sign,
     verify,
-    Ed25519
-   --emptySignature
 ) where
 
+--import           Data.Typeable
 import           Concordium.Crypto.ByteStringHelpers
 import           Text.Printf
 import           Data.IORef
-import           Data.ByteString.Internal   (create, toForeignPtr)
+--import           Data.ByteString.Internal   (create, toForeignPtr)
 import           Data.Word
 import           System.IO.Unsafe
 import           Foreign.Ptr
@@ -36,8 +43,8 @@ import           System.Random
 import           Foreign.Marshal.Array
 import           Foreign.Marshal.Alloc
 import           Foreign.C.Types
-import           Concordium.Crypto.SignatureScheme (SignatureScheme, SignatureScheme_, SchemeId)
-import qualified Concordium.Crypto.SignatureScheme as S 
+--import           Concordium.Crypto.SignatureScheme (SignatureScheme, SignatureScheme_, SchemeId)
+--import qualified Concordium.Crypto.SignatureScheme as S 
 
 
 foreign import ccall "eddsa_priv_key" c_priv_key :: Ptr Word8 -> IO CInt
@@ -172,25 +179,5 @@ test = do kp@(KeyPair sk pk) <- newKeyPair
               putStrLn ("Good?: " ++ if suc then "YES" else "NO")
 
 
-
-data Ed25519
-instance SignatureScheme_ Ed25519 where
-    data VerifyKey Ed25519    = Ed25519_PK (FBS.FixedByteString VerifyKeySize)
-    data SignKey Ed25519      = Ed25519_SK (FBS.FixedByteString SignKeySize)
-    data Signature Ed25519    = Ed25519_Sig (FBS.FixedByteString SignatureSize)
-    generatePrivateKey        = unsafePerformIO $ do (SignKey x) <- newPrivKey
-                                                     return (Ed25519_SK x)
-    publicKey (Ed25519_SK x) = unsafePerformIO $ do (VerifyKey y) <- pubKey (SignKey x)
-                                                    return (Ed25519_PK y)
-    sign (Ed25519_SK x) (Ed25519_PK y) b = let (Signature s ) = sign KeyPair{signKey=(SignKey x), verifyKey=(VerifyKey y)} b
-                                           in (Ed25519_Sig s)
-    verify (Ed25519_PK x) b (Ed25519_Sig s) = verify (VerifyKey x) b (Signature s)
-    schemeId _ = S.SchemeId (fromIntegral 2)
-    putVerifyKey (Ed25519_PK s) = putByteString $ FBS.toByteString s
-    getVerifyKey  = Ed25519_PK . FBS.fromByteString <$> getByteString verifyKeySize
-    putSignKey (Ed25519_SK s) = putByteString $ FBS.toByteString s
-    getSignKey  = Ed25519_SK . FBS.fromByteString <$> getByteString signKeySize
-    signKeyEq (Ed25519_SK sk0) (Ed25519_SK sk1) = sk0==sk1   
-    verifyKeyEq (Ed25519_PK pk0) (Ed25519_PK pk1) = pk0==pk1   
 
 
