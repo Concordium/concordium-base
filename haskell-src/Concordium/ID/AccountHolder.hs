@@ -31,6 +31,17 @@ createAccount ahc = ACI { aci_regId = regId,
                           aci_proof = proof
                         }
 
+accountAddress :: AccountCreationInformation-> AccountAddress
+accountAddress aci =  accountAddress' vk sc
+    where vk = aci_verifKey aci
+          sc = aci_sigScheme aci
+
+
+addressToBase58 :: AccountAddress -> Base58String
+addressToBase58 (AccountAddress x) = fromBytes bs
+    where
+        bs = FBS.toByteString x
+
 accountAddressSize = 21
 
 data AccountAddressSize 
@@ -74,13 +85,3 @@ proof = Proof $ pack "proof of bot"
 randomAcc = unsafePerformIO $ do keypair <- S.newKeyPair
                                  return $ createAccount (S.verifyKey keypair)
 
-accountAddress :: AccountCreationInformation-> AccountAddress
-accountAddress aci =  accountAddress' vk sc
-    where vk = aci_verifKey aci 
-          sc = aci_sigScheme aci
-
-
-addressToBase58 :: AccountAddress -> Base58String 
-addressToBase58 (AccountAddress x) = fromBytes bs 
-    where
-        bs = FBS.toByteString x
