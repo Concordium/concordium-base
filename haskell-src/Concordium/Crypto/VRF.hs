@@ -34,6 +34,7 @@ import           Foreign.C.Types
 import           Data.IORef
 import           Concordium.Crypto.SHA256
 import           System.Random
+import           Test.QuickCheck (Arbitrary(..))
 
 
 foreign import ccall "ec_vrf_priv_key" rs_priv_key :: Ptr Word8 -> IO CInt
@@ -120,6 +121,10 @@ randomKeyPair gen = (key, gen')
             (gen0, gen') = split gen
             privKey = PrivateKey $ FBS.pack $ randoms gen0
             key = KeyPair privKey (unsafePerformIO $ pubKey privKey)
+
+instance Arbitrary KeyPair where
+    arbitrary = fst . randomKeyPair . mkStdGen <$> arbitrary
+
 
 -- |Generate a new key pair using the system random number generator.
 newKeyPair :: IO KeyPair
