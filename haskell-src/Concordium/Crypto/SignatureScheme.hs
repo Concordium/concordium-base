@@ -31,8 +31,8 @@ class SignatureScheme_ scheme where
     sign ::  SignKey scheme -> VerifyKey scheme -> ByteString -> Signature scheme
     verify :: VerifyKey scheme -> ByteString -> Signature scheme -> Bool
     schemeId :: VerifyKey scheme -> SchemeId
-    putVerifyKey :: Putter (VerifyKey scheme)
-    getVerifyKey :: Get (VerifyKey scheme)
+    toByteString :: VerifyKey scheme -> ByteString 
+    fromByteString :: ByteString -> VerifyKey scheme 
 
 
 data SignatureScheme = forall a. SignatureScheme_ a => SignatureScheme a
@@ -41,8 +41,8 @@ data SignatureScheme = forall a. SignatureScheme_ a => SignatureScheme a
 --setup :: (SignatureScheme a) => [SecurityParam] -> SchemeId -> a
 
 instance (SignatureScheme_ a) => Serialize (VerifyKey a) where
-    put = putVerifyKey
-    get = getVerifyKey
+    put  = put . toByteString
+    get = fromByteString <$> get
 
 
 data Ed25519
@@ -59,8 +59,8 @@ instance SignatureScheme_ Ed25519 where
                                            in (Ed25519_Sig s)
     verify (Ed25519_PK x) b (Ed25519_Sig s) = S.verify (S.VerifyKey x) b (S.Signature s)
     schemeId _ = SchemeId (fromIntegral 2)
-    putVerifyKey (Ed25519_PK s) = putByteString $ FBS.toByteString s
-    getVerifyKey  = Ed25519_PK . FBS.fromByteString <$> getByteString S.verifyKeySize
+    toByteString (Ed25519_PK s) =  FBS.toByteString s
+    fromByteString bs = Ed25519_PK $ FBS.fromByteString  bs
 
 
 
@@ -79,5 +79,5 @@ instance SignatureScheme_ CL where
     sign (CL_SK x) (CL_PK y) b = CL_Sig b
     verify (CL_PK x) b s = True
     schemeId _ = SchemeId (fromIntegral 3)
-    putVerifyKey (CL_PK s) = put s
-    getVerifyKey  = CL_PK <$> get 
+    toByteString (CL_PK s) =  s
+    fromByteString bs  = CL_PK bs

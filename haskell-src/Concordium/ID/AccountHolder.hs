@@ -7,6 +7,9 @@ import System.IO.Unsafe
 import qualified  Concordium.Crypto.Signature as S
 import Concordium.Crypto.SignatureScheme
 import Concordium.ID.Attributes
+import qualified Concordium.Crypto.SHA224 as SHA224
+import qualified Data.ByteString as BS
+import qualified Data.FixedByteString as FBS
 
 
 
@@ -27,6 +30,20 @@ createAccount ahc = ACI { aci_regId = regId,
                           aci_proof = proof
                         }
 
+accountAddressSize = 161
+
+data AccountAddressSize 
+instance FBS.FixedLength AccountAddressSize where
+    fixedLength _ = accountAddressSize
+
+data AccountAddress =  AccountAddress (FBS.FixedByteString AccountAddressSize)
+
+accountAddress :: AccountVerificationKey -> SchemeId -> AccountAddress 
+accountAddress (AccVerifyKey x) (SchemeId y) =  AccountAddress (FBS.fromByteString $ BS.cons y (BS.take 160 bs))
+    where 
+        (SHA224.Hash r) = SHA224.hash (toByteString x) 
+        bs = FBS.toByteString r
+      
 
 verifyAccount :: AccountCreationInformation -> Bool 
 verifyAccount _ = True
