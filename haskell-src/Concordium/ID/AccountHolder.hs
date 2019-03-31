@@ -1,5 +1,7 @@
+{-# LANGUAGE DeriveGeneric #-}
 module Concordium.ID.AccountHolder where
 
+import GHC.Generics
 import Concordium.ID.Types
 import Data.ByteString.Char8
 import Data.ByteString.Random.MWC
@@ -12,7 +14,10 @@ import qualified Data.ByteString as BS
 import qualified Data.FixedByteString as FBS
 import Data.Base58String.Bitcoin
 
-
+import Foreign.Storable(peek)
+import Foreign.Ptr(castPtr)
+import Data.Serialize
+import Data.Hashable
 
 
 
@@ -42,13 +47,29 @@ addressToBase58 (AccountAddress x) = fromBytes bs
     where
         bs = FBS.toByteString x
 
+base58decodeAddr :: Base58String -> AccountAddress
+base58decodeAddr bs = AccountAddress (FBS.fromByteString (toBytes bs))
+
+
 accountAddressSize = 21
 
 data AccountAddressSize 
 instance FBS.FixedLength AccountAddressSize where
     fixedLength _ = accountAddressSize
 
-data AccountAddress =  AccountAddress (FBS.FixedByteString AccountAddressSize)
+newtype AccountAddress =  AccountAddress (FBS.FixedByteString AccountAddressSize)
+    deriving(Eq, Generic)
+
+instance Serialize AccountAddress where
+    put (AccountAddress h) = putByteString $ FBS.toByteString h
+    get = AccountAddress . FBS.fromByteString <$> getByteString accountAddressSize
+
+instance Hashable AccountAddress where
+    hashWithSalt s (AccountAddress b) = hashWithSalt s (FBS.toByteString b)
+    hash (AccountAddress b) = unsafeDupablePerformIO $ FBS.withPtr b $ \p -> peek (castPtr p)
+
+instance Show AccountAddress where
+  show = show . addressToBase58
 
 accountAddress' :: AccountVerificationKey -> SchemeId -> AccountAddress 
 accountAddress' (AccVerifyKey x) (SchemeId y) =  AccountAddress (FBS.fromByteString $ BS.cons y (BS.take (accountAddressSize - 1) bs))
