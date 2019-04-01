@@ -25,45 +25,6 @@ instance Attribute_ BirthDate where
     is AgeOver21 x = is (OlderThan 21) x
 
 instance Serialize (Predicate BirthDate) where
-    get = getBirthDatePredicate
-    put = putBirthDatePredicate
-
-putBirthDatePredicate :: Putter (Predicate BirthDate)
-putBirthDatePredicate AgeOver18 = put $ ("BD_Over18") 
-putBirthDatePredicate AgeOver21 = put $ ("BD_Over21") 
-putBirthDatePredicate (OlderThan x) = put $ ("BD_OlderThan"++show x) 
-
-getBirthDatePredicate :: Get (Predicate BirthDate)
-getBirthDatePredicate = do ls <- get :: (Get String) 
-                           case ls of 
-                             ('B':'D':'_':ls') -> case ls' of
-                                                    "AgeOver18" -> return AgeOver18
-                                                    "AgeOver21" -> return AgeOver21
-                                                    _           -> return $ OlderThan $ read (Prelude.drop 9 ls') 
-                             _                 -> error "parse error"
-
-putMaxAccountPredicate :: Putter (Predicate MaxAccount)
-putMaxAccountPredicate x = put ("MA_" ++ show x)
-
-getMaxAccountPredicate :: Get (Predicate MaxAccount)
-getMaxAccountPredicate = do ls <- get :: (Get String)
-                            case ls of 
-                              ('M':'A':'_': ls') -> return $ LessThan $ read ls'
-                              _                  -> error "parse error"
-
-putCitizenshipsPredicate :: Putter (Predicate Citizenships)
-putCitizenshipsPredicate EU  =  put ("CT_EU")
-putCitizenshipsPredicate EEA  =  put ("CT_EEA")
-
-getCitizenshipsPredicate :: Get (Predicate Citizenships)
-getCitizenshipsPredicate = do ls <- get :: (Get String) 
-                              case ls of 
-                                ('C':'T':'_': ls') -> case ls' of 
-                                                        "EU" -> return EU
-                                                        "EEA" -> return EEA
-                                                        _ -> error "parse error"
-                                _ -> error "parse error"
-
 
 -- Country Attribute
 data CountryCode = NZ | DK | US | FR deriving (Eq, Generic)
@@ -90,8 +51,6 @@ instance Attribute_ Citizenships where
     is EEA (Citizen ls) = iseea ls
 
 instance Serialize (Predicate Citizenships) where 
-    get = getCitizenshipsPredicate
-    put = putCitizenshipsPredicate
 
 
 -- Max Account attribute
@@ -103,8 +62,6 @@ instance Attribute_ MaxAccount where
 
 
 instance Serialize (Predicate MaxAccount) where 
-    put = putMaxAccountPredicate
-    get  = getMaxAccountPredicate
 
 
 
