@@ -14,7 +14,7 @@ curve25519-dalek = "1"
 
 [lib]
 name = "ec_vrf_ed25519"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]
 
 
 
