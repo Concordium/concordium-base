@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, GeneralizedNewtypeDeriving, ForeignFunctionInterface #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, ForeignFunctionInterface #-}
 -- | This module is a prototype implementantion of  verifiable random function.
 -- draft-irtf-cfrg-vrf-01
 
@@ -23,29 +23,18 @@ module Concordium.Crypto.VRF(
 ) where
 
 import           Concordium.Crypto.ByteStringHelpers
-import           Data.String.Builder
-import           Data.ByteString.Builder
 import           Data.ByteString            (ByteString)
 import qualified Data.ByteString            as B
-import qualified Data.ByteString.Lazy       as L
-import           Data.ByteString.Internal   (create, toForeignPtr)
 import qualified Data.FixedByteString       as FBS
 import           Foreign.Ptr
-import           Foreign.ForeignPtr
 import           Data.Word
 import           System.IO.Unsafe
-import           Control.Monad
-import           Foreign.Marshal.Array
-import           Foreign.Marshal.Alloc
 import           Data.Serialize
 import           Foreign.C.Types
 import           Data.IORef
-import           GHC.Generics
-import           Data.Maybe
-import           Numeric
-import           Text.Printf
 import           Concordium.Crypto.SHA256
 import           System.Random
+import           Test.QuickCheck (Arbitrary(..))
 
 
 foreign import ccall "ec_vrf_priv_key" rs_priv_key :: Ptr Word8 -> IO CInt
@@ -132,6 +121,10 @@ randomKeyPair gen = (key, gen')
             (gen0, gen') = split gen
             privKey = PrivateKey $ FBS.pack $ randoms gen0
             key = KeyPair privKey (unsafePerformIO $ pubKey privKey)
+
+instance Arbitrary KeyPair where
+    arbitrary = fst . randomKeyPair . mkStdGen <$> arbitrary
+
 
 -- |Generate a new key pair using the system random number generator.
 newKeyPair :: IO KeyPair

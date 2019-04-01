@@ -38,6 +38,7 @@ Library
                 , time       >= 1.7
                 , random-bytestring >= 0.1.3.0
                 , base58string >= 0.10.0
+                , QuickCheck >= 2.10
 
   extra-libraries: ec_vrf_ed25519
                    sha_2, 

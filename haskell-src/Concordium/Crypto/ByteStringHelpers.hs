@@ -6,8 +6,6 @@ import           Data.ByteString.Internal
 import           Foreign.Ptr
 import           Foreign.ForeignPtr
 import           Data.Word
-import           Data.ByteString.Builder
-import           Control.Monad
 import qualified Data.List as L
 
 wordToHex :: Word8 -> [Char]

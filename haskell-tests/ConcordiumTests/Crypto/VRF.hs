@@ -5,13 +5,8 @@ import qualified Concordium.Crypto.VRF as VRF
 
 import Data.Serialize
 import qualified Data.ByteString as BS
-import Data.Word
 import Test.QuickCheck
 import Test.Hspec
-import System.Random
-
-instance Arbitrary VRF.KeyPair where
-    arbitrary = fst . VRF.randomKeyPair . mkStdGen <$> arbitrary
 
 testSerializePublicKey :: Property
 testSerializePublicKey = property $ \kp -> Right (VRF.publicKey kp) === runGet get (runPut $ put $ VRF.publicKey kp)

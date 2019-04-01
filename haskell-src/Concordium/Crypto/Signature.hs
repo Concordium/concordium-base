@@ -23,23 +23,15 @@ module Concordium.Crypto.Signature(
 ) where
 
 import           Concordium.Crypto.ByteStringHelpers
-import           Text.Printf
 import           Data.IORef
 import           Data.Word
 import           System.IO.Unsafe
 import           Foreign.Ptr
-import           Foreign.ForeignPtr
-import qualified Concordium.Crypto.SHA256 as Hash
-import qualified Data.ByteString.Lazy as L
 import           Data.Serialize
 import qualified Data.ByteString  as B
 import           Data.ByteString (ByteString) 
-import           Data.ByteString.Builder
 import qualified Data.FixedByteString as FBS
-import           Data.Word
 import           System.Random
-import           Foreign.Marshal.Array
-import           Foreign.Marshal.Alloc
 import           Foreign.C.Types
 
 
