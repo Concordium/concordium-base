@@ -63,7 +63,7 @@ data AccountSigningKey = forall a. (SignatureScheme_ a)  => AccSignKey (SignKey 
 --type AccountSigningKey = S.SignKey
 
 -- Verification key for accounts (eddsa key)
-data AccountVerificationKey = forall a. (SignatureScheme_ a, Typeable (VerifyKey a),  Serialize (VerifyKey a) ) => AccVerifyKey (VerifyKey a)
+data AccountVerificationKey = forall a. (SignatureScheme_ a,  Serialize (VerifyKey a) ) => AccVerifyKey (VerifyKey a)
 
 sigScheme (AccVerifyKey x) = schemeId x
 
@@ -150,6 +150,7 @@ data AccountCreationInformation = ACI { aci_regId     :: AccountRegistrationID,
 instance Serialize AccountCreationInformation where
 
 data AccountHolderCertificate = AHC { ahc_ipId :: IdentityProviderIdentity,
+                                      ahc_ipPk :: IdentityProviderPublicKey,
                                       ahc_ahi  :: AccountHolderInformation,
                                       ahc_sig  :: Signature CL
                                      }
