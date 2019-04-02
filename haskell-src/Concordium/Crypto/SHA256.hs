@@ -130,5 +130,8 @@ hashToInt (Hash h) = case runGet getInt64be (FBS.toByteString h) of
     Left e -> error e
     Right i -> fromIntegral i
 
-
+-- |Convert a 'Hash' to a 'ByteString'.
+-- Gives the same result a serializing, but more efficient.
+hashToByteString :: Hash -> ByteString
+hashToByteString (Hash h) = FBS.toByteString h
 

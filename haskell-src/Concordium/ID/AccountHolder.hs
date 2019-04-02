@@ -58,7 +58,7 @@ instance FBS.FixedLength AccountAddressSize where
     fixedLength _ = accountAddressSize
 
 newtype AccountAddress =  AccountAddress (FBS.FixedByteString AccountAddressSize)
-    deriving(Eq, Generic)
+    deriving(Eq, Ord, Generic)
 
 instance Serialize AccountAddress where
     put (AccountAddress h) = putByteString $ FBS.toByteString h
