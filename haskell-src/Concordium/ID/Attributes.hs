@@ -8,7 +8,7 @@ import           Data.Set
 import           GHC.Generics
 import           Data.Serialize
 
--- Class Attribute
+
 class (Eq a) => Attribute_ a where
    data Predicate a :: *
    is :: Predicate a -> a -> Bool

@@ -22,7 +22,29 @@ import Data.Hashable
 
 
 -- This is a dummy module for testing
---
+-- Account creation
+
+
+
+-- deploy credentials
+-- input : Private Key for signatures
+-- input : Policy for account
+-- input : AHI including PRF key and attribute List
+-- input : AHC mainly signature for IP
+-- input : counter  
+newAccount :: (SignatureScheme_ a )=> SignKey a -> VerifyKey a -> Policy ->  AccountHolderInformation -> AccountHolderCertificate -> Int-> IO AccountCreationInformation
+newAccount sk pk p ahi ahc n =  do e <- random (fromIntegral 32) 
+                                   regId       <-  registrationId
+                                   proof       <- prove p ahi ahc 
+                                   return $ ACI {aci_regId=regId, aci_arData=ardata, aci_ipId=ip, aci_sigScheme=scheme, 
+                                                 aci_verifKey= (AccVerifyKey pk), aci_encKey=(EncKeyAcc e), aci_policy=p, aci_auxData=aux, aci_proof=proof}
+    where
+        scheme = schemeId pk
+
+prove :: Policy -> AccountHolderInformation -> AccountHolderCertificate -> IO ZKProof
+prove _ _ _ = random (fromIntegral 80) >>= (return . Proof)
+
+registrationId = (random (fromIntegral 32)) >>= (return . RegIdAcc)
 
 createAccount :: S.VerifyKey -> AccountCreationInformation  
 createAccount ahc = ACI { aci_regId = regId, 
