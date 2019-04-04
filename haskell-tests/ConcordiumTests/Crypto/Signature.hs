@@ -7,12 +7,6 @@ import qualified Data.ByteString as BS
 import Data.Word
 import Test.QuickCheck
 import Test.Hspec
-import System.Random
-
-instance Arbitrary Sig.KeyPair where
-    arbitrary = do
-        seed <- arbitrary
-        return $ fst $ Sig.randomKeyPair (mkStdGen seed)
 
 testSerializeSignKey :: Property
 testSerializeSignKey = property $ ck
