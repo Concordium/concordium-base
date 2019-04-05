@@ -9,7 +9,6 @@ Cabal-Version:       >=1.18
 Build-Type:     Custom
 
 custom-setup
-  # dependencies needed to compile Setup.hs file
   setup-depends:
     base  >= 4.7,
     Cabal >= 2.2,
