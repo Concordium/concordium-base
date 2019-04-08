@@ -33,6 +33,7 @@ import           Data.ByteString (ByteString)
 import qualified Data.FixedByteString as FBS
 import           System.Random
 import           Foreign.C.Types
+import           Test.QuickCheck (Arbitrary(..))
 
 
 foreign import ccall "eddsa_priv_key" c_priv_key :: Ptr Word8 -> IO CInt
@@ -126,6 +127,8 @@ randomKeyPair gen = (key, gen')
             privKey = SignKey $ FBS.pack $ randoms gen0
             key = KeyPair privKey (unsafePerformIO $ pubKey privKey)
 
+instance Arbitrary KeyPair where
+    arbitrary = fst . randomKeyPair . mkStdGen <$> arbitrary
 
 newKeyPair :: IO KeyPair
 newKeyPair = do sk <- newPrivKey
