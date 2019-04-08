@@ -26,7 +26,7 @@ class SignatureScheme_ scheme where
     data VerifyKey scheme :: * 
     data SignKey scheme :: *
     data Signature scheme :: *
-    generatePrivateKey ::  SignKey scheme
+    generatePrivateKey ::  IO (SignKey scheme)
     publicKey :: SignKey scheme -> VerifyKey scheme
     sign ::  SignKey scheme -> VerifyKey scheme -> ByteString -> Signature scheme
     verify :: VerifyKey scheme -> ByteString -> Signature scheme -> Bool
@@ -51,8 +51,8 @@ instance SignatureScheme_ Ed25519 where
     data VerifyKey Ed25519    = Ed25519_PK (FBS.FixedByteString S.VerifyKeySize) deriving (Typeable)
     data SignKey Ed25519      = Ed25519_SK (FBS.FixedByteString S.SignKeySize)
     data Signature Ed25519    = Ed25519_Sig (FBS.FixedByteString S.SignatureSize)
-    generatePrivateKey        = unsafePerformIO $ do (S.SignKey x) <- S.newPrivKey
-                                                     return (Ed25519_SK x)
+    generatePrivateKey        =  do (S.SignKey x) <- S.newPrivKey
+                                    return (Ed25519_SK x)
     publicKey (Ed25519_SK x) = unsafePerformIO $ do (S.VerifyKey y) <- S.pubKey (S.SignKey x)
                                                     return (Ed25519_PK y)
     sign (Ed25519_SK x) (Ed25519_PK y) b = let (S.Signature s ) = S.sign S.KeyPair{S.signKey=(S.SignKey x), S.verifyKey=(S.VerifyKey y)} b
@@ -74,7 +74,7 @@ instance SignatureScheme_ CL where
     data VerifyKey CL    = CL_PK ByteString
     data SignKey CL      = CL_SK ByteString
     data Signature CL    = CL_Sig ByteString
-    generatePrivateKey        = CL_SK B.empty
+    generatePrivateKey        = return (CL_SK B.empty)
     publicKey (CL_SK x) = CL_PK x
     sign (CL_SK x) (CL_PK y) b = CL_Sig b
     verify (CL_PK x) b s = True
