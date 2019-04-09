@@ -150,3 +150,7 @@ data ChainMetadata =
                 , finalizedHeight :: BlockHeight
                 }
 
+
+
+
+-- *Types moved from Acorn.Types, needed by acorn interpreter and typechecker and by the scheduler

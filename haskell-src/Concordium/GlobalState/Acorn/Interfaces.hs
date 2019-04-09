@@ -1,0 +1,316 @@
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# OPTIONS_GHC -Wall #-}
+
+module Concordium.GlobalState.Acorn.Interfaces where
+
+import GHC.Generics(Generic)
+
+import Data.Hashable(Hashable, hashWithSalt)
+import Data.HashMap.Strict(HashMap)
+import qualified Data.HashMap.Strict as Map
+import qualified Data.Sequence as Seq
+import Data.Int
+import Data.Maybe(fromJust)
+
+import qualified Data.Serialize.Put as P
+import qualified Data.Serialize.Get as G
+import qualified Data.Serialize as S
+
+import Control.Monad
+
+import Concordium.GlobalState.Types
+import qualified Concordium.GlobalState.Acorn.Core as Core
+
+-- * Basic representation types.
+
+-- * Datatypes involved in typechecking, and any other operations involving types.
+
+-- |Interface of a contract.
+data ContractInterface = ContractInterface
+    { paramTy :: !(Core.Type Core.ModuleRef) -- ^Type of the parameter of the init method.
+    , msgTy :: !(Core.Type Core.ModuleRef) -- ^Type of messages the receive method can handle.
+                                           --  The references are relative to the module imports in which this contract exists.
+    }
+  deriving(Show, Generic)
+
+
+-- |Interface derived from a module. This is used in typechecking other modules.
+-- Lists public functions which can be called, and types of methods.
+data Interface = Interface
+    { importedModules :: !(HashMap Core.ModuleName Core.ModuleRef)
+    , exportedTypes :: !(HashMap Core.TyName (Int, HashMap Core.Name [Core.Type Core.ModuleRef]))
+    , exportedTerms :: !(HashMap Core.Name (Core.Type Core.ModuleRef))
+    , exportedContracts :: !(HashMap Core.TyName ContractInterface)
+    , exportedConstraints :: !(HashMap Core.TyName (Core.ConstraintDecl Core.ModuleRef))
+    }
+  deriving (Show, Generic)
+
+type ModuleInterfaces = HashMap Core.ModuleRef Interface
+
+-- * Datatypes involved in execution of terms.
+
+type Energy = Int64
+
+-- | How to derive energy amounts from gtu amounts
+gtuToEnergy :: Amount -> Energy
+gtuToEnergy = fromIntegral
+
+-- | How to derive energy amounts from gtu amounts
+energyToGtu :: Energy -> Amount
+energyToGtu = fromIntegral
+
+
+-- | The type of values used by the interpreter. 
+data Value = 
+             VClosure !RTEnv !Expr -- ^Functions evaluate to closures.
+             | VRecClosure !RTEnv !Int ![Expr] -- ^Recursive functions evaluate to recursive closures.
+             | VLiteral !Core.Literal    -- ^Base literals.
+             | VAmount !Amount
+             | VDict !(HashMap Value Value)   -- ^Dictionaries are also primitives, but are here since they depend on values.
+                                          --  FIXME: The keys and values should be restricted, so the type value is too liberal so should be changed.
+             | VConstructor !Core.Name ![Value] -- ^Constructors applied to arguments.
+                                             -- FIXME: Should use sequence instead of list here as well since it is usually built by appending to the back.
+                                             -- FIXME: Should use sequence instead of list here as well since it is usually built by appending to the back.
+             | VInstance { vinstance_ls :: !Value
+                         , vinstance_caddr :: !ContractAddress
+                         , vinstance_implements :: !ImplementsValue
+                         }
+  deriving(Show)
+
+-- |Only provide hash for values which can be keys of a dictionary.
+-- These will be the only ones allowed for dictionaries
+instance Hashable Value where
+  hashWithSalt s (VLiteral l) = hashWithSalt s (0 :: Int, hashWithSalt s l)
+  hashWithSalt s (VAmount l) = hashWithSalt s (1 :: Int, hashWithSalt s l)
+  hashWithSalt s (VDict mp) = hashWithSalt s (2 :: Int, hashWithSalt s (Map.toList mp))
+  hashWithSalt s (VConstructor n vals) =
+    hashWithSalt s (3 + n, hashWithSalt s vals)
+  hashWithSalt _ _ = error "Trying to hash a Value which is not hashable."
+
+instance Eq Value where
+  VLiteral l == VLiteral l' = l == l'
+  VAmount a == VAmount a' = a == a'
+  VDict d1 == VDict d2 = d1 == d2
+  VConstructor c1 vals1 == VConstructor c2 vals2 =
+    c1 == c2 && vals1 == vals2
+  _ == _ = False
+
+-- **The serialization instances for values are only for storable values.
+-- If you try to serialize with a value which is not storable the methods will fail.
+putStorable :: P.Putter Value
+putStorable (VLiteral l) = P.putWord8 0 <> Core.putLit l
+putStorable (VAmount (Amount a)) = P.putWord8 1 <> P.putWord64be a
+putStorable (VConstructor n vals) = do
+  P.putWord8 2
+  Core.putName n
+  Core.putLength vals
+  mapM_ putStorable vals
+putStorable (VDict mp) = do
+  P.putWord8 3
+  let kv = Map.toList mp
+  Core.putLength kv
+  mapM_ (\(k, v) -> putStorable k <> putStorable v) kv
+putStorable _ = error "FATAL: Trying to serialize a non-storable value. This should not happen."
+
+getStorable :: G.Get Value
+getStorable = do
+  h <- G.getWord8
+  case h of
+    0 -> VLiteral <$> Core.getLit
+    1 -> (VAmount . Amount) <$> G.getWord64be
+    2 -> do
+      name <- Core.getName
+      l <- Core.getLength
+      vals <- replicateM l getStorable
+      return $ VConstructor name vals
+    3 -> do
+      l <- Core.getLength
+      kv <- replicateM l (do k <- getStorable
+                             v <- getStorable
+                             return (k, v))
+      mp <- foldM (\mp (k, v) -> if k `Map.member` mp then fail "Duplicate keys." else return (Map.insert k v mp)) Map.empty kv
+      return $ VDict mp
+    _ -> fail "Serialization failure. Unknown node."
+
+newtype RTEnv = RTEnv { localStack :: (Seq.Seq Value) }
+  deriving(Show)
+
+{-# INLINE singletonLocalStack #-}
+singletonLocalStack :: Value -> RTEnv
+singletonLocalStack v = RTEnv { localStack = Seq.singleton v }
+
+{-# INLINE pushToStack #-}
+pushToStack :: RTEnv -> Value -> RTEnv
+pushToStack env v = env { localStack = v Seq.<| localStack env }
+
+{-# INLINE pushAllToStack #-}
+pushAllToStack :: RTEnv -> Seq.Seq Value -> RTEnv
+pushAllToStack env v = env { localStack = v Seq.>< localStack env }
+
+emptyStack :: RTEnv
+emptyStack = RTEnv Seq.empty
+
+-- |NB: This method is unsafe and will raise an error if the stack is empty.
+{-# INLINE peekStack #-}
+peekStack :: RTEnv -> Value
+peekStack env = localStack env `Seq.index` 0
+
+-- |NB: This method is unsafe and will raise an error if the stack is empty.
+{-# INLINE peekStack' #-}
+peekStack' :: RTEnv -> Value
+peekStack' env = localStack env `Seq.index` 1
+
+{-# INLINE peekStack'' #-}
+peekStack'' :: RTEnv -> Value
+peekStack'' env = localStack env `Seq.index` 2
+
+{-# INLINE peekStack''' #-}
+peekStack''' :: RTEnv -> Value
+peekStack''' env = localStack env `Seq.index` 3
+
+{-# INLINE peekStackK #-}
+peekStackK :: RTEnv -> Int -> Value
+peekStackK env k = localStack env `Seq.index` k
+
+
+-- |Continuations of the CEK machine. These correspond to evaluation context in the on-paper presentation
+data Kont = Done  -- empty evaluation context
+          | EvalArg Expr RTEnv Kont  -- the context E[e -] (right to left evaluation)
+          | EvalFun Value Kont  -- the context E[- v] (right to left evaluation)
+          | EvalCase !JumpTable RTEnv Kont -- the context E[case - of pats]
+          | EvalLet Expr RTEnv Kont -- the context E[let x = - in e]
+
+-- this can be done more efficiently by splitting the map into two, one for constructors which should be named 0, 1, ... n
+-- and another one for literals
+-- but barring constant factors the complexity is the same (assuming HashMap has constant lookup)
+data JumpTable = JumpTable { jumpTable :: !(HashMap (Either Core.Literal Core.Name) Expr)
+                           , defaultCase :: !(Maybe Expr)}
+    deriving(Show)
+
+{-# INLINE jumpDefault #-}                                
+jumpDefault :: JumpTable -> Expr
+jumpDefault = fromJust . defaultCase
+
+{-# INLINE jumpCtor #-}                                
+jumpCtor :: Core.Name -> JumpTable -> Maybe Expr
+jumpCtor n (JumpTable jt _) = Map.lookup (Right n) jt
+
+{-# INLINE jumpLit #-}                                
+jumpLit :: Core.Literal -> JumpTable -> Maybe Expr
+jumpLit n (JumpTable jt _) = Map.lookup (Left n) jt
+
+-- |Untyped terms with all external references replaced by links to other linked code.
+data Expr
+  = 
+    Literal !Core.Literal           
+  -- |Variables. Include constructors, imported definitions, but also bound variables.
+  | BoundVar !Core.BoundVar
+  -- |An anonymous function with type of its argument. We use the de-bruijn
+  -- representation of bound variables, hence no variable name.
+  | Lambda !Expr
+  | App !Expr !Expr
+  | Let !Expr !Expr
+  | LetRec ![Expr] !Expr
+  -- |Case expression, the list of alternatives should be non-empty. In bodies
+  -- of branches we again use the De-Bruijn convention.
+  | Case !Expr !JumpTable
+  -- |Read local state of another contract.
+  | Read !Core.Name
+  -- |Make a message to another contract (the message is then sent by the execution engine).
+  | Send !Core.Name
+  -- |Try to cast an address to an instance (returning Nothing if this fails).
+  | Cast !(Core.ModuleRef, Core.TyName)
+  -- |Extract an address from the instance.
+  | UnCast
+  -- |A primitive function. The first argument is the identifier (index in the
+  -- @primitives@ table), the second is the arity of the function.
+  | PrimFun !Int
+  -- |Constructor.
+  | Constructor !Core.Name
+  deriving (Show, Generic)
+
+-- t -> msgty of the contract
+type SenderTy = Expr
+-- just a state view function, stateTy of the contract -> specified type
+type GetterTy = Expr
+
+-- |aliases for the types of init and update/receive methods.
+type InitType = Expr
+type UpdateType = Expr
+
+data ImplementsValue = ImplementsValue
+    {
+    senderImpls :: !(Seq.Seq SenderTy)  -- ^The list of sender methods for a particular constraint this contract implements.
+    ,getterImpls :: !(Seq.Seq GetterTy)  -- ^The list of constraint method for a particular constraint this contract implements.
+    } deriving(Show)
+
+-- |A `ContractValue` is what a contract evaluates to.
+data ContractValue = ContractValue
+    {initMethod :: !InitType      -- ^The initilization method. Represented as a function.
+    ,updateMethod :: !UpdateType  -- ^The update/receive method. Also represented as a function.
+    ,implements :: !(HashMap (Core.ModuleRef, Core.TyName) ImplementsValue)
+    }
+    deriving(Show, Generic)
+
+-- |A mapping of identifiers to values, e.g., definitions to values, and of contract identifiers to their
+-- respective initialization functions and receive functions.
+-- A module evalutes to a value of this type.
+data ValueInterface = ValueInterface
+    {exportedDefsVals :: !(HashMap Core.Name Expr) -- exported definitions, e.g., the library
+    ,exportedDefsConts :: !(HashMap Core.TyName ContractValue)  -- exported contracts with their init and update methods
+    }
+    deriving(Show)
+
+-- *Serialization instances for interfaces. NB: The format is not designed with
+-- efficiency in mind for now, and should be fixed if we need to use it in a
+-- performance critical way.
+
+instance S.Serialize ContractInterface 
+
+putHashMap :: (S.Serialize a, S.Serialize b) => HashMap a b -> S.Put
+putHashMap = S.put . Map.toList
+
+getHashMap :: (Eq a, Hashable a, S.Serialize a, S.Serialize b) => S.Get (HashMap a b)
+getHashMap = Map.fromList <$> S.get
+
+
+putExportedTypes :: (S.Serialize a, S.Serialize b, S.Serialize c, S.Serialize d) => HashMap a (b, HashMap c d) -> S.Put
+putExportedTypes = putHashMap . Map.map (\(i, m) -> (i, Map.toList m))
+
+getExportedTypes :: (Eq a, Hashable a, Eq c, Hashable c, S.Serialize a, S.Serialize b, S.Serialize c, S.Serialize d) => S.Get (HashMap a (b, HashMap c d))
+getExportedTypes = do
+  Map.map (\(i, m) -> (i, Map.fromList m)) <$> getHashMap
+  
+
+instance S.Serialize Interface where
+  put (Interface{..}) =
+    putHashMap importedModules <>
+    putExportedTypes exportedTypes <>
+    putHashMap exportedTerms <>
+    putHashMap exportedContracts <>
+    putHashMap exportedConstraints
+
+  get = do
+    importedModules <- getHashMap
+    exportedTypes <- getExportedTypes
+    exportedTerms <- getHashMap
+    exportedContracts <- getHashMap
+    exportedConstraints <- getHashMap
+    return Interface{..}
+
+
+-- * Monads needed for various parts of the interpreter.
+-- The monads provide the context needed to lookup other modules or contract states.
+class Monad m => InterpreterMonad m where
+  getCurrentContractState :: ContractAddress -> m (Maybe (HashMap (Core.ModuleRef, Core.TyName) ImplementsValue, Value))
+
+class Monad m => LinkerMonad m where
+  getExprInModule :: Core.ModuleRef -> Core.Name -> m (Maybe Expr)
+  
+class Monad m => TypecheckerMonad m where
+  getExportedTermType :: Core.ModuleRef -> Core.Name -> m (Maybe (Core.Type Core.ModuleRef))
+  getExportedType :: Core.ModuleRef -> Core.TyName -> m (Maybe (Int, HashMap Core.Name [Core.Type Core.ModuleRef]))
+  getExportedConstraints :: Core.ModuleRef -> Core.TyName -> m (Maybe (Core.ConstraintDecl Core.ModuleRef))
