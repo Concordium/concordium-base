@@ -14,7 +14,6 @@ import Data.Word
 
 import Concordium.Crypto.SHA256(Hash)
 import qualified Concordium.Crypto.SHA256 as H
-import Concordium.Crypto.Signature
 import qualified Concordium.ID.AccountHolder as AH
 import Concordium.ID.Types
 import Data.ByteString.Char8(ByteString)
@@ -149,8 +148,3 @@ data ChainMetadata =
                 -- blockHeight - finalizedHeight is an upper bound only.
                 , finalizedHeight :: BlockHeight
                 }
-
-
-
-
--- *Types moved from Acorn.Types, needed by acorn interpreter and typechecker and by the scheduler

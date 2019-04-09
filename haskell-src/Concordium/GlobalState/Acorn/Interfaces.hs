@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module Concordium.GlobalState.Acorn.Interfaces where
@@ -14,12 +15,12 @@ import qualified Data.HashMap.Strict as Map
 import qualified Data.Sequence as Seq
 import Data.Int
 import Data.Maybe(fromJust)
+import Control.Monad.Trans.Maybe
+import Control.Monad.Except
 
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
-
-import Control.Monad
 
 import Concordium.GlobalState.Types
 import qualified Concordium.GlobalState.Acorn.Core as Core
@@ -314,3 +315,63 @@ class Monad m => TypecheckerMonad m where
   getExportedTermType :: Core.ModuleRef -> Core.Name -> m (Maybe (Core.Type Core.ModuleRef))
   getExportedType :: Core.ModuleRef -> Core.TyName -> m (Maybe (Int, HashMap Core.Name [Core.Type Core.ModuleRef]))
   getExportedConstraints :: Core.ModuleRef -> Core.TyName -> m (Maybe (Core.ConstraintDecl Core.ModuleRef))
+
+-- |The ability to retrieve static information, static meaning no local state of
+-- contracts, nor amounts. This is sufficient for typechecking and compiling
+-- modules and is used by the scheduler.
+class Monad m => StaticEnvironmentMonad m where
+  -- |Get chain metadata that is needed for contract execution.
+  getChainMetadata :: m ChainMetadata
+
+  -- |Return a module interface needed for typechecking.
+  getModuleInterfaces :: Core.ModuleRef -> m (Maybe (Interface, ValueInterface))
+
+  getInterface :: Core.ModuleRef -> m (Maybe Interface)
+  getInterface mref = do
+    mres <- getModuleInterfaces mref
+    return (fst <$> mres)
+
+-- |Add safe exception handling to the environment monad.
+instance StaticEnvironmentMonad m => StaticEnvironmentMonad (ExceptT String m) where
+  getChainMetadata = lift getChainMetadata
+  getModuleInterfaces = lift . getModuleInterfaces
+
+instance StaticEnvironmentMonad m => StaticEnvironmentMonad (MaybeT m) where
+  getChainMetadata = lift getChainMetadata
+  getModuleInterfaces = lift . getModuleInterfaces
+
+
+instance StaticEnvironmentMonad m => TypecheckerMonad (ExceptT String m) where
+  {-# INLINE getExportedTermType #-}
+  getExportedTermType mref n = 
+    getInterface mref >>=
+      \case Nothing -> throwError $ "Module " ++ show mref ++ " does not exists."
+            Just iface -> return $ Map.lookup n (exportedTerms iface)
+
+  {-# INLINE getExportedType #-}
+  getExportedType mref n = 
+    getInterface mref >>=
+      \case Nothing -> throwError $ "Module " ++ show mref ++ " does not exists."
+            Just iface -> return $ Map.lookup n (exportedTypes iface)
+
+  {-# INLINE getExportedConstraints #-}
+  getExportedConstraints mref n = 
+    getInterface mref >>=
+      \case Nothing -> throwError $ "Module " ++ show mref ++ " does not exists."
+            Just iface -> return $ Map.lookup n (exportedConstraints iface)
+
+
+instance StaticEnvironmentMonad m => LinkerMonad (ExceptT String m) where
+  {-# INLINE getExprInModule #-}
+  getExprInModule mref n =
+    getModuleInterfaces mref >>=
+      \case Nothing -> throwError $ "Module " ++ show mref ++ " does not exist."
+            Just (_, viface) -> return $ Map.lookup n (exportedDefsVals viface)
+
+
+instance StaticEnvironmentMonad m => LinkerMonad (MaybeT m) where
+  {-# INLINE getExprInModule #-}
+  getExprInModule mref n =
+    getModuleInterfaces mref >>=
+      \case Nothing -> return Nothing
+            Just (_, viface) -> return $ Map.lookup n (exportedDefsVals viface)
