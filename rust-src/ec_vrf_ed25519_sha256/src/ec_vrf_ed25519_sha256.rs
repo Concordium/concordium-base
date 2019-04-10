@@ -193,7 +193,7 @@ impl<'d> Deserialize<'d> for Keypair {
 
 //foreign interface
 #[no_mangle]
-
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 //Error encoding
 //-1 secret key extraction failed
 //-2 public key extraction failed
@@ -250,6 +250,7 @@ pub extern fn ec_vrf_verify_key(key: &[u8;32]) -> i32{
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern fn ec_vrf_verify(public_key_bytes: &[u8;32], proof_bytes: &[u8;80], message: *const u8, len:usize)-> i32{
     let res_pk = PublicKey::from_bytes(public_key_bytes);
     if res_pk.is_err() { return -2 };

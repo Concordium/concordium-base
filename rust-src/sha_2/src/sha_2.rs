@@ -8,12 +8,14 @@ pub extern fn sha256_new() -> *mut Sha256 {
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern fn sha256_free(ptr: *mut Sha256) {
     if ptr.is_null() { return }
     unsafe { Box::from_raw(ptr); }
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern fn sha256_input(ptr: *mut Sha256, a: *const u8, len: usize) {
     let hasher: &mut Sha256 = unsafe {
         assert!(!ptr.is_null());
@@ -26,6 +28,7 @@ pub extern fn sha256_input(ptr: *mut Sha256, a: *const u8, len: usize) {
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern fn sha256_result(hash: &mut[u8;32], ptr: *mut Sha256){
     let hasher = unsafe{ Box::from_raw(ptr)};
     //let hasher  = unsafe {
@@ -44,12 +47,14 @@ pub extern fn sha224_new() -> *mut Sha224 {
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern fn sha224_free(ptr: *mut Sha224) {
     if ptr.is_null() { return }
     unsafe { Box::from_raw(ptr); }
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern fn sha224_input(ptr: *mut Sha224, a: *const u8, len: usize) {
     let hasher: &mut Sha224 = unsafe {
         assert!(!ptr.is_null());
@@ -62,6 +67,7 @@ pub extern fn sha224_input(ptr: *mut Sha224, a: *const u8, len: usize) {
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern fn sha224_result(hash: &mut[u8;28], ptr: *mut Sha224){
     let hasher = unsafe{ Box::from_raw(ptr)};
     //let hasher  = unsafe {
