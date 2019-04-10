@@ -27,6 +27,7 @@ pub extern fn eddsa_pub_key(secret_key_bytes: &[u8;32], public_key_bytes: &mut [
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern fn eddsa_sign(message: *const u8, len: usize, secret_key_bytes: &[u8;32], public_key_bytes: &[u8;32], signature_bytes: &mut [u8; SIGNATURE_LENGTH]){ 
     let sk = SecretKey::from_bytes(secret_key_bytes).expect("bad secret key bytes");
     let pk = PublicKey::from_bytes(public_key_bytes).expect("bad public key bytes");
@@ -41,6 +42,7 @@ pub extern fn eddsa_sign(message: *const u8, len: usize, secret_key_bytes: &[u8;
 //-1 badly formatted signature
 //0 verification failed
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern fn eddsa_verify(message: *const u8, len: usize, public_key_bytes:&[u8;32], signature_bytes: &[u8; SIGNATURE_LENGTH])-> i32{
     let pk_res = PublicKey::from_bytes(public_key_bytes);
     if pk_res.is_err() { return -2 }; 
