@@ -28,6 +28,7 @@ Library
                    Concordium.Crypto.Signature
                    Concordium.Crypto.SignatureScheme
                    Concordium.Crypto.VRF
+                   Concordium.Crypto.PRF
                    Data.FixedByteString
                    Concordium.ID.Attributes
                    Concordium.ID.Types
@@ -48,7 +49,8 @@ Library
 
   extra-libraries: ec_vrf_ed25519
                    sha_2, 
-                   eddsa_ed25519
+                   eddsa_ed25519,
+                   dodis_yampolskiy_prf
 
 Test-Suite tests
   type: exitcode-stdio-1.0
