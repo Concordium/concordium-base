@@ -6,6 +6,7 @@ use rand::*;
 //foreign interface
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern fn prf_key(secret_key_bytes: &mut[u8; SECRET_KEY_LENGTH]){
     let mut csprng= thread_rng();
     let sk = SecretKey::generate(&mut csprng);
@@ -13,6 +14,7 @@ pub extern fn prf_key(secret_key_bytes: &mut[u8; SECRET_KEY_LENGTH]){
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern fn prf(prf_bytes: &mut[u8; PRF_LENGTH], secret_key_bytes: &[u8; SECRET_KEY_LENGTH], nonce:u8)-> i32{
     let res_sk = SecretKey::from_bytes(secret_key_bytes);
     if res_sk.is_err(){ return -1 };
