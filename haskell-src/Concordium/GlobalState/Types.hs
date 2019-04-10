@@ -93,6 +93,9 @@ instance S.Serialize Nonce where
   put (Nonce w) = P.putWord64be w
   get = Nonce <$> G.getWord64be
 
+minNonce :: Nonce
+minNonce = 1
+
 -- |The metadata of the transaction that is relevant for contract execution.
 data Header = Header { sender :: !AH.AccountAddress
                      , nonce :: !Nonce
