@@ -21,3 +21,4 @@ pub const COMMITMENT_LENGTH: usize = 48;
 //this is the size of compressed gropu element
 pub const HIDING_PARAM_LENGTH: usize= 48;
 
+pub const GROUP_ELEMENT_LENGTH: usize = 48;

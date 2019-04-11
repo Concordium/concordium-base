@@ -93,16 +93,4 @@ impl<'d> Deserialize<'d> for Commitment{
 }
 
 
-#[test]
-pub fn key_to_byte_conversion(){
-    let mut csprng = thread_rng();
-    for i in 1..100{
-        let sk = Commitment::generate(&mut csprng);
-        let r = sk.to_bytes();
-        let res_sk2= Commitment::from_bytes(&r);
-        assert!(res_sk2.is_ok());
-        let sk2= res_sk2.unwrap(); 
-        assert_eq!(sk2, sk);
-    }
-}
 
