@@ -19,8 +19,8 @@ use serde::{Deserializer, Serializer};
 use crate::constants::*;
 use crate::errors::*;
 use crate::errors::InternalError::{DecodingError, CommitmentLengthError};
-use pairing::bls12_381::{G1Compressed,G1Affine, FrRepr, Fr};
-use pairing::{EncodedPoint,CurveProjective, CurveAffine,Field,PrimeField};
+use pairing::bls12_381::{G1Compressed,G1Affine}; 
+use pairing::{EncodedPoint, CurveAffine};
 
 /// A Commitment is a group element .
 #[derive( Debug,PartialEq, Eq)]

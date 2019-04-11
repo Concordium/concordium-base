@@ -9,16 +9,15 @@
 
 //! Common constants 
 
-use pairing::bls12_381::FrRepr;
 
 //length of prf in bytes
-pub const COMMITMENT_KEY_LENGTH: usize = 48*2;
+//pub const COMMITMENT_KEY_LENGTH: usize = 48*2;
 
 //length of a commitment
 pub const COMMITMENT_LENGTH: usize = 48;
 
 //size of hiding prarmeter in bytes
 //this is the size of compressed gropu element
-pub const HIDING_PARAM_LENGTH: usize= 48;
+//pub const HIDING_PARAM_LENGTH: usize= 48;
 
 pub const GROUP_ELEMENT_LENGTH: usize = 48;

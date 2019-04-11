@@ -20,8 +20,8 @@ use crate::commitment::*;
 use crate::constants::*;
 use crate::errors::*;
 use crate::errors::InternalError::{DecodingError, CommitmentKeyLengthError};
-use pairing::bls12_381::{G1Compressed,G1Affine, G1, FrRepr, Fr};
-use pairing::{EncodedPoint,CurveProjective, CurveAffine,Field,PrimeField};
+use pairing::bls12_381::{G1Compressed,G1Affine, G1,  Fr};
+use pairing::{EncodedPoint,CurveProjective, CurveAffine};
 use rand::*;
 
 /// A commitment  key.
@@ -57,7 +57,7 @@ impl CommitmentKey {
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<CommitmentKey, CommitmentError> {
           let l = bytes.len();
-          if (l==0 || l < GROUP_ELEMENT_LENGTH * 2 || l % GROUP_ELEMENT_LENGTH !=0){
+          if l==0 || l < GROUP_ELEMENT_LENGTH * 2 || l % GROUP_ELEMENT_LENGTH !=0{
               return Err(CommitmentError(CommitmentKeyLengthError));
           }
           let glen = (l/GROUP_ELEMENT_LENGTH) - 1;
@@ -68,7 +68,7 @@ impl CommitmentKey {
               let mut g = G1Compressed::empty();
               g.as_mut().copy_from_slice(&bytes[j..k]);
               match g.into_affine(){
-                  Err(x) => return (Err(CommitmentError(DecodingError(x)))),
+                  Err(x) => return Err(CommitmentError(DecodingError(x))),
                   Ok(g_affine) => gs.push(g_affine)
               }
           }
@@ -95,7 +95,7 @@ impl CommitmentKey {
         h.mul_assign(r);
         let g = &self.0;
         let mut res = h;
-        let mut gs = G1::zero();
+        let mut gs: G1; 
         for i in 0..self.0.len(){
             gs = g[i].into_projective();
             gs.mul_assign(ss[i]);
@@ -114,7 +114,7 @@ impl CommitmentKey {
     pub fn generate<T>(n: usize, csprng: &mut T)-> CommitmentKey
       where T:  Rng,{
           let mut gs: Vec<G1Affine> = Vec::new();
-          for i in 0..n {
+          for _i in 0..n {
               let g_fr = Fr::rand(csprng);
               let g = G1Affine::one().mul(g_fr);
               gs.push(g.into_affine());
