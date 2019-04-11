@@ -21,19 +21,10 @@ use crate::errors::*;
 use crate::errors::InternalError::{DecodingError, CommitmentLengthError};
 use pairing::bls12_381::{G1Compressed,G1Affine, FrRepr, Fr};
 use pairing::{EncodedPoint,CurveProjective, CurveAffine,Field,PrimeField};
-use rand::*;
 
 /// A Commitment is a group element .
 #[derive( Debug,PartialEq, Eq)]
 pub struct Commitment(pub(crate) G1Affine);
-
-/*
-impl Drop for SecretKey {
-    fn drop(&mut self) {
-        (self.0).into_repr().0.clear();
-    }
-}
-*/
 
 
 impl Commitment {
@@ -61,11 +52,6 @@ impl Commitment {
               Ok(g_affine) => Ok(Commitment (g_affine))
           }
     }
-
-    pub fn open(&self, s: Fr, r: Fr)-> bool{
-        true
-     }
-
 
 }
 

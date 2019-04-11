@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
+use crate::commitment::*;
 use crate::constants::*;
 use crate::errors::*;
 use crate::errors::InternalError::{DecodingError, CommitmentKeyLengthError};
@@ -69,20 +70,37 @@ impl CommitmentKey {
           }
     }
 
-    pub fn commit<T>(&self, s: Fr, csprng: &mut T)-> G1Affine
+    pub fn commit<T>(&self, s: Fr, csprng: &mut T)-> Commitment 
         where T: Rng,{
+        let r = Fr::rand(csprng);
+        self.hide(s, r)
+            /*
         let g = self.0;
         let h = self.1;
 
         g.mul(s);
-        let r = Fr::rand(csprng);
         h.mul(r);
         let mut res = g.into_projective();
         res.add_assign_mixed(&h);
-        res.into_affine()
+        Commitment(res.into_affine())
+        */
 
      }
 
+    fn hide(&self, s:Fr, r:Fr) -> Commitment{
+        let g = self.0;
+        let h = self.1;
+        g.mul(s);
+        h.mul(r);
+        let mut res = g.into_projective();
+        res.add_assign_mixed(&h);
+        Commitment(res.into_affine())
+    }
+
+    pub fn open(&self, s:Fr, r: Fr, c: Commitment)-> bool{
+        self.hide(s,r) == c
+
+    }
 
     /// Generate a `CommitmentKey` from a `csprng`.
     ///

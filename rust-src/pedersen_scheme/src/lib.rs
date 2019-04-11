@@ -5,8 +5,8 @@ extern crate rand;
 extern crate failure;
 extern crate core;
 
-mod constants;
 mod commitment;
+mod constants;
 mod errors;
 mod key;
 

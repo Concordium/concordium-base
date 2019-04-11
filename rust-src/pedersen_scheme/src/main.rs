@@ -8,6 +8,7 @@ extern crate core;
 mod constants;
 mod errors;
 mod key;
+mod commitment;
 use key::*;
 use pairing::{CurveAffine};
 use rand::*;
