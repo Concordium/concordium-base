@@ -137,7 +137,6 @@ instance S.Serialize SerializedPayload where
 newtype Slot = Slot Word64 deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
 newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
 
-
 -- |Blockchain metadata as needed by contract execution.
 data ChainMetadata =
   ChainMetadata { slotNumber :: Slot

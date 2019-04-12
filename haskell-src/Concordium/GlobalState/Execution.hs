@@ -2,8 +2,6 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 module Concordium.GlobalState.Execution where
 
-import Data.HashMap.Strict(HashMap)
-
 import Prelude hiding(fail)
 
 import Control.Monad.Reader
@@ -74,15 +72,6 @@ class Message a where
   getHeader :: a -> Header
   getPayload :: a -> Either String Payload
 
--- |A simple type of messages used during testing.
-type MessageTy = (Header, SerializedPayload)
-
-instance Message MessageTy where
-  {-# INLINE getHeader #-}
-  getHeader = fst
-  {-# INLINE getPayload #-}
-  getPayload = S.decode . _spayload . snd
-
 -- |Events which are generated during transaction execution.
 -- These are only used for valid transactions.
 data Event = ModuleDeployed !Core.ModuleRef
@@ -110,8 +99,11 @@ data InvalidKind = ModuleNotWF !String -- ^Error raised when typechecking of the
                  | InvalidContractReference !Core.ModuleRef !Core.TyName -- ^Reference to a non-existing contract.
                  | InvalidModuleReference !Core.ModuleRef   -- ^Reference to a non-existing module.
                  | InvalidContractAddress !ContractAddress -- ^Contract instance does not exist.
-                 | EvaluationError !String -- ^Error during evalution.
-                                           -- This is mostly for debugging purposes since this kind of an error should not happen after successful typechecking.
+                 | EvaluationError !String -- ^Error during evalution. This is
+                                           -- mostly for debugging purposes
+                                           -- since this kind of an error should
+                                           -- not happen after successful
+                                           -- typechecking.
                  | AmountTooLarge !Address !Amount
                  -- ^When one wishes to transfer an amount from A to B but there
                  -- are not enough funds on account/contract A to make this
@@ -130,19 +122,11 @@ data FailureKind = InvalidHeader
 data TxResult = TxValid ValidResult | TxInvalid FailureKind
 
 
+-- |A simple type of messages used during testing.
+type MessageTy = (Header, SerializedPayload)
 
-
--- |TODO: Probably move this to globalstate.
-data Instance = Instance
-    {ref :: !ContractAddress                 -- ^Address of this contract instance.
-    ,ireceiveFun :: !Expr                         -- ^Pointer to its receive function.
-    ,iModuleIface :: !(Interface, ValueInterface)
-    ,imsgTy :: !(Core.Type Core.ModuleRef)        -- ^The type of messages its receive function supports.
-    ,lState :: !Value                     -- ^The current local state of the instance.
-    ,iamount :: !Amount                   -- ^And the amount of GTUs it currently owns.
-    ,instanceImplements :: !(HashMap (Core.ModuleRef, Core.TyName) ImplementsValue)  
-    -- ^Implementation of the given class sender method. This can also be looked
-    -- up through the contract, and we should probably do that, but having it
-    -- here simplifies things.
-    } deriving(Show)
-
+instance Message MessageTy where
+  {-# INLINE getHeader #-}
+  getHeader = fst
+  {-# INLINE getPayload #-}
+  getPayload = S.decode . _spayload . snd
