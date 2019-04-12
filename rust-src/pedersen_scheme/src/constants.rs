@@ -28,4 +28,4 @@ pub const GROUP_ELEMENT_LENGTH: usize = 48;
 
 
 //length of field element in bytes
-pub const FIELD_ELEMENT_LENGTH: usize = 48;
+pub const FIELD_ELEMENT_LENGTH: usize = 32;
