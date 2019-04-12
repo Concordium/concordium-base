@@ -17,9 +17,10 @@ use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
 use crate::commitment::*;
+use crate::value::*;
 use crate::constants::*;
 use crate::errors::*;
-use crate::errors::InternalError::{DecodingError, CommitmentKeyLengthError};
+use crate::errors::InternalError::{GDecodingError, CommitmentKeyLengthError, KeyValueLengthMismatch};
 use pairing::bls12_381::{G1Compressed,G1Affine, G1,  Fr};
 use pairing::{EncodedPoint,CurveProjective, CurveAffine};
 use rand::*;
@@ -68,7 +69,7 @@ impl CommitmentKey {
               let mut g = G1Compressed::empty();
               g.as_mut().copy_from_slice(&bytes[j..k]);
               match g.into_affine(){
-                  Err(x) => return Err(CommitmentError(DecodingError(x))),
+                  Err(x) => return Err(CommitmentError(GDecodingError(x))),
                   Ok(g_affine) => gs.push(g_affine)
               }
           }
@@ -76,21 +77,21 @@ impl CommitmentKey {
           h.as_mut().copy_from_slice(&bytes[(l-GROUP_ELEMENT_LENGTH)..]);
 
           match h.into_affine() {
-              Err(x) => Err(CommitmentError(DecodingError(x))),
+              Err(x) => Err(CommitmentError(GDecodingError(x))),
               Ok(h_affine) => Ok(CommitmentKey (gs, h_affine))
          }
     }
 
-    pub fn commit<T>(&self, ss: &Vec<Fr>, csprng: &mut T)-> (Commitment , Fr)
+    pub fn commit<T>(&self, ss: &Value, csprng: &mut T)-> (Commitment , Fr)
         where T: Rng,{
         let r = Fr::rand(csprng);
-        (self.hide(ss, r),r)
+        (self.hide(ss, r).unwrap(),r) //panicking is Ok here
 
      }
 
 
-    fn hide(&self, ss:&Vec<Fr>, r:Fr) -> Commitment{
-        assert_eq!(self.0.len(),ss.len());
+    fn hide(&self, ss:&Value, r:Fr) -> Result<Commitment, CommitmentError>{
+        if self.0.len()!=ss.0.len() { return Err (CommitmentError(KeyValueLengthMismatch))};
         let mut h = self.1.into_projective();
         h.mul_assign(r);
         let g = &self.0;
@@ -98,14 +99,17 @@ impl CommitmentKey {
         let mut gs: G1; 
         for i in 0..self.0.len(){
             gs = g[i].into_projective();
-            gs.mul_assign(ss[i]);
+            gs.mul_assign(ss.0[i]);
             res.add_assign(&gs);
         }
-        Commitment(res.into_affine())
+        Ok(Commitment(res.into_affine()))
     }
     
-    pub fn open(&self, ss:&Vec<Fr>, r: Fr, c: Commitment)-> bool{
-        self.hide(ss,r) == c
+    pub fn open(&self, ss:&Value, r: Fr, c: Commitment)-> bool{
+        match self.hide(ss,r){
+            Err(_) => false,
+            Ok(x) => x==c
+        }
 
     }
 
@@ -166,7 +170,7 @@ impl<'d> Deserialize<'d> for CommitmentKey{
 #[test]
 pub fn key_to_byte_conversion(){
     let mut csprng = thread_rng();
-    for i in 1..2{
+    for i in 1..10{
         let sk = CommitmentKey::generate(i,  &mut csprng);
         let res_sk2= CommitmentKey::from_bytes(&*sk.to_bytes());
         assert!(res_sk2.is_ok());
@@ -178,13 +182,9 @@ pub fn key_to_byte_conversion(){
 #[test]
 pub fn commit_open(){
     let mut csprng = thread_rng();
-    for i in 1..20{
+    for i in 1..10{
         let sk = CommitmentKey::generate(i,  &mut csprng);
-        let mut ss= Vec::new();
-        for j in 0..i{
-            let s = Fr::rand(&mut csprng);
-            ss.push(s);
-        }
+        let ss = Value::generate(i, &mut csprng);
         let (c, r)= sk.commit(&ss, &mut csprng);
         assert!(sk.open(&ss, r, c))
     }

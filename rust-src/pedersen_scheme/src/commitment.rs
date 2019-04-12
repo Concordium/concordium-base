@@ -18,9 +18,10 @@ use serde::{Deserializer, Serializer};
 
 use crate::constants::*;
 use crate::errors::*;
-use crate::errors::InternalError::{DecodingError, CommitmentLengthError};
-use pairing::bls12_381::{G1Compressed,G1Affine}; 
-use pairing::{EncodedPoint, CurveAffine};
+use crate::errors::InternalError::{GDecodingError, CommitmentLengthError};
+use pairing::bls12_381::{G1Compressed,G1Affine, G1}; 
+use pairing::{EncodedPoint, CurveAffine, CurveProjective};
+use rand::*;
 
 /// A Commitment is a group element .
 #[derive( Debug,PartialEq, Eq)]
@@ -48,9 +49,13 @@ impl Commitment {
           let mut g = G1Compressed::empty();
           g.as_mut().copy_from_slice(&bytes);
           match g.into_affine() {
-              Err(x) => Err(CommitmentError(DecodingError(x))),
+              Err(x) => Err(CommitmentError(GDecodingError(x))),
               Ok(g_affine) => Ok(Commitment (g_affine))
           }
+    }
+
+    pub fn generate<T:Rng>(csprng: &mut T)-> Self{
+        Commitment(G1::rand(csprng).into_affine())
     }
 
 }
@@ -93,4 +98,14 @@ impl<'d> Deserialize<'d> for Commitment{
 }
 
 
+#[test]
+pub fn byte_conversion(){
+    let mut csprng = thread_rng();
+    for _i in 0..20 {
+        let x = Commitment::generate(&mut csprng);
+        let y = Commitment::from_bytes(&x.to_bytes());
+        assert!(y.is_ok());
+        assert_eq!(x,y.unwrap());
+    }
 
+}
