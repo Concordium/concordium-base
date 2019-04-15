@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wall #-}
 module Concordium.GlobalState.Types (module Concordium.GlobalState.Types, AH.AccountAddress(..)) where
 
@@ -23,6 +24,7 @@ import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 
+import Lens.Micro.Platform
 
 data Hashed a = Hashed {unhashed :: a, hashed :: H.Hash}
 
@@ -97,14 +99,16 @@ minNonce :: Nonce
 minNonce = 1
 
 data Account = Account {
-  accountAddress :: !AH.AccountAddress -- ^Address of the account.
-  ,accountNonce :: !Nonce  -- ^Next available nonce for this account.
-  ,accountAmount :: !Amount -- ^Current public account balance.
-  ,accountCreationInformation :: AccountCreationInformation
+  _accountAddress :: !AH.AccountAddress -- ^Address of the account.
+  ,_accountNonce :: !Nonce  -- ^Next available nonce for this account.
+  ,_accountAmount :: !Amount -- ^Current public account balance.
+  ,_accountCreationInformation :: AccountCreationInformation
   }
 
+makeLenses ''Account
+
 instance S.Serialize Account where
-  put Account{..} = S.put accountAddress <> S.put accountNonce <> S.put accountAmount <> S.put accountCreationInformation
+  put Account{..} = S.put _accountAddress <> S.put _accountNonce <> S.put _accountAmount <> S.put _accountCreationInformation
   get = Account <$> S.get <*> S.get <*> S.get <*> S.get
 
 instance HashableTo Hash Account where
