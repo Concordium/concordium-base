@@ -7,6 +7,7 @@ import           Foreign.Ptr
 import           Foreign.ForeignPtr
 import           Data.Word
 import qualified Data.List as L
+import qualified Data.FixedByteString as FBS
 
 wordToHex :: Word8 -> [Char]
 wordToHex x = printf "%.2x" x
@@ -20,3 +21,6 @@ byteStringToHex b= L.concatMap wordToHex ls
 withByteStringPtr :: ByteString -> (Ptr Word8 -> IO a) -> IO a
 withByteStringPtr b f =  withForeignPtr fptr $ \ptr -> f (ptr `plusPtr` off)
     where (fptr, off, _) = toForeignPtr b
+
+
+    

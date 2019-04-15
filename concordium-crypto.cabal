@@ -27,6 +27,7 @@ Library
                    Concordium.Crypto.SHA224	
                    Concordium.Crypto.Signature
                    Concordium.Crypto.SignatureScheme
+                   Concordium.Crypto.PedersenScheme
                    Concordium.Crypto.VRF
                    Concordium.Crypto.PRF
                    Data.FixedByteString
