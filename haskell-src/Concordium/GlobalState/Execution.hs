@@ -64,13 +64,9 @@ instance S.Serialize Payload where
 encodePayload :: Payload -> SerializedPayload
 encodePayload = SerializedPayload . S.encode
 
--- |This class is meant to make it more flexible to use block execution functions.
--- During block execution we only need access to metadata and payload, but in other parts the baker might
--- need other information about a transaction. Instances of this class make it possible to simply project the values
--- without needing to convert transactions first.
-class Message a where
-  getHeader :: a -> Header
-  getPayload :: a -> Either String Payload
+{-# INLINE decodePayload #-}
+decodePayload :: S.Serialize a => SerializedPayload -> Either String a
+decodePayload (SerializedPayload s) = S.decode s
 
 -- |Events which are generated during transaction execution.
 -- These are only used for valid transactions.
@@ -120,13 +116,3 @@ data FailureKind = InvalidHeader
       deriving(Show)
 
 data TxResult = TxValid ValidResult | TxInvalid FailureKind
-
-
--- |A simple type of messages used during testing.
-type MessageTy = (Header, SerializedPayload)
-
-instance Message MessageTy where
-  {-# INLINE getHeader #-}
-  getHeader = fst
-  {-# INLINE getPayload #-}
-  getPayload = S.decode . _spayload . snd

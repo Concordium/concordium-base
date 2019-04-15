@@ -96,14 +96,6 @@ instance S.Serialize Nonce where
 minNonce :: Nonce
 minNonce = 1
 
--- |The metadata of the transaction that is relevant for contract execution.
-data Header = Header { sender :: !AH.AccountAddress
-                     , nonce :: !Nonce
-                     , gasAmount :: !Amount
---                      , signature :: !Signature
-                     }
-    deriving (Show, Generic, Eq)
-
 data Account = Account {
   accountAddress :: !AH.AccountAddress -- ^Address of the account.
   ,accountNonce :: !Nonce  -- ^Next available nonce for this account.
@@ -118,18 +110,14 @@ instance S.Serialize Account where
 instance HashableTo Hash Account where
   getHash = H.hash . S.runPut . S.put
 
-instance S.Serialize Header where
-  put (Header{..}) = S.put sender <> S.put nonce <> S.put gasAmount -- <> S.put signature
-  get = Header <$> S.get <*> S.get <*> S.get -- <*> S.get
-
 -- |Serialized payload of the transaction
 newtype SerializedPayload = SerializedPayload { _spayload :: ByteString }
     deriving(Eq, Show)
 
+-- |FIXME: This instance is probably wrong. What we want is just putByteString since the body is already serialized.
 instance S.Serialize SerializedPayload where
   put = S.put . _spayload
   get = SerializedPayload <$> S.get
-
 
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
