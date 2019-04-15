@@ -52,6 +52,7 @@ Library
                    sha_2, 
                    eddsa_ed25519,
                    dodis_yampolskiy_prf
+                   pedersen_scheme
 
 Test-Suite tests
   type: exitcode-stdio-1.0

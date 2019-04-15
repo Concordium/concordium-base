@@ -62,7 +62,14 @@ pub extern fn pedersen_open(n: usize, key_bytes: *const u8, values: *const u8, c
     }
 }
 
-
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern fn pedersen_random_values(n: usize, values_bytes : *mut u8){
+   let mut csprng = thread_rng();
+   let vs = Value::generate(n, &mut csprng); 
+   let v_slice: &mut[u8] = unsafe{ slice::from_raw_parts_mut(values_bytes, n*FIELD_ELEMENT_LENGTH)};
+   &v_slice.copy_from_slice(&*vs.to_bytes());
+}
 #[test]
 pub fn commit_open(){
     let mut key_bytes = [0u8; 11 * GROUP_ELEMENT_LENGTH];
