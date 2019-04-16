@@ -111,8 +111,12 @@ data InvalidKind = ModuleNotWF !String -- ^Error raised when typechecking of the
                  | AccountCredentialsFailure
     deriving (Show)
 
-data FailureKind = InvalidHeader
-                 | InsufficientFunds !AccountAddress   -- ^The amount is not sufficient to cover the gas deposit. 
+data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
+                 | IncorrectSignature  -- ^Signature check failed.
+                 | NonSequentialNonce !Nonce -- ^The transaction nonce is not
+                                             -- next in sequence. The argument
+                                             -- is the expected nonce.
+                 | UnknownAccount !AccountAddress -- ^Transaction is coming from an unknown sender.
       deriving(Show)
 
 data TxResult = TxValid ValidResult | TxInvalid FailureKind
