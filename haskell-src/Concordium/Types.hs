@@ -6,7 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wall #-}
-module Concordium.GlobalState.Types (module Concordium.GlobalState.Types, AH.AccountAddress(..)) where
+module Concordium.Types (module Concordium.Types, AH.AccountAddress(..)) where
 
 import GHC.Generics
 
@@ -18,7 +18,7 @@ import qualified Concordium.Crypto.SHA256 as H
 import qualified Concordium.ID.AccountHolder as AH
 import Concordium.ID.Types
 import Data.ByteString.Char8(ByteString)
-import Concordium.GlobalState.HashableTo
+import Concordium.Types.HashableTo
 
 import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P

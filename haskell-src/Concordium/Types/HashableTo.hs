@@ -1,5 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
-module Concordium.GlobalState.HashableTo where
+module Concordium.Types.HashableTo where
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS

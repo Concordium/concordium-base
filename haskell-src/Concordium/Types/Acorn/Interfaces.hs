@@ -5,7 +5,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module Concordium.GlobalState.Acorn.Interfaces where
+module Concordium.Types.Acorn.Interfaces where
 
 import GHC.Generics(Generic)
 
@@ -22,8 +22,8 @@ import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
 
-import Concordium.GlobalState.Types
-import qualified Concordium.GlobalState.Acorn.Core as Core
+import Concordium.Types
+import qualified Concordium.Types.Acorn.Core as Core
 
 -- * Basic representation types.
 

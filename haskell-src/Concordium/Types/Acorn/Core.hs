@@ -7,7 +7,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# OPTIONS_GHC -Wall #-}
-module Concordium.GlobalState.Acorn.Core where
+module Concordium.Types.Acorn.Core where
 
 import Data.ByteString.Char8(ByteString)
 import qualified Data.ByteString.Char8 as BS
@@ -28,10 +28,10 @@ import Control.Monad.Except(throwError, MonadError)
 import Data.Int
 import Data.Bits
 import Data.Word
-import qualified Concordium.GlobalState.Acorn.NumericTypes as NumTys
+import qualified Concordium.Types.Acorn.NumericTypes as NumTys
 
 import qualified Concordium.Crypto.SHA256 as SHA256
-import Concordium.GlobalState.Types
+import Concordium.Types
 
 
 -- Basic literals supported by the language.

@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-module Concordium.GlobalState.Execution where
+module Concordium.Types.Execution where
 
 import Prelude hiding(fail)
 
@@ -10,9 +10,9 @@ import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
 
-import qualified Concordium.GlobalState.Acorn.Core as Core
-import Concordium.GlobalState.Types
-import Concordium.GlobalState.Acorn.Interfaces
+import qualified Concordium.Types.Acorn.Core as Core
+import Concordium.Types
+import Concordium.Types.Acorn.Interfaces
 import qualified Concordium.ID.Types as IDTypes
 
 -- |These are the messages that are generated as parts of contract execution.

@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wall #-}
-module Concordium.GlobalState.Acorn.NumericTypes where
+module Concordium.Types.Acorn.NumericTypes where
 
 import GHC.Generics
 import Data.Hashable(Hashable)
