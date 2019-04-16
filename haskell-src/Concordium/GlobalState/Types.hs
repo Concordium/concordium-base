@@ -89,7 +89,7 @@ instance S.Serialize Amount where
 
 
 newtype Nonce = Nonce Word64
-    deriving(Eq, Show, Ord, Num)
+    deriving(Eq, Show, Ord, Num, Enum)
 
 instance S.Serialize Nonce where
   put (Nonce w) = P.putWord64be w
