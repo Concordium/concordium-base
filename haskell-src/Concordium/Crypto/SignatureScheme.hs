@@ -8,6 +8,10 @@ import           Data.Serialize
 import qualified Data.ByteString as B
 import           Data.Typeable
 import           System.IO.Unsafe
+import           Test.QuickCheck (Arbitrary(..))
+import           System.Random
+
+ 
 
 
 data SignKey = SignKey ByteString
@@ -42,6 +46,12 @@ instance Serialize KeyPair where
         sk <- get
         vk <- get
         return $ KeyPair sk vk
+
+
+instance Serialize Signature where
+    put (Signature b) = put b
+    get = Signature <$> get
+
 instance Enum SchemeId where 
     toEnum n | n == 1    = CL
              | n == 2    = Ed25519

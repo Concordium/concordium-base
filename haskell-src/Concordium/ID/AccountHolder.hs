@@ -7,7 +7,7 @@ import Data.ByteString.Char8
 import GHC.Word
 import Data.ByteString.Random.MWC
 import System.IO.Unsafe
-import qualified  Concordium.Crypto.Signature as S
+import qualified  Concordium.Crypto.Ed25519Signature  as S
 import Concordium.Crypto.SignatureScheme
 import Concordium.ID.Attributes
 import qualified Concordium.Crypto.SHA224 as SHA224
@@ -46,7 +46,7 @@ prove _ _ _ = random (fromIntegral 80) >>= (return . Proof)
 
 registrationId = (random (fromIntegral 32)) >>= (return . RegIdAcc)
 
-createAccount :: S.VerifyKey -> AccountCreationInformation  
+createAccount :: VerifyKey -> AccountCreationInformation  
 createAccount ahc = ACI { aci_regId = regId, 
                           aci_arData = ardata, 
                           aci_ipId = ip, 

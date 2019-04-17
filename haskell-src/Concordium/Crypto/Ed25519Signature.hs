@@ -2,22 +2,8 @@
 -- |This module provides a prototype implementation of 
 -- EDDSA scheme of Curve Ed25519 
 --  IRTF RFC 8032
-module Concordium.Crypto.Signature(
-    SignKey (..),
-    VerifyKey (..),
-    KeyPair(..),
-    Signature (..),
-    test,
-    randomKeyPair,
-    newKeyPair,
-    newPrivKey,
-    pubKey,
-    signatureSize,
-    signKeySize,
-    verifyKeySize,
-    sign,
-    verify,
-) where
+module Concordium.Crypto.Ed25519Signature 
+    where
 
 import           Concordium.Crypto.ByteStringHelpers
 import qualified Concordium.Crypto.SignatureScheme as SCH
@@ -30,9 +16,9 @@ import           Data.Serialize
 import qualified Data.ByteString  as B
 import           Data.ByteString (ByteString) 
 import           Data.ByteString.Internal
-import           System.Random
 import           Foreign.C.Types
 import           Test.QuickCheck (Arbitrary(..))
+import           System.Random
 
 
 foreign import ccall "eddsa_priv_key" c_priv_key :: Ptr Word8 -> IO CInt
@@ -68,15 +54,6 @@ pubKey (SignKey sk) = do pk <- create verifyKeySize $ \pub ->
                                  withByteStringPtr sk $ \y -> c_public_key y pub
                          return (VerifyKey pk)
 
-randomKeyPair :: RandomGen g => g -> (KeyPair, g)
-randomKeyPair gen = (key, gen')
-        where
-            (gen0, gen') = split gen
-            privKey = SignKey $ B.pack $ randoms gen0
-            key = KeyPair privKey (unsafePerformIO $ pubKey privKey)
-
-instance Arbitrary KeyPair where
-    arbitrary = fst . randomKeyPair . mkStdGen <$> arbitrary
 
 newKeyPair :: IO KeyPair
 newKeyPair = do sk <- newPrivKey
@@ -123,5 +100,28 @@ test = do kp@(KeyPair sk pk) <- newKeyPair
 ed25519 :: SCH.SignatureScheme
 ed25519 = SCH.SigScheme { SCH.schemeId = Ed25519,
                           SCH.sign = sign,
-                          SCH.verify = verify
+                          SCH.verify = verify,
+                          SCH.newPrivateKey =  newPrivKey,
+                          SCH.publicKey = unsafePerformIO . pubKey
                         }
+
+
+
+
+
+instance Arbitrary SCH.KeyPair where
+          arbitrary = fst . randomKeyPair . mkStdGen <$> arbitrary
+
+randomKeyPair :: RandomGen g => g -> (SCH.KeyPair, g)
+randomKeyPair gen = (key, gen')
+        where
+            (gen0, gen') = split gen
+            privKey = SCH.SignKey $ B.pack $ take signKeySize $ randoms gen0
+            key = SCH.KeyPair privKey (SCH.publicKey ed25519 privKey)
+
+
+
+
+
+
+

@@ -25,7 +25,8 @@ Library
   hs-source-dirs: haskell-src
   Exposed-modules: Concordium.Crypto.SHA256	
                    Concordium.Crypto.SHA224	
-                   Concordium.Crypto.Signature
+                   Concordium.Crypto.Ed25519Signature
+                   Concordium.Crypto.BlockSignature
                    Concordium.Crypto.SignatureScheme
                    Concordium.Crypto.PedersenScheme
                    Concordium.Crypto.VRF
@@ -67,8 +68,8 @@ Test-Suite tests
                     , cereal >=0.5.7
                     , random >= 1.1
   other-modules:
-    ConcordiumTests.Crypto.SHA256
-    ConcordiumTests.Crypto.SHA224
-    ConcordiumTests.Crypto.Signature
-    ConcordiumTests.Crypto.VRF
+   ConcordiumTests.Crypto.SHA256
+   ConcordiumTests.Crypto.SHA224
+   ConcordiumTests.Crypto.Ed25519Signature
+   ConcordiumTests.Crypto.VRF
 
