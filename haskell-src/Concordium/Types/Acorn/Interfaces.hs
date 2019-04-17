@@ -228,10 +228,12 @@ data Expr
   | UnCast
   -- |A primitive function. The first argument is the identifier (index in the
   -- @primitives@ table), the second is the arity of the function.
-  | PrimFun !Int
+  | PrimFun !Int64
   -- |Constructor.
   | Constructor !Core.Name
   deriving (Show, Generic)
+
+-- |TODO: Manually define the serialize instance similar to how it is defined for Acorn expressions.
 
 -- t -> msgty of the contract
 type SenderTy = Expr

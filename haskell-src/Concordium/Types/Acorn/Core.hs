@@ -411,6 +411,14 @@ instance Show ModuleRef where
 
 -- * Expression and module serialization
 
+instance S.Serialize Literal where
+  get = getLit
+  put = putLit
+
+instance S.Serialize BoundVar where
+  get = getBoundVar
+  put = putBoundVar
+
 instance S.Serialize a => S.Serialize (Expr a) where
     get = getExpr
     put = putExpr
