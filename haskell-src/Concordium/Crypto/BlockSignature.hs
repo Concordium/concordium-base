@@ -14,6 +14,13 @@ type VerifyKey = SCH.VerifyKey
 type KeyPair = SCH.KeyPair
 type Signature = SCH.Signature
 
+verifyKey :: KeyPair -> VerifyKey
+verifyKey = SCH.verifyKey
+
+signKey :: KeyPair -> SignKey
+signKey = SCH.signKey
+
+
 sign :: KeyPair -> ByteString -> Signature
 sign = SCH.sign ed25519
 
