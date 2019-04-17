@@ -1,4 +1,4 @@
---| abstraction layer for block signatures
+-- abstraction layer for block signatures
 
 module Concordium.Crypto.BlockSignature where
 
