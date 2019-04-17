@@ -17,7 +17,7 @@ import           System.Random
 data SignKey = SignKey ByteString
     deriving (Eq, Show)
 data VerifyKey = VerifyKey ByteString
-    deriving (Eq, Show)
+    deriving (Eq, Show, Ord)
 data Signature = Signature ByteString
     deriving (Eq, Show)
 data SchemeId = Ed25519 | CL
