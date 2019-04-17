@@ -5,16 +5,14 @@ module Concordium.Crypto.BlockSignature where
 import qualified Concordium.Crypto.Ed25519Signature as Ed25519
 import           Concordium.Crypto.Ed25519Signature (ed25519)
 import qualified Concordium.Crypto.SignatureScheme as SCH
-import           Concordium.Crypto.SignatureScheme (KeyPair(..))
 import           System.Random
 import           Data.ByteString
 
 
 type SignKey = SCH.SignKey
 type VerifyKey = SCH.VerifyKey
---type KeyPair = SCH.KeyPair
+type KeyPair = SCH.KeyPair
 
---KeyPair = SCH.KeyPair
 type Signature = SCH.Signature
 
 verifyKey :: KeyPair -> VerifyKey
