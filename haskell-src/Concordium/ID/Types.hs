@@ -59,28 +59,18 @@ data IdentityProvider = IP IdentityProviderIdentity IdentityProviderPublicKey
                          
 
 -- Signing key for accounts (eddsa key)
-data AccountSigningKey = forall a. (SignatureScheme_ a)  => AccSignKey (SignKey a) 
---type AccountSigningKey = S.SignKey
+type AccountSigningKey = SignKey  
 
 -- Verification key for accounts (eddsa key)
-data AccountVerificationKey = forall a. (SignatureScheme_ a,  Serialize (VerifyKey a) ) => AccVerifyKey (VerifyKey a)
+type AccountVerificationKey = VerifyKey 
 
-sigScheme (AccVerifyKey x) = schemeId x
+-- Account signatures (eddsa key)
+type AccountSignature = Signature 
 
-instance Serialize AccountVerificationKey where
-    put (AccVerifyKey x) = put (schemeId x, x)
-    get = do (scheme, bs) <- get
-             case (schemeNameFromId scheme) of
-               Schnorr -> return $ AccVerifyKey (bs:: VerifyKey Ed25519)
-               _       -> error "parsy parsy error"
+--accountSign :: AccountSigningKey -> AccountVerificationKey -> ByteString -> AccountSignature
+--accountSign (AccSignKey sk) (AccVerifyKey pk) b | sch== Schnorr =  AccSig $ sign (sk:: SignKey Ed25519)  (pk:: VerifyKey Ed25519) b
+--                                                | otherwise = error "not a known signature scheme"
 
---type AccountVerificationKey = S.VerifyKey
-
-    {-
-instance Serialize AccountVerificationKey where
-      put (AccVerifyKey s) = put s
-      get  =  AccVerifyKey <$> (get >>= getAccountVerificationKey)
--}
 
 -- decryption key for accounts (Elgamal?)
 newtype AccountDecryptionKey = DecKeyAcc ByteString 
@@ -152,5 +142,5 @@ instance Serialize AccountCreationInformation where
 data AccountHolderCertificate = AHC { ahc_ipId :: IdentityProviderIdentity,
                                       ahc_ipPk :: IdentityProviderPublicKey,
                                       ahc_ahi  :: AccountHolderInformation,
-                                      ahc_sig  :: Signature CL
+                                      ahc_sig  :: Signature 
                                      }

@@ -4,6 +4,7 @@ module Concordium.ID.AccountHolder where
 import GHC.Generics
 import Concordium.ID.Types
 import Data.ByteString.Char8
+import GHC.Word
 import Data.ByteString.Random.MWC
 import System.IO.Unsafe
 import qualified  Concordium.Crypto.Signature as S
@@ -32,14 +33,13 @@ import Data.Hashable
 -- input : AHI including PRF key and attribute List
 -- input : AHC mainly signature for IP
 -- input : counter  
-newAccount :: (SignatureScheme_ a )=> SignKey a -> VerifyKey a -> Policy ->  AccountHolderInformation -> AccountHolderCertificate -> Int-> IO AccountCreationInformation
-newAccount sk pk p ahi ahc n =  do e <- random (fromIntegral 32) 
+newAccount :: SignKey -> VerifyKey ->  SignatureScheme -> Policy ->  AccountHolderInformation -> AccountHolderCertificate -> Int-> IO AccountCreationInformation
+newAccount sk pk sch p ahi ahc n =  
+                                do e <- random (fromIntegral 32) 
                                    regId       <-  registrationId
                                    proof       <- prove p ahi ahc 
-                                   return $ ACI {aci_regId=regId, aci_arData=ardata, aci_ipId=ip, aci_sigScheme=scheme, 
-                                                 aci_verifKey= (AccVerifyKey pk), aci_encKey=(EncKeyAcc e), aci_policy=p, aci_auxData=aux, aci_proof=proof}
-    where
-        scheme = schemeId pk
+                                   return $ ACI {aci_regId=regId, aci_arData=ardata, aci_ipId=ip, aci_sigScheme= schemeId sch, 
+                                                 aci_verifKey=  pk, aci_encKey=(EncKeyAcc e), aci_policy=p, aci_auxData=aux, aci_proof=proof}
 
 prove :: Policy -> AccountHolderInformation -> AccountHolderCertificate -> IO ZKProof
 prove _ _ _ = random (fromIntegral 80) >>= (return . Proof)
@@ -51,7 +51,7 @@ createAccount ahc = ACI { aci_regId = regId,
                           aci_arData = ardata, 
                           aci_ipId = ip, 
                           aci_sigScheme = scheme,
-                          aci_verifKey = let (S.VerifyKey x) = ahc in (AccVerifyKey (Ed25519_PK x)),
+                          aci_verifKey = ahc,
                           aci_encKey = encKey, 
                           aci_policy = policy,
                           aci_auxData = aux,
@@ -94,10 +94,12 @@ instance Show AccountAddress where
   show = show . addressToBase58
 
 accountAddress' :: AccountVerificationKey -> SchemeId -> AccountAddress 
-accountAddress' (AccVerifyKey x) (SchemeId y) =  AccountAddress (FBS.fromByteString $ BS.cons y (BS.take (accountAddressSize - 1) bs))
+accountAddress' (VerifyKey x) y =  AccountAddress (FBS.fromByteString $ BS.cons sch (BS.take (accountAddressSize - 1) bs))
     where 
-        (SHA224.Hash r) = SHA224.hash (toByteString x) 
+        (SHA224.Hash r) = SHA224.hash x
         bs = FBS.toByteString r
+        sch:: Word8
+        sch = fromIntegral $ fromEnum y
       
 
 verifyAccount :: AccountCreationInformation -> Bool 
@@ -113,7 +115,7 @@ ardata = [(AR_ID $ pack "superman", Share $ unsafePerformIO $ random (fromIntegr
 
 regId = RegIdAcc $ unsafePerformIO $ random (fromIntegral 32)
 
-scheme = SchemeId (fromIntegral 2)
+scheme = Ed25519 
 
 
 encKey = EncKeyAcc ( unsafePerformIO $ random (fromIntegral 32))
@@ -126,5 +128,5 @@ proof = Proof $ pack "proof of bot"
 
 
 randomAcc = unsafePerformIO $ do keypair <- S.newKeyPair
-                                 return $ createAccount (S.verifyKey keypair)
+                                 return $ createAccount (verifyKey keypair)
 
