@@ -75,3 +75,12 @@ Test-Suite tests
    ConcordiumTests.Crypto.Ed25519Signature
    ConcordiumTests.Crypto.VRF
 
+Executable perf-test
+  main-is: Perf.hs
+  hs-source-dirs: haskell-tests
+  build-depends: base >= 4.7
+               , concordium-crypto
+               , bytestring >= 0.10
+               , criterion >= 1.5.4
+  other-modules:
+    PerformanceTests.Ed25519Perf
