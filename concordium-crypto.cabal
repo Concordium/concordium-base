@@ -28,6 +28,7 @@ Library
                    Concordium.Crypto.Ed25519Signature
                    Concordium.Crypto.BlockSignature
                    Concordium.Crypto.SignatureScheme
+                   Concordium.Crypto.AccountSignatureSchemes
                    Concordium.Crypto.PedersenScheme
                    Concordium.Crypto.VRF
                    Concordium.Crypto.PRF
@@ -48,6 +49,7 @@ Library
                 , random-bytestring >= 0.1.3.0
                 , base58string >= 0.10.0
                 , QuickCheck >= 2.10
+                , vector >= 0.12
 
   extra-libraries: ec_vrf_ed25519
                    sha_2, 

@@ -5,6 +5,8 @@ import           Concordium.Crypto.ByteStringHelpers
 import           Data.Word
 import qualified Data.FixedByteString as FBS
 import           Data.Serialize
+import           Data.Serialize.Put
+import           Data.Serialize.Get
 import qualified Data.ByteString as B
 import           Data.Typeable
 import           System.IO.Unsafe
@@ -14,23 +16,23 @@ import           System.Random
  
 
 
-data SignKey = SignKey ByteString
+newtype SignKey = SignKey ByteString
     deriving (Eq, Show)
-data VerifyKey = VerifyKey ByteString
+newtype VerifyKey = VerifyKey ByteString
     deriving (Eq, Show, Ord)
-data Signature = Signature ByteString
+newtype Signature = Signature ByteString
     deriving (Eq, Show)
 data SchemeId = Ed25519 | CL
     deriving (Eq, Show)
 data KeyPair = KeyPair {
-      signKey :: SignKey,
-      verifyKey :: VerifyKey
+      signKey :: !SignKey,
+      verifyKey :: !VerifyKey
  } deriving (Eq, Show)
 
 instance Serialize SchemeId where
-    put x = put (fromEnum x)
-    get = do e <- get 
-             return $  toEnum e
+    put x = putWord8 (fromIntegral (fromEnum x))
+    get = do e <- getWord8 
+             return $  toEnum (fromIntegral e)
 
 instance Serialize SignKey where
     put (SignKey sk) = put sk
@@ -41,23 +43,19 @@ instance Serialize VerifyKey where
     get = VerifyKey <$> get
 
 instance Serialize KeyPair where
-    put (KeyPair sk vk) = put sk >> put vk
-    get = do
-        sk <- get
-        vk <- get
-        return $ KeyPair sk vk
-
+    put (KeyPair sk vk) = put sk <> put vk
+    get = KeyPair <$> get <*> get
 
 instance Serialize Signature where
     put (Signature b) = put b
     get = Signature <$> get
 
 instance Enum SchemeId where 
-    toEnum n | n == 1    = CL
-             | n == 2    = Ed25519
+    toEnum n | n == 0    = CL
+             | n == 1    = Ed25519
              | otherwise = errorWithoutStackTrace "SchemeId.toEnum: bad argument"
-    fromEnum CL = 1
-    fromEnum Ed25519= 2 
+    fromEnum CL = 0
+    fromEnum Ed25519= 1
 
 
 data SignatureScheme = SigScheme {schemeId :: SchemeId,
@@ -66,11 +64,3 @@ data SignatureScheme = SigScheme {schemeId :: SchemeId,
                                   newPrivateKey :: IO SignKey,
                                   publicKey :: SignKey -> VerifyKey
                                  }
-              
-                                  
-{-
-instance Serialize SchemeId where
-      put (s) = put $ schemeCode s
-      get  = Id <$> get
--}
-

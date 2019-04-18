@@ -71,7 +71,7 @@ sign (KeyPair (SignKey sk) (VerifyKey pk)) m = Signature $ unsafePerformIO $ cre
 
 
 verify :: VerifyKey -> ByteString -> Signature -> Bool
-verify (VerifyKey pk) m (Signature sig) =  suc > -1
+verify (VerifyKey pk) m (Signature sig) =  suc > 0
    where
        mlen = fromIntegral $ B.length m
        suc  = unsafeDupablePerformIO $ 

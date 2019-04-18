@@ -50,6 +50,19 @@ testSignVerifyEd25519 = property $ ck
         ck kp doc0 = let doc = BS.pack doc0 in
                         verify  (verifyKey kp) doc (sign  kp doc)
 
+
+testSignVerifyEd25519DocumentCollision :: Property
+testSignVerifyEd25519DocumentCollision = property $ ck
+    where
+        ck :: KeyPair -> [Word8] -> [Word8] -> Property
+        ck kp doc0 doc1 = -- check that if we sign doc0 and then check the
+                          -- signature of doc1, this only succeeds
+                          -- if doc0 == doc1
+          let doc = BS.pack doc0
+              sig = sign kp doc
+          in doc0 /= doc1 ==> not (verify (verifyKey kp) (BS.pack doc1) sig)
+
+
 tests :: Spec
 tests = parallel $ describe "Concordium.Crypto.Ed25519Signature" $ do
             describe "serialization" $ do
@@ -58,5 +71,6 @@ tests = parallel $ describe "Concordium.Crypto.Ed25519Signature" $ do
                 it "key pair" $ testSerializeKeyPairEd25519 
                 it "signature" $ testSerializeSignatureEd25519
             it "verify signature" $ withMaxSuccess 10000 $ testSignVerifyEd25519
-            it "no collision on document" $ withMaxSuccess 10000 $ testNoDocCollisionEd25519
-            it "no collision on key pair" $ withMaxSuccess 10000 $ testNoKeyPairCollisionEd25519
+            it "verify fails when checking different document" $ withMaxSuccess 100000 $ testSignVerifyEd25519DocumentCollision
+            it "no collision on document" $ withMaxSuccess 100000 $ testNoDocCollisionEd25519
+            it "no collision on key pair" $ withMaxSuccess 100000 $ testNoKeyPairCollisionEd25519
