@@ -51,7 +51,7 @@ testSignVerifyEd25519 = property $ ck
                         verify  (verifyKey kp) doc (sign  kp doc)
 
 tests :: Spec
-tests = parallel $ describe "Concordium.Crypto.Signature" $ do
+tests = parallel $ describe "Concordium.Crypto.Ed25519Signature" $ do
             describe "serialization" $ do
                 it "sign key" $ testSerializeSignKeyEd25519 
                 it "verify key" $ testSerializeVerifyKeyEd25519 
