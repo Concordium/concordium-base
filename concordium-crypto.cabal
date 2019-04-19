@@ -84,3 +84,4 @@ Executable perf-test
                , criterion >= 1.5.4
   other-modules:
     PerformanceTests.Ed25519Perf
+    PerformanceTests.SHA256Perf

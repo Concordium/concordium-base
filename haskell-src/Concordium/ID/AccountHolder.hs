@@ -90,6 +90,9 @@ instance Hashable AccountAddress where
     hashWithSalt s (AccountAddress b) = hashWithSalt s (FBS.toByteString b)
     hash (AccountAddress b) = unsafeDupablePerformIO $ FBS.withPtr b $ \p -> peek (castPtr p)
 
+accountScheme :: AccountAddress -> Maybe SchemeId
+accountScheme (AccountAddress s) = toScheme (FBS.getByte s 0)
+
 instance Show AccountAddress where
   show = show . addressToBase58
 
