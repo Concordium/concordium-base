@@ -118,11 +118,6 @@ instance HashableTo Hash Account where
 newtype SerializedPayload = SerializedPayload { _spayload :: ByteString }
     deriving(Eq, Show)
 
--- |FIXME: This instance is probably wrong. What we want is just putByteString since the body is already serialized.
-instance S.Serialize SerializedPayload where
-  put = S.put . _spayload
-  get = SerializedPayload <$> S.get
-
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
 
