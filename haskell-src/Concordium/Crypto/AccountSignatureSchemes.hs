@@ -37,4 +37,3 @@ schemes = Vec.fromList
           [error "CL scheme not implemented."
           ,ed25519
           ]
-

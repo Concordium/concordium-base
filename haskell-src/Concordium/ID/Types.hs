@@ -137,6 +137,10 @@ data AccountCreationInformation = ACI { aci_regId     :: AccountRegistrationID,
                                       }
     deriving (Generic )
 
+-- NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
+instance Eq AccountCreationInformation where
+  aci1 == aci2 = aci_verifKey aci1 == aci_verifKey aci2 && aci_sigScheme aci1 == aci_sigScheme aci2
+
 instance Serialize AccountCreationInformation where
 
 data AccountHolderCertificate = AHC { ahc_ipId :: IdentityProviderIdentity,
