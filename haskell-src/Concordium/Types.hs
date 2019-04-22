@@ -21,6 +21,7 @@ import Concordium.Types.HashableTo
 import Data.Hashable(Hashable)
 import Data.Word
 import Data.ByteString.Char8(ByteString)
+import qualified Data.ByteString.Char8 as BS
 
 import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P
@@ -126,9 +127,12 @@ newtype EncodedPayload = EncodedPayload { _spayload :: ByteString }
 -- though the body cannot be deserialized. Thus it is important to know
 -- precisely the length of the body.
 instance S.Serialize EncodedPayload where
-  put = S.put . _spayload
-  get = EncodedPayload <$> S.get
-  
+  put (EncodedPayload p) = 
+    P.putWord32be (fromIntegral (BS.length p)) <>
+    P.putByteString p
+  get = do
+    l <- fromIntegral <$> G.getWord32be
+    EncodedPayload <$> G.getByteString l
 
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
