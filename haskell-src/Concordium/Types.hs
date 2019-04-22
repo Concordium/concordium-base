@@ -10,15 +10,17 @@ module Concordium.Types (module Concordium.Types, AH.AccountAddress(..)) where
 
 import GHC.Generics
 
-import Data.Hashable(Hashable)
-import Data.Word
 
-import Concordium.Crypto.SHA256(Hash)
-import qualified Concordium.Crypto.SHA256 as H
+import qualified Concordium.Crypto.BlockSignature as Sig
+import qualified Concordium.Crypto.SHA256 as Hash
+import qualified Concordium.Crypto.VRF as VRF
 import qualified Concordium.ID.AccountHolder as AH
 import Concordium.ID.Types
-import Data.ByteString.Char8(ByteString)
 import Concordium.Types.HashableTo
+
+import Data.Hashable(Hashable)
+import Data.Word
+import Data.ByteString.Char8(ByteString)
 
 import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P
@@ -26,12 +28,12 @@ import qualified Data.Serialize.Get as G
 
 import Lens.Micro.Platform
 
-data Hashed a = Hashed {unhashed :: a, hashed :: H.Hash}
+data Hashed a = Hashed {unhashed :: a, hashed :: Hash.Hash}
 
-instance HashableTo H.Hash (Hashed a) where
+instance HashableTo Hash.Hash (Hashed a) where
     getHash = hashed
 
-makeHashed :: HashableTo H.Hash a => a -> Hashed a
+makeHashed :: HashableTo Hash.Hash a => a -> Hashed a
 makeHashed v = Hashed v (getHash v)
 
 instance Eq (Hashed a) where
@@ -61,7 +63,7 @@ instance S.Serialize ContractAddress where
 -- |An address is either a contract or account.
 data Address = AddressAccount !AH.AccountAddress
              | AddressContract !ContractAddress
-            deriving(Show)
+            deriving(Show, Eq)
 
 instance S.Serialize Address where
   get = do
@@ -111,12 +113,22 @@ instance S.Serialize Account where
   put Account{..} = S.put _accountAddress <> S.put _accountNonce <> S.put _accountAmount <> S.put _accountCreationInformation
   get = Account <$> S.get <*> S.get <*> S.get <*> S.get
 
-instance HashableTo Hash Account where
-  getHash = H.hash . S.runPut . S.put
+instance HashableTo Hash.Hash Account where
+  getHash = Hash.hash . S.runPut . S.put
 
 -- |Serialized payload of the transaction
-newtype SerializedPayload = SerializedPayload { _spayload :: ByteString }
+newtype EncodedPayload = EncodedPayload { _spayload :: ByteString }
     deriving(Eq, Show)
+
+-- |NB: We explicitly put the length first, even though the body is already
+-- serialized and thus it would normally not be necessary to do so. The reason
+-- we do it is that at the moment a transaction can appear on a block even
+-- though the body cannot be deserialized. Thus it is important to know
+-- precisely the length of the body.
+instance S.Serialize EncodedPayload where
+  put = S.put . _spayload
+  get = EncodedPayload <$> S.get
+  
 
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
@@ -137,3 +149,13 @@ data ChainMetadata =
                 -- blockHeight - finalizedHeight is an upper bound only.
                 , finalizedHeight :: BlockHeight
                 }
+
+
+-- * Types related to blocks
+
+type BlockHash = Hash.Hash
+type BlockProof = VRF.Proof
+type BlockSignature = Sig.Signature
+-- TODO: The hash is redundant; should be removed
+type BlockNonce = (VRF.Hash, VRF.Proof)
+

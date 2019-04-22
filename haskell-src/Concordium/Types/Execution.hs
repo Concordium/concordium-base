@@ -25,7 +25,6 @@ data Payload = DeployModule !Core.Module   -- put module on the chain
              | Update !Amount !ContractAddress !(Core.Expr Core.ModuleName) -- ^The last argument is the parameter.
              | Transfer !Address !Amount     -- ^Where (which can be a contract) and what amount to transfer.
              | CreateAccount !IDTypes.AccountCreationInformation
---              deriving(Show)
 
 instance S.Serialize Payload where
   put (DeployModule amod) =
@@ -61,12 +60,12 @@ instance S.Serialize Payload where
       _ -> fail "Only 5 types of transactions types are currently supported."
 
 {-# INLINE encodePayload #-}
-encodePayload :: Payload -> SerializedPayload
-encodePayload = SerializedPayload . S.encode
+encodePayload :: Payload -> EncodedPayload
+encodePayload = EncodedPayload . S.encode
 
 {-# INLINE decodePayload #-}
-decodePayload :: S.Serialize a => SerializedPayload -> Either String a
-decodePayload (SerializedPayload s) = S.decode s
+decodePayload :: S.Serialize a => EncodedPayload -> Either String a
+decodePayload (EncodedPayload s) = S.decode s
 
 -- |Events which are generated during transaction execution.
 -- These are only used for valid transactions.

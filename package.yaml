@@ -40,3 +40,19 @@ library:
     - -Wredundant-constraints
     - -fno-ignore-asserts
 
+executables:
+  Perf-test:
+    main:            Perf.hs
+    source-dirs:     test
+    ghc-options:
+    - -threaded
+    - -with-rtsopts=-N
+    - -Wall
+    - -Wcompat
+    
+    dependencies:
+    - globalstate-types
+    - criterion >= 1.5.4
+
+
+    
