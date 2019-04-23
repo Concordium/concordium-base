@@ -19,8 +19,8 @@ import qualified Concordium.ID.Types as IDTypes
 data InternalMessage = TSend !ContractAddress !Amount !Value | TSimpleTransfer !Address !Amount
     deriving(Show)
 
--- |The transaction payload. Currently only 4 transaction kinds are supported.
-data Payload = DeployModule !Core.Module   -- put module on the chain
+-- |The transaction payload. Currently only 5 transaction kinds are supported.
+data Payload = DeployModule !Core.Module   -- ^Put module on the chain.
              | InitContract !Amount !Core.ModuleRef !Core.TyName !(Core.Expr Core.ModuleName)   -- ^Call init method of contract.
              | Update !Amount !ContractAddress !(Core.Expr Core.ModuleName) -- ^The last argument is the parameter.
              | Transfer !Address !Amount     -- ^Where (which can be a contract) and what amount to transfer.
@@ -68,7 +68,7 @@ decodePayload :: S.Serialize a => EncodedPayload -> Either String a
 decodePayload (EncodedPayload s) = S.decode s
 
 -- |Events which are generated during transaction execution.
--- These are only used for valid transactions.
+-- These are only used for commited transactions.
 data Event = ModuleDeployed !Core.ModuleRef
            | ContractInitialized !Core.ModuleRef !Core.TyName !ContractAddress
            | Updated !ContractAddress !Amount !MessageFormat
@@ -85,7 +85,7 @@ data MessageFormat = ValueMessage !Value | ExprMessage !Expr
 data ValidResult = TxReject InvalidKind | TxSuccess [Event]
     deriving(Show)
 
--- |Ways a single transaction can fail. Values of this type are only used for reporting of invalid transactions.
+-- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
 data InvalidKind = ModuleNotWF !String -- ^Error raised when typechecking of the module has failed.
                  | ModuleHashAlreadyExists !Core.ModuleRef  -- ^As the name says.
                  | MessageTypeError !String -- ^Message to the receive method is of the wrong type.
