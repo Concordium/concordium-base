@@ -48,7 +48,7 @@ instance Ord (Hashed a) where
 -- For now they are placeholders
 
 data ContractAddress = ContractAddress { contractIndex :: !Word64
-                                       , contractVersion :: !Word64} 
+                                       , contractSubindex :: !Word64} 
     deriving(Eq, Generic)
 
 instance Hashable ContractAddress
