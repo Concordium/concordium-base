@@ -9,7 +9,7 @@ module Concordium.Types.Acorn.Interfaces where
 
 import GHC.Generics(Generic)
 
-import Data.Hashable(Hashable, hashWithSalt)
+import Data.Hashable(Hashable)
 import Data.HashMap.Strict(HashMap)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Sequence as Seq
@@ -70,8 +70,6 @@ data Value =
              | VRecClosure !RTEnv !Int ![Expr] -- ^Recursive functions evaluate to recursive closures.
              | VLiteral !Core.Literal    -- ^Base literals.
              | VAmount !Amount
-             | VDict !(HashMap Value Value)   -- ^Dictionaries are also primitives, but are here since they depend on values.
-                                          --  FIXME: The keys and values should be restricted, so the type value is too liberal so should be changed.
              | VConstructor !Core.Name ![Value] -- ^Constructors applied to arguments.
                                              -- FIXME: Should use sequence instead of list here as well since it is usually built by appending to the back.
                                              -- FIXME: Should use sequence instead of list here as well since it is usually built by appending to the back.
@@ -80,24 +78,6 @@ data Value =
                          , vinstance_implements :: !ImplementsValue
                          }
   deriving(Show)
-
--- |Only provide hash for values which can be keys of a dictionary.
--- These will be the only ones allowed for dictionaries
-instance Hashable Value where
-  hashWithSalt s (VLiteral l) = hashWithSalt s (0 :: Int, hashWithSalt s l)
-  hashWithSalt s (VAmount l) = hashWithSalt s (1 :: Int, hashWithSalt s l)
-  hashWithSalt s (VDict mp) = hashWithSalt s (2 :: Int, hashWithSalt s (Map.toList mp))
-  hashWithSalt s (VConstructor n vals) =
-    hashWithSalt s (3 + n, hashWithSalt s vals)
-  hashWithSalt _ _ = error "Trying to hash a Value which is not hashable."
-
-instance Eq Value where
-  VLiteral l == VLiteral l' = l == l'
-  VAmount a == VAmount a' = a == a'
-  VDict d1 == VDict d2 = d1 == d2
-  VConstructor c1 vals1 == VConstructor c2 vals2 =
-    c1 == c2 && vals1 == vals2
-  _ == _ = False
 
 -- **The serialization instances for values are only for storable values.
 -- If you try to serialize with a value which is not storable the methods will fail.
@@ -109,11 +89,6 @@ putStorable (VConstructor n vals) = do
   Core.putName n
   Core.putLength vals
   mapM_ putStorable vals
-putStorable (VDict mp) = do
-  P.putWord8 3
-  let kv = Map.toList mp
-  Core.putLength kv
-  mapM_ (\(k, v) -> putStorable k <> putStorable v) kv
 putStorable _ = error "FATAL: Trying to serialize a non-storable value. This should not happen."
 
 getStorable :: G.Get Value
@@ -127,13 +102,6 @@ getStorable = do
       l <- Core.getLength
       vals <- replicateM l getStorable
       return $ VConstructor name vals
-    3 -> do
-      l <- Core.getLength
-      kv <- replicateM l (do k <- getStorable
-                             v <- getStorable
-                             return (k, v))
-      mp <- foldM (\mp (k, v) -> if k `Map.member` mp then fail "Duplicate keys." else return (Map.insert k v mp)) Map.empty kv
-      return $ VDict mp
     _ -> fail "Serialization failure. Unknown node."
 
 newtype RTEnv = RTEnv { localStack :: (Seq.Seq Value) }
