@@ -77,7 +77,8 @@ data Value =
                          , vinstance_caddr :: !ContractAddress
                          , vinstance_implements :: !ImplementsValue
                          }
-  deriving(Show)
+  deriving(Show, Eq)
+
 
 -- **The serialization instances for values are only for storable values.
 -- If you try to serialize with a value which is not storable the methods will fail.
@@ -105,7 +106,7 @@ getStorable = do
     _ -> fail "Serialization failure. Unknown node."
 
 newtype RTEnv = RTEnv { localStack :: (Seq.Seq Value) }
-  deriving(Show)
+  deriving(Show, Eq)
 
 {-# INLINE singletonLocalStack #-}
 singletonLocalStack :: Value -> RTEnv
@@ -151,13 +152,14 @@ data Kont = Done  -- empty evaluation context
           | EvalFun Value Kont  -- the context E[- v] (right to left evaluation)
           | EvalCase !JumpTable RTEnv Kont -- the context E[case - of pats]
           | EvalLet Expr RTEnv Kont -- the context E[let x = - in e]
+  deriving(Eq)
 
 -- this can be done more efficiently by splitting the map into two, one for constructors which should be named 0, 1, ... n
 -- and another one for literals
 -- but barring constant factors the complexity is the same (assuming HashMap has constant lookup)
 data JumpTable = JumpTable { jumpTable :: !(HashMap (Either Core.Literal Core.Name) Expr)
                            , defaultCase :: !(Maybe Expr)}
-    deriving(Show)
+    deriving(Show, Eq)
 
 {-# INLINE jumpDefault #-}                                
 jumpDefault :: JumpTable -> Expr
@@ -199,7 +201,7 @@ data Expr
   | PrimFun !Int64
   -- |Constructor.
   | Constructor !Core.Name
-  deriving (Show, Generic)
+  deriving (Show, Eq, Generic)
 
 -- |TODO: Manually define the serialize instance similar to how it is defined for Acorn expressions.
 
@@ -216,7 +218,7 @@ data ImplementsValue = ImplementsValue
     {
     senderImpls :: !(Seq.Seq SenderTy)  -- ^The list of sender methods for a particular constraint this contract implements.
     ,getterImpls :: !(Seq.Seq GetterTy)  -- ^The list of constraint method for a particular constraint this contract implements.
-    } deriving(Show)
+    } deriving(Eq, Show)
 
 -- |A `ContractValue` is what a contract evaluates to.
 data ContractValue = ContractValue
