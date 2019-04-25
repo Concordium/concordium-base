@@ -3,13 +3,14 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE BangPatterns #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module Concordium.Types.Acorn.Interfaces where
 
 import GHC.Generics(Generic)
 
-import Data.Hashable(Hashable, hashWithSalt)
+import Data.Hashable(Hashable)
 import Data.HashMap.Strict(HashMap)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Sequence as Seq
@@ -70,8 +71,6 @@ data Value =
              | VRecClosure !RTEnv !Int ![Expr] -- ^Recursive functions evaluate to recursive closures.
              | VLiteral !Core.Literal    -- ^Base literals.
              | VAmount !Amount
-             | VDict !(HashMap Value Value)   -- ^Dictionaries are also primitives, but are here since they depend on values.
-                                          --  FIXME: The keys and values should be restricted, so the type value is too liberal so should be changed.
              | VConstructor !Core.Name ![Value] -- ^Constructors applied to arguments.
                                              -- FIXME: Should use sequence instead of list here as well since it is usually built by appending to the back.
                                              -- FIXME: Should use sequence instead of list here as well since it is usually built by appending to the back.
@@ -79,25 +78,8 @@ data Value =
                          , vinstance_caddr :: !ContractAddress
                          , vinstance_implements :: !ImplementsValue
                          }
-  deriving(Show)
+  deriving(Show, Eq)
 
--- |Only provide hash for values which can be keys of a dictionary.
--- These will be the only ones allowed for dictionaries
-instance Hashable Value where
-  hashWithSalt s (VLiteral l) = hashWithSalt s (0 :: Int, hashWithSalt s l)
-  hashWithSalt s (VAmount l) = hashWithSalt s (1 :: Int, hashWithSalt s l)
-  hashWithSalt s (VDict mp) = hashWithSalt s (2 :: Int, hashWithSalt s (Map.toList mp))
-  hashWithSalt s (VConstructor n vals) =
-    hashWithSalt s (3 + n, hashWithSalt s vals)
-  hashWithSalt _ _ = error "Trying to hash a Value which is not hashable."
-
-instance Eq Value where
-  VLiteral l == VLiteral l' = l == l'
-  VAmount a == VAmount a' = a == a'
-  VDict d1 == VDict d2 = d1 == d2
-  VConstructor c1 vals1 == VConstructor c2 vals2 =
-    c1 == c2 && vals1 == vals2
-  _ == _ = False
 
 -- **The serialization instances for values are only for storable values.
 -- If you try to serialize with a value which is not storable the methods will fail.
@@ -109,11 +91,6 @@ putStorable (VConstructor n vals) = do
   Core.putName n
   Core.putLength vals
   mapM_ putStorable vals
-putStorable (VDict mp) = do
-  P.putWord8 3
-  let kv = Map.toList mp
-  Core.putLength kv
-  mapM_ (\(k, v) -> putStorable k <> putStorable v) kv
 putStorable _ = error "FATAL: Trying to serialize a non-storable value. This should not happen."
 
 getStorable :: G.Get Value
@@ -127,25 +104,21 @@ getStorable = do
       l <- Core.getLength
       vals <- replicateM l getStorable
       return $ VConstructor name vals
-    3 -> do
-      l <- Core.getLength
-      kv <- replicateM l (do k <- getStorable
-                             v <- getStorable
-                             return (k, v))
-      mp <- foldM (\mp (k, v) -> if k `Map.member` mp then fail "Duplicate keys." else return (Map.insert k v mp)) Map.empty kv
-      return $ VDict mp
     _ -> fail "Serialization failure. Unknown node."
 
 newtype RTEnv = RTEnv { localStack :: (Seq.Seq Value) }
-  deriving(Show)
+  deriving(Show, Eq)
 
 {-# INLINE singletonLocalStack #-}
 singletonLocalStack :: Value -> RTEnv
 singletonLocalStack v = RTEnv { localStack = Seq.singleton v }
 
 {-# INLINE pushToStack #-}
+-- |NB: It is quite crucial that this method is strict in the value. If not then
+-- the interpreter can leak memory because a closure that is pushed onto the
+-- environment retains references to elements which are not longer reachable.
 pushToStack :: RTEnv -> Value -> RTEnv
-pushToStack env v = env { localStack = v Seq.<| localStack env }
+pushToStack env !v = env { localStack = v Seq.<| localStack env }
 
 {-# INLINE pushAllToStack #-}
 pushAllToStack :: RTEnv -> Seq.Seq Value -> RTEnv
@@ -183,13 +156,14 @@ data Kont = Done  -- empty evaluation context
           | EvalFun Value Kont  -- the context E[- v] (right to left evaluation)
           | EvalCase !JumpTable RTEnv Kont -- the context E[case - of pats]
           | EvalLet Expr RTEnv Kont -- the context E[let x = - in e]
+  deriving(Eq, Show)
 
 -- this can be done more efficiently by splitting the map into two, one for constructors which should be named 0, 1, ... n
 -- and another one for literals
 -- but barring constant factors the complexity is the same (assuming HashMap has constant lookup)
 data JumpTable = JumpTable { jumpTable :: !(HashMap (Either Core.Literal Core.Name) Expr)
                            , defaultCase :: !(Maybe Expr)}
-    deriving(Show)
+    deriving(Show, Eq)
 
 {-# INLINE jumpDefault #-}                                
 jumpDefault :: JumpTable -> Expr
@@ -231,7 +205,7 @@ data Expr
   | PrimFun !Int64
   -- |Constructor.
   | Constructor !Core.Name
-  deriving (Show, Generic)
+  deriving (Show, Eq, Generic)
 
 -- |TODO: Manually define the serialize instance similar to how it is defined for Acorn expressions.
 
@@ -248,7 +222,7 @@ data ImplementsValue = ImplementsValue
     {
     senderImpls :: !(Seq.Seq SenderTy)  -- ^The list of sender methods for a particular constraint this contract implements.
     ,getterImpls :: !(Seq.Seq GetterTy)  -- ^The list of constraint method for a particular constraint this contract implements.
-    } deriving(Show)
+    } deriving(Eq, Show)
 
 -- |A `ContractValue` is what a contract evaluates to.
 data ContractValue = ContractValue
