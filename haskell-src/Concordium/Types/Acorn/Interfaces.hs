@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE BangPatterns #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module Concordium.Types.Acorn.Interfaces where
@@ -113,8 +114,11 @@ singletonLocalStack :: Value -> RTEnv
 singletonLocalStack v = RTEnv { localStack = Seq.singleton v }
 
 {-# INLINE pushToStack #-}
+-- |NB: It is quite crucial that this method is strict in the value. If not then
+-- the interpreter can leak memory because a closure that is pushed onto the
+-- environment retains references to elements which are not longer reachable.
 pushToStack :: RTEnv -> Value -> RTEnv
-pushToStack env v = env { localStack = v Seq.<| localStack env }
+pushToStack env !v = env { localStack = v Seq.<| localStack env }
 
 {-# INLINE pushAllToStack #-}
 pushAllToStack :: RTEnv -> Seq.Seq Value -> RTEnv
@@ -152,7 +156,7 @@ data Kont = Done  -- empty evaluation context
           | EvalFun Value Kont  -- the context E[- v] (right to left evaluation)
           | EvalCase !JumpTable RTEnv Kont -- the context E[case - of pats]
           | EvalLet Expr RTEnv Kont -- the context E[let x = - in e]
-  deriving(Eq)
+  deriving(Eq, Show)
 
 -- this can be done more efficiently by splitting the map into two, one for constructors which should be named 0, 1, ... n
 -- and another one for literals
