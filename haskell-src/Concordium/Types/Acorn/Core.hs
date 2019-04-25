@@ -524,7 +524,7 @@ putLit l = case l of
              AAddress addr -> P.putWord8 11 *> putAAddress addr
 
 putCAddress :: P.Putter ContractAddress
-putCAddress (ContractAddress idx v) = P.putWord64be idx >> P.putWord64be v
+putCAddress = S.put
 
 -- FIXME: is an address going to be fixed length? Use serialization derived at elsewhere.
 putAAddress :: P.Putter AccountAddress
@@ -709,7 +709,7 @@ getLength :: G.Get Int
 getLength = fromIntegral <$> G.getWord32be
 
 getCAddress :: G.Get ContractAddress
-getCAddress = ContractAddress <$> G.getWord64be <*> G.getWord64be
+getCAddress = S.get
 
 getAAddress :: G.Get AccountAddress
 getAAddress = S.get

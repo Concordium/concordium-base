@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# OPTIONS_GHC -Wall #-}
 module Concordium.Types (module Concordium.Types, AH.AccountAddress(..)) where
 
@@ -22,6 +23,7 @@ import Data.Hashable(Hashable)
 import Data.Word
 import Data.ByteString.Char8(ByteString)
 import qualified Data.ByteString.Char8 as BS
+import Data.Bits
 
 import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P
@@ -47,8 +49,22 @@ instance Ord (Hashed a) where
 -- Eventually these will be replaced by types given by the global store.
 -- For now they are placeholders
 
-data ContractAddress = ContractAddress { contractIndex :: !Word64
-                                       , contractSubindex :: !Word64} 
+newtype ContractIndex = ContractIndex Word64
+    deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Bits, Integral)
+
+instance S.Serialize ContractIndex where
+    get = ContractIndex <$> G.getWord64be
+    put (ContractIndex i) = P.putWord64be i
+
+newtype ContractSubindex = ContractSubindex Word64
+    deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
+
+instance S.Serialize ContractSubindex where
+    get = ContractSubindex <$> G.getWord64be
+    put (ContractSubindex i) = P.putWord64be i
+
+data ContractAddress = ContractAddress { contractIndex :: !ContractIndex
+                                       , contractSubindex :: !ContractSubindex} 
     deriving(Eq, Generic)
 
 instance Hashable ContractAddress
@@ -57,8 +73,8 @@ instance Show ContractAddress where
   show (ContractAddress i v) = "<" ++ show i ++ ", " ++ show v ++ ">"
 
 instance S.Serialize ContractAddress where
-  get = ContractAddress <$> G.getWord64be <*> G.getWord64be
-  put (ContractAddress i v) = P.putWord64be i <> P.putWord64be v
+  get = ContractAddress <$> S.get <*> S.get
+  put (ContractAddress i v) = S.put i <> S.put v
 
 
 -- |An address is either a contract or account.
