@@ -39,7 +39,7 @@ divC x y = if y /= 0 && (y /= -1 || x > minBound) -- This is only correct if usi
            then Just (x `div` y) -- cannot over/underflow, therefore use operation on a
            else Nothing
 
-modC :: (Integral a, Bounded a) => a -> a -> Maybe a
+modC :: Integral a => a -> a -> Maybe a
 modC x y = if y /= 0
            then Just (x `mod` y) -- cannot over/underflow, therefore use operation on a
            else Nothing
@@ -58,7 +58,7 @@ modD :: (Integral a, Bounded a) => a -> a -> a
 modD x y = fromMaybe 0 $ divC x y
 
 -- | Note: Defaults on negative exponent, normalizes on overflow
-powD :: (Integral a, Bounded a) => a -> a -> a
+powD :: Integral a => a -> a -> a
 powD x y = if y >= 0
            then fromInteger $ (toInteger x)^(toInteger y)
            else 0
