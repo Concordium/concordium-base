@@ -342,11 +342,11 @@ liftFreeBy k = if k == 0 then id else go 0
 
 -- *The notion of a module.
 
--- | A module import "import Foo as bar". The reason for having this is
--- to reduce space usage and so that it is easy to determine which modules to
--- look up up front. Foo will be a unique id of the module deployed on the chain
--- (probably a 64-byte hash of the module content) whereas bar will typically be
--- a very short name.
+-- | A module import "import Foo as bar". The reason for having this is to
+-- reduce space usage and so that it is easy to determine which modules to look
+-- up up front. Foo will be a unique id of the module deployed on the chain
+-- (currently defined as a 32-byte hash of the serialized module content) and
+-- ModuleName is a short 4-byte identifier local to the module.
 data Import = Import {iModule :: ModuleRef
                      ,iAs :: ModuleName
                      }
