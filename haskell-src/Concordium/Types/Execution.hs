@@ -108,6 +108,7 @@ data InvalidKind = ModuleNotWF !String -- ^Error raised when typechecking of the
                  | Rejected -- ^Rejected due to contract logic.
                  | AccountAlreadyExists !AccountAddress
                  | AccountCredentialsFailure
+                 | DuplicateAccountRegistrationID IDTypes.AccountRegistrationID
     deriving (Show)
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
