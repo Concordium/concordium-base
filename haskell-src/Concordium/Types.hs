@@ -154,6 +154,11 @@ instance S.Serialize EncodedPayload where
 -- other parts of the system as well, e.g., in smart contracts.
 
 newtype Slot = Slot Word64 deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
+
+-- |The slot number of the genesis block (0).
+genesisSlot :: Slot
+genesisSlot = 0
+
 newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
 
 -- |Blockchain metadata as needed by contract execution.
