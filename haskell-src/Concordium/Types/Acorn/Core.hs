@@ -526,11 +526,9 @@ putLit l = case l of
 putCAddress :: P.Putter ContractAddress
 putCAddress = S.put
 
--- FIXME: is an address going to be fixed length? Use serialization derived at elsewhere.
 putAAddress :: P.Putter AccountAddress
 putAAddress = S.put
 
--- putDataTyName :: P.Putter (DataTyName ModuleName)
 putDataTyName :: S.Serialize t => P.Putter (DataTyName t)
 putDataTyName n = case n of
   LocalDataTy ln -> do P.putWord8 0
