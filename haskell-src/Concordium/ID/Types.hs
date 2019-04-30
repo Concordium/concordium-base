@@ -3,6 +3,8 @@ module Concordium.ID.Types where
 
 import qualified Data.ByteString    as BS
 import           Data.ByteString    (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as LC
+import           Data.ByteString.Builder(toLazyByteString, byteStringHex)
 import           Data.Time
 import           Data.Word
 import           Concordium.ID.Attributes
@@ -85,7 +87,10 @@ instance Serialize AccountEncryptionKey where
 
 -- Account Registration ID (32 bytes)
 newtype AccountRegistrationID = RegIdAcc ByteString 
-    deriving (Eq)
+    deriving (Eq, Ord)
+
+instance Show AccountRegistrationID where
+  show (RegIdAcc rid) = LC.unpack . toLazyByteString . byteStringHex $ rid
 
 accountRegistrationIDSize :: Int 
 accountRegistrationIDSize = 32
