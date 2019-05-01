@@ -26,6 +26,19 @@ import qualified Data.Serialize as S
 import Concordium.Types
 import qualified Concordium.Types.Acorn.Core as Core
 
+data TypingError = OtherErr String
+                 | CaseWithoutAlternatives
+                 | PatternRedundant
+                 | PatternRedundantLiteral
+                 | PatternsNonExhaustive
+                 | ExpectedPatternType (Core.Type Core.ModuleRef)
+                 -- | type found, type expected
+                 | UnexpectedCaseAlternativeResultType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 | TypeConstructorWhereLiteralOrVariableExpected
+                 | ModuleNotExists Core.ModuleRef
+  deriving (Eq, Show)
+
+
 -- * Basic representation types.
 
 -- * Datatypes involved in typechecking, and any other operations involving types.
@@ -315,7 +328,7 @@ class Monad m => StaticEnvironmentMonad m where
     return (fst <$> mres)
 
 -- |Add safe exception handling to the environment monad.
-instance StaticEnvironmentMonad m => StaticEnvironmentMonad (ExceptT String m) where
+instance StaticEnvironmentMonad m => StaticEnvironmentMonad (ExceptT TypingError m) where
   getChainMetadata = lift getChainMetadata
   getModuleInterfaces = lift . getModuleInterfaces
 
@@ -324,31 +337,31 @@ instance StaticEnvironmentMonad m => StaticEnvironmentMonad (MaybeT m) where
   getModuleInterfaces = lift . getModuleInterfaces
 
 
-instance StaticEnvironmentMonad m => TypecheckerMonad (ExceptT String m) where
+instance StaticEnvironmentMonad m => TypecheckerMonad (ExceptT TypingError m) where
   {-# INLINE getExportedTermType #-}
   getExportedTermType mref n = 
     getInterface mref >>=
-      \case Nothing -> throwError $ "Module " ++ show mref ++ " does not exists."
+      \case Nothing -> throwError $ ModuleNotExists mref
             Just iface -> return $ Map.lookup n (exportedTerms iface)
 
   {-# INLINE getExportedType #-}
   getExportedType mref n = 
     getInterface mref >>=
-      \case Nothing -> throwError $ "Module " ++ show mref ++ " does not exists."
+      \case Nothing -> throwError $ ModuleNotExists mref
             Just iface -> return $ Map.lookup n (exportedTypes iface)
 
   {-# INLINE getExportedConstraints #-}
   getExportedConstraints mref n = 
     getInterface mref >>=
-      \case Nothing -> throwError $ "Module " ++ show mref ++ " does not exists."
+      \case Nothing -> throwError $ ModuleNotExists mref
             Just iface -> return $ Map.lookup n (exportedConstraints iface)
 
 
-instance StaticEnvironmentMonad m => LinkerMonad (ExceptT String m) where
+instance StaticEnvironmentMonad m => LinkerMonad (ExceptT TypingError m) where
   {-# INLINE getExprInModule #-}
   getExprInModule mref n =
     getModuleInterfaces mref >>=
-      \case Nothing -> throwError $ "Module " ++ show mref ++ " does not exist."
+      \case Nothing -> throwError $ ModuleNotExists mref
             Just (_, viface) -> return $ Map.lookup n (exportedDefsVals viface)
 
 
