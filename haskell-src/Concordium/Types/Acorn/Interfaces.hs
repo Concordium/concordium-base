@@ -50,6 +50,9 @@ data Interface = Interface
     }
   deriving (Show, Generic)
 
+emptyInterface :: Interface
+emptyInterface = Interface Map.empty Map.empty Map.empty Map.empty Map.empty
+
 type ModuleInterfaces = HashMap Core.ModuleRef Interface
 
 -- * Datatypes involved in execution of terms.
@@ -240,6 +243,10 @@ data ValueInterface = ValueInterface
     ,exportedDefsConts :: !(HashMap Core.TyName ContractValue)  -- exported contracts with their init and update methods
     }
     deriving(Show)
+
+-- |Empty value interface
+emptyValueInterface :: ValueInterface
+emptyValueInterface = ValueInterface Map.empty Map.empty
 
 -- *Serialization instances for interfaces. NB: The format is not designed with
 -- efficiency in mind for now, and should be fixed if we need to use it in a
