@@ -293,7 +293,7 @@ class Monad m => InterpreterMonad m where
 
 class Monad m => LinkerMonad m where
   getExprInModule :: Core.ModuleRef -> Core.Name -> m (Maybe Expr)
-  
+
 class Monad m => TypecheckerMonad m where
   getExportedTermType :: Core.ModuleRef -> Core.Name -> m (Maybe (Core.Type Core.ModuleRef))
   getExportedType :: Core.ModuleRef -> Core.TyName -> m (Maybe (Int, HashMap Core.Name [Core.Type Core.ModuleRef]))
