@@ -91,7 +91,7 @@ instance FBS.FixedLength ProofSize where
 
 -- |A VRF proof. 80 bytes.
 newtype Proof = Proof (FBS.FixedByteString ProofSize)
-    deriving (Eq)
+    deriving (Eq, Ord)
 
 instance Serialize Proof where
     put (Proof p) = putByteString $ FBS.toByteString p
