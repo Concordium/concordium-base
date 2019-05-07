@@ -18,12 +18,32 @@ import Data.Maybe
 
 -- ** Checked operations
 
--- Use the given operation on Integer to see whether the result would be out of bound for type a and convert results within bounds to a
-checkOpBounds :: forall a . (Integral a, Bounded a) => (Integer -> Integer -> Integer) -> a -> a -> Maybe a
-checkOpBounds op x y = let res = op (toInteger x) (toInteger y)
-                       in if res >= toInteger (minBound :: a) && res <= toInteger (maxBound :: a)
-                          then Just $ fromInteger res
-                          else Nothing
+-- NOTE: should use toIntegralSized when having implemented Bits
+-- |Converts from one Integral to another if it fits into its range
+toIntegral :: forall a b . (Integral a, Integral b, Bounded b) => a -> Maybe b
+toIntegral x = -- NOTE: do not use check whether (toInteger $ fromInteger $ toInteger x ) equals toInteger x (with fromInteger :: Integer -> b) as this might be satisfied even if x is out of bounds of the target type (fromInteger uses modulo)
+  if toInteger x >= toInteger (minBound :: b) && toInteger x <= toInteger (maxBound :: b)
+  then Just $ fromInteger $ toInteger x
+  else Nothing
+
+-- |Convert from one Integral to another via Integer (using toInteger and fromInteger)
+toIntegralNormalizing :: (Integral a, Integral b) => a -> b
+toIntegralNormalizing = fromInteger . toInteger
+
+-- |Convert from one Integral to another by preserving the corresponding two's complement representation
+-- This assumes the bit size of the two types to be the same (if not, the result is an undefined value of type b)
+-- The types can be the same
+toIntegralRepr :: forall a b . (Integral a, Integral b, Bounded b) => a -> b
+toIntegralRepr x =
+  let x' = toInteger x
+      targetRangeSize = toInteger $ (maxBound :: b) - (minBound :: b) + 1
+  in if      x' < 0 then fromInteger $ x' + targetRangeSize
+     else if x' > toInteger (maxBound :: b) then fromInteger $ x' - targetRangeSize
+     else fromInteger x'
+
+-- |Use the given operation on Integer to see whether the result would be out of bound for type a and convert results within bounds to a
+checkOpBounds :: (Integral a, Bounded a) => (Integer -> Integer -> Integer) -> a -> a -> Maybe a
+checkOpBounds op x y = toIntegral $ op (toInteger x) (toInteger y)
 
 addC :: (Integral a, Bounded a) => a -> a -> Maybe a
 addC = checkOpBounds (+)
