@@ -1,0 +1,17 @@
+[package]
+name = "elgamal"
+version = "0.1.0"
+authors=["concordium AB"]
+
+[dependencies]
+pairing = "0"
+failure       = "0"
+rand    = "0.4"
+rand_core = "0"
+clear_on_drop = "0"
+
+
+[lib]
+name = "elgamal"
+crate-type = ["cdylib", "lib"]
+
