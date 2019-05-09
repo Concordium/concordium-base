@@ -126,7 +126,7 @@ impl<'d> Deserialize<'d> for SecretKey {
             type Value = SecretKey;
 
             fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                formatter.write_str("An ed25519 secret key as 32 bytes, as specified in RFC8032.")
+                formatter.write_str("An PRF ecret key as 32 bytes.")
             }
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<SecretKey, E>
