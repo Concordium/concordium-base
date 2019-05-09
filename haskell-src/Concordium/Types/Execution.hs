@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Concordium.Types.Execution where
 
 import Prelude hiding(fail)
@@ -81,34 +82,39 @@ data Event = ModuleDeployed !Core.ModuleRef
 data MessageFormat = ValueMessage !Value | ExprMessage !Expr
     deriving(Show)
 
--- |Result of a valid transaction.
-data ValidResult = TxReject InvalidKind | TxSuccess [Event]
-    deriving(Show)
+-- |Result of a valid transaction is either a reject with a reason or a
+-- successful transaction with a list of events which occurred during execution.
+type ValidResult = Either RejectReason [Event]
+
+pattern TxSuccess :: b -> Either a b
+pattern TxReject :: a -> Either a b
+pattern TxSuccess a = Right a
+pattern TxReject e = Left e
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
-data InvalidKind = ModuleNotWF !String -- ^Error raised when typechecking of the module has failed.
-                 | ModuleHashAlreadyExists !Core.ModuleRef  -- ^As the name says.
-                 | MessageTypeError !String -- ^Message to the receive method is of the wrong type.
-                 | ParamsTypeError !String -- ^Parameters of the init method are of the wrong type.
-                 | InvalidAccountReference !AccountAddress -- ^Account does not exists.
-                 | InvalidContractReference !Core.ModuleRef !Core.TyName -- ^Reference to a non-existing contract.
-                 | InvalidModuleReference !Core.ModuleRef   -- ^Reference to a non-existing module.
-                 | InvalidContractAddress !ContractAddress -- ^Contract instance does not exist.
-                 | EvaluationError !String -- ^Error during evalution. This is
-                                           -- mostly for debugging purposes
-                                           -- since this kind of an error should
-                                           -- not happen after successful
-                                           -- typechecking.
-                 | AmountTooLarge !Address !Amount
-                 -- ^When one wishes to transfer an amount from A to B but there
-                 -- are not enough funds on account/contract A to make this
-                 -- possible. The data are the from address and the amount to transfer.
-                 | SerializationFailure String -- ^Serialization of the body failed for the given reason.
-                 | OutOfEnergy -- ^We ran of out energy to process this transaction.
-                 | Rejected -- ^Rejected due to contract logic.
-                 | AccountAlreadyExists !AccountAddress
-                 | AccountCredentialsFailure
-                 | DuplicateAccountRegistrationID IDTypes.AccountRegistrationID
+data RejectReason = ModuleNotWF !String -- ^Error raised when typechecking of the module has failed.
+                  | ModuleHashAlreadyExists !Core.ModuleRef  -- ^As the name says.
+                  | MessageTypeError !String -- ^Message to the receive method is of the wrong type.
+                  | ParamsTypeError !String -- ^Parameters of the init method are of the wrong type.
+                  | InvalidAccountReference !AccountAddress -- ^Account does not exists.
+                  | InvalidContractReference !Core.ModuleRef !Core.TyName -- ^Reference to a non-existing contract.
+                  | InvalidModuleReference !Core.ModuleRef   -- ^Reference to a non-existing module.
+                  | InvalidContractAddress !ContractAddress -- ^Contract instance does not exist.
+                  | EvaluationError !String -- ^Error during evalution. This is
+                                            -- mostly for debugging purposes
+                                            -- since this kind of an error should
+                                            -- not happen after successful
+                                            -- typechecking.
+                  | AmountTooLarge !Address !Amount
+                  -- ^When one wishes to transfer an amount from A to B but there
+                  -- are not enough funds on account/contract A to make this
+                  -- possible. The data are the from address and the amount to transfer.
+                  | SerializationFailure String -- ^Serialization of the body failed for the given reason.
+                  | OutOfEnergy -- ^We ran of out energy to process this transaction.
+                  | Rejected -- ^Rejected due to contract logic.
+                  | AccountAlreadyExists !AccountAddress
+                  | AccountCredentialsFailure
+                  | DuplicateAccountRegistrationID IDTypes.AccountRegistrationID
     deriving (Show)
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
