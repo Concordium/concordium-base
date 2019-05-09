@@ -3,4 +3,4 @@ extern crate rand;
 
 mod eddsa_ed25519;
 
-pub use eddsa_ed25519::*;
+pub use crate::eddsa_ed25519::*;

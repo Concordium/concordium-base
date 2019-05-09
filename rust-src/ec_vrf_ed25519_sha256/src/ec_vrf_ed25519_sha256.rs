@@ -265,26 +265,3 @@ pub extern fn ec_vrf_verify(public_key_bytes: &[u8;32], proof_bytes: &[u8;80], m
 
     if pk.verify(proof, data) { 1 } else { 0 }
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    use clear_on_drop::clear::Clear;
-
-    #[test]
-    fn keypair_clear_on_drop() {
-        let mut keypair: Keypair = Keypair::from_bytes(&[1u8; KEYPAIR_LENGTH][..]).unwrap();
-
-        keypair.clear();
-
-        fn as_bytes<T>(x: &T) -> &[u8] {
-            use std::mem;
-            use std::slice;
-
-            unsafe { slice::from_raw_parts(x as *const T as *const u8, mem::size_of_val(x)) }
-        }
-
-        assert!(!as_bytes(&keypair).contains(&0x15));
-    }
-}
