@@ -86,8 +86,9 @@ data MessageFormat = ValueMessage !Value | ExprMessage !Expr
 -- successful transaction with a list of events which occurred during execution.
 type ValidResult = Either RejectReason [Event]
 
-pattern TxSuccess :: b -> Either a b
-pattern TxReject :: a -> Either a b
+{-# COMPLETE TxSuccess, TxReject #-}
+pattern TxSuccess :: [Event] -> ValidResult
+pattern TxReject :: RejectReason -> ValidResult
 pattern TxSuccess a = Right a
 pattern TxReject e = Left e
 
