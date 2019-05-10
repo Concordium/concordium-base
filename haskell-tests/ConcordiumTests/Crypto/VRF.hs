@@ -5,6 +5,7 @@ import qualified Concordium.Crypto.VRF as VRF
 
 import Data.Serialize
 import qualified Data.ByteString as BS
+import Test.QuickCheck.Monadic
 import Test.QuickCheck
 import Test.Hspec
 
@@ -18,17 +19,25 @@ testSerializeKeyPair :: Property
 testSerializeKeyPair = property $ \(kp :: VRF.KeyPair) -> Right kp === runGet get (runPut $ put kp)
 
 testSerializeProof :: Property
-testSerializeProof = property $ \kp doc -> let pf = VRF.prove kp (BS.pack doc) in Right pf === runGet get (runPut $ put pf)
+testSerializeProof = property $ \kp doc -> monadicIO $ do
+        pf <- run $ VRF.prove kp (BS.pack doc)
+        return $ Right pf === runGet get (runPut $ put pf)
 
 testGenVerifyKey :: Property
 testGenVerifyKey = property $ \kp -> VRF.verifyKey (VRF.publicKey kp)
 
 testProveVerify :: Property
-testProveVerify = property $ \kp doc0 ->
-                    let
-                        doc = BS.pack doc0
-                        pf = VRF.prove kp doc
-                    in VRF.verify (VRF.publicKey kp) doc pf
+testProveVerify = property $ \kp doc0 -> monadicIO $ do
+                    let doc = BS.pack doc0
+                    pf <- run $ VRF.prove kp doc
+                    return $ VRF.verify (VRF.publicKey kp) doc pf
+
+testProofToHashDeterministic :: Property
+testProofToHashDeterministic = property $ \kp doc0 -> monadicIO $ do
+        let doc = BS.pack doc0
+        pf1 <- run $ VRF.prove kp doc
+        pf2 <- run $ VRF.prove kp doc
+        return $ VRF.proofToHash pf1 === VRF.proofToHash pf2
 
 tests :: Spec
 tests = parallel $ describe "Concordium.Crypto.VRF" $ do
@@ -39,3 +48,4 @@ tests = parallel $ describe "Concordium.Crypto.VRF" $ do
         it "proof" testSerializeProof
     it "verify generated public key" testGenVerifyKey
     it "verify proof" testProveVerify
+    it "output of VRF is independent of proof" testProofToHashDeterministic

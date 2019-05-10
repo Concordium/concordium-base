@@ -163,9 +163,9 @@ test = do kp@(KeyPair sk pk) <- newKeyPair
           _ <- putStrLn("SK: " ++ show sk)
           _ <- putStrLn("PK: " ++ show pk)
           _ <- putStrLn("MESSAGE:") 
-          alpha <- B.getLine 
-          let prf = prove kp alpha  
-              valid = verify pk alpha prf 
+          alpha <- B.getLine
+          prf <- prove kp alpha
+          let valid = verify pk alpha prf 
               h' = proofToHash prf 
            in
               putStrLn ("Proof: " ++ show prf) >>
@@ -174,13 +174,13 @@ test = do kp@(KeyPair sk pk) <- newKeyPair
               putStrLn ("Proof hash: " ++ show h')
 
 -- |Generate a VRF proof.
-prove :: KeyPair -> ByteString -> Proof
-prove (KeyPair (PrivateKey sk) (PublicKey pk)) b = Proof $
-                                        FBS.unsafeCreate $ \prf -> 
+prove :: KeyPair -> ByteString -> IO Proof
+prove (KeyPair (PrivateKey sk) (PublicKey pk)) b = Proof <$>
+                                        (FBS.create $ \prf -> 
                                            FBS.withPtr pk $ \pk' -> 
                                                FBS.withPtr sk $ \sk' -> 
                                                    withByteStringPtr b $ \b' -> 
-                                                       rs_prove prf pk' sk' b' (fromIntegral $ B.length b)
+                                                       rs_prove prf pk' sk' b' (fromIntegral $ B.length b))
 
 -- |Verify a VRF proof.
 verify :: PublicKey -> ByteString -> Proof -> Bool
