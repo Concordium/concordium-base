@@ -22,22 +22,30 @@ data InternalMessage = TSend !ContractAddress !Amount !Value | TSimpleTransfer !
 
 -- |The transaction payload. Currently only 5 transaction kinds are supported.
 data Payload = DeployModule !Core.Module   -- ^Put module on the chain.
-             | InitContract !Amount !Core.ModuleRef !Core.TyName !(Core.Expr Core.ModuleName)   -- ^Call init method of contract.
-             | Update !Amount !ContractAddress !(Core.Expr Core.ModuleName) -- ^The last argument is the parameter.
+             | InitContract !Amount                        -- ^Initial amount on the contract's account.
+                            !Core.ModuleRef                -- ^Name of the module in which the contract exist.
+                            !Core.TyName                   -- ^Name of the contract.
+                            !(Core.Expr Core.ModuleName)   -- ^Parameter to the init method.
+                            !Int                           -- ^Derived field, size of the parameter.
+             | Update !Amount
+                      !ContractAddress             -- ^The recepient address.
+                      !(Core.Expr Core.ModuleName) -- ^The message.
+                      !Int                         -- ^Derived field, size of the message.
              | Transfer !Address !Amount     -- ^Where (which can be a contract) and what amount to transfer.
              | CreateAccount !IDTypes.AccountCreationInformation
+  deriving(Eq, Show)
 
 instance S.Serialize Payload where
   put (DeployModule amod) =
     P.putWord8 0 <>
     Core.putModule amod
-  put (InitContract amnt mref cname params) =
+  put (InitContract amnt mref cname params _) =
       P.putWord8 1 <>
       S.put amnt <>
       Core.putModuleRef mref <>
       Core.putTyName cname <>
       Core.putExpr params
-  put (Update amnt cref msg) =
+  put (Update amnt cref msg _) =
     P.putWord8 2 <>
     S.put amnt <>
     S.put cref <>
@@ -54,8 +62,19 @@ instance S.Serialize Payload where
     h <- G.getWord8
     case h of
       0 -> DeployModule <$> Core.getModule
-      1 -> InitContract <$> S.get <*> Core.getModuleRef <*> Core.getTyName <*> Core.getExpr
-      2 -> Update <$> S.get <*> S.get <*> Core.getExpr
+      1 -> do amnt <- S.get
+              mref <- Core.getModuleRef
+              cname <- Core.getTyName
+              pstart <- G.bytesRead
+              params <- Core.getExpr
+              pend <- G.bytesRead
+              return $! InitContract amnt mref cname params (pend - pstart)
+      2 -> do amnt <- S.get
+              cref <- S.get
+              pstart <- G.bytesRead
+              msg <- Core.getExpr
+              pend <- G.bytesRead
+              return $! Update amnt cref msg (pend - pstart)
       3 -> Transfer <$> S.get <*> S.get
       4 -> CreateAccount <$> S.get
       _ -> fail "Only 5 types of transactions types are currently supported."
@@ -124,6 +143,7 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
                                              -- next in sequence. The argument
                                              -- is the expected nonce.
                  | UnknownAccount !AccountAddress -- ^Transaction is coming from an unknown sender.
+                 | DepositInsufficient -- ^The dedicated gas amount was lower than the minimum allowed.
       deriving(Show)
 
 data TxResult = TxValid ValidResult | TxInvalid FailureKind
