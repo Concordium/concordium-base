@@ -43,7 +43,7 @@ library:
 executables:
   Perf-test:
     main:            Perf.hs
-    source-dirs:     test
+    source-dirs:     perf
     ghc-options:
     - -threaded
     - -with-rtsopts=-N
@@ -55,4 +55,20 @@ executables:
     - criterion >= 1.5.4
 
 
-    
+tests:
+  types-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -with-rtsopts=-N
+    - -Wall
+    dependencies:
+    - globalstate-types
+    - concordium-crypto
+    - hspec >= 2.6
+    - QuickCheck >= 2.12
+    - hspec-expectations >= 0.8
+    - containers
+    - base58string == 0.10.*
+    - random

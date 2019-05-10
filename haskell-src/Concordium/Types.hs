@@ -137,6 +137,9 @@ instance HashableTo Hash.Hash Account where
 newtype EncodedPayload = EncodedPayload { _spayload :: ByteString }
     deriving(Eq, Show)
 
+payloadSize :: EncodedPayload -> Int
+payloadSize = BS.length . _spayload
+
 -- |NB: We explicitly put the length first, even though the body is already
 -- serialized and thus it would normally not be necessary to do so. The reason
 -- we do it is that at the moment a transaction can appear on a block even
