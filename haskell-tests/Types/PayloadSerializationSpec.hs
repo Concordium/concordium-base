@@ -64,8 +64,8 @@ checkPayload e = let bs = S.encodeLazy e
 
 tests :: Spec
 tests = describe "Payload serialization tests" $ do
-           test 25
-           test 50
- where test size = modifyMaxSuccess (const 10000) $
-                   specify ("Payload serialization with size = " ++ show size ++ ":") $
-                   forAll (resize size $ genPayload) checkPayload
+           test 25 5000
+           test 50 500
+ where test size num = modifyMaxSuccess (const num) $
+                       specify ("Payload serialization with size = " ++ show size ++ ":") $
+                       forAll (resize size $ genPayload) checkPayload
