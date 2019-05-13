@@ -253,7 +253,17 @@ arithmeticSpecsWordInt _ _ = do
     specify "Integer representable numbers" $ forAll lowerGen (\x -> toInteger ((toIntegralRepr x) :: b) === toInteger x)
     specify "Not Integer representable numbers" $ forAll upperGen (\x -> toInteger ((toIntegralRepr x) :: b) === (toInteger x) - (toInteger (maxBound :: a)) - 1)
 
-tests :: SpecWith ()
+intCastTests :: Spec
+intCastTests = do
+  describe "Int128 -> Int64 is homomorphic" $ modifyMaxSuccess (const 5000) $ do
+    specify "addition distributes" $ property $ \a b -> f (a + b) == f a + f b
+    specify "multiplication distributes" $ property $ \a b -> f (a * b) == f a * f b
+    specify "negation distributes" $ property $ \a -> f (-a) == - f a
+
+    where f :: Int128 -> Int64
+          f = toIntegralNormalizing
+
+tests :: Spec
 tests = do
   describe "Numeric types" $ do
     describe "Int64" $ do
@@ -290,3 +300,5 @@ tests = do
     describe "Representation conversion Int128/Word128" $ do
       arithmeticSpecsIntWord (negNumGen :: Gen Int128) (nonNegNumGen :: Gen Int128) (arbitrary :: Gen Word128)
       arithmeticSpecsWordInt (arbitrary :: Gen Word128) (arbitrary :: Gen Int128)
+
+    intCastTests
