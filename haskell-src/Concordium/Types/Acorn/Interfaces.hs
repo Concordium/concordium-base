@@ -26,19 +26,6 @@ import qualified Data.Serialize as S
 import Concordium.Types
 import qualified Concordium.Types.Acorn.Core as Core
 
-data TypingError = OtherErr String
-                 | CaseWithoutAlternatives
-                 | PatternRedundant
-                 | PatternRedundantLiteral
-                 | PatternsNonExhaustive
-                 | ExpectedPatternType (Core.Type Core.ModuleRef)
-                 -- | type found, type expected
-                 | UnexpectedCaseAlternativeResultType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
-                 | TypeConstructorWhereLiteralOrVariableExpected
-                 | ModuleNotExists Core.ModuleRef
-  deriving (Eq, Show)
-
-
 -- * Basic representation types.
 
 -- * Datatypes involved in typechecking, and any other operations involving types.
@@ -67,6 +54,27 @@ emptyInterface :: Interface
 emptyInterface = Interface Map.empty Map.empty Map.empty Map.empty Map.empty
 
 type ModuleInterfaces = HashMap Core.ModuleRef Interface
+
+-- |Errors which can occur during typechecking.
+data TypingError =
+                 -- |TODO: To be replaced by more precise errors.
+                 OtherErr String
+                 -- |Empty set of alternatives is not allowed in a case expression.
+                 | CaseWithoutAlternatives
+                 -- |Redundant pattern where the type of the discriminee is a declared datatype.
+                 | PatternRedundant (Core.Pattern Core.ModuleRef)
+                 -- |Redundant pattern where the type of the discriminee is a base type.
+                 | PatternRedundantLiteral Core.Literal
+                  -- |Non-exhaustive pattern
+                 | PatternsNonExhaustive
+                 -- |Pattern does not have correct type. The first argument is the actual type, the second the expected type.
+                 | ExpectedPatternType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |The body of the branch of a case expression does not have the correct type.
+                 -- The first argument is type found, the second is the expected type.
+                 | UnexpectedCaseAlternativeResultType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |Module does not exist. Raised when trying to type-check an imported definition from a non-existing module.
+                 | ModuleNotExists Core.ModuleRef
+  deriving (Eq, Show)
 
 -- * Datatypes involved in execution of terms.
 
