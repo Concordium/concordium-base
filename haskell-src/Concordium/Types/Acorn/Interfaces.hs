@@ -69,6 +69,8 @@ data TypingError =
                  | PatternsNonExhaustive
                  -- |Pattern does not have correct type. The first argument is the actual type, the second the expected type.
                  | ExpectedPatternType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |A more specific type mismatch. A constructor pattern occurs at a place where the discriminee has a base type.
+                 | TypeConstructorWhereLiteralOrVariableExpected (Core.CTorName Core.ModuleRef)
                  -- |The body of the branch of a case expression does not have the correct type.
                  -- The first argument is type found, the second is the expected type.
                  | UnexpectedCaseAlternativeResultType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
