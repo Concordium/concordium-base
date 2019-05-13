@@ -4,13 +4,19 @@ extern crate clear_on_drop;
 extern crate rand;
 extern crate failure;
 extern crate core;
+extern crate bitvec;
+extern crate rayon;
+#[cfg(feature = "serde")]
+extern crate serde;
 
 mod constants;
 mod errors;
-mod secret;
+pub mod secret;
 mod cipher;
 mod message;
-mod public;
-mod elgamal;
+pub mod public;
+pub mod elgamal;
 
-//pub use crate::elgamal::*;
+pub use crate::elgamal::*;
+pub use crate::secret::*;
+pub use crate::public::*;

@@ -79,16 +79,47 @@ impl PublicKey {
           }
     }
 
+    #[inline]
     pub fn encrypt<T>(&self, csprng: &mut T, m: &Message) -> Cipher
     where T:Rng{
-        let mut fr = Fr::rand(csprng);
-        let mut t = G1::one().clone(); //g
+        let fr = Fr::rand(csprng); //k
+        let mut t = G1::one(); //g
         t.mul_assign(fr); //kg
         let mut s= self.0;
         s.mul_assign(fr); //kag
         s.add_assign(&m.0); //kag + m
         Cipher(t, s)
 
+    }
+
+    pub fn encrypt_bin_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
+        where T:Rng{
+            if !e { 
+                self.encrypt(csprng, &Message(G1::zero()))
+            } else{
+                self.encrypt(csprng, &Message(G1::one()))
+            }
+    }
+    pub fn encrypt_binary_exp(&self, e: &bool) -> Cipher{
+            let mut csprng = thread_rng();  
+            if !e { 
+                self.encrypt(&mut csprng, &Message(G1::zero()))
+            } else{
+                self.encrypt(&mut csprng, &Message(G1::one()))
+            }
+    }
+
+    pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &Fr) -> Cipher
+        where T:Rng{
+        let mut m = G1::one(); //g
+        let e2 = e.clone();
+        m.mul_assign(e2);//g^e
+        self.encrypt(csprng, &Message(m))
+    }
+
+    pub fn encrypt_exponent_vec<T>(&self, csprng: &mut T, e: &Vec<Fr>) -> Vec<Cipher>
+        where T:Rng{
+            e.into_iter().map(|x| {self.encrypt_exponent(csprng, &x)}).collect()
     }
     
 
@@ -100,7 +131,7 @@ impl Serialize for PublicKey {
     where
         S: Serializer,
     {
-        serializer.serialize_bytes(self.as_bytes())
+        serializer.serialize_bytes(&self.to_bytes())
     }
 }
 

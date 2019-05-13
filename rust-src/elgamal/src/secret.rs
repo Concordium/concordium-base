@@ -21,7 +21,7 @@ use crate::errors::*;
 use crate::cipher::*;
 use crate::message::*;
 use crate::errors::InternalError::{DecodingError, DivisionByZero};
-use pairing::bls12_381::{G1Affine, FrRepr, Fr};
+use pairing::bls12_381::{G1,G1Affine, FrRepr, Fr};
 use pairing::{CurveProjective, CurveAffine,Field,PrimeField};
 use rand::*;
 
@@ -78,13 +78,31 @@ impl SecretKey {
           }
     }
 
-    pub fn decrypt(&self, c: Cipher)-> Message{
+    pub fn decrypt(&self, c: &Cipher)-> Message{
         let mut x = c.0; //k * g
         let mut y = c.1; // m + k * a * g
         x.mul_assign(self.0 ); //k * a * g
         y.sub_assign(&x); //m
         Message(y)
     }
+    
+    pub fn decrypt_exponent(&self, c: & Cipher) -> Fr{
+        let Message(m) = self.decrypt(c);
+        let mut a = Fr::zero();
+        let mut i = G1::zero(); 
+        let mut x = m==G1::zero();
+        while !x {
+            i.add_assign(&G1::one());
+            a.add_assign(&Fr::one());
+            x = m== i;
+        }
+        a
+    }
+
+    pub fn decrypt_exponent_vec(&self, v: &Vec<Cipher>) -> Vec<Fr>{
+        v.into_iter().map(|y| self.decrypt_exponent(y)).collect()
+    }
+
 
     /// Generate a `SecretKey` from a `csprng`.
     ///
@@ -102,7 +120,7 @@ impl Serialize for SecretKey {
     where
         S: Serializer,
     {
-        serializer.serialize_bytes(self.as_bytes())
+        serializer.serialize_bytes(&self.to_bytes())
     }
 }
 
