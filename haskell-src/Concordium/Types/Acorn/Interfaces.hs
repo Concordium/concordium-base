@@ -55,6 +55,29 @@ emptyInterface = Interface Map.empty Map.empty Map.empty Map.empty Map.empty
 
 type ModuleInterfaces = HashMap Core.ModuleRef Interface
 
+-- |Errors which can occur during typechecking.
+data TypingError =
+                 -- |TODO: To be replaced by more precise errors.
+                 OtherErr String
+                 -- |Empty set of alternatives is not allowed in a case expression.
+                 | CaseWithoutAlternatives
+                 -- |Redundant pattern where the type of the discriminee is a declared datatype.
+                 | PatternRedundant (Core.Pattern Core.ModuleRef)
+                 -- |Redundant pattern where the type of the discriminee is a base type.
+                 | PatternRedundantLiteral Core.Literal
+                  -- |Non-exhaustive pattern
+                 | PatternsNonExhaustive
+                 -- |Pattern does not have correct type. The first argument is the actual type, the second the expected type.
+                 | ExpectedPatternType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |A more specific type mismatch. A constructor pattern occurs at a place where the discriminee has a base type.
+                 | TypeConstructorWhereLiteralOrVariableExpected (Core.CTorName Core.ModuleRef)
+                 -- |The body of the branch of a case expression does not have the correct type.
+                 -- The first argument is type found, the second is the expected type.
+                 | UnexpectedCaseAlternativeResultType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |Module does not exist. Raised when trying to type-check an imported definition from a non-existing module.
+                 | ModuleNotExists Core.ModuleRef
+  deriving (Eq, Show)
+
 -- * Datatypes involved in execution of terms.
 
 type Energy = Int64
@@ -315,7 +338,7 @@ class Monad m => StaticEnvironmentMonad m where
     return (fst <$> mres)
 
 -- |Add safe exception handling to the environment monad.
-instance StaticEnvironmentMonad m => StaticEnvironmentMonad (ExceptT String m) where
+instance StaticEnvironmentMonad m => StaticEnvironmentMonad (ExceptT TypingError m) where
   getChainMetadata = lift getChainMetadata
   getModuleInterfaces = lift . getModuleInterfaces
 
@@ -324,31 +347,31 @@ instance StaticEnvironmentMonad m => StaticEnvironmentMonad (MaybeT m) where
   getModuleInterfaces = lift . getModuleInterfaces
 
 
-instance StaticEnvironmentMonad m => TypecheckerMonad (ExceptT String m) where
+instance StaticEnvironmentMonad m => TypecheckerMonad (ExceptT TypingError m) where
   {-# INLINE getExportedTermType #-}
   getExportedTermType mref n = 
     getInterface mref >>=
-      \case Nothing -> throwError $ "Module " ++ show mref ++ " does not exists."
+      \case Nothing -> throwError $ ModuleNotExists mref
             Just iface -> return $ Map.lookup n (exportedTerms iface)
 
   {-# INLINE getExportedType #-}
   getExportedType mref n = 
     getInterface mref >>=
-      \case Nothing -> throwError $ "Module " ++ show mref ++ " does not exists."
+      \case Nothing -> throwError $ ModuleNotExists mref
             Just iface -> return $ Map.lookup n (exportedTypes iface)
 
   {-# INLINE getExportedConstraints #-}
   getExportedConstraints mref n = 
     getInterface mref >>=
-      \case Nothing -> throwError $ "Module " ++ show mref ++ " does not exists."
+      \case Nothing -> throwError $ ModuleNotExists mref
             Just iface -> return $ Map.lookup n (exportedConstraints iface)
 
 
-instance StaticEnvironmentMonad m => LinkerMonad (ExceptT String m) where
+instance StaticEnvironmentMonad m => LinkerMonad (ExceptT TypingError m) where
   {-# INLINE getExprInModule #-}
   getExprInModule mref n =
     getModuleInterfaces mref >>=
-      \case Nothing -> throwError $ "Module " ++ show mref ++ " does not exist."
+      \case Nothing -> throwError $ ModuleNotExists mref
             Just (_, viface) -> return $ Map.lookup n (exportedDefsVals viface)
 
 
