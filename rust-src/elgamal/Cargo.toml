@@ -9,6 +9,18 @@ failure       = "0"
 rand    = "0.4"
 rand_core = "0"
 clear_on_drop = "0"
+bitvec ="0.2.0"
+rayon = "1"
+serde = "1"
+
+
+[dev-dependencies]
+criterion = "0.2"
+
+[[bench]]
+name = "elgamal_benchmarks"
+harness = false
+
 
 
 [lib]

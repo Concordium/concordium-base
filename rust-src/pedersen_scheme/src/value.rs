@@ -130,7 +130,7 @@ impl Serialize for Value{
     where
         S: Serializer,
     {
-        serializer.serialize_bytes(self.as_bytes())
+        serializer.serialize_bytes(&self.to_bytes())
     }
 }
 
@@ -146,7 +146,7 @@ impl<'d> Deserialize<'d> for Value{
             type Value = Value;
 
             fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                formatter.write_str("An value is {} bytes ", FIELD_ELEMENT_LENGTH)
+                formatter.write_str("An value is 32 bytes ")
             }
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Value, E>

@@ -1,8 +1,25 @@
+// -*- mode: rust; -*-
+//
+// Authors:
+// - bm@concordium.com
+
+//! Elgamal cipher  types
+
+
+#[cfg(feature = "serde")]
+use serde::de::Error as SerdeError;
+#[cfg(feature = "serde")]
+use serde::de::Visitor;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde::{Deserializer, Serializer};
+
 use pairing::{EncodedPoint, bls12_381::G1, bls12_381::G1Compressed, CurveProjective, CurveAffine};
 use crate::errors::{*, InternalError::*};
 use crate::constants::*;
 
-#[derive(Debug,PartialEq, Eq)]
+#[derive(Debug,PartialEq, Eq, Copy, Clone)]
 pub struct Cipher (pub(crate) G1, pub(crate) G1);
 
 impl Cipher{
@@ -39,3 +56,55 @@ impl Cipher{
     }
 }
 
+#[cfg(feature = "serde")]
+impl Serialize for Cipher {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(&self.to_bytes())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'d> Deserialize<'d> for Cipher {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'d>,
+    {
+        struct CipherVisitor;
+
+        impl<'d> Visitor<'d> for CipherVisitor {
+            type Value = Cipher;
+
+            fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                formatter.write_str(
+                    "An Elgamal Cipher key as a 96-bytes",
+                )
+            }
+
+            fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Cipher, E>
+            where
+                E: SerdeError,
+            {
+                Cipher::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
+            }
+        }
+        deserializer.deserialize_bytes(CipherVisitor)
+    }
+}
+/*
+#[test]
+pub fn key_to_byte_conversion(){
+    let mut csprng = thread_rng();
+    for _i in 1..100{
+        let sk = SecretKey::generate(&mut csprng);
+        let pk = PublicKey::from(&sk);
+        let r = pk.to_bytes();
+        let res_pk2= PublicKey::from_bytes(&r);
+        assert!(res_pk2.is_ok());
+        let pk2= res_pk2.unwrap();
+        assert_eq!(pk2, pk);
+    }
+}
+*/

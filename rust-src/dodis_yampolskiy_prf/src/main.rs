@@ -4,6 +4,7 @@ extern crate clear_on_drop;
 extern crate rand;
 extern crate failure;
 extern crate core;
+extern crate serde;
 
 mod constants;
 mod errors;

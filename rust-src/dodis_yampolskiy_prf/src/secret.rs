@@ -6,7 +6,6 @@
 //! PRF Key type 
 
 
-
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
 #[cfg(feature = "serde")]
@@ -110,7 +109,7 @@ impl Serialize for SecretKey {
     where
         S: Serializer,
     {
-        serializer.serialize_bytes(self.as_bytes())
+        serializer.serialize_bytes(&self.to_bytes())
     }
 }
 

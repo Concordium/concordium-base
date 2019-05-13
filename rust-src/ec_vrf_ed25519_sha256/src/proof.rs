@@ -16,11 +16,13 @@ use curve25519_dalek::scalar::Scalar;
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
 #[cfg(feature = "serde")]
+use serde::de::Unexpected::Bytes;
+#[cfg(feature = "serde")]
 use serde::de::Visitor;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
+use serde::{Deserializer, Serializer };
 
 use crate::constants::*;
 use crate::errors::*;
@@ -130,8 +132,11 @@ impl<'d> Deserialize<'d> for Proof {
             where
                 E: SerdeError,
             {
-                if bytes.len() != 80 { Err(SerdeError::invalid_length(bytes.len(), &self))}
-                else { Proof::from_bytes(bytes).or(Err(SerdeError::invalid_value(Bytes(bytes)))) }
+                if bytes.len() != PROOF_LENGTH { Err(SerdeError::invalid_length(bytes.len(), &self))}
+                else { 
+                    let mut bytes_copy = [0u8;PROOF_LENGTH];
+                    bytes_copy.copy_from_slice(bytes);
+                    Proof::from_bytes(&bytes_copy).or(Err(SerdeError::invalid_value(Bytes(bytes), &self))) }
             }
         }
         deserializer.deserialize_bytes(ProofVisitor)

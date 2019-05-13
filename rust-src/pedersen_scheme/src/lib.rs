@@ -1,4 +1,5 @@
 extern crate pairing;
+extern crate serde;
 extern crate rand_core;
 extern crate clear_on_drop;
 extern crate rand;

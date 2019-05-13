@@ -67,7 +67,7 @@ impl Serialize for Commitment{
     where
         S: Serializer,
     {
-        serializer.serialize_bytes(self.as_bytes())
+        serializer.serialize_bytes(&self.to_bytes())
     }
 }
 

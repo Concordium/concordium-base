@@ -11,6 +11,7 @@ failure       = "0"
 sha2      = "0"
 signatory = "0"
 curve25519-dalek = "1"
+serde = "1"
 
 [lib]
 name = "ec_vrf_ed25519"

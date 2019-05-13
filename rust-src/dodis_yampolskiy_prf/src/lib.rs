@@ -4,6 +4,8 @@ extern crate clear_on_drop;
 extern crate rand;
 extern crate failure;
 extern crate core;
+#[cfg(feature = "serde")]
+extern crate serde;
 
 mod constants;
 mod errors;
