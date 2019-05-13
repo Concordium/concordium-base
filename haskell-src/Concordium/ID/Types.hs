@@ -35,7 +35,7 @@ newtype AnonimityRevokerPrivateKey = AR_SK ByteString
 
 -- Name of Identity Revoker
 newtype AnonimityRevokerIdentity  = AR_ID ByteString 
-    deriving (Eq)
+    deriving (Eq, Show)
 
 instance Serialize AnonimityRevokerIdentity  where
     put (AR_ID s) = put s
@@ -45,7 +45,7 @@ data AnonimityRevoker = AR AnonimityRevokerIdentity AnonimityRevokerPublicKey
 
 -- Name of Idenity Provider
 newtype IdentityProviderIdentity  = IP_ID ByteString
-    deriving (Eq)
+    deriving (Eq, Show)
 
 instance Serialize IdentityProviderIdentity where
     put (IP_ID s) = put s
@@ -79,7 +79,7 @@ newtype AccountDecryptionKey = DecKeyAcc ByteString
 
 -- encryption key for accounts (Elgamal?)
 newtype AccountEncryptionKey = EncKeyAcc ByteString 
-    deriving (Eq)
+    deriving (Eq, Show)
 
 instance Serialize AccountEncryptionKey where
     put (EncKeyAcc b) = putByteString b
@@ -101,7 +101,7 @@ instance Serialize AccountRegistrationID where
 
 -- shared public key
 newtype SecretShare = Share ByteString
-    deriving (Eq)
+    deriving (Eq, Show)
 
 instance Serialize SecretShare where
       put (Share s) = put s
@@ -118,7 +118,7 @@ data Statement = Statement (ByteString -> Bool)
 data Witness = Witness ByteString 
 
 data ZKProof = Proof ByteString 
-    deriving (Generic)
+    deriving (Generic, Show)
 
 instance Serialize ZKProof where
 
@@ -140,7 +140,7 @@ data AccountCreationInformation = ACI { aci_regId     :: AccountRegistrationID,
                                         aci_auxData   :: ByteString,
                                         aci_proof     :: ZKProof
                                       }
-    deriving (Generic )
+    deriving (Generic, Show)
 
 -- NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
 instance Eq AccountCreationInformation where

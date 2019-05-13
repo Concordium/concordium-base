@@ -9,14 +9,14 @@ import           GHC.Generics
 import           Data.Serialize
 
 
-class (Eq a) => Attribute_ a where
+class (Eq a, Show a) => Attribute_ a where
    data Predicate a :: *
    is :: Predicate a -> a -> Bool
 
 data Attribute = forall a. Attribute_ a => Attribute a
 
 -- Birth date attribute
-newtype BirthDate = BD Day deriving (Eq)
+newtype BirthDate = BD Day deriving (Eq, Show)
 
 instance Attribute_ BirthDate where
     data Predicate BirthDate = AgeOver18 | AgeOver21 | OlderThan Int deriving (Show, Generic)
@@ -27,11 +27,11 @@ instance Attribute_ BirthDate where
 instance Serialize (Predicate BirthDate) where
 
 -- Country Attribute
-data CountryCode = NZ | DK | US | FR deriving (Eq, Generic)
+data CountryCode = NZ | DK | US | FR deriving (Eq, Generic, Show)
 
 instance Serialize CountryCode where
 
-newtype Citizenships = Citizen [CountryCode] deriving (Eq)
+newtype Citizenships = Citizen [CountryCode] deriving (Eq, Show)
 
 eu :: [CountryCode]
 eu = [DK, FR]
@@ -54,7 +54,7 @@ instance Serialize (Predicate Citizenships) where
 
 
 -- Max Account attribute
-newtype MaxAccount = MaxAccount Int deriving (Eq)
+newtype MaxAccount = MaxAccount Int deriving (Eq, Show)
 
 instance Attribute_ MaxAccount where
     data Predicate MaxAccount = LessThan Int deriving (Show, Generic)
@@ -67,7 +67,7 @@ instance Serialize (Predicate MaxAccount) where
 
 data Policy = AtomicBD (Predicate BirthDate) | AtomicMaxAccount (Predicate MaxAccount) | AtomicCitizenship (Predicate Citizenships)
               | Conj Policy Policy  | Disj Policy Policy
-              deriving (Generic)
+              deriving (Generic, Show)
 
 instance Serialize Policy where
 
