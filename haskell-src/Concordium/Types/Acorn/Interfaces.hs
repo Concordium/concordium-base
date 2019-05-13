@@ -367,14 +367,6 @@ instance StaticEnvironmentMonad m => TypecheckerMonad (ExceptT TypingError m) wh
             Just iface -> return $ Map.lookup n (exportedConstraints iface)
 
 
-instance StaticEnvironmentMonad m => LinkerMonad (ExceptT TypingError m) where
-  {-# INLINE getExprInModule #-}
-  getExprInModule mref n =
-    getModuleInterfaces mref >>=
-      \case Nothing -> throwError $ ModuleNotExists mref
-            Just (_, viface) -> return $ Map.lookup n (exportedDefsVals viface)
-
-
 instance StaticEnvironmentMonad m => LinkerMonad (MaybeT m) where
   {-# INLINE getExprInModule #-}
   getExprInModule mref n =

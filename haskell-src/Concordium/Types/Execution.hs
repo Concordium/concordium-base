@@ -112,15 +112,16 @@ pattern TxSuccess a = Right a
 pattern TxReject e = Left e
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
-data RejectReason = ModuleNotWF !String -- ^Error raised when typechecking of the module has failed.
+data RejectReason = ModuleNotWF !TypingError -- ^Error raised when typechecking of the module has failed.
+                  | MissingImports !String  -- ^Error when there were missing imports (determined before typechecking).
                   | ModuleHashAlreadyExists !Core.ModuleRef  -- ^As the name says.
-                  | MessageTypeError !String -- ^Message to the receive method is of the wrong type.
-                  | ParamsTypeError !String -- ^Parameters of the init method are of the wrong type.
+                  | MessageTypeError !TypingError -- ^Message to the receive method is of the wrong type.
+                  | ParamsTypeError !TypingError -- ^Parameters of the init method are of the wrong type.
                   | InvalidAccountReference !AccountAddress -- ^Account does not exists.
                   | InvalidContractReference !Core.ModuleRef !Core.TyName -- ^Reference to a non-existing contract.
                   | InvalidModuleReference !Core.ModuleRef   -- ^Reference to a non-existing module.
                   | InvalidContractAddress !ContractAddress -- ^Contract instance does not exist.
-                  | EvaluationError !String -- ^Error during evalution. This is
+                  | EvaluationError         -- ^Error during evalution. This is
                                             -- mostly for debugging purposes
                                             -- since this kind of an error should
                                             -- not happen after successful
