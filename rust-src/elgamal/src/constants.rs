@@ -8,7 +8,6 @@
 // - bm@concordium.com
 
 //! Common constants 
-use pairing::bls12_381::FrRepr;
 
 //length of public key in bytes
 pub const PUBLIC_KEY_LENGTH: usize = 48; 

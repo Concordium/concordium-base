@@ -22,8 +22,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use pairing::{CurveProjective, CurveAffine, EncodedPoint};
-use pairing::bls12_381::{G1Compressed,G1Affine, G1,  Fr};
+use pairing::{CurveProjective,  CurveAffine, EncodedPoint};
+use pairing::bls12_381::{G1Compressed, G1,  Fr};
 
 use crate::constants::*;
 use crate::errors::*;
@@ -100,7 +100,8 @@ impl PublicKey {
                 self.encrypt(csprng, &Message(G1::one()))
             }
     }
-    pub fn encrypt_binary_exp(&self, e: &bool) -> Cipher{
+    pub fn encrypt_binary_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
+      where T:Rng {
             let mut csprng = thread_rng();  
             if !e { 
                 self.encrypt(&mut csprng, &Message(G1::zero()))

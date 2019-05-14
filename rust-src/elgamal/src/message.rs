@@ -1,3 +1,20 @@
+// -*- mode: rust; -*-
+//
+// Authors:
+// - bm@concordium.com
+
+//! Elgamal message  types
+
+
+#[cfg(feature = "serde")]
+use serde::de::Error as SerdeError;
+#[cfg(feature = "serde")]
+use serde::de::Visitor;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde::{Deserializer, Serializer};
+
 use pairing::{EncodedPoint, bls12_381::G1, bls12_381::G1Compressed, CurveProjective, CurveAffine};
 use rand::*;
 
@@ -8,12 +25,13 @@ use crate::constants::*;
 pub struct Message (pub(crate) G1);
 
 impl Message{
+    //generate random message (for testing)
     pub fn generate<T>(csprng: &mut T)-> Message
         where T:  Rng,{
             Message(G1::rand(csprng))
         }
-    /// Convert this message key to a byte array.
-    
+
+    /// Convert this message to a byte array.
     #[inline]
     pub fn to_bytes(&self) -> [u8; MESSAGE_LENGTH] {
         let mut ar = [0u8; MESSAGE_LENGTH];
@@ -38,3 +56,51 @@ impl Message{
     }
 }
 
+#[cfg(feature = "serde")]
+  impl Serialize for Message {
+      fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+      where
+          S: Serializer,
+      {
+          serializer.serialize_bytes(&self.to_bytes())
+      }
+  }
+
+  #[cfg(feature = "serde")]
+  impl<'d> Deserialize<'d> for Message {
+      fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+      where
+          D: Deserializer<'d>,
+      {
+          struct MessageVisitor;
+
+          impl<'d> Visitor<'d> for MessageVisitor {
+              type Value = Message;
+
+              fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                  formatter.write_str(
+                      "An Elgamal message key as a 48-bytes",
+                  )
+              }
+
+              fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Message, E>
+              where
+                  E: SerdeError,
+              {
+                  Message::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
+              }
+          }
+          deserializer.deserialize_bytes(MessageVisitor)
+      }
+  }
+
+#[test]
+pub fn message_to_byte_conversion(){
+    let mut csprng = thread_rng();
+    for _i in 1..100{
+       let  m = Message::generate(&mut csprng);
+       let s = Message::from_bytes(&m.to_bytes());
+       assert!(s.is_ok());
+       assert_eq!(m, s.unwrap());
+    }
+}

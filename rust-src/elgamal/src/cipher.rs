@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
 use pairing::{EncodedPoint, bls12_381::G1, bls12_381::G1Compressed, CurveProjective, CurveAffine};
+#[cfg(test)]
+use rand::*;
 use crate::errors::{*, InternalError::*};
 use crate::constants::*;
 
@@ -34,6 +36,7 @@ impl Cipher{
     }
 
 
+
     /// Construct a cipher from a slice of bytes.
     ///
     /// A `Result` whose okay value is a cipher key or whose error value
@@ -50,12 +53,13 @@ impl Cipher{
               Err(x) => Err(ElgamalError(GDecodingError(x))),
               Ok(g_affine) => match h.into_affine(){
                   Err(x) => Err(ElgamalError(GDecodingError(x))),
-                  Ok(h_affine) => Ok(Cipher((G1::from(g_affine)), G1::from(h_affine)))
+                  Ok(h_affine) => Ok(Cipher(G1::from(g_affine), G1::from(h_affine)))
               }
           }
     }
 }
 
+//serialization feature for cipher
 #[cfg(feature = "serde")]
 impl Serialize for Cipher {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -93,18 +97,22 @@ impl<'d> Deserialize<'d> for Cipher {
         deserializer.deserialize_bytes(CipherVisitor)
     }
 }
-/*
 #[test]
-pub fn key_to_byte_conversion(){
+pub fn cipher_to_byte_conversion(){
     let mut csprng = thread_rng();
     for _i in 1..100{
-        let sk = SecretKey::generate(&mut csprng);
-        let pk = PublicKey::from(&sk);
-        let r = pk.to_bytes();
-        let res_pk2= PublicKey::from_bytes(&r);
-        assert!(res_pk2.is_ok());
-        let pk2= res_pk2.unwrap();
-        assert_eq!(pk2, pk);
+        let a = G1::rand(&mut csprng);
+        let b = G1::rand(&mut csprng);
+        let c = Cipher(a,b);
+        let s = Cipher::from_bytes(&c.to_bytes());
+        assert!(s.is_ok());
+        assert_eq!(c,s.unwrap());
+       // let sk = SecretKey::generate(&mut csprng);
+       // let pk = PublicKey::from(&sk);
+       // let r = pk.to_bytes();
+       // let res_pk2= PublicKey::from_bytes(&r);
+       // assert!(res_pk2.is_ok());
+       // let pk2= res_pk2.unwrap();
+       // assert_eq!(pk2, pk);
     }
 }
-*/

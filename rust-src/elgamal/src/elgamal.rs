@@ -6,52 +6,41 @@ use crate::public::*;
 use crate::message::*;
 use crate::cipher::*;
 use rand::*;
-use std::fmt::LowerHex;
 use bitvec::Bits;
-use std::thread;
-use std::time::Duration;
 
 
-use pairing::bls12_381::{G1, G1Affine, FrRepr, Fr};
-use pairing::{CurveProjective, CurveAffine,Field,PrimeField};
+use pairing::bls12_381::{G1 };
+use pairing::{CurveProjective};
+#[cfg(test)]
+use pairing::bls12_381::{FrRepr, Fr};
+#[cfg(test)]
+use pairing::PrimeField;
 
 //returns the binary representation of a u64
-//as an array of Fr::zero() and Fr::one()
 
-pub fn u64_to_group_bits (e: &u64) -> Vec<bool>{
-    //let  mut xs = [G1::zero();64];
+pub fn u64_to_bits (e: &u64) -> Vec<bool>{
     let mut xs = vec![];
-    //let mut xs = [false ; 64];
-    //let mut x = e.clone();
     for i in 0..64{
         xs.push(e.get(i as u8));
     }
-    
-   // for i in 0..64 {
-   //     let y= x % 2;
-   //     if y==1 {xs[i]= G1::one()} else {xs[i] = G1::zero()};
-   //     x = x/2;
-   // }
     xs
 }
 
 //take an array of zero's and ones and returns a u64
 pub fn group_bits_to_u64 (v: &[G1] ) -> u64{
     let mut r= 0u64;
-    let mut ind = 0;
     for i in 0..v.len(){
-        r.set((i  as u8), v[i]==G1::one());
-    //    let x:u64 = if v[i]==G1::one() {2u64.pow(i as u32)} else {0};
-    //    r = r + x;
+        r.set(i  as u8, v[i]==G1::one());
     }
     r
 }
 
-        
+//encrypts a u64 bitwise, that is
+// it turns the u64 into it's binary representation b0...bn 
+// and encrypts the group elements g^b0...g^bn in parallel
 pub fn encrypt_bitwise(pk: &PublicKey, e: u64) -> Vec<Cipher> {
-    let mut csprng = thread_rng();
-    let er = u64_to_group_bits(&e);
-    let cs = er.par_iter().map(|x| pk.encrypt_binary_exp(x)).collect();
+    let er = u64_to_bits(&e);
+    let cs = er.par_iter().map(|x| {let mut csprng = thread_rng(); pk.encrypt_binary_exp(&mut csprng, x)}).collect();
     cs
 }
 

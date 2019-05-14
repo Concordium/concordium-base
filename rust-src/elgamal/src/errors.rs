@@ -22,7 +22,6 @@ use pairing::{PrimeFieldDecodingError, GroupDecodingError};
 pub(crate) enum InternalError {
     DecodingError(PrimeFieldDecodingError),
     GDecodingError(GroupDecodingError),
-    DivisionByZero,
     PublicKeyLengthError,
     MessageLengthError,
     CipherLengthError
@@ -41,23 +40,22 @@ impl Display for InternalError {
                 => write!(f, "Wrong message length"),
             InternalError::CipherLengthError
                 => write!(f, "Wrong cipher length"),
-            InternalError::DivisionByZero
-                => write!(f, "Division By Zero"),
         }
     }
 }
 
 impl ::failure::Fail for InternalError {}
 
-/// Errors which may occur while processing proofs and keys.
+/// Errors which may occur while processing keys, encryption and decryptoin.
 ///
 /// This error may arise due to:
 ///
 /// * Being given bytes with a length different to what was expected.
 ///
-/// * A problem decompressing to a scalar, 
+/// * A problem decoding to a scalar, 
+/// 
+/// * A problem  decoding to a group element
 ///
-/// * A problem with the format of `s`, a scalar, 
 
 #[derive(Debug)]
 pub struct ElgamalError(pub(crate) InternalError);

@@ -20,9 +20,9 @@ use crate::constants::*;
 use crate::errors::*;
 use crate::cipher::*;
 use crate::message::*;
-use crate::errors::InternalError::{DecodingError, DivisionByZero};
-use pairing::bls12_381::{G1,G1Affine, FrRepr, Fr};
-use pairing::{CurveProjective, CurveAffine,Field,PrimeField};
+use crate::errors::InternalError::{DecodingError};
+use pairing::{CurveProjective, Field,PrimeField};
+use pairing::bls12_381::{G1, FrRepr, Fr};
 use rand::*;
 
 /// elgamal secret  key.
