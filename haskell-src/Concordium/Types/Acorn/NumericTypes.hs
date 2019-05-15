@@ -26,20 +26,12 @@ toIntegral x = -- NOTE: do not use check whether (toInteger $ fromInteger $ toIn
   then Just $ fromInteger $ toInteger x
   else Nothing
 
+-- NOTE: This implementation is inefficient, at least for types with same bit size can simply keep the bit representation
 -- |Convert from one Integral to another via Integer (using toInteger and fromInteger)
+-- |If the argument value is withing the target type's range, the value is preserved. Otherwise it is "normalized" into the target type's range such that `toIntegralNormalizing (x + y) == toIntegralNormalizing x + toIntegralNormalizing y`.
+-- |When types a and b have the same bit size, the two's complement of the result is the same as that of the argument.
 toIntegralNormalizing :: (Integral a, Integral b) => a -> b
 toIntegralNormalizing = fromInteger . toInteger
-
--- |Convert from one Integral to another by preserving the corresponding two's complement representation
--- This assumes the bit size of the two types to be the same (if not, the result is an undefined value of type b)
--- The types can be the same
-toIntegralRepr :: forall a b . (Integral a, Integral b, Bounded b) => a -> b
-toIntegralRepr x =
-  let x' = toInteger x
-      targetRangeSize = toInteger $ (maxBound :: b) - (minBound :: b) + 1
-  in if      x' < 0 then fromInteger $ x' + targetRangeSize
-     else if x' > toInteger (maxBound :: b) then fromInteger $ x' - targetRangeSize
-     else fromInteger x'
 
 -- |Use the given operation on Integer to see whether the result would be out of bound for type a and convert results within bounds to a
 checkOpBounds :: (Integral a, Bounded a) => (Integer -> Integer -> Integer) -> a -> a -> Maybe a
@@ -56,12 +48,12 @@ mulC = checkOpBounds (*)
 
 divC :: (Integral a, Bounded a) => a -> a -> Maybe a
 divC x y = if y /= 0 && (y /= -1 || x > minBound) -- This is only correct if using two's complement.
-           then Just (x `div` y) -- cannot over/underflow, therefore use operation on a
+           then Just (x `div` y) -- cannot overflow, therefore use operation on a
            else Nothing
 
 modC :: Integral a => a -> a -> Maybe a
 modC x y = if y /= 0
-           then Just (x `mod` y) -- cannot over/underflow, therefore use operation on a
+           then Just (x `mod` y) -- cannot overflow, therefore use operation on a
            else Nothing
 
 powC :: (Integral a, Bounded a) => a -> a -> Maybe a

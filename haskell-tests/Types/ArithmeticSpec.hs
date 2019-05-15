@@ -128,8 +128,8 @@ arithmeticSpecsInt smallNumGen =
     parallel . describe "Int-specific failure of checked operations" $ modifyMaxSuccess (const 50000) $ do
       specify "-minBound" $ (0 :: a) `subC` minBound `shouldBe` Nothing
       specify "minBound `divC` (-1)" $ (minBound :: a) `divC` (-1) `shouldBe` Nothing -- unchecked operation should default to 0 on this exception
-      specify "add underflow" $ (property $ checkFail addC bigNegNumGen bigNegNumGen)
-      specify "mul underflow" $ (property $ checkFail mulC bigNegNumGen bigNumGen)
+      specify "add overflow" $ (property $ checkFail addC bigNegNumGen bigNegNumGen)
+      specify "mul overflow" $ (property $ checkFail mulC bigNegNumGen bigNumGen)
       specify "pow with negative exponent" $ (property $ checkFail powC arbitrary (negNumGen :: Gen a))
     parallel . describe "Int-specific defaulting of operations" $ modifyMaxSuccess (const 50000) $ do
       specify "pow with negative exponent" (forAll smallNumGen (\x -> forAll (negNumGen :: Gen a) (\y -> powD x y === 0)))
@@ -144,7 +144,7 @@ arithmeticSpecsWord smallNumGen =
       specify "-maxBound" $ (0 :: a) - maxBound `shouldBe` 1
       specify "3*maxBound (equation)" $ (3 :: a) * maxBound `shouldBe` minBound + maxBound - 2
     parallel . describe "Word-specific failure of checked operations" $ modifyMaxSuccess (const 50000) $ do
-      specify "sub underflow" $ (property $ checkFail subC smallNumGen bigNumGen)
+      specify "sub overflow" $ (property $ checkFail subC smallNumGen bigNumGen)
 
 arithmeticSpecs :: forall a . (Bounded a, Num a, Integral a, Arbitrary a, Show a) => Gen a -> SpecWith ()
 arithmeticSpecs smallNumGen =
@@ -225,7 +225,7 @@ arithmeticSpecs smallNumGen =
     parallel . describe "Div/mod relation" $ modifyMaxSuccess (const 50000) $ do
       specify "checked div/mod" (property $ compareChecked2 (\_ y q r -> q * y + r) (\x _ _ _ -> x) divC' modC) -- NOTE: compareChecked2 is for comparing checked vs. unchecked, but here it is just the checked operation
     describe "Representation conversion within same type" $ modifyMaxSuccess (const 50000) $ do
-      specify "Involution on same type" $ forAll arbitrary (\x -> ((toIntegralRepr x) :: a) === x)
+      specify "Involution on same type" $ forAll arbitrary (\x -> ((toIntegralNormalizing x) :: a) === x)
 
 -- a should be an Int type, b a Word type of the same bit size
 arithmeticSpecsIntWord :: forall a b . (Bounded a, Num a, Integral a, Arbitrary a, Show a,
@@ -233,12 +233,12 @@ arithmeticSpecsIntWord :: forall a b . (Bounded a, Num a, Integral a, Arbitrary 
                        => Gen a -> Gen a -> Gen b -> SpecWith ()
 arithmeticSpecsIntWord negNumGenA nonNegNumGenA _ = do
   describe "Int -> Word" $ modifyMaxSuccess (const 5000) $ do
-    specify "0" $ toIntegralRepr (0 :: a) `shouldBe` (0 :: b)
-    specify "-1" $ toIntegralRepr (-1 :: a) `shouldBe` (maxBound :: b)
-    specify "minBound" $ toInteger (toIntegralRepr (minBound :: a) :: b) `shouldBe` -(toInteger (minBound :: a))
-    specify "maxBound" $ toInteger (toIntegralRepr (maxBound :: a) :: b) `shouldBe` toInteger (maxBound :: a)
-    specify "Negative numbers" $ forAll negNumGenA (\x -> toInteger ((toIntegralRepr x) :: b) === (toInteger x) + (toInteger (maxBound :: b)) + 1)
-    specify "Non-negative numbers" $ forAll nonNegNumGenA (\x -> toInteger ((toIntegralRepr x) :: b) === toInteger x)
+    specify "0" $ toIntegralNormalizing (0 :: a) `shouldBe` (0 :: b)
+    specify "-1" $ toIntegralNormalizing (-1 :: a) `shouldBe` (maxBound :: b)
+    specify "minBound" $ toInteger (toIntegralNormalizing (minBound :: a) :: b) `shouldBe` -(toInteger (minBound :: a))
+    specify "maxBound" $ toInteger (toIntegralNormalizing (maxBound :: a) :: b) `shouldBe` toInteger (maxBound :: a)
+    specify "Negative numbers" $ forAll negNumGenA (\x -> toInteger ((toIntegralNormalizing x) :: b) === (toInteger x) + (toInteger (maxBound :: b)) + 1)
+    specify "Non-negative numbers" $ forAll nonNegNumGenA (\x -> toInteger ((toIntegralNormalizing x) :: b) === toInteger x)
 
 -- a should be a Word type, b an Int type of the same bit size
 arithmeticSpecsWordInt :: forall a b . (Bounded a, Num a, Integral a, Arbitrary a, Show a,
@@ -248,10 +248,10 @@ arithmeticSpecsWordInt _ _ = do
   describe "Word -> Int" $ modifyMaxSuccess (const 5000) $ do
     let lowerGen = (suchThat (arbitrary :: Gen a) (\x -> toInteger x <  ((toInteger (maxBound :: a))+1) `div` 2))
     let upperGen = (suchThat (arbitrary :: Gen a) (\x -> toInteger x >= ((toInteger (maxBound :: a))+1) `div` 2))
-    specify "minBound" $ (toIntegralRepr (minBound :: a) :: b) `shouldBe` (0 :: b)
-    specify "maxBound" $ (toIntegralRepr (maxBound :: a) :: b) `shouldBe` (-1 :: b)
-    specify "Integer representable numbers" $ forAll lowerGen (\x -> toInteger ((toIntegralRepr x) :: b) === toInteger x)
-    specify "Not Integer representable numbers" $ forAll upperGen (\x -> toInteger ((toIntegralRepr x) :: b) === (toInteger x) - (toInteger (maxBound :: a)) - 1)
+    specify "minBound" $ (toIntegralNormalizing (minBound :: a) :: b) `shouldBe` (0 :: b)
+    specify "maxBound" $ (toIntegralNormalizing (maxBound :: a) :: b) `shouldBe` (-1 :: b)
+    specify "Integer representable numbers" $ forAll lowerGen (\x -> toInteger ((toIntegralNormalizing x) :: b) === toInteger x)
+    specify "Not Integer representable numbers" $ forAll upperGen (\x -> toInteger ((toIntegralNormalizing x) :: b) === (toInteger x) - (toInteger (maxBound :: a)) - 1)
 
 intCastTests :: Spec
 intCastTests = do
