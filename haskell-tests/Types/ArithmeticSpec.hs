@@ -228,40 +228,47 @@ arithmeticSpecs smallNumGen =
       specify "Involution on same type" $ forAll arbitrary (\x -> ((toIntegralNormalizing x) :: a) === x)
 
 -- a should be an Int type, b a Word type of the same bit size
-arithmeticSpecsIntWord :: forall a b . (Bounded a, Num a, Integral a, Arbitrary a, Show a,
-                                        Bounded b, Num b, Integral b, Arbitrary b, Show b)
+specCastIntWord :: forall a b . (Bounded a, Integral a, Show a,
+                                 Bounded b, Integral b)
                        => Gen a -> Gen a -> Gen b -> SpecWith ()
-arithmeticSpecsIntWord negNumGenA nonNegNumGenA _ = do
+specCastIntWord negNumGenA nonNegNumGenA _ = do
   describe "Int -> Word" $ modifyMaxSuccess (const 5000) $ do
-    specify "0" $ toIntegralNormalizing (0 :: a) `shouldBe` (0 :: b)
-    specify "-1" $ toIntegralNormalizing (-1 :: a) `shouldBe` (maxBound :: b)
-    specify "minBound" $ toInteger (toIntegralNormalizing (minBound :: a) :: b) `shouldBe` -(toInteger (minBound :: a))
-    specify "maxBound" $ toInteger (toIntegralNormalizing (maxBound :: a) :: b) `shouldBe` toInteger (maxBound :: a)
+    specify "minInt" $ toInteger (toIntegralNormalizing (minBound :: a) :: b) `shouldBe` -(toInteger (minBound :: a)) 
+    specify "minInt'" $ toInteger (toIntegralNormalizing (minBound :: a) :: b) `shouldBe` toInteger (maxBound :: b) + toInteger (minBound :: a) + 1
+    specify "minInt+1" $ toInteger (toIntegralNormalizing ((minBound :: a)+1) :: b) `shouldBe` toInteger (maxBound :: b) + toInteger (minBound :: a) + 2
+    specify "-1" $ toInteger ((toIntegralNormalizing (-1 :: a)) :: b) `shouldBe` toInteger (maxBound :: b)
+    specify "0" $ toInteger ((toIntegralNormalizing (0 :: a)) :: b) `shouldBe` toInteger (0 :: b)
+    specify "1" $ toInteger ((toIntegralNormalizing (1 :: a)) :: b) `shouldBe` toInteger (1 :: b)
+    specify "maxInt-1" $ toInteger (toIntegralNormalizing ((maxBound :: a)-1) :: b) `shouldBe` toInteger (maxBound :: a) - 1
+    specify "maxInt" $ toInteger (toIntegralNormalizing (maxBound :: a) :: b) `shouldBe` toInteger (maxBound :: a)
     specify "Negative numbers" $ forAll negNumGenA (\x -> toInteger ((toIntegralNormalizing x) :: b) === (toInteger x) + (toInteger (maxBound :: b)) + 1)
     specify "Non-negative numbers" $ forAll nonNegNumGenA (\x -> toInteger ((toIntegralNormalizing x) :: b) === toInteger x)
 
 -- a should be a Word type, b an Int type of the same bit size
-arithmeticSpecsWordInt :: forall a b . (Bounded a, Num a, Integral a, Arbitrary a, Show a,
-                                        Bounded b, Num b, Integral b, Arbitrary b, Show b)
+specCastWordInt :: forall a b . (Bounded a, Integral a, Arbitrary a, Show a,
+                                 Bounded b, Integral b,              Show b)
                        => Gen a -> Gen b -> SpecWith ()
-arithmeticSpecsWordInt _ _ = do
+specCastWordInt _ _ = do
   describe "Word -> Int" $ modifyMaxSuccess (const 5000) $ do
     let lowerGen = (suchThat (arbitrary :: Gen a) (\x -> toInteger x <  ((toInteger (maxBound :: a))+1) `div` 2))
     let upperGen = (suchThat (arbitrary :: Gen a) (\x -> toInteger x >= ((toInteger (maxBound :: a))+1) `div` 2))
-    specify "minBound" $ (toIntegralNormalizing (minBound :: a) :: b) `shouldBe` (0 :: b)
-    specify "maxBound" $ (toIntegralNormalizing (maxBound :: a) :: b) `shouldBe` (-1 :: b)
+    specify "minWord" $ (toIntegralNormalizing (minBound :: a) :: b) `shouldBe` (0 :: b)
+    specify "minWord+1" $ (toIntegralNormalizing ((minBound :: a)+1) :: b) `shouldBe` (1 :: b)
+    specify "maxInt-1" $ toInteger (toIntegralNormalizing (fromJust $ toIntegral ((maxBound :: b)-1) :: a) :: b) `shouldBe` toInteger (maxBound :: b) - 1
+    specify "maxInt" $ toInteger (toIntegralNormalizing (maxBound :: b) :: b) `shouldBe` toInteger (maxBound :: b)
+    specify "maxInt+1" $ toInteger (toIntegralNormalizing ((fromJust $ toIntegral (maxBound :: b) :: a)+1) :: b) `shouldBe` toInteger (minBound :: b)
+    specify "maxInt+2" $ toInteger (toIntegralNormalizing ((fromJust $ toIntegral (maxBound :: b) :: a)+2) :: b) `shouldBe` toInteger (minBound :: b) + 1
+    specify "maxWord-1" $ (toIntegralNormalizing ((maxBound :: a)-1) :: b) `shouldBe` (-2 :: b)
+    specify "maxWord" $ (toIntegralNormalizing (maxBound :: a) :: b) `shouldBe` (-1 :: b)
     specify "Integer representable numbers" $ forAll lowerGen (\x -> toInteger ((toIntegralNormalizing x) :: b) === toInteger x)
     specify "Not Integer representable numbers" $ forAll upperGen (\x -> toInteger ((toIntegralNormalizing x) :: b) === (toInteger x) - (toInteger (maxBound :: a)) - 1)
 
-intCastTests :: Spec
-intCastTests = do
+specCastHomomorphic :: (Integral a, Arbitrary a, Show a, Integral b) => (a -> b) -> Spec
+specCastHomomorphic f = do
   describe "Int128 -> Int64 is homomorphic" $ modifyMaxSuccess (const 5000) $ do
     specify "addition distributes" $ property $ \a b -> f (a + b) == f a + f b
     specify "multiplication distributes" $ property $ \a b -> f (a * b) == f a * f b
     specify "negation distributes" $ property $ \a -> f (-a) == - f a
-
-    where f :: Int128 -> Int64
-          f = toIntegralNormalizing
 
 tests :: Spec
 tests = do
@@ -294,11 +301,11 @@ tests = do
       specify "maxBound fromInteger" $ (maxBound :: Word128) `shouldBe` fromInteger (2^(128::Integer) - 1)
       arithmeticSpecsWord smallGenWord128
       arithmeticSpecs smallGenWord128
-    describe "Representation conversion Int64/Word64" $ do
-      arithmeticSpecsIntWord (negNumGen :: Gen Int64) (nonNegNumGen :: Gen Int64) (arbitrary :: Gen Word64)
-      arithmeticSpecsWordInt (arbitrary :: Gen Word64) (arbitrary :: Gen Int64)
-    describe "Representation conversion Int128/Word128" $ do
-      arithmeticSpecsIntWord (negNumGen :: Gen Int128) (nonNegNumGen :: Gen Int128) (arbitrary :: Gen Word128)
-      arithmeticSpecsWordInt (arbitrary :: Gen Word128) (arbitrary :: Gen Int128)
-
-    intCastTests
+    describe "Conversion Int64/Word64" $ do
+      specCastIntWord (negNumGen :: Gen Int64) (nonNegNumGen :: Gen Int64) (arbitrary :: Gen Word64)
+      specCastWordInt (arbitrary :: Gen Word64) (arbitrary :: Gen Int64)
+    describe "Conversion Int128/Word128" $ do
+      specCastIntWord (negNumGen :: Gen Int128) (nonNegNumGen :: Gen Int128) (arbitrary :: Gen Word128)
+      specCastWordInt (arbitrary :: Gen Word128) (arbitrary :: Gen Int128)
+    specCastHomomorphic (toIntegralNormalizing :: Int128 -> Int64)
+    specCastHomomorphic (toIntegralNormalizing :: Word128 -> Word64)
