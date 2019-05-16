@@ -26,10 +26,22 @@ toIntegral x = -- NOTE: do not use check whether (toInteger $ fromInteger $ toIn
   then Just $ fromInteger $ toInteger x
   else Nothing
 
--- NOTE: This implementation is inefficient, at least for types with same bit size can simply keep the bit representation
--- |Convert from one Integral to another via Integer (using toInteger and fromInteger)
--- |If the argument value is withing the target type's range, the value is preserved. Otherwise it is "normalized" into the target type's range such that `toIntegralNormalizing (x + y) == toIntegralNormalizing x + toIntegralNormalizing y`.
--- |When types a and b have the same bit size, the two's complement of the result is the same as that of the argument.
+-- |Convert from one Integral to another.
+-- |If the argument value is withing the target type's range, the value is
+-- preserved. Otherwise it is "normalized" into the target type's range such that
+-- 
+--   * @toIntegralNormalizing 1 = 1@
+--   * @toIntegralNormalizing (x + y) = toIntegralNormalizing x + toIntegralNormalizing y@
+--   * @toIntegralNormalizing (x * y) = toIntegralNormalizing x * toIntegralNormalizing y@
+--   * @toIntegralNormalizing (-x) = - toIntegralNormalizing x@
+-- 
+-- In particular, in two's complement representation, if a and b have the same
+-- bit size the bit representation is maintained.
+--
+-- TODO: This implementation is inefficient and will be replaced by a more
+-- efficient one. On two's complement representations, if size(a) >= size(b) all
+-- this does is take the lowest (least significant) n bits, where n is the size
+-- of b.
 toIntegralNormalizing :: (Integral a, Integral b) => a -> b
 toIntegralNormalizing = fromInteger . toInteger
 
