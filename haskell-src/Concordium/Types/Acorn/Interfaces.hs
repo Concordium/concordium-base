@@ -61,10 +61,11 @@ data TypingError =
                  OtherErr String
                  -- |Empty set of alternatives is not allowed in a case expression.
                  | CaseWithoutAlternatives
-                 -- |Redundant pattern where the type of the discriminee is a declared datatype.
+                 -- |Redundant pattern: a redundant variable, literal (if the type of the discriminee is a base type) or data type constructor (if the type of the discriminee is a declared datatype).
                  | PatternRedundant (Core.Pattern Core.ModuleRef)
-                 -- |Redundant pattern where the type of the discriminee is a base type.
-                 | PatternRedundantLiteral Core.Literal
+                 -- NOTE: PatternRedundantTypeConstructor could be added as more specific error (see NOTE in TypeCheck)
+                 -- -- |Redundant pattern where the type of the discriminee is a declared datatype and the specified constructor is redundant.
+                 -- | PatternRedundantTypeConstructor (Core.CTorName Core.ModuleRef)
                   -- |Non-exhaustive pattern
                  | PatternsNonExhaustive
                  -- |Pattern does not have correct type. The first argument is the actual type, the second the expected type.
