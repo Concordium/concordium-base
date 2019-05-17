@@ -66,10 +66,13 @@ data TypingError =
                  -- NOTE: PatternRedundantTypeConstructor could be added as more specific error (see NOTE in TypeCheck)
                  -- -- |Redundant pattern where the type of the discriminee is a declared datatype and the specified constructor is redundant.
                  -- | PatternRedundantTypeConstructor (Core.CTorName Core.ModuleRef)
-                  -- |Non-exhaustive pattern
+                 -- NOTE: Could split into base type / declared datatype versions, providing missing constructors for declared datatype
+                 -- |Non-exhaustive pattern
                  | PatternsNonExhaustive
                  -- |Pattern does not have correct type. The first argument is the actual type, the second the expected type.
                  | UnexpectedPatternType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |A more specific type mismatch. The constructor used in the pattern is not a type constructor of the discriminee type.
+                 | UnexpectedTypeConstructor (Core.CTorName Core.ModuleRef)
                  -- |A more specific type mismatch. A constructor pattern occurs at a place where the discriminee has a base type.
                  | TypeConstructorWhereLiteralOrVariableExpected (Core.CTorName Core.ModuleRef)
                  -- |A more specific type mismatch. A litreal occurs at a place where the discriminee has a declared datatype.
