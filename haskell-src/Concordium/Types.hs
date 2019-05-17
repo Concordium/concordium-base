@@ -7,7 +7,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# OPTIONS_GHC -Wall #-}
-module Concordium.Types (module Concordium.Types, AH.AccountAddress(..)) where
+module Concordium.Types (module Concordium.Types, AccountAddress(..)) where
 
 import GHC.Generics
 
@@ -15,7 +15,6 @@ import GHC.Generics
 import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
-import qualified Concordium.ID.AccountHolder as AH
 import Concordium.ID.Types
 import Concordium.Types.HashableTo
 
@@ -78,7 +77,7 @@ instance S.Serialize ContractAddress where
 
 
 -- |An address is either a contract or account.
-data Address = AddressAccount !AH.AccountAddress
+data Address = AddressAccount !AccountAddress
              | AddressContract !ContractAddress
             deriving(Show, Eq)
 
@@ -118,7 +117,7 @@ minNonce :: Nonce
 minNonce = 1
 
 data Account = Account {
-  _accountAddress :: !AH.AccountAddress -- ^Address of the account.
+  _accountAddress :: !AccountAddress -- ^Address of the account.
   ,_accountNonce :: !Nonce  -- ^Next available nonce for this account.
   ,_accountAmount :: !Amount -- ^Current public account balance.
   ,_accountCreationInformation :: AccountCreationInformation

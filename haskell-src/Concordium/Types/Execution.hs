@@ -20,7 +20,7 @@ import qualified Concordium.ID.Types as IDTypes
 data InternalMessage = TSend !ContractAddress !Amount !Value | TSimpleTransfer !Address !Amount
     deriving(Show)
 
--- |The transaction payload. Currently only 5 transaction kinds are supported.
+-- |The transaction payload. Currently only 6 transaction kinds are supported.
 data Payload = DeployModule !Core.Module   -- ^Put module on the chain.
              | InitContract !Amount                        -- ^Initial amount on the contract's account.
                             !Core.ModuleRef                -- ^Name of the module in which the contract exist.
@@ -33,6 +33,7 @@ data Payload = DeployModule !Core.Module   -- ^Put module on the chain.
                       !Int                         -- ^Derived field, size of the message.
              | Transfer !Address !Amount     -- ^Where (which can be a contract) and what amount to transfer.
              | CreateAccount !IDTypes.AccountCreationInformation
+             | DeployCredential !IDTypes.CredentialDeploymentInformation
   deriving(Eq, Show)
 
 instance S.Serialize Payload where
@@ -57,6 +58,9 @@ instance S.Serialize Payload where
   put (CreateAccount aci) =
     P.putWord8 4 <>
     S.put aci
+  put (DeployCredential cdi) =
+    P.putWord8 5 <>
+    S.put cdi
 
   get = do
     h <- G.getWord8
@@ -77,7 +81,8 @@ instance S.Serialize Payload where
               return $! Update amnt cref msg (pend - pstart)
       3 -> Transfer <$> S.get <*> S.get
       4 -> CreateAccount <$> S.get
-      _ -> fail "Only 5 types of transactions types are currently supported."
+      5 -> DeployCredential <$> S.get
+      _ -> fail "Only 6 types of transactions types are currently supported."
 
 {-# INLINE encodePayload #-}
 encodePayload :: Payload -> EncodedPayload
@@ -135,7 +140,7 @@ data RejectReason = ModuleNotWF !TypingError -- ^Error raised when typechecking 
                   | Rejected -- ^Rejected due to contract logic.
                   | AccountAlreadyExists !AccountAddress
                   | AccountCredentialsFailure
-                  | DuplicateAccountRegistrationID IDTypes.AccountRegistrationID
+                  | DuplicateAccountRegistrationID IDTypes.CredentialRegistrationID
     deriving (Show)
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
