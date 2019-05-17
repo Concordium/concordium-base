@@ -120,7 +120,7 @@ instance Serialize AccountEncryptionKey where
     put (EncKeyAcc b) = put b
     get = EncKeyAcc <$> get
 
--- Account Registration ID (48 bytes)
+-- Credential Registration ID (48 bytes)
 newtype CredentialRegistrationID = RegIdCred ByteString 
     deriving (Eq, Ord)
 

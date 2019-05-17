@@ -46,9 +46,9 @@ registerCredentialHolder chi = return $ CHC {
                                     }
 --deploy credentials: Protocol takes place between account holder and the chain
 --the object CredentialDeploymentInformation is sent on the chain for verification
-deployCredentials :: SignKey -> VerifyKey ->  SignatureScheme -> Policy ->  
+deployCredential :: SignKey -> VerifyKey ->  SignatureScheme -> Policy ->  
     CredentialHolderInformation -> CredentialHolderCertificate -> Word8 -> IO CredentialDeploymentInformation
-deployCredentials sk vk sch p chi chc n = return $ CDI {
+deployCredential sk vk sch p chi chc n = return $ CDI {
                                             cdi_verifKey = vk,
                                             cdi_sigScheme = schemeId sch,
                                             cdi_regId = regId,
@@ -62,7 +62,8 @@ deployCredentials sk vk sch p chi chc n = return $ CDI {
                                in RegIdCred . FBS.toByteString $ x
 
                                             
-
+verifyCredential :: CredentialDeploymentInformation -> Bool
+verifyCredential _ = True
 
                                      
 
@@ -89,7 +90,7 @@ prove :: Policy -> AccountHolderInformation -> AccountHolderCertificate -> IO ZK
 prove _ _ _ = random (fromIntegral 80) >>= (return . Proof)
 -}
 
-registrationId = (random (fromIntegral 32)) >>= (return . RegIdCred)
+registrationId = (random (fromIntegral 48)) >>= (return . RegIdCred)
     
 createAccount :: VerifyKey -> AccountCreationInformation  
 createAccount ahc = ACI { 
@@ -122,10 +123,8 @@ accountAddress' (VerifyKey x) y =  AccountAddress (FBS.fromByteString $ BS.cons 
         sch:: Word8
         sch = fromIntegral $ fromEnum y
       
-          {-
 verifyAccount :: AccountCreationInformation -> Bool 
 verifyAccount _ = True
--}
 
 
 ar :: AnonimityRevoker
@@ -152,10 +151,8 @@ aux = pack "aux"
 
 proof = Proof $ pack "proof of bot"
 
-    {-
 randomAcc = unsafePerformIO $ do keypair <- S.newKeyPair
                                  return $ createAccount (verifyKey keypair)
--}
 
 fakeSign::ByteString -> ByteString
 fakeSign x = SHA256.hashToByteString (SHA256.hash x)
