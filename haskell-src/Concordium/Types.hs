@@ -22,6 +22,8 @@ import Data.Hashable(Hashable)
 import Data.Word
 import Data.ByteString.Char8(ByteString)
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as BSL
+import Data.ByteString.Builder(toLazyByteString, byteStringHex)
 import Data.Bits
 
 import qualified Data.Serialize as S
@@ -116,18 +118,39 @@ instance S.Serialize Nonce where
 minNonce :: Nonce
 minNonce = 1
 
+newtype EncryptedAmount = EncryptedAmount ByteString
+    deriving(Eq, S.Serialize)
+
+instance Show EncryptedAmount where
+  show (EncryptedAmount amnt) = BSL.unpack . toLazyByteString . byteStringHex $ amnt
+
 data Account = Account {
   _accountAddress :: !AccountAddress -- ^Address of the account.
   ,_accountNonce :: !Nonce  -- ^Next available nonce for this account.
   ,_accountAmount :: !Amount -- ^Current public account balance.
+  ,_accountEncryptedAmount :: ![EncryptedAmount]
   ,_accountCreationInformation :: AccountCreationInformation
+  -- |FIXME: Once it is clearer what policies are and how they affect execution
+  -- we might expand credentials into a more efficient data structure allowing
+  -- more efficient checking of credentials/policies, but until then we just
+  -- keep the data that was sent as part of the transaction. Note that most of
+  -- the data is not needed on a regular basis. The only part relevant for
+  -- transaction execution is the policy. In particular the policy will always
+  -- have an expiration date. Once it is clear how this date is used it will be
+  -- lifted up so that we only ever check credentials which are not out of date.
+  ,_accountCredentials :: ![CredentialDeploymentInformation]
   }
 
 makeLenses ''Account
 
 instance S.Serialize Account where
-  put Account{..} = S.put _accountAddress <> S.put _accountNonce <> S.put _accountAmount <> S.put _accountCreationInformation
-  get = Account <$> S.get <*> S.get <*> S.get <*> S.get
+  put Account{..} = S.put _accountAddress <>
+                    S.put _accountNonce <>
+                    S.put _accountAmount <>
+                    S.put _accountEncryptedAmount <>
+                    S.put _accountCreationInformation <>
+                    S.put _accountCredentials
+  get = Account <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get
 
 instance HashableTo Hash.Hash Account where
   getHash = Hash.hash . S.runPut . S.put
