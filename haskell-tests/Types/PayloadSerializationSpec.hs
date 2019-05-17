@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Types.PayloadSerializationSpec where
 
 import Test.Hspec
@@ -11,20 +12,41 @@ import Data.ByteString.Lazy as BSL
 import Data.ByteString as BS
 import System.Random
 
-import qualified Concordium.ID.AccountHolder as AH
-import Concordium.Crypto.SignatureScheme(KeyPair, SchemeId(Ed25519), verifyKey)
+import qualified Concordium.ID.Account as AH
+import Concordium.Crypto.SignatureScheme(KeyPair, VerifyKey(..), SchemeId(Ed25519), verifyKey)
 import Concordium.Crypto.Ed25519Signature(randomKeyPair)
 import Concordium.Types.Execution
 import Concordium.Types(Amount(..), Address(..))
+import Concordium.ID.Types
+import Concordium.ID.Attributes
 
 import qualified Data.Serialize as S
 
 import Types.CoreAllGen
 
+import Control.Monad
+
+genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
+genCredentialDeploymentInformation = do
+  cdi_verifKey <- VerifyKey . BS.pack <$> vector 37
+  cdi_sigScheme <- elements [Ed25519]
+  cdi_regId <- RegIdCred . BS.pack <$> vector credentialRegistrationIDSize
+  cdi_arData <- do l <- choose (0, 10)
+                   replicateM l $ do arId <- AR_ID . BS.pack <$> vector 73
+                                     secretShare <- Share . BS.pack <$> vector 37
+                                     return (arId, secretShare)
+  cdi_ipId <- IP_ID . BS.pack <$> vector 53
+  cdi_policy <- elements [AtomicBD AgeOver18]
+  cdi_auxData <- BS.pack <$> (vector =<< choose (0, 1000))
+  cdi_proof <- choose (10, 1000) >>= \s -> Proof . BS.pack <$> vector s
+  return CDI{..}
+
 genPayload :: Gen Payload
-genPayload = oneof [genDeployModule, genInit, genUpdate, genTransfer, genAccount]
+genPayload = oneof [genDeployModule, genInit, genUpdate, genTransfer, genAccount, genCredential]
   where 
         genAccount = CreateAccount . AH.createAccount . verifyKey . fst . randomKeyPair . mkStdGen <$> arbitrary
+
+        genCredential = DeployCredential <$> genCredentialDeploymentInformation
 
         genDeployModule = DeployModule <$> genModule
 

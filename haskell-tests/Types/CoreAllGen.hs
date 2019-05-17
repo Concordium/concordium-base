@@ -10,10 +10,11 @@ import Control.Monad
 import Concordium.Types
 import Concordium.Types.Acorn.Core
 import Types.NumericTypes()
+import Data.FixedByteString as FBS
 
 import qualified Concordium.Crypto.SHA256 as SHA256
 
-import qualified Concordium.ID.AccountHolder as AH
+import qualified Concordium.ID.Types(AccountAddress(..))
 import qualified Data.Base58String.Bitcoin as Base58
 
 
@@ -89,7 +90,7 @@ genPat = oneof [return $ PVar
                ]
 
 genAddress :: Gen AccountAddress
-genAddress = AH.base58decodeAddr . Base58.fromBytes . BS.pack <$> (vector 21)
+genAddress = AccountAddress . FBS.fromByteString . BS.pack <$> (vector 21)
 
 genCAddress :: Gen ContractAddress
 genCAddress = ContractAddress <$> (ContractIndex <$> arbitrary) <*> (ContractSubindex <$> arbitrary)
@@ -155,8 +156,6 @@ genConstraintImpl = sized $ \n -> do
 genConstraintDecl :: Gen (ConstraintDecl ModuleName)
 genConstraintDecl = sized $ \n -> do
   constraintName <- genTyName
-  constraintCast <- genName
-  constraintUnCast <- genName
   ls <- choose (0, n)
   senders <- vectorOf ls $ liftM2 Sender genName genType
   lg <- choose (0, n)
