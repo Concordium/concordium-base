@@ -99,6 +99,7 @@ data Event = ModuleDeployed !Core.ModuleRef
            | Updated !ContractAddress !Amount !MessageFormat
            | Transferred !Address !Amount !Address
            | AccountCreated !AccountAddress
+           | CredentialDeployed !IDTypes.CredentialDeploymentInformation
   deriving (Show)
 
 -- |Used internally by the scheduler since internal messages are sent as values,
@@ -139,8 +140,10 @@ data RejectReason = ModuleNotWF !TypingError -- ^Error raised when typechecking 
                   | OutOfEnergy -- ^We ran of out energy to process this transaction.
                   | Rejected -- ^Rejected due to contract logic.
                   | AccountAlreadyExists !AccountAddress
-                  | AccountCredentialsFailure
+                  | AccountCreationInformationInvalid
                   | DuplicateAccountRegistrationID IDTypes.CredentialRegistrationID
+                  | AccountCredentialInvalid
+                  | DeployCredentialToNonExistentAccount
     deriving (Show)
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
