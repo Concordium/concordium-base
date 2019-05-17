@@ -117,8 +117,8 @@ newtype AccountEncryptionKey = EncKeyAcc ByteString
     deriving (Eq, Show)
 
 instance Serialize AccountEncryptionKey where
-    put (EncKeyAcc b) = putByteString b
-    get = EncKeyAcc <$> getByteString credentialRegistrationIDSize 
+    put (EncKeyAcc b) = put b
+    get = EncKeyAcc <$> get
 
 -- Account Registration ID (48 bytes)
 newtype CredentialRegistrationID = RegIdCred ByteString 
@@ -128,7 +128,7 @@ instance Show CredentialRegistrationID where
   show (RegIdCred rid) = LC.unpack . toLazyByteString . byteStringHex $ rid
 
 credentialRegistrationIDSize :: Int 
-credentialRegistrationIDSize = 32
+credentialRegistrationIDSize = 48
 
 instance Serialize CredentialRegistrationID where
     put (RegIdCred b) = putByteString b
@@ -153,7 +153,7 @@ data Statement = Statement (ByteString -> Bool)
 data Witness = Witness ByteString 
 
 data ZKProof = Proof ByteString 
-    deriving (Generic, Show)
+    deriving (Eq, Generic, Show) -- Eq instance only used for testing.
 
 instance Serialize ZKProof where
 
@@ -193,7 +193,7 @@ data AccountCreationInformation = ACI {
                                         aci_accAddress:: AccountAddress,
                                         aci_proof:: ZKProof -- sigma proof that the creator has the private key corresponding to these keys
                                       }
-                            deriving (Generic, Show)
+                            deriving (Eq, Generic, Show) -- Eq instance only needed for testing and not relied upon elsewhere.
 
 
 --instance Serialize AccountCreationInformation where
