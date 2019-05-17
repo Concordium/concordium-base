@@ -111,7 +111,7 @@ pub fn encrypt_decrypt_bitwise_vec(){
     let mut csprng = thread_rng();
     let sk = SecretKey::generate(&mut csprng);
     let pk = PublicKey::from(&sk);
-    for _i in 1..100 {
+    for i in 1..100 {
         let n = u64::rand(&mut csprng);
         let c = encrypt_bitwise(&pk, n);
         let n2 = decrypt_bitwise(&sk, &c);

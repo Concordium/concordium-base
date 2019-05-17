@@ -120,7 +120,7 @@ instance Serialize AccountEncryptionKey where
     put (EncKeyAcc b) = putByteString b
     get = EncKeyAcc <$> getByteString credentialRegistrationIDSize 
 
--- Account Registration ID (48 bytes)
+-- Credential Registration ID (48 bytes)
 newtype CredentialRegistrationID = RegIdCred ByteString 
     deriving (Eq, Ord)
 
@@ -128,7 +128,7 @@ instance Show CredentialRegistrationID where
   show (RegIdCred rid) = LC.unpack . toLazyByteString . byteStringHex $ rid
 
 credentialRegistrationIDSize :: Int 
-credentialRegistrationIDSize = 32
+credentialRegistrationIDSize = 48 
 
 instance Serialize CredentialRegistrationID where
     put (RegIdCred b) = putByteString b

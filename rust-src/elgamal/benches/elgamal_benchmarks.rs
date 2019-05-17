@@ -37,7 +37,7 @@ pub fn decrypt_bitwise_bench(c: &mut Criterion){
 pub fn det(c:&mut Criterion){
       let mut csprng = thread_rng();
       let e = u64::rand(&mut csprng);
-      c.bench_function("u64 to g bits", move |b| b.iter(|| u64_to_group_bits(&e)));
+      c.bench_function("u64 to g bits", move |b| b.iter(|| u64_to_bits(&e)));
       //let er = u64_to_group_bits(&e);
       //let cs = er.par_iter().map(|x| pk.encrypt_binary_exp(x)).collect();
       //cs
