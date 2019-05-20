@@ -32,8 +32,8 @@ data Payload = DeployModule !Core.Module   -- ^Put module on the chain.
                       !(Core.Expr Core.ModuleName) -- ^The message.
                       !Int                         -- ^Derived field, size of the message.
              | Transfer !Address !Amount     -- ^Where (which can be a contract) and what amount to transfer.
-             | CreateAccount !IDTypes.AccountCreationInformation  -- ^Create an account with no credentials.
-             | DeployCredential !IDTypes.CredentialDeploymentInformation  -- ^Deploy a credential to an existing account.
+             | CreateAccount !IDTypes.AccountCreationInformation
+             | DeployCredential !IDTypes.CredentialDeploymentInformation
   deriving(Eq, Show)
 
 instance S.Serialize Payload where
