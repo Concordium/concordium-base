@@ -139,7 +139,7 @@ data Account = Account {
   -- have an expiration date. Once it is clear how this date is used it will be
   -- lifted up so that we only ever check credentials which are not out of date.
   ,_accountCredentials :: ![CredentialDeploymentInformation]
-  }
+  } deriving(Show)
 
 makeLenses ''Account
 
