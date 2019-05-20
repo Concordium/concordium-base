@@ -42,7 +42,8 @@ data ContractInterface = ContractInterface
 -- |Interface derived from a module. This is used in typechecking other modules.
 -- Lists public functions which can be called, and types of methods.
 data Interface = Interface
-    { importedModules :: !(HashMap Core.ModuleName Core.ModuleRef)
+    { uniqueName :: !Core.ModuleRef
+    , importedModules :: !(HashMap Core.ModuleName Core.ModuleRef)
     , exportedTypes :: !(HashMap Core.TyName (Int, HashMap Core.Name [Core.Type Core.ModuleRef]))
     , exportedTerms :: !(HashMap Core.Name (Core.Type Core.ModuleRef))
     , exportedContracts :: !(HashMap Core.TyName ContractInterface)
@@ -50,8 +51,8 @@ data Interface = Interface
     }
   deriving (Show, Generic)
 
-emptyInterface :: Interface
-emptyInterface = Interface Map.empty Map.empty Map.empty Map.empty Map.empty
+emptyInterface :: Core.ModuleRef -> Interface
+emptyInterface mref = Interface mref Map.empty Map.empty Map.empty Map.empty Map.empty
 
 type ModuleInterfaces = HashMap Core.ModuleRef Interface
 
@@ -300,6 +301,7 @@ getExportedTypes = do
 
 instance S.Serialize Interface where
   put (Interface{..}) =
+    S.put uniqueName <>
     putHashMap importedModules <>
     putExportedTypes exportedTypes <>
     putHashMap exportedTerms <>
@@ -307,6 +309,7 @@ instance S.Serialize Interface where
     putHashMap exportedConstraints
 
   get = do
+    uniqueName <- S.get
     importedModules <- getHashMap
     exportedTypes <- getExportedTypes
     exportedTerms <- getHashMap
