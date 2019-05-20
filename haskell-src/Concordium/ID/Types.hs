@@ -7,31 +7,69 @@ import qualified Data.ByteString.Lazy.Char8 as LC
 import           Data.ByteString.Builder(toLazyByteString, byteStringHex)
 import           Data.Time
 import           Data.Word
+import qualified Data.FixedByteString as FBS
 import           Concordium.ID.Attributes
---import qualified Concordium.Crypto.Signature as S
---import           Concordium.Crypto.Signature (Ed25519)
 import           Concordium.Crypto.SignatureScheme
+import           Concordium.Crypto.PRF
 import           Data.Serialize
 import           GHC.Generics
 import           Data.Typeable
+import           Data.Hashable
+import Foreign.Storable(peek)
+import Foreign.Ptr(castPtr)
+import Data.Base58String.Bitcoin
+import System.IO.Unsafe
 
 
-newtype AccountHolderIdentity = AH ByteString
+accountAddressSize = 21
+data AccountAddressSize
+instance FBS.FixedLength AccountAddressSize where
+    fixedLength _ = accountAddressSize
 
--- Secret Key of Account Holder
-newtype SecretIdenityCredentials = IdCredSec ByteString
+newtype AccountAddress =  AccountAddress (FBS.FixedByteString AccountAddressSize)
+    deriving(Eq, Ord, Generic)
 
--- Public Key of Account Holder
-newtype PublicIdenityCredentials = IdCredPub ByteString
+instance Serialize AccountAddress where
+    put (AccountAddress h) = putByteString $ FBS.toByteString h
+    get = AccountAddress . FBS.fromByteString <$> getByteString accountAddressSize
 
--- A secret key to generate Account Registration ID
-newtype PseudoRandomFunctionKey   = PRFKey ByteString
+instance Hashable AccountAddress where
+    hashWithSalt s (AccountAddress b) = hashWithSalt s (FBS.toByteString b)
+    hash (AccountAddress b) = unsafeDupablePerformIO $ FBS.withPtr b $ \p -> peek (castPtr p)
+
+
+instance Show AccountAddress where
+  show = show . addressToBase58
+     where addressToBase58 (AccountAddress x) = fromBytes $ FBS.toByteString x
+
+newtype CredentialHolderIdentity = CH ByteString
+    deriving(Eq, Show)
+
+instance Serialize CredentialHolderIdentity where
+    put (CH x) = put x 
+    get = CH <$> get
+
+-- Secret Key of Credential Holder
+newtype CredentialHolderSecretKey = CH_SK ByteString
+    deriving(Eq, Show)
+
+instance Serialize CredentialHolderSecretKey where 
+    put (CH_SK x) = put x
+    get = CH_SK <$> get
+
+
+-- Public Key of Credential Holder
+newtype CredentialHolderPublicKey = CH_PK ByteString
+    deriving(Eq, Show)
+
 
 -- Public key of Anonimity Revoker (Elgamal)
 newtype AnonimityRevokerPublicKey = AR_PK ByteString
+    deriving(Eq, Show)
 
 -- Private key of Anonimity Revoker (Elgamal)
 newtype AnonimityRevokerPrivateKey = AR_SK ByteString
+    deriving(Eq, Show)
 
 -- Name of Identity Revoker
 newtype AnonimityRevokerIdentity  = AR_ID ByteString 
@@ -69,9 +107,6 @@ type AccountVerificationKey = VerifyKey
 -- Account signatures (eddsa key)
 type AccountSignature = Signature 
 
---accountSign :: AccountSigningKey -> AccountVerificationKey -> ByteString -> AccountSignature
---accountSign (AccSignKey sk) (AccVerifyKey pk) b | sch== Schnorr =  AccSig $ sign (sk:: SignKey Ed25519)  (pk:: VerifyKey Ed25519) b
---                                                | otherwise = error "not a known signature scheme"
 
 
 -- decryption key for accounts (Elgamal?)
@@ -82,22 +117,22 @@ newtype AccountEncryptionKey = EncKeyAcc ByteString
     deriving (Eq, Show)
 
 instance Serialize AccountEncryptionKey where
-    put (EncKeyAcc b) = putByteString b
-    get = EncKeyAcc <$> getByteString accountRegistrationIDSize 
+    put (EncKeyAcc b) = put b
+    get = EncKeyAcc <$> get
 
--- Account Registration ID (32 bytes)
-newtype AccountRegistrationID = RegIdAcc ByteString 
+-- Credential Registration ID (48 bytes)
+newtype CredentialRegistrationID = RegIdCred ByteString 
     deriving (Eq, Ord)
 
-instance Show AccountRegistrationID where
-  show (RegIdAcc rid) = LC.unpack . toLazyByteString . byteStringHex $ rid
+instance Show CredentialRegistrationID where
+  show (RegIdCred rid) = LC.unpack . toLazyByteString . byteStringHex $ rid
 
-accountRegistrationIDSize :: Int 
-accountRegistrationIDSize = 32
+credentialRegistrationIDSize :: Int 
+credentialRegistrationIDSize = 48
 
-instance Serialize AccountRegistrationID where
-    put (RegIdAcc b) = putByteString b
-    get = RegIdAcc <$> getByteString accountRegistrationIDSize 
+instance Serialize CredentialRegistrationID where
+    put (RegIdCred b) = putByteString b
+    get = RegIdCred <$> getByteString credentialRegistrationIDSize 
 
 -- shared public key
 newtype SecretShare = Share ByteString
@@ -108,7 +143,7 @@ instance Serialize SecretShare where
       get  = Share <$> get
 
 --AR Data
-type AccountAnonimityRevocationData = [(AnonimityRevokerIdentity, SecretShare)] 
+type AnonimityRevocationData = [(AnonimityRevokerIdentity, SecretShare)] 
 
 
 -- ZK proofs
@@ -118,38 +153,55 @@ data Statement = Statement (ByteString -> Bool)
 data Witness = Witness ByteString 
 
 data ZKProof = Proof ByteString 
-    deriving (Generic, Show)
+    deriving (Eq, Generic, Show) -- Eq instance only used for testing.
 
 instance Serialize ZKProof where
 
-data AccountHolderInformation = AHI { ahi_id :: AccountHolderIdentity,
-                                      ahi_idCredPub :: PublicIdenityCredentials, 
-                                      ahi_idCredSec :: SecretIdenityCredentials, 
-                                      ahi_prfKey   :: PseudoRandomFunctionKey, 
-                                      ahi_attributeList :: AttributeList 
+data CredentialHolderInformation = CHI { chi_id :: CredentialHolderIdentity,
+                                         chi_PK :: CredentialHolderPublicKey, 
+                                         chi_sk :: CredentialHolderSecretKey, 
+                                         chi_prfKey   :: PrfKey, 
+                                         chi_attributeList :: AttributeList 
                                      }
 
+    deriving(Generic, Show)
 
-data AccountCreationInformation = ACI { aci_regId     :: AccountRegistrationID,
-                                        aci_arData    :: AccountAnonimityRevocationData,
-                                        aci_ipId      :: IdentityProviderIdentity, 
-                                        aci_sigScheme :: SchemeId,
-                                        aci_verifKey  :: AccountVerificationKey,
-                                        aci_encKey    :: AccountEncryptionKey,
-                                        aci_policy    :: Policy, 
-                                        aci_auxData   :: ByteString,
-                                        aci_proof     :: ZKProof
-                                      }
-    deriving (Generic, Show)
+data CredentialDeploymentInformation = CDI { 
+                                             cdi_verifKey :: AccountVerificationKey,
+                                             cdi_sigScheme :: SchemeId,
+                                             cdi_regId     :: CredentialRegistrationID,
+                                             cdi_arData    :: AnonimityRevocationData,
+                                             cdi_ipId      :: IdentityProviderIdentity, 
+                                             cdi_policy    :: Policy, 
+                                             cdi_auxData   :: ByteString,
+                                             cdi_proof     :: ZKProof
+                                            }
+                            deriving (Generic, Show)
 
 -- NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
-instance Eq AccountCreationInformation where
-  aci1 == aci2 = aci_verifKey aci1 == aci_verifKey aci2 && aci_sigScheme aci1 == aci_sigScheme aci2
+instance Eq CredentialDeploymentInformation where
+  cdi1 == cdi2 = cdi_verifKey cdi1 == cdi_verifKey cdi2 && cdi_sigScheme cdi1 == cdi_sigScheme cdi2 &&
+      cdi_regId cdi1 == cdi_regId cdi2
 
+--instance Serialize CredentialHolderInformation where
+instance Serialize CredentialDeploymentInformation where
+
+data AccountCreationInformation = ACI {
+                                        aci_verifKey :: AccountVerificationKey,
+                                        aci_encKey :: AccountEncryptionKey,
+                                        aci_sigScheme :: SchemeId ,
+                                        aci_accAddress:: AccountAddress,
+                                        aci_proof:: ZKProof -- sigma proof that the creator has the private key corresponding to these keys
+                                      }
+                            deriving (Eq, Generic, Show) -- Eq instance only needed for testing and not relied upon elsewhere.
+
+
+--instance Serialize AccountCreationInformation where
 instance Serialize AccountCreationInformation where
 
-data AccountHolderCertificate = AHC { ahc_ipId :: IdentityProviderIdentity,
-                                      ahc_ipPk :: IdentityProviderPublicKey,
-                                      ahc_ahi  :: AccountHolderInformation,
-                                      ahc_sig  :: Signature 
-                                     }
+
+data CredentialHolderCertificate = CHC { chc_ipId :: IdentityProviderIdentity,
+                                         chc_ipPk :: IdentityProviderPublicKey,
+                                         chc_chi  :: CredentialHolderInformation,
+                                         chc_sig  :: Signature 
+                                        }

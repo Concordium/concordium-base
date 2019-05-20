@@ -26,7 +26,7 @@ use pairing::bls12_381::{G1, FrRepr, Fr};
 use rand::*;
 
 /// elgamal secret  key.
-#[derive(Debug,PartialEq, Eq)]
+#[derive(Debug,PartialEq, Eq, Clone)]
 pub struct SecretKey(pub(crate) Fr);
 
 /* THIS IS COMMENTED FOR NOW FOR COMPATIBILITY WITH BLS CURVE IMPLEMENTATION

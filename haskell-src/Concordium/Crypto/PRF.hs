@@ -3,9 +3,9 @@
 -- dodis-yampolskiy
 
 module Concordium.Crypto.PRF(
-    PrivateKey,
-    newPrivKey,
-    PrfObj,
+    PrfKey,
+    newPrfKey,
+    PrfObj(..),
     prf,
     test
 ) where
@@ -25,25 +25,26 @@ import           System.Random
 import           Test.QuickCheck (Arbitrary(..))
 
 
-foreign import ccall "prf_key" rs_priv_key :: Ptr Word8 -> IO()
+foreign import ccall "prf_key" rs_prf_key :: Ptr Word8 -> IO()
 foreign import ccall "prf" rs_prf :: Ptr Word8 -> Ptr Word8 -> Word8 -> IO CInt
 
 -- |The size of a PRF  key in bytes (32).
-privateKeySize :: Int
-privateKeySize = 32
+prfKeySize :: Int
+prfKeySize = 32
 
-data PrivateKeySize
-instance FBS.FixedLength PrivateKeySize where
-    fixedLength _ = privateKeySize
+data PrfKeySize
+instance FBS.FixedLength PrfKeySize where
+    fixedLength _ = prfKeySize
 
--- |A VRF private key. 32 bytes.
-data PrivateKey = PrivateKey (FBS.FixedByteString PrivateKeySize)
+-- |A VRF  key. 32 bytes.
+data PrfKey = PrfKey (FBS.FixedByteString PrfKeySize)
     deriving (Eq)
-instance Serialize PrivateKey where
-    put (PrivateKey key) = putByteString $ FBS.toByteString key
-    get = PrivateKey . FBS.fromByteString <$> getByteString privateKeySize
-instance Show PrivateKey where
-    show (PrivateKey key) = byteStringToHex $ FBS.toByteString key
+
+instance Serialize PrfKey where
+    put (PrfKey key) = putByteString $ FBS.toByteString key
+    get = PrfKey . FBS.fromByteString <$> getByteString prfKeySize
+instance Show PrfKey where
+    show (PrfKey key) = byteStringToHex $ FBS.toByteString key
 
 
 -- |The size of a PRF Object in bytes (48).
@@ -67,15 +68,15 @@ instance Show PrfObj where
 
 
 
-newPrivKey :: IO PrivateKey
-newPrivKey =  
-    do sk <- FBS.create $ \priv -> rs_priv_key priv 
-       return (PrivateKey sk)
+newPrfKey :: IO PrfKey
+newPrfKey =  
+    do sk <- FBS.create $ \priv -> rs_prf_key priv 
+       return (PrfKey sk)
 
                                  
 
 test :: IO () 
-test = do sks <- mapM (\ _ -> newPrivKey) [1]
+test = do sks <- mapM (\ _ -> newPrfKey) [1]
           let ms = map f sks 
           let rs = zip sks ms  in
               mapM_ g rs
@@ -86,8 +87,8 @@ test = do sks <- mapM (\ _ -> newPrivKey) [1]
 
 -- |Generate a PRF object.
 
-prf :: PrivateKey -> Word8-> PrfObj
-prf (PrivateKey sk) n = PrfObj $ unsafeDupablePerformIO  $ 
+prf :: PrfKey -> Word8-> PrfObj
+prf (PrfKey sk) n = PrfObj $ unsafeDupablePerformIO  $ 
                         do suc <- newIORef(0::Int) 
                            p  <- FBS.create $ \prf -> 
                             do pc <- FBS.withPtr sk $ \sk' -> 

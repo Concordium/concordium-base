@@ -35,7 +35,7 @@ Library
                    Data.FixedByteString
                    Concordium.ID.Attributes
                    Concordium.ID.Types
-                   Concordium.ID.AccountHolder
+                   Concordium.ID.Account
 
   Other-modules:   Concordium.Crypto.ByteStringHelpers
   Build-depends:  base >=4.7
