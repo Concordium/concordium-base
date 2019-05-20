@@ -10,22 +10,22 @@ use bitvec::Bits;
 
 
 use pairing::bls12_381::{G1 };
-use pairing::{CurveProjective};
+use pairing::{Field, CurveProjective};
+use pairing::bls12_381::{Fr};
 #[cfg(test)]
-use pairing::bls12_381::{FrRepr, Fr};
+use pairing::bls12_381::{FrRepr};
 #[cfg(test)]
 use pairing::PrimeField;
 
-//returns the binary representation of a u64
 
-pub fn u64_to_bits (e: &u64) -> Vec<bool>{
-    let mut xs = vec![];
+pub fn encrypt_u64_bitwise(pk: &PublicKey, e:&u64) -> Vec<Cipher>{
+    let mut csprng = thread_rng();
+    let mut er = vec![];
     for i in 0..64{
-        xs.push(e.get(i as u8));
+        er.push((e.get(i as u8), Fr::rand(&mut csprng)));
     }
-    xs
+    er.par_iter().map(|(x,y)| pk.hide_binary_exp(*y,x)).collect()
 }
-
 //take an array of zero's and ones and returns a u64
 pub fn group_bits_to_u64 (v: &[G1] ) -> u64{
     let mut r= 0u64;
@@ -35,48 +35,22 @@ pub fn group_bits_to_u64 (v: &[G1] ) -> u64{
     r
 }
 
-//encrypts a u64 bitwise, that is
-// it turns the u64 into it's binary representation b0...bn 
-// and encrypts the group elements g^b0...g^bn in parallel
-pub fn encrypt_bitwise(pk: &PublicKey, e: u64) -> Vec<Cipher> {
-    let er = u64_to_bits(&e);
-    let cs = er.par_iter().map(|x| {let mut csprng = thread_rng(); pk.encrypt_binary_exp(&mut csprng, x)}).collect();
-    cs
-}
 
 
 pub fn decrypt_bitwise(sk:&SecretKey, v:&Vec<Cipher>)-> u64{
-    //let er = sk.decrypt_exponent_vec(v);
     let dr:Vec<G1> = v.par_iter().map(|x| {let Message(m) = sk.decrypt(&x); m}).collect();
-    group_bits_to_u64(&dr.as_slice())
-    //let mut er = [G1::zero();64];
-    //for i in 0..64{
-    //    let Message(z) = sk.decrypt(&v[i]);
-    //    er[i] = z;
-   // }
-    //let er:Vec<G1> = v.into_iter().map(|y| {let Message(z) =sk.decrypt(y); z}).collect();
-    //group_bits_to_u64(&er)
+    group_bits_to_u64(dr.as_slice())
 }
 
-/*
-#[test]
-pub fn bits(){
-    let mut csprng = thread_rng();
-    for _i in 1..100{
-        let m = u64::rand(&mut csprng);
-        let n  = group_bits_to_u64(&u64_to_group_bits(&m));
-        println!("m={:?}, n={:?}", m, n);
-        assert_eq!(m,n)
-    }
-}
-*/
 #[test]
 pub fn encrypt_decrypt(){
     let mut csprng = thread_rng();
     for _i in 1..100{
         let sk = SecretKey::generate(&mut csprng);
+        let sk2 = sk.clone();
 //        println!("SK={:x}", ByteBuf(&sk.to_bytes()));
         let pk = PublicKey::from(&sk);
+        let pk2 = pk.clone();
  //       println!("PK={:x}", ByteBuf(&pk.to_bytes()));
         let m = Message::generate(&mut csprng);
  //       println!("M={:x}", ByteBuf(&m.to_bytes()));
@@ -85,6 +59,8 @@ pub fn encrypt_decrypt(){
         let t = sk.decrypt(&c);
  //       println!("d={:x}", ByteBuf(&t.to_bytes()));
         assert_eq!(t, m);
+        assert_eq!(pk, pk2);
+        assert_eq!(sk, sk2);
       }
 }
 
@@ -92,7 +68,9 @@ pub fn encrypt_decrypt(){
 pub fn encrypt_decrypt_exponent(){
     let mut csprng = thread_rng();
     let sk = SecretKey::generate(&mut csprng);
+    let sk2 = sk.clone();
     let pk = PublicKey::from(&sk);
+    let pk2 = pk.clone();
     for _i in 1..100{
         let n = u64::rand(&mut csprng);
         let e = Fr::from_repr(FrRepr::from(n % 1000)).unwrap();
@@ -103,6 +81,8 @@ pub fn encrypt_decrypt_exponent(){
         println!("e2={}", e2);
         assert_eq!(e,e2);
     }
+    assert_eq!(sk, sk2);
+    assert_eq!(pk, pk2);
 
 }
 
@@ -110,13 +90,17 @@ pub fn encrypt_decrypt_exponent(){
 pub fn encrypt_decrypt_bitwise_vec(){
     let mut csprng = thread_rng();
     let sk = SecretKey::generate(&mut csprng);
+    let sk2 = sk.clone();
     let pk = PublicKey::from(&sk);
-    for i in 1..100 {
+    let pk2 =pk.clone();
+    for _i in 1..100 {
         let n = u64::rand(&mut csprng);
-        let c = encrypt_bitwise(&pk, n);
+        let c = encrypt_u64_bitwise(&pk, &n);
         let n2 = decrypt_bitwise(&sk, &c);
         assert_eq!(n,n2);
     }
+    assert_eq!(sk, sk2);
+    assert_eq!(pk, pk2);
 }
 
 

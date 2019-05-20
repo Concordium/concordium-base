@@ -85,13 +85,13 @@ impl PublicKey {
         let fr = Fr::rand(csprng); //k
         let mut t = G1::one(); //g
         t.mul_assign(fr); //kg
-        let mut s= self.0;
+        let mut s= self.0.clone();
         s.mul_assign(fr); //kag
         s.add_assign(&m.0); //kag + m
         Cipher(t, s)
 
     }
-
+/*
     pub fn encrypt_bin_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
         where T:Rng{
             if !e { 
@@ -108,6 +108,23 @@ impl PublicKey {
             } else{
                 self.encrypt(&mut csprng, &Message(G1::one()))
             }
+    }
+*/
+    pub fn hide (&self, k: Fr, m: &Message) -> Cipher{
+        let mut t = G1::one(); //g
+        t.mul_assign(k); //kg
+        let mut s = self.0.clone();
+        s.mul_assign(k); //kag
+        s.add_assign(&m.0); //kag + m
+        Cipher(t,s)
+    }
+
+    pub fn hide_binary_exp(&self, h: Fr, e:&bool) -> Cipher {
+        if !e {
+            self.hide(h,&Message(G1::zero()))
+        } else {
+            self.hide(h, &Message(G1::one()))
+        }
     }
 
     pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &Fr) -> Cipher
