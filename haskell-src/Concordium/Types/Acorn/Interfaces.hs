@@ -62,6 +62,10 @@ data TypingError =
                  OtherErr String
                  -- |The type of an argument given to a function does not match the function's definition. The first argument is the actual type, the second the expected type.
                  | UnexpectedArgumentType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |The type of the discriminee in a case expression is not fully instantiated. -- NOTE: Could add name of declared datatype
+                 | NonFullyInstantiatedTypeAsCaseArgument
+                 -- |The type of the discriminee in a case expression is a function type.
+                 | FunctionAsCaseArgument
                  -- |Empty set of alternatives is not allowed in a case expression.
                  | CaseWithoutAlternatives
                  -- |Redundant pattern: a redundant variable, literal (if the type of the discriminee is a base type) or data type constructor (if the type of the discriminee is a declared datatype).
