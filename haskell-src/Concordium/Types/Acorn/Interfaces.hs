@@ -60,6 +60,9 @@ type ModuleInterfaces = HashMap Core.ModuleRef Interface
 data TypingError =
                  -- |TODO: To be replaced by more precise errors.
                  OtherErr String
+                 -- |Error raised when a declared datatype is instantiated with a wrong number of arguments (too few or too many).
+                 -- The first argument is the number of given parameters, the second the expected number
+                 | IncorrectNumberOfTypeParameters Int Int
                  -- |The type of an argument given to a function does not match the function's definition. The first argument is the actual type, the second the expected type.
                  | UnexpectedArgumentType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
                  -- |The type of the discriminee in a case expression is not fully instantiated. -- NOTE: Could add name of declared datatype
