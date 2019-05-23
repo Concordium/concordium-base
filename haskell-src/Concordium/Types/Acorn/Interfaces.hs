@@ -61,14 +61,27 @@ data TypingError =
                  -- |TODO: To be replaced by more precise errors.
                  OtherErr String
                  -- |Error raised when a declared datatype is instantiated with a wrong number of arguments (too few or too many).
-                 -- The first argument is the number of given parameters, the second the expected number
+                 -- The first argument is the number of given parameters, the second the expected number.
                  | IncorrectNumberOfTypeParameters Int Int
-                 -- |The type of an argument given to a function does not match the function's definition. The first argument is the actual type, the second the expected type.
+                 -- |A type abstraction is applied to a term which is not a type.
+                 | TypeAbstractionNotAppliedToType (Core.Expr Core.ModuleRef)
+                 -- |A type appears where a term is expected.
+                 | TypeWhereTermExpected (Core.Type Core.ModuleRef)
+                 -- |A term is applied which is neither of a function tpye, nor universal type.
+                 -- The first argument is the term to be applied, the second its type.
+                 | OnlyAbstractionsCanBeApplied (Core.Expr Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |The type of an argument given to a function does not match the function's definition.
+                 -- The first argument is the actual type, the second the expected type.
                  | UnexpectedArgumentType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |The result type of a defined function (e.g. in a letrec) does not match the specified result type.
+                 -- The first argument is the actual type, the second the specified type.
+                 | ResultTypeNotAsSpecified (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
                  -- |The type of the discriminee in a case expression is not fully instantiated. -- NOTE: Could add name of declared datatype
                  | NonFullyInstantiatedTypeAsCaseArgument
                  -- |The type of the discriminee in a case expression is a function type.
                  | FunctionAsCaseArgument
+                 -- |The discriminee in a case expression is a type variable.
+                 | TypeVariableAsCaseArgument
                  -- |Empty set of alternatives is not allowed in a case expression.
                  | CaseWithoutAlternatives
                  -- |Redundant pattern: a redundant variable, literal (if the type of the discriminee is a base type) or data type constructor (if the type of the discriminee is a declared datatype).
@@ -81,8 +94,10 @@ data TypingError =
                  | PatternsNonExhaustive
                  -- |Pattern does not have correct type. The first argument is the actual type, the second the expected type.
                  | UnexpectedPatternType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |Special case of UnexpectedPatternType where the pattern is a literal of unsupported type.
+                 | UnsupportedLiteralInPattern Core.Literal
                  -- |A more specific type mismatch. The constructor used in the pattern is not a type constructor of the discriminee type.
-                 | UnexpectedTypeConstructor (Core.CTorName Core.ModuleRef)
+                 | UnexpectedTypeConstructorInPattern (Core.CTorName Core.ModuleRef)
                  -- |A more specific type mismatch. A constructor pattern occurs at a place where the discriminee has a base type.
                  | TypeConstructorWhereLiteralOrVariableExpected (Core.CTorName Core.ModuleRef)
                  -- |A more specific type mismatch. A litreal occurs at a place where the discriminee has a declared datatype.
