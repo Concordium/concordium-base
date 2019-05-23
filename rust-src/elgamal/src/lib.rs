@@ -1,3 +1,4 @@
+extern crate libc;
 extern crate pairing;
 extern crate rand_core;
 extern crate clear_on_drop;
@@ -12,7 +13,7 @@ extern crate serde;
 mod constants;
 mod errors;
 pub mod secret;
-mod cipher;
+pub mod cipher;
 mod message;
 pub mod public;
 pub mod elgamal;

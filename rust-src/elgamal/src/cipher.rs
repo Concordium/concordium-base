@@ -34,13 +34,35 @@ impl Cipher{
         ar[CIPHER_LENGTH/2..].copy_from_slice(self.1.into_affine().into_compressed().as_ref());
         ar
     }
+    
 
+   /// Construct a cipher from a slice of bytes.
+   /// only use if you know that the bytes are an encoding fo a cipher
+   /// A `Result` whose okay value is a cipher key or whose error value
+   /// is an `ElgamalError` wrapping the internal error that occurred.
+   ///
+   #[inline]
+   pub fn from_bytes_unchecked(bytes: &[u8]) -> Result<Cipher, ElgamalError> {
+         if bytes.len() != CIPHER_LENGTH { return Err(ElgamalError(CipherLengthError))}
+         let mut g = G1Compressed::empty();
+         let mut h = G1Compressed::empty();
+         g.as_mut().copy_from_slice(&bytes[0..CIPHER_LENGTH/2]);
+         h.as_mut().copy_from_slice(&bytes[CIPHER_LENGTH/2..CIPHER_LENGTH]);
 
+         match g.into_affine_unchecked() {
+             Err(x) => Err(ElgamalError(GDecodingError(x))),
+             Ok(g_affine) => match h.into_affine_unchecked(){
+                 Err(x) => Err(ElgamalError(GDecodingError(x))),
+                 Ok(h_affine) => Ok(Cipher(G1::from(g_affine), G1::from(h_affine)))
+             }
+         }
+   }
 
     /// Construct a cipher from a slice of bytes.
     ///
     /// A `Result` whose okay value is a cipher key or whose error value
     /// is an `ElgamalError` wrapping the internal error that occurred.
+    ///
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<Cipher, ElgamalError> {
           if bytes.len() != CIPHER_LENGTH { return Err(ElgamalError(CipherLengthError))}
