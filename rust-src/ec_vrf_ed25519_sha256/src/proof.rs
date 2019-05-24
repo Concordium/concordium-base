@@ -29,9 +29,9 @@ use crate::errors::*;
 
 use sha2::*;
 
-pub fn hash_points(pts: Vec<CompressedEdwardsY>) -> Scalar{
+pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar{
         let mut hash: Sha256 = Sha256::new();
-        for p in &pts{
+        for p in pts {
             hash.input(p.to_bytes());
         }
         let mut c_bytes: [u8;32]=[0;32];

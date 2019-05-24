@@ -195,9 +195,9 @@ impl PublicKey {
         let u = self_to_c + g_to_s; //should equal g^k
         match self.hash_to_curve(message) {
             Err(_) => false,
-            Ok (h) => { 
+            Ok (h) => {
                 let v = (&c * &point) + (&s * &h); //should equal h^cs * h^(k-cx) = h^k
-                let derivable_c = hash_points(vec![                       
+                let derivable_c = hash_points(&[
                                               constants::ED25519_BASEPOINT_COMPRESSED,
                                               h.compress(),
                                               self.0,
