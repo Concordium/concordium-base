@@ -44,7 +44,7 @@ createSha224Ctx = do
   ptr <- rs_sha224_init
   if ptr /= nullPtr
     then do
-      foreignPtr <- newForeignPtr_  ptr
+      foreignPtr <- newForeignPtr_   ptr
       return $ Just foreignPtr
     else
       return Nothing

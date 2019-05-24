@@ -30,6 +30,7 @@ Library
                    Concordium.Crypto.SignatureScheme
                    Concordium.Crypto.AccountSignatureSchemes
                    Concordium.Crypto.PedersenScheme
+                   Concordium.Crypto.Elgamal
                    Concordium.Crypto.VRF
                    Concordium.Crypto.PRF
                    Data.FixedByteString
@@ -56,6 +57,7 @@ Library
                    eddsa_ed25519,
                    dodis_yampolskiy_prf
                    pedersen_scheme
+                   elgamal
 
 Test-Suite tests
   type: exitcode-stdio-1.0
@@ -74,6 +76,7 @@ Test-Suite tests
    ConcordiumTests.Crypto.SHA224
    ConcordiumTests.Crypto.Ed25519Signature
    ConcordiumTests.Crypto.VRF
+   ConcordiumTests.Crypto.Elgamal
 
 Executable perf-test
   main-is: Perf.hs
