@@ -78,6 +78,8 @@ data TypingError =
                  | ResultTypeNotAsSpecified (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
                  -- |The type of the discriminee in a case expression is not fully instantiated. -- NOTE: Could add name of declared datatype
                  | NonFullyInstantiatedTypeAsCaseArgument
+                 -- |The type of the discriminee in a case expression is a base type not supported for pattern matching.
+                 | UnsupportedBaseTypeInCaseArgument (Core.TBase)
                  -- |The type of the discriminee in a case expression is a function type.
                  | FunctionAsCaseArgument
                  -- |The discriminee in a case expression is a type variable.
@@ -105,6 +107,14 @@ data TypingError =
                  -- |The body of the branch of a case expression does not have the correct type.
                  -- The first argument is type found, the second is the expected type.
                  | UnexpectedCaseAlternativeResultType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |A variable used in an expression is not bound.
+                 | UndefinedVariable Core.BoundVar
+                 -- |A free type variable occurs in an expression.
+                 | FreeTypeVariable Core.BoundTyVar
+                 -- The data type with the given name is not defined in the current module.
+                 | UndefinedLocalDatatype Core.TyName
+                 -- The data type with the given name is not defined in the given module.
+                 | UndefinedQualifiedDatatype Core.ModuleRef Core.TyName
                  -- |Module does not exist. Raised when trying to type-check an imported definition from a non-existing module.
                  | ModuleNotExists Core.ModuleRef
   deriving (Eq, Show)
