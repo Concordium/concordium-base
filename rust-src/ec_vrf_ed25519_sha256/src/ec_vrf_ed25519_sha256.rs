@@ -80,7 +80,7 @@ impl Keypair {
     ///
     /// A `Result` whose okay value is an EdDSA `Keypair` or whose error value
     /// is an `ProofError` describing the error that occurred.
-    pub fn from_bytes<'a>(bytes: &'a [u8]) -> Result<Keypair, ProofError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Keypair, ProofError> {
         if bytes.len() != KEYPAIR_LENGTH {
             return Err(ProofError(InternalError::BytesLength {
                 name: "Keypair",
