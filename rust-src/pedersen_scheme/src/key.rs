@@ -46,9 +46,9 @@ impl CommitmentKey {
          let h = &self.1;
          let mut bytes: Vec<u8> = Vec::new();
          for g in gs.iter(){
-             bytes.extend_from_slice(g.into_compressed().as_ref().clone());
+             bytes.extend_from_slice(g.into_compressed().as_ref());
          }
-         bytes.extend_from_slice(h.into_compressed().as_ref().clone());
+         bytes.extend_from_slice(h.into_compressed().as_ref());
          bytes.into_boxed_slice()
      }
     /// Construct a commitmentkey from a slice of bytes.

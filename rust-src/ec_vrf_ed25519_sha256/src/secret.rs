@@ -107,7 +107,7 @@ impl SecretKey {
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<SecretKey, ProofError> {
         if bytes.len() != SECRET_KEY_LENGTH {
-            return Err(ProofError(InternalError::BytesLengthError {
+            return Err(ProofError(InternalError::BytesLength {
                 name: "SecretKey",
                 length: SECRET_KEY_LENGTH,
             }));
@@ -404,7 +404,7 @@ impl ExpandedSecretKey {
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<ExpandedSecretKey, ProofError> {
         if bytes.len() != EXPANDED_SECRET_KEY_LENGTH {
-            return Err(ProofError(InternalError::BytesLengthError {
+            return Err(ProofError(InternalError::BytesLength {
                 name: "ExpandedSecretKey",
                 length: EXPANDED_SECRET_KEY_LENGTH,
             }));

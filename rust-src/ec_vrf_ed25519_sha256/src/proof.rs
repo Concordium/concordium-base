@@ -81,11 +81,11 @@ impl Proof {
         scalar_bytes2.copy_from_slice(&proof_bytes[48..PROOF_LENGTH]);
         let compressed_point = CompressedEdwardsY(point_bytes);
         match compressed_point.decompress(){
-            None => Err (ProofError(InternalError::PointDecompressionError)),
+            None => Err (ProofError(InternalError::PointDecompression)),
             Some(p) => match Scalar::from_canonical_bytes(scalar_bytes1) {
-                None => Err (ProofError(InternalError::ScalarFormatError)),
+                None => Err (ProofError(InternalError::ScalarFormat)),
                 Some(s1) => match Scalar::from_canonical_bytes(scalar_bytes2){
-                    None => Err (ProofError(InternalError::ScalarFormatError)),
+                    None => Err (ProofError(InternalError::ScalarFormat)),
                     Some(s2) => Ok (Proof(p, s1, s2))
                 }
             }

@@ -127,7 +127,7 @@ impl PublicKey {
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey, ProofError> {
         if bytes.len() != PUBLIC_KEY_LENGTH {
-            return Err(ProofError(InternalError::BytesLengthError {
+            return Err(ProofError(InternalError::BytesLength {
                 name: "PublicKey",
                 length: PUBLIC_KEY_LENGTH,
             }));
@@ -138,7 +138,7 @@ impl PublicKey {
         let compressed = CompressedEdwardsY(bits);
         let point = compressed
             .decompress()
-            .ok_or(ProofError(InternalError::PointDecompressionError))?;
+            .ok_or(ProofError(InternalError::PointDecompression))?;
 
         Ok(PublicKey(compressed, point))
     }
@@ -178,7 +178,7 @@ impl PublicKey {
             }
             if ctr== u32::max_value() {done=true;} else {ctr += 1;}
         }
-        Err(ProofError(InternalError::PointDecompressionError))
+        Err(ProofError(InternalError::PointDecompression))
     }
     pub fn verify_key(public_key_bytes: &[u8;32])->bool{
         match PublicKey::from_bytes(public_key_bytes){

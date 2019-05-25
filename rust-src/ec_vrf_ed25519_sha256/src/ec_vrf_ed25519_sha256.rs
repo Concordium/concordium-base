@@ -82,7 +82,7 @@ impl Keypair {
     /// is an `ProofError` describing the error that occurred.
     pub fn from_bytes<'a>(bytes: &'a [u8]) -> Result<Keypair, ProofError> {
         if bytes.len() != KEYPAIR_LENGTH {
-            return Err(ProofError(InternalError::BytesLengthError {
+            return Err(ProofError(InternalError::BytesLength {
                 name: "Keypair",
                 length: KEYPAIR_LENGTH,
             }));

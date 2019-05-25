@@ -15,7 +15,7 @@ pub extern fn pedersen_commitment_key(n: usize, key_bytes: *mut u8){
     let key_slice: &mut[u8] = unsafe{ slice::from_raw_parts_mut(key_bytes, (n+1)*GROUP_ELEMENT_LENGTH)};
     let mut csprng= thread_rng();
     let ck = CommitmentKey::generate(n, &mut csprng);
-    &key_slice.copy_from_slice(&*ck.to_bytes());
+    key_slice.copy_from_slice(&*ck.to_bytes());
 }
 
 #[no_mangle]
@@ -70,7 +70,7 @@ pub extern fn pedersen_random_values(n: usize, values_bytes : *mut u8){
    let mut csprng = thread_rng();
    let vs = Value::generate(n, &mut csprng); 
    let v_slice: &mut[u8] = unsafe{ slice::from_raw_parts_mut(values_bytes, n*FIELD_ELEMENT_LENGTH)};
-   &v_slice.copy_from_slice(&*vs.to_bytes());
+   v_slice.copy_from_slice(&*vs.to_bytes());
 }
 #[test]
 pub fn commit_open(){
