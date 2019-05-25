@@ -26,15 +26,15 @@ pub extern fn pedersen_commit(n :usize, key_bytes: *const u8, values: *const u8,
     let key_slice: &[u8] = unsafe{ slice::from_raw_parts(key_bytes, (n+1)*GROUP_ELEMENT_LENGTH)};
     let values_slice: &[u8] = unsafe{ slice::from_raw_parts(values, (n)*FIELD_ELEMENT_LENGTH)};
     match CommitmentKey::from_bytes(key_slice){
-        Err(_) => return -1,
+        Err(_) => -1,
         Ok(ck) => match Value::from_bytes(values_slice){
-            Err(_) => return -2,
+            Err(_) => -2,
             Ok(vs) => {
                 let mut csprng = thread_rng();
                 let (c,r) = ck.commit(&vs, &mut csprng);
                 randomness.copy_from_slice(&Value::value_to_bytes(&r));
                 commitment.copy_from_slice(&c.to_bytes());
-                return 1;
+                1
             }
         }
     }
@@ -48,14 +48,14 @@ pub extern fn pedersen_open(n: usize, key_bytes: *const u8, values: *const u8, c
     let key_slice: &[u8] = unsafe{ slice::from_raw_parts(key_bytes, (n+1)*GROUP_ELEMENT_LENGTH)};
     let values_slice: &[u8] = unsafe{ slice::from_raw_parts(values, (n)*FIELD_ELEMENT_LENGTH)};
     match CommitmentKey::from_bytes(key_slice){
-        Err(_) => return -1,
+        Err(_) => -1,
         Ok(ck) => match Value::from_bytes(values_slice){
-            Err(_) => return -2,
+            Err(_) => -2,
             Ok(vs) => match Value::value_from_bytes(randomness){
-                Err(_) => return -3,
+                Err(_) => -3,
                 Ok(r) => match Commitment::from_bytes(commitment){
-                    Err(_) => return -4,
-                    Ok(c) => if ck.open(&vs, r, c) { return 1} else {return 0} 
+                    Err(_) => -4,
+                    Ok(c) => if ck.open(&vs, r, c) { 1} else {0} 
                 }
             }
         }

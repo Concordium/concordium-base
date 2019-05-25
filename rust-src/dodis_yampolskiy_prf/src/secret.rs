@@ -46,7 +46,7 @@ impl SecretKey {
          let mut i = 0;
          for a in frpr.as_ref().iter().rev(){
              bytes[i..(i+8)].copy_from_slice(&a.to_be_bytes());
-             i = i+8;
+             i += 8;
          }
          bytes
      }
@@ -63,7 +63,7 @@ impl SecretKey {
           for digit in frrepr.as_mut().iter_mut().rev(){
             tmp.copy_from_slice(&bytes[i..(i+8)]);
             *digit =u64::from_be_bytes(tmp);
-            i = i + 8;
+            i += 8;
           }
           match Fr::from_repr(frrepr){
               Ok(fr) => Ok(SecretKey(fr)),
@@ -72,7 +72,7 @@ impl SecretKey {
     }
 
     pub fn prf(&self, n: u8)-> Result<G1Affine, PrfError>{
-        let res_x = Fr::from_repr(FrRepr::from(n as u64));
+        let res_x = Fr::from_repr(FrRepr::from(u64::from(n)));
         if res_x.is_err() {let y = res_x.unwrap_err(); return Err(PrfError(DecodingError(y)));}
         let x = res_x.unwrap();
         let k = self.0;

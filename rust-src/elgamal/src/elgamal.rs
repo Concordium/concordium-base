@@ -13,7 +13,7 @@ use bitvec::Bits;
 
 
 use pairing::bls12_381::{G1 };
-use pairing::{Field, CurveProjective};
+use pairing::CurveProjective;
 use pairing::bls12_381::{Fr};
 #[cfg(test)]
 use pairing::bls12_381::{FrRepr};
@@ -219,12 +219,14 @@ pub fn ff_encrypt_decrypt_u64_unchecked(){
     }
 }
 
+// Still prototyping
+#[allow(dead_code)]
 struct ByteBuf<'a>(&'a [u8]);
 
 impl<'a> std::fmt::LowerHex for ByteBuf<'a> {
     fn fmt(&self, fmtr: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         for byte in self.0 {
-            try!( fmtr.write_fmt(format_args!("{:02x}", byte)));
+            ( fmtr.write_fmt(format_args!("{:02x}", byte)))?;
         }
         Ok(())
     }
