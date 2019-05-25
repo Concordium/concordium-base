@@ -428,7 +428,7 @@ impl ExpandedSecretKey {
         let x = self.key;
         let h_to_x = x * h; //h^x
         let k = Scalar::random(rng); //nonce
-        let h_to_k = &k * &h; //h^k
+        let h_to_k = k * h; //h^k
         let g_to_k = &k *&constants::ED25519_BASEPOINT_TABLE; //g^k
         let c = hash_points(&[
                             constants::ED25519_BASEPOINT_COMPRESSED,

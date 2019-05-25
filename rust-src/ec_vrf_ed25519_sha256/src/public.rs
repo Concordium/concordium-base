@@ -176,7 +176,7 @@ impl PublicKey {
             if let Some(ed_point)= p_candidate.decompress(){
                 return Ok(ed_point.mul_by_cofactor());
             }
-            if ctr== u32::max_value() {done=true;} else {ctr = ctr + 1;}
+            if ctr== u32::max_value() {done=true;} else {ctr += 1;}
         }
         Err(ProofError(InternalError::PointDecompressionError))
     }
@@ -193,12 +193,12 @@ impl PublicKey {
         let Proof(point, c, s) = pi; //s should be equal k- c x, where k is random and x is secret key
                                      //self should be equal g^x
         let g_to_s = &s * &constants::ED25519_BASEPOINT_TABLE;//should be equal to g^(k-c x)
-        let self_to_c = &c * &self.1; //self_to_c should be equal to g^(cx)
+        let self_to_c = c * self.1; //self_to_c should be equal to g^(cx)
         let u = self_to_c + g_to_s; //should equal g^k
         match self.hash_to_curve(message) {
             Err(_) => false,
             Ok (h) => {
-                let v = (&c * &point) + (&s * &h); //should equal h^cs * h^(k-cx) = h^k
+                let v = (c * point) + (s * h); //should equal h^cs * h^(k-cx) = h^k
                 let derivable_c = hash_points(&[
                                               constants::ED25519_BASEPOINT_COMPRESSED,
                                               h.compress(),
