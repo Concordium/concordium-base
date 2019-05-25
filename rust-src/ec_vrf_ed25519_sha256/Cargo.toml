@@ -1,7 +1,8 @@
 [package]
 name="ec_vrf_ed25519_sha256"
-authors=["concordium AB"]
+authors = ["Concordium AG <info@concordium.com>"]
 version="0.0.1"
+edition = "2018"
 
 [dependencies]
 rand      = "0"
@@ -15,7 +16,7 @@ serde = "1"
 
 [lib]
 name = "ec_vrf_ed25519"
-crate-type = ["cdylib", "lib"]
+crate-type = ["staticlib", "cdylib", "lib"]
 
 
 

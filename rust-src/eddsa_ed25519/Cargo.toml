@@ -1,7 +1,7 @@
 [package]
 name = "eddsa_ed25519"
 version = "0.1.0"
-authors = ["Bassel Mannaa <bm@concordium.com>"]
+authors = ["Concordium AG <info@concordium.com>"]
 edition = "2018"
 
 [dependencies]
@@ -11,5 +11,4 @@ serde         = "1"
 
 [lib]
 name = "eddsa_ed25519"
-crate-type = ["cdylib", "lib"]
-
+crate-type = ["staticlib", "cdylib", "lib"]
