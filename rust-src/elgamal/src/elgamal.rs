@@ -2,7 +2,6 @@ use libc::{uint8_t, size_t};
 use std::slice;
 use rayon::prelude::*;
 use rayon::iter::IntoParallelRefIterator;
-use crate::constants::*;
 use crate::secret::*;
 use crate::public::*;
 use crate::message::*;
@@ -58,7 +57,7 @@ pub extern fn encrypt_u64(ptr : *mut PublicKey, e: u64, out: &mut [u8;6144]) {
         assert!(!ptr.is_null());
         &* ptr
     };
-    let xs:Vec<[u8;96]> = encrypt_u64_bitwise(pk, &e).iter().map(|x| x.to_bytes()).collect();
+    let xs:Vec<[u8;96]> = encrypt_u64_bitwise(pk, e).iter().map(|x| x.to_bytes()).collect();
     for i in 0..64{
         for j in 0..96{
             out[j + (i * 96)] = xs[i][j];
@@ -101,13 +100,13 @@ pub extern fn decrypt_u64_unsafe(ptr:*mut SecretKey, cipher_bytes: *const uint8_
       Ok(group_bits_to_u64(v.as_slice()))
 }
     
-pub fn encrypt_u64_bitwise(pk: &PublicKey, e:&u64) -> Vec<Cipher>{
+pub fn encrypt_u64_bitwise(pk: &PublicKey, e:u64) -> Vec<Cipher>{
     let mut csprng = thread_rng();
     let mut er = vec![];
     for i in 0..64{
         er.push((e.get(i as u8), Fr::rand(&mut csprng)));
     }
-    er.par_iter().map(|(x,y)| pk.hide_binary_exp(*y,x)).collect()
+    er.par_iter().map(|(x,y)| pk.hide_binary_exp(*y,*x)).collect()
 }
 //take an array of zero's and ones and returns a u64
 pub fn group_bits_to_u64 (v: &[G1] ) -> u64{
@@ -120,7 +119,7 @@ pub fn group_bits_to_u64 (v: &[G1] ) -> u64{
 
 
 
-pub fn decrypt_u64_bitwise(sk:&SecretKey, v:&Vec<Cipher>)-> u64{
+pub fn decrypt_u64_bitwise(sk:&SecretKey, v:&[Cipher])-> u64{
     let dr:Vec<G1> = v.par_iter().map(|x| {let Message(m) = sk.decrypt(&x); m}).collect();
     group_bits_to_u64(dr.as_slice())
 }

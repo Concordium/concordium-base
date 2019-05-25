@@ -47,7 +47,7 @@ impl Debug for PublicKey {
 impl<'a> From<&'a SecretKey> for PublicKey {
     /// Derive this public key from its corresponding `SecretKey`.
     fn from(secret_key: &SecretKey) -> PublicKey {
-        let mut t = G1::one().clone(); 
+        let mut t = G1::one();
         t.mul_assign(secret_key.0);
         PublicKey(t)
     }
@@ -85,7 +85,7 @@ impl PublicKey {
         let fr = Fr::rand(csprng); //k
         let mut t = G1::one(); //g
         t.mul_assign(fr); //kg
-        let mut s= self.0.clone();
+        let mut s= self.0;
         s.mul_assign(fr); //kag
         s.add_assign(&m.0); //kag + m
         Cipher(t, s)
@@ -113,13 +113,13 @@ impl PublicKey {
     pub fn hide (&self, k: Fr, m: &Message) -> Cipher{
         let mut t = G1::one(); //g
         t.mul_assign(k); //kg
-        let mut s = self.0.clone();
+        let mut s = self.0;
         s.mul_assign(k); //kag
         s.add_assign(&m.0); //kag + m
         Cipher(t,s)
     }
 
-    pub fn hide_binary_exp(&self, h: Fr, e:&bool) -> Cipher {
+    pub fn hide_binary_exp(&self, h: Fr, e:bool) -> Cipher {
         if !e {
             self.hide(h,&Message(G1::zero()))
         } else {
@@ -130,14 +130,14 @@ impl PublicKey {
     pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &Fr) -> Cipher
         where T:Rng{
         let mut m = G1::one(); //g
-        let e2 = e.clone();
+        let e2 = *e;
         m.mul_assign(e2);//g^e
         self.encrypt(csprng, &Message(m))
     }
 
-    pub fn encrypt_exponent_vec<T>(&self, csprng: &mut T, e: &Vec<Fr>) -> Vec<Cipher>
+    pub fn encrypt_exponent_vec<T>(&self, csprng: &mut T, e: &[Fr]) -> Vec<Cipher>
         where T:Rng{
-            e.into_iter().map(|x| {self.encrypt_exponent(csprng, &x)}).collect()
+            e.iter().map(|x| {self.encrypt_exponent(csprng, &x)}).collect()
     }
     
 

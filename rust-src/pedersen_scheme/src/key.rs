@@ -56,6 +56,8 @@ impl CommitmentKey {
     /// A `Result` whose okay value is an commitment key or whose error value
     /// is an `CommitmentError` wrapping the internal error that occurred.
     #[inline]
+    // TODO : Rename variable names more appropriately
+    #[allow(clippy::many_single_char_names)]
     pub fn from_bytes(bytes: &[u8]) -> Result<CommitmentKey, CommitmentError> {
           let l = bytes.len();
           if l==0 || l < GROUP_ELEMENT_LENGTH * 2 || l % GROUP_ELEMENT_LENGTH !=0{

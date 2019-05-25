@@ -42,6 +42,8 @@ pub extern fn pedersen_commit(n :usize, key_bytes: *const u8, values: *const u8,
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
+// TODO : Rename variable names more appropriately
+#[allow(clippy::many_single_char_names)]
 pub extern fn pedersen_open(n: usize, key_bytes: *const u8, values: *const u8, commitment: &[u8;COMMITMENT_LENGTH], randomness:&[u8;RANDOMNESS_LENGTH]) -> i32 {
     assert!(!key_bytes.is_null(), "Null pointer");
     assert!(!values.is_null(), "Null pointer");

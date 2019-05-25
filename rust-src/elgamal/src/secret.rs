@@ -86,6 +86,8 @@ impl SecretKey {
         Message(y)
     }
     
+    // TODO : Rename variable names more appropriately
+    #[allow(clippy::many_single_char_names)]
     pub fn decrypt_exponent(&self, c: & Cipher) -> Fr{
         let Message(m) = self.decrypt(c);
         let mut a = Fr::zero();
@@ -99,8 +101,8 @@ impl SecretKey {
         a
     }
 
-    pub fn decrypt_exponent_vec(&self, v: &Vec<Cipher>) -> Vec<Fr>{
-        v.into_iter().map(|y| self.decrypt_exponent(y)).collect()
+    pub fn decrypt_exponent_vec(&self, v: &[Cipher]) -> Vec<Fr>{
+        v.iter().map(|y| self.decrypt_exponent(y)).collect()
     }
 
 

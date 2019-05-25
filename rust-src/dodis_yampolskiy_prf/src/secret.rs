@@ -71,6 +71,8 @@ impl SecretKey {
           }
     }
 
+    // TODO : Rename variable names more appropriately
+    #[allow(clippy::many_single_char_names)]
     pub fn prf(&self, n: u8)-> Result<G1Affine, PrfError>{
         let res_x = Fr::from_repr(FrRepr::from(u64::from(n)));
         if res_x.is_err() {let y = res_x.unwrap_err(); return Err(PrfError(DecodingError(y)));}

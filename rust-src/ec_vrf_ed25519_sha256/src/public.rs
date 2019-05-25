@@ -187,6 +187,8 @@ impl PublicKey {
         }
     }
 
+    // TODO : Rename variable names more appropriately
+    #[allow(clippy::many_single_char_names)]
     pub fn verify(&self, pi: Proof, message: &[u8])-> bool{
         let Proof(point, c, s) = pi; //s should be equal k- c x, where k is random and x is secret key
                                      //self should be equal g^x
