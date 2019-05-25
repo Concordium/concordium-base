@@ -177,7 +177,7 @@ pub fn encrypt_decrypt_bitwise_vec(){
     let pk2 =pk.clone();
     for _i in 1..100 {
         let n = u64::rand(&mut csprng);
-        let c = encrypt_u64_bitwise(&pk, &n);
+        let c = encrypt_u64_bitwise(&pk, n);
         let n2 = decrypt_u64_bitwise(&sk, &c);
         assert_eq!(n,n2);
     }

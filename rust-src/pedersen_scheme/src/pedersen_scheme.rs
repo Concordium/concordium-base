@@ -80,7 +80,7 @@ pub fn commit_open(){
     let mut commitment_bytes = [0u8; COMMITMENT_LENGTH];
     let mut randomness_bytes = [0u8; RANDOMNESS_LENGTH];
     for i in 1..10{
-        let mut key_slice = &mut key_bytes[..(i+1)*GROUP_ELEMENT_LENGTH];
+        let key_slice = &mut key_bytes[..(i+1)*GROUP_ELEMENT_LENGTH];
         pedersen_commitment_key(i, key_slice.as_mut_ptr());  
         let vs=Value::generate(i, &mut csprng);
         let v_slice : &[u8] = &*&vs.to_bytes();
