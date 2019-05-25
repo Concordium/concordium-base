@@ -99,7 +99,7 @@ impl CommitmentKey {
         let g = &self.0;
         let mut res = h;
         let mut gs: G1; 
-        for i in 0..self.0.len(){
+        for (i,_) in self.0.iter().enumerate() {
             gs = g[i].into_projective();
             gs.mul_assign(ss.0[i]);
             res.add_assign(&gs);

@@ -111,7 +111,7 @@ pub fn encrypt_u64_bitwise(pk: &PublicKey, e:u64) -> Vec<Cipher>{
 //take an array of zero's and ones and returns a u64
 pub fn group_bits_to_u64 (v: &[G1] ) -> u64{
     let mut r= 0u64;
-    for i in 0..v.len(){
+    for (i,_) in v.iter().enumerate(){
         r.set(i  as u8, v[i]==G1::one());
     }
     r
@@ -218,7 +218,7 @@ pub fn ff_encrypt_decrypt_u64_unchecked(){
     }
 }
 
-// Still prototyping
+// TODO : Remove when done prototyping
 #[allow(dead_code)]
 struct ByteBuf<'a>(&'a [u8]);
 
