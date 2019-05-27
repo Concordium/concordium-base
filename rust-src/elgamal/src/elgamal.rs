@@ -69,7 +69,7 @@ pub extern fn encrypt_u64(ptr : *mut PublicKey, e: u64, out: &mut [u8;6144]) {
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern fn decrypt_u64(ptr: *mut SecretKey, cipher_bytes: *const uint8_t, len: size_t) -> u64{
+pub extern fn decrypt_u64(ptr: *mut SecretKey, cipher_bytes: *const uint8_t, len: size_t) -> Result<u64, ElgamalError>{
     let cipher = unsafe {
         assert!(!cipher_bytes.is_null());
         slice::from_raw_parts(cipher_bytes, len as usize) 
@@ -81,7 +81,7 @@ pub extern fn decrypt_u64(ptr: *mut SecretKey, cipher_bytes: *const uint8_t, len
     let  v:Vec<_> = cipher.par_chunks(96).map(|x| {let c = Cipher::from_bytes(x).unwrap();
                                                    let Message(m) = sk.decrypt(&c);
                                                    m}).collect();
-    group_bits_to_u64(v.as_slice())
+    Ok(group_bits_to_u64(v.as_slice()))
 }
 
 #[no_mangle]
