@@ -46,7 +46,7 @@ impl SecretKey {
          let mut i = 0;
          for a in frpr.as_ref().iter().rev(){
              bytes[i..(i+8)].copy_from_slice(&a.to_be_bytes());
-             i = i+8;
+             i += 8;
          }
          bytes
      }
@@ -63,7 +63,7 @@ impl SecretKey {
           for digit in frrepr.as_mut().iter_mut().rev(){
             tmp.copy_from_slice(&bytes[i..(i+8)]);
             *digit =u64::from_be_bytes(tmp);
-            i = i + 8;
+            i += 8;
           }
           match Fr::from_repr(frrepr){
               Ok(fr) => Ok(SecretKey(fr)),
@@ -71,8 +71,10 @@ impl SecretKey {
           }
     }
 
+    // TODO : Rename variable names more appropriately
+    #[allow(clippy::many_single_char_names)]
     pub fn prf(&self, n: u8)-> Result<G1Affine, PrfError>{
-        let res_x = Fr::from_repr(FrRepr::from(n as u64));
+        let res_x = Fr::from_repr(FrRepr::from(u64::from(n)));
         if res_x.is_err() {let y = res_x.unwrap_err(); return Err(PrfError(DecodingError(y)));}
         let x = res_x.unwrap();
         let k = self.0;
@@ -151,7 +153,7 @@ pub fn test_bounds() {
 #[test]
 pub fn key_to_byte_conversion(){
     let mut csprng = thread_rng();
-    for i in 1..100{
+    for _ in 1..100{
         let sk = SecretKey::generate(&mut csprng);
         let r = sk.to_bytes();
         let res_sk2= SecretKey::from_bytes(&r);

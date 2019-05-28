@@ -5,7 +5,6 @@ extern crate ed25519_dalek;
 
 use rand::*;
 use criterion::Criterion;
-use criterion::black_box;
 use ed25519_dalek::*;
 
 
@@ -13,13 +12,13 @@ use ed25519_dalek::*;
 fn bench_sign(c:&mut Criterion){
     let mut csprng = thread_rng();
     let mut a:Vec<u8> = Vec::new();
-    for i in 0..1000 {
+    for _ in 0..1000 {
         a.push(csprng.gen::<u8>());
     }
     let d = a.clone();
 
     let sk = SecretKey::generate(&mut csprng);
-    let mut pk = PublicKey::from(&sk);
+    let pk = PublicKey::from(&sk);
     let expanded_sk = ExpandedSecretKey::from(&sk);
     let sig = expanded_sk.sign(a.as_slice(), &pk);
     c.bench_function("sign {}",  move |b| b.iter(||  expanded_sk.sign(a.as_slice(), &pk)));

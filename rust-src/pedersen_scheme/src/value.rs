@@ -59,7 +59,7 @@ impl Value{
            let mut i = 0;
            for a in frpr.as_ref().iter().rev(){
                bytes[i..(i+8)].copy_from_slice(&a.to_be_bytes());
-               i = i+8;
+               i += 8;
            }
            bytes
        }
@@ -100,7 +100,7 @@ impl Value{
           for digit in frrepr.as_mut().iter_mut().rev(){
             tmp.copy_from_slice(&bytes[i..(i+8)]);
             *digit =u64::from_be_bytes(tmp);
-            i = i + 8;
+            i += 8;
           }
           match Fr::from_repr(frrepr){
               Ok(fr) => Ok(fr),
