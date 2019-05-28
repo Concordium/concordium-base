@@ -24,4 +24,4 @@ harness = false
 
 [lib]
 name = "elgamal"
-crate-type = ["staticlib", "cdylib", "lib"]
+crate-type = ["rlib", "staticlib", "cdylib", "lib"]
