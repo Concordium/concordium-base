@@ -53,7 +53,7 @@ impl SecretKey {
          let mut i = 0;
          for a in frpr.as_ref().iter().rev(){
              bytes[i..(i+8)].copy_from_slice(&a.to_be_bytes());
-             i = i+8;
+             i += 8;
          }
          bytes
      }
@@ -70,7 +70,7 @@ impl SecretKey {
           for digit in frrepr.as_mut().iter_mut().rev(){
             tmp.copy_from_slice(&bytes[i..(i+8)]);
             *digit =u64::from_be_bytes(tmp);
-            i = i + 8;
+            i += 8;
           }
           match Fr::from_repr(frrepr){
               Ok(fr) => Ok(SecretKey(fr)),
@@ -86,6 +86,8 @@ impl SecretKey {
         Message(y)
     }
     
+    // TODO : Rename variable names more appropriately
+    #[allow(clippy::many_single_char_names)]
     pub fn decrypt_exponent(&self, c: & Cipher) -> Fr{
         let Message(m) = self.decrypt(c);
         let mut a = Fr::zero();
@@ -99,8 +101,8 @@ impl SecretKey {
         a
     }
 
-    pub fn decrypt_exponent_vec(&self, v: &Vec<Cipher>) -> Vec<Fr>{
-        v.into_iter().map(|y| self.decrypt_exponent(y)).collect()
+    pub fn decrypt_exponent_vec(&self, v: &[Cipher]) -> Vec<Fr>{
+        v.iter().map(|y| self.decrypt_exponent(y)).collect()
     }
 
 

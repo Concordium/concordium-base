@@ -46,9 +46,9 @@ impl CommitmentKey {
          let h = &self.1;
          let mut bytes: Vec<u8> = Vec::new();
          for g in gs.iter(){
-             bytes.extend_from_slice(g.into_compressed().as_ref().clone());
+             bytes.extend_from_slice(g.into_compressed().as_ref());
          }
-         bytes.extend_from_slice(h.into_compressed().as_ref().clone());
+         bytes.extend_from_slice(h.into_compressed().as_ref());
          bytes.into_boxed_slice()
      }
     /// Construct a commitmentkey from a slice of bytes.
@@ -56,6 +56,8 @@ impl CommitmentKey {
     /// A `Result` whose okay value is an commitment key or whose error value
     /// is an `CommitmentError` wrapping the internal error that occurred.
     #[inline]
+    // TODO : Rename variable names more appropriately
+    #[allow(clippy::many_single_char_names)]
     pub fn from_bytes(bytes: &[u8]) -> Result<CommitmentKey, CommitmentError> {
           let l = bytes.len();
           if l==0 || l < GROUP_ELEMENT_LENGTH * 2 || l % GROUP_ELEMENT_LENGTH !=0{
@@ -97,7 +99,7 @@ impl CommitmentKey {
         let g = &self.0;
         let mut res = h;
         let mut gs: G1; 
-        for i in 0..self.0.len(){
+        for (i,_) in self.0.iter().enumerate() {
             gs = g[i].into_projective();
             gs.mul_assign(ss.0[i]);
             res.add_assign(&gs);

@@ -29,9 +29,9 @@ use crate::errors::*;
 
 use sha2::*;
 
-pub fn hash_points(pts: Vec<CompressedEdwardsY>) -> Scalar{
+pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar{
         let mut hash: Sha256 = Sha256::new();
-        for p in &pts{
+        for p in pts {
             hash.input(p.to_bytes());
         }
         let mut c_bytes: [u8;32]=[0;32];
@@ -81,11 +81,11 @@ impl Proof {
         scalar_bytes2.copy_from_slice(&proof_bytes[48..PROOF_LENGTH]);
         let compressed_point = CompressedEdwardsY(point_bytes);
         match compressed_point.decompress(){
-            None => Err (ProofError(InternalError::PointDecompressionError)),
+            None => Err (ProofError(InternalError::PointDecompression)),
             Some(p) => match Scalar::from_canonical_bytes(scalar_bytes1) {
-                None => Err (ProofError(InternalError::ScalarFormatError)),
+                None => Err (ProofError(InternalError::ScalarFormat)),
                 Some(s1) => match Scalar::from_canonical_bytes(scalar_bytes2){
-                    None => Err (ProofError(InternalError::ScalarFormatError)),
+                    None => Err (ProofError(InternalError::ScalarFormat)),
                     Some(s2) => Ok (Proof(p, s1, s2))
                 }
             }

@@ -19,6 +19,8 @@ use pairing::{PrimeFieldDecodingError, GroupDecodingError};
 /// Internal errors.  
 
 #[derive(Debug )]
+// TODO : Rename these
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum InternalError {
     DecodingError(PrimeFieldDecodingError),
     GDecodingError(GroupDecodingError),

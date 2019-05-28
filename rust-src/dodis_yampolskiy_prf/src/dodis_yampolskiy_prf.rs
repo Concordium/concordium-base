@@ -23,6 +23,6 @@ pub extern fn prf(prf_bytes: &mut[u8; PRF_LENGTH], secret_key_bytes: &[u8; SECRE
     if res_prf.is_err() { return 0 };
     let prf = res_prf.unwrap();
     prf_bytes.copy_from_slice(&prf.into_compressed().as_ref());
-    return 1;
+    1
 }
 

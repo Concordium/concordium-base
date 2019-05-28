@@ -80,9 +80,9 @@ impl Keypair {
     ///
     /// A `Result` whose okay value is an EdDSA `Keypair` or whose error value
     /// is an `ProofError` describing the error that occurred.
-    pub fn from_bytes<'a>(bytes: &'a [u8]) -> Result<Keypair, ProofError> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Keypair, ProofError> {
         if bytes.len() != KEYPAIR_LENGTH {
-            return Err(ProofError(InternalError::BytesLengthError {
+            return Err(ProofError(InternalError::BytesLength {
                 name: "Keypair",
                 length: KEYPAIR_LENGTH,
             }));
@@ -90,7 +90,7 @@ impl Keypair {
         let secret = SecretKey::from_bytes(&bytes[..SECRET_KEY_LENGTH])?;
         let public = PublicKey::from_bytes(&bytes[SECRET_KEY_LENGTH..])?;
 
-        Ok(Keypair{ secret: secret, public: public })
+        Ok(Keypair{ secret, public })
     }
 
     /// Generate an ed25519 keypair.

@@ -67,7 +67,7 @@ impl SecretKey {
 
     /// View this secret key as a byte array.
     #[inline]
-    pub fn as_bytes<'a>(&'a self) -> &'a [u8; SECRET_KEY_LENGTH] {
+    pub fn as_bytes(&self) -> &'_ [u8; SECRET_KEY_LENGTH] {
         &self.0
     }
 
@@ -107,7 +107,7 @@ impl SecretKey {
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<SecretKey, ProofError> {
         if bytes.len() != SECRET_KEY_LENGTH {
-            return Err(ProofError(InternalError::BytesLengthError {
+            return Err(ProofError(InternalError::BytesLength {
                 name: "SecretKey",
                 length: SECRET_KEY_LENGTH,
             }));
@@ -404,7 +404,7 @@ impl ExpandedSecretKey {
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<ExpandedSecretKey, ProofError> {
         if bytes.len() != EXPANDED_SECRET_KEY_LENGTH {
-            return Err(ProofError(InternalError::BytesLengthError {
+            return Err(ProofError(InternalError::BytesLength {
                 name: "ExpandedSecretKey",
                 length: EXPANDED_SECRET_KEY_LENGTH,
             }));
@@ -428,9 +428,9 @@ impl ExpandedSecretKey {
         let x = self.key;
         let h_to_x = x * h; //h^x
         let k = Scalar::random(rng); //nonce
-        let h_to_k = &k * &h; //h^k
+        let h_to_k = k * h; //h^k
         let g_to_k = &k *&constants::ED25519_BASEPOINT_TABLE; //g^k
-        let c = hash_points(vec![
+        let c = hash_points(&[
                             constants::ED25519_BASEPOINT_COMPRESSED,
                             h.compress(),
                             public_key.0,

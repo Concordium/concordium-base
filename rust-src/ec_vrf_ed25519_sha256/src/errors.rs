@@ -19,32 +19,34 @@ use core::fmt::Display;
 /// Internal errors.  Most application-level developers will likely not
 /// need to pay any attention to these.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+// TODO : Remove when done prototyping
+#[allow(dead_code)]
 pub(crate) enum InternalError {
-    PointDecompressionError,
-    ScalarFormatError,
+    PointDecompression,
+    ScalarFormat,
     /// An error in the length of bytes handed to a constructor.
     ///
     /// To use this, pass a string specifying the `name` of the type which is
     /// returning the error, and the `length` in bytes which its constructor
     /// expects.
-    BytesLengthError {
+    BytesLength {
         name: &'static str,
         length: usize,
     },
     /// The verification equation wasn't satisfied
-    VerifyError,
+    Verify,
 }
 
 impl Display for InternalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            InternalError::PointDecompressionError
+            InternalError::PointDecompression
                 => write!(f, "Cannot decompress Edwards point"),
-            InternalError::ScalarFormatError
+            InternalError::ScalarFormat
                 => write!(f, "Cannot use scalar with high-bit set"),
-            InternalError::BytesLengthError{ name: n, length: l}
+            InternalError::BytesLength{ name: n, length: l}
                 => write!(f, "{} must be {} bytes in length", n, l),
-            InternalError::VerifyError
+            InternalError::Verify
                 => write!(f, "Verification equation was not satisfied"),
         }
     }

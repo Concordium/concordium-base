@@ -84,7 +84,7 @@ impl PublicKey {
 
     /// View this public key as a byte array.
     #[inline]
-    pub fn as_bytes<'a>(&'a self) -> &'a [u8; PUBLIC_KEY_LENGTH] {
+    pub fn as_bytes(&self) -> &'_ [u8; PUBLIC_KEY_LENGTH] {
         &(self.0).0
     }
 
@@ -127,7 +127,7 @@ impl PublicKey {
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey, ProofError> {
         if bytes.len() != PUBLIC_KEY_LENGTH {
-            return Err(ProofError(InternalError::BytesLengthError {
+            return Err(ProofError(InternalError::BytesLength {
                 name: "PublicKey",
                 length: PUBLIC_KEY_LENGTH,
             }));
@@ -138,7 +138,7 @@ impl PublicKey {
         let compressed = CompressedEdwardsY(bits);
         let point = compressed
             .decompress()
-            .ok_or(ProofError(InternalError::PointDecompressionError))?;
+            .ok_or(ProofError(InternalError::PointDecompression))?;
 
         Ok(PublicKey(compressed, point))
     }
@@ -176,9 +176,9 @@ impl PublicKey {
             if let Some(ed_point)= p_candidate.decompress(){
                 return Ok(ed_point.mul_by_cofactor());
             }
-            if ctr== u32::max_value() {done=true;} else {ctr = ctr + 1;}
+            if ctr== u32::max_value() {done=true;} else {ctr += 1;}
         }
-        Err(ProofError(InternalError::PointDecompressionError))
+        Err(ProofError(InternalError::PointDecompression))
     }
     pub fn verify_key(public_key_bytes: &[u8;32])->bool{
         match PublicKey::from_bytes(public_key_bytes){
@@ -187,17 +187,19 @@ impl PublicKey {
         }
     }
 
+    // TODO : Rename variable names more appropriately
+    #[allow(clippy::many_single_char_names)]
     pub fn verify(&self, pi: Proof, message: &[u8])-> bool{
         let Proof(point, c, s) = pi; //s should be equal k- c x, where k is random and x is secret key
                                      //self should be equal g^x
         let g_to_s = &s * &constants::ED25519_BASEPOINT_TABLE;//should be equal to g^(k-c x)
-        let self_to_c = &c * &self.1; //self_to_c should be equal to g^(cx)
+        let self_to_c = c * self.1; //self_to_c should be equal to g^(cx)
         let u = self_to_c + g_to_s; //should equal g^k
         match self.hash_to_curve(message) {
             Err(_) => false,
-            Ok (h) => { 
-                let v = (&c * &point) + (&s * &h); //should equal h^cs * h^(k-cx) = h^k
-                let derivable_c = hash_points(vec![                       
+            Ok (h) => {
+                let v = (c * point) + (s * h); //should equal h^cs * h^(k-cx) = h^k
+                let derivable_c = hash_points(&[
                                               constants::ED25519_BASEPOINT_COMPRESSED,
                                               h.compress(),
                                               self.0,
