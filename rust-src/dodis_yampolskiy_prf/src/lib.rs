@@ -1,15 +1,15 @@
-extern crate pairing;
-extern crate rand_core;
 extern crate clear_on_drop;
-extern crate rand;
-extern crate failure;
 extern crate core;
+extern crate failure;
+extern crate pairing;
+extern crate rand;
+extern crate rand_core;
 #[cfg(feature = "serde")]
 extern crate serde;
 
 mod constants;
+mod dodis_yampolskiy_prf;
 mod errors;
 mod secret;
-mod dodis_yampolskiy_prf;
 
 pub use crate::dodis_yampolskiy_prf::*;

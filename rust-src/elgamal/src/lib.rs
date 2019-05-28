@@ -1,23 +1,23 @@
+extern crate bitvec;
+extern crate clear_on_drop;
+extern crate core;
+extern crate failure;
 extern crate libc;
 extern crate pairing;
-extern crate rand_core;
-extern crate clear_on_drop;
 extern crate rand;
-extern crate failure;
-extern crate core;
-extern crate bitvec;
+extern crate rand_core;
 extern crate rayon;
 #[cfg(feature = "serde")]
 extern crate serde;
 
-mod constants;
-mod errors;
-pub mod secret;
 pub mod cipher;
+mod constants;
+pub mod elgamal;
+mod errors;
 mod message;
 pub mod public;
-pub mod elgamal;
+pub mod secret;
 
 pub use crate::elgamal::*;
-pub use crate::secret::*;
 pub use crate::public::*;
+pub use crate::secret::*;

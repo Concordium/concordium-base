@@ -3,8 +3,7 @@
 // Authors:
 // - bm@concordium.com
 
-//! PRF Key type 
-
+//! PRF Key type
 
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
@@ -16,14 +15,14 @@ use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
 use crate::constants::*;
-use crate::errors::*;
 use crate::errors::InternalError::{DecodingError, DivisionByZero};
-use pairing::bls12_381::{G1Affine, FrRepr, Fr};
-use pairing::{CurveProjective, CurveAffine,Field,PrimeField};
+use crate::errors::*;
+use pairing::bls12_381::{Fr, FrRepr, G1Affine};
+use pairing::{CurveAffine, CurveProjective, Field, PrimeField};
 use rand::*;
 
 /// A PRF  key.
-#[derive(Debug,PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SecretKey(pub(crate) Fr);
 
 /*
@@ -35,21 +34,20 @@ impl Drop for SecretKey {
 }
 */
 
-
 impl SecretKey {
     #[inline]
     pub fn to_bytes(&self) -> [u8; SECRET_KEY_LENGTH] {
-         let frpr = &self.0.into_repr();
-         let xs = frpr.as_ref(); //array of 64 bit integers (limbs) least significant first
-         assert!(xs.len()*8 <= SECRET_KEY_LENGTH);
-         let mut bytes = [0u8; SECRET_KEY_LENGTH];
-         let mut i = 0;
-         for a in frpr.as_ref().iter().rev(){
-             bytes[i..(i+8)].copy_from_slice(&a.to_be_bytes());
-             i += 8;
-         }
-         bytes
-     }
+        let frpr = &self.0.into_repr();
+        let xs = frpr.as_ref(); //array of 64 bit integers (limbs) least significant first
+        assert!(xs.len() * 8 <= SECRET_KEY_LENGTH);
+        let mut bytes = [0u8; SECRET_KEY_LENGTH];
+        let mut i = 0;
+        for a in frpr.as_ref().iter().rev() {
+            bytes[i..(i + 8)].copy_from_slice(&a.to_be_bytes());
+            i += 8;
+        }
+        bytes
+    }
 
     /// Construct a `SecretKey` from a slice of bytes.
     ///
@@ -57,25 +55,28 @@ impl SecretKey {
     /// is an `PRFError` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<SecretKey, PrfError> {
-          let mut frrepr: FrRepr=FrRepr ([0u64;4]);
-          let mut tmp = [0u8; 8];
-          let mut i = 0;
-          for digit in frrepr.as_mut().iter_mut().rev(){
-            tmp.copy_from_slice(&bytes[i..(i+8)]);
-            *digit =u64::from_be_bytes(tmp);
+        let mut frrepr: FrRepr = FrRepr([0u64; 4]);
+        let mut tmp = [0u8; 8];
+        let mut i = 0;
+        for digit in frrepr.as_mut().iter_mut().rev() {
+            tmp.copy_from_slice(&bytes[i..(i + 8)]);
+            *digit = u64::from_be_bytes(tmp);
             i += 8;
-          }
-          match Fr::from_repr(frrepr){
-              Ok(fr) => Ok(SecretKey(fr)),
-              Err(x) => Err (PrfError(DecodingError(x)))
-          }
+        }
+        match Fr::from_repr(frrepr) {
+            Ok(fr) => Ok(SecretKey(fr)),
+            Err(x) => Err(PrfError(DecodingError(x))),
+        }
     }
 
     // TODO : Rename variable names more appropriately
     #[allow(clippy::many_single_char_names)]
-    pub fn prf(&self, n: u8)-> Result<G1Affine, PrfError>{
+    pub fn prf(&self, n: u8) -> Result<G1Affine, PrfError> {
         let res_x = Fr::from_repr(FrRepr::from(u64::from(n)));
-        if res_x.is_err() {let y = res_x.unwrap_err(); return Err(PrfError(DecodingError(y)));}
+        if res_x.is_err() {
+            let y = res_x.unwrap_err();
+            return Err(PrfError(DecodingError(y)));
+        }
         let x = res_x.unwrap();
         let k = self.0;
         let mut kx = Fr::zero();
@@ -83,26 +84,27 @@ impl SecretKey {
         kx.add_assign(&x);
 
         match kx.inverse() {
-            None => Err (PrfError(DivisionByZero)),
-            Some(y) => Ok ({ let mut z = y;
-                         z.negate();
-                         G1Affine::one().mul(z).into_affine()
-                       })
+            None => Err(PrfError(DivisionByZero)),
+            Some(y) => Ok({
+                let mut z = y;
+                z.negate();
+                G1Affine::one().mul(z).into_affine()
+            }),
         }
-
-     }
+    }
 
     /// Generate a `SecretKey` from a `csprng`.
     ///
-    pub fn generate<T>(csprng: &mut T)-> SecretKey
-      where T:  Rng,{
-          let mut fr = Fr::rand(csprng);
-          while fr.into_repr() > MAX_SECRET_KEY {
-              fr = Fr::rand(csprng) //try again
-          }
-          SecretKey(Fr::rand(csprng))
-      }
-
+    pub fn generate<T>(csprng: &mut T) -> SecretKey
+    where
+        T: Rng,
+    {
+        let mut fr = Fr::rand(csprng);
+        while fr.into_repr() > MAX_SECRET_KEY {
+            fr = Fr::rand(csprng) //try again
+        }
+        SecretKey(Fr::rand(csprng))
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -151,15 +153,14 @@ pub fn test_bounds() {
 }
 
 #[test]
-pub fn key_to_byte_conversion(){
+pub fn key_to_byte_conversion() {
     let mut csprng = thread_rng();
-    for _ in 1..100{
+    for _ in 1..100 {
         let sk = SecretKey::generate(&mut csprng);
         let r = sk.to_bytes();
-        let res_sk2= SecretKey::from_bytes(&r);
+        let res_sk2 = SecretKey::from_bytes(&r);
         assert!(res_sk2.is_ok());
-        let sk2= res_sk2.unwrap(); 
+        let sk2 = res_sk2.unwrap();
         assert_eq!(sk2, sk);
     }
 }
-

@@ -5,8 +5,6 @@
 
 //! Commitment key type
 
-
-
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
 #[cfg(feature = "serde")]
@@ -17,16 +15,18 @@ use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
 use crate::commitment::*;
-use crate::value::*;
 use crate::constants::*;
+use crate::errors::InternalError::{
+    CommitmentKeyLengthError, GDecodingError, KeyValueLengthMismatch,
+};
 use crate::errors::*;
-use crate::errors::InternalError::{GDecodingError, CommitmentKeyLengthError, KeyValueLengthMismatch};
-use pairing::bls12_381::{G1Compressed,G1Affine, G1,  Fr};
-use pairing::{EncodedPoint,CurveProjective, CurveAffine};
+use crate::value::*;
+use pairing::bls12_381::{Fr, G1Affine, G1Compressed, G1};
+use pairing::{CurveAffine, CurveProjective, EncodedPoint};
 use rand::*;
 
 /// A commitment  key.
-#[derive( Debug,PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CommitmentKey(pub(crate) Vec<G1Affine>, pub(crate) G1Affine);
 
 /*
@@ -37,20 +37,19 @@ impl Drop for SecretKey {
 }
 */
 
-
 impl CommitmentKey {
     //turn commitment key into a byte aray
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
-         let gs = &self.0;
-         let h = &self.1;
-         let mut bytes: Vec<u8> = Vec::new();
-         for g in gs.iter(){
-             bytes.extend_from_slice(g.into_compressed().as_ref());
-         }
-         bytes.extend_from_slice(h.into_compressed().as_ref());
-         bytes.into_boxed_slice()
-     }
+        let gs = &self.0;
+        let h = &self.1;
+        let mut bytes: Vec<u8> = Vec::new();
+        for g in gs.iter() {
+            bytes.extend_from_slice(g.into_compressed().as_ref());
+        }
+        bytes.extend_from_slice(h.into_compressed().as_ref());
+        bytes.into_boxed_slice()
+    }
     /// Construct a commitmentkey from a slice of bytes.
     ///
     /// A `Result` whose okay value is an commitment key or whose error value
@@ -59,81 +58,84 @@ impl CommitmentKey {
     // TODO : Rename variable names more appropriately
     #[allow(clippy::many_single_char_names)]
     pub fn from_bytes(bytes: &[u8]) -> Result<CommitmentKey, CommitmentError> {
-          let l = bytes.len();
-          if l==0 || l < GROUP_ELEMENT_LENGTH * 2 || l % GROUP_ELEMENT_LENGTH !=0{
-              return Err(CommitmentError(CommitmentKeyLengthError));
-          }
-          let glen = (l/GROUP_ELEMENT_LENGTH) - 1;
-          let mut gs:Vec<G1Affine> = Vec::new();
-          for i in 0..glen{
-              let j = i*GROUP_ELEMENT_LENGTH;
-              let k = j + GROUP_ELEMENT_LENGTH;
-              let mut g = G1Compressed::empty();
-              g.as_mut().copy_from_slice(&bytes[j..k]);
-              match g.into_affine(){
-                  Err(x) => return Err(CommitmentError(GDecodingError(x))),
-                  Ok(g_affine) => gs.push(g_affine)
-              }
-          }
-          let mut h = G1Compressed::empty();
-          h.as_mut().copy_from_slice(&bytes[(l-GROUP_ELEMENT_LENGTH)..]);
+        let l = bytes.len();
+        if l == 0 || l < GROUP_ELEMENT_LENGTH * 2 || l % GROUP_ELEMENT_LENGTH != 0 {
+            return Err(CommitmentError(CommitmentKeyLengthError));
+        }
+        let glen = (l / GROUP_ELEMENT_LENGTH) - 1;
+        let mut gs: Vec<G1Affine> = Vec::new();
+        for i in 0..glen {
+            let j = i * GROUP_ELEMENT_LENGTH;
+            let k = j + GROUP_ELEMENT_LENGTH;
+            let mut g = G1Compressed::empty();
+            g.as_mut().copy_from_slice(&bytes[j..k]);
+            match g.into_affine() {
+                Err(x) => return Err(CommitmentError(GDecodingError(x))),
+                Ok(g_affine) => gs.push(g_affine),
+            }
+        }
+        let mut h = G1Compressed::empty();
+        h.as_mut()
+            .copy_from_slice(&bytes[(l - GROUP_ELEMENT_LENGTH)..]);
 
-          match h.into_affine() {
-              Err(x) => Err(CommitmentError(GDecodingError(x))),
-              Ok(h_affine) => Ok(CommitmentKey (gs, h_affine))
-         }
+        match h.into_affine() {
+            Err(x) => Err(CommitmentError(GDecodingError(x))),
+            Ok(h_affine) => Ok(CommitmentKey(gs, h_affine)),
+        }
     }
 
-    pub fn commit<T>(&self, ss: &Value, csprng: &mut T)-> (Commitment , Fr)
-        where T: Rng,{
+    pub fn commit<T>(&self, ss: &Value, csprng: &mut T) -> (Commitment, Fr)
+    where
+        T: Rng,
+    {
         let r = Fr::rand(csprng);
-        (self.hide(ss, r).unwrap(),r) //panicking is Ok here
+        (self.hide(ss, r).unwrap(), r) //panicking is Ok here
+    }
 
-     }
-
-
-    fn hide(&self, ss:&Value, r:Fr) -> Result<Commitment, CommitmentError>{
-        if self.0.len()!=ss.0.len() { return Err (CommitmentError(KeyValueLengthMismatch))};
+    fn hide(&self, ss: &Value, r: Fr) -> Result<Commitment, CommitmentError> {
+        if self.0.len() != ss.0.len() {
+            return Err(CommitmentError(KeyValueLengthMismatch));
+        };
         let mut h = self.1.into_projective();
         h.mul_assign(r);
         let g = &self.0;
         let mut res = h;
-        let mut gs: G1; 
-        for (i,_) in self.0.iter().enumerate() {
+        let mut gs: G1;
+        for (i, _) in self.0.iter().enumerate() {
             gs = g[i].into_projective();
             gs.mul_assign(ss.0[i]);
             res.add_assign(&gs);
         }
         Ok(Commitment(res.into_affine()))
     }
-    
-    pub fn open(&self, ss:&Value, r: Fr, c: Commitment)-> bool{
-        match self.hide(ss,r){
-            Err(_) => false,
-            Ok(x) => x==c
-        }
 
+    pub fn open(&self, ss: &Value, r: Fr, c: Commitment) -> bool {
+        match self.hide(ss, r) {
+            Err(_) => false,
+            Ok(x) => x == c,
+        }
     }
 
     /// Generate a `CommitmentKey` for `n` values from a `csprng`.
     ///
-    pub fn generate<T>(n: usize, csprng: &mut T)-> CommitmentKey
-      where T:  Rng,{
-          let mut gs: Vec<G1Affine> = Vec::new();
-          for _i in 0..n {
-              let g_fr = Fr::rand(csprng);
-              let g = G1Affine::one().mul(g_fr);
-              gs.push(g.into_affine());
-          }
-          let h_fr = Fr::rand(csprng); 
-          let h = G1Affine::one().mul(h_fr);
-          CommitmentKey(gs,h.into_affine())
-      }
+    pub fn generate<T>(n: usize, csprng: &mut T) -> CommitmentKey
+    where
+        T: Rng,
+    {
+        let mut gs: Vec<G1Affine> = Vec::new();
+        for _i in 0..n {
+            let g_fr = Fr::rand(csprng);
+            let g = G1Affine::one().mul(g_fr);
+            gs.push(g.into_affine());
+        }
+        let h_fr = Fr::rand(csprng);
+        let h = G1Affine::one().mul(h_fr);
+        CommitmentKey(gs, h.into_affine())
+    }
 }
 
-
 #[cfg(feature = "serde")]
-impl Serialize for CommitmentKey{
+impl Serialize for CommitmentKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -143,7 +145,7 @@ impl Serialize for CommitmentKey{
 }
 
 #[cfg(feature = "serde")]
-impl<'d> Deserialize<'d> for CommitmentKey{
+impl<'d> Deserialize<'d> for CommitmentKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'d>,
@@ -161,34 +163,33 @@ impl<'d> Deserialize<'d> for CommitmentKey{
             where
                 E: SerdeError,
             {
-                CommitmentKey::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
+                CommitmentKey::from_bytes(bytes)
+                    .or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }
         }
         deserializer.deserialize_bytes(CommitmentKeyVisitor)
     }
 }
 
-
 #[test]
-pub fn key_to_byte_conversion(){
+pub fn key_to_byte_conversion() {
     let mut csprng = thread_rng();
-    for i in 1..10{
-        let sk = CommitmentKey::generate(i,  &mut csprng);
-        let res_sk2= CommitmentKey::from_bytes(&*sk.to_bytes());
+    for i in 1..10 {
+        let sk = CommitmentKey::generate(i, &mut csprng);
+        let res_sk2 = CommitmentKey::from_bytes(&*sk.to_bytes());
         assert!(res_sk2.is_ok());
-        let sk2= res_sk2.unwrap(); 
+        let sk2 = res_sk2.unwrap();
         assert_eq!(sk2, sk);
     }
 }
 
 #[test]
-pub fn commit_open(){
+pub fn commit_open() {
     let mut csprng = thread_rng();
-    for i in 1..10{
-        let sk = CommitmentKey::generate(i,  &mut csprng);
+    for i in 1..10 {
+        let sk = CommitmentKey::generate(i, &mut csprng);
         let ss = Value::generate(i, &mut csprng);
-        let (c, r)= sk.commit(&ss, &mut csprng);
+        let (c, r) = sk.commit(&ss, &mut csprng);
         assert!(sk.open(&ss, r, c))
     }
 }
-

@@ -1,11 +1,11 @@
 // -*- mode: rust; -*-
-  //
-  // This file is part of concordium_crypto
-  // Copyright (c) 2019 -
-  // See LICENSE for licensing information.
-  //
-  // Authors:
-  // - bm@concordium.com
+//
+// This file is part of concordium_crypto
+// Copyright (c) 2019 -
+// See LICENSE for licensing information.
+//
+// Authors:
+// - bm@concordium.com
 
 //! Errors which may occur when parsing keys and/or proofs to or from wire formats.
 
@@ -40,14 +40,12 @@ pub(crate) enum InternalError {
 impl Display for InternalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            InternalError::PointDecompression
-                => write!(f, "Cannot decompress Edwards point"),
-            InternalError::ScalarFormat
-                => write!(f, "Cannot use scalar with high-bit set"),
-            InternalError::BytesLength{ name: n, length: l}
-                => write!(f, "{} must be {} bytes in length", n, l),
-            InternalError::Verify
-                => write!(f, "Verification equation was not satisfied"),
+            InternalError::PointDecompression => write!(f, "Cannot decompress Edwards point"),
+            InternalError::ScalarFormat => write!(f, "Cannot use scalar with high-bit set"),
+            InternalError::BytesLength { name: n, length: l } => {
+                write!(f, "{} must be {} bytes in length", n, l)
+            }
+            InternalError::Verify => write!(f, "Verification equation was not satisfied"),
         }
     }
 }

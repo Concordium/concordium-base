@@ -1,14 +1,13 @@
 // -*- mode: rust; -*-
 //
 // This file is part of concordium_crypto
-// Copyright (c) 2019 - 
+// Copyright (c) 2019 -
 // See LICENSE for licensing information.
 //
 // Authors:
 // - bm@concordium.com
 
-//! Common constants 
-
+//! Common constants
 
 //length of prf in bytes
 //pub const COMMITMENT_KEY_LENGTH: usize = 48*2;
@@ -16,7 +15,7 @@
 //length of a commitment
 pub const COMMITMENT_LENGTH: usize = 48;
 
-//length of randomness 
+//length of randomness
 pub const RANDOMNESS_LENGTH: usize = FIELD_ELEMENT_LENGTH;
 
 //size of hiding prarmeter in bytes
@@ -25,7 +24,6 @@ pub const RANDOMNESS_LENGTH: usize = FIELD_ELEMENT_LENGTH;
 
 //length of gruop element in bytes
 pub const GROUP_ELEMENT_LENGTH: usize = 48;
-
 
 //length of field element in bytes
 pub const FIELD_ELEMENT_LENGTH: usize = 32;

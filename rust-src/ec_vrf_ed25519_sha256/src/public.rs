@@ -17,8 +17,8 @@ use curve25519_dalek::edwards::CompressedEdwardsY;
 use curve25519_dalek::edwards::EdwardsPoint;
 use curve25519_dalek::scalar::Scalar;
 
-pub use sha2::Sha512;
 pub use sha2::Sha256;
+pub use sha2::Sha512;
 
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
@@ -31,8 +31,8 @@ use serde::{Deserializer, Serializer};
 
 use crate::constants::*;
 use crate::errors::*;
-use crate::secret::*;
 use crate::proof::*;
+use crate::secret::*;
 /// An ed25519 public key.
 #[derive(Copy, Clone, Default, Eq, PartialEq)]
 pub struct PublicKey(pub(crate) CompressedEdwardsY, pub(crate) EdwardsPoint);
@@ -48,7 +48,6 @@ impl AsRef<[u8]> for PublicKey {
         self.as_bytes()
     }
 }
-
 
 impl<'a> From<&'a SecretKey> for PublicKey {
     /// Derive this public key from its corresponding `SecretKey`.
@@ -114,7 +113,6 @@ impl PublicKey {
 
         Ok(PublicKey(compressed, point))
     }
-    
 
     /// Internal utility function for mangling the bits of a (formerly
     /// mathematically well-defined) "scalar" and multiplying it to produce a
@@ -132,11 +130,11 @@ impl PublicKey {
         PublicKey(compressed, point)
     }
 
-    pub fn hash_to_curve(&self, message: &[u8]) -> Result<EdwardsPoint, ProofError>{
+    pub fn hash_to_curve(&self, message: &[u8]) -> Result<EdwardsPoint, ProofError> {
         let mut ctr = 0u32;
         let mut done = false;
-        let mut p_candidate_bytes = [0u8;32];
-        let mut h: Sha256 = Sha256::new();        
+        let mut p_candidate_bytes = [0u8; 32];
+        let mut h: Sha256 = Sha256::new();
         h.input(&self.as_bytes());
         h.input(&message);
         while !done {
@@ -145,45 +143,48 @@ impl PublicKey {
             let hash = attempt_h.result();
             p_candidate_bytes.copy_from_slice(hash.as_slice());
             let p_candidate = CompressedEdwardsY(p_candidate_bytes);
-            if let Some(ed_point)= p_candidate.decompress(){
+            if let Some(ed_point) = p_candidate.decompress() {
                 return Ok(ed_point.mul_by_cofactor());
             }
-            if ctr== u32::max_value() {done=true;} else {ctr += 1;}
+            if ctr == u32::max_value() {
+                done = true;
+            } else {
+                ctr += 1;
+            }
         }
         Err(ProofError(InternalError::PointDecompression))
     }
-    pub fn verify_key(public_key_bytes: &[u8;32])->bool{
-        match PublicKey::from_bytes(public_key_bytes){
-            Ok(pk) => ! pk.1.is_small_order(),
-            _      => false
+    pub fn verify_key(public_key_bytes: &[u8; 32]) -> bool {
+        match PublicKey::from_bytes(public_key_bytes) {
+            Ok(pk) => !pk.1.is_small_order(),
+            _ => false,
         }
     }
 
     // TODO : Rename variable names more appropriately
     #[allow(clippy::many_single_char_names)]
-    pub fn verify(&self, pi: Proof, message: &[u8])-> bool{
+    pub fn verify(&self, pi: Proof, message: &[u8]) -> bool {
         let Proof(point, c, s) = pi; //s should be equal k- c x, where k is random and x is secret key
                                      //self should be equal g^x
-        let g_to_s = &s * &constants::ED25519_BASEPOINT_TABLE;//should be equal to g^(k-c x)
+        let g_to_s = &s * &constants::ED25519_BASEPOINT_TABLE; //should be equal to g^(k-c x)
         let self_to_c = c * self.1; //self_to_c should be equal to g^(cx)
         let u = self_to_c + g_to_s; //should equal g^k
         match self.hash_to_curve(message) {
             Err(_) => false,
-            Ok (h) => {
+            Ok(h) => {
                 let v = (c * point) + (s * h); //should equal h^cs * h^(k-cx) = h^k
                 let derivable_c = hash_points(&[
-                                              constants::ED25519_BASEPOINT_COMPRESSED,
-                                              h.compress(),
-                                              self.0,
-                                              point.compress(),
-                                              u.compress(),
-                                              v.compress()
+                    constants::ED25519_BASEPOINT_COMPRESSED,
+                    h.compress(),
+                    self.0,
+                    point.compress(),
+                    u.compress(),
+                    v.compress(),
                 ]);
-                c==derivable_c
-            } 
+                c == derivable_c
+            }
         }
     }
-
 }
 
 #[cfg(feature = "serde")]

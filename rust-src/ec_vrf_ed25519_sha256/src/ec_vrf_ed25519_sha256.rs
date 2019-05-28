@@ -4,13 +4,12 @@
 // - bm@concordium.com
 //
 
-//! ed25519 VRF 
+//! ed25519 VRF
 
-
-use rand::CryptoRng;
-use rand::RngCore;
-use rand::Rng;
 use rand::thread_rng;
+use rand::CryptoRng;
+use rand::Rng;
+use rand::RngCore;
 
 use std::slice;
 
@@ -27,12 +26,11 @@ pub use sha2::Sha512;
 
 pub use curve25519_dalek::digest::Digest;
 
-
 pub use crate::constants::*;
 pub use crate::errors::*;
+pub use crate::proof::*;
 pub use crate::public::*;
 pub use crate::secret::*;
-pub use crate::proof::*;
 
 /// An ed25519 keypair.
 #[derive(Debug, Default)] // we derive Default in order to use the clear() method in Drop
@@ -90,7 +88,7 @@ impl Keypair {
         let secret = SecretKey::from_bytes(&bytes[..SECRET_KEY_LENGTH])?;
         let public = PublicKey::from_bytes(&bytes[SECRET_KEY_LENGTH..])?;
 
-        Ok(Keypair{ secret, public })
+        Ok(Keypair { secret, public })
     }
 
     /// Generate an ed25519 keypair.
@@ -102,14 +100,21 @@ impl Keypair {
         let sk: SecretKey = SecretKey::generate(csprng);
         let pk: PublicKey = (&sk).into();
 
-        Keypair{ public: pk, secret: sk }
+        Keypair {
+            public: pk,
+            secret: sk,
+        }
     }
 
     /// prove a message with this keypair's secret key.
-    pub fn prove<R: RngCore + CryptoRng>(&self, message: &[u8], rng:&mut R) -> Result<Proof, ProofError> {
+    pub fn prove<R: RngCore + CryptoRng>(
+        &self,
+        message: &[u8],
+        rng: &mut R,
+    ) -> Result<Proof, ProofError> {
         let expanded: ExpandedSecretKey = (&self.secret).into();
 
-        expanded.prove(&self.public, &message,  rng)
+        expanded.prove(&self.public, &message, rng)
     }
 }
 
@@ -135,9 +140,11 @@ impl<'d> Deserialize<'d> for Keypair {
             type Value = Keypair;
 
             fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                formatter.write_str("An ed25519 keypair, 64 bytes in total where the secret key is \
-                                     the first 32 bytes and is in unexpanded form, and the second \
-                                     32 bytes is a compressed point for a public key.")
+                formatter.write_str(
+                    "An ed25519 keypair, 64 bytes in total where the secret key is \
+                     the first 32 bytes and is in unexpanded form, and the second \
+                     32 bytes is a compressed point for a public key.",
+                )
             }
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Keypair, E>
@@ -148,7 +155,10 @@ impl<'d> Deserialize<'d> for Keypair {
                 let public_key = PublicKey::from_bytes(&bytes[SECRET_KEY_LENGTH..]);
 
                 if secret_key.is_ok() && public_key.is_ok() {
-                    Ok(Keypair{ secret: secret_key.unwrap(), public: public_key.unwrap() })
+                    Ok(Keypair {
+                        secret: secret_key.unwrap(),
+                        public: public_key.unwrap(),
+                    })
                 } else {
                     Err(SerdeError::invalid_length(bytes.len(), &self))
                 }
@@ -158,7 +168,6 @@ impl<'d> Deserialize<'d> for Keypair {
     }
 }
 
-
 //foreign interface
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -167,69 +176,102 @@ impl<'d> Deserialize<'d> for Keypair {
 //-2 public key extraction failed
 //0 proving failed
 //1 success
-pub extern fn ec_vrf_prove(proof: &mut [u8;PROOF_LENGTH], public_key_bytes: &[u8;PUBLIC_KEY_LENGTH], secret_key_bytes: &[u8;SECRET_KEY_LENGTH], message: *const u8, len: usize)->i32{
-   let res_sk = SecretKey::from_bytes(secret_key_bytes);
-   let res_pk = PublicKey::from_bytes(public_key_bytes);
-   if res_sk.is_err() { return -1 };
-   if res_pk.is_err() { return -2 };
-   let sk = res_sk.unwrap();
-   let pk = res_pk.unwrap();
-                
-   assert!(!message.is_null(), "Null pointer in ec_vrf_prove");
-   let data: &[u8]= unsafe { slice::from_raw_parts(message, len)};
-   let mut csprng = thread_rng();
-   match sk.prove(&pk, data, &mut csprng){
-       Err(_) => 0,
-       p    => {proof.copy_from_slice(&p.unwrap().to_bytes()); 
-                 1
-       }
+pub extern "C" fn ec_vrf_prove(
+    proof: &mut [u8; PROOF_LENGTH],
+    public_key_bytes: &[u8; PUBLIC_KEY_LENGTH],
+    secret_key_bytes: &[u8; SECRET_KEY_LENGTH],
+    message: *const u8,
+    len: usize,
+) -> i32 {
+    let res_sk = SecretKey::from_bytes(secret_key_bytes);
+    let res_pk = PublicKey::from_bytes(public_key_bytes);
+    if res_sk.is_err() {
+        return -1;
+    };
+    if res_pk.is_err() {
+        return -2;
+    };
+    let sk = res_sk.unwrap();
+    let pk = res_pk.unwrap();
+
+    assert!(!message.is_null(), "Null pointer in ec_vrf_prove");
+    let data: &[u8] = unsafe { slice::from_raw_parts(message, len) };
+    let mut csprng = thread_rng();
+    match sk.prove(&pk, data, &mut csprng) {
+        Err(_) => 0,
+        p => {
+            proof.copy_from_slice(&p.unwrap().to_bytes());
+            1
+        }
     }
 }
 
 #[no_mangle]
-pub extern fn ec_vrf_priv_key(secret_key_bytes: &mut[u8;SECRET_KEY_LENGTH])-> i32{
-   let mut csprng = thread_rng();
-   let sk = SecretKey::generate(&mut csprng); 
-   secret_key_bytes.copy_from_slice(&sk.to_bytes());
-   1
+pub extern "C" fn ec_vrf_priv_key(secret_key_bytes: &mut [u8; SECRET_KEY_LENGTH]) -> i32 {
+    let mut csprng = thread_rng();
+    let sk = SecretKey::generate(&mut csprng);
+    secret_key_bytes.copy_from_slice(&sk.to_bytes());
+    1
 }
 
 //error encodeing
 //bad input
 #[no_mangle]
-pub extern fn ec_vrf_pub_key(public_key_bytes: &mut[u8;32], secret_key_bytes: &[u8;32])->i32{
+pub extern "C" fn ec_vrf_pub_key(
+    public_key_bytes: &mut [u8; 32],
+    secret_key_bytes: &[u8; 32],
+) -> i32 {
     let res_sk = SecretKey::from_bytes(secret_key_bytes);
-    if res_sk.is_err() { return -1 };
+    if res_sk.is_err() {
+        return -1;
+    };
     let sk = res_sk.unwrap();
-    let pk = PublicKey::from(&sk); 
+    let pk = PublicKey::from(&sk);
     public_key_bytes.copy_from_slice(&pk.to_bytes());
     1
 }
 
 #[no_mangle]
-pub extern fn ec_vrf_proof_to_hash(hash: &mut[u8;32], pi: &[u8;80]) {
+pub extern "C" fn ec_vrf_proof_to_hash(hash: &mut [u8; 32], pi: &[u8; 80]) {
     let proof = Proof::from_bytes(&pi).expect("Proof Parsing failed");
     hash.copy_from_slice(&proof.to_hash());
 }
 
 #[no_mangle]
-pub extern fn ec_vrf_verify_key(key: &[u8;32]) -> i32{
-   if PublicKey::verify_key(key) { 1 } else { 0 } 
+pub extern "C" fn ec_vrf_verify_key(key: &[u8; 32]) -> i32 {
+    if PublicKey::verify_key(key) {
+        1
+    } else {
+        0
+    }
 }
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern fn ec_vrf_verify(public_key_bytes: &[u8;32], proof_bytes: &[u8;80], message: *const u8, len:usize)-> i32{
+pub extern "C" fn ec_vrf_verify(
+    public_key_bytes: &[u8; 32],
+    proof_bytes: &[u8; 80],
+    message: *const u8,
+    len: usize,
+) -> i32 {
     let res_pk = PublicKey::from_bytes(public_key_bytes);
-    if res_pk.is_err() { return -2 };
+    if res_pk.is_err() {
+        return -2;
+    };
     let pk = res_pk.unwrap();
 
     let res_proof = Proof::from_bytes(&proof_bytes);
-    if res_proof.is_err() { return -1 };
+    if res_proof.is_err() {
+        return -1;
+    };
     let proof = res_proof.unwrap();
 
     assert!(!message.is_null(), "Null pointer in ec_vrf_prove");
-    let data: &[u8]= unsafe { slice::from_raw_parts(message, len)};
+    let data: &[u8] = unsafe { slice::from_raw_parts(message, len) };
 
-    if pk.verify(proof, data) { 1 } else { 0 }
+    if pk.verify(proof, data) {
+        1
+    } else {
+        0
+    }
 }

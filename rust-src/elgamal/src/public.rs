@@ -12,7 +12,6 @@
 use core::fmt::Debug;
 use rand::*;
 
-
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
 #[cfg(feature = "serde")]
@@ -22,27 +21,25 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use pairing::{CurveProjective,  CurveAffine, EncodedPoint};
-use pairing::bls12_381::{G1Compressed, G1,  Fr};
+use pairing::bls12_381::{Fr, G1Compressed, G1};
+use pairing::{CurveAffine, CurveProjective, EncodedPoint};
 
-use crate::constants::*;
-use crate::errors::*;
-use crate::errors::InternalError::{GDecodingError,PublicKeyLengthError};
-use crate::secret::*;
-use crate::message::*;
 use crate::cipher::*;
+use crate::constants::*;
+use crate::errors::InternalError::{GDecodingError, PublicKeyLengthError};
+use crate::errors::*;
+use crate::message::*;
+use crate::secret::*;
 
 /// Elgamal public key .
-#[derive(Copy, Clone,  Eq, PartialEq)]
-pub struct PublicKey(pub(crate)G1);
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub struct PublicKey(pub(crate) G1);
 
 impl Debug for PublicKey {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         write!(f, "PublicKey({:?})", self.0)
     }
 }
-
-
 
 impl<'a> From<&'a SecretKey> for PublicKey {
     /// Derive this public key from its corresponding `SecretKey`.
@@ -53,16 +50,14 @@ impl<'a> From<&'a SecretKey> for PublicKey {
     }
 }
 
-
 impl PublicKey {
     /// Convert this public key to a byte array.
     #[inline]
     pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
         let mut ar = [0u8; PUBLIC_KEY_LENGTH];
         ar.copy_from_slice(self.0.into_affine().into_compressed().as_ref());
-        ar 
+        ar
     }
-
 
     /// Construct a public key from a slice of bytes.
     ///
@@ -70,77 +65,84 @@ impl PublicKey {
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey, ElgamalError> {
-          if bytes.len() != PUBLIC_KEY_LENGTH { return Err(ElgamalError(PublicKeyLengthError))}
-          let mut g = G1Compressed::empty();
-          g.as_mut().copy_from_slice(&bytes);
-          match g.into_affine() {
-              Err(x) => Err(ElgamalError(GDecodingError(x))),
-              Ok(g_affine) => Ok(PublicKey (G1::from(g_affine)))
-          }
+        if bytes.len() != PUBLIC_KEY_LENGTH {
+            return Err(ElgamalError(PublicKeyLengthError));
+        }
+        let mut g = G1Compressed::empty();
+        g.as_mut().copy_from_slice(&bytes);
+        match g.into_affine() {
+            Err(x) => Err(ElgamalError(GDecodingError(x))),
+            Ok(g_affine) => Ok(PublicKey(G1::from(g_affine))),
+        }
     }
 
     #[inline]
     pub fn encrypt<T>(&self, csprng: &mut T, m: &Message) -> Cipher
-    where T:Rng{
+    where
+        T: Rng,
+    {
         let fr = Fr::rand(csprng); //k
         let mut t = G1::one(); //g
         t.mul_assign(fr); //kg
-        let mut s= self.0;
+        let mut s = self.0;
         s.mul_assign(fr); //kag
         s.add_assign(&m.0); //kag + m
         Cipher(t, s)
-
     }
-/*
-    pub fn encrypt_bin_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
-        where T:Rng{
-            if !e { 
-                self.encrypt(csprng, &Message(G1::zero()))
-            } else{
-                self.encrypt(csprng, &Message(G1::one()))
-            }
-    }
-    pub fn encrypt_binary_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
-      where T:Rng {
-            let mut csprng = thread_rng();  
-            if !e { 
-                self.encrypt(&mut csprng, &Message(G1::zero()))
-            } else{
-                self.encrypt(&mut csprng, &Message(G1::one()))
-            }
-    }
-*/
-    pub fn hide (&self, k: Fr, m: &Message) -> Cipher{
+    /*
+        pub fn encrypt_bin_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
+            where T:Rng{
+                if !e {
+                    self.encrypt(csprng, &Message(G1::zero()))
+                } else{
+                    self.encrypt(csprng, &Message(G1::one()))
+                }
+        }
+        pub fn encrypt_binary_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
+          where T:Rng {
+                let mut csprng = thread_rng();
+                if !e {
+                    self.encrypt(&mut csprng, &Message(G1::zero()))
+                } else{
+                    self.encrypt(&mut csprng, &Message(G1::one()))
+                }
+        }
+    */
+    pub fn hide(&self, k: Fr, m: &Message) -> Cipher {
         let mut t = G1::one(); //g
         t.mul_assign(k); //kg
         let mut s = self.0;
         s.mul_assign(k); //kag
         s.add_assign(&m.0); //kag + m
-        Cipher(t,s)
+        Cipher(t, s)
     }
 
-    pub fn hide_binary_exp(&self, h: Fr, e:bool) -> Cipher {
+    pub fn hide_binary_exp(&self, h: Fr, e: bool) -> Cipher {
         if !e {
-            self.hide(h,&Message(G1::zero()))
+            self.hide(h, &Message(G1::zero()))
         } else {
             self.hide(h, &Message(G1::one()))
         }
     }
 
     pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &Fr) -> Cipher
-        where T:Rng{
+    where
+        T: Rng,
+    {
         let mut m = G1::one(); //g
         let e2 = *e;
-        m.mul_assign(e2);//g^e
+        m.mul_assign(e2); //g^e
         self.encrypt(csprng, &Message(m))
     }
 
     pub fn encrypt_exponent_vec<T>(&self, csprng: &mut T, e: &[Fr]) -> Vec<Cipher>
-        where T:Rng{
-            e.iter().map(|x| {self.encrypt_exponent(csprng, &x)}).collect()
+    where
+        T: Rng,
+    {
+        e.iter()
+            .map(|x| self.encrypt_exponent(csprng, &x))
+            .collect()
     }
-    
-
 }
 
 #[cfg(feature = "serde")]
@@ -165,9 +167,7 @@ impl<'d> Deserialize<'d> for PublicKey {
             type Value = PublicKey;
 
             fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                formatter.write_str(
-                    "An Elgamal public key as a 48-bytes",
-                )
+                formatter.write_str("An Elgamal public key as a 48-bytes")
             }
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<PublicKey, E>
@@ -182,15 +182,15 @@ impl<'d> Deserialize<'d> for PublicKey {
 }
 
 #[test]
-pub fn key_to_byte_conversion(){
+pub fn key_to_byte_conversion() {
     let mut csprng = thread_rng();
-    for _i in 1..100{
+    for _i in 1..100 {
         let sk = SecretKey::generate(&mut csprng);
         let pk = PublicKey::from(&sk);
         let r = pk.to_bytes();
-        let res_pk2= PublicKey::from_bytes(&r);
+        let res_pk2 = PublicKey::from_bytes(&r);
         assert!(res_pk2.is_ok());
-        let pk2= res_pk2.unwrap();
+        let pk2 = res_pk2.unwrap();
         assert_eq!(pk2, pk);
     }
 }

@@ -1,7 +1,7 @@
 // -*- mode: rust; -*-
 //
 // This file is part of concordium_crypto
-// Copyright (c) 2019 - 
+// Copyright (c) 2019 -
 // See LICENSE for licensing information.
 //
 // Authors:
@@ -28,4 +28,5 @@ const EXPANDED_SECRET_KEY_KEY_LENGTH: usize = 32;
 const EXPANDED_SECRET_KEY_NONCE_LENGTH: usize = 32;
 
 /// The length of an "expanded" ed25519 key, `ExpandedSecretKey`, in bytes.
-pub const EXPANDED_SECRET_KEY_LENGTH: usize = EXPANDED_SECRET_KEY_KEY_LENGTH + EXPANDED_SECRET_KEY_NONCE_LENGTH;
+pub const EXPANDED_SECRET_KEY_LENGTH: usize =
+    EXPANDED_SECRET_KEY_KEY_LENGTH + EXPANDED_SECRET_KEY_NONCE_LENGTH;

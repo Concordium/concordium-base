@@ -9,16 +9,14 @@ use core::fmt::Debug;
 
 use clear_on_drop::clear::Clear;
 
-
-
 use curve25519_dalek::constants;
 use curve25519_dalek::digest::Digest;
 use curve25519_dalek::edwards::EdwardsPoint;
 use curve25519_dalek::scalar::Scalar;
 
 use rand::CryptoRng;
-use rand::RngCore;
 use rand::Rng;
+use rand::RngCore;
 
 use sha2::Sha512;
 
@@ -90,10 +88,14 @@ impl SecretKey {
     }
 
     #[allow(non_snake_case)]
-    pub fn prove<R: RngCore + CryptoRng>(&self, public_key:&PublicKey, message: &[u8], rng: &mut R) -> Result<Proof, ProofError>{
-        ExpandedSecretKey::from(self).prove(&public_key, &message,  rng)
+    pub fn prove<R: RngCore + CryptoRng>(
+        &self,
+        public_key: &PublicKey,
+        message: &[u8],
+        rng: &mut R,
+    ) -> Result<Proof, ProofError> {
+        ExpandedSecretKey::from(self).prove(&public_key, &message, rng)
     }
-
 
     /// Generate a `SecretKey` from a `csprng`.
     ///
@@ -202,7 +204,7 @@ impl<'a> From<&'a SecretKey> for ExpandedSecretKey {
     ///
     fn from(secret_key: &'a SecretKey) -> ExpandedSecretKey {
         let mut h: Sha512 = Sha512::default();
-        let mut hash:  [u8; 64] = [0u8; 64];
+        let mut hash: [u8; 64] = [0u8; 64];
         let mut lower: [u8; 32] = [0u8; 32];
         let mut upper: [u8; 32] = [0u8; 32];
 
@@ -212,11 +214,14 @@ impl<'a> From<&'a SecretKey> for ExpandedSecretKey {
         lower.copy_from_slice(&hash[00..32]);
         upper.copy_from_slice(&hash[32..64]);
 
-        lower[0]  &= 248;
-        lower[31] &=  63;
-        lower[31] |=  64;
+        lower[0] &= 248;
+        lower[31] &= 63;
+        lower[31] |= 64;
 
-        ExpandedSecretKey{ key: Scalar::from_bits(lower), nonce: upper, }
+        ExpandedSecretKey {
+            key: Scalar::from_bits(lower),
+            nonce: upper,
+        }
     }
 }
 use crate::proof::*;
@@ -262,27 +267,31 @@ impl ExpandedSecretKey {
     }
 
     /// VRF proof with expanded secret key
-    pub fn prove<R: RngCore + CryptoRng>(&self, public_key:&PublicKey, message: &[u8], rng: &mut R) -> Result<Proof, ProofError>{
-        let h:EdwardsPoint = public_key.hash_to_curve(message).expect("prove failed");
+    pub fn prove<R: RngCore + CryptoRng>(
+        &self,
+        public_key: &PublicKey,
+        message: &[u8],
+        rng: &mut R,
+    ) -> Result<Proof, ProofError> {
+        let h: EdwardsPoint = public_key.hash_to_curve(message).expect("prove failed");
         //let x = self.mangle_scalar_bits_and_return_scalar(); //secret key
         let x = self.key;
         let h_to_x = x * h; //h^x
         let k = Scalar::random(rng); //nonce
         let h_to_k = k * h; //h^k
-        let g_to_k = &k *&constants::ED25519_BASEPOINT_TABLE; //g^k
+        let g_to_k = &k * &constants::ED25519_BASEPOINT_TABLE; //g^k
         let c = hash_points(&[
-                            constants::ED25519_BASEPOINT_COMPRESSED,
-                            h.compress(),
-                            public_key.0,
-                            h_to_x.compress(),
-                            g_to_k.compress(),
-                            h_to_k.compress()
+            constants::ED25519_BASEPOINT_COMPRESSED,
+            h.compress(),
+            public_key.0,
+            h_to_x.compress(),
+            g_to_k.compress(),
+            h_to_k.compress(),
         ]);
         let k_minus_cx = k - (c * x);
 
-        Ok (Proof(h_to_x, c, k_minus_cx))
+        Ok(Proof(h_to_x, c, k_minus_cx))
     }
-
 }
 
 #[cfg(feature = "serde")]

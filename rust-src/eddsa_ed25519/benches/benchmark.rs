@@ -1,17 +1,15 @@
 #[macro_use]
 extern crate criterion;
-extern crate rand;
 extern crate ed25519_dalek;
+extern crate rand;
 
-use rand::*;
 use criterion::Criterion;
 use ed25519_dalek::*;
+use rand::*;
 
-
-
-fn bench_sign(c:&mut Criterion){
+fn bench_sign(c: &mut Criterion) {
     let mut csprng = thread_rng();
-    let mut a:Vec<u8> = Vec::new();
+    let mut a: Vec<u8> = Vec::new();
     for _ in 0..1000 {
         a.push(csprng.gen::<u8>());
     }
@@ -21,8 +19,12 @@ fn bench_sign(c:&mut Criterion){
     let pk = PublicKey::from(&sk);
     let expanded_sk = ExpandedSecretKey::from(&sk);
     let sig = expanded_sk.sign(a.as_slice(), &pk);
-    c.bench_function("sign {}",  move |b| b.iter(||  expanded_sk.sign(a.as_slice(), &pk)));
-    c.bench_function("verify{}", move |b| b.iter(|| pk.verify(d.as_slice(), &sig)));
+    c.bench_function("sign {}", move |b| {
+        b.iter(|| expanded_sk.sign(a.as_slice(), &pk))
+    });
+    c.bench_function("verify{}", move |b| {
+        b.iter(|| pk.verify(d.as_slice(), &sig))
+    });
 }
 
 /*
@@ -45,4 +47,3 @@ fn criterion_benchmark(c: &mut Criterion) {
 
 criterion_group!(benches, bench_sign);
 criterion_main!(benches);
-

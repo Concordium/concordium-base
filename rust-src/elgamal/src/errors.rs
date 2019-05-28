@@ -1,12 +1,11 @@
 // -*- mode: rust; -*-
-  //
-  // This file is part of concordium_crypto
-  // Copyright (c) 2019 -
-  // See LICENSE for licensing information.
-  //
-  // Authors:
-  // - bm@concordium.com
-
+//
+// This file is part of concordium_crypto
+// Copyright (c) 2019 -
+// See LICENSE for licensing information.
+//
+// Authors:
+// - bm@concordium.com
 
 // rustc seems to think the typenames in match statements (e.g. in
 // Display) should be snake cased, for some reason.
@@ -14,11 +13,11 @@
 
 use core::fmt;
 use core::fmt::Display;
-use pairing::{PrimeFieldDecodingError, GroupDecodingError};
+use pairing::{GroupDecodingError, PrimeFieldDecodingError};
 
 /// Internal errors.  
 
-#[derive(Debug )]
+#[derive(Debug)]
 // TODO : Rename these
 #[allow(clippy::enum_variant_names)]
 pub(crate) enum InternalError {
@@ -26,22 +25,17 @@ pub(crate) enum InternalError {
     GDecodingError(GroupDecodingError),
     PublicKeyLengthError,
     MessageLengthError,
-    CipherLengthError
+    CipherLengthError,
 }
 
 impl Display for InternalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            InternalError::GDecodingError(ref p)
-                => write!(f,"{}", p),
-            InternalError::DecodingError(ref p)
-                => write!(f,"{}", p),
-            InternalError::PublicKeyLengthError
-                => write!(f, "Wrong PublicKey length"),
-            InternalError::MessageLengthError
-                => write!(f, "Wrong message length"),
-            InternalError::CipherLengthError
-                => write!(f, "Wrong cipher length"),
+            InternalError::GDecodingError(ref p) => write!(f, "{}", p),
+            InternalError::DecodingError(ref p) => write!(f, "{}", p),
+            InternalError::PublicKeyLengthError => write!(f, "Wrong PublicKey length"),
+            InternalError::MessageLengthError => write!(f, "Wrong message length"),
+            InternalError::CipherLengthError => write!(f, "Wrong cipher length"),
         }
     }
 }
@@ -54,8 +48,8 @@ impl ::failure::Fail for InternalError {}
 ///
 /// * Being given bytes with a length different to what was expected.
 ///
-/// * A problem decoding to a scalar, 
-/// 
+/// * A problem decoding to a scalar,
+///
 /// * A problem  decoding to a group element
 ///
 
