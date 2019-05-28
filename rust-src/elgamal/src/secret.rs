@@ -14,38 +14,38 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::cipher::*;
-use crate::constants::*;
-use crate::errors::InternalError::DecodingError;
-use crate::errors::*;
-use crate::message::*;
-use pairing::bls12_381::{Fr, FrRepr, G1};
-use pairing::{CurveProjective, Field, PrimeField};
+use crate::{
+    cipher::*,
+    constants::*,
+    errors::{InternalError::DecodingError, *},
+    message::*,
+};
+use pairing::{
+    bls12_381::{Fr, FrRepr, G1},
+    CurveProjective, Field, PrimeField,
+};
 use rand::*;
 
 /// elgamal secret  key.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SecretKey(pub(crate) Fr);
 
-/* THIS IS COMMENTED FOR NOW FOR COMPATIBILITY WITH BLS CURVE IMPLEMENTATION
- * ONCE WE HAVE TAKEN OVER THE SOURCE OF THE CURVE THIS SHOULD BE IMPLEMENTED
-*/
-/*
-/// Overwrite secret key material with null bytes when it goes out of scope.
-///
-impl Drop for SecretKey {
-    fn drop(&mut self) {
-        (self.0).into_repr().0.clear();
-    }
-}
-*/
+// THIS IS COMMENTED FOR NOW FOR COMPATIBILITY WITH BLS CURVE IMPLEMENTATION
+// ONCE WE HAVE TAKEN OVER THE SOURCE OF THE CURVE THIS SHOULD BE IMPLEMENTED
+// Overwrite secret key material with null bytes when it goes out of scope.
+//
+// impl Drop for SecretKey {
+// fn drop(&mut self) {
+// (self.0).into_repr().0.clear();
+// }
+// }
 
 impl SecretKey {
     /// Convert a secret key into bytes
     #[inline]
     pub fn to_bytes(&self) -> [u8; SECRET_KEY_LENGTH] {
         let frpr = &self.0.into_repr();
-        let xs = frpr.as_ref(); //array of 64 bit integers (limbs) least significant first
+        let xs = frpr.as_ref(); // array of 64 bit integers (limbs) least significant first
         assert!(xs.len() * 8 <= SECRET_KEY_LENGTH);
         let mut bytes = [0u8; SECRET_KEY_LENGTH];
         let mut i = 0;
@@ -77,10 +77,10 @@ impl SecretKey {
     }
 
     pub fn decrypt(&self, c: &Cipher) -> Message {
-        let mut x = c.0; //k * g
+        let mut x = c.0; // k * g
         let mut y = c.1; // m + k * a * g
-        x.mul_assign(self.0); //k * a * g
-        y.sub_assign(&x); //m
+        x.mul_assign(self.0); // k * a * g
+        y.sub_assign(&x); // m
         Message(y)
     }
 
@@ -104,11 +104,9 @@ impl SecretKey {
     }
 
     /// Generate a `SecretKey` from a `csprng`.
-    ///
     pub fn generate<T>(csprng: &mut T) -> SecretKey
     where
-        T: Rng,
-    {
+        T: Rng, {
         SecretKey(Fr::rand(csprng))
     }
 }
@@ -117,8 +115,7 @@ impl SecretKey {
 impl Serialize for SecretKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         serializer.serialize_bytes(&self.to_bytes())
     }
 }
@@ -127,8 +124,7 @@ impl Serialize for SecretKey {
 impl<'d> Deserialize<'d> for SecretKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'d>,
-    {
+        D: Deserializer<'d>, {
         struct SecretKeyVisitor;
 
         impl<'d> Visitor<'d> for SecretKeyVisitor {
@@ -140,8 +136,7 @@ impl<'d> Deserialize<'d> for SecretKey {
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<SecretKey, E>
             where
-                E: SerdeError,
-            {
+                E: SerdeError, {
                 SecretKey::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }
         }

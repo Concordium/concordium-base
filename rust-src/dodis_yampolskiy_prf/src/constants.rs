@@ -10,11 +10,11 @@
 //! Common constants
 use pairing::bls12_381::FrRepr;
 
-//length of prf in bytes
+// length of prf in bytes
 #[allow(dead_code)]
 pub const PRF_LENGTH: usize = 48;
 
-//length of secret key, in bytes
+// length of secret key, in bytes
 pub const SECRET_KEY_LENGTH: usize = 32;
 
 // The maximum possible count 255
@@ -26,7 +26,7 @@ pub const MAX_COUNT: FrRepr = FrRepr([
     0x57c9_e652_d111_ec48,
     0x0c59_041b_7aa5_7a37,
 ]);
-//max secret key equal to MODULUS - MAX_COUNT - 1
+// max secret key equal to MODULUS - MAX_COUNT - 1
 pub const MAX_SECRET_KEY: FrRepr = FrRepr([
     0xffff_fdcc_0000_0233,
     0x7dcd_569b_fc62_adcb,

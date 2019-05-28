@@ -9,14 +9,14 @@
 
 //! Common constants
 
-//length of public key in bytes
+// length of public key in bytes
 pub const PUBLIC_KEY_LENGTH: usize = 48;
 
-//length of message (block) in bytes
+// length of message (block) in bytes
 pub const MESSAGE_LENGTH: usize = 48;
 
-//length of cipher in bytes
+// length of cipher in bytes
 pub const CIPHER_LENGTH: usize = 96;
 
-//length of secret key, in bytes
+// length of secret key, in bytes
 pub const SECRET_KEY_LENGTH: usize = 32;

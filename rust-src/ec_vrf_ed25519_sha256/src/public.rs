@@ -11,14 +11,14 @@
 
 use core::fmt::Debug;
 
-use curve25519_dalek::constants;
-use curve25519_dalek::digest::Digest;
-use curve25519_dalek::edwards::CompressedEdwardsY;
-use curve25519_dalek::edwards::EdwardsPoint;
-use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::{
+    constants,
+    digest::Digest,
+    edwards::{CompressedEdwardsY, EdwardsPoint},
+    scalar::Scalar,
+};
 
-pub use sha2::Sha256;
-pub use sha2::Sha512;
+pub use sha2::{Sha256, Sha512};
 
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
@@ -29,10 +29,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::constants::*;
-use crate::errors::*;
-use crate::proof::*;
-use crate::secret::*;
+use crate::{constants::*, errors::*, proof::*, secret::*};
 /// An ed25519 public key.
 #[derive(Copy, Clone, Default, Eq, PartialEq)]
 pub struct PublicKey(pub(crate) CompressedEdwardsY, pub(crate) EdwardsPoint);
@@ -44,9 +41,7 @@ impl Debug for PublicKey {
 }
 
 impl AsRef<[u8]> for PublicKey {
-    fn as_ref(&self) -> &[u8] {
-        self.as_bytes()
-    }
+    fn as_ref(&self) -> &[u8] { self.as_bytes() }
 }
 
 impl<'a> From<&'a SecretKey> for PublicKey {
@@ -77,29 +72,25 @@ impl<'a> From<&'a ExpandedSecretKey> for PublicKey {
 impl PublicKey {
     /// Convert this public key to a byte array.
     #[inline]
-    pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
-        self.0.to_bytes()
-    }
+    pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] { self.0.to_bytes() }
 
     /// View this public key as a byte array.
     #[inline]
-    pub fn as_bytes(&self) -> &'_ [u8; PUBLIC_KEY_LENGTH] {
-        &(self.0).0
-    }
+    pub fn as_bytes(&self) -> &'_ [u8; PUBLIC_KEY_LENGTH] { &(self.0).0 }
 
     /// Construct a `PublicKey` from a slice of bytes.
     ///
     /// # Warning
     ///
     /// The caller is responsible for ensuring that the bytes passed into this
-    /// method actually represent a `curve25519_dalek::curve::CompressedEdwardsY`
-    /// and that said compressed point is actually a point on the curve.
-    ///
+    /// method actually represent a
+    /// `curve25519_dalek::curve::CompressedEdwardsY` and that said
+    /// compressed point is actually a point on the curve.
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey, ProofError> {
         if bytes.len() != PUBLIC_KEY_LENGTH {
             return Err(ProofError(InternalError::BytesLength {
-                name: "PublicKey",
+                name:   "PublicKey",
                 length: PUBLIC_KEY_LENGTH,
             }));
         }
@@ -154,6 +145,7 @@ impl PublicKey {
         }
         Err(ProofError(InternalError::PointDecompression))
     }
+
     pub fn verify_key(public_key_bytes: &[u8; 32]) -> bool {
         match PublicKey::from_bytes(public_key_bytes) {
             Ok(pk) => !pk.1.is_small_order(),
@@ -164,15 +156,15 @@ impl PublicKey {
     // TODO : Rename variable names more appropriately
     #[allow(clippy::many_single_char_names)]
     pub fn verify(&self, pi: Proof, message: &[u8]) -> bool {
-        let Proof(point, c, s) = pi; //s should be equal k- c x, where k is random and x is secret key
-                                     //self should be equal g^x
-        let g_to_s = &s * &constants::ED25519_BASEPOINT_TABLE; //should be equal to g^(k-c x)
-        let self_to_c = c * self.1; //self_to_c should be equal to g^(cx)
-        let u = self_to_c + g_to_s; //should equal g^k
+        let Proof(point, c, s) = pi; // s should be equal k- c x, where k is random and x is secret key
+                                     // self should be equal g^x
+        let g_to_s = &s * &constants::ED25519_BASEPOINT_TABLE; // should be equal to g^(k-c x)
+        let self_to_c = c * self.1; // self_to_c should be equal to g^(cx)
+        let u = self_to_c + g_to_s; // should equal g^k
         match self.hash_to_curve(message) {
             Err(_) => false,
             Ok(h) => {
-                let v = (c * point) + (s * h); //should equal h^cs * h^(k-cx) = h^k
+                let v = (c * point) + (s * h); // should equal h^cs * h^(k-cx) = h^k
                 let derivable_c = hash_points(&[
                     constants::ED25519_BASEPOINT_COMPRESSED,
                     h.compress(),
@@ -191,8 +183,7 @@ impl PublicKey {
 impl Serialize for PublicKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         serializer.serialize_bytes(self.as_bytes())
     }
 }
@@ -201,8 +192,7 @@ impl Serialize for PublicKey {
 impl<'d> Deserialize<'d> for PublicKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'d>,
-    {
+        D: Deserializer<'d>, {
         struct PublicKeyVisitor;
 
         impl<'d> Visitor<'d> for PublicKeyVisitor {
@@ -216,8 +206,7 @@ impl<'d> Deserialize<'d> for PublicKey {
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<PublicKey, E>
             where
-                E: SerdeError,
-            {
+                E: SerdeError, {
                 PublicKey::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }
         }

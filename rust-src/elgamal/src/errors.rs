@@ -11,8 +11,7 @@
 // Display) should be snake cased, for some reason.
 #![allow(non_snake_case)]
 
-use core::fmt;
-use core::fmt::Display;
+use core::fmt::{self, Display};
 use pairing::{GroupDecodingError, PrimeFieldDecodingError};
 
 /// Internal errors.  
@@ -51,19 +50,14 @@ impl ::failure::Fail for InternalError {}
 /// * A problem decoding to a scalar,
 ///
 /// * A problem  decoding to a group element
-///
 
 #[derive(Debug)]
 pub struct ElgamalError(pub(crate) InternalError);
 
 impl Display for ElgamalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 impl ::failure::Fail for ElgamalError {
-    fn cause(&self) -> Option<&dyn (::failure::Fail)> {
-        Some(&self.0)
-    }
+    fn cause(&self) -> Option<&dyn (::failure::Fail)> { Some(&self.0) }
 }

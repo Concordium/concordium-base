@@ -6,10 +6,7 @@
 
 //! ed25519 VRF
 
-use rand::thread_rng;
-use rand::CryptoRng;
-use rand::Rng;
-use rand::RngCore;
+use rand::{thread_rng, CryptoRng, Rng, RngCore};
 
 use std::slice;
 
@@ -26,11 +23,7 @@ pub use sha2::Sha512;
 
 pub use curve25519_dalek::digest::Digest;
 
-pub use crate::constants::*;
-pub use crate::errors::*;
-pub use crate::proof::*;
-pub use crate::public::*;
-pub use crate::secret::*;
+pub use crate::{constants::*, errors::*, proof::*, public::*, secret::*};
 
 /// An ed25519 keypair.
 #[derive(Debug, Default)] // we derive Default in order to use the clear() method in Drop
@@ -64,8 +57,8 @@ impl Keypair {
     /// # Inputs
     ///
     /// * `bytes`: an `&[u8]` representing the scalar for the secret key, and a
-    ///   compressed Edwards-Y coordinate of a point on curve25519, both as bytes.
-    ///   (As obtained from `Keypair::to_bytes()`.)
+    ///   compressed Edwards-Y coordinate of a point on curve25519, both as
+    ///   bytes. (As obtained from `Keypair::to_bytes()`.)
     ///
     /// # Warning
     ///
@@ -81,7 +74,7 @@ impl Keypair {
     pub fn from_bytes(bytes: &[u8]) -> Result<Keypair, ProofError> {
         if bytes.len() != KEYPAIR_LENGTH {
             return Err(ProofError(InternalError::BytesLength {
-                name: "Keypair",
+                name:   "Keypair",
                 length: KEYPAIR_LENGTH,
             }));
         }
@@ -92,11 +85,9 @@ impl Keypair {
     }
 
     /// Generate an ed25519 keypair.
-    ///
     pub fn generate<R>(csprng: &mut R) -> Keypair
     where
-        R: CryptoRng + Rng,
-    {
+        R: CryptoRng + Rng, {
         let sk: SecretKey = SecretKey::generate(csprng);
         let pk: PublicKey = (&sk).into();
 
@@ -122,8 +113,7 @@ impl Keypair {
 impl Serialize for Keypair {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         serializer.serialize_bytes(&self.to_bytes()[..])
     }
 }
@@ -132,8 +122,7 @@ impl Serialize for Keypair {
 impl<'d> Deserialize<'d> for Keypair {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'d>,
-    {
+        D: Deserializer<'d>, {
         struct KeypairVisitor;
 
         impl<'d> Visitor<'d> for KeypairVisitor {
@@ -141,16 +130,15 @@ impl<'d> Deserialize<'d> for Keypair {
 
             fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 formatter.write_str(
-                    "An ed25519 keypair, 64 bytes in total where the secret key is \
-                     the first 32 bytes and is in unexpanded form, and the second \
-                     32 bytes is a compressed point for a public key.",
+                    "An ed25519 keypair, 64 bytes in total where the secret key is the first 32 \
+                     bytes and is in unexpanded form, and the second 32 bytes is a compressed \
+                     point for a public key.",
                 )
             }
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Keypair, E>
             where
-                E: SerdeError,
-            {
+                E: SerdeError, {
                 let secret_key = SecretKey::from_bytes(&bytes[..SECRET_KEY_LENGTH]);
                 let public_key = PublicKey::from_bytes(&bytes[SECRET_KEY_LENGTH..]);
 
@@ -168,14 +156,14 @@ impl<'d> Deserialize<'d> for Keypair {
     }
 }
 
-//foreign interface
+// foreign interface
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-//Error encoding
+// Error encoding
 //-1 secret key extraction failed
 //-2 public key extraction failed
-//0 proving failed
-//1 success
+// 0 proving failed
+// 1 success
 pub extern "C" fn ec_vrf_prove(
     proof: &mut [u8; PROOF_LENGTH],
     public_key_bytes: &[u8; PUBLIC_KEY_LENGTH],
@@ -214,8 +202,8 @@ pub extern "C" fn ec_vrf_priv_key(secret_key_bytes: &mut [u8; SECRET_KEY_LENGTH]
     1
 }
 
-//error encodeing
-//bad input
+// error encodeing
+// bad input
 #[no_mangle]
 pub extern "C" fn ec_vrf_pub_key(
     public_key_bytes: &mut [u8; 32],

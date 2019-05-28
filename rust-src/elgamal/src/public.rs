@@ -21,15 +21,21 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use pairing::bls12_381::{Fr, G1Compressed, G1};
-use pairing::{CurveAffine, CurveProjective, EncodedPoint};
+use pairing::{
+    bls12_381::{Fr, G1Compressed, G1},
+    CurveAffine, CurveProjective, EncodedPoint,
+};
 
-use crate::cipher::*;
-use crate::constants::*;
-use crate::errors::InternalError::{GDecodingError, PublicKeyLengthError};
-use crate::errors::*;
-use crate::message::*;
-use crate::secret::*;
+use crate::{
+    cipher::*,
+    constants::*,
+    errors::{
+        InternalError::{GDecodingError, PublicKeyLengthError},
+        *,
+    },
+    message::*,
+    secret::*,
+};
 
 /// Elgamal public key .
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -79,41 +85,39 @@ impl PublicKey {
     #[inline]
     pub fn encrypt<T>(&self, csprng: &mut T, m: &Message) -> Cipher
     where
-        T: Rng,
-    {
-        let fr = Fr::rand(csprng); //k
-        let mut t = G1::one(); //g
-        t.mul_assign(fr); //kg
+        T: Rng, {
+        let fr = Fr::rand(csprng); // k
+        let mut t = G1::one(); // g
+        t.mul_assign(fr); // kg
         let mut s = self.0;
-        s.mul_assign(fr); //kag
-        s.add_assign(&m.0); //kag + m
+        s.mul_assign(fr); // kag
+        s.add_assign(&m.0); // kag + m
         Cipher(t, s)
     }
-    /*
-        pub fn encrypt_bin_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
-            where T:Rng{
-                if !e {
-                    self.encrypt(csprng, &Message(G1::zero()))
-                } else{
-                    self.encrypt(csprng, &Message(G1::one()))
-                }
-        }
-        pub fn encrypt_binary_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
-          where T:Rng {
-                let mut csprng = thread_rng();
-                if !e {
-                    self.encrypt(&mut csprng, &Message(G1::zero()))
-                } else{
-                    self.encrypt(&mut csprng, &Message(G1::one()))
-                }
-        }
-    */
+
+    // pub fn encrypt_bin_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
+    // where T:Rng{
+    // if !e {
+    // self.encrypt(csprng, &Message(G1::zero()))
+    // } else{
+    // self.encrypt(csprng, &Message(G1::one()))
+    // }
+    // }
+    // pub fn encrypt_binary_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
+    // where T:Rng {
+    // let mut csprng = thread_rng();
+    // if !e {
+    // self.encrypt(&mut csprng, &Message(G1::zero()))
+    // } else{
+    // self.encrypt(&mut csprng, &Message(G1::one()))
+    // }
+    // }
     pub fn hide(&self, k: Fr, m: &Message) -> Cipher {
-        let mut t = G1::one(); //g
-        t.mul_assign(k); //kg
+        let mut t = G1::one(); // g
+        t.mul_assign(k); // kg
         let mut s = self.0;
-        s.mul_assign(k); //kag
-        s.add_assign(&m.0); //kag + m
+        s.mul_assign(k); // kag
+        s.add_assign(&m.0); // kag + m
         Cipher(t, s)
     }
 
@@ -127,18 +131,16 @@ impl PublicKey {
 
     pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &Fr) -> Cipher
     where
-        T: Rng,
-    {
-        let mut m = G1::one(); //g
+        T: Rng, {
+        let mut m = G1::one(); // g
         let e2 = *e;
-        m.mul_assign(e2); //g^e
+        m.mul_assign(e2); // g^e
         self.encrypt(csprng, &Message(m))
     }
 
     pub fn encrypt_exponent_vec<T>(&self, csprng: &mut T, e: &[Fr]) -> Vec<Cipher>
     where
-        T: Rng,
-    {
+        T: Rng, {
         e.iter()
             .map(|x| self.encrypt_exponent(csprng, &x))
             .collect()
@@ -149,8 +151,7 @@ impl PublicKey {
 impl Serialize for PublicKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         serializer.serialize_bytes(&self.to_bytes())
     }
 }
@@ -159,8 +160,7 @@ impl Serialize for PublicKey {
 impl<'d> Deserialize<'d> for PublicKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'d>,
-    {
+        D: Deserializer<'d>, {
         struct PublicKeyVisitor;
 
         impl<'d> Visitor<'d> for PublicKeyVisitor {
@@ -172,8 +172,7 @@ impl<'d> Deserialize<'d> for PublicKey {
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<PublicKey, E>
             where
-                E: SerdeError,
-            {
+                E: SerdeError, {
                 PublicKey::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }
         }

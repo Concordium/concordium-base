@@ -8,15 +8,10 @@ use criterion::Criterion;
 
 extern crate elgamal;
 
-use elgamal::elgamal::*;
-use elgamal::public::*;
-use elgamal::secret::*;
+use elgamal::{elgamal::*, public::*, secret::*};
 
 extern crate pairing;
-use pairing::bls12_381::G1;
-use pairing::CurveAffine;
-use pairing::CurveProjective;
-use pairing::EncodedPoint;
+use pairing::{bls12_381::G1, CurveAffine, CurveProjective, EncodedPoint};
 
 pub fn encrypt_bitwise_bench(c: &mut Criterion) {
     let mut csprng = thread_rng();
@@ -54,18 +49,17 @@ pub fn into_affine_bench(c: &mut Criterion) {
         b.iter(|| x.into_affine_unchecked().unwrap())
     });
 }
-/*
-pub fn cipher_from_bytes_bench(c: &mut Criterion){
-    let mut csprng = thread_rng();
-    let g = G1::rand(&mut csprng);
-    let h = G1::rand(&mut csprng);
-    let q = Cipher(g,h);
-    let p = q.to_bytes();
-    c.bench_function("cipher from bytes", move |b| b.iter(|| Cipher::from_bytes(&p)));
-
-
-}
-*/
+// pub fn cipher_from_bytes_bench(c: &mut Criterion){
+// let mut csprng = thread_rng();
+// let g = G1::rand(&mut csprng);
+// let h = G1::rand(&mut csprng);
+// let q = Cipher(g,h);
+// let p = q.to_bytes();
+// c.bench_function("cipher from bytes", move |b| b.iter(||
+// Cipher::from_bytes(&p)));
+//
+//
+// }
 pub fn ff_decrypt_u64_bench(c: &mut Criterion) {
     let sk = new_secret_key();
     let pk = public_key(sk);

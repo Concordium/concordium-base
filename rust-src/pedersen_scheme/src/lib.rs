@@ -13,5 +13,4 @@ mod key;
 mod pedersen_scheme;
 mod value;
 
-pub use crate::key::*;
-pub use crate::pedersen_scheme::*;
+pub use crate::{key::*, pedersen_scheme::*};

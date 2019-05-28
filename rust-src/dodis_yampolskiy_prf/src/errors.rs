@@ -11,8 +11,7 @@
 // Display) should be snake cased, for some reason.
 #![allow(non_snake_case)]
 
-use core::fmt;
-use core::fmt::Display;
+use core::fmt::{self, Display};
 use pairing::PrimeFieldDecodingError;
 
 /// Internal errors.  
@@ -48,13 +47,9 @@ impl ::failure::Fail for InternalError {}
 pub struct PrfError(pub(crate) InternalError);
 
 impl Display for PrfError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 impl ::failure::Fail for PrfError {
-    fn cause(&self) -> Option<&dyn (::failure::Fail)> {
-        Some(&self.0)
-    }
+    fn cause(&self) -> Option<&dyn (::failure::Fail)> { Some(&self.0) }
 }

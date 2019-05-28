@@ -1,9 +1,8 @@
-use crate::constants::*;
-use crate::secret::*;
+use crate::{constants::*, secret::*};
 use pairing::CurveAffine;
 use rand::*;
 
-//foreign interface
+// foreign interface
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]

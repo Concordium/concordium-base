@@ -3,7 +3,7 @@ use rand::*;
 
 use std::slice;
 
-//foreign function interfacee
+// foreign function interfacee
 
 #[no_mangle]
 pub extern "C" fn eddsa_priv_key(secret_key_bytes: &mut [u8; SECRET_KEY_LENGTH]) -> i32 {
@@ -13,7 +13,7 @@ pub extern "C" fn eddsa_priv_key(secret_key_bytes: &mut [u8; SECRET_KEY_LENGTH])
     1
 }
 
-//error encodeing
+// error encodeing
 //-1 bad input
 #[no_mangle]
 pub extern "C" fn eddsa_pub_key(
@@ -47,10 +47,10 @@ pub extern "C" fn eddsa_sign(
     let signature = expanded_sk.sign(data, &pk);
     signature_bytes.copy_from_slice(&signature.to_bytes());
 }
-//Error encoding
+// Error encoding
 //-2 bad public key
 //-1 badly formatted signature
-//0 verification failed
+// 0 verification failed
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn eddsa_verify(

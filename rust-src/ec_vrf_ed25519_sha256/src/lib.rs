@@ -1,4 +1,4 @@
-//extern crate std;
+// extern crate std;
 extern crate clear_on_drop;
 extern crate core;
 extern crate curve25519_dalek;

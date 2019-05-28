@@ -14,21 +14,25 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use pairing::{bls12_381::G1Compressed, bls12_381::G1, CurveAffine, CurveProjective, EncodedPoint};
+use pairing::{
+    bls12_381::{G1Compressed, G1},
+    CurveAffine, CurveProjective, EncodedPoint,
+};
 use rand::*;
 
-use crate::constants::*;
-use crate::errors::{InternalError::*, *};
+use crate::{
+    constants::*,
+    errors::{InternalError::*, *},
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Message(pub(crate) G1);
 
 impl Message {
-    //generate random message (for testing)
+    // generate random message (for testing)
     pub fn generate<T>(csprng: &mut T) -> Message
     where
-        T: Rng,
-    {
+        T: Rng, {
         Message(G1::rand(csprng))
     }
 
@@ -62,8 +66,7 @@ impl Message {
 impl Serialize for Message {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         serializer.serialize_bytes(&self.to_bytes())
     }
 }
@@ -72,8 +75,7 @@ impl Serialize for Message {
 impl<'d> Deserialize<'d> for Message {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'d>,
-    {
+        D: Deserializer<'d>, {
         struct MessageVisitor;
 
         impl<'d> Visitor<'d> for MessageVisitor {
@@ -85,8 +87,7 @@ impl<'d> Deserialize<'d> for Message {
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Message, E>
             where
-                E: SerdeError,
-            {
+                E: SerdeError, {
                 Message::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }
         }

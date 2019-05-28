@@ -7,9 +7,10 @@
 
 use core::fmt::Debug;
 
-use curve25519_dalek::edwards::CompressedEdwardsY;
-use curve25519_dalek::edwards::EdwardsPoint;
-use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::{
+    edwards::{CompressedEdwardsY, EdwardsPoint},
+    scalar::Scalar,
+};
 
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
@@ -22,8 +23,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::constants::*;
-use crate::errors::*;
+use crate::{constants::*, errors::*};
 
 use sha2::*;
 
@@ -33,7 +33,7 @@ pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
         hash.input(p.to_bytes());
     }
     let mut c_bytes: [u8; 32] = [0; 32];
-    //taking firt 16 bytes of the hash
+    // taking firt 16 bytes of the hash
     c_bytes[0..16].copy_from_slice(&hash.result().as_slice()[0..16]);
     Scalar::from_bytes_mod_order(c_bytes)
 }
@@ -42,7 +42,7 @@ pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
 
 pub struct Proof(pub EdwardsPoint, pub Scalar, pub Scalar);
 
-//impl Clone for Proof {
+// impl Clone for Proof {
 //    fn clone(&self) -> Self {
 //        *self
 //    }
@@ -59,7 +59,7 @@ impl Proof {
     #[inline]
     pub fn to_bytes(&self) -> [u8; PROOF_LENGTH] {
         let c = &self.1.reduce().to_bytes();
-        //assert c is within range
+        // assert c is within range
         assert_eq!(c[16..32], [0u8; 16]);
         let mut proof_bytes: [u8; PROOF_LENGTH] = [0u8; PROOF_LENGTH];
         proof_bytes[..32].copy_from_slice(&self.0.compress().to_bytes()[..]);
@@ -102,8 +102,7 @@ impl Proof {
 impl Serialize for Proof {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         serializer.serialize_bytes(&self.to_bytes()[..])
     }
 }
@@ -112,8 +111,7 @@ impl Serialize for Proof {
 impl<'d> Deserialize<'d> for Proof {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'d>,
-    {
+        D: Deserializer<'d>, {
         struct ProofVisitor;
 
         impl<'d> Visitor<'d> for ProofVisitor {
@@ -126,8 +124,7 @@ impl<'d> Deserialize<'d> for Proof {
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Proof, E>
             where
-                E: SerdeError,
-            {
+                E: SerdeError, {
                 if bytes.len() != PROOF_LENGTH {
                     Err(SerdeError::invalid_length(bytes.len(), &self))
                 } else {

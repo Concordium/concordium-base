@@ -14,31 +14,35 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::constants::*;
-use crate::errors::InternalError::{DecodingError, DivisionByZero};
-use crate::errors::*;
-use pairing::bls12_381::{Fr, FrRepr, G1Affine};
-use pairing::{CurveAffine, CurveProjective, Field, PrimeField};
+use crate::{
+    constants::*,
+    errors::{
+        InternalError::{DecodingError, DivisionByZero},
+        *,
+    },
+};
+use pairing::{
+    bls12_381::{Fr, FrRepr, G1Affine},
+    CurveAffine, CurveProjective, Field, PrimeField,
+};
 use rand::*;
 
 /// A PRF  key.
 #[derive(Debug, PartialEq, Eq)]
 pub struct SecretKey(pub(crate) Fr);
 
-/*
-/// Overwrite secret key material with null bytes when it goes out of scope.
-impl Drop for SecretKey {
-    fn drop(&mut self) {
-        (self.0).into_repr().0.clear();
-    }
-}
-*/
+// Overwrite secret key material with null bytes when it goes out of scope.
+// impl Drop for SecretKey {
+// fn drop(&mut self) {
+// (self.0).into_repr().0.clear();
+// }
+// }
 
 impl SecretKey {
     #[inline]
     pub fn to_bytes(&self) -> [u8; SECRET_KEY_LENGTH] {
         let frpr = &self.0.into_repr();
-        let xs = frpr.as_ref(); //array of 64 bit integers (limbs) least significant first
+        let xs = frpr.as_ref(); // array of 64 bit integers (limbs) least significant first
         assert!(xs.len() * 8 <= SECRET_KEY_LENGTH);
         let mut bytes = [0u8; SECRET_KEY_LENGTH];
         let mut i = 0;
@@ -94,14 +98,12 @@ impl SecretKey {
     }
 
     /// Generate a `SecretKey` from a `csprng`.
-    ///
     pub fn generate<T>(csprng: &mut T) -> SecretKey
     where
-        T: Rng,
-    {
+        T: Rng, {
         let mut fr = Fr::rand(csprng);
         while fr.into_repr() > MAX_SECRET_KEY {
-            fr = Fr::rand(csprng) //try again
+            fr = Fr::rand(csprng) // try again
         }
         SecretKey(Fr::rand(csprng))
     }
@@ -111,8 +113,7 @@ impl SecretKey {
 impl Serialize for SecretKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         serializer.serialize_bytes(&self.to_bytes())
     }
 }
@@ -121,8 +122,7 @@ impl Serialize for SecretKey {
 impl<'d> Deserialize<'d> for SecretKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'d>,
-    {
+        D: Deserializer<'d>, {
         struct SecretKeyVisitor;
 
         impl<'d> Visitor<'d> for SecretKeyVisitor {
@@ -134,8 +134,7 @@ impl<'d> Deserialize<'d> for SecretKey {
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<SecretKey, E>
             where
-                E: SerdeError,
-            {
+                E: SerdeError, {
                 SecretKey::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }
         }

@@ -14,9 +14,14 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::constants::*;
-use crate::errors::{InternalError::*, *};
-use pairing::{bls12_381::G1Compressed, bls12_381::G1, CurveAffine, CurveProjective, EncodedPoint};
+use crate::{
+    constants::*,
+    errors::{InternalError::*, *},
+};
+use pairing::{
+    bls12_381::{G1Compressed, G1},
+    CurveAffine, CurveProjective, EncodedPoint,
+};
 #[cfg(test)]
 use rand::*;
 
@@ -38,7 +43,6 @@ impl Cipher {
     /// only use if you know that the bytes are an encoding fo a cipher
     /// A `Result` whose okay value is a cipher key or whose error value
     /// is an `ElgamalError` wrapping the internal error that occurred.
-    ///
     #[inline]
     pub fn from_bytes_unchecked(bytes: &[u8]) -> Result<Cipher, ElgamalError> {
         if bytes.len() != CIPHER_LENGTH {
@@ -63,7 +67,6 @@ impl Cipher {
     ///
     /// A `Result` whose okay value is a cipher key or whose error value
     /// is an `ElgamalError` wrapping the internal error that occurred.
-    ///
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<Cipher, ElgamalError> {
         if bytes.len() != CIPHER_LENGTH {
@@ -85,13 +88,12 @@ impl Cipher {
     }
 }
 
-//serialization feature for cipher
+// serialization feature for cipher
 #[cfg(feature = "serde")]
 impl Serialize for Cipher {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         serializer.serialize_bytes(&self.to_bytes())
     }
 }
@@ -100,8 +102,7 @@ impl Serialize for Cipher {
 impl<'d> Deserialize<'d> for Cipher {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'d>,
-    {
+        D: Deserializer<'d>, {
         struct CipherVisitor;
 
         impl<'d> Visitor<'d> for CipherVisitor {
@@ -113,8 +114,7 @@ impl<'d> Deserialize<'d> for Cipher {
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Cipher, E>
             where
-                E: SerdeError,
-            {
+                E: SerdeError, {
                 Cipher::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }
         }

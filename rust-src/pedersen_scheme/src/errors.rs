@@ -11,8 +11,7 @@
 // Display) should be snake cased, for some reason.
 #![allow(non_snake_case)]
 
-use core::fmt;
-use core::fmt::Display;
+use core::fmt::{self, Display};
 use pairing::{GroupDecodingError, PrimeFieldDecodingError};
 
 /// Internal errors.  
@@ -58,13 +57,9 @@ impl ::failure::Fail for InternalError {}
 pub struct CommitmentError(pub(crate) InternalError);
 
 impl Display for CommitmentError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 impl ::failure::Fail for CommitmentError {
-    fn cause(&self) -> Option<&dyn (::failure::Fail)> {
-        Some(&self.0)
-    }
+    fn cause(&self) -> Option<&dyn (::failure::Fail)> { Some(&self.0) }
 }

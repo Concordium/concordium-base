@@ -14,31 +14,33 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::commitment::*;
-use crate::constants::*;
-use crate::errors::InternalError::{
-    CommitmentKeyLengthError, GDecodingError, KeyValueLengthMismatch,
+use crate::{
+    commitment::*,
+    constants::*,
+    errors::{
+        InternalError::{CommitmentKeyLengthError, GDecodingError, KeyValueLengthMismatch},
+        *,
+    },
+    value::*,
 };
-use crate::errors::*;
-use crate::value::*;
-use pairing::bls12_381::{Fr, G1Affine, G1Compressed, G1};
-use pairing::{CurveAffine, CurveProjective, EncodedPoint};
+use pairing::{
+    bls12_381::{Fr, G1Affine, G1Compressed, G1},
+    CurveAffine, CurveProjective, EncodedPoint,
+};
 use rand::*;
 
 /// A commitment  key.
 #[derive(Debug, PartialEq, Eq)]
 pub struct CommitmentKey(pub(crate) Vec<G1Affine>, pub(crate) G1Affine);
 
-/*
-impl Drop for SecretKey {
-    fn drop(&mut self) {
-        (self.0).into_repr().0.clear();
-    }
-}
-*/
+// impl Drop for SecretKey {
+// fn drop(&mut self) {
+// (self.0).into_repr().0.clear();
+// }
+// }
 
 impl CommitmentKey {
-    //turn commitment key into a byte aray
+    // turn commitment key into a byte aray
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
         let gs = &self.0;
@@ -50,6 +52,7 @@ impl CommitmentKey {
         bytes.extend_from_slice(h.into_compressed().as_ref());
         bytes.into_boxed_slice()
     }
+
     /// Construct a commitmentkey from a slice of bytes.
     ///
     /// A `Result` whose okay value is an commitment key or whose error value
@@ -86,10 +89,9 @@ impl CommitmentKey {
 
     pub fn commit<T>(&self, ss: &Value, csprng: &mut T) -> (Commitment, Fr)
     where
-        T: Rng,
-    {
+        T: Rng, {
         let r = Fr::rand(csprng);
-        (self.hide(ss, r).unwrap(), r) //panicking is Ok here
+        (self.hide(ss, r).unwrap(), r) // panicking is Ok here
     }
 
     fn hide(&self, ss: &Value, r: Fr) -> Result<Commitment, CommitmentError> {
@@ -117,11 +119,9 @@ impl CommitmentKey {
     }
 
     /// Generate a `CommitmentKey` for `n` values from a `csprng`.
-    ///
     pub fn generate<T>(n: usize, csprng: &mut T) -> CommitmentKey
     where
-        T: Rng,
-    {
+        T: Rng, {
         let mut gs: Vec<G1Affine> = Vec::new();
         for _i in 0..n {
             let g_fr = Fr::rand(csprng);
@@ -138,8 +138,7 @@ impl CommitmentKey {
 impl Serialize for CommitmentKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         serializer.serialize_bytes(&*self.to_bytes())
     }
 }
@@ -148,8 +147,7 @@ impl Serialize for CommitmentKey {
 impl<'d> Deserialize<'d> for CommitmentKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'d>,
-    {
+        D: Deserializer<'d>, {
         struct CommitmentKeyVisitor;
 
         impl<'d> Visitor<'d> for CommitmentKeyVisitor {
@@ -161,8 +159,7 @@ impl<'d> Deserialize<'d> for CommitmentKey {
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<CommitmentKey, E>
             where
-                E: SerdeError,
-            {
+                E: SerdeError, {
                 CommitmentKey::from_bytes(bytes)
                     .or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }

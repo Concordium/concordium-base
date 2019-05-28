@@ -15,28 +15,32 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::constants::*;
-use crate::errors::InternalError::{FDecodingError, ValueVecLengthError};
-use crate::errors::*;
-use pairing::bls12_381::{Fr, FrRepr};
-use pairing::PrimeField;
+use crate::{
+    constants::*,
+    errors::{
+        InternalError::{FDecodingError, ValueVecLengthError},
+        *,
+    },
+};
+use pairing::{
+    bls12_381::{Fr, FrRepr},
+    PrimeField,
+};
 use rand::*;
 
 /// A  value
 #[derive(Debug, PartialEq, Eq)]
 pub struct Value(pub(crate) Vec<Fr>);
 
-/*
-/// Overwrite value  material with null bytes when it goes out of scope.
-impl Drop for Value {
-    fn drop(&mut self) {
-        (self.0).into_repr().0.clear();
-    }
-}
-*/
+// Overwrite value  material with null bytes when it goes out of scope.
+// impl Drop for Value {
+// fn drop(&mut self) {
+// (self.0).into_repr().0.clear();
+// }
+// }
 
 impl Value {
-    //turn value vector into a byte aray
+    // turn value vector into a byte aray
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
         let vs = &self.0;
@@ -50,7 +54,7 @@ impl Value {
     #[inline]
     pub fn value_to_bytes(fe: &Fr) -> [u8; FIELD_ELEMENT_LENGTH] {
         let frpr = &fe.into_repr();
-        let xs = frpr.as_ref(); //array of 64 bit integers (limbs) least significant first
+        let xs = frpr.as_ref(); // array of 64 bit integers (limbs) least significant first
         assert!(xs.len() * 8 <= FIELD_ELEMENT_LENGTH);
         let mut bytes = [0u8; FIELD_ELEMENT_LENGTH];
         let mut i = 0;
@@ -105,11 +109,9 @@ impl Value {
     }
 
     /// Generate a sing `Value` from a `csprng`.
-    ///
     pub fn generate<T>(n: usize, csprng: &mut T) -> Value
     where
-        T: Rng,
-    {
+        T: Rng, {
         let mut vs: Vec<Fr> = Vec::new();
         for _i in 0..n {
             vs.push(Fr::rand(csprng));
@@ -123,8 +125,7 @@ impl Value {
 impl Serialize for Value {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         serializer.serialize_bytes(&self.to_bytes())
     }
 }
@@ -133,8 +134,7 @@ impl Serialize for Value {
 impl<'d> Deserialize<'d> for Value {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'d>,
-    {
+        D: Deserializer<'d>, {
         struct ValueVisitor;
 
         impl<'d> Visitor<'d> for ValueVisitor {
@@ -146,8 +146,7 @@ impl<'d> Deserialize<'d> for Value {
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Value, E>
             where
-                E: SerdeError,
-            {
+                E: SerdeError, {
                 Value::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }
         }

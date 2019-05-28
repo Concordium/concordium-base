@@ -1,24 +1,20 @@
-use crate::cipher::*;
-use crate::errors::*;
-use crate::message::*;
-use crate::public::*;
-use crate::secret::*;
+use crate::{cipher::*, errors::*, message::*, public::*, secret::*};
 use bitvec::Bits;
 use libc::{size_t, uint8_t};
 use rand::*;
-use rayon::iter::IntoParallelRefIterator;
-use rayon::prelude::*;
+use rayon::{iter::IntoParallelRefIterator, prelude::*};
 use std::slice;
 
-use pairing::bls12_381::Fr;
 #[cfg(test)]
 use pairing::bls12_381::FrRepr;
-use pairing::bls12_381::G1;
-use pairing::CurveProjective;
 #[cfg(test)]
 use pairing::PrimeField;
+use pairing::{
+    bls12_381::{Fr, G1},
+    CurveProjective,
+};
 
-//foreign function interface
+// foreign function interface
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn new_secret_key() -> *mut SecretKey {
@@ -137,7 +133,7 @@ pub fn encrypt_u64_bitwise(pk: &PublicKey, e: u64) -> Vec<Cipher> {
         .map(|(x, y)| pk.hide_binary_exp(*y, *x))
         .collect()
 }
-//take an array of zero's and ones and returns a u64
+// take an array of zero's and ones and returns a u64
 pub fn group_bits_to_u64(v: &[G1]) -> u64 {
     let mut r = 0u64;
     for (i, _) in v.iter().enumerate() {

@@ -7,14 +7,14 @@
 // Authors:
 // - bm@concordium.com
 
-//! Errors which may occur when parsing keys and/or proofs to or from wire formats.
+//! Errors which may occur when parsing keys and/or proofs to or from wire
+//! formats.
 
 // rustc seems to think the typenames in match statements (e.g. in
 // Display) should be snake cased, for some reason.
 #![allow(non_snake_case)]
 
-use core::fmt;
-use core::fmt::Display;
+use core::fmt::{self, Display};
 
 /// Internal errors.  Most application-level developers will likely not
 /// need to pay any attention to these.
@@ -30,7 +30,7 @@ pub(crate) enum InternalError {
     /// returning the error, and the `length` in bytes which its constructor
     /// expects.
     BytesLength {
-        name: &'static str,
+        name:   &'static str,
         length: usize,
     },
     /// The verification equation wasn't satisfied
@@ -60,22 +60,18 @@ impl ::failure::Fail for InternalError {}
 ///
 /// * A problem decompressing to a curve point, from `proof`, or `PublicKey`.
 ///
-/// * A problem with the format of `s`, a scalar, in the `Signature`.  This
-///   is only raised if the high-bit of the scalar was set.  (Scalars must
-///   only be constructed from 255-bit integers.)
+/// * A problem with the format of `s`, a scalar, in the `Signature`.  This is
+///   only raised if the high-bit of the scalar was set.  (Scalars must only be
+///   constructed from 255-bit integers.)
 ///
 /// * Failure of a proof to satisfy the verification equation.
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub struct ProofError(pub(crate) InternalError);
 
 impl Display for ProofError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 impl ::failure::Fail for ProofError {
-    fn cause(&self) -> Option<&dyn (::failure::Fail)> {
-        Some(&self.0)
-    }
+    fn cause(&self) -> Option<&dyn (::failure::Fail)> { Some(&self.0) }
 }

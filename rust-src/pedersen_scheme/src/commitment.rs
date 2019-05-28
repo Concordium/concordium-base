@@ -14,11 +14,17 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::constants::*;
-use crate::errors::InternalError::{CommitmentLengthError, GDecodingError};
-use crate::errors::*;
-use pairing::bls12_381::{G1Affine, G1Compressed, G1};
-use pairing::{CurveAffine, CurveProjective, EncodedPoint};
+use crate::{
+    constants::*,
+    errors::{
+        InternalError::{CommitmentLengthError, GDecodingError},
+        *,
+    },
+};
+use pairing::{
+    bls12_381::{G1Affine, G1Compressed, G1},
+    CurveAffine, CurveProjective, EncodedPoint,
+};
 use rand::*;
 
 /// A Commitment is a group element .
@@ -26,7 +32,7 @@ use rand::*;
 pub struct Commitment(pub(crate) G1Affine);
 
 impl Commitment {
-    //turn commitment key into a byte aray
+    // turn commitment key into a byte aray
     #[inline]
     pub fn to_bytes(&self) -> [u8; COMMITMENT_LENGTH] {
         let g = self.0.into_compressed();
@@ -53,17 +59,14 @@ impl Commitment {
         }
     }
 
-    pub fn generate<T: Rng>(csprng: &mut T) -> Self {
-        Commitment(G1::rand(csprng).into_affine())
-    }
+    pub fn generate<T: Rng>(csprng: &mut T) -> Self { Commitment(G1::rand(csprng).into_affine()) }
 }
 
 #[cfg(feature = "serde")]
 impl Serialize for Commitment {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
-    {
+        S: Serializer, {
         serializer.serialize_bytes(&self.to_bytes())
     }
 }
@@ -72,8 +75,7 @@ impl Serialize for Commitment {
 impl<'d> Deserialize<'d> for Commitment {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'d>,
-    {
+        D: Deserializer<'d>, {
         struct CommitmentVisitor;
 
         impl<'d> Visitor<'d> for CommitmentVisitor {
@@ -85,8 +87,7 @@ impl<'d> Deserialize<'d> for Commitment {
 
             fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Commitment, E>
             where
-                E: SerdeError,
-            {
+                E: SerdeError, {
                 Commitment::from_bytes(bytes)
                     .or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }

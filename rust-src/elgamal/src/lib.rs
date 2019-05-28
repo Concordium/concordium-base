@@ -18,6 +18,4 @@ mod message;
 pub mod public;
 pub mod secret;
 
-pub use crate::elgamal::*;
-pub use crate::public::*;
-pub use crate::secret::*;
+pub use crate::{elgamal::*, public::*, secret::*};

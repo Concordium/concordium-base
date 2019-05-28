@@ -1,16 +1,13 @@
-use crate::commitment::*;
-use crate::constants::*;
-use crate::key::*;
-use crate::value::*;
+use crate::{commitment::*, constants::*, key::*, value::*};
 use rand::*;
 use std::slice;
 
-//foreign interface
+// foreign interface
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn pedersen_commitment_key(n: usize, key_bytes: *mut u8) {
-    //assert_eq!((n+1)*GROUP_ELEMENT_LENGTH, key_bytes.len());
+    // assert_eq!((n+1)*GROUP_ELEMENT_LENGTH, key_bytes.len());
     assert!(!key_bytes.is_null(), "Null pointer");
     let key_slice: &mut [u8] =
         unsafe { slice::from_raw_parts_mut(key_bytes, (n + 1) * GROUP_ELEMENT_LENGTH) };
@@ -97,7 +94,7 @@ pub extern "C" fn pedersen_random_values(n: usize, values_bytes: *mut u8) {
 #[test]
 pub fn commit_open() {
     let mut key_bytes = [0u8; 11 * GROUP_ELEMENT_LENGTH];
-    //let mut values = [0u8; 10 * FIELD_ELEMENT_LENGTH];
+    // let mut values = [0u8; 10 * FIELD_ELEMENT_LENGTH];
     let mut csprng = thread_rng();
     let mut commitment_bytes = [0u8; COMMITMENT_LENGTH];
     let mut randomness_bytes = [0u8; RANDOMNESS_LENGTH];
