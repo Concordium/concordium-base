@@ -83,7 +83,6 @@ impl SecretKey {
     }
 
     /// Generate a `SecretKey` from a `csprng`.
-    ///
     pub fn generate<T>(csprng: &mut T) -> SecretKey
     where
         T: CryptoRng + Rng, {
