@@ -1,3 +1,5 @@
+// Authors:
+// - bm@concordium.com
 extern crate rand;
 use rand::*;
 

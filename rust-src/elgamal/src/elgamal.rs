@@ -1,3 +1,5 @@
+// Authors:
+// - bm@concordium.com
 use crate::{cipher::*, errors::*, message::*, public::*, secret::*};
 use bitvec::Bits;
 use libc::{size_t, uint8_t};

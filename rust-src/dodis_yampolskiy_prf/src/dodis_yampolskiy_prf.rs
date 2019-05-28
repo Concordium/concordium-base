@@ -3,6 +3,8 @@ use pairing::CurveAffine;
 use rand::*;
 
 // foreign interface
+// Authors:
+// - bm@concordium.com
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]

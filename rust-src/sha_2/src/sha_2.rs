@@ -1,3 +1,5 @@
+// Authors:
+// - bm@concordium.com
 use sha2::*;
 
 use std::slice;

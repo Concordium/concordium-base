@@ -1,3 +1,6 @@
+// Authors:
+// - bm@concordium.com
+
 use crate::{commitment::*, constants::*, key::*, value::*};
 use rand::*;
 use std::slice;

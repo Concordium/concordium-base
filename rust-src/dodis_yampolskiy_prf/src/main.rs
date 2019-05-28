@@ -1,3 +1,5 @@
+// Authors:
+// - bm@concordium.com
 extern crate clear_on_drop;
 extern crate core;
 extern crate failure;
