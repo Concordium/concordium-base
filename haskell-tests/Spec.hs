@@ -10,8 +10,8 @@ import qualified ConcordiumTests.Crypto.Elgamal
 
 main :: IO  ()
 main = hspec $ do
---    ConcordiumTests.Crypto.SHA256.tests
---    ConcordiumTests.Crypto.SHA224.tests
---    ConcordiumTests.Crypto.Ed25519Signature.tests
---    ConcordiumTests.Crypto.VRF.tests
-    ConcordiumTests.Crypto.Elgamal.tests
+    ConcordiumTests.Crypto.SHA256.tests
+    ConcordiumTests.Crypto.SHA224.tests
+    ConcordiumTests.Crypto.Ed25519Signature.tests
+    ConcordiumTests.Crypto.VRF.tests
+--    ConcordiumTests.Crypto.Elgamal.tests
