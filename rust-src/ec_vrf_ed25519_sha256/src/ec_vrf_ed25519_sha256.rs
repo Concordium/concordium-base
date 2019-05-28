@@ -95,38 +95,6 @@ impl Keypair {
 
     /// Generate an ed25519 keypair.
     ///
-    /// # Example
-    ///
-    /// ```
-    /// extern crate rand;
-    /// extern crate ed25519_dalek;
-    ///
-    /// # #[cfg(feature = "std")]
-    /// # fn main() {
-    ///
-    /// use rand::Rng;
-    /// use rand::rngs::OsRng;
-    /// use ed25519_dalek::Keypair;
-    /// use ed25519_dalek::Signature;
-    ///
-    /// let mut csprng: OsRng = OsRng::new().unwrap();
-    /// let keypair: Keypair = Keypair::generate(&mut csprng);
-    ///
-    /// # }
-    /// #
-    /// # #[cfg(not(feature = "std"))]
-    /// # fn main() { }
-    /// ```
-    ///
-    /// # Input
-    ///
-    /// A CSPRNG with a `fill_bytes()` method, e.g. `rand_chacha::ChaChaRng`.
-    ///
-    /// The caller must also supply a hash function which implements the
-    /// `Digest` and `Default` traits, and which returns 512 bits of output.
-    /// The standard hash function used for most ed25519 libraries is SHA-512,
-    /// which is available with `use sha2::Sha512` as in the example above.
-    /// Other suitable hash functions include Keccak-512 and Blake2b-512.
     pub fn generate<R>(csprng: &mut R) -> Keypair
     where
         R: CryptoRng + Rng,

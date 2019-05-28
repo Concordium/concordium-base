@@ -73,35 +73,6 @@ impl SecretKey {
 
     /// Construct a `SecretKey` from a slice of bytes.
     ///
-    /// # Example
-    ///
-    /// ```
-    /// # extern crate ed25519_dalek;
-    /// #
-    /// use ed25519_dalek::SecretKey;
-    /// use ed25519_dalek::SECRET_KEY_LENGTH;
-    /// use ed25519_dalek::ProofError;
-    ///
-    /// # fn doctest() -> Result<SecretKey, ProofError> {
-    /// let secret_key_bytes: [u8; SECRET_KEY_LENGTH] = [
-    ///    157, 097, 177, 157, 239, 253, 090, 096,
-    ///    186, 132, 074, 244, 146, 236, 044, 196,
-    ///    068, 073, 197, 105, 123, 050, 105, 025,
-    ///    112, 059, 172, 003, 028, 174, 127, 096, ];
-    ///
-    /// let secret_key: SecretKey = SecretKey::from_bytes(&secret_key_bytes)?;
-    /// #
-    /// # Ok(secret_key)
-    /// # }
-    /// #
-    /// # fn main() {
-    /// #     let result = doctest();
-    /// #     assert!(result.is_ok());
-    /// # }
-    /// ```
-    ///
-    /// # Returns
-    ///
     /// A `Result` whose okay value is an EdDSA `SecretKey` or whose error value
     /// is an `ProofError` wrapping the internal error that occurred.
     #[inline]
@@ -129,52 +100,6 @@ impl SecretKey {
     /// # Example
     ///
     /// ```
-    /// extern crate rand;
-    /// extern crate sha2;
-    /// extern crate ed25519_dalek;
-    ///
-    /// # #[cfg(feature = "std")]
-    /// # fn main() {
-    /// #
-    /// use rand::Rng;
-    /// use rand::rngs::OsRng;
-    /// use sha2::Sha512;
-    /// use ed25519_dalek::PublicKey;
-    /// use ed25519_dalek::SecretKey;
-    /// use ed25519_dalek::Proof;
-    ///
-    /// let mut csprng: OsRng = OsRng::new().unwrap();
-    /// let secret_key: SecretKey = SecretKey::generate(&mut csprng);
-    /// # }
-    /// #
-    /// # #[cfg(not(feature = "std"))]
-    /// # fn main() { }
-    /// ```
-    ///
-    /// Afterwards, you can generate the corresponding public:
-    ///
-    /// ```
-    /// # extern crate rand;
-    /// # extern crate ed25519_dalek;
-    /// #
-    /// # fn main() {
-    /// #
-    /// # use rand::Rng;
-    /// # use rand::thread_rng;
-    /// # use ed25519_dalek::PublicKey;
-    /// # use ed25519_dalek::SecretKey;
-    /// # use ed25519_dalek::Proof;
-    /// #
-    /// # let mut csprng = thread_rng();
-    /// # let secret_key: SecretKey = SecretKey::generate(&mut csprng);
-    ///
-    /// let public_key: PublicKey = (&secret_key).into();
-    /// # }
-    /// ```
-    ///
-    /// # Input
-    ///
-    /// A CSPRNG with a `fill_bytes()` method, e.g. `rand::OsRng`
     pub fn generate<T>(csprng: &mut T) -> SecretKey
     where
         T: CryptoRng + Rng,
@@ -275,25 +200,6 @@ impl Drop for ExpandedSecretKey {
 impl<'a> From<&'a SecretKey> for ExpandedSecretKey {
     /// Construct an `ExpandedSecretKey` from a `SecretKey`.
     ///
-    /// # Examples
-    ///
-    /// ```
-    /// # extern crate rand;
-    /// # extern crate sha2;
-    /// # extern crate ed25519_dalek;
-    /// #
-    /// # fn main() {
-    /// #
-    /// use rand::Rng;
-    /// use rand::thread_rng;
-    /// use sha2::Sha512;
-    /// use ed25519_dalek::{SecretKey, ExpandedSecretKey};
-    ///
-    /// let mut csprng = thread_rng();
-    /// let secret_key: SecretKey = SecretKey::generate(&mut csprng);
-    /// let expanded_secret_key: ExpandedSecretKey = ExpandedSecretKey::from(&secret_key);
-    /// # }
-    /// ```
     fn from(secret_key: &'a SecretKey) -> ExpandedSecretKey {
         let mut h: Sha512 = Sha512::default();
         let mut hash:  [u8; 64] = [0u8; 64];
@@ -324,32 +230,6 @@ impl ExpandedSecretKey {
     /// secret key, and the last 32 bytes represent the "domain-separation"
     /// "nonce".
     ///
-    /// # Examples
-    ///
-    /// ```
-    /// # extern crate rand;
-    /// # extern crate sha2;
-    /// # extern crate ed25519_dalek;
-    /// #
-    /// # #[cfg(all(feature = "sha2", feature = "std"))]
-    /// # fn main() {
-    /// #
-    /// use rand::Rng;
-    /// use rand::rngs::OsRng;
-    /// use sha2::Sha512;
-    /// use ed25519_dalek::{SecretKey, ExpandedSecretKey};
-    ///
-    /// let mut csprng: OsRng = OsRng::new().unwrap();
-    /// let secret_key: SecretKey = SecretKey::generate(&mut csprng);
-    /// let expanded_secret_key: ExpandedSecretKey = ExpandedSecretKey::from(&secret_key);
-    /// let expanded_secret_key_bytes: [u8; 64] = expanded_secret_key.to_bytes();
-    ///
-    /// assert!(&expanded_secret_key_bytes[..] != &[0u8; 64][..]);
-    /// # }
-    /// #
-    /// # #[cfg(any(not(feature = "sha2"), not(feature = "std")))]
-    /// # fn main() { }
-    /// ```
     #[inline]
     pub fn to_bytes(&self) -> [u8; EXPANDED_SECRET_KEY_LENGTH] {
         let mut bytes: [u8; 64] = [0u8; 64];
@@ -361,46 +241,6 @@ impl ExpandedSecretKey {
 
     /// Construct an `ExpandedSecretKey` from a slice of bytes.
     ///
-    /// # Returns
-    ///
-    /// A `Result` whose okay value is an EdDSA `ExpandedSecretKey` or whose
-    /// error value is an `ProofError` describing the error that occurred.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # extern crate rand;
-    /// # extern crate sha2;
-    /// # extern crate ed25519_dalek;
-    /// #
-    /// # use ed25519_dalek::{ExpandedSecretKey, ProofError};
-    /// #
-    /// # #[cfg(all(feature = "sha2", feature = "std"))]
-    /// # fn do_test() -> Result<ExpandedSecretKey, ProofError> {
-    /// #
-    /// use rand::Rng;
-    /// use rand::rngs::OsRng;
-    /// use ed25519_dalek::{SecretKey, ExpandedSecretKey};
-    /// use ed25519_dalek::ProofError;
-    ///
-    /// let mut csprng: OsRng = OsRng::new().unwrap();
-    /// let secret_key: SecretKey = SecretKey::generate(&mut csprng);
-    /// let expanded_secret_key: ExpandedSecretKey = ExpandedSecretKey::from(&secret_key);
-    /// let bytes: [u8; 64] = expanded_secret_key.to_bytes();
-    /// let expanded_secret_key_again = ExpandedSecretKey::from_bytes(&bytes)?;
-    /// #
-    /// # Ok(expanded_secret_key_again)
-    /// # }
-    /// #
-    /// # #[cfg(all(feature = "sha2", feature = "std"))]
-    /// # fn main() {
-    /// #     let result = do_test();
-    /// #     assert!(result.is_ok());
-    /// # }
-    /// #
-    /// # #[cfg(any(not(feature = "sha2"), not(feature = "std")))]
-    /// # fn main() { }
-    /// ```
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<ExpandedSecretKey, ProofError> {
         if bytes.len() != EXPANDED_SECRET_KEY_LENGTH {

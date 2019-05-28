@@ -196,7 +196,7 @@ pub fn ff_encrypt_decrypt_u64(){
         let n = u64::rand(&mut csprng);
         println!("n={}", n);
         encrypt_u64(pk, n, &mut xs); 
-        let m = decrypt_u64(sk, xs.as_ptr(), 6144);
+        let m = decrypt_u64(sk, xs.as_ptr(), 6144).unwrap();
         println!("m={}", m);
         assert_eq!(m,n);
     }
