@@ -64,7 +64,7 @@ pub extern "C" fn encrypt_u64(ptr: *mut PublicKey, e: u64, out: &mut [u8; 6144])
     };
     let xs: Vec<[u8; 96]> = encrypt_u64_bitwise(pk, e)
         .iter()
-        .map(|x| x.to_bytes())
+        .map(Cipher::to_bytes)
         .collect();
     for i in 0..64 {
         for j in 0..96 {
