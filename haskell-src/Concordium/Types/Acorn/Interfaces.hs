@@ -108,8 +108,16 @@ data TypingError =
                  | UndefinedLocalDatatype Core.TyName
                  -- |The data type with the given name is not defined in the given module.
                  | UndefinedQualifiedDatatype Core.ModuleRef Core.TyName
+                 -- |The module referred to in an expression with the given name is not imported (not part of the interface's import map).
+                 | ModuleNotImported Core.ModuleName
+                 -- |The givin name qualified with the given module is not in scope.
+                 | QualifiedNameNotInScope Core.ModuleRef Core.Name
+                 -- TODO Improve documentation
                  -- |Module does not exist. Raised when trying to type-check an imported definition from a non-existing module.
                  | ModuleNotExists Core.ModuleRef
+                 -- |Type checking succeeded with a type other than the expected.
+                 -- The first argument is type assigned to the expression in question, the second is the expected type.
+                 | UnexpectedType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
   deriving (Eq, Show)
 
 -- * Datatypes involved in execution of terms.
