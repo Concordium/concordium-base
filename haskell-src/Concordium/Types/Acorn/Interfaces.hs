@@ -34,7 +34,6 @@ import qualified Concordium.Types.Acorn.Core as Core
 data ContractInterface = ContractInterface
     { paramTy :: !(Core.Type Core.ModuleRef) -- ^Type of the parameter of the init method.
     , msgTy :: !(Core.Type Core.ModuleRef) -- ^Type of messages the receive method can handle.
-                                           --  The references are relative to the module imports in which this contract exists.
     }
   deriving(Show, Generic)
 
@@ -107,7 +106,6 @@ data Value =
              | VAmount !Amount
              | VConstructor !Core.Name ![Value] -- ^Constructors applied to arguments.
                                              -- FIXME: Should use sequence instead of list here as well since it is usually built by appending to the back.
-                                             -- FIXME: Should use sequence instead of list here as well since it is usually built by appending to the back.
              | VInstance { vinstance_ls :: !Value
                          , vinstance_caddr :: !ContractAddress
                          , vinstance_implements :: !ImplementsValue
@@ -115,7 +113,7 @@ data Value =
   deriving(Show, Eq)
 
 
--- **The serialization instances for values are only for storable values.
+-- |The serialization instances for values are only for storable values.
 -- If you try to serialize with a value which is not storable the methods will fail.
 putStorable :: P.Putter Value
 putStorable (VLiteral l) = P.putWord8 0 <> Core.putLit l
@@ -254,17 +252,21 @@ type UpdateType = Expr
 
 data ImplementsValue = ImplementsValue
     {
-    senderImpls :: !(Seq.Seq SenderTy)  -- ^The list of sender methods for a particular constraint this contract implements.
-    ,getterImpls :: !(Seq.Seq GetterTy)  -- ^The list of constraint method for a particular constraint this contract implements.
+    -- |The list of sender methods for a particular constraint this contract implements.
+    senderImpls :: !(Seq.Seq SenderTy)
+    -- |The list of getter methods for a particular constraint this contract implements.
+    ,getterImpls :: !(Seq.Seq GetterTy)
     } deriving(Eq, Show)
 
--- |A `ContractValue` is what a contract evaluates to.
+-- |A 'ContractValue' is what a contract evaluates to. It contains the code of the init and receive methods in a ready-to-execute form.
 data ContractValue = ContractValue
-    {initMethod :: !InitType      -- ^The initilization method. Represented as a function.
-    ,updateMethod :: !UpdateType  -- ^The update/receive method. Also represented as a function.
-    ,implements :: !(HashMap (Core.ModuleRef, Core.TyName) ImplementsValue)
-    }
-    deriving(Show, Generic)
+    { -- |The compiled initilization method.
+      initMethod :: !InitType
+    -- |The compiled receive method.
+    ,updateMethod :: !UpdateType
+    -- |A map of all the implemented constraints.
+    ,implements :: !(HashMap (Core.ModuleRef, Core.TyName) ImplementsValue) 
+    } deriving(Show, Generic)
 
 -- |A mapping of identifiers to values, e.g., definitions to values, and of contract identifiers to their
 -- respective initialization functions and receive functions.
