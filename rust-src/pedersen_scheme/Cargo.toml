@@ -14,4 +14,4 @@ serde         = "1"
 
 [lib]
 name = "pedersen_scheme"
-crate-type = ["rlib", "staticlib", "cdylib", "lib"]
+crate-type = ["rlib", "staticlib", "cdylib" ]

@@ -9,4 +9,4 @@ sha2 = "0"
 
 [lib]
 name = "sha_2"
-crate-type = ["rlib", "staticlib", "cdylib", "lib"]
+crate-type = ["rlib", "staticlib", "cdylib"]

@@ -14,4 +14,4 @@ criterion = "0.2"
 
 [lib]
 name = "eddsa_ed25519"
-crate-type = ["rlib", "staticlib", "cdylib", "lib"]
+crate-type = ["rlib", "staticlib", "cdylib"]
