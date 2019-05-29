@@ -26,8 +26,6 @@ import qualified Data.Serialize as S
 import Concordium.Types
 import qualified Concordium.Types.Acorn.Core as Core
 
--- * Basic representation types.
-
 -- * Datatypes involved in typechecking, and any other operations involving types.
 
 -- |Interface of a contract.
@@ -66,7 +64,7 @@ data TypingError =
                  | TypeAbstractionNotAppliedToType (Core.Expr Core.ModuleRef)
                  -- |A type appears where a term is expected.
                  | TypeWhereTermExpected (Core.Type Core.ModuleRef)
-                 -- |A term is applied which is neither of a function tpye, nor universal type.
+                 -- |A term is applied which is neither of a function type, nor universal type.
                  -- The first argument is the term to be applied, the second its type.
                  | OnlyAbstractionsCanBeApplied (Core.Expr Core.ModuleRef) (Core.Type Core.ModuleRef)
                  -- |The type of an argument given to a function does not match the function's definition.
@@ -87,10 +85,6 @@ data TypingError =
                  | CaseWithoutAlternatives
                  -- |Redundant pattern: a redundant variable, literal (if the type of the discriminee is a base type) or data type constructor (if the type of the discriminee is a declared datatype).
                  | PatternRedundant (Core.Pattern Core.ModuleRef)
-                 -- NOTE: PatternRedundantTypeConstructor could be added as more specific error (see NOTE in TypeCheck)
-                 -- -- |Redundant pattern where the type of the discriminee is a declared datatype and the specified constructor is redundant.
-                 -- | PatternRedundantTypeConstructor (Core.CTorName Core.ModuleRef)
-                 -- NOTE: Could split into base type / declared datatype versions, providing missing constructors for declared datatype
                  -- |Non-exhaustive pattern
                  | PatternsNonExhaustive
                  -- |Pattern does not have correct type. The first argument is the actual type, the second the expected type.
@@ -110,9 +104,9 @@ data TypingError =
                  | UndefinedVariable Core.BoundVar
                  -- |A free type variable occurs in an expression.
                  | FreeTypeVariable Core.BoundTyVar
-                 -- The data type with the given name is not defined in the current module.
+                 -- |The data type with the given name is not defined in the current module.
                  | UndefinedLocalDatatype Core.TyName
-                 -- The data type with the given name is not defined in the given module.
+                 -- |The data type with the given name is not defined in the given module.
                  | UndefinedQualifiedDatatype Core.ModuleRef Core.TyName
                  -- |Module does not exist. Raised when trying to type-check an imported definition from a non-existing module.
                  | ModuleNotExists Core.ModuleRef
@@ -314,7 +308,9 @@ data ValueInterface = ValueInterface
 emptyValueInterface :: ValueInterface
 emptyValueInterface = ValueInterface Map.empty Map.empty
 
--- *Serialization instances for interfaces. NB: The format is not designed with
+-- * Serialization instances for interfaces.
+-- $serialization
+-- NB: The format is not designed with
 -- efficiency in mind for now, and should be fixed if we need to use it in a
 -- performance critical way.
 
