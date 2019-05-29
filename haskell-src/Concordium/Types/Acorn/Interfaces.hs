@@ -41,7 +41,8 @@ data ContractInterface = ContractInterface
 -- |Interface derived from a module. This is used in typechecking other modules.
 -- Lists public functions which can be called, and types of methods.
 data Interface = Interface
-    { importedModules :: !(HashMap Core.ModuleName Core.ModuleRef)
+    { uniqueName :: !Core.ModuleRef
+    , importedModules :: !(HashMap Core.ModuleName Core.ModuleRef)
     , exportedTypes :: !(HashMap Core.TyName (Int, HashMap Core.Name [Core.Type Core.ModuleRef]))
     , exportedTerms :: !(HashMap Core.Name (Core.Type Core.ModuleRef))
     , exportedContracts :: !(HashMap Core.TyName ContractInterface)
@@ -49,8 +50,8 @@ data Interface = Interface
     }
   deriving (Show, Generic)
 
-emptyInterface :: Interface
-emptyInterface = Interface Map.empty Map.empty Map.empty Map.empty Map.empty
+emptyInterface :: Core.ModuleRef -> Interface
+emptyInterface mref = Interface mref Map.empty Map.empty Map.empty Map.empty Map.empty
 
 type ModuleInterfaces = HashMap Core.ModuleRef Interface
 
@@ -58,8 +59,30 @@ type ModuleInterfaces = HashMap Core.ModuleRef Interface
 data TypingError =
                  -- |TODO: To be replaced by more precise errors.
                  OtherErr String
-                 -- |The type of an argument given to a function does not match the function's definition. The first argument is the actual type, the second the expected type.
+                 -- |Error raised when a declared datatype is instantiated with a wrong number of arguments (too few or too many).
+                 -- The first argument is the number of given parameters, the second the expected number.
+                 | IncorrectNumberOfTypeParameters Int Int
+                 -- |A type abstraction is applied to a term which is not a type.
+                 | TypeAbstractionNotAppliedToType (Core.Expr Core.ModuleRef)
+                 -- |A type appears where a term is expected.
+                 | TypeWhereTermExpected (Core.Type Core.ModuleRef)
+                 -- |A term is applied which is neither of a function tpye, nor universal type.
+                 -- The first argument is the term to be applied, the second its type.
+                 | OnlyAbstractionsCanBeApplied (Core.Expr Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |The type of an argument given to a function does not match the function's definition.
+                 -- The first argument is the actual type, the second the expected type.
                  | UnexpectedArgumentType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |The result type of a defined function (e.g. in a letrec) does not match the specified result type.
+                 -- The first argument is the actual type, the second the specified type.
+                 | ResultTypeNotAsSpecified (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |The type of the discriminee in a case expression is not fully instantiated. -- NOTE: Could add name of declared datatype
+                 | NonFullyInstantiatedTypeAsCaseArgument
+                 -- |The type of the discriminee in a case expression is a base type not supported for pattern matching.
+                 | UnsupportedBaseTypeInCaseArgument (Core.TBase)
+                 -- |The type of the discriminee in a case expression is a function type.
+                 | FunctionAsCaseArgument
+                 -- |The discriminee in a case expression is a type variable.
+                 | TypeVariableAsCaseArgument
                  -- |Empty set of alternatives is not allowed in a case expression.
                  | CaseWithoutAlternatives
                  -- |Redundant pattern: a redundant variable, literal (if the type of the discriminee is a base type) or data type constructor (if the type of the discriminee is a declared datatype).
@@ -72,8 +95,10 @@ data TypingError =
                  | PatternsNonExhaustive
                  -- |Pattern does not have correct type. The first argument is the actual type, the second the expected type.
                  | UnexpectedPatternType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |Special case of UnexpectedPatternType where the pattern is a literal of unsupported type.
+                 | UnsupportedLiteralInPattern Core.Literal
                  -- |A more specific type mismatch. The constructor used in the pattern is not a type constructor of the discriminee type.
-                 | UnexpectedTypeConstructor (Core.CTorName Core.ModuleRef)
+                 | UnexpectedTypeConstructorInPattern (Core.CTorName Core.ModuleRef)
                  -- |A more specific type mismatch. A constructor pattern occurs at a place where the discriminee has a base type.
                  | TypeConstructorWhereLiteralOrVariableExpected (Core.CTorName Core.ModuleRef)
                  -- |A more specific type mismatch. A litreal occurs at a place where the discriminee has a declared datatype.
@@ -81,6 +106,14 @@ data TypingError =
                  -- |The body of the branch of a case expression does not have the correct type.
                  -- The first argument is type found, the second is the expected type.
                  | UnexpectedCaseAlternativeResultType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- |A variable used in an expression is not bound.
+                 | UndefinedVariable Core.BoundVar
+                 -- |A free type variable occurs in an expression.
+                 | FreeTypeVariable Core.BoundTyVar
+                 -- The data type with the given name is not defined in the current module.
+                 | UndefinedLocalDatatype Core.TyName
+                 -- The data type with the given name is not defined in the given module.
+                 | UndefinedQualifiedDatatype Core.ModuleRef Core.TyName
                  -- |Module does not exist. Raised when trying to type-check an imported definition from a non-existing module.
                  | ModuleNotExists Core.ModuleRef
   deriving (Eq, Show)
@@ -304,6 +337,7 @@ getExportedTypes = do
 
 instance S.Serialize Interface where
   put (Interface{..}) =
+    S.put uniqueName <>
     putHashMap importedModules <>
     putExportedTypes exportedTypes <>
     putHashMap exportedTerms <>
@@ -311,6 +345,7 @@ instance S.Serialize Interface where
     putHashMap exportedConstraints
 
   get = do
+    uniqueName <- S.get
     importedModules <- getHashMap
     exportedTypes <- getExportedTypes
     exportedTerms <- getHashMap
