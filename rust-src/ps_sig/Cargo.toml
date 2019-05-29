@@ -1,0 +1,23 @@
+[package]
+name = "ps_sig"
+version = "0.1.0"
+authors = ["bassel <bassel.mannaa@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+pairing = "0"
+failure       = "0"
+rand    = "0.4"
+rand_core = "0"
+clear_on_drop = "0"
+bitvec ="0.2.0"
+rayon = "1"
+serde = "1"
+libc  = "0"
+
+[dev-dependencies]
+criterion = "0.2"
+
+[lib]
+name = "ps_sig"
+crate-type = ["rlib", "staticlib", "cdylib"]
