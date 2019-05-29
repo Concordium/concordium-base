@@ -99,8 +99,15 @@ data Expr origin
   -- |Local let binding, non-recursive (Let e e') is let e in e' (we use
   -- De-Bruijn convention here as well).
   | Let !(Expr origin) !(Expr origin)
-  -- |Recursive fix t1 e t2 is like "fix f (x : t1) : t2 = e.
-  -- f is referred to by DeBruijn index 1, x as 0
+  -- |Mutually recursive let. The list of binders can be empty. In the example
+  -- 
+  -- @
+  --    letrec [(tdom1, e1, tcod1), (tdom2, e2, tcod2)] ebody
+  -- @
+  -- 
+  --   * in expressions @e1@ and @e2@ DeBruijn index 0 refers to the local variable
+  --     and indices 1 and 2 refer to the functions defined by @e2@ and @e1@ respectively
+  --   * in expression @ebody@ DeBruijn index 0 refers to (the functions defined by) @e2@ and 1 to @e1@
   | LetRec ![(Type origin, Expr origin, Type origin)] !(Expr origin)
   -- |Case expression, the list of alternatives should be non-empty. In bodies
   -- of branches we again use the De-Bruijn convention.
