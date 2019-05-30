@@ -269,26 +269,6 @@ data Contract a = Contract {
   }
   deriving(Show, Eq, Generic)
 
--- |Default constraint derived from a contract.
-
-defaultConstraint :: MonadError String m => Contract ModuleRef -> m (ConstraintDecl ModuleRef)
-defaultConstraint Contract{..} = do
-  (prelimMsgTy, prelimModelTy) <- prelimExtract cReceive
-  let contractCast = fromIntegral cName
-      senderName = contractCast + 2
-      getterName = contractCast + 3
-      constraintName = cName
-      senders = [Sender {sName = senderName
-                        ,sVal = prelimMsgTy}]
-      getters = [Getter {gName = getterName
-                        ,gVal = prelimModelTy}]
-  return ConstraintDecl{..}
-
-  where prelimExtract (Lambda _ (Lambda modelTy (Lambda _ (Lambda _ (Lambda (TApp _ [msgTy]) _))))) =
-            return (msgTy, modelTy)
-        prelimExtract _ = throwError "prelimExtract: Receive method not of the correct shape."
-
-
 
 -- * Utility functions used during typechecking.
 
