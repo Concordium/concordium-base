@@ -6,15 +6,10 @@ import Test.Hspec.QuickCheck
 
 import Test.QuickCheck
 
-import qualified Data.Serialize.Put as P
-import qualified Data.Serialize.Get as G
 import Data.ByteString.Lazy as BSL
 import Data.ByteString as BS
-import System.Random
 
-import qualified Concordium.ID.Account as AH
-import Concordium.Crypto.SignatureScheme(KeyPair, VerifyKey(..), SchemeId(Ed25519), verifyKey)
-import Concordium.Crypto.Ed25519Signature(randomKeyPair)
+import Concordium.Crypto.SignatureScheme(VerifyKey(..), SchemeId(Ed25519))
 import Concordium.Types.Execution
 import Concordium.Types(Amount(..), Address(..))
 import Concordium.ID.Types
@@ -25,6 +20,8 @@ import qualified Data.Serialize as S
 import Types.CoreAllGen
 
 import Control.Monad
+
+import Data.Int
 
 genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
 genCredentialDeploymentInformation = do
@@ -42,10 +39,8 @@ genCredentialDeploymentInformation = do
   return CDI{..}
 
 genPayload :: Gen Payload
-genPayload = oneof [genDeployModule, genInit, genUpdate, genTransfer, genAccount, genCredential]
+genPayload = oneof [genDeployModule, genInit, genUpdate, genTransfer, genCredential]
   where 
-        genAccount = CreateAccount . AH.createAccount . verifyKey . fst . randomKeyPair . mkStdGen <$> arbitrary
-
         genCredential = DeployCredential <$> genCredentialDeploymentInformation
 
         genDeployModule = DeployModule <$> genModule
@@ -70,12 +65,13 @@ genPayload = oneof [genDeployModule, genInit, genUpdate, genTransfer, genAccount
           amnt <- Amount <$> arbitrary
           return $ Transfer a amnt
 
+groupIntoSize :: Int64 -> [Char]
 groupIntoSize s =
   let kb = s `div` 1000
-      nd = if kb > 0 then truncate (logBase 10 (fromIntegral kb)) else 0
+      nd = if kb > 0 then truncate (logBase 10 (fromIntegral kb :: Double)) else 0 :: Int
   in if nd == 0 then show kb ++ "kB"
-     else let lb = 10^nd
-              ub = 10^(nd+1)
+     else let lb = 10^nd :: Int
+              ub = 10^(nd+1) :: Int
           in show lb ++ " -- " ++ show ub ++ "kB"
 
 checkPayload :: Payload -> Property

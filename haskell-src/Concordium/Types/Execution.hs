@@ -32,7 +32,6 @@ data Payload = DeployModule !Core.Module   -- ^Put module on the chain.
                       !(Core.Expr Core.ModuleName) -- ^The message.
                       !Int                         -- ^Derived field, size of the message.
              | Transfer !Address !Amount     -- ^Where (which can be a contract) and what amount to transfer.
-             | CreateAccount !IDTypes.AccountCreationInformation  -- ^Create an account with no credentials.
              | DeployCredential !IDTypes.CredentialDeploymentInformation  -- ^Deploy a credential to an existing account.
   deriving(Eq, Show)
 
@@ -55,11 +54,8 @@ instance S.Serialize Payload where
     P.putWord8 3 <>
     S.put addr <>
     S.put amnt
-  put (CreateAccount aci) =
-    P.putWord8 4 <>
-    S.put aci
   put (DeployCredential cdi) =
-    P.putWord8 5 <>
+    P.putWord8 4 <>
     S.put cdi
 
   get = do
@@ -80,8 +76,7 @@ instance S.Serialize Payload where
               pend <- G.bytesRead
               return $! Update amnt cref msg (pend - pstart)
       3 -> Transfer <$> S.get <*> S.get
-      4 -> CreateAccount <$> S.get
-      5 -> DeployCredential <$> S.get
+      4 -> DeployCredential <$> S.get
       _ -> fail "Only 6 types of transactions types are currently supported."
 
 {-# INLINE encodePayload #-}
