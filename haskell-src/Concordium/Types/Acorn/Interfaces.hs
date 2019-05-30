@@ -33,7 +33,7 @@ data ContractInterface = ContractInterface
     { paramTy :: !(Core.Type Core.ModuleRef) -- ^Type of the parameter of the init method.
     , msgTy :: !(Core.Type Core.ModuleRef) -- ^Type of messages the receive method can handle.
     }
-  deriving(Show, Generic)
+  deriving(Show, Eq, Generic)
 
 
 -- |Interface derived from a module. This is used in typechecking other modules.
@@ -46,7 +46,7 @@ data Interface = Interface
     , exportedContracts :: !(HashMap Core.TyName ContractInterface)
     , exportedConstraints :: !(HashMap Core.TyName (Core.ConstraintDecl Core.ModuleRef))
     }
-  deriving (Show, Generic)
+  deriving (Show, Eq, Generic)
 
 emptyInterface :: Core.ModuleRef -> Interface
 emptyInterface mref = Interface mref Map.empty Map.empty Map.empty Map.empty Map.empty
