@@ -98,7 +98,7 @@ data TypingError =
                  -- |A more specific type mismatch. A litreal occurs at a place where the discriminee has a declared datatype.
                  | LiteralWhereTypeConstructorExpected Core.Literal
                  -- |The body of the branch of a case expression does not have the correct type.
-                 -- The first argument is type found, the second is the expected type.
+                 -- The first argument is the type found, the second is the expected type.
                  | UnexpectedCaseAlternativeResultType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
                  -- |A variable used in an expression is not bound.
                  | UndefinedVariable Core.BoundVar
@@ -116,7 +116,7 @@ data TypingError =
                  -- |Module does not exist. Raised when trying to type-check an imported definition from a non-existing module.
                  | ModuleNotExists Core.ModuleRef
                  -- |Type checking succeeded with a type other than the expected.
-                 -- The first argument is type assigned to the expression in question, the second is the expected type.
+                 -- The first argument is the type assigned to the expression in question, the second is the expected type.
                  | UnexpectedType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
   deriving (Eq, Show)
 
