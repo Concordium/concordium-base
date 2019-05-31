@@ -256,9 +256,9 @@ data ConstraintImpl origin
       }
     deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
--- |A contract has a name an init method, and a receive method. The type of
+-- |A contract has a name, an init method, and a receive method. The type of
 -- local state is inferred from the type of the init method, and the type of
--- messages the contract can receive is inferred from the type of the update
+-- messages the contract can receive is inferred from the type of the receive
 -- method. Moreover, the contract can "implement" or be an instance of a number
 -- of constraints (by name).
 data Contract a = Contract {
