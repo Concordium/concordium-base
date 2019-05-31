@@ -1,0 +1,13 @@
+[package]
+name = "curve_arithmetic"
+version = "0.1.0"
+authors = ["bassel <bassel.mannaa@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+pairing = "0"
+rand    = "0.4"
+
+[lib]
+name = "eddsa_ed25519"
+crate-type = ["rlib", "staticlib", "cdylib"]
