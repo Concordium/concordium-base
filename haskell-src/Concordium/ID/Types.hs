@@ -183,22 +183,7 @@ instance Eq CredentialDeploymentInformation where
   cdi1 == cdi2 = cdi_verifKey cdi1 == cdi_verifKey cdi2 && cdi_sigScheme cdi1 == cdi_sigScheme cdi2 &&
       cdi_regId cdi1 == cdi_regId cdi2
 
---instance Serialize CredentialHolderInformation where
 instance Serialize CredentialDeploymentInformation where
-
-data AccountCreationInformation = ACI {
-                                        aci_verifKey :: AccountVerificationKey,
-                                        aci_encKey :: AccountEncryptionKey,
-                                        aci_sigScheme :: SchemeId ,
-                                        aci_accAddress:: AccountAddress,
-                                        aci_proof:: ZKProof -- sigma proof that the creator has the private key corresponding to these keys
-                                      }
-                            deriving (Eq, Generic, Show) -- Eq instance only needed for testing and not relied upon elsewhere.
-
-
---instance Serialize AccountCreationInformation where
-instance Serialize AccountCreationInformation where
-
 
 data CredentialHolderCertificate = CHC { chc_ipId :: IdentityProviderIdentity,
                                          chc_ipPk :: IdentityProviderPublicKey,
