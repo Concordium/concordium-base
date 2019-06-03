@@ -66,47 +66,8 @@ verifyCredential :: CredentialDeploymentInformation -> Bool
 verifyCredential _ = True
 
                                      
-
--- input : Account Signature Key Pair + signature scheme
--- input : Account Encryption PK
-newAccount:: SignKey-> VerifyKey -> SignatureScheme -> AccountEncryptionKey -> IO AccountCreationInformation
-newAccount sk pk sch enc =  return $ 
-                           ACI {
-                                        aci_sigScheme = sch',
-                                        aci_verifKey = pk,
-                                        aci_encKey = enc,
-                                        aci_accAddress = accountAddress' pk sch' ,
-                                        aci_proof =  p
-                                }
-            where
-                p = let (EncKeyAcc x) = enc
-                        SHA256.Hash y = SHA256.hash x in 
-                        Proof $ FBS.toByteString y
-                sch' = schemeId sch
-
-                                        
-                                            {-
-prove :: Policy -> AccountHolderInformation -> AccountHolderCertificate -> IO ZKProof
-prove _ _ _ = random (fromIntegral 80) >>= (return . Proof)
--}
-
 registrationId = (random (fromIntegral 48)) >>= (return . RegIdCred)
     
-createAccount :: VerifyKey -> AccountCreationInformation  
-createAccount ahc = ACI { 
-                          aci_sigScheme = scheme,
-                          aci_verifKey = ahc,
-                          aci_encKey = encKey,
-                          aci_accAddress = accountAddress' ahc scheme,
-                          aci_proof = proof
-                        }
-
-accountAddress :: AccountCreationInformation-> AccountAddress
-accountAddress aci =  accountAddress' vk sc
-    where vk = aci_verifKey aci
-          sc = aci_sigScheme aci
-
-
 base58decodeAddr :: Base58String -> AccountAddress
 base58decodeAddr bs = AccountAddress (FBS.fromByteString (toBytes bs))
 
@@ -115,17 +76,19 @@ accountScheme :: AccountAddress -> Maybe SchemeId
 accountScheme (AccountAddress s) = toScheme (FBS.getByte s 0)
 
 
-accountAddress' :: AccountVerificationKey -> SchemeId -> AccountAddress 
-accountAddress' (VerifyKey x) y =  AccountAddress (FBS.fromByteString $ BS.cons sch (BS.take (accountAddressSize - 1) bs))
+-- |Compute the account address from account's (public) verification key and the signature scheme identifier.
+-- The address is computed by the following algorithm
+--
+--  * compute SHA-224 hash of the verification key
+--  * take the first 20 bytes of the resulting string
+--  * and prepend a one byte identifier of the signature scheme.
+accountAddress :: AccountVerificationKey -> SchemeId -> AccountAddress 
+accountAddress (VerifyKey x) y =  AccountAddress (FBS.fromByteString $ BS.cons sch (BS.take (accountAddressSize - 1) bs))
     where 
         (SHA224.Hash r) = SHA224.hash x
         bs = FBS.toByteString r
         sch:: Word8
         sch = fromIntegral $ fromEnum y
-      
-verifyAccount :: AccountCreationInformation -> Bool 
-verifyAccount _ = True
-
 
 ar :: AnonimityRevoker
 ar = AR (AR_ID $ pack "Gotham City Police Department") (AR_PK $ unsafePerformIO $ random (fromIntegral 48))
@@ -150,9 +113,6 @@ policy = Conj (AtomicBD AgeOver18) (AtomicCitizenship EU)
 aux = pack "aux"
 
 proof = Proof $ pack "proof of bot"
-
-randomAcc = unsafePerformIO $ do keypair <- S.newKeyPair
-                                 return $ createAccount (verifyKey keypair)
 
 fakeSign::ByteString -> ByteString
 fakeSign x = SHA256.hashToByteString (SHA256.hash x)
