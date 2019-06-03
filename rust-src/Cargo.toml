@@ -7,6 +7,7 @@ members=[
    "sha_2",
    "dodis_yampolskiy_prf",
    "pedersen_scheme",
+   "pedersen_scheme2",
    "elgamal",
    "ps_sig" ]
 
