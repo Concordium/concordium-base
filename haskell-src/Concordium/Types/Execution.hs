@@ -33,6 +33,7 @@ data Payload = DeployModule !Core.Module   -- ^Put module on the chain.
                       !Int                         -- ^Derived field, size of the message.
              | Transfer !Address !Amount     -- ^Where (which can be a contract) and what amount to transfer.
              | DeployCredential !IDTypes.CredentialDeploymentInformation  -- ^Deploy a credential to an existing account.
+             | DeployEncryptionKey !IDTypes.AccountEncryptionKey -- ^Deploy the encryption to the sender's account.
   deriving(Eq, Show)
 
 instance S.Serialize Payload where
@@ -57,6 +58,9 @@ instance S.Serialize Payload where
   put (DeployCredential cdi) =
     P.putWord8 4 <>
     S.put cdi
+  put (DeployEncryptionKey ek) =
+    P.putWord8 5 <>
+    S.put ek
 
   get = do
     h <- G.getWord8
@@ -77,6 +81,7 @@ instance S.Serialize Payload where
               return $! Update amnt cref msg (pend - pstart)
       3 -> Transfer <$> S.get <*> S.get
       4 -> DeployCredential <$> S.get
+      5 -> DeployEncryptionKey <$> S.get
       _ -> fail "Only 6 types of transactions types are currently supported."
 
 {-# INLINE encodePayload #-}
@@ -95,6 +100,7 @@ data Event = ModuleDeployed !Core.ModuleRef
            | Transferred !Address !Amount !Address
            | AccountCreated !AccountAddress
            | CredentialDeployed !IDTypes.CredentialDeploymentInformation
+           | AccountEncryptionKeyDeployed AccountAddress IDTypes.AccountEncryptionKey
   deriving (Show)
 
 -- |Used internally by the scheduler since internal messages are sent as values,
@@ -134,11 +140,9 @@ data RejectReason = ModuleNotWF !TypingError -- ^Error raised when typechecking 
                   | SerializationFailure String -- ^Serialization of the body failed for the given reason.
                   | OutOfEnergy -- ^We ran of out energy to process this transaction.
                   | Rejected -- ^Rejected due to contract logic.
-                  | AccountAlreadyExists !AccountAddress
-                  | AccountCreationInformationInvalid
                   | DuplicateAccountRegistrationID IDTypes.CredentialRegistrationID
                   | AccountCredentialInvalid
-                  | DeployCredentialToNonExistentAccount
+                  | AccountEncryptionKeyAlreadyExists AccountAddress IDTypes.AccountEncryptionKey
     deriving (Show)
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
