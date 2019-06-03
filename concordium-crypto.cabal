@@ -58,6 +58,9 @@ Library
                    dodis_yampolskiy_prf
                    pedersen_scheme
                    elgamal
+  if os(windows)
+        extra-libraries: ws2_32
+                         userenv
 
 Test-Suite tests
   type: exitcode-stdio-1.0
