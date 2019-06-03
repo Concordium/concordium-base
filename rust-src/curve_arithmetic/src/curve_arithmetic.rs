@@ -6,7 +6,7 @@ use pairing::Field;
 use std::fmt::{Debug, Display};
 
 pub enum FieldDecodingError {
-    NotFieldElement
+    NotFieldElement,
 }
 pub enum CurveDecodingError {
     NotOnCurve,
@@ -29,5 +29,5 @@ pub trait Curve:
     fn into_compressed(&self) -> Self::Compressed;
     fn from_compressed(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
     fn from_compressed_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
-//    fn scalar_to_bytes(s: Scalar)-> Box<[u8]>;
+    //    fn scalar_to_bytes(s: Scalar)-> Box<[u8]>;
 }
