@@ -39,7 +39,7 @@ genCredentialDeploymentInformation = do
   return CDI{..}
 
 genPayload :: Gen Payload
-genPayload = oneof [genDeployModule, genInit, genUpdate, genTransfer, genCredential]
+genPayload = oneof [genDeployModule, genInit, genUpdate, genTransfer, genCredential, genEncryption]
   where 
         genCredential = DeployCredential <$> genCredentialDeploymentInformation
 
@@ -64,6 +64,11 @@ genPayload = oneof [genDeployModule, genInit, genUpdate, genTransfer, genCredent
           a <- oneof [AddressContract <$> genCAddress, AddressAccount <$> genAddress]
           amnt <- Amount <$> arbitrary
           return $ Transfer a amnt
+
+        -- NB: if the encryption key is going to be fixed length this needs to change
+        genEncryption = do
+          l <- choose (30,50)
+          DeployEncryptionKey . EncKeyAcc . BS.pack <$> vector l
 
 groupIntoSize :: Int64 -> [Char]
 groupIntoSize s =
