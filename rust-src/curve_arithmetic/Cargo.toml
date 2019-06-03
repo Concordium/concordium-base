@@ -9,5 +9,5 @@ pairing = "0"
 rand    = "0.4"
 
 [lib]
-name = "eddsa_ed25519"
+name = "curve_arithmetic"
 crate-type = ["rlib", "staticlib", "cdylib"]
