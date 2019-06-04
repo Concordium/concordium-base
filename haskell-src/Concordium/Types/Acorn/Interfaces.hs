@@ -110,11 +110,26 @@ data TypingError =
                  | UndefinedQualifiedDatatype Core.ModuleRef Core.TyName
                  -- |The module referred to in an expression with the given name is not imported (not part of the interface's import map).
                  | ModuleNotImported Core.ModuleName
-                 -- |The givin name qualified with the given module is not in scope.
+                 -- |The given name qualified with the given module is not in scope.
                  | QualifiedNameNotInScope Core.ModuleRef Core.Name
                  -- TODO Improve documentation
                  -- |Module does not exist. Raised when trying to type-check an imported definition from a non-existing module.
                  | ModuleNotExists Core.ModuleRef
+                 -- |The init method definition of a contract is not a function of the correct type.
+                 -- The argument is the type of the contract this error refers to.
+                 | ContractInitMethodHasIncorrectType Core.TyName
+                 -- |The receive method definition of a contract is not a function of the correct type (in the context of the types specified by the init method).
+                 -- The argument is the type of the contract this error refers to.
+                 | ContractReceiveMethodHasIncorrectType Core.TyName
+                 -- |The contract's message type as specified by the receive method is not a storable type.
+                 -- The argument is the type of the contract this error refers to.
+                 | ContractMessageTypeNotStorable Core.TyName
+                 -- |The contract's parameter type as specified by the init method is not a storable type.
+                 -- The argument is the type of the contract this error refers to.
+                 | ContractParameterTypeNotStorable Core.TyName
+                 -- |The type for the contract state as specified by the init and receive method is not a storable type.
+                 -- The argument is the type of the contract this error refers to.
+                 | ContractModelTypeNotStorable Core.TyName
                  -- |Type checking succeeded with a type other than the expected.
                  -- The first argument is the type assigned to the expression in question, the second is the expected type.
                  | UnexpectedType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
