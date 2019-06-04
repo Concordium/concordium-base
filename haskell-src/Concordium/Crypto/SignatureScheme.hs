@@ -21,7 +21,7 @@ newtype SignKey = SignKey ByteString
 newtype VerifyKey = VerifyKey ByteString
     deriving (Eq, Show, Ord)
 newtype Signature = Signature ByteString
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 data SchemeId = Ed25519 | CL
     deriving (Eq, Show)
 data KeyPair = KeyPair {
