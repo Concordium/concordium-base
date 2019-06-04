@@ -98,6 +98,7 @@ instance S.Serialize Address where
 
 
 -- |Type of GTU amounts.
+-- FIXME: This likely needs to be Word128.
 newtype Amount = Amount { _amount :: Word64 }
     deriving(Eq, Ord, Enum, Num, Integral, Real, Hashable)
 
@@ -108,6 +109,17 @@ instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
   put (Amount v) = P.putWord64be v
 
+-- |The type used to count exact execution cost. This cost is then converted to
+-- amounts in some way.
+newtype Energy = Energy { _energy :: Word64 }
+    deriving(Eq, Enum, Ord, Num, Real, Integral, Hashable)
+
+instance Show Energy where
+  show = show . _energy
+
+instance S.Serialize Energy where
+  get = Energy <$> G.getWord64be
+  put (Energy v) = P.putWord64be v
 
 newtype Nonce = Nonce Word64
     deriving(Eq, Show, Ord, Num, Enum)
