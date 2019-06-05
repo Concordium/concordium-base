@@ -1,3 +1,4 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric #-}
 module Concordium.ID.Types where
 
@@ -81,9 +82,9 @@ instance Serialize AnonimityRevokerIdentity  where
 
 data AnonimityRevoker = AR AnonimityRevokerIdentity AnonimityRevokerPublicKey
 
--- Name of Idenity Provider
+-- Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID ByteString
-    deriving (Eq, Show)
+    deriving (Eq, Show, Hashable)
 
 instance Serialize IdentityProviderIdentity where
     put (IP_ID s) = put s
@@ -91,6 +92,11 @@ instance Serialize IdentityProviderIdentity where
 
 -- Public key of Identity provider ()
 newtype IdentityProviderPublicKey = IP_PK ByteString
+    deriving(Eq, Hashable)
+
+instance Show IdentityProviderPublicKey where
+  show (IP_PK pubk) = LC.unpack . toLazyByteString . byteStringHex $ pubk
+
 
 -- Private key of Identity provider ()
 newtype IdentityProviderSecretKey = IP_SK ByteString
