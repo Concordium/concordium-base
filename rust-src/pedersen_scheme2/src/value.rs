@@ -18,7 +18,7 @@ use serde::{Deserializer, Serializer};
 use crate::{
     constants::*,
     errors::{
-        InternalError::{ValueVecLengthError, FieldDecodingError, CurveDecodingError},
+        InternalError::{CurveDecodingError, FieldDecodingError, ValueVecLengthError},
         *,
     },
 };
@@ -31,7 +31,7 @@ use rand::*;
 
 /// A  value
 #[derive(Debug, PartialEq, Eq)]
-pub struct Value<C:Curve>(pub(crate) Vec<C::Scalar>);
+pub struct Value<C: Curve>(pub(crate) Vec<C::Scalar>);
 
 // Overwrite value  material with null bytes when it goes out of scope.
 // impl Drop for Value {
@@ -40,7 +40,7 @@ pub struct Value<C:Curve>(pub(crate) Vec<C::Scalar>);
 // }
 // }
 
-impl <C:Curve> Value<C> {
+impl<C: Curve> Value<C> {
     // turn value vector into a byte aray
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
@@ -53,9 +53,7 @@ impl <C:Curve> Value<C> {
     }
 
     #[inline]
-    pub fn value_to_bytes(scalar: &C::Scalar) -> Box<[u8]> {
-        C::scalar_to_bytes(scalar)
-    }
+    pub fn value_to_bytes(scalar: &C::Scalar) -> Box<[u8]> { C::scalar_to_bytes(scalar) }
 
     /// Construct a value vec from a slice of bytes.
     ///
@@ -86,9 +84,9 @@ impl <C:Curve> Value<C> {
     /// is an `CommitmentError` wrapping the internal error that occurred.
     #[inline]
     pub fn value_from_bytes(bytes: &[u8]) -> Result<C::Scalar, CommitmentError> {
-        match C::bytes_to_scalar(bytes){
+        match C::bytes_to_scalar(bytes) {
             Ok(scalar) => Ok(scalar),
-            Err(x)     => Err(CommitmentError(FieldDecodingError)
+            Err(x) => Err(CommitmentError(FieldDecodingError)),
         }
     }
 
@@ -105,15 +103,22 @@ impl <C:Curve> Value<C> {
     }
 }
 
-
-#[test]
-pub fn value_to_byte_conversion() {
-    let mut csprng = thread_rng();
-    for i in 1..20 {
-        let val = Value::<G2Affine>::generate(i, &mut csprng);
-        let res_val2 = Value::<G2Affine>::from_bytes(&*val.to_bytes());
-        assert!(res_val2.is_ok());
-        let val2 = res_val2.unwrap();
-        assert_eq!(val2, val);
-    }
+macro_rules! macro_test_value_to_byte_conversion {
+    ($function_name:ident, $curve_type:path) => {
+        #[test]
+        pub fn $function_name() {
+            let mut csprng = thread_rng();
+            for i in 1..20 {
+                let val = Value::<$curve_type>::generate(i, &mut csprng);
+                let res_val2 = Value::<$curve_type>::from_bytes(&*val.to_bytes());
+                assert!(res_val2.is_ok());
+                let val2 = res_val2.unwrap();
+                assert_eq!(val2, val);
+            }
+        }
+    };
 }
+
+macro_test_value_to_byte_conversion!(value_to_byte_conversion_bls12_381_g1_affine, G1Affine);
+
+macro_test_value_to_byte_conversion!(value_to_byte_conversion_bls12_381_g2_affine, G2Affine);

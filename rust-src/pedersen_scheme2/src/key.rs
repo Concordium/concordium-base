@@ -5,16 +5,6 @@
 
 //! Commitment key type
 
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
-use curve_arithmetic::curve_arithmetic::*;
-use curve_arithmetic::bls12_381_instance::*;
 use crate::{
     commitment::*,
     constants::*,
@@ -24,9 +14,17 @@ use crate::{
     },
     value::*,
 };
+use curve_arithmetic::{bls12_381_instance::*, curve_arithmetic::*};
+#[cfg(feature = "serde")]
+use serde::de::Error as SerdeError;
+#[cfg(feature = "serde")]
+use serde::de::Visitor;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde::{Deserializer, Serializer};
 
 use pairing::bls12_381::{G1Affine, G2Affine};
-
 
 use rand::*;
 
@@ -40,7 +38,7 @@ pub struct CommitmentKey<C: Curve>(pub(crate) Vec<C>, pub(crate) C);
 // }
 // }
 
-impl <C:Curve> CommitmentKey<C> {
+impl<C: Curve> CommitmentKey<C> {
     // turn commitment key into a byte aray
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
@@ -71,17 +69,15 @@ impl <C:Curve> CommitmentKey<C> {
         for i in 0..glen {
             let j = i * C::GROUP_ELEMENT_LENGTH;
             let k = j + C::GROUP_ELEMENT_LENGTH;
-            match C::bytes_to_curve(&bytes[j..k]){
+            match C::bytes_to_curve(&bytes[j..k]) {
                 Err(x) => return Err(CommitmentError(CurveDecodingError)),
-                Ok(g_affine) => gs.push(g_affine)
+                Ok(g_affine) => gs.push(g_affine),
             };
         }
-        match C::bytes_to_curve (&bytes[(l - C::GROUP_ELEMENT_LENGTH)..]){
+        match C::bytes_to_curve(&bytes[(l - C::GROUP_ELEMENT_LENGTH)..]) {
             Err(x) => Err(CommitmentError(CurveDecodingError)),
-            Ok(h_affine) =>Ok(CommitmentKey(gs, h_affine) 
-
+            Ok(h_affine) => Ok(CommitmentKey(gs, h_affine)),
         }
-
     }
 
     pub fn commit<T>(&self, ss: &Value<C>, csprng: &mut T) -> (Commitment<C>, C::Scalar)
@@ -98,8 +94,8 @@ impl <C:Curve> CommitmentKey<C> {
         let h = self.1;
         let hr = h.mul_by_scalar(r);
         let mut res = hr;
-        for it in self.0.iter().zip(ss.0.iter()){
-            let (g,m) = it;
+        for it in self.0.iter().zip(ss.0.iter()) {
+            let (g, m) = it;
             let gm = g.mul_by_scalar(m);
             res = res.plus_point(g);
         }
@@ -126,29 +122,44 @@ impl <C:Curve> CommitmentKey<C> {
     }
 }
 
-
-#[test]
-pub fn key_to_byte_conversion() {
-    let mut csprng = thread_rng();
-    for i in 1..10 {
-        let sk = CommitmentKey::<G2Affine>::generate(i, &mut csprng);
-        let res_sk2 = CommitmentKey::<G2Affine>::from_bytes(&*sk.to_bytes());
-        assert!(res_sk2.is_ok());
-        let sk2 = res_sk2.unwrap();
-        assert_eq!(sk2, sk);
-    }
+macro_rules! macro_test_key_byte_conversion {
+    ($function_name:ident, $curve_type:path) => {
+        #[test]
+        pub fn $function_name() {
+            let mut csprng = thread_rng();
+            for i in 1..10 {
+                let sk = CommitmentKey::<$curve_type>::generate(i, &mut csprng);
+                let res_sk2 = CommitmentKey::<$curve_type>::from_bytes(&*sk.to_bytes());
+                assert!(res_sk2.is_ok());
+                let sk2 = res_sk2.unwrap();
+                assert_eq!(sk2, sk);
+            }
+        }
+    };
 }
 
-#[test]
-pub fn commit_open() {
-    let mut csprng = thread_rng();
-    for i in 1..10 {
-        let sk = CommitmentKey::<G2Affine>::generate(i, &mut csprng);
-        let ss = Value::<G2Affine>::generate(i, &mut csprng);
-        let (c, r) = sk.commit(&ss, &mut csprng);
-        assert!(sk.open(&ss, &r, &c));
-        let m = G2Affine::generate_scalar(&mut csprng);
-        assert!(!sk.open(&ss, &m, &c));
-        assert!(!sk.open(&ss, &r, &Commitment::<G2Affine>::generate(&mut csprng)));
-    }
+macro_test_key_byte_conversion!(key_byte_conversion_bls12_381_g1_affine, G1Affine);
+
+macro_test_key_byte_conversion!(key_byte_conversion_bls12_381_g2_affine, G2Affine);
+
+macro_rules! macro_test_commit_open {
+    ($function_name:ident, $curve_type:path) => {
+        #[test]
+        pub fn $function_name() {
+            let mut csprng = thread_rng();
+            for i in 1..10 {
+                let sk = CommitmentKey::<$curve_type>::generate(i, &mut csprng);
+                let ss = Value::<$curve_type>::generate(i, &mut csprng);
+                let (c, r) = sk.commit(&ss, &mut csprng);
+                assert!(sk.open(&ss, &r, &c));
+                let m = <$curve_type as Curve>::generate_scalar(&mut csprng);
+                assert!(!sk.open(&ss, &m, &c));
+                assert!(!sk.open(&ss, &r, &Commitment::<$curve_type>::generate(&mut csprng)));
+            }
+        }
+    };
 }
+
+macro_test_commit_open!(commit_open_bls12_381_g1_affine, G1Affine);
+
+macro_test_commit_open!(commit_open_bls12_381_g2_affine, G2Affine);

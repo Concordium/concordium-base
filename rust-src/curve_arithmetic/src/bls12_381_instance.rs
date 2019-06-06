@@ -72,7 +72,7 @@ impl Curve for G1Affine
 
     fn scalar_to_bytes(e:&Self::Scalar)-> Box<[u8]>{
         let frpr = &e.into_repr();
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0u8; Self::SCALAR_LENGTH];
         let mut i = 0;
         for a in frpr.as_ref().iter().rev(){
             bytes[i..(i+8)].copy_from_slice(&a.to_be_bytes());
@@ -102,7 +102,7 @@ impl Curve for G1Affine
     fn curve_to_bytes(&self) -> Box<[u8]>{
         let g = self.into_compressed();
         let g_bytes = g.as_ref();
-        let mut bytes = [0u8;48];
+        let mut bytes = [0u8;Self::GROUP_ELEMENT_LENGTH];
         bytes.copy_from_slice(&g_bytes);
         Box::new(bytes)
     }
@@ -190,7 +190,7 @@ impl Curve for G2Affine
 
       fn scalar_to_bytes(e:&Self::Scalar)-> Box<[u8]>{
           let frpr = &e.into_repr();
-          let mut bytes = [0u8; 32];
+          let mut bytes = [0u8; Self::SCALAR_LENGTH];
           let mut i = 0;
           for a in frpr.as_ref().iter().rev(){
               bytes[i..(i+8)].copy_from_slice(&a.to_be_bytes());
@@ -220,7 +220,7 @@ impl Curve for G2Affine
       fn curve_to_bytes(&self) -> Box<[u8]>{
           let g = self.into_compressed();
           let g_bytes = g.as_ref();
-          let mut bytes = [0u8;96];
+          let mut bytes = [0u8;Self::GROUP_ELEMENT_LENGTH];
           bytes.copy_from_slice(&g_bytes);
           Box::new(bytes)
       }

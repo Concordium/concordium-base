@@ -12,7 +12,7 @@ mod commitment;
 mod constants;
 mod errors;
 mod key;
-//mod pedersen_scheme;
+mod pedersen_scheme;
 mod value;
 
-//pub use crate::{key::*, pedersen_scheme::*};
+// pub use crate::{key::*, pedersen_scheme::*};
