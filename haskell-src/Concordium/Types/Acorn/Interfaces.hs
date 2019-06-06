@@ -121,6 +121,9 @@ data TypingError =
                  -- |The receive method definition of a contract is not a function of the correct type (in the context of the types specified by the init method).
                  -- The argument is the type of the contract this error refers to.
                  | ContractReceiveMethodHasIncorrectType Core.TyName
+                 -- |A more specific error about a contract's receive method type where the result type is not as required.
+                 -- The first argument is the type of the contract this error refers to, the second the result type of the receive method and the third the expected result type.
+                 | ContractReceiveMethodHasIncorrectResultType Core.TyName (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
                  -- |The contract's message type as specified by the receive method is not a storable type.
                  -- The argument is the type of the contract this error refers to.
                  | ContractMessageTypeNotStorable Core.TyName
@@ -130,6 +133,24 @@ data TypingError =
                  -- |The type for the contract state as specified by the init and receive method is not a storable type.
                  -- The argument is the type of the contract this error refers to.
                  | ContractModelTypeNotStorable Core.TyName
+                 -- The contract's number of implementations of getter methods does not match the number specified in the respective constraint.
+                 -- The first argument is the type of the contract this error refers to, the second the name of the constraint.
+                 | ContractIncorrectNumberOfGetterImplementations Core.TyName (Core.ConstraintRef Core.ModuleRef)
+                 -- The contract's number of implementations of sender methods does not match the number specified in the respective constraint.
+                 -- The first argument is the type of the contract this error refers to, the second the name of the constraint.
+                 | ContractIncorrectNumberOfSenderImplementations Core.TyName (Core.ConstraintRef Core.ModuleRef)
+                 -- An implementation of a getter method in a contract does not match the expected method to be implemented.
+                 -- The first argument is the type of the contract this error refers to, the second the name of the method that is implemented and the third the name of the method that is expected to be implemented.
+                 | ContractUnexpectedGetterImplementation Core.TyName Core.Name Core.Name
+                 -- An implementation of a sender method in a contract does not match the expected method to be implemented.
+                 -- The first argument is the type of the contract this error refers to, the second the name of the method that is implemented and the third the name of the method that is expected to be implemented.
+                 | ContractUnexpectedSenderImplementation Core.TyName Core.Name Core.Name
+                 -- An implementation of a getter method in a contract does not have the correct type.
+                 -- The first and second arguments are the type of the contract and the constraint this error refers to, the third the incorrect type of the implementation.
+                 | ContractUnexpectedGetterType Core.TyName (Core.ConstraintRef Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- An implementation of a sender method in a contract does not have the correct type.
+                 -- The first and second arguments are the type of the contract and the constraint this error refers to, the third the incorrect type of the implementation.
+                 | ContractUnexpectedSenderType Core.TyName (Core.ConstraintRef Core.ModuleRef) (Core.Type Core.ModuleRef)
                  -- |Type checking succeeded with a type other than the expected.
                  -- The first argument is the type assigned to the expression in question, the second is the expected type.
                  | UnexpectedType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
