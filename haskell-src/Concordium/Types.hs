@@ -16,6 +16,7 @@ import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
 import Concordium.ID.Types
+import Concordium.Crypto.SignatureScheme(SchemeId)
 import Concordium.Types.HashableTo
 
 import Data.Hashable(Hashable)
@@ -97,6 +98,7 @@ instance S.Serialize Address where
 
 
 -- |Type of GTU amounts.
+-- FIXME: This likely needs to be Word128.
 newtype Amount = Amount { _amount :: Word64 }
     deriving(Eq, Ord, Enum, Num, Integral, Real, Hashable)
 
@@ -107,6 +109,17 @@ instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
   put (Amount v) = P.putWord64be v
 
+-- |The type used to count exact execution cost. This cost is then converted to
+-- amounts in some way.
+newtype Energy = Energy { _energy :: Word64 }
+    deriving(Eq, Enum, Ord, Num, Real, Integral, Hashable)
+
+instance Show Energy where
+  show = show . _energy
+
+instance S.Serialize Energy where
+  get = Energy <$> G.getWord64be
+  put (Energy v) = P.putWord64be v
 
 newtype Nonce = Nonce Word64
     deriving(Eq, Show, Ord, Num, Enum)
@@ -125,11 +138,23 @@ instance Show EncryptedAmount where
   show (EncryptedAmount amnt) = BSL.unpack . toLazyByteString . byteStringHex $ amnt
 
 data Account = Account {
-  _accountAddress :: !AccountAddress -- ^Address of the account.
-  ,_accountNonce :: !Nonce  -- ^Next available nonce for this account.
-  ,_accountAmount :: !Amount -- ^Current public account balance.
+  -- |Address of the account.
+  _accountAddress :: !AccountAddress
+  -- |Next available nonce for this account.
+  ,_accountNonce :: !Nonce
+  -- |Current public account balance.
+  ,_accountAmount :: !Amount
+  -- |List of encrypted amounts on the account.
   ,_accountEncryptedAmount :: ![EncryptedAmount]
-  ,_accountCreationInformation :: AccountCreationInformation
+  -- |Encryption key with which the encrypted amount on this account must be
+  -- encrypted. Other accounts use it to send encrypted amounts to this account,
+  -- if the key exists. Accounts start with no encryption key, and once the key
+  -- is chosen it cannot be changed.
+  ,_accountEncryptionKey :: Maybe AccountEncryptionKey
+  -- |The key used to verify transaction signatures.
+  ,_accountVerificationKey :: !AccountVerificationKey
+  -- |Signature scheme of the account.
+  ,_accountSignatureScheme :: SchemeId
   -- |FIXME: Once it is clearer what policies are and how they affect execution
   -- we might expand credentials into a more efficient data structure allowing
   -- more efficient checking of credentials/policies, but until then we just
@@ -148,9 +173,11 @@ instance S.Serialize Account where
                     S.put _accountNonce <>
                     S.put _accountAmount <>
                     S.put _accountEncryptedAmount <>
-                    S.put _accountCreationInformation <>
+                    S.put _accountEncryptionKey <>
+                    S.put _accountVerificationKey <>
+                    S.put _accountSignatureScheme <>
                     S.put _accountCredentials
-  get = Account <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get
+  get = Account <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get
 
 instance HashableTo Hash.Hash Account where
   getHash = Hash.hash . S.runPut . S.put
