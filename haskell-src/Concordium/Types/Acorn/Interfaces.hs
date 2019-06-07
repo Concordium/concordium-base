@@ -158,17 +158,6 @@ data TypingError =
 
 -- * Datatypes involved in execution of terms.
 
-type Energy = Int64
-
--- | How to derive energy amounts from gtu amounts
-gtuToEnergy :: Amount -> Energy
-gtuToEnergy = fromIntegral
-
--- | How to derive energy amounts from gtu amounts
-energyToGtu :: Energy -> Amount
-energyToGtu = fromIntegral
-
-
 -- | The type of values used by the interpreter. 
 data Value = 
              VClosure !RTEnv !Expr -- ^Functions evaluate to closures.
