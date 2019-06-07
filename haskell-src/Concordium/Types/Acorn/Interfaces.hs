@@ -122,8 +122,8 @@ data TypingError =
                  -- The argument is the type of the contract this error refers to.
                  | ContractReceiveMethodHasIncorrectType Core.TyName
                  -- |A more specific error about a contract's receive method type where the result type is not as required.
-                 -- The first argument is the type of the contract this error refers to, the second the result type of the receive method and the third the expected result type.
-                 | ContractReceiveMethodHasIncorrectResultType Core.TyName (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
+                 -- The first argument is the type of the contract this error refers to and the second the incorrect result type of the receive method.
+                 | ContractReceiveMethodHasIncorrectResultType Core.TyName (Core.Type Core.ModuleRef)
                  -- |The contract's message type as specified by the receive method is not a storable type.
                  -- The argument is the type of the contract this error refers to.
                  | ContractMessageTypeNotStorable Core.TyName
