@@ -125,14 +125,14 @@ data TypingError =
                  -- The first argument is the type of the contract this error refers to and the second the incorrect result type of the receive method.
                  | ContractReceiveMethodHasIncorrectResultType Core.TyName (Core.Type Core.ModuleRef)
                  -- |The contract's message type as specified by the receive method is not a storable type.
-                 -- The argument is the type of the contract this error refers to.
-                 | ContractMessageTypeNotStorable Core.TyName
+                 -- The first argument is the type of the contract this error refers to, the second the unstorable type.
+                 | ContractMessageTypeNotStorable Core.TyName (Core.Type Core.ModuleRef)
                  -- |The contract's parameter type as specified by the init method is not a storable type.
-                 -- The argument is the type of the contract this error refers to.
-                 | ContractParameterTypeNotStorable Core.TyName
+                 -- The first argument is the type of the contract this error refers to, the second the unstorable type.
+                 | ContractParameterTypeNotStorable Core.TyName (Core.Type Core.ModuleRef)
                  -- |The type for the contract state as specified by the init and receive method is not a storable type.
-                 -- The argument is the type of the contract this error refers to.
-                 | ContractModelTypeNotStorable Core.TyName
+                 -- The first argument is the type of the contract this error refers to.
+                 | ContractModelTypeNotStorable Core.TyName (Core.Type Core.ModuleRef)
                  -- The contract's number of implementations of getter methods does not match the number specified in the respective constraint.
                  -- The first argument is the type of the contract this error refers to, the second the name of the constraint.
                  | ContractIncorrectNumberOfGetterImplementations Core.TyName (Core.ConstraintRef Core.ModuleRef)
