@@ -140,11 +140,11 @@ data TypingError =
                  -- The first argument is the type of the contract this error refers to, the second the name of the constraint.
                  | ContractIncorrectNumberOfSenderImplementations Core.TyName (Core.ConstraintRef Core.ModuleRef)
                  -- An implementation of a getter method in a contract does not match the expected method to be implemented.
-                 -- The first argument is the type of the contract this error refers to, the second the name of the method that is implemented and the third the name of the method that is expected to be implemented.
-                 | ContractUnexpectedGetterImplementation Core.TyName Core.Name Core.Name
+                 -- The first and second arguments are the type of the contract and the constraint this error refers to, the third the name of the method that is implemented and the fourth the name of the method that is expected to be implemented.
+                 | ContractUnexpectedGetterImplementation Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
                  -- An implementation of a sender method in a contract does not match the expected method to be implemented.
-                 -- The first argument is the type of the contract this error refers to, the second the name of the method that is implemented and the third the name of the method that is expected to be implemented.
-                 | ContractUnexpectedSenderImplementation Core.TyName Core.Name Core.Name
+                 -- The first and second arguments are the type of the contract and the constraint this error refers to, the third the name of the method that is implemented and the fourth the name of the method that is expected to be implemented.
+                 | ContractUnexpectedSenderImplementation Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
                  -- An implementation of a getter method in a contract does not have the correct type.
                  -- The first and second arguments are the type of the contract and the constraint this error refers to, the third the incorrect type of the implementation.
                  | ContractUnexpectedGetterType Core.TyName (Core.ConstraintRef Core.ModuleRef) (Core.Type Core.ModuleRef)
