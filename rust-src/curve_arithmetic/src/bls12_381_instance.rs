@@ -466,13 +466,13 @@ impl Curve for G2Affine {
 }
 
 impl Pairing for Bls12 {
- type ScalarField = Fr;
- type G_1 = <Bls12 as Engine>::G1Affine;
- type G_2 = <Bls12 as Engine>::G2Affine;
- type BaseField = <Bls12 as Engine>::Fq;
- type TargetField = <Bls12 as Engine>::Fqk;
- fn pair(p: <Bls12 as Engine>::G1Affine, q: <Bls12 as Engine>::G2Affine) -> Self::TargetField{
-    <Bls12 as Engine>::pairing(p,q)
- }
-}
+    type BaseField = <Bls12 as Engine>::Fq;
+    type G_1 = <Bls12 as Engine>::G1Affine;
+    type G_2 = <Bls12 as Engine>::G2Affine;
+    type ScalarField = Fr;
+    type TargetField = <Bls12 as Engine>::Fqk;
 
+    fn pair(p: <Bls12 as Engine>::G1Affine, q: <Bls12 as Engine>::G2Affine) -> Self::TargetField {
+        <Bls12 as Engine>::pairing(p, q)
+    }
+}
