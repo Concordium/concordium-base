@@ -100,12 +100,6 @@ macro_rules! macro_open {
                     (n + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH,
                 )
             };
-            unsafe {
-                slice::from_raw_parts(
-                    key_bytes,
-                    (n + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH,
-                )
-            };
             let values_slice: &[u8] = unsafe {
                 slice::from_raw_parts(values, (n) * <$curve_type as Curve>::SCALAR_LENGTH)
             };

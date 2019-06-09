@@ -17,5 +17,5 @@ path = "../curve_arithmetic"
 version = "0" 
 
 [lib]
-name = "pedersen_scheme"
+name = "pedersen_scheme_modular"
 crate-type = ["rlib", "staticlib", "cdylib" ]
