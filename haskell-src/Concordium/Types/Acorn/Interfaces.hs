@@ -57,102 +57,152 @@ type ModuleInterfaces = HashMap Core.ModuleRef Interface
 data TypingError =
                  -- |TODO: To be replaced by more precise errors.
                  OtherErr String
-                 -- |Error raised when a declared datatype is instantiated with a wrong number of arguments (too few or too many).
-                 -- The first argument is the number of given parameters, the second the expected number.
+                 -- |Error raised when a declared datatype is instantiated with
+                 -- a wrong number of arguments (too few or too many). The first
+                 -- argument is the number of given parameters, the second the
+                 -- expected number.
                  | IncorrectNumberOfTypeParameters Int Int
                  -- |A type abstraction is applied to a term which is not a type.
                  | TypeAbstractionNotAppliedToType (Core.Expr Core.ModuleRef)
                  -- |A type appears where a term is expected.
                  | TypeWhereTermExpected (Core.Type Core.ModuleRef)
-                 -- |A term is applied which is neither of a function type, nor universal type.
-                 -- The first argument is the term to be applied, the second its type.
+                 -- |A term is applied which is neither of a function type, nor
+                 -- universal type. The first argument is the term to be
+                 -- applied, the second its type.
                  | OnlyAbstractionsCanBeApplied (Core.Expr Core.ModuleRef) (Core.Type Core.ModuleRef)
-                 -- |The type of an argument given to a function does not match the function's definition.
-                 -- The first argument is the actual type, the second the expected type.
+                 -- |The type of an argument given to a function does not match
+                 -- the function's definition. The first argument is the actual
+                 -- type, the second the expected type.
                  | UnexpectedArgumentType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
-                 -- |The result type of a defined function (e.g. in a letrec) does not match the specified result type.
-                 -- The first argument is the actual type, the second the specified type.
+                 -- |The result type of a defined function (e.g. in a letrec)
+                 -- does not match the specified result type. The first argument
+                 -- is the actual type, the second the specified type.
                  | ResultTypeNotAsSpecified (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
-                 -- |The type of the discriminee in a case expression is not fully instantiated. -- NOTE: Could add name of declared datatype
+                 -- |The type of the discriminee in a case expression is not
+                 -- fully instantiated. -- NOTE: Could add name of declared datatype
                  | NonFullyInstantiatedTypeAsCaseArgument
-                 -- |The type of the discriminee in a case expression is a base type not supported for pattern matching.
+                 -- |The type of the discriminee in a case expression is a base
+                 -- type not supported for pattern matching.
                  | UnsupportedBaseTypeInCaseArgument (Core.TBase)
                  -- |The type of the discriminee in a case expression is a function type.
                  | FunctionAsCaseArgument
                  -- |The discriminee in a case expression is a type variable.
                  | TypeVariableAsCaseArgument
-                 -- |Empty set of alternatives is not allowed in a case expression.
+                 -- |Empty set of alternatives is not allowed in a case
+                 -- expression.
                  | CaseWithoutAlternatives
-                 -- |Redundant pattern: a redundant variable, literal (if the type of the discriminee is a base type) or data type constructor (if the type of the discriminee is a declared datatype).
+                 -- |Redundant pattern: a redundant variable, literal (if the
+                 -- type of the discriminee is a base type) or data type
+                 -- constructor (if the type of the discriminee is a declared
+                 -- datatype).
                  | PatternRedundant (Core.Pattern Core.ModuleRef)
                  -- |Non-exhaustive pattern
                  | PatternsNonExhaustive
-                 -- |Pattern does not have correct type. The first argument is the actual type, the second the expected type.
+                 -- |Pattern does not have correct type. The first argument is
+                 -- the actual type, the second the expected type.
                  | UnexpectedPatternType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
-                 -- |Special case of UnexpectedPatternType where the pattern is a literal of unsupported type.
+                 -- |Special case of UnexpectedPatternType where the pattern is
+                 -- a literal of unsupported type.
                  | UnsupportedLiteralInPattern Core.Literal
-                 -- |A more specific type mismatch. The constructor used in the pattern is not a type constructor of the discriminee type.
+                 -- |A more specific type mismatch. The constructor used in the
+                 -- pattern is not a type constructor of the discriminee type.
                  | UnexpectedTypeConstructorInPattern (Core.CTorName Core.ModuleRef)
-                 -- |A more specific type mismatch. A constructor pattern occurs at a place where the discriminee has a base type.
+                 -- |A more specific type mismatch. A constructor pattern occurs
+                 -- at a place where the discriminee has a base type.
                  | TypeConstructorWhereLiteralOrVariableExpected (Core.CTorName Core.ModuleRef)
-                 -- |A more specific type mismatch. A litreal occurs at a place where the discriminee has a declared datatype.
+                 -- |A more specific type mismatch. A litreal occurs at a place
+                 -- where the discriminee has a declared datatype.
                  | LiteralWhereTypeConstructorExpected Core.Literal
-                 -- |The body of the branch of a case expression does not have the correct type.
-                 -- The first argument is the type found, the second is the expected type.
+                 -- |The body of the branch of a case expression does not have
+                 -- the correct type. The first argument is the type found, the
+                 -- second is the expected type.
                  | UnexpectedCaseAlternativeResultType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
                  -- |A variable used in an expression is not bound.
                  | UndefinedVariable Core.BoundVar
                  -- |A free type variable occurs in an expression.
                  | FreeTypeVariable Core.BoundTyVar
-                 -- |The data type with the given name is not defined in the current module.
+                 -- |The data type with the given name is not defined in the
+                 -- current module.
                  | UndefinedLocalDatatype Core.TyName
-                 -- |The data type with the given name is not defined in the given module.
+                 -- |The data type with the given name is not defined in the
+                 -- given module.
                  | UndefinedQualifiedDatatype Core.ModuleRef Core.TyName
-                 -- |The module referred to in an expression with the given name is not imported (not part of the interface's import map).
+                 -- |The module referred to in an expression with the given name
+                 -- is not imported (not part of interface's import map).
                  | ModuleNotImported Core.ModuleName
-                 -- |The given name qualified with the given module is not in scope.
+                 -- |The referenced name does not exist in the given module.
                  | QualifiedNameNotInScope Core.ModuleRef Core.Name
-                 -- TODO Improve documentation
-                 -- |Module does not exist. Raised when trying to type-check an imported definition from a non-existing module.
+                 -- |Module does not exist. Raised when trying to type-check an
+                 -- imported definition from a non-existing module.
                  | ModuleNotExists Core.ModuleRef
-                 -- |The init method definition of a contract is not a function of the correct type.
-                 -- The argument is the type of the contract this error refers to.
+                 -- |The init method of a contract is not of the correct shape.
+                 -- The argument is the name of the contract containing the init
+                 -- method.
                  | ContractInitMethodHasIncorrectType Core.TyName
-                 -- |The receive method definition of a contract is not a function of the correct type (in the context of the types specified by the init method).
-                 -- The argument is the type of the contract this error refers to.
+                 -- |The receive method of a contract is not of the correct
+                 -- shape (in the context of the types specified by the init
+                 -- method). The argument is the name of the contract containing
+                 -- the receive method.
                  | ContractReceiveMethodHasIncorrectType Core.TyName
-                 -- |A more specific error about a contract's receive method type where the result type is not as required.
-                 -- The first argument is the type of the contract this error refers to and the second the incorrect result type of the receive method.
+                 -- |A more specific error about a contract's receive method
+                 -- type where the result type is not as required. The first
+                 -- argument is the name of the contract this error refers to
+                 -- and the second is the given result type of the receive
+                 -- method.
                  | ContractReceiveMethodHasIncorrectResultType Core.TyName (Core.Type Core.ModuleRef)
-                 -- |The contract's message type as specified by the receive method is not a storable type.
-                 -- The first argument is the type of the contract this error refers to, the second the unstorable type.
+                 -- |The contract's message type as specified by the receive
+                 -- method is not a storable type. The first argument is the
+                 -- name of the contract this error refers to, the second the
+                 -- given message type.
                  | ContractMessageTypeNotStorable Core.TyName (Core.Type Core.ModuleRef)
-                 -- |The contract's parameter type as specified by the init method is not a storable type.
-                 -- The first argument is the type of the contract this error refers to, the second the unstorable type.
+                 -- |The contract's parameter type as specified by the init
+                 -- method is not a storable type. The first argument is the
+                 -- name of the contract this error refers to, the second the
+                 -- given parameter type.
                  | ContractParameterTypeNotStorable Core.TyName (Core.Type Core.ModuleRef)
-                 -- |The type for the contract state as specified by the init and receive method is not a storable type.
-                 -- The first argument is the type of the contract this error refers to.
+                 -- |The model type of the contract (as specified by the init
+                 -- and receive methods) is not a storable type. The first
+                 -- argument is the name of the contract this error refers to
+                 -- the second the given model type.
                  | ContractModelTypeNotStorable Core.TyName (Core.Type Core.ModuleRef)
-                 -- The contract's number of implementations of getter methods does not match the number specified in the respective constraint.
-                 -- The first argument is the type of the contract this error refers to, the second the name of the constraint.
+                 -- |The contract's number of implementations of getter methods
+                 -- does not match the number specified in the respective
+                 -- constraint. The first argument is the name of the contract
+                 -- this error refers to, the second the name of the constraint.
                  | ContractIncorrectNumberOfGetterImplementations Core.TyName (Core.ConstraintRef Core.ModuleRef)
-                 -- The contract's number of implementations of sender methods does not match the number specified in the respective constraint.
-                 -- The first argument is the type of the contract this error refers to, the second the name of the constraint.
+                 -- |The contract's number of implementations of sender methods
+                 -- does not match the number specified in the respective
+                 -- constraint. The first argument is the name of the contract
+                 -- this error refers to, the second the name of the constraint.
                  | ContractIncorrectNumberOfSenderImplementations Core.TyName (Core.ConstraintRef Core.ModuleRef)
-                 -- An implementation of a getter method in a contract does not match the expected method to be implemented.
-                 -- The first and second arguments are the type of the contract and the constraint this error refers to, the third the name of the method that is implemented and the fourth the name of the method that is expected to be implemented.
+                 -- |An implementation of a getter method in a contract does not
+                 -- match the expected method to be implemented. The first and
+                 -- second arguments are the name of the contract and the
+                 -- constraint this error refers to, the third the name of the
+                 -- method that is implemented and the fourth the name of the
+                 -- method that is expected to be implemented.
                  | ContractUnexpectedGetterImplementation Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
-                 -- An implementation of a sender method in a contract does not match the expected method to be implemented.
-                 -- The first and second arguments are the type of the contract and the constraint this error refers to, the third the name of the method that is implemented and the fourth the name of the method that is expected to be implemented.
+                 -- |An implementation of a sender method in a contract does not
+                 -- match the expected method to be implemented. The first and
+                 -- second arguments are the name of the contract and the
+                 -- constraint this error refers to, the third the name of the
+                 -- method that is implemented and the fourth the name of the
+                 -- method that is expected to be implemented.
                  | ContractUnexpectedSenderImplementation Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
-                 -- An implementation of a getter method in a contract does not have the correct type.
-                 -- The first and second arguments are the type of the contract and the constraint this error refers to, the third the incorrect type of the implementation.
+                 -- |An implementation of a getter method in a contract does not
+                 -- have the correct type. The first and second arguments are
+                 -- the name of the contract and the constraint this error
+                 -- refers to, the third the incorrect type of the implementation.
                  | ContractUnexpectedGetterType Core.TyName (Core.ConstraintRef Core.ModuleRef) (Core.Type Core.ModuleRef)
-                 -- An implementation of a sender method in a contract does not have the correct type.
-                 -- The first and second arguments are the type of the contract and the constraint this error refers to, the third the incorrect type of the implementation.
+                 -- |An implementation of a sender method in a contract does not
+                 -- have the correct type. The first and second arguments are
+                 -- the name of the contract and the constraint this error
+                 -- refers to, the third the incorrect type of the
+                 -- implementation.
                  | ContractUnexpectedSenderType Core.TyName (Core.ConstraintRef Core.ModuleRef) (Core.Type Core.ModuleRef)
-                 -- |Type checking succeeded with a type other than the expected.
-                 -- The first argument is the type assigned to the expression in question, the second is the expected type.
+                 -- |A type was encountered which was not expected. The first
+                 -- argument is the type encountered, the second is the expected
+                 -- type.
                  | UnexpectedType (Core.Type Core.ModuleRef) (Core.Type Core.ModuleRef)
   deriving (Eq, Show)
 
