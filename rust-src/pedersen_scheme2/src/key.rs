@@ -102,13 +102,7 @@ impl<C: Curve> CommitmentKey<C> {
         Ok(Commitment(res))
     }
 
-    // TODO: Should this function also check that the length of the given set of
-    // values matches the commitment key length, or is this established elsewhere?
     pub fn open(&self, ss: &Value<C>, r: &C::Scalar, c: &Commitment<C>) -> bool {
-        debug_assert!(
-            ss.0.len() == self.0.len(),
-            "Number of commited values does not match the length of commitment key!"
-        );
         match self.hide(ss, r) {
             Err(_) => false,
             Ok(x) => x == *c,
