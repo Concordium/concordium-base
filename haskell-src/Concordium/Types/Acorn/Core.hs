@@ -23,7 +23,6 @@ import qualified Data.Serialize as S
 import Data.Hashable(Hashable)
 
 import Control.Monad
-import Control.Monad.Except(throwError, MonadError)
 
 import Data.Int
 import Data.Bits
