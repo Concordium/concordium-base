@@ -20,25 +20,26 @@ use crate::errors::{
 };
 use curve_arithmetic::curve_arithmetic::*;
 
-use pairing::bls12_381::{Bls12};
+use pairing::bls12_381::Bls12;
 
 use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
 
 /// A message
-#[derive(Debug )]
-pub struct PublicKey<C: Pairing>(pub(crate) Vec<C::G_1>, pub(crate) Vec<C::G_2>, pub(crate) C::G_2);
+#[derive(Debug)]
+pub struct PublicKey<C: Pairing>(
+    pub(crate) Vec<C::G_1>,
+    pub(crate) Vec<C::G_2>,
+    pub(crate) C::G_2,
+);
 
-impl<C:Pairing> PartialEq for PublicKey<C> {
+impl<C: Pairing> PartialEq for PublicKey<C> {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 
-            && self.1 == other.1 
-            && self.2 == other.2
+        self.0 == other.0 && self.1 == other.1 && self.2 == other.2
     }
 }
 
-impl<C:Pairing> Eq for PublicKey<C>{ }
-
+impl<C: Pairing> Eq for PublicKey<C> {}
 
 impl<C: Pairing> PublicKey<C> {
     // turn message vector into a byte aray
@@ -46,12 +47,12 @@ impl<C: Pairing> PublicKey<C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let vs = &self.0;
         let us = &self.1;
-        let s  = &self.2;
+        let s = &self.2;
         let mut bytes: Vec<u8> = Vec::new();
         for v in vs.iter() {
             bytes.extend_from_slice(&*C::G_1::curve_to_bytes(&v));
         }
-        for u in us.iter(){
+        for u in us.iter() {
             bytes.extend_from_slice(&*C::G_2::curve_to_bytes(&u));
         }
         bytes.extend_from_slice(&*C::G_2::curve_to_bytes(s));
@@ -65,11 +66,15 @@ impl<C: Pairing> PublicKey<C> {
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey<C>, SignatureError> {
         let l = bytes.len();
-        if l < (C::G_2::GROUP_ELEMENT_LENGTH * 2 + C::G_1::GROUP_ELEMENT_LENGTH) 
-            || (l - C::G_2::GROUP_ELEMENT_LENGTH) % (C::G_1::GROUP_ELEMENT_LENGTH + C::G_2::GROUP_ELEMENT_LENGTH) != 0 {
+        if l < (C::G_2::GROUP_ELEMENT_LENGTH * 2 + C::G_1::GROUP_ELEMENT_LENGTH)
+            || (l - C::G_2::GROUP_ELEMENT_LENGTH)
+                % (C::G_1::GROUP_ELEMENT_LENGTH + C::G_2::GROUP_ELEMENT_LENGTH)
+                != 0
+        {
             return Err(SignatureError(PublicKeyLengthError));
         }
-        let vlen = (l - C::G_2::GROUP_ELEMENT_LENGTH)/(C::G_1::GROUP_ELEMENT_LENGTH + C::G_2::GROUP_ELEMENT_LENGTH);
+        let vlen = (l - C::G_2::GROUP_ELEMENT_LENGTH)
+            / (C::G_1::GROUP_ELEMENT_LENGTH + C::G_2::GROUP_ELEMENT_LENGTH);
         let mut vs: Vec<C::G_1> = Vec::new();
         for i in 0..vlen {
             let j = i * C::G_1::GROUP_ELEMENT_LENGTH;
@@ -92,13 +97,11 @@ impl<C: Pairing> PublicKey<C> {
             }
         }
 
-        match C::G_2::bytes_to_curve(&bytes[(l - C::G_2::GROUP_ELEMENT_LENGTH)..]){
+        match C::G_2::bytes_to_curve(&bytes[(l - C::G_2::GROUP_ELEMENT_LENGTH)..]) {
             Err(x) => Err(SignatureError(CurveDecodingError)),
-            Ok(fr) => Ok(PublicKey(vs, us, fr))
+            Ok(fr) => Ok(PublicKey(vs, us, fr)),
         }
-
     }
-
 
     /// Generate a secret key  from a `csprng`.
     pub fn generate<T>(n: usize, csprng: &mut T) -> PublicKey<C>

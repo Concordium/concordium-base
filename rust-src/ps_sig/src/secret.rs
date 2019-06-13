@@ -20,30 +20,27 @@ use crate::errors::{
 };
 use curve_arithmetic::curve_arithmetic::*;
 
-use pairing::bls12_381::{Bls12};
+use pairing::bls12_381::Bls12;
 
 use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
 
 /// A message
-#[derive(Debug )]
+#[derive(Debug)]
 pub struct SecretKey<C: Pairing>(pub(crate) Vec<C::ScalarField>, pub(crate) C::ScalarField);
 
-impl<C:Pairing> PartialEq for SecretKey<C> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1
-    }
+impl<C: Pairing> PartialEq for SecretKey<C> {
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 && self.1 == other.1 }
 }
 
-impl<C:Pairing> Eq for SecretKey<C>{}
-
+impl<C: Pairing> Eq for SecretKey<C> {}
 
 impl<C: Pairing> SecretKey<C> {
     // turn message vector into a byte aray
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
         let vs = &self.0;
-        let u  = &self.1;
+        let u = &self.1;
         let mut bytes: Vec<u8> = Vec::new();
         for v in vs.iter() {
             bytes.extend_from_slice(&*Self::value_to_bytes(&v));
@@ -75,13 +72,11 @@ impl<C: Pairing> SecretKey<C> {
                 Ok(fr) => vs.push(fr),
             }
         }
-        match C::bytes_to_scalar(&bytes[(l - C::SCALAR_LENGTH)..]){
+        match C::bytes_to_scalar(&bytes[(l - C::SCALAR_LENGTH)..]) {
             Err(x) => Err(SignatureError(FieldDecodingError)),
-            Ok(fr) => Ok(SecretKey(vs, fr))
+            Ok(fr) => Ok(SecretKey(vs, fr)),
         }
-
     }
-
 
     /// Generate a secret key  from a `csprng`.
     pub fn generate<T>(n: usize, csprng: &mut T) -> SecretKey<C>
@@ -94,6 +89,10 @@ impl<C: Pairing> SecretKey<C> {
 
         SecretKey(vs, C::generate_scalar(csprng))
     }
+
+    pub fn sign_known_message() {}
+
+    pub fn sign_unknown_message() {}
 }
 
 macro_rules! macro_test_secret_key_to_byte_conversion {

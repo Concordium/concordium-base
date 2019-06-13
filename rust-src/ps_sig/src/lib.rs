@@ -1,6 +1,6 @@
-mod Message;
 mod errors;
 mod known_message;
-mod unknown_message;
-mod secret;
 mod public;
+mod secret;
+mod signature;
+mod unknown_message;

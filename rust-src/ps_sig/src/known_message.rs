@@ -20,23 +20,20 @@ use crate::errors::{
 };
 use curve_arithmetic::curve_arithmetic::*;
 
-use pairing::bls12_381::{Bls12};
+use pairing::bls12_381::Bls12;
 
 use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
 
 /// A message
-#[derive(Debug )]
+#[derive(Debug)]
 pub struct KnownMessage<C: Pairing>(pub(crate) Vec<C::ScalarField>);
 
-impl<C:Pairing> PartialEq for KnownMessage<C> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
+impl<C: Pairing> PartialEq for KnownMessage<C> {
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
-impl<C:Pairing> Eq for KnownMessage<C>{}
-
+impl<C: Pairing> Eq for KnownMessage<C> {}
 
 impl<C: Pairing> KnownMessage<C> {
     // turn message vector into a byte aray
