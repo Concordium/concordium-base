@@ -9,5 +9,6 @@ members=[
    "pedersen_scheme",
    "pedersen_scheme2",
    "elgamal",
+   "sigma_protocols",
    "ps_sig" ]
 
