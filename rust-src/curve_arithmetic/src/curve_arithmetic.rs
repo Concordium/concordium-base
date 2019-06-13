@@ -46,4 +46,8 @@ pub trait Pairing: Sized + 'static + Clone {
     type BaseField: PrimeField;
     type TargetField: Field;
     fn pair(p: Self::G_1, q: Self::G_2) -> Self::TargetField;
+    const SCALAR_LENGTH: usize;
+    fn scalar_to_bytes(s: &Self::ScalarField) -> Box<[u8]>;
+    fn bytes_to_scalar(b: &[u8]) -> Result<Self::ScalarField, FieldDecodingError>;
+    fn generate_scalar<R: Rng>(rng: &mut R) -> Self::ScalarField;
 }

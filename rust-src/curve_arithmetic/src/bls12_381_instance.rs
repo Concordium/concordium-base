@@ -472,7 +472,39 @@ impl Pairing for Bls12 {
     type ScalarField = Fr;
     type TargetField = <Bls12 as Engine>::Fqk;
 
+    const SCALAR_LENGTH: usize = 32;
+
     fn pair(p: <Bls12 as Engine>::G1Affine, q: <Bls12 as Engine>::G2Affine) -> Self::TargetField {
         <Bls12 as Engine>::pairing(p, q)
+    }
+
+    fn scalar_to_bytes(e: &Self::ScalarField) -> Box<[u8]> {
+        let frpr = &e.into_repr();
+        let mut bytes = [0u8; Self::SCALAR_LENGTH];
+        let mut i = 0;
+        for a in frpr.as_ref().iter().rev() {
+            bytes[i..(i + 8)].copy_from_slice(&a.to_be_bytes());
+            i += 8;
+        }
+        Box::new(bytes)
+    }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::ScalarField { Fr::rand(csprng) }
+
+    fn bytes_to_scalar(bytes: &[u8]) -> Result<Self::ScalarField, FieldDecodingError> {
+        if bytes.len() != Self::SCALAR_LENGTH {
+            return Err(FieldDecodingError::NotFieldElement);
+        }
+        let mut frrepr: FrRepr = FrRepr([0u64; 4]);
+        let mut tmp = [0u8; 8];
+        let mut i = 0;
+        for digit in frrepr.as_mut().iter_mut().rev() {
+            tmp.copy_from_slice(&bytes[i..(i + 8)]);
+            *digit = u64::from_be_bytes(tmp);
+            i += 8;
+        }
+        match Fr::from_repr(frrepr) {
+            Ok(fr) => Ok(fr),
+            Err(x) => Err(FieldDecodingError::NotFieldElement),
+        }
     }
 }
