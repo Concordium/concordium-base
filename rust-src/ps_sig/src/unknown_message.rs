@@ -10,7 +10,7 @@ use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
 
 #[derive(Debug)]
-struct UnknownMessage<C: Pairing>(pub(crate) C::G_1);
+pub struct UnknownMessage<C: Pairing>(pub(crate) C::G_1);
 
 impl<C: Pairing> PartialEq for UnknownMessage<C> {
     fn eq(&self, other: &Self) -> bool { self.0 == other.0 }

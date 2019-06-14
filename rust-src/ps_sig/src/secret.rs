@@ -3,7 +3,7 @@
 // Authors:
 // - bm@concordium.com
 
-//! A known message
+//! A secret key
 
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
@@ -14,11 +14,14 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
+use crate::signature::*;
+use crate::{known_message::*, unknown_message::*};
 use crate::errors::{
     InternalError::{CurveDecodingError, FieldDecodingError, SecretKeyLengthError},
     *,
 };
 use curve_arithmetic::curve_arithmetic::*;
+use pairing::Field;
 
 use pairing::bls12_381::Bls12;
 
@@ -36,7 +39,7 @@ impl<C: Pairing> PartialEq for SecretKey<C> {
 impl<C: Pairing> Eq for SecretKey<C> {}
 
 impl<C: Pairing> SecretKey<C> {
-    // turn message vector into a byte aray
+    // turn secret key vector into a byte array
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
         let vs = &self.0;
@@ -54,7 +57,7 @@ impl<C: Pairing> SecretKey<C> {
 
     /// Construct a secret key vec from a slice of bytes.
     ///
-    /// A `Result` whose okay value is a message vec  or whose error value
+    /// A `Result` whose okay value is a secret key vec  or whose error value
     /// is an `SignatureError` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<SecretKey<C>, SignatureError> {
@@ -91,10 +94,37 @@ impl<C: Pairing> SecretKey<C> {
     }
 
 
- //    pub fn sign_known_message() {}
+     pub fn sign_known_message<T>(&self, message: &KnownMessage<C>, csprng: &mut T) -> Result<Signature<C>, SignatureError>
+        where 
+            T:Rng, {
+         let ys = & self.0;
+         let ms = & message.0;
+         if ms.len() > ys.len(){
+             return Err(SignatureError (SecretKeyLengthError));
+         }
 
- //   pub fn sign_unknown_message() {}
+         let mut z = ms.iter().zip(ys.iter()).fold(<C::ScalarField as Field>::zero(), |mut acc,(m,y)| {
+             let mut r = m.clone(); r.mul_assign(y);
+             acc.add_assign(&r);
+             acc
+         });
+         z.add_assign(&self.1);
+         let h = C::G_1::one_point().mul_by_scalar(&C::generate_scalar(csprng));
 
+         Ok(Signature(h, h.mul_by_scalar(&z)))
+
+     }
+
+     pub fn sign_unknown_message<T>(&self, message: &UnknownMessage<C>, csprng: &mut T) -> Result<Signature<C>, SignatureError>
+         where 
+            T: Rng, {
+                let sk = C::G_1::one_point().mul_by_scalar(&self.1);
+                let r = C::generate_scalar(csprng);
+                let a = C::G_1::one_point().mul_by_scalar(&r);
+                let m = message.0;
+                let xmr = sk.plus_point(&m).mul_by_scalar(&r);
+                Ok(Signature(a,xmr))
+     }
 }
 
 macro_rules! macro_test_secret_key_to_byte_conversion {
