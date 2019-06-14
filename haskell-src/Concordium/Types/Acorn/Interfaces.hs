@@ -132,9 +132,15 @@ data TypingError =
                  | ModuleNotImported Core.ModuleName
                  -- |The referenced name does not exist in the given module.
                  | QualifiedNameNotInScope Core.ModuleRef Core.Name
-                 -- |Module does not exist. Raised when trying to type-check an
-                 -- imported definition from a non-existing module.
+                 -- |A module with the given reference does not exist. Raised when
+                 -- trying to type-check an imported definition from a non-existing module.
                  | ModuleNotExists Core.ModuleRef
+                 -- |The given name is already bound but is attempted to be
+                 -- redefined.
+                 | RedefinitionOfTerm Core.Name
+                 -- |The contract with the given name has already been defined but
+                 -- |is attempted to be defined again.
+                 | RedefinitionOfContract Core.TyName
                  -- |The init method of a contract is not of the correct shape.
                  -- The argument is the name of the contract containing the init
                  -- method.
@@ -162,9 +168,19 @@ data TypingError =
                  | ContractParameterTypeNotStorable Core.TyName (Core.Type Core.ModuleRef)
                  -- |The model type of the contract (as specified by the init
                  -- and receive methods) is not a storable type. The first
-                 -- argument is the name of the contract this error refers to
+                 -- argument is the name of the contract this error refers to,
                  -- the second the given model type.
                  | ContractModelTypeNotStorable Core.TyName (Core.Type Core.ModuleRef)
+                 -- |A contract attempts to implement a local constraint that does
+                 -- not exist. The first argument is the contract this error refers to,
+                 -- the second the name which does not refer to a local constraint.
+                 | LocalConstraintNotExists Core.TyName Core.TyName
+                 -- |A contract attempts to implement an imported constraint that does
+                 -- not exist. The first argument is the contract this error refers to,
+                 -- the second the reference of the module the constraint should be
+                 -- imported from and the third the name which does not refer to a
+                 -- constraint in that module.
+                 | ImportedConstraintNotExists Core.TyName Core.ModuleRef Core.TyName
                  -- |The contract's number of implementations of getter methods
                  -- does not match the number specified in the respective
                  -- constraint. The first argument is the name of the contract
