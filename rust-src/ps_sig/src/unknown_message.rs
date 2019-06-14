@@ -35,7 +35,7 @@ impl<C: Pairing> UnknownMessage<C> {
         }
     }
 
-    pub fn generate<T: Rng>(csprng: &mut T) -> UnknownMessage<C> {
+    pub fn arbitrary<T: Rng>(csprng: &mut T) -> UnknownMessage<C> {
         UnknownMessage(C::G_1::generate(csprng))
     }
 }
@@ -46,7 +46,7 @@ macro_rules! macro_test_unknown_message_to_byte_conversion {
         pub fn $function_name() {
             let mut csprng = thread_rng();
             for _i in 0..20 {
-                let x = UnknownMessage::<$pairing_type>::generate(&mut csprng);
+                let x = UnknownMessage::<$pairing_type>::arbitrary(&mut csprng);
                 let y = UnknownMessage::<$pairing_type>::from_bytes(&*x.to_bytes());
                 assert!(y.is_ok());
                 assert_eq!(x, y.unwrap());

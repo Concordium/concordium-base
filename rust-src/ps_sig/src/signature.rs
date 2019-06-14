@@ -56,7 +56,7 @@ impl<C: Pairing> Signature<C> {
         }
     }
 
-    pub fn generate<T: Rng>(csprng: &mut T) -> Signature<C> {
+    pub fn arbitrary<T: Rng>(csprng: &mut T) -> Signature<C> {
         // not a prober signature to be used for testing serialization
         Signature(C::G_1::generate(csprng), C::G_1::generate(csprng))
     }
@@ -68,7 +68,7 @@ macro_rules! macro_test_signature_to_byte_conversion {
         pub fn $function_name() {
             let mut csprng = thread_rng();
             for _i in 0..20 {
-                let x = Signature::<$pairing_type>::generate(&mut csprng);
+                let x = Signature::<$pairing_type>::arbitrary(&mut csprng);
                 let y = Signature::<$pairing_type>::from_bytes(&*x.to_bytes());
                 assert!(y.is_ok());
                 assert_eq!(x, y.unwrap());

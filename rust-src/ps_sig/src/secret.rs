@@ -25,7 +25,7 @@ use pairing::bls12_381::Bls12;
 use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
 
-/// A message
+/// A secret key
 #[derive(Debug)]
 pub struct SecretKey<C: Pairing>(pub(crate) Vec<C::ScalarField>, pub(crate) C::ScalarField);
 
@@ -52,7 +52,7 @@ impl<C: Pairing> SecretKey<C> {
     #[inline]
     pub fn value_to_bytes(scalar: &C::ScalarField) -> Box<[u8]> { C::scalar_to_bytes(scalar) }
 
-    /// Construct a message vec from a slice of bytes.
+    /// Construct a secret key vec from a slice of bytes.
     ///
     /// A `Result` whose okay value is a message vec  or whose error value
     /// is an `SignatureError` wrapping the internal error that occurred.
@@ -90,9 +90,11 @@ impl<C: Pairing> SecretKey<C> {
         SecretKey(vs, C::generate_scalar(csprng))
     }
 
-    pub fn sign_known_message() {}
 
-    pub fn sign_unknown_message() {}
+ //    pub fn sign_known_message() {}
+
+ //   pub fn sign_unknown_message() {}
+
 }
 
 macro_rules! macro_test_secret_key_to_byte_conversion {

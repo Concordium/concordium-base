@@ -21,6 +21,7 @@ use crate::errors::{
 use curve_arithmetic::curve_arithmetic::*;
 
 use pairing::bls12_381::Bls12;
+use crate::secret::*;
 
 use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
@@ -103,8 +104,9 @@ impl<C: Pairing> PublicKey<C> {
         }
     }
 
-    /// Generate a secret key  from a `csprng`.
-    pub fn generate<T>(n: usize, csprng: &mut T) -> PublicKey<C>
+
+    /// Generate a public key  from a `csprng`.
+    pub fn arbitrary<T>(n: usize, csprng: &mut T) -> PublicKey<C>
     where
         T: Rng, {
         let mut vs: Vec<C::G_1> = Vec::new();
@@ -121,13 +123,25 @@ impl<C: Pairing> PublicKey<C> {
     }
 }
 
+  impl<'a, C:Pairing> From<&'a SecretKey<C>> for PublicKey<C> {
+        /// Derive this public key from its corresponding `SecretKey`.
+        fn from(sk: &SecretKey<C>) -> PublicKey<C> {
+          let (vs, x) = (&sk.0, &sk.1);
+          let rs = vs.iter().map(|r| {C::G_1::one_point().mul_by_scalar(&r)}).collect();
+          let ts = vs.iter().map(|r| {C::G_2::one_point().mul_by_scalar(&r)}).collect();
+          let h  = C::G_2::one_point().mul_by_scalar(&x);
+          PublicKey(rs, ts, h)
+        }
+    }
+
+
 macro_rules! macro_test_public_key_to_byte_conversion {
     ($function_name:ident, $pairing_type:path) => {
         #[test]
         pub fn $function_name() {
             let mut csprng = thread_rng();
             for i in 1..20 {
-                let val = PublicKey::<$pairing_type>::generate(i, &mut csprng);
+                let val = PublicKey::<$pairing_type>::arbitrary(i, &mut csprng);
                 let res_val2 = PublicKey::<$pairing_type>::from_bytes(&*val.to_bytes());
                 assert!(res_val2.is_ok());
                 let val2 = res_val2.unwrap();

@@ -41,8 +41,8 @@ pub trait Curve:
 
 pub trait Pairing: Sized + 'static + Clone {
     type ScalarField: PrimeField;
-    type G_1: Curve;
-    type G_2: Curve;
+    type G_1: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
+    type G_2: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
     type BaseField: PrimeField;
     type TargetField: Field;
     fn pair(p: Self::G_1, q: Self::G_2) -> Self::TargetField;
@@ -50,4 +50,5 @@ pub trait Pairing: Sized + 'static + Clone {
     fn scalar_to_bytes(s: &Self::ScalarField) -> Box<[u8]>;
     fn bytes_to_scalar(b: &[u8]) -> Result<Self::ScalarField, FieldDecodingError>;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::ScalarField;
-}
+} 
+

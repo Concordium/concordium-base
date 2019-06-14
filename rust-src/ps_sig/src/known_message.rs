@@ -86,7 +86,7 @@ impl<C: Pairing> KnownMessage<C> {
     }
 
     /// Generate a sing `Message` from a `csprng`.
-    pub fn generate<T>(n: usize, csprng: &mut T) -> KnownMessage<C>
+    pub fn arbitrary<T>(n: usize, csprng: &mut T) -> KnownMessage<C>
     where
         T: Rng, {
         let mut vs: Vec<C::ScalarField> = Vec::new();
@@ -104,7 +104,7 @@ macro_rules! macro_test_message_to_byte_conversion {
         pub fn $function_name() {
             let mut csprng = thread_rng();
             for i in 1..20 {
-                let val = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
+                let val = KnownMessage::<$pairing_type>::arbitrary(i, &mut csprng);
                 let res_val2 = KnownMessage::<$pairing_type>::from_bytes(&*val.to_bytes());
                 assert!(res_val2.is_ok());
                 let val2 = res_val2.unwrap();
