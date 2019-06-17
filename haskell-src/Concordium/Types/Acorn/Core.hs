@@ -7,7 +7,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# OPTIONS_GHC -Wall #-}
-module Concordium.Types.Acorn.Core where
+module Concordium.Types.Acorn.Core(module Concordium.Types.Acorn.Core,
+                                   ModuleRef(..))
+where
 
 import Data.ByteString.Char8(ByteString)
 import qualified Data.ByteString.Char8 as BS
@@ -387,13 +389,6 @@ emptyModule = Module {
   , mContracts = []
   , mVersion = 1
   }
-
--- |Unique module reference.
-newtype ModuleRef = ModuleRef {moduleRef :: SHA256.Hash}
-    deriving(Eq, Ord, Hashable)
-
-instance Show ModuleRef where
-  show (ModuleRef m) = show m
 
 -- * Expression and module serialization
 
