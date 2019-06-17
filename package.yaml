@@ -29,6 +29,7 @@ dependencies:
 - cereal >= 0.5
 - microlens-platform >=0.3
 - concordium-crypto
+- aeson >= 1.4.2
 
 library:
   source-dirs: src
