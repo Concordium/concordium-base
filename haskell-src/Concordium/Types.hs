@@ -78,6 +78,12 @@ instance S.Serialize ContractAddress where
   get = ContractAddress <$> S.get <*> S.get
   put (ContractAddress i v) = S.put i <> S.put v
 
+-- |Unique module reference.
+newtype ModuleRef = ModuleRef {moduleRef :: Hash.Hash}
+    deriving(Eq, Ord, Hashable)
+
+instance Show ModuleRef where
+  show (ModuleRef m) = show m
 
 -- |An address is either a contract or account.
 data Address = AddressAccount !AccountAddress
