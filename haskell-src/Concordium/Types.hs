@@ -27,6 +27,8 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.ByteString.Builder(toLazyByteString, byteStringHex)
 import Data.Bits
 
+import Data.Aeson as AE
+
 import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
@@ -68,6 +70,18 @@ instance S.Serialize ContractSubindex where
 data ContractAddress = ContractAddress { contractIndex :: !ContractIndex
                                        , contractSubindex :: !ContractSubindex} 
     deriving(Eq, Generic)
+
+instance FromJSON ContractAddress where
+  parseJSON = withObject "ContractAddress" $ \v -> do
+    i <- v .: "index"
+    j <- v .: "subindex"
+    return $ ContractAddress (fromIntegral (i :: Word64)) (fromIntegral (j :: Word64))
+
+instance ToJSON ContractAddress where
+  toJSON (ContractAddress i j) =
+    object ["index" AE..= (fromIntegral i :: Word64), "subindex" AE..= (fromIntegral j :: Word64)]
+  toEncoding (ContractAddress i j) =
+    pairs ("index" AE..= (fromIntegral i :: Word64) <> "subindex" AE..= (fromIntegral j :: Word64))
 
 instance Hashable ContractAddress
 
