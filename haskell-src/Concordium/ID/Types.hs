@@ -49,7 +49,7 @@ instance Show AccountAddress where
 -- TODO: The library should be replaced.
 safeDecodeBase58Address :: ByteString -> IO (Maybe AccountAddress)
 safeDecodeBase58Address bs = do
-  decoded <- try (return $ fromBytes bs)
+  decoded <- try (evaluate (b58String bs))
   case decoded of
     Left (ErrorCall _) -> return Nothing
     Right dec -> return (Just (AccountAddress . FBS.fromByteString . toBytes $ dec))
