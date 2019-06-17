@@ -20,6 +20,7 @@ import Foreign.Storable(peek)
 import Foreign.Ptr(castPtr)
 import Data.Base58String.Bitcoin
 import System.IO.Unsafe
+import Control.Exception
 
 
 accountAddressSize = 21
@@ -42,6 +43,17 @@ instance Hashable AccountAddress where
 instance Show AccountAddress where
   show = show . addressToBase58
      where addressToBase58 (AccountAddress x) = fromBytes $ FBS.toByteString x
+
+-- |Decode an address encoded in base 58. This function is in the IO monad
+-- because the library we are using does not support safe parsing.
+-- TODO: The library should be replaced.
+safeDecodeBase58Address :: ByteString -> IO (Maybe AccountAddress)
+safeDecodeBase58Address bs = do
+  decoded <- try (return $ fromBytes bs)
+  case decoded of
+    Left (ErrorCall _) -> return Nothing
+    Right dec -> return (Just (AccountAddress . FBS.fromByteString . toBytes $ dec))
+
 
 newtype CredentialHolderIdentity = CH ByteString
     deriving(Eq, Show)
