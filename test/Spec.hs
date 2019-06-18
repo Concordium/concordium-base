@@ -1,7 +1,7 @@
 module Main where
 
 import qualified Types.PayloadSerializationSpec(tests)
-import qualified Types.SerializationSpec(testExpr, testModule)
+import qualified Types.SerializationSpec(testExpr, testModule, testContractAddress)
 import qualified Types.ArithmeticSpec(tests)
 
 import Test.Hspec
@@ -17,6 +17,9 @@ main = hspec $ parallel $ do
          
            modifyMaxSuccess (const 1000) $ Types.SerializationSpec.testModule 10
            modifyMaxSuccess (const 500) $ Types.SerializationSpec.testModule 25
+
+         describe "JSON serialization tests" $ do
+           modifyMaxSuccess (const 500) $ Types.SerializationSpec.testContractAddress
 
          Types.PayloadSerializationSpec.tests
 
