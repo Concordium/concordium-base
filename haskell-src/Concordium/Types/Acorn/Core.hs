@@ -416,10 +416,6 @@ instance S.Serialize ModuleName where
   get = getModuleName
   put = putModuleName
 
-instance S.Serialize ModuleRef where
-  get = getModuleRef
-  put = putModuleRef
-
 instance S.Serialize Name where
   get = getName
   put = putName
@@ -630,10 +626,6 @@ putModule Module{..} = do
   mapM_ putContract mContracts
   P.putWord32be mVersion
 
-putModuleRef :: P.Putter ModuleRef
-putModuleRef (ModuleRef mref) = do
-  S.put mref
-  
 
 -- * Deserialization.
 getName :: G.Get Name
@@ -794,9 +786,6 @@ getDataType = do
   l <- getLength
   dtCons <- replicateM l getDataCons
   return $ DataType{..}
-
-getModuleRef :: G.Get ModuleRef
-getModuleRef = ModuleRef <$> S.get
 
 getImport :: G.Get Import
 getImport = do
