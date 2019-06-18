@@ -43,7 +43,7 @@ instance S.Serialize Payload where
   put (InitContract amnt mref cname params _) =
       P.putWord8 1 <>
       S.put amnt <>
-      Core.putModuleRef mref <>
+      putModuleRef mref <>
       Core.putTyName cname <>
       Core.putExpr params
   put (Update amnt cref msg _) =
@@ -67,7 +67,7 @@ instance S.Serialize Payload where
     case h of
       0 -> DeployModule <$> Core.getModule
       1 -> do amnt <- S.get
-              mref <- Core.getModuleRef
+              mref <- getModuleRef
               cname <- Core.getTyName
               pstart <- G.bytesRead
               params <- Core.getExpr
