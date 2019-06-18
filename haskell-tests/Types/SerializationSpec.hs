@@ -2,19 +2,26 @@
 module Types.SerializationSpec where
 
 import Test.Hspec
-import Test.Hspec.QuickCheck
 
 import Test.QuickCheck as QC
 
 import Types.CoreAllGen
 
 import Concordium.Types.Acorn.Core
+import Concordium.Types
 
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 
-import Data.ByteString.Lazy as BS    
+import Data.Aeson as AE
 
+import Data.ByteString.Lazy as BS    
+import Data.Int
+
+import Types.CoreAllGen(genCAddress)
+
+
+groupIntoSize :: Int64 -> [Char]
 groupIntoSize s =
   let kb = s `div` 1000
       nd = if kb > 0 then truncate (logBase 10 (fromIntegral kb)) else 0
@@ -47,3 +54,15 @@ testModule :: Int -> Spec
 testModule size = do
   specify ("Module serialization with size " ++ show size ++ ":") $
     forAll (resize size $ genModule) checkModule
+
+checkContractAddress :: ContractAddress -> Property
+checkContractAddress c =
+  let bs = AE.encode c
+  in case AE.eitherDecode bs :: Either String ContractAddress of
+       Left err -> counterexample err False
+       Right c' -> c === c'
+
+testContractAddress :: Spec
+testContractAddress = do
+  specify "Contract address serialization" $
+    forAll genCAddress checkContractAddress
