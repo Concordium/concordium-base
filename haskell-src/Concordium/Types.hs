@@ -181,7 +181,7 @@ data Account = Account {
   -- encrypted. Other accounts use it to send encrypted amounts to this account,
   -- if the key exists. Accounts start with no encryption key, and once the key
   -- is chosen it cannot be changed.
-  ,_accountEncryptionKey :: Maybe AccountEncryptionKey
+  ,_accountEncryptionKey :: !(Maybe AccountEncryptionKey)
   -- |The key used to verify transaction signatures.
   ,_accountVerificationKey :: !AccountVerificationKey
   -- |Signature scheme of the account.
