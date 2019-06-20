@@ -51,6 +51,7 @@ Library
                 , base58string >= 0.10.0
                 , QuickCheck >= 2.10
                 , vector >= 0.12
+                , text >= 1.2.3.1
 
   extra-libraries: ec_vrf_ed25519
                    sha_2, 
@@ -63,6 +64,7 @@ Library
                          userenv
 
 Test-Suite tests
+  default-language: Haskell2010
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs: haskell-tests
@@ -82,6 +84,7 @@ Test-Suite tests
    ConcordiumTests.Crypto.Elgamal
 
 Executable perf-test
+  default-language: Haskell2010
   main-is: Perf.hs
   hs-source-dirs: haskell-tests
   build-depends: base >= 4.7

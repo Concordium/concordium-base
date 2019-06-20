@@ -8,6 +8,7 @@ import qualified Data.ByteString.Lazy.Char8 as LC
 import           Data.ByteString.Builder(toLazyByteString, byteStringHex)
 import           Data.Time
 import           Data.Word
+import           Data.Text(unpack)
 import qualified Data.FixedByteString as FBS
 import           Concordium.ID.Attributes
 import           Concordium.Crypto.SignatureScheme
@@ -41,8 +42,8 @@ instance Hashable AccountAddress where
 
 
 instance Show AccountAddress where
-  show = show . addressToBase58
-     where addressToBase58 (AccountAddress x) = fromBytes $ FBS.toByteString x
+  show = unpack . addressToBase58
+     where addressToBase58 (AccountAddress x) = toText . fromBytes $ FBS.toByteString x
 
 -- |Decode an address encoded in base 58. This function is in the IO monad
 -- because the library we are using does not support safe parsing.
