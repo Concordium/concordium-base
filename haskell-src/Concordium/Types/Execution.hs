@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -10,6 +12,8 @@ import Control.Monad.Reader
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
+import qualified Data.ByteString as BS
+
 
 import qualified Concordium.Types.Acorn.Core as Core
 import Concordium.Types
@@ -20,69 +24,204 @@ import qualified Concordium.ID.Types as IDTypes
 data InternalMessage = TSend !ContractAddress !Amount !Value | TSimpleTransfer !Address !Amount
     deriving(Show)
 
--- |The transaction payload. Currently only 6 transaction kinds are supported.
-data Payload = DeployModule !Core.Module   -- ^Put module on the chain.
-             | InitContract !Amount                        -- ^Initial amount on the contract's account.
-                            !Core.ModuleRef                -- ^Name of the module in which the contract exist.
-                            !Core.TyName                   -- ^Name of the contract.
-                            !(Core.Expr Core.ModuleName)   -- ^Parameter to the init method.
-                            !Int                           -- ^Derived field, size of the parameter.
-             | Update !Amount
-                      !ContractAddress             -- ^The recepient address.
-                      !(Core.Expr Core.ModuleName) -- ^The message.
-                      !Int                         -- ^Derived field, size of the message.
-             | Transfer !Address !Amount     -- ^Where (which can be a contract) and what amount to transfer.
-             | DeployCredential !IDTypes.CredentialDeploymentInformation  -- ^Deploy a credential to an existing account.
-             | DeployEncryptionKey !IDTypes.AccountEncryptionKey -- ^Deploy the encryption to the sender's account.
+type Proof = BS.ByteString
+
+-- |The transaction payload. Defines the supported kinds of transactions.
+data Payload = 
+  -- |Put module on the chain.
+  DeployModule {
+    -- |Module source.
+    dmMod :: !Core.Module
+    }
+  -- |Initialize a new contract instance.
+  | InitContract {
+      -- |Initial amount on the contract's account.
+      icAmount :: !Amount,
+      -- |Reference of the module (on-chain) in which the contract exist.
+      icModRef :: !Core.ModuleRef,
+      -- |Name of the contract (relative to the module) to initialize.
+      icContractName :: !Core.TyName,
+      -- |Parameter to the init method. Relative to the module (as if it were a term at the end of the module).
+      icParam :: !(Core.Expr Core.ModuleName),
+      -- |Derived field, serialized size of the parameter.
+      icSize :: !Int
+      }
+  -- |Update an existing contract instance.
+  | Update {
+      -- |Amount to call the receive method with.
+      uAmount :: !Amount,
+      -- |The address of the contract to invoke.
+      uAddress :: !ContractAddress,
+      -- |Message to invoke the receive method with.
+      uMessage :: !(Core.Expr Core.ModuleName),
+      -- ^Derived field, serialized size of the message.
+      uSize :: !Int
+      }
+  -- |Simple transfer from an account to either a contract or an account.
+  | Transfer {
+      -- |Recepient.
+      tToAddress :: !Address,
+      -- |Amount to transfer.
+      tAmount :: !Amount
+      }
+  -- |Deploy credentials, creating a new account if one does not yet exist.
+  | DeployCredential {
+      -- |The credentials to deploy.
+      dcCredential :: !IDTypes.CredentialDeploymentInformation
+      }
+  -- |Deploy an encryption key to an existing account.
+  | DeployEncryptionKey {
+      -- |The encryption key to deploy.
+      dekKey :: !IDTypes.AccountEncryptionKey
+      }
+  -- |Add a new baker with fresh id.
+  | AddBaker {
+      -- NOTE: The baker id should probably be generated automatically.
+      -- we do not wish to recycle baker ids. If we allowed that then
+      -- potentially when bakers are removed dishonest bakers might try to
+      -- claim their ids and thus abuse the system.
+      -- |Public key to verify the baker has won the election.
+      abElectionVerifyKey :: !BakerElectionVerifyKey,
+      -- |Public key to verify block signatures signed by the baker.
+      abSignatureVerifyKey :: !BakerSignVerifyKey,
+      -- |Address of the account the baker wants to be rewarded to.
+      abAccount :: !AccountAddress,
+      -- |Proof of at least the following facts
+      -- 
+      --   * the baker owns the account on the given address (knows the private key)
+      --   * the baker owns private keys corresponding to the public keys (election and signature)
+      --   * the baker is allowed to become a baker: THIS NEEDS SPEC
+      abProof :: !Proof
+      }
+  -- |Remove an existing baker from the baker pool.
+  | RemoveBaker {
+      -- |Id of the baker to remove.
+      rbId :: !BakerId,
+      -- |Proof that we are allowed to remove the baker. One
+      -- mechanism would be that the baker would remove itself only
+      -- (the transaction must come from the baker's account) but
+      -- possibly we want other mechanisms.
+      rbProof :: !Proof
+      }
+  -- |Update the account the baker receives their baking reward to.
+  -- Can only be initiated by the baker itself.
+  | UpdateBakerAccount {
+      -- |Id of the baker to update.
+      ubaId :: !BakerId,
+      -- |Address of the new account. The account must exist.
+      ubaAddress :: !AccountAddress,
+      -- |Proof that the baker owns the new account.
+      ubaProof :: !Proof
+      }
+  -- |Update the signature (verification) key of the baker.
+  | UpdateBakerSignKey {
+      -- |Id of the baker to update.
+      ubsId :: !BakerId,
+      -- |New signature verification key.
+      ubsKey :: !BakerSignVerifyKey,
+      -- |Proof that the baker knows the private key of this verification key.
+      ubsProof :: !Proof
+      }
   deriving(Eq, Show)
 
 instance S.Serialize Payload where
-  put (DeployModule amod) =
+  put DeployModule{..} =
     P.putWord8 0 <>
-    Core.putModule amod
-  put (InitContract amnt mref cname params _) =
+    Core.putModule dmMod
+  put InitContract{..} =
       P.putWord8 1 <>
-      S.put amnt <>
-      putModuleRef mref <>
-      Core.putTyName cname <>
-      Core.putExpr params
-  put (Update amnt cref msg _) =
+      S.put icAmount <>
+      putModuleRef icModRef <>
+      Core.putTyName icContractName <>
+      Core.putExpr icParam
+  put Update{..} =
     P.putWord8 2 <>
-    S.put amnt <>
-    S.put cref <>
-    Core.putExpr msg
-  put (Transfer addr amnt) =
+    S.put uAmount <>
+    S.put uAddress <>
+    Core.putExpr uMessage
+  put Transfer{..} =
     P.putWord8 3 <>
-    S.put addr <>
-    S.put amnt
-  put (DeployCredential cdi) =
+    S.put tToAddress <>
+    S.put tAmount
+  put DeployCredential{..} =
     P.putWord8 4 <>
-    S.put cdi
-  put (DeployEncryptionKey ek) =
+    S.put dcCredential
+  put DeployEncryptionKey{..} =
     P.putWord8 5 <>
-    S.put ek
+    S.put dekKey
+  put AddBaker{..} =
+    P.putWord8 6 <>
+    S.put abElectionVerifyKey <>
+    S.put abSignatureVerifyKey <>
+    S.put abAccount <>
+    S.put abProof
+  put RemoveBaker{..} =
+    P.putWord8 7 <>
+    S.put rbId <>
+    S.put rbProof
+  put UpdateBakerAccount{..} =
+    P.putWord8 8 <>
+    S.put ubaId <>
+    S.put ubaAddress <>
+    S.put ubaProof
+  put UpdateBakerSignKey{..} =
+    P.putWord8 9 <>
+    S.put ubsId <>
+    S.put ubsKey <>
+    S.put ubsProof
+
 
   get = do
-    h <- G.getWord8
-    case h of
-      0 -> DeployModule <$> Core.getModule
-      1 -> do amnt <- S.get
-              mref <- getModuleRef
-              cname <- Core.getTyName
+    G.getWord8 >>=
+      \case 0 -> do
+              dmMod <- Core.getModule
+              return DeployModule{..}
+            1 -> do
+              icAmount <- S.get
+              icModRef <- getModuleRef
+              icContractName <- Core.getTyName
               pstart <- G.bytesRead
-              params <- Core.getExpr
+              icParam <- Core.getExpr
               pend <- G.bytesRead
-              return $! InitContract amnt mref cname params (pend - pstart)
-      2 -> do amnt <- S.get
-              cref <- S.get
+              return InitContract{icSize = pend - pstart,..}
+            2 -> do
+              uAmount <- S.get
+              uAddress <- S.get
               pstart <- G.bytesRead
-              msg <- Core.getExpr
+              uMessage <- Core.getExpr
               pend <- G.bytesRead
-              return $! Update amnt cref msg (pend - pstart)
-      3 -> Transfer <$> S.get <*> S.get
-      4 -> DeployCredential <$> S.get
-      5 -> DeployEncryptionKey <$> S.get
-      _ -> fail "Only 6 types of transactions types are currently supported."
+              return Update{uSize = pend - pstart,..}
+            3 -> do
+              tToAddress <- S.get
+              tAmount <- S.get
+              return Transfer{..}
+            4 -> do
+              dcCredential <- S.get
+              return DeployCredential{..}
+            5 -> do
+              dekKey <- S.get
+              return DeployEncryptionKey{..}
+            6 -> do
+              abElectionVerifyKey <- S.get
+              abSignatureVerifyKey <- S.get
+              abAccount <- S.get
+              abProof <- S.get
+              return AddBaker{..}
+            7 -> do
+              rbId <- S.get
+              rbProof <- S.get
+              return RemoveBaker{..}
+            8 -> do
+              ubaId <- S.get
+              ubaAddress <- S.get
+              ubaProof <- S.get
+              return UpdateBakerAccount{..}
+            9 -> do
+              ubsId <- S.get
+              ubsKey <- S.get
+              ubsProof <- S.get
+              return UpdateBakerSignKey{..}
+            _ -> fail "Unsupported transaction type."
 
 {-# INLINE encodePayload #-}
 encodePayload :: Payload -> EncodedPayload
