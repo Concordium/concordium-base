@@ -8,11 +8,11 @@ extern crate rand;
 extern crate rand_core;
 extern crate serde;
 
-mod commitment;
+pub mod commitment;
 mod constants;
 mod errors;
-mod key;
-mod pedersen_scheme;
-mod value;
+pub mod key;
+pub mod pedersen_scheme;
+pub mod value;
 
 pub use crate::{key::*, pedersen_scheme::*};

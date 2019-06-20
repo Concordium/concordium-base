@@ -14,11 +14,14 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::signature::*;
-use crate::{known_message::*, unknown_message::*};
-use crate::errors::{
-    InternalError::{CurveDecodingError, FieldDecodingError, SecretKeyLengthError},
-    *,
+use crate::{
+    errors::{
+        InternalError::{CurveDecodingError, FieldDecodingError, SecretKeyLengthError},
+        *,
+    },
+    known_message::*,
+    signature::*,
+    unknown_message::*,
 };
 use curve_arithmetic::curve_arithmetic::*;
 use pairing::Field;
@@ -62,7 +65,7 @@ impl<C: Pairing> SecretKey<C> {
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<SecretKey<C>, SignatureError> {
         let l = bytes.len();
-        if l == 0 || l < C::SCALAR_LENGTH * 2 || l % C::SCALAR_LENGTH != 0 {
+        if l == 0 || l < C::SCALAR_LENGTH || l % C::SCALAR_LENGTH != 0 {
             return Err(SignatureError(SecretKeyLengthError));
         }
         let vlen = (l / C::SCALAR_LENGTH) - 1;
@@ -93,38 +96,48 @@ impl<C: Pairing> SecretKey<C> {
         SecretKey(vs, C::generate_scalar(csprng))
     }
 
+    pub fn sign_known_message<T>(
+        &self,
+        message: &KnownMessage<C>,
+        csprng: &mut T,
+    ) -> Result<Signature<C>, SignatureError>
+    where
+        T: Rng, {
+        let ys = &self.0;
+        let ms = &message.0;
+        if ms.len() > ys.len() {
+            return Err(SignatureError(SecretKeyLengthError));
+        }
 
-     pub fn sign_known_message<T>(&self, message: &KnownMessage<C>, csprng: &mut T) -> Result<Signature<C>, SignatureError>
-        where 
-            T:Rng, {
-         let ys = & self.0;
-         let ms = & message.0;
-         if ms.len() > ys.len(){
-             return Err(SignatureError (SecretKeyLengthError));
-         }
+        let mut z =
+            ms.iter()
+                .zip(ys.iter())
+                .fold(<C::ScalarField as Field>::zero(), |mut acc, (m, y)| {
+                    let mut r = m.clone();
+                    r.mul_assign(y);
+                    acc.add_assign(&r);
+                    acc
+                });
+        z.add_assign(&self.1);
+        let h = C::G_1::one_point().mul_by_scalar(&C::generate_scalar(csprng));
 
-         let mut z = ms.iter().zip(ys.iter()).fold(<C::ScalarField as Field>::zero(), |mut acc,(m,y)| {
-             let mut r = m.clone(); r.mul_assign(y);
-             acc.add_assign(&r);
-             acc
-         });
-         z.add_assign(&self.1);
-         let h = C::G_1::one_point().mul_by_scalar(&C::generate_scalar(csprng));
+        Ok(Signature(h, h.mul_by_scalar(&z)))
+    }
 
-         Ok(Signature(h, h.mul_by_scalar(&z)))
-
-     }
-
-     pub fn sign_unknown_message<T>(&self, message: &UnknownMessage<C>, csprng: &mut T) -> Result<Signature<C>, SignatureError>
-         where 
-            T: Rng, {
-                let sk = C::G_1::one_point().mul_by_scalar(&self.1);
-                let r = C::generate_scalar(csprng);
-                let a = C::G_1::one_point().mul_by_scalar(&r);
-                let m = message.0;
-                let xmr = sk.plus_point(&m).mul_by_scalar(&r);
-                Ok(Signature(a,xmr))
-     }
+    pub fn sign_unknown_message<T>(
+        &self,
+        message: &UnknownMessage<C>,
+        csprng: &mut T,
+    ) -> Result<Signature<C>, SignatureError>
+    where
+        T: Rng, {
+        let sk = C::G_1::one_point().mul_by_scalar(&self.1);
+        let r = C::generate_scalar(csprng);
+        let a = C::G_1::one_point().mul_by_scalar(&r);
+        let m = message.0;
+        let xmr = sk.plus_point(&m).mul_by_scalar(&r);
+        Ok(Signature(a, xmr))
+    }
 }
 
 macro_rules! macro_test_secret_key_to_byte_conversion {
@@ -132,7 +145,7 @@ macro_rules! macro_test_secret_key_to_byte_conversion {
         #[test]
         pub fn $function_name() {
             let mut csprng = thread_rng();
-            for i in 1..20 {
+            for i in 0..20 {
                 let val = SecretKey::<$pairing_type>::generate(i, &mut csprng);
                 let res_val2 = SecretKey::<$pairing_type>::from_bytes(&*val.to_bytes());
                 assert!(res_val2.is_ok());

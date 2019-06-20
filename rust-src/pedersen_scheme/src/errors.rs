@@ -11,15 +11,19 @@
 // Display) should be snake cased, for some reason.
 #![allow(non_snake_case)]
 
+
 use core::fmt::{self, Display};
-use pairing::{GroupDecodingError, PrimeFieldDecodingError};
+// use pairing::{GroupDecodingError, PrimeFieldDecodingError};
+use curve_arithmetic::curve_arithmetic::*;
 
 /// Internal errors.  
 
 #[derive(Debug)]
 pub(crate) enum InternalError {
-    GDecodingError(GroupDecodingError),
-    FDecodingError(PrimeFieldDecodingError),
+    // GDecodingError(GroupDecodingError),
+    // FDecodingError(PrimeFieldDecodingError),
+    CurveDecodingError,
+    FieldDecodingError,
     CommitmentKeyLengthError,
     ValueVecLengthError,
     CommitmentLengthError,
@@ -29,8 +33,10 @@ pub(crate) enum InternalError {
 impl Display for InternalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            InternalError::GDecodingError(ref p) => write!(f, "{}", p),
-            InternalError::FDecodingError(ref p) => write!(f, "{}", p),
+            // InternalError::GDecodingError(ref p) => write!(f, "{}", p),
+            // InternalError::FDecodingError(ref p) => write!(f, "{}", p),
+            InternalError::CurveDecodingError => write!(f, "Not on Curve"),
+            InternalError::FieldDecodingError => write!(f, "Not a Field element"),
             InternalError::CommitmentKeyLengthError => {
                 write!(f, "wrong length of commitment key bytes")
             }

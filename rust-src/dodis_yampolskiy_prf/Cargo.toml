@@ -1,5 +1,5 @@
 [package]
-name = "dodis-yampolskiy-prf"
+name = "dodis_yampolskiy_prf"
 version = "0.1.0"
 authors = ["Concordium AG <info@concordium.com>"]
 edition = "2018"

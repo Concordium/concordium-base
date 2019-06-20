@@ -6,9 +6,12 @@ use pairing::{Engine, Field, PrimeField};
 use rand::*;
 use std::fmt::{Debug, Display};
 
+#[derive(Debug)]
 pub enum FieldDecodingError {
     NotFieldElement,
 }
+
+#[derive(Debug)]
 pub enum CurveDecodingError {
     NotOnCurve,
 }

@@ -19,12 +19,11 @@ use crate::errors::{
     *,
 };
 
-use crate::signature::*;
-use crate::known_message::*;
+use crate::{known_message::*, signature::*};
 use curve_arithmetic::curve_arithmetic::*;
 
-use pairing::bls12_381::Bls12;
 use crate::secret::*;
+use pairing::bls12_381::Bls12;
 
 use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
@@ -107,7 +106,6 @@ impl<C: Pairing> PublicKey<C> {
         }
     }
 
-
     /// Generate a public key  from a `csprng`.
     pub fn arbitrary<T>(n: usize, csprng: &mut T) -> PublicKey<C>
     where
@@ -125,37 +123,44 @@ impl<C: Pairing> PublicKey<C> {
         PublicKey(vs, us, C::G_2::generate(csprng))
     }
 
-    pub fn verify(&self, sig: &Signature<C>, message: &KnownMessage<C>)-> bool{
+    pub fn verify(&self, sig: &Signature<C>, message: &KnownMessage<C>) -> bool {
         let ys = &self.1;
         let x = self.2;
         let ms = &message.0;
-        if ms.len() > ys.len(){
+        if ms.len() > ys.len() {
             return false;
         }
-        let h = ys.iter().zip(ms.iter()).fold(C::G_2::zero_point(), |acc, (y,m)|{
-            let ym = y.mul_by_scalar(&m);
-            let acc = acc.plus_point(&ym);
-            acc
-        });
+        let h = ys
+            .iter()
+            .zip(ms.iter())
+            .fold(C::G_2::zero_point(), |acc, (y, m)| {
+                let ym = y.mul_by_scalar(&m);
+                let acc = acc.plus_point(&ym);
+                acc
+            });
         let hx = h.plus_point(&x);
         let p1 = C::pair(sig.0, hx);
         let p2 = C::pair(sig.1, C::G_2::one_point());
-        p1==p2
-        
+        p1 == p2
     }
 }
 
-  impl<'a, C:Pairing> From<&'a SecretKey<C>> for PublicKey<C> {
-        /// Derive this public key from its corresponding `SecretKey`.
-        fn from(sk: &SecretKey<C>) -> PublicKey<C> {
-          let (vs, x) = (&sk.0, &sk.1);
-          let rs = vs.iter().map(|r| {C::G_1::one_point().mul_by_scalar(&r)}).collect();
-          let ts = vs.iter().map(|r| {C::G_2::one_point().mul_by_scalar(&r)}).collect();
-          let h  = C::G_2::one_point().mul_by_scalar(&x);
-          PublicKey(rs, ts, h)
-        }
+impl<'a, C: Pairing> From<&'a SecretKey<C>> for PublicKey<C> {
+    /// Derive this public key from its corresponding `SecretKey`.
+    fn from(sk: &SecretKey<C>) -> PublicKey<C> {
+        let (vs, x) = (&sk.0, &sk.1);
+        let rs = vs
+            .iter()
+            .map(|r| C::G_1::one_point().mul_by_scalar(&r))
+            .collect();
+        let ts = vs
+            .iter()
+            .map(|r| C::G_2::one_point().mul_by_scalar(&r))
+            .collect();
+        let h = C::G_2::one_point().mul_by_scalar(&x);
+        PublicKey(rs, ts, h)
     }
-
+}
 
 macro_rules! macro_test_public_key_to_byte_conversion {
     ($function_name:ident, $pairing_type:path) => {
@@ -233,5 +238,4 @@ macro_rules! macro_test_sign_verify_different_sig {
           };
   }
 
-  macro_test_sign_verify_different_sig!(sign_verify_different_sig_bls12_381, Bls12);
-
+macro_test_sign_verify_different_sig!(sign_verify_different_sig_bls12_381, Bls12);

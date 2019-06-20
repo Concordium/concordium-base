@@ -1,5 +1,5 @@
 [package]
-name = "pedersen-scheme"
+name = "pedersen_scheme"
 version = "0.1.0"
 authors = ["Concordium AG <info@concordium.com>"]
 edition = "2018"
@@ -11,6 +11,10 @@ rand    = "0.4"
 rand_core = "0"
 clear_on_drop = "0"
 serde         = "1"
+
+[dependencies.curve_arithmetic]
+path = "../curve_arithmetic"
+version = "0" 
 
 [lib]
 name = "pedersen_scheme"
