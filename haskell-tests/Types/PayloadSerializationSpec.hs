@@ -9,11 +9,15 @@ import Test.QuickCheck
 import Data.ByteString.Lazy as BSL
 import Data.ByteString as BS
 
+import Concordium.Types
 import Concordium.Crypto.SignatureScheme(VerifyKey(..), SchemeId(Ed25519))
 import Concordium.Types.Execution
 import Concordium.Types(Amount(..), Address(..))
 import Concordium.ID.Types
 import Concordium.ID.Attributes
+import qualified Concordium.Crypto.VRF as VRF
+
+import qualified Data.FixedByteString as FBS
 
 import qualified Data.Serialize as S
 
@@ -39,7 +43,17 @@ genCredentialDeploymentInformation = do
   return CDI{..}
 
 genPayload :: Gen Payload
-genPayload = oneof [genDeployModule, genInit, genUpdate, genTransfer, genCredential, genEncryption]
+genPayload = oneof [genDeployModule,
+                    genInit,
+                    genUpdate,
+                    genTransfer,
+                    genCredential,
+                    genEncryption,
+                    genAddBaker,
+                    genRemoveBaker,
+                    genUpdateBakerAccount,
+                    genUpdateBakerSignKey
+                    ]
   where 
         genCredential = DeployCredential <$> genCredentialDeploymentInformation
 
@@ -69,6 +83,35 @@ genPayload = oneof [genDeployModule, genInit, genUpdate, genTransfer, genCredent
         genEncryption = do
           l <- choose (30,50)
           DeployEncryptionKey . EncKeyAcc . BS.pack <$> vector l
+
+        genAddBaker = do
+          abElectionVerifyKey <- VRF.publicKey <$> arbitrary
+          abSignatureVerifyKey <- VerifyKey . BS.pack <$> (vector =<< choose (30,80))
+          abAccount <- genAddress
+          abProof <- genProof
+          return AddBaker{..}
+
+        genProof = choose (50,200) >>= vector >>= return . BS.pack
+
+        genRemoveBaker = do
+          rbId <- genBakerId
+          rbProof <- genProof
+          return RemoveBaker{..}
+
+        genUpdateBakerAccount = do
+          ubaId <- genBakerId
+          ubaAddress <- genAddress
+          ubaProof <- genProof
+          return UpdateBakerAccount{..}
+
+        genUpdateBakerSignKey = do
+          ubsId <- genBakerId
+          ubsKey <- VerifyKey . BS.pack <$> (vector =<< choose (30,80))
+          ubsProof <- genProof
+          return UpdateBakerSignKey{..}
+
+        genBakerId = BakerId <$> arbitrary
+
 
 groupIntoSize :: Int64 -> [Char]
 groupIntoSize s =

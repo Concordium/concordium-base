@@ -267,3 +267,26 @@ type BlockSignature = Sig.Signature
 -- TODO: The hash is redundant; should be removed
 type BlockNonce = (VRF.Hash, VRF.Proof)
 
+-- * Types releated to bakers.
+newtype BakerId = BakerId Word64
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
+
+instance S.Serialize BakerId where
+    get = BakerId <$> G.getWord64be
+    put (BakerId i) = P.putWord64be i
+
+type LeadershipElectionNonce = ByteString
+type BakerSignVerifyKey = Sig.VerifyKey
+type BakerSignPrivateKey = Sig.KeyPair
+type BakerElectionVerifyKey = VRF.PublicKey
+type BakerElectionPrivateKey = VRF.KeyPair
+type LotteryPower = Double
+type ElectionDifficulty = Double
+
+type VoterId = Word64
+type VoterVerificationKey = Sig.VerifyKey
+type VoterVRFPublicKey = VRF.PublicKey
+type VoterSignKey = Sig.SignKey
+type VoterPower = Int
+
+
