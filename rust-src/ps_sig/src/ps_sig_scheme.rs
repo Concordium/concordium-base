@@ -18,12 +18,14 @@ pub fn message<C: Pairing>(commitment: &Commitment<C::G_1>) -> UnknownMessage<C>
     UnknownMessage(point)
 }
 
-pub fn commit_with_pk<C:Pairing>(pk: &PublicKey<C>, vs: &Value<C::G_1>) -> (UnknownMessage<C>, C::ScalarField){
+pub fn commit_with_pk<C: Pairing>(
+    pk: &PublicKey<C>,
+    vs: &Value<C::G_1>,
+) -> (UnknownMessage<C>, C::ScalarField) {
     let ck = commitment_key(&pk);
     let mut csprng = thread_rng();
     let (commitment, randomness) = ck.commit(&vs, &mut csprng);
     (message(&commitment), randomness)
-
 }
 
 // retrieves a signature on the original message from the signature on the
@@ -174,31 +176,38 @@ macro_rules! macro_sign_known_message {
     };
 }
 
-
 macro_sign_known_message!(sign_known_message_bls12_381, Bls12);
 
 //#[test] sign verify known message
 macro_rules! macro_test_sign_verify_known_message_ffi {
-    ($function_name:ident, 
-     $sign_func_name: ident,
-     $sec_key_func_name: ident,
-     $pub_key_func_name: ident,
-     $verify_func_name: ident,
-     $pairing_type:path) => {
+    (
+        $function_name:ident,
+        $sign_func_name:ident,
+        $sec_key_func_name:ident,
+        $pub_key_func_name:ident,
+        $verify_func_name:ident,
+        $pairing_type:path
+    ) => {
         #[test]
         pub fn $function_name() {
             let mut sk_bytes = [0u8; 21 * <$pairing_type as Pairing>::SCALAR_LENGTH];
-            let mut pk_bytes = [0u8; 21 * <$pairing_type as Pairing>::G_2::GROUP_ELEMENT_LENGTH + 20 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
-            //let mut msg_bytes = [0u8; 20 * <$pairing_type as Pairing>::SCALAR_LENGTH];
+            let mut pk_bytes = [0u8; 21 * <$pairing_type as Pairing>::G_2::GROUP_ELEMENT_LENGTH
+                + 20 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
             let mut sig_bytes = [0u8; 40 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
             let mut csprng = thread_rng();
-            for i in 1..20{
+            for i in 1..20 {
                 $sec_key_func_name(i, sk_bytes.as_mut_ptr());
-                //let msg_slice = &mut msg_bytes[..(i + 1) * <$curve_type as Curve>::SCALAR_LENGTH];
+                // let msg_slice = &mut msg_bytes[..(i + 1) * <$curve_type as
+                // Curve>::SCALAR_LENGTH];
                 let m = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
                 let m_bytes = m.to_bytes();
                 $pub_key_func_name(i, sk_bytes.as_ptr(), pk_bytes.as_mut_ptr());
-                $sign_func_name(i, sk_bytes.as_ptr(), m_bytes.as_ptr(), sig_bytes.as_mut_ptr());
+                $sign_func_name(
+                    i,
+                    sk_bytes.as_ptr(),
+                    m_bytes.as_ptr(),
+                    sig_bytes.as_mut_ptr(),
+                );
                 let mut res = 0i32;
                 res = $verify_func_name(i, pk_bytes.as_ptr(), sig_bytes.as_ptr(), m_bytes.as_ptr());
                 println!("res={}", res);
@@ -208,7 +217,14 @@ macro_rules! macro_test_sign_verify_known_message_ffi {
     };
 }
 
-macro_test_sign_verify_known_message_ffi!(sign_verify_known_message_ffi_bls12_381, sign_known_message_bls12_381, generate_secret_key_bls12_381, public_key_bls12_381, verify_bls12_381, Bls12); 
+macro_test_sign_verify_known_message_ffi!(
+    sign_verify_known_message_ffi_bls12_381,
+    sign_known_message_bls12_381,
+    generate_secret_key_bls12_381,
+    public_key_bls12_381,
+    verify_bls12_381,
+    Bls12
+);
 macro_rules! macro_sign_unknown_message {
     ($function_name:ident, $pairing_type:path) => {
         #[no_mangle]
@@ -270,44 +286,48 @@ macro_rules! macro_verify {
             n: usize,
             pk_bytes: *const u8,
             sig_bytes: *const u8,
-            msg_bytes : *const u8,
-            ) -> i32 {
+            msg_bytes: *const u8,
+        ) -> i32 {
             assert!(!pk_bytes.is_null(), "Null pointer");
             let pk_slice: &[u8] = unsafe {
-                  slice::from_raw_parts(
-                      pk_bytes,
-                      (n + 1) * <$pairing_type as Pairing>::G_2::GROUP_ELEMENT_LENGTH
-                          + n * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH,
-                  )
-              };
-              let pk_res = PublicKey::<$pairing_type>::from_bytes(pk_slice);
-              if !pk_res.is_ok() {
-                  return -1;
-              }
-              let pk = pk_res.unwrap();
+                slice::from_raw_parts(
+                    pk_bytes,
+                    (n + 1) * <$pairing_type as Pairing>::G_2::GROUP_ELEMENT_LENGTH
+                        + n * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH,
+                )
+            };
+            let pk_res = PublicKey::<$pairing_type>::from_bytes(pk_slice);
+            if !pk_res.is_ok() {
+                return -1;
+            }
+            let pk = pk_res.unwrap();
 
-              assert!(!sig_bytes.is_null(), "Null pointer");
-              let sig_slice: &[u8] = unsafe {
-                  slice::from_raw_parts(
-                      sig_bytes,
-                      2 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH,
-                  )
-              };
-              let sig_res = Signature::<$pairing_type>::from_bytes(&sig_slice);
-              if !sig_res.is_ok() {
-                  return -2;
-              }
-              let sig = sig_res.unwrap();
-              assert!(!msg_bytes.is_null(), "Null pointer");
-              let msg_slice: &[u8] = unsafe {
-                  slice::from_raw_parts(msg_bytes, n * <$pairing_type as Pairing>::SCALAR_LENGTH)
-              };
-              let msg_res = KnownMessage::<$pairing_type>::from_bytes(msg_slice);
-              if !msg_res.is_ok() {
-                  return -3;
-              }
-              let msg = msg_res.unwrap();
-              if pk.verify(&sig, &msg) { 1 } else { 0 }
+            assert!(!sig_bytes.is_null(), "Null pointer");
+            let sig_slice: &[u8] = unsafe {
+                slice::from_raw_parts(
+                    sig_bytes,
+                    2 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH,
+                )
+            };
+            let sig_res = Signature::<$pairing_type>::from_bytes(&sig_slice);
+            if !sig_res.is_ok() {
+                return -2;
+            }
+            let sig = sig_res.unwrap();
+            assert!(!msg_bytes.is_null(), "Null pointer");
+            let msg_slice: &[u8] = unsafe {
+                slice::from_raw_parts(msg_bytes, n * <$pairing_type as Pairing>::SCALAR_LENGTH)
+            };
+            let msg_res = KnownMessage::<$pairing_type>::from_bytes(msg_slice);
+            if !msg_res.is_ok() {
+                return -3;
+            }
+            let msg = msg_res.unwrap();
+            if pk.verify(&sig, &msg) {
+                1
+            } else {
+                0
+            }
         }
     };
 }
@@ -413,59 +433,60 @@ macro_rules! macro_retrieve_sig {
 }
 macro_retrieve_sig!(retrieve_sig_bls12_381, Bls12);
 
-
-
-
 macro_rules! macro_commit_with_pk {
-       ($function_name:ident, $pairing_type:path) => {
-           #[no_mangle]
-           #[allow(clippy::not_unsafe_ptr_arg_deref)]
-           pub extern "C" fn $function_name(
-               n: usize,
-               pk_bytes: *const u8,
-               value_bytes: *const u8,
-               unknown_msg_bytes: *mut u8,
-               randomness_bytes: *mut u8,
-           ) -> i32 {
-               assert!(!pk_bytes.is_null(), "Null pointer");
-               assert!(!value_bytes.is_null(), "Null pointer");
-               assert!(!unknown_msg_bytes.is_null(), "Null pointer");
-               assert!(!randomness_bytes.is_null(), "Null pointer");
-               let pk_slice: &[u8] = unsafe {
-                   slice::from_raw_parts(
-                       pk_bytes,
-                       (n + 1) * <$pairing_type as Pairing>::G_2::GROUP_ELEMENT_LENGTH
-                           + n * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH,
-                   )
-               };
-               let pk_res = PublicKey::<$pairing_type>::from_bytes(pk_slice);
-               if !pk_res.is_ok() {
-                   return -1;
-               }
-               let pk = pk_res.unwrap();
-               let value_slice: &[u8] = unsafe {
-                   slice::from_raw_parts(value_bytes, n * <$pairing_type as Pairing>::SCALAR_LENGTH)
-               };
-               let val_res = Value::from_bytes(value_slice);
-               if !val_res.is_ok() {
-                   return -2;
-               }
-               let val = val_res.unwrap();
-               let (unknown_msg, randomness) = commit_with_pk(&pk, &val);
-  
+    ($function_name:ident, $pairing_type:path) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub extern "C" fn $function_name(
+            n: usize,
+            pk_bytes: *const u8,
+            value_bytes: *const u8,
+            unknown_msg_bytes: *mut u8,
+            randomness_bytes: *mut u8,
+        ) -> i32 {
+            assert!(!pk_bytes.is_null(), "Null pointer");
+            assert!(!value_bytes.is_null(), "Null pointer");
+            assert!(!unknown_msg_bytes.is_null(), "Null pointer");
+            assert!(!randomness_bytes.is_null(), "Null pointer");
+            let pk_slice: &[u8] = unsafe {
+                slice::from_raw_parts(
+                    pk_bytes,
+                    (n + 1) * <$pairing_type as Pairing>::G_2::GROUP_ELEMENT_LENGTH
+                        + n * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH,
+                )
+            };
+            let pk_res = PublicKey::<$pairing_type>::from_bytes(pk_slice);
+            if !pk_res.is_ok() {
+                return -1;
+            }
+            let pk = pk_res.unwrap();
+            let value_slice: &[u8] = unsafe {
+                slice::from_raw_parts(value_bytes, n * <$pairing_type as Pairing>::SCALAR_LENGTH)
+            };
+            let val_res = Value::from_bytes(value_slice);
+            if !val_res.is_ok() {
+                return -2;
+            }
+            let val = val_res.unwrap();
+            let (unknown_msg, randomness) = commit_with_pk(&pk, &val);
 
-           let randomness_slice: &mut [u8] = unsafe {
-               slice::from_raw_parts_mut(randomness_bytes, <$pairing_type as Pairing>::SCALAR_LENGTH)
-           };
-           randomness_slice.copy_from_slice(&* <$pairing_type>::scalar_to_bytes(&randomness));
-           let unknown_msg_slice: &mut [u8] = unsafe {
-               slice::from_raw_parts_mut(unknown_msg_bytes, <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH)
-           };
-           unknown_msg_slice.copy_from_slice(&* unknown_msg.to_bytes());
-           1
-           }
-       };
+            let randomness_slice: &mut [u8] = unsafe {
+                slice::from_raw_parts_mut(
+                    randomness_bytes,
+                    <$pairing_type as Pairing>::SCALAR_LENGTH,
+                )
+            };
+            randomness_slice.copy_from_slice(&*<$pairing_type>::scalar_to_bytes(&randomness));
+            let unknown_msg_slice: &mut [u8] = unsafe {
+                slice::from_raw_parts_mut(
+                    unknown_msg_bytes,
+                    <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH,
+                )
+            };
+            unknown_msg_slice.copy_from_slice(&*unknown_msg.to_bytes());
+            1
+        }
+    };
 }
-           
 
 macro_commit_with_pk!(commit_with_pk_bls12_381, Bls12);
