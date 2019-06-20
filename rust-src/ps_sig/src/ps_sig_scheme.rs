@@ -210,8 +210,14 @@ macro_rules! macro_test_sign_verify_known_message_ffi {
                 );
                 let mut res = 0i32;
                 res = $verify_func_name(i, pk_bytes.as_ptr(), sig_bytes.as_ptr(), m_bytes.as_ptr());
-                println!("res={}", res);
                 assert_eq!(res, 1 as i32);
+
+                let wrong_msg = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
+                res = $verify_func_name(i, pk_bytes.as_ptr(), sig_bytes.as_ptr(), wrong_msg.to_bytes().as_ptr());
+                assert_ne!(res, 1 as i32);
+
+                let wrong_sig = Signature::<$pairing_type>::arbitrary(&mut csprng);
+                res = $verify_func_name(i, pk_bytes.as_ptr(), sig_bytes.as_ptr(), wrong_sig.to_bytes().as_ptr());
             }
         }
     };
