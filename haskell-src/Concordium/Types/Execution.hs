@@ -240,6 +240,11 @@ data Event = ModuleDeployed !Core.ModuleRef
            | AccountCreated !AccountAddress
            | CredentialDeployed !IDTypes.CredentialDeploymentInformation
            | AccountEncryptionKeyDeployed AccountAddress IDTypes.AccountEncryptionKey
+           | BakerAdded !BakerId
+           | BakerRemoved !BakerId
+           | BakerAccountUpdated !BakerId !AccountAddress
+           | BakerKeyUpdated !BakerId !BakerSignVerifyKey
+
   deriving (Show)
 
 -- |Used internally by the scheduler since internal messages are sent as values,
@@ -282,6 +287,11 @@ data RejectReason = ModuleNotWF !TypingError -- ^Error raised when typechecking 
                   | DuplicateAccountRegistrationID IDTypes.CredentialRegistrationID
                   | AccountCredentialInvalid
                   | AccountEncryptionKeyAlreadyExists AccountAddress IDTypes.AccountEncryptionKey
+                  | NonExistentRewardAccount !AccountAddress -- ^Reward account desired by the baker does not exist.
+                  | InvalidProof -- ^Proof that the baker owns relevant private keys is not valid.
+                  | RemovingNonExistentBaker !BakerId
+                  | InvalidBakerRemoveSource !AccountAddress
+                  | UpdatingNonExistentBaker !BakerId
     deriving (Show)
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
