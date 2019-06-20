@@ -138,9 +138,13 @@ data TypingError =
                  -- |The given name is already bound but is attempted to be
                  -- redefined.
                  | RedefinitionOfTerm Core.Name
+                 -- |The given type name is already bound but is attempted to be redefined.
+                 | RedefinitionOfType Core.TyName
                  -- |The contract with the given name has already been defined but
                  -- |is attempted to be defined again.
                  | RedefinitionOfContract Core.TyName
+                 -- |Attempting to declare a data type with the given name without constructors.
+                 | DataTypeWithoutConstructors Core.TyName
                  -- |The init method of a contract is not of the correct shape.
                  -- The argument is the name of the contract containing the init
                  -- method.
