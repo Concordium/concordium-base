@@ -213,11 +213,21 @@ macro_rules! macro_test_sign_verify_known_message_ffi {
                 assert_eq!(res, 1 as i32);
 
                 let wrong_msg = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
-                res = $verify_func_name(i, pk_bytes.as_ptr(), sig_bytes.as_ptr(), wrong_msg.to_bytes().as_ptr());
+                res = $verify_func_name(
+                    i,
+                    pk_bytes.as_ptr(),
+                    sig_bytes.as_ptr(),
+                    wrong_msg.to_bytes().as_ptr(),
+                );
                 assert_ne!(res, 1 as i32);
 
                 let wrong_sig = Signature::<$pairing_type>::arbitrary(&mut csprng);
-                res = $verify_func_name(i, pk_bytes.as_ptr(), sig_bytes.as_ptr(), wrong_sig.to_bytes().as_ptr());
+                res = $verify_func_name(
+                    i,
+                    pk_bytes.as_ptr(),
+                    sig_bytes.as_ptr(),
+                    wrong_sig.to_bytes().as_ptr(),
+                );
             }
         }
     };
@@ -349,7 +359,6 @@ macro_rules! macro_commitment_key {
             n: usize,
             pk_bytes: *const u8,
             commitment_key_bytes: *mut u8,
-            randomness: *mut u8,
         ) -> i32 {
             assert!(!pk_bytes.is_null(), "Null pointer");
             let pk_slice: &[u8] = unsafe {
