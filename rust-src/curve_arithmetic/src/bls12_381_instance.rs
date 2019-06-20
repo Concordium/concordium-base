@@ -465,7 +465,6 @@ impl Curve for G2Affine {
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
 }
 
-
 impl Pairing for Bls12 {
     type BaseField = <Bls12 as Engine>::Fq;
     type G_1 = <Bls12 as Engine>::G1Affine;
@@ -489,6 +488,7 @@ impl Pairing for Bls12 {
         }
         Box::new(bytes)
     }
+
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::ScalarField { Fr::rand(csprng) }
 
     fn bytes_to_scalar(bytes: &[u8]) -> Result<Self::ScalarField, FieldDecodingError> {
@@ -509,4 +509,3 @@ impl Pairing for Bls12 {
         }
     }
 }
-

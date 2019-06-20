@@ -53,5 +53,4 @@ pub trait Pairing: Sized + 'static + Clone {
     fn scalar_to_bytes(s: &Self::ScalarField) -> Box<[u8]>;
     fn bytes_to_scalar(b: &[u8]) -> Result<Self::ScalarField, FieldDecodingError>;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::ScalarField;
-} 
-
+}

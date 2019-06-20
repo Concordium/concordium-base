@@ -52,9 +52,7 @@ impl<C: Curve> CommitmentKey<C> {
         bytes.into_boxed_slice()
     }
 
-    pub fn new(v: Vec<C>, r: C) -> Self{
-        CommitmentKey(v, r)
-    }
+    pub fn new(v: Vec<C>, r: C) -> Self { CommitmentKey(v, r) }
 
     /// Construct a commitmentkey from a slice of bytes.
     ///
