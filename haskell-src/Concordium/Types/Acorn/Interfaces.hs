@@ -55,13 +55,11 @@ type ModuleInterfaces = HashMap Core.ModuleRef Interface
 
 -- |Errors which can occur during typechecking.
 data TypingError =
-                 -- |TODO: To be replaced by more precise errors.
-                 OtherErr String
                  -- |Error raised when a declared datatype is instantiated with
                  -- a wrong number of arguments (too few or too many). The first
                  -- argument is the number of given parameters, the second the
                  -- expected number.
-                 | IncorrectNumberOfTypeParameters Int Int
+                   IncorrectNumberOfTypeParameters Int Int
                  -- |A type abstraction is applied to a term which is not a type.
                  | TypeAbstractionNotAppliedToType (Core.Expr Core.ModuleRef)
                  -- |A type appears where a term is expected.
