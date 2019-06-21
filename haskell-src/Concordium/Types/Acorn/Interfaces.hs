@@ -130,7 +130,9 @@ data TypingError =
                  -- |The module referred to in an expression with the given name
                  -- is not imported (not part of interface's import map).
                  | ModuleNotImported Core.ModuleName
-                 -- |The referenced name does not exist in the given module.
+                 -- |The referenced local definition does not exist in the current module.
+                 | LocalNameNotInScope Core.Name
+                 -- |The referenced imported definition does not exist in the given module.
                  | QualifiedNameNotInScope Core.ModuleRef Core.Name
                  -- |A module with the given reference does not exist. Raised when
                  -- trying to type-check an imported definition from a non-existing module.
