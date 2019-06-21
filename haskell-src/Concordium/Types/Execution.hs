@@ -104,7 +104,6 @@ data Payload =
       rbProof :: !Proof
       }
   -- |Update the account the baker receives their baking reward to.
-  -- Can only be initiated by the baker itself.
   | UpdateBakerAccount {
       -- |Id of the baker to update.
       ubaId :: !BakerId,
