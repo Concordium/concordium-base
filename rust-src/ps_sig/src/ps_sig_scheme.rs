@@ -1,7 +1,7 @@
 use crate::{known_message::*, public::*, secret::*, signature::*, unknown_message::*};
 use curve_arithmetic::{bls12_381_instance::*, curve_arithmetic::*};
 use pairing::bls12_381::Bls12;
-use pedersen_scheme::{commitment::Commitment, key::CommitmentKey, value::*};
+use pedersen_scheme::{commitment::Commitment, key::CommitmentKey, pedersen_scheme::*, value::*};
 use rand::*;
 use std::slice;
 
@@ -178,7 +178,6 @@ macro_rules! macro_sign_known_message {
 
 macro_sign_known_message!(sign_known_message_bls12_381, Bls12);
 
-//#[test] sign verify known message
 macro_rules! macro_test_sign_verify_known_message_ffi {
     (
         $function_name:ident,
@@ -193,7 +192,7 @@ macro_rules! macro_test_sign_verify_known_message_ffi {
             let mut sk_bytes = [0u8; 21 * <$pairing_type as Pairing>::SCALAR_LENGTH];
             let mut pk_bytes = [0u8; 21 * <$pairing_type as Pairing>::G_2::GROUP_ELEMENT_LENGTH
                 + 20 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
-            let mut sig_bytes = [0u8; 40 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
+            let mut sig_bytes = [0u8; 2 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
             let mut csprng = thread_rng();
             for i in 1..20 {
                 $sec_key_func_name(i, sk_bytes.as_mut_ptr());
@@ -225,8 +224,8 @@ macro_rules! macro_test_sign_verify_known_message_ffi {
                 res = $verify_func_name(
                     i,
                     pk_bytes.as_ptr(),
-                    sig_bytes.as_ptr(),
                     wrong_sig.to_bytes().as_ptr(),
+                    m_bytes.as_ptr(),
                 );
             }
         }
@@ -241,6 +240,105 @@ macro_test_sign_verify_known_message_ffi!(
     verify_bls12_381,
     Bls12
 );
+
+macro_rules! macro_test_sign_verify_unknown_message_ffi {
+    (
+        $function_name:ident,
+        $sign_func_name:ident,
+        $sec_key_func_name:ident,
+        $pub_key_func_name:ident,
+        $commitment_with_pk_func_name:ident,
+        $commitment_key_func_name:ident,
+        $random_values_func_name:ident,
+        $verify_func_name:ident,
+        $retrieve_sig_func_name:ident,
+        $pairing_type:path
+    ) => {
+        #[test]
+        pub fn $function_name() {
+            let mut sk_bytes = [0u8; 21 * <$pairing_type as Pairing>::SCALAR_LENGTH];
+            let mut pk_bytes = [0u8; 21 * <$pairing_type as Pairing>::G_2::GROUP_ELEMENT_LENGTH
+                + 20 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
+            let mut ck_bytes = [0u8; 21 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
+            let mut value_bytes = [0u8; 21 * <$pairing_type as Pairing>::SCALAR_LENGTH];
+            let mut sig_bytes = [0u8; 2 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
+            let mut retrieved_sig_bytes =
+                [0u8; 2 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
+            let mut unknown_msg_bytes =
+                [0u8; <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
+            let mut randomness_bytes = [0u8; <$pairing_type as Pairing>::SCALAR_LENGTH];
+            let mut csprng = thread_rng();
+            for i in 1..20 {
+                $sec_key_func_name(i, sk_bytes.as_mut_ptr());
+                $pub_key_func_name(i, sk_bytes.as_ptr(), pk_bytes.as_mut_ptr());
+                $random_values_func_name(i, value_bytes.as_mut_ptr());
+                $commitment_with_pk_func_name(
+                    i,
+                    pk_bytes.as_ptr(),
+                    value_bytes.as_ptr(),
+                    unknown_msg_bytes.as_mut_ptr(),
+                    randomness_bytes.as_mut_ptr(),
+                );
+                let sk_slice = &sk_bytes[i * <$pairing_type as Pairing>::SCALAR_LENGTH
+                    ..(i + 1) * <$pairing_type as Pairing>::SCALAR_LENGTH];
+                $sign_func_name(
+                    sk_slice.as_ptr(),
+                    unknown_msg_bytes.as_ptr(),
+                    sig_bytes.as_mut_ptr(),
+                );
+                $commitment_key_func_name(i, pk_bytes.as_ptr(), ck_bytes.as_mut_ptr());
+                $retrieve_sig_func_name(
+                    i,
+                    sig_bytes.as_ptr(),
+                    ck_bytes.as_ptr(),
+                    randomness_bytes.as_ptr(),
+                    retrieved_sig_bytes.as_mut_ptr(),
+                );
+
+                let mut res = 0i32;
+                res = $verify_func_name(
+                    i,
+                    pk_bytes.as_ptr(),
+                    retrieved_sig_bytes.as_ptr(),
+                    value_bytes.as_ptr(),
+                );
+                assert_eq!(res, 1 as i32);
+
+                let wrong_msg = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
+                res = $verify_func_name(
+                    i,
+                    pk_bytes.as_ptr(),
+                    retrieved_sig_bytes.as_ptr(),
+                    wrong_msg.to_bytes().as_ptr(),
+                );
+                assert_ne!(res, 1 as i32);
+
+                let wrong_sig = Signature::<$pairing_type>::arbitrary(&mut csprng);
+                res = $verify_func_name(
+                    i,
+                    pk_bytes.as_ptr(),
+                    wrong_sig.to_bytes().as_ptr(),
+                    value_bytes.as_ptr(),
+                );
+                assert_ne!(res, 1 as i32);
+            }
+        }
+    };
+}
+
+macro_test_sign_verify_unknown_message_ffi!(
+    sign_verify_unknown_message_ffi_bls12_381,
+    sign_unknown_message_bls12_381,
+    generate_secret_key_bls12_381,
+    public_key_bls12_381,
+    commit_with_pk_bls12_381,
+    commitment_key_bls12_381,
+    random_values_bls12_381_g1_proj,
+    verify_bls12_381,
+    retrieve_sig_bls12_381,
+    Bls12
+);
+
 macro_rules! macro_sign_unknown_message {
     ($function_name:ident, $pairing_type:path) => {
         #[no_mangle]

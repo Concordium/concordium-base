@@ -3,7 +3,7 @@
 
 use crate::{commitment::*, constants::*, key::*, value::*};
 use curve_arithmetic::{bls12_381_instance::*, curve_arithmetic::*};
-use pairing::bls12_381::{G1Affine, G2Affine};
+use pairing::bls12_381::{G1, G1Affine, G2Affine};
 use rand::*;
 use std::slice;
 
@@ -155,6 +155,7 @@ macro_rules! macro_random_values {
 }
 
 macro_random_values!(random_values_bls12_381_g1_affine, G1Affine);
+macro_random_values!(random_values_bls12_381_g1_proj, G1);
 
 macro_random_values!(random_values_bls12_381_g2_affine, G2Affine);
 
