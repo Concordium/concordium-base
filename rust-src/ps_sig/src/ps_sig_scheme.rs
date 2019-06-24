@@ -273,7 +273,6 @@ macro_rules! macro_test_sign_verify_unknown_message_ffi {
             let mut sk_bytes = [0u8; 21 * <$pairing_type as Pairing>::SCALAR_LENGTH];
             let mut pk_bytes = [0u8; 21 * <$pairing_type as Pairing>::G_2::GROUP_ELEMENT_LENGTH
                 + 20 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
-            let mut ck_bytes = [0u8; 21 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
             let mut value_bytes = [0u8; 21 * <$pairing_type as Pairing>::SCALAR_LENGTH];
             let mut sig_bytes = [0u8; 2 * <$pairing_type as Pairing>::G_1::GROUP_ELEMENT_LENGTH];
             let mut retrieved_sig_bytes =
@@ -300,11 +299,9 @@ macro_rules! macro_test_sign_verify_unknown_message_ffi {
                     unknown_msg_bytes.as_ptr(),
                     sig_bytes.as_mut_ptr(),
                 );
-                $commitment_key_func_name(i, pk_bytes.as_ptr(), ck_bytes.as_mut_ptr());
                 $retrieve_sig_func_name(
                     i,
                     sig_bytes.as_ptr(),
-                    ck_bytes.as_ptr(),
                     randomness_bytes.as_ptr(),
                     retrieved_sig_bytes.as_mut_ptr(),
                 );
