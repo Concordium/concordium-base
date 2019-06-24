@@ -22,7 +22,7 @@ pub fn encrypt_bitwise_bench(c: &mut Criterion) {
     let pk = PublicKey::from(&sk);
     let n = u64::rand(&mut csprng);
     c.bench_function("encryption bitwise", move |b| {
-        b.iter(|| encrypt_u64_bitwise(pk, n))
+        b.iter(|| encrypt_u64_bitwise_iter(pk, n).count())
     });
 }
 
