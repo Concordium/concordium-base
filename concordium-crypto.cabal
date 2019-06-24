@@ -65,7 +65,6 @@ Library
                    dodis_yampolskiy_prf
                    pedersen_scheme
                    elgamal
-                   pedersen_scheme_modular
                    ps_sig
 
 Test-Suite tests
