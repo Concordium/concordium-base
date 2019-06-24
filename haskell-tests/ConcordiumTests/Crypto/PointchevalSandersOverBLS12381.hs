@@ -131,7 +131,7 @@ tests = parallel $
     -- modifyMaxSuccess (const 500) $ describe "Signature cannot be changed." $
     --   mapM_ testOtherSignature' [1..11]
     modifyMaxSuccess (const 500) $ describe "Values cannot be changed with unknown sig." $
-      mapM_ testRandomValues' [1..3] -- only go up to 3 because we generate random values and probablity of generating valid ones diminishes quickly
+      mapM_ testRandomValues' [1..2] -- only go up to 2 because we generate random values and probablity of generating valid ones diminishes quickly
 
     describe "Changing public key invalidates signature of known message." $ do
       forM_ [1..10] $ \n -> do

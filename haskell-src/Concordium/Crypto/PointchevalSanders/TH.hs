@@ -333,7 +333,6 @@ mkDataTysAndTerms InternalParameters{parameters=Parameters{..},..} =
        else return Nothing
 
      data RetrieveResult = RetrieveOrigSignatureMalformed
-                         | RetrieveCommitmentKeyMalformed
                          | RetrieveRandomnessMalformed
                          | RetrieveSignatureOK !Signature
        deriving(Eq, Show)
@@ -352,8 +351,7 @@ mkDataTysAndTerms InternalParameters{parameters=Parameters{..},..} =
        return $!
          case suc of
            k | k == -1 -> RetrieveOrigSignatureMalformed
-             | k == -2 -> RetrieveCommitmentKeyMalformed
-             | k == -3 -> RetrieveRandomnessMalformed
+             | k == -2 -> RetrieveRandomnessMalformed
              | otherwise -> RetrieveSignatureOK (Signature (FBS.FixedByteString retrieved_sig_bytes))
 
      data CommitResult = CommitPublicKeyMalformed

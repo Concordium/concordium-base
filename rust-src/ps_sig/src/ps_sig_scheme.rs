@@ -502,7 +502,7 @@ macro_rules! macro_retrieve_sig {
                 slice_from_c_bytes!(randomness_bytes, <$pairing_type as Pairing>::SCALAR_LENGTH);
             let randomness_res = <$pairing_type>::bytes_to_scalar(&randomness_slice);
             if !randomness_res.is_ok() {
-                return -3;
+                return -2;
             }
             let randomness = randomness_res.unwrap();
             let retrieved_sig_slice: &mut [u8] = mut_slice_from_c_bytes!(
