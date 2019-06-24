@@ -24,4 +24,4 @@ main = hspec $ do
     -- is incorrect, or similar)
     ConcordiumTests.Crypto.PedersenOverBLS12G1.tests
     ConcordiumTests.Crypto.PedersenOverBLS12G2.tests
-    ConcordiumTests.Crypto.Elgamal.tests
+    -- ConcordiumTests.Crypto.Elgamal.tests

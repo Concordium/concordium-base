@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
 use crate::errors::{
-    InternalError::{CurveDecodingError, FieldDecodingError, PublicKeyLengthError},
+    InternalError::{CurveDecodingError, PublicKeyLengthError},
     *,
 };
 
@@ -25,8 +25,6 @@ use curve_arithmetic::curve_arithmetic::*;
 use crate::secret::*;
 
 use rand::*;
-
-use pairing::bls12_381::Bls12;
 
 /// A message
 #[derive(Debug)]
@@ -51,7 +49,9 @@ impl<C: Pairing> PublicKey<C> {
         let vs = &self.0;
         let us = &self.1;
         let s = &self.2;
-        let mut bytes: Vec<u8> = Vec::new();
+        let mut bytes: Vec<u8> = Vec::with_capacity(
+            vs.len() * C::G_1::GROUP_ELEMENT_LENGTH + (us.len() + 1) * C::G_2::GROUP_ELEMENT_LENGTH,
+        );
         for v in vs.iter() {
             bytes.extend_from_slice(&*C::G_1::curve_to_bytes(&v));
         }
@@ -78,7 +78,7 @@ impl<C: Pairing> PublicKey<C> {
         }
         let vlen = (l - C::G_2::GROUP_ELEMENT_LENGTH)
             / (C::G_1::GROUP_ELEMENT_LENGTH + C::G_2::GROUP_ELEMENT_LENGTH);
-        let mut vs: Vec<C::G_1> = Vec::new();
+        let mut vs: Vec<C::G_1> = Vec::with_capacity(vlen);
         for i in 0..vlen {
             let j = i * C::G_1::GROUP_ELEMENT_LENGTH;
             let k = j + C::G_1::GROUP_ELEMENT_LENGTH;
@@ -89,7 +89,7 @@ impl<C: Pairing> PublicKey<C> {
         }
 
         let index = vlen * C::G_1::GROUP_ELEMENT_LENGTH;
-        let mut us: Vec<C::G_2> = Vec::new();
+        let mut us: Vec<C::G_2> = Vec::with_capacity(vlen);
 
         for i in 0..vlen {
             let j = i * C::G_2::GROUP_ELEMENT_LENGTH + index;
@@ -110,12 +110,12 @@ impl<C: Pairing> PublicKey<C> {
     pub fn arbitrary<T>(n: usize, csprng: &mut T) -> PublicKey<C>
     where
         T: Rng, {
-        let mut vs: Vec<C::G_1> = Vec::new();
+        let mut vs: Vec<C::G_1> = Vec::with_capacity(n);
         for _i in 0..n {
             vs.push(C::G_1::generate(csprng));
         }
 
-        let mut us: Vec<C::G_2> = Vec::new();
+        let mut us: Vec<C::G_2> = Vec::with_capacity(n);
         for _i in 0..n {
             us.push(C::G_2::generate(csprng));
         }
@@ -161,80 +161,86 @@ impl<'a, C: Pairing> From<&'a SecretKey<C>> for PublicKey<C> {
     }
 }
 
-macro_rules! macro_test_public_key_to_byte_conversion {
-    ($function_name:ident, $pairing_type:path) => {
-        #[test]
-        pub fn $function_name() {
-            let mut csprng = thread_rng();
-            for i in 1..20 {
-                let val = PublicKey::<$pairing_type>::arbitrary(i, &mut csprng);
-                let res_val2 = PublicKey::<$pairing_type>::from_bytes(&*val.to_bytes());
-                assert!(res_val2.is_ok());
-                let val2 = res_val2.unwrap();
-                assert_eq!(val2, val);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::Bls12;
+
+    macro_rules! macro_test_public_key_to_byte_conversion {
+        ($function_name:ident, $pairing_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for i in 1..20 {
+                    let val = PublicKey::<$pairing_type>::arbitrary(i, &mut csprng);
+                    let res_val2 = PublicKey::<$pairing_type>::from_bytes(&*val.to_bytes());
+                    assert!(res_val2.is_ok());
+                    let val2 = res_val2.unwrap();
+                    assert_eq!(val2, val);
+                }
             }
-        }
-    };
-}
+        };
+    }
 
-macro_test_public_key_to_byte_conversion!(public_key_to_byte_conversion_bls12_381, Bls12);
+    macro_test_public_key_to_byte_conversion!(public_key_to_byte_conversion_bls12_381, Bls12);
 
-macro_rules! macro_test_sign_verify_pass {
-    ($function_name:ident, $pairing_type:path) => {
-        #[test]
-        pub fn $function_name() {
-            let mut csprng = thread_rng();
-            for i in 1..20 {
-                let sk = SecretKey::<$pairing_type>::generate(i, &mut csprng);
-                let pk = PublicKey::from(&sk);
-                let message = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
-                let sig = sk.sign_known_message(&message, &mut csprng);
-                assert!(sig.is_ok());
-                assert!(&pk.verify(&sig.unwrap(), &message));
+    macro_rules! macro_test_sign_verify_pass {
+        ($function_name:ident, $pairing_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for i in 1..20 {
+                    let sk = SecretKey::<$pairing_type>::generate(i, &mut csprng);
+                    let pk = PublicKey::from(&sk);
+                    let message = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
+                    let sig = sk.sign_known_message(&message, &mut csprng);
+                    assert!(sig.is_ok());
+                    assert!(&pk.verify(&sig.unwrap(), &message));
+                }
             }
-        }
-    };
-}
-macro_test_sign_verify_pass!(sign_verify_pass_bls12_381, Bls12);
+        };
+    }
+    macro_test_sign_verify_pass!(sign_verify_pass_bls12_381, Bls12);
 
-macro_rules! macro_test_sign_verify_different_message {
-    ($function_name:ident, $pairing_type:path) => {
-        #[test]
-        pub fn $function_name() {
-            let mut csprng = thread_rng();
-            for i in 1..20 {
-                let sk = SecretKey::<$pairing_type>::generate(i, &mut csprng);
-                let pk = PublicKey::from(&sk);
-                let message = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
-                let different_message = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
-                let sig = sk.sign_known_message(&message, &mut csprng);
-                assert!(sig.is_ok());
-                assert!(!&pk.verify(&sig.unwrap(), &different_message));
+    macro_rules! macro_test_sign_verify_different_message {
+        ($function_name:ident, $pairing_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for i in 1..20 {
+                    let sk = SecretKey::<$pairing_type>::generate(i, &mut csprng);
+                    let pk = PublicKey::from(&sk);
+                    let message = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
+                    let different_message = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
+                    let sig = sk.sign_known_message(&message, &mut csprng);
+                    assert!(sig.is_ok());
+                    assert!(!&pk.verify(&sig.unwrap(), &different_message));
+                }
             }
-        }
-    };
-}
+        };
+    }
 
-macro_test_sign_verify_different_message!(sign_verify_different_message_bls12_381, Bls12);
+    macro_test_sign_verify_different_message!(sign_verify_different_message_bls12_381, Bls12);
 
-macro_rules! macro_test_sign_verify_different_sig {
-    ($function_name:ident, $pairing_type:path) => {
-        #[test]
-        pub fn $function_name() {
-            let mut csprng = thread_rng();
-            for i in 1..20 {
-                let sk = SecretKey::<$pairing_type>::generate(i, &mut csprng);
-                let pk = PublicKey::from(&sk);
-                let message = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
-                let different_message = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
-                let sig = sk.sign_known_message(&message, &mut csprng);
-                let different_sig = sk.sign_known_message(&different_message, &mut csprng);
-                assert!(sig.is_ok());
-                assert!(different_sig.is_ok());
-                assert!(!&pk.verify(&different_sig.unwrap(), &message));
+    macro_rules! macro_test_sign_verify_different_sig {
+        ($function_name:ident, $pairing_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for i in 1..20 {
+                    let sk = SecretKey::<$pairing_type>::generate(i, &mut csprng);
+                    let pk = PublicKey::from(&sk);
+                    let message = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
+                    let different_message = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
+                    let sig = sk.sign_known_message(&message, &mut csprng);
+                    let different_sig = sk.sign_known_message(&different_message, &mut csprng);
+                    assert!(sig.is_ok());
+                    assert!(different_sig.is_ok());
+                    assert!(!&pk.verify(&different_sig.unwrap(), &message));
+                }
             }
-        }
-    };
-}
+        };
+    }
 
-macro_test_sign_verify_different_sig!(sign_verify_different_sig_bls12_381, Bls12);
+    macro_test_sign_verify_different_sig!(sign_verify_different_sig_bls12_381, Bls12);
+}

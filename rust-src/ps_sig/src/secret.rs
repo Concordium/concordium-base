@@ -16,7 +16,7 @@ use serde::{Deserializer, Serializer};
 
 use crate::{
     errors::{
-        InternalError::{CurveDecodingError, FieldDecodingError, SecretKeyLengthError},
+        InternalError::{FieldDecodingError, SecretKeyLengthError},
         *,
     },
     known_message::*,
@@ -27,8 +27,6 @@ use curve_arithmetic::curve_arithmetic::*;
 use pairing::Field;
 
 use rand::*;
-
-use pairing::bls12_381::Bls12;
 
 /// A secret key
 #[derive(Debug)]
@@ -139,20 +137,26 @@ impl<C: Pairing> SecretKey<C> {
     }
 }
 
-macro_rules! macro_test_secret_key_to_byte_conversion {
-    ($function_name:ident, $pairing_type:path) => {
-        #[test]
-        pub fn $function_name() {
-            let mut csprng = thread_rng();
-            for i in 0..20 {
-                let val = SecretKey::<$pairing_type>::generate(i, &mut csprng);
-                let res_val2 = SecretKey::<$pairing_type>::from_bytes(&*val.to_bytes());
-                assert!(res_val2.is_ok());
-                let val2 = res_val2.unwrap();
-                assert_eq!(val2, val);
-            }
-        }
-    };
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::Bls12;
 
-macro_test_secret_key_to_byte_conversion!(secret_key_to_byte_conversion_bls12_381, Bls12);
+    macro_rules! macro_test_secret_key_to_byte_conversion {
+        ($function_name:ident, $pairing_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for i in 0..20 {
+                    let val = SecretKey::<$pairing_type>::generate(i, &mut csprng);
+                    let res_val2 = SecretKey::<$pairing_type>::from_bytes(&*val.to_bytes());
+                    assert!(res_val2.is_ok());
+                    let val2 = res_val2.unwrap();
+                    assert_eq!(val2, val);
+                }
+            }
+        };
+    }
+
+    macro_test_secret_key_to_byte_conversion!(secret_key_to_byte_conversion_bls12_381, Bls12);
+}

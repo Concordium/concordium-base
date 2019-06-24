@@ -38,7 +38,7 @@ testCorrectSignature =
           monadicIO $ do
             (_, publicKey, _, _, values, randomness, knownMsgSig, unknownMsgSig) <- run $ setup n
             assert (verifySignature n publicKey knownMsgSig values == VerifySignatureOK)
-            let RetrieveSignatureOK retrievedSig = retrieveSignature n unknownMsgSig randomness
+            let RetrieveSignatureOK retrievedSig = retrieveSignature unknownMsgSig randomness
             let res = verifySignature n publicKey retrievedSig values
             assert (res == VerifySignatureOK)
 
@@ -59,7 +59,7 @@ randomValue = EncodedValue . FBS.pack <$> vector (FBS.fixedLength (undefined :: 
 testCorrectRandomness :: Int -> PublicKey -> Signature -> Randomness -> EncodedValues -> Property
 testCorrectRandomness n publicKey unknownMsgSig targetRandomness values =
   forAll randomRandomness $ \randomness -> targetRandomness /= randomness ==>
-                                           let rs = retrieveSignature n unknownMsgSig randomness
+                                           let rs = retrieveSignature unknownMsgSig randomness
                                            in rs /= RetrieveRandomnessMalformed ==>
                                              case rs of
                                                RetrieveSignatureOK retrievedSig ->
@@ -99,7 +99,7 @@ testRandomValues n publicKey unknownMsgSig randomness targetValues =
   forAll (replicateM n randomValue) $
     \randomVals ->
       targetValues /= randomVals ==>
-      let rs = retrieveSignature n unknownMsgSig randomness
+      let rs = retrieveSignature unknownMsgSig randomness
       in case rs of
            RetrieveSignatureOK retrievedSig ->
                let res = verifySignature n publicKey retrievedSig randomVals
@@ -122,7 +122,7 @@ tests = parallel $
       (_, publicKey, _, _, values, randomness, knownMsgSig, unknownMsgSig) <- runIO $ setup n
       specify ("Signature of known message checks out, n = " ++ show n) $
           verifySignature n publicKey knownMsgSig values `shouldBe` VerifySignatureOK
-      let RetrieveSignatureOK retrievedSig = retrieveSignature n unknownMsgSig randomness
+      let RetrieveSignatureOK retrievedSig = retrieveSignature unknownMsgSig randomness
       specify ("Signature of unknown message, retrieved, checks out, n = " ++ show n) $
           verifySignature n publicKey retrievedSig values `shouldBe` VerifySignatureOK
 
@@ -147,5 +147,5 @@ tests = parallel $
       publicKey' <- runIO $ genPublicKey n
       when (publicKey /= publicKey') $
         specify ("Different public keys, verify should fail, n = " ++ show n) $
-        let RetrieveSignatureOK retrievedSig = retrieveSignature n unknownMsgSig randomness
+        let RetrieveSignatureOK retrievedSig = retrieveSignature unknownMsgSig randomness
         in verifySignature n publicKey' retrievedSig values `shouldBe` VerifySignatureIncorrect

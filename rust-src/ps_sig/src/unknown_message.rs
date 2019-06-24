@@ -1,12 +1,7 @@
-use crate::errors::{
-    InternalError::{CurveDecodingError, FieldDecodingError, MessageVecLengthError},
-    *,
-};
+use crate::errors::{InternalError::CurveDecodingError, *};
 use curve_arithmetic::curve_arithmetic::*;
 
 use rand::*;
-
-use pairing::bls12_381::Bls12;
 
 #[derive(Debug)]
 pub struct UnknownMessage<C: Pairing>(pub(crate) C::G_1);
@@ -39,18 +34,27 @@ impl<C: Pairing> UnknownMessage<C> {
     }
 }
 
-macro_rules! macro_test_unknown_message_to_byte_conversion {
-    ($function_name:ident, $pairing_type:path) => {
-        #[test]
-        pub fn $function_name() {
-            let mut csprng = thread_rng();
-            for _i in 0..20 {
-                let x = UnknownMessage::<$pairing_type>::arbitrary(&mut csprng);
-                let y = UnknownMessage::<$pairing_type>::from_bytes(&*x.to_bytes());
-                assert!(y.is_ok());
-                assert_eq!(x, y.unwrap());
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::Bls12;
+
+    macro_rules! macro_test_unknown_message_to_byte_conversion {
+        ($function_name:ident, $pairing_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for _i in 0..20 {
+                    let x = UnknownMessage::<$pairing_type>::arbitrary(&mut csprng);
+                    let y = UnknownMessage::<$pairing_type>::from_bytes(&*x.to_bytes());
+                    assert!(y.is_ok());
+                    assert_eq!(x, y.unwrap());
+                }
             }
-        }
-    };
+        };
+    }
+    macro_test_unknown_message_to_byte_conversion!(
+        unknown_message_to_byte_conversion_bls12_381,
+        Bls12
+    );
 }
-macro_test_unknown_message_to_byte_conversion!(unknown_message_to_byte_conversion_bls12_381, Bls12);

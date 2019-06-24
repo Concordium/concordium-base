@@ -100,9 +100,9 @@ mkForeignImports InternalParameters{parameters=Parameters{..},..} = do
   -- -3 if randomness malformed
   -- 1 if everything OK
   -- This function is pure.
-  retrieveSig <- forImpD cCall unsafe cRetrieveSignature retrieveSignatureName [t| CSize -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> CInt |]
+  retrieveSig <- forImpD cCall unsafe cRetrieveSignature retrieveSignatureName [t| Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> CInt |]
   -- Commit to a list of values.
-  -- input is n, public key, message, array to write the commitment, and array to write the randomness.
+  -- public key, message,  to write the commitment, and array to write the randomness.
   -- return value is
   -- -1 if public key malformed
   -- -2 if message malformed
@@ -337,14 +337,13 @@ mkDataTysAndTerms InternalParameters{parameters=Parameters{..},..} =
                          | RetrieveSignatureOK !Signature
        deriving(Eq, Show)
 
-     retrieveSignature :: Int -> Signature -> Randomness -> RetrieveResult
-     retrieveSignature n sig r = unsafePerformIO $ do
+     retrieveSignature :: Signature -> Randomness -> RetrieveResult
+     retrieveSignature sig r = unsafePerformIO $ do
        retrieved_sig_bytes <- mallocForeignPtrBytes signatureSize
        suc <- withSignature sig $
                 \orig_sig_bytes -> withRandomness r $
                     \randomness_bytes -> withForeignPtr retrieved_sig_bytes $
                       \retrieved_sig_bytes' -> return $! $(varE retrieveSignatureName)
-                                                         (fromIntegral n)
                                                          orig_sig_bytes
                                                          randomness_bytes
                                                          retrieved_sig_bytes'

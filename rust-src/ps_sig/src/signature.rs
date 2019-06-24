@@ -14,10 +14,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use pairing::bls12_381::Bls12;
-
 use crate::errors::{
-    InternalError::{CurveDecodingError, FieldDecodingError, SignatureLengthError},
+    InternalError::{CurveDecodingError, SignatureLengthError},
     *,
 };
 use curve_arithmetic::curve_arithmetic::*;
@@ -61,19 +59,24 @@ impl<C: Pairing> Signature<C> {
     }
 }
 
-macro_rules! macro_test_signature_to_byte_conversion {
-    ($function_name:ident, $pairing_type:path) => {
-        #[test]
-        pub fn $function_name() {
-            let mut csprng = thread_rng();
-            for _i in 0..20 {
-                let x = Signature::<$pairing_type>::arbitrary(&mut csprng);
-                let y = Signature::<$pairing_type>::from_bytes(&*x.to_bytes());
-                assert!(y.is_ok());
-                assert_eq!(x, y.unwrap());
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::Bls12;
+    macro_rules! macro_test_signature_to_byte_conversion {
+        ($function_name:ident, $pairing_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for _i in 0..20 {
+                    let x = Signature::<$pairing_type>::arbitrary(&mut csprng);
+                    let y = Signature::<$pairing_type>::from_bytes(&*x.to_bytes());
+                    assert!(y.is_ok());
+                    assert_eq!(x, y.unwrap());
+                }
             }
-        }
-    };
-}
+        };
+    }
 
-macro_test_signature_to_byte_conversion!(signature_to_byte_conversion_bls12_381, Bls12);
+    macro_test_signature_to_byte_conversion!(signature_to_byte_conversion_bls12_381, Bls12);
+}
