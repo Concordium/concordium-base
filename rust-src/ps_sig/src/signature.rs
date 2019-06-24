@@ -14,15 +14,14 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
+use pairing::bls12_381::Bls12;
+
 use crate::errors::{
     InternalError::{CurveDecodingError, FieldDecodingError, SignatureLengthError},
     *,
 };
 use curve_arithmetic::curve_arithmetic::*;
 
-use pairing::bls12_381::Bls12;
-
-use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
 
 /// A signature
@@ -48,9 +47,9 @@ impl<C: Pairing> Signature<C> {
             return Err(SignatureError(SignatureLengthError));
         }
         match C::G_1::bytes_to_curve(&bytes[..C::G_1::GROUP_ELEMENT_LENGTH]) {
-            Err(x) => Err(SignatureError(CurveDecodingError)),
+            Err(_) => Err(SignatureError(CurveDecodingError)),
             Ok(g) => match C::G_1::bytes_to_curve(&bytes[C::G_1::GROUP_ELEMENT_LENGTH..]) {
-                Err(y) => Err(SignatureError(CurveDecodingError)),
+                Err(_) => Err(SignatureError(CurveDecodingError)),
                 Ok(h) => Ok(Signature(g, h)),
             },
         }

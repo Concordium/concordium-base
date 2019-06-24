@@ -4,10 +4,9 @@ use crate::errors::{
 };
 use curve_arithmetic::curve_arithmetic::*;
 
-use pairing::bls12_381::Bls12;
-
-use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
+
+use pairing::bls12_381::Bls12;
 
 #[derive(Debug)]
 pub struct UnknownMessage<C: Pairing>(pub(crate) C::G_1);
@@ -31,7 +30,7 @@ impl<C: Pairing> UnknownMessage<C> {
     pub fn from_bytes(bytes: &[u8]) -> Result<UnknownMessage<C>, SignatureError> {
         match C::G_1::bytes_to_curve(bytes) {
             Ok(point) => Ok(UnknownMessage(point)),
-            Err(x) => Err(SignatureError(CurveDecodingError)),
+            Err(_) => Err(SignatureError(CurveDecodingError)),
         }
     }
 

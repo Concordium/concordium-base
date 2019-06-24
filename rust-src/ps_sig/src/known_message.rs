@@ -20,10 +20,9 @@ use crate::errors::{
 };
 use curve_arithmetic::curve_arithmetic::*;
 
-use pairing::bls12_381::Bls12;
-
-use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
+
+use pairing::bls12_381::Bls12;
 
 /// A message
 #[derive(Debug)]
@@ -66,7 +65,7 @@ impl<C: Pairing> KnownMessage<C> {
             let j = i * C::SCALAR_LENGTH;
             let k = j + C::SCALAR_LENGTH;
             match C::bytes_to_scalar(&bytes[j..k]) {
-                Err(x) => return Err(SignatureError(FieldDecodingError)),
+                Err(_) => return Err(SignatureError(FieldDecodingError)),
                 Ok(fr) => vs.push(fr),
             }
         }
@@ -81,7 +80,7 @@ impl<C: Pairing> KnownMessage<C> {
     pub fn message_from_bytes(bytes: &[u8]) -> Result<C::ScalarField, SignatureError> {
         match C::bytes_to_scalar(bytes) {
             Ok(scalar) => Ok(scalar),
-            Err(x) => Err(SignatureError(FieldDecodingError)),
+            Err(_) => Err(SignatureError(FieldDecodingError)),
         }
     }
 

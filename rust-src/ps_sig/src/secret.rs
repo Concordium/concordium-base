@@ -26,10 +26,9 @@ use crate::{
 use curve_arithmetic::curve_arithmetic::*;
 use pairing::Field;
 
-use pairing::bls12_381::Bls12;
-
-use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
+
+use pairing::bls12_381::Bls12;
 
 /// A secret key
 #[derive(Debug)]
@@ -74,12 +73,12 @@ impl<C: Pairing> SecretKey<C> {
             let j = i * C::SCALAR_LENGTH;
             let k = j + C::SCALAR_LENGTH;
             match C::bytes_to_scalar(&bytes[j..k]) {
-                Err(x) => return Err(SignatureError(FieldDecodingError)),
+                Err(_) => return Err(SignatureError(FieldDecodingError)),
                 Ok(fr) => vs.push(fr),
             }
         }
         match C::bytes_to_scalar(&bytes[(l - C::SCALAR_LENGTH)..]) {
-            Err(x) => Err(SignatureError(FieldDecodingError)),
+            Err(_) => Err(SignatureError(FieldDecodingError)),
             Ok(fr) => Ok(SecretKey(vs, fr)),
         }
     }
@@ -113,7 +112,7 @@ impl<C: Pairing> SecretKey<C> {
             ms.iter()
                 .zip(ys.iter())
                 .fold(<C::ScalarField as Field>::zero(), |mut acc, (m, y)| {
-                    let mut r = m.clone();
+                    let mut r = *m;
                     r.mul_assign(y);
                     acc.add_assign(&r);
                     acc
