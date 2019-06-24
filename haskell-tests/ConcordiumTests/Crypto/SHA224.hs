@@ -10,7 +10,6 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.Word
 import Test.QuickCheck
 import Test.Hspec
-import Test.Hspec.Expectations
 import Text.Read hiding (get)
 import Data.Char
 

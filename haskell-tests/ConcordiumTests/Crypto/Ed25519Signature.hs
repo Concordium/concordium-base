@@ -1,9 +1,7 @@
 module ConcordiumTests.Crypto.Ed25519Signature where
 
 import           Concordium.Crypto.Ed25519Signature
-import qualified Concordium.Crypto.SignatureScheme as SCH 
 import           Concordium.Crypto.SignatureScheme (KeyPair(..)) 
-import System.Random
 import Data.Serialize
 import qualified Data.ByteString as BS
 import Data.Word

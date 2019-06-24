@@ -3,13 +3,9 @@ module ConcordiumTests.Crypto.Elgamal where
 
 import qualified Concordium.Crypto.Elgamal as Elgamal 
 
-import Data.Serialize
-import qualified Data.ByteString as BS
 import Test.QuickCheck.Monadic
 import Test.QuickCheck
 import Test.Hspec
-import           Foreign.Ptr
-import           Foreign.ForeignPtr
 
 testEncryptDecrypt :: Property
 testEncryptDecrypt = property $ \n ->  monadicIO  $ do 
