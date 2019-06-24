@@ -62,15 +62,13 @@ pub extern "C" fn encrypt_u64(ptr: *mut PublicKey, e: u64, out: &mut [u8; 6144])
         assert!(!ptr.is_null());
         &*ptr
     };
-    let xs: Vec<[u8; 96]> = encrypt_u64_bitwise(pk, e)
-        .iter()
-        .map(Cipher::to_bytes)
-        .collect();
-    for i in 0..64 {
-        for j in 0..96 {
-            out[j + (i * 96)] = xs[i][j];
-        }
-    }
+
+    out.par_chunks_mut(96)
+        .zip(encrypt_u64_bitwise_iter(*pk, e))
+        .for_each(|(out_chunk, cipher)| {
+            let mut cipher_bytes = Cipher::to_bytes(&cipher);
+            out_chunk.swap_with_slice(&mut cipher_bytes);
+        });
 }
 
 #[no_mangle]
@@ -125,15 +123,18 @@ pub extern "C" fn decrypt_u64_unsafe(
     Ok(group_bits_to_u64(v.as_slice()))
 }
 
-pub fn encrypt_u64_bitwise(pk: &PublicKey, e: u64) -> Vec<Cipher> {
-    let mut csprng = thread_rng();
-    let mut er = vec![];
-    for i in 0..64 {
-        er.push((e.get(i as u8), Fr::rand(&mut csprng)));
-    }
-    er.par_iter()
-        .map(|(x, y)| pk.hide_binary_exp(*y, *x))
-        .collect()
+pub fn encrypt_u64_bitwise_iter(
+    pk: PublicKey,
+    e: u64,
+) -> impl IndexedParallelIterator<Item = Cipher> {
+    (0..64).into_par_iter().map(move |i| {
+        let mut csprng = thread_rng();
+        pk.hide_binary_exp(Fr::rand(&mut csprng), e.get(i as u8))
+    })
+}
+
+pub fn encrypt_u64_bitwise(pk: PublicKey, e: u64) -> Vec<Cipher> {
+    encrypt_u64_bitwise_iter(pk, e).collect()
 }
 // take an array of zero's and ones and returns a u64
 pub fn group_bits_to_u64(v: &[G1]) -> u64 {
@@ -207,7 +208,7 @@ pub fn encrypt_decrypt_bitwise_vec() {
     let pk2 = pk.clone();
     for _i in 1..100 {
         let n = u64::rand(&mut csprng);
-        let c = encrypt_u64_bitwise(&pk, n);
+        let c = encrypt_u64_bitwise(pk, n);
         let n2 = decrypt_u64_bitwise(&sk, &c);
         assert_eq!(n, n2);
     }

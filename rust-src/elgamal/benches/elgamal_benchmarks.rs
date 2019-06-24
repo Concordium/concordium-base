@@ -14,6 +14,7 @@ use elgamal::{elgamal::*, public::*, secret::*};
 
 extern crate pairing;
 use pairing::{bls12_381::G1, CurveAffine, CurveProjective, EncodedPoint};
+use rayon::iter::ParallelIterator;
 
 pub fn encrypt_bitwise_bench(c: &mut Criterion) {
     let mut csprng = thread_rng();
@@ -21,7 +22,7 @@ pub fn encrypt_bitwise_bench(c: &mut Criterion) {
     let pk = PublicKey::from(&sk);
     let n = u64::rand(&mut csprng);
     c.bench_function("encryption bitwise", move |b| {
-        b.iter(|| encrypt_u64_bitwise(&pk, n))
+        b.iter(|| encrypt_u64_bitwise(pk, n))
     });
 }
 
@@ -91,7 +92,7 @@ pub fn decrypt_bitwise_bench(c: &mut Criterion) {
     let sk = SecretKey::generate(&mut csprng);
     let pk = PublicKey::from(&sk);
     let n = u64::rand(&mut csprng);
-    let p = encrypt_u64_bitwise(&pk, n);
+    let p = encrypt_u64_bitwise(pk, n);
     c.bench_function("decryption bitwise", move |b| {
         b.iter(|| decrypt_u64_bitwise(&sk, &p))
     });
