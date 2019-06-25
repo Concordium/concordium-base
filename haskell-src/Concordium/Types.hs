@@ -26,6 +26,7 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.ByteString.Builder(toLazyByteString, byteStringHex)
 import Data.Bits
+import Data.Ratio
 
 import Data.Aeson as AE
 
@@ -48,6 +49,28 @@ instance Eq (Hashed a) where
 
 instance Ord (Hashed a) where
     compare a b = compare (hashed a) (hashed b)
+
+-- * Types releated to bakers.
+newtype BakerId = BakerId Word64
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
+
+instance S.Serialize BakerId where
+    get = BakerId <$> G.getWord64be
+    put (BakerId i) = P.putWord64be i
+
+type LeadershipElectionNonce = ByteString
+type BakerSignVerifyKey = Sig.VerifyKey
+type BakerSignPrivateKey = Sig.KeyPair
+type BakerElectionVerifyKey = VRF.PublicKey
+type BakerElectionPrivateKey = VRF.KeyPair
+type LotteryPower = Ratio Amount
+type ElectionDifficulty = Double
+
+type VoterId = Word64
+type VoterVerificationKey = Sig.VerifyKey
+type VoterVRFPublicKey = VRF.PublicKey
+type VoterSignKey = Sig.SignKey
+type VoterPower = Int
 
 -- * Blockchain specific types.
 -- Eventually these will be replaced by types given by the global store.
@@ -195,6 +218,8 @@ data Account = Account {
   -- have an expiration date. Once it is clear how this date is used it will be
   -- lifted up so that we only ever check credentials which are not out of date.
   ,_accountCredentials :: ![CredentialDeploymentInformation]
+  -- |The baker to which this account's stake is delegated (if any).
+  ,_accountStakeDelegate :: Maybe BakerId
   } deriving(Show)
 
 makeLenses ''Account
@@ -207,8 +232,9 @@ instance S.Serialize Account where
                     S.put _accountEncryptionKey <>
                     S.put _accountVerificationKey <>
                     S.put _accountSignatureScheme <>
-                    S.put _accountCredentials
-  get = Account <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get
+                    S.put _accountCredentials <>
+                    S.put _accountStakeDelegate
+  get = Account <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get
 
 instance HashableTo Hash.Hash Account where
   getHash = Hash.hash . S.runPut . S.put
@@ -266,27 +292,4 @@ type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 -- TODO: The hash is redundant; should be removed
 type BlockNonce = (VRF.Hash, VRF.Proof)
-
--- * Types releated to bakers.
-newtype BakerId = BakerId Word64
-    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
-
-instance S.Serialize BakerId where
-    get = BakerId <$> G.getWord64be
-    put (BakerId i) = P.putWord64be i
-
-type LeadershipElectionNonce = ByteString
-type BakerSignVerifyKey = Sig.VerifyKey
-type BakerSignPrivateKey = Sig.KeyPair
-type BakerElectionVerifyKey = VRF.PublicKey
-type BakerElectionPrivateKey = VRF.KeyPair
-type LotteryPower = Double
-type ElectionDifficulty = Double
-
-type VoterId = Word64
-type VoterVerificationKey = Sig.VerifyKey
-type VoterVRFPublicKey = VRF.PublicKey
-type VoterSignKey = Sig.SignKey
-type VoterPower = Int
-
 
