@@ -17,7 +17,6 @@ import Concordium.ID.Types
 import Concordium.ID.Attributes
 import qualified Concordium.Crypto.VRF as VRF
 
-import qualified Data.FixedByteString as FBS
 
 import qualified Data.Serialize as S
 

@@ -55,13 +55,11 @@ type ModuleInterfaces = HashMap Core.ModuleRef Interface
 
 -- |Errors which can occur during typechecking.
 data TypingError =
-                 -- |TODO: To be replaced by more precise errors.
-                 OtherErr String
                  -- |Error raised when a declared datatype is instantiated with
                  -- a wrong number of arguments (too few or too many). The first
                  -- argument is the number of given parameters, the second the
                  -- expected number.
-                 | IncorrectNumberOfTypeParameters Int Int
+                   IncorrectNumberOfTypeParameters Int Int
                  -- |A type abstraction is applied to a term which is not a type.
                  | TypeAbstractionNotAppliedToType (Core.Expr Core.ModuleRef)
                  -- |A type appears where a term is expected.
@@ -130,11 +128,23 @@ data TypingError =
                  -- |The module referred to in an expression with the given name
                  -- is not imported (not part of interface's import map).
                  | ModuleNotImported Core.ModuleName
-                 -- |The referenced name does not exist in the given module.
+                 -- |The referenced local definition does not exist in the current module.
+                 | LocalNameNotInScope Core.Name
+                 -- |The referenced imported definition does not exist in the given module.
                  | QualifiedNameNotInScope Core.ModuleRef Core.Name
-                 -- |Module does not exist. Raised when trying to type-check an
-                 -- imported definition from a non-existing module.
+                 -- |A module with the given reference does not exist. Raised when
+                 -- trying to type-check an imported definition from a non-existing module.
                  | ModuleNotExists Core.ModuleRef
+                 -- |The given name is already bound but is attempted to be
+                 -- redefined.
+                 | RedefinitionOfTerm Core.Name
+                 -- |The given type name is already bound but is attempted to be redefined.
+                 | RedefinitionOfType Core.TyName
+                 -- |The contract with the given name has already been defined but
+                 -- |is attempted to be defined again.
+                 | RedefinitionOfContract Core.TyName
+                 -- |Attempting to declare a data type with the given name without constructors.
+                 | DataTypeWithoutConstructors Core.TyName
                  -- |The init method of a contract is not of the correct shape.
                  -- The argument is the name of the contract containing the init
                  -- method.
@@ -162,9 +172,19 @@ data TypingError =
                  | ContractParameterTypeNotStorable Core.TyName (Core.Type Core.ModuleRef)
                  -- |The model type of the contract (as specified by the init
                  -- and receive methods) is not a storable type. The first
-                 -- argument is the name of the contract this error refers to
+                 -- argument is the name of the contract this error refers to,
                  -- the second the given model type.
                  | ContractModelTypeNotStorable Core.TyName (Core.Type Core.ModuleRef)
+                 -- |A contract attempts to implement a local constraint that does
+                 -- not exist. The first argument is the contract this error refers to,
+                 -- the second the name which does not refer to a local constraint.
+                 | LocalConstraintNotExists Core.TyName Core.TyName
+                 -- |A contract attempts to implement an imported constraint that does
+                 -- not exist. The first argument is the contract this error refers to,
+                 -- the second the reference of the module the constraint should be
+                 -- imported from and the third the name which does not refer to a
+                 -- constraint in that module.
+                 | ImportedConstraintNotExists Core.TyName Core.ModuleRef Core.TyName
                  -- |The contract's number of implementations of getter methods
                  -- does not match the number specified in the respective
                  -- constraint. The first argument is the name of the contract
