@@ -48,6 +48,7 @@ testReadUpperShow = property ck
         ck doc = let hsh = Hash.hash (BS.pack doc) in
             Just hsh === readMaybe (toUpper <$> show hsh)
 
+tests :: Spec
 tests = describe "Concordium.Crypto.SHA224" $ do
             it "serialization" $ withMaxSuccess 100000 $ testSerialize
             it "strict vs lazy" $ withMaxSuccess 100000 $ testStrictLazy

@@ -1,13 +1,11 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Concordium.ID.Account where
 
-import GHC.Generics
 import Concordium.ID.Types
 import Data.ByteString.Char8
 import GHC.Word
 import Data.ByteString.Random.MWC
 import System.IO.Unsafe
-import qualified  Concordium.Crypto.Ed25519Signature  as S
 import Concordium.Crypto.SignatureScheme
 import Concordium.Crypto.PRF
 import Concordium.ID.Attributes
@@ -17,10 +15,7 @@ import qualified Data.ByteString as BS
 import qualified Data.FixedByteString as FBS
 import Data.Base58String.Bitcoin
 
-import Foreign.Storable(peek)
-import Foreign.Ptr(castPtr)
 import Data.Serialize
-import Data.Hashable
 
 
 
@@ -136,23 +131,27 @@ gcpibPubKey =  let (SHA256.Hash x) = SHA256.hash $ pack "Gotham City Post Indust
                       in  IP_PK (FBS.toByteString x)
 
 
+arData :: [(AnonimityRevokerIdentity, SecretShare)]
 arData = [(AR_ID $ pack "Gotham City Police Department", Share $ unsafePerformIO $ random (fromIntegral 48))]
 
+regId :: CredentialRegistrationID
 regId = RegIdCred $ unsafePerformIO $ random (fromIntegral 48)
 
+scheme :: SchemeId
 scheme = Ed25519 
 
 
+encKey :: AccountEncryptionKey
 encKey = EncKeyAcc ( unsafePerformIO $ random (fromIntegral 48))
 
+policy :: Policy
 policy = Conj (AtomicBD AgeOver18) (AtomicCitizenship EU) 
 
+aux :: ByteString
 aux = pack "aux"
 
+proof :: ZKProof
 proof = Proof $ pack "proof of bot"
-
-randomAcc = unsafePerformIO $ do keypair <- S.newKeyPair
-                                 return $ createAccount (verifyKey keypair)
 
 fakeSign::ByteString -> ByteString
 fakeSign x = SHA256.hashToByteString (SHA256.hash x)

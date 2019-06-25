@@ -1,19 +1,8 @@
 {-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances #-}
 module Concordium.Crypto.SignatureScheme where
 import           Data.ByteString (ByteString) 
-import           Concordium.Crypto.ByteStringHelpers
 import           Data.Word
-import qualified Data.FixedByteString as FBS
 import           Data.Serialize
-import           Data.Serialize.Put
-import           Data.Serialize.Get
-import qualified Data.ByteString as B
-import           Data.Typeable
-import           System.IO.Unsafe
-import           Test.QuickCheck (Arbitrary(..))
-import           System.Random
-
- 
 
 
 newtype SignKey = SignKey ByteString

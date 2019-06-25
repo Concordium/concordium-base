@@ -1,26 +1,22 @@
 {-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric #-}
 module Concordium.ID.Types where
 
-import qualified Data.ByteString    as BS
 import           Data.ByteString    (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as LC
 import           Data.ByteString.Builder(toLazyByteString, byteStringHex)
-import           Data.Time
-import           Data.Word
 import qualified Data.FixedByteString as FBS
 import           Concordium.ID.Attributes
 import           Concordium.Crypto.SignatureScheme
 import           Concordium.Crypto.PRF
 import           Data.Serialize
 import           GHC.Generics
-import           Data.Typeable
 import           Data.Hashable
 import Foreign.Storable(peek)
 import Foreign.Ptr(castPtr)
 import Data.Base58String.Bitcoin
 import System.IO.Unsafe
 
-
+accountAddressSize :: Int
 accountAddressSize = 21
 data AccountAddressSize
 instance FBS.FixedLength AccountAddressSize where

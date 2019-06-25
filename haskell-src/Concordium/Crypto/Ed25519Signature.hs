@@ -12,12 +12,11 @@ import           Data.IORef
 import           Data.Word
 import           System.IO.Unsafe
 import           Foreign.Ptr
-import           Data.Serialize
 import qualified Data.ByteString  as B
 import           Data.ByteString (ByteString) 
 import           Data.ByteString.Internal
 import           Foreign.C.Types
-import           Test.QuickCheck (Arbitrary(..))
+import           Test.QuickCheck (Gen, Arbitrary(..))
 import           System.Random
 
 
@@ -106,11 +105,8 @@ ed25519 = SCH.SigScheme { SCH.schemeId = Ed25519,
                         }
 
 
-
-
-
-instance Arbitrary SCH.KeyPair where
-          arbitrary = fst . randomKeyPair . mkStdGen <$> arbitrary
+genKeyPair :: Gen KeyPair
+genKeyPair = fst . randomKeyPair . mkStdGen <$> arbitrary
 
 randomKeyPair :: RandomGen g => g -> (SCH.KeyPair, g)
 randomKeyPair gen = (key, gen')

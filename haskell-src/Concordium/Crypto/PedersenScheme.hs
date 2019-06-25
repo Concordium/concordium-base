@@ -6,7 +6,6 @@ module Concordium.Crypto.PedersenScheme
  where
 
 import           Concordium.Crypto.ByteStringHelpers
-import           Data.IORef
 import           Data.Word
 import           System.IO.Unsafe
 import           Foreign.Ptr
@@ -16,9 +15,7 @@ import qualified Data.ByteString  as B
 import           Data.ByteString (ByteString, empty) 
 import qualified Data.FixedByteString as FBS
 import           Data.FixedByteString (FixedByteString)
-import           System.Random
 import           Foreign.C.Types
-import           Test.QuickCheck (Arbitrary(..))
 
 -- input [n:Word32] number of values
 -- input [key_bytes:: Ptr Word8] a byte array to fill with key bytes
@@ -36,6 +33,7 @@ groupElementSize = 48
 fieldElementSize :: Int  
 fieldElementSize = 32  
 
+randomnessSize :: Int
 randomnessSize = fieldElementSize
 
 data ValueSize
@@ -61,7 +59,7 @@ instance Serialize CommitmentKey where
     get = do (b,n) <- get 
              return $ CommitmentKey b n 
 instance Show CommitmentKey where
-    show (CommitmentKey key n) = byteStringToHex  key
+    show (CommitmentKey key _) = byteStringToHex  key
 
 data Value = Value (FixedByteString ValueSize)
     deriving(Eq)

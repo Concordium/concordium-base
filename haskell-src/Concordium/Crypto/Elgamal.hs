@@ -7,15 +7,8 @@ import           Data.ByteString.Internal
 import           Foreign.Ptr
 import           Foreign.ForeignPtr
 import           Data.Word
-import           System.IO.Unsafe
-import           Control.Monad
-import           Data.Serialize
-import           Data.Hashable
-import           Data.Bits
-import           Foreign.Storable           (peek)
-import           Text.Read
-import           Data.Char
 
+u64CipherSize :: Int
 u64CipherSize = 6144
 
 data ElgamalSecretKeyData

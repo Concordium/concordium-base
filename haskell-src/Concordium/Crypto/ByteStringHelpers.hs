@@ -3,6 +3,7 @@ module Concordium.Crypto.ByteStringHelpers where
 
 import           Text.Printf
 import           Data.ByteString hiding (length)
+import           Data.ByteString.Unsafe
 import qualified Data.FixedByteString as FBS
 import           Data.ByteString.Internal
 import           Foreign.Ptr
@@ -10,11 +11,10 @@ import           Foreign.ForeignPtr
 import           Data.Word
 import qualified Data.List as L
 import           Foreign.Storable
+import           Foreign.Marshal.Utils
 import           System.IO.Unsafe
 import           Control.Monad
 import Data.Serialize
-import Data.Serialize.Put
-import Data.Serialize.Get
 
 wordToHex :: Word8 -> [Char]
 wordToHex x = printf "%.2x" x
@@ -56,8 +56,15 @@ putForeignPtrWord8 n fp = putWord32be (fromIntegral n) <> mapM_ putWord8 (unsafe
 getForeignPtrWord8 :: Get (Int, ForeignPtr Word8)
 getForeignPtrWord8 = do
   n <- fromIntegral <$> getWord32be
-  bs <- replicateM n getWord8
-  return (n, listToForeignPtr n bs)
+  bs <- getByteString n
+  let r = unsafeDupablePerformIO $ do
+        fp <- mallocForeignPtrBytes n
+        withForeignPtr fp $
+            \fpp ->
+              unsafeUseAsCString bs $
+                \bsp -> copyBytes (castPtr fpp) bsp n
+        return fp
+  return (n, r)
 
 -- This is a safe method as long as the first argument <= length of the list.
 -- Giving the first argument makes the method more efficient in current use cases.

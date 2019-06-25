@@ -67,6 +67,7 @@ Library
                    ps_sig
 
 Test-Suite tests
+  default-language: Haskell2010
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs: haskell-tests
@@ -90,6 +91,7 @@ Test-Suite tests
    ConcordiumTests.Crypto.PointchevalSandersOverBLS12381
 
 Executable perf-test
+  default-language: Haskell2010
   main-is: Perf.hs
   hs-source-dirs: haskell-tests
   build-depends: base >= 4.7

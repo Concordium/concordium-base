@@ -11,8 +11,6 @@ module Concordium.Crypto.PRF(
 ) where
 
 import           Concordium.Crypto.ByteStringHelpers
-import           Data.ByteString            (ByteString)
-import qualified Data.ByteString            as B
 import qualified Data.FixedByteString       as FBS
 import           Foreign.Ptr
 import           Data.Word
@@ -20,9 +18,6 @@ import           System.IO.Unsafe
 import           Data.Serialize
 import           Foreign.C.Types
 import           Data.IORef
-import           Concordium.Crypto.SHA256
-import           System.Random
-import           Test.QuickCheck (Arbitrary(..))
 
 
 foreign import ccall "prf_key" rs_prf_key :: Ptr Word8 -> IO()
@@ -76,7 +71,7 @@ newPrfKey =
                                  
 
 test :: IO () 
-test = do sks <- mapM (\ _ -> newPrfKey) [1]
+test = do sks <- mapM (\ _ -> newPrfKey) [1 :: Int]
           let ms = map f sks 
           let rs = zip sks ms  in
               mapM_ g rs
@@ -90,13 +85,13 @@ test = do sks <- mapM (\ _ -> newPrfKey) [1]
 prf :: PrfKey -> Word8-> PrfObj
 prf (PrfKey sk) n = PrfObj $ unsafeDupablePerformIO  $ 
                         do suc <- newIORef(0::Int) 
-                           p  <- FBS.create $ \prf -> 
+                           p  <- FBS.create $ \prfp -> 
                             do pc <- FBS.withPtr sk $ \sk' -> 
-                                       rs_prf prf  sk' n 
+                                       rs_prf prfp  sk' n 
                                if (pc == 1) then writeIORef suc 1  
                                else  writeIORef suc 0  
                            suc' <- readIORef suc
                            case suc' of
                              1 -> return p
-                             0 -> error "PRF failed"
+                             _ -> error "PRF failed"
 
