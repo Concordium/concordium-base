@@ -3,13 +3,9 @@ module ConcordiumTests.Crypto.Elgamal where
 
 import qualified Concordium.Crypto.Elgamal as Elgamal 
 
-import Data.Serialize
-import qualified Data.ByteString as BS
 import Test.QuickCheck.Monadic
 import Test.QuickCheck
 import Test.Hspec
-import           Foreign.Ptr
-import           Foreign.ForeignPtr
 
 testEncryptDecrypt :: Property
 testEncryptDecrypt = property $ \n ->  monadicIO  $ do 
@@ -22,7 +18,7 @@ testEncryptDecrypt = property $ \n ->  monadicIO  $ do
 
 
 tests :: Spec
-tests = parallel $ describe "Concordium.Crypto.Elgamal" $ do
+tests = describe "Concordium.Crypto.Elgamal" $ do
     describe "Encrypt decrypt" $ do
         it "Encrypt decrypt word64" $ withMaxSuccess 1000 $ testEncryptDecrypt
 

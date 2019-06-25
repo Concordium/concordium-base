@@ -14,7 +14,7 @@
 
 use core::fmt::{self, Display};
 // use pairing::{GroupDecodingError, PrimeFieldDecodingError};
-use curve_arithmetic::curve_arithmetic::*;
+// use curve_arithmetic::curve_arithmetic::*;
 
 /// Internal errors.  
 
@@ -43,7 +43,6 @@ impl Display for InternalError {
             InternalError::SignatureKeyLengthError => {
                 write!(f, "wrong length of signature key bytes")
             }
-            InternalError::SignatureLengthError => write!(f, "wrong length of signature bytes "),
             InternalError::MessageVecLengthError => write!(f, "wrong length of message vec bytes "),
             InternalError::KeyMessageLengthMismatch => {
                 write!(f, "wrong message vec length or key length or both")

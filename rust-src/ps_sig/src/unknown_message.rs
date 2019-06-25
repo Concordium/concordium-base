@@ -1,12 +1,6 @@
-use crate::errors::{
-    InternalError::{CurveDecodingError, FieldDecodingError, MessageVecLengthError},
-    *,
-};
+use crate::errors::{InternalError::CurveDecodingError, *};
 use curve_arithmetic::curve_arithmetic::*;
 
-use pairing::bls12_381::Bls12;
-
-use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
 
 #[derive(Debug)]
@@ -31,7 +25,7 @@ impl<C: Pairing> UnknownMessage<C> {
     pub fn from_bytes(bytes: &[u8]) -> Result<UnknownMessage<C>, SignatureError> {
         match C::G_1::bytes_to_curve(bytes) {
             Ok(point) => Ok(UnknownMessage(point)),
-            Err(x) => Err(SignatureError(CurveDecodingError)),
+            Err(_) => Err(SignatureError(CurveDecodingError)),
         }
     }
 
@@ -40,18 +34,27 @@ impl<C: Pairing> UnknownMessage<C> {
     }
 }
 
-macro_rules! macro_test_unknown_message_to_byte_conversion {
-    ($function_name:ident, $pairing_type:path) => {
-        #[test]
-        pub fn $function_name() {
-            let mut csprng = thread_rng();
-            for _i in 0..20 {
-                let x = UnknownMessage::<$pairing_type>::arbitrary(&mut csprng);
-                let y = UnknownMessage::<$pairing_type>::from_bytes(&*x.to_bytes());
-                assert!(y.is_ok());
-                assert_eq!(x, y.unwrap());
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::Bls12;
+
+    macro_rules! macro_test_unknown_message_to_byte_conversion {
+        ($function_name:ident, $pairing_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for _i in 0..20 {
+                    let x = UnknownMessage::<$pairing_type>::arbitrary(&mut csprng);
+                    let y = UnknownMessage::<$pairing_type>::from_bytes(&*x.to_bytes());
+                    assert!(y.is_ok());
+                    assert_eq!(x, y.unwrap());
+                }
             }
-        }
-    };
+        };
+    }
+    macro_test_unknown_message_to_byte_conversion!(
+        unknown_message_to_byte_conversion_bls12_381,
+        Bls12
+    );
 }
-macro_test_unknown_message_to_byte_conversion!(unknown_message_to_byte_conversion_bls12_381, Bls12);

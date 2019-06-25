@@ -3,7 +3,7 @@
 
 use crate::{commitment::*, constants::*, key::*, value::*};
 use curve_arithmetic::{bls12_381_instance::*, curve_arithmetic::*};
-use pairing::bls12_381::{G1, G1Affine, G2Affine};
+use pairing::bls12_381::{G1Affine, G2Affine, G1};
 use rand::*;
 use std::slice;
 

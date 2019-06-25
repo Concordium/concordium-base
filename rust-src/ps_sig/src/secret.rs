@@ -16,7 +16,7 @@ use serde::{Deserializer, Serializer};
 
 use crate::{
     errors::{
-        InternalError::{CurveDecodingError, FieldDecodingError, SecretKeyLengthError},
+        InternalError::{FieldDecodingError, SecretKeyLengthError},
         *,
     },
     known_message::*,
@@ -26,9 +26,6 @@ use crate::{
 use curve_arithmetic::curve_arithmetic::*;
 use pairing::Field;
 
-use pairing::bls12_381::Bls12;
-
-use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
 
 /// A secret key
@@ -74,12 +71,12 @@ impl<C: Pairing> SecretKey<C> {
             let j = i * C::SCALAR_LENGTH;
             let k = j + C::SCALAR_LENGTH;
             match C::bytes_to_scalar(&bytes[j..k]) {
-                Err(x) => return Err(SignatureError(FieldDecodingError)),
+                Err(_) => return Err(SignatureError(FieldDecodingError)),
                 Ok(fr) => vs.push(fr),
             }
         }
         match C::bytes_to_scalar(&bytes[(l - C::SCALAR_LENGTH)..]) {
-            Err(x) => Err(SignatureError(FieldDecodingError)),
+            Err(_) => Err(SignatureError(FieldDecodingError)),
             Ok(fr) => Ok(SecretKey(vs, fr)),
         }
     }
@@ -113,7 +110,7 @@ impl<C: Pairing> SecretKey<C> {
             ms.iter()
                 .zip(ys.iter())
                 .fold(<C::ScalarField as Field>::zero(), |mut acc, (m, y)| {
-                    let mut r = m.clone();
+                    let mut r = *m;
                     r.mul_assign(y);
                     acc.add_assign(&r);
                     acc
@@ -140,20 +137,26 @@ impl<C: Pairing> SecretKey<C> {
     }
 }
 
-macro_rules! macro_test_secret_key_to_byte_conversion {
-    ($function_name:ident, $pairing_type:path) => {
-        #[test]
-        pub fn $function_name() {
-            let mut csprng = thread_rng();
-            for i in 0..20 {
-                let val = SecretKey::<$pairing_type>::generate(i, &mut csprng);
-                let res_val2 = SecretKey::<$pairing_type>::from_bytes(&*val.to_bytes());
-                assert!(res_val2.is_ok());
-                let val2 = res_val2.unwrap();
-                assert_eq!(val2, val);
-            }
-        }
-    };
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::Bls12;
 
-macro_test_secret_key_to_byte_conversion!(secret_key_to_byte_conversion_bls12_381, Bls12);
+    macro_rules! macro_test_secret_key_to_byte_conversion {
+        ($function_name:ident, $pairing_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for i in 0..20 {
+                    let val = SecretKey::<$pairing_type>::generate(i, &mut csprng);
+                    let res_val2 = SecretKey::<$pairing_type>::from_bytes(&*val.to_bytes());
+                    assert!(res_val2.is_ok());
+                    let val2 = res_val2.unwrap();
+                    assert_eq!(val2, val);
+                }
+            }
+        };
+    }
+
+    macro_test_secret_key_to_byte_conversion!(secret_key_to_byte_conversion_bls12_381, Bls12);
+}

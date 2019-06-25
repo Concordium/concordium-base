@@ -1,9 +1,7 @@
 module ConcordiumTests.Crypto.Ed25519Signature where
 
 import           Concordium.Crypto.Ed25519Signature
-import qualified Concordium.Crypto.SignatureScheme as SCH 
 import           Concordium.Crypto.SignatureScheme (KeyPair(..)) 
-import System.Random
 import Data.Serialize
 import qualified Data.ByteString as BS
 import Data.Word
@@ -64,7 +62,7 @@ testSignVerifyEd25519DocumentCollision = property $ ck
 
 
 tests :: Spec
-tests = parallel $ describe "Concordium.Crypto.Ed25519Signature" $ do
+tests = describe "Concordium.Crypto.Ed25519Signature" $ do
             describe "serialization" $ do
                 it "sign key" $ testSerializeSignKeyEd25519 
                 it "verify key" $ testSerializeVerifyKeyEd25519 

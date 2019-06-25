@@ -15,14 +15,11 @@ use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
 use crate::errors::{
-    InternalError::{CurveDecodingError, FieldDecodingError, MessageVecLengthError},
+    InternalError::{FieldDecodingError, MessageVecLengthError},
     *,
 };
 use curve_arithmetic::curve_arithmetic::*;
 
-use pairing::bls12_381::Bls12;
-
-use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
 
 /// A message
@@ -66,7 +63,7 @@ impl<C: Pairing> KnownMessage<C> {
             let j = i * C::SCALAR_LENGTH;
             let k = j + C::SCALAR_LENGTH;
             match C::bytes_to_scalar(&bytes[j..k]) {
-                Err(x) => return Err(SignatureError(FieldDecodingError)),
+                Err(_) => return Err(SignatureError(FieldDecodingError)),
                 Ok(fr) => vs.push(fr),
             }
         }
@@ -81,7 +78,7 @@ impl<C: Pairing> KnownMessage<C> {
     pub fn message_from_bytes(bytes: &[u8]) -> Result<C::ScalarField, SignatureError> {
         match C::bytes_to_scalar(bytes) {
             Ok(scalar) => Ok(scalar),
-            Err(x) => Err(SignatureError(FieldDecodingError)),
+            Err(_) => Err(SignatureError(FieldDecodingError)),
         }
     }
 
@@ -98,20 +95,24 @@ impl<C: Pairing> KnownMessage<C> {
     }
 }
 
-macro_rules! macro_test_message_to_byte_conversion {
-    ($function_name:ident, $pairing_type:path) => {
-        #[test]
-        pub fn $function_name() {
-            let mut csprng = thread_rng();
-            for i in 1..20 {
-                let val = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
-                let res_val2 = KnownMessage::<$pairing_type>::from_bytes(&*val.to_bytes());
-                assert!(res_val2.is_ok());
-                let val2 = res_val2.unwrap();
-                assert_eq!(val2, val);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::Bls12;
+    macro_rules! macro_test_message_to_byte_conversion {
+        ($function_name:ident, $pairing_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for i in 1..20 {
+                    let val = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
+                    let res_val2 = KnownMessage::<$pairing_type>::from_bytes(&*val.to_bytes());
+                    assert!(res_val2.is_ok());
+                    let val2 = res_val2.unwrap();
+                    assert_eq!(val2, val);
+                }
             }
-        }
-    };
+        };
+    }
+    macro_test_message_to_byte_conversion!(message_to_byte_conversion_bls12_381, Bls12);
 }
-
-macro_test_message_to_byte_conversion!(message_to_byte_conversion_bls12_381, Bls12);

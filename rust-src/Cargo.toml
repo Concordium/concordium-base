@@ -8,6 +8,5 @@ members=[
    "dodis_yampolskiy_prf",
    "pedersen_scheme",
    "elgamal",
-   "sigma_protocols",
    "ps_sig" ]
 

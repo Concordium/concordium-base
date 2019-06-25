@@ -95,7 +95,7 @@ impl Curve for G2 {
         }
         match Fr::from_repr(frrepr) {
             Ok(fr) => Ok(fr),
-            Err(x) => Err(FieldDecodingError::NotFieldElement),
+            Err(_) => Err(FieldDecodingError::NotFieldElement),
         }
     }
 
@@ -114,7 +114,7 @@ impl Curve for G2 {
         let mut g = G2Compressed::empty();
         g.as_mut().copy_from_slice(&bytes);
         match g.into_affine() {
-            Err(x) => Err(CurveDecodingError::NotOnCurve),
+            Err(_) => Err(CurveDecodingError::NotOnCurve),
             Ok(g_affine) => Ok(g_affine.into_projective()),
         }
     }
@@ -210,7 +210,7 @@ impl Curve for G1 {
         }
         match Fr::from_repr(frrepr) {
             Ok(fr) => Ok(fr),
-            Err(x) => Err(FieldDecodingError::NotFieldElement),
+            Err(_) => Err(FieldDecodingError::NotFieldElement),
         }
     }
 
@@ -229,7 +229,7 @@ impl Curve for G1 {
         let mut g = G1Compressed::empty();
         g.as_mut().copy_from_slice(&bytes);
         match g.into_affine() {
-            Err(x) => Err(CurveDecodingError::NotOnCurve),
+            Err(_) => Err(CurveDecodingError::NotOnCurve),
             Ok(g_affine) => Ok(g_affine.into_projective()),
         }
     }
@@ -323,7 +323,7 @@ impl Curve for G1Affine {
         }
         match Fr::from_repr(frrepr) {
             Ok(fr) => Ok(fr),
-            Err(x) => Err(FieldDecodingError::NotFieldElement),
+            Err(_) => Err(FieldDecodingError::NotFieldElement),
         }
     }
 
@@ -342,7 +342,7 @@ impl Curve for G1Affine {
         let mut g = G1Compressed::empty();
         g.as_mut().copy_from_slice(&bytes);
         match g.into_affine() {
-            Err(x) => Err(CurveDecodingError::NotOnCurve),
+            Err(_) => Err(CurveDecodingError::NotOnCurve),
             Ok(g_affine) => Ok(g_affine),
         }
     }
@@ -436,7 +436,7 @@ impl Curve for G2Affine {
         }
         match Fr::from_repr(frrepr) {
             Ok(fr) => Ok(fr),
-            Err(x) => Err(FieldDecodingError::NotFieldElement),
+            Err(_) => Err(FieldDecodingError::NotFieldElement),
         }
     }
 
@@ -455,7 +455,7 @@ impl Curve for G2Affine {
         let mut g = G2Compressed::empty();
         g.as_mut().copy_from_slice(&bytes);
         match g.into_affine() {
-            Err(x) => Err(CurveDecodingError::NotOnCurve),
+            Err(_) => Err(CurveDecodingError::NotOnCurve),
             Ok(g_affine) => Ok(g_affine),
         }
     }
@@ -505,7 +505,7 @@ impl Pairing for Bls12 {
         }
         match Fr::from_repr(frrepr) {
             Ok(fr) => Ok(fr),
-            Err(x) => Err(FieldDecodingError::NotFieldElement),
+            Err(_) => Err(FieldDecodingError::NotFieldElement),
         }
     }
 }

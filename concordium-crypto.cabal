@@ -33,6 +33,7 @@ Library
                    Concordium.Crypto.PedersenScheme
                    Concordium.Crypto.PedersenOverBLS12G1
                    Concordium.Crypto.PedersenOverBLS12G2
+                   Concordium.Crypto.PointchevalSandersOverBLS12381
                    Concordium.Crypto.Elgamal
                    Concordium.Crypto.VRF
                    Concordium.Crypto.PRF
@@ -40,9 +41,9 @@ Library
                    Concordium.ID.Attributes
                    Concordium.ID.Types
                    Concordium.ID.Account
-
-  Other-modules:   Concordium.Crypto.ByteStringHelpers
-                   Concordium.Crypto.PedersenScheme.TH
+                   Concordium.Crypto.ByteStringHelpers
+  Other-modules:   Concordium.Crypto.PedersenScheme.TH
+                   Concordium.Crypto.PointchevalSanders.TH
   Build-depends:  base >=4.7
                 , bytestring >=0.10
                 , cereal >=0.5.7
@@ -63,7 +64,7 @@ Library
                    dodis_yampolskiy_prf
                    pedersen_scheme
                    elgamal
-                   pedersen_scheme_modular
+                   ps_sig
 
 Test-Suite tests
   type: exitcode-stdio-1.0
@@ -77,7 +78,7 @@ Test-Suite tests
                     , bytestring >=0.10
                     , cereal >=0.5.7
                     , random >= 1.1
-  ghc-options: -threaded -with-rtsopts=-N -Wall
+  ghc-options: -threaded -with-rtsopts=-N -Wall -O2
   other-modules:
    ConcordiumTests.Crypto.SHA256
    ConcordiumTests.Crypto.SHA224
@@ -86,6 +87,7 @@ Test-Suite tests
    ConcordiumTests.Crypto.PedersenOverBLS12G1
    ConcordiumTests.Crypto.PedersenOverBLS12G2
    ConcordiumTests.Crypto.Elgamal
+   ConcordiumTests.Crypto.PointchevalSandersOverBLS12381
 
 Executable perf-test
   main-is: Perf.hs

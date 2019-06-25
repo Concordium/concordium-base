@@ -2,7 +2,7 @@
 // - bm@concordium.com
 //
 
-use pairing::{Engine, Field, PrimeField};
+use pairing::{Field, PrimeField};
 use rand::*;
 use std::fmt::{Debug, Display};
 
