@@ -168,8 +168,8 @@ mkDataTysAndTerms InternalParameters{parameters=Parameters{..},..} =
        show (EncodedValue v) = fbsHex v
 
      instance Serialize EncodedValue where
-         put (EncodedValue v) = putByteString $ FBS.toByteString v
-         get = EncodedValue . FBS.fromByteString <$> getByteString (FBS.fixedLength (undefined::ValueSize))
+         put (EncodedValue v) = fbsPut v
+         get = EncodedValue <$> fbsGet
 
      type EncodedValues = [EncodedValue]
 
@@ -180,42 +180,52 @@ mkDataTysAndTerms InternalParameters{parameters=Parameters{..},..} =
        show (Randomness r) = byteStringToHex (FBS.toByteString r)
 
      instance Serialize Randomness where
-         put (Randomness c) = putByteString $ FBS.toByteString c
-         get = Randomness. FBS.fromByteString <$> getByteString (FBS.fixedLength (undefined::RandomnessSize))
-
+         put (Randomness c) = fbsPut c
+         get = Randomness <$> fbsGet
 
      newtype Commitment = Commitment (FixedByteString UnknownMessageSize)
          deriving (Eq)
      instance Serialize Commitment where
-         put (Commitment c) = putByteString $ FBS.toByteString c
-         get = Commitment . FBS.fromByteString <$> getByteString (FBS.fixedLength (undefined::UnknownMessageSize))
+         put (Commitment c) = fbsPut c
+         get = Commitment <$> fbsGet
      instance Show Commitment where
          show (Commitment c) = fbsHex c
 
      data SecretKey = SecretKey !Int !(ForeignPtr Word8)
-
      instance Eq SecretKey where
        SecretKey l1 p1 == SecretKey l2 p2 = l1 == l2 && unsafeEqForeignPtr l1 p1 p2
-
      instance Show SecretKey where
        show (SecretKey l p) = unsafeForeignPtrHex l p
+     instance Serialize SecretKey where
+       put (SecretKey n fp) = putForeignPtrWord8 n fp
+       get = uncurry SecretKey <$> getForeignPtrWord8
 
      data PublicKey = PublicKey !Int !(ForeignPtr Word8)
      instance Eq PublicKey where
        PublicKey l1 p1 == PublicKey l2 p2 = l1 == l2 && unsafeEqForeignPtr l1 p1 p2
      instance Show PublicKey where
        show (PublicKey l p) = unsafeForeignPtrHex l p
+     instance Serialize PublicKey where
+       put (PublicKey n fp) = putForeignPtrWord8 n fp
+       get = uncurry PublicKey <$> getForeignPtrWord8
+
 
      data CommitmentKey = CommitmentKey !Int !(ForeignPtr Word8)
      instance Eq CommitmentKey where
        CommitmentKey l1 p1 == CommitmentKey l2 p2 = l1 == l2 && unsafeEqForeignPtr l1 p1 p2
      instance Show CommitmentKey where
        show (CommitmentKey l p) = unsafeForeignPtrHex l p
+     instance Serialize CommitmentKey where
+       put (CommitmentKey n fp) = putForeignPtrWord8 n fp
+       get = uncurry CommitmentKey <$> getForeignPtrWord8
 
      newtype Signature = Signature (FixedByteString SignatureSize)
        deriving(Eq)
      instance Show Signature where
        show (Signature s) = fbsHex s
+     instance Serialize Signature where
+       put (Signature fbs) = fbsPut fbs
+       get = Signature <$> fbsGet
 
      withSecretKey :: SecretKey -> (Ptr Word8 -> IO a) -> IO a
      withSecretKey (SecretKey _ sk_bytes) = withForeignPtr sk_bytes 
@@ -250,7 +260,7 @@ mkDataTysAndTerms InternalParameters{parameters=Parameters{..},..} =
 
      -- Derive public key from secret key. If secret key is malformed return 'Nothing'.
      derivePublicKey :: Int -> SecretKey -> Maybe PublicKey
-     derivePublicKey n sk = unsafePerformIO $ do
+     derivePublicKey n sk = unsafeDupablePerformIO $ do
        pk_bytes <- mallocForeignPtrBytes (publicKeySize n)
        suc <- withSecretKey sk $
                 \sk_bytes -> withForeignPtr pk_bytes $ \pk_bytes' -> 
@@ -309,7 +319,7 @@ mkDataTysAndTerms InternalParameters{parameters=Parameters{..},..} =
        deriving(Eq, Show)
 
      verifySignature :: Int -> PublicKey -> Signature -> EncodedValues -> VerifyResult
-     verifySignature n pk sig vals = unsafePerformIO $ do
+     verifySignature n pk sig vals = unsafeDupablePerformIO $ do
        suc <- withPublicKey pk $
                 \pk_bytes -> withSignature sig $
                   \sig_bytes -> withEncodedValues n vals $
@@ -323,7 +333,7 @@ mkDataTysAndTerms InternalParameters{parameters=Parameters{..},..} =
              | otherwise -> VerifySignatureOK
                 
      deriveCommitmentKey :: Int -> PublicKey -> Maybe CommitmentKey
-     deriveCommitmentKey n pk = unsafePerformIO $ do
+     deriveCommitmentKey n pk = unsafeDupablePerformIO $ do
        ck_bytes <- mallocForeignPtrBytes (commitmentKeySize n)
        suc <- withPublicKey pk $
                 \pk_bytes -> withForeignPtr ck_bytes $
@@ -338,7 +348,7 @@ mkDataTysAndTerms InternalParameters{parameters=Parameters{..},..} =
        deriving(Eq, Show)
 
      retrieveSignature :: Signature -> Randomness -> RetrieveResult
-     retrieveSignature sig r = unsafePerformIO $ do
+     retrieveSignature sig r = unsafeDupablePerformIO $ do
        retrieved_sig_bytes <- mallocForeignPtrBytes signatureSize
        suc <- withSignature sig $
                 \orig_sig_bytes -> withRandomness r $

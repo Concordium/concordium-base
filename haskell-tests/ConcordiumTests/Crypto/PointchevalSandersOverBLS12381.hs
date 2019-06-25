@@ -9,6 +9,8 @@ import Test.QuickCheck.Monadic
 import Test.QuickCheck
 import Test.Hspec
 import Test.Hspec.QuickCheck
+import Data.Serialize
+import Concordium.Crypto.ByteStringHelpers
 
 import Control.Monad
 
@@ -42,7 +44,6 @@ testCorrectSignature =
             let res = verifySignature n publicKey retrievedSig values
             assert (res == VerifySignatureOK)
 
-
 randomRandomness :: Gen Randomness
 randomRandomness = Randomness . FBS.pack <$> vector randomnessSize
 
@@ -52,6 +53,27 @@ randomSignature = Signature . FBS.pack <$> vector signatureSize
 randomValue :: Gen EncodedValue
 randomValue = EncodedValue . FBS.pack <$> vector (FBS.fixedLength (undefined :: ValueSize))
 
+randomCommitment :: Gen Commitment
+randomCommitment = Commitment . FBS.pack <$> vector (FBS.fixedLength (undefined :: UnknownMessageSize))
+
+randomPublicKey :: Gen PublicKey
+randomPublicKey = do
+  n <- choose (1,500)
+  xs <- replicateM n arbitrary
+  return $ PublicKey n (listToForeignPtr n xs)
+
+randomCommitmentKey :: Gen CommitmentKey
+randomCommitmentKey = do
+  n <- choose (1,500)
+  xs <- replicateM n arbitrary
+  return $ CommitmentKey n (listToForeignPtr n xs)
+
+randomSecretKey :: Gen SecretKey
+randomSecretKey = do
+  n <- choose (1,500)
+  xs <- replicateM n arbitrary
+  return $ SecretKey n (listToForeignPtr n xs)
+ 
 -- Check that the signature of unknown message validates only with
 -- correct randomness generated during the commitment phase.
 -- TODO: This is currently testing with random values, which is less than ideal
@@ -113,9 +135,25 @@ testRandomValues' n = do
   (_, publicKey, _, _, values, randomness, _, unknownMsgSig) <- runIO $ setup n
   specify ("n = " ++ show n) $ testRandomValues n publicKey unknownMsgSig randomness values
 
+-- serialization of data structures
+
+testSerialize :: (Eq a, Serialize a, Show a) => Gen a -> Property
+testSerialize g = forAll g $ \v -> Right v === runGet get (runPut (put v))
+
+
+
 tests :: Spec
-tests = parallel $
+tests = 
   describe "Crypto.PointchevalSandersOverBLS12381" $ do
+    modifyMaxSuccess (const 500) $ describe "Serialization tests." $ do
+      specify "Serialize randomness." $ testSerialize randomRandomness
+      specify "Serialize signature." $ testSerialize randomSignature
+      specify "Serialize value." $ testSerialize randomValue
+      specify "Serialize commitment." $ testSerialize randomCommitment
+      specify "Serialize public key." $ testSerialize randomPublicKey
+      specify "Serialize commitment key." $ testSerialize randomCommitmentKey
+      specify "Serialize secret key." $ testSerialize randomSecretKey
+
     describe "Correct signatures validate." $ 
       forM_ [1..10] $ \n ->
       replicateM_ 10 $ do

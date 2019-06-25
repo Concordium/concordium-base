@@ -18,7 +18,7 @@ testEncryptDecrypt = property $ \n ->  monadicIO  $ do
 
 
 tests :: Spec
-tests = parallel $ describe "Concordium.Crypto.Elgamal" $ do
+tests = describe "Concordium.Crypto.Elgamal" $ do
     describe "Encrypt decrypt" $ do
         it "Encrypt decrypt word64" $ withMaxSuccess 1000 $ testEncryptDecrypt
 

@@ -62,7 +62,7 @@ testSignVerifyEd25519DocumentCollision = property $ ck
 
 
 tests :: Spec
-tests = parallel $ describe "Concordium.Crypto.Ed25519Signature" $ do
+tests = describe "Concordium.Crypto.Ed25519Signature" $ do
             describe "serialization" $ do
                 it "sign key" $ testSerializeSignKeyEd25519 
                 it "verify key" $ testSerializeVerifyKeyEd25519 

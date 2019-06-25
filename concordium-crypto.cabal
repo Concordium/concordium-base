@@ -41,9 +41,8 @@ Library
                    Concordium.ID.Attributes
                    Concordium.ID.Types
                    Concordium.ID.Account
-
-  Other-modules:   Concordium.Crypto.ByteStringHelpers
-                   Concordium.Crypto.PedersenScheme.TH
+                   Concordium.Crypto.ByteStringHelpers
+  Other-modules:   Concordium.Crypto.PedersenScheme.TH
                    Concordium.Crypto.PointchevalSanders.TH
   Build-depends:  base >=4.7
                 , bytestring >=0.10

@@ -92,9 +92,9 @@ testSerializeRandomness =
   forAll randomRandomness $ \rand -> Right rand === runGet get (runPut $ put $ rand)
 
 tests :: Spec
-tests = parallel $ modifyMaxSuccess (const 500) $ 
+tests = modifyMaxSuccess (const 500) $ 
   describe "Crypto.PedersenOverBLS12G1" $ do
-    parallel $ describe "Serialization" $ do
+    describe "Serialization" $ do
       specify "Serialization of commitments" testSerializeCommitment
       specify "Serialization of values" testSerializeValues
       specify "Serialization of randomness" testSerializeRandomness

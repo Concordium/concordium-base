@@ -48,7 +48,8 @@ testReadUpperShow = property ck
         ck doc = let hsh = Hash.hash (BS.pack doc) in
             Just hsh === readMaybe (toUpper <$> show hsh)
 
-tests = parallel $ describe "Concordium.Crypto.SHA256" $ do
+tests :: Spec
+tests = describe "Concordium.Crypto.SHA256" $ do
             it "serialization" $ withMaxSuccess 100000 $ testSerialize
             it "strict vs lazy" $ withMaxSuccess 100000 $ testStrictLazy
             it "show then read" $ withMaxSuccess 100000 $ testReadShow

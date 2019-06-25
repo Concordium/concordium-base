@@ -12,7 +12,7 @@ import qualified ConcordiumTests.Crypto.Elgamal
 import qualified ConcordiumTests.Crypto.PointchevalSandersOverBLS12381
 
 main :: IO  ()
-main = hspec $ do
+main = hspec $ parallel $ do
     ConcordiumTests.Crypto.PointchevalSandersOverBLS12381.tests
     ConcordiumTests.Crypto.SHA256.tests
     ConcordiumTests.Crypto.SHA224.tests
