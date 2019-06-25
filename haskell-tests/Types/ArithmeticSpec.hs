@@ -114,7 +114,7 @@ compareChecked2 c1 c2 f g x y = let r1 = f x y
 
 
 -- Specifications specific to signed numeric types
-arithmeticSpecsInt :: forall a . (Bounded a, Num a, Integral a, Arbitrary a, Show a) => Gen a -> SpecWith ()
+arithmeticSpecsInt :: forall a . (Bounded a, Integral a, Arbitrary a, Show a) => Gen a -> SpecWith ()
 arithmeticSpecsInt smallNumGen =
   let bigNumGen = makeBigNumGen smallNumGen
       bigNegNumGen = makeBigNegNumGen smallNumGen
@@ -136,7 +136,7 @@ arithmeticSpecsInt smallNumGen =
 
 
 -- Specifications specific to unsigned numeric types
-arithmeticSpecsWord :: forall a . (Bounded a, Num a, Integral a, Arbitrary a, Show a) => Gen a -> SpecWith ()
+arithmeticSpecsWord :: forall a . (Bounded a, Integral a, Show a) => Gen a -> SpecWith ()
 arithmeticSpecsWord smallNumGen =
   let bigNumGen = makeBigNumGen smallNumGen
   in do
@@ -146,7 +146,7 @@ arithmeticSpecsWord smallNumGen =
     parallel . describe "Word-specific failure of checked operations" $ modifyMaxSuccess (const 50000) $ do
       specify "sub overflow" $ (property $ checkFail subC smallNumGen bigNumGen)
 
-arithmeticSpecs :: forall a . (Bounded a, Num a, Integral a, Arbitrary a, Show a) => Gen a -> SpecWith ()
+arithmeticSpecs :: forall a . (Bounded a, Integral a, Arbitrary a, Show a) => Gen a -> SpecWith ()
 arithmeticSpecs smallNumGen =
   -- specify type for operations
   let add = (+) :: a -> a -> a

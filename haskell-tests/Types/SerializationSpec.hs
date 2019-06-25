@@ -24,10 +24,10 @@ import Types.CoreAllGen(genCAddress)
 groupIntoSize :: Int64 -> [Char]
 groupIntoSize s =
   let kb = s `div` 1000
-      nd = if kb > 0 then truncate (logBase 10 (fromIntegral kb)) else 0
+      nd = if kb > 0 then truncate (logBase 10 (fromIntegral kb) :: Double) else (0 :: Int)
   in if nd == 0 then show kb ++ "kB"
-     else let lb = 10^nd
-              ub = 10^(nd+1)
+     else let lb = 10^nd :: Integer
+              ub = 10^(nd+1) :: Integer
           in show lb ++ " -- " ++ show ub ++ "kB"
 
 -- check that getExpr is left inverse of putExpr

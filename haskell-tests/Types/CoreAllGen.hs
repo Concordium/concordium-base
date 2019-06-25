@@ -14,10 +14,6 @@ import Data.FixedByteString as FBS
 
 import qualified Concordium.Crypto.SHA256 as SHA256
 
-import qualified Concordium.ID.Types(AccountAddress(..))
-import qualified Data.Base58String.Bitcoin as Base58
-
-
 import Test.QuickCheck
 
 genName :: Gen Name
@@ -63,16 +59,16 @@ genType = sized $ genType'
 
 -- TODO remove when implementing Int256
 minInt256 :: Integer
-minInt256 = 2^255
+minInt256 = 2^(255 :: Int)
 
 genLit :: Gen Literal
 genLit = oneof [Str . BS.pack <$> arbitrary
-               ,Int256 . (flip (-) minInt256) . (`mod` 2^256) . abs <$> arbitrary -- TODO adapt when implementing Int256
+               ,Int256 . (flip (-) minInt256) . (`mod` 2^(256 :: Int)) . abs <$> arbitrary -- TODO adapt when implementing Int256
                -- ,Int128 . (flip (-) minInt128) . (`mod` 2^128) . abs <$> arbitrary
                ,Int128 <$> arbitrary -- TODO this should be fine?
                ,Int32 <$> arbitrary
                ,Int64 <$> arbitrary
-               ,Word256 . (`mod` 2^256) . abs <$> arbitrary -- TODO adapt when implementing Word256
+               ,Word256 . (`mod` 2^(256 :: Int)) . abs <$> arbitrary -- TODO adapt when implementing Word256
                -- ,Word128 . (`mod` 2^128) . abs <$> arbitrary
                ,Word128 <$> arbitrary -- TODO this should be fine?
                ,Word32 <$> arbitrary
