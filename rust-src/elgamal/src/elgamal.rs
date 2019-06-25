@@ -2,7 +2,7 @@
 // - bm@concordium.com
 use crate::{cipher::*, errors::*, message::*, public::*, secret::*};
 use bitvec::Bits;
-use libc::{size_t, uint8_t};
+use libc::size_t;
 use rand::*;
 use rayon::{iter::IntoParallelRefIterator, prelude::*};
 use std::slice;
@@ -77,7 +77,7 @@ pub extern "C" fn encrypt_u64(ptr: *mut PublicKey, e: u64, out: &mut [u8; 6144])
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn decrypt_u64(
     ptr: *mut SecretKey,
-    cipher_bytes: *const uint8_t,
+    cipher_bytes: *const u8,
     len: size_t,
 ) -> Result<u64, ElgamalError> {
     let cipher = unsafe {
@@ -103,7 +103,7 @@ pub extern "C" fn decrypt_u64(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn decrypt_u64_unsafe(
     ptr: *mut SecretKey,
-    cipher_bytes: *const uint8_t,
+    cipher_bytes: *const u8,
     len: size_t,
 ) -> Result<u64, ElgamalError> {
     let cipher = unsafe {
