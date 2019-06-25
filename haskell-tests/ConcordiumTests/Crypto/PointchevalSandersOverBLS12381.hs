@@ -173,17 +173,17 @@ tests =
 
     describe "Changing public key invalidates signature of known message." $ do
       forM_ [1..10] $ \n -> do
-      (_, publicKey, _, _, values, _, knownMsgSig, _) <- runIO $ setup n
-      publicKey' <- runIO $ genPublicKey n
-      when (publicKey /= publicKey') $
-        specify ("Different public keys, verify should fail, n = " ++ show n) $
-        verifySignature n publicKey' knownMsgSig values `shouldBe` VerifySignatureIncorrect
+        (_, publicKey, _, _, values, _, knownMsgSig, _) <- runIO $ setup n
+        publicKey' <- runIO $ genPublicKey n
+        when (publicKey /= publicKey') $
+            specify ("Different public keys, verify should fail, n = " ++ show n) $
+            verifySignature n publicKey' knownMsgSig values `shouldBe` VerifySignatureIncorrect
 
     describe "Changing public key invalidates signature of unknown message." $ do
       forM_ [1..10] $ \n -> do
-      (_, publicKey, _, _, values, randomness, _, unknownMsgSig) <- runIO $ setup n
-      publicKey' <- runIO $ genPublicKey n
-      when (publicKey /= publicKey') $
-        specify ("Different public keys, verify should fail, n = " ++ show n) $
-        let RetrieveSignatureOK retrievedSig = retrieveSignature unknownMsgSig randomness
-        in verifySignature n publicKey' retrievedSig values `shouldBe` VerifySignatureIncorrect
+        (_, publicKey, _, _, values, randomness, _, unknownMsgSig) <- runIO $ setup n
+        publicKey' <- runIO $ genPublicKey n
+        when (publicKey /= publicKey') $
+            specify ("Different public keys, verify should fail, n = " ++ show n) $
+            let RetrieveSignatureOK retrievedSig = retrieveSignature unknownMsgSig randomness
+            in verifySignature n publicKey' retrievedSig values `shouldBe` VerifySignatureIncorrect
