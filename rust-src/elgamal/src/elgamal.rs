@@ -139,8 +139,8 @@ pub fn encrypt_u64_bitwise(pk: PublicKey, e: u64) -> Vec<Cipher> {
 // take an array of zero's and ones and returns a u64
 pub fn group_bits_to_u64(v: &[G1]) -> u64 {
     let mut r = 0u64;
-    for (i, _) in v.iter().enumerate() {
-        r.set(i as u8, v[i] == G1::one());
+    for (i, &e) in v.iter().enumerate() {
+        r.set(i as u8, e == G1::one());
     }
     r
 }
