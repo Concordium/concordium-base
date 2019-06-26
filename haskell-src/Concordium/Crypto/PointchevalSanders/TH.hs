@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -163,33 +164,17 @@ mkDataTysAndTerms InternalParameters{parameters=Parameters{..},..} =
      -- Value encoded as a field element.
      newtype EncodedValue = EncodedValue (FixedByteString ValueSize)
          deriving(Eq, Storable)
-
-     instance Show EncodedValue where
-       show (EncodedValue v) = fbsHex v
-
-     instance Serialize EncodedValue where
-         put (EncodedValue v) = fbsPut v
-         get = EncodedValue <$> fbsGet
+         deriving (Show, Serialize) via FBSHex ValueSize
 
      type EncodedValues = [EncodedValue]
 
      newtype Randomness = Randomness (FixedByteString RandomnessSize)
          deriving (Eq)
-
-     instance Show Randomness where
-       show (Randomness r) = byteStringToHex (FBS.toByteString r)
-
-     instance Serialize Randomness where
-         put (Randomness c) = fbsPut c
-         get = Randomness <$> fbsGet
+        deriving (Show, Serialize) via FBSHex RandomnessSize
 
      newtype Commitment = Commitment (FixedByteString UnknownMessageSize)
          deriving (Eq)
-     instance Serialize Commitment where
-         put (Commitment c) = fbsPut c
-         get = Commitment <$> fbsGet
-     instance Show Commitment where
-         show (Commitment c) = fbsHex c
+         deriving (Show, Serialize) via FBSHex UnknownMessageSize
 
      data SecretKey = SecretKey !Int !(ForeignPtr Word8)
      instance Eq SecretKey where
@@ -221,11 +206,7 @@ mkDataTysAndTerms InternalParameters{parameters=Parameters{..},..} =
 
      newtype Signature = Signature (FixedByteString SignatureSize)
        deriving(Eq)
-     instance Show Signature where
-       show (Signature s) = fbsHex s
-     instance Serialize Signature where
-       put (Signature fbs) = fbsPut fbs
-       get = Signature <$> fbsGet
+       deriving (Show, Serialize) via FBSHex SignatureSize
 
      withSecretKey :: SecretKey -> (Ptr Word8 -> IO a) -> IO a
      withSecretKey (SecretKey _ sk_bytes) = withForeignPtr sk_bytes 

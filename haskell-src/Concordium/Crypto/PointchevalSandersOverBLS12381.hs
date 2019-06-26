@@ -1,9 +1,16 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DerivingVia #-}
 module Concordium.Crypto.PointchevalSandersOverBLS12381 where
 
 import Concordium.Crypto.PointchevalSanders.TH
 import Foreign.C.Types
+
+-- This import is needed because otherwise the FBSHex data constructor is hidden
+-- and deriving via does not see that the representations of various types are
+-- the same.
+import Concordium.Crypto.ByteStringHelpers
+
 
 mkPointChevalScheme Parameters{
   cDeriveCommitmentKey = "commitment_key_bls12_381",

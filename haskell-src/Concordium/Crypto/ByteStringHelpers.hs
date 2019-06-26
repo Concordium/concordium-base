@@ -81,3 +81,14 @@ newtype ByteStringHex = ByteStringHex ByteString
 
 instance Show ByteStringHex where
   show (ByteStringHex s) = byteStringToHex s
+
+-- |Wrapper used to automatically derive Show instances in base16 for types
+-- simply wrapping fixed byte stringns.
+newtype FBSHex a = FBSHex (FBS.FixedByteString a)
+
+instance FBS.FixedLength a => Show (FBSHex a) where
+  show (FBSHex s) = fbsHex s
+
+instance FBS.FixedLength a => Serialize (FBSHex a) where
+  put (FBSHex s) = fbsPut s
+  get = FBSHex <$> fbsGet
