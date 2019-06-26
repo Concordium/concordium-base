@@ -4,7 +4,6 @@ module Concordium.ID.Attributes where
 
 
 import           Data.Time
-import           Data.Set
 import           GHC.Generics
 import           Data.Serialize
 
@@ -43,7 +42,7 @@ instance Serialize BirthDate where
 
 instance Attribute_ BirthDate where
     data Predicate BirthDate = AgeOver18 | AgeOver21 | OlderThan Int deriving (Show, Generic)
-    is (OlderThan x) (BirthDate date) = True
+    is (OlderThan _) (BirthDate _) = True
     is AgeOver18 x = is (OlderThan 18) x
     is AgeOver21 x = is (OlderThan 21) x
 
@@ -65,10 +64,10 @@ eea :: [CountryCode]
 eea = [DK, FR]
 
 iseu :: [CountryCode] -> Bool
-iseu ls = True
+iseu = error "Unimplemented."
 
 iseea :: [CountryCode] -> Bool
-iseea ls = False
+iseea = error "Unimplemented."
 
 instance Attribute_ Citizenships where
     data Predicate Citizenships = EU | EEA  deriving (Show, Generic)
@@ -109,7 +108,7 @@ type AttributeList = [Attribute]
 
 -- sanity check, only one Attr_i ..etc
 isValid :: AttributeList -> Bool
-isValid x = True
+isValid = error "Unimplemented."
 
 satisfy :: AttributeList -> Policy -> Bool
-satisfy x y = True
+satisfy = error "Unimplemented."

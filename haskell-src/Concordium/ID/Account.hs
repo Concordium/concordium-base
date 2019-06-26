@@ -1,11 +1,11 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Concordium.ID.Account where
 
 import Concordium.ID.Types
 import Data.ByteString.Char8
 import GHC.Word
 import Data.ByteString.Random.MWC
-import System.IO.Unsafe
 import Concordium.Crypto.SignatureScheme
 import Concordium.Crypto.PRF
 import Concordium.ID.Attributes
@@ -41,27 +41,35 @@ registerCredentialHolder chi = return $ CHC {
                                     }
 --deploy credentials: Protocol takes place between account holder and the chain
 --the object CredentialDeploymentInformation is sent on the chain for verification
-deployCredential :: SignKey -> VerifyKey ->  SignatureScheme -> Policy ->  
-    CredentialHolderInformation -> CredentialHolderCertificate -> Word8 -> IO CredentialDeploymentInformation
-deployCredential sk vk sch p chi chc n = return $ CDI {
-                                            cdi_verifKey = vk,
-                                            cdi_sigScheme = schemeId sch,
-                                            cdi_regId = regId,
-                                            cdi_arData = arData,
-                                            cdi_ipId  = chc_ipId chc,
-                                            cdi_policy = p,
-                                            cdi_auxData = aux,
-                                            cdi_proof = proof
-                                            }
-               where regId = let (PrfObj x) = prf (chi_prfKey chi) n
-                               in RegIdCred . FBS.toByteString $ x
+deployCredential ::
+  SignKey ->
+  VerifyKey ->
+  SignatureScheme ->
+  Policy ->
+  CredentialHolderInformation ->
+  CredentialHolderCertificate ->
+  Word8 ->
+  IO CredentialDeploymentInformation
+deployCredential _sk vk sch p chi chc n = return $ CDI {
+  cdi_verifKey = vk,
+  cdi_sigScheme = schemeId sch,
+  cdi_regId = cRegId,
+  cdi_arData = arData,
+  cdi_ipId  = chc_ipId chc,
+  cdi_policy = p,
+  cdi_auxData = aux,
+  cdi_proof = proof
+  }
+  where cRegId = let PrfObj x = prf (chi_prfKey chi) n
+                 in RegIdCred . FBS.toByteString $ x
 
                                             
 verifyCredential :: CredentialDeploymentInformation -> Bool
 verifyCredential _ = True
 
                                      
-registrationId = (random (fromIntegral 48)) >>= (return . RegIdCred)
+registrationId :: IO CredentialRegistrationID
+registrationId = (random 48) >>= (return . RegIdCred)
     
 base58decodeAddr :: Base58String -> AccountAddress
 base58decodeAddr bs = AccountAddress (FBS.fromByteString (toBytes bs))
@@ -86,26 +94,29 @@ accountAddress (VerifyKey x) y =  AccountAddress (FBS.fromByteString $ BS.cons s
         sch = fromIntegral $ fromEnum y
 
 ar :: AnonimityRevoker
-ar = AR (AR_ID $ pack "Gotham City Police Department") (AR_PK $ unsafePerformIO $ random (fromIntegral 48))
+ar = AR (AR_ID $ pack "Gotham City Police Department") (AR_PK $ "<Jim Gordon's private key>")
 
 --Identity Provider
+gcpib :: IdentityProviderIdentity
 gcpib = IP_ID $ pack "Gotham City Post Industrial Bank"
+
+gcpibPubKey :: IdentityProviderPublicKey
 gcpibPubKey =  let (SHA256.Hash x) = SHA256.hash $ pack "Gotham City Post Industrial Bank"
                       in  IP_PK (FBS.toByteString x)
 
 
 arData :: [(AnonimityRevokerIdentity, SecretShare)]
-arData = [(AR_ID $ pack "Gotham City Police Department", Share $ unsafePerformIO $ random (fromIntegral 48))]
+arData = [(AR_ID $ pack "Gotham City Police Department", Share "<Jim Gordon has all the share>")]
 
 regId :: CredentialRegistrationID
-regId = RegIdCred $ unsafePerformIO $ random (fromIntegral 48)
+regId = RegIdCred $ "Batman"
 
 scheme :: SchemeId
 scheme = Ed25519 
 
 
 encKey :: AccountEncryptionKey
-encKey = EncKeyAcc ( unsafePerformIO $ random (fromIntegral 48))
+encKey = EncKeyAcc "<Batman's encryption key>"
 
 policy :: Policy
 policy = Conj (AtomicBD AgeOver18) (AtomicCitizenship EU) 
@@ -114,7 +125,7 @@ aux :: ByteString
 aux = pack "aux"
 
 proof :: ZKProof
-proof = Proof $ pack "proof of bot"
+proof = Proof $ "proof of bot"
 
 fakeSign::ByteString -> ByteString
 fakeSign x = SHA256.hashToByteString (SHA256.hash x)

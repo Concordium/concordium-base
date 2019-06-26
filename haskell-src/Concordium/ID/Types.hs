@@ -1,10 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia #-}
 module Concordium.ID.Types where
 
 import           Data.ByteString    (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as LC
-import           Data.ByteString.Builder(toLazyByteString, byteStringHex)
 import qualified Data.FixedByteString as FBS
 import           Concordium.ID.Attributes
 import           Concordium.Crypto.SignatureScheme
@@ -18,6 +16,7 @@ import Data.Base58String.Bitcoin
 import System.IO.Unsafe
 import Control.Exception
 import qualified Data.Text as Text
+import Concordium.Crypto.ByteStringHelpers
 
 accountAddressSize :: Int
 accountAddressSize = 21
@@ -61,29 +60,33 @@ instance Serialize CredentialHolderIdentity where
 
 -- Secret Key of Credential Holder
 newtype CredentialHolderSecretKey = CH_SK ByteString
-    deriving(Eq, Show)
+    deriving(Eq)
+    deriving Show via ByteStringHex
 
 instance Serialize CredentialHolderSecretKey where 
     put (CH_SK x) = put x
     get = CH_SK <$> get
 
-
 -- Public Key of Credential Holder
 newtype CredentialHolderPublicKey = CH_PK ByteString
-    deriving(Eq, Show)
+    deriving(Eq)
+    deriving Show via ByteStringHex
 
 
 -- Public key of Anonimity Revoker (Elgamal)
 newtype AnonimityRevokerPublicKey = AR_PK ByteString
-    deriving(Eq, Show)
+    deriving(Eq)
+    deriving Show via ByteStringHex
 
 -- Private key of Anonimity Revoker (Elgamal)
 newtype AnonimityRevokerPrivateKey = AR_SK ByteString
-    deriving(Eq, Show)
+    deriving(Eq)
+    deriving Show via ByteStringHex
 
 -- Name of Identity Revoker
 newtype AnonimityRevokerIdentity  = AR_ID ByteString 
-    deriving (Eq, Show)
+    deriving (Eq)
+    deriving Show via ByteStringHex
 
 instance Serialize AnonimityRevokerIdentity  where
     put (AR_ID s) = put s
@@ -93,7 +96,8 @@ data AnonimityRevoker = AR AnonimityRevokerIdentity AnonimityRevokerPublicKey
 
 -- Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID ByteString
-    deriving (Eq, Show, Hashable)
+    deriving (Eq, Hashable)
+    deriving Show via ByteStringHex
 
 instance Serialize IdentityProviderIdentity where
     put (IP_ID s) = put s
@@ -102,13 +106,13 @@ instance Serialize IdentityProviderIdentity where
 -- Public key of Identity provider ()
 newtype IdentityProviderPublicKey = IP_PK ByteString
     deriving(Eq, Hashable)
-
-instance Show IdentityProviderPublicKey where
-  show (IP_PK pubk) = LC.unpack . toLazyByteString . byteStringHex $ pubk
-
+    deriving Show via ByteStringHex
 
 -- Private key of Identity provider ()
 newtype IdentityProviderSecretKey = IP_SK ByteString
+    deriving(Eq)
+    deriving Show via ByteStringHex
+
 
 data IdentityProvider = IP IdentityProviderIdentity IdentityProviderPublicKey
                          
@@ -123,13 +127,16 @@ type AccountVerificationKey = VerifyKey
 type AccountSignature = Signature 
 
 
-
 -- decryption key for accounts (Elgamal?)
 newtype AccountDecryptionKey = DecKeyAcc ByteString 
+    deriving(Eq)
+    deriving Show via ByteStringHex
+
 
 -- encryption key for accounts (Elgamal?)
 newtype AccountEncryptionKey = EncKeyAcc ByteString 
-    deriving (Eq, Show)
+    deriving (Eq)
+    deriving Show via ByteStringHex
 
 instance Serialize AccountEncryptionKey where
     put (EncKeyAcc b) = put b
@@ -137,10 +144,8 @@ instance Serialize AccountEncryptionKey where
 
 -- Credential Registration ID (48 bytes)
 newtype CredentialRegistrationID = RegIdCred ByteString 
-    deriving (Eq, Ord)
-
-instance Show CredentialRegistrationID where
-  show (RegIdCred rid) = LC.unpack . toLazyByteString . byteStringHex $ rid
+    deriving (Eq)
+    deriving Show via ByteStringHex
 
 credentialRegistrationIDSize :: Int 
 credentialRegistrationIDSize = 48
@@ -151,7 +156,8 @@ instance Serialize CredentialRegistrationID where
 
 -- shared public key
 newtype SecretShare = Share ByteString
-    deriving (Eq, Show)
+    deriving (Eq)
+    deriving Show via ByteStringHex
 
 instance Serialize SecretShare where
       put (Share s) = put s
@@ -160,15 +166,15 @@ instance Serialize SecretShare where
 --AR Data
 type AnonimityRevocationData = [(AnonimityRevokerIdentity, SecretShare)] 
 
-
 -- ZK proofs
 
 data Statement = Statement (ByteString -> Bool)
 
 data Witness = Witness ByteString 
 
-data ZKProof = Proof ByteString 
-    deriving (Eq, Generic, Show) -- Eq instance only used for testing.
+newtype ZKProof = Proof ByteString 
+    deriving (Eq, Generic) -- Eq instance only used for testing.
+    deriving Show via ByteStringHex
 
 instance Serialize ZKProof where
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, ForeignFunctionInterface #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, ForeignFunctionInterface, OverloadedStrings #-}
 -- | This module is a prototype implementantion of  pseudo  random function.
 -- dodis-yampolskiy
 
@@ -68,8 +68,6 @@ newPrfKey =
     do sk <- FBS.create $ \priv -> rs_prf_key priv 
        return (PrfKey sk)
 
-                                 
-
 test :: IO () 
 test = do sks <- mapM (\ _ -> newPrfKey) [1 :: Int]
           let ms = map f sks 
@@ -80,9 +78,8 @@ test = do sks <- mapM (\ _ -> newPrfKey) [1 :: Int]
                            putStrLn(show prfs)
 
 
--- |Generate a PRF object.
-
-prf :: PrfKey -> Word8-> PrfObj
+-- |Generate a PRF object. 
+prf :: PrfKey -> Word8 -> PrfObj
 prf (PrfKey sk) n = PrfObj $ unsafeDupablePerformIO  $ 
                         do suc <- newIORef(0::Int) 
                            p  <- FBS.create $ \prfp -> 
