@@ -66,7 +66,7 @@ getForeignPtrWord8 = do
         return fp
   return (n, r)
 
--- This is a safe method as long as the first argument <= length of the list.
+-- |This is a safe method as long as the first argument <= length of the list.
 -- Giving the first argument makes the method more efficient in current use cases.
 listToForeignPtr :: Int -> [Word8] -> ForeignPtr Word8
 listToForeignPtr n wds = unsafeDupablePerformIO $ do
@@ -74,3 +74,10 @@ listToForeignPtr n wds = unsafeDupablePerformIO $ do
         withForeignPtr fp $
             \fpp -> zipWithM_ (pokeByteOff fpp) [0..n-1] wds
         return fp
+
+-- |Wrapper used to automatically derive Show instances in base16 for types
+-- simply wrapping bytestrings.
+newtype ByteStringHex = ByteStringHex ByteString
+
+instance Show ByteStringHex where
+  show (ByteStringHex s) = byteStringToHex s

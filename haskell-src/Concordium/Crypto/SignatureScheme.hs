@@ -1,16 +1,22 @@
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia #-}
 module Concordium.Crypto.SignatureScheme where
 import           Data.ByteString (ByteString) 
 import           Data.Word
 import           Data.Serialize
-
+import Concordium.Crypto.ByteStringHelpers
 
 newtype SignKey = SignKey ByteString
-    deriving (Eq, Show)
+    deriving (Eq)
+    deriving Show via ByteStringHex
+
 newtype VerifyKey = VerifyKey ByteString
-    deriving (Eq, Show, Ord)
+    deriving (Eq, Ord)
+    deriving Show via ByteStringHex
+
 newtype Signature = Signature ByteString
-    deriving (Eq, Show)
+    deriving (Eq)
+    deriving Show via ByteStringHex
+
 data SchemeId = Ed25519 | CL
     deriving (Eq, Show)
 data KeyPair = KeyPair {

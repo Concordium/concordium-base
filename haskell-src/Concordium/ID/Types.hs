@@ -1,3 +1,4 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric #-}
 module Concordium.ID.Types where
 
@@ -15,6 +16,8 @@ import Foreign.Storable(peek)
 import Foreign.Ptr(castPtr)
 import Data.Base58String.Bitcoin
 import System.IO.Unsafe
+import Control.Exception
+import qualified Data.Text as Text
 
 accountAddressSize :: Int
 accountAddressSize = 21
@@ -35,8 +38,19 @@ instance Hashable AccountAddress where
 
 
 instance Show AccountAddress where
-  show = show . addressToBase58
-     where addressToBase58 (AccountAddress x) = fromBytes $ FBS.toByteString x
+  show = Text.unpack . addressToBase58
+     where addressToBase58 (AccountAddress x) = toText . fromBytes $ FBS.toByteString x
+
+-- |Decode an address encoded in base 58. This function is in the IO monad
+-- because the library we are using does not support safe parsing.
+-- TODO: The library should be replaced.
+safeDecodeBase58Address :: ByteString -> IO (Maybe AccountAddress)
+safeDecodeBase58Address bs = do
+  decoded <- try (evaluate (b58String bs))
+  case decoded of
+    Left (ErrorCall _) -> return Nothing
+    Right dec -> return (Just (AccountAddress . FBS.fromByteString . toBytes $ dec))
+
 
 newtype CredentialHolderIdentity = CH ByteString
     deriving(Eq, Show)
@@ -77,9 +91,9 @@ instance Serialize AnonimityRevokerIdentity  where
 
 data AnonimityRevoker = AR AnonimityRevokerIdentity AnonimityRevokerPublicKey
 
--- Name of Idenity Provider
+-- Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID ByteString
-    deriving (Eq, Show)
+    deriving (Eq, Show, Hashable)
 
 instance Serialize IdentityProviderIdentity where
     put (IP_ID s) = put s
@@ -87,6 +101,11 @@ instance Serialize IdentityProviderIdentity where
 
 -- Public key of Identity provider ()
 newtype IdentityProviderPublicKey = IP_PK ByteString
+    deriving(Eq, Hashable)
+
+instance Show IdentityProviderPublicKey where
+  show (IP_PK pubk) = LC.unpack . toLazyByteString . byteStringHex $ pubk
+
 
 -- Private key of Identity provider ()
 newtype IdentityProviderSecretKey = IP_SK ByteString
@@ -179,22 +198,7 @@ instance Eq CredentialDeploymentInformation where
   cdi1 == cdi2 = cdi_verifKey cdi1 == cdi_verifKey cdi2 && cdi_sigScheme cdi1 == cdi_sigScheme cdi2 &&
       cdi_regId cdi1 == cdi_regId cdi2
 
---instance Serialize CredentialHolderInformation where
 instance Serialize CredentialDeploymentInformation where
-
-data AccountCreationInformation = ACI {
-                                        aci_verifKey :: AccountVerificationKey,
-                                        aci_encKey :: AccountEncryptionKey,
-                                        aci_sigScheme :: SchemeId ,
-                                        aci_accAddress:: AccountAddress,
-                                        aci_proof:: ZKProof -- sigma proof that the creator has the private key corresponding to these keys
-                                      }
-                            deriving (Eq, Generic, Show) -- Eq instance only needed for testing and not relied upon elsewhere.
-
-
---instance Serialize AccountCreationInformation where
-instance Serialize AccountCreationInformation where
-
 
 data CredentialHolderCertificate = CHC { chc_ipId :: IdentityProviderIdentity,
                                          chc_ipPk :: IdentityProviderPublicKey,
