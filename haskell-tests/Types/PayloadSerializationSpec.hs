@@ -51,7 +51,9 @@ genPayload = oneof [genDeployModule,
                     genAddBaker,
                     genRemoveBaker,
                     genUpdateBakerAccount,
-                    genUpdateBakerSignKey
+                    genUpdateBakerSignKey,
+                    genDelegateStake,
+                    genUndelegateStake
                     ]
   where 
         genCredential = DeployCredential <$> genCredentialDeploymentInformation
@@ -110,6 +112,10 @@ genPayload = oneof [genDeployModule,
           return UpdateBakerSignKey{..}
 
         genBakerId = BakerId <$> arbitrary
+
+        genDelegateStake = DelegateStake <$> genBakerId
+
+        genUndelegateStake = return UndelegateStake
 
 
 groupIntoSize :: Int64 -> [Char]
