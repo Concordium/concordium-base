@@ -49,7 +49,7 @@ impl SecretKey {
         assert!(xs.len() * 8 <= SECRET_KEY_LENGTH);
         let mut bytes = [0u8; SECRET_KEY_LENGTH];
         let mut i = 0;
-        for a in frpr.as_ref().iter().rev() {
+        for a in xs.iter().rev() {
             bytes[i..(i + 8)].copy_from_slice(&a.to_be_bytes());
             i += 8;
         }
