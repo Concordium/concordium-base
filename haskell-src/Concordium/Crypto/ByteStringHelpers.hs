@@ -23,4 +23,9 @@ withByteStringPtr b f =  withForeignPtr fptr $ \ptr -> f (ptr `plusPtr` off)
     where (fptr, off, _) = toForeignPtr b
 
 
-    
+-- |Wrapper used to automatically derive Show instances in base16 for types
+-- simply wrapping bytestrings.
+newtype ByteStringHex = ByteStringHex ByteString
+
+instance Show ByteStringHex where
+  show (ByteStringHex s) = byteStringToHex s
