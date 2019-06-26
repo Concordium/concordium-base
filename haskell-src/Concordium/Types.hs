@@ -16,8 +16,10 @@ import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
 import Concordium.ID.Types
+import qualified Concordium.ID.Account as AH
 import Concordium.Crypto.SignatureScheme(SchemeId)
 import Concordium.Types.HashableTo
+import Control.Exception(assert)
 
 import Data.Hashable(Hashable)
 import Data.Word
@@ -27,6 +29,8 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.ByteString.Builder(toLazyByteString, byteStringHex)
 import Data.Bits
 import Data.Ratio
+import qualified Data.Set as Set
+import Data.Set(Set)
 
 import Data.Aeson as AE
 
@@ -92,7 +96,7 @@ instance S.Serialize ContractSubindex where
 
 data ContractAddress = ContractAddress { contractIndex :: !ContractIndex
                                        , contractSubindex :: !ContractSubindex} 
-    deriving(Eq, Generic)
+    deriving(Eq, Ord, Generic)
 
 instance FromJSON ContractAddress where
   parseJSON = withObject "ContractAddress" $ \v -> do
@@ -154,7 +158,7 @@ instance S.Serialize Address where
 -- |Type of GTU amounts.
 -- FIXME: This likely needs to be Word128.
 newtype Amount = Amount { _amount :: Word64 }
-    deriving(Eq, Ord, Enum, Num, Integral, Real, Hashable)
+    deriving(Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable)
 
 instance Show Amount where
   show = show . _amount
@@ -162,6 +166,24 @@ instance Show Amount where
 instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
   put (Amount v) = P.putWord64be v
+
+-- |Type representing a difference between amounts.
+newtype AmountDelta = AmountDelta { amountDelta :: Integer }
+    deriving (Eq, Ord, Enum, Num, Integral, Real)
+
+amountToDelta :: Amount -> AmountDelta
+amountToDelta = fromIntegral
+
+amountDiff :: Amount -> Amount -> AmountDelta
+amountDiff amt1 amt2 = fromIntegral amt1 - fromIntegral amt2
+
+applyAmountDelta ::  AmountDelta -> Amount -> Amount
+applyAmountDelta del amt =
+        assert (amt' >= fromIntegral (minBound :: Amount)) $
+        assert (amt' <= fromIntegral (maxBound :: Amount)) $
+            fromIntegral amt'
+    where
+        amt' = fromIntegral amt + del
 
 -- |The type used to count exact execution cost. This cost is then converted to
 -- amounts in some way.
@@ -219,7 +241,12 @@ data Account = Account {
   -- lifted up so that we only ever check credentials which are not out of date.
   ,_accountCredentials :: ![CredentialDeploymentInformation]
   -- |The baker to which this account's stake is delegated (if any).
-  ,_accountStakeDelegate :: Maybe BakerId
+  ,_accountStakeDelegate :: !(Maybe BakerId)
+  -- |The set of instances belonging to this account.
+  -- TODO: Revisit choice of datastructure.  Additions and removals
+  -- are expected to be rare.  The set is traversed when stake delegation
+  -- changes.
+  ,_accountInstances :: !(Set ContractAddress)
   } deriving(Show)
 
 makeLenses ''Account
@@ -233,11 +260,26 @@ instance S.Serialize Account where
                     S.put _accountVerificationKey <>
                     S.put _accountSignatureScheme <>
                     S.put _accountCredentials <>
-                    S.put _accountStakeDelegate
-  get = Account <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get
+                    S.put _accountStakeDelegate <>
+                    S.put (Set.toAscList _accountInstances)
+  get = Account <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> (Set.fromList <$> S.get)
 
 instance HashableTo Hash.Hash Account where
   getHash = Hash.hash . S.runPut . S.put
+
+-- |Create an empty account with the given public key.
+newAccount :: AccountVerificationKey -> SchemeId -> Account
+newAccount _accountVerificationKey _accountSignatureScheme = Account {
+        _accountAddress = AH.accountAddress _accountVerificationKey _accountSignatureScheme,
+        _accountNonce = minNonce,
+        _accountAmount = 0,
+        _accountEncryptedAmount = [],
+        _accountEncryptionKey = Nothing,
+        _accountCredentials = [],
+        _accountStakeDelegate = Nothing,
+        _accountInstances = Set.empty,
+        ..
+    }
 
 -- |Serialized payload of the transaction
 newtype EncodedPayload = EncodedPayload { _spayload :: ByteString }
