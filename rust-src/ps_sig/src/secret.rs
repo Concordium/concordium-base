@@ -44,7 +44,7 @@ impl<C: Pairing> SecretKey<C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let vs = &self.0;
         let u = &self.1;
-        let mut bytes: Vec<u8> = Vec::new();
+        let mut bytes: Vec<u8> = Vec::with_capacity((vs.len() + 1) * C::SCALAR_LENGTH);
         for v in vs.iter() {
             bytes.extend_from_slice(&*Self::value_to_bytes(&v));
         }
@@ -66,7 +66,7 @@ impl<C: Pairing> SecretKey<C> {
             return Err(SignatureError(SecretKeyLengthError));
         }
         let vlen = (l / C::SCALAR_LENGTH) - 1;
-        let mut vs: Vec<C::ScalarField> = Vec::new();
+        let mut vs: Vec<C::ScalarField> = Vec::with_capacity(vlen);
         for i in 0..vlen {
             let j = i * C::SCALAR_LENGTH;
             let k = j + C::SCALAR_LENGTH;
@@ -85,7 +85,7 @@ impl<C: Pairing> SecretKey<C> {
     pub fn generate<T>(n: usize, csprng: &mut T) -> SecretKey<C>
     where
         T: Rng, {
-        let mut vs: Vec<C::ScalarField> = Vec::new();
+        let mut vs: Vec<C::ScalarField> = Vec::with_capacity(n);
         for _i in 0..n {
             vs.push(C::generate_scalar(csprng));
         }

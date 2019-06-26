@@ -19,6 +19,7 @@ use core::fmt::{self, Display};
 /// Internal errors.  
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) enum InternalError {
     CurveDecodingError,
     FieldDecodingError,

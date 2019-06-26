@@ -1,8 +1,8 @@
 // Authors:
 // - bm@concordium.com
 
-use crate::{commitment::*, constants::*, key::*, value::*};
-use curve_arithmetic::{bls12_381_instance::*, curve_arithmetic::*};
+use crate::{commitment::*, key::*, value::*};
+use curve_arithmetic::curve_arithmetic::*;
 use pairing::bls12_381::{G1Affine, G2Affine, G1};
 use rand::*;
 use std::slice;
@@ -159,63 +159,67 @@ macro_random_values!(random_values_bls12_381_g1_proj, G1);
 
 macro_random_values!(random_values_bls12_381_g2_affine, G2Affine);
 
-macro_rules! macro_test_commit_open {
-    (
-        $function_name:ident,
-        $commit_func_name:ident,
-        $key_func_name:ident,
-        $open_func_name:ident,
-        $rand_value_func_name:ident,
-        $curve_type:path
-    ) => {
-        #[test]
-        pub fn $function_name() {
-            let mut key_bytes = [0u8; 11 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH];
-            let mut values = [0u8; 10 * <$curve_type as Curve>::SCALAR_LENGTH];
-            let mut commitment_bytes = [0u8; <$curve_type as Curve>::GROUP_ELEMENT_LENGTH];
-            let mut randomness_bytes = [0u8; <$curve_type as Curve>::SCALAR_LENGTH];
-            for i in 1..10 {
-                let key_slice =
-                    &mut key_bytes[..(i + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH];
-                $key_func_name(i, key_slice.as_mut_ptr());
-                let v_slice = &mut values[..(i + 1) * <$curve_type as Curve>::SCALAR_LENGTH];
-                $rand_value_func_name(i, v_slice.as_mut_ptr());
-                let suc1 = $commit_func_name(
-                    i,
-                    key_slice.as_ptr(),
-                    v_slice.as_ptr(),
-                    &mut commitment_bytes,
-                    &mut randomness_bytes,
-                );
-                assert!(suc1 > 0);
-                assert!(
-                    $open_func_name(
+#[cfg(test)]
+mod tests {
+    use super::*;
+    macro_rules! macro_test_commit_open {
+        (
+            $function_name:ident,
+            $commit_func_name:ident,
+            $key_func_name:ident,
+            $open_func_name:ident,
+            $rand_value_func_name:ident,
+            $curve_type:path
+        ) => {
+            #[test]
+            pub fn $function_name() {
+                let mut key_bytes = [0u8; 11 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH];
+                let mut values = [0u8; 10 * <$curve_type as Curve>::SCALAR_LENGTH];
+                let mut commitment_bytes = [0u8; <$curve_type as Curve>::GROUP_ELEMENT_LENGTH];
+                let mut randomness_bytes = [0u8; <$curve_type as Curve>::SCALAR_LENGTH];
+                for i in 1..10 {
+                    let key_slice =
+                        &mut key_bytes[..(i + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH];
+                    $key_func_name(i, key_slice.as_mut_ptr());
+                    let v_slice = &mut values[..(i + 1) * <$curve_type as Curve>::SCALAR_LENGTH];
+                    $rand_value_func_name(i, v_slice.as_mut_ptr());
+                    let suc1 = $commit_func_name(
                         i,
                         key_slice.as_ptr(),
                         v_slice.as_ptr(),
-                        &commitment_bytes,
-                        &randomness_bytes
-                    ) > 0
-                );
+                        &mut commitment_bytes,
+                        &mut randomness_bytes,
+                    );
+                    assert!(suc1 > 0);
+                    assert!(
+                        $open_func_name(
+                            i,
+                            key_slice.as_ptr(),
+                            v_slice.as_ptr(),
+                            &commitment_bytes,
+                            &randomness_bytes
+                        ) > 0
+                    );
+                }
             }
-        }
-    };
+        };
+    }
+
+    macro_test_commit_open!(
+        commit_open_bls12_381_g1_affine,
+        commit_bls12_381_g1_affine,
+        pedersen_commitment_key_bls12_381_g1_affine,
+        open_bls12_381_g1_affine,
+        random_values_bls12_381_g1_affine,
+        G1Affine
+    );
+
+    macro_test_commit_open!(
+        commit_open_bls12_381_g2_affine,
+        commit_bls12_381_g2_affine,
+        pedersen_commitment_key_bls12_381_g2_affine,
+        open_bls12_381_g2_affine,
+        random_values_bls12_381_g2_affine,
+        G2Affine
+    );
 }
-
-macro_test_commit_open!(
-    commit_open_bls12_381_g1_affine,
-    commit_bls12_381_g1_affine,
-    pedersen_commitment_key_bls12_381_g1_affine,
-    open_bls12_381_g1_affine,
-    random_values_bls12_381_g1_affine,
-    G1Affine
-);
-
-macro_test_commit_open!(
-    commit_open_bls12_381_g2_affine,
-    commit_bls12_381_g2_affine,
-    pedersen_commitment_key_bls12_381_g2_affine,
-    open_bls12_381_g2_affine,
-    random_values_bls12_381_g2_affine,
-    G2Affine
-);

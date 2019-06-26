@@ -1,6 +1,5 @@
 use crate::errors::{InternalError::CurveDecodingError, *};
 use curve_arithmetic::curve_arithmetic::*;
-
 use rand::*;
 
 #[derive(Debug)]
@@ -29,6 +28,8 @@ impl<C: Pairing> UnknownMessage<C> {
         }
     }
 
+    /// Generate a valid, but arbitrary message. Exposed because it can be used
+    /// for testing protocols built on top of the signature scheme.
     pub fn arbitrary<T: Rng>(csprng: &mut T) -> UnknownMessage<C> {
         UnknownMessage(C::G_1::generate(csprng))
     }

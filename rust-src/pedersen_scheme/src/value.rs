@@ -15,18 +15,12 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::{
-    constants::*,
-    errors::{
-        InternalError::{CurveDecodingError, FieldDecodingError, ValueVecLengthError},
-        *,
-    },
+use crate::errors::{
+    InternalError::{FieldDecodingError, ValueVecLengthError},
+    *,
 };
 use curve_arithmetic::curve_arithmetic::*;
 
-use pairing::bls12_381::{G1Affine, G2Affine};
-
-use curve_arithmetic::bls12_381_instance::*;
 use rand::*;
 
 /// A  value
@@ -45,7 +39,7 @@ impl<C: Curve> Value<C> {
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
         let vs = &self.0;
-        let mut bytes: Vec<u8> = Vec::new();
+        let mut bytes: Vec<u8> = Vec::with_capacity(vs.len());
         for v in vs.iter() {
             bytes.extend_from_slice(&*Self::value_to_bytes(&v));
         }
@@ -66,12 +60,10 @@ impl<C: Curve> Value<C> {
             return Err(CommitmentError(ValueVecLengthError));
         }
         let vlen = l / C::SCALAR_LENGTH;
-        let mut vs: Vec<C::Scalar> = Vec::new();
-        for i in 0..vlen {
-            let j = i * C::SCALAR_LENGTH;
-            let k = j + C::SCALAR_LENGTH;
-            match C::bytes_to_scalar(&bytes[j..k]) {
-                Err(x) => return Err(CommitmentError(FieldDecodingError)),
+        let mut vs: Vec<C::Scalar> = Vec::with_capacity(vlen);
+        for elem in bytes.chunks(C::SCALAR_LENGTH) {
+            match C::bytes_to_scalar(&elem) {
+                Err(_) => return Err(CommitmentError(FieldDecodingError)),
                 Ok(fr) => vs.push(fr),
             }
         }
@@ -86,7 +78,7 @@ impl<C: Curve> Value<C> {
     pub fn value_from_bytes(bytes: &[u8]) -> Result<C::Scalar, CommitmentError> {
         match C::bytes_to_scalar(bytes) {
             Ok(scalar) => Ok(scalar),
-            Err(x) => Err(CommitmentError(FieldDecodingError)),
+            Err(_) => Err(CommitmentError(FieldDecodingError)),
         }
     }
 
@@ -94,7 +86,7 @@ impl<C: Curve> Value<C> {
     pub fn generate<T>(n: usize, csprng: &mut T) -> Value<C>
     where
         T: Rng, {
-        let mut vs: Vec<C::Scalar> = Vec::new();
+        let mut vs: Vec<C::Scalar> = Vec::with_capacity(n);
         for _i in 0..n {
             vs.push(C::generate_scalar(csprng));
         }
@@ -103,22 +95,27 @@ impl<C: Curve> Value<C> {
     }
 }
 
-macro_rules! macro_test_value_to_byte_conversion {
-    ($function_name:ident, $curve_type:path) => {
-        #[test]
-        pub fn $function_name() {
-            let mut csprng = thread_rng();
-            for i in 1..20 {
-                let val = Value::<$curve_type>::generate(i, &mut csprng);
-                let res_val2 = Value::<$curve_type>::from_bytes(&*val.to_bytes());
-                assert!(res_val2.is_ok());
-                let val2 = res_val2.unwrap();
-                assert_eq!(val2, val);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::{G1Affine, G2Affine};
+    macro_rules! macro_test_value_to_byte_conversion {
+        ($function_name:ident, $curve_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for i in 1..20 {
+                    let val = Value::<$curve_type>::generate(i, &mut csprng);
+                    let res_val2 = Value::<$curve_type>::from_bytes(&*val.to_bytes());
+                    assert!(res_val2.is_ok());
+                    let val2 = res_val2.unwrap();
+                    assert_eq!(val2, val);
+                }
             }
-        }
-    };
+        };
+    }
+
+    macro_test_value_to_byte_conversion!(value_to_byte_conversion_bls12_381_g1_affine, G1Affine);
+
+    macro_test_value_to_byte_conversion!(value_to_byte_conversion_bls12_381_g2_affine, G2Affine);
 }
-
-macro_test_value_to_byte_conversion!(value_to_byte_conversion_bls12_381_g1_affine, G1Affine);
-
-macro_test_value_to_byte_conversion!(value_to_byte_conversion_bls12_381_g2_affine, G2Affine);

@@ -14,11 +14,11 @@
 
 use core::fmt::{self, Display};
 // use pairing::{GroupDecodingError, PrimeFieldDecodingError};
-use curve_arithmetic::curve_arithmetic::*;
 
 /// Internal errors.  
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) enum InternalError {
     // GDecodingError(GroupDecodingError),
     // FDecodingError(PrimeFieldDecodingError),

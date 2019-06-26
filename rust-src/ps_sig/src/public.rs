@@ -5,6 +5,7 @@
 
 //! A known message
 
+use rand::*;
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
 #[cfg(feature = "serde")]
@@ -23,8 +24,6 @@ use crate::{known_message::*, signature::*};
 use curve_arithmetic::curve_arithmetic::*;
 
 use crate::secret::*;
-
-use rand::*;
 
 /// A message
 #[derive(Debug)]
@@ -106,23 +105,6 @@ impl<C: Pairing> PublicKey<C> {
         }
     }
 
-    /// Generate a public key  from a `csprng`.
-    pub fn arbitrary<T>(n: usize, csprng: &mut T) -> PublicKey<C>
-    where
-        T: Rng, {
-        let mut vs: Vec<C::G_1> = Vec::with_capacity(n);
-        for _i in 0..n {
-            vs.push(C::G_1::generate(csprng));
-        }
-
-        let mut us: Vec<C::G_2> = Vec::with_capacity(n);
-        for _i in 0..n {
-            us.push(C::G_2::generate(csprng));
-        }
-
-        PublicKey(vs, us, C::G_2::generate(csprng))
-    }
-
     pub fn verify(&self, sig: &Signature<C>, message: &KnownMessage<C>) -> bool {
         let ys = &self.1;
         let x = self.2;
@@ -141,6 +123,23 @@ impl<C: Pairing> PublicKey<C> {
         let p1 = C::pair(sig.0, hx);
         let p2 = C::pair(sig.1, C::G_2::one_point());
         p1 == p2
+    }
+
+    /// Generate a public key  from a `csprng`.
+    pub fn arbitrary<T>(n: usize, csprng: &mut T) -> PublicKey<C>
+    where
+        T: Rng, {
+        let mut vs: Vec<C::G_1> = Vec::with_capacity(n);
+        for _i in 0..n {
+            vs.push(C::G_1::generate(csprng));
+        }
+
+        let mut us: Vec<C::G_2> = Vec::with_capacity(n);
+        for _i in 0..n {
+            us.push(C::G_2::generate(csprng));
+        }
+
+        PublicKey(vs, us, C::G_2::generate(csprng))
     }
 }
 

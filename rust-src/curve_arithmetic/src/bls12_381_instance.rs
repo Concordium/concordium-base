@@ -22,34 +22,34 @@ impl Curve for G2 {
     fn one_point() -> Self { G2::one() }
 
     fn inverse_point(&self) -> Self {
-        let mut x = self.clone();
-        &x.negate();
+        let mut x = *self;
+        x.negate();
         x
     }
 
     fn is_zero_point(&self) -> bool { self.is_zero() }
 
     fn double_point(&self) -> Self {
-        let mut x = self.clone();
-        &x.double();
+        let mut x = *self;
+        x.double();
         x
     }
 
     fn plus_point(&self, other: &Self) -> Self {
-        let mut x = self.clone();
-        &x.add_assign(other);
+        let mut x = *self;
+        x.add_assign(other);
         x
     }
 
     fn minus_point(&self, other: &Self) -> Self {
-        let mut x = self.clone();
-        &x.sub_assign(&other);
+        let mut x = *self;
+        x.sub_assign(&other);
         x
     }
 
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self {
-        let s = scalar.clone();
-        let mut p = self.clone();
+        let s = *scalar;
+        let mut p = *self;
         p.mul_assign(s);
         p
     }
@@ -137,34 +137,34 @@ impl Curve for G1 {
     fn one_point() -> Self { G1::one() }
 
     fn inverse_point(&self) -> Self {
-        let mut x = self.clone();
-        &x.negate();
+        let mut x = *self;
+        x.negate();
         x
     }
 
     fn is_zero_point(&self) -> bool { self.is_zero() }
 
     fn double_point(&self) -> Self {
-        let mut x = self.clone();
-        &x.double();
+        let mut x = *self;
+        x.double();
         x
     }
 
     fn plus_point(&self, other: &Self) -> Self {
-        let mut x = self.clone();
-        &x.add_assign(other);
+        let mut x = *self;
+        x.add_assign(other);
         x
     }
 
     fn minus_point(&self, other: &Self) -> Self {
-        let mut x = self.clone();
-        &x.sub_assign(&other);
+        let mut x = *self;
+        x.sub_assign(&other);
         x
     }
 
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self {
-        let s = scalar.clone();
-        let mut p = self.clone();
+        let s = *scalar;
+        let mut p = *self;
         p.mul_assign(s);
         p
     }
@@ -252,7 +252,7 @@ impl Curve for G1Affine {
     fn one_point() -> Self { G1Affine::one() }
 
     fn inverse_point(&self) -> Self {
-        let mut x = self.into_projective().clone();
+        let mut x = self.into_projective();
         x.negate();
         x.into_affine()
     }
@@ -260,25 +260,25 @@ impl Curve for G1Affine {
     fn is_zero_point(&self) -> bool { self.is_zero() }
 
     fn double_point(&self) -> Self {
-        let mut x = self.into_projective().clone();
-        &x.double();
+        let mut x = self.into_projective();
+        x.double();
         x.into_affine()
     }
 
     fn plus_point(&self, other: &Self) -> Self {
-        let mut x = self.into_projective().clone();
-        &x.add_assign_mixed(other);
+        let mut x = self.into_projective();
+        x.add_assign_mixed(other);
         x.into_affine()
     }
 
     fn minus_point(&self, other: &Self) -> Self {
-        let mut x = self.into_projective().clone();
-        &x.sub_assign(&other.into_projective());
+        let mut x = self.into_projective();
+        x.sub_assign(&other.into_projective());
         x.into_affine()
     }
 
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self {
-        let s = scalar.clone();
+        let s = *scalar;
         self.mul(s).into_affine()
     }
 
@@ -365,7 +365,7 @@ impl Curve for G2Affine {
     fn one_point() -> Self { G2Affine::one() }
 
     fn inverse_point(&self) -> Self {
-        let mut x = self.into_projective().clone();
+        let mut x = self.into_projective();
         x.negate();
         x.into_affine()
     }
@@ -373,25 +373,25 @@ impl Curve for G2Affine {
     fn is_zero_point(&self) -> bool { self.is_zero() }
 
     fn double_point(&self) -> Self {
-        let mut x = self.into_projective().clone();
-        &x.double();
+        let mut x = self.into_projective();
+        x.double();
         x.into_affine()
     }
 
     fn plus_point(&self, other: &Self) -> Self {
-        let mut x = self.into_projective().clone();
-        &x.add_assign_mixed(other);
+        let mut x = self.into_projective();
+        x.add_assign_mixed(other);
         x.into_affine()
     }
 
     fn minus_point(&self, other: &Self) -> Self {
-        let mut x = self.into_projective().clone();
-        &x.sub_assign(&other.into_projective());
+        let mut x = self.into_projective();
+        x.sub_assign(&other.into_projective());
         x.into_affine()
     }
 
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self {
-        let s = scalar.clone();
+        let s = *scalar;
         self.mul(s).into_affine()
     }
 

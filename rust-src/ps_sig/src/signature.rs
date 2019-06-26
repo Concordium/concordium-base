@@ -19,7 +19,6 @@ use crate::errors::{
     *,
 };
 use curve_arithmetic::curve_arithmetic::*;
-
 use rand::*;
 
 /// A signature
@@ -34,7 +33,7 @@ impl<C: Pairing> Eq for Signature<C> {}
 
 impl<C: Pairing> Signature<C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
-        let mut bytes: Vec<u8> = Vec::new();
+        let mut bytes: Vec<u8> = Vec::with_capacity(2 * C::G_1::GROUP_ELEMENT_LENGTH);
         bytes.extend_from_slice(&*self.0.curve_to_bytes());
         bytes.extend_from_slice(&*self.1.curve_to_bytes());
         bytes.into_boxed_slice()
@@ -53,8 +52,11 @@ impl<C: Pairing> Signature<C> {
         }
     }
 
+    /// Generate a valid (in the sense of representation) but otherwise
+    /// arbitrary signature. Exposed because it is useful for testing protocols
+    /// on top of the signature scheme.
     pub fn arbitrary<T: Rng>(csprng: &mut T) -> Signature<C> {
-        // not a prober signature to be used for testing serialization
+        // not a proper signature to be used for testing serialization
         Signature(C::G_1::generate(csprng), C::G_1::generate(csprng))
     }
 }
@@ -63,6 +65,7 @@ impl<C: Pairing> Signature<C> {
 mod tests {
     use super::*;
     use pairing::bls12_381::Bls12;
+
     macro_rules! macro_test_signature_to_byte_conversion {
         ($function_name:ident, $pairing_type:path) => {
             #[test]

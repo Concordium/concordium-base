@@ -5,6 +5,7 @@
 
 //! A known message
 
+use rand::*;
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
 #[cfg(feature = "serde")]
@@ -19,8 +20,6 @@ use crate::errors::{
     *,
 };
 use curve_arithmetic::curve_arithmetic::*;
-
-use rand::*;
 
 /// A message
 #[derive(Debug)]
@@ -37,15 +36,15 @@ impl<C: Pairing> KnownMessage<C> {
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
         let vs = &self.0;
-        let mut bytes: Vec<u8> = Vec::new();
+        let mut bytes: Vec<u8> = Vec::with_capacity(vs.len() * C::SCALAR_LENGTH);
         for v in vs.iter() {
-            bytes.extend_from_slice(&*Self::value_to_bytes(&v));
+            bytes.extend_from_slice(&Self::value_to_bytes(&v));
         }
         bytes.into_boxed_slice()
     }
 
     #[inline]
-    pub fn value_to_bytes(scalar: &C::ScalarField) -> Box<[u8]> { C::scalar_to_bytes(scalar) }
+    fn value_to_bytes(scalar: &C::ScalarField) -> Box<[u8]> { C::scalar_to_bytes(scalar) }
 
     /// Construct a message vec from a slice of bytes.
     ///
@@ -58,14 +57,11 @@ impl<C: Pairing> KnownMessage<C> {
             return Err(SignatureError(MessageVecLengthError));
         }
         let vlen = l / C::SCALAR_LENGTH;
-        let mut vs: Vec<C::ScalarField> = Vec::new();
+        let mut vs: Vec<C::ScalarField> = Vec::with_capacity(vlen);
         for i in 0..vlen {
             let j = i * C::SCALAR_LENGTH;
             let k = j + C::SCALAR_LENGTH;
-            match C::bytes_to_scalar(&bytes[j..k]) {
-                Err(_) => return Err(SignatureError(FieldDecodingError)),
-                Ok(fr) => vs.push(fr),
-            }
+            vs.push(Self::message_from_bytes(&bytes[j..k])?);
         }
         Ok(KnownMessage(vs))
     }
@@ -75,18 +71,18 @@ impl<C: Pairing> KnownMessage<C> {
     /// A `Result` whose okay value is a Message  or whose error value
     /// is an `SignatureError` wrapping the internal error that occurred.
     #[inline]
-    pub fn message_from_bytes(bytes: &[u8]) -> Result<C::ScalarField, SignatureError> {
+    fn message_from_bytes(bytes: &[u8]) -> Result<C::ScalarField, SignatureError> {
         match C::bytes_to_scalar(bytes) {
             Ok(scalar) => Ok(scalar),
             Err(_) => Err(SignatureError(FieldDecodingError)),
         }
     }
 
-    /// Generate a sing `Message` from a `csprng`.
+    /// Generate a valid `Message` from a `csprng`.
     pub fn generate<T>(n: usize, csprng: &mut T) -> KnownMessage<C>
     where
         T: Rng, {
-        let mut vs: Vec<C::ScalarField> = Vec::new();
+        let mut vs: Vec<C::ScalarField> = Vec::with_capacity(n);
         for _i in 0..n {
             vs.push(C::generate_scalar(csprng));
         }
@@ -99,6 +95,7 @@ impl<C: Pairing> KnownMessage<C> {
 mod tests {
     use super::*;
     use pairing::bls12_381::Bls12;
+
     macro_rules! macro_test_message_to_byte_conversion {
         ($function_name:ident, $pairing_type:path) => {
             #[test]
@@ -106,7 +103,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for i in 1..20 {
                     let val = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
-                    let res_val2 = KnownMessage::<$pairing_type>::from_bytes(&*val.to_bytes());
+                    let res_val2 = KnownMessage::<$pairing_type>::from_bytes(&val.to_bytes());
                     assert!(res_val2.is_ok());
                     let val2 = res_val2.unwrap();
                     assert_eq!(val2, val);
