@@ -54,7 +54,7 @@ data Payload =
       uAddress :: !ContractAddress,
       -- |Message to invoke the receive method with.
       uMessage :: !(Core.Expr Core.ModuleName),
-      -- ^Derived field, serialized size of the message.
+      -- |Derived field, serialized size of the message.
       uSize :: !Int
       }
   -- |Simple transfer from an account to either a contract or an account.
@@ -121,6 +121,14 @@ data Payload =
       -- |Proof that the baker knows the private key of this verification key.
       ubsProof :: !Proof
       }
+  -- |Change which baker an account's stake is delegated to.
+  -- If the ID is not valid, the delegation is not updated.
+  | DelegateStake {
+      -- |ID of the baker to delegate stake to.
+      dsID :: !BakerId
+      }
+  -- |Undelegate stake.
+  | UndelegateStake
   deriving(Eq, Show)
 
 instance S.Serialize Payload where
@@ -168,7 +176,11 @@ instance S.Serialize Payload where
     S.put ubsId <>
     S.put ubsKey <>
     S.put ubsProof
-
+  put DelegateStake{..} =
+    P.putWord8 10 <>
+    S.put dsID
+  put UndelegateStake =
+    P.putWord8 11
 
   get = do
     G.getWord8 >>=
@@ -220,6 +232,8 @@ instance S.Serialize Payload where
               ubsKey <- S.get
               ubsProof <- S.get
               return UpdateBakerSignKey{..}
+            10 -> DelegateStake <$> S.get
+            11 -> return UndelegateStake
             _ -> fail "Unsupported transaction type."
 
 {-# INLINE encodePayload #-}
@@ -243,6 +257,8 @@ data Event = ModuleDeployed !Core.ModuleRef
            | BakerRemoved !BakerId
            | BakerAccountUpdated !BakerId !AccountAddress
            | BakerKeyUpdated !BakerId !BakerSignVerifyKey
+           | StakeDelegated !BakerId
+           | StakeUndelegated
 
   deriving (Show)
 
@@ -291,6 +307,7 @@ data RejectReason = ModuleNotWF !TypingError -- ^Error raised when typechecking 
                   | RemovingNonExistentBaker !BakerId
                   | InvalidBakerRemoveSource !AccountAddress
                   | UpdatingNonExistentBaker !BakerId
+                  | InvalidStakeDelegationTarget !BakerId -- ^The target of stake delegation is not a valid baker.
     deriving (Show)
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
