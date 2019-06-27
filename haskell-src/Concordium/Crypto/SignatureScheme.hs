@@ -16,7 +16,7 @@ newtype VerifyKey = VerifyKey ByteString
     deriving Show via ByteStringHex
 
 newtype Signature = Signature ByteString
-    deriving (Eq)
+    deriving (Eq, Ord)
     deriving Show via ByteStringHex
 
 data SchemeId = Ed25519 | CL
