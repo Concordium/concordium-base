@@ -165,14 +165,14 @@ tests =
           verifySignature n publicKey retrievedSig values `shouldBe` VerifySignatureOK
 
     modifyMaxSuccess (const 500) $ describe "Signature only validates with correct randomness." $
-      mapM_ testCorrectRandomness' [1..11]
+      mapM_ testCorrectRandomness' [1..6]
     -- modifyMaxSuccess (const 500) $ describe "Signature cannot be changed." $
     --   mapM_ testOtherSignature' [1..11]
     modifyMaxSuccess (const 500) $ describe "Values cannot be changed with unknown sig." $
       mapM_ testRandomValues' [1..2] -- only go up to 2 because we generate random values and probablity of generating valid ones diminishes quickly
 
     describe "Changing public key invalidates signature of known message." $ do
-      forM_ [1..10] $ \n -> do
+      forM_ [1..5] $ \n -> do
         (_, publicKey, _, _, values, _, knownMsgSig, _) <- runIO $ setup n
         publicKey' <- runIO $ genPublicKey n
         when (publicKey /= publicKey') $
@@ -180,7 +180,7 @@ tests =
             verifySignature n publicKey' knownMsgSig values `shouldBe` VerifySignatureIncorrect
 
     describe "Changing public key invalidates signature of unknown message." $ do
-      forM_ [1..10] $ \n -> do
+      forM_ [1..5] $ \n -> do
         (_, publicKey, _, _, values, randomness, _, unknownMsgSig) <- runIO $ setup n
         publicKey' <- runIO $ genPublicKey n
         when (publicKey /= publicKey') $

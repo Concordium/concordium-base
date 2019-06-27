@@ -75,6 +75,6 @@ tests = describe "Concordium.Crypto.Ed25519Signature" $ do
                 it "key pair" $ testSerializeKeyPairEd25519 
                 it "signature" $ testSerializeSignatureEd25519
             it "verify signature" $ withMaxSuccess 10000 $ testSignVerifyEd25519
-            it "verify fails when checking different document" $ withMaxSuccess 100000 $ testSignVerifyEd25519DocumentCollision
-            it "no collision on document" $ withMaxSuccess 100000 $ testNoDocCollisionEd25519
-            it "no collision on key pair" $ withMaxSuccess 100000 $ testNoKeyPairCollisionEd25519
+            it "verify fails when checking different document" $ withMaxSuccess 10000 $ testSignVerifyEd25519DocumentCollision
+            it "no collision on document" $ withMaxSuccess 10000 $ testNoDocCollisionEd25519
+            it "no collision on key pair" $ withMaxSuccess 10000 $ testNoKeyPairCollisionEd25519
