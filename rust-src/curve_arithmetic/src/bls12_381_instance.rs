@@ -119,6 +119,18 @@ impl Curve for G2 {
         }
     }
 
+    fn bytes_to_curve_unchecked(bytes: &[u8]) -> Result<Self, CurveDecodingError> {
+        if bytes.len() != Self::GROUP_ELEMENT_LENGTH {
+            return Err(CurveDecodingError::NotOnCurve);
+        }
+        let mut g = G2Compressed::empty();
+        g.as_mut().copy_from_slice(&bytes);
+        match g.into_affine_unchecked() {
+            Err(_) => Err(CurveDecodingError::NotOnCurve),
+            Ok(g_affine) => Ok(g_affine.into_projective()),
+        }
+    }
+
     fn generate<T: Rng>(csprng: &mut T) -> Self { G2::rand(csprng) }
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
@@ -229,6 +241,18 @@ impl Curve for G1 {
         let mut g = G1Compressed::empty();
         g.as_mut().copy_from_slice(&bytes);
         match g.into_affine() {
+            Err(_) => Err(CurveDecodingError::NotOnCurve),
+            Ok(g_affine) => Ok(g_affine.into_projective()),
+        }
+    }
+
+    fn bytes_to_curve_unchecked(bytes: &[u8]) -> Result<Self, CurveDecodingError> {
+        if bytes.len() != Self::GROUP_ELEMENT_LENGTH {
+            return Err(CurveDecodingError::NotOnCurve);
+        }
+        let mut g = G1Compressed::empty();
+        g.as_mut().copy_from_slice(&bytes);
+        match g.into_affine_unchecked() {
             Err(_) => Err(CurveDecodingError::NotOnCurve),
             Ok(g_affine) => Ok(g_affine.into_projective()),
         }
@@ -347,6 +371,18 @@ impl Curve for G1Affine {
         }
     }
 
+    fn bytes_to_curve_unchecked(bytes: &[u8]) -> Result<Self, CurveDecodingError> {
+        if bytes.len() != Self::GROUP_ELEMENT_LENGTH {
+            return Err(CurveDecodingError::NotOnCurve);
+        }
+        let mut g = G1Compressed::empty();
+        g.as_mut().copy_from_slice(&bytes);
+        match g.into_affine_unchecked() {
+            Err(_) => Err(CurveDecodingError::NotOnCurve),
+            Ok(g_affine) => Ok(g_affine),
+        }
+    }
+
     fn generate<T: Rng>(csprng: &mut T) -> Self { G1::rand(csprng).into_affine() }
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
@@ -455,6 +491,18 @@ impl Curve for G2Affine {
         let mut g = G2Compressed::empty();
         g.as_mut().copy_from_slice(&bytes);
         match g.into_affine() {
+            Err(_) => Err(CurveDecodingError::NotOnCurve),
+            Ok(g_affine) => Ok(g_affine),
+        }
+    }
+
+    fn bytes_to_curve_unchecked(bytes: &[u8]) -> Result<Self, CurveDecodingError> {
+        if bytes.len() != Self::GROUP_ELEMENT_LENGTH {
+            return Err(CurveDecodingError::NotOnCurve);
+        }
+        let mut g = G2Compressed::empty();
+        g.as_mut().copy_from_slice(&bytes);
+        match g.into_affine_unchecked() {
             Err(_) => Err(CurveDecodingError::NotOnCurve),
             Ok(g_affine) => Ok(g_affine),
         }

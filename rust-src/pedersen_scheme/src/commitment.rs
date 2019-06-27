@@ -17,6 +17,7 @@ use serde::{Deserializer, Serializer};
 use crate::errors::{InternalError::CurveDecodingError, *};
 
 use curve_arithmetic::curve_arithmetic::*;
+
 /// A Commitment is a group element .
 #[derive(Debug, PartialEq, Eq)]
 pub struct Commitment<C: Curve>(pub C);

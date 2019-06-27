@@ -2,261 +2,390 @@
 // - bm@concordium.com
 use crate::{cipher::*, errors::*, message::*, public::*, secret::*};
 use bitvec::Bits;
-use libc::size_t;
 use rand::*;
-use rayon::{iter::IntoParallelRefIterator, prelude::*};
+use rayon::prelude::*;
 use std::slice;
 
-#[cfg(test)]
-use pairing::bls12_381::FrRepr;
-#[cfg(test)]
-use pairing::PrimeField;
-use pairing::{
-    bls12_381::{Fr, G1},
-    CurveProjective,
-};
+// #[cfg(test)]
+// use pairing::bls12_381::FrRepr;
+// #[cfg(test)]
+// use pairing::PrimeField;
+use curve_arithmetic::curve_arithmetic::Curve;
+use pairing::bls12_381::{G1, G2};
 
 // foreign function interface
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn new_secret_key() -> *mut SecretKey {
-    let mut csprng = thread_rng();
-    Box::into_raw(Box::new(SecretKey::generate(&mut csprng)))
-}
-
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn secret_key_free(ptr: *mut SecretKey) {
-    if ptr.is_null() {
-        return;
-    }
-    unsafe {
-        Box::from_raw(ptr);
-    }
-}
-
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn public_key(ptr: *mut SecretKey) -> *mut PublicKey {
-    let sk: &SecretKey = unsafe {
-        assert!(!ptr.is_null());
-        &*ptr
+macro_rules! macro_new_secret_key_ffi {
+    ($function_name:ident, $curve_type:path) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub extern "C" fn $function_name() -> *mut SecretKey<$curve_type> {
+            let mut csprng = thread_rng();
+            Box::into_raw(Box::new(SecretKey::generate(&mut csprng)))
+        }
     };
-    Box::into_raw(Box::new(PublicKey::from(sk)))
-}
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn public_key_free(ptr: *mut PublicKey) {
-    if ptr.is_null() {
-        return;
-    }
-    unsafe {
-        Box::from_raw(ptr);
-    }
 }
 
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn encrypt_u64(ptr: *mut PublicKey, e: u64, out: &mut [u8; 6144]) {
-    let pk: &PublicKey = unsafe {
-        assert!(!ptr.is_null());
-        &*ptr
-    };
+macro_new_secret_key_ffi!(new_secret_key_g1, G1);
+macro_new_secret_key_ffi!(new_secret_key_g2, G2);
 
-    out.par_chunks_mut(96)
-        .zip(encrypt_u64_bitwise_iter(*pk, e))
-        .for_each(|(out_chunk, cipher)| {
-            let mut cipher_bytes = Cipher::to_bytes(&cipher);
-            out_chunk.swap_with_slice(&mut cipher_bytes);
-        });
+macro_rules! macro_free_ffi {
+    ($function_name:ident, $type:path) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub extern "C" fn $function_name(ptr: *mut $type) {
+            if ptr.is_null() {
+                return;
+            }
+            unsafe {
+                Box::from_raw(ptr);
+            }
+        }
+    };
 }
 
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn decrypt_u64(
-    ptr: *mut SecretKey,
-    cipher_bytes: *const u8,
-    len: size_t,
-) -> Result<u64, ElgamalError> {
-    let cipher = unsafe {
-        assert!(!cipher_bytes.is_null());
-        slice::from_raw_parts(cipher_bytes, len as usize)
+macro_free_ffi!(free_secret_key_g1, SecretKey<G1>);
+macro_free_ffi!(free_secret_key_g2, SecretKey<G2>);
+
+macro_rules! macro_derive_public_key_ffi {
+    ($function_name:ident, $curve_type:path) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub extern "C" fn $function_name(
+            ptr: *mut SecretKey<$curve_type>,
+        ) -> *mut PublicKey<$curve_type> {
+            let sk: &SecretKey<$curve_type> = unsafe {
+                assert!(!ptr.is_null());
+                &*ptr
+            };
+            Box::into_raw(Box::new(PublicKey::from(sk)))
+        }
     };
-    let sk: &SecretKey = unsafe {
-        assert!(!ptr.is_null());
-        &*ptr
-    };
-    let v: Vec<_> = cipher
-        .par_chunks(96)
-        .map(|x| {
-            let c = Cipher::from_bytes(x).unwrap();
-            let Message(m) = sk.decrypt(&c);
-            m
-        })
-        .collect();
-    Ok(group_bits_to_u64(v.as_slice()))
 }
 
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn decrypt_u64_unsafe(
-    ptr: *mut SecretKey,
-    cipher_bytes: *const u8,
-    len: size_t,
-) -> Result<u64, ElgamalError> {
-    let cipher = unsafe {
-        assert!(!cipher_bytes.is_null());
-        slice::from_raw_parts(cipher_bytes, len as usize)
-    };
-    let sk: &SecretKey = unsafe {
-        assert!(!ptr.is_null());
-        &*ptr
-    };
-    let v: Vec<_> = cipher
-        .par_chunks(96)
-        .map(|x| {
-            let c = Cipher::from_bytes_unchecked(x).unwrap();
-            let Message(m) = sk.decrypt(&c);
-            m
-        })
-        .collect();
-    Ok(group_bits_to_u64(v.as_slice()))
+macro_derive_public_key_ffi!(derive_public_key_g1, G1);
+macro_derive_public_key_ffi!(derive_public_key_g2, G2);
+
+// TODO: Duplicated from ps_sig!
+macro_rules! slice_from_c_bytes_worker {
+    ($cstr:expr, $length:expr, $null_ptr_error:expr, $reader:expr) => {{
+        assert!(!$cstr.is_null(), $null_ptr_error);
+        unsafe { $reader($cstr, $length) }
+    }};
 }
 
-pub fn encrypt_u64_bitwise_iter(
-    pk: PublicKey,
+macro_rules! slice_from_c_bytes {
+    ($cstr:expr, $length:expr) => {
+        slice_from_c_bytes_worker!($cstr, $length, "Null pointer.", slice::from_raw_parts)
+    };
+    ($cstr:expr, $length:expr, $null_ptr_error:expr) => {
+        slice_from_c_bytes_worker!($cstr, $length, $null_ptr_error, slice::from_raw_parts)
+    };
+}
+
+macro_rules! mut_slice_from_c_bytes {
+    ($cstr:expr, $length:expr) => {
+        slice_from_c_bytes_worker!($cstr, $length, "Null pointer.", slice::from_raw_parts_mut)
+    };
+    ($cstr:expr, $length:expr, $null_ptr_error:expr) => {
+        slice_from_c_bytes_worker!($cstr, $length, $null_ptr_error, slice::from_raw_parts_mut)
+    };
+}
+
+pub fn encrypt_u64_bitwise_iter<C: Curve>(
+    pk: PublicKey<C>,
     e: u64,
-) -> impl IndexedParallelIterator<Item = Cipher> {
+) -> impl IndexedParallelIterator<Item = Cipher<C>> {
     (0..64).into_par_iter().map(move |i| {
         let mut csprng = thread_rng();
-        pk.hide_binary_exp(Fr::rand(&mut csprng), e.get(i as u8))
+        pk.hide_binary_exp(&C::generate_scalar(&mut csprng), e.get(i as u8))
     })
 }
 
-pub fn encrypt_u64_bitwise(pk: PublicKey, e: u64) -> Vec<Cipher> {
+/// Generate code to encrypt a single 64 bit integer bitwise.
+macro_rules! macro_encrypt_u64_ffi {
+    ($function_name:ident, $curve_type:path) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub extern "C" fn $function_name(ptr: *mut PublicKey<$curve_type>, e: u64, out: *mut u8) {
+            let pk: &PublicKey<$curve_type> = unsafe {
+                assert!(!ptr.is_null());
+                &*ptr
+            };
+            let elen = 2 * 64 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH;
+            let out_bytes = mut_slice_from_c_bytes!(out, elen);
+            out_bytes.par_chunks_mut(2 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH) // each ciphertext is of this length
+                                        .zip(encrypt_u64_bitwise_iter(*pk, e))
+                                        .for_each(|(out_chunk, cipher)| {
+                                            let mut cipher_bytes = Cipher::to_bytes(&cipher);
+                                            out_chunk.swap_with_slice(&mut cipher_bytes);
+                                        })
+        }
+    };
+}
+
+macro_encrypt_u64_ffi!(encrypt_u64_g1, G1);
+macro_encrypt_u64_ffi!(encrypt_u64_g2, G2);
+
+pub fn encrypt_u64_bitwise<C: Curve>(pk: PublicKey<C>, e: u64) -> Vec<Cipher<C>> {
     encrypt_u64_bitwise_iter(pk, e).collect()
 }
+
 // take an array of zero's and ones and returns a u64
-pub fn group_bits_to_u64(v: &[G1]) -> u64 {
+pub fn group_bits_to_u64<'a, C, I>(v: I) -> u64
+where
+    C: Curve,
+    I: Iterator<Item = &'a C>, {
     let mut r = 0u64;
-    for (i, &e) in v.iter().enumerate() {
-        r.set(i as u8, e == G1::one());
+    let one = C::one_point();
+    for (i, &e) in v.enumerate() {
+        r.set(i as u8, e == one);
     }
     r
 }
 
-pub fn decrypt_u64_bitwise(sk: &SecretKey, v: &[Cipher]) -> u64 {
-    let dr: Vec<G1> = v
+/// Generate code to decrypt a single 64 bit integer bitwise.
+macro_rules! macro_decrypt_u64_ffi {
+    ($function_name:ident, $curve_type:path) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub extern "C" fn $function_name(
+            ptr: *mut SecretKey<$curve_type>,
+            cipher_bytes: *const u8,
+            result_ptr: *mut u64,
+        ) -> i32 {
+            assert!(!result_ptr.is_null());
+            assert!(!ptr.is_null());
+            let cipher_len = 2 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH;
+            let clen = 64 * cipher_len;
+            let cipher = slice_from_c_bytes!(cipher_bytes, clen);
+            let sk: &SecretKey<$curve_type> = unsafe { &*ptr };
+            let v: Result<Vec<$curve_type>, ElgamalError> = cipher
+                .par_chunks(cipher_len)
+                .map(|x| {
+                    let c = Cipher::from_bytes(x)?;
+                    let Message(m) = sk.decrypt(&c);
+                    Ok(m)
+                })
+                .collect();
+            match v {
+                Err(_) => -2,
+                Ok(vv) => {
+                    let result = group_bits_to_u64(vv.iter());
+                    unsafe { *result_ptr = result }
+                    0
+                }
+            }
+        }
+    };
+}
+
+macro_decrypt_u64_ffi!(decrypt_u64_g1, G1);
+macro_decrypt_u64_ffi!(decrypt_u64_g2, G2);
+
+/// Generate code to decrypt a single 64 bit integer bitwise. This function
+/// not check that the cipher is valid. It uses the unchecked conversion
+/// bytes to group elements. It will panic if the ciphertext is invalid.
+macro_rules! macro_decrypt_u64_unsafe_ffi {
+    ($function_name:ident, $curve_type:path) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub extern "C" fn $function_name(
+            ptr: *mut SecretKey<$curve_type>,
+            cipher_bytes: *const u8,
+        ) -> u64 {
+            assert!(!ptr.is_null());
+            let cipher_len = 2 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH;
+            let clen = 64 * cipher_len;
+            let cipher = slice_from_c_bytes!(cipher_bytes, clen);
+            let sk: &SecretKey<$curve_type> = unsafe { &*ptr };
+            let v: Vec<$curve_type> = cipher
+                .par_chunks(cipher_len)
+                .map(|x| {
+                    let c = Cipher::from_bytes_unchecked(x).unwrap();
+                    let Message(m) = sk.decrypt(&c);
+                    m
+                })
+                .collect();
+            group_bits_to_u64(v.iter())
+        }
+    };
+}
+
+macro_decrypt_u64_unsafe_ffi!(decrypt_u64_unsafe_g1, G1);
+macro_decrypt_u64_unsafe_ffi!(decrypt_u64_unsafe_g2, G2);
+
+pub fn decrypt_u64_bitwise<C: Curve>(sk: &SecretKey<C>, v: &[Cipher<C>]) -> u64 {
+    let dr: Vec<C> = v
         .par_iter()
         .map(|x| {
             let Message(m) = sk.decrypt(&x);
             m
         })
         .collect();
-    group_bits_to_u64(dr.as_slice())
+    group_bits_to_u64(dr.iter())
 }
 
-#[test]
-pub fn encrypt_decrypt() {
-    let mut csprng = thread_rng();
-    for _i in 1..100 {
-        let sk = SecretKey::generate(&mut csprng);
-        let sk2 = sk.clone();
-        //        println!("SK={:x}", ByteBuf(&sk.to_bytes()));
-        let pk = PublicKey::from(&sk);
-        let pk2 = pk.clone();
-        //       println!("PK={:x}", ByteBuf(&pk.to_bytes()));
-        let m = Message::generate(&mut csprng);
-        //       println!("M={:x}", ByteBuf(&m.to_bytes()));
-        let c = pk.encrypt(&mut csprng, &m);
-        //       println!("C={:x}", ByteBuf(&c.to_bytes()));
-        let t = sk.decrypt(&c);
-        //       println!("d={:x}", ByteBuf(&t.to_bytes()));
-        assert_eq!(t, m);
-        assert_eq!(pk, pk2);
-        assert_eq!(sk, sk2);
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::Field;
+    macro_rules! macro_test_encrypt_decrypt_success {
+        ($function_name:ident, $curve_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for _i in 1..100 {
+                    let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
+                    let pk = PublicKey::from(&sk);
+                    let m = Message::generate(&mut csprng);
+                    let c = pk.encrypt(&mut csprng, &m);
+                    let mm = sk.decrypt(&c);
+                    assert_eq!(m, mm);
 
-#[test]
-pub fn encrypt_decrypt_exponent() {
-    let mut csprng = thread_rng();
-    let sk = SecretKey::generate(&mut csprng);
-    let sk2 = sk.clone();
-    let pk = PublicKey::from(&sk);
-    let pk2 = pk.clone();
-    for _i in 1..100 {
-        let n = u64::rand(&mut csprng);
-        let e = Fr::from_repr(FrRepr::from(n % 1000)).unwrap();
-        println!("e={}", e);
-        let c = pk.encrypt_exponent(&mut csprng, &e);
-        println!("C={:x}", ByteBuf(&c.to_bytes()));
-        let e2 = sk.decrypt_exponent(&c);
-        println!("e2={}", e2);
-        assert_eq!(e, e2);
+                    // encrypting again gives a different ciphertext (very likely at least)
+                    let canother = pk.encrypt(&mut csprng, &m);
+                    assert_ne!(c, canother);
+                }
+            }
+        };
     }
-    assert_eq!(sk, sk2);
-    assert_eq!(pk, pk2);
-}
 
-#[test]
-pub fn encrypt_decrypt_bitwise_vec() {
-    let mut csprng = thread_rng();
-    let sk = SecretKey::generate(&mut csprng);
-    let sk2 = sk.clone();
-    let pk = PublicKey::from(&sk);
-    let pk2 = pk.clone();
-    for _i in 1..100 {
-        let n = u64::rand(&mut csprng);
-        let c = encrypt_u64_bitwise(pk, n);
-        let n2 = decrypt_u64_bitwise(&sk, &c);
-        assert_eq!(n, n2);
+    macro_test_encrypt_decrypt_success!(encrypt_decrypt_success_g1, G1);
+    macro_test_encrypt_decrypt_success!(encrypt_decrypt_success_g2, G2);
+
+    macro_rules! macro_test_encrypt_decrypt_exponent_success {
+        ($function_name:ident, $curve_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
+                let pk = PublicKey::from(&sk);
+                for _i in 1..100 {
+                    let n = u64::rand(&mut csprng);
+                    let mut e = <$curve_type as Curve>::Scalar::zero();
+                    let one_scalar = <$curve_type as Curve>::Scalar::one();
+                    for _ in 0..(n % 1000) {
+                        e.add_assign(&one_scalar);
+                    }
+                    let c = pk.encrypt_exponent(&mut csprng, &e);
+                    let e2 = sk.decrypt_exponent(&c);
+                    assert_eq!(e, e2);
+                }
+            }
+        };
     }
-    assert_eq!(sk, sk2);
-    assert_eq!(pk, pk2);
-}
 
-#[test]
-pub fn ff_encrypt_decrypt_u64() {
-    let sk = new_secret_key();
-    let pk = public_key(sk);
-    let mut xs = [0u8; 6144];
-    let mut csprng = thread_rng();
-    for _i in 1..100 {
-        let n = u64::rand(&mut csprng);
-        println!("n={}", n);
-        encrypt_u64(pk, n, &mut xs);
-        let m = decrypt_u64(sk, xs.as_ptr(), 6144).unwrap();
-        println!("m={}", m);
-        assert_eq!(m, n);
+    macro_test_encrypt_decrypt_exponent_success!(encrypt_decrypt_exponent_success_g1, G1);
+    macro_test_encrypt_decrypt_exponent_success!(encrypt_decrypt_exponent_success_g2, G2);
+
+    macro_rules! macro_test_encrypt_decrypt_bitwise_vec_success {
+        ($function_name:ident, $curve_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
+                let pk = PublicKey::from(&sk);
+                for _i in 1..100 {
+                    let n = u64::rand(&mut csprng);
+                    let c = encrypt_u64_bitwise(pk, n);
+                    let n2 = decrypt_u64_bitwise(&sk, &c);
+                    assert_eq!(n, n2);
+                }
+            }
+        };
     }
-}
 
-#[test]
-pub fn ff_encrypt_decrypt_u64_unchecked() {
-    let sk = new_secret_key();
-    let pk = public_key(sk);
-    let mut xs = [0u8; 6144];
-    let mut csprng = thread_rng();
-    for _i in 1..100 {
-        let n = u64::rand(&mut csprng);
-        println!("n={}", n);
-        encrypt_u64(pk, n, &mut xs);
-        let m = decrypt_u64_unsafe(sk, xs.as_ptr(), 6144).unwrap();
-        println!("m={}", m);
-        assert_eq!(m, n);
+    macro_test_encrypt_decrypt_bitwise_vec_success!(encrypt_decrypt_bitwise_vec_success_g1, G1);
+    macro_test_encrypt_decrypt_bitwise_vec_success!(encrypt_decrypt_bitwise_vec_success_g2, G2);
+
+    macro_rules! macro_test_encrypt_decrypt_u64_ffi {
+        (
+            $function_name:ident,
+            $new_secret_key_name:ident,
+            $derive_public_name:ident,
+            $encrypt_name:ident,
+            $decrypt_name:ident,
+            $size:expr
+        ) => {
+            #[test]
+            pub fn $function_name() {
+                let byte_size = $size * 2 * 64;
+                let sk = $new_secret_key_name();
+                let pk = $derive_public_name(sk);
+                let mut xs = Vec::with_capacity(byte_size);
+                let mut csprng = thread_rng();
+                for _i in 1..100 {
+                    let n = u64::rand(&mut csprng);
+                    $encrypt_name(pk, n, xs.as_mut_ptr());
+                    let result_ptr = Box::into_raw(Box::new(0));
+                    let m = $decrypt_name(sk, xs.as_ptr(), result_ptr);
+                    assert_eq!(m, 0);
+                    assert_eq!(unsafe { *result_ptr }, n);
+                }
+            }
+        };
     }
-}
 
-// TODO : Remove when done prototyping
-#[allow(dead_code)]
-struct ByteBuf<'a>(&'a [u8]);
-
-impl<'a> std::fmt::LowerHex for ByteBuf<'a> {
-    fn fmt(&self, fmtr: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        for byte in self.0 {
-            (fmtr.write_fmt(format_args!("{:02x}", byte)))?;
-        }
-        Ok(())
+    macro_test_encrypt_decrypt_u64_ffi! {
+        encrypt_decrypt_u64_g1_ffi,
+        new_secret_key_g1,
+        derive_public_key_g1,
+        encrypt_u64_g1,
+        decrypt_u64_g1,
+        <G1 as Curve>::GROUP_ELEMENT_LENGTH
     }
+
+    macro_test_encrypt_decrypt_u64_ffi! {
+        encrypt_decrypt_u64_g2_ffi,
+        new_secret_key_g2,
+        derive_public_key_g2,
+        encrypt_u64_g2,
+        decrypt_u64_g2,
+        <G2 as Curve>::GROUP_ELEMENT_LENGTH
+    }
+
+    macro_rules! macro_test_encrypt_decrypt_u64_unchecked_ffi {
+        (
+            $function_name:ident,
+            $new_secret_key_name:ident,
+            $derive_public_name:ident,
+            $encrypt_name:ident,
+            $decrypt_name:ident,
+            $size:expr
+        ) => {
+            #[test]
+            pub fn $function_name() {
+                let byte_size = $size * 2 * 64;
+                let sk = $new_secret_key_name();
+                let pk = $derive_public_name(sk);
+                let mut xs = vec![0; byte_size];
+                let mut csprng = thread_rng();
+                for _i in 1..100 {
+                    let n = u64::rand(&mut csprng);
+                    $encrypt_name(pk, n, xs.as_mut_ptr());
+                    let m = $decrypt_name(sk, xs.as_ptr());
+                    assert_eq!(m, n);
+                }
+            }
+        };
+    }
+
+    macro_test_encrypt_decrypt_u64_unchecked_ffi! {
+        encrypt_decrypt_u64_g1_ffi_unsafe,
+        new_secret_key_g1,
+        derive_public_key_g1,
+        encrypt_u64_g1,
+        decrypt_u64_unsafe_g1,
+        <G1 as Curve>::GROUP_ELEMENT_LENGTH
+    }
+
+    macro_test_encrypt_decrypt_u64_unchecked_ffi! {
+        encrypt_decrypt_u64_g2_ffi_unsafe,
+        new_secret_key_g2,
+        derive_public_key_g2,
+        encrypt_u64_g2,
+        decrypt_u64_unsafe_g2,
+        <G2 as Curve>::GROUP_ELEMENT_LENGTH
+    }
+
 }
