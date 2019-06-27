@@ -9,7 +9,6 @@ import Data.Maybe
 import Test.QuickCheck.Monadic
 import Test.QuickCheck
 import Test.Hspec
-import Test.Hspec.QuickCheck
 
 testEncryptDecryptWord :: Property
 testEncryptDecryptWord = property $ \n -> monadicIO  $ do 
