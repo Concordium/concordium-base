@@ -9,6 +9,7 @@ import qualified ConcordiumTests.Crypto.VRF
 import qualified ConcordiumTests.Crypto.PedersenOverBLS12G1
 import qualified ConcordiumTests.Crypto.PedersenOverBLS12G2
 import qualified ConcordiumTests.Crypto.Elgamal
+import qualified ConcordiumTests.Crypto.ElgamalBLS12381_G2
 import qualified ConcordiumTests.Crypto.PointchevalSandersOverBLS12381
 
 main :: IO  ()
@@ -25,3 +26,4 @@ main = hspec $ parallel $ do
     ConcordiumTests.Crypto.PedersenOverBLS12G1.tests
     ConcordiumTests.Crypto.PedersenOverBLS12G2.tests
     ConcordiumTests.Crypto.Elgamal.tests
+    ConcordiumTests.Crypto.ElgamalBLS12381_G2.tests
