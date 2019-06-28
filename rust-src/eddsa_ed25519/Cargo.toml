@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 ed25519-dalek = "1.0.0-pre.1"
-rand          = "0"
+rand          = "0.5"
 serde         = "1"
 
 [dev-dependencies]
