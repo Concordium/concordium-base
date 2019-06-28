@@ -90,6 +90,9 @@ impl Curve for G2 {
         let mut i = 0;
         for digit in frrepr.as_mut().iter_mut().rev() {
             tmp.copy_from_slice(&bytes[i..(i + 8)]);
+            if i == 0 {
+                tmp[0] = tmp[0] & 127;
+            }
             *digit = u64::from_be_bytes(tmp);
             i += 8;
         }
@@ -205,6 +208,9 @@ impl Curve for G1 {
         let mut i = 0;
         for digit in frrepr.as_mut().iter_mut().rev() {
             tmp.copy_from_slice(&bytes[i..(i + 8)]);
+            if i == 0 {
+                tmp[0] = tmp[0] & 127;
+            }
             *digit = u64::from_be_bytes(tmp);
             i += 8;
         }
@@ -318,6 +324,9 @@ impl Curve for G1Affine {
         let mut i = 0;
         for digit in frrepr.as_mut().iter_mut().rev() {
             tmp.copy_from_slice(&bytes[i..(i + 8)]);
+            if i == 0 {
+                tmp[0] = tmp[0] & 127;
+            }
             *digit = u64::from_be_bytes(tmp);
             i += 8;
         }
@@ -431,6 +440,9 @@ impl Curve for G2Affine {
         let mut i = 0;
         for digit in frrepr.as_mut().iter_mut().rev() {
             tmp.copy_from_slice(&bytes[i..(i + 8)]);
+            if i == 0 {
+                tmp[0] = tmp[0] & 127;
+            }
             *digit = u64::from_be_bytes(tmp);
             i += 8;
         }
@@ -500,6 +512,9 @@ impl Pairing for Bls12 {
         let mut i = 0;
         for digit in frrepr.as_mut().iter_mut().rev() {
             tmp.copy_from_slice(&bytes[i..(i + 8)]);
+            if i == 0 {
+                tmp[0] = tmp[0] & 127;
+            }
             *digit = u64::from_be_bytes(tmp);
             i += 8;
         }
@@ -509,3 +524,25 @@ impl Pairing for Bls12 {
         }
     }
 }
+
+macro_rules! macro_test_scalar_byte_conversion{
+    ($function_name:ident, $p:path) =>{
+        #[test]
+        pub fn $function_name(){
+            let mut csprng = thread_rng();
+            for i in 0..1000{
+                let scalar = <$p>::generate_scalar(&mut csprng);
+                let bytes = <$p>::scalar_to_bytes(&scalar);
+                let scalar_res = <$p>::bytes_to_scalar(&*bytes);
+                assert!(scalar_res.is_ok());
+                assert_eq!(scalar, scalar_res.unwrap());
+            }
+        }
+    };
+}
+
+macro_test_scalar_byte_conversion!(sc_bytes_conv_g1, G1);
+macro_test_scalar_byte_conversion!(sc_bytes_conv_g2, G2);
+macro_test_scalar_byte_conversion!(sc_bytes_conv_g1Affine, G1Affine);
+macro_test_scalar_byte_conversion!(sc_bytes_conv_g2Affine, G2Affine);
+macro_test_scalar_byte_conversion!(sc_bytes_conv_bls12, Bls12);
