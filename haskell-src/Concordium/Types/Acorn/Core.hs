@@ -1,7 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -14,9 +10,6 @@
 module Concordium.Types.Acorn.Core(module Concordium.Types.Acorn.Core,
                                    ModuleRef(..))
 where
-
-import GHC.Types(Constraint)
-import Data.Void
 
 import Data.ByteString.Char8(ByteString)
 import qualified Data.ByteString.Char8 as BS
@@ -41,19 +34,6 @@ import qualified Concordium.Types.Acorn.NumericTypes as NumTys
 import qualified Concordium.Crypto.SHA256 as SHA256
 import Concordium.Types
 
-type family ExprAnnot a
-type family PatternAnnot a
-type family TypeAnnot a
-
-data UA -- used to express a term/pattern/type is unannotated
-type instance ExprAnnot UA = Void
-type instance TypeAnnot UA = Void
-type instance PatternAnnot UA = Void
-
-type AnnotContext (c :: * -> Constraint) (a :: *) =
-  (c (ExprAnnot a),
-   c (PatternAnnot a),
-   c (TypeAnnot a))
 
 -- Basic literals supported by the language.
 -- TODO: Will need to be modified based on experience with examples.
@@ -102,7 +82,7 @@ data Variable boundvar name origin =
 
 instance (Hashable a, Hashable b, Hashable c) => Hashable (Variable a b c)
 
-data Expr annot origin
+data Expr origin
   = 
   -- |Basic literals.
     Literal !Literal           
@@ -110,16 +90,16 @@ data Expr annot origin
   | Atom !(Variable BoundVar Name origin)
   -- |An anonymous function with type of its argument. We use the de-bruijn
   -- representation of bound variables, hence no variable name.
-  | Lambda !(Type annot origin) !(Expr annot origin)
+  | Lambda !(Type origin) !(Expr origin)
   -- |Type abstraction term (big lambda). Again with de-bruijn convention. Note
   -- that type and term variables are different classes, so going under a type
   -- binder only increases De-Bruijn level of type variables.
-  | TLambda !(Expr annot origin)
+  | TLambda !(Expr origin)
   -- |Application of an expression, includes term and type applications.
-  | App !(Expr annot origin) !(Expr annot origin)
+  | App !(Expr origin) !(Expr origin)
   -- |Local let binding, non-recursive (Let e e') is let e in e' (we use
   -- De-Bruijn convention here as well).
-  | Let !(Expr annot origin) !(Expr annot origin)
+  | Let !(Expr origin) !(Expr origin)
   -- |Mutually recursive let. The list of binders can be empty. In the example
   -- 
   -- @
@@ -129,27 +109,20 @@ data Expr annot origin
   --   * in expressions @e1@ and @e2@ DeBruijn index 0 refers to the local variable
   --     and indices 1 and 2 refer to the functions defined by @e2@ and @e1@ respectively
   --   * in expression @ebody@ DeBruijn index 0 refers to (the functions defined by) @e2@ and 1 to @e1@
-  | LetRec ![(Type annot origin, Expr annot origin, Type annot origin)] !(Expr annot origin)
+  | LetRec ![(Type origin, Expr origin, Type origin)] !(Expr origin)
   -- |Case expression, the list of alternatives should be non-empty. In bodies
   -- of branches we again use the De-Bruijn convention.
-  | Case !(Expr annot origin) ![(Pattern annot origin, Expr annot origin)]
+  | Case !(Expr origin) ![(Pattern origin, Expr origin)]
   -- |Types are also expressions (since we have explicit type application)
-  | Type !(Type annot origin)
-  -- |Free-form annotation. The field is strict so that setting annot=Data.Void
-  -- we can disable this constructor.
-  | EAnnot !(ExprAnnot annot) !(Expr annot origin)
-  deriving (Generic, Functor, Foldable, Traversable)
-
-deriving instance (AnnotContext Eq annot, Eq origin) => Eq (Expr annot origin)
-deriving instance (AnnotContext Show annot, Show origin) => Show (Expr annot origin)
-
+  | Type !(Type origin)
+  deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
 
 -- TODO: We could simply merge PCtor and PVar into one and just use variable for
 -- everything.
 
 -- | We do not allow nested patterns since checking incompleteness is NP-hard,
 -- which we cannot allow for security reasons.
-data Pattern annot origin =
+data Pattern origin =
   -- |We do not need to give it a name because we are using De-Bruijn convention for bound variables.
   PVar 
   -- |Fully instantiated constructor. Constructor can be either locally declared or imported.
@@ -159,11 +132,7 @@ data Pattern annot origin =
   -- strings is quite different than matching ints, and we probably do not want
   -- to allow matching on all literals.
   | PLiteral !Literal                 -- Matching a literal.
-  | PAnnot !(PatternAnnot annot) !(Pattern annot origin)
-  deriving (Generic, Functor, Foldable, Traversable)
-
-deriving instance (AnnotContext Eq annot, Eq origin) => Eq (Pattern annot origin)
-deriving instance (AnnotContext Show annot, Show origin) => Show (Pattern annot origin)
+  deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
 
 data CTorName origin = LocalCTor {ctorName :: !Name}
                      | ImportedCTor {ctorName :: !Name
@@ -211,78 +180,37 @@ data DataTyName origin = LocalDataTy {dataTyName :: !TyName}
 
 instance Hashable origin => Hashable (DataTyName origin)
 
--- |NB: Eq is alpha equality because we are using DeBruijn indices. This is only
--- true if the 'TAnnot' node cannot be constructed or if equality on @annot@
--- is total.
-data Type annot origin =
+data Type origin =
   -- |Polymorphic quantification. Using De-Bruijn representation.
-  TForall !(Type annot origin)
+  TForall !(Type origin)
   -- |Function types.
-  | TArr !(Type annot origin) !(Type annot origin)     
+  | TArr !(Type origin) !(Type origin)     
   -- |Type variables, but also imported or defined types.
   | TVar !BoundTyVar
   -- |Type application, i.e., List Int. This will always be "declared datatype applied to types".
-  | TApp !(DataTyName origin) ![(Type annot origin)]
+  | TApp !(DataTyName origin) ![(Type origin)]
   -- |Base types.
   | TBase !TBase
-  | TAnnot !(TypeAnnot annot) !(Type annot origin)
-  deriving (Generic, Functor, Foldable, Traversable)
-
-deriving instance (AnnotContext Show annot, Show origin) => Show (Type annot origin)
-
--- |The Eq instance ignores annotations.
-instance Eq origin => Eq (Type annot origin) where
-    {-# INLINE (==) #-}
-    (==) = alphaEq
-
-alphaEq :: Eq origin => Type annot origin -> Type annot origin -> Bool
-alphaEq = go
-  where go (TForall t1) (TForall t2) = go t1 t2
-        go (TArr t1 t1') (TArr t2 t2') = go t1 t2 && go t1' t2'
-        go (TVar v) (TVar v') = v == v'
-        go (TApp n tys) (TApp n' tys') =
-          n == n' &&
-          length tys == length tys' &&
-          (and $ zipWith go tys tys')
-        go (TBase b) (TBase b') = b == b'
-        go (TAnnot _ t) t' = go t t'
-        go t (TAnnot _ t') = go t t'
-        go _ _ = False
-
-eraseAnnot :: Type annot origin -> Type annot' origin
-eraseAnnot = go
-    where go :: Type annot origin -> Type annot' origin
-          go (TForall t1) = TForall (go t1)
-          go (TArr t1 t1') = TArr (go t1) (go t1')
-          go (TVar v) = TVar v
-          go (TApp n tys) = TApp n (map go tys)
-          go (TBase b) = TBase b
-          go (TAnnot _ t) = go t
+  deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+-- NB: Eq is alpha equality because we are using DeBruijn indices
 
 -- | A data constructor has a name, and an arity.
 -- For instance, the arity of polymorphic list Cons is going to be [α, List α]
 -- and the variable α must be listed in the type variables of DataType below.
 -- Since we are using DeBruijn indices this concretely means that α < dtParams.
-data DataCon annot origin = DataCon {dcName :: !Name
-                                    , dcArity :: ![Type annot origin] }
-  deriving (Generic, Functor, Traversable, Foldable)
-
-deriving instance (AnnotContext Eq annot, Eq origin) => Eq (DataCon annot origin)
-deriving instance (AnnotContext Show annot, Show origin) => Show (DataCon annot origin)
+data DataCon origin = DataCon {dcName :: !Name
+                              , dcArity :: ![Type origin] }
+  deriving (Show, Eq, Generic, Functor, Traversable, Foldable)
 
 -- | A datatype declaration is a name, plus the number of type parameters, plus
 -- a non-empty list of constructors.
-data DataType annot origin =
-  DataType {
-  dtVis :: !DataTyVisibility
-  , dtName :: !TyName
-  , dtParams :: !Word32 -- ^The number of parameters. Use DeBruijn to refer to them.
-  , dtCons :: ![DataCon annot origin]
-  }
-  deriving (Generic, Functor, Traversable, Foldable)
-
-deriving instance (AnnotContext Eq annot, Eq origin) => Eq (DataType annot origin)
-deriving instance (AnnotContext Show annot, Show origin) => Show (DataType annot origin)
+data DataType origin = DataType {
+                                dtVis :: !DataTyVisibility
+                                , dtName :: !TyName
+                                , dtParams :: !Word32 -- ^The number of parameters. Use DeBruijn to refer to them.
+                                , dtCons :: ![DataCon origin]
+                                }
+  deriving (Show, Eq, Generic, Functor, Traversable, Foldable)
 
 -- |The parameter v in 'Sender' and 'Getter' are going to be instantiated with
 -- Type in 'ConstraintDecl' and with 'Expr' in 'ConstraintImpl'.
@@ -298,7 +226,7 @@ data Getter v = Getter {
                        }
     deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
-data ConstraintDecl annot v
+data ConstraintDecl v
     = ConstraintDecl
       {
       constraintName :: !TyName
@@ -306,15 +234,12 @@ data ConstraintDecl annot v
       -- other contracts. They should be of type (and will be typechecked to be)
       -- ref C -> T -> Transaction where ref C is address of contracts
       -- implementing interface/class C.
-      , senders   :: ![Sender (Type annot v)] 
+      , senders   :: ![Sender (Type v)] 
       -- |Getters of a constraint are methods which can be used to access the state
       -- of any instance implementing this class. They are of type ref C -> T.
-      , getters   :: ![Getter (Type annot v)] 
+      , getters   :: ![Getter (Type v)] 
       }
-    deriving (Generic, Functor, Foldable, Traversable)
-
-deriving instance (AnnotContext Eq annot, Eq origin) => Eq (ConstraintDecl annot origin)
-deriving instance (AnnotContext Show annot, Show origin) => Show (ConstraintDecl annot origin)
+    deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
 -- |Canonical reference to a constraint.
 data ConstraintRef origin = ImportedCR {crName :: !TyName, crMod :: !origin}
@@ -323,39 +248,34 @@ data ConstraintRef origin = ImportedCR {crName :: !TyName, crMod :: !origin}
 
 instance Hashable a => Hashable (ConstraintRef a)
 
-data ConstraintImpl annot origin
+data ConstraintImpl origin
     = ConstraintImpl
       {
       constraintNameImpl :: ConstraintRef origin
-      , sendersImpl   :: ![Sender (Expr annot origin)] 
-      , gettersImpl   :: ![Getter (Expr annot origin)] 
+      , sendersImpl   :: ![Sender (Expr origin)] 
+      , gettersImpl   :: ![Getter (Expr origin)] 
       }
-    deriving (Generic, Functor, Foldable, Traversable)
-
-deriving instance (AnnotContext Eq annot, Eq origin) => Eq (ConstraintImpl annot origin)
-deriving instance (AnnotContext Show annot, Show origin) => Show (ConstraintImpl annot origin)
+    deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
 -- |A contract has a name, an init method, and a receive method. The type of
 -- local state is inferred from the type of the init method, and the type of
 -- messages the contract can receive is inferred from the type of the receive
 -- method. Moreover, the contract can "implement" or be an instance of a number
 -- of constraints (by name).
-data Contract annot a = Contract {
+data Contract a = Contract {
   cName :: !TyName
-  , cInit :: !(Expr annot a)
-  , cReceive :: !(Expr annot a)
-  , cInstances :: ![ConstraintImpl annot a]
+  , cInit :: !(Expr a)
+  , cReceive :: !(Expr a)
+  , cInstances :: ![ConstraintImpl a]
   }
-  deriving(Generic)
+  deriving(Show, Eq, Generic)
 
-deriving instance (AnnotContext Eq annot, Eq origin) => Eq (Contract annot origin)
-deriving instance (AnnotContext Show annot, Show origin) => Show (Contract annot origin)
 
 -- * Utility functions used during typechecking.
 
 -- |Apply a type of the form forall .... to a list of types.
 -- Used to instantiate the arity arguments of datatype constructors during typechecking.
-applyTy :: [Type annot origin] -> Type annot origin -> Type annot origin
+applyTy :: [Type origin] -> Type origin -> Type origin
 applyTy ts t = go t 0
   where len :: Int
         len = length ts
@@ -367,13 +287,12 @@ applyTy ts t = go t 0
         -- FIXME: It is not clear that fromIntegral is always correct here. Documentation states it preserves representation, not sign.
         go ta@(TVar v) n | fromIntegral v >= n && fromIntegral v - n < len = ts !! (fromIntegral v - n)
                          | otherwise = liftFreeBy (fromIntegral n) ta
-        go (TAnnot a ty) n = TAnnot a (go ty n)
 
 -- TODO: FIXME: We should not use this during typechecking since it can cause
 -- exponential blow up in term size when we blindly substitute.
 -- |'substTy' t₁ t₂ replaces the variable "0" in t₁ with t₂
 -- Substitution is capture avoiding.
-substTy :: Type annot origin -> Type annot origin -> Type annot origin
+substTy :: Type a -> Type a -> Type a
 substTy t t' = go (fromIntegral (0::Word32)) t
   where go _ ty@(TBase _) = ty
         go n (TApp t1 t2) = TApp t1 (map (go n) t2)
@@ -384,7 +303,6 @@ substTy t t' = go (fromIntegral (0::Word32)) t
         go n ta@(TVar v) | v == n = liftTy 0 n t'
                          | v > n = TVar (v-1) -- we have removed a binder, so must decrease the pointer
                          | otherwise = ta
-        go n (TAnnot a ty) = TAnnot a (go n ty)
 
         liftTy _ _ ty@(TBase _) = ty
         liftTy l n (TApp t1 t2) = TApp t1 (map (liftTy l n) t2)
@@ -394,14 +312,13 @@ substTy t t' = go (fromIntegral (0::Word32)) t
         -- Documentation states it preserves representation, not sign.
         liftTy l n ta@(TVar v) | v >= l = TVar (v + n)
                                | otherwise = ta
-        liftTy l n (TAnnot a ty) = TAnnot a (liftTy l n ty)
 
 -- |Lift all free variables by 1 (to be used when going under type lambda in typechecking terms).
-liftFree :: Type annot origin -> Type annot origin
+liftFree :: Type a -> Type a
 liftFree = liftFreeBy 1
 
 -- |Lift all free variables by k (to be used when going under type lambda in typechecking terms).
-liftFreeBy :: BoundTyVar -> Type annot origin -> Type annot origin
+liftFreeBy :: BoundTyVar -> Type origin -> Type origin
 liftFreeBy k = if k == 0 then id else go 0
   where go _ ty@(TBase _) = ty
         go n (TApp t1 t2) = TApp t1 (map (go n) t2)
@@ -409,7 +326,7 @@ liftFreeBy k = if k == 0 then id else go 0
         go n (TForall t1) = TForall (go (n+1) t1)
         go n ta@(TVar v) | v >= n = TVar (v+k)
                          | otherwise = ta
-        go n (TAnnot a t) = TAnnot a (go n t)
+
 
 -- *The notion of a module.
 
@@ -423,15 +340,12 @@ data Import = Import {iModule :: ModuleRef
                      }
   deriving(Show, Eq, Generic)
 
-data Definition annot origin = Definition {
+data Definition a = Definition {
   dVis :: !Visibility
   , dName :: !Name
-  , dExpr :: !(Expr annot origin)
+  , dExpr :: !(Expr a)
   }
-  deriving (Generic, Functor, Foldable, Traversable)
-
-deriving instance (AnnotContext Eq annot, Eq origin) => Eq (Definition annot origin)
-deriving instance (AnnotContext Show annot, Show origin) => Show (Definition annot origin)
+  deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
 -- |Name, but differentiated for sanity checking. But in practice there can never be a confusion between module names and term and type names.
 newtype ModuleName = ModuleName { moduleName :: Word32 }
@@ -442,23 +356,20 @@ type Version = Word32
 
 -- |This is the unit that can be deployed on the chain. The module should not be
 -- empty, so there should be either a non-empty list of constracts, constraints, or contracts.
-data Module annot =
+data Module =
   Module { 
          mImports :: ![Import]
-         , mDataTypes :: ![DataType annot ModuleName]
-         , mConstraintDecls :: ![ConstraintDecl annot ModuleName]
+         , mDataTypes :: ![DataType ModuleName]
+         , mConstraintDecls :: ![ConstraintDecl ModuleName]
          -- |List of pure functions provided by the module. These should not have any "effectful" operations, such as
          -- reading state of the blockchain, or sending messages, etc. This is part of a well-formedness check.
-         , mDefs :: ![Definition annot ModuleName]
+         , mDefs :: ![Definition ModuleName]
          -- |A possibly empty list of contracts.
-         , mContracts :: ![Contract annot ModuleName]
+         , mContracts :: ![Contract ModuleName]
          -- |Version number of this module, i.e., which language version it corresponds to.
          , mVersion :: !Version
          }
-  deriving (Generic)
-
-deriving instance (AnnotContext Eq annot) => Eq (Module annot)
-deriving instance (AnnotContext Show annot) => Show (Module annot)
+  deriving (Eq, Show, Generic)
 
 -- |Whether a definition can be called from other modules or not.
 data Visibility = Public | Private
@@ -469,7 +380,7 @@ data DataTyVisibility = None | OnlyType | All
     deriving(Show, Eq, Generic)
 
 -- plays the role of the prim module. Invalid otherwise.
-emptyModule :: Module annot
+emptyModule :: Module
 emptyModule = Module {
   mImports =  []
   , mDataTypes = []
@@ -480,8 +391,6 @@ emptyModule = Module {
   }
 
 -- * Expression and module serialization
--- The annotations on types/terms/patterns are completely ignored in
--- serialization.
 
 instance S.Serialize Literal where
   get = getLit
@@ -491,15 +400,15 @@ instance S.Serialize BoundVar where
   get = getBoundVar
   put = putBoundVar
 
-instance S.Serialize origin => S.Serialize (Expr a origin) where
+instance S.Serialize a => S.Serialize (Expr a) where
     get = getExpr
     put = putExpr
 
-instance S.Serialize origin => S.Serialize (Type a origin) where
+instance S.Serialize a => S.Serialize (Type a) where
   get = getType
   put = putType
 
-instance S.Serialize (Module annot) where
+instance S.Serialize Module where
   get = getModule
   put = putModule
 
@@ -515,11 +424,11 @@ instance S.Serialize TyName where
   get = getTyName
   put = putTyName
 
-instance S.Serialize origin => S.Serialize (ConstraintDecl annot origin) where
+instance S.Serialize a => S.Serialize (ConstraintDecl a) where
   get = getConstraintDecl
   put = putConstraintDecl
 
-putExpr :: S.Serialize origin => P.Putter (Expr annot origin)
+putExpr :: S.Serialize t => P.Putter (Expr t)
 putExpr (Literal l) = do P.putWord8 10
                          putLit l
 putExpr (Atom at) = case at of
@@ -530,7 +439,6 @@ putExpr (Atom at) = case at of
                         Imported l orig -> do P.putWord8 2
                                               putName l
                                               S.put orig
-putExpr (EAnnot _ e) = putExpr e
 putExpr (Lambda ty body) = do
   P.putWord8 3
   putType ty
@@ -560,7 +468,7 @@ putExpr (Type ty) = do
   P.putWord8 9
   putType ty
 
-putPat :: S.Serialize origin => P.Putter (Pattern annot origin)
+putPat :: S.Serialize t => P.Putter (Pattern t)
 putPat PVar = do
   P.putWord8 0
 putPat (PCtor ctor) = case ctor of
@@ -574,7 +482,6 @@ putPat (PCtor ctor) = case ctor of
 putPat (PLiteral lit) = do
   P.putWord8 3
   putLit lit
-putPat (PAnnot _ p) = putPat p -- NB: Annotation is ignored.
 
 putLit :: P.Putter Literal
 putLit l = case l of
@@ -609,7 +516,7 @@ putDataTyName n = case n of
 
 
 
-putType :: S.Serialize origin => P.Putter (Type annot origin)
+putType :: S.Serialize t => P.Putter (Type t)
 putType (TForall t) = do P.putWord8 0
                          putType t
 putType (TArr t1 t2) = do P.putWord8 1
@@ -621,7 +528,6 @@ putType (TApp t1 t2) = do P.putWord8 3
                           putDataTyName t1
                           putLength t2
                           mapM_ putType t2
-putType (TAnnot _ t) = putType t -- NB: annotation is ignored                          
 putType (TBase tbase) = case tbase of
   TInt32 -> P.putWord8 4
   TInt64 -> P.putWord8 5
@@ -654,7 +560,7 @@ putName = P.putWord32be . fromIntegral
 putTyName :: P.Putter TyName
 putTyName = P.putWord32be . fromIntegral
 
-putDataType :: P.Putter (DataType annot ModuleName)
+putDataType :: P.Putter (DataType ModuleName)
 putDataType DataType{..} = do
   putTyName dtName
   P.putWord32be dtParams
@@ -671,14 +577,14 @@ putVisibility :: P.Putter Visibility
 putVisibility Private = P.putWord8 0
 putVisibility Public = P.putWord8 1
 
-putDataCons :: P.Putter (DataCon annot ModuleName)
+putDataCons :: P.Putter (DataCon ModuleName)
 putDataCons DataCon{..} = do
   putName dcName
   putLength dcArity
   mapM_ putType dcArity
 
 
-putConstraintDecl :: S.Serialize t => P.Putter (ConstraintDecl annot t)
+putConstraintDecl :: S.Serialize t => P.Putter (ConstraintDecl t)
 putConstraintDecl ConstraintDecl{..} = do
   putTyName constraintName
   putLength senders
@@ -686,7 +592,7 @@ putConstraintDecl ConstraintDecl{..} = do
   putLength getters
   mapM_ (\Getter{..} -> putName gName >> putType gVal) getters
 
-putContract :: P.Putter (Contract annot ModuleName)
+putContract :: P.Putter (Contract ModuleName)
 putContract Contract{..} = do
   putTyName cName
   putExpr cInit
@@ -694,7 +600,7 @@ putContract Contract{..} = do
   putLength cInstances
   mapM_ putConstraintImpl cInstances
 
-putConstraintImpl :: P.Putter (ConstraintImpl annot ModuleName)
+putConstraintImpl :: P.Putter (ConstraintImpl ModuleName)
 putConstraintImpl ConstraintImpl{..} = do
   putConstraintRef constraintNameImpl
   putLength sendersImpl
@@ -706,7 +612,7 @@ putConstraintRef :: P.Putter (ConstraintRef ModuleName)
 putConstraintRef (LocalCR cname) = P.putWord8 0 >> putTyName cname
 putConstraintRef (ImportedCR cname origin) = P.putWord8 1 >> putTyName cname >> putModuleName origin
 
-putModule :: P.Putter (Module annot)
+putModule :: P.Putter Module
 putModule Module{..} = do
   putLength mImports
   mapM_ (\Import{..} -> putModuleRef iModule >> putModuleName iAs) mImports
@@ -746,7 +652,7 @@ getDataTyName = do
     1 -> ImportedDataTy <$> getTyName <*> S.get
     _ -> fail "Not a valid data type name."
 
-getType :: S.Serialize origin => S.Get (Type annot origin)
+getType :: S.Serialize a => S.Get (Type a)
 getType = do h <- G.getWord8
              case h of
                0 -> TForall <$> getType
@@ -780,7 +686,7 @@ getAAddress :: G.Get AccountAddress
 getAAddress = S.get
 
 
-getPat :: S.Serialize origin => G.Get (Pattern annot origin)
+getPat :: S.Serialize a => G.Get (Pattern a)
 getPat = do h <- G.getWord8
             case h of
               0 -> return $ PVar
@@ -806,7 +712,7 @@ getLit = do h <- G.getWord8
               11 -> AAddress <$> getAAddress
               _ -> fail "Not a valid literal."
 
-getExpr :: S.Serialize origin => G.Get (Expr annot origin)
+getExpr :: S.Serialize a => G.Get (Expr a)
 getExpr = do h <- G.getWord8
              case h of
                10 -> Literal <$> getLit
@@ -838,7 +744,7 @@ getConstraintRef = do h <- G.getWord8
                         1 -> liftM2 ImportedCR getTyName S.get
                         _ -> fail "Not a valid constraint reference."
 
-getConstraintImpl :: G.Get (ConstraintImpl annot ModuleName)
+getConstraintImpl :: G.Get (ConstraintImpl ModuleName)
 getConstraintImpl = do
   constraintNameImpl <- getConstraintRef
   ls <- getLength
@@ -847,7 +753,7 @@ getConstraintImpl = do
   gettersImpl <- replicateM lg $ liftM2 Getter getName getExpr
   return $ ConstraintImpl{..}
 
-getConstraintDecl :: S.Serialize a => S.Get (ConstraintDecl annot a)
+getConstraintDecl :: S.Serialize a => S.Get (ConstraintDecl a)
 getConstraintDecl = do
   constraintName <- getTyName
   ls <- getLength
@@ -856,7 +762,7 @@ getConstraintDecl = do
   getters <- replicateM lg $ liftM2 Getter getName getType
   return $ ConstraintDecl{..}
   
-getDataCons :: G.Get (DataCon annot ModuleName)
+getDataCons :: G.Get (DataCon ModuleName)
 getDataCons = do
   dcName <- getName
   l <- getLength
@@ -872,7 +778,7 @@ getDtVisibility = do h <- G.getWord8
                        2 -> return All
                        _ -> fail "Not a valid datatype visibility."
 
-getDataType :: G.Get (DataType annot ModuleName)
+getDataType :: G.Get (DataType ModuleName)
 getDataType = do
   dtName <- getTyName
   dtParams <- G.getWord32be
@@ -894,14 +800,14 @@ getVisibility = do h <- G.getWord8
                      1 -> return Public
                      _ -> fail "Not a valid visibility annotation."
 
-getDefinition :: G.Get (Definition annot ModuleName)
+getDefinition :: G.Get (Definition ModuleName)
 getDefinition = do
   dName <- getName
   dVis <- getVisibility
   dExpr <- getExpr
   return $ Definition{..}
 
-getContract :: G.Get (Contract annot ModuleName)
+getContract :: G.Get (Contract ModuleName)
 getContract = do
   cName <- getTyName
   cInit <- getExpr
@@ -910,7 +816,7 @@ getContract = do
   cInstances <- replicateM l getConstraintImpl
   return $ Contract{..}
 
-getModule :: G.Get (Module annot)
+getModule :: G.Get Module
 getModule = do
   lIm <- getLength
   mImports <- replicateM lIm getImport
@@ -927,8 +833,9 @@ getModule = do
 
 -- * Deriving module reference from serialization
 -- |Hash of a serialization of a module, encoded into base16
-moduleHash :: Module annot -> ModuleRef
+moduleHash :: Module -> ModuleRef
 moduleHash =  ModuleRef . SHA256.hash . P.runPut . putModule 
+
 
 --
 bit128ToPair :: Integer -> (Word64, Word64)

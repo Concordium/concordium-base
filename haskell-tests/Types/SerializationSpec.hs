@@ -31,14 +31,14 @@ groupIntoSize s =
           in show lb ++ " -- " ++ show ub ++ "kB"
 
 -- check that getExpr is left inverse of putExpr
-checkExpr :: Expr UA ModuleName -> Property
+checkExpr :: Expr ModuleName -> Property
 checkExpr e = let bs = P.runPutLazy (putExpr e)
               in  case G.runGetLazy getExpr bs of
                     Left err -> counterexample err False
                     Right e' -> label (groupIntoSize (BS.length bs)) $ e === e'
 
 -- check that getModule is left inverse of putModule
-checkModule :: Module UA -> Property
+checkModule :: Module -> Property
 checkModule e = let bs = P.runPutLazy (putModule e)
                 in  case G.runGetLazy getModule bs of
                       Left err -> counterexample err False

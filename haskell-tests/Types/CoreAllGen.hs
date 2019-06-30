@@ -34,7 +34,7 @@ genModuleName = ModuleName <$> arbitrary
 genDataTyName :: Gen (DataTyName ModuleName)
 genDataTyName = oneof [LocalDataTy <$> genTyName, ImportedDataTy <$> genTyName <*> genModuleName]
 
-genType :: Gen (Type UA ModuleName)
+genType :: Gen (Type ModuleName)
 genType = sized $ genType'
   where genType' n = oneof [genBaseType
                            ,TVar <$> genBoundTyVar
@@ -78,7 +78,7 @@ genLit = oneof [Str . BS.pack <$> arbitrary
                ,CAddress <$> genCAddress
                ]
 
-genPat :: Gen (Pattern UA ModuleName)
+genPat :: Gen (Pattern ModuleName)
 genPat = oneof [return $ PVar
                ,PCtor . LocalCTor <$> genName
                ,PCtor <$> liftM2 ImportedCTor genName genModuleName
@@ -92,7 +92,7 @@ genCAddress :: Gen ContractAddress
 genCAddress = ContractAddress <$> (ContractIndex <$> arbitrary) <*> (ContractSubindex <$> arbitrary)
 
 
-genExpr :: Gen (Expr UA ModuleName)
+genExpr :: Gen (Expr ModuleName)
 genExpr = sized genExpr'
   where genExpr' n = oneof $ [atoms
                              ,genLambda n
@@ -139,7 +139,7 @@ genExpr = sized genExpr'
 genConstraintRef :: Gen (ConstraintRef ModuleName)
 genConstraintRef = oneof [LocalCR <$> genTyName, liftM2 ImportedCR genTyName genModuleName]
 
-genConstraintImpl :: Gen (ConstraintImpl UA ModuleName)
+genConstraintImpl :: Gen (ConstraintImpl ModuleName)
 genConstraintImpl = sized $ \n -> do
   constraintNameImpl <- genConstraintRef
   ls <- choose (0, n)
@@ -149,7 +149,7 @@ genConstraintImpl = sized $ \n -> do
   return $ ConstraintImpl{..}
 
 
-genConstraintDecl :: Gen (ConstraintDecl UA ModuleName)
+genConstraintDecl :: Gen (ConstraintDecl ModuleName)
 genConstraintDecl = sized $ \n -> do
   constraintName <- genTyName
   ls <- choose (0, n)
@@ -158,7 +158,7 @@ genConstraintDecl = sized $ \n -> do
   getters <- vectorOf lg $ liftM2 Getter genName genType
   return $ ConstraintDecl{..}
 
-genDataCons :: Gen (DataCon UA ModuleName)
+genDataCons :: Gen (DataCon ModuleName)
 genDataCons = sized $ \n -> do
   dcName <- genName
   l <- choose (0, n)
@@ -168,7 +168,7 @@ genDataCons = sized $ \n -> do
 genDtVisibility :: Gen DataTyVisibility
 genDtVisibility = elements [None, OnlyType, All]
 
-genDataType :: Gen (DataType UA ModuleName)
+genDataType :: Gen (DataType ModuleName)
 genDataType = sized $ \n -> do
   dtName <- genTyName
   dtParams <- arbitrary
@@ -189,14 +189,14 @@ genImport = do
 genVisibility :: Gen Visibility
 genVisibility = elements [Private,Public]
 
-genDefinition :: Gen (Definition UA ModuleName)
+genDefinition :: Gen (Definition ModuleName)
 genDefinition = do
   dName <- genName
   dVis <- genVisibility
   dExpr <- genExpr
   return $ Definition{..}
 
-genContract :: Gen (Contract UA ModuleName)
+genContract :: Gen (Contract ModuleName)
 genContract = sized $ \n -> do
   cName <- genTyName
   cInit <- genExpr
@@ -205,7 +205,7 @@ genContract = sized $ \n -> do
   cInstances <- vectorOf l genConstraintImpl
   return $ Contract{..}
 
-genModule :: Gen (Module UA)
+genModule :: Gen Module
 genModule = sized $ \n -> do
   lIm <- choose (0, n)
   mImports <- vectorOf lIm genImport
