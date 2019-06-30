@@ -30,6 +30,7 @@ dependencies:
 - microlens-platform >=0.3
 - concordium-crypto
 - aeson >= 1.4.2
+- ghc-prim >= 0.5.3
 
 library:
   source-dirs: src
