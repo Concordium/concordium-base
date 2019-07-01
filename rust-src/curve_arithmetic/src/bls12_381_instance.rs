@@ -525,12 +525,12 @@ impl Pairing for Bls12 {
     }
 }
 
-macro_rules! macro_test_scalar_byte_conversion{
-    ($function_name:ident, $p:path) =>{
+macro_rules! macro_test_scalar_byte_conversion {
+    ($function_name:ident, $p:path) => {
         #[test]
-        pub fn $function_name(){
+        pub fn $function_name() {
             let mut csprng = thread_rng();
-            for i in 0..1000{
+            for i in 0..1000 {
                 let scalar = <$p>::generate_scalar(&mut csprng);
                 let bytes = <$p>::scalar_to_bytes(&scalar);
                 let scalar_res = <$p>::bytes_to_scalar(&*bytes);
