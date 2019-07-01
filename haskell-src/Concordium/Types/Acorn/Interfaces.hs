@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -492,7 +493,7 @@ class Monad m => StaticEnvironmentMonad annot m | m -> annot where
   getChainMetadata :: m ChainMetadata
 
   -- |Return a module interface needed for typechecking.
-  getModuleInterfaces :: Core.ModuleRef -> m (Maybe (Interface annot, ValueInterface annot))
+  getModuleInterfaces :: Core.ModuleRef -> m (Maybe (Interface annot, ValueInterface (Core.ExprAnnot annot)))
 
   getInterface :: Core.ModuleRef -> m (Maybe (Interface annot))
   getInterface mref = do
@@ -529,7 +530,7 @@ instance StaticEnvironmentMonad annot m => TypecheckerMonad annot (ExceptT (Typi
             Just iface -> return $ Map.lookup n (exportedConstraints iface)
 
 
-instance StaticEnvironmentMonad annot m => LinkerMonad annot (MaybeT m) where
+instance (annot ~ Core.ExprAnnot tannot, StaticEnvironmentMonad tannot m) => LinkerMonad annot (MaybeT m) where
   {-# INLINE getExprInModule #-}
   getExprInModule mref n =
     getModuleInterfaces mref >>=
