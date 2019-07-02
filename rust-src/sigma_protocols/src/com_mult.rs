@@ -5,15 +5,15 @@ use sha2::{Digest, Sha256};
 
 #[derive(Clone)]
 pub struct ComMultProof<T: Curve> {
-    challenge:         T::Scalar,
-    randomised_point: ([T; 3],T),
-    witness:           ([(T::Scalar,T::Scalar); 3], T::Scalar)
+    challenge:        T::Scalar,
+    randomised_point: ([T; 3], T),
+    witness:          ([(T::Scalar, T::Scalar); 3], T::Scalar),
 }
 
 pub fn prove_com_mult<T: Curve, R: Rng>(
     csprng: &mut R,
-    public: &[T;3],
-    secret: &[(T::Scalar, T::Scalar);3],
+    public: &[T; 3],
+    secret: &[(T::Scalar, T::Scalar); 3],
     coeff: &[T; 2],
 ) -> ComMultProof<T> {
     let mut hasher = Sha256::new();
@@ -22,10 +22,10 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
     hasher.input(&*public[2].curve_to_bytes());
     let [public_1, public_2, public_3] = public;
     let [g, h] = coeff;
-    //let [s_11, s_12, s_13, s_21,s_22, s_23] = secret;
+    // let [s_11, s_12, s_13, s_21,s_22, s_23] = secret;
     let mut randomised_point = [T::zero_point(); 3];
     let mut a_randomised_point = T::zero_point();
-    let mut witness = [(T::Scalar::zero(), T::Scalar::zero());3]; 
+    let mut witness = [(T::Scalar::zero(), T::Scalar::zero()); 3];
     let mut a_witness = T::Scalar::zero();
     let mut hash = [0u8; 32];
     let mut suc = false;
@@ -43,7 +43,9 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
         }
         let r_2 = rands[1].0;
         a_rand = T::generate_scalar(csprng);
-        a_randomised_point = public_1.mul_by_scalar(&r_2).plus_point(&h.mul_by_scalar(&a_rand));
+        a_randomised_point = public_1
+            .mul_by_scalar(&r_2)
+            .plus_point(&h.mul_by_scalar(&a_rand));
         for i in 0..3 {
             hasher2.input(&*randomised_point[i].curve_to_bytes());
         }
@@ -56,17 +58,16 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
                 } else {
                     challenge = x;
                     for i in 0..3 {
-                        let (mut s_1i, mut s_2i) = secret[i].clone(); 
+                        let (mut s_1i, mut s_2i) = secret[i].clone();
                         let (r_i, t_i) = rands[i];
                         s_1i.mul_assign(&challenge);
                         s_1i.negate();
                         s_1i.add_assign(&r_i);
-                        
+
                         s_2i.mul_assign(&challenge);
                         s_2i.negate();
                         s_2i.add_assign(&t_i);
                         witness[i] = (s_1i, s_2i);
-
                     }
                     let mut rel = secret[1].0;
                     rel.mul_assign(&secret[0].1);
@@ -83,26 +84,22 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
     }
     ComMultProof {
         challenge,
-        randomised_point:(randomised_point, a_randomised_point),
-        witness: (witness, a_witness)
+        randomised_point: (randomised_point, a_randomised_point),
+        witness: (witness, a_witness),
     }
 }
 
-pub fn verify_com_mult<T: Curve>(
-    coeff: &[T; 2],
-    public: &[T; 3],
-    proof: &ComMultProof<T>,
-) -> bool {
+pub fn verify_com_mult<T: Curve>(coeff: &[T; 2], public: &[T; 3], proof: &ComMultProof<T>) -> bool {
     let mut hasher = Sha256::new();
-    //let (g_1, h_1, g, h) = base;
-    //let (e_1, e_2, e_3) = public;
-    let [g,h] = coeff;
+    // let (g_1, h_1, g, h) = base;
+    // let (e_1, e_2, e_3) = public;
+    let [g, h] = coeff;
     hasher.input(&*public[0].curve_to_bytes());
     hasher.input(&*public[1].curve_to_bytes());
     hasher.input(&*public[2].curve_to_bytes());
     let (witness, a_witness) = proof.witness;
     let (randomised_point, a_randomised_point) = proof.randomised_point;
-    for rp in randomised_point.iter(){
+    for rp in randomised_point.iter() {
         hasher.input(&*rp.curve_to_bytes());
     }
     hasher.input(&*a_randomised_point.curve_to_bytes());
@@ -117,10 +114,19 @@ pub fn verify_com_mult<T: Curve>(
             for i in 0..3 {
                 let (w_1, w_2) = witness[i];
                 let v = randomised_point[i];
-                let retrieved_v = public[i].mul_by_scalar(&c).plus_point(&g.mul_by_scalar(&w_1)).plus_point(&h.mul_by_scalar(&w_2));
-                if v != retrieved_v { return false}
+                let retrieved_v = public[i]
+                    .mul_by_scalar(&c)
+                    .plus_point(&g.mul_by_scalar(&w_1))
+                    .plus_point(&h.mul_by_scalar(&w_2));
+                if v != retrieved_v {
+                    return false;
+                }
             }
-            a_randomised_point == public[2].mul_by_scalar(&c).plus_point(&public[0].mul_by_scalar(&witness[1].0)).plus_point(&h.mul_by_scalar(&a_witness))
+            a_randomised_point
+                == public[2]
+                    .mul_by_scalar(&c)
+                    .plus_point(&public[0].mul_by_scalar(&witness[1].0))
+                    .plus_point(&h.mul_by_scalar(&a_witness))
         }
     }
 }
@@ -128,23 +134,28 @@ pub fn verify_com_mult<T: Curve>(
 #[test]
 pub fn test_com_mult() {
     let mut csprng = thread_rng();
-    let mut secret: [(<G1 as Curve>::Scalar, <G1 as Curve>::Scalar);3] =  [(<G1 as Curve>::Scalar::zero(), <G1 as Curve>::Scalar::zero());3];
-    let mut coeff: [G1;2] = [G1::zero_point();2];
-    let mut public: [G1;3] =  [G1::zero_point(); 3];
+    let mut secret: [(<G1 as Curve>::Scalar, <G1 as Curve>::Scalar); 3] =
+        [(<G1 as Curve>::Scalar::zero(), <G1 as Curve>::Scalar::zero()); 3];
+    let mut coeff: [G1; 2] = [G1::zero_point(); 2];
+    let mut public: [G1; 3] = [G1::zero_point(); 3];
     for i in 0..100 {
-        for i in 0..2{
-         secret[i] = (G1::generate_scalar(&mut csprng),G1::generate_scalar(&mut csprng));
+        for i in 0..2 {
+            secret[i] = (
+                G1::generate_scalar(&mut csprng),
+                G1::generate_scalar(&mut csprng),
+            );
         }
         let mut a_3 = secret[0].0.clone();
         a_3.mul_assign(&secret[1].0);
-        secret[2] = (a_3,G1::generate_scalar(&mut csprng));
+        secret[2] = (a_3, G1::generate_scalar(&mut csprng));
         coeff[0] = G1::generate(&mut csprng);
         coeff[1] = G1::generate(&mut csprng);
-        for i in 0..3{
-            public[i] = coeff[0].mul_by_scalar(&secret[i].0).plus_point(&coeff[1].mul_by_scalar(&secret[i].1));
+        for i in 0..3 {
+            public[i] = coeff[0]
+                .mul_by_scalar(&secret[i].0)
+                .plus_point(&coeff[1].mul_by_scalar(&secret[i].1));
         }
         let proof = prove_com_mult(&mut csprng, &public, &secret, &coeff);
         assert!(verify_com_mult(&coeff, &public, &proof));
     }
 }
-

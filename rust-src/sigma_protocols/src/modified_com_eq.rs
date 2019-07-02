@@ -10,12 +10,12 @@ pub struct ModifiedComEqProof<T: Curve> {
 }
 
 pub fn prove_com_eq<T: Curve, R: Rng>(
-    evaluation: &(Vec<T>, T),                  
-    coeff: &(T, T, T, T, Vec<T>),                    
-    secret: &(T::Scalar, Vec<T::Scalar>, Vec<T::Scalar>), 
+    evaluation: &(Vec<T>, T),
+    coeff: &(T, T, T, T, Vec<T>),
+    secret: &(T::Scalar, Vec<T::Scalar>, Vec<T::Scalar>),
     csprng: &mut R,
 ) -> ModifiedComEqProof<T> {
-    let ( p,q, g, h, gxs) = coeff;
+    let (p, q, g, h, gxs) = coeff;
     let (sec, bxs, axs) = secret;
     let (cxs, y) = evaluation;
     let n = cxs.len();
@@ -30,7 +30,7 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
     let mut challenge = T::Scalar::zero();
     let mut zxs = axs.clone();
     let mut wxs = bxs.clone();
-    let mut wit = sec.clone(); 
+    let mut wit = sec.clone();
     let mut rands = vec![(T::Scalar::zero(), T::Scalar::zero()); n];
     let mut a_rand = T::Scalar::zero();
     for ev in cxs.iter() {
@@ -76,7 +76,6 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
             }
         }
     }
-    
 
     ModifiedComEqProof {
         challenge,
@@ -93,7 +92,7 @@ pub fn verify_com_eq<T: Curve>(
     let challenge = &proof.challenge;
     let (vxs, u) = &proof.randomised_point;
     let (wit, wxs, zxs) = &proof.witness;
-    let (p,q, g, h, gxs) = coeff;
+    let (p, q, g, h, gxs) = coeff;
     let (cxs, y) = evaluation;
     let n = cxs.len();
     assert_eq!(wxs.len(), n);
@@ -112,8 +111,8 @@ pub fn verify_com_eq<T: Curve>(
     let mut p_exp = challenge.clone();
     p_exp.negate();
     p_exp.add_assign(&T::Scalar::one());
-    u_c =u_c.plus_point(&q.mul_by_scalar(&wit));
-    u_c= u_c.plus_point(&p.mul_by_scalar(&p_exp));
+    u_c = u_c.plus_point(&q.mul_by_scalar(&wit));
+    u_c = u_c.plus_point(&p.mul_by_scalar(&p_exp));
     if *u == u_c {
         let mut hasher = Sha256::new();
         let mut hash = [0u8; 32];
@@ -134,12 +133,9 @@ pub fn verify_com_eq<T: Curve>(
                     return false;
                 }
             }
-            Err(_) => {
-                false
-            }
+            Err(_) => false,
         }
     } else {
-
         false
     }
 }
@@ -169,7 +165,7 @@ pub fn prove_verify_modified_com_eq() {
                 .plus_point(&h.mul_by_scalar(&bxs[j]));
         }
         y = y.plus_point(&q.mul_by_scalar(&sec));
-        y= y.plus_point(&p);
+        y = y.plus_point(&p);
         let coeff = (p, q, g, h, gxs);
         let evaluation = (cxs, y);
         let proof = prove_com_eq(&evaluation, &coeff, &(sec, bxs, axs), &mut csprng);

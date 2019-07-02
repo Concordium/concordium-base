@@ -1,13 +1,57 @@
-use curve_arithmetic::{bls12_381_instance::*, curve_arithmetic::Curve};
-use pairing::{bls12_381::G1Affine, Field};
+use curve_arithmetic::curve_arithmetic::Curve;
+use failure::Error;
+use pairing::Field;
 use rand::*;
 use sha2::{Digest, Sha256};
 
-#[derive(Clone)]
+use std::io::{Cursor, Read};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComEncEqProof<T: Curve> {
     challenge:         T::Scalar,
     randomised_points: (T, T, T),
     witness:           (T::Scalar, T::Scalar, T::Scalar),
+}
+
+impl<T: Curve> ComEncEqProof<T> {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let bytes_len = T::SCALAR_LENGTH + 3 * T::GROUP_ELEMENT_LENGTH + 3 * T::SCALAR_LENGTH;
+        let mut bytes = Vec::with_capacity(bytes_len);
+        bytes.extend_from_slice(&T::scalar_to_bytes(&self.challenge));
+        bytes.extend_from_slice(&self.randomised_points.0.curve_to_bytes());
+        bytes.extend_from_slice(&self.randomised_points.1.curve_to_bytes());
+        bytes.extend_from_slice(&self.randomised_points.2.curve_to_bytes());
+        bytes.extend_from_slice(&T::scalar_to_bytes(&self.witness.0));
+        bytes.extend_from_slice(&T::scalar_to_bytes(&self.witness.1));
+        bytes.extend_from_slice(&T::scalar_to_bytes(&self.witness.2));
+        bytes
+    }
+
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let mut scalar_buffer = vec![0; T::SCALAR_LENGTH];
+        let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
+        bytes.read_exact(&mut scalar_buffer)?;
+        let challenge = T::bytes_to_scalar(&scalar_buffer)?;
+        bytes.read_exact(&mut group_buffer)?;
+        let r1 = T::bytes_to_curve(&group_buffer)?;
+        bytes.read_exact(&mut group_buffer)?;
+        let r2 = T::bytes_to_curve(&group_buffer)?;
+        bytes.read_exact(&mut group_buffer)?;
+        let r3 = T::bytes_to_curve(&group_buffer)?;
+        bytes.read_exact(&mut scalar_buffer)?;
+        let w1 = T::bytes_to_scalar(&scalar_buffer)?;
+        bytes.read_exact(&mut scalar_buffer)?;
+        let w2 = T::bytes_to_scalar(&scalar_buffer)?;
+        bytes.read_exact(&mut scalar_buffer)?;
+        let w3 = T::bytes_to_scalar(&scalar_buffer)?;
+        let randomised_points = (r1, r2, r3);
+        let witness = (w1, w2, w3);
+        Ok(ComEncEqProof {
+            challenge,
+            randomised_points,
+            witness,
+        })
+    }
 }
 
 pub fn prove_com_enc_eq<T: Curve, R: Rng>(
@@ -49,15 +93,15 @@ pub fn prove_com_enc_eq<T: Curve, R: Rng>(
                 if x == T::Scalar::zero() {
                 } else {
                     challenge = x;
-                    w_1 = s_1.clone();
+                    w_1 = *s_1;
                     w_1.mul_assign(&challenge);
                     w_1.negate();
                     w_1.add_assign(&r_1);
-                    w_2 = s_2.clone();
+                    w_2 = *s_2;
                     w_2.mul_assign(&challenge);
                     w_2.negate();
                     w_2.add_assign(&r_2);
-                    w_3 = s_3.clone();
+                    w_3 = *s_3;
                     w_3.mul_assign(&challenge);
                     w_3.negate();
                     w_3.add_assign(&r_3);
@@ -114,31 +158,65 @@ pub fn verify_com_enc_eq<T: Curve>(
     }
 }
 
-#[test]
-pub fn test_com_enc_eq() {
-    let mut csprng = thread_rng();
-    for i in 0..100 {
-        let (s_1, s_2, s_3) = (
-            G1Affine::generate_scalar(&mut csprng),
-            G1Affine::generate_scalar(&mut csprng),
-            G1Affine::generate_scalar(&mut csprng),
-        );
-        let (g_1, h_1, g, h) = (
-            G1Affine::generate(&mut csprng),
-            G1Affine::generate(&mut csprng),
-            G1Affine::generate(&mut csprng),
-            G1Affine::generate(&mut csprng),
-        );
-        let e_1 = g_1.mul_by_scalar(&s_1);
-        let e_2 = g_1.mul_by_scalar(&s_2).plus_point(&h_1.mul_by_scalar(&s_1));
-        let e_3 = g.mul_by_scalar(&s_2).plus_point(&h.mul_by_scalar(&s_3));
-        let public = (e_1, e_2, e_3);
-        let proof = prove_com_enc_eq::<G1Affine, ThreadRng>(
-            &mut csprng,
-            &public,
-            &(s_1, s_2, s_3),
-            &(g_1, h_1, g, h),
-        );
-        assert!(verify_com_enc_eq(&(g_1, h_1, g, h), &public, &proof));
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use curve_arithmetic::bls12_381_instance;
+    use pairing::bls12_381::G1Affine;
+
+    #[test]
+    pub fn test_com_enc_eq() {
+        let mut csprng = thread_rng();
+        for i in 0..100 {
+            let (s_1, s_2, s_3) = (
+                G1Affine::generate_scalar(&mut csprng),
+                G1Affine::generate_scalar(&mut csprng),
+                G1Affine::generate_scalar(&mut csprng),
+            );
+            let (g_1, h_1, g, h) = (
+                G1Affine::generate(&mut csprng),
+                G1Affine::generate(&mut csprng),
+                G1Affine::generate(&mut csprng),
+                G1Affine::generate(&mut csprng),
+            );
+            let e_1 = g_1.mul_by_scalar(&s_1);
+            let e_2 = g_1.mul_by_scalar(&s_2).plus_point(&h_1.mul_by_scalar(&s_1));
+            let e_3 = g.mul_by_scalar(&s_2).plus_point(&h.mul_by_scalar(&s_3));
+            let public = (e_1, e_2, e_3);
+            let proof = prove_com_enc_eq::<G1Affine, ThreadRng>(
+                &mut csprng,
+                &public,
+                &(s_1, s_2, s_3),
+                &(g_1, h_1, g, h),
+            );
+            assert!(verify_com_enc_eq(&(g_1, h_1, g, h), &public, &proof));
+        }
+    }
+
+    #[test]
+    pub fn test_proof_serialization() {
+        let mut csprng = thread_rng();
+        for i in 0..100 {
+            let challenge = G1Affine::generate_scalar(&mut csprng);
+            let randomised_points = (
+                G1Affine::generate(&mut csprng),
+                G1Affine::generate(&mut csprng),
+                G1Affine::generate(&mut csprng),
+            );
+            let witness = (
+                G1Affine::generate_scalar(&mut csprng),
+                G1Affine::generate_scalar(&mut csprng),
+                G1Affine::generate_scalar(&mut csprng),
+            );
+            let ap = ComEncEqProof {
+                challenge,
+                randomised_points,
+                witness,
+            };
+            let bytes = ap.to_bytes();
+            let app = ComEncEqProof::from_bytes(&mut Cursor::new(&bytes));
+            assert!(app.is_ok());
+            assert_eq!(ap, app.unwrap());
+        }
     }
 }
