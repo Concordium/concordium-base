@@ -10,5 +10,6 @@ members=[
    "elgamal",
    "ps_sig",
    "sigma_protocols",
+   "id",
    "ffi_macros"]
 
