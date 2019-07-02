@@ -243,7 +243,7 @@ encodePayload :: Payload -> EncodedPayload
 encodePayload = EncodedPayload . S.encode
 
 {-# INLINE decodePayload #-}
-decodePayload :: S.Serialize a => EncodedPayload -> Either String a
+decodePayload :: EncodedPayload -> Either String Payload
 decodePayload (EncodedPayload s) = S.decode s
 
 -- |Events which are generated during transaction execution.
