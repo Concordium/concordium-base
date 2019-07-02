@@ -9,5 +9,6 @@ members=[
    "pedersen_scheme",
    "elgamal",
    "ps_sig",
-   "sigma_protocols" ]
+   "sigma_protocols",
+   "ffi_macros"]
 

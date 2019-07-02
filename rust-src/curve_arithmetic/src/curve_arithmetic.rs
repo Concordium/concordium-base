@@ -2,19 +2,32 @@
 // - bm@concordium.com
 //
 
+use failure::Fail;
 use pairing::{Field, PrimeField};
 use rand::*;
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Debug)]
 pub enum FieldDecodingError {
     NotFieldElement,
 }
 
+impl Display for FieldDecodingError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result { write!(f, "Not a field element.") }
+}
+
+impl Fail for FieldDecodingError {}
+
 #[derive(Debug)]
 pub enum CurveDecodingError {
     NotOnCurve,
 }
+
+impl Display for CurveDecodingError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result { write!(f, "Not a point on the curve.") }
+}
+
+impl Fail for CurveDecodingError {}
 
 pub trait Curve:
     Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static {

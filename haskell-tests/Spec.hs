@@ -10,9 +10,13 @@ import qualified ConcordiumTests.Crypto.PedersenOverBLS12G1
 import qualified ConcordiumTests.Crypto.PedersenOverBLS12G2
 import qualified ConcordiumTests.Crypto.Elgamal
 import qualified ConcordiumTests.Crypto.PointchevalSandersOverBLS12381
+import qualified ConcordiumTests.Crypto.CurveSerialization
+import qualified ConcordiumTests.Crypto.SigmaProtocols.DLogBLS12G1
 
 main :: IO  ()
 main = hspec $ parallel $ do
+    ConcordiumTests.Crypto.CurveSerialization.tests
+    ConcordiumTests.Crypto.SigmaProtocols.DLogBLS12G1.tests
     ConcordiumTests.Crypto.PointchevalSandersOverBLS12381.tests
     ConcordiumTests.Crypto.SHA256.tests
     ConcordiumTests.Crypto.SHA224.tests

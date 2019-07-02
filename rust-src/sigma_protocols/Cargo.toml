@@ -9,13 +9,18 @@ pairing = "0"
 sha2      = "0"
 failure       = "0"
 rand    = "0.4"
-rand_core = "0"
+rand_core = "0.3.0"
 clear_on_drop = "0"
 serde         = "1"
+libc = "0.2.58"
 
 [dependencies.curve_arithmetic]
 path = "../curve_arithmetic"
 version = "0" 
+
+[dependencies.ffi_macros]
+path = "../ffi_macros"
+version = "0"
 
 [lib]
 name = "sigma_protocols"

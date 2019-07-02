@@ -7,6 +7,11 @@ edition = "2018"
 [dependencies]
 pairing = "0"
 rand    = "0.4"
+failure = "0.1"
+libc = "0.2.58"
+
+[dependencies.ffi_macros]
+path = "../ffi_macros"
 
 [lib]
 name = "curve_arithmetic"
