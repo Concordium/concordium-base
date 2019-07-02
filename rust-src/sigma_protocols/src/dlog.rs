@@ -1,4 +1,5 @@
 use curve_arithmetic::{bls12_381_instance::*, curve_arithmetic::Curve};
+use failure::Error;
 use pairing::{bls12_381::G1Affine, Field};
 use rand::*;
 use sha2::{Digest, Sha256};
@@ -8,6 +9,30 @@ pub struct DlogProof<T: Curve> {
     challenge:        T::Scalar,
     randomised_point: T,
     witness:          T::Scalar,
+}
+
+impl<T: Curve> DlogProof<T> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut bytes = Vec::with_capacity(2 * T::SCALAR_LENGTH + T::GROUP_ELEMENT_LENGTH);
+        bytes.extend_from_slice(&T::scalar_to_bytes(&self.challenge));
+        bytes.extend_from_slice(&self.randomised_point.curve_to_bytes());
+        bytes.extend_from_slice(&T::scalar_to_bytes(&self.witness));
+        bytes.into_boxed_slice()
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        let p1 = T::SCALAR_LENGTH;
+        let p2 = p1 + T::GROUP_ELEMENT_LENGTH;
+        let p3 = p2 + T::SCALAR_LENGTH;
+        let challenge = T::bytes_to_scalar(&bytes[..p1])?;
+        let randomised_point = T::bytes_to_curve(&bytes[p1..p2])?;
+        let witness = T::bytes_to_scalar(&bytes[p2..p3])?;
+        Ok(DlogProof {
+            challenge,
+            randomised_point,
+            witness,
+        })
+    }
 }
 
 pub fn prove_dlog<T: Curve, R: Rng>(

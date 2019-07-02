@@ -72,7 +72,7 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
     ComEqProof {
         challenge,
         randomised_point: (vxs, u),
-        witness:          (wxs, zxs),
+        witness: (wxs, zxs),
     }
 }
 pub fn verify_com_eq<T: Curve>(
