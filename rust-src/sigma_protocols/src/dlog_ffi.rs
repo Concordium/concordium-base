@@ -49,7 +49,7 @@ macro_rules! generate_dlog_verify {
     };
 }
 
-macro_rules! derive_dlog_public{
+macro_rules! derive_dlog_public {
     ($function_name:ident, $curve_type:path) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
