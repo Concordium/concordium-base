@@ -60,6 +60,7 @@ pub trait Curve:
     fn bytes_to_curve_unchecked(b: &[u8]) -> Result<Self, CurveDecodingError>;
     fn generate<R: Rng>(rng: &mut R) -> Self;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar;
+    fn scalar_from_u64(n :u64) -> Result<Self::Scalar, FieldDecodingError>;
 }
 
 pub trait Pairing: Sized + 'static + Clone {

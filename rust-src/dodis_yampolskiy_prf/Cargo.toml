@@ -11,6 +11,9 @@ rand    = "0.4"
 rand_core = "0"
 clear_on_drop = "0"
 serde = "1" 
+[dependencies.curve_arithmetic]
+path = "../curve_arithmetic"
+version="0"
 
 [lib]
 name = "dodis_yampolskiy_prf"

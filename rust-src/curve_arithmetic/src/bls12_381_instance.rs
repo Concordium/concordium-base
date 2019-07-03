@@ -101,7 +101,12 @@ impl Curve for G2 {
             Err(_) => Err(FieldDecodingError::NotFieldElement),
         }
     }
-
+    fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError>{
+        match Fr::from_repr(FrRepr::from(n)){
+            Ok(sc) => Ok(sc),
+            Err(_) => Err(FieldDecodingError::NotFieldElement)
+        }
+    }
     fn curve_to_bytes(&self) -> Box<[u8]> {
         let g = self.into_affine().into_compressed();
         let g_bytes = g.as_ref();
@@ -231,7 +236,13 @@ impl Curve for G1 {
             Err(_) => Err(FieldDecodingError::NotFieldElement),
         }
     }
+    fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError>{
+          match Fr::from_repr(FrRepr::from(n)){
+              Ok(sc) => Ok(sc),
 
+            Err(_) => Err(FieldDecodingError::NotFieldElement),
+          }
+      }
     fn curve_to_bytes(&self) -> Box<[u8]> {
         let g = self.into_affine().into_compressed();
         let g_bytes = g.as_ref();
@@ -359,7 +370,12 @@ impl Curve for G1Affine {
             Err(_) => Err(FieldDecodingError::NotFieldElement),
         }
     }
-
+    fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError>{
+          match Fr::from_repr(FrRepr::from(n)){
+              Ok(sc) => Ok(sc),
+              Err(_) => Err(FieldDecodingError::NotFieldElement),
+          }
+      }
     fn curve_to_bytes(&self) -> Box<[u8]> {
         let g = self.into_compressed();
         let g_bytes = g.as_ref();
@@ -488,6 +504,12 @@ impl Curve for G2Affine {
         }
     }
 
+    fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError>{
+          match Fr::from_repr(FrRepr::from(n)){
+              Ok(sc) => Ok(sc),
+            Err(_) => Err(FieldDecodingError::NotFieldElement),
+          }
+      }
     fn curve_to_bytes(&self) -> Box<[u8]> {
         let g = self.into_compressed();
         let g_bytes = g.as_ref();
