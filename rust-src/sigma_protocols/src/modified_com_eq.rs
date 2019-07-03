@@ -73,7 +73,6 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
     let mut wxs = bxs.clone();
     let mut wit = sec.clone();
     let mut rands = vec![(T::Scalar::zero(), T::Scalar::zero()); n];
-    let mut a_rand = T::Scalar::zero();
     for ev in cxs.iter() {
         hasher.input(&*ev.curve_to_bytes());
     }
@@ -89,7 +88,7 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
             vxs[i] = g.mul_by_scalar(&r_i).plus_point(&h.mul_by_scalar(&s_i));
             hasher2.input(&*vxs[i].curve_to_bytes());
         }
-        a_rand = T::generate_scalar(csprng);
+        let a_rand = T::generate_scalar(csprng);
         tmp_u = tmp_u.plus_point(&q.mul_by_scalar(&a_rand));
         tmp_u = tmp_u.plus_point(&p);
         hasher2.input(&*tmp_u.curve_to_bytes());
@@ -167,13 +166,7 @@ pub fn verify_com_eq<T: Curve>(
         hasher.input(&*u.curve_to_bytes());
         hash.copy_from_slice(hasher.result().as_slice());
         match T::bytes_to_scalar(&hash) {
-            Ok(x) => {
-                if x == *challenge {
-                    return true;
-                } else {
-                    return false;
-                }
-            }
+            Ok(x) => x == *challenge,
             Err(_) => false,
         }
     } else {

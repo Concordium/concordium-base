@@ -189,6 +189,7 @@ pub fn verify_com_mult<T: Curve>(coeff: &[T; 2], public: &[T; 3], proof: &ComMul
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use pairing::bls12_381::G1;
