@@ -209,7 +209,7 @@ impl Curve for G1 {
         for digit in frrepr.as_mut().iter_mut().rev() {
             tmp.copy_from_slice(&bytes[i..(i + 8)]);
             if i == 0 {
-                tmp[0] = tmp[0] & 127;
+                tmp[0] &= 127;
             }
             *digit = u64::from_be_bytes(tmp);
             i += 8;
@@ -325,7 +325,7 @@ impl Curve for G1Affine {
         for digit in frrepr.as_mut().iter_mut().rev() {
             tmp.copy_from_slice(&bytes[i..(i + 8)]);
             if i == 0 {
-                tmp[0] = tmp[0] & 127;
+                tmp[0] &= 127;
             }
             *digit = u64::from_be_bytes(tmp);
             i += 8;
@@ -441,7 +441,7 @@ impl Curve for G2Affine {
         for digit in frrepr.as_mut().iter_mut().rev() {
             tmp.copy_from_slice(&bytes[i..(i + 8)]);
             if i == 0 {
-                tmp[0] = tmp[0] & 127;
+                tmp[0] &= 127;
             }
             *digit = u64::from_be_bytes(tmp);
             i += 8;
@@ -513,7 +513,7 @@ impl Pairing for Bls12 {
         for digit in frrepr.as_mut().iter_mut().rev() {
             tmp.copy_from_slice(&bytes[i..(i + 8)]);
             if i == 0 {
-                tmp[0] = tmp[0] & 127;
+                tmp[0] &= 127;
             }
             *digit = u64::from_be_bytes(tmp);
             i += 8;

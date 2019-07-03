@@ -1,10 +1,10 @@
-use curve_arithmetic::{bls12_381_instance::*, curve_arithmetic::Curve};
+use curve_arithmetic::curve_arithmetic::Curve;
 use failure::Error;
-use pairing::{bls12_381::G1Affine, Field};
+use pairing::Field;
 use rand::*;
 use sha2::{Digest, Sha256};
 
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DlogProof<T: Curve> {
     challenge:        T::Scalar,
     randomised_point: T,
@@ -96,14 +96,39 @@ pub fn verify_dlog<T: Curve>(base: &T, public: &T, proof: &DlogProof<T>) -> bool
     }
 }
 
-#[test]
-pub fn test_dlog() {
-    let mut csprng = thread_rng();
-    for i in 0..1000 {
-        let secret = G1Affine::generate_scalar(&mut csprng);
-        let base = G1Affine::generate(&mut csprng);
-        let public = &base.mul_by_scalar(&secret);
-        let proof = prove_dlog::<G1Affine, ThreadRng>(&mut csprng, &public, &secret, &base);
-        assert!(verify_dlog(&base, &public, &proof));
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::G1Affine;
+    #[test]
+    pub fn test_dlog() {
+        let mut csprng = thread_rng();
+        for _ in 0..1000 {
+            let secret = G1Affine::generate_scalar(&mut csprng);
+            let base = G1Affine::generate(&mut csprng);
+            let public = &base.mul_by_scalar(&secret);
+            let proof = prove_dlog::<G1Affine, ThreadRng>(&mut csprng, &public, &secret, &base);
+            assert!(verify_dlog(&base, &public, &proof));
+        }
+    }
+
+    #[test]
+    pub fn test_dlog_proof_serialization() {
+        let mut csprng = thread_rng();
+        for _ in 0..1000 {
+            let challenge = G1Affine::generate_scalar(&mut csprng);
+            let randomised_point = G1Affine::generate(&mut csprng);
+            let witness = G1Affine::generate_scalar(&mut csprng);
+
+            let dp = DlogProof {
+                challenge,
+                randomised_point,
+                witness,
+            };
+            let bytes = dp.to_bytes();
+            let dpp = DlogProof::from_bytes(&bytes);
+            assert!(dpp.is_ok());
+            assert_eq!(dp, dpp.unwrap());
+        }
     }
 }
