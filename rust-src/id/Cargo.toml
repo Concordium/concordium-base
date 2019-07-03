@@ -24,6 +24,9 @@ version = "0"
 [dependencies.ps_sig]
 path = "../ps_sig"
 version = "0"
+[dependencies.elgamal]
+path = "../elgamal"
+version = "0"
 
 [lib]
 name = "id"

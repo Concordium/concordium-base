@@ -4,6 +4,7 @@ use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use pairing::{Field, PrimeField};
 use ps_sig::signature::* ;
 use chrono::{NaiveDateTime};
+use elgamal::cipher::*;
 
 
 pub trait Attribute<F:Field> {
@@ -74,13 +75,14 @@ pub struct CredDeploymentCert<P:Pairing, A: Attributes<P::ScalarField>> {
     pub usig: Signature<P>,
 
 }
-/*
+
 struct ArData<P:Pairing>{
-    ar_name: String,
-    e_reg_id: Cipher  
+    pub ar_name: String,
+    pub e_reg_id: Cipher<P::G_1> 
     
 }
-*/
+
+
 pub struct CredDeploymentInfo<P:Pairing, A: Attributes<P::ScalarField>>{
     pub reg_id : P::G_1,
     pub attributes: A
