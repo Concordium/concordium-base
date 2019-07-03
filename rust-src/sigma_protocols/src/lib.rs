@@ -6,3 +6,5 @@ pub mod com_mult;
 pub mod dlog;
 pub mod dlog_ffi;
 pub mod modified_com_eq;
+
+mod common;

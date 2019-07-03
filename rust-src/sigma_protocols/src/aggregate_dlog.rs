@@ -8,6 +8,8 @@ use byteorder::{BigEndian, ReadBytesExt};
 
 use std::io::{Cursor, Read};
 
+use crate::common::*;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AggregateDlogProof<T: Curve> {
     challenge:        T::Scalar,
@@ -20,28 +22,21 @@ impl<T: Curve> AggregateDlogProof<T> {
         let bytes_len =
             T::SCALAR_LENGTH + T::GROUP_ELEMENT_LENGTH + 4 + self.witness.len() * T::SCALAR_LENGTH;
         let mut bytes = Vec::with_capacity(bytes_len);
-        bytes.extend_from_slice(&T::scalar_to_bytes(&self.challenge));
-        bytes.extend_from_slice(&self.randomised_point.curve_to_bytes());
-        let wlen = self.witness.len() as u32;
-        bytes.extend_from_slice(&wlen.to_be_bytes());
-        for &elem in self.witness.iter() {
-            bytes.extend_from_slice(&T::scalar_to_bytes(&elem));
-        }
+        write_curve_scalar::<T>(&self.challenge, &mut bytes);
+        write_curve_element::<T>(&self.randomised_point, &mut bytes);
+        write_curve_scalars::<T>(&self.witness, &mut bytes);
         bytes
     }
 
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let mut scalar_buffer = vec![0; T::SCALAR_LENGTH];
         let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
-        bytes.read_exact(&mut scalar_buffer)?;
-        let challenge = T::bytes_to_scalar(&scalar_buffer)?;
-        bytes.read_exact(&mut group_buffer)?;
-        let randomised_point = T::bytes_to_curve(&group_buffer)?;
+        let challenge = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
+        let randomised_point = read_curve::<T>(bytes, &mut group_buffer)?;
         let len = bytes.read_u32::<BigEndian>()?;
         let mut witness = Vec::with_capacity(len as usize);
         for _ in 0..len {
-            bytes.read_exact(&mut scalar_buffer)?;
-            witness.push(T::bytes_to_scalar(&scalar_buffer)?);
+            witness.push(read_curve_scalar::<T>(bytes, &mut scalar_buffer)?);
         }
         Ok(AggregateDlogProof {
             challenge,

@@ -6,6 +6,8 @@ use sha2::{Digest, Sha256};
 
 use std::io::{Cursor, Read};
 
+use crate::common::*;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComEncEqProof<T: Curve> {
     challenge:         T::Scalar,
@@ -30,20 +32,13 @@ impl<T: Curve> ComEncEqProof<T> {
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let mut scalar_buffer = vec![0; T::SCALAR_LENGTH];
         let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
-        bytes.read_exact(&mut scalar_buffer)?;
-        let challenge = T::bytes_to_scalar(&scalar_buffer)?;
-        bytes.read_exact(&mut group_buffer)?;
-        let r1 = T::bytes_to_curve(&group_buffer)?;
-        bytes.read_exact(&mut group_buffer)?;
-        let r2 = T::bytes_to_curve(&group_buffer)?;
-        bytes.read_exact(&mut group_buffer)?;
-        let r3 = T::bytes_to_curve(&group_buffer)?;
-        bytes.read_exact(&mut scalar_buffer)?;
-        let w1 = T::bytes_to_scalar(&scalar_buffer)?;
-        bytes.read_exact(&mut scalar_buffer)?;
-        let w2 = T::bytes_to_scalar(&scalar_buffer)?;
-        bytes.read_exact(&mut scalar_buffer)?;
-        let w3 = T::bytes_to_scalar(&scalar_buffer)?;
+        let challenge = T::bytes_to_scalar(read_exact_bytes(bytes, &mut scalar_buffer)?)?;
+        let r1 = read_curve::<T>(bytes, &mut group_buffer)?;
+        let r2 = read_curve::<T>(bytes, &mut group_buffer)?;
+        let r3 = read_curve::<T>(bytes, &mut group_buffer)?;
+        let w1 = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
+        let w2 = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
+        let w3 = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
         let randomised_points = (r1, r2, r3);
         let witness = (w1, w2, w3);
         Ok(ComEncEqProof {
