@@ -3,13 +3,19 @@
 //
 
 use failure::Fail;
-use pairing::{Field, PrimeField};
+use pairing::{Field, PrimeField, PrimeFieldDecodingError};
 use rand::*;
 use std::fmt::{Debug, Display, Formatter};
 
-#[derive(Debug)]
+#[derive(Debug) ]
 pub enum FieldDecodingError {
     NotFieldElement,
+}
+
+impl From<PrimeFieldDecodingError> for FieldDecodingError {
+    fn from(err: PrimeFieldDecodingError) -> Self {
+       FieldDecodingError::NotFieldElement 
+    }
 }
 
 impl Display for FieldDecodingError {

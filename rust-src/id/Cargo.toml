@@ -13,12 +13,16 @@ rand_core = "0.3.0"
 clear_on_drop = "0"
 serde         = "1"
 libc = "0.2.58"
+chrono = "0.4.7"
 
 [dependencies.curve_arithmetic]
 path = "../curve_arithmetic"
 version = "0" 
 [dependencies.sigma_protocols]
 path = "../sigma_protocols"
+version = "0"
+[dependencies.ps_sig]
+path = "../ps_sig"
 version = "0"
 
 [lib]
