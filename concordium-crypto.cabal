@@ -31,6 +31,7 @@ Library
                    Concordium.Crypto.SignatureScheme
                    Concordium.Crypto.AccountSignatureSchemes
                    Concordium.Crypto.Elgamal
+                   Concordium.Crypto.ElgamalBLS12381_G2
                    Concordium.Crypto.VRF
                    Concordium.Crypto.PRF
                    Data.FixedByteString
@@ -40,6 +41,7 @@ Library
                    Concordium.Crypto.Curve
                    Concordium.Crypto.ByteStringHelpers
   Other-modules:   Concordium.Crypto.FFIHelpers
+                   Concordium.Crypto.Elgamal.TH
   Build-depends:  base >=4.7
                 , bytestring >=0.10
                 , cereal >=0.5.7

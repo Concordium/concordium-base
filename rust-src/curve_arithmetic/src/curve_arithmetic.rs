@@ -13,7 +13,7 @@ pub enum FieldDecodingError {
 }
 
 impl From<PrimeFieldDecodingError> for FieldDecodingError {
-    fn from(err: PrimeFieldDecodingError) -> Self {
+    fn from(_err: PrimeFieldDecodingError) -> Self {
        FieldDecodingError::NotFieldElement 
     }
 }
@@ -57,6 +57,7 @@ pub trait Curve:
     fn bytes_to_scalar(b: &[u8]) -> Result<Self::Scalar, FieldDecodingError>;
     fn curve_to_bytes(&self) -> Box<[u8]>;
     fn bytes_to_curve(b: &[u8]) -> Result<Self, CurveDecodingError>;
+    fn bytes_to_curve_unchecked(b: &[u8]) -> Result<Self, CurveDecodingError>;
     fn generate<R: Rng>(rng: &mut R) -> Self;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar;
 }

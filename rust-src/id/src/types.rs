@@ -1,10 +1,9 @@
 use curve_arithmetic::curve_arithmetic::*;
 use curve_arithmetic::curve_arithmetic::FieldDecodingError;
-use curve_arithmetic::bls12_381_instance::*;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use pairing::{Field, PrimeField};
-use ps_sig::{signature::*, ps_sig_scheme::*};
-use chrono::{NaiveDate, NaiveDateTime};
+use ps_sig::signature::* ;
+use chrono::{NaiveDateTime};
 
 
 pub trait Attribute<F:Field> {
@@ -37,7 +36,7 @@ pub trait Attributes<F:Field>{
     fn index(a: &Self::AttributeType) -> u32;  
 }
 
-struct AttributeList ([KnownAttributes;5]);
+pub struct AttributeList ([KnownAttributes;5]);
 
 impl Attributes<<Bls12 as Pairing>::ScalarField> for AttributeList{
     type AttributeType = KnownAttributes;
@@ -51,28 +50,28 @@ impl Attributes<<Bls12 as Pairing>::ScalarField> for AttributeList{
     }
 }
 
-struct IdCredentials<C:Curve>{
-    id_cred_sec: C::Scalar,
-    id_cred_pub: C
+pub struct IdCredentials<C:Curve>{
+    pub id_cred_sec: C::Scalar,
+    pub id_cred_pub: C
 }
 
-struct AccHolderInfo<P:Pairing>{
-    id_ah: String,
-    id_cred: IdCredentials<P::G_2>,
+pub struct AccHolderInfo<P:Pairing>{
+    pub id_ah: String,
+    pub id_cred: IdCredentials<P::G_2>,
     //aux_data: &[u8]
 
 }
 
-struct AccCredentialInfo<P:Pairing, A: Attributes<P::ScalarField>>{
-    acc_holder_info: AccHolderInfo<P>,
-    prf_key: P::ScalarField,
-    attritubtes: A
+pub struct AccCredentialInfo<P:Pairing, A: Attributes<P::ScalarField>>{
+    pub acc_holder_info: AccHolderInfo<P>,
+    pub prf_key: P::ScalarField,
+    pub attritubtes: A
 
 }
-struct CredDeploymentCert<P:Pairing, A: Attributes<P::ScalarField>> { 
-    acc_credential_info: AccCredentialInfo<P, A>,
-    id_ip: String,
-    sig: Signature<P>,
+pub struct CredDeploymentCert<P:Pairing, A: Attributes<P::ScalarField>> { 
+    pub acc_credential_info: AccCredentialInfo<P, A>,
+    pub id_ip: String,
+    pub usig: Signature<P>,
 
 }
 /*
@@ -82,9 +81,9 @@ struct ArData<P:Pairing>{
     
 }
 */
-struct CredDeploymentInfo<P:Pairing, A: Attributes<P::ScalarField>>{
-    reg_id : P::G_1,
-    attributes: A
+pub struct CredDeploymentInfo<P:Pairing, A: Attributes<P::ScalarField>>{
+    pub reg_id : P::G_1,
+    pub attributes: A
 
 }
 

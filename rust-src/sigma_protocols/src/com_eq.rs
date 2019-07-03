@@ -1,5 +1,5 @@
-use curve_arithmetic::{bls12_381_instance::*, curve_arithmetic::Curve};
-use pairing::{bls12_381::G1Affine, Field};
+use curve_arithmetic::{curve_arithmetic::Curve};
+use pairing::{Field};
 use rand::*;
 use sha2::{Digest, Sha256};
 
@@ -206,7 +206,7 @@ mod test {
             assert!(verify_com_eq(&evaluation, &coeff, &proof));
         }
     }
-
+    
     #[test]
     pub fn test_com_eq_proof_serialization() {
         let mut csprng = thread_rng();

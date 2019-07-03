@@ -79,7 +79,7 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
     hasher.input(&*public[0].curve_to_bytes());
     hasher.input(&*public[1].curve_to_bytes());
     hasher.input(&*public[2].curve_to_bytes());
-    let [public_1, public_2, public_3] = public;
+    //let [public_1, public_2, public_3] = public;
     let [g, h] = coeff;
     // let [s_11, s_12, s_13, s_21,s_22, s_23] = secret;
     let mut randomised_point = [T::zero_point(); 3];
@@ -101,7 +101,7 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
         }
         let r_2 = rands[1].0;
         let a_rand = T::generate_scalar(csprng);
-        a_randomised_point = public_1
+        a_randomised_point = public[0]
             .mul_by_scalar(&r_2)
             .plus_point(&h.mul_by_scalar(&a_rand));
         for rp in &randomised_point {

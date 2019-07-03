@@ -12,29 +12,28 @@
 #![allow(non_snake_case)]
 
 use core::fmt::{self, Display};
-use pairing::{GroupDecodingError, PrimeFieldDecodingError};
+
+use curve_arithmetic::curve_arithmetic as carith;
 
 /// Internal errors.  
 
 #[derive(Debug)]
-// TODO : Rename these
-#[allow(clippy::enum_variant_names)]
 pub(crate) enum InternalError {
-    DecodingError(PrimeFieldDecodingError),
-    GDecodingError(GroupDecodingError),
-    PublicKeyLengthError,
-    MessageLengthError,
-    CipherLengthError,
+    FieldDecoding(carith::FieldDecodingError),
+    GroupDecoding(carith::CurveDecodingError),
+    PublicKeyLength,
+    MessageLength,
+    CipherLength,
 }
 
 impl Display for InternalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            InternalError::GDecodingError(ref p) => write!(f, "{}", p),
-            InternalError::DecodingError(ref p) => write!(f, "{}", p),
-            InternalError::PublicKeyLengthError => write!(f, "Wrong PublicKey length"),
-            InternalError::MessageLengthError => write!(f, "Wrong message length"),
-            InternalError::CipherLengthError => write!(f, "Wrong cipher length"),
+            InternalError::GroupDecoding(ref e) => write!(f, "Group decoding error {:?}", e),
+            InternalError::FieldDecoding(ref e) => write!(f, "Field decoding error {:?}", e),
+            InternalError::PublicKeyLength => write!(f, "Wrong PublicKey length"),
+            InternalError::MessageLength => write!(f, "Wrong message length"),
+            InternalError::CipherLength => write!(f, "Wrong cipher length"),
         }
     }
 }
@@ -53,6 +52,18 @@ impl ::failure::Fail for InternalError {}
 
 #[derive(Debug)]
 pub struct ElgamalError(pub(crate) InternalError);
+
+impl From<carith::FieldDecodingError> for ElgamalError {
+    fn from(err: carith::FieldDecodingError) -> Self {
+        ElgamalError(InternalError::FieldDecoding(err))
+    }
+}
+
+impl From<carith::CurveDecodingError> for ElgamalError {
+    fn from(err: carith::CurveDecodingError) -> Self {
+        ElgamalError(InternalError::GroupDecoding(err))
+    }
+}
 
 impl Display for ElgamalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
