@@ -4,9 +4,7 @@ use pairing::Field;
 use rand::*;
 use sha2::{Digest, Sha256};
 
-use byteorder::{BigEndian, ReadBytesExt};
-
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 
 use crate::common::*;
 
@@ -33,11 +31,7 @@ impl<T: Curve> AggregateDlogProof<T> {
         let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
         let challenge = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
         let randomised_point = read_curve::<T>(bytes, &mut group_buffer)?;
-        let len = bytes.read_u32::<BigEndian>()?;
-        let mut witness = Vec::with_capacity(len as usize);
-        for _ in 0..len {
-            witness.push(read_curve_scalar::<T>(bytes, &mut scalar_buffer)?);
-        }
+        let witness = read_curve_scalars::<T>(bytes, &mut scalar_buffer)?;
         Ok(AggregateDlogProof {
             challenge,
             randomised_point,
@@ -133,7 +127,6 @@ pub fn verify_aggregate_dlog<T: Curve>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use curve_arithmetic::bls12_381_instance;
     use pairing::bls12_381::G1Affine;
     #[test]
     pub fn test_aggregate_dlog() {

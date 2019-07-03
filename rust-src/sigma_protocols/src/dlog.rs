@@ -3,6 +3,9 @@ use failure::Error;
 use pairing::Field;
 use rand::*;
 use sha2::{Digest, Sha256};
+use std::io::Cursor;
+
+use crate::common::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DlogProof<T: Curve> {
@@ -14,19 +17,18 @@ pub struct DlogProof<T: Curve> {
 impl<T: Curve> DlogProof<T> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut bytes = Vec::with_capacity(2 * T::SCALAR_LENGTH + T::GROUP_ELEMENT_LENGTH);
-        bytes.extend_from_slice(&T::scalar_to_bytes(&self.challenge));
-        bytes.extend_from_slice(&self.randomised_point.curve_to_bytes());
-        bytes.extend_from_slice(&T::scalar_to_bytes(&self.witness));
+        write_curve_scalar::<T>(&self.challenge, &mut bytes);
+        write_curve_element::<T>(&self.randomised_point, &mut bytes);
+        write_curve_scalar::<T>(&self.witness, &mut bytes);
         bytes.into_boxed_slice()
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        let p1 = T::SCALAR_LENGTH;
-        let p2 = p1 + T::GROUP_ELEMENT_LENGTH;
-        let p3 = p2 + T::SCALAR_LENGTH;
-        let challenge = T::bytes_to_scalar(&bytes[..p1])?;
-        let randomised_point = T::bytes_to_curve(&bytes[p1..p2])?;
-        let witness = T::bytes_to_scalar(&bytes[p2..p3])?;
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let mut scalar_buffer = vec![0; T::SCALAR_LENGTH];
+        let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
+        let challenge = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
+        let randomised_point = read_curve::<T>(bytes, &mut group_buffer)?;
+        let witness = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
         Ok(DlogProof {
             challenge,
             randomised_point,
@@ -126,7 +128,7 @@ mod tests {
                 witness,
             };
             let bytes = dp.to_bytes();
-            let dpp = DlogProof::from_bytes(&bytes);
+            let dpp = DlogProof::from_bytes(&mut Cursor::new(&bytes));
             assert!(dpp.is_ok());
             assert_eq!(dp, dpp.unwrap());
         }

@@ -4,7 +4,7 @@ use pairing::Field;
 use rand::*;
 use sha2::{Digest, Sha256};
 
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 
 use crate::common::*;
 
@@ -19,20 +19,20 @@ impl<T: Curve> ComEncEqProof<T> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let bytes_len = T::SCALAR_LENGTH + 3 * T::GROUP_ELEMENT_LENGTH + 3 * T::SCALAR_LENGTH;
         let mut bytes = Vec::with_capacity(bytes_len);
-        bytes.extend_from_slice(&T::scalar_to_bytes(&self.challenge));
-        bytes.extend_from_slice(&self.randomised_points.0.curve_to_bytes());
-        bytes.extend_from_slice(&self.randomised_points.1.curve_to_bytes());
-        bytes.extend_from_slice(&self.randomised_points.2.curve_to_bytes());
-        bytes.extend_from_slice(&T::scalar_to_bytes(&self.witness.0));
-        bytes.extend_from_slice(&T::scalar_to_bytes(&self.witness.1));
-        bytes.extend_from_slice(&T::scalar_to_bytes(&self.witness.2));
+        write_curve_scalar::<T>(&self.challenge, &mut bytes);
+        write_curve_element::<T>(&self.randomised_points.0, &mut bytes);
+        write_curve_element::<T>(&self.randomised_points.1, &mut bytes);
+        write_curve_element::<T>(&self.randomised_points.2, &mut bytes);
+        write_curve_scalar::<T>(&self.witness.0, &mut bytes);
+        write_curve_scalar::<T>(&self.witness.1, &mut bytes);
+        write_curve_scalar::<T>(&self.witness.2, &mut bytes);
         bytes
     }
 
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let mut scalar_buffer = vec![0; T::SCALAR_LENGTH];
         let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
-        let challenge = T::bytes_to_scalar(read_exact_bytes(bytes, &mut scalar_buffer)?)?;
+        let challenge = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
         let r1 = read_curve::<T>(bytes, &mut group_buffer)?;
         let r2 = read_curve::<T>(bytes, &mut group_buffer)?;
         let r3 = read_curve::<T>(bytes, &mut group_buffer)?;
@@ -156,7 +156,6 @@ pub fn verify_com_enc_eq<T: Curve>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use curve_arithmetic::bls12_381_instance;
     use pairing::bls12_381::G1Affine;
 
     #[test]

@@ -4,7 +4,7 @@ use rand::*;
 use sha2::{Digest, Sha256};
 
 use failure::Error;
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 
 use crate::common::*;
 
@@ -24,9 +24,9 @@ impl<T: Curve> ComEqProof<T> {
             + (rp_len + 1) * T::GROUP_ELEMENT_LENGTH
             + (witness0_len + witness1_len) * T::SCALAR_LENGTH;
         let mut bytes = Vec::with_capacity(bytes_len);
-        bytes.extend_from_slice(&T::scalar_to_bytes(&self.challenge));
+        write_curve_scalar::<T>(&self.challenge, &mut bytes);
         write_curve_elements(&self.randomised_point.0, &mut bytes);
-        bytes.extend_from_slice(&self.randomised_point.1.curve_to_bytes());
+        write_curve_element(&self.randomised_point.1, &mut bytes);
         write_curve_scalars::<T>(&self.witness.0, &mut bytes);
         write_curve_scalars::<T>(&self.witness.1, &mut bytes);
         bytes
