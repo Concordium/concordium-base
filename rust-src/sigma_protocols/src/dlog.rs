@@ -1,10 +1,13 @@
-use curve_arithmetic::{bls12_381_instance::*, curve_arithmetic::Curve};
+use curve_arithmetic::curve_arithmetic::Curve;
 use failure::Error;
-use pairing::{bls12_381::G1Affine, Field};
+use pairing::Field;
 use rand::*;
 use sha2::{Digest, Sha256};
+use std::io::Cursor;
 
-#[derive(Clone)]
+use crate::common::*;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DlogProof<T: Curve> {
     challenge:        T::Scalar,
     randomised_point: T,
@@ -14,19 +17,18 @@ pub struct DlogProof<T: Curve> {
 impl<T: Curve> DlogProof<T> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut bytes = Vec::with_capacity(2 * T::SCALAR_LENGTH + T::GROUP_ELEMENT_LENGTH);
-        bytes.extend_from_slice(&T::scalar_to_bytes(&self.challenge));
-        bytes.extend_from_slice(&self.randomised_point.curve_to_bytes());
-        bytes.extend_from_slice(&T::scalar_to_bytes(&self.witness));
+        write_curve_scalar::<T>(&self.challenge, &mut bytes);
+        write_curve_element::<T>(&self.randomised_point, &mut bytes);
+        write_curve_scalar::<T>(&self.witness, &mut bytes);
         bytes.into_boxed_slice()
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        let p1 = T::SCALAR_LENGTH;
-        let p2 = p1 + T::GROUP_ELEMENT_LENGTH;
-        let p3 = p2 + T::SCALAR_LENGTH;
-        let challenge = T::bytes_to_scalar(&bytes[..p1])?;
-        let randomised_point = T::bytes_to_curve(&bytes[p1..p2])?;
-        let witness = T::bytes_to_scalar(&bytes[p2..p3])?;
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let mut scalar_buffer = vec![0; T::SCALAR_LENGTH];
+        let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
+        let challenge = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
+        let randomised_point = read_curve::<T>(bytes, &mut group_buffer)?;
+        let witness = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
         Ok(DlogProof {
             challenge,
             randomised_point,
@@ -96,14 +98,39 @@ pub fn verify_dlog<T: Curve>(base: &T, public: &T, proof: &DlogProof<T>) -> bool
     }
 }
 
-#[test]
-pub fn test_dlog() {
-    let mut csprng = thread_rng();
-    for i in 0..1000 {
-        let secret = G1Affine::generate_scalar(&mut csprng);
-        let base = G1Affine::generate(&mut csprng);
-        let public = &base.mul_by_scalar(&secret);
-        let proof = prove_dlog::<G1Affine, ThreadRng>(&mut csprng, &public, &secret, &base);
-        assert!(verify_dlog(&base, &public, &proof));
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::G1Affine;
+    #[test]
+    pub fn test_dlog() {
+        let mut csprng = thread_rng();
+        for _ in 0..1000 {
+            let secret = G1Affine::generate_scalar(&mut csprng);
+            let base = G1Affine::generate(&mut csprng);
+            let public = &base.mul_by_scalar(&secret);
+            let proof = prove_dlog::<G1Affine, ThreadRng>(&mut csprng, &public, &secret, &base);
+            assert!(verify_dlog(&base, &public, &proof));
+        }
+    }
+
+    #[test]
+    pub fn test_dlog_proof_serialization() {
+        let mut csprng = thread_rng();
+        for _ in 0..1000 {
+            let challenge = G1Affine::generate_scalar(&mut csprng);
+            let randomised_point = G1Affine::generate(&mut csprng);
+            let witness = G1Affine::generate_scalar(&mut csprng);
+
+            let dp = DlogProof {
+                challenge,
+                randomised_point,
+                witness,
+            };
+            let bytes = dp.to_bytes();
+            let dpp = DlogProof::from_bytes(&mut Cursor::new(&bytes));
+            assert!(dpp.is_ok());
+            assert_eq!(dp, dpp.unwrap());
+        }
     }
 }
