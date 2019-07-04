@@ -17,9 +17,9 @@ pub trait Attribute<F: Field> {
 }
 
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
-    pub variant: u32,
-    pub alist:   Vec<AttributeType>,
-    _phantom:    std::marker::PhantomData<F>,
+    pub variant:  u32,
+    pub alist:    Vec<AttributeType>,
+    pub _phantom: std::marker::PhantomData<F>,
 }
 
 pub struct IdCredentials<C: Curve> {
@@ -27,20 +27,34 @@ pub struct IdCredentials<C: Curve> {
     pub id_cred_pub: elgamal::PublicKey<C>,
 }
 
+/// Private credential holder information. A user maintaints these
+/// through many different interactions with the identity provider and
+/// the chain.
 pub struct CredentialHolderInfo<P: Pairing> {
-    pub id_ah:   String,
+    /// Name of the credential holder.
+    pub id_ah: String,
+    /// Public and private keys of the credential holder. NB: These are distinct
+    /// from the public/private keys of the account holders.
     pub id_cred: IdCredentials<P::G_1>,
     // aux_data: &[u8]
 }
 
+/// Private and public data chosen by the credential holder before the
+/// interaction with the identity provider. The credential holder chooses a prf
+/// key and an attribute list.
 pub struct AccCredentialInfo<P: Pairing, AttributeType: Attribute<P::ScalarField>> {
     pub acc_holder_info: CredentialHolderInfo<P>,
-    pub prf_key:         prf::SecretKey<P::G_1>,
-    pub attributes:      AttributeList<P::ScalarField, AttributeType>,
+    /// Chosen prf key of the credential holder.
+    pub prf_key: prf::SecretKey<P::G_1>,
+    /// Chosen attribute list.
+    pub attributes: AttributeList<P::ScalarField, AttributeType>,
 }
 
+/// Data created by the credential holder to support anonymity revocation.
 pub struct ArData<C: Curve> {
-    pub ar_name:  String,
+    /// Identity of the anonymity revoker.
+    pub ar_name: String,
+    /// Encryption of the prf key of the credential holder.
     pub e_reg_id: Cipher<C>,
 }
 
@@ -75,9 +89,11 @@ pub struct PreIdentityObject<
 
 /// Public information about an identity provider.
 pub struct IpInfo<P: Pairing, C: Curve> {
-    pub id_identity:   String,
+    pub id_identity: String,
     pub id_verify_key: pssig::PublicKey<P>,
-    pub ar_info:       ArInfo<C>,
+    /// In the current design the identity provider chooses a single anonymity
+    /// revoker. This will be changed in the future.
+    pub ar_info: ArInfo<C>,
 }
 
 pub struct ArInfo<C: Curve> {

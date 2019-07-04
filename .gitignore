@@ -17,3 +17,4 @@ build/
 dist/
 
 rust-src/target/
+*.json

@@ -14,6 +14,7 @@ pub struct AuxData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     ps_secret_key: ps_sig::SecretKey<P>,
     comm_2_params:  CommitmentParams<C>,
     elgamal_params: ElgamalParams<C>,
+    ar_info: ArInfo<C>,
 }
 
 pub struct Declined(pub Reason);
@@ -28,8 +29,6 @@ pub fn verify_credentials<
     AttributeType: Attribute<P::ScalarField>,
     C: Curve<Scalar = P::ScalarField>,
 >(
-    ar_info: &ArInfo<C>,
-    sk: &ps_sig::SecretKey<P>,
     pre_id_obj: &PreIdentityObject<P, AttributeType, C>,
     aux_data: AuxData<P, C>,
 ) -> Either<ps_sig::Signature<P>, Declined> {
