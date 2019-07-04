@@ -68,7 +68,7 @@ type ModuleInterfaces annot = HashMap Core.ModuleRef (Interface annot)
 
 -- |Errors which can occur during typechecking.
 data TypingError annot =
-                 -- |Error raised when a declared datatype is instantiated with
+                 -- |A declared datatype is instantiated with
                  -- a wrong number of arguments (too few or too many). The first
                  -- argument is the number of given parameters, the second the
                  -- expected number.
@@ -90,8 +90,8 @@ data TypingError annot =
                  -- is the actual type, the second the specified type.
                  | ResultTypeNotAsSpecified (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
                  -- |The type of the discriminee in a case expression is not
-                 -- fully instantiated. -- NOTE: Could add name of declared datatype
-                 | NonFullyInstantiatedTypeAsCaseArgument
+                 -- fully instantiated.
+                 | NonFullyInstantiatedTypeAsCaseArgument -- NOTE: Could add name of declared datatype
                  -- |The type of the discriminee in a case expression is a base
                  -- type not supported for pattern matching.
                  | UnsupportedBaseTypeInCaseArgument (Core.TBase)
@@ -99,33 +99,29 @@ data TypingError annot =
                  | FunctionAsCaseArgument
                  -- |The discriminee in a case expression is a type variable.
                  | TypeVariableAsCaseArgument
-                 -- |Empty set of alternatives is not allowed in a case
-                 -- expression.
+                 -- |A case expression has no alternatives.
                  | CaseWithoutAlternatives
-                 -- |Redundant pattern: a redundant variable, literal (if the
-                 -- type of the discriminee is a base type) or data type
+                 -- |A pattern in a case expression is redundant: a redundant variable,
+                 -- literal (if the type of the discriminee is a base type) or data type
                  -- constructor (if the type of the discriminee is a declared
                  -- datatype).
                  | PatternRedundant (Core.Pattern annot Core.ModuleRef)
-                 -- |Non-exhaustive pattern
+                 -- |The patterns in a case expression are not exhaustive.
                  | PatternsNonExhaustive
-                 -- |Pattern does not have correct type. The first argument is
-                 -- the actual type, the second the expected type.
+                 -- |A pattern in a case expression does not have the correct type.
+                 -- The first argument is the actual type, the second the expected type.
                  | UnexpectedPatternType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
-                 -- |Special case of UnexpectedPatternType where the pattern is
-                 -- a literal of unsupported type.
-                 | UnsupportedLiteralInPattern Core.Literal
-                 -- |A more specific type mismatch. The constructor used in the
+                 -- |A more specific case of 'UnexpectedPatternType'. The constructor used in the
                  -- pattern is not a type constructor of the discriminee type.
                  | UnexpectedTypeConstructorInPattern (Core.CTorName Core.ModuleRef)
-                 -- |A more specific type mismatch. A constructor pattern occurs
+                 -- |A more specific case of 'UnexpectedPatternType'. A constructor pattern occurs
                  -- at a place where the discriminee has a base type.
                  | TypeConstructorWhereLiteralOrVariableExpected (Core.CTorName Core.ModuleRef)
-                 -- |A more specific type mismatch. A litreal occurs at a place
+                 -- |A more specific case of 'UnexpectedPatternType'. A litreal occurs at a place
                  -- where the discriminee has a declared datatype.
                  | LiteralWhereTypeConstructorExpected Core.Literal
-                 -- |The body of the branch of a case expression does not have
-                 -- the correct type. The first argument is the type found, the
+                 -- |The body of a case alternative does not have
+                 -- the correct type. The first argument is the actual type, the
                  -- second is the expected type.
                  | UnexpectedCaseAlternativeResultType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
                  -- |A variable used in an expression is not bound.
@@ -138,8 +134,8 @@ data TypingError annot =
                  -- |The data type with the given name is not defined in the
                  -- given module.
                  | UndefinedQualifiedDatatype Core.ModuleRef Core.TyName
-                 -- |The module referred to in an expression with the given name
-                 -- is not imported (not part of interface's import map).
+                 -- |The module with the given name (referred to from an expression)
+                 -- is not imported (not part of the given interface's import map).
                  | ModuleNotImported Core.ModuleName
                  -- |The referenced local definition does not exist in the current module.
                  | LocalNameNotInScope Core.Name
@@ -154,24 +150,21 @@ data TypingError annot =
                  -- |The given type name is already bound but is attempted to be redefined.
                  | RedefinitionOfType Core.TyName
                  -- |The contract with the given name has already been defined but
-                 -- |is attempted to be defined again.
+                 -- is attempted to be redefined.
                  | RedefinitionOfContract Core.TyName
-                 -- |Attempting to declare a data type with the given name without constructors.
+                 -- |Attempting to declare a data type (with the given name) without constructors.
                  | DataTypeWithoutConstructors Core.TyName
-                 -- |The init method of a contract is not of the correct shape.
-                 -- The argument is the name of the contract containing the init
-                 -- method.
+                 -- |The init method of a contract is not of the correct type.
+                 -- The argument is the name of the contract this error refers to.
                  | ContractInitMethodHasIncorrectType Core.TyName
                  -- |The receive method of a contract is not of the correct
-                 -- shape (in the context of the types specified by the init
-                 -- method). The argument is the name of the contract containing
-                 -- the receive method.
+                 -- type (in the context of the types specified by the init
+                 -- method). The argument is the name of the contract this error refers to.
                  | ContractReceiveMethodHasIncorrectType Core.TyName
-                 -- |A more specific error about a contract's receive method
-                 -- type where the result type is not as required. The first
+                 -- |A more specific case of 'ContractReceiveMethodHasIncorrectType'
+                 -- where the result type is not as required. The first
                  -- argument is the name of the contract this error refers to
-                 -- and the second is the given result type of the receive
-                 -- method.
+                 -- and the second is the result type of the receive method.
                  | ContractReceiveMethodHasIncorrectResultType Core.TyName (Core.Type annot ModuleRef)
                  -- |The contract's message type as specified by the receive
                  -- method is not a storable type. The first argument is the
@@ -209,15 +202,15 @@ data TypingError annot =
                  -- this error refers to, the second the name of the constraint.
                  | ContractIncorrectNumberOfSenderImplementations Core.TyName (Core.ConstraintRef Core.ModuleRef)
                  -- |An implementation of a getter method in a contract does not
-                 -- match the expected method to be implemented. The first and
-                 -- second arguments are the name of the contract and the
+                 -- match the expected method to be implemented at that position.
+                 -- The first and second arguments are the name of the contract and the
                  -- constraint this error refers to, the third the name of the
                  -- method that is implemented and the fourth the name of the
                  -- method that is expected to be implemented.
                  | ContractUnexpectedGetterImplementation Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
                  -- |An implementation of a sender method in a contract does not
-                 -- match the expected method to be implemented. The first and
-                 -- second arguments are the name of the contract and the
+                 -- match the expected method to be implemented at that position.
+                 -- The first and second arguments are the name of the contract and the
                  -- constraint this error refers to, the third the name of the
                  -- method that is implemented and the fourth the name of the
                  -- method that is expected to be implemented.
@@ -233,9 +226,9 @@ data TypingError annot =
                  -- refers to, the third the incorrect type of the
                  -- implementation.
                  | ContractUnexpectedSenderType Core.TyName (Core.ConstraintRef Core.ModuleRef) (Core.Type annot ModuleRef)
-                 -- |A type was encountered which was not expected. The first
-                 -- argument is the type encountered, the second is the expected
-                 -- type.
+                 -- |An expression to be type checked has not the type specified
+                 -- as the expected type. The first argument is the type encountered,
+                 -- the second is the expected type.
                  | UnexpectedType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
 
 deriving instance Core.AnnotContext Eq annot => Eq (TypingError annot)
