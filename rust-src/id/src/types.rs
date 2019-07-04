@@ -40,7 +40,7 @@ pub struct ArData<C: Curve> {
 }
 
 /// Information sent from the account holder to the identity provider.
-pub struct PreIdentityObject<P: Pairing, AttributeType: Attribute<P::ScalarField>, C:Curve> {
+pub struct PreIdentityObject<P: Pairing, AttributeType: Attribute<P::ScalarField>, C:Curve<Scalar=P::ScalarField>> {
     /// Name of the account holder.
     pub id_ah: String,
     /// Public credential of the account holder only.
@@ -65,10 +65,10 @@ pub struct PreIdentityObject<P: Pairing, AttributeType: Attribute<P::ScalarField
 }
 
 /// Public information about an identity provider.
-pub struct IpInfo<P: Pairing> {
+pub struct IpInfo<P: Pairing, C:Curve> {
     pub id_identity: String,
     pub id_verify_key: pssig::PublicKey<P>,
-    pub ar_info: ArInfo<P>,
+    pub ar_info: ArInfo<C>,
 }
 
 pub struct ArInfo<C:Curve>{
@@ -82,17 +82,17 @@ pub struct ArInfo<C:Curve>{
 /// Information the account holder has after the interaction with the identity
 /// provider. The account holder uses this information to generate credentials
 /// to deploy on the chain.
-pub struct IdentityObject<P: Pairing, AttributeType: Attribute<P::ScalarField>> {
+pub struct IdentityObject<P: Pairing, AttributeType: Attribute<P::ScalarField>, C:Curve> {
     /// Identity provider who checked and signed the data in the
     /// PreIdentityObject.
-    pub id_provider: IpInfo<P>,
+    pub id_provider: IpInfo<P, C>,
     pub acc_credential_info: AccCredentialInfo<P, AttributeType>,
     /// Signature of the PreIdentityObject data.
     pub sig: Signature<P>,
     /// Information on the chosen anonymity revoker, and the encryption of the
     /// account holder's prf key with the anonymity revoker's encryption key.
     /// Should be the same as the data signed by the identity provider.
-    pub ar_data: ArData<P>,
+    pub ar_data: ArData<C>,
 }
 
 pub struct CredDeploymentInfo<P: Pairing, AttributeType: Attribute<P::ScalarField>> {
