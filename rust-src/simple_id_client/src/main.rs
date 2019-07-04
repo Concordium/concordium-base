@@ -1,7 +1,7 @@
 use clap::{App, Arg, SubCommand};
 
 use curve_arithmetic::Pairing;
-use dialoguer::{Checkboxes, Input, Select};
+use dialoguer::{Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::{
@@ -35,10 +35,10 @@ type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, Examp
 impl Attribute<<Bls12 as Pairing>::ScalarField> for ExampleAttribute {
     fn to_field_element(&self) -> <Bls12 as Pairing>::ScalarField {
         match self {
-            ExampleAttribute::Age(x) => Fr::from_repr(FrRepr::from(*x as u64)).unwrap(),
-            ExampleAttribute::Citizenship(c) => Fr::from_repr(FrRepr::from(*c as u64)).unwrap(),
-            ExampleAttribute::MaxAccount(x) => Fr::from_repr(FrRepr::from(*x as u64)).unwrap(),
-            ExampleAttribute::Business(b) => Fr::from_repr(FrRepr::from(*b as u64)).unwrap(),
+            ExampleAttribute::Age(x) => Fr::from_repr(FrRepr::from(u64::from(*x))).unwrap(),
+            ExampleAttribute::Citizenship(c) => Fr::from_repr(FrRepr::from(u64::from(*c))).unwrap(),
+            ExampleAttribute::MaxAccount(x) => Fr::from_repr(FrRepr::from(u64::from(*x))).unwrap(),
+            ExampleAttribute::Business(b) => Fr::from_repr(FrRepr::from(u64::from(*b))).unwrap(),
         }
     }
 }
@@ -51,17 +51,6 @@ impl fmt::Display for ExampleAttribute {
             ExampleAttribute::MaxAccount(x) => write!(f, "(MaxAccount, {})", x),
             ExampleAttribute::Business(b) => write!(f, "(Business, {})", b),
         }
-    }
-}
-
-/// Show the type of the attribute. Used to display the option to the user when
-/// selecting the attribute list type.
-fn show_example_attribute_type(att: &ExampleAttribute, f: &mut fmt::Formatter) -> fmt::Result {
-    match att {
-        ExampleAttribute::Age(_) => write!(f, "Age"),
-        ExampleAttribute::Citizenship(_) => write!(f, "Citizenship"),
-        ExampleAttribute::MaxAccount(_) => write!(f, "MaxAccount"),
-        ExampleAttribute::Business(_) => write!(f, "Business"),
     }
 }
 
@@ -111,7 +100,7 @@ fn write_json_to_file(filepath: &str, js: &Value) -> io::Result<()> {
 }
 
 /// Output json to standard output.
-fn output_json(js: &Value) -> () {
+fn output_json(js: &Value) {
     println!("{}", to_string_pretty(js).unwrap());
 }
 
