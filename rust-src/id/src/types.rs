@@ -44,7 +44,7 @@ pub struct PreIdentityObject<P: Pairing, AttributeType: Attribute<P::ScalarField
     /// Name of the account holder.
     pub id_ah: String,
     /// Public credential of the account holder only.
-    pub id_cred_pub: elgamal::PublicKey<P::G_2>,
+    pub id_cred_pub: elgamal::PublicKey<C>,
     /// Information on the chosen anonymity revoker, and the encryption of the
     /// account holder's prf key with the anonymity revoker's encryption key.
     pub id_ar_data: ArData<C>,
