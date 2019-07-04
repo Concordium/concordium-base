@@ -129,9 +129,9 @@ fn chi_to_json<P: Pairing>(chi: &CredentialHolderInfo<P>) -> Value {
 
 fn json_to_chi<P: Pairing>(js: &Value) -> Option<CredentialHolderInfo<P>> {
     let id_cred_pub =
-        elgamal::PublicKey::<P::G_2>::from_bytes(&json_base16_decode(&js["idCredPublic"])?).ok()?;
+        elgamal::PublicKey::<P::G_1>::from_bytes(&json_base16_decode(&js["idCredPublic"])?).ok()?;
     let id_cred_sec =
-        elgamal::SecretKey::<P::G_2>::from_bytes(&json_base16_decode(&js["idCredSecret"])?).ok()?;
+        elgamal::SecretKey::<P::G_1>::from_bytes(&json_base16_decode(&js["idCredSecret"])?).ok()?;
     let id_ah = js["name"].as_str()?;
     let info: CredentialHolderInfo<P> = CredentialHolderInfo {
         id_ah:   id_ah.to_owned(),
@@ -169,10 +169,10 @@ struct Context<P: Pairing, C: Curve> {
     /// base point of the dlog proof (account holder knows secret credentials
     /// corresponding to the public credentials), shared at least between id
     /// provider and the account holder
-    dlog_base: P::G_2,
+    dlog_base: P::G_1,
     /// Commitment key shared by the identity provider and the account holder.
     /// It is used to generate commitments to the prf key.
-    commitment_key_id: PedersenKey<P::G_2>,
+    commitment_key_id: PedersenKey<P::G_1>,
     /// Commitment key shared by the anonymity revoker, identity provider, and
     /// account holder. Used to commit to the prf key of the account holder in
     /// the same group as the encryption of the prf key as given to the
@@ -316,6 +316,7 @@ fn main() {
             let mut csprng = thread_rng();
             let secret = SecretKey::generate(&mut csprng);
             let public = PublicKey::from(&secret);
+            // let id_prf_key = prf::SecretKey::generate(&mut csprng);
             let ah_info = CredentialHolderInfo::<Bls12> {
                 id_ah:   name,
                 id_cred: IdCredentials {

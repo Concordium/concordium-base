@@ -36,7 +36,7 @@ pub struct CredentialHolderInfo<P: Pairing> {
     pub id_ah: String,
     /// Public and private keys of the credential holder. NB: These are distinct
     /// from the public/private keys of the account holders.
-    pub id_cred: IdCredentials<P::G_2>,
+    pub id_cred: IdCredentials<P::G_1>,
     // aux_data: &[u8]
 }
 
@@ -68,16 +68,16 @@ pub struct PreIdentityObject<
     /// Name of the account holder.
     pub id_ah: String,
     /// Public credential of the account holder only.
-    pub id_cred_pub: elgamal::PublicKey<P::G_2>,
+    pub id_cred_pub: elgamal::PublicKey<P::G_1>,
     /// Information on the chosen anonymity revoker, and the encryption of the
     /// account holder's prf key with the anonymity revoker's encryption key.
     pub id_ar_data: ArData<C>,
     /// Chosen attribute list.
     pub alist: AttributeList<P::ScalarField, AttributeType>,
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub
-    pub pok_sc: DlogProof<P::G_2>,
+    pub pok_sc: DlogProof<P::G_1>,
     /// Commitment to the prf key.
-    pub cmm_prf: pedersen::Commitment<P::G_2>,
+    pub cmm_prf: pedersen::Commitment<P::G_1>,
     /// commitment to the prf key in the same group as the elgamal key of the
     /// anonymity revoker
     pub snd_cmm_prf: pedersen::Commitment<C>,
@@ -85,7 +85,7 @@ pub struct PreIdentityObject<
     /// the key in snd_cmm_prf (hidden behind the commitment).
     pub proof_com_enc_eq: ComEncEqProof<C>,
     // proof that the first and snd commitments to the prf are hiding the same value
-    pub proof_com_eq: ComEqDiffGrpsProof<P::G_2, C>,
+    pub proof_com_eq: ComEqDiffGrpsProof<P::G_1, C>,
 }
 
 /// Public information about an identity provider.

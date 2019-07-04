@@ -125,7 +125,7 @@ impl<C: Pairing> SecretKey<C> {
         &self,
         message: &UnknownMessage<C>,
         csprng: &mut T,
-    ) -> Result<Signature<C>, SignatureError>
+    ) -> Signature<C>
     where
         T: Rng, {
         let sk = C::G_1::one_point().mul_by_scalar(&self.1);
@@ -133,7 +133,7 @@ impl<C: Pairing> SecretKey<C> {
         let a = C::G_1::one_point().mul_by_scalar(&r);
         let m = message.0;
         let xmr = sk.plus_point(&m).mul_by_scalar(&r);
-        Ok(Signature(a, xmr))
+        Signature(a, xmr)
     }
 }
 

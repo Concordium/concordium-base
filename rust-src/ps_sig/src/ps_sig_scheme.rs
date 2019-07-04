@@ -186,11 +186,11 @@ macro_rules! macro_sign_unknown_message {
             let msg = msg_res.unwrap();
 
             let mut csprng = thread_rng();
-            let sig_res = sk.sign_unknown_message(&msg, &mut csprng);
-            if !sig_res.is_ok() {
-                return -3;
-            }
-            let sig = sig_res.unwrap();
+            let sig = sk.sign_unknown_message(&msg, &mut csprng);
+            //if !sig_res.is_ok() {
+            //    return -3;
+           // }
+            //let sig = sig_res.unwrap();
             let sig_slice: &mut [u8] = unsafe {
                 slice::from_raw_parts_mut(
                     signature_bytes,
@@ -388,8 +388,8 @@ mod tests {
                     let vs = Value::generate(i, &mut csprng);
                     let (commitment, randomness) = ck.commit(&vs, &mut csprng);
                     let message = message(&commitment);
-                    let sig_res = sk.sign_unknown_message(&message, &mut csprng);
-                    let sig = sig_res.unwrap();
+                    let sig = sk.sign_unknown_message(&message, &mut csprng);
+                    //let sig = sig_res.unwrap();
                     let sig2 = retrieve_sig(&sig, randomness);
                     let knownm: KnownMessage<$pairing_type> = KnownMessage(vs.0.clone());
                     let sig_res = sk.sign_known_message(&KnownMessage(vs.0), &mut csprng);
