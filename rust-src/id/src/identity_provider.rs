@@ -8,13 +8,13 @@ use rand::*;
 use sigma_protocols::{com_enc_eq::*, com_eq_different_groups::*, dlog::*};
 
 pub struct AuxData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    id_cred_base:   P::G_1,
-    //comm_1_params:  CommitmentParams<P::G_1>,
-    ps_public_key: ps_sig::PublicKey<P>,
-    ps_secret_key: ps_sig::SecretKey<P>,
+    id_cred_base: P::G_1,
+    // comm_1_params:  CommitmentParams<P::G_1>,
+    ps_public_key:  ps_sig::PublicKey<P>,
+    ps_secret_key:  ps_sig::SecretKey<P>,
     comm_2_params:  CommitmentParams<C>,
     elgamal_params: ElgamalParams<C>,
-    ar_info: ArInfo<C>,
+    ar_info:        ArInfo<C>,
 }
 
 pub struct Declined(pub Reason);
@@ -41,7 +41,8 @@ pub fn verify_credentials<
         return Right(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
     }
 
-    let comm_1_params = CommitmentParams((aux_data.ps_public_key.0[0], aux_data.ps_public_key.0[1]));
+    let comm_1_params =
+        CommitmentParams((aux_data.ps_public_key.0[0], aux_data.ps_public_key.0[1]));
     let b_2 = verify_vrf_key_data(
         &comm_1_params,
         &pre_id_obj.cmm_prf,
@@ -52,26 +53,38 @@ pub fn verify_credentials<
         &pre_id_obj.proof_com_eq,
         &pre_id_obj.proof_com_enc_eq,
     );
-    if !b_2{
+    if !b_2 {
         return Right(Declined(Reason::FailedToVerifyPrfData));
     }
-    let message: ps_sig::UnknownMessage<P> = compute_message(&pre_id_obj.id_cred_pub, &pre_id_obj.cmm_prf, &pre_id_obj.alist, &aux_data.ps_public_key);
+    let message: ps_sig::UnknownMessage<P> = compute_message(
+        &pre_id_obj.id_cred_pub,
+        &pre_id_obj.cmm_prf,
+        &pre_id_obj.alist,
+        &aux_data.ps_public_key,
+    );
     let mut csprng = thread_rng();
-    Left(aux_data.ps_secret_key.sign_unknown_message(&message, &mut csprng))
+    Left(
+        aux_data
+            .ps_secret_key
+            .sign_unknown_message(&message, &mut csprng),
+    )
 }
 
-
-fn  compute_message<P:Pairing, AttributeType: Attribute<P::ScalarField>>(id_cred_pub: &elgamal::PublicKey<P::G_1>, cmm_prf: &PedersenCommitment<P::G_1>, att_list:&AttributeList<P::ScalarField, AttributeType>, ps_public_key: &ps_sig::PublicKey<P>) -> ps_sig::UnknownMessage<P>{
+fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
+    id_cred_pub: &elgamal::PublicKey<P::G_1>,
+    cmm_prf: &PedersenCommitment<P::G_1>,
+    att_list: &AttributeList<P::ScalarField, AttributeType>,
+    ps_public_key: &ps_sig::PublicKey<P>,
+) -> ps_sig::UnknownMessage<P> {
     let mut message = id_cred_pub.0;
     message = message.plus_point(&cmm_prf.0);
     let att_vec = &att_list.alist;
     let n = att_vec.len();
     let key_vec = &ps_public_key.0;
-    assert!(key_vec.len() >= n+2);
+    assert!(key_vec.len() >= n + 2);
     for i in 2..(n + 2) {
-        let att = att_vec[i - 2].to_field_element(); 
+        let att = att_vec[i - 2].to_field_element();
         message = message.plus_point(&key_vec[i].mul_by_scalar(&att))
-
     }
 
     ps_sig::UnknownMessage(message)
