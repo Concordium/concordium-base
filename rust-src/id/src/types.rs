@@ -51,7 +51,7 @@ pub struct PreIdentityObject<P: Pairing, AttributeType: Attribute<P::ScalarField
     /// Chosen attribute list.
     pub alist: AttributeList<P::ScalarField, AttributeType>,
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub
-    pub pok_sc: DlogProof<P::G_1>,
+    pub pok_sc: DlogProof<C>,
     /// Commitment to the prf key.
     pub cmm_prf: pedersen::Commitment<P::G_2>,
     ///commitment to the prf key in the same group as the elgamal key of the anonymity revoker
