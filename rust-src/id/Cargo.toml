@@ -30,6 +30,9 @@ version = "0"
 [dependencies.dodis_yampolskiy_prf]
 path = "../dodis_yampolskiy_prf"
 version = "0"
+[dependencies.pedersen_scheme]
+path = "../pedersen_scheme"
+version = "0"
 
 
 [lib]
