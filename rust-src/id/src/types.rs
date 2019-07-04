@@ -4,8 +4,8 @@ use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use pairing::{Field, PrimeField};
 use ps_sig::signature::* ;
 use chrono::{NaiveDateTime};
-use elgamal::cipher::*;
-
+use elgamal::{cipher::*,secret::*,public::*};
+use dodis_yampolskiy_prf::secret as prf;
 
 pub trait Attribute<F:Field> {
     fn to_field_element(&self) -> Result<F,FieldDecodingError>;
@@ -52,20 +52,20 @@ impl Attributes<<Bls12 as Pairing>::ScalarField> for AttributeList{
 }
 
 pub struct IdCredentials<C:Curve>{
-    pub id_cred_sec: C::Scalar,
-    pub id_cred_pub: C
+    pub id_cred_sec: SecretKey<C>,
+    pub id_cred_pub: PublicKey<C>
 }
 
 pub struct AccHolderInfo<P:Pairing>{
     pub id_ah: String,
     pub id_cred: IdCredentials<P::G_2>,
+    pub id_prf_key: prf::SecretKey<P::G_1>,
     //aux_data: &[u8]
-
 }
 
 pub struct AccCredentialInfo<P:Pairing, A: Attributes<P::ScalarField>>{
     pub acc_holder_info: AccHolderInfo<P>,
-    pub prf_key: P::ScalarField,
+    pub prf_key: prf::SecretKey<P::G_1>,
     pub attritubtes: A
 
 }
@@ -73,7 +73,6 @@ pub struct CredDeploymentCert<P:Pairing, A: Attributes<P::ScalarField>> {
     pub acc_credential_info: AccCredentialInfo<P, A>,
     pub id_ip: String,
     pub usig: Signature<P>,
-
 }
 
 struct ArData<P:Pairing>{
@@ -81,7 +80,6 @@ struct ArData<P:Pairing>{
     pub e_reg_id: Cipher<P::G_1> 
     
 }
-
 
 pub struct CredDeploymentInfo<P:Pairing, A: Attributes<P::ScalarField>>{
     pub reg_id : P::G_1,

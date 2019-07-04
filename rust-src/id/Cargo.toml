@@ -27,6 +27,10 @@ version = "0"
 [dependencies.elgamal]
 path = "../elgamal"
 version = "0"
+[dependencies.dodis_yampolskiy_prf]
+path = "../dodis_yampolskiy_prf"
+version = "0"
+
 
 [lib]
 name = "id"

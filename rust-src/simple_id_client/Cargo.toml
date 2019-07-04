@@ -1,0 +1,33 @@
+[package]
+name = "simple_id_client"
+version = "0.1.0"
+authors = ["Concordium"]
+edition = "2018"
+
+[dependencies]
+clap = "2.33"
+dialoguer = "0.4"
+pairing = "0.14"
+rand = "0.4"
+hex = "0.3"
+serde_json = "1.0"
+
+[dependencies.sigma_protocols]
+path = "../sigma_protocols"
+version = "0" 
+
+[dependencies.curve_arithmetic]
+path = "../curve_arithmetic"
+version = "0" 
+
+[dependencies.elgamal]
+path = "../elgamal"
+version = "0" 
+
+[dependencies.dodis_yampolskiy_prf]
+path = "../dodis_yampolskiy_prf"
+version = "0"
+
+[dependencies.id]
+path = "../id"
+version = "0" 
