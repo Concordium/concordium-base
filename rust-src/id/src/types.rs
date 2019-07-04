@@ -63,6 +63,10 @@ pub struct PreIdentityObject<P: Pairing, AttributeType: Attribute<P::ScalarField
 pub struct IpInfo<P: Pairing> {
     pub id_identity: String,
     pub id_verify_key: pssig::PublicKey<P>,
+    pub ar_info: ArInfo<P>,
+}
+
+pub struct ArInfo<P:Pairing>{
     /// The name and public key of the anonymity revoker chosen by this identity
     /// provider. In the future each identity provider will allow a set of
     /// anonymity revokers.
