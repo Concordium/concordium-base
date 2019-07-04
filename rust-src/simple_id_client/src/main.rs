@@ -3,7 +3,7 @@ use clap::{App, Arg, SubCommand};
 use curve_arithmetic::{Curve, Pairing};
 use dialoguer::{Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
-use elgamal::{message::Message, public::PublicKey, secret::SecretKey};
+use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::{
     bls12_381::{Bls12, Fr, FrRepr},
     PrimeField,
@@ -146,7 +146,7 @@ fn json_to_chi<P: Pairing>(js: &Value) -> Option<CredentialHolderInfo<P>> {
 fn alist_to_json(
     alist: &AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>,
 ) -> Value {
-    let alist_vec: Vec<String> = alist.alist.iter().map(|x| x.to_string()).collect();
+    let alist_vec: Vec<String> = alist.alist.iter().map(ToString::to_string).collect();
     json!({
         "variant": alist.variant,
         "items": alist_vec
@@ -180,6 +180,9 @@ struct Context<P: Pairing, C: Curve> {
     commitment_key_ar: PedersenKey<C>,
 }
 
+/// Generate PreIdentityObject out of the account holder information,
+/// the chosen anonymity revoker information, and the necessary contextual
+/// information (group generators, shared commitment keys, etc).
 fn generate_pio<
     P: Pairing,
     AttributeType: Attribute<P::ScalarField>,
