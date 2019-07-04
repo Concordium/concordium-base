@@ -1,8 +1,8 @@
 use clap::{App, Arg, SubCommand};
 
 use dialoguer::{Checkboxes, Input, Select};
-use elgamal::{public::PublicKey, secret::SecretKey};
 use dodis_yampolskiy_prf::secret as prf;
+use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::bls12_381::Bls12;
 use rand::*;
 use std::convert::*;
@@ -10,7 +10,6 @@ use std::convert::*;
 use hex::encode;
 use id::types::*;
 use serde_json::{json, to_string_pretty, Value};
-
 
 use std::{
     fs::File,
@@ -62,12 +61,12 @@ fn main() {
             let public = PublicKey::from(&secret);
             let id_prf_key = prf::SecretKey::generate(&mut csprng);
             let ah_info = AccHolderInfo::<Bls12> {
-                id_ah:   name,
+                id_ah: name,
                 id_cred: IdCredentials {
                     id_cred_sec: secret,
                     id_cred_pub: public,
                 },
-                id_prf_key
+                id_prf_key,
             };
             let js = json!({
                 "name": ah_info.id_ah,

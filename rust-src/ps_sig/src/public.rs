@@ -28,9 +28,9 @@ use crate::secret::*;
 /// A message
 #[derive(Debug)]
 pub struct PublicKey<C: Pairing>(
-    pub(crate) Vec<C::G_1>,
-    pub(crate) Vec<C::G_2>,
-    pub(crate) C::G_2,
+    pub Vec<C::G_1>,
+    pub Vec<C::G_2>,
+    pub C::G_2,
 );
 
 impl<C: Pairing> PartialEq for PublicKey<C> {

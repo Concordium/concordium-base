@@ -34,7 +34,7 @@ use curve_arithmetic::Curve;
 
 /// Elgamal public key .
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub struct PublicKey<C: Curve>(pub(crate) C);
+pub struct PublicKey<C: Curve>(pub C);
 
 impl<C: Curve> Debug for PublicKey<C> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {

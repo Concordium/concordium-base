@@ -60,7 +60,6 @@ pub fn prove_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>, R: Rng>
     coeff: &((C1, C1), (C2, C2)),
 ) -> ComEqDiffGrpsProof<C1, C2> {
     let (public_1, public_2) = public;
-    // let (s_1, s_2, s_3) = secret;
 
     let ((g_1, h_1), (g_2, h_2)) = coeff;
     let mut hasher = Sha256::new();

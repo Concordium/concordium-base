@@ -7,15 +7,13 @@ use pairing::{Field, PrimeField, PrimeFieldDecodingError};
 use rand::*;
 use std::fmt::{Debug, Display, Formatter};
 
-#[derive(Debug) ]
+#[derive(Debug)]
 pub enum FieldDecodingError {
     NotFieldElement,
 }
 
 impl From<PrimeFieldDecodingError> for FieldDecodingError {
-    fn from(_err: PrimeFieldDecodingError) -> Self {
-       FieldDecodingError::NotFieldElement 
-    }
+    fn from(_err: PrimeFieldDecodingError) -> Self { FieldDecodingError::NotFieldElement }
 }
 
 impl Display for FieldDecodingError {
@@ -60,7 +58,7 @@ pub trait Curve:
     fn bytes_to_curve_unchecked(b: &[u8]) -> Result<Self, CurveDecodingError>;
     fn generate<R: Rng>(rng: &mut R) -> Self;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar;
-    fn scalar_from_u64(n :u64) -> Result<Self::Scalar, FieldDecodingError>;
+    fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError>;
 }
 
 pub trait Pairing: Sized + 'static + Clone {
