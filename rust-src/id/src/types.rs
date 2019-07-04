@@ -18,8 +18,8 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
 }
 
 pub struct IdCredentials<C: Curve> {
-    pub id_cred_sec: elgamal::SecretKey<C>,
-    pub id_cred_pub: elgamal::PublicKey<C>,
+    pub id_cred_sec: C::Scalar,
+    pub id_cred_pub: C,
 }
 
 pub struct CredentialHolderInfo<P: Pairing> {
@@ -44,7 +44,7 @@ pub struct PreIdentityObject<P: Pairing, AttributeType: Attribute<P::ScalarField
     /// Name of the account holder.
     pub id_ah: String,
     /// Public credential of the account holder only.
-    pub id_cred_pub: elgamal::PublicKey<P::G_1>,
+    pub id_cred_pub: P::G_2,
     /// Information on the chosen anonymity revoker, and the encryption of the
     /// account holder's prf key with the anonymity revoker's encryption key.
     pub id_ar_data: ArData<C>,
