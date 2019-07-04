@@ -34,7 +34,7 @@ use curve_arithmetic::Curve;
 
 /// Elgamal public key .
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub struct PublicKey<C: Curve>(pub(crate) C);
+pub struct PublicKey<C: Curve>(pub C);
 
 impl<C: Curve> Debug for PublicKey<C> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
@@ -68,13 +68,21 @@ impl<C: Curve> PublicKey<C> {
     }
 
     #[inline]
-    pub fn encrypt<T>(&self, csprng: &mut T, m: &Message<C>) -> Cipher<C>
+    /// Encrypt and returned the randomness used. NB: Randomness must be kept
+    /// private.
+    pub fn encrypt_rand<T>(&self, csprng: &mut T, m: &Message<C>) -> (Cipher<C>, C::Scalar)
     where
         T: Rng, {
         let k = C::generate_scalar(csprng);
         let g = C::one_point().mul_by_scalar(&k);
         let s = self.0.mul_by_scalar(&k).plus_point(&m.0);
-        Cipher(g, s)
+        (Cipher(g, s), k)
+    }
+
+    pub fn encrypt<T>(&self, csprng: &mut T, m: &Message<C>) -> Cipher<C>
+    where
+        T: Rng, {
+        self.encrypt_rand(csprng, m).0
     }
 
     // pub fn encrypt_bin_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher<C>
@@ -109,11 +117,22 @@ impl<C: Curve> PublicKey<C> {
         }
     }
 
-    pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &C::Scalar) -> Cipher<C>
+    /// Encrypt as an exponent, and return the randomness used.
+    pub fn encrypt_exponent_rand<T>(
+        &self,
+        csprng: &mut T,
+        e: &C::Scalar,
+    ) -> (Cipher<C>, C::Scalar)
     where
         T: Rng, {
         let m = C::one_point().mul_by_scalar(e);
-        self.encrypt(csprng, &Message(m))
+        self.encrypt_rand(csprng, &Message(m))
+    }
+
+    pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &C::Scalar) -> Cipher<C>
+    where
+        T: Rng, {
+        self.encrypt_exponent_rand(csprng, e).0
     }
 
     pub fn encrypt_exponent_vec<T>(&self, csprng: &mut T, e: &[C::Scalar]) -> Vec<Cipher<C>>

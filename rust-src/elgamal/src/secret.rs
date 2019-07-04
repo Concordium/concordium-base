@@ -24,7 +24,7 @@ use pairing::Field;
 
 /// elgamal secret  key.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct SecretKey<C: Curve>(pub(crate) C::Scalar);
+pub struct SecretKey<C: Curve>(pub C::Scalar);
 
 // THIS IS COMMENTED FOR NOW FOR COMPATIBILITY WITH BLS CURVE IMPLEMENTATION
 // ONCE WE HAVE TAKEN OVER THE SOURCE OF THE CURVE THIS SHOULD BE IMPLEMENTED

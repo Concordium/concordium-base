@@ -9,13 +9,14 @@ use sigma_protocols::{
     com_enc_eq::ComEncEqProof, com_eq_different_groups::ComEqDiffGrpsProof, dlog::DlogProof,
 };
 
-pub struct CommitmentParams<C:Curve>(pub (C, C));
-pub struct ElgamalParams<C:Curve>(pub (C, C));
+pub struct CommitmentParams<C: Curve>(pub (C, C));
+pub struct ElgamalParams<C: Curve>(pub (C, C));
 
 pub trait Attribute<F: Field> {
     fn to_field_element(&self) -> F;
 }
 
+#[derive(Clone)]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     pub variant:  u32,
     pub alist:    Vec<AttributeType>,
@@ -67,14 +68,14 @@ pub struct PreIdentityObject<
     /// Name of the account holder.
     pub id_ah: String,
     /// Public credential of the account holder only.
-    pub id_cred_pub: elgamal::PublicKey<C>,
+    pub id_cred_pub: elgamal::PublicKey<P::G_2>,
     /// Information on the chosen anonymity revoker, and the encryption of the
     /// account holder's prf key with the anonymity revoker's encryption key.
     pub id_ar_data: ArData<C>,
     /// Chosen attribute list.
     pub alist: AttributeList<P::ScalarField, AttributeType>,
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub
-    pub pok_sc: DlogProof<C>,
+    pub pok_sc: DlogProof<P::G_2>,
     /// Commitment to the prf key.
     pub cmm_prf: pedersen::Commitment<P::G_2>,
     /// commitment to the prf key in the same group as the elgamal key of the

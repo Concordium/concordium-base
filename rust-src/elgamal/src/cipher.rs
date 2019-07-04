@@ -23,7 +23,7 @@ use curve_arithmetic::curve_arithmetic::*;
 use rand::*;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub struct Cipher<C: Curve>(pub(crate) C, pub(crate) C);
+pub struct Cipher<C: Curve>(pub C, pub C);
 
 impl<C: Curve> Cipher<C> {
     /// Convert this cipher key to a byte array.

@@ -31,4 +31,8 @@ version = "0"
 
 [dependencies.id]
 path = "../id"
-version = "0" 
+version = "0"
+
+[dependencies.pedersen_scheme]
+path = "../pedersen_scheme"
+version = "0"

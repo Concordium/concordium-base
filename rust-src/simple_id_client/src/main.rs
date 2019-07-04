@@ -1,9 +1,9 @@
 use clap::{App, Arg, SubCommand};
 
-use curve_arithmetic::Pairing;
+use curve_arithmetic::{Curve, Pairing};
 use dialoguer::{Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
-use elgamal::{public::PublicKey, secret::SecretKey};
+use elgamal::{message::Message, public::PublicKey, secret::SecretKey};
 use pairing::{
     bls12_381::{Bls12, Fr, FrRepr},
     PrimeField,
@@ -14,6 +14,10 @@ use std::{convert::*, fmt};
 use hex::{decode, encode};
 use id::types::*;
 use serde_json::{json, to_string_pretty, Value};
+
+use pedersen_scheme::{key::CommitmentKey as PedersenKey, value as pedersen};
+
+use sigma_protocols::{com_enc_eq, com_eq_different_groups, dlog};
 
 use std::{
     fs::File,
@@ -156,6 +160,100 @@ fn aci_to_json(aci: &AccCredentialInfo<Bls12, ExampleAttribute>) -> Value {
         "prfKey": json_base16_encode(&aci.prf_key.to_bytes()),
         "attributes": alist_to_json(&aci.attributes),
     })
+}
+
+struct Context<P: Pairing, C: Curve> {
+    ar_name: String,
+    ar_public_key: elgamal::PublicKey<C>,
+    ar_elgamal_generator: C,
+    /// base point of the dlog proof (account holder knows secret credentials
+    /// corresponding to the public credentials), shared at least between id
+    /// provider and the account holder
+    dlog_base: P::G_2,
+    /// Commitment key shared by the identity provider and the account holder.
+    /// It is used to generate commitments to the prf key.
+    commitment_key_id: PedersenKey<P::G_2>,
+    /// Commitment key shared by the anonymity revoker, identity provider, and
+    /// account holder. Used to commit to the prf key of the account holder in
+    /// the same group as the encryption of the prf key as given to the
+    /// anonymity revoker.
+    commitment_key_ar: PedersenKey<C>,
+}
+
+fn generate_pio<
+    P: Pairing,
+    AttributeType: Attribute<P::ScalarField>,
+    C: Curve<Scalar = P::ScalarField>,
+>(
+    context: &Context<P, C>,
+    aci: &AccCredentialInfo<P, AttributeType>,
+) -> PreIdentityObject<P, AttributeType, C>
+where
+    AttributeType: Clone, {
+    let mut csprng = thread_rng();
+    let id_ah = aci.acc_holder_info.id_ah.clone();
+    let id_cred_pub = aci.acc_holder_info.id_cred.id_cred_pub;
+    let prf::SecretKey(prf_key_scalar) = aci.prf_key;
+    // FIXME: The next item will change to encrypt by chunks to enable anonymity
+    // revocation.
+    let (prf_key_enc, prf_key_enc_rand) = context
+        .ar_public_key
+        .encrypt_exponent_rand(&mut csprng, &prf_key_scalar);
+    let id_ar_data = ArData {
+        ar_name:  context.ar_name.clone(),
+        e_reg_id: prf_key_enc,
+    };
+    let alist = aci.attributes.clone();
+    let elgamal::SecretKey(id_cred_sec_scalar) = &aci.acc_holder_info.id_cred.id_cred_sec;
+    let elgamal::PublicKey(id_cred_pub_elem) = &id_cred_pub;
+    let pok_sc = dlog::prove_dlog(
+        &mut csprng,
+        id_cred_pub_elem,
+        id_cred_sec_scalar,
+        &context.dlog_base,
+    );
+    let (cmm_prf, rand_cmm_prf) = context
+        .commitment_key_id
+        .commit(&pedersen::Value(vec![prf_key_scalar]), &mut csprng);
+    let (snd_cmm_prf, rand_snd_cmm_prf) = context
+        .commitment_key_ar
+        .commit(&pedersen::Value(vec![prf_key_scalar]), &mut csprng);
+    // now generate the proof that the commitment hidden in snd_cmm_prf is to
+    // the same prf key as the one encrypted in id_ar_data via anonymity revokers
+    // public key.
+    let proof_com_enc_eq = {
+        let public = (prf_key_enc.0, prf_key_enc.1, snd_cmm_prf.0);
+        // TODO: Check that this order of secret values is correct!
+        let secret = (prf_key_enc_rand, prf_key_scalar, rand_snd_cmm_prf);
+        let base = (
+            context.ar_elgamal_generator,
+            context.ar_public_key.0,
+            context.commitment_key_ar.0[0],
+            context.commitment_key_ar.1,
+        );
+        com_enc_eq::prove_com_enc_eq(&mut csprng, &public, &secret, &base)
+    };
+    let proof_com_eq = {
+        let public = (cmm_prf.0, snd_cmm_prf.0);
+        // TODO: Check that this is the correct order of secret values.
+        let secret = (prf_key_scalar, rand_cmm_prf, rand_snd_cmm_prf);
+        let coeff = (
+            (context.commitment_key_id.0[0], context.commitment_key_id.1),
+            (context.commitment_key_ar.0[0], context.commitment_key_ar.1),
+        );
+        com_eq_different_groups::prove_com_eq_diff_grps(&mut csprng, &public, &secret, &coeff)
+    };
+    PreIdentityObject {
+        id_ah,
+        id_cred_pub,
+        id_ar_data,
+        alist,
+        pok_sc,
+        cmm_prf,
+        snd_cmm_prf,
+        proof_com_enc_eq,
+        proof_com_eq,
+    }
 }
 
 // fn json_to_aci<P: Pairing>(js: &Value) -> Option<CredentialHolderInfo<P>> {
