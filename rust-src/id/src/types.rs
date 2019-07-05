@@ -16,13 +16,14 @@ pub trait Attribute<F: Field> {
     fn to_field_element(&self) -> F;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     pub variant:  u32,
     pub alist:    Vec<AttributeType>,
     pub _phantom: std::marker::PhantomData<F>,
 }
 
+#[derive(Debug)]
 pub struct IdCredentials<C: Curve> {
     pub id_cred_sec: elgamal::SecretKey<C>,
     pub id_cred_pub: elgamal::PublicKey<C>,
@@ -31,6 +32,7 @@ pub struct IdCredentials<C: Curve> {
 /// Private credential holder information. A user maintaints these
 /// through many different interactions with the identity provider and
 /// the chain.
+#[derive(Debug)]
 pub struct CredentialHolderInfo<P: Pairing> {
     /// Name of the credential holder.
     pub id_ah: String,
@@ -43,6 +45,7 @@ pub struct CredentialHolderInfo<P: Pairing> {
 /// Private and public data chosen by the credential holder before the
 /// interaction with the identity provider. The credential holder chooses a prf
 /// key and an attribute list.
+#[derive(Debug)]
 pub struct AccCredentialInfo<P: Pairing, AttributeType: Attribute<P::ScalarField>> {
     pub acc_holder_info: CredentialHolderInfo<P>,
     /// Chosen prf key of the credential holder.
@@ -103,6 +106,7 @@ pub struct ArInfo<C: Curve> {
     /// anonymity revokers.
     pub ar_name: String,
     pub ar_public_key: elgamal::PublicKey<C>,
+    pub ar_elgamal_generator: C,
 }
 
 /// Information the account holder has after the interaction with the identity

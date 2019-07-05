@@ -25,7 +25,7 @@ use std::{
     path::Path,
 };
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ExampleAttribute {
     Age(u8),
     Citizenship(u16),
@@ -58,6 +58,15 @@ impl fmt::Display for ExampleAttribute {
     }
 }
 
+fn example_attribute_to_json(att: &ExampleAttribute) -> Value {
+    match att {
+        ExampleAttribute::Age(x) => json!({"age": *x}),
+        ExampleAttribute::Citizenship(c) => json!({ "citizenship": c }),
+        ExampleAttribute::MaxAccount(x) => json!({ "maxAccount": x }),
+        ExampleAttribute::Business(b) => json!({ "business": b }),
+    }
+}
+
 /// Show fields of the type of fields of the given attribute list.
 fn show_attribute_format(variant: u32) -> &'static str {
     match variant {
@@ -67,27 +76,32 @@ fn show_attribute_format(variant: u32) -> &'static str {
     }
 }
 
+fn read_max_account() -> io::Result<ExampleAttribute> {
+    let options = vec![10, 25, 50, 100, 200, 255];
+    let select = Select::new()
+        .with_prompt("Choose maximum number of accounts")
+        .items(&options)
+        .default(0)
+        .interact()?;
+    Ok(ExampleAttribute::MaxAccount(options[select]))
+}
+
+/// Given the chosen variant of the attribute list read off the fields from user
+/// input. Fails if the user input is not well-formed.
 fn read_attribute_list(variant: u32) -> io::Result<Vec<ExampleAttribute>> {
     match variant {
         0 => {
-            let max_acc = Input::new()
-                .with_prompt("Choose maximum number of accounts")
-                .interact()?;
+            let max_acc = read_max_account()?;
             let age = Input::new().with_prompt("Your age").interact()?;
-            Ok(vec![
-                ExampleAttribute::MaxAccount(max_acc),
-                ExampleAttribute::Age(age),
-            ])
+            Ok(vec![max_acc, ExampleAttribute::Age(age)])
         }
         1 => {
-            let max_acc = Input::new()
-                .with_prompt("Choose maximum number of accounts")
-                .interact()?;
+            let max_acc = read_max_account()?;
             let age = Input::new().with_prompt("Your age").interact()?;
             let citizenship = Input::new().with_prompt("Citizenship").interact()?; // TODO: use drop-down/select with
             let business = Input::new().with_prompt("Are you a business").interact()?;
             Ok(vec![
-                ExampleAttribute::MaxAccount(max_acc),
+                max_acc,
                 ExampleAttribute::Age(age),
                 ExampleAttribute::Citizenship(citizenship),
                 ExampleAttribute::Business(business),
@@ -143,13 +157,40 @@ fn json_to_chi<P: Pairing>(js: &Value) -> Option<CredentialHolderInfo<P>> {
     Some(info)
 }
 
-fn alist_to_json(
-    alist: &AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>,
-) -> Value {
-    let alist_vec: Vec<String> = alist.alist.iter().map(ToString::to_string).collect();
+fn json_to_example_attribute(v: &Value) -> Option<ExampleAttribute> {
+    let mp = v.as_object()?;
+    if let Some(age) = mp.get("age") {
+        Some(ExampleAttribute::Age(age.as_u64()? as u8))
+    } else if let Some(citizenship) = mp.get("citizenship") {
+        Some(ExampleAttribute::Citizenship(citizenship.as_u64()? as u16))
+    } else if let Some(max_account) = mp.get("maxAccount") {
+        Some(ExampleAttribute::MaxAccount(max_account.as_u64()? as u16))
+    } else if let Some(business) = mp.get("business") {
+        Some(ExampleAttribute::Business(business.as_u64()? != 0))
+    } else {
+        None
+    }
+}
+
+fn alist_to_json(alist: &ExampleAttributeList) -> Value {
+    let alist_vec: Vec<Value> = alist.alist.iter().map(example_attribute_to_json).collect();
     json!({
         "variant": alist.variant,
         "items": alist_vec
+    })
+}
+
+fn json_to_alist(v: &Value) -> Option<ExampleAttributeList> {
+    let obj = v.as_object()?;
+    let variant = obj.get("variant")?;
+    let items_val = obj.get("items")?;
+    let items = items_val.as_array()?;
+    let alist_vec: Option<Vec<ExampleAttribute>> =
+        items.iter().map(json_to_example_attribute).collect();
+    Some(AttributeList {
+        variant:  variant.as_u64()? as u32,
+        alist:    alist_vec?,
+        _phantom: Default::default(),
     })
 }
 
@@ -162,10 +203,21 @@ fn aci_to_json(aci: &AccCredentialInfo<Bls12, ExampleAttribute>) -> Value {
     })
 }
 
+fn json_to_aci(v: &Value) -> Option<AccCredentialInfo<Bls12, ExampleAttribute>> {
+    let obj = v.as_object()?;
+    let chi = json_to_chi(obj.get("credentialHolderInformation")?)?;
+    let prf_key = prf::SecretKey::from_bytes(&json_base16_decode(obj.get("prfKey")?)?).ok()?;
+    let attributes = json_to_alist(obj.get("attributes")?)?;
+    Some(AccCredentialInfo {
+        acc_holder_info: chi,
+        prf_key,
+        attributes,
+    })
+}
+
 struct Context<P: Pairing, C: Curve> {
-    ar_name: String,
-    ar_public_key: elgamal::PublicKey<C>,
-    ar_elgamal_generator: C,
+    /// Information on the anonymity revoker
+    ar_info: ArInfo<C>,
     /// base point of the dlog proof (account holder knows secret credentials
     /// corresponding to the public credentials), shared at least between id
     /// provider and the account holder
@@ -179,6 +231,20 @@ struct Context<P: Pairing, C: Curve> {
     /// anonymity revoker.
     commitment_key_ar: PedersenKey<C>,
 }
+
+// fn json_to_ip_infos(v: &Value) -> Option<Vec<IpInfo<Bls12, <Bls12 as
+// Pairing>::G_1>>> {     let ips_arr = v.as_array()?;
+//     let ips = ips_arr.iter().map(|ip_val|
+//                                  { let obj = ip_val.as_obj()?;
+//                                    let id_identity =
+// ip_val.get("idIdentity").as_str()?;                                    let
+// id_verify_key =
+// pssig::PublicKey::from_bytes(&json_base_16_decode(ip_val.get("idVerifyKey")?
+// )?).ok()?;                                    let id_ar_name =
+// ip_val.get("arName").as_str()?;                                    let
+// id_ar_public_key =
+// elgamal::PublicKey::from_bytes(&json_base_16_decode(ip_val.get("arPublicKey"
+// )?)?).ok()?; }
 
 /// Generate PreIdentityObject out of the account holder information,
 /// the chosen anonymity revoker information, and the necessary contextual
@@ -200,10 +266,11 @@ where
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
     // revocation.
     let (prf_key_enc, prf_key_enc_rand) = context
+        .ar_info
         .ar_public_key
         .encrypt_exponent_rand(&mut csprng, &prf_key_scalar);
     let id_ar_data = ArData {
-        ar_name:  context.ar_name.clone(),
+        ar_name:  context.ar_info.ar_name.clone(),
         e_reg_id: prf_key_enc,
     };
     let alist = aci.attributes.clone();
@@ -227,10 +294,10 @@ where
     let proof_com_enc_eq = {
         let public = (prf_key_enc.0, prf_key_enc.1, snd_cmm_prf.0);
         // TODO: Check that this order of secret values is correct!
-        let secret = (prf_key_enc_rand, prf_key_scalar, rand_snd_cmm_prf);
+        let secret = (prf_key_scalar, rand_snd_cmm_prf, prf_key_enc_rand);
         let base = (
-            context.ar_elgamal_generator,
-            context.ar_public_key.0,
+            context.ar_info.ar_elgamal_generator,
+            context.ar_info.ar_public_key.0,
             context.commitment_key_ar.0[0],
             context.commitment_key_ar.1,
         );
@@ -259,25 +326,9 @@ where
     }
 }
 
-// fn json_to_aci<P: Pairing>(js: &Value) -> Option<CredentialHolderInfo<P>> {
-//     let id_cred_pub =
-//         elgamal::PublicKey::<P::G_2>::from_bytes(&json_base16_decode(&js["
-// idCredPublic"])?).ok()?;     let id_cred_sec =
-//         elgamal::SecretKey::<P::G_2>::from_bytes(&json_base16_decode(&js["
-// idCredSecret"])?).ok()?;     let id_ah = js["name"].as_str()?;
-//     let info: CredentialHolderInfo<P> = CredentialHolderInfo {
-//         id_ah:   id_ah.to_owned(),
-//         id_cred: IdCredentials {
-//             id_cred_pub,
-//             id_cred_sec,
-//         },
-//     };
-//     Some(info)
-// }
-
 fn main() {
     let matches = App::new("Prototype client showcasing ID layer interactions.")
-        .version("0.123456")
+        .version("0. 0.36787944117")
         .author("Concordium")
         .subcommand(
             SubCommand::with_name("create_chi")
@@ -370,7 +421,8 @@ fn main() {
                                 _phantom: Default::default(),
                             },
                         };
-                        output_json(&aci_to_json(&aci));
+                        let js = aci_to_json(&aci);
+                        output_json(&js);
                     } else {
                         println!("You have to choose an attribute list. Terminating.");
                     }
