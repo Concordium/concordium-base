@@ -4,6 +4,7 @@ use elgamal::cipher::Cipher;
 use pairing::Field;
 use pedersen_scheme::commitment as pedersen;
 use ps_sig::{public as pssig, signature::*};
+use ed25519_dalek as acc_sig_scheme;
 
 use sigma_protocols::{
     com_enc_eq::ComEncEqProof, com_eq_different_groups::ComEqDiffGrpsProof, dlog::DlogProof,
@@ -121,7 +122,10 @@ pub struct IdentityObject<P: Pairing, AttributeType: Attribute<P::ScalarField>, 
     pub ar_data: ArData<C>,
 }
 
-pub struct CredDeploymentInfo<P: Pairing, AttributeType: Attribute<P::ScalarField>> {
+pub struct CredDeploymentInfo<P: Pairing, AttributeType: Attribute<P::ScalarField>, C:Curve> {
     pub reg_id:     P::G_1,
+    pub ar_data:    ArData<C>,
+    pub ip_identity: String,
+    pub acc_pub_key: acc_sig_scheme::PublicKey,
     pub attributes: AttributeList<P::ScalarField, AttributeType>,
 }
