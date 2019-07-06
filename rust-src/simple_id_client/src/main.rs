@@ -5,7 +5,7 @@ use dialoguer::{Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{cipher::Cipher, public::PublicKey, secret::SecretKey};
 use hex::{decode, encode};
-use id::{identity_provider::*, types::*};
+use id::{account_holder::*, identity_provider::*, types::*};
 use pairing::{
     bls12_381::{Bls12, Fr, FrRepr},
     PrimeField,
@@ -19,9 +19,7 @@ use std::io::Cursor;
 use rand::*;
 use serde_json::{json, to_string_pretty, Value};
 
-use pedersen_scheme::{
-    commitment::Commitment, key::CommitmentKey as PedersenKey, value as pedersen,
-};
+use pedersen_scheme::commitment::Commitment;
 
 use sigma_protocols::{com_enc_eq, com_eq_different_groups, dlog};
 
@@ -288,50 +286,6 @@ fn json_to_aci(v: &Value) -> Option<AccCredentialInfo<Bls12, ExampleAttribute>> 
     })
 }
 
-struct Context<P: Pairing, C: Curve> {
-    /// Information on the anonymity revoker
-    pub ar_info: ArInfo<C>,
-    /// base point of the dlog proof (account holder knows secret credentials
-    /// corresponding to the public credentials), shared at least between id
-    /// provider and the account holder
-    pub dlog_base: P::G_1,
-    /// Commitment key shared by the identity provider and the account holder.
-    /// It is used to generate commitments to the prf key.
-    pub commitment_key_id: PedersenKey<P::G_1>,
-    /// Commitment key shared by the anonymity revoker, identity provider, and
-    /// account holder. Used to commit to the prf key of the account holder in
-    /// the same group as the encryption of the prf key as given to the
-    /// anonymity revoker.
-    pub commitment_key_ar: PedersenKey<C>,
-}
-
-struct GlobalContext<P: Pairing> {
-    /// Base point of the dlog proof.
-    dlog_base: P::G_1,
-}
-
-/// Make a context in which the account holder can produce a pre-identity object
-/// to send to the identity provider. Also requires access to the global context
-/// of parameters, e.g., dlog-proof base point.
-fn make_context_from_ip_info<P: Pairing, C: Curve>(
-    ip_info: &IpInfo<P, C>,
-    global: &GlobalContext<P>,
-) -> Context<P, C> {
-    // TODO: Check with Bassel that these parameters are correct.
-    let commitment_key_id =
-        PedersenKey(vec![ip_info.id_verify_key.0[0]], ip_info.id_verify_key.0[1]);
-    let commitment_key_ar = PedersenKey(
-        vec![ip_info.ar_info.ar_elgamal_generator],
-        ip_info.ar_info.ar_public_key.0,
-    );
-    Context {
-        ar_info: ip_info.ar_info.clone(),
-        dlog_base: global.dlog_base,
-        commitment_key_id,
-        commitment_key_ar,
-    }
-}
-
 fn global_context_to_json(global: &GlobalContext<Bls12>) -> Value {
     json!({"dLogBase": json_base16_encode(&global.dlog_base.curve_to_bytes())})
 }
@@ -387,86 +341,6 @@ fn ip_info_to_json(ipinfo: &IpInfo<Bls12, <Bls12 as Pairing>::G_1>) -> Value {
 fn ip_infos_to_json(ipinfos: &[IpInfo<Bls12, <Bls12 as Pairing>::G_1>]) -> Value {
     let arr: Vec<Value> = ipinfos.iter().map(ip_info_to_json).collect();
     json!(arr)
-}
-
-/// Generate PreIdentityObject out of the account holder information,
-/// the chosen anonymity revoker information, and the necessary contextual
-/// information (group generators, shared commitment keys, etc).
-fn generate_pio<
-    P: Pairing,
-    AttributeType: Attribute<P::ScalarField>,
-    C: Curve<Scalar = P::ScalarField>,
->(
-    context: &Context<P, C>,
-    aci: &AccCredentialInfo<P, AttributeType>,
-) -> PreIdentityObject<P, AttributeType, C>
-where
-    AttributeType: Clone, {
-    let mut csprng = thread_rng();
-    let id_ah = aci.acc_holder_info.id_ah.clone();
-    let id_cred_pub = aci.acc_holder_info.id_cred.id_cred_pub;
-    let prf::SecretKey(prf_key_scalar) = aci.prf_key;
-    // FIXME: The next item will change to encrypt by chunks to enable anonymity
-    // revocation.
-    let (prf_key_enc, prf_key_enc_rand) = context
-        .ar_info
-        .ar_public_key
-        .encrypt_exponent_rand(&mut csprng, &prf_key_scalar);
-    let id_ar_data = ArData {
-        ar_name:  context.ar_info.ar_name.clone(),
-        e_reg_id: prf_key_enc,
-    };
-    let alist = aci.attributes.clone();
-    let pok_sc = dlog::prove_dlog(
-        &mut csprng,
-        &id_cred_pub.0,
-        &aci.acc_holder_info.id_cred.id_cred_sec.0,
-        &context.dlog_base,
-    );
-    let (cmm_prf, rand_cmm_prf) = context
-        .commitment_key_id
-        .commit(&pedersen::Value(vec![prf_key_scalar]), &mut csprng);
-    let (snd_cmm_prf, rand_snd_cmm_prf) = context
-        .commitment_key_ar
-        .commit(&pedersen::Value(vec![prf_key_scalar]), &mut csprng);
-    // now generate the proof that the commitment hidden in snd_cmm_prf is to
-    // the same prf key as the one encrypted in id_ar_data via anonymity revokers
-    // public key.
-    let proof_com_enc_eq = {
-        let public = (prf_key_enc.0, prf_key_enc.1, snd_cmm_prf.0);
-        // TODO: Check that this order of secret values is correct!
-        // FIXME: I think this is consistent with the way the protocol in the whitepaper
-        // is written, but is different from what Bassel said it should be.
-        let secret = (prf_key_enc_rand, prf_key_scalar, rand_snd_cmm_prf);
-        let base = (
-            context.ar_info.ar_elgamal_generator,
-            context.ar_info.ar_public_key.0,
-            context.commitment_key_ar.0[0],
-            context.commitment_key_ar.1,
-        );
-        com_enc_eq::prove_com_enc_eq(&mut csprng, &public, &secret, &base)
-    };
-    let proof_com_eq = {
-        let public = (cmm_prf.0, snd_cmm_prf.0);
-        // TODO: Check that this is the correct order of secret values.
-        let secret = (prf_key_scalar, rand_cmm_prf, rand_snd_cmm_prf);
-        let coeff = (
-            (context.commitment_key_id.0[0], context.commitment_key_id.1),
-            (context.commitment_key_ar.0[0], context.commitment_key_ar.1),
-        );
-        com_eq_different_groups::prove_com_eq_diff_grps(&mut csprng, &public, &secret, &coeff)
-    };
-    PreIdentityObject {
-        id_ah,
-        id_cred_pub,
-        id_ar_data,
-        alist,
-        pok_sc,
-        cmm_prf,
-        snd_cmm_prf,
-        proof_com_enc_eq,
-        proof_com_eq,
-    }
 }
 
 fn ar_data_to_json<C: Curve>(ar_data: &ArData<C>) -> Value {
@@ -719,20 +593,9 @@ fn handle_act_as_ip(matches: &ArgMatches) {
             return;
         }
     };
-    let ctx = make_context_from_ip_info(&ip_info, &global_ctx);
+    let ctx = make_context_from_ip_info(ip_info, &global_ctx);
 
-    let aux_data = AuxData {
-        id_cred_base:   ctx.dlog_base,
-        ps_public_key:  ip_info.id_verify_key.clone(),
-        ps_secret_key:  ip_sec_key,
-        comm_2_params:  CommitmentParams((ctx.commitment_key_ar.0[0], ctx.commitment_key_ar.1)),
-        elgamal_params: ElgamalParams((
-            ctx.ar_info.ar_elgamal_generator,
-            ctx.ar_info.ar_public_key.0,
-        )),
-        ar_info:        ctx.ar_info,
-    };
-    let vf = verify_credentials(&pio, aux_data);
+    let vf = verify_credentials(&pio, ctx, &ip_sec_key);
     match vf {
         Ok(sig) => {
             println!("Successfully checked pre-identity data.");
@@ -846,7 +709,7 @@ fn handle_start_ip(matches: &ArgMatches) {
             .default(0)
             .interact()
         {
-            &ips[ip_info_idx]
+            ips[ip_info_idx].clone()
         } else {
             eprintln!("You have to choose an identity provider. Terminating.");
             return;

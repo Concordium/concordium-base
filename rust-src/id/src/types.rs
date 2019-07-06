@@ -2,7 +2,7 @@ use curve_arithmetic::curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::cipher::Cipher;
 use pairing::Field;
-use pedersen_scheme::commitment as pedersen;
+use pedersen_scheme::{commitment as pedersen, key::CommitmentKey as PedersenKey};
 use ps_sig::{public as pssig, signature::*};
 
 use sigma_protocols::{
@@ -93,6 +93,7 @@ pub struct PreIdentityObject<
 }
 
 /// Public information about an identity provider.
+#[derive(Debug, Clone)]
 pub struct IpInfo<P: Pairing, C: Curve> {
     pub id_identity: String,
     pub id_verify_key: pssig::PublicKey<P>,
@@ -130,4 +131,61 @@ pub struct IdentityObject<P: Pairing, AttributeType: Attribute<P::ScalarField>, 
 pub struct CredDeploymentInfo<P: Pairing, AttributeType: Attribute<P::ScalarField>> {
     pub reg_id:     P::G_1,
     pub attributes: AttributeList<P::ScalarField, AttributeType>,
+}
+
+/// Context needed to generate pre-identity object.
+/// This context is derived from the public information of the identity
+/// provider, as well as some other global parameters which can be found in the
+/// struct 'GlobalContext'.
+pub struct Context<P: Pairing, C: Curve> {
+    /// Public information on the chosen identity provider and anonymity
+    /// revoker(s).
+    pub ip_info: IpInfo<P, C>,
+    /// base point of the dlog proof (account holder knows secret credentials
+    /// corresponding to the public credentials), shared at least between id
+    /// provider and the account holder
+    pub dlog_base: P::G_1,
+    /// Commitment key shared by the identity provider and the account holder.
+    /// It is used to generate commitments to the prf key.
+    pub commitment_key_id: PedersenKey<P::G_1>,
+    /// Commitment key shared by the anonymity revoker, identity provider, and
+    /// account holder. Used to commit to the prf key of the account holder in
+    /// the same group as the encryption of the prf key as given to the
+    /// anonymity revoker.
+    pub commitment_key_ar: PedersenKey<C>,
+}
+
+pub struct GlobalContext<P: Pairing> {
+    /// Base point of the dlog proof. This must be the same as the generator of
+    /// the elgamal encryption group used by the identity providers. Currently
+    /// we assume that the generator is fixed globally for the group (since all
+    /// identity providers use the same group). This parameter is currently not
+    /// in the IpInfo struct because we might need it to not be chosen by
+    /// the identity provider.
+    ///
+    /// If it is then maybe the identity provider could revel the prf key of the
+    /// account holder. TODO: CHECK IF THIS IS REALLY THE CASE.
+    pub dlog_base: P::G_1,
+}
+
+/// Make a context in which the account holder can produce a pre-identity object
+/// to send to the identity provider. Also requires access to the global context
+/// of parameters, e.g., dlog-proof base point.
+pub fn make_context_from_ip_info<P: Pairing, C: Curve>(
+    ip_info: IpInfo<P, C>,
+    global: &GlobalContext<P>,
+) -> Context<P, C> {
+    // TODO: Check with Bassel that these parameters are correct.
+    let commitment_key_id =
+        PedersenKey(vec![ip_info.id_verify_key.0[0]], ip_info.id_verify_key.0[1]);
+    let commitment_key_ar = PedersenKey(
+        vec![ip_info.ar_info.ar_elgamal_generator],
+        ip_info.ar_info.ar_public_key.0,
+    );
+    Context {
+        ip_info,
+        dlog_base: global.dlog_base,
+        commitment_key_id,
+        commitment_key_ar,
+    }
 }
