@@ -15,18 +15,15 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::errors::{
-    InternalError::{CurveDecodingError, PublicKeyLengthError},
-    *,
-};
-
-use crate::{known_message::*, signature::*};
+use crate::{common::*, known_message::*, signature::*};
 use curve_arithmetic::curve_arithmetic::*;
+use failure::Error;
+use std::io::Cursor;
 
 use crate::secret::*;
 
 /// A message
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PublicKey<C: Pairing>(pub Vec<C::G_1>, pub Vec<C::G_2>, pub C::G_2);
 
 impl<C: Pairing> PartialEq for PublicKey<C> {
@@ -45,60 +42,37 @@ impl<C: Pairing> PublicKey<C> {
         let us = &self.1;
         let s = &self.2;
         let mut bytes: Vec<u8> = Vec::with_capacity(
-            vs.len() * C::G_1::GROUP_ELEMENT_LENGTH + (us.len() + 1) * C::G_2::GROUP_ELEMENT_LENGTH,
+            4 + 4
+                + vs.len() * C::G_1::GROUP_ELEMENT_LENGTH
+                + (us.len() + 1) * C::G_2::GROUP_ELEMENT_LENGTH,
         );
-        for v in vs.iter() {
-            bytes.extend_from_slice(&*C::G_1::curve_to_bytes(&v));
-        }
-        for u in us.iter() {
-            bytes.extend_from_slice(&*C::G_2::curve_to_bytes(&u));
-        }
-        bytes.extend_from_slice(&*C::G_2::curve_to_bytes(s));
+        write_elems(vs, &C::G_1::curve_to_bytes, &mut bytes);
+        write_elems(us, &C::G_2::curve_to_bytes, &mut bytes);
+        write_elem(s, &C::G_2::curve_to_bytes, &mut bytes);
         bytes.into_boxed_slice()
     }
 
     /// Construct a message vec from a slice of bytes.
     ///
     /// A `Result` whose okay value is a message vec  or whose error value
-    /// is an `SignatureError` wrapping the internal error that occurred.
+    /// is an `Error` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey<C>, SignatureError> {
-        let l = bytes.len();
-        if l < (C::G_2::GROUP_ELEMENT_LENGTH * 2 + C::G_1::GROUP_ELEMENT_LENGTH)
-            || (l - C::G_2::GROUP_ELEMENT_LENGTH)
-                % (C::G_1::GROUP_ELEMENT_LENGTH + C::G_2::GROUP_ELEMENT_LENGTH)
-                != 0
-        {
-            return Err(SignatureError(PublicKeyLengthError));
-        }
-        let vlen = (l - C::G_2::GROUP_ELEMENT_LENGTH)
-            / (C::G_1::GROUP_ELEMENT_LENGTH + C::G_2::GROUP_ELEMENT_LENGTH);
-        let mut vs: Vec<C::G_1> = Vec::with_capacity(vlen);
-        for i in 0..vlen {
-            let j = i * C::G_1::GROUP_ELEMENT_LENGTH;
-            let k = j + C::G_1::GROUP_ELEMENT_LENGTH;
-            match C::G_1::bytes_to_curve(&bytes[j..k]) {
-                Err(_) => return Err(SignatureError(CurveDecodingError)),
-                Ok(fr) => vs.push(fr),
-            }
-        }
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<PublicKey<C>, Error> {
+        let mut g1_buffer = vec![0; C::G_1::GROUP_ELEMENT_LENGTH];
+        let mut g2_buffer = vec![0; C::G_2::GROUP_ELEMENT_LENGTH];
+        let f1: for<'r> fn(&'r [u8]) -> Result<C::G_1, Error> = |x| {
+            let r = C::G_1::bytes_to_curve(x)?;
+            Ok(r)
+        };
+        let f2: for<'r> fn(&'r [u8]) -> Result<C::G_2, Error> = |x| {
+            let r = C::G_2::bytes_to_curve(x)?;
+            Ok(r)
+        };
 
-        let index = vlen * C::G_1::GROUP_ELEMENT_LENGTH;
-        let mut us: Vec<C::G_2> = Vec::with_capacity(vlen);
-
-        for i in 0..vlen {
-            let j = i * C::G_2::GROUP_ELEMENT_LENGTH + index;
-            let k = j + C::G_2::GROUP_ELEMENT_LENGTH;
-            match C::G_2::bytes_to_curve(&bytes[j..k]) {
-                Err(_) => return Err(SignatureError(CurveDecodingError)),
-                Ok(fr) => us.push(fr),
-            }
-        }
-
-        match C::G_2::bytes_to_curve(&bytes[(l - C::G_2::GROUP_ELEMENT_LENGTH)..]) {
-            Err(_) => Err(SignatureError(CurveDecodingError)),
-            Ok(fr) => Ok(PublicKey(vs, us, fr)),
-        }
+        let vs = read_elems(&f1, bytes, &mut g1_buffer)?;
+        let us = read_elems(&f2, bytes, &mut g2_buffer)?;
+        let fr = read_elem(&f2, bytes, &mut g2_buffer)?;
+        Ok(PublicKey(vs, us, fr))
     }
 
     pub fn verify(&self, sig: &Signature<C>, message: &KnownMessage<C>) -> bool {
@@ -168,7 +142,8 @@ mod tests {
                 let mut csprng = thread_rng();
                 for i in 1..20 {
                     let val = PublicKey::<$pairing_type>::arbitrary(i, &mut csprng);
-                    let res_val2 = PublicKey::<$pairing_type>::from_bytes(&*val.to_bytes());
+                    let res_val2 =
+                        PublicKey::<$pairing_type>::from_bytes(&mut Cursor::new(&*val.to_bytes()));
                     assert!(res_val2.is_ok());
                     let val2 = res_val2.unwrap();
                     assert_eq!(val2, val);

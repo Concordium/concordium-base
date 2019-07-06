@@ -45,7 +45,8 @@ impl<C: Curve> Debug for PublicKey<C> {
 impl<'a, C: Curve> From<&'a SecretKey<C>> for PublicKey<C> {
     /// Derive this public key from its corresponding `SecretKey`.
     fn from(secret_key: &SecretKey<C>) -> PublicKey<C> {
-        PublicKey(C::one_point().mul_by_scalar(&secret_key.0))
+        let g: C = PublicKey::generator();
+        PublicKey(g.mul_by_scalar(&secret_key.0))
     }
 }
 
@@ -79,6 +80,7 @@ impl<C: Curve> PublicKey<C> {
         (Cipher(g, s), k)
     }
 
+    #[inline]
     pub fn encrypt<T>(&self, csprng: &mut T, m: &Message<C>) -> Cipher<C>
     where
         T: Rng, {
@@ -142,6 +144,10 @@ impl<C: Curve> PublicKey<C> {
             .map(|x| self.encrypt_exponent(csprng, &x))
             .collect()
     }
+
+    /// TODO: This is a hack to get the prototype working. Abstraction layers
+    /// need a rethink.
+    pub fn generator() -> C { C::one_point() }
 }
 
 #[cfg(feature = "serde")]

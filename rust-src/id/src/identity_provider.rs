@@ -8,17 +8,19 @@ use rand::*;
 use sigma_protocols::{com_enc_eq::*, com_eq_different_groups::*, dlog::*};
 
 pub struct AuxData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    id_cred_base: P::G_1,
+    pub id_cred_base: P::G_1,
     // comm_1_params:  CommitmentParams<P::G_1>,
-    ps_public_key:  ps_sig::PublicKey<P>,
-    ps_secret_key:  ps_sig::SecretKey<P>,
-    comm_2_params:  CommitmentParams<C>,
-    elgamal_params: ElgamalParams<C>,
-    ar_info:        ArInfo<C>,
+    pub ps_public_key:  ps_sig::PublicKey<P>,
+    pub ps_secret_key:  ps_sig::SecretKey<P>,
+    pub comm_2_params:  CommitmentParams<C>,
+    pub elgamal_params: ElgamalParams<C>,
+    pub ar_info:        ArInfo<C>,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Declined(pub Reason);
 
+#[derive(Debug, Clone, Copy)]
 pub enum Reason {
     FailedToVerifyKnowledgeOfIdCredSec,
     FailedToVerifyPrfData,
@@ -31,14 +33,14 @@ pub fn verify_credentials<
 >(
     pre_id_obj: &PreIdentityObject<P, AttributeType, C>,
     aux_data: AuxData<P, C>,
-) -> Either<ps_sig::Signature<P>, Declined> {
+) -> Result<ps_sig::Signature<P>, Declined> {
     let b_1 = verify_knowledge_of_id_cred_sec::<P::G_1>(
         &aux_data.id_cred_base,
         &pre_id_obj.id_cred_pub,
         &pre_id_obj.pok_sc,
     );
     if !b_1 {
-        return Right(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
+        return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
     }
 
     let comm_1_params =
@@ -54,7 +56,7 @@ pub fn verify_credentials<
         &pre_id_obj.proof_com_enc_eq,
     );
     if !b_2 {
-        return Right(Declined(Reason::FailedToVerifyPrfData));
+        return Err(Declined(Reason::FailedToVerifyPrfData));
     }
     let message: ps_sig::UnknownMessage<P> = compute_message(
         &pre_id_obj.id_cred_pub,
@@ -63,11 +65,9 @@ pub fn verify_credentials<
         &aux_data.ps_public_key,
     );
     let mut csprng = thread_rng();
-    Left(
-        aux_data
-            .ps_secret_key
-            .sign_unknown_message(&message, &mut csprng),
-    )
+    Ok(aux_data
+        .ps_secret_key
+        .sign_unknown_message(&message, &mut csprng))
 }
 
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(

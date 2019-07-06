@@ -12,6 +12,7 @@ rand = "0.4"
 hex = "0.3"
 serde_json = "1.0"
 failure = "0.1.5"
+chrono = "0.4"
 
 [dependencies.sigma_protocols]
 path = "../sigma_protocols"
@@ -35,4 +36,8 @@ version = "0"
 
 [dependencies.pedersen_scheme]
 path = "../pedersen_scheme"
+version = "0"
+
+[dependencies.ps_sig]
+path = "../ps_sig"
 version = "0"

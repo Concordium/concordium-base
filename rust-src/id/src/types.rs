@@ -87,7 +87,8 @@ pub struct PreIdentityObject<
     /// Proof that the encryption of the prf key in id_ar_data is the same as
     /// the key in snd_cmm_prf (hidden behind the commitment).
     pub proof_com_enc_eq: ComEncEqProof<C>,
-    // proof that the first and snd commitments to the prf are hiding the same value
+    /// Proof that the first and snd commitments to the prf are hiding the same
+    /// value
     pub proof_com_eq: ComEqDiffGrpsProof<P::G_1, C>,
 }
 
@@ -100,6 +101,7 @@ pub struct IpInfo<P: Pairing, C: Curve> {
     pub ar_info: ArInfo<C>,
 }
 
+#[derive(Clone, Debug)]
 pub struct ArInfo<C: Curve> {
     /// The name and public key of the anonymity revoker chosen by this identity
     /// provider. In the future each identity provider will allow a set of

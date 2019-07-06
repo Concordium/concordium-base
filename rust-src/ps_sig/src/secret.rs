@@ -15,16 +15,16 @@ use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
 use crate::{
-    errors::{
-        InternalError::{FieldDecodingError, SecretKeyLengthError},
-        *,
-    },
+    common::*,
+    errors::{InternalError::SecretKeyLengthError, *},
     known_message::*,
     signature::*,
     unknown_message::*,
 };
 use curve_arithmetic::curve_arithmetic::*;
+use failure::Error;
 use pairing::Field;
+use std::io::Cursor;
 
 use rand::*;
 
@@ -42,13 +42,9 @@ impl<C: Pairing> SecretKey<C> {
     // turn secret key vector into a byte array
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
-        let vs = &self.0;
-        let u = &self.1;
-        let mut bytes: Vec<u8> = Vec::with_capacity((vs.len() + 1) * C::SCALAR_LENGTH);
-        for v in vs.iter() {
-            bytes.extend_from_slice(&*Self::value_to_bytes(&v));
-        }
-        bytes.extend_from_slice(&*Self::value_to_bytes(u));
+        let mut bytes: Vec<u8> = Vec::with_capacity(4 + (self.0.len() + 1) * C::SCALAR_LENGTH);
+        write_pairing_scalars::<C>(&self.0, &mut bytes);
+        write_pairing_scalar::<C>(&self.1, &mut bytes);
         bytes.into_boxed_slice()
     }
 
@@ -60,25 +56,11 @@ impl<C: Pairing> SecretKey<C> {
     /// A `Result` whose okay value is a secret key vec  or whose error value
     /// is an `SignatureError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<SecretKey<C>, SignatureError> {
-        let l = bytes.len();
-        if l == 0 || l < C::SCALAR_LENGTH || l % C::SCALAR_LENGTH != 0 {
-            return Err(SignatureError(SecretKeyLengthError));
-        }
-        let vlen = (l / C::SCALAR_LENGTH) - 1;
-        let mut vs: Vec<C::ScalarField> = Vec::with_capacity(vlen);
-        for i in 0..vlen {
-            let j = i * C::SCALAR_LENGTH;
-            let k = j + C::SCALAR_LENGTH;
-            match C::bytes_to_scalar(&bytes[j..k]) {
-                Err(_) => return Err(SignatureError(FieldDecodingError)),
-                Ok(fr) => vs.push(fr),
-            }
-        }
-        match C::bytes_to_scalar(&bytes[(l - C::SCALAR_LENGTH)..]) {
-            Err(_) => Err(SignatureError(FieldDecodingError)),
-            Ok(fr) => Ok(SecretKey(vs, fr)),
-        }
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<SecretKey<C>, Error> {
+        let mut scalar_buffer = vec![0; C::SCALAR_LENGTH];
+        let vs = read_pairing_scalars::<C>(bytes, &mut scalar_buffer)?;
+        let fr = read_pairing_scalar::<C>(bytes, &mut scalar_buffer)?;
+        Ok(SecretKey(vs, fr))
     }
 
     /// Generate a secret key  from a `csprng`.
@@ -149,7 +131,8 @@ mod tests {
                 let mut csprng = thread_rng();
                 for i in 0..20 {
                     let val = SecretKey::<$pairing_type>::generate(i, &mut csprng);
-                    let res_val2 = SecretKey::<$pairing_type>::from_bytes(&*val.to_bytes());
+                    let res_val2 =
+                        SecretKey::<$pairing_type>::from_bytes(&mut Cursor::new(&*val.to_bytes()));
                     assert!(res_val2.is_ok());
                     let val2 = res_val2.unwrap();
                     assert_eq!(val2, val);
