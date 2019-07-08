@@ -5,6 +5,8 @@ use pairing::Field;
 use pedersen_scheme::{commitment as pedersen, key::CommitmentKey as PedersenKey};
 use ps_sig::{public as pssig, signature::*};
 
+use ed25519_dalek as ed25519;
+
 use sigma_protocols::{
     com_enc_eq::ComEncEqProof, com_eq_different_groups::ComEqDiffGrpsProof, dlog::DlogProof,
 };
