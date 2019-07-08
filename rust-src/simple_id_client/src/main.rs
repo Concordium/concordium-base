@@ -29,12 +29,12 @@ use std::{
     path::Path,
 };
 
-static GLOBAL_CONTEXT: &'static str = "database/global.json";
-static IP_PREFIX: &'static str = "database/identity_provider-";
-static AR_PREFIX: &'static str = "database/anonymity_revoker-";
-static IP_NAME_PREFIX: &'static str = "identity_provider-";
-static AR_NAME_PREFIX: &'static str = "anonymity_revoker-";
-static IDENTITY_PROVIDERS: &'static str = "database/identity_providers.json";
+static GLOBAL_CONTEXT: &str = "database/global.json";
+static IP_PREFIX: &str = "database/identity_provider-";
+static AR_PREFIX: &str = "database/anonymity_revoker-";
+static IP_NAME_PREFIX: &str = "identity_provider-";
+static AR_NAME_PREFIX: &str = "anonymity_revoker-";
+static IDENTITY_PROVIDERS: &str = "database/identity_providers.json";
 
 fn read_global_context() -> Option<GlobalContext<Bls12>> {
     if let Ok(Some(gc)) = read_json_from_file(GLOBAL_CONTEXT)
@@ -302,6 +302,7 @@ fn json_to_global_context(v: &Value) -> Option<GlobalContext<Bls12>> {
 }
 
 fn json_to_ip_info(ip_val: &Value) -> Option<IpInfo<Bls12, <Bls12 as Pairing>::G_1>> {
+    let ip_val = ip_val.as_object()?;
     let id_identity = ip_val.get("idIdentity")?.as_str()?;
     let id_verify_key = ps_sig::PublicKey::from_bytes(&mut Cursor::new(&json_base16_decode(
         ip_val.get("idVerifyKey")?,
@@ -330,9 +331,9 @@ fn json_to_ip_infos(v: &Value) -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>::G
 
 fn ip_info_to_json(ipinfo: &IpInfo<Bls12, <Bls12 as Pairing>::G_1>) -> Value {
     json!({
-                                   "idIdentity": ipinfo.id_identity.clone(),
+                                   "idIdentity": ipinfo.id_identity,
                                    "idVerifyKey": json_base16_encode(&ipinfo.id_verify_key.to_bytes()),
-                                   "arName": ipinfo.ar_info.ar_name.clone(),
+                                   "arName": ipinfo.ar_info.ar_name,
                                    "arPublicKey": json_base16_encode(&ipinfo.ar_info.ar_public_key.to_bytes()),
                                    "arElgamalGenerator": json_base16_encode(&ipinfo.ar_info.ar_elgamal_generator.curve_to_bytes())
     })
@@ -491,34 +492,7 @@ fn main() {
         )
         .get_matches();
     if let Some(matches) = matches.subcommand_matches("create_chi") {
-        if let Ok(name) = Input::new().with_prompt("Your name").interact() {
-            let mut csprng = thread_rng();
-            let secret = SecretKey::generate(&mut csprng);
-            let public = PublicKey::from(&secret);
-            let ah_info = CredentialHolderInfo::<Bls12> {
-                id_ah:   name,
-                id_cred: IdCredentials {
-                    id_cred_sec: secret.clone(),
-                    id_cred_pub: public,
-                },
-            };
-
-            let js = chi_to_json(&ah_info);
-            if let Some(filepath) = matches.value_of("out") {
-                match write_json_to_file(filepath, &js) {
-                    Ok(()) => println!("Wrote CHI to file."),
-                    Err(_) => {
-                        eprintln!("Could not write to file. The generated information is");
-                        output_json(&js);
-                    }
-                }
-            } else {
-                println!("Generated account holder information.");
-                output_json(&js);
-            }
-        } else {
-            eprintln!("You need to provide a name. Terminating.");
-        }
+        handle_create_chi(matches);
     }
     if let Some(matches) = matches.subcommand_matches("start_ip") {
         handle_start_ip(matches);
@@ -531,6 +505,43 @@ fn main() {
     }
     if let Some(matches) = matches.subcommand_matches("ip_sign_pio") {
         handle_act_as_ip(matches);
+    }
+}
+
+/// Create a new CHI object (essentially new idCredPub and idCredSec).
+fn handle_create_chi(matches: &ArgMatches) {
+    let name = {
+        if let Ok(name) = Input::new().with_prompt("Your name").interact() {
+            name
+        } else {
+            eprintln!("You need to provide a name. Terminating.");
+            return;
+        }
+    };
+
+    let mut csprng = thread_rng();
+    let secret = SecretKey::generate(&mut csprng);
+    let public = PublicKey::from(&secret);
+    let ah_info = CredentialHolderInfo::<Bls12> {
+        id_ah:   name,
+        id_cred: IdCredentials {
+            id_cred_sec: secret,
+            id_cred_pub: public,
+        },
+    };
+
+    let js = chi_to_json(&ah_info);
+    if let Some(filepath) = matches.value_of("out") {
+        match write_json_to_file(filepath, &js) {
+            Ok(()) => println!("Wrote CHI to file."),
+            Err(_) => {
+                eprintln!("Could not write to file. The generated information is");
+                output_json(&js);
+            }
+        }
+    } else {
+        println!("Generated account holder information.");
+        output_json(&js)
     }
 }
 
@@ -681,6 +692,7 @@ fn handle_start_ip(matches: &ArgMatches) {
             return;
         }
     };
+
     // we also read the global context from another json file
     let global_ctx = {
         if let Some(gc) = read_global_context() {
@@ -693,19 +705,18 @@ fn handle_start_ip(matches: &ArgMatches) {
 
     // names of identity providers the user can choose from, together with the
     // names of anonymity revokers associated with them
-    let ips_names: Vec<_> = ips
-        .iter()
-        .map(|x| {
-            format!(
-                "Identity provider {}, its anonymity revoker is {}",
-                &x.id_identity, &x.ar_info.ar_name
-            )
-        })
-        .collect();
+    let mut ips_names = Vec::with_capacity(ips.len());
+    for x in ips.iter() {
+        ips_names.push(format!(
+            "Identity provider {}, its anonymity revoker is {}",
+            &x.id_identity, &x.ar_info.ar_name
+        ))
+    }
+
     let ip_info = {
         if let Ok(ip_info_idx) = Select::new()
             .with_prompt("Choose identity provider")
-            .items(&ips_names)
+            .items(&ips_names[..1])
             .default(0)
             .interact()
         {
