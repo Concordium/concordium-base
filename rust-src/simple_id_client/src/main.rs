@@ -1,7 +1,12 @@
-use clap::{App, Arg, ArgMatches, SubCommand};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+
+use std::fmt;
+
+use ed25519_dalek as ed25519;
+use eddsa_ed25519 as ed25519_wrapper;
 
 use curve_arithmetic::{Curve, Pairing};
-use dialoguer::{Input, Select};
+use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{cipher::Cipher, public::PublicKey, secret::SecretKey};
 use hex::{decode, encode};
@@ -19,7 +24,7 @@ use std::io::Cursor;
 use rand::*;
 use serde_json::{json, to_string_pretty, Value};
 
-use pedersen_scheme::commitment::Commitment;
+use pedersen_scheme::{commitment::Commitment, key as pedersen_key};
 
 use sigma_protocols::{com_enc_eq, com_eq_different_groups, dlog};
 
@@ -94,6 +99,18 @@ pub enum ExampleAttribute {
 }
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
+
+impl fmt::Display for ExampleAttribute {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExampleAttribute::Age(x) => write!(f, "Age({})", x),
+            ExampleAttribute::Citizenship(c) => write!(f, "Citizenship({})", c),
+            ExampleAttribute::ExpiryDate(d) => write!(f, "ExpiryDate({})", d),
+            ExampleAttribute::MaxAccount(x) => write!(f, "MaxAccount({})", x),
+            ExampleAttribute::Business(b) => write!(f, "Business({})", b),
+        }
+    }
+}
 
 impl Attribute<<Bls12 as Pairing>::ScalarField> for ExampleAttribute {
     fn to_field_element(&self) -> <Bls12 as Pairing>::ScalarField {
@@ -287,16 +304,22 @@ fn json_to_aci(v: &Value) -> Option<AccCredentialInfo<Bls12, ExampleAttribute>> 
 }
 
 fn global_context_to_json(global: &GlobalContext<Bls12>) -> Value {
-    json!({"dLogBase": json_base16_encode(&global.dlog_base.curve_to_bytes())})
+    json!({"dLogBase": json_base16_encode(&global.dlog_base.curve_to_bytes()),
+           "onChainCommitmentKey": json_base16_encode(&global.on_chain_commitment_key.to_bytes()),
+    })
 }
 
 fn json_to_global_context(v: &Value) -> Option<GlobalContext<Bls12>> {
     let obj = v.as_object()?;
+    let dlog_base_bytes = obj.get("dLogBase").and_then(json_base16_decode)?;
+    let dlog_base = <<Bls12 as Pairing>::G_1 as Curve>::bytes_to_curve(&dlog_base_bytes).ok()?;
+    let cmk_bytes = obj
+        .get("onChainCommitmentKey")
+        .and_then(json_base16_decode)?;
+    let cmk = pedersen_key::CommitmentKey::from_bytes(&mut Cursor::new(&cmk_bytes)).ok()?;
     let gc = GlobalContext {
-        dlog_base: <<Bls12 as Pairing>::G_1 as Curve>::bytes_to_curve(&json_base16_decode(
-            obj.get("dLogBase")?,
-        )?)
-        .ok()?,
+        dlog_base,
+        on_chain_commitment_key: cmk,
     };
     Some(gc)
 }
@@ -410,9 +433,11 @@ fn json_to_pio(
 }
 
 fn main() {
-    let matches = App::new("Prototype client showcasing ID layer interactions.")
+    let app = App::new("Prototype client showcasing ID layer interactions.")
         .version("0. 0.36787944117")
         .author("Concordium")
+        .setting(AppSettings::ArgRequiredElseHelp)
+        .global_setting(AppSettings::ColoredHelp)
         .subcommand(
             SubCommand::with_name("create_chi")
                 .about("Create new credential holder information.")
@@ -490,22 +515,164 @@ fn main() {
                         .help("File to write the signed identity object to."),
                 ),
         )
-        .get_matches();
-    if let Some(matches) = matches.subcommand_matches("create_chi") {
-        handle_create_chi(matches);
+        .subcommand(
+            SubCommand::with_name("deploy_credential")
+                .about(
+                    "Take the identity object, select attributes to reveal and create a \
+                     credential object to deploy on chain.",
+                )
+                .arg(
+                    Arg::with_name("id_object")
+                        .long("id_object")
+                        .short("i")
+                        .value_name("FILE")
+                        .required(true)
+                        .help("File with the JSON encoded identity object."),
+                )
+                .arg(
+                    Arg::with_name("account")
+                        .long("account")
+                        .short("a")
+                        .value_name("FILE")
+                        .help(
+                            "File with existing account private info (verification and signature \
+                             keys).
+If not present a fresh key-pair will be generated.",
+                        ),
+                )
+                .arg(
+                    Arg::with_name("out")
+                        .long("out")
+                        .short("o")
+                        .value_name("FILE")
+                        .help("File to output the transaction payload to."),
+                ),
+        );
+    let matches = app.get_matches();
+    let exec_if = |x: &str| matches.subcommand_matches(x);
+    exec_if("create_chi").map(handle_create_chi);
+    exec_if("start_ip").map(handle_start_ip);
+    exec_if("generate_ips").map(handle_generate_ips);
+    exec_if("generate_global").map(handle_generate_global);
+    exec_if("ip_sign_pio").map(handle_act_as_ip);
+    exec_if("deploy_credential").map(handle_deploy_credential);
+}
+
+/// Read the identity object, select attributes to reveal and create a
+/// transaction.
+fn handle_deploy_credential(matches: &ArgMatches) {
+    // we read the signed identity object
+    // signature of the identity object and the pre-identity object itself.
+    let v = match matches.value_of("id_object").map(read_json_from_file) {
+        Some(Ok(v)) => v,
+        Some(Err(x)) => {
+            eprintln!("Could not read identity object because {}", x);
+            return;
+        }
+        None => panic!("Should not happen since the argument is mandatory."),
+    };
+    let (ip_sig, pio): (ps_sig::Signature<Bls12>, _) = {
+        if let Some(v) = v.as_object() {
+            match (
+                v.get("signature").and_then(json_base16_decode),
+                v.get("preIdentityObject").and_then(json_to_pio),
+            ) {
+                (Some(sig_bytes), Some(pio)) => {
+                    if let Ok(ip_sig) = ps_sig::Signature::from_bytes(&sig_bytes) {
+                        (ip_sig, pio)
+                    } else {
+                        eprintln!("Signature malformed.");
+                        return;
+                    }
+                }
+                (_, _) => {
+                    eprintln!("Could not parse JSON.");
+                    return;
+                }
+            }
+        } else {
+            eprintln!("Could not parse JSON.");
+            return;
+        }
+    };
+
+    // we also read the global context from another json file (called
+    // global.context). We need commitment keys and other data in there.
+    let global_ctx = {
+        if let Some(gc) = read_global_context() {
+            gc
+        } else {
+            eprintln!("Cannot read global context information database. Terminating.");
+            return;
+        }
+    };
+
+    // now we have all the data ready.
+    // we first ask the user to select which credentials they wish to reveal
+    let alist = pio.alist.alist;
+    let mut alist_str: Vec<String> = Vec::with_capacity(alist.len());
+    for a in alist.iter() {
+        alist_str.push(a.to_string());
     }
-    if let Some(matches) = matches.subcommand_matches("start_ip") {
-        handle_start_ip(matches);
+    // the interface of checkboxes is less than ideal.
+    let alist_items: Vec<&str> = alist_str.iter().map(String::as_str).collect();
+    let atts: Vec<usize> = match Checkboxes::new()
+        .with_prompt("Select which attributes you wish to reveal.")
+        .items(&alist_items)
+        .interact()
+    {
+        Ok(idxs) => idxs,
+        Err(x) => {
+            eprintln!("You need to select which attributes you want. {}", x);
+            return;
+        }
+    };
+
+    // We now generate or read account verification/signature key pair.
+    let mut known_acc = false;
+    let acc_data = {
+        if let Some(acc_data) = matches.value_of("account").and_then(read_account_data) {
+            known_acc = true;
+            acc_data
+        } else {
+            let kp = ed25519_wrapper::generate_keypair();
+            AccountData {
+                sign_key:   kp.secret,
+                verify_key: kp.public,
+            }
+        }
+    };
+    if !known_acc {
+        println!("Generated fresh verification and signature key of the account.");
+        output_json(&account_data_to_json(&acc_data))
     }
-    if let Some(matches) = matches.subcommand_matches("generate_ips") {
-        handle_generate_ips(matches);
-    }
-    if let Some(matches) = matches.subcommand_matches("generate_global") {
-        handle_generate_global(matches);
-    }
-    if let Some(matches) = matches.subcommand_matches("ip_sign_pio") {
-        handle_act_as_ip(matches);
-    }
+
+    // Now we have have everything we need to generate the proofs
+    unimplemented!()
+}
+
+fn read_account_data<P: AsRef<Path>>(path: P) -> Option<AccountData> {
+    let v = read_json_from_file(path).ok()?;
+    json_to_account_data(&v)
+}
+
+fn json_to_account_data(v: &Value) -> Option<AccountData> {
+    let v = v.as_object()?;
+    let verify_key =
+        ed25519::PublicKey::from_bytes(&v.get("verifyKey").and_then(json_base16_decode)?).ok()?;
+    let sign_key =
+        ed25519::SecretKey::from_bytes(&v.get("signKey").and_then(json_base16_decode)?).ok()?;
+    Some(AccountData {
+        verify_key,
+        sign_key,
+    })
+}
+
+fn account_data_to_json(acc: &AccountData) -> Value {
+    json!({
+        "verifyKey": json_base16_encode(acc.verify_key.as_bytes()),
+        "signKey": json_base16_encode(acc.sign_key.as_bytes()),
+    })
 }
 
 /// Create a new CHI object (essentially new idCredPub and idCredSec).
@@ -578,7 +745,6 @@ fn handle_act_as_ip(matches: &ArgMatches) {
             return;
         }
     };
-
     let ip_data_path = Path::new(matches.value_of("ip-data").unwrap());
     let (ip_info, ip_sec_key) = match read_json_from_file(&ip_data_path)
         .as_ref()
@@ -818,9 +984,15 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
 
 /// Generate the global context.
 fn handle_generate_global(_matches: &ArgMatches) -> Option<()> {
-    // let mut csprng = thread_rng();
+    let mut csprng = thread_rng();
     let gc = GlobalContext {
         dlog_base: PublicKey::generator(),
+        // we generate the commitment key for 1 value only.
+        // Since the scheme supports general vectors of values this is inefficient
+        // but is OK for now.
+        // The reason we only need 1 value is that we commit to each value separately
+        // in the attribute list. This is so that we can reveal items individually.
+        on_chain_commitment_key: pedersen_key::CommitmentKey::generate(1, &mut csprng),
     };
     write_json_to_file(GLOBAL_CONTEXT, &global_context_to_json(&gc)).ok()
 }

@@ -166,6 +166,16 @@ pub struct GlobalContext<P: Pairing> {
     /// If it is then maybe the identity provider could revel the prf key of the
     /// account holder. TODO: CHECK IF THIS IS REALLY THE CASE.
     pub dlog_base: P::G_1,
+
+    /// A shared commitment key known to the chain and the account holder (and
+    /// therefore it is public). The account holder uses this commitment key to
+    /// generate commitments to values in the attribute list.
+    /// This key should presumably be generated at genesis time via some shared
+    /// multi-party computation since none of the parties should know anything
+    /// special about it (so that commitment is binding, and that the commitment
+    /// cannot be broken).
+    /// TODO: Check with Bassel that the key is over the correct group.
+    pub on_chain_commitment_key: PedersenKey<P::G_1>,
 }
 
 /// Make a context in which the account holder can produce a pre-identity object
@@ -188,4 +198,13 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve>(
         commitment_key_id,
         commitment_key_ar,
     }
+}
+
+/// Account data needed by the account holder to generate proofs to deploy the
+/// credential object.
+pub struct AccountData {
+    /// Signature key of the account.
+    pub verify_key: ed25519::PublicKey,
+    /// And the corresponding verification key.
+    pub sign_key: ed25519::SecretKey,
 }
