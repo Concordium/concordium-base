@@ -7,10 +7,7 @@
 
 use crate::{
     commitment::*,
-    errors::{
-        InternalError::{CommitmentKeyLengthError, CurveDecodingError, KeyValueLengthMismatch},
-        *,
-    },
+    errors::{InternalError::KeyValueLengthMismatch, *},
     value::*,
 };
 #[cfg(feature = "serde")]
@@ -22,9 +19,11 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::{curve_arithmetic::*, serialization::*};
 
+use failure::Error;
 use rand::*;
+use std::io::Cursor;
 
 /// A commitment  key.
 #[derive(Debug, PartialEq, Eq)]
@@ -42,11 +41,9 @@ impl<C: Curve> CommitmentKey<C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let gs = &self.0;
         let h = &self.1;
-        let mut bytes: Vec<u8> = Vec::with_capacity(gs.len());
-        for g in gs.iter() {
-            bytes.extend_from_slice(&g.curve_to_bytes());
-        }
-        bytes.extend_from_slice(&h.curve_to_bytes());
+        let mut bytes: Vec<u8> = Vec::with_capacity((gs.len() + 1) * C::GROUP_ELEMENT_LENGTH);
+        write_curve_elements(gs, &mut bytes);
+        write_curve_element(h, &mut bytes);
         bytes.into_boxed_slice()
     }
 
@@ -57,27 +54,11 @@ impl<C: Curve> CommitmentKey<C> {
     /// A `Result` whose okay value is an commitment key or whose error value
     /// is an `CommitmentError` wrapping the internal error that occurred.
     #[inline]
-    // TODO : Rename variable names more appropriately
-    #[allow(clippy::many_single_char_names)]
-    pub fn from_bytes(bytes: &[u8]) -> Result<CommitmentKey<C>, CommitmentError> {
-        let l = bytes.len();
-        if l == 0 || l < C::GROUP_ELEMENT_LENGTH * 2 || l % C::GROUP_ELEMENT_LENGTH != 0 {
-            return Err(CommitmentError(CommitmentKeyLengthError));
-        }
-        let last_elem_index = l - C::GROUP_ELEMENT_LENGTH;
-        let (init, last) = bytes.split_at(last_elem_index);
-        let glen = l / C::GROUP_ELEMENT_LENGTH + 1;
-        let mut gs: Vec<C> = Vec::with_capacity(glen);
-        for elem in init.chunks(C::GROUP_ELEMENT_LENGTH) {
-            match C::bytes_to_curve(&elem) {
-                Err(_) => return Err(CommitmentError(CurveDecodingError)),
-                Ok(g_affine) => gs.push(g_affine),
-            };
-        }
-        match C::bytes_to_curve(&last) {
-            Err(_) => Err(CommitmentError(CurveDecodingError)),
-            Ok(h_affine) => Ok(CommitmentKey(gs, h_affine)),
-        }
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<CommitmentKey<C>, Error> {
+        let mut group_buf = vec![0; C::GROUP_ELEMENT_LENGTH];
+        let gs = read_curve_elements(cur, &mut group_buf)?;
+        let h = read_curve(cur, &mut group_buf)?;
+        Ok(CommitmentKey(gs, h))
     }
 
     pub fn commit<T>(&self, ss: &Value<C>, csprng: &mut T) -> (Commitment<C>, C::Scalar)
@@ -134,7 +115,8 @@ mod tests {
                 let mut csprng = thread_rng();
                 for i in 1..10 {
                     let sk = CommitmentKey::<$curve_type>::generate(i, &mut csprng);
-                    let res_sk2 = CommitmentKey::<$curve_type>::from_bytes(&*sk.to_bytes());
+                    let res_sk2 =
+                        CommitmentKey::<$curve_type>::from_bytes(&mut Cursor::new(&sk.to_bytes()));
                     assert!(res_sk2.is_ok());
                     let sk2 = res_sk2.unwrap();
                     assert_eq!(sk2, sk);

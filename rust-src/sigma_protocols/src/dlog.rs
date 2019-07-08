@@ -5,7 +5,7 @@ use rand::*;
 use sha2::{Digest, Sha256};
 use std::io::Cursor;
 
-use crate::common::*;
+use curve_arithmetic::serialization::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DlogProof<T: Curve> {

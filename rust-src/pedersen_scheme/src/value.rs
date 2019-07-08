@@ -15,13 +15,12 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::errors::{
-    InternalError::{FieldDecodingError, ValueVecLengthError},
-    *,
-};
-use curve_arithmetic::curve_arithmetic::*;
+use crate::errors::{InternalError::FieldDecodingError, *};
+use curve_arithmetic::{curve_arithmetic::*, serialization::*};
 
+use failure::Error;
 use rand::*;
+use std::io::Cursor;
 
 /// A  value
 #[derive(Debug, PartialEq, Eq)]
@@ -39,10 +38,8 @@ impl<C: Curve> Value<C> {
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
         let vs = &self.0;
-        let mut bytes: Vec<u8> = Vec::with_capacity(vs.len());
-        for v in vs.iter() {
-            bytes.extend_from_slice(&*Self::value_to_bytes(&v));
-        }
+        let mut bytes: Vec<u8> = Vec::with_capacity(vs.len() * C::SCALAR_LENGTH);
+        write_curve_scalars::<C>(vs, &mut bytes);
         bytes.into_boxed_slice()
     }
 
@@ -54,19 +51,9 @@ impl<C: Curve> Value<C> {
     /// A `Result` whose okay value is a Value vec  or whose error value
     /// is an `CommitmentError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<Value<C>, CommitmentError> {
-        let l = bytes.len();
-        if l == 0 || l % C::SCALAR_LENGTH != 0 {
-            return Err(CommitmentError(ValueVecLengthError));
-        }
-        let vlen = l / C::SCALAR_LENGTH;
-        let mut vs: Vec<C::Scalar> = Vec::with_capacity(vlen);
-        for elem in bytes.chunks(C::SCALAR_LENGTH) {
-            match C::bytes_to_scalar(&elem) {
-                Err(_) => return Err(CommitmentError(FieldDecodingError)),
-                Ok(fr) => vs.push(fr),
-            }
-        }
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<Value<C>, Error> {
+        let mut scalar_buf = vec![0; C::SCALAR_LENGTH];
+        let vs = read_curve_scalars::<C>(cur, &mut scalar_buf)?;
         Ok(Value(vs))
     }
 
@@ -106,7 +93,8 @@ mod tests {
                 let mut csprng = thread_rng();
                 for i in 1..20 {
                     let val = Value::<$curve_type>::generate(i, &mut csprng);
-                    let res_val2 = Value::<$curve_type>::from_bytes(&*val.to_bytes());
+                    let res_val2 =
+                        Value::<$curve_type>::from_bytes(&mut Cursor::new(&val.to_bytes()));
                     assert!(res_val2.is_ok());
                     let val2 = res_val2.unwrap();
                     assert_eq!(val2, val);

@@ -1,8 +1,8 @@
 use failure::Error;
 use std::io::{Cursor, Read};
 
+use crate::curve_arithmetic::Curve;
 use byteorder::{BigEndian, ReadBytesExt};
-use curve_arithmetic::curve_arithmetic::Curve;
 
 pub fn read_exact_bytes<'a>(cur: &mut Cursor<&[u8]>, buf: &'a mut [u8]) -> Result<&'a [u8], Error> {
     cur.read_exact(buf)?;
