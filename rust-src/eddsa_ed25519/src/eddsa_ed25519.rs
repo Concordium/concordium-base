@@ -3,6 +3,13 @@ use rand::*;
 
 use std::slice;
 
+/// FIXME: Hack to get around different requirements for rand versions
+/// between the pairing crate and this one.
+pub fn generate_keypair() -> Keypair {
+    let mut csprng = thread_rng();
+    Keypair::generate(&mut csprng)
+}
+
 // foreign function interfacee
 
 #[no_mangle]

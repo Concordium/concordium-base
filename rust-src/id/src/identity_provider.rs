@@ -1,23 +1,15 @@
 use crate::types::*;
 use curve_arithmetic::curve_arithmetic::*;
-use either::*;
 use elgamal::cipher::Cipher;
 use pedersen_scheme::commitment::Commitment as PedersenCommitment;
 use ps_sig;
 use rand::*;
 use sigma_protocols::{com_enc_eq::*, com_eq_different_groups::*, dlog::*};
 
-pub struct AuxData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    id_cred_base: P::G_1,
-    ps_public_key:  ps_sig::PublicKey<P>,
-    ps_secret_key:  ps_sig::SecretKey<P>,
-    comm_2_params:  CommitmentParams<C>,
-    elgamal_params: ElgamalParams<C>,
-    ar_info:        ArInfo<C>,
-}
-
+#[derive(Debug, Clone, Copy)]
 pub struct Declined(pub Reason);
 
+#[derive(Debug, Clone, Copy)]
 pub enum Reason {
     FailedToVerifyKnowledgeOfIdCredSec,
     FailedToVerifyPrfData,
@@ -29,44 +21,47 @@ pub fn verify_credentials<
     C: Curve<Scalar = P::ScalarField>,
 >(
     pre_id_obj: &PreIdentityObject<P, AttributeType, C>,
-    aux_data: AuxData<P, C>,
-) -> Either<ps_sig::Signature<P>, Declined> {
+    context: Context<P, C>,
+    id_secret_key: &ps_sig::SecretKey<P>,
+) -> Result<ps_sig::Signature<P>, Declined> {
     let b_1 = verify_knowledge_of_id_cred_sec::<P::G_1>(
-        &aux_data.id_cred_base,
+        &context.dlog_base,
         &pre_id_obj.id_cred_pub,
         &pre_id_obj.pok_sc,
     );
     if !b_1 {
-        return Right(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
+        return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
     }
 
-    let comm_1_params =
-        CommitmentParams((aux_data.ps_public_key.0[0], aux_data.ps_public_key.0[1]));
+    let comm_1_params = CommitmentParams((
+        context.ip_info.id_verify_key.0[0],
+        context.ip_info.id_verify_key.0[1],
+    ));
+    let comm_2_params =
+        CommitmentParams((context.commitment_key_ar.0[0], context.commitment_key_ar.1));
+    let ar_info = context.ip_info.ar_info;
+    let elgamal_params = ElgamalParams((ar_info.ar_elgamal_generator, ar_info.ar_public_key.0));
     let b_2 = verify_vrf_key_data(
         &comm_1_params,
         &pre_id_obj.cmm_prf,
-        &aux_data.comm_2_params,
+        &comm_2_params,
         &pre_id_obj.snd_cmm_prf,
-        &aux_data.elgamal_params,
+        &elgamal_params,
         &pre_id_obj.id_ar_data.e_reg_id,
         &pre_id_obj.proof_com_eq,
         &pre_id_obj.proof_com_enc_eq,
     );
     if !b_2 {
-        return Right(Declined(Reason::FailedToVerifyPrfData));
+        return Err(Declined(Reason::FailedToVerifyPrfData));
     }
     let message: ps_sig::UnknownMessage<P> = compute_message(
         &pre_id_obj.id_cred_pub,
         &pre_id_obj.cmm_prf,
         &pre_id_obj.alist,
-        &aux_data.ps_public_key,
+        &context.ip_info.id_verify_key,
     );
     let mut csprng = thread_rng();
-    Left(
-        aux_data
-            .ps_secret_key
-            .sign_unknown_message(&message, &mut csprng),
-    )
+    Ok(id_secret_key.sign_unknown_message(&message, &mut csprng))
 }
 
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
@@ -124,10 +119,5 @@ fn verify_vrf_key_data<C_1: Curve, C_2: Curve<Scalar = C_1::Scalar>>(
     let (e_1, e_2) = (cipher.0, cipher.1);
     let coeff = (g, h, g_2, h_2);
     let eval = (e_1, e_2, c_2);
-    let b_2 = verify_com_enc_eq(&coeff, &eval, comm_enc_eq_proof);
-    if b_2 {
-        true
-    } else {
-        false
-    }
+    verify_com_enc_eq(&coeff, &eval, comm_enc_eq_proof)
 }

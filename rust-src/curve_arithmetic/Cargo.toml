@@ -9,6 +9,7 @@ pairing = "0"
 rand    = "0.4"
 failure = "0.1"
 libc = "0.2.58"
+byteorder = "1.3"
 
 [dependencies.ffi_macros]
 path = "../ffi_macros"

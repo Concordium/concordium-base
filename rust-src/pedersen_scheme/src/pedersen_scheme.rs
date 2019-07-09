@@ -5,7 +5,7 @@ use crate::{commitment::*, key::*, value::*};
 use curve_arithmetic::curve_arithmetic::*;
 use pairing::bls12_381::{G1Affine, G2Affine, G1};
 use rand::*;
-use std::slice;
+use std::{io::Cursor, slice};
 
 macro_rules! macro_generate_commitment_key {
     ($function_name:ident, $curve_type:path) => {
@@ -16,7 +16,7 @@ macro_rules! macro_generate_commitment_key {
             let key_slice: &mut [u8] = unsafe {
                 slice::from_raw_parts_mut(
                     key_bytes,
-                    (n + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH,
+                    4 + (n + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH,
                 )
             };
             let mut csprng = thread_rng();
@@ -45,15 +45,15 @@ macro_rules! macro_commit {
             let key_slice: &[u8] = unsafe {
                 slice::from_raw_parts(
                     key_bytes,
-                    (n + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH,
+                    4 + (n + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH,
                 )
             };
             let values_slice: &[u8] = unsafe {
-                slice::from_raw_parts(values, (n) * <$curve_type as Curve>::SCALAR_LENGTH)
+                slice::from_raw_parts(values, 4 + (n) * <$curve_type as Curve>::SCALAR_LENGTH)
             };
-            match CommitmentKey::<$curve_type>::from_bytes(key_slice) {
+            match CommitmentKey::<$curve_type>::from_bytes(&mut Cursor::new(key_slice)) {
                 Err(_) => -1,
-                Ok(ck) => match Value::<$curve_type>::from_bytes(values_slice) {
+                Ok(ck) => match Value::<$curve_type>::from_bytes(&mut Cursor::new(values_slice)) {
                     Err(_) => -2,
                     Ok(vs) => {
                         let mut csprng = thread_rng();
@@ -97,15 +97,15 @@ macro_rules! macro_open {
             let key_slice: &[u8] = unsafe {
                 slice::from_raw_parts(
                     key_bytes,
-                    (n + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH,
+                    4 + (n + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH,
                 )
             };
             let values_slice: &[u8] = unsafe {
-                slice::from_raw_parts(values, (n) * <$curve_type as Curve>::SCALAR_LENGTH)
+                slice::from_raw_parts(values, 4 + (n) * <$curve_type as Curve>::SCALAR_LENGTH)
             };
-            match CommitmentKey::<$curve_type>::from_bytes(key_slice) {
+            match CommitmentKey::<$curve_type>::from_bytes(&mut Cursor::new(key_slice)) {
                 Err(_) => -1,
-                Ok(ck) => match Value::<$curve_type>::from_bytes(values_slice) {
+                Ok(ck) => match Value::<$curve_type>::from_bytes(&mut Cursor::new(values_slice)) {
                     Err(_) => -2,
                     Ok(vs) => match Value::<$curve_type>::value_from_bytes(randomness) {
                         Err(_) => -3,
@@ -147,7 +147,10 @@ macro_rules! macro_random_values {
             let mut csprng = thread_rng();
             let vs = Value::<$curve_type>::generate(n, &mut csprng);
             let v_slice: &mut [u8] = unsafe {
-                slice::from_raw_parts_mut(value_bytes, n * <$curve_type as Curve>::SCALAR_LENGTH)
+                slice::from_raw_parts_mut(
+                    value_bytes,
+                    4 + n * <$curve_type as Curve>::SCALAR_LENGTH,
+                )
             };
             v_slice.copy_from_slice(&*vs.to_bytes());
         }

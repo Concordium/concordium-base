@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use failure::Error;
 use std::io::Cursor;
 
-use crate::common::*;
+use curve_arithmetic::serialization::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModifiedComEqProof<T: Curve> {

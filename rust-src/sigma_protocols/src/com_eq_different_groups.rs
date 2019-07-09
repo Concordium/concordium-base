@@ -1,5 +1,4 @@
-use crate::common::*;
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::{curve_arithmetic::Curve, serialization::*};
 use failure::Error;
 use pairing::Field;
 use rand::*;

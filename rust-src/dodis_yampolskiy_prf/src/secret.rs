@@ -18,7 +18,7 @@ use crate::errors::{
     InternalError::{DecodingError, DivisionByZero},
     *,
 };
-use curve_arithmetic::curve_arithmetic::{Curve, FieldDecodingError};
+use curve_arithmetic::curve_arithmetic::Curve;
 use pairing::Field;
 use rand::*;
 
@@ -74,7 +74,8 @@ impl<C: Curve> SecretKey<C> {
     }
 }
 
-mod test {
+#[cfg(test)]
+mod tests {
     use super::*;
     use pairing::bls12_381::G1;
     #[test]
