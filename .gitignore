@@ -18,3 +18,4 @@ dist/
 
 rust-src/target/
 *.json
+/.dir-locals.el

@@ -6,8 +6,6 @@ import qualified ConcordiumTests.Crypto.SHA256
 import qualified ConcordiumTests.Crypto.SHA224
 import qualified ConcordiumTests.Crypto.Ed25519Signature
 import qualified ConcordiumTests.Crypto.VRF
-import qualified ConcordiumTests.Crypto.Elgamal
-import qualified ConcordiumTests.Crypto.ElgamalBLS12381_G2
 
 main :: IO  ()
 main = hspec $ parallel $ do

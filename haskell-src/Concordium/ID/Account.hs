@@ -3,71 +3,17 @@
 module Concordium.ID.Account where
 
 import Concordium.ID.Types
-import Data.ByteString.Char8
 import GHC.Word
 import Data.ByteString.Random.MWC
 import Concordium.Crypto.SignatureScheme
-import Concordium.Crypto.PRF
-import Concordium.ID.Attributes
 import qualified Concordium.Crypto.SHA224 as SHA224
-import qualified Concordium.Crypto.SHA256 as SHA256
 import qualified Data.ByteString as BS
 import qualified Data.FixedByteString as FBS
 import Data.Base58String.Bitcoin
 
-import Data.Serialize
-
-
-
--- This is an evolving module for testing
--- Account related functionality
--- 1. account creation
--- 2. credential deployment
--- 3. transaction initiation (client)
-
-
--- protocol to take part between Credential Holder and Idenity provider
--- input CredentialHolderInformation
--- output CredentialHolderCertificate 
--- note that CredentialHolderInformation has some private data that are not sent to 
--- the IP
--- For now the answer comes with random arbitrary CredentialDeploymentInformation
-registerCredentialHolder:: CredentialHolderInformation -> IO CredentialHolderCertificate
-registerCredentialHolder chi = return $ CHC {
-                                    chc_ipId = gcpib, 
-                                    chc_ipPk = gcpibPubKey,
-                                    chc_chi  = chi,
-                                    chc_sig  = fakeSignCred (chi_sk chi, chi_prfKey chi, chi_attributeList chi)
-                                    }
---deploy credentials: Protocol takes place between account holder and the chain
---the object CredentialDeploymentInformation is sent on the chain for verification
-deployCredential ::
-  SignKey ->
-  VerifyKey ->
-  SignatureScheme ->
-  Policy ->
-  CredentialHolderInformation ->
-  CredentialHolderCertificate ->
-  Word8 ->
-  IO CredentialDeploymentInformation
-deployCredential _sk vk sch p chi chc n = return $ CDI {
-  cdi_verifKey = vk,
-  cdi_sigScheme = schemeId sch,
-  cdi_regId = cRegId,
-  cdi_arData = arData,
-  cdi_ipId  = chc_ipId chc,
-  cdi_policy = p,
-  cdi_auxData = aux,
-  cdi_proof = proof
-  }
-  where cRegId = let PrfObj x = prf (chi_prfKey chi) n
-                 in RegIdCred . FBS.toByteString $ x
-
-                                            
 verifyCredential :: CredentialDeploymentInformation -> Bool
 verifyCredential _ = True
 
-                                     
 registrationId :: IO CredentialRegistrationID
 registrationId = (random 48) >>= (return . RegIdCred)
     
@@ -92,43 +38,3 @@ accountAddress (VerifyKey x) y =  AccountAddress (FBS.fromByteString $ BS.cons s
         bs = FBS.toByteString r
         sch:: Word8
         sch = fromIntegral $ fromEnum y
-
-ar :: AnonimityRevoker
-ar = AR (AR_ID $ pack "Gotham City Police Department") (AR_PK $ "<Jim Gordon's private key>")
-
---Identity Provider
-gcpib :: IdentityProviderIdentity
-gcpib = IP_ID $ pack "Gotham City Post Industrial Bank"
-
-gcpibPubKey :: IdentityProviderPublicKey
-gcpibPubKey =  let (SHA256.Hash x) = SHA256.hash $ pack "Gotham City Post Industrial Bank"
-                      in  IP_PK (FBS.toByteString x)
-
-
-arData :: [(AnonimityRevokerIdentity, SecretShare)]
-arData = [(AR_ID $ pack "Gotham City Police Department", Share "<Jim Gordon has all the share>")]
-
-regId :: CredentialRegistrationID
-regId = RegIdCred $ "Batman"
-
-scheme :: SchemeId
-scheme = Ed25519 
-
-
-encKey :: AccountEncryptionKey
-encKey = EncKeyAcc "<Batman's encryption key>"
-
-policy :: Policy
-policy = Conj (AtomicBD AgeOver18) (AtomicCitizenship EU) 
-
-aux :: ByteString
-aux = pack "aux"
-
-proof :: ZKProof
-proof = Proof $ "proof of bot"
-
-fakeSign::ByteString -> ByteString
-fakeSign x = SHA256.hashToByteString (SHA256.hash x)
-
-fakeSignCred:: (CredentialHolderSecretKey, PrfKey, AttributeList) -> Signature
-fakeSignCred (x, y, z) = Signature $ fakeSign $ BS.concat[runPut (put x), runPut (put y), runPut (put  z)]
