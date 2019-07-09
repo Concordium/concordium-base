@@ -15,13 +15,13 @@ use std::io::Cursor;
 //for public values a, b, C_j in G_1, and  X', Y_j', g' in G_2 
 //and known pairing e
 #[derive(Clone, Debug)]
-pub struct ComEqSigProof<P: Pairing> {
+pub struct ComEqSigProof<P: Pairing, C:Curve<Scalar=P::ScalarField>> {
     challenge:        P::ScalarField,
-    randomised_point: (P::G_2, Vec<P::G_1>) ,
-    witness:          ((P::ScalarField, Vec<P::ScalarField>), Vec<P::ScalarField>),
+    randomised_point: (P::G_2, Vec<C>) ,
+    witness:          ((P::ScalarField, Vec<P::ScalarField>), Vec<C::Scalar>),
 }
 
-impl<P:Pairing> PartialEq for ComEqSigProof<P>{
+impl<P:Pairing, C:Curve<Scalar=P::ScalarField>> PartialEq for ComEqSigProof<P, C>{
     fn eq(&self, other:&Self) -> bool{
         self.challenge == other.challenge &&
             self.randomised_point == other.randomised_point &&
@@ -30,22 +30,22 @@ impl<P:Pairing> PartialEq for ComEqSigProof<P>{
 }
 
 
-impl<P: Pairing> ComEqSigProof<P> {
+impl<P: Pairing, C:Curve<Scalar=P::ScalarField>> ComEqSigProof<P, C> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let rp_len = self.randomised_point.1.len();
         let witness1_len = (self.witness.0).1.len();
         let witness2_len = self.witness.1.len();
         let bytes_len = P::SCALAR_LENGTH
             + P::G_2::GROUP_ELEMENT_LENGTH
-            + rp_len  * P::G_1::GROUP_ELEMENT_LENGTH
+            + rp_len  * C::GROUP_ELEMENT_LENGTH
             + (1 + witness1_len  + witness2_len) * P::SCALAR_LENGTH;
         let mut bytes = Vec::with_capacity(bytes_len);
         write_curve_scalar::<P::G_2>(&self.challenge, &mut bytes);
         write_curve_element::<P::G_2>(&self.randomised_point.0, &mut bytes);
-        write_curve_elements::<P::G_1>(&self.randomised_point.1, &mut bytes);
+        write_curve_elements::<C>(&self.randomised_point.1, &mut bytes);
         write_curve_scalar::<P::G_2>(&(self.witness.0).0, &mut bytes);
         write_curve_scalars::<P::G_2>(&(self.witness.0).1, &mut bytes);
-        write_curve_scalars::<P::G_2>(&self.witness.1, &mut bytes);
+        write_curve_scalars::<C>(&self.witness.1, &mut bytes);
         bytes
     }
 
@@ -55,10 +55,10 @@ impl<P: Pairing> ComEqSigProof<P> {
         let mut group1_buffer = vec![0; P::G_1::GROUP_ELEMENT_LENGTH];
         let challenge = read_curve_scalar::<P::G_2>(bytes, &mut scalar_buffer)?;
         let rp1 = read_curve::<P::G_2>(bytes, &mut group2_buffer)?;
-        let rp2 = read_curve_elements::<P::G_1>(bytes, &mut group1_buffer)?;
+        let rp2 = read_curve_elements::<C>(bytes, &mut group1_buffer)?;
         let w0 = read_curve_scalar::<P::G_2>(bytes, &mut scalar_buffer)?;
         let w1 = read_curve_scalars::<P::G_2>(bytes, &mut scalar_buffer)?;
-        let w2 = read_curve_scalars::<P::G_2>(bytes, &mut scalar_buffer)?;
+        let w2 = read_curve_scalars::<C>(bytes, &mut scalar_buffer)?;
         Ok(ComEqSigProof {
             challenge: challenge,
             randomised_point: (rp1, rp2),
@@ -67,12 +67,12 @@ impl<P: Pairing> ComEqSigProof<P> {
     }
 }
 
-pub fn prove_com_eq_sig<P: Pairing, R: Rng>(
-    evaluation: &((P::G_1, P::G_2), Vec<P::G_1>),
-    coeff: &((P::G_1, P::G_2), (P::G_1, P::G_2), (P::G_1, Vec<P::G_2>), (P::G_1, P::G_1)),
-    secret: &((P::ScalarField, Vec<P::ScalarField>), Vec<P::ScalarField>),
+pub fn prove_com_eq_sig<P: Pairing, C:Curve<Scalar=P::ScalarField>, R: Rng>(
+    evaluation: &((P::G_1, P::G_2), Vec<C>),
+    coeff: &((P::G_1, P::G_2), (P::G_1, P::G_2), (P::G_1, Vec<P::G_2>), (C, C)),
+    secret: &((P::ScalarField, Vec<P::ScalarField>), Vec<C::Scalar>),
     csprng: &mut R,
-) -> ComEqSigProof<P> {
+) -> ComEqSigProof<P, C> {
     let ((eval_pair, eval), comm_vec) = evaluation;
     let ((_p_pair, p), (_q_pair,q), (_gxs_pair, gxs) , (g, h)) = coeff;
     let ((q_sec, gxs_sec), pedersen_rands) = secret;
@@ -83,7 +83,7 @@ pub fn prove_com_eq_sig<P: Pairing, R: Rng>(
     let mut suc = false;
     //randomised points 
     let mut u = <P::G_2 as Curve>::zero_point();
-    let mut vxs = vec![<P::G_1 as Curve>::zero_point(); n];
+    let mut vxs = vec![C::zero_point(); n];
 
     //let mut rands = vec![(T::Scalar::zero(), T::Scalar::zero()); n];
     let mut challenge = <P::G_2 as Curve>::Scalar::zero();
@@ -95,7 +95,7 @@ pub fn prove_com_eq_sig<P: Pairing, R: Rng>(
     let mut gxs_rands = vec![<P::G_2 as Curve>::Scalar::zero(); n];
 
     let mut pedersen_rands_wit = pedersen_rands.clone();
-    let mut pedersen_rands_rands = vec![<P::G_1 as Curve>::Scalar::zero(); n];
+    let mut pedersen_rands_rands = vec![C::Scalar::zero(); n];
 
     let mut hasher = Sha256::new();
     let mut hash = [0u8; 32];
@@ -112,7 +112,7 @@ pub fn prove_com_eq_sig<P: Pairing, R: Rng>(
         let mut tmp_u = <P::G_2 as Curve>::zero_point();
         for i in 0..n {
             gxs_rands[i] = <P::G_2 as Curve>::generate_scalar(csprng);
-            pedersen_rands_rands[i] = <P::G_1 as Curve>::generate_scalar(csprng);
+            pedersen_rands_rands[i] = C::generate_scalar(csprng);
             //rands[i] = (r_i, s_i);
             tmp_u = tmp_u.plus_point(&gxs[i].mul_by_scalar(&gxs_rands[i]));
             vxs[i] = g.mul_by_scalar(&gxs_rands[i]).plus_point(&h.mul_by_scalar(&pedersen_rands_rands[i]));
@@ -154,10 +154,10 @@ pub fn prove_com_eq_sig<P: Pairing, R: Rng>(
     }
 }
 
-pub fn verify_com_eq_sig<P: Pairing>(
-    evaluation: &((P::G_1, P::G_2), Vec<P::G_1>),
-    coeff: &((P::G_1, P::G_2), (P::G_1, P::G_2), (P::G_1, Vec<P::G_2>), (P::G_1, P::G_1)),
-    proof: &ComEqSigProof<P>,
+pub fn verify_com_eq_sig<P: Pairing, C:Curve<Scalar=P::ScalarField>>(
+    evaluation: &((P::G_1, P::G_2), Vec<C>),
+    coeff: &((P::G_1, P::G_2), (P::G_1, P::G_2), (P::G_1, Vec<P::G_2>), (C, C)),
+    proof: &ComEqSigProof<P, C>,
 ) -> bool {
     let challenge = &proof.challenge;
     let (u, vxs) = &proof.randomised_point;
@@ -277,12 +277,12 @@ mod tests {
             let secret = ((q_sec, gxs_sec), pedersen_rands);
 
 
-            let proof = prove_com_eq_sig::<Bls12, ThreadRng>(&evaluation, &coeff, &secret, &mut csprng);
+            let proof = prove_com_eq_sig::<Bls12, <Bls12 as Pairing>::G_1 , ThreadRng>(&evaluation, &coeff, &secret, &mut csprng);
             assert!(verify_com_eq_sig(&evaluation, &coeff, &proof));
 
             let wrong_q_sec = <Bls12 as Pairing>::generate_scalar(&mut csprng);
             let wrong_secret = ((wrong_q_sec, (secret.0).1), secret.1);
-            let wrong_proof = prove_com_eq_sig::<Bls12, ThreadRng>(&evaluation, &coeff, &wrong_secret, &mut csprng);
+            let wrong_proof = prove_com_eq_sig::<Bls12, <Bls12 as Pairing>::G_1, ThreadRng>(&evaluation, &coeff, &wrong_secret, &mut csprng);
             assert!(!verify_com_eq_sig(&evaluation, &coeff, &wrong_proof));
         }
 
@@ -318,7 +318,7 @@ mod tests {
             for _ in 0..lw2 {
                 w2.push(<Bls12 as Pairing>::generate_scalar(&mut csprng));
             }
-            let cep = ComEqSigProof::<Bls12> {
+            let cep = ComEqSigProof::<Bls12, <Bls12 as Pairing>::G_1> {
                 challenge,
                 randomised_point: (rp1, rp2),
                 witness: ((<Bls12 as Pairing>::generate_scalar(&mut csprng), w1), w2),
