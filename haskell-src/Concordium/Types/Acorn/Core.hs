@@ -218,8 +218,8 @@ data Type annot origin =
   -- |Polymorphic quantification. Using De-Bruijn representation.
   TForall !(Type annot origin)
   -- |Function types.
-  | TArr !(Type annot origin) !(Type annot origin)     
-  -- |Type variables, but also imported or defined types.
+  | TArr !(Type annot origin) !(Type annot origin)
+  -- |Bound type variables. Note that namespaces for bound type and term variables are distinct.
   | TVar !BoundTyVar
   -- |Type application, i.e., List Int. This will always be "declared datatype applied to types".
   | TApp !(DataTyName origin) ![(Type annot origin)]
