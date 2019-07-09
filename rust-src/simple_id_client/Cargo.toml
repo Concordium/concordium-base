@@ -46,4 +46,4 @@ version = "0"
 
 [dependencies.eddsa_ed25519]
 path = "../eddsa_ed25519"
-eddsa_ed25519 = "0"
+version = "0"

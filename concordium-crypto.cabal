@@ -33,7 +33,6 @@ Library
                    Concordium.Crypto.Elgamal
                    Concordium.Crypto.ElgamalBLS12381_G2
                    Concordium.Crypto.VRF
-                   Concordium.Crypto.PRF
                    Data.FixedByteString
                    Concordium.ID.Attributes
                    Concordium.ID.Types
