@@ -14,9 +14,8 @@ import Concordium.Crypto.SignatureScheme(VerifyKey(..), SchemeId(Ed25519))
 import Concordium.Types.Execution
 import Concordium.Types(Amount(..), Address(..))
 import Concordium.ID.Types
-import Concordium.ID.Attributes
 import qualified Concordium.Crypto.VRF as VRF
-
+import Data.FixedByteString as FBS
 
 import qualified Data.Serialize as S
 
@@ -28,18 +27,27 @@ import Data.Int
 
 genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
 genCredentialDeploymentInformation = do
-  cdi_verifKey <- VerifyKey . BS.pack <$> vector 37
-  cdi_sigScheme <- elements [Ed25519]
-  cdi_regId <- RegIdCred . BS.pack <$> vector credentialRegistrationIDSize
-  cdi_arData <- do l <- choose (0, 10)
-                   replicateM l $ do arId <- AR_ID . BS.pack <$> vector 73
-                                     secretShare <- Share . BS.pack <$> vector 37
-                                     return (arId, secretShare)
-  cdi_ipId <- IP_ID . BS.pack <$> vector 53
-  cdi_policy <- elements [AtomicBD AgeOver18]
-  cdi_auxData <- BS.pack <$> (vector =<< choose (0, 1000))
-  cdi_proof <- choose (10, 1000) >>= \s -> Proof . BS.pack <$> vector s
-  return CDI{..}
+  cdvVerifyKey <- VerifyKey . BS.pack <$> vector 37
+  cdvSigScheme <- elements [Ed25519]
+  cdvRegId <- RegIdCred . BS.pack <$> vector credentialRegistrationIDSize
+  -- cdvarData <- do l <- choose (0, 10)
+  --                  replicateM l $ do arId <- AR_ID . BS.pack <$> vector 73
+  --                                    secretShare <- Share . BS.pack <$> vector 37
+  --                                    return (arId, secretShare)
+  cdvIpId <- IP_ID . BS.pack <$> vector 53
+  cdvPolicy <- do l <- choose (0,1000)
+                  Policy <$> replicateM l genPolicyItem
+  cdiProofs <- do l <- choose (0, 10000)
+                  Proofs . BS.pack <$> vector l
+  let cdiValues = CredentialDeploymentValues{..}
+  return CredentialDeploymentInformation{..}
+
+genPolicyItem :: Gen PolicyItem
+genPolicyItem = do
+  piAttributeListVariant <- arbitrary
+  piIndex <- arbitrary
+  piValue <- AttributeValue . FBS.pack <$> vector (FBS.fixedLength (undefined :: AttributeMaxSize))
+  return PolicyItem{..}
 
 genPayload :: Gen Payload
 genPayload = oneof [genDeployModule,

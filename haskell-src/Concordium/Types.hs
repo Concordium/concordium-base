@@ -239,7 +239,8 @@ data Account = Account {
   -- transaction execution is the policy. In particular the policy will always
   -- have an expiration date. Once it is clear how this date is used it will be
   -- lifted up so that we only ever check credentials which are not out of date.
-  ,_accountCredentials :: ![CredentialDeploymentInformation]
+  -- We do not retain proofs in global state.
+  ,_accountCredentials :: ![CredentialDeploymentValues]
   -- |The baker to which this account's stake is delegated (if any).
   ,_accountStakeDelegate :: !(Maybe BakerId)
   -- |The set of instances belonging to this account.
