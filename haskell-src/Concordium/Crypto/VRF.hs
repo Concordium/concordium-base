@@ -4,7 +4,7 @@
 
 
 module Concordium.Crypto.VRF(
-    PublicKey,
+    PublicKey(..),
     PrivateKey,
     newPrivKey,
     pubKey,
