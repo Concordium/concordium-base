@@ -20,13 +20,13 @@ pub fn verify_credentials<
     AttributeType: Attribute<P::ScalarField>,
     C: Curve<Scalar = P::ScalarField>,
 >(
-    pre_id_obj: &PreIdentityObject<P, AttributeType, C>,
+    pre_id_obj: &PreIdentityObject<P, C, AttributeType >,
     context: Context<P, C>,
-    id_secret_key: &ps_sig::SecretKey<P>,
+    ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Declined> {
     let b_1 = verify_knowledge_of_id_cred_sec::<P::G_1>(
         &context.dlog_base,
-        &pre_id_obj.id_cred_pub,
+        &pre_id_obj.id_cred_pub_ip,
         &pre_id_obj.pok_sc,
     );
     if !b_1 {
@@ -34,8 +34,8 @@ pub fn verify_credentials<
     }
 
     let comm_1_params = CommitmentParams((
-        context.ip_info.id_verify_key.0[0],
-        context.ip_info.id_verify_key.0[1],
+        context.ip_info.ip_verify_key.0[0],
+        context.ip_info.ip_verify_key.0[1],
     ));
     let comm_2_params =
         CommitmentParams((context.commitment_key_ar.0[0], context.commitment_key_ar.1));
@@ -47,7 +47,7 @@ pub fn verify_credentials<
         &comm_2_params,
         &pre_id_obj.snd_cmm_prf,
         &elgamal_params,
-        &pre_id_obj.id_ar_data.e_reg_id,
+        &pre_id_obj.id_ar_data.prf_key_enc,
         &pre_id_obj.proof_com_eq,
         &pre_id_obj.proof_com_enc_eq,
     );
@@ -55,22 +55,22 @@ pub fn verify_credentials<
         return Err(Declined(Reason::FailedToVerifyPrfData));
     }
     let message: ps_sig::UnknownMessage<P> = compute_message(
-        &pre_id_obj.id_cred_pub,
+        &pre_id_obj.id_cred_pub_ip,
         &pre_id_obj.cmm_prf,
         &pre_id_obj.alist,
-        &context.ip_info.id_verify_key,
+        &context.ip_info.ip_verify_key,
     );
     let mut csprng = thread_rng();
-    Ok(id_secret_key.sign_unknown_message(&message, &mut csprng))
+    Ok(ip_secret_key.sign_unknown_message(&message, &mut csprng))
 }
 
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
-    id_cred_pub: &elgamal::PublicKey<P::G_1>,
+    id_cred_pub: &P::G_1,
     cmm_prf: &PedersenCommitment<P::G_1>,
     att_list: &AttributeList<P::ScalarField, AttributeType>,
     ps_public_key: &ps_sig::PublicKey<P>,
 ) -> ps_sig::UnknownMessage<P> {
-    let mut message = id_cred_pub.0;
+    let mut message = id_cred_pub.clone();
     message = message.plus_point(&cmm_prf.0);
     let att_vec = &att_list.alist;
     let n = att_vec.len();
@@ -86,11 +86,10 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
 
 fn verify_knowledge_of_id_cred_sec<C: Curve>(
     base: &C,
-    pk: &elgamal::PublicKey<C>,
+    pk: &C,
     proof: &DlogProof<C>,
 ) -> bool {
-    let public = pk.0;
-    verify_dlog(base, &public, proof)
+    verify_dlog(base, &pk, proof)
 }
 
 fn verify_vrf_key_data<C_1: Curve, C_2: Curve<Scalar = C_1::Scalar>>(

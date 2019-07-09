@@ -12,5 +12,6 @@ members=[
    "sigma_protocols",
    "id",
    "ffi_macros",
-   "simple_id_client"]
+   "simple_id_client",
+]
 

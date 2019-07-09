@@ -3,6 +3,7 @@ use crate::types::*;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use pedersen_scheme::value as pedersen;
+use elgamal::message::Message as ElgamalMessage;
 use rand::*;
 use sigma_protocols::{com_enc_eq, com_eq_different_groups, dlog};
 
@@ -11,18 +12,20 @@ use sigma_protocols::{com_enc_eq, com_eq_different_groups, dlog};
 /// information (group generators, shared commitment keys, etc).
 pub fn generate_pio<
     P: Pairing,
-    AttributeType: Attribute<P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
     C: Curve<Scalar = P::ScalarField>,
 >(
     context: &Context<P, C>,
-    aci: &AccCredentialInfo<P, AttributeType>,
-) -> PreIdentityObject<P, AttributeType, C>
+    aci: &AccCredentialInfo<P, C, AttributeType>,
+) -> PreIdentityObject<P, C, AttributeType>
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
     let id_ah = aci.acc_holder_info.id_ah.clone();
     let id_cred_pub = aci.acc_holder_info.id_cred.id_cred_pub;
+    let id_cred_pub_ip = aci.acc_holder_info.id_cred.id_cred_pub_ip;
     let prf::SecretKey(prf_key_scalar) = aci.prf_key;
+    let id_cred_pub_point = aci.acc_holder_info.id_cred.id_cred_pub; 
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
     // revocation.
     let (prf_key_enc, prf_key_enc_rand) = context
@@ -30,15 +33,21 @@ where
         .ar_info
         .ar_public_key
         .encrypt_exponent_rand(&mut csprng, &prf_key_scalar);
+    let id_cred_pub_enc = context
+        .ip_info
+        .ar_info
+        .ar_public_key
+        .encrypt(&mut csprng, &ElgamalMessage::<C>(id_cred_pub));
     let id_ar_data = ArData {
         ar_name:  context.ip_info.ar_info.ar_name.clone(),
-        e_reg_id: prf_key_enc,
+        prf_key_enc : prf_key_enc,
+        id_cred_pub_enc: id_cred_pub_enc,
     };
     let alist = aci.attributes.clone();
     let pok_sc = dlog::prove_dlog(
         &mut csprng,
-        &id_cred_pub.0,
-        &aci.acc_holder_info.id_cred.id_cred_sec.0,
+        &id_cred_pub_ip,
+        &aci.acc_holder_info.id_cred.id_cred_sec,
         &context.dlog_base,
     );
     let (cmm_prf, rand_cmm_prf) = context
@@ -77,7 +86,7 @@ where
     };
     PreIdentityObject {
         id_ah,
-        id_cred_pub,
+        id_cred_pub_ip,
         id_ar_data,
         alist,
         pok_sc,
