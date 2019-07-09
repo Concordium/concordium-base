@@ -28,7 +28,7 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
 }
 
 #[derive(Debug)]
-//in our case C: will be G_1 and T will be G_1 for now
+/// In our case C: will be G_1 and T will be G_1 for now
 pub struct IdCredentials<C: Curve, T:Curve<Scalar=C::Scalar>> {
     pub id_cred_sec: C::Scalar,
     pub id_cred_pub: C,
@@ -67,7 +67,7 @@ pub struct ArData<C: Curve> {
     pub ar_name: String,
     /// Encryption of the prf key of the credential holder.
     pub prf_key_enc: Cipher<C>,
-    //encryption of public identity credentials
+    /// Encryption of public identity credentials.
     pub id_cred_pub_enc: Cipher<C> 
 }
 
@@ -208,10 +208,8 @@ pub struct Context<P: Pairing, C: Curve<Scalar=P::ScalarField>> {
 }
 
 pub struct GlobalContext<C: Curve > {
-    
-    //base of dlog proofs with chain
+    /// Base of dlog proofs with chain.
     pub dlog_base_chain: C,
-
 
     /// A shared commitment key known to the chain and the account holder (and
     /// therefore it is public). The account holder uses this commitment key to
@@ -220,7 +218,6 @@ pub struct GlobalContext<C: Curve > {
     /// multi-party computation since none of the parties should know anything
     /// special about it (so that commitment is binding, and that the commitment
     /// cannot be broken).
-    /// TODO: Check with Bassel that the key is over the correct group.
     pub on_chain_commitment_key: PedersenKey<C>,
 }
 

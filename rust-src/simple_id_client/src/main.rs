@@ -34,6 +34,8 @@ use std::{
     path::Path,
 };
 
+type ExampleCurve = <Bls12 as Pairing>::G_1;
+
 static GLOBAL_CONTEXT: &str = "database/global.json";
 static IP_PREFIX: &str = "database/identity_provider-";
 static AR_PREFIX: &str = "database/anonymity_revoker-";
@@ -41,7 +43,7 @@ static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "anonymity_revoker-";
 static IDENTITY_PROVIDERS: &str = "database/identity_providers.json";
 
-fn read_global_context() -> Option<GlobalContext<Bls12>> {
+fn read_global_context() -> Option<GlobalContext<ExampleCurve>> {
     if let Ok(Some(gc)) = read_json_from_file(GLOBAL_CONTEXT)
         .as_ref()
         .map(json_to_global_context)
@@ -217,25 +219,28 @@ fn json_base16_encode(v: &[u8]) -> Value { json!(encode(v)) }
 
 fn json_base16_decode(v: &Value) -> Option<Vec<u8>> { decode(v.as_str()?).ok() }
 
-fn chi_to_json<P: Pairing>(chi: &CredentialHolderInfo<P>) -> Value {
+fn chi_to_json<C: Curve, T: Curve<Scalar = C::Scalar>>(chi: &CredentialHolderInfo<C, T>) -> Value {
     json!({
         "name": chi.id_ah,
-        "idCredPublic": encode(chi.id_cred.id_cred_pub.to_bytes()),
-        "idCredSecret": encode(chi.id_cred.id_cred_sec.to_bytes()),
+        "idCredPublicIP": encode(chi.id_cred.id_cred_pub_ip.curve_to_bytes()),
+        "idCredPublic": encode(chi.id_cred.id_cred_pub.curve_to_bytes()),
+        "idCredSecret": encode(C::scalar_to_bytes(&chi.id_cred.id_cred_sec)),
     })
 }
 
-fn json_to_chi<P: Pairing>(js: &Value) -> Option<CredentialHolderInfo<P>> {
-    let id_cred_pub =
-        elgamal::PublicKey::<P::G_1>::from_bytes(&json_base16_decode(&js["idCredPublic"])?).ok()?;
-    let id_cred_sec =
-        elgamal::SecretKey::<P::G_1>::from_bytes(&json_base16_decode(&js["idCredSecret"])?).ok()?;
+fn json_to_chi<C: Curve, T: Curve<Scalar = C::Scalar>>(
+    js: &Value,
+) -> Option<CredentialHolderInfo<C, T>> {
+    let id_cred_pub_ip = T::bytes_to_curve(&json_base16_decode(&js["idCredPublicIP"])?).ok()?;
+    let id_cred_pub = C::bytes_to_curve(&json_base16_decode(&js["idCredPublic"])?).ok()?;
+    let id_cred_sec = C::bytes_to_scalar(&json_base16_decode(&js["idCredSecret"])?).ok()?;
     let id_ah = js["name"].as_str()?;
-    let info: CredentialHolderInfo<P> = CredentialHolderInfo {
+    let info: CredentialHolderInfo<C, T> = CredentialHolderInfo {
         id_ah:   id_ah.to_owned(),
         id_cred: IdCredentials {
-            id_cred_pub,
             id_cred_sec,
+            id_cred_pub,
+            id_cred_pub_ip,
         },
     };
     Some(info)
@@ -282,7 +287,7 @@ fn json_to_alist(v: &Value) -> Option<ExampleAttributeList> {
     })
 }
 
-fn aci_to_json(aci: &AccCredentialInfo<Bls12, ExampleAttribute>) -> Value {
+fn aci_to_json(aci: &AccCredentialInfo<Bls12, <Bls12 as Pairing>::G_1, ExampleAttribute>) -> Value {
     let chi = chi_to_json(&aci.acc_holder_info);
     json!({
         "credentialHolderInformation": chi,
@@ -291,7 +296,9 @@ fn aci_to_json(aci: &AccCredentialInfo<Bls12, ExampleAttribute>) -> Value {
     })
 }
 
-fn json_to_aci(v: &Value) -> Option<AccCredentialInfo<Bls12, ExampleAttribute>> {
+fn json_to_aci(
+    v: &Value,
+) -> Option<AccCredentialInfo<Bls12, <Bls12 as Pairing>::G_1, ExampleAttribute>> {
     let obj = v.as_object()?;
     let chi = json_to_chi(obj.get("credentialHolderInformation")?)?;
     let prf_key = prf::SecretKey::from_bytes(&json_base16_decode(obj.get("prfKey")?)?).ok()?;
@@ -303,22 +310,23 @@ fn json_to_aci(v: &Value) -> Option<AccCredentialInfo<Bls12, ExampleAttribute>> 
     })
 }
 
-fn global_context_to_json(global: &GlobalContext<Bls12>) -> Value {
-    json!({"dLogBase": json_base16_encode(&global.dlog_base.curve_to_bytes()),
+fn global_context_to_json(global: &GlobalContext<ExampleCurve>) -> Value {
+    json!({"dLogBaseChain": json_base16_encode(&global.dlog_base_chain.curve_to_bytes()),
            "onChainCommitmentKey": json_base16_encode(&global.on_chain_commitment_key.to_bytes()),
     })
 }
 
-fn json_to_global_context(v: &Value) -> Option<GlobalContext<Bls12>> {
+fn json_to_global_context(v: &Value) -> Option<GlobalContext<ExampleCurve>> {
     let obj = v.as_object()?;
-    let dlog_base_bytes = obj.get("dLogBase").and_then(json_base16_decode)?;
-    let dlog_base = <<Bls12 as Pairing>::G_1 as Curve>::bytes_to_curve(&dlog_base_bytes).ok()?;
+    let dlog_base_bytes = obj.get("dLogBaseChain").and_then(json_base16_decode)?;
+    let dlog_base_chain =
+        <<Bls12 as Pairing>::G_1 as Curve>::bytes_to_curve(&dlog_base_bytes).ok()?;
     let cmk_bytes = obj
         .get("onChainCommitmentKey")
         .and_then(json_base16_decode)?;
     let cmk = pedersen_key::CommitmentKey::from_bytes(&mut Cursor::new(&cmk_bytes)).ok()?;
     let gc = GlobalContext {
-        dlog_base,
+        dlog_base_chain,
         on_chain_commitment_key: cmk,
     };
     Some(gc)
@@ -326,9 +334,9 @@ fn json_to_global_context(v: &Value) -> Option<GlobalContext<Bls12>> {
 
 fn json_to_ip_info(ip_val: &Value) -> Option<IpInfo<Bls12, <Bls12 as Pairing>::G_1>> {
     let ip_val = ip_val.as_object()?;
-    let id_identity = ip_val.get("idIdentity")?.as_str()?;
-    let id_verify_key = ps_sig::PublicKey::from_bytes(&mut Cursor::new(&json_base16_decode(
-        ip_val.get("idVerifyKey")?,
+    let ip_identity = ip_val.get("ipIdentity")?.as_str()?;
+    let ip_verify_key = ps_sig::PublicKey::from_bytes(&mut Cursor::new(&json_base16_decode(
+        ip_val.get("ipVerifyKey")?,
     )?))
     .ok()?;
     let id_ar_name = ip_val.get("arName")?.as_str()?;
@@ -337,8 +345,8 @@ fn json_to_ip_info(ip_val: &Value) -> Option<IpInfo<Bls12, <Bls12 as Pairing>::G
     let id_ar_elgamal_generator =
         Curve::bytes_to_curve(&json_base16_decode(ip_val.get("arElgamalGenerator")?)?).ok()?;
     Some(IpInfo {
-        id_identity: id_identity.to_owned(),
-        id_verify_key,
+        ip_identity: ip_identity.to_owned(),
+        ip_verify_key,
         ar_info: ArInfo {
             ar_name:              id_ar_name.to_owned(),
             ar_public_key:        id_ar_public_key,
@@ -354,8 +362,8 @@ fn json_to_ip_infos(v: &Value) -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>::G
 
 fn ip_info_to_json(ipinfo: &IpInfo<Bls12, <Bls12 as Pairing>::G_1>) -> Value {
     json!({
-                                   "idIdentity": ipinfo.id_identity,
-                                   "idVerifyKey": json_base16_encode(&ipinfo.id_verify_key.to_bytes()),
+                                   "ipIdentity": ipinfo.ip_identity,
+                                   "ipVerifyKey": json_base16_encode(&ipinfo.ip_verify_key.to_bytes()),
                                    "arName": ipinfo.ar_info.ar_name,
                                    "arPublicKey": json_base16_encode(&ipinfo.ar_info.ar_public_key.to_bytes()),
                                    "arElgamalGenerator": json_base16_encode(&ipinfo.ar_info.ar_elgamal_generator.curve_to_bytes())
@@ -370,23 +378,26 @@ fn ip_infos_to_json(ipinfos: &[IpInfo<Bls12, <Bls12 as Pairing>::G_1>]) -> Value
 fn ar_data_to_json<C: Curve>(ar_data: &ArData<C>) -> Value {
     json!({
         "arName": ar_data.ar_name.clone(),
-        "prfKeyEncryption": json_base16_encode(&ar_data.e_reg_id.to_bytes())
+        "prfKeyEncryption": json_base16_encode(&ar_data.prf_key_enc.to_bytes()),
+        "idCredPubEnc": json_base16_encode(&ar_data.id_cred_pub_enc.to_bytes()),
     })
 }
 
-fn json_to_ar_data(v: &Value) -> Option<ArData<<Bls12 as Pairing>::G_1>> {
+fn json_to_ar_data(v: &Value) -> Option<ArData<ExampleCurve>> {
     let ar_name = v.get("arName")?.as_str()?;
-    let e_reg_id = Cipher::from_bytes(&json_base16_decode(v.get("prfKeyEncryption")?)?).ok()?;
+    let prf_key_enc = Cipher::from_bytes(&json_base16_decode(v.get("prfKeyEncryption")?)?).ok()?;
+    let id_cred_pub_enc = Cipher::from_bytes(&json_base16_decode(v.get("idCredPubEnc")?)?).ok()?;
     Some(ArData {
         ar_name: ar_name.to_owned(),
-        e_reg_id,
+        prf_key_enc,
+        id_cred_pub_enc,
     })
 }
 
-fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleAttribute, <Bls12 as Pairing>::G_1>) -> Value {
+fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>) -> Value {
     json!({
         "accountHolderName": pio.id_ah,
-        "idCredPub": json_base16_encode(&pio.id_cred_pub.to_bytes()),
+        "idCredPubIp": json_base16_encode(&pio.id_cred_pub_ip.curve_to_bytes()),
         "idArData": ar_data_to_json(&pio.id_ar_data),
         "attributeList": alist_to_json(&pio.alist),
         "pokSecCred": json_base16_encode(&pio.pok_sc.to_bytes()),
@@ -397,11 +408,10 @@ fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleAttribute, <Bls12 as Pairin
     })
 }
 
-fn json_to_pio(
-    v: &Value,
-) -> Option<PreIdentityObject<Bls12, ExampleAttribute, <Bls12 as Pairing>::G_1>> {
+fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>> {
     let id_ah = v.get("accountHolderName")?.as_str()?.to_owned();
-    let id_cred_pub = PublicKey::from_bytes(&json_base16_decode(v.get("idCredPub")?)?).ok()?;
+    let id_cred_pub_ip =
+        ExampleCurve::bytes_to_curve(&json_base16_decode(v.get("idCredPubIp")?)?).ok()?;
     let id_ar_data = json_to_ar_data(v.get("idArData")?)?;
     let alist = json_to_alist(v.get("attributeList")?)?;
     let pok_sc =
@@ -421,7 +431,7 @@ fn json_to_pio(
     .ok()?;
     Some(PreIdentityObject {
         id_ah,
-        id_cred_pub,
+        id_cred_pub_ip,
         id_ar_data,
         alist,
         pok_sc,
@@ -439,7 +449,7 @@ fn main() {
         .setting(AppSettings::ArgRequiredElseHelp)
         .global_setting(AppSettings::ColoredHelp)
         .subcommand(
-            SubCommand::with_name("create_chi")
+            SubCommand::with_name("create-chi")
                 .about("Create new credential holder information.")
                 .arg(
                     Arg::with_name("out")
@@ -450,7 +460,7 @@ fn main() {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("start_ip")
+            SubCommand::with_name("start-ip")
                 .about("Generate data to send to the identity provider to sign and verify.")
                 .arg(
                     Arg::with_name("chi")
@@ -473,7 +483,7 @@ fn main() {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("generate_ips")
+            SubCommand::with_name("generate-ips")
                 .about("Generate given number of identity providers. Public and private keys.")
                 .arg(
                     Arg::with_name("num")
@@ -484,11 +494,11 @@ fn main() {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("generate_global")
+            SubCommand::with_name("generate-global")
                 .about("Generate the global context of parameters."),
         )
         .subcommand(
-            SubCommand::with_name("ip_sign_pio")
+            SubCommand::with_name("ip-sign-pio")
                 .about("Act as the identity provider, checking and signing a pre-identity object.")
                 .arg(
                     Arg::with_name("pio")
@@ -516,13 +526,13 @@ fn main() {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("deploy_credential")
+            SubCommand::with_name("deploy-credential")
                 .about(
                     "Take the identity object, select attributes to reveal and create a \
                      credential object to deploy on chain.",
                 )
                 .arg(
-                    Arg::with_name("id_object")
+                    Arg::with_name("id-object")
                         .long("id_object")
                         .short("i")
                         .value_name("FILE")
@@ -687,13 +697,14 @@ fn handle_create_chi(matches: &ArgMatches) {
     };
 
     let mut csprng = thread_rng();
-    let secret = SecretKey::generate(&mut csprng);
-    let public = PublicKey::from(&secret);
-    let ah_info = CredentialHolderInfo::<Bls12> {
+    let secret = ExampleCurve::generate_scalar(&mut csprng);
+    let public = ExampleCurve::one_point().mul_by_scalar(&secret);
+    let ah_info = CredentialHolderInfo::<ExampleCurve, ExampleCurve> {
         id_ah:   name,
         id_cred: IdCredentials {
-            id_cred_sec: secret,
-            id_cred_pub: public,
+            id_cred_sec:    secret,
+            id_cred_pub:    public,
+            id_cred_pub_ip: public,
         },
     };
 
@@ -803,7 +814,7 @@ fn handle_start_ip(matches: &ArgMatches) {
     let chi = {
         if let Ok(Some(chi)) = read_json_from_file(&path)
             .as_ref()
-            .map(json_to_chi::<Bls12>)
+            .map(json_to_chi::<ExampleCurve, ExampleCurve>)
         {
             chi
         } else {
@@ -875,14 +886,14 @@ fn handle_start_ip(matches: &ArgMatches) {
     for x in ips.iter() {
         ips_names.push(format!(
             "Identity provider {}, its anonymity revoker is {}",
-            &x.id_identity, &x.ar_info.ar_name
+            &x.ip_identity, &x.ar_info.ar_name
         ))
     }
 
     let ip_info = {
         if let Ok(ip_info_idx) = Select::new()
             .with_prompt("Choose identity provider")
-            .items(&ips_names[..1])
+            .items(&ips_names)
             .default(0)
             .interact()
         {
@@ -965,8 +976,8 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         write_json_to_file(&ar_fname, &private_js).ok()?;
 
         let ip_info = IpInfo {
-            id_identity: mk_ip_name(id),
-            id_verify_key: id_public_key,
+            ip_identity: mk_ip_name(id),
+            ip_verify_key: id_public_key,
             ar_info,
         };
         let js = ip_info_to_json(&ip_info);
@@ -986,7 +997,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
 fn handle_generate_global(_matches: &ArgMatches) -> Option<()> {
     let mut csprng = thread_rng();
     let gc = GlobalContext {
-        dlog_base: PublicKey::generator(),
+        dlog_base_chain: ExampleCurve::one_point(),
         // we generate the commitment key for 1 value only.
         // Since the scheme supports general vectors of values this is inefficient
         // but is OK for now.
