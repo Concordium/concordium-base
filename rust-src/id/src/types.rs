@@ -28,6 +28,7 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
 }
 
 #[derive(Debug)]
+//in our case C: will be G_1 and T will be G_1 for now
 pub struct IdCredentials<C: Curve, T:Curve<Scalar=C::Scalar>> {
     pub id_cred_sec: C::Scalar,
     pub id_cred_pub: C,
