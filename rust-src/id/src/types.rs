@@ -126,10 +126,24 @@ pub struct IdentityObject<P: Pairing, AttributeType: Attribute<P::ScalarField>, 
     pub ar_data: ArData<C>,
 }
 
+pub struct CredDeploymentCommitments<P:Pairing>{
+      pub cmm_id_cred_sec: pedersen::Commitment<P::G_1>,
+      pub cmm_prf: pedersen::Commitment<P::G_1>,
+      pub cmm_attributes: Vec<pedersen::Commitment<P::G_1>>
+}
+
+pub struct Policy<P:Pairing>{
+    variant: i32,
+    policy_vec: Vec<(u16, P::ScalarField)>
+}
+
 pub struct CredDeploymentInfo<P: Pairing, AttributeType: Attribute<P::ScalarField>, C:Curve> {
-    pub reg_id:     P::G_1,
-    pub ar_data:    ArData<C>,
-    pub ip_identity: String,
-    pub acc_pub_key: acc_sig_scheme::PublicKey,
-    pub attributes: AttributeList<P::ScalarField, AttributeType>,
+      pub reg_id:     P::G_1,
+      pub ar_data:    ArData<C>,
+      pub ip_identity: String,
+      pub policy : Policy<P>,
+      pub acc_pub_key: acc_sig_scheme::PublicKey,
+      pub acc_encryption_key: elgamal::PublicKey<C>,
+      pub attributes: AttributeList<P::ScalarField, AttributeType>,
+      pub commitments: CredDeploymentCommitments<P>
 }

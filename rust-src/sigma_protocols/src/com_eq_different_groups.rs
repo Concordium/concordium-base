@@ -158,7 +158,7 @@ mod tests {
     #[test]
     pub fn test_com_eq_diff_grps() {
         let mut csprng = thread_rng();
-        for i in 0..100 {
+        for _i in 0..100 {
             let (s_1, s_2, s_3) = (
                 G1Affine::generate_scalar(&mut csprng),
                 G1Affine::generate_scalar(&mut csprng),
@@ -193,7 +193,7 @@ mod tests {
     #[test]
     pub fn test_com_eq_diff_grps_proof_serialization() {
         let mut csprng = thread_rng();
-        for i in 0..100 {
+        for _i in 0..100 {
             let challenge = G1Affine::generate_scalar(&mut csprng);
             let randomised_point = (
                 G1Affine::generate(&mut csprng),

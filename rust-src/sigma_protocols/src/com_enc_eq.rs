@@ -161,7 +161,7 @@ mod tests {
     #[test]
     pub fn test_com_enc_eq() {
         let mut csprng = thread_rng();
-        for i in 0..100 {
+        for _i in 0..100 {
             let (s_1, s_2, s_3) = (
                 G1Affine::generate_scalar(&mut csprng),
                 G1Affine::generate_scalar(&mut csprng),
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     pub fn test_proof_serialization() {
         let mut csprng = thread_rng();
-        for i in 0..100 {
+        for _i in 0..100 {
             let challenge = G1Affine::generate_scalar(&mut csprng);
             let randomised_points = (
                 G1Affine::generate(&mut csprng),

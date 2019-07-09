@@ -600,6 +600,7 @@ impl Pairing for Bls12 {
             Err(_) => Err(FieldDecodingError::NotFieldElement),
         }
     }
+
 }
 
 macro_rules! macro_test_scalar_byte_conversion {

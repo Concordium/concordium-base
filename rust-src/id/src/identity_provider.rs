@@ -9,7 +9,6 @@ use sigma_protocols::{com_enc_eq::*, com_eq_different_groups::*, dlog::*};
 
 pub struct AuxData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     id_cred_base: P::G_1,
-    // comm_1_params:  CommitmentParams<P::G_1>,
     ps_public_key:  ps_sig::PublicKey<P>,
     ps_secret_key:  ps_sig::SecretKey<P>,
     comm_2_params:  CommitmentParams<C>,
