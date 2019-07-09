@@ -533,11 +533,22 @@ fn main() {
                 )
                 .arg(
                     Arg::with_name("id-object")
-                        .long("id_object")
+                        .long("id-object")
                         .short("i")
                         .value_name("FILE")
                         .required(true)
                         .help("File with the JSON encoded identity object."),
+                )
+                .arg(
+                    Arg::with_name("chi")
+                        .long("chi")
+                        .short("c")
+                        .value_name("FILE")
+                        .required(true)
+                        .help(
+                            "File with credential holder information used to generate the \
+                             identity object.",
+                        ),
                 )
                 .arg(
                     Arg::with_name("account")
@@ -560,12 +571,12 @@ If not present a fresh key-pair will be generated.",
         );
     let matches = app.get_matches();
     let exec_if = |x: &str| matches.subcommand_matches(x);
-    exec_if("create_chi").map(handle_create_chi);
-    exec_if("start_ip").map(handle_start_ip);
-    exec_if("generate_ips").map(handle_generate_ips);
-    exec_if("generate_global").map(handle_generate_global);
-    exec_if("ip_sign_pio").map(handle_act_as_ip);
-    exec_if("deploy_credential").map(handle_deploy_credential);
+    exec_if("create-chi").map(handle_create_chi);
+    exec_if("start-ip").map(handle_start_ip);
+    exec_if("generate-ips").map(handle_generate_ips);
+    exec_if("generate-global").map(handle_generate_global);
+    exec_if("ip-sign-pio").map(handle_act_as_ip);
+    exec_if("deploy-credential").map(handle_deploy_credential);
 }
 
 /// Read the identity object, select attributes to reveal and create a
@@ -573,7 +584,7 @@ If not present a fresh key-pair will be generated.",
 fn handle_deploy_credential(matches: &ArgMatches) {
     // we read the signed identity object
     // signature of the identity object and the pre-identity object itself.
-    let v = match matches.value_of("id_object").map(read_json_from_file) {
+    let v = match matches.value_of("id-object").map(read_json_from_file) {
         Some(Ok(v)) => v,
         Some(Err(x)) => {
             eprintln!("Could not read identity object because {}", x);
@@ -581,6 +592,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         }
         None => panic!("Should not happen since the argument is mandatory."),
     };
+    // we first read the signed pre-identity object
     let (ip_sig, pio): (ps_sig::Signature<Bls12>, _) = {
         if let Some(v) = v.as_object() {
             match (
@@ -657,7 +669,30 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         output_json(&account_data_to_json(&acc_data))
     }
 
+    // finally we also read the credential holder information with secret keys
+    // which we need to
+    let chi_value = match matches.value_of("chi").map(read_json_from_file) {
+        Some(Ok(v)) => v,
+        Some(Err(x)) => {
+            eprintln!("Could not read CHI object because {}", x);
+            return;
+        }
+        None => panic!("Should not happen since the argument is mandatory."),
+    };
+    let chi = match json_to_chi::<ExampleCurve, ExampleCurve>(&chi_value) {
+        Some(chi) => chi,
+        None => {
+            eprintln!("Could not parse CHI. Terminating.");
+            return;
+        }
+    };
+
     // Now we have have everything we need to generate the proofs
+    // we have
+    // - chi
+    // - pio
+    // - signature of the identity provider
+    // - acc_data of the account onto which we are deploying this credential.
     unimplemented!()
 }
 
@@ -853,14 +888,13 @@ fn handle_start_ip(matches: &ArgMatches) {
         acc_holder_info: chi,
         prf_key,
         attributes: AttributeList::<<Bls12 as Pairing>::ScalarField, ExampleAttribute> {
-            variant: 0,
+            variant: alist_type as u32,
             alist,
             _phantom: Default::default(),
         },
     };
 
-    // now choose an identity provider we load the identity providers from the
-    // database.
+    // now choose an identity provider.
     let ips = {
         if let Some(ips) = read_identity_providers() {
             ips
