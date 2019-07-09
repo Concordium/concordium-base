@@ -15,11 +15,10 @@ verifyCredential :: CredentialDeploymentInformation -> Bool
 verifyCredential _ = True
 
 registrationId :: IO CredentialRegistrationID
-registrationId = (random 48) >>= (return . RegIdCred)
+registrationId = (random 48) >>= (return . RegIdCred . FBS.fromByteString)
     
 base58decodeAddr :: Base58String -> AccountAddress
 base58decodeAddr bs = AccountAddress (FBS.fromByteString (toBytes bs))
-
 
 accountScheme :: AccountAddress -> Maybe SchemeId
 accountScheme (AccountAddress s) = toScheme (FBS.getByte s 0)

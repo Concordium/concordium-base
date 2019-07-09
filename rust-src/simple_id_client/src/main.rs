@@ -692,7 +692,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // - chi
     // - pio
     // - signature of the identity provider
-    // - acc_data of the account onto which we are deploying this credential.
+    // - acc_data of the account onto which we are deploying this credential (private and public)
     unimplemented!()
 }
 

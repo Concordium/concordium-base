@@ -150,39 +150,52 @@ pub struct CredDeploymentProofs<P:Pairing, C:Curve<Scalar=P::ScalarField>>{
     //proof of knowledge of prf key K such that 
     //appears in both
     //ar_data.enc_prf_key, and commitments.cmm_prf
-    proof_prf: ComEncEqProof<C>,
+    pub proof_prf: ComEncEqProof<C>,
     //proof of knowledge of signature of Identity Provider on the list 
     //(idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n])
-    proof_ip_sig: ComEqSigProof<P, C>,
+    pub proof_ip_sig: ComEqSigProof<P, C>,
     //proof that reg_id = prf_K(x)
-    proof_reg_id: ComMultProof<C>,
+    pub proof_reg_id: ComMultProof<C>,
     //proof that ar_data.enc_id_cred_pub contains the right ky id_cred_pub
 }
 
 pub struct Policy<C:Curve>{
-    variant: i32,
-    policy_vec: Vec<(u16, C::Scalar)>
+    pub variant: i32,
+    pub policy_vec: Vec<(u16, C::Scalar)>
+}
+
+pub enum SchemeId {
+    Ed25519,
+    CL
 }
 
 pub struct CredDeploymentInfo<P: Pairing, C:Curve<Scalar=P::ScalarField>> {
-      // registration id of account
-      pub reg_id:     C,
-      //signature from IP
-      pub sig: Signature<P>,
-      pub ar_data:    ArData<C>,
-      //identity of the identity providers
-      pub ip_identity: String,
-      pub policy : Policy<C>,
-      pub acc_pub_key: acc_sig_scheme::PublicKey,
-      //pub acc_encryption_key: elgamal::PublicKey<C>,
-      //pub attributes: AttributeList<P::ScalarField, AttributeType>,
-      pub commitments: CredDeploymentCommitments<C>,
-      //proofs
-      pub proofs : CredDeploymentProofs<P, C>,
-      //proof that the attributelist in commitments.cmm_attributes satisfy the policy
-      //the u16 is the index of the attribute
-      //the Scalar is the witness (technically the randomness in the commitment) i.e. to open
-      pub proof_policy: Vec<(u16, P::ScalarField)>
+    /// Id of the signature scheme of the account. The verification key must
+    /// correspond to the
+    pub acc_scheme_id: SchemeId,
+    /// Chosen verification key of the account.
+    pub acc_pub_key: acc_sig_scheme::PublicKey,
+    /// Credential registration id of the credential.
+    pub reg_id:     C,
+    /// Identity of the identity provider who signed the identity object from
+    /// which this credential is derived.
+    pub ip_identity: String,
+    /// Anonymity revocation data. Which anonymity revokers have the capability
+    /// to remove the anonymity of the account.
+    pub ar_data:    ArData<C>,
+    /// Signature derived from the signature of the pre-identity object by the
+    /// IP
+    pub sig: Signature<P>,
+    /// Policy of this credential object.
+    pub policy : Policy<C>,
+    /// Individual commitments to each item in the attribute list.
+    pub commitments: CredDeploymentCommitments<C>,
+    /// Proofs that all the above corresponds to what the identiy provider signed.
+    pub proofs : CredDeploymentProofs<P, C>,
+    /// Proof that the attributelist in commitments.cmm_attributes satisfy the policy
+    /// the u16 is the index of the attribute
+    /// the Scalar is the witness (technically the randomness in the commitment) i.e. to open
+    pub proof_policy: Vec<(u16, P::ScalarField)>
 }
 
 /// Context needed to generate pre-identity object.
