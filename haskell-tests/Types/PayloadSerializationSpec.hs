@@ -29,14 +29,17 @@ genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
 genCredentialDeploymentInformation = do
   cdvVerifyKey <- VerifyKey . BS.pack <$> vector 37
   cdvSigScheme <- elements [Ed25519]
-  cdvRegId <- RegIdCred . BS.pack <$> vector credentialRegistrationIDSize
+  cdvRegId <- RegIdCred . FBS.pack <$> vector (FBS.fixedLength (undefined :: RegIdSize))
   -- cdvarData <- do l <- choose (0, 10)
   --                  replicateM l $ do arId <- AR_ID . BS.pack <$> vector 73
   --                                    secretShare <- Share . BS.pack <$> vector 37
   --                                    return (arId, secretShare)
   cdvIpId <- IP_ID . BS.pack <$> vector 53
   cdvPolicy <- do l <- choose (0,1000)
-                  Policy <$> replicateM l genPolicyItem
+                  pAttributeListVariant <- arbitrary
+                  pExpiry <- arbitrary
+                  pItems <- replicateM l genPolicyItem
+                  return Policy{..}
   cdiProofs <- do l <- choose (0, 10000)
                   Proofs . BS.pack <$> vector l
   let cdiValues = CredentialDeploymentValues{..}
@@ -44,9 +47,8 @@ genCredentialDeploymentInformation = do
 
 genPolicyItem :: Gen PolicyItem
 genPolicyItem = do
-  piAttributeListVariant <- arbitrary
   piIndex <- arbitrary
-  piValue <- AttributeValue . FBS.pack <$> vector (FBS.fixedLength (undefined :: AttributeMaxSize))
+  piValue <- AttributeValue . FBS.pack <$> vector (FBS.fixedLength (undefined :: AttributeSize))
   return PolicyItem{..}
 
 genPayload :: Gen Payload
