@@ -181,6 +181,21 @@ data TypingError annot =
                  -- argument is the name of the contract this error refers to,
                  -- the second the given model type.
                  | ContractModelTypeNotStorable Core.TyName (Core.Type annot ModuleRef)
+                 -- |The contract's message type as specified by the receive
+                 -- method is not a public type. The first argument is the
+                 -- name of the contract this error refers to, the second the
+                 -- given message type.
+                 | ContractMessageTypeNotPublic Core.TyName (Core.Type annot ModuleRef)
+                 -- |The contract's parameter type as specified by the init
+                 -- method is not a public type. The first argument is the
+                 -- name of the contract this error refers to, the second the
+                 -- given parameter type.
+                 | ContractParameterTypeNotPublic Core.TyName (Core.Type annot ModuleRef)
+                 -- |The model type of the contract (as specified by the init
+                 -- and receive methods) is not a public type. The first
+                 -- argument is the name of the contract this error refers to,
+                 -- the second the given model type.
+                 | ContractModelTypeNotPublic Core.TyName (Core.Type annot ModuleRef)
                  -- |A contract attempts to implement a local constraint that does
                  -- not exist. The first argument is the contract this error refers to,
                  -- the second the name which does not refer to a local constraint.
@@ -226,6 +241,9 @@ data TypingError annot =
                  -- refers to, the third the incorrect type of the
                  -- implementation.
                  | ContractUnexpectedSenderType Core.TyName (Core.ConstraintRef Core.ModuleRef) (Core.Type annot ModuleRef)
+                 -- |The public definition (explicit definition or datatype constructor)
+                 -- with the given name has a private type.
+                 | PublicDefinitionWithPrivateType Core.Name (Core.Type annot ModuleRef)
                  -- |An expression to be type checked has not the type specified
                  -- as the expected type. The first argument is the type encountered,
                  -- the second is the expected type.
