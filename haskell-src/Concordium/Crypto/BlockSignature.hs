@@ -7,7 +7,7 @@ import           Concordium.Crypto.Ed25519Signature (ed25519)
 import qualified Concordium.Crypto.SignatureScheme as SCH
 import           System.Random
 import           Data.ByteString
-
+import Test.QuickCheck
 
 type SignKey = SCH.SignKey
 type VerifyKey = SCH.VerifyKey
@@ -48,3 +48,5 @@ newKeyPair = do sk <- newPrivateKey
 randomKeyPair :: RandomGen g => g -> (SCH.KeyPair, g)
 randomKeyPair = Ed25519.randomKeyPair
 
+genKeyPair :: Gen KeyPair
+genKeyPair = fst . randomKeyPair . mkStdGen <$> arbitrary

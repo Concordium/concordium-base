@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia #-}
 module Concordium.ID.Types where
 
@@ -150,17 +150,6 @@ data Policy = Policy {
   pItems :: [PolicyItem]
   } deriving(Eq, Show)
 
--- |Type whose only purpose is to enable derivation of serialization instances.
-newtype Short65K = Short65K ByteString
-
-instance Serialize Short65K where
-  put (Short65K bs) = 
-    putWord16be (fromIntegral (BS.length bs)) <>
-    putByteString bs
-  get = do
-    l <- fromIntegral <$> getWord16be
-    Short65K <$> getByteString l
-
 -- |Unique identifier of the anonymity revoker. At most 65k bytes in length.
 newtype ARName = ARName ByteString
     deriving(Show, Eq)
@@ -287,4 +276,3 @@ deserializeCDIPartial bs = loop (runGetPartial getCDIPartial bs)
     where loop (Fail err _) = Left err
           loop (Partial k) = loop (k empty)
           loop (Done r rest) = Right (r, rest)
-    

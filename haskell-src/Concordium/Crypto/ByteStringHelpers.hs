@@ -3,6 +3,7 @@ module Concordium.Crypto.ByteStringHelpers where
 
 import           Text.Printf
 import           Data.ByteString hiding (length)
+import qualified Data.ByteString as BS
 import           Data.ByteString.Unsafe
 import qualified Data.FixedByteString as FBS
 import           Data.ByteString.Internal
@@ -92,3 +93,14 @@ instance FBS.FixedLength a => Show (FBSHex a) where
 instance FBS.FixedLength a => Serialize (FBSHex a) where
   put (FBSHex s) = fbsPut s
   get = FBSHex <$> fbsGet
+
+-- |Type whose only purpose is to enable derivation of serialization instances.
+newtype Short65K = Short65K ByteString
+
+instance Serialize Short65K where
+  put (Short65K bs) =
+    putWord16be (fromIntegral (BS.length bs)) <>
+    putByteString bs
+  get = do
+    l <- fromIntegral <$> getWord16be
+    Short65K <$> getByteString l
