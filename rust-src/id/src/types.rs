@@ -10,7 +10,7 @@ use ed25519_dalek as ed25519;
 
 use sigma_protocols::{
     com_enc_eq::ComEncEqProof, com_eq_different_groups::ComEqDiffGrpsProof, dlog::DlogProof,
-    com_eq_sig::ComEqSigProof, com_mult::ComMultProof
+    com_eq_sig::ComEqSigProof, com_mult::ComMultProof, com_eq::ComEqProof
 };
 
 pub struct CommitmentParams<C: Curve>(pub (C, C));
@@ -91,7 +91,8 @@ pub struct PreIdentityObject<
     /// Chosen attribute list.
     pub alist: AttributeList<C::Scalar, AttributeType>,
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub
-    pub pok_sc: DlogProof<P::G_1>,
+    /// matching the commitment cmm_sc
+    pub pok_sc: ComEqProof<P::G_1>,
     ///commitment to id cred sec
     pub cmm_sc: pedersen::Commitment<P::G_1>,
     /// Commitment to the prf key.
