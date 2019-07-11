@@ -578,7 +578,7 @@ impl Pairing for Bls12 {
         Box::new(bytes)
     }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::ScalarField { Fr::rand(csprng) }
+    fn generate_scalar<T: Rng >(csprng: &mut T) -> Self::ScalarField { Fr::rand(csprng) }
 
     fn bytes_to_scalar(bytes: &[u8]) -> Result<Self::ScalarField, FieldDecodingError> {
         if bytes.len() != Self::SCALAR_LENGTH {

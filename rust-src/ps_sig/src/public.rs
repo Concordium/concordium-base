@@ -24,23 +24,27 @@ use crate::secret::*;
 
 /// A message
 #[derive(Debug, Clone)]
-pub struct PublicKey<C: Pairing>(pub Vec<C::G_1>, pub Vec<C::G_2>, pub C::G_2);
+pub struct PublicKey<C: Pairing>(pub C::G_1, pub C::G_2, pub Vec<C::G_1>, pub Vec<C::G_2>, pub C::G_2);
 
 impl<C: Pairing> PartialEq for PublicKey<C> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0 && self.1 == other.1 && self.2 == other.2
+            && self.3 == other.3 && self.4 == other.4
     }
 }
 
 impl<C: Pairing> Eq for PublicKey<C> {}
 
 impl<C: Pairing> PublicKey<C> {
+    /*
     // turn message vector into a byte aray
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
-        let vs = &self.0;
-        let us = &self.1;
-        let s = &self.2;
+        let gen1 = &self.0;
+        let gen2 = &self.1;
+        let vs = &self.2;
+        let us = &self.3;
+        let s = &self.4;
         let mut bytes: Vec<u8> = Vec::with_capacity(
             4 + 4
                 + vs.len() * C::G_1::GROUP_ELEMENT_LENGTH
@@ -74,10 +78,11 @@ impl<C: Pairing> PublicKey<C> {
         let fr = read_elem(&f2, bytes, &mut g2_buffer)?;
         Ok(PublicKey(vs, us, fr))
     }
+    */
 
     pub fn verify(&self, sig: &Signature<C>, message: &KnownMessage<C>) -> bool {
-        let ys = &self.1;
-        let x = self.2;
+        let ys = &self.3;
+        let x = self.4;
         let ms = &message.0;
         if ms.len() > ys.len() {
             return false;
@@ -109,7 +114,7 @@ impl<C: Pairing> PublicKey<C> {
             us.push(C::G_2::generate(csprng));
         }
 
-        PublicKey(vs, us, C::G_2::generate(csprng))
+        PublicKey(C::G_1::one_point(), C::G_2::one_point(), vs, us, C::G_2::generate(csprng))
     }
 }
 
@@ -126,7 +131,7 @@ impl<'a, C: Pairing> From<&'a SecretKey<C>> for PublicKey<C> {
             .map(|r| C::G_2::one_point().mul_by_scalar(&r))
             .collect();
         let h = C::G_2::one_point().mul_by_scalar(&x);
-        PublicKey(rs, ts, h)
+        PublicKey(C::G_1::one_point(), C::G_2::one_point(), rs, ts, h)
     }
 }
 
@@ -134,7 +139,7 @@ impl<'a, C: Pairing> From<&'a SecretKey<C>> for PublicKey<C> {
 mod tests {
     use super::*;
     use pairing::bls12_381::Bls12;
-
+/*
     macro_rules! macro_test_public_key_to_byte_conversion {
         ($function_name:ident, $pairing_type:path) => {
             #[test]
@@ -154,6 +159,7 @@ mod tests {
 
     macro_test_public_key_to_byte_conversion!(public_key_to_byte_conversion_bls12_381, Bls12);
 
+    */
     macro_rules! macro_test_sign_verify_pass {
         ($function_name:ident, $pairing_type:path) => {
             #[test]

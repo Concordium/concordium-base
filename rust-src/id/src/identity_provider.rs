@@ -34,8 +34,8 @@ pub fn verify_credentials<
     }
 
     let comm_1_params = CommitmentParams((
-        context.ip_info.ip_verify_key.0[0],
-        context.ip_info.ip_verify_key.0[1],
+        context.commitment_key_prf.0[0],
+        context.commitment_key_prf.1,
     ));
     let comm_2_params =
         CommitmentParams((context.commitment_key_ar.0[0], context.commitment_key_ar.1));
@@ -47,7 +47,7 @@ pub fn verify_credentials<
         &comm_2_params,
         &pre_id_obj.snd_cmm_prf,
         &elgamal_params,
-        &pre_id_obj.id_ar_data.prf_key_enc,
+        &pre_id_obj.ip_ar_data.prf_key_enc,
         &pre_id_obj.proof_com_eq,
         &pre_id_obj.proof_com_enc_eq,
     );
@@ -70,14 +70,19 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     att_list: &AttributeList<P::ScalarField, AttributeType>,
     ps_public_key: &ps_sig::PublicKey<P>,
 ) -> ps_sig::UnknownMessage<P> {
+    //TODO: handle the errors
+    let variant = P::G_1::scalar_from_u64(att_list.variant as u64).unwrap();
+    let expiry = P::G_1::scalar_from_u64(att_list.expiry.timestamp() as u64).unwrap();
     let mut message = id_cred_pub.clone();
     message = message.plus_point(&cmm_prf.0);
     let att_vec = &att_list.alist;
     let n = att_vec.len();
-    let key_vec = &ps_public_key.0;
-    assert!(key_vec.len() >= n + 2);
-    for i in 2..(n + 2) {
-        let att = att_vec[i - 2].to_field_element();
+    let key_vec = &ps_public_key.2;
+    assert!(key_vec.len() >= n + 4);
+    message = message.plus_point(&key_vec[2].mul_by_scalar(&variant));
+    message = message.plus_point(&key_vec[3].mul_by_scalar(&expiry));
+    for i in 4..(n + 2) {
+        let att = att_vec[i - 4].to_field_element();
         message = message.plus_point(&key_vec[i].mul_by_scalar(&att))
     }
 
