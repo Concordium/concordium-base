@@ -29,7 +29,7 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
 }
 
 #[derive(Debug)]
-//in our case C: will be G_1 and T will be G_1 for now
+/// In our case C: will be G_1 and T will be G_1 for now
 pub struct IdCredentials<C: Curve, T:Curve<Scalar=C::Scalar>> {
     pub id_cred_sec: C::Scalar,
     pub id_cred_pub: C,
@@ -156,18 +156,25 @@ pub struct CredDeploymentCommitments<C:Curve>{
 }
 
 pub struct CredDeploymentProofs<P:Pairing, C:Curve<Scalar=P::ScalarField>>{
+    //proof of knowledge of prf key K such that 
+    //appears in both
+    //ar_data.enc_prf_key, and commitments.cmm_prf
+    pub proof_prf: ComEncEqProof<C>,
     //proof of knowledge of signature of Identity Provider on the list 
     //(idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n])
-    proof_ip_sig: ComEqSigProof<P, C>,
+    pub proof_ip_sig: ComEqSigProof<P, C>,
     //proof that reg_id = prf_K(x)
-    proof_reg_id: ComMultProof<C>,
-    //proof that ar_data.enc_id_cred_pub contains the right ky id_cred_pub
-    proof_sc: ComEncEqProof<C>, 
+    pub proof_reg_id: ComMultProof<C>,
 }
 
 pub struct Policy<C:Curve>{
-    variant: i32,
-    policy_vec: Vec<(u16, C::Scalar)>
+    pub variant: i32,
+    pub policy_vec: Vec<(u16, C::Scalar)>
+}
+
+pub enum SchemeId {
+    Ed25519,
+    CL
 }
 
 pub struct PolicyProof<C:Curve>{
@@ -177,22 +184,32 @@ pub struct PolicyProof<C:Curve>{
 }
 
 pub struct CredDeploymentInfo<P: Pairing, C:Curve<Scalar=P::ScalarField>> {
-      // registration id of account
-      pub reg_id:     C,
-      //signature from IP
-      pub sig: Signature<P>,
-      pub ar_data:    ChainArData<C>,
-      //identity of the identity providers
-      pub ip_identity: String,
-      pub policy : Policy<C>,
-      pub acc_pub_key: acc_sig_scheme::PublicKey,
-      //pub acc_encryption_key: elgamal::PublicKey<C>,
-      //pub attributes: AttributeList<P::ScalarField, AttributeType>,
-      pub commitments: CredDeploymentCommitments<C>,
-      //proofs
-      pub proofs : CredDeploymentProofs<P, C>,
-      //proof that the attributelist in commitments.cmm_attributes satisfy the policy
-      pub proof_policy: PolicyProof<C>
+    /// Id of the signature scheme of the account. The verification key must
+    /// correspond to the
+    pub acc_scheme_id: SchemeId,
+    /// Chosen verification key of the account.
+    pub acc_pub_key: acc_sig_scheme::PublicKey,
+    /// Credential registration id of the credential.
+    pub reg_id:     C,
+    /// Identity of the identity provider who signed the identity object from
+    /// which this credential is derived.
+    pub ip_identity: String,
+    /// Anonymity revocation data. Which anonymity revokers have the capability
+    /// to remove the anonymity of the account.
+    pub ar_data:    ChainArData<C>,
+    /// Signature derived from the signature of the pre-identity object by the
+    /// IP
+    pub sig: Signature<P>,
+    /// Policy of this credential object.
+    pub policy : Policy<C>,
+    /// Individual commitments to each item in the attribute list.
+    pub commitments: CredDeploymentCommitments<C>,
+    /// Proofs that all the above corresponds to what the identiy provider signed.
+    pub proofs : CredDeploymentProofs<P, C>,
+    /// Proof that the attributelist in commitments.cmm_attributes satisfy the policy
+    /// the u16 is the index of the attribute
+    /// the Scalar is the witness (technically the randomness in the commitment) i.e. to open
+    pub proof_policy: Vec<(u16, P::ScalarField)>
 }
 
 /// Context needed to generate pre-identity object.
@@ -221,10 +238,8 @@ pub struct Context<P: Pairing, C: Curve<Scalar=P::ScalarField>> {
 }
 
 pub struct GlobalContext<C: Curve > {
-    
-    //base of dlog proofs with chain
+    /// Base of dlog proofs with chain.
     pub dlog_base_chain: C,
-
 
     /// A shared commitment key known to the chain and the account holder (and
     /// therefore it is public). The account holder uses this commitment key to
@@ -233,7 +248,6 @@ pub struct GlobalContext<C: Curve > {
     /// multi-party computation since none of the parties should know anything
     /// special about it (so that commitment is binding, and that the commitment
     /// cannot be broken).
-    /// TODO: Check with Bassel that the key is over the correct group.
     pub on_chain_commitment_key: PedersenKey<C>,
 }
 

@@ -1,9 +1,10 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia #-}
 module Concordium.ID.Types where
 
 import Data.Word
 import           Data.ByteString    (ByteString, empty)
+import qualified Data.ByteString as BS
 import qualified Data.FixedByteString as FBS
 import           Concordium.Crypto.SignatureScheme
 import           Data.Serialize
@@ -50,36 +51,8 @@ safeDecodeBase58Address bs = do
     Left (ErrorCall _) -> return Nothing
     Right dec -> return (Just (AccountAddress . FBS.fromByteString . toBytes $ dec))
 
-
-newtype CredentialHolderIdentity = CH ByteString
-    deriving(Eq, Show)
-
-instance Serialize CredentialHolderIdentity where
-    put (CH x) = put x 
-    get = CH <$> get
-
--- Secret Key of Credential Holder
-newtype CredentialHolderSecretKey = CH_SK ByteString
-    deriving(Eq)
-    deriving Show via ByteStringHex
-
-instance Serialize CredentialHolderSecretKey where 
-    put (CH_SK x) = put x
-    get = CH_SK <$> get
-
--- Public Key of Credential Holder
-newtype CredentialHolderPublicKey = CH_PK ByteString
-    deriving(Eq)
-    deriving Show via ByteStringHex
-
-
 -- Public key of Anonimity Revoker (Elgamal)
 newtype AnonimityRevokerPublicKey = AR_PK ByteString
-    deriving(Eq)
-    deriving Show via ByteStringHex
-
--- Private key of Anonimity Revoker (Elgamal)
-newtype AnonimityRevokerPrivateKey = AR_SK ByteString
     deriving(Eq)
     deriving Show via ByteStringHex
 
@@ -87,35 +60,19 @@ newtype AnonimityRevokerPrivateKey = AR_SK ByteString
 newtype AnonimityRevokerIdentity  = AR_ID ByteString 
     deriving (Eq)
     deriving Show via ByteStringHex
-
-instance Serialize AnonimityRevokerIdentity  where
-    put (AR_ID s) = put s
-    get  = AR_ID <$> get 
-
-data AnonimityRevoker = AR AnonimityRevokerIdentity AnonimityRevokerPublicKey
+    deriving Serialize via Short65K
 
 -- Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID ByteString
     deriving (Eq, Hashable)
     deriving Show via ByteStringHex
+    deriving Serialize via Short65K
 
-instance Serialize IdentityProviderIdentity where
-    put (IP_ID s) = put s
-    get  = IP_ID <$> get
-
--- Public key of Identity provider ()
+-- Public key of Identity provider
 newtype IdentityProviderPublicKey = IP_PK ByteString
     deriving(Eq, Hashable)
     deriving Show via ByteStringHex
-
--- Private key of Identity provider ()
-newtype IdentityProviderSecretKey = IP_SK ByteString
-    deriving(Eq)
-    deriving Show via ByteStringHex
-
-
-data IdentityProvider = IP IdentityProviderIdentity IdentityProviderPublicKey
-                         
+    deriving Serialize via Short65K
 
 -- Signing key for accounts (eddsa key)
 type AccountSigningKey = SignKey  
@@ -126,61 +83,57 @@ type AccountVerificationKey = VerifyKey
 -- Account signatures (eddsa key)
 type AccountSignature = Signature 
 
-
 -- decryption key for accounts (Elgamal?)
 newtype AccountDecryptionKey = DecKeyAcc ByteString 
     deriving(Eq)
     deriving Show via ByteStringHex
-
+    deriving Serialize via Short65K
 
 -- encryption key for accounts (Elgamal?)
 newtype AccountEncryptionKey = EncKeyAcc ByteString 
     deriving (Eq)
     deriving Show via ByteStringHex
+    deriving Serialize via Short65K
 
-instance Serialize AccountEncryptionKey where
-    put (EncKeyAcc b) = put b
-    get = EncKeyAcc <$> get
+data RegIdSize
 
--- Credential Registration ID (48 bytes)
-newtype CredentialRegistrationID = RegIdCred ByteString 
+instance FBS.FixedLength RegIdSize where
+  fixedLength _ = 48
+
+-- |Credential Registration ID (48 bytes)
+newtype CredentialRegistrationID = RegIdCred (FBS.FixedByteString RegIdSize)
     deriving (Eq, Ord)
-    deriving Show via ByteStringHex
-
-
-credentialRegistrationIDSize :: Int 
-credentialRegistrationIDSize = 48
-
-instance Serialize CredentialRegistrationID where
-    put (RegIdCred b) = putByteString b
-    get = RegIdCred <$> getByteString credentialRegistrationIDSize 
+    deriving Show via (FBSHex RegIdSize)
+    deriving Serialize via (FBSHex RegIdSize)
 
 newtype Proofs = Proofs ByteString
     deriving(Eq)
     deriving(Show) via ByteStringHex
 
--- |NB: This puts the length information up front, which is possibly not
--- what we want.
+-- |NB: This puts the length information up front, which is possibly not what we
+-- want.
 instance Serialize Proofs where
-  put (Proofs bs) = put bs
-  get = Proofs <$> get
+  put (Proofs bs) = 
+    putWord32be (fromIntegral (BS.length bs)) <>
+    putByteString bs
+  get = do
+    l <- fromIntegral <$> getWord32be
+    Proofs <$> getByteString l
 
 -- |Maximum size of an attribute in bytes.
 -- This is determined by the field element size.
-data AttributeMaxSize
+data AttributeSize
 
-instance FBS.FixedLength AttributeMaxSize where
-  fixedLength _ = 31
+instance FBS.FixedLength AttributeSize where
+  fixedLength _ = 32
 
-newtype AttributeValue = AttributeValue (FBS.FixedByteString AttributeMaxSize)
+newtype AttributeValue = AttributeValue (FBS.FixedByteString AttributeSize)
     deriving(Eq)
-    deriving(Show) via (FBSHex AttributeMaxSize)
-    deriving(Serialize) via (FBSHex AttributeMaxSize)
+    deriving(Show) via (FBSHex AttributeSize)
+    deriving(Serialize) via (FBSHex AttributeSize)
 
 -- |For the moment the policies we support are simply opening of specific commitments.
 data PolicyItem = PolicyItem {
-  -- |Variant of the attribute list this policy item belongs to.
-  piAttributeListVariant :: Word16,
   -- |What index in the attribute list this belongs to.
   -- NB: Maximum length of attribute list is 2^16
   piIndex :: Word16,
@@ -188,8 +141,42 @@ data PolicyItem = PolicyItem {
   piValue :: AttributeValue
   } deriving(Eq, Show)
 
-newtype Policy = Policy [PolicyItem]
-    deriving(Eq, Show)
+data Policy = Policy {
+  -- |Variant of the attribute list this policy belongs to.
+  pAttributeListVariant :: Word16,
+  -- |Expiry date of this credential. In seconds since unix epoch.
+  pExpiry :: Word64,
+  -- |List of items in this attribute list.
+  pItems :: [PolicyItem]
+  } deriving(Eq, Show)
+
+-- |Unique identifier of the anonymity revoker. At most 65k bytes in length.
+newtype ARName = ARName ByteString
+    deriving(Show, Eq)
+    deriving Serialize via Short65K
+
+-- |Encryption of data with anonymity revoker's public key.
+newtype AREnc = AREnc ByteString
+    deriving(Eq)
+    deriving Show via ByteStringHex
+    deriving Serialize via Short65K
+
+data AnonymityRevocationData = AnonymityRevocationData {
+  -- |Unique identifier of the anonimity revoker.
+  ardName :: ARName,
+  -- |Encryption of the prf key with the anonymity revoker's public key.
+  ardPrfKeyEnc :: AREnc,
+  -- |Encryption of the public credentials with the anonymity revoker's public key.
+  ardIdCredPubEnc :: AREnc
+  } deriving(Eq, Show)
+
+instance Serialize AnonymityRevocationData where
+  put AnonymityRevocationData{..} =
+    put ardName <>
+    put ardPrfKeyEnc <>
+    put ardIdCredPubEnc
+  get = AnonymityRevocationData <$> get <*> get <*> get
+
 
 data CredentialDeploymentValues = CredentialDeploymentValues {
   -- |Signature scheme of the account to which this credential is deployed.
@@ -199,35 +186,38 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
   cdvVerifyKey  :: AccountVerificationKey,
   -- |Registration id of __this__ credential.
   cdvRegId     :: CredentialRegistrationID,
-  -- |Identity of the identity provider who signed the identity object from which this
-  -- credential is derived.
+  -- |Identity of the identity provider who signed the identity object from
+  -- which this credential is derived.
   cdvIpId      :: IdentityProviderIdentity,
-  -- |Policy.
+  -- |Policy. At the moment only opening of specific commitments.
   cdvPolicy :: Policy
 } deriving(Eq, Show)
 
 
 getPolicy :: Get Policy
 getPolicy = do
+  pAttributeListVariant <- getWord16be
+  pExpiry <- getWord64be
   l <- fromIntegral <$> getWord16be
-  Policy <$> replicateM l getPolicyItem 
+  pItems <- replicateM l getPolicyItem 
+  return Policy{..}
 
 getPolicyItem :: Get PolicyItem
 getPolicyItem = do
-  piAttributeListVariant <- getWord16be
   piIndex <- getWord16be
   piValue <- get
   return PolicyItem{..}
 
 putPolicy :: Putter Policy
-putPolicy (Policy p) =
-  let l = length p
-  in putWord16be (fromIntegral l) <>
-     mapM_ putPolicyItem p
+putPolicy Policy{..} =
+  let l = length pItems
+  in putWord16be pAttributeListVariant <>
+     putWord64be pExpiry <>
+     putWord16be (fromIntegral l) <>
+     mapM_ putPolicyItem pItems
 
 putPolicyItem :: Putter PolicyItem
 putPolicyItem PolicyItem{..} = 
-   putWord16be piAttributeListVariant <>
    putWord16be piIndex <>
    put piValue
 
@@ -286,4 +276,3 @@ deserializeCDIPartial bs = loop (runGetPartial getCDIPartial bs)
     where loop (Fail err _) = Left err
           loop (Partial k) = loop (k empty)
           loop (Done r rest) = Right (r, rest)
-    

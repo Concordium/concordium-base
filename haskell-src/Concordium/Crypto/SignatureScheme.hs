@@ -8,14 +8,17 @@ import Concordium.Crypto.ByteStringHelpers
 newtype SignKey = SignKey ByteString
     deriving (Eq)
     deriving Show via ByteStringHex
+    deriving Serialize via Short65K
 
 newtype VerifyKey = VerifyKey ByteString
     deriving (Eq, Ord)
     deriving Show via ByteStringHex
+    deriving Serialize via Short65K
 
 newtype Signature = Signature ByteString
-    deriving (Eq)
+    deriving (Eq, Ord)
     deriving Show via ByteStringHex
+    deriving Serialize via Short65K
 
 data SchemeId = Ed25519 | CL
     deriving (Eq, Show)
@@ -29,21 +32,9 @@ instance Serialize SchemeId where
     get = do e <- getWord8 
              return $  toEnum (fromIntegral e)
 
-instance Serialize SignKey where
-    put (SignKey sk) = put sk
-    get = SignKey <$> get
-
-instance Serialize VerifyKey where
-    put (VerifyKey sk) = put sk
-    get = VerifyKey <$> get
-
 instance Serialize KeyPair where
     put (KeyPair sk vk) = put sk <> put vk
     get = KeyPair <$> get <*> get
-
-instance Serialize Signature where
-    put (Signature b) = put b
-    get = Signature <$> get
 
 instance Enum SchemeId where 
     toEnum n = case toScheme (fromIntegral n) of 
