@@ -3,11 +3,13 @@ use crate::types::*;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use pedersen_scheme::value as pedersen;
+use pedersen_scheme::commitment::Commitment; 
+use pedersen_scheme::key::CommitmentKey;
 use elgamal::message::Message as ElgamalMessage;
 use ed25519_dalek as acc_sig_scheme;
 use ps_sig;
 use rand::*;
-use sigma_protocols::{com_enc_eq, com_eq_different_groups, dlog};
+use sigma_protocols::{com_eq, com_enc_eq, com_eq_different_groups, dlog};
 
 /// Generate PreIdentityObject out of the account holder information,
 /// the chosen anonymity revoker information, and the necessary contextual
@@ -33,25 +35,24 @@ where
         .ar_info
         .ar_public_key
         .encrypt_exponent_rand(&mut csprng, &prf_key_scalar);
-    let id_cred_pub_enc = context
-        .ip_info
-        .ar_info
-        .ar_public_key
-        .encrypt(&mut csprng, &ElgamalMessage::<P::G_1>(id_cred_pub_ip));
-    let ip_ar_data = ArData {
+    let ip_ar_data = IpArData {
         ar_name:  context.ip_info.ar_info.ar_name.clone(),
         prf_key_enc : prf_key_enc,
         //id_cred_pub_enc: id_cred_pub_enc,
     };
     let alist = aci.attributes.clone();
-    let pok_sc = dlog::prove_dlog(
-        &mut csprng,
-        &id_cred_pub_ip,
-        &aci.acc_holder_info.id_cred.id_cred_sec,
-        &context.dlog_base,
-    );
+
+    let id_cred_sec = aci.acc_holder_info.id_cred.id_cred_sec;
+    let sc_ck = &context.commitment_key_sc;
+    let (cmm_sc, cmm_sc_rand) = sc_ck.commit(&pedersen::Value(vec![id_cred_sec]), &mut csprng);
+    let pok_sc = {
+        let Commitment(cmm_sc_point) = cmm_sc;
+        let CommitmentKey(sc_ck_1, sc_ck_2) = sc_ck;
+        com_eq::prove_com_eq(&(vec![cmm_sc_point] , id_cred_pub_ip), &(sc_ck_1[0], *sc_ck_2, vec![context.dlog_base]), &(vec![cmm_sc_rand], vec![id_cred_sec]), &mut csprng)    
+    };
+    
     let (cmm_prf, rand_cmm_prf) = context
-        .commitment_key_id
+        .commitment_key_prf
         .commit(&pedersen::Value(vec![prf_key_scalar]), &mut csprng);
     let (snd_cmm_prf, rand_snd_cmm_prf) = context
         .commitment_key_ar
@@ -79,7 +80,7 @@ where
         // TODO: Check that this is the correct order of secret values.
         let secret = (prf_key_scalar, rand_cmm_prf, rand_snd_cmm_prf);
         let coeff = (
-            (context.commitment_key_id.0[0], context.commitment_key_id.1),
+            (context.commitment_key_prf.0[0], context.commitment_key_prf.1),
             (context.commitment_key_ar.0[0], context.commitment_key_ar.1),
         );
         com_eq_different_groups::prove_com_eq_diff_grps(&mut csprng, &public, &secret, &coeff)
@@ -89,6 +90,7 @@ where
         id_cred_pub_ip,
         ip_ar_data,
         alist,
+        cmm_sc,
         pok_sc,
         cmm_prf,
         snd_cmm_prf,
@@ -243,8 +245,4 @@ fn compute_commitments<C:Curve, AttributeType:Attribute<C::Scalar>, R:Rng>(commi
 
 }
 
-    commit to variant (open)
-    commit to expiry (open)
-    commit to att vec
-}
 
