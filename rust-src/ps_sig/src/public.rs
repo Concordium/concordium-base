@@ -15,12 +15,14 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::{common::*, known_message::*, signature::*};
+use crate::{known_message::*, signature::*};
 use curve_arithmetic::curve_arithmetic::*;
 use failure::Error;
 use std::io::Cursor;
 
 use crate::secret::*;
+
+use curve_arithmetic::serialization::*;
 
 /// A message
 #[derive(Debug, Clone)]
@@ -36,7 +38,7 @@ impl<C: Pairing> PartialEq for PublicKey<C> {
 impl<C: Pairing> Eq for PublicKey<C> {}
 
 impl<C: Pairing> PublicKey<C> {
-    /*
+
     // turn message vector into a byte aray
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
@@ -47,12 +49,14 @@ impl<C: Pairing> PublicKey<C> {
         let s = &self.4;
         let mut bytes: Vec<u8> = Vec::with_capacity(
             4 + 4
-                + vs.len() * C::G_1::GROUP_ELEMENT_LENGTH
-                + (us.len() + 1) * C::G_2::GROUP_ELEMENT_LENGTH,
-        );
-        write_elems(vs, &C::G_1::curve_to_bytes, &mut bytes);
-        write_elems(us, &C::G_2::curve_to_bytes, &mut bytes);
-        write_elem(s, &C::G_2::curve_to_bytes, &mut bytes);
+                + (vs.len() + 1) * C::G_1::GROUP_ELEMENT_LENGTH
+                + (us.len() + 2) * C::G_2::GROUP_ELEMENT_LENGTH,
+                );
+        write_curve_element::<C::G_1>(gen1, &mut bytes);
+        write_curve_element::<C::G_2>(gen2, &mut bytes);
+        write_curve_elements::<C::G_1>(vs, &mut bytes);
+        write_curve_elements::<C::G_2>(us, &mut bytes);
+        write_curve_element::<C::G_2>(s, &mut bytes);
         bytes.into_boxed_slice()
     }
 
@@ -62,23 +66,14 @@ impl<C: Pairing> PublicKey<C> {
     /// is an `Error` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<PublicKey<C>, Error> {
-        let mut g1_buffer = vec![0; C::G_1::GROUP_ELEMENT_LENGTH];
-        let mut g2_buffer = vec![0; C::G_2::GROUP_ELEMENT_LENGTH];
-        let f1: for<'r> fn(&'r [u8]) -> Result<C::G_1, Error> = |x| {
-            let r = C::G_1::bytes_to_curve(x)?;
-            Ok(r)
-        };
-        let f2: for<'r> fn(&'r [u8]) -> Result<C::G_2, Error> = |x| {
-            let r = C::G_2::bytes_to_curve(x)?;
-            Ok(r)
-        };
-
-        let vs = read_elems(&f1, bytes, &mut g1_buffer)?;
-        let us = read_elems(&f2, bytes, &mut g2_buffer)?;
-        let fr = read_elem(&f2, bytes, &mut g2_buffer)?;
-        Ok(PublicKey(vs, us, fr))
+        let gen1 = read_curve::<C::G_1>(bytes)?;
+        let gen2 = read_curve::<C::G_2>(bytes)?;
+        let vs = read_curve_elements::<C::G_1>(bytes)?;
+        let us = read_curve_elements::<C::G_2>(bytes)?;
+        let fr = read_curve::<C::G_2>(bytes)?;
+        Ok(PublicKey(gen1, gen2, vs, us, fr))
     }
-    */
+
 
     pub fn verify(&self, sig: &Signature<C>, message: &KnownMessage<C>) -> bool {
         let ys = &self.3;
@@ -139,7 +134,7 @@ impl<'a, C: Pairing> From<&'a SecretKey<C>> for PublicKey<C> {
 mod tests {
     use super::*;
     use pairing::bls12_381::Bls12;
-/*
+
     macro_rules! macro_test_public_key_to_byte_conversion {
         ($function_name:ident, $pairing_type:path) => {
             #[test]
@@ -159,7 +154,6 @@ mod tests {
 
     macro_test_public_key_to_byte_conversion!(public_key_to_byte_conversion_bls12_381, Bls12);
 
-    */
     macro_rules! macro_test_sign_verify_pass {
         ($function_name:ident, $pairing_type:path) => {
             #[test]

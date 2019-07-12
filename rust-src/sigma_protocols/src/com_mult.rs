@@ -33,33 +33,31 @@ impl<T: Curve> ComMultProof<T> {
     }
 
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let mut scalar_buffer = vec![0; T::SCALAR_LENGTH];
-        let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
-        let challenge = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
+        let challenge = read_curve_scalar::<T>(bytes)?;
         let randomised_point = (
             [
-                read_curve::<T>(bytes, &mut group_buffer)?,
-                read_curve::<T>(bytes, &mut group_buffer)?,
-                read_curve::<T>(bytes, &mut group_buffer)?,
+                read_curve::<T>(bytes)?,
+                read_curve::<T>(bytes)?,
+                read_curve::<T>(bytes)?,
             ],
-            read_curve::<T>(bytes, &mut group_buffer)?,
+            read_curve::<T>(bytes)?,
         );
         let witness = (
             [
                 (
-                    read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
-                    read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
+                    read_curve_scalar::<T>(bytes)?,
+                    read_curve_scalar::<T>(bytes)?,
                 ),
                 (
-                    read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
-                    read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
+                    read_curve_scalar::<T>(bytes)?,
+                    read_curve_scalar::<T>(bytes)?,
                 ),
                 (
-                    read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
-                    read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
+                    read_curve_scalar::<T>(bytes)?,
+                    read_curve_scalar::<T>(bytes)?,
                 ),
             ],
-            read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
+            read_curve_scalar::<T>(bytes)?,
         );
         Ok(ComMultProof {
             challenge,
@@ -71,11 +69,13 @@ impl<T: Curve> ComMultProof<T> {
 
 pub fn prove_com_mult<T: Curve, R: Rng>(
     csprng: &mut R,
+    challenge_prefix: &[u8],
     public: &[T; 3],
     secret: &[(T::Scalar, T::Scalar); 3],
     coeff: &[T; 2],
 ) -> ComMultProof<T> {
     let mut hasher = Sha256::new();
+    hasher.input(challenge_prefix);
     hasher.input(&*public[0].curve_to_bytes());
     hasher.input(&*public[1].curve_to_bytes());
     hasher.input(&*public[2].curve_to_bytes());
@@ -109,7 +109,7 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
         }
         hasher2.input(&*a_randomised_point.curve_to_bytes());
         hash.copy_from_slice(hasher2.result().as_slice());
-        match T::bytes_to_scalar(&hash) {
+        match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
             Err(_) => {}
             Ok(x) => {
                 if x == T::Scalar::zero() {
@@ -147,11 +147,17 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
     }
 }
 
-pub fn verify_com_mult<T: Curve>(coeff: &[T; 2], public: &[T; 3], proof: &ComMultProof<T>) -> bool {
+pub fn verify_com_mult<T: Curve>(
+    challenge_prefix: &[u8],
+    coeff: &[T; 2],
+    public: &[T; 3],
+    proof: &ComMultProof<T>,
+) -> bool {
     let mut hasher = Sha256::new();
     // let (g_1, h_1, g, h) = base;
     // let (e_1, e_2, e_3) = public;
     let [g, h] = coeff;
+    hasher.input(challenge_prefix);
     hasher.input(&*public[0].curve_to_bytes());
     hasher.input(&*public[1].curve_to_bytes());
     hasher.input(&*public[2].curve_to_bytes());
@@ -163,7 +169,7 @@ pub fn verify_com_mult<T: Curve>(coeff: &[T; 2], public: &[T; 3], proof: &ComMul
     hasher.input(&*a_randomised_point.curve_to_bytes());
     let mut hash = [0u8; 32];
     hash.copy_from_slice(hasher.result().as_slice());
-    match T::bytes_to_scalar(&hash) {
+    match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
         Err(_) => false,
         Ok(c) => {
             if c != proof.challenge {
@@ -192,6 +198,7 @@ pub fn verify_com_mult<T: Curve>(coeff: &[T; 2], public: &[T; 3], proof: &ComMul
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::*;
     use pairing::bls12_381::G1;
 
     #[test]
@@ -218,8 +225,13 @@ mod tests {
                     .mul_by_scalar(&secret[i].0)
                     .plus_point(&coeff[1].mul_by_scalar(&secret[i].1));
             }
-            let proof = prove_com_mult(&mut csprng, &public, &secret, &coeff);
-            assert!(verify_com_mult(&coeff, &public, &proof));
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let proof = prove_com_mult(&mut csprng, &challenge_prefix, &public, &secret, &coeff);
+            assert!(verify_com_mult(&challenge_prefix, &coeff, &public, &proof));
+            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
+            if verify_com_mult(&challenge_prefix_1, &coeff, &public, &proof) {
+                assert_eq!(challenge_prefix, challenge_prefix_1);
+            }
         }
     }
 

@@ -25,12 +25,14 @@ use std::marker::PhantomData;
 
 use crate::{
     cipher::*,
-    errors::{InternalError::PublicKeyLength, *},
+    errors::*,
     message::*,
     secret::*,
 };
 
 use curve_arithmetic::Curve;
+
+use std::io::Cursor;
 
 /// Elgamal public key .
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -60,10 +62,7 @@ impl<C: Curve> PublicKey<C> {
     /// A `Result` whose okay value is a public key or whose error value
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ElgamalError> {
-        if bytes.len() != C::GROUP_ELEMENT_LENGTH {
-            return Err(ElgamalError(PublicKeyLength));
-        }
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, ElgamalError> {
         let h = C::bytes_to_curve(bytes)?;
         Ok(PublicKey(h))
     }
@@ -197,7 +196,7 @@ mod tests {
                     let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
                     let pk = PublicKey::from(&sk);
                     let r = pk.to_bytes();
-                    let res_pk2 = PublicKey::from_bytes(&r);
+                    let res_pk2 = PublicKey::from_bytes(&mut Cursor::new(&r));
                     assert!(res_pk2.is_ok());
                     let pk2 = res_pk2.unwrap();
                     assert_eq!(pk2, pk);

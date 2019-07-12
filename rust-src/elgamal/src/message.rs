@@ -16,11 +16,13 @@ use serde::{Deserializer, Serializer};
 #[cfg(feature = "serde")]
 use std::marker::PhantomData;
 
-use crate::errors::{InternalError::*, *};
+use crate::errors::*;
 
 use rand::*;
 
 use curve_arithmetic::Curve;
+
+use std::io::Cursor;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Message<C: Curve>(pub C);
@@ -42,11 +44,8 @@ impl<C: Curve> Message<C> {
     /// A `Result` whose okay value is a message key or whose error value
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ElgamalError> {
-        if bytes.len() != C::GROUP_ELEMENT_LENGTH {
-            return Err(ElgamalError(MessageLength));
-        }
-        let g = C::bytes_to_curve(&bytes)?;
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, ElgamalError> {
+        let g = C::bytes_to_curve(bytes)?;
         Ok(Message(g))
     }
 }
@@ -96,7 +95,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _i in 1..100 {
                     let m: Message<$curve_type> = Message::generate(&mut csprng);
-                    let s = Message::from_bytes(&m.to_bytes());
+                    let s = Message::from_bytes(&mut Cursor::new(&m.to_bytes()));
                     assert!(s.is_ok());
                     assert_eq!(m, s.unwrap());
                 }

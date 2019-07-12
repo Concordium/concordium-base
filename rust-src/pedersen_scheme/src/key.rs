@@ -55,9 +55,8 @@ impl<C: Curve> CommitmentKey<C> {
     /// is an `CommitmentError` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<CommitmentKey<C>, Error> {
-        let mut group_buf = vec![0; C::GROUP_ELEMENT_LENGTH];
-        let gs = read_curve_elements(cur, &mut group_buf)?;
-        let h = read_curve(cur, &mut group_buf)?;
+        let gs = read_curve_elements(cur)?;
+        let h = read_curve(cur)?;
         Ok(CommitmentKey(gs, h))
     }
 

@@ -24,11 +24,9 @@ impl<T: Curve> DlogProof<T> {
     }
 
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let mut scalar_buffer = vec![0; T::SCALAR_LENGTH];
-        let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
-        let challenge = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
-        let randomised_point = read_curve::<T>(bytes, &mut group_buffer)?;
-        let witness = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
+        let challenge = read_curve_scalar::<T>(bytes)?;
+        let randomised_point = read_curve::<T>(bytes)?;
+        let witness = read_curve_scalar::<T>(bytes)?;
         Ok(DlogProof {
             challenge,
             randomised_point,
@@ -39,11 +37,13 @@ impl<T: Curve> DlogProof<T> {
 
 pub fn prove_dlog<T: Curve, R: Rng>(
     csprng: &mut R,
+    challenge_prefix: &[u8],
     public: &T,
     secret: &T::Scalar,
     base: &T,
 ) -> DlogProof<T> {
     let mut hasher = Sha256::new();
+    hasher.input(challenge_prefix);
     hasher.input(&*public.curve_to_bytes());
     let mut hash = [0u8; 32];
     let mut suc = false;
@@ -56,7 +56,7 @@ pub fn prove_dlog<T: Curve, R: Rng>(
         randomised_point = base.mul_by_scalar(&rand_scalar);
         hasher2.input(&*randomised_point.curve_to_bytes());
         hash.copy_from_slice(hasher2.result().as_slice());
-        match T::bytes_to_scalar(&hash) {
+        match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
             Err(_) => {}
             Ok(x) => {
                 if x == T::Scalar::zero() {
@@ -80,13 +80,19 @@ pub fn prove_dlog<T: Curve, R: Rng>(
     }
 }
 
-pub fn verify_dlog<T: Curve>(base: &T, public: &T, proof: &DlogProof<T>) -> bool {
+pub fn verify_dlog<T: Curve>(
+    challenge_prefix: &[u8],
+    base: &T,
+    public: &T,
+    proof: &DlogProof<T>,
+) -> bool {
     let mut hasher = Sha256::new();
+    hasher.input(challenge_prefix);
     hasher.input(&*public.curve_to_bytes());
     hasher.input(&*proof.randomised_point.curve_to_bytes());
     let mut hash = [0u8; 32];
     hash.copy_from_slice(hasher.result().as_slice());
-    match T::bytes_to_scalar(&hash) {
+    match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
         Err(_) => false,
         Ok(c) => {
             proof.randomised_point
@@ -101,6 +107,7 @@ pub fn verify_dlog<T: Curve>(base: &T, public: &T, proof: &DlogProof<T>) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::*;
     use pairing::bls12_381::G1Affine;
     #[test]
     pub fn test_dlog() {
@@ -109,8 +116,19 @@ mod tests {
             let secret = G1Affine::generate_scalar(&mut csprng);
             let base = G1Affine::generate(&mut csprng);
             let public = &base.mul_by_scalar(&secret);
-            let proof = prove_dlog::<G1Affine, ThreadRng>(&mut csprng, &public, &secret, &base);
-            assert!(verify_dlog(&base, &public, &proof));
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let proof = prove_dlog::<G1Affine, ThreadRng>(
+                &mut csprng,
+                &challenge_prefix,
+                &public,
+                &secret,
+                &base,
+            );
+            assert!(verify_dlog(&challenge_prefix, &base, &public, &proof));
+            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
+            if verify_dlog(&challenge_prefix_1, &base, &public, &proof) {
+                assert_eq!(challenge_prefix, challenge_prefix_1);
+            }
         }
     }
 

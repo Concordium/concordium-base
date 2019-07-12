@@ -161,11 +161,10 @@ newtype AREnc = AREnc ByteString
     deriving Show via ByteStringHex
     deriving Serialize via Short65K
 
+-- |Data needed on-chain to revoke anonymity of the account holder.
 data AnonymityRevocationData = AnonymityRevocationData {
   -- |Unique identifier of the anonimity revoker.
   ardName :: ARName,
-  -- |Encryption of the prf key with the anonymity revoker's public key.
-  ardPrfKeyEnc :: AREnc,
   -- |Encryption of the public credentials with the anonymity revoker's public key.
   ardIdCredPubEnc :: AREnc
   } deriving(Eq, Show)
@@ -173,9 +172,8 @@ data AnonymityRevocationData = AnonymityRevocationData {
 instance Serialize AnonymityRevocationData where
   put AnonymityRevocationData{..} =
     put ardName <>
-    put ardPrfKeyEnc <>
     put ardIdCredPubEnc
-  get = AnonymityRevocationData <$> get <*> get <*> get
+  get = AnonymityRevocationData <$> get <*> get
 
 
 data CredentialDeploymentValues = CredentialDeploymentValues {

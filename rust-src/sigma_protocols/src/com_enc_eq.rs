@@ -30,15 +30,13 @@ impl<T: Curve> ComEncEqProof<T> {
     }
 
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let mut scalar_buffer = vec![0; T::SCALAR_LENGTH];
-        let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
-        let challenge = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
-        let r1 = read_curve::<T>(bytes, &mut group_buffer)?;
-        let r2 = read_curve::<T>(bytes, &mut group_buffer)?;
-        let r3 = read_curve::<T>(bytes, &mut group_buffer)?;
-        let w1 = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
-        let w2 = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
-        let w3 = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
+        let challenge = read_curve_scalar::<T>(bytes)?;
+        let r1 = read_curve::<T>(bytes)?;
+        let r2 = read_curve::<T>(bytes)?;
+        let r3 = read_curve::<T>(bytes)?;
+        let w1 = read_curve_scalar::<T>(bytes)?;
+        let w2 = read_curve_scalar::<T>(bytes)?;
+        let w3 = read_curve_scalar::<T>(bytes)?;
         let randomised_points = (r1, r2, r3);
         let witness = (w1, w2, w3);
         Ok(ComEncEqProof {
@@ -51,11 +49,13 @@ impl<T: Curve> ComEncEqProof<T> {
 
 pub fn prove_com_enc_eq<T: Curve, R: Rng>(
     csprng: &mut R,
+    challenge_prefix: &[u8],
     public: &(T, T, T),
     secret: &(T::Scalar, T::Scalar, T::Scalar),
     base: &(T, T, T, T),
 ) -> ComEncEqProof<T> {
     let mut hasher = Sha256::new();
+    hasher.input(challenge_prefix);
     hasher.input(&*public.0.curve_to_bytes());
     hasher.input(&*public.1.curve_to_bytes());
     hasher.input(&*public.2.curve_to_bytes());
@@ -82,7 +82,7 @@ pub fn prove_com_enc_eq<T: Curve, R: Rng>(
         hasher2.input(&*a_2.curve_to_bytes());
         hasher2.input(&*a_3.curve_to_bytes());
         hash.copy_from_slice(hasher2.result().as_slice());
-        match T::bytes_to_scalar(&hash) {
+        match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
             Err(_) => {}
             Ok(x) => {
                 if x == T::Scalar::zero() {
@@ -115,6 +115,7 @@ pub fn prove_com_enc_eq<T: Curve, R: Rng>(
 }
 
 pub fn verify_com_enc_eq<T: Curve>(
+    challenge_prefix: &[u8],
     base: &(T, T, T, T),
     public: &(T, T, T),
     proof: &ComEncEqProof<T>,
@@ -123,6 +124,7 @@ pub fn verify_com_enc_eq<T: Curve>(
     let (g_1, h_1, g, h) = base;
     let (e_1, e_2, e_3) = public;
     let (w_1, w_2, w_3) = proof.witness;
+    hasher.input(challenge_prefix);
     hasher.input(&*e_1.curve_to_bytes());
     hasher.input(&*e_2.curve_to_bytes());
     hasher.input(&*e_3.curve_to_bytes());
@@ -132,7 +134,7 @@ pub fn verify_com_enc_eq<T: Curve>(
     hasher.input(&*a_3.curve_to_bytes());
     let mut hash = [0u8; 32];
     hash.copy_from_slice(hasher.result().as_slice());
-    match T::bytes_to_scalar(&hash) {
+    match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
         Err(_) => false,
         Ok(c) => {
             if c != proof.challenge {
@@ -156,6 +158,7 @@ pub fn verify_com_enc_eq<T: Curve>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::*;
     use pairing::bls12_381::G1Affine;
 
     #[test]
@@ -177,13 +180,24 @@ mod tests {
             let e_2 = g_1.mul_by_scalar(&s_2).plus_point(&h_1.mul_by_scalar(&s_1));
             let e_3 = g.mul_by_scalar(&s_2).plus_point(&h.mul_by_scalar(&s_3));
             let public = (e_1, e_2, e_3);
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
             let proof = prove_com_enc_eq::<G1Affine, ThreadRng>(
                 &mut csprng,
+                &challenge_prefix,
                 &public,
                 &(s_1, s_2, s_3),
                 &(g_1, h_1, g, h),
             );
-            assert!(verify_com_enc_eq(&(g_1, h_1, g, h), &public, &proof));
+            assert!(verify_com_enc_eq(
+                &challenge_prefix,
+                &(g_1, h_1, g, h),
+                &public,
+                &proof
+            ));
+            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
+            if verify_com_enc_eq(&challenge_prefix_1, &(g_1, h_1, g, h), &public, &proof) {
+                assert_eq!(challenge_prefix, challenge_prefix_1);
+            }
         }
     }
 

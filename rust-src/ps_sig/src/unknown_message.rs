@@ -1,6 +1,7 @@
 use crate::errors::{InternalError::CurveDecodingError, *};
 use curve_arithmetic::curve_arithmetic::*;
 use rand::*;
+use std::io::Cursor;
 
 #[derive(Debug)]
 pub struct UnknownMessage<C: Pairing>(pub C::G_1);
@@ -21,7 +22,7 @@ impl<C: Pairing> UnknownMessage<C> {
     /// A `Result` whose okay value is an commitment key or whose error value
     /// is an `CommitmentError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<UnknownMessage<C>, SignatureError> {
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<UnknownMessage<C>, SignatureError> {
         match C::G_1::bytes_to_curve(bytes) {
             Ok(point) => Ok(UnknownMessage(point)),
             Err(_) => Err(SignatureError(CurveDecodingError)),
@@ -47,7 +48,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _i in 0..20 {
                     let x = UnknownMessage::<$pairing_type>::arbitrary(&mut csprng);
-                    let y = UnknownMessage::<$pairing_type>::from_bytes(&*x.to_bytes());
+                    let y = UnknownMessage::<$pairing_type>::from_bytes(&mut Cursor::new(&x.to_bytes()));
                     assert!(y.is_ok());
                     assert_eq!(x, y.unwrap());
                 }

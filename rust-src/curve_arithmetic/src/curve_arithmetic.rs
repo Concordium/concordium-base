@@ -5,7 +5,10 @@
 use failure::Fail;
 use pairing::{Field, PrimeField, PrimeFieldDecodingError};
 use rand::*;
-use std::fmt::{Debug, Display, Formatter};
+use std::{
+    fmt::{Debug, Display, Formatter},
+    io::Cursor,
+};
 
 #[derive(Debug)]
 pub enum FieldDecodingError {
@@ -52,10 +55,10 @@ pub trait Curve:
     fn decompress(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
     fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
     fn scalar_to_bytes(s: &Self::Scalar) -> Box<[u8]>;
-    fn bytes_to_scalar(b: &[u8]) -> Result<Self::Scalar, FieldDecodingError>;
+    fn bytes_to_scalar(b: &mut Cursor<&[u8]>) -> Result<Self::Scalar, FieldDecodingError>;
     fn curve_to_bytes(&self) -> Box<[u8]>;
-    fn bytes_to_curve(b: &[u8]) -> Result<Self, CurveDecodingError>;
-    fn bytes_to_curve_unchecked(b: &[u8]) -> Result<Self, CurveDecodingError>;
+    fn bytes_to_curve(b: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError>;
+    fn bytes_to_curve_unchecked(b: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError>;
     fn generate<R: Rng>(rng: &mut R) -> Self;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar;
     fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError>;
@@ -70,8 +73,9 @@ pub trait Pairing: Sized + 'static + Clone {
     fn pair(p: Self::G_1, q: Self::G_2) -> Self::TargetField;
     const SCALAR_LENGTH: usize;
     fn scalar_to_bytes(s: &Self::ScalarField) -> Box<[u8]>;
-    fn bytes_to_scalar(b: &[u8]) -> Result<Self::ScalarField, FieldDecodingError>;
-    fn generate_scalar<R: Rng >(rng: &mut R) -> Self::ScalarField;
-//    fn target_field_to_bytes(f: &Self::TargetField) -> Box<[u8]>;
-//    fn bytes_to_target_field(b: &[u8]) -> Result<Self::TargetField, FieldDecodingError>;
+    fn bytes_to_scalar(b: &mut Cursor<&[u8]>) -> Result<Self::ScalarField, FieldDecodingError>;
+    fn generate_scalar<R: Rng>(rng: &mut R) -> Self::ScalarField;
+    //    fn target_field_to_bytes(f: &Self::TargetField) -> Box<[u8]>;
+    //    fn bytes_to_target_field(b: &[u8]) -> Result<Self::TargetField,
+    // FieldDecodingError>;
 }

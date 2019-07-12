@@ -15,13 +15,12 @@ use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 
 use crate::{
-    common::*,
     errors::{InternalError::SecretKeyLengthError, *},
     known_message::*,
     signature::*,
     unknown_message::*,
 };
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::{curve_arithmetic::*, serialization::*};
 use failure::Error;
 use pairing::Field;
 use std::io::Cursor;
@@ -57,9 +56,8 @@ impl<C: Pairing> SecretKey<C> {
     /// is an `SignatureError` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<SecretKey<C>, Error> {
-        let mut scalar_buffer = vec![0; C::SCALAR_LENGTH];
-        let vs = read_pairing_scalars::<C>(bytes, &mut scalar_buffer)?;
-        let fr = read_pairing_scalar::<C>(bytes, &mut scalar_buffer)?;
+        let vs = read_pairing_scalars::<C>(bytes)?;
+        let fr = read_pairing_scalar::<C>(bytes)?;
         Ok(SecretKey(vs, fr))
     }
 
