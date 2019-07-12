@@ -26,7 +26,7 @@ use serde_json::{json, to_string_pretty, Value};
 
 use pedersen_scheme::{commitment::Commitment, key as pedersen_key};
 
-use sigma_protocols::{com_enc_eq, com_eq_different_groups, dlog};
+use sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups};
 
 use std::{
     fs::File,
@@ -36,8 +36,8 @@ use std::{
 
 type ExampleCurve = <Bls12 as Pairing>::G_1;
 
-macro_rules! m_json_decode{
-    ($val: expr, $key:expr) => {
+macro_rules! m_json_decode {
+    ($val:expr, $key:expr) => {
         &mut Cursor::new(&json_base16_decode($val.get($key)?)?)
     };
 }
@@ -129,9 +129,9 @@ impl Attribute<<Bls12 as Pairing>::ScalarField> for ExampleAttribute {
     }
 }
 
-fn example_attribute_to_json(att: &ExampleAttribute) -> Value {
+fn example_attribute_to_json(att: ExampleAttribute) -> Value {
     match att {
-        ExampleAttribute::Age(x) => json!({"age": *x}),
+        ExampleAttribute::Age(x) => json!({"age": x}),
         ExampleAttribute::Citizenship(c) => json!({ "citizenship": c }),
         ExampleAttribute::MaxAccount(x) => json!({ "maxAccount": x }),
         ExampleAttribute::Business(b) => json!({ "business": b }),
@@ -141,8 +141,8 @@ fn example_attribute_to_json(att: &ExampleAttribute) -> Value {
 /// Show fields of the type of fields of the given attribute list.
 fn show_attribute_format(variant: u32) -> &'static str {
     match variant {
-        0 => "[MaxAccount, ExpiryDate, Age]",
-        1 => "[MaxAccount, ExpiryDate, Age, Citizenship, Business]",
+        0 => "[ExpiryDate, MaxAccount, Age]",
+        1 => "[ExpiryDate, MaxAccount, Age, Citizenship, Business]",
         _ => unimplemented!("Only two formats of attribute lists supported."),
     }
 }
@@ -157,17 +157,17 @@ fn read_max_account() -> io::Result<ExampleAttribute> {
     Ok(ExampleAttribute::MaxAccount(options[select]))
 }
 
-fn parse_expiry_date(input: &str) -> io::Result<ExampleAttribute> {
+fn parse_expiry_date(input: &str) -> io::Result<NaiveDateTime> {
     let mut input = input.to_owned();
     input.push_str(" 23:59:59");
     let dt = NaiveDateTime::parse_from_str(&input, "%d %B %Y %H:%M:%S")
         .map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
-    Ok(ExampleAttribute::ExpiryDate(dt))
+    Ok(dt)
 }
 
 /// Reads the expiry date. Only the day, the expiry time is set at the end of
 /// that day.
-fn read_expiry_date() -> io::Result<ExampleAttribute> {
+fn read_expiry_date() -> io::Result<NaiveDateTime> {
     let input: String = Input::new().with_prompt("Expiry date").interact()?;
     parse_expiry_date(&input)
 }
@@ -176,16 +176,14 @@ fn read_expiry_date() -> io::Result<ExampleAttribute> {
 /// input. Fails if the user input is not well-formed.
 fn read_attribute_list(variant: u32) -> io::Result<Vec<ExampleAttribute>> {
     let max_acc = read_max_account()?;
-    let expiry_date = read_expiry_date()?;
     let age = Input::new().with_prompt("Your age").interact()?;
     match variant {
-        0 => Ok(vec![max_acc, ExampleAttribute::Age(age), expiry_date]),
+        0 => Ok(vec![max_acc, ExampleAttribute::Age(age)]),
         1 => {
             let citizenship = Input::new().with_prompt("Citizenship").interact()?; // TODO: use drop-down/select with
             let business = Input::new().with_prompt("Are you a business").interact()?;
             Ok(vec![
                 max_acc,
-                expiry_date,
                 ExampleAttribute::Age(age),
                 ExampleAttribute::Citizenship(citizenship),
                 ExampleAttribute::Business(business),
@@ -250,10 +248,6 @@ fn json_to_example_attribute(v: &Value) -> Option<ExampleAttribute> {
         Some(ExampleAttribute::Age(age.as_u64()? as u8))
     } else if let Some(citizenship) = mp.get("citizenship") {
         Some(ExampleAttribute::Citizenship(citizenship.as_u64()? as u16))
-    } else if let Some(expiry_date) = mp.get("expiryDate") {
-        let str = expiry_date.as_str()?;
-        let r = parse_expiry_date(&str).ok()?;
-        Some(r)
     } else if let Some(max_account) = mp.get("maxAccount") {
         Some(ExampleAttribute::MaxAccount(max_account.as_u64()? as u16))
     } else if let Some(business) = mp.get("business") {
@@ -264,9 +258,10 @@ fn json_to_example_attribute(v: &Value) -> Option<ExampleAttribute> {
 }
 
 fn alist_to_json(alist: &ExampleAttributeList) -> Value {
-    let alist_vec: Vec<Value> = alist.alist.iter().map(example_attribute_to_json).collect();
+    let alist_vec: Vec<Value> = alist.alist.iter().map(|x| example_attribute_to_json(*x)).collect();
     json!({
         "variant": alist.variant,
+        "expiryDate": alist.expiry.format("%d %B %Y").to_string(),
         "items": alist_vec
     })
 }
@@ -274,13 +269,15 @@ fn alist_to_json(alist: &ExampleAttributeList) -> Value {
 fn json_to_alist(v: &Value) -> Option<ExampleAttributeList> {
     let obj = v.as_object()?;
     let variant = obj.get("variant")?;
+    let expiry = parse_expiry_date(obj.get("expiryDate").and_then(Value::as_str)?).ok()?;
     let items_val = obj.get("items")?;
     let items = items_val.as_array()?;
     let alist_vec: Option<Vec<ExampleAttribute>> =
         items.iter().map(json_to_example_attribute).collect();
     Some(AttributeList {
-        variant:  variant.as_u64()? as u32,
-        alist:    alist_vec?,
+        variant: variant.as_u64()? as u32,
+        expiry,
+        alist: alist_vec?,
         _phantom: Default::default(),
     })
 }
@@ -318,7 +315,8 @@ fn json_to_global_context(v: &Value) -> Option<GlobalContext<ExampleCurve>> {
     let obj = v.as_object()?;
     let dlog_base_bytes = obj.get("dLogBaseChain").and_then(json_base16_decode)?;
     let dlog_base_chain =
-        <<Bls12 as Pairing>::G_1 as Curve>::bytes_to_curve(&mut Cursor::new(&dlog_base_bytes)).ok()?;
+        <<Bls12 as Pairing>::G_1 as Curve>::bytes_to_curve(&mut Cursor::new(&dlog_base_bytes))
+            .ok()?;
     let cmk_bytes = obj
         .get("onChainCommitmentKey")
         .and_then(json_base16_decode)?;
@@ -389,7 +387,6 @@ fn json_to_ip_ar_data(v: &Value) -> Option<IpArData<ExampleCurve>> {
     })
 }
 
-
 fn chain_ar_data_to_json<C: Curve>(ar_data: &ChainArData<C>) -> Value {
     json!({
         "arName": ar_data.ar_name.clone(),
@@ -406,14 +403,14 @@ fn json_to_chain_ar_data(v: &Value) -> Option<ChainArData<ExampleCurve>> {
     })
 }
 
-
 fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>) -> Value {
     json!({
         "accountHolderName": pio.id_ah,
         "idCredPubIp": json_base16_encode(&pio.id_cred_pub_ip.curve_to_bytes()),
-        "ipArData": ip_ar_data_to_json(&pio.id_ar_data),
+        "ipArData": ip_ar_data_to_json(&pio.ip_ar_data),
         "attributeList": alist_to_json(&pio.alist),
         "pokSecCred": json_base16_encode(&pio.pok_sc.to_bytes()),
+        "idCredSecCommitment": json_base16_encode(&pio.cmm_sc.to_bytes()),
         "prfKeyCommitmentWithID": json_base16_encode(&pio.cmm_prf.to_bytes()),
         "prfKeyCommitmentWithAR": json_base16_encode(&pio.snd_cmm_prf.to_bytes()),
         "proofEncryptionPrf": json_base16_encode(&pio.proof_com_enc_eq.to_bytes()),
@@ -423,17 +420,16 @@ fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>) -
 
 fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>> {
     let id_ah = v.get("accountHolderName")?.as_str()?.to_owned();
-    let id_cred_pub_ip =
-        ExampleCurve::bytes_to_curve(m_json_decode!(v, "idCredPubIp")).ok()?;
-    let ip_ar_data = json_to_ar_data(v.get("ipArData")?)?;
+    let id_cred_pub_ip = ExampleCurve::bytes_to_curve(m_json_decode!(v, "idCredPubIp")).ok()?;
+    let ip_ar_data = json_to_ip_ar_data(v.get("ipArData")?)?;
     let alist = json_to_alist(v.get("attributeList")?)?;
-    let pok_sc =
-        dlog::DlogProof::from_bytes(&mut Cursor::new(&json_base16_decode(v.get("pokSecCred")?)?))
-            .ok()?;
-    let cmm_prf =
-        Commitment::from_bytes(m_json_decode!(v, "prfKeyCommitmentWithID")).ok()?;
-    let snd_cmm_prf =
-        Commitment::from_bytes(m_json_decode!(v, "prfKeyCommitmentWithAR")).ok()?;
+    let pok_sc = com_eq::ComEqProof::from_bytes(&mut Cursor::new(&json_base16_decode(
+        v.get("pokSecCred")?,
+    )?))
+    .ok()?;
+    let cmm_sc = Commitment::from_bytes(m_json_decode!(v, "idCredSecCommitment")).ok()?;
+    let cmm_prf = Commitment::from_bytes(m_json_decode!(v, "prfKeyCommitmentWithID")).ok()?;
+    let snd_cmm_prf = Commitment::from_bytes(m_json_decode!(v, "prfKeyCommitmentWithAR")).ok()?;
     let proof_com_enc_eq = com_enc_eq::ComEncEqProof::from_bytes(&mut Cursor::new(
         &json_base16_decode(v.get("proofEncryptionPrf")?)?,
     ))
@@ -448,6 +444,7 @@ fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, Examp
         ip_ar_data,
         alist,
         pok_sc,
+        cmm_sc,
         cmm_prf,
         snd_cmm_prf,
         proof_com_enc_eq,
@@ -613,7 +610,8 @@ fn handle_deploy_credential(matches: &ArgMatches) {
                 v.get("preIdentityObject").and_then(json_to_pio),
             ) {
                 (Some(sig_bytes), Some(pio)) => {
-                    if let Ok(ip_sig) = ps_sig::Signature::from_bytes(&mut Cursor::new(&sig_bytes)) {
+                    if let Ok(ip_sig) = ps_sig::Signature::from_bytes(&mut Cursor::new(&sig_bytes))
+                    {
                         (ip_sig, pio)
                     } else {
                         eprintln!("Signature malformed.");
@@ -705,7 +703,8 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // - chi
     // - pio
     // - signature of the identity provider
-    // - acc_data of the account onto which we are deploying this credential (private and public)
+    // - acc_data of the account onto which we are deploying this credential
+    //   (private and public)
     unimplemented!()
 }
 
@@ -887,6 +886,13 @@ fn handle_start_ip(matches: &ArgMatches) {
             }
         }
     };
+    let expiry_date = match read_expiry_date() {
+        Ok(expiry_date) => expiry_date,
+        Err(e) => {
+            eprintln!("Could not read credential expiry date because {}", e);
+            return;
+        }
+    };
     let alist = {
         match read_attribute_list(alist_type as u32) {
             Ok(alist) => alist,
@@ -902,6 +908,7 @@ fn handle_start_ip(matches: &ArgMatches) {
         prf_key,
         attributes: AttributeList::<<Bls12 as Pairing>::ScalarField, ExampleAttribute> {
             variant: alist_type as u32,
+            expiry: expiry_date,
             alist,
             _phantom: Default::default(),
         },
