@@ -75,7 +75,7 @@ pub struct IpArData<C: Curve> {
 pub struct ChainArData<C: Curve> {
     /// Identity of the anonymity revoker.
     pub ar_name: String,
-    //encryption of public identity credentials
+    /// Encryption of public identity credentials
     pub id_cred_pub_enc: Cipher<C>
 }
 
@@ -104,7 +104,7 @@ pub struct PreIdentityObject<
     /// commitment to the prf key in the same group as the elgamal key of the
     /// anonymity revoker
     pub snd_cmm_prf: pedersen::Commitment<C>,
-    /// Proof that the encryption of the prf key in id_ar_data is the same as
+    /// Proof that the encryption of the prf key in ip_ar_data is the same as
     /// the key in snd_cmm_prf (hidden behind the commitment).
     pub proof_com_enc_eq: ComEncEqProof<C>,
     /// Proof that the first and snd commitments to the prf are hiding the same
@@ -312,47 +312,58 @@ pub fn bytes_to_short_string(cur: &mut Cursor<&[u8]>) -> Option<String> {
     String::from_utf8(svec).ok()
 }
 
-impl <C: Curve>ArData<C> {
+impl <C: Curve>IpArData<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut r = short_string_to_bytes(&self.ar_name);
         r.extend_from_slice(&self.prf_key_enc.to_bytes());
-        r.extend_from_slice(&self.id_cred_pub_enc.to_bytes());
         r
     }
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let ar_name = bytes_to_short_string(cur)?;
         let prf_key_enc = Cipher::from_bytes(cur).ok()?;
+        Some(IpArData{ar_name, prf_key_enc})
+    }
+}
+
+impl <C: Curve>ChainArData<C> {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut r = short_string_to_bytes(&self.ar_name);
+        r.extend_from_slice(&self.id_cred_pub_enc.to_bytes());
+        r
+    }
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let ar_name = bytes_to_short_string(cur)?;
         let id_cred_pub_enc = Cipher::from_bytes(cur).ok()?;
-        Some(ArData{ar_name, prf_key_enc, id_cred_pub_enc})
+        Some(ChainArData{ar_name, id_cred_pub_enc})
     }
 }
 
 impl <C: Curve> CredDeploymentCommitments<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let s1 = self.comm_id_cred_sec.to_bytes();
-        let s2 = self.cmm_prf.to_bytes();
-        let mut v = Vec::with_capacity(s1.len() + s2.len() + 2);
-        v.extend_from_slice(&s1);
-        v.extend_from_slice(&s2);
-        let att_len = self.cmm_attributes.len();
-        v.extend_from_slice(&(att_len as u16).to_be_bytes());
-        for cmm in self.cmm_attributes.iter() {
-            v.extend_from_slice(&cmm.to_bytes());
+        let mut out = Vec::from(self.cmm_id_cred_sec.to_bytes());
+        out.extend_from_slice(&self.cmm_prf.to_bytes());
+        out.extend_from_slice(&self.cmm_cred_counter.to_bytes());
+        let atts = &self.cmm_attributes;
+        out.extend_from_slice(&(atts.len() as u16).to_be_bytes());
+        for a in atts {
+            out.extend_from_slice(&a.to_bytes());
         }
-        v
+        out
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let comm_id_cred_sec = pedersen::Commitment::from_bytes(cur).ok()?;
+        let cmm_id_cred_sec = pedersen::Commitment::from_bytes(cur).ok()?;
         let cmm_prf = pedersen::Commitment::from_bytes(cur).ok()?;
+        let cmm_cred_counter = pedersen::Commitment::from_bytes(cur).ok()?;
         let l = cur.read_u16::<BigEndian>().ok()?;
         let mut cmm_attributes = Vec::with_capacity(l as usize);
         for _ in 0..l {
             cmm_attributes.push(pedersen::Commitment::from_bytes(cur).ok()?)
-        }
+        };
         Some(CredDeploymentCommitments{
-            comm_id_cred_sec,
+            cmm_id_cred_sec,
             cmm_prf,
+            cmm_cred_counter,
             cmm_attributes
         })
     }
@@ -455,7 +466,7 @@ impl <P: Pairing, C: Curve<Scalar=P::ScalarField>>CredDeploymentInfo<P, C> {
         let acc_pub_key = acc_sig_scheme::PublicKey::from_bytes(&buf).ok()?;
         let reg_id = curve_serialization::read_curve::<C>(cur).ok()?;
         let ip_identity = bytes_to_short_string(cur)?;
-        let ar_data = ArData::from_bytes(cur)?;
+        let ar_data = ChainArData::from_bytes(cur)?;
         let sig = Signature::from_bytes(cur).ok()?;
         let policy = Policy::from_bytes(cur)?;
         let commitments = CredDeploymentCommitments::from_bytes(cur)?;

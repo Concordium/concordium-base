@@ -37,7 +37,7 @@ pub fn retrieve_sig<C: Pairing>(sig: &Signature<C>, r: C::ScalarField) -> Signat
 }
 
 
-fn blind_sig<P:Pairing, R: Rng>(sig: &Signature<P>, csprng: &mut R)-> (Signature<P>, P::ScalarField, P::ScalarField){
+pub fn blind_sig<P:Pairing, R: Rng>(sig: &Signature<P>, csprng: &mut R)-> (Signature<P>, P::ScalarField, P::ScalarField){
   let r = P::generate_scalar(csprng);
   let t = P::generate_scalar(csprng);
   let Signature(a, b) = sig;

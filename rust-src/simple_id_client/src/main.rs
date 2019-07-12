@@ -101,7 +101,6 @@ fn mk_ar_name(n: usize) -> String {
 pub enum ExampleAttribute {
     Age(u8),
     Citizenship(u16),
-    ExpiryDate(NaiveDateTime),
     MaxAccount(u16),
     Business(bool),
 }
@@ -113,7 +112,6 @@ impl fmt::Display for ExampleAttribute {
         match self {
             ExampleAttribute::Age(x) => write!(f, "Age({})", x),
             ExampleAttribute::Citizenship(c) => write!(f, "Citizenship({})", c),
-            ExampleAttribute::ExpiryDate(d) => write!(f, "ExpiryDate({})", d),
             ExampleAttribute::MaxAccount(x) => write!(f, "MaxAccount({})", x),
             ExampleAttribute::Business(b) => write!(f, "Business({})", b),
         }
@@ -125,11 +123,6 @@ impl Attribute<<Bls12 as Pairing>::ScalarField> for ExampleAttribute {
         match self {
             ExampleAttribute::Age(x) => Fr::from_repr(FrRepr::from(u64::from(*x))).unwrap(),
             ExampleAttribute::Citizenship(c) => Fr::from_repr(FrRepr::from(u64::from(*c))).unwrap(),
-            // TODO: note that using timestamp on naivedate is ambiguous because it does not account
-            // for the time zone the date is in.
-            ExampleAttribute::ExpiryDate(d) => {
-                Fr::from_repr(FrRepr::from(d.timestamp() as u64)).unwrap()
-            }
             ExampleAttribute::MaxAccount(x) => Fr::from_repr(FrRepr::from(u64::from(*x))).unwrap(),
             ExampleAttribute::Business(b) => Fr::from_repr(FrRepr::from(u64::from(*b))).unwrap(),
         }
@@ -140,7 +133,6 @@ fn example_attribute_to_json(att: &ExampleAttribute) -> Value {
     match att {
         ExampleAttribute::Age(x) => json!({"age": *x}),
         ExampleAttribute::Citizenship(c) => json!({ "citizenship": c }),
-        ExampleAttribute::ExpiryDate(d) => json!({"expiryDate": d.format("%d %B %Y").to_string()}),
         ExampleAttribute::MaxAccount(x) => json!({ "maxAccount": x }),
         ExampleAttribute::Business(b) => json!({ "business": b }),
     }
@@ -381,30 +373,45 @@ fn ip_infos_to_json(ipinfos: &[IpInfo<Bls12, <Bls12 as Pairing>::G_1>]) -> Value
     json!(arr)
 }
 
-fn ar_data_to_json<C: Curve>(ar_data: &ArData<C>) -> Value {
+fn ip_ar_data_to_json<C: Curve>(ar_data: &IpArData<C>) -> Value {
     json!({
         "arName": ar_data.ar_name.clone(),
         "prfKeyEncryption": json_base16_encode(&ar_data.prf_key_enc.to_bytes()),
+    })
+}
+
+fn json_to_ip_ar_data(v: &Value) -> Option<IpArData<ExampleCurve>> {
+    let ar_name = v.get("arName")?.as_str()?;
+    let prf_key_enc = Cipher::from_bytes(m_json_decode!(v, "prfKeyEncryption")).ok()?;
+    Some(IpArData {
+        ar_name: ar_name.to_owned(),
+        prf_key_enc,
+    })
+}
+
+
+fn chain_ar_data_to_json<C: Curve>(ar_data: &ChainArData<C>) -> Value {
+    json!({
+        "arName": ar_data.ar_name.clone(),
         "idCredPubEnc": json_base16_encode(&ar_data.id_cred_pub_enc.to_bytes()),
     })
 }
 
-fn json_to_ar_data(v: &Value) -> Option<ArData<ExampleCurve>> {
+fn json_to_chain_ar_data(v: &Value) -> Option<ChainArData<ExampleCurve>> {
     let ar_name = v.get("arName")?.as_str()?;
-    let prf_key_enc = Cipher::from_bytes(m_json_decode!(v, "prfKeyEncryption")).ok()?;
     let id_cred_pub_enc = Cipher::from_bytes(m_json_decode!(v, "idCredPubEnc")).ok()?;
-    Some(ArData {
+    Some(ChainArData {
         ar_name: ar_name.to_owned(),
-        prf_key_enc,
         id_cred_pub_enc,
     })
 }
+
 
 fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>) -> Value {
     json!({
         "accountHolderName": pio.id_ah,
         "idCredPubIp": json_base16_encode(&pio.id_cred_pub_ip.curve_to_bytes()),
-        "idArData": ar_data_to_json(&pio.id_ar_data),
+        "ipArData": ip_ar_data_to_json(&pio.id_ar_data),
         "attributeList": alist_to_json(&pio.alist),
         "pokSecCred": json_base16_encode(&pio.pok_sc.to_bytes()),
         "prfKeyCommitmentWithID": json_base16_encode(&pio.cmm_prf.to_bytes()),
@@ -418,7 +425,7 @@ fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, Examp
     let id_ah = v.get("accountHolderName")?.as_str()?.to_owned();
     let id_cred_pub_ip =
         ExampleCurve::bytes_to_curve(m_json_decode!(v, "idCredPubIp")).ok()?;
-    let id_ar_data = json_to_ar_data(v.get("idArData")?)?;
+    let ip_ar_data = json_to_ar_data(v.get("ipArData")?)?;
     let alist = json_to_alist(v.get("attributeList")?)?;
     let pok_sc =
         dlog::DlogProof::from_bytes(&mut Cursor::new(&json_base16_decode(v.get("pokSecCred")?)?))
@@ -438,7 +445,7 @@ fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, Examp
     Some(PreIdentityObject {
         id_ah,
         id_cred_pub_ip,
-        id_ar_data,
+        ip_ar_data,
         alist,
         pok_sc,
         cmm_prf,
