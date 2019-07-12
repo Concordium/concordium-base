@@ -48,7 +48,7 @@ where
     let pok_sc = {
         let Commitment(cmm_sc_point) = cmm_sc;
         let CommitmentKey(sc_ck_1, sc_ck_2) = sc_ck;
-        com_eq::prove_com_eq(&(vec![cmm_sc_point] , id_cred_pub_ip), &(sc_ck_1[0], *sc_ck_2, vec![context.dlog_base]), &(vec![cmm_sc_rand], vec![id_cred_sec]), &mut csprng)    
+        com_eq::prove_com_eq(&[], &(vec![cmm_sc_point] , id_cred_pub_ip), &(sc_ck_1[0], *sc_ck_2, vec![context.dlog_base]), &(vec![cmm_sc_rand], vec![id_cred_sec]), &mut csprng)    
     };
     
     let (cmm_prf, rand_cmm_prf) = context
@@ -73,7 +73,7 @@ where
             context.commitment_key_ar.0[0],
             context.commitment_key_ar.1,
         );
-        com_enc_eq::prove_com_enc_eq(&mut csprng, &public, &secret, &base)
+        com_enc_eq::prove_com_enc_eq(&mut csprng, &[], &public, &secret, &base)
     };
     let proof_com_eq = {
         let public = (cmm_prf.0, snd_cmm_prf.0);
@@ -83,7 +83,7 @@ where
             (context.commitment_key_prf.0[0], context.commitment_key_prf.1),
             (context.commitment_key_ar.0[0], context.commitment_key_ar.1),
         );
-        com_eq_different_groups::prove_com_eq_diff_grps(&mut csprng, &public, &secret, &coeff)
+        com_eq_different_groups::prove_com_eq_diff_grps(&mut csprng, &[], &public, &secret, &coeff)
     };
     PreIdentityObject {
         id_ah,
@@ -99,7 +99,7 @@ where
     }
 }
 
-
+/*
 pub fn generate_cdi<
       P: Pairing,
       AttributeType: Attribute<C::Scalar>,
@@ -244,5 +244,5 @@ fn compute_commitments<C:Curve, AttributeType:Attribute<C::Scalar>, R:Rng>(commi
     (cdc, cr)
 
 }
-
+*/
 

@@ -107,7 +107,7 @@ fn verify_knowledge_of_id_cred_sec<C: Curve>(
 ) -> bool {
     let PedersenCommitment(c) = commitment;
     let CommitmentParams((h, g)) = cmm_params;
-    verify_com_eq(&(vec![*c],*pk),&(*h,*g, vec![*base]), &proof)
+    verify_com_eq(&[], &(vec![*c],*pk),&(*h,*g, vec![*base]), &proof)
 }
 
 fn verify_vrf_key_data<C_1: Curve, C_2: Curve<Scalar = C_1::Scalar>>(
@@ -125,6 +125,7 @@ fn verify_vrf_key_data<C_1: Curve, C_2: Curve<Scalar = C_1::Scalar>>(
     let c_1 = comm_1.0;
     let c_2 = comm_2.0;
     let b_1 = verify_com_eq_diff_grps(
+        &[],
         &((g_1, h_1), (g_2, h_2)),
         &(c_1, c_2),
         com_eq_diff_grps_proof,
@@ -136,5 +137,5 @@ fn verify_vrf_key_data<C_1: Curve, C_2: Curve<Scalar = C_1::Scalar>>(
     let (e_1, e_2) = (cipher.0, cipher.1);
     let coeff = (g, h, g_2, h_2);
     let eval = (e_1, e_2, c_2);
-    verify_com_enc_eq(&coeff, &eval, comm_enc_eq_proof)
+    verify_com_enc_eq(&[], &coeff, &eval, comm_enc_eq_proof)
 }
