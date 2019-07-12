@@ -40,6 +40,7 @@ impl<T: Curve> AggregateDlogProof<T> {
 
 pub fn prove_aggregate_dlog<T: Curve, R: Rng>(
     csprng: &mut R,
+    challenge_prefix: &[u8],
     public: &T,
     secret: &[T::Scalar],
     coeff: &[T],
@@ -47,6 +48,7 @@ pub fn prove_aggregate_dlog<T: Curve, R: Rng>(
     let n = secret.len();
     assert_eq!(coeff.len(), n);
     let mut hasher = Sha256::new();
+    hasher.input(challenge_prefix);
     hasher.input(&*public.curve_to_bytes());
     let mut hash = [0u8; 32];
     let mut suc = false;
@@ -88,11 +90,13 @@ pub fn prove_aggregate_dlog<T: Curve, R: Rng>(
 }
 
 pub fn verify_aggregate_dlog<T: Curve>(
+    challenge_prefix: &[u8],
     coeff: &Vec<T>,
     public: &T,
     proof: &AggregateDlogProof<T>,
 ) -> bool {
     let mut hasher = Sha256::new();
+    hasher.input(challenge_prefix);
     let randomised_point = proof.randomised_point;
     let witness = &proof.witness;
     let n = witness.len();
@@ -125,7 +129,9 @@ pub fn verify_aggregate_dlog<T: Curve>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::*;
     use pairing::bls12_381::G1Affine;
+
     #[test]
     pub fn test_aggregate_dlog() {
         let mut csprng = thread_rng();
@@ -138,9 +144,24 @@ mod tests {
                 coeff[j] = G1Affine::generate(&mut csprng);
                 public = public.plus_point(&coeff[j].mul_by_scalar(&secret[j]));
             }
-            let proof =
-                prove_aggregate_dlog::<G1Affine, ThreadRng>(&mut csprng, &public, &secret, &coeff);
-            assert!(verify_aggregate_dlog(&coeff, &public, &proof));
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let proof = prove_aggregate_dlog::<G1Affine, ThreadRng>(
+                &mut csprng,
+                &challenge_prefix,
+                &public,
+                &secret,
+                &coeff,
+            );
+            assert!(verify_aggregate_dlog(
+                &challenge_prefix,
+                &coeff,
+                &public,
+                &proof
+            ));
+            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
+            if verify_aggregate_dlog(&challenge_prefix_1, &coeff, &public, &proof) {
+                assert_eq!(challenge_prefix, challenge_prefix_1);
+            }
         }
     }
 

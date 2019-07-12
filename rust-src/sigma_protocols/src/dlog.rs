@@ -37,11 +37,13 @@ impl<T: Curve> DlogProof<T> {
 
 pub fn prove_dlog<T: Curve, R: Rng>(
     csprng: &mut R,
+    challenge_prefix: &[u8],
     public: &T,
     secret: &T::Scalar,
     base: &T,
 ) -> DlogProof<T> {
     let mut hasher = Sha256::new();
+    hasher.input(challenge_prefix);
     hasher.input(&*public.curve_to_bytes());
     let mut hash = [0u8; 32];
     let mut suc = false;
@@ -78,8 +80,14 @@ pub fn prove_dlog<T: Curve, R: Rng>(
     }
 }
 
-pub fn verify_dlog<T: Curve>(base: &T, public: &T, proof: &DlogProof<T>) -> bool {
+pub fn verify_dlog<T: Curve>(
+    challenge_prefix: &[u8],
+    base: &T,
+    public: &T,
+    proof: &DlogProof<T>,
+) -> bool {
     let mut hasher = Sha256::new();
+    hasher.input(challenge_prefix);
     hasher.input(&*public.curve_to_bytes());
     hasher.input(&*proof.randomised_point.curve_to_bytes());
     let mut hash = [0u8; 32];
@@ -99,6 +107,7 @@ pub fn verify_dlog<T: Curve>(base: &T, public: &T, proof: &DlogProof<T>) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::*;
     use pairing::bls12_381::G1Affine;
     #[test]
     pub fn test_dlog() {
@@ -107,8 +116,19 @@ mod tests {
             let secret = G1Affine::generate_scalar(&mut csprng);
             let base = G1Affine::generate(&mut csprng);
             let public = &base.mul_by_scalar(&secret);
-            let proof = prove_dlog::<G1Affine, ThreadRng>(&mut csprng, &public, &secret, &base);
-            assert!(verify_dlog(&base, &public, &proof));
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let proof = prove_dlog::<G1Affine, ThreadRng>(
+                &mut csprng,
+                &challenge_prefix,
+                &public,
+                &secret,
+                &base,
+            );
+            assert!(verify_dlog(&challenge_prefix, &base, &public, &proof));
+            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
+            if verify_dlog(&challenge_prefix_1, &base, &public, &proof) {
+                assert_eq!(challenge_prefix, challenge_prefix_1);
+            }
         }
     }
 

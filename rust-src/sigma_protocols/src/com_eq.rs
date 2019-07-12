@@ -49,6 +49,7 @@ impl<T: Curve> ComEqProof<T> {
 }
 
 pub fn prove_com_eq<T: Curve, R: Rng>(
+    challenge_prefix: &[u8],
     evaluation: &(Vec<T>, T),                  // ([c_i], y)
     coeff: &(T, T, Vec<T>),                    // g, h, [g_i]
     secret: &(Vec<T::Scalar>, Vec<T::Scalar>), //([b_i], [a_i])
@@ -65,6 +66,7 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
     let mut u = T::zero_point();
     let mut vxs = vec![T::zero_point(); n];
     let mut hasher = Sha256::new();
+    hasher.input(challenge_prefix);
     let mut hash = [0u8; 32];
     let mut challenge = T::Scalar::zero();
     let mut zxs = axs.clone();
@@ -115,6 +117,7 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
     }
 }
 pub fn verify_com_eq<T: Curve>(
+    challenge_prefix: &[u8],
     evaluation: &(Vec<T>, T),
     coeff: &(T, T, Vec<T>),
     proof: &ComEqProof<T>,
@@ -143,6 +146,7 @@ pub fn verify_com_eq<T: Curve>(
     if *u == u_c {
         let mut hasher = Sha256::new();
         let mut hash = [0u8; 32];
+        hasher.input(challenge_prefix);
         for ev in cxs.iter() {
             hasher.input(&*ev.curve_to_bytes());
         }
@@ -174,6 +178,7 @@ pub fn verify_com_eq<T: Curve>(
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::common::*;
     use pairing::bls12_381::G1Affine;
 
     #[test]
@@ -199,8 +204,24 @@ mod test {
             }
             let coeff = (g, h, gxs);
             let evaluation = (cxs, y);
-            let proof = prove_com_eq(&evaluation, &coeff, &(bxs, axs), &mut csprng);
-            assert!(verify_com_eq(&evaluation, &coeff, &proof));
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let proof = prove_com_eq(
+                &challenge_prefix,
+                &evaluation,
+                &coeff,
+                &(bxs, axs),
+                &mut csprng,
+            );
+            assert!(verify_com_eq(
+                &challenge_prefix,
+                &evaluation,
+                &coeff,
+                &proof
+            ));
+            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
+            if verify_com_eq(&challenge_prefix_1, &evaluation, &coeff, &proof) {
+                assert_eq!(challenge_prefix, challenge_prefix_1);
+            }
         }
     }
 

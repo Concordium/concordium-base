@@ -51,6 +51,7 @@ where
 
 pub fn prove_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>, R: Rng>(
     csprng: &mut R,
+    challenge_prefix: &[u8],
     public: &(C1, C2),
     secret: &(C1::Scalar, C1::Scalar, C1::Scalar),
     coeff: &((C1, C1), (C2, C2)),
@@ -59,6 +60,7 @@ pub fn prove_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>, R: Rng>
 
     let ((g_1, h_1), (g_2, h_2)) = coeff;
     let mut hasher = Sha256::new();
+    hasher.input(challenge_prefix);
     hasher.input(&*public_1.curve_to_bytes());
     hasher.input(&*public_2.curve_to_bytes());
     let mut hash = [0u8; 32];
@@ -111,11 +113,13 @@ pub fn prove_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>, R: Rng>
 }
 
 pub fn verify_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
+    challenge_prefix: &[u8],
     coeff: &((C1, C1), (C2, C2)),
     public: &(C1, C2),
     proof: &ComEqDiffGrpsProof<C1, C2>,
 ) -> bool {
     let mut hasher = Sha256::new();
+    hasher.input(challenge_prefix);
     let (public_1, public_2) = public;
     let ((g_1, h_1), (g_2, h_2)) = coeff;
     let (w_1, w_2, w_3) = proof.witness;
@@ -149,6 +153,7 @@ pub fn verify_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::*;
     use pairing::bls12_381::{G1Affine, G2Affine};
 
     #[test]
@@ -176,13 +181,24 @@ mod tests {
             );
             let secret = (s_1, s_2, s_3);
             let coeff = ((g_1, h_1), (g_2, h_2));
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
             let proof = prove_com_eq_diff_grps::<G1Affine, G2Affine, ThreadRng>(
                 &mut csprng,
+                &challenge_prefix,
                 &public,
                 &secret,
                 &coeff,
             );
-            assert!(verify_com_eq_diff_grps(&coeff, &public, &proof));
+            assert!(verify_com_eq_diff_grps(
+                &challenge_prefix,
+                &coeff,
+                &public,
+                &proof
+            ));
+            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
+            if verify_com_eq_diff_grps(&challenge_prefix_1, &coeff, &public, &proof) {
+                assert_eq!(challenge_prefix, challenge_prefix_1);
+            }
         }
     }
 
