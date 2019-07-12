@@ -560,7 +560,7 @@ impl Pairing for Bls12 {
         Box::new(bytes)
     }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::ScalarField { Fr::rand(csprng) }
+    fn generate_scalar<T: Rng >(csprng: &mut T) -> Self::ScalarField { Fr::rand(csprng) }
 
     fn bytes_to_scalar(bytes: &mut Cursor<&[u8]>) -> Result<Self::ScalarField, FieldDecodingError> {
         let mut frrepr: FrRepr = FrRepr([0u64; 4]);

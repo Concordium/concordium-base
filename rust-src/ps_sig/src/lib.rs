@@ -11,5 +11,6 @@ pub use public::*;
 pub use secret::*;
 pub use signature::*;
 pub use unknown_message::*;
+pub use ps_sig_scheme::*;
 
 mod common;

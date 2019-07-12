@@ -160,6 +160,7 @@ pub fn verify_com_eq_sig<P: Pairing, C:Curve<Scalar=P::ScalarField>>(
     let ((q_wit, gxs_wit), pedersen_rands_wit) = &proof.witness;
     let ((p_pair, p), (q_pair,q), (gxs_pair, gxs) , (g, h)) = coeff;
     let ((eval_pair, eval), comm_vec) = evaluation;
+    if *eval_pair == P::G_1::zero_point() { return false}
     let n = comm_vec.len();
     assert_eq!(gxs_wit.len(), n);
     assert_eq!(pedersen_rands_wit.len(), n);

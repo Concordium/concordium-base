@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use curve_arithmetic::curve_arithmetic::*;
 use curve_arithmetic::serialization as curve_serialization;
 use dodis_yampolskiy_prf::secret as prf;
@@ -6,12 +7,11 @@ use pairing::Field;
 use pedersen_scheme::{commitment as pedersen, key::CommitmentKey as PedersenKey};
 use ps_sig::{public as pssig, signature::*};
 use ed25519_dalek as acc_sig_scheme;
-
 use ed25519_dalek as ed25519;
 
 use sigma_protocols::{
     com_enc_eq::ComEncEqProof, com_eq_different_groups::ComEqDiffGrpsProof, dlog::DlogProof,
-    com_eq_sig::ComEqSigProof, com_mult::ComMultProof
+    com_eq_sig::ComEqSigProof, com_mult::ComMultProof, com_eq::ComEqProof
 };
 
 use std::io::{Cursor, Read};
@@ -27,6 +27,7 @@ pub trait Attribute<F: Field> {
 #[derive(Clone, Debug)]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     pub variant:  u32,
+    pub expiry : NaiveDateTime,
     pub alist:    Vec<AttributeType>,
     pub _phantom: std::marker::PhantomData<F>,
 }
@@ -64,15 +65,18 @@ pub struct AccCredentialInfo<P:Pairing, C:Curve<Scalar=P::ScalarField>, Attribut
     /// Chosen attribute list.
     pub attributes: AttributeList<C::Scalar, AttributeType>,
 }
-
-/// Data created by the credential holder to support anonymity revocation.
-pub struct ArData<C: Curve> {
+pub struct IpArData<C: Curve> {
     /// Identity of the anonymity revoker.
     pub ar_name: String,
     /// Encryption of the prf key of the credential holder.
     pub prf_key_enc: Cipher<C>,
-    /// Encryption of public identity credentials.
-    pub id_cred_pub_enc: Cipher<C> 
+}
+/// Data created by the credential holder to support anonymity revocation.
+pub struct ChainArData<C: Curve> {
+    /// Identity of the anonymity revoker.
+    pub ar_name: String,
+    //encryption of public identity credentials
+    pub id_cred_pub_enc: Cipher<C>
 }
 
 /// Information sent from the account holder to the identity provider.
@@ -87,11 +91,14 @@ pub struct PreIdentityObject<
     pub id_cred_pub_ip: P::G_1,
     /// Information on the chosen anonymity revoker, and the encryption of the
     /// account holder's prf key with the anonymity revoker's encryption key.
-    pub id_ar_data: ArData<C>,
+    pub ip_ar_data: IpArData<C>,
     /// Chosen attribute list.
     pub alist: AttributeList<C::Scalar, AttributeType>,
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub
-    pub pok_sc: DlogProof<P::G_1>,
+    /// matching the commitment cmm_sc
+    pub pok_sc: ComEqProof<P::G_1>,
+    ///commitment to id cred sec
+    pub cmm_sc: pedersen::Commitment<P::G_1>,
     /// Commitment to the prf key.
     pub cmm_prf: pedersen::Commitment<P::G_1>,
     /// commitment to the prf key in the same group as the elgamal key of the
@@ -138,16 +145,19 @@ pub struct IdentityObject<P: Pairing, C:Curve<Scalar=P::ScalarField>, AttributeT
     /// Information on the chosen anonymity revoker, and the encryption of the
     /// account holder's prf key with the anonymity revoker's encryption key.
     /// Should be the same as the data signed by the identity provider.
-    pub ar_data: ArData<C>,
+    pub ar_data: IpArData<C>,
 }
 
 pub struct CredDeploymentCommitments<C:Curve>{
       //commitment to id_cred_sec
-      pub comm_id_cred_sec: pedersen::Commitment<C>,
+      pub cmm_id_cred_sec: pedersen::Commitment<C>,
       //commitment to the prf key
       pub cmm_prf: pedersen::Commitment<C>,
+      //commitment to credential counter
+      pub cmm_cred_counter: pedersen::Commitment<C>,
       // commitments to the attribute list
-      pub cmm_attributes: Vec<pedersen::Commitment<C>>
+      pub cmm_attributes: Vec<pedersen::Commitment<C>>,
+    
 }
 
 pub struct CredDeploymentProofs<P:Pairing, C:Curve<Scalar=P::ScalarField>>{
@@ -160,7 +170,6 @@ pub struct CredDeploymentProofs<P:Pairing, C:Curve<Scalar=P::ScalarField>>{
     pub proof_ip_sig: ComEqSigProof<P, C>,
     //proof that reg_id = prf_K(x)
     pub proof_reg_id: ComMultProof<C>,
-    //proof that ar_data.enc_id_cred_pub contains the right ky id_cred_pub
 }
 
 pub struct Policy<C:Curve>{
@@ -171,6 +180,12 @@ pub struct Policy<C:Curve>{
 pub enum SchemeId {
     Ed25519,
     CL
+}
+
+pub struct PolicyProof<C:Curve>{
+      //the u16 is the index of the attribute
+      //the Scalar is the witness (technically the randomness in the commitment) i.e. to open
+      cmm_opening_map: Vec<(u16, C::Scalar)>
 }
 
 pub struct CredDeploymentInfo<P: Pairing, C:Curve<Scalar=P::ScalarField>> {
@@ -186,7 +201,7 @@ pub struct CredDeploymentInfo<P: Pairing, C:Curve<Scalar=P::ScalarField>> {
     pub ip_identity: String,
     /// Anonymity revocation data. Which anonymity revokers have the capability
     /// to remove the anonymity of the account.
-    pub ar_data:    ArData<C>,
+    pub ar_data:    ChainArData<C>,
     /// Signature derived from the signature of the pre-identity object by the
     /// IP
     pub sig: Signature<P>,
@@ -215,8 +230,11 @@ pub struct Context<P: Pairing, C: Curve<Scalar=P::ScalarField>> {
     /// provider and the account holder
     pub dlog_base: P::G_1,
     /// Commitment key shared by the identity provider and the account holder.
+    /// It is used to generate commitments to the id cred sec key.
+    pub commitment_key_sc: PedersenKey<P::G_1>,
+    /// Commitment key shared by the identity provider and the account holder.
     /// It is used to generate commitments to the prf key.
-    pub commitment_key_id: PedersenKey<P::G_1>,
+    pub commitment_key_prf: PedersenKey<P::G_1>,
     /// Commitment key shared by the anonymity revoker, identity provider, and
     /// account holder. Used to commit to the prf key of the account holder in
     /// the same group as the encryption of the prf key as given to the
@@ -246,16 +264,20 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar=P::ScalarField>>(
     global: &GlobalContext<C>,
 ) -> Context<P, C> {
     // TODO: Check with Bassel that these parameters are correct.
-    let commitment_key_id =
-        PedersenKey(vec![ip_info.ip_verify_key.0[0]], ip_info.ip_verify_key.0[1]);
+    let dlog_base= <P as Pairing>::G_1::one_point();
+    let commitment_key_sc =
+        PedersenKey(vec![ip_info.ip_verify_key.2[0]], dlog_base);
+    let commitment_key_prf =
+        PedersenKey(vec![ip_info.ip_verify_key.2[1]], dlog_base);
     let commitment_key_ar = PedersenKey(
         vec![ip_info.ar_info.ar_elgamal_generator],
         ip_info.ar_info.ar_public_key.0,
     );
     Context {
         ip_info,
-        dlog_base: <P as Pairing>::G_1::one_point(),
-        commitment_key_id,
+        dlog_base,
+        commitment_key_sc,
+        commitment_key_prf,
         commitment_key_ar,
     }
 }
