@@ -187,6 +187,8 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
   -- |Identity of the identity provider who signed the identity object from
   -- which this credential is derived.
   cdvIpId      :: IdentityProviderIdentity,
+  -- |Anonymity revocation data associated with this credential.
+  cdvArData :: AnonymityRevocationData,
   -- |Policy. At the moment only opening of specific commitments.
   cdvPolicy :: Policy
 } deriving(Eq, Show)
@@ -226,6 +228,7 @@ instance Serialize CredentialDeploymentValues where
     cdvVerifyKey <- get
     cdvRegId <- get
     cdvIpId <- get
+    cdvArData <- get
     cdvPolicy <- getPolicy
     return CredentialDeploymentValues{..}
 
@@ -234,6 +237,7 @@ instance Serialize CredentialDeploymentValues where
     put cdvVerifyKey <>
     put cdvRegId <>
     put cdvIpId <>
+    put cdvArData <>
     putPolicy cdvPolicy
 
   
@@ -266,6 +270,7 @@ getCDIPartial = do
   cdvVerifyKey <- get
   cdvRegId <- get
   cdvIpId <- get
+  cdvArData <- get
   cdvPolicy <- getPolicy
   return CredentialDeploymentValues{..}
 

@@ -1,21 +1,20 @@
 use chrono::NaiveDateTime;
-use curve_arithmetic::curve_arithmetic::*;
-use curve_arithmetic::serialization as curve_serialization;
+use curve_arithmetic::{curve_arithmetic::*, serialization as curve_serialization};
 use dodis_yampolskiy_prf::secret as prf;
+use ed25519_dalek as acc_sig_scheme;
+use ed25519_dalek as ed25519;
 use elgamal::cipher::Cipher;
 use pairing::Field;
 use pedersen_scheme::{commitment as pedersen, key::CommitmentKey as PedersenKey};
 use ps_sig::{public as pssig, signature::*};
-use ed25519_dalek as acc_sig_scheme;
-use ed25519_dalek as ed25519;
 
 use sigma_protocols::{
-    com_enc_eq::ComEncEqProof, com_eq_different_groups::ComEqDiffGrpsProof, dlog::DlogProof,
-    com_eq_sig::ComEqSigProof, com_mult::ComMultProof, com_eq::ComEqProof
+    com_enc_eq::ComEncEqProof, com_eq::ComEqProof, com_eq_different_groups::ComEqDiffGrpsProof,
+    com_eq_sig::ComEqSigProof, com_mult::ComMultProof, dlog::DlogProof,
 };
 
-use std::io::{Cursor, Read};
 use byteorder::{BigEndian, ReadBytesExt};
+use std::io::{Cursor, Read};
 
 pub struct CommitmentParams<C: Curve>(pub (C, C));
 pub struct ElgamalParams<C: Curve>(pub (C, C));
@@ -27,25 +26,24 @@ pub trait Attribute<F: Field> {
 #[derive(Clone, Debug)]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     pub variant:  u32,
-    pub expiry : NaiveDateTime,
+    pub expiry:   NaiveDateTime,
     pub alist:    Vec<AttributeType>,
     pub _phantom: std::marker::PhantomData<F>,
 }
 
 #[derive(Debug)]
 /// In our case C: will be G_1 and T will be G_1 for now
-pub struct IdCredentials<C: Curve, T:Curve<Scalar=C::Scalar>> {
-    pub id_cred_sec: C::Scalar,
-    pub id_cred_pub: C,
+pub struct IdCredentials<C: Curve, T: Curve<Scalar = C::Scalar>> {
+    pub id_cred_sec:    C::Scalar,
+    pub id_cred_pub:    C,
     pub id_cred_pub_ip: T,
-
 }
 
 /// Private credential holder information. A user maintaints these
 /// through many different interactions with the identity provider and
 /// the chain.
 #[derive(Debug)]
-pub struct CredentialHolderInfo<C:Curve, T:Curve<Scalar=C::Scalar>> {
+pub struct CredentialHolderInfo<C: Curve, T: Curve<Scalar = C::Scalar>> {
     /// Name of the credential holder.
     pub id_ah: String,
     /// Public and private keys of the credential holder. NB: These are distinct
@@ -58,7 +56,11 @@ pub struct CredentialHolderInfo<C:Curve, T:Curve<Scalar=C::Scalar>> {
 /// interaction with the identity provider. The credential holder chooses a prf
 /// key and an attribute list.
 #[derive(Debug)]
-pub struct AccCredentialInfo<P:Pairing, C:Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar>> {
+pub struct AccCredentialInfo<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
     pub acc_holder_info: CredentialHolderInfo<C, P::G_1>,
     /// Chosen prf key of the credential holder.
     pub prf_key: prf::SecretKey<C>,
@@ -76,7 +78,7 @@ pub struct ChainArData<C: Curve> {
     /// Identity of the anonymity revoker.
     pub ar_name: String,
     /// Encryption of public identity credentials
-    pub id_cred_pub_enc: Cipher<C>
+    pub id_cred_pub_enc: Cipher<C>,
 }
 
 /// Information sent from the account holder to the identity provider.
@@ -97,7 +99,7 @@ pub struct PreIdentityObject<
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub
     /// matching the commitment cmm_sc
     pub pok_sc: ComEqProof<P::G_1>,
-    ///commitment to id cred sec
+    /// commitment to id cred sec
     pub cmm_sc: pedersen::Commitment<P::G_1>,
     /// Commitment to the prf key.
     pub cmm_prf: pedersen::Commitment<P::G_1>,
@@ -114,7 +116,7 @@ pub struct PreIdentityObject<
 
 /// Public information about an identity provider.
 #[derive(Debug, Clone)]
-pub struct IpInfo<P: Pairing, C: Curve<Scalar=P::ScalarField>> {
+pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub ip_identity: String,
     pub ip_verify_key: pssig::PublicKey<P>,
     /// In the current design the identity provider chooses a single anonymity
@@ -135,7 +137,11 @@ pub struct ArInfo<C: Curve> {
 /// Information the account holder has after the interaction with the identity
 /// provider. The account holder uses this information to generate credentials
 /// to deploy on the chain.
-pub struct IdentityObject<P: Pairing, C:Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar>> {
+pub struct IdentityObject<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
     /// Identity provider who checked and signed the data in the
     /// PreIdentityObject.
     pub id_provider: IpInfo<P, C>,
@@ -148,80 +154,81 @@ pub struct IdentityObject<P: Pairing, C:Curve<Scalar=P::ScalarField>, AttributeT
     pub ar_data: IpArData<C>,
 }
 
-pub struct CredDeploymentCommitments<C:Curve>{
-      //commitment to id_cred_sec
-      pub cmm_id_cred_sec: pedersen::Commitment<C>,
-      //commitment to the prf key
-      pub cmm_prf: pedersen::Commitment<C>,
-      //commitment to credential counter
-      pub cmm_cred_counter: pedersen::Commitment<C>,
-      // commitments to the attribute list
-      pub cmm_attributes: Vec<pedersen::Commitment<C>>,
-    
+pub struct CredDeploymentCommitments<C: Curve> {
+    // commitment to id_cred_sec
+    pub cmm_id_cred_sec: pedersen::Commitment<C>,
+    // commitment to the prf key
+    pub cmm_prf: pedersen::Commitment<C>,
+    // commitment to credential counter
+    pub cmm_cred_counter: pedersen::Commitment<C>,
+    // commitments to the attribute list
+    pub cmm_attributes: Vec<pedersen::Commitment<C>>,
 }
 
-pub struct CredDeploymentProofs<P:Pairing, C:Curve<Scalar=P::ScalarField>>{
-    //proof of knowledge of prf key K such that 
-    //appears in both
-    //ar_data.enc_prf_key, and commitments.cmm_prf
+pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    // proof of knowledge of prf key K such that
+    // appears in both
+    // ar_data.enc_prf_key, and commitments.cmm_prf
     pub proof_prf: ComEncEqProof<C>,
-    //proof of knowledge of signature of Identity Provider on the list 
+    // proof of knowledge of signature of Identity Provider on the list
     //(idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n])
     pub proof_ip_sig: ComEqSigProof<P, C>,
-    //proof that reg_id = prf_K(x)
+    // proof that reg_id = prf_K(x)
     pub proof_reg_id: ComMultProof<C>,
 }
 
-pub struct Policy<C:Curve>{
-    pub variant: u16,
-    pub policy_vec: Vec<(u16, C::Scalar)>
+pub struct Policy<C: Curve> {
+    pub variant:    u16,
+    pub policy_vec: Vec<(u16, C::Scalar)>,
 }
 
 pub enum SchemeId {
     Ed25519,
-    CL
+    CL,
 }
 
-pub struct PolicyProof<C:Curve>{
-      //the u16 is the index of the attribute
-      //the Scalar is the witness (technically the randomness in the commitment) i.e. to open
-      cmm_opening_map: Vec<(u16, C::Scalar)>
+pub struct PolicyProof<C: Curve> {
+    // the u16 is the index of the attribute
+    // the Scalar is the witness (technically the randomness in the commitment) i.e. to open
+    cmm_opening_map: Vec<(u16, C::Scalar)>,
 }
 
-pub struct CredDeploymentInfo<P: Pairing, C:Curve<Scalar=P::ScalarField>> {
+pub struct CredDeploymentInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Id of the signature scheme of the account. The verification key must
     /// correspond to the scheme.
     pub acc_scheme_id: SchemeId,
     /// Chosen verification key of the account.
     pub acc_pub_key: acc_sig_scheme::PublicKey,
     /// Credential registration id of the credential.
-    pub reg_id:     C,
+    pub reg_id: C,
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
     pub ip_identity: String,
     /// Anonymity revocation data. Which anonymity revokers have the capability
     /// to remove the anonymity of the account.
-    pub ar_data:    ChainArData<C>,
+    pub ar_data: ChainArData<C>,
+    /// Policy of this credential object.
+    pub policy: Policy<C>,
     /// Signature derived from the signature of the pre-identity object by the
     /// IP
     pub sig: Signature<P>,
-    /// Policy of this credential object.
-    pub policy : Policy<C>,
     /// Individual commitments to each item in the attribute list.
     pub commitments: CredDeploymentCommitments<C>,
-    /// Proofs that all the above corresponds to what the identiy provider signed.
-    pub proofs : CredDeploymentProofs<P, C>,
-    /// Proof that the attributelist in commitments.cmm_attributes satisfy the policy
-    /// the u16 is the index of the attribute
-    /// the Scalar is the witness (technically the randomness in the commitment) i.e. to open
-    pub proof_policy: Vec<(u16, P::ScalarField)>
+    /// Proofs that all the above corresponds to what the identiy provider
+    /// signed.
+    pub proofs: CredDeploymentProofs<P, C>,
+    /// Proof that the attributelist in commitments.cmm_attributes satisfy the
+    /// policy the u16 is the index of the attribute
+    /// the Scalar is the witness (technically the randomness in the commitment)
+    /// i.e. to open
+    pub proof_policy: Vec<(u16, P::ScalarField)>,
 }
 
 /// Context needed to generate pre-identity object.
 /// This context is derived from the public information of the identity
 /// provider, as well as some other global parameters which can be found in the
 /// struct 'GlobalContext'.
-pub struct Context<P: Pairing, C: Curve<Scalar=P::ScalarField>> {
+pub struct Context<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider and anonymity
     /// revoker(s).
     pub ip_info: IpInfo<P, C>,
@@ -242,7 +249,7 @@ pub struct Context<P: Pairing, C: Curve<Scalar=P::ScalarField>> {
     pub commitment_key_ar: PedersenKey<C>,
 }
 
-pub struct GlobalContext<C: Curve > {
+pub struct GlobalContext<C: Curve> {
     /// Base of dlog proofs with chain.
     pub dlog_base_chain: C,
 
@@ -259,16 +266,14 @@ pub struct GlobalContext<C: Curve > {
 /// Make a context in which the account holder can produce a pre-identity object
 /// to send to the identity provider. Also requires access to the global context
 /// of parameters, e.g., dlog-proof base point.
-pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar=P::ScalarField>>(
+pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     ip_info: IpInfo<P, C>,
     global: &GlobalContext<C>,
 ) -> Context<P, C> {
     // TODO: Check with Bassel that these parameters are correct.
-    let dlog_base= <P as Pairing>::G_1::one_point();
-    let commitment_key_sc =
-        PedersenKey(vec![ip_info.ip_verify_key.2[0]], dlog_base);
-    let commitment_key_prf =
-        PedersenKey(vec![ip_info.ip_verify_key.2[1]], dlog_base);
+    let dlog_base = <P as Pairing>::G_1::one_point();
+    let commitment_key_sc = PedersenKey(vec![ip_info.ip_verify_key.2[0]], dlog_base);
+    let commitment_key_prf = PedersenKey(vec![ip_info.ip_verify_key.2[1]], dlog_base);
     let commitment_key_ar = PedersenKey(
         vec![ip_info.ar_info.ar_elgamal_generator],
         ip_info.ar_info.ar_public_key.0,
@@ -291,7 +296,6 @@ pub struct AccountData {
     pub sign_key: ed25519::SecretKey,
 }
 
-
 /// Serialization of relevant types.
 
 /// Serialize a string by putting the length first as 2 bytes, big endian.
@@ -312,33 +316,41 @@ pub fn bytes_to_short_string(cur: &mut Cursor<&[u8]>) -> Option<String> {
     String::from_utf8(svec).ok()
 }
 
-impl <C: Curve>IpArData<C> {
+impl<C: Curve> IpArData<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut r = short_string_to_bytes(&self.ar_name);
         r.extend_from_slice(&self.prf_key_enc.to_bytes());
         r
     }
+
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let ar_name = bytes_to_short_string(cur)?;
         let prf_key_enc = Cipher::from_bytes(cur).ok()?;
-        Some(IpArData{ar_name, prf_key_enc})
+        Some(IpArData {
+            ar_name,
+            prf_key_enc,
+        })
     }
 }
 
-impl <C: Curve>ChainArData<C> {
+impl<C: Curve> ChainArData<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut r = short_string_to_bytes(&self.ar_name);
         r.extend_from_slice(&self.id_cred_pub_enc.to_bytes());
         r
     }
+
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let ar_name = bytes_to_short_string(cur)?;
         let id_cred_pub_enc = Cipher::from_bytes(cur).ok()?;
-        Some(ChainArData{ar_name, id_cred_pub_enc})
+        Some(ChainArData {
+            ar_name,
+            id_cred_pub_enc,
+        })
     }
 }
 
-impl <C: Curve> CredDeploymentCommitments<C> {
+impl<C: Curve> CredDeploymentCommitments<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::from(self.cmm_id_cred_sec.to_bytes());
         out.extend_from_slice(&self.cmm_prf.to_bytes());
@@ -359,17 +371,17 @@ impl <C: Curve> CredDeploymentCommitments<C> {
         let mut cmm_attributes = Vec::with_capacity(l as usize);
         for _ in 0..l {
             cmm_attributes.push(pedersen::Commitment::from_bytes(cur).ok()?)
-        };
-        Some(CredDeploymentCommitments{
+        }
+        Some(CredDeploymentCommitments {
             cmm_id_cred_sec,
             cmm_prf,
             cmm_cred_counter,
-            cmm_attributes
+            cmm_attributes,
         })
     }
 }
 
-impl <P: Pairing, C: Curve<Scalar=P::ScalarField>>CredDeploymentProofs<P, C> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::from(self.proof_prf.to_bytes());
         out.extend_from_slice(&self.proof_ip_sig.to_bytes());
@@ -381,7 +393,7 @@ impl <P: Pairing, C: Curve<Scalar=P::ScalarField>>CredDeploymentProofs<P, C> {
         let proof_prf = ComEncEqProof::from_bytes(cur).ok()?;
         let proof_ip_sig = ComEqSigProof::from_bytes(cur).ok()?;
         let proof_reg_id = ComMultProof::from_bytes(cur).ok()?;
-        Some(CredDeploymentProofs{
+        Some(CredDeploymentProofs {
             proof_prf,
             proof_ip_sig,
             proof_reg_id,
@@ -389,7 +401,7 @@ impl <P: Pairing, C: Curve<Scalar=P::ScalarField>>CredDeploymentProofs<P, C> {
     }
 }
 
-impl <C: Curve>Policy<C> {
+impl<C: Curve> Policy<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut vec = Vec::with_capacity(4);
         vec.extend_from_slice(&self.variant.to_be_bytes());
@@ -411,30 +423,31 @@ impl <C: Curve>Policy<C> {
             let scalar = curve_serialization::read_curve_scalar::<C>(cur).ok()?;
             policy_vec.push((idx, scalar));
         }
-        Some(Policy{
+        Some(Policy {
             variant,
-            policy_vec
+            policy_vec,
         })
     }
 }
 
 impl SchemeId {
-    pub fn to_bytes(&self) -> [u8;1] {
+    pub fn to_bytes(&self) -> [u8; 1] {
         match self {
             SchemeId::CL => [0],
             SchemeId::Ed25519 => [1],
         }
     }
+
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<SchemeId> {
         match cur.read_u8().ok()? {
             0 => Some(SchemeId::CL),
             1 => Some(SchemeId::Ed25519),
-            _ => None
+            _ => None,
         }
     }
 }
 
-impl <P: Pairing, C: Curve<Scalar=P::ScalarField>>CredDeploymentInfo<P, C> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentInfo<P, C> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut v = self.acc_scheme_id.to_bytes().to_vec();
         // NOTE: Serialize the public key with length to match what is in Haskell code
@@ -446,8 +459,8 @@ impl <P: Pairing, C: Curve<Scalar=P::ScalarField>>CredDeploymentInfo<P, C> {
         v.extend_from_slice(&self.reg_id.curve_to_bytes());
         v.extend_from_slice(&short_string_to_bytes(&self.ip_identity));
         v.extend_from_slice(&self.ar_data.to_bytes());
-        v.extend_from_slice(&self.sig.to_bytes());
         v.extend_from_slice(&self.policy.to_bytes());
+        v.extend_from_slice(&self.sig.to_bytes());
         v.extend_from_slice(&self.commitments.to_bytes());
         v.extend_from_slice(&self.proofs.to_bytes());
         // serialize the last vector
@@ -458,6 +471,7 @@ impl <P: Pairing, C: Curve<Scalar=P::ScalarField>>CredDeploymentInfo<P, C> {
         }
         v
     }
+
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let acc_scheme_id = SchemeId::from_bytes(cur)?;
         let sig_length = cur.read_u16::<BigEndian>().ok()?;
@@ -467,8 +481,8 @@ impl <P: Pairing, C: Curve<Scalar=P::ScalarField>>CredDeploymentInfo<P, C> {
         let reg_id = curve_serialization::read_curve::<C>(cur).ok()?;
         let ip_identity = bytes_to_short_string(cur)?;
         let ar_data = ChainArData::from_bytes(cur)?;
-        let sig = Signature::from_bytes(cur).ok()?;
         let policy = Policy::from_bytes(cur)?;
+        let sig = Signature::from_bytes(cur).ok()?;
         let commitments = CredDeploymentCommitments::from_bytes(cur)?;
         let proofs = CredDeploymentProofs::from_bytes(cur)?;
         let l = cur.read_u16::<BigEndian>().ok()?;
@@ -478,7 +492,7 @@ impl <P: Pairing, C: Curve<Scalar=P::ScalarField>>CredDeploymentInfo<P, C> {
             let scalar = curve_serialization::read_curve_scalar::<C>(cur).ok()?;
             proof_policy.push((idx, scalar));
         }
-        Some(CredDeploymentInfo{
+        Some(CredDeploymentInfo {
             acc_scheme_id,
             acc_pub_key,
             reg_id,
@@ -488,7 +502,7 @@ impl <P: Pairing, C: Curve<Scalar=P::ScalarField>>CredDeploymentInfo<P, C> {
             policy,
             commitments,
             proofs,
-            proof_policy
+            proof_policy,
         })
     }
 }
