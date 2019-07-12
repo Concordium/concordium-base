@@ -20,6 +20,9 @@ use crate::errors::{
     *,
 };
 use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::serialization::*;
+
+use std::io::Cursor;
 
 /// A message
 #[derive(Debug)]
@@ -36,34 +39,25 @@ impl<C: Pairing> KnownMessage<C> {
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
         let vs = &self.0;
-        let mut bytes: Vec<u8> = Vec::with_capacity(vs.len() * C::SCALAR_LENGTH);
-        for v in vs.iter() {
-            bytes.extend_from_slice(&Self::value_to_bytes(&v));
-        }
+        let mut bytes: Vec<u8> = Vec::with_capacity(4 + vs.len() * C::SCALAR_LENGTH);
+        write_pairing_scalars::<C>(vs, &mut bytes);
         bytes.into_boxed_slice()
     }
 
     #[inline]
-    fn value_to_bytes(scalar: &C::ScalarField) -> Box<[u8]> { C::scalar_to_bytes(scalar) }
+    pub fn value_to_bytes(scalar: &C::ScalarField) -> Box<[u8]> { C::scalar_to_bytes(scalar) }
 
     /// Construct a message vec from a slice of bytes.
     ///
     /// A `Result` whose okay value is a message vec  or whose error value
     /// is an `SignatureError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<KnownMessage<C>, SignatureError> {
-        let l = bytes.len();
-        if l == 0 || l % C::SCALAR_LENGTH != 0 {
-            return Err(SignatureError(MessageVecLengthError));
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<KnownMessage<C>, SignatureError> {
+        let vs = read_pairing_scalars::<C>(bytes);
+        match vs {
+            Err(_) => Err(SignatureError(MessageVecLengthError)),
+            Ok(vs) => Ok(KnownMessage(vs)),
         }
-        let vlen = l / C::SCALAR_LENGTH;
-        let mut vs: Vec<C::ScalarField> = Vec::with_capacity(vlen);
-        for i in 0..vlen {
-            let j = i * C::SCALAR_LENGTH;
-            let k = j + C::SCALAR_LENGTH;
-            vs.push(Self::message_from_bytes(&bytes[j..k])?);
-        }
-        Ok(KnownMessage(vs))
     }
 
     /// Construct a single `KnownMessage` from a slice of bytes.
@@ -71,7 +65,7 @@ impl<C: Pairing> KnownMessage<C> {
     /// A `Result` whose okay value is a Message  or whose error value
     /// is an `SignatureError` wrapping the internal error that occurred.
     #[inline]
-    fn message_from_bytes(bytes: &[u8]) -> Result<C::ScalarField, SignatureError> {
+    pub fn message_from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<C::ScalarField, SignatureError> {
         match C::bytes_to_scalar(bytes) {
             Ok(scalar) => Ok(scalar),
             Err(_) => Err(SignatureError(FieldDecodingError)),
@@ -103,7 +97,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for i in 1..20 {
                     let val = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
-                    let res_val2 = KnownMessage::<$pairing_type>::from_bytes(&val.to_bytes());
+                    let res_val2 = KnownMessage::<$pairing_type>::from_bytes(&mut Cursor::new(&val.to_bytes()));
                     assert!(res_val2.is_ok());
                     let val2 = res_val2.unwrap();
                     assert_eq!(val2, val);

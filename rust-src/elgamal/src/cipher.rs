@@ -16,11 +16,12 @@ use serde::{Deserializer, Serializer};
 #[cfg(feature = "serde")]
 use std::marker::PhantomData;
 
-use crate::errors::{InternalError::*, *};
+use crate::errors::*;
 
 use curve_arithmetic::curve_arithmetic::*;
 
 use rand::*;
+use std::io::Cursor;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Cipher<C: Curve>(pub C, pub C);
@@ -41,13 +42,9 @@ impl<C: Curve> Cipher<C> {
     /// A `Result` whose okay value is a cipher key or whose error value
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes_unchecked(bytes: &[u8]) -> Result<Cipher<C>, ElgamalError> {
-        if bytes.len() != 2 * C::GROUP_ELEMENT_LENGTH {
-            return Err(ElgamalError(CipherLength));
-        }
-
-        let g = C::bytes_to_curve_unchecked(&bytes[..C::GROUP_ELEMENT_LENGTH])?;
-        let h = C::bytes_to_curve_unchecked(&bytes[C::GROUP_ELEMENT_LENGTH..])?;
+    pub fn from_bytes_unchecked(bytes: &mut Cursor<&[u8]>) -> Result<Cipher<C>, ElgamalError> {
+        let g = C::bytes_to_curve_unchecked(bytes)?;
+        let h = C::bytes_to_curve_unchecked(bytes)?;
         Ok(Cipher(g, h))
     }
 
@@ -56,13 +53,9 @@ impl<C: Curve> Cipher<C> {
     /// A `Result` whose okay value is a cipher key or whose error value
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<Cipher<C>, ElgamalError> {
-        if bytes.len() != 2 * C::GROUP_ELEMENT_LENGTH {
-            return Err(ElgamalError(CipherLength));
-        }
-
-        let g = C::bytes_to_curve(&bytes[..C::GROUP_ELEMENT_LENGTH])?;
-        let h = C::bytes_to_curve(&bytes[C::GROUP_ELEMENT_LENGTH..])?;
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Cipher<C>, ElgamalError> {
+        let g = C::bytes_to_curve(bytes)?;
+        let h = C::bytes_to_curve(bytes)?;
         Ok(Cipher(g, h))
     }
 
@@ -121,7 +114,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _i in 1..100 {
                     let c: Cipher<$curve_type> = Cipher::generate(&mut csprng);
-                    let s = Cipher::from_bytes(&c.to_bytes());
+                    let s = Cipher::from_bytes(&mut Cursor::new(&c.to_bytes()));
                     assert!(s.is_ok());
                     assert_eq!(c, s.unwrap());
                 }

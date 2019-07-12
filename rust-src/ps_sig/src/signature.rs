@@ -14,12 +14,11 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::errors::{
-    InternalError::{CurveDecodingError, SignatureLengthError},
-    *,
-};
+use crate::errors::{InternalError::CurveDecodingError, *};
 use curve_arithmetic::curve_arithmetic::*;
 use rand::*;
+
+use std::io::Cursor;
 
 /// A signature
 #[derive(Debug)]
@@ -39,13 +38,10 @@ impl<C: Pairing> Signature<C> {
         bytes.into_boxed_slice()
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Signature<C>, SignatureError> {
-        if bytes.len() != C::G_1::GROUP_ELEMENT_LENGTH * 2 {
-            return Err(SignatureError(SignatureLengthError));
-        }
-        match C::G_1::bytes_to_curve(&bytes[..C::G_1::GROUP_ELEMENT_LENGTH]) {
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Signature<C>, SignatureError> {
+        match C::G_1::bytes_to_curve(bytes) {
             Err(_) => Err(SignatureError(CurveDecodingError)),
-            Ok(g) => match C::G_1::bytes_to_curve(&bytes[C::G_1::GROUP_ELEMENT_LENGTH..]) {
+            Ok(g) => match C::G_1::bytes_to_curve(bytes) {
                 Err(_) => Err(SignatureError(CurveDecodingError)),
                 Ok(h) => Ok(Signature(g, h)),
             },
@@ -73,7 +69,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _i in 0..20 {
                     let x = Signature::<$pairing_type>::arbitrary(&mut csprng);
-                    let y = Signature::<$pairing_type>::from_bytes(&*x.to_bytes());
+                    let y = Signature::<$pairing_type>::from_bytes(&mut Cursor::new(&x.to_bytes()));
                     assert!(y.is_ok());
                     assert_eq!(x, y.unwrap());
                 }

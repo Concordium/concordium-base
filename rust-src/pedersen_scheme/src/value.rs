@@ -52,8 +52,7 @@ impl<C: Curve> Value<C> {
     /// is an `CommitmentError` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<Value<C>, Error> {
-        let mut scalar_buf = vec![0; C::SCALAR_LENGTH];
-        let vs = read_curve_scalars::<C>(cur, &mut scalar_buf)?;
+        let vs = read_curve_scalars::<C>(cur)?;
         Ok(Value(vs))
     }
 
@@ -62,7 +61,7 @@ impl<C: Curve> Value<C> {
     /// A `Result` whose okay value is an Value  or whose error value
     /// is an `CommitmentError` wrapping the internal error that occurred.
     #[inline]
-    pub fn value_from_bytes(bytes: &[u8]) -> Result<C::Scalar, CommitmentError> {
+    pub fn value_from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<C::Scalar, CommitmentError> {
         match C::bytes_to_scalar(bytes) {
             Ok(scalar) => Ok(scalar),
             Err(_) => Err(CommitmentError(FieldDecodingError)),

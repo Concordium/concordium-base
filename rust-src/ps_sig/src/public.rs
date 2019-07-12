@@ -15,12 +15,14 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::{common::*, known_message::*, signature::*};
+use crate::{known_message::*, signature::*};
 use curve_arithmetic::curve_arithmetic::*;
 use failure::Error;
 use std::io::Cursor;
 
 use crate::secret::*;
+
+use curve_arithmetic::serialization::*;
 
 /// A message
 #[derive(Debug, Clone)]
@@ -46,9 +48,9 @@ impl<C: Pairing> PublicKey<C> {
                 + vs.len() * C::G_1::GROUP_ELEMENT_LENGTH
                 + (us.len() + 1) * C::G_2::GROUP_ELEMENT_LENGTH,
         );
-        write_elems(vs, &C::G_1::curve_to_bytes, &mut bytes);
-        write_elems(us, &C::G_2::curve_to_bytes, &mut bytes);
-        write_elem(s, &C::G_2::curve_to_bytes, &mut bytes);
+        write_curve_elements::<C::G_1>(vs, &mut bytes);
+        write_curve_elements::<C::G_2>(us, &mut bytes);
+        write_curve_element::<C::G_2>(s, &mut bytes);
         bytes.into_boxed_slice()
     }
 
@@ -58,20 +60,9 @@ impl<C: Pairing> PublicKey<C> {
     /// is an `Error` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<PublicKey<C>, Error> {
-        let mut g1_buffer = vec![0; C::G_1::GROUP_ELEMENT_LENGTH];
-        let mut g2_buffer = vec![0; C::G_2::GROUP_ELEMENT_LENGTH];
-        let f1: for<'r> fn(&'r [u8]) -> Result<C::G_1, Error> = |x| {
-            let r = C::G_1::bytes_to_curve(x)?;
-            Ok(r)
-        };
-        let f2: for<'r> fn(&'r [u8]) -> Result<C::G_2, Error> = |x| {
-            let r = C::G_2::bytes_to_curve(x)?;
-            Ok(r)
-        };
-
-        let vs = read_elems(&f1, bytes, &mut g1_buffer)?;
-        let us = read_elems(&f2, bytes, &mut g2_buffer)?;
-        let fr = read_elem(&f2, bytes, &mut g2_buffer)?;
+        let vs = read_curve_elements::<C::G_1>(bytes)?;
+        let us = read_curve_elements::<C::G_2>(bytes)?;
+        let fr = read_curve::<C::G_2>(bytes)?;
         Ok(PublicKey(vs, us, fr))
     }
 

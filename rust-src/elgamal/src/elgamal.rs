@@ -1,6 +1,6 @@
 // Authors:
 // - bm@concordium.com
-use crate::{cipher::*, errors::*, message::*, public::*, secret::*};
+use crate::{cipher::*, message::*, public::*, secret::*};
 use bitvec::Bits;
 use libc::size_t;
 use rand::*;
@@ -13,6 +13,8 @@ use std::slice;
 // use pairing::PrimeField;
 use curve_arithmetic::curve_arithmetic::Curve;
 use pairing::bls12_381::{G1, G2};
+
+use std::io::Cursor;
 
 // TODO: Duplicated from ps_sig!
 macro_rules! slice_from_c_bytes_worker {
@@ -142,7 +144,7 @@ macro_rules! macro_derive_from_bytes {
         pub extern "C" fn $function_name(input_bytes: *mut u8, input_len: size_t) -> *const $type {
             let len = input_len as usize;
             let bytes = slice_from_c_bytes!(input_bytes, len);
-            let e = $from(&bytes);
+            let e = $from(&mut Cursor::new(&bytes));
             match e {
                 Ok(r) => Box::into_raw(Box::new(r)),
                 Err(_) => ::std::ptr::null(),
@@ -224,23 +226,22 @@ macro_rules! macro_decrypt_u64_ffi {
             let cipher_len = 2 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH;
             let clen = 64 * cipher_len;
             let cipher = slice_from_c_bytes!(cipher_bytes, clen);
+            let mut cur = Cursor::new(cipher);
             let sk: &SecretKey<$curve_type> = unsafe { &*ptr };
-            let v: Result<Vec<$curve_type>, ElgamalError> = cipher
-                .par_chunks(cipher_len)
-                .map(|x| {
-                    let c = Cipher::from_bytes(x)?;
-                    let Message(m) = sk.decrypt(&c);
-                    Ok(m)
-                })
-                .collect();
-            match v {
-                Err(_) => -1,
-                Ok(vv) => {
-                    let result = group_bits_to_u64(vv.iter());
-                    unsafe { *result_ptr = result }
-                    0
+            let mut v = Vec::with_capacity(64);
+            for _ in 0..64 {
+                let c = Cipher::from_bytes(&mut cur);
+                match c {
+                    Err(_) => return -1,
+                    Ok(c) => {
+                        let Message(m) = sk.decrypt(&c);
+                        v.push(m)
+                    }
                 }
             }
+            let result = group_bits_to_u64(v.iter());
+            unsafe { *result_ptr = result }
+            0
         }
     };
 }
@@ -260,15 +261,14 @@ macro_rules! macro_decrypt_u64_unsafe_ffi {
             let cipher_len = 2 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH;
             let clen = 64 * cipher_len;
             let cipher = slice_from_c_bytes!(cipher_bytes, clen);
+            let mut cur = Cursor::new(cipher);
             let sk: &SecretKey<$curve_type> = unsafe { &*ptr };
-            let v: Vec<$curve_type> = cipher
-                .par_chunks(cipher_len)
-                .map(|x| {
-                    let c = Cipher::from_bytes_unchecked(x).unwrap();
-                    let Message(m) = sk.decrypt(&c);
-                    m
-                })
-                .collect();
+            let mut v = Vec::with_capacity(64);
+            for _ in 0..64 {
+                let c = Cipher::from_bytes_unchecked(&mut cur).unwrap();
+                let Message(m) = sk.decrypt(&c);
+                v.push(m)
+            }
             group_bits_to_u64(v.iter())
         }
     };

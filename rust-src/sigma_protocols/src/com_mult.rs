@@ -33,33 +33,31 @@ impl<T: Curve> ComMultProof<T> {
     }
 
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let mut scalar_buffer = vec![0; T::SCALAR_LENGTH];
-        let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
-        let challenge = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
+        let challenge = read_curve_scalar::<T>(bytes)?;
         let randomised_point = (
             [
-                read_curve::<T>(bytes, &mut group_buffer)?,
-                read_curve::<T>(bytes, &mut group_buffer)?,
-                read_curve::<T>(bytes, &mut group_buffer)?,
+                read_curve::<T>(bytes)?,
+                read_curve::<T>(bytes)?,
+                read_curve::<T>(bytes)?,
             ],
-            read_curve::<T>(bytes, &mut group_buffer)?,
+            read_curve::<T>(bytes)?,
         );
         let witness = (
             [
                 (
-                    read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
-                    read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
+                    read_curve_scalar::<T>(bytes)?,
+                    read_curve_scalar::<T>(bytes)?,
                 ),
                 (
-                    read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
-                    read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
+                    read_curve_scalar::<T>(bytes)?,
+                    read_curve_scalar::<T>(bytes)?,
                 ),
                 (
-                    read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
-                    read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
+                    read_curve_scalar::<T>(bytes)?,
+                    read_curve_scalar::<T>(bytes)?,
                 ),
             ],
-            read_curve_scalar::<T>(bytes, &mut scalar_buffer)?,
+            read_curve_scalar::<T>(bytes)?,
         );
         Ok(ComMultProof {
             challenge,
@@ -109,7 +107,7 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
         }
         hasher2.input(&*a_randomised_point.curve_to_bytes());
         hash.copy_from_slice(hasher2.result().as_slice());
-        match T::bytes_to_scalar(&hash) {
+        match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
             Err(_) => {}
             Ok(x) => {
                 if x == T::Scalar::zero() {
@@ -163,7 +161,7 @@ pub fn verify_com_mult<T: Curve>(coeff: &[T; 2], public: &[T; 3], proof: &ComMul
     hasher.input(&*a_randomised_point.curve_to_bytes());
     let mut hash = [0u8; 32];
     hash.copy_from_slice(hasher.result().as_slice());
-    match T::bytes_to_scalar(&hash) {
+    match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
         Err(_) => false,
         Ok(c) => {
             if c != proof.challenge {

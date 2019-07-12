@@ -50,15 +50,12 @@ impl<P: Pairing, C:Curve<Scalar=P::ScalarField>> ComEqSigProof<P, C> {
     }
 
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let mut scalar_buffer = vec![0; P::SCALAR_LENGTH];
-        let mut group2_buffer = vec![0; P::G_2::GROUP_ELEMENT_LENGTH];
-        let mut group1_buffer = vec![0; P::G_1::GROUP_ELEMENT_LENGTH];
-        let challenge = read_curve_scalar::<P::G_2>(bytes, &mut scalar_buffer)?;
-        let rp1 = read_curve::<P::G_2>(bytes, &mut group2_buffer)?;
-        let rp2 = read_curve_elements::<C>(bytes, &mut group1_buffer)?;
-        let w0 = read_curve_scalar::<P::G_2>(bytes, &mut scalar_buffer)?;
-        let w1 = read_curve_scalars::<P::G_2>(bytes, &mut scalar_buffer)?;
-        let w2 = read_curve_scalars::<C>(bytes, &mut scalar_buffer)?;
+        let challenge = read_curve_scalar::<P::G_2>(bytes)?;
+        let rp1 = read_curve::<P::G_2>(bytes)?;
+        let rp2 = read_curve_elements::<C>(bytes)?;
+        let w0 = read_curve_scalar::<P::G_2>(bytes)?;
+        let w1 = read_curve_scalars::<P::G_2>(bytes)?;
+        let w2 = read_curve_scalars::<C>(bytes)?;
         Ok(ComEqSigProof {
             challenge: challenge,
             randomised_point: (rp1, rp2),
@@ -89,7 +86,6 @@ pub fn prove_com_eq_sig<P: Pairing, C:Curve<Scalar=P::ScalarField>, R: Rng>(
     let mut challenge = <P::G_2 as Curve>::Scalar::zero();
 
     let mut q_wit = q_sec.clone();
-    let mut q_rand = <P::G_2 as Curve>::Scalar::zero();
 
     let mut gxs_wit = gxs_sec.clone();
     let mut gxs_rands = vec![<P::G_2 as Curve>::Scalar::zero(); n];
@@ -118,12 +114,12 @@ pub fn prove_com_eq_sig<P: Pairing, C:Curve<Scalar=P::ScalarField>, R: Rng>(
             vxs[i] = g.mul_by_scalar(&gxs_rands[i]).plus_point(&h.mul_by_scalar(&pedersen_rands_rands[i]));
             hasher2.input(&*vxs[i].curve_to_bytes());
         }
-        q_rand = <P::G_2 as Curve>::generate_scalar(csprng);
+        let q_rand = <P::G_2 as Curve>::generate_scalar(csprng);
         tmp_u = tmp_u.plus_point(&q.mul_by_scalar(&q_rand));
         tmp_u = tmp_u.plus_point(&p);
         hasher2.input(&*tmp_u.curve_to_bytes());
         hash.copy_from_slice(hasher2.result().as_slice());
-        match <P::G_2 as Curve>::bytes_to_scalar(&hash) {
+        match <P::G_2 as Curve>::bytes_to_scalar(&mut Cursor::new(&hash)) {
             Err(_) => {}
             Ok(x) => {
                 if !(x == <P::G_2 as Curve>::Scalar::zero()) {
@@ -206,7 +202,7 @@ pub fn verify_com_eq_sig<P: Pairing, C:Curve<Scalar=P::ScalarField>>(
         }
         hasher.input(&*u.curve_to_bytes());
         hash.copy_from_slice(hasher.result().as_slice());
-        match <P::G_2 as Curve>::bytes_to_scalar(&hash) {
+        match <P::G_2 as Curve>::bytes_to_scalar(&mut Cursor::new(&hash)) {
             Ok(x) => x == *challenge,
             Err(_) => false,
         }

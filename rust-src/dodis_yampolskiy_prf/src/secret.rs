@@ -22,6 +22,8 @@ use curve_arithmetic::curve_arithmetic::Curve;
 use pairing::Field;
 use rand::*;
 
+use std::io::Cursor;
+
 /// A PRF  key.
 #[derive(Debug, PartialEq, Eq)]
 pub struct SecretKey<C: Curve>(pub C::Scalar);
@@ -35,7 +37,7 @@ impl<C: Curve> SecretKey<C> {
     /// A `Result` whose okay value is an PRF key or whose error value
     /// is an `PRFError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<SecretKey<C>, PrfError> {
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<SecretKey<C>, PrfError> {
         match C::bytes_to_scalar(bytes) {
             Ok(scalar) => Ok(SecretKey(scalar)),
             Err(x) => Err(PrfError(DecodingError(x))),
@@ -84,7 +86,7 @@ mod tests {
         for _ in 1..100 {
             let sk = SecretKey::<G1>::generate(&mut csprng);
             let r = sk.to_bytes();
-            let res_sk2 = SecretKey::<G1>::from_bytes(&r);
+            let res_sk2 = SecretKey::<G1>::from_bytes(&mut Cursor::new(&r));
             assert!(res_sk2.is_ok());
             let sk2 = res_sk2.unwrap();
             assert_eq!(sk2, sk);

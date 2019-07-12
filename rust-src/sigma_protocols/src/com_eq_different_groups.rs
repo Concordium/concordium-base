@@ -33,15 +33,12 @@ where
     }
 
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let mut scalar_buffer = vec![0; C1::SCALAR_LENGTH];
-        let mut group_buffer_c1 = vec![0; C1::GROUP_ELEMENT_LENGTH];
-        let mut group_buffer_c2 = vec![0; C2::GROUP_ELEMENT_LENGTH];
-        let challenge = read_curve_scalar::<C1>(bytes, &mut scalar_buffer)?;
-        let r1 = read_curve::<C1>(bytes, &mut group_buffer_c1)?;
-        let r2 = read_curve::<C2>(bytes, &mut group_buffer_c2)?;
-        let w1 = read_curve_scalar::<C1>(bytes, &mut scalar_buffer)?;
-        let w2 = read_curve_scalar::<C1>(bytes, &mut scalar_buffer)?;
-        let w3 = read_curve_scalar::<C1>(bytes, &mut scalar_buffer)?;
+        let challenge = read_curve_scalar::<C1>(bytes)?;
+        let r1 = read_curve::<C1>(bytes)?;
+        let r2 = read_curve::<C2>(bytes)?;
+        let w1 = read_curve_scalar::<C1>(bytes)?;
+        let w2 = read_curve_scalar::<C1>(bytes)?;
+        let w3 = read_curve_scalar::<C1>(bytes)?;
         let randomised_point = (r1, r2);
         let witness = (w1, w2, w3);
         Ok(ComEqDiffGrpsProof {
@@ -83,7 +80,7 @@ pub fn prove_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>, R: Rng>
         hasher2.input(&*rp_1.curve_to_bytes());
         hasher2.input(&*rp_2.curve_to_bytes());
         hash.copy_from_slice(hasher2.result().as_slice());
-        match C1::bytes_to_scalar(&hash) {
+        match C1::bytes_to_scalar(&mut Cursor::new(&hash)) {
             Err(_) => {}
             Ok(x) => {
                 if x == C1::Scalar::zero() {
@@ -129,7 +126,7 @@ pub fn verify_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
     hasher.input(&*rp_2.curve_to_bytes());
     let mut hash = [0u8; 32];
     hash.copy_from_slice(hasher.result().as_slice());
-    match C1::bytes_to_scalar(&hash) {
+    match C1::bytes_to_scalar(&mut Cursor::new(&hash)) {
         Err(_) => false,
         Ok(c) => {
             if c != proof.challenge {

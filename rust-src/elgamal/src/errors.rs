@@ -18,6 +18,7 @@ use curve_arithmetic::curve_arithmetic as carith;
 /// Internal errors.  
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) enum InternalError {
     FieldDecoding(carith::FieldDecodingError),
     GroupDecoding(carith::CurveDecodingError),

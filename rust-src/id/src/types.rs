@@ -1,4 +1,5 @@
 use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::serialization as curve_serialization;
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::cipher::Cipher;
 use pairing::Field;
@@ -12,6 +13,9 @@ use sigma_protocols::{
     com_enc_eq::ComEncEqProof, com_eq_different_groups::ComEqDiffGrpsProof, dlog::DlogProof,
     com_eq_sig::ComEqSigProof, com_mult::ComMultProof
 };
+
+use std::io::{Cursor, Read};
+use byteorder::{BigEndian, ReadBytesExt};
 
 pub struct CommitmentParams<C: Curve>(pub (C, C));
 pub struct ElgamalParams<C: Curve>(pub (C, C));
@@ -160,7 +164,7 @@ pub struct CredDeploymentProofs<P:Pairing, C:Curve<Scalar=P::ScalarField>>{
 }
 
 pub struct Policy<C:Curve>{
-    pub variant: i32,
+    pub variant: u16,
     pub policy_vec: Vec<(u16, C::Scalar)>
 }
 
@@ -171,7 +175,7 @@ pub enum SchemeId {
 
 pub struct CredDeploymentInfo<P: Pairing, C:Curve<Scalar=P::ScalarField>> {
     /// Id of the signature scheme of the account. The verification key must
-    /// correspond to the
+    /// correspond to the scheme.
     pub acc_scheme_id: SchemeId,
     /// Chosen verification key of the account.
     pub acc_pub_key: acc_sig_scheme::PublicKey,
@@ -263,4 +267,195 @@ pub struct AccountData {
     pub verify_key: ed25519::PublicKey,
     /// And the corresponding verification key.
     pub sign_key: ed25519::SecretKey,
+}
+
+
+/// Serialization of relevant types.
+
+/// Serialize a string by putting the length first as 2 bytes, big endian.
+pub fn short_string_to_bytes(s: &str) -> Vec<u8> {
+    let bytes = s.as_bytes();
+    let l = bytes.len();
+    assert!(l < 65536);
+    let mut out = Vec::with_capacity(l + 2);
+    out.extend_from_slice(&(l as u16).to_be_bytes());
+    out.extend_from_slice(bytes);
+    out
+}
+/// TODO: We really should not be using Strings.
+pub fn bytes_to_short_string(cur: &mut Cursor<&[u8]>) -> Option<String> {
+    let l = cur.read_u16::<BigEndian>().ok()?;
+    let mut svec = vec![0; l as usize];
+    cur.read_exact(&mut svec).ok()?;
+    String::from_utf8(svec).ok()
+}
+
+impl <C: Curve>ArData<C> {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut r = short_string_to_bytes(&self.ar_name);
+        r.extend_from_slice(&self.prf_key_enc.to_bytes());
+        r.extend_from_slice(&self.id_cred_pub_enc.to_bytes());
+        r
+    }
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let ar_name = bytes_to_short_string(cur)?;
+        let prf_key_enc = Cipher::from_bytes(cur).ok()?;
+        let id_cred_pub_enc = Cipher::from_bytes(cur).ok()?;
+        Some(ArData{ar_name, prf_key_enc, id_cred_pub_enc})
+    }
+}
+
+impl <C: Curve> CredDeploymentCommitments<C> {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let s1 = self.comm_id_cred_sec.to_bytes();
+        let s2 = self.cmm_prf.to_bytes();
+        let mut v = Vec::with_capacity(s1.len() + s2.len() + 2);
+        v.extend_from_slice(&s1);
+        v.extend_from_slice(&s2);
+        let att_len = self.cmm_attributes.len();
+        v.extend_from_slice(&(att_len as u16).to_be_bytes());
+        for cmm in self.cmm_attributes.iter() {
+            v.extend_from_slice(&cmm.to_bytes());
+        }
+        v
+    }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let comm_id_cred_sec = pedersen::Commitment::from_bytes(cur).ok()?;
+        let cmm_prf = pedersen::Commitment::from_bytes(cur).ok()?;
+        let l = cur.read_u16::<BigEndian>().ok()?;
+        let mut cmm_attributes = Vec::with_capacity(l as usize);
+        for _ in 0..l {
+            cmm_attributes.push(pedersen::Commitment::from_bytes(cur).ok()?)
+        }
+        Some(CredDeploymentCommitments{
+            comm_id_cred_sec,
+            cmm_prf,
+            cmm_attributes
+        })
+    }
+}
+
+impl <P: Pairing, C: Curve<Scalar=P::ScalarField>>CredDeploymentProofs<P, C> {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::from(self.proof_prf.to_bytes());
+        out.extend_from_slice(&self.proof_ip_sig.to_bytes());
+        out.extend_from_slice(&self.proof_reg_id.to_bytes());
+        out
+    }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let proof_prf = ComEncEqProof::from_bytes(cur).ok()?;
+        let proof_ip_sig = ComEqSigProof::from_bytes(cur).ok()?;
+        let proof_reg_id = ComMultProof::from_bytes(cur).ok()?;
+        Some(CredDeploymentProofs{
+            proof_prf,
+            proof_ip_sig,
+            proof_reg_id,
+        })
+    }
+}
+
+impl <C: Curve>Policy<C> {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut vec = Vec::with_capacity(4);
+        vec.extend_from_slice(&self.variant.to_be_bytes());
+        let l = self.policy_vec.len();
+        vec.extend_from_slice(&(l as u16).to_be_bytes());
+        for (idx, v) in self.policy_vec.iter() {
+            vec.extend_from_slice(&idx.to_be_bytes());
+            vec.extend_from_slice(&C::scalar_to_bytes(v));
+        }
+        vec
+    }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let variant = cur.read_u16::<BigEndian>().ok()?;
+        let len = cur.read_u16::<BigEndian>().ok()?;
+        let mut policy_vec = Vec::with_capacity(len as usize);
+        for _ in 0..len {
+            let idx = cur.read_u16::<BigEndian>().ok()?;
+            let scalar = curve_serialization::read_curve_scalar::<C>(cur).ok()?;
+            policy_vec.push((idx, scalar));
+        }
+        Some(Policy{
+            variant,
+            policy_vec
+        })
+    }
+}
+
+impl SchemeId {
+    pub fn to_bytes(&self) -> [u8;1] {
+        match self {
+            SchemeId::CL => [0],
+            SchemeId::Ed25519 => [1],
+        }
+    }
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<SchemeId> {
+        match cur.read_u8().ok()? {
+            0 => Some(SchemeId::CL),
+            1 => Some(SchemeId::Ed25519),
+            _ => None
+        }
+    }
+}
+
+impl <P: Pairing, C: Curve<Scalar=P::ScalarField>>CredDeploymentInfo<P, C> {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut v = self.acc_scheme_id.to_bytes().to_vec();
+        // NOTE: Serialize the public key with length to match what is in Haskell code
+        // and in order to accept different signature schemes in the future.
+        let sig_bytes = self.acc_pub_key.to_bytes();
+        v.extend_from_slice(&(sig_bytes.len() as u16).to_be_bytes());
+        v.extend_from_slice(&sig_bytes);
+        v.extend_from_slice(&self.acc_pub_key.to_bytes());
+        v.extend_from_slice(&self.reg_id.curve_to_bytes());
+        v.extend_from_slice(&short_string_to_bytes(&self.ip_identity));
+        v.extend_from_slice(&self.ar_data.to_bytes());
+        v.extend_from_slice(&self.sig.to_bytes());
+        v.extend_from_slice(&self.policy.to_bytes());
+        v.extend_from_slice(&self.commitments.to_bytes());
+        v.extend_from_slice(&self.proofs.to_bytes());
+        // serialize the last vector
+        v.extend_from_slice(&(self.proof_policy.len() as u16).to_be_bytes());
+        for (idx, r) in self.proof_policy.iter() {
+            v.extend_from_slice(&idx.to_be_bytes());
+            v.extend_from_slice(&C::scalar_to_bytes(r));
+        }
+        v
+    }
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let acc_scheme_id = SchemeId::from_bytes(cur)?;
+        let sig_length = cur.read_u16::<BigEndian>().ok()?;
+        let mut buf = vec![0; sig_length as usize];
+        cur.read_exact(&mut buf).ok()?;
+        let acc_pub_key = acc_sig_scheme::PublicKey::from_bytes(&buf).ok()?;
+        let reg_id = curve_serialization::read_curve::<C>(cur).ok()?;
+        let ip_identity = bytes_to_short_string(cur)?;
+        let ar_data = ArData::from_bytes(cur)?;
+        let sig = Signature::from_bytes(cur).ok()?;
+        let policy = Policy::from_bytes(cur)?;
+        let commitments = CredDeploymentCommitments::from_bytes(cur)?;
+        let proofs = CredDeploymentProofs::from_bytes(cur)?;
+        let l = cur.read_u16::<BigEndian>().ok()?;
+        let mut proof_policy = Vec::with_capacity(l as usize);
+        for _ in 0..l {
+            let idx = cur.read_u16::<BigEndian>().ok()?;
+            let scalar = curve_serialization::read_curve_scalar::<C>(cur).ok()?;
+            proof_policy.push((idx, scalar));
+        }
+        Some(CredDeploymentInfo{
+            acc_scheme_id,
+            acc_pub_key,
+            reg_id,
+            ip_identity,
+            ar_data,
+            sig,
+            policy,
+            commitments,
+            proofs,
+            proof_policy
+        })
+    }
 }

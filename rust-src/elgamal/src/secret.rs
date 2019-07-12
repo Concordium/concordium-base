@@ -22,6 +22,8 @@ use rand::*;
 use curve_arithmetic::Curve;
 use pairing::Field;
 
+use std::io::Cursor;
+
 /// elgamal secret  key.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SecretKey<C: Curve>(pub C::Scalar);
@@ -46,7 +48,7 @@ impl<C: Curve> SecretKey<C> {
     /// A `Result` whose okay value is a secret key or whose error value
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<SecretKey<C>, ElgamalError> {
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<SecretKey<C>, ElgamalError> {
         let x = C::bytes_to_scalar(bytes)?;
         Ok(SecretKey(x))
     }
@@ -130,7 +132,7 @@ mod tests {
                 for _i in 1..100 {
                     let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
                     let r = sk.to_bytes();
-                    let res_sk2 = SecretKey::from_bytes(&r);
+                    let res_sk2 = SecretKey::from_bytes(&mut Cursor::new(&r));
                     assert!(res_sk2.is_ok());
                     let sk2 = res_sk2.unwrap();
                     assert_eq!(sk2, sk);

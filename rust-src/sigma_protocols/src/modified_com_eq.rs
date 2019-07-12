@@ -34,14 +34,12 @@ impl<T: Curve> ModifiedComEqProof<T> {
     }
 
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let mut scalar_buffer = vec![0; T::SCALAR_LENGTH];
-        let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
-        let challenge = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
-        let rp1 = read_curve_elements::<T>(bytes, &mut group_buffer)?;
-        let rp2 = read_curve::<T>(bytes, &mut group_buffer)?;
-        let w0 = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
-        let w1 = read_curve_scalars::<T>(bytes, &mut scalar_buffer)?;
-        let w2 = read_curve_scalars::<T>(bytes, &mut scalar_buffer)?;
+        let challenge = read_curve_scalar::<T>(bytes)?;
+        let rp1 = read_curve_elements::<T>(bytes)?;
+        let rp2 = read_curve::<T>(bytes)?;
+        let w0 = read_curve_scalar::<T>(bytes)?;
+        let w1 = read_curve_scalars::<T>(bytes)?;
+        let w2 = read_curve_scalars::<T>(bytes)?;
         Ok(ModifiedComEqProof {
             challenge,
             randomised_point: (rp1, rp2),
@@ -93,7 +91,7 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
         tmp_u = tmp_u.plus_point(&p);
         hasher2.input(&*tmp_u.curve_to_bytes());
         hash.copy_from_slice(hasher2.result().as_slice());
-        match T::bytes_to_scalar(&hash) {
+        match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
             Err(_) => {}
             Ok(x) => {
                 if !(x == T::Scalar::zero()) {
@@ -165,7 +163,7 @@ pub fn verify_com_eq<T: Curve>(
         }
         hasher.input(&*u.curve_to_bytes());
         hash.copy_from_slice(hasher.result().as_slice());
-        match T::bytes_to_scalar(&hash) {
+        match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
             Ok(x) => x == *challenge,
             Err(_) => false,
         }

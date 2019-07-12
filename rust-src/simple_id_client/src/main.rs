@@ -36,6 +36,12 @@ use std::{
 
 type ExampleCurve = <Bls12 as Pairing>::G_1;
 
+macro_rules! m_json_decode{
+    ($val: expr, $key:expr) => {
+        &mut Cursor::new(&json_base16_decode($val.get($key)?)?)
+    };
+}
+
 static GLOBAL_CONTEXT: &str = "database/global.json";
 static IP_PREFIX: &str = "database/identity_provider-";
 static AR_PREFIX: &str = "database/anonymity_revoker-";
@@ -231,9 +237,9 @@ fn chi_to_json<C: Curve, T: Curve<Scalar = C::Scalar>>(chi: &CredentialHolderInf
 fn json_to_chi<C: Curve, T: Curve<Scalar = C::Scalar>>(
     js: &Value,
 ) -> Option<CredentialHolderInfo<C, T>> {
-    let id_cred_pub_ip = T::bytes_to_curve(&json_base16_decode(&js["idCredPublicIP"])?).ok()?;
-    let id_cred_pub = C::bytes_to_curve(&json_base16_decode(&js["idCredPublic"])?).ok()?;
-    let id_cred_sec = C::bytes_to_scalar(&json_base16_decode(&js["idCredSecret"])?).ok()?;
+    let id_cred_pub_ip = T::bytes_to_curve(m_json_decode!(js, "idCredPublicIP")).ok()?;
+    let id_cred_pub = C::bytes_to_curve(m_json_decode!(js, "idCredPublic")).ok()?;
+    let id_cred_sec = C::bytes_to_scalar(m_json_decode!(js, "idCredSecret")).ok()?;
     let id_ah = js["name"].as_str()?;
     let info: CredentialHolderInfo<C, T> = CredentialHolderInfo {
         id_ah:   id_ah.to_owned(),
@@ -301,7 +307,7 @@ fn json_to_aci(
 ) -> Option<AccCredentialInfo<Bls12, <Bls12 as Pairing>::G_1, ExampleAttribute>> {
     let obj = v.as_object()?;
     let chi = json_to_chi(obj.get("credentialHolderInformation")?)?;
-    let prf_key = prf::SecretKey::from_bytes(&json_base16_decode(obj.get("prfKey")?)?).ok()?;
+    let prf_key = prf::SecretKey::from_bytes(m_json_decode!(obj, "prfKey")).ok()?;
     let attributes = json_to_alist(obj.get("attributes")?)?;
     Some(AccCredentialInfo {
         acc_holder_info: chi,
@@ -320,7 +326,7 @@ fn json_to_global_context(v: &Value) -> Option<GlobalContext<ExampleCurve>> {
     let obj = v.as_object()?;
     let dlog_base_bytes = obj.get("dLogBaseChain").and_then(json_base16_decode)?;
     let dlog_base_chain =
-        <<Bls12 as Pairing>::G_1 as Curve>::bytes_to_curve(&dlog_base_bytes).ok()?;
+        <<Bls12 as Pairing>::G_1 as Curve>::bytes_to_curve(&mut Cursor::new(&dlog_base_bytes)).ok()?;
     let cmk_bytes = obj
         .get("onChainCommitmentKey")
         .and_then(json_base16_decode)?;
@@ -341,9 +347,9 @@ fn json_to_ip_info(ip_val: &Value) -> Option<IpInfo<Bls12, <Bls12 as Pairing>::G
     .ok()?;
     let id_ar_name = ip_val.get("arName")?.as_str()?;
     let id_ar_public_key =
-        elgamal::PublicKey::from_bytes(&json_base16_decode(ip_val.get("arPublicKey")?)?).ok()?;
+        elgamal::PublicKey::from_bytes(m_json_decode!(ip_val, "arPublicKey")).ok()?;
     let id_ar_elgamal_generator =
-        Curve::bytes_to_curve(&json_base16_decode(ip_val.get("arElgamalGenerator")?)?).ok()?;
+        Curve::bytes_to_curve(m_json_decode!(ip_val, "arElgamalGenerator")).ok()?;
     Some(IpInfo {
         ip_identity: ip_identity.to_owned(),
         ip_verify_key,
@@ -385,8 +391,8 @@ fn ar_data_to_json<C: Curve>(ar_data: &ArData<C>) -> Value {
 
 fn json_to_ar_data(v: &Value) -> Option<ArData<ExampleCurve>> {
     let ar_name = v.get("arName")?.as_str()?;
-    let prf_key_enc = Cipher::from_bytes(&json_base16_decode(v.get("prfKeyEncryption")?)?).ok()?;
-    let id_cred_pub_enc = Cipher::from_bytes(&json_base16_decode(v.get("idCredPubEnc")?)?).ok()?;
+    let prf_key_enc = Cipher::from_bytes(m_json_decode!(v, "prfKeyEncryption")).ok()?;
+    let id_cred_pub_enc = Cipher::from_bytes(m_json_decode!(v, "idCredPubEnc")).ok()?;
     Some(ArData {
         ar_name: ar_name.to_owned(),
         prf_key_enc,
@@ -411,16 +417,16 @@ fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>) -
 fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>> {
     let id_ah = v.get("accountHolderName")?.as_str()?.to_owned();
     let id_cred_pub_ip =
-        ExampleCurve::bytes_to_curve(&json_base16_decode(v.get("idCredPubIp")?)?).ok()?;
+        ExampleCurve::bytes_to_curve(m_json_decode!(v, "idCredPubIp")).ok()?;
     let id_ar_data = json_to_ar_data(v.get("idArData")?)?;
     let alist = json_to_alist(v.get("attributeList")?)?;
     let pok_sc =
         dlog::DlogProof::from_bytes(&mut Cursor::new(&json_base16_decode(v.get("pokSecCred")?)?))
             .ok()?;
     let cmm_prf =
-        Commitment::from_bytes(&json_base16_decode(v.get("prfKeyCommitmentWithID")?)?).ok()?;
+        Commitment::from_bytes(m_json_decode!(v, "prfKeyCommitmentWithID")).ok()?;
     let snd_cmm_prf =
-        Commitment::from_bytes(&json_base16_decode(v.get("prfKeyCommitmentWithAR")?)?).ok()?;
+        Commitment::from_bytes(m_json_decode!(v, "prfKeyCommitmentWithAR")).ok()?;
     let proof_com_enc_eq = com_enc_eq::ComEncEqProof::from_bytes(&mut Cursor::new(
         &json_base16_decode(v.get("proofEncryptionPrf")?)?,
     ))
@@ -600,7 +606,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
                 v.get("preIdentityObject").and_then(json_to_pio),
             ) {
                 (Some(sig_bytes), Some(pio)) => {
-                    if let Ok(ip_sig) = ps_sig::Signature::from_bytes(&sig_bytes) {
+                    if let Ok(ip_sig) = ps_sig::Signature::from_bytes(&mut Cursor::new(&sig_bytes)) {
                         (ip_sig, pio)
                     } else {
                         eprintln!("Signature malformed.");

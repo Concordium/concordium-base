@@ -30,15 +30,13 @@ impl<T: Curve> ComEncEqProof<T> {
     }
 
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let mut scalar_buffer = vec![0; T::SCALAR_LENGTH];
-        let mut group_buffer = vec![0; T::GROUP_ELEMENT_LENGTH];
-        let challenge = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
-        let r1 = read_curve::<T>(bytes, &mut group_buffer)?;
-        let r2 = read_curve::<T>(bytes, &mut group_buffer)?;
-        let r3 = read_curve::<T>(bytes, &mut group_buffer)?;
-        let w1 = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
-        let w2 = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
-        let w3 = read_curve_scalar::<T>(bytes, &mut scalar_buffer)?;
+        let challenge = read_curve_scalar::<T>(bytes)?;
+        let r1 = read_curve::<T>(bytes)?;
+        let r2 = read_curve::<T>(bytes)?;
+        let r3 = read_curve::<T>(bytes)?;
+        let w1 = read_curve_scalar::<T>(bytes)?;
+        let w2 = read_curve_scalar::<T>(bytes)?;
+        let w3 = read_curve_scalar::<T>(bytes)?;
         let randomised_points = (r1, r2, r3);
         let witness = (w1, w2, w3);
         Ok(ComEncEqProof {
@@ -82,7 +80,7 @@ pub fn prove_com_enc_eq<T: Curve, R: Rng>(
         hasher2.input(&*a_2.curve_to_bytes());
         hasher2.input(&*a_3.curve_to_bytes());
         hash.copy_from_slice(hasher2.result().as_slice());
-        match T::bytes_to_scalar(&hash) {
+        match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
             Err(_) => {}
             Ok(x) => {
                 if x == T::Scalar::zero() {
@@ -132,7 +130,7 @@ pub fn verify_com_enc_eq<T: Curve>(
     hasher.input(&*a_3.curve_to_bytes());
     let mut hash = [0u8; 32];
     hash.copy_from_slice(hasher.result().as_slice());
-    match T::bytes_to_scalar(&hash) {
+    match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
         Err(_) => false,
         Ok(c) => {
             if c != proof.challenge {

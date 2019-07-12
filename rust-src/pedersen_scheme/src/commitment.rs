@@ -18,6 +18,8 @@ use crate::errors::{InternalError::CurveDecodingError, *};
 
 use curve_arithmetic::curve_arithmetic::*;
 
+use std::io::Cursor;
+
 /// A Commitment is a group element .
 #[derive(Debug, PartialEq, Eq)]
 pub struct Commitment<C: Curve>(pub C);
@@ -32,7 +34,7 @@ impl<C: Curve> Commitment<C> {
     /// A `Result` whose okay value is an commitment key or whose error value
     /// is an `CommitmentError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<Commitment<C>, CommitmentError> {
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Commitment<C>, CommitmentError> {
         match C::bytes_to_curve(bytes) {
             Ok(point) => Ok(Commitment(point)),
             Err(_) => Err(CommitmentError(CurveDecodingError)),
@@ -56,7 +58,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _i in 0..20 {
                     let x = Commitment::<$curve_type>::generate(&mut csprng);
-                    let y = Commitment::<$curve_type>::from_bytes(&*x.to_bytes());
+                    let y = Commitment::<$curve_type>::from_bytes(&mut Cursor::new(&x.to_bytes()));
                     assert!(y.is_ok());
                     assert_eq!(x, y.unwrap());
                 }
