@@ -30,16 +30,12 @@ Library
                    Concordium.Crypto.BlockSignature
                    Concordium.Crypto.SignatureScheme
                    Concordium.Crypto.AccountSignatureSchemes
-                   Concordium.Crypto.Elgamal
-                   Concordium.Crypto.ElgamalBLS12381_G2
                    Concordium.Crypto.VRF
                    Data.FixedByteString
                    Concordium.ID.Types
                    Concordium.ID.Account
-                   Concordium.Crypto.Curve
                    Concordium.Crypto.ByteStringHelpers
-  Other-modules:   Concordium.Crypto.FFIHelpers
-                   Concordium.Crypto.Elgamal.TH
+
   Build-depends:  base >=4.7
                 , bytestring >=0.10
                 , cereal >=0.5.7
@@ -58,11 +54,6 @@ Library
   extra-libraries: ec_vrf_ed25519
                    sha_2, 
                    eddsa_ed25519,
-                   dodis_yampolskiy_prf
-                   pedersen_scheme
-                   elgamal
-                   ps_sig
-                   curve_arithmetic
                    sigma_protocols
 
   if os(windows)
