@@ -48,7 +48,9 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _i in 0..20 {
                     let x = UnknownMessage::<$pairing_type>::arbitrary(&mut csprng);
-                    let y = UnknownMessage::<$pairing_type>::from_bytes(&mut Cursor::new(&x.to_bytes()));
+                    let y = UnknownMessage::<$pairing_type>::from_bytes(&mut Cursor::new(
+                        &x.to_bytes(),
+                    ));
                     assert!(y.is_ok());
                     assert_eq!(x, y.unwrap());
                 }

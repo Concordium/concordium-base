@@ -36,12 +36,14 @@ pub fn retrieve_sig<C: Pairing>(sig: &Signature<C>, r: C::ScalarField) -> Signat
     Signature(sig.0, b.minus_point(&hr))
 }
 
-
-pub fn blind_sig<P:Pairing, R: Rng>(sig: &Signature<P>, csprng: &mut R)-> (Signature<P>, P::ScalarField, P::ScalarField){
-  let r = P::generate_scalar(csprng);
-  let t = P::generate_scalar(csprng);
-  let Signature(a, b) = sig;
-  let a_hid = a.mul_by_scalar(&r);
-  let b_hid = b.plus_point(&a.mul_by_scalar(&t)).mul_by_scalar(&r);
-  (Signature(a_hid, b_hid), r, t)
+pub fn blind_sig<P: Pairing, R: Rng>(
+    sig: &Signature<P>,
+    csprng: &mut R,
+) -> (Signature<P>, P::ScalarField, P::ScalarField) {
+    let r = P::generate_scalar(csprng);
+    let t = P::generate_scalar(csprng);
+    let Signature(a, b) = sig;
+    let a_hid = a.mul_by_scalar(&r);
+    let b_hid = b.plus_point(&a.mul_by_scalar(&t)).mul_by_scalar(&r);
+    (Signature(a_hid, b_hid), r, t)
 }

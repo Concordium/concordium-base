@@ -19,8 +19,7 @@ use crate::errors::{
     InternalError::{FieldDecodingError, MessageVecLengthError},
     *,
 };
-use curve_arithmetic::curve_arithmetic::*;
-use curve_arithmetic::serialization::*;
+use curve_arithmetic::{curve_arithmetic::*, serialization::*};
 
 use std::io::Cursor;
 
@@ -97,7 +96,9 @@ mod tests {
                 let mut csprng = thread_rng();
                 for i in 1..20 {
                     let val = KnownMessage::<$pairing_type>::generate(i, &mut csprng);
-                    let res_val2 = KnownMessage::<$pairing_type>::from_bytes(&mut Cursor::new(&val.to_bytes()));
+                    let res_val2 = KnownMessage::<$pairing_type>::from_bytes(&mut Cursor::new(
+                        &val.to_bytes(),
+                    ));
                     assert!(res_val2.is_ok());
                     let val2 = res_val2.unwrap();
                     assert_eq!(val2, val);

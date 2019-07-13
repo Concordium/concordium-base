@@ -25,7 +25,7 @@ use rand::*;
 use std::io::Cursor;
 
 /// A PRF  key.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SecretKey<C: Curve>(pub C::Scalar);
 
 impl<C: Curve> SecretKey<C> {
@@ -61,7 +61,7 @@ impl<C: Curve> SecretKey<C> {
 
         match kx.inverse() {
             None => Err(PrfError(DivisionByZero)),
-            Some(y) => Ok(y)
+            Some(y) => Ok(y),
         }
     }
 

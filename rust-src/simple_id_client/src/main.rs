@@ -131,7 +131,7 @@ impl Attribute<<Bls12 as Pairing>::ScalarField> for ExampleAttribute {
 
 fn example_attribute_to_json(att: ExampleAttribute) -> Value {
     match att {
-        ExampleAttribute::Age(x) => json!({"age": x}),
+        ExampleAttribute::Age(x) => json!({ "age": x }),
         ExampleAttribute::Citizenship(c) => json!({ "citizenship": c }),
         ExampleAttribute::MaxAccount(x) => json!({ "maxAccount": x }),
         ExampleAttribute::Business(b) => json!({ "business": b }),
@@ -258,7 +258,11 @@ fn json_to_example_attribute(v: &Value) -> Option<ExampleAttribute> {
 }
 
 fn alist_to_json(alist: &ExampleAttributeList) -> Value {
-    let alist_vec: Vec<Value> = alist.alist.iter().map(|x| example_attribute_to_json(*x)).collect();
+    let alist_vec: Vec<Value> = alist
+        .alist
+        .iter()
+        .map(|x| example_attribute_to_json(*x))
+        .collect();
     json!({
         "variant": alist.variant,
         "expiryDate": alist.expiry.format("%d %B %Y").to_string(),
@@ -556,7 +560,8 @@ fn main() {
                         .value_name("FILE")
                         .required(true)
                         .help(
-                            "File with private credential holder information used to generate the identity object.",
+                            "File with private credential holder information used to generate the \
+                             identity object.",
                         ),
                 )
                 .arg(
@@ -681,8 +686,11 @@ fn handle_deploy_credential(matches: &ArgMatches) {
 
     // finally we also read the credential holder information with secret keys
     // which we need to
-    let private_value =
-        match read_json_from_file(matches.value_of("private").expect("Should not happen because argument is mandatory.")) {
+    let private_value = match read_json_from_file(
+        matches
+            .value_of("private")
+            .expect("Should not happen because argument is mandatory."),
+    ) {
         Ok(v) => v,
         Err(x) => {
             eprintln!("Could not read CHI object because {}", x);
@@ -693,19 +701,20 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         Some(aci) => aci,
         None => {
             eprintln!("Could not read ACI.");
-            return
+            return;
         }
     };
-    let randomness =
-        match private_value.get("randomness")
+    let randomness = match private_value
+        .get("randomness")
         .and_then(|x| json_base16_decode(&x))
-        .and_then(|bytes| SigRetrievalRandomness::<Bls12>::from_bytes(&mut Cursor::new(&bytes))) {
-            Some(rand) => rand,
-            None => {
-                eprintln!("Could not read randomness used to generate pre-identity object.");
-                return
-            }
-        };
+        .and_then(|bytes| SigRetrievalRandomness::<Bls12>::from_bytes(&mut Cursor::new(&bytes)))
+    {
+        Some(rand) => rand,
+        None => {
+            eprintln!("Could not read randomness used to generate pre-identity object.");
+            return;
+        }
+    };
     output_json(&json_base16_encode(&randomness.to_bytes()));
     // Now we have have everything we need to generate the proofs
     // we have
@@ -970,7 +979,7 @@ fn handle_start_ip(matches: &ArgMatches) {
     let context = make_context_from_ip_info(ip_info, &global_ctx);
     // and finally generate the pre-identity object
     // we also retrieve the randomness which we must keep private.
-    // This randomness must be used 
+    // This randomness must be used
     let (pio, randomness) = generate_pio(&context, &aci);
 
     // the only thing left is to output all the information

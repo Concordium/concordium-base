@@ -16,8 +16,8 @@
 //             let key_slice: &mut [u8] = unsafe {
 //                 slice::from_raw_parts_mut(
 //                     key_bytes,
-//                     4 + (n + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH,
-//                 )
+//                     4 + (n + 1) * <$curve_type as
+// Curve>::GROUP_ELEMENT_LENGTH,                 )
 //             };
 //             let mut csprng = thread_rng();
 //             let ck = CommitmentKey::<$curve_type>::generate(n, &mut csprng);
@@ -26,12 +26,13 @@
 //     };
 // }
 
-// macro_generate_commitment_key!(pedersen_commitment_key_bls12_381_g2_affine, G2Affine);
-// macro_generate_commitment_key!(pedersen_commitment_key_bls12_381_g1_affine, G1Affine);
+// macro_generate_commitment_key!(pedersen_commitment_key_bls12_381_g2_affine,
+// G2Affine); macro_generate_commitment_key!
+// (pedersen_commitment_key_bls12_381_g1_affine, G1Affine);
 
 // macro_rules! macro_commit {
-//     ($function_name:ident, $curve_type:path, $commitment_len:expr, $randomness_len:expr) => {
-//         #[no_mangle]
+//     ($function_name:ident, $curve_type:path, $commitment_len:expr,
+// $randomness_len:expr) => {         #[no_mangle]
 //         #[allow(clippy::not_unsafe_ptr_arg_deref)]
 //         pub extern "C" fn $function_name(
 //             n: usize,
@@ -45,20 +46,21 @@
 //             let key_slice: &[u8] = unsafe {
 //                 slice::from_raw_parts(
 //                     key_bytes,
-//                     4 + (n + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH,
-//                 )
+//                     4 + (n + 1) * <$curve_type as
+// Curve>::GROUP_ELEMENT_LENGTH,                 )
 //             };
 //             let values_slice: &[u8] = unsafe {
-//                 slice::from_raw_parts(values, 4 + (n) * <$curve_type as Curve>::SCALAR_LENGTH)
-//             };
-//             match CommitmentKey::<$curve_type>::from_bytes(&mut Cursor::new(key_slice)) {
-//                 Err(_) => -1,
-//                 Ok(ck) => match Value::<$curve_type>::from_bytes(&mut Cursor::new(values_slice)) {
-//                     Err(_) => -2,
+//                 slice::from_raw_parts(values, 4 + (n) * <$curve_type as
+// Curve>::SCALAR_LENGTH)             };
+//             match CommitmentKey::<$curve_type>::from_bytes(&mut
+// Cursor::new(key_slice)) {                 Err(_) => -1,
+//                 Ok(ck) => match Value::<$curve_type>::from_bytes(&mut
+// Cursor::new(values_slice)) {                     Err(_) => -2,
 //                     Ok(vs) => {
 //                         let mut csprng = thread_rng();
 //                         let (c, r) = ck.commit(&vs, &mut csprng);
-//                         randomness.copy_from_slice(&Value::<$curve_type>::value_to_bytes(&r));
+//
+// randomness.copy_from_slice(&Value::<$curve_type>::value_to_bytes(&r));
 //                         commitment.copy_from_slice(&c.to_bytes());
 //                         1
 //                     }
@@ -82,8 +84,8 @@
 // );
 
 // macro_rules! macro_open {
-//     ($function_name:ident, $curve_type:path, $commitment_len:expr, $randomness_len:expr) => {
-//         #[no_mangle]
+//     ($function_name:ident, $curve_type:path, $commitment_len:expr,
+// $randomness_len:expr) => {         #[no_mangle]
 //         #[allow(clippy::not_unsafe_ptr_arg_deref)]
 //         pub extern "C" fn $function_name(
 //             n: usize,
@@ -97,21 +99,21 @@
 //             let key_slice: &[u8] = unsafe {
 //                 slice::from_raw_parts(
 //                     key_bytes,
-//                     4 + (n + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH,
-//                 )
+//                     4 + (n + 1) * <$curve_type as
+// Curve>::GROUP_ELEMENT_LENGTH,                 )
 //             };
 //             let values_slice: &[u8] = unsafe {
-//                 slice::from_raw_parts(values, 4 + (n) * <$curve_type as Curve>::SCALAR_LENGTH)
-//             };
-//             match CommitmentKey::<$curve_type>::from_bytes(&mut Cursor::new(key_slice)) {
-//                 Err(_) => -1,
-//                 Ok(ck) => match Value::<$curve_type>::from_bytes(&mut Cursor::new(values_slice)) {
-//                     Err(_) => -2,
-//                     Ok(vs) => match Value::<$curve_type>::value_from_bytes(randomness) {
-//                         Err(_) => -3,
-//                         Ok(r) => match Commitment::<$curve_type>::from_bytes(commitment) {
-//                             Err(_) => -4,
-//                             Ok(c) => {
+//                 slice::from_raw_parts(values, 4 + (n) * <$curve_type as
+// Curve>::SCALAR_LENGTH)             };
+//             match CommitmentKey::<$curve_type>::from_bytes(&mut
+// Cursor::new(key_slice)) {                 Err(_) => -1,
+//                 Ok(ck) => match Value::<$curve_type>::from_bytes(&mut
+// Cursor::new(values_slice)) {                     Err(_) => -2,
+//                     Ok(vs) => match
+// Value::<$curve_type>::value_from_bytes(randomness) {
+// Err(_) => -3,                         Ok(r) => match
+// Commitment::<$curve_type>::from_bytes(commitment) {
+// Err(_) => -4,                             Ok(c) => {
 //                                 if ck.open(&vs, &r, &c) {
 //                                     1
 //                                 } else {
@@ -176,18 +178,19 @@
 //         ) => {
 //             #[test]
 //             pub fn $function_name() {
-//                 let mut key_bytes = [0u8; 11 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH];
-//                 let mut values = [0u8; 10 * <$curve_type as Curve>::SCALAR_LENGTH];
-//                 let mut commitment_bytes = [0u8; <$curve_type as Curve>::GROUP_ELEMENT_LENGTH];
-//                 let mut randomness_bytes = [0u8; <$curve_type as Curve>::SCALAR_LENGTH];
-//                 for i in 1..10 {
+//                 let mut key_bytes = [0u8; 11 * <$curve_type as
+// Curve>::GROUP_ELEMENT_LENGTH];                 let mut values = [0u8; 10 *
+// <$curve_type as Curve>::SCALAR_LENGTH];                 let mut
+// commitment_bytes = [0u8; <$curve_type as Curve>::GROUP_ELEMENT_LENGTH];
+//                 let mut randomness_bytes = [0u8; <$curve_type as
+// Curve>::SCALAR_LENGTH];                 for i in 1..10 {
 //                     let key_slice =
-//                         &mut key_bytes[..(i + 1) * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH];
-//                     $key_func_name(i, key_slice.as_mut_ptr());
-//                     let v_slice = &mut values[..(i + 1) * <$curve_type as Curve>::SCALAR_LENGTH];
-//                     $rand_value_func_name(i, v_slice.as_mut_ptr());
-//                     let suc1 = $commit_func_name(
-//                         i,
+//                         &mut key_bytes[..(i + 1) * <$curve_type as
+// Curve>::GROUP_ELEMENT_LENGTH];                     $key_func_name(i,
+// key_slice.as_mut_ptr());                     let v_slice = &mut values[..(i +
+// 1) * <$curve_type as Curve>::SCALAR_LENGTH];
+// $rand_value_func_name(i, v_slice.as_mut_ptr());                     let suc1
+// = $commit_func_name(                         i,
 //                         key_slice.as_ptr(),
 //                         v_slice.as_ptr(),
 //                         &mut commitment_bytes,

@@ -3,7 +3,7 @@ use crate::types::*;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
-use elgamal::message::Message as ElgamalMessage;
+use elgamal::{cipher::Cipher, message::Message as ElgamalMessage};
 use pairing::Field;
 use pedersen_scheme::{
     commitment::Commitment,
@@ -139,29 +139,30 @@ where
 
     let commitment_base = global_context.on_chain_commitment_key.0[0];
 
-    let alist = prio.alist;
+    let alist = &prio.alist;
     let prf_key = aci.prf_key;
     let id_cred_sec = aci.acc_holder_info.id_cred.id_cred_sec;
-    let reg_id_exponent =
-        match aci.prf_key.prf_exponent(cred_counter) {
-            Ok(exp) => exp,
-            Err(err) => unimplemented!("Handle the (very unlikely) case where K + x = 0, {}", err),
-        };
+    let reg_id_exponent = match aci.prf_key.prf_exponent(cred_counter) {
+        Ok(exp) => exp,
+        Err(err) => unimplemented!("Handle the (very unlikely) case where K + x = 0, {}", err),
+    };
 
     let reg_id = commitment_base.mul_by_scalar(&reg_id_exponent);
 
     // IdCredPub in the same group as the anonymity revoker's data.
+    // FIXME: We need to have the generator as parameter. Right now this all
+    // works by accident because the generator is always chosen as C::one_point().
     let id_cred_pub = aci.acc_holder_info.id_cred.id_cred_pub;
-    let id_cred_pub_enc = context
+    let (id_cred_pub_enc, id_cred_pub_rand) = context
         .ip_info
         .ar_info
         .ar_public_key
-        .encrypt(&mut csprng, &ElgamalMessage::<C>(id_cred_pub));
-    let ar_data = prio.ip_ar_data;
-    let ip_pub_key = context.ip_info.ip_verify_key;
+        .encrypt_rand(&mut csprng, &ElgamalMessage::<C>(id_cred_pub));
+
+    let ip_pub_key = &context.ip_info.ip_verify_key;
 
     let ar_data = ChainArData {
-        ar_name: prio.ip_ar_data.ar_name,
+        ar_name: prio.ip_ar_data.ar_name.clone(),
         id_cred_pub_enc,
     };
 
@@ -169,7 +170,7 @@ where
     let retrieved_sig = ps_sig::retrieve_sig(&ip_sig, sig_retrieval_rand.0);
 
     // and then we blind the signature to disassociate it from the message.
-    let (blinded_sig, r, t) = ps_sig::blind_sig(&retrieved_sig, &mut csprng);
+    let (blinded_sig, _r, t) = ps_sig::blind_sig(&retrieved_sig, &mut csprng);
 
     // We now compute commitments to all the items in the attribute list.
     // We use the on-chain pedersen commitment key.
@@ -182,10 +183,19 @@ where
         &mut csprng,
     );
 
-    // Compute the proof of the fact that the commitment to the prf key we gave
-    // to the identity provider (and which is signed) is the same as the
-    // commitment we put on the chain.
-    let pok_prf = compute_pok_prf(&prf_key, &commitments.cmm_prf, &commitment_rands.prf_rand);
+    // Compute the proof of the fact that the encryption of idcredpub we
+    // computed above corresponds to the same id_cred_sec that is signed by the
+    // identity provider (and commited to)
+    let pok_id_cred_pub = compute_pok_id_cred_pub(
+        &context,
+        &global_context,
+        &id_cred_sec,
+        &id_cred_pub_enc,
+        &id_cred_pub_rand,
+        &commitments.cmm_id_cred_sec,
+        &commitment_rands.id_cred_sec_rand,
+        &mut csprng,
+    );
 
     // Proof that the registration id is computed correctly from the prf key K and
     // the cred_counter x. At the moment there is no proof that x is less than
@@ -193,14 +203,14 @@ where
     let pok_reg_id = compute_pok_reg_id(
         &global_context.on_chain_commitment_key,
         prf_key,
-        commitments.cmm_prf,
+        &commitments.cmm_prf,
         commitment_rands.prf_rand,
         cred_counter,
-        commitments.cmm_cred_counter,
+        &commitments.cmm_cred_counter,
         commitment_rands.cred_counter_rand,
         reg_id_exponent,
         reg_id,
-        &mut csprng
+        &mut csprng,
     );
 
     // Proof of knowledge of the signature of the identity provider.
@@ -226,7 +236,7 @@ where
         eddsa_dlog::prove_dlog_ed25519(&challenge_prefix, &acc_data.verify_key, &acc_data.sign_key);
 
     let cdp = CredDeploymentProofs {
-        proof_prf: pok_prf,
+        proof_id_cred_pub: pok_id_cred_pub,
         proof_ip_sig: pok_sig,
         proof_reg_id: pok_reg_id,
         proof_acc_sk,
@@ -235,14 +245,36 @@ where
     CredDeploymentInfo {
         acc_scheme_id: SchemeId::Ed25519,
         reg_id,
-        sig: *ip_sig,
+        sig: ip_sig.clone(),
         ar_data,
-        ip_identity: context.ip_info.ip_identity,
-        policy: *policy,
+        ip_identity: context.ip_info.ip_identity.clone(),
+        policy: policy.clone(),
         acc_pub_key: acc_data.verify_key,
         commitments,
         proofs: cdp,
-        proof_policy: panic!(),
+        proof_policy: open_policy_commitments(&policy, &commitment_rands),
+    }
+}
+
+fn open_policy_commitments<C: Curve>(
+    policy: &Policy<C>,
+    commitment_rands: &CommitmentsRandomness<C>,
+) -> PolicyProof<C> {
+    // FIXME: Handle this more resiliantly.
+    let att_rands = &commitment_rands.attributes_rand;
+    assert!(att_rands.len() >= 2);
+    let variant_rand = att_rands[0];
+    let expiry_rand = att_rands[1];
+    // FIXME: Handle out-of-range.
+    let cmm_opening_map = policy
+        .policy_vec
+        .iter()
+        .map(|(idx, _)| (*idx, att_rands[*idx as usize + 2]))
+        .collect();
+    PolicyProof {
+        variant_rand,
+        expiry_rand,
+        cmm_opening_map,
     }
 }
 
@@ -263,13 +295,13 @@ fn compute_pok_sig<
     t: &P::ScalarField,
     csprng: &mut R,
 ) -> com_eq_sig::ComEqSigProof<P, C> {
-    let att_vec = alist.alist;
+    let att_vec = &alist.alist;
     let n = att_vec.len() + 2; // CHECK
 
     let ps_sig::Signature(a, b) = blinded_sig;
     let (eval_pair, eval) = (b, P::G_2::one_point());
     let (g, h) = ((commitment_key.0)[0], commitment_key.1);
-    let ps_sig::PublicKey(gen1, gen2, _, yxs, x) = ip_pub_key;
+    let ps_sig::PublicKey(_gen1, _gen2, _, yxs, x) = ip_pub_key;
     assert!(yxs.len() >= n + 2);
 
     let (p_pair, p) = (a, x);
@@ -277,8 +309,8 @@ fn compute_pok_sig<
     let (q_pair, q) = (a, P::G_2::one_point());
     let q_sec = t;
 
-    let gxs = Vec::with_capacity(n + 2);
-    let gxs_sec = Vec::with_capacity(n + 2);
+    let mut gxs = Vec::with_capacity(n + 2);
+    let mut gxs_sec = Vec::with_capacity(n + 2);
     gxs_sec.push(*id_cred_sec);
     gxs.push(yxs[0]);
     let prf_key_scalar = prf_key.0;
@@ -292,12 +324,12 @@ fn compute_pok_sig<
 
     let gxs_pair = a; // CHECK with Bassel
 
-    let pedersen_rands = Vec::with_capacity(n + 2);
+    let mut pedersen_rands = Vec::with_capacity(n + 2);
     pedersen_rands.push(commitment_rands.id_cred_sec_rand);
     pedersen_rands.push(commitment_rands.prf_rand);
     pedersen_rands.extend_from_slice(&commitment_rands.attributes_rand);
 
-    let comm_vec = Vec::with_capacity(n + 2);
+    let mut comm_vec = Vec::with_capacity(n + 2);
     comm_vec.push(commitments.cmm_id_cred_sec.0);
     comm_vec.push(commitments.cmm_prf.0);
     for v in commitments.cmm_attributes.iter() {
@@ -333,14 +365,14 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
         commitment_key.commit(&Value(vec![*id_cred_sec]), csprng);
     let prf::SecretKey(prf_scalar) = prf_key;
     let (cmm_prf, prf_rand) = commitment_key.commit(&Value(vec![*prf_scalar]), csprng);
-    let variant_scalar = C::scalar_from_u64(alist.variant as u64).unwrap();
+    let variant_scalar = C::scalar_from_u64(u64::from(alist.variant)).unwrap();
     let (cmm_variant, variant_rand) = commitment_key.commit(&Value(vec![variant_scalar]), csprng);
     let expiry_scalar = C::scalar_from_u64(alist.expiry.timestamp() as u64).unwrap();
     let (cmm_expiry, expiry_rand) = commitment_key.commit(&Value(vec![expiry_scalar]), csprng);
-    let cred_counter_scalar = C::scalar_from_u64(cred_counter as u64).unwrap();
+    let cred_counter_scalar = C::scalar_from_u64(u64::from(cred_counter)).unwrap();
     let (cmm_cred_counter, cred_counter_rand) =
         commitment_key.commit(&Value(vec![cred_counter_scalar]), csprng);
-    let att_vec = alist.alist;
+    let att_vec = &alist.alist;
     let n = att_vec.len();
     let mut cmm_attributes = Vec::with_capacity(n + 2);
     let mut attributes_rand = Vec::with_capacity(n + 2);
@@ -373,35 +405,31 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
 fn compute_pok_reg_id<C: Curve, R: Rng>(
     on_chain_commitment_key: &PedersenKey<C>,
     prf_key: prf::SecretKey<C>,
-    cmm_prf: Commitment<C>,
+    cmm_prf: &Commitment<C>,
     prf_rand: C::Scalar,
     cred_counter: u8,
-    cmm_cred_counter: Commitment<C>,
+    cmm_cred_counter: &Commitment<C>,
     cred_counter_rand: C::Scalar,
     reg_id_exponent: C::Scalar,
     reg_id: C,
-    csprng: &mut R
+    csprng: &mut R,
 ) -> com_mult::ComMultProof<C> {
-    let challenge_prefix = [0; 32]; // FIX
-
     // coefficients of the protocol derived from the pedersen key
     let g = on_chain_commitment_key.0[0];
     let h = on_chain_commitment_key.1;
 
-    let coeff = [g,h];
+    let coeff = [g, h];
 
     // commitments are the public values.
-    let public = [cmm_prf.0.plus_point(&cmm_cred_counter.0),
-                  reg_id,
-                  g
-    ];
+    let public = [cmm_prf.0.plus_point(&cmm_cred_counter.0), reg_id, g];
     // finally the secret keys are derived from actual commited values
     // and the randomness.
 
-    let k = prf_key.0;
-    // FIXME: Handle the error case (which cannot happen for the current curve, but in general ...)
-    k.add_assign(&C::scalar_from_u64(cred_counter as u64).unwrap());
-    let rand_1 = prf_rand;
+    let mut k = prf_key.0;
+    // FIXME: Handle the error case (which cannot happen for the current curve, but
+    // in general ...)
+    k.add_assign(&C::scalar_from_u64(u64::from(cred_counter)).unwrap());
+    let mut rand_1 = prf_rand;
     rand_1.add_assign(&cred_counter_rand);
     let s1 = (k, rand_1);
     // reg_id is the commitment to reg_id_exponent with randomness 0
@@ -413,4 +441,31 @@ fn compute_pok_reg_id<C: Curve, R: Rng>(
 
     let challenge_prefix = [0; 32]; // FIXME
     com_mult::prove_com_mult(csprng, &challenge_prefix, &public, &secret, &coeff)
+}
+
+fn compute_pok_id_cred_pub<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
+    context: &Context<P, C>,
+    global_context: &GlobalContext<C>,
+    id_cred_sec: &C::Scalar,
+    id_cred_pub_enc: &Cipher<C>,
+    id_cred_pub_rand: &C::Scalar,
+    cmm_id_cred_sec: &Commitment<C>,
+    id_cred_sec_rand: &C::Scalar,
+    csprng: &mut R,
+) -> com_enc_eq::ComEncEqProof<C> {
+    // FIXME
+    let challenge_prefix = [0; 32];
+    let public = (id_cred_pub_enc.0, id_cred_pub_enc.1, cmm_id_cred_sec.0);
+    // FIXME: The one_point needs to be a parameter.
+    let ar_info = &context.ip_info.ar_info;
+    let cmm_key = &global_context.on_chain_commitment_key;
+    let base = (
+        ar_info.ar_elgamal_generator,
+        ar_info.ar_public_key.0,
+        cmm_key.0[0],
+        cmm_key.1,
+    );
+    let secret = (*id_cred_pub_rand, *id_cred_sec, *id_cred_sec_rand);
+
+    com_enc_eq::prove_com_enc_eq::<C, R>(csprng, &challenge_prefix, &public, &secret, &base)
 }

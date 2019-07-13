@@ -1,7 +1,7 @@
 use failure::Error;
 use std::io::Cursor;
 
-use crate::curve_arithmetic::{Curve,Pairing};
+use crate::curve_arithmetic::{Curve, Pairing};
 use byteorder::{BigEndian, ReadBytesExt};
 
 pub fn read_curve_scalar<C: Curve>(cur: &mut Cursor<&[u8]>) -> Result<C::Scalar, Error> {
@@ -24,7 +24,9 @@ pub fn read_curve_scalars<C: Curve>(cur: &mut Cursor<&[u8]>) -> Result<Vec<C::Sc
 }
 
 /// TODO:Unify.
-pub fn read_pairing_scalars<P: Pairing>(cur: &mut Cursor<&[u8]>) -> Result<Vec<P::ScalarField>, Error> {
+pub fn read_pairing_scalars<P: Pairing>(
+    cur: &mut Cursor<&[u8]>,
+) -> Result<Vec<P::ScalarField>, Error> {
     let len = cur.read_u32::<BigEndian>()?;
     let mut res = Vec::with_capacity(len as usize);
     for _ in 0..len {
@@ -32,7 +34,6 @@ pub fn read_pairing_scalars<P: Pairing>(cur: &mut Cursor<&[u8]>) -> Result<Vec<P
     }
     Ok(res)
 }
-
 
 /// TODO:Unify.
 pub fn read_pairing_scalar<P: Pairing>(cur: &mut Cursor<&[u8]>) -> Result<P::ScalarField, Error> {

@@ -23,12 +23,7 @@ use serde::{Deserializer, Serializer};
 #[cfg(feature = "serde")]
 use std::marker::PhantomData;
 
-use crate::{
-    cipher::*,
-    errors::*,
-    message::*,
-    secret::*,
-};
+use crate::{cipher::*, errors::*, message::*, secret::*};
 
 use curve_arithmetic::Curve;
 

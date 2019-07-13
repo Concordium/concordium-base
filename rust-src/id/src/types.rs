@@ -3,9 +3,9 @@ use curve_arithmetic::{curve_arithmetic::*, serialization as curve_serialization
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
+use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
 use elgamal::cipher::Cipher;
 use pairing::Field;
-use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
 use pedersen_scheme::{commitment as pedersen, key::CommitmentKey as PedersenKey};
 use ps_sig::{public as pssig, signature::*};
 
@@ -137,35 +137,42 @@ pub struct ArInfo<C: Curve> {
 }
 
 #[derive(Debug)]
-pub struct SigRetrievalRandomness<P:Pairing>(pub P::ScalarField);
+pub struct SigRetrievalRandomness<P: Pairing>(pub P::ScalarField);
 
-pub struct CredDeploymentCommitments<C:Curve>{
-      //commitment to id_cred_sec
-      pub cmm_id_cred_sec: pedersen::Commitment<C>,
-      //commitment to the prf key
-      pub cmm_prf: pedersen::Commitment<C>,
-      //commitment to credential counter
-      pub cmm_cred_counter: pedersen::Commitment<C>,
-      // commitments to the attribute list
-      pub cmm_attributes: Vec<pedersen::Commitment<C>>,
+pub struct CredDeploymentCommitments<C: Curve> {
+    // commitment to id_cred_sec
+    pub cmm_id_cred_sec: pedersen::Commitment<C>,
+    // commitment to the prf key
+    pub cmm_prf: pedersen::Commitment<C>,
+    // commitment to credential counter
+    pub cmm_cred_counter: pedersen::Commitment<C>,
+    // commitments to the attribute list
+    pub cmm_attributes: Vec<pedersen::Commitment<C>>,
 }
 
 pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    // proof of knowledge of prf key K such that
-    // appears in both
-    // ar_data.enc_prf_key, and commitments.cmm_prf
-    pub proof_prf: ComEncEqProof<C>,
-    // proof of knowledge of signature of Identity Provider on the list
-    //(idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n])
+    /// Proof of knowledge of IdCredSec corresponding to the commitment made on
+    /// the chain. The commitment is signed by the IP, and so this proof makes
+    /// sure that we have encrypted IDCredPub correctly so anonymity can be
+    /// revoked.
+    pub proof_id_cred_pub: ComEncEqProof<C>,
+    /// Proof of knowledge of signature of Identity Provider on the list
+    /// (idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n])
     pub proof_ip_sig: ComEqSigProof<P, C>,
-    // proof that reg_id = prf_K(x)
+    /// Proof that reg_id = prf_K(x). Also establishes that reg_id is computed
+    /// from the prf key signed by the identity provider.
     pub proof_reg_id: ComMultProof<C>,
-    //proof of knowledge of acc secret key
+    /// Proof of knowledge of acc secret key (signing key corresponding to the
+    /// verification key).
     pub proof_acc_sk: Ed25519DlogProof,
 }
 
+#[derive(Debug, Clone)]
 pub struct Policy<C: Curve> {
-    pub variant:    u16,
+    pub variant: u16,
+    pub expiry: NaiveDateTime,
+    /// TODO: Policy should not be scalars, but rather attributetype elements
+    /// (which means we need an additional parameter).
     pub policy_vec: Vec<(u16, C::Scalar)>,
 }
 
@@ -175,9 +182,14 @@ pub enum SchemeId {
 }
 
 pub struct PolicyProof<C: Curve> {
-    // the u16 is the index of the attribute
-    // the Scalar is the witness (technically the randomness in the commitment) i.e. to open
-    cmm_opening_map: Vec<(u16, C::Scalar)>,
+    /// Randomness to open the variant commitment.
+    pub variant_rand: C::Scalar,
+    /// Randomness to open the expiry commitment.
+    pub expiry_rand: C::Scalar,
+    /// The u16 is the index of the attribute
+    /// The Scalar is the witness (technically the randomness in the commitment)
+    /// i.e. to open.
+    pub cmm_opening_map: Vec<(u16, C::Scalar)>,
 }
 
 pub struct CredDeploymentInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
@@ -205,10 +217,7 @@ pub struct CredDeploymentInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// signed.
     pub proofs: CredDeploymentProofs<P, C>,
     /// Proof that the attributelist in commitments.cmm_attributes satisfy the
-    /// policy the u16 is the index of the attribute
-    /// the Scalar is the witness (technically the randomness in the commitment)
-    /// i.e. to open
-    pub proof_policy: Vec<(u16, P::ScalarField)>,
+    pub proof_policy: PolicyProof<C>,
 }
 
 /// Context needed to generate pre-identity object.
@@ -370,7 +379,7 @@ impl<C: Curve> CredDeploymentCommitments<C> {
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::from(self.proof_prf.to_bytes());
+        let mut out = self.proof_id_cred_pub.to_bytes();
         out.extend_from_slice(&self.proof_ip_sig.to_bytes());
         out.extend_from_slice(&self.proof_reg_id.to_bytes());
         out.extend_from_slice(&self.proof_acc_sk.to_bytes());
@@ -378,15 +387,15 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let proof_prf = ComEncEqProof::from_bytes(cur).ok()?;
+        let proof_id_cred_pub = ComEncEqProof::from_bytes(cur).ok()?;
         let proof_ip_sig = ComEqSigProof::from_bytes(cur).ok()?;
         let proof_reg_id = ComMultProof::from_bytes(cur).ok()?;
         let proof_acc_sk = Ed25519DlogProof::from_bytes(cur).ok()?;
         Some(CredDeploymentProofs {
-            proof_prf,
+            proof_id_cred_pub,
             proof_ip_sig,
             proof_reg_id,
-            proof_acc_sk
+            proof_acc_sk,
         })
     }
 }
@@ -395,6 +404,7 @@ impl<C: Curve> Policy<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut vec = Vec::with_capacity(4);
         vec.extend_from_slice(&self.variant.to_be_bytes());
+        vec.extend_from_slice(&self.expiry.timestamp().to_be_bytes());
         let l = self.policy_vec.len();
         vec.extend_from_slice(&(l as u16).to_be_bytes());
         for (idx, v) in self.policy_vec.iter() {
@@ -406,6 +416,8 @@ impl<C: Curve> Policy<C> {
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let variant = cur.read_u16::<BigEndian>().ok()?;
+        let timestamp = cur.read_i64::<BigEndian>().ok()?;
+        let expiry = NaiveDateTime::from_timestamp(timestamp, 0);
         let len = cur.read_u16::<BigEndian>().ok()?;
         let mut policy_vec = Vec::with_capacity(len as usize);
         for _ in 0..len {
@@ -415,6 +427,7 @@ impl<C: Curve> Policy<C> {
         }
         Some(Policy {
             variant,
+            expiry,
             policy_vec,
         })
     }
@@ -453,12 +466,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentInfo<P, C> {
         v.extend_from_slice(&self.sig.to_bytes());
         v.extend_from_slice(&self.commitments.to_bytes());
         v.extend_from_slice(&self.proofs.to_bytes());
-        // serialize the last vector
-        v.extend_from_slice(&(self.proof_policy.len() as u16).to_be_bytes());
-        for (idx, r) in self.proof_policy.iter() {
-            v.extend_from_slice(&idx.to_be_bytes());
-            v.extend_from_slice(&C::scalar_to_bytes(r));
-        }
+        v.extend_from_slice(&self.proof_policy.to_bytes());
         v
     }
 
@@ -475,13 +483,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentInfo<P, C> {
         let sig = Signature::from_bytes(cur).ok()?;
         let commitments = CredDeploymentCommitments::from_bytes(cur)?;
         let proofs = CredDeploymentProofs::from_bytes(cur)?;
-        let l = cur.read_u16::<BigEndian>().ok()?;
-        let mut proof_policy = Vec::with_capacity(l as usize);
-        for _ in 0..l {
-            let idx = cur.read_u16::<BigEndian>().ok()?;
-            let scalar = curve_serialization::read_curve_scalar::<C>(cur).ok()?;
-            proof_policy.push((idx, scalar));
-        }
+        let proof_policy = PolicyProof::from_bytes(cur)?;
         Some(CredDeploymentInfo {
             acc_scheme_id,
             acc_pub_key,
@@ -497,13 +499,42 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentInfo<P, C> {
     }
 }
 
-impl <P: Pairing>SigRetrievalRandomness<P> {
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        P::G_1::scalar_to_bytes(&self.0)
-    }
+impl<P: Pairing> SigRetrievalRandomness<P> {
+    pub fn to_bytes(&self) -> Box<[u8]> { P::G_1::scalar_to_bytes(&self.0) }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let scalar = curve_serialization::read_curve_scalar::<P::G_1>(cur).ok()?;
         Some(SigRetrievalRandomness(scalar))
+    }
+}
+
+impl<C: Curve> PolicyProof<C> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut v = Vec::with_capacity(2 * C::SCALAR_LENGTH);
+        v.extend_from_slice(&C::scalar_to_bytes(&self.variant_rand));
+        v.extend_from_slice(&C::scalar_to_bytes(&self.expiry_rand));
+        v.extend_from_slice(&(self.cmm_opening_map.len() as u16).to_be_bytes());
+        for (idx, r) in self.cmm_opening_map.iter() {
+            v.extend_from_slice(&idx.to_be_bytes());
+            v.extend_from_slice(&C::scalar_to_bytes(r));
+        }
+        v.into_boxed_slice()
+    }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let variant_rand = C::bytes_to_scalar(cur).ok()?;
+        let expiry_rand = C::bytes_to_scalar(cur).ok()?;
+        let l = cur.read_u16::<BigEndian>().ok()?;
+        let mut cmm_opening_map = Vec::with_capacity(l as usize);
+        for _ in 0..l {
+            let idx = cur.read_u16::<BigEndian>().ok()?;
+            let scalar = curve_serialization::read_curve_scalar::<C>(cur).ok()?;
+            cmm_opening_map.push((idx, scalar));
+        }
+        Some(PolicyProof {
+            variant_rand,
+            expiry_rand,
+            cmm_opening_map,
+        })
     }
 }

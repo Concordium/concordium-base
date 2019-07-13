@@ -26,19 +26,27 @@ use curve_arithmetic::serialization::*;
 
 /// A message
 #[derive(Debug, Clone)]
-pub struct PublicKey<C: Pairing>(pub C::G_1, pub C::G_2, pub Vec<C::G_1>, pub Vec<C::G_2>, pub C::G_2);
+pub struct PublicKey<C: Pairing>(
+    pub C::G_1,
+    pub C::G_2,
+    pub Vec<C::G_1>,
+    pub Vec<C::G_2>,
+    pub C::G_2,
+);
 
 impl<C: Pairing> PartialEq for PublicKey<C> {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1 && self.2 == other.2
-            && self.3 == other.3 && self.4 == other.4
+        self.0 == other.0
+            && self.1 == other.1
+            && self.2 == other.2
+            && self.3 == other.3
+            && self.4 == other.4
     }
 }
 
 impl<C: Pairing> Eq for PublicKey<C> {}
 
 impl<C: Pairing> PublicKey<C> {
-
     // turn message vector into a byte aray
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
@@ -51,7 +59,7 @@ impl<C: Pairing> PublicKey<C> {
             4 + 4
                 + (vs.len() + 1) * C::G_1::GROUP_ELEMENT_LENGTH
                 + (us.len() + 2) * C::G_2::GROUP_ELEMENT_LENGTH,
-                );
+        );
         write_curve_element::<C::G_1>(gen1, &mut bytes);
         write_curve_element::<C::G_2>(gen2, &mut bytes);
         write_curve_elements::<C::G_1>(vs, &mut bytes);
@@ -73,7 +81,6 @@ impl<C: Pairing> PublicKey<C> {
         let fr = read_curve::<C::G_2>(bytes)?;
         Ok(PublicKey(gen1, gen2, vs, us, fr))
     }
-
 
     pub fn verify(&self, sig: &Signature<C>, message: &KnownMessage<C>) -> bool {
         let ys = &self.3;
@@ -109,7 +116,13 @@ impl<C: Pairing> PublicKey<C> {
             us.push(C::G_2::generate(csprng));
         }
 
-        PublicKey(C::G_1::one_point(), C::G_2::one_point(), vs, us, C::G_2::generate(csprng))
+        PublicKey(
+            C::G_1::one_point(),
+            C::G_2::one_point(),
+            vs,
+            us,
+            C::G_2::generate(csprng),
+        )
     }
 }
 

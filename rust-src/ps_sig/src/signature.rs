@@ -21,7 +21,7 @@ use rand::*;
 use std::io::Cursor;
 
 /// A signature
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Signature<C: Pairing>(pub C::G_1, pub C::G_1);
 
 impl<C: Pairing> PartialEq for Signature<C> {

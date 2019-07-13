@@ -94,7 +94,7 @@ fn point_from_public_key(public_key: &PublicKey) -> Option<EdwardsPoint> {
     CompressedEdwardsY::from_slice(&bytes).decompress()
 }
 
-pub fn prove_dlog_ed25519<R: Rng>(
+pub fn prove_dlog_ed25519(
     challenge_prefix: &[u8],
     public: &PublicKey,
     secret_key: &SecretKey,
@@ -167,7 +167,7 @@ mod tests {
             let secret = SecretKey::generate(&mut csprng);
             let public = PublicKey::from(&secret);
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let proof = prove_dlog_ed25519(&mut csprng, &challenge_prefix, &public, &secret);
+            let proof = prove_dlog_ed25519(&challenge_prefix, &public, &secret);
             assert!(verify_dlog_ed25519(&challenge_prefix, &public, &proof));
             let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
             if verify_dlog_ed25519(&challenge_prefix_1, &public, &proof) {
@@ -183,7 +183,7 @@ mod tests {
             let secret = SecretKey::generate(&mut csprng);
             let public = PublicKey::from(&secret);
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let proof = prove_dlog_ed25519(&mut csprng, &challenge_prefix, &public, &secret);
+            let proof = prove_dlog_ed25519(&challenge_prefix, &public, &secret);
             let bytes = proof.to_bytes();
             let proof_des = Ed25519DlogProof::from_bytes(&mut Cursor::new(&bytes));
             assert_eq!(proof, proof_des.expect("Proof did not deserialize."));
