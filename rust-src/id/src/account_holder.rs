@@ -1,6 +1,7 @@
 use crate::types::*;
 
 use curve_arithmetic::{Curve, Pairing};
+use pairing::Field;
 use dodis_yampolskiy_prf::secret as prf;
 use pedersen_scheme::value as pedersen;
 use pedersen_scheme::commitment::Commitment; 
@@ -21,7 +22,7 @@ pub fn generate_pio<
 >(
     context: &Context<P, C>,
     aci: &AccCredentialInfo<P, C, AttributeType>,
-) -> PreIdentityObject<P, C, AttributeType>
+) -> (PreIdentityObject<P, C, AttributeType>, SigRetrievalRandomness<P>)
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
@@ -85,7 +86,7 @@ where
         );
         com_eq_different_groups::prove_com_eq_diff_grps(&mut csprng, &[], &public, &secret, &coeff)
     };
-    PreIdentityObject {
+    let prio =PreIdentityObject {
         id_ah,
         id_cred_pub_ip,
         ip_ar_data,
@@ -96,7 +97,10 @@ where
         snd_cmm_prf,
         proof_com_enc_eq,
         proof_com_eq,
-    }
+    };
+    let mut sig_retrieval_rand = cmm_sc_rand;
+    sig_retrieval_rand.add_assign(&rand_cmm_prf);  
+    (prio, SigRetrievalRandomness(sig_retrieval_rand))
 }
 
 /*
@@ -107,6 +111,7 @@ pub fn generate_cdi<
   >(
       context: &Context<P, C>,
       global_context: &GlobalContext<C>,
+
       aci: &AccCredentialInfo<P, C, AttributeType>,
       prio: &PreIdentityObject<P, C, AttributeType>,
       cred_counter: u8,
@@ -244,5 +249,5 @@ fn compute_commitments<C:Curve, AttributeType:Attribute<C::Scalar>, R:Rng>(commi
     (cdc, cr)
 
 }
-*/
 
+*/
