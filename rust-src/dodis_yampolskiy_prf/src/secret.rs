@@ -44,9 +44,10 @@ impl<C: Curve> SecretKey<C> {
         }
     }
 
-    // TODO : Rename variable names more appropriately
-    #[allow(clippy::many_single_char_names)]
-    pub fn prf(&self, n: u8) -> Result<C, PrfError> {
+    // NOTE: I have removed the negation since I don't think it is needed.
+    // At least it does not appear in the white paper.
+    // CHECK!
+    pub fn prf_exponent(&self, n: u8) -> Result<C::Scalar, PrfError> {
         let res_x = C::scalar_from_u64(u64::from(n));
         if res_x.is_err() {
             let y = res_x.unwrap_err();
@@ -60,12 +61,13 @@ impl<C: Curve> SecretKey<C> {
 
         match kx.inverse() {
             None => Err(PrfError(DivisionByZero)),
-            Some(y) => Ok({
-                let mut z = y;
-                z.negate();
-                C::one_point().mul_by_scalar(&z)
-            }),
+            Some(y) => Ok(y)
         }
+    }
+
+    pub fn prf(&self, g: &C, n: u8) -> Result<C, PrfError> {
+        let y = self.prf_exponent(n)?;
+        Ok(g.mul_by_scalar(&y))
     }
 
     /// Generate a `SecretKey` from a `csprng`.

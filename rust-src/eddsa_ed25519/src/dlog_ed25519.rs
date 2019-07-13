@@ -1,13 +1,16 @@
+use curve25519_dalek::{
+    constants,
+    edwards::{CompressedEdwardsY, EdwardsPoint},
+    scalar::*,
+    traits::Identity,
+};
+use ed25519_dalek::*;
 use rand::*;
 use sha2::{Digest, Sha512};
-use std::io::Cursor;
-use ed25519_dalek::*;
-use curve25519_dalek::edwards::EdwardsPoint;
-use curve25519_dalek::edwards::CompressedEdwardsY;
-use curve25519_dalek::scalar::*;
-use curve25519_dalek::constants;
-use curve25519_dalek::traits::Identity;
-use curve25519_dalek::traits::IsIdentity;
+use std::io::{Cursor, Read};
+
+use failure::{Error, Fail};
+use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ed25519DlogProof {
@@ -15,65 +18,83 @@ pub struct Ed25519DlogProof {
     randomised_point: EdwardsPoint,
     witness:          Scalar,
 }
-/*
-impl<T: Curve> DlogProof<T> {
+
+#[derive(Debug)]
+pub enum PointDecodingError {
+    NotOnCurve,
+    NotAScalar,
+}
+
+impl Display for PointDecodingError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            PointDecodingError::NotOnCurve => write!(f, "Not a valid edwards point."),
+            PointDecodingError::NotAScalar => write!(f, "Not a scalar."),
+        }
+    }
+}
+
+impl Fail for PointDecodingError {}
+
+impl Ed25519DlogProof {
     pub fn to_bytes(&self) -> Box<[u8]> {
-        let mut bytes = Vec::with_capacity(2 * T::SCALAR_LENGTH + T::GROUP_ELEMENT_LENGTH);
-        write_curve_scalar::<T>(&self.challenge, &mut bytes);
-        write_curve_element::<T>(&self.randomised_point, &mut bytes);
-        write_curve_scalar::<T>(&self.witness, &mut bytes);
+        let mut bytes = Vec::with_capacity(3 * 32);
+        bytes.extend_from_slice(self.challenge.as_bytes());
+        bytes.extend_from_slice(self.randomised_point.compress().as_bytes());
+        bytes.extend_from_slice(self.witness.as_bytes());
         bytes.into_boxed_slice()
     }
 
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let challenge = read_curve_scalar::<T>(bytes)?;
-        let randomised_point = read_curve::<T>(bytes)?;
-        let witness = read_curve_scalar::<T>(bytes)?;
-        Ok(DlogProof {
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let mut buf = [0; 32];
+        cur.read_exact(&mut buf)?;
+        let challenge = Scalar::from_canonical_bytes(buf).ok_or(PointDecodingError::NotAScalar)?;
+        cur.read_exact(&mut buf)?;
+        let randomised_point_y = CompressedEdwardsY(buf);
+        let randomised_point = randomised_point_y
+            .decompress()
+            .ok_or(PointDecodingError::NotOnCurve)?;
+        cur.read_exact(&mut buf)?;
+        let witness = Scalar::from_canonical_bytes(buf).ok_or(PointDecodingError::NotAScalar)?;
+        Ok(Ed25519DlogProof {
             challenge,
             randomised_point,
             witness,
         })
     }
 }
-*/
 
-fn generate_rand_scalar<R: Rng>(csprng: &mut R)->Scalar{
-    let mut bytes = [0u8;32];
+/// FIXME: This is a temporary hack due to library incompatibilites (dependencis
+/// on rand require two different versions.
+
+fn generate_rand_scalar() -> Scalar {
+    let mut csprng = thread_rng();
+    let mut bytes = [0u8; 32];
     csprng.fill_bytes(&mut bytes);
     let mut hasher = Sha512::new();
     hasher.input(&bytes);
-    let mut hash:   [u8; 64] = [0u8; 64];
-    hash.copy_from_slice(hasher.result().as_slice());
-    let mut bits = [0u8; 32];
-    bits.copy_from_slice(&hash[..32]);
-    bits[0]  &= 248;
-    bits[31] &= 127;
-    bits[31] |= 64;
-    Scalar::from_bits(bits)
+    Scalar::from_hash(hasher)
 }
 
-fn scalar_from_secret_key(secret_key: &SecretKey) -> Scalar{
+fn scalar_from_secret_key(secret_key: &SecretKey) -> Scalar {
     let mut h = Sha512::new();
-    let mut hash:   [u8; 64] = [0u8; 64];
+    let mut hash: [u8; 64] = [0u8; 64];
     let mut bits: [u8; 32] = [0u8; 32];
     h.input(secret_key.as_bytes());
     hash.copy_from_slice(h.result().as_slice());
     bits.copy_from_slice(&hash[..32]);
-    bits[0]  &= 248;
+    bits[0] &= 248;
     bits[31] &= 127;
     bits[31] |= 64;
     Scalar::from_bits(bits)
 }
 
-fn point_from_public_key(public_key: &PublicKey) -> Option<EdwardsPoint>{
+fn point_from_public_key(public_key: &PublicKey) -> Option<EdwardsPoint> {
     let bytes = public_key.to_bytes();
     CompressedEdwardsY::from_slice(&bytes).decompress()
-
 }
 
 pub fn prove_dlog_ed25519<R: Rng>(
-    csprng: &mut R,
     challenge_prefix: &[u8],
     public: &PublicKey,
     secret_key: &SecretKey,
@@ -89,20 +110,19 @@ pub fn prove_dlog_ed25519<R: Rng>(
     let mut randomised_point = EdwardsPoint::identity();
     while !suc {
         let mut hasher2 = hasher.clone();
-        let rand_scalar = generate_rand_scalar(csprng);
+        let rand_scalar = generate_rand_scalar();
         randomised_point = &rand_scalar * &constants::ED25519_BASEPOINT_TABLE;
         hasher2.input(&randomised_point.compress().to_bytes());
         hash.copy_from_slice(&hasher2.result().as_slice()[..32]);
-        let x = Scalar::from_bytes_mod_order(hash); 
+        let x = Scalar::from_bytes_mod_order(hash);
         if x == Scalar::zero() {
             println!("x = 0");
         } else {
-             challenge = x;
-             witness = rand_scalar - challenge * secret;
-             suc = true;
+            challenge = x;
+            witness = rand_scalar - challenge * secret;
+            suc = true;
         }
     }
-
 
     Ed25519DlogProof {
         challenge,
@@ -123,12 +143,15 @@ pub fn verify_dlog_ed25519(
     let mut hash = [0u8; 32];
     hash.copy_from_slice(&hasher.result().as_slice()[..32]);
     let c = Scalar::from_bytes_mod_order(hash);
-    if c != proof.challenge {println!("wrong challenge"); return false;}
-    match point_from_public_key(&public_key){
+    if c != proof.challenge {
+        println!("wrong challenge");
+        return false;
+    }
+    match point_from_public_key(&public_key) {
         None => false,
         Some(public) => {
-    proof.randomised_point
-                == public * &proof.challenge + &proof.witness *  &constants::ED25519_BASEPOINT_TABLE
+            proof.randomised_point
+                == public * &proof.challenge + &proof.witness * &constants::ED25519_BASEPOINT_TABLE
         }
     }
 }
@@ -140,44 +163,30 @@ mod tests {
     #[test]
     pub fn test_ed25519_dlog() {
         let mut csprng = thread_rng();
-        for _ in 0..1000 {
+        for _ in 0..10000 {
             let secret = SecretKey::generate(&mut csprng);
             let public = PublicKey::from(&secret);
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let proof = prove_dlog_ed25519(
-                &mut csprng,
-                &challenge_prefix,
-                &public,
-                &secret,
-            );
+            let proof = prove_dlog_ed25519(&mut csprng, &challenge_prefix, &public, &secret);
             assert!(verify_dlog_ed25519(&challenge_prefix, &public, &proof));
             let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
-            if verify_dlog(&challenge_prefix_1, &public, &proof) {
+            if verify_dlog_ed25519(&challenge_prefix_1, &public, &proof) {
                 assert_eq!(challenge_prefix, challenge_prefix_1);
             }
         }
     }
-    /*
 
     #[test]
-    pub fn test_dlog_proof_serialization() {
+    pub fn test_ed25519_dlog_proof_serialization() {
         let mut csprng = thread_rng();
-        for _ in 0..1000 {
-            let challenge = G1Affine::generate_scalar(&mut csprng);
-            let randomised_point = G1Affine::generate(&mut csprng);
-            let witness = G1Affine::generate_scalar(&mut csprng);
-
-            let dp = DlogProof {
-                challenge,
-                randomised_point,
-                witness,
-            };
-            let bytes = dp.to_bytes();
-            let dpp = DlogProof::from_bytes(&mut Cursor::new(&bytes));
-            assert!(dpp.is_ok());
-            assert_eq!(dp, dpp.unwrap());
+        for _ in 0..10000 {
+            let secret = SecretKey::generate(&mut csprng);
+            let public = PublicKey::from(&secret);
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let proof = prove_dlog_ed25519(&mut csprng, &challenge_prefix, &public, &secret);
+            let bytes = proof.to_bytes();
+            let proof_des = Ed25519DlogProof::from_bytes(&mut Cursor::new(&bytes));
+            assert_eq!(proof, proof_des.expect("Proof did not deserialize."));
         }
     }
-    */
 }
-

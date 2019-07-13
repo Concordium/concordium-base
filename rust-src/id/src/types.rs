@@ -5,6 +5,7 @@ use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
 use elgamal::cipher::Cipher;
 use pairing::Field;
+use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
 use pedersen_scheme::{commitment as pedersen, key::CommitmentKey as PedersenKey};
 use ps_sig::{public as pssig, signature::*};
 
@@ -67,6 +68,7 @@ pub struct AccCredentialInfo<
     /// Chosen attribute list.
     pub attributes: AttributeList<C::Scalar, AttributeType>,
 }
+
 pub struct IpArData<C: Curve> {
     /// Identity of the anonymity revoker.
     pub ar_name: String,
@@ -134,26 +136,7 @@ pub struct ArInfo<C: Curve> {
     pub ar_elgamal_generator: C,
 }
 
-/// Information the account holder has after the interaction with the identity
-/// provider. The account holder uses this information to generate credentials
-/// to deploy on the chain.
-pub struct IdentityObject<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-> {
-    /// Identity provider who checked and signed the data in the
-    /// PreIdentityObject.
-    pub id_provider: IpInfo<P, C>,
-    pub acc_credential_info: AccCredentialInfo<P, C, AttributeType>,
-    /// Signature of the PreIdentityObject data.
-    pub sig: Signature<P>,
-    /// Information on the chosen anonymity revoker, and the encryption of the
-    /// account holder's prf key with the anonymity revoker's encryption key.
-    /// Should be the same as the data signed by the identity provider.
-    pub ar_data: IpArData<C>,
-}
-
+#[derive(Debug)]
 pub struct SigRetrievalRandomness<P:Pairing>(pub P::ScalarField);
 
 pub struct CredDeploymentCommitments<C:Curve>{
@@ -390,6 +373,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
         let mut out = Vec::from(self.proof_prf.to_bytes());
         out.extend_from_slice(&self.proof_ip_sig.to_bytes());
         out.extend_from_slice(&self.proof_reg_id.to_bytes());
+        out.extend_from_slice(&self.proof_acc_sk.to_bytes());
         out
     }
 
@@ -397,10 +381,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
         let proof_prf = ComEncEqProof::from_bytes(cur).ok()?;
         let proof_ip_sig = ComEqSigProof::from_bytes(cur).ok()?;
         let proof_reg_id = ComMultProof::from_bytes(cur).ok()?;
+        let proof_acc_sk = Ed25519DlogProof::from_bytes(cur).ok()?;
         Some(CredDeploymentProofs {
             proof_prf,
             proof_ip_sig,
             proof_reg_id,
+            proof_acc_sk
         })
     }
 }
@@ -508,5 +494,16 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentInfo<P, C> {
             proofs,
             proof_policy,
         })
+    }
+}
+
+impl <P: Pairing>SigRetrievalRandomness<P> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        P::G_1::scalar_to_bytes(&self.0)
+    }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let scalar = curve_serialization::read_curve_scalar::<P::G_1>(cur).ok()?;
+        Some(SigRetrievalRandomness(scalar))
     }
 }

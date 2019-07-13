@@ -22,7 +22,7 @@ use std::io::Cursor;
 
 /// A signature
 #[derive(Debug)]
-pub struct Signature<C: Pairing>(pub(crate) C::G_1, pub(crate) C::G_1);
+pub struct Signature<C: Pairing>(pub C::G_1, pub C::G_1);
 
 impl<C: Pairing> PartialEq for Signature<C> {
     fn eq(&self, other: &Self) -> bool { self.0 == other.0 && self.1 == other.1 }

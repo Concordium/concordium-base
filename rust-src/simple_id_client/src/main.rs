@@ -550,14 +550,13 @@ fn main() {
                         .help("File with the JSON encoded identity object."),
                 )
                 .arg(
-                    Arg::with_name("chi")
-                        .long("chi")
+                    Arg::with_name("private")
+                        .long("private")
                         .short("c")
                         .value_name("FILE")
                         .required(true)
                         .help(
-                            "File with credential holder information used to generate the \
-                             identity object.",
+                            "File with private credential holder information used to generate the identity object.",
                         ),
                 )
                 .arg(
@@ -682,22 +681,32 @@ fn handle_deploy_credential(matches: &ArgMatches) {
 
     // finally we also read the credential holder information with secret keys
     // which we need to
-    let chi_value = match matches.value_of("chi").map(read_json_from_file) {
-        Some(Ok(v)) => v,
-        Some(Err(x)) => {
+    let private_value =
+        match read_json_from_file(matches.value_of("private").expect("Should not happen because argument is mandatory.")) {
+        Ok(v) => v,
+        Err(x) => {
             eprintln!("Could not read CHI object because {}", x);
             return;
         }
-        None => panic!("Should not happen since the argument is mandatory."),
     };
-    let chi = match json_to_chi::<ExampleCurve, ExampleCurve>(&chi_value) {
-        Some(chi) => chi,
+    let aci = match private_value.get("ACI") {
+        Some(aci) => aci,
         None => {
-            eprintln!("Could not parse CHI. Terminating.");
-            return;
+            eprintln!("Could not read ACI.");
+            return
         }
     };
-
+    let randomness =
+        match private_value.get("randomness")
+        .and_then(|x| json_base16_decode(&x))
+        .and_then(|bytes| SigRetrievalRandomness::<Bls12>::from_bytes(&mut Cursor::new(&bytes))) {
+            Some(rand) => rand,
+            None => {
+                eprintln!("Could not read randomness used to generate pre-identity object.");
+                return
+            }
+        };
+    output_json(&json_base16_encode(&randomness.to_bytes()));
     // Now we have have everything we need to generate the proofs
     // we have
     // - chi
@@ -960,14 +969,20 @@ fn handle_start_ip(matches: &ArgMatches) {
 
     let context = make_context_from_ip_info(ip_info, &global_ctx);
     // and finally generate the pre-identity object
-    let pio = generate_pio(&context, &aci);
+    // we also retrieve the randomness which we must keep private.
+    // This randomness must be used 
+    let (pio, randomness) = generate_pio(&context, &aci);
 
     // the only thing left is to output all the information
 
-    let js = aci_to_json(&aci);
+    let aci_js = aci_to_json(&aci);
+    let js = json!({
+        "ACI": aci_js,
+        "randomness": json_base16_encode(&randomness.to_bytes())
+    });
     if let Some(aci_out_path) = matches.value_of("private") {
         if write_json_to_file(aci_out_path, &js).is_ok() {
-            println!("Wrote ACI data to file.");
+            println!("Wrote ACI and randomness to file.");
         } else {
             println!("Could not write ACI data to file. Outputting to standard output.");
             output_json(&js);
