@@ -88,7 +88,7 @@ fn test_pipeline() {
 
     let variant = 0;
     let expiry_date = NaiveDateTime::from_timestamp(12334, 0);
-    let alist = Vec::new();
+    let alist = vec![ExampleAttribute::MaxAccount(55), ExampleAttribute::Age(31)];
     let aci = AccCredentialInfo {
         acc_holder_info: ah_info,
         prf_key,
@@ -138,7 +138,8 @@ fn test_pipeline() {
         &acc_data,
         &randomness,
     );
-    // now check that the generated credentials are indeed valid.
+    // assert_eq!(4, cdi.commitments.cmm_attributes.len(), "Attribute list length
+    // check."); now check that the generated credentials are indeed valid.
     let cdi_check = verify_cdi(&global_ctx, ip_info, cdi);
     assert_eq!(cdi_check, Ok(()));
 }

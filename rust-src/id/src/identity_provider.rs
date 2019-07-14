@@ -88,7 +88,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     assert!(key_vec.len() >= n + 4);
     message = message.plus_point(&key_vec[2].mul_by_scalar(&variant));
     message = message.plus_point(&key_vec[3].mul_by_scalar(&expiry));
-    for i in 4..(n + 2) {
+    for i in 4..(n + 4) {
         let att = att_vec[i - 4].to_field_element();
         message = message.plus_point(&key_vec[i].mul_by_scalar(&att))
     }
