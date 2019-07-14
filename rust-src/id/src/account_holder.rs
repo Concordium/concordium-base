@@ -170,6 +170,7 @@ where
     let retrieved_sig = ps_sig::retrieve_sig(&ip_sig, sig_retrieval_rand.0);
 
     // and then we blind the signature to disassociate it from the message.
+    // only the second part is used (as per the protocol)
     let (blinded_sig, _r, t) = ps_sig::blind_sig(&retrieved_sig, &mut csprng);
 
     // We now compute commitments to all the items in the attribute list.

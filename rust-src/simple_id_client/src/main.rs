@@ -10,7 +10,7 @@ use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{cipher::Cipher, public::PublicKey, secret::SecretKey};
 use hex::{decode, encode};
-use id::{account_holder::*, identity_provider::*, types::*};
+use id::{account_holder::*, identity_provider::*, types::*, chain::*};
 use pairing::{
     bls12_381::{Bls12, Fr, FrRepr},
     PrimeField,
@@ -139,7 +139,7 @@ fn example_attribute_to_json(att: ExampleAttribute) -> Value {
 }
 
 /// Show fields of the type of fields of the given attribute list.
-fn show_attribute_format(variant: u32) -> &'static str {
+fn show_attribute_format(variant: u16) -> &'static str {
     match variant {
         0 => "[ExpiryDate, MaxAccount, Age]",
         1 => "[ExpiryDate, MaxAccount, Age, Citizenship, Business]",
@@ -174,7 +174,7 @@ fn read_expiry_date() -> io::Result<NaiveDateTime> {
 
 /// Given the chosen variant of the attribute list read off the fields from user
 /// input. Fails if the user input is not well-formed.
-fn read_attribute_list(variant: u32) -> io::Result<Vec<ExampleAttribute>> {
+fn read_attribute_list(variant: u16) -> io::Result<Vec<ExampleAttribute>> {
     let max_acc = read_max_account()?;
     let age = Input::new().with_prompt("Your age").interact()?;
     match variant {
@@ -279,7 +279,7 @@ fn json_to_alist(v: &Value) -> Option<ExampleAttributeList> {
     let alist_vec: Option<Vec<ExampleAttribute>> =
         items.iter().map(json_to_example_attribute).collect();
     Some(AttributeList {
-        variant: variant.as_u64()? as u32,
+        variant: variant.as_u64()? as u16,
         expiry,
         alist: alist_vec?,
         _phantom: Default::default(),
@@ -607,29 +607,30 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         None => panic!("Should not happen since the argument is mandatory."),
     };
     // we first read the signed pre-identity object
-    let (ip_sig, pio): (ps_sig::Signature<Bls12>, _) = {
+    let (ip_sig, pio, ip_info): (ps_sig::Signature<Bls12>, _, _) = {
         if let Some(v) = v.as_object() {
             match (
                 v.get("signature").and_then(json_base16_decode),
                 v.get("preIdentityObject").and_then(json_to_pio),
+                v.get("ipInfo").and_then(json_to_ip_info)
             ) {
-                (Some(sig_bytes), Some(pio)) => {
+                (Some(sig_bytes), Some(pio), Some(ip_info)) => {
                     if let Ok(ip_sig) = ps_sig::Signature::from_bytes(&mut Cursor::new(&sig_bytes))
                     {
-                        (ip_sig, pio)
+                        (ip_sig, pio, ip_info)
                     } else {
-                        eprintln!("Signature malformed.");
-                        return;
+                        eprintln!("Malformed input.");
+                        return
                     }
                 }
-                (_, _) => {
+                (_, _, _) => {
                     eprintln!("Could not parse JSON.");
-                    return;
+                    return
                 }
             }
         } else {
             eprintln!("Could not parse JSON.");
-            return;
+            return
         }
     };
 
@@ -646,7 +647,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
 
     // now we have all the data ready.
     // we first ask the user to select which credentials they wish to reveal
-    let alist = pio.alist.alist;
+    let alist = &pio.alist.alist;
     let mut alist_str: Vec<String> = Vec::with_capacity(alist.len());
     for a in alist.iter() {
         alist_str.push(a.to_string());
@@ -663,6 +664,17 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             eprintln!("You need to select which attributes you want. {}", x);
             return;
         }
+    };
+
+    // from the above and the pre-identity object we make a policy
+    let mut revealed_attributes = Vec::with_capacity(atts.len());
+    for idx in atts {
+        revealed_attributes.push((idx as u16, ExampleAttribute::to_field_element(&alist[idx])))
+    }
+    let policy = Policy{
+        variant: pio.alist.variant,
+        expiry: pio.alist.expiry,
+        policy_vec: revealed_attributes
     };
 
     // We now generate or read account verification/signature key pair.
@@ -685,7 +697,9 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     }
 
     // finally we also read the credential holder information with secret keys
-    // which we need to
+    // which we need to generate CDI.
+    // This file should also contain the public keys of the identity provider who
+    // signed the object.
     let private_value = match read_json_from_file(
         matches
             .value_of("private")
@@ -697,7 +711,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             return;
         }
     };
-    let aci = match private_value.get("ACI") {
+    let aci = match private_value.get("ACI").and_then(json_to_aci) {
         Some(aci) => aci,
         None => {
             eprintln!("Could not read ACI.");
@@ -720,9 +734,23 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // we have
     // - chi
     // - pio
+    // - ip_info
     // - signature of the identity provider
     // - acc_data of the account onto which we are deploying this credential
     //   (private and public)
+    let cdi = generate_cdi(
+        &ip_info,
+        &global_ctx,
+        &aci,
+        &pio,
+        0,
+        &ip_sig,
+        &policy,
+        &acc_data,
+        &randomness
+            );
+    let checked = verify_cdi(&global_ctx, ip_info, cdi);
+    println!("{:?}", checked);
     unimplemented!()
 }
 
@@ -846,7 +874,8 @@ fn handle_act_as_ip(matches: &ArgMatches) {
             return;
         }
     };
-    let ctx = make_context_from_ip_info(ip_info, &global_ctx);
+    // FIXME: Clone should not be necessary. Refactor.
+    let ctx = make_context_from_ip_info(ip_info.clone(), &global_ctx);
 
     let vf = verify_credentials(&pio, ctx, &ip_sec_key);
     match vf {
@@ -856,7 +885,8 @@ fn handle_act_as_ip(matches: &ArgMatches) {
             if let Some(signed_out_path) = matches.value_of("out") {
                 let js = json!({
                     "preIdentityObject": pio_to_json(&pio),
-                    "signature": json_base16_encode(sig_bytes)
+                    "signature": json_base16_encode(sig_bytes),
+                    "ipInfo": ip_info_to_json(&ip_info)
                 });
                 if write_json_to_file(signed_out_path, &js).is_ok() {
                     println!("Wrote signed identity object to file.");
@@ -912,7 +942,7 @@ fn handle_start_ip(matches: &ArgMatches) {
         }
     };
     let alist = {
-        match read_attribute_list(alist_type as u32) {
+        match read_attribute_list(alist_type as u16) {
             Ok(alist) => alist,
             Err(x) => {
                 eprintln!("Could not read the attribute list because of: {}", x);
@@ -925,7 +955,7 @@ fn handle_start_ip(matches: &ArgMatches) {
         acc_holder_info: chi,
         prf_key,
         attributes: AttributeList::<<Bls12 as Pairing>::ScalarField, ExampleAttribute> {
-            variant: alist_type as u32,
+            variant: alist_type as u16,
             expiry: expiry_date,
             alist,
             _phantom: Default::default(),

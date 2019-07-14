@@ -180,6 +180,7 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     assert_eq!(gxs_wit.len(), n);
     assert_eq!(pedersen_rands_wit.len(), n);
     assert_eq!(vxs.len(), n);
+    assert_eq!(gxs.len(), n);
     let u_1 = P::pair(*eval_pair, eval.mul_by_scalar(challenge));
     let mut tmp_u = <P::G_2 as Curve>::zero_point();
     for i in 0..n {
