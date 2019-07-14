@@ -25,7 +25,7 @@ use std::io::Cursor;
 
 /// A message
 #[derive(Debug)]
-pub struct KnownMessage<C: Pairing>(pub(crate) Vec<C::ScalarField>);
+pub struct KnownMessage<C: Pairing>(pub Vec<C::ScalarField>);
 
 impl<C: Pairing> PartialEq for KnownMessage<C> {
     fn eq(&self, other: &Self) -> bool { self.0 == other.0 }

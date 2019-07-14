@@ -263,8 +263,7 @@ pub struct GlobalContext<C: Curve> {
 /// to send to the identity provider. Also requires access to the global context
 /// of parameters, e.g., dlog-proof base point.
 pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
-    ip_info: IpInfo<P, C>,
-    global: &GlobalContext<C>,
+    ip_info: IpInfo<P, C>
 ) -> Context<P, C> {
     // TODO: Check with Bassel that these parameters are correct.
     let dlog_base = <P as Pairing>::G_1::one_point();

@@ -246,7 +246,7 @@ where
     CredDeploymentInfo {
         acc_scheme_id: SchemeId::Ed25519,
         reg_id,
-        sig: ip_sig.clone(),
+        sig: blinded_sig,
         ar_data,
         ip_identity: ip_info.ip_identity.clone(),
         policy: policy.clone(),

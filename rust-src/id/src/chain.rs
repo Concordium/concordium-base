@@ -67,6 +67,17 @@ pub fn verify_cdi<
         return Err(CDIVerificationError::RegId)
     }
 
+    let challenge_prefix = [0; 32];
+    let verify_dlog = eddsa_dlog::verify_dlog_ed25519(
+        &challenge_prefix,
+        &cdi.acc_pub_key,
+        &cdi.proofs.proof_acc_sk,
+    );
+
+    if !verify_dlog {
+        return Err(CDIVerificationError::Dlog)
+    }
+
     let check_pok_sig = verify_pok_sig(
         &global_context.on_chain_commitment_key,
         &commitments,
@@ -77,17 +88,6 @@ pub fn verify_cdi<
 
     if !check_pok_sig {
         return Err(CDIVerificationError::Signature)
-    }
-
-    let challenge_prefix = [0; 32];
-    let verify_dlog = eddsa_dlog::verify_dlog_ed25519(
-        &challenge_prefix,
-        &cdi.acc_pub_key,
-        &cdi.proofs.proof_acc_sk,
-    );
-
-    if !verify_dlog {
-        return Err(CDIVerificationError::Dlog)
     }
 
     // TODO: Check commitment openings.
