@@ -609,11 +609,16 @@ If not present a fresh key-pair will be generated.",
                         ),
                 )
                 .arg(
+                    Arg::with_name("bin-out")
+                        .long("bin-out")
+                        .value_name("FILE")
+                        .help("File to output the binary transaction payload to."),
+                )
+                .arg(
                     Arg::with_name("out")
                         .long("out")
-                        .short("o")
                         .value_name("FILE")
-                        .help("File to output the transaction payload to."),
+                        .help("File to output the JSON transaction payload to."),
                 ),
         );
     let matches = app.get_matches();
@@ -796,7 +801,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // Now simply output the credential object in the transaction format
     // accepted by the simple-client for sending transactions.
 
-    let values = cdi.values;
+    let values = &cdi.values;
 
     let js = json!({
         "schemeId": if values.acc_scheme_id == SchemeId::Ed25519 {"Ed25519"} else {"CL"},
@@ -806,13 +811,46 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         "arData": chain_ar_data_to_json(&values.ar_data),
         "policy": policy_to_json(&values.policy),
         "IPSignature": json_base16_encode(&values.sig.to_bytes()),
+        "commitments": json_base16_encode(&values.commitments.to_bytes()),
+        "proofs": json_base16_encode(&cdi.proofs.to_bytes()),
     });
+    if let Some(json_file) = matches.value_of("out") {
+        match write_json_to_file(json_file, &js) {
+            Ok(_) => println!("Wrote transaction payload to JSON file."),
+            Err(e) => {
+                eprintln!("Could not JSON write to file because {}", e);
+                output_json(&js);
+            }
+        }
+    }
+    if let Some(bin_file) = matches.value_of("bin-out") {
+        match File::create(&bin_file) {
+            Ok(mut file) => match file.write_all(&cdi.to_bytes()) {
+                Ok(_) => println!("Wrote binary data to provided file."),
+                Err(e) => {
+                    eprintln!("Could not write binary to file because {}", e);
+                }
+            },
+            Err(e) => {
+                eprintln!("Could not write binary to file because {}", e);
+            }
+        }
+    }
 }
 
 fn policy_to_json<C: Curve, AttributeType: Attribute<C::Scalar>>(
     policy: &Policy<C, AttributeType>,
-) {
-    panic!()
+) -> Value {
+    let revealed: Vec<Value> = policy
+        .policy_vec
+        .iter()
+        .map(|(idx, value)| json!({"index": idx, "value": json_base16_encode(&value.to_bytes())}))
+        .collect();
+    json!({
+        "variant": policy.variant,
+        "expiry": policy.expiry,
+        "revealedItems": revealed
+    })
 }
 
 fn read_account_data<P: AsRef<Path>>(path: P) -> Option<AccountData> {
