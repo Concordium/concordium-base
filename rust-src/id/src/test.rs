@@ -118,7 +118,7 @@ fn test_pipeline() {
     let policy = Policy {
         variant,
         expiry: expiry_date,
-        policy_vec: Vec::new(),
+        policy_vec: vec![(1, ExampleAttribute::Age(31).to_field_element())],
     };
 
     let kp = ed25519::generate_keypair();

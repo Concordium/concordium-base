@@ -4,7 +4,7 @@ use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use elgamal::cipher::Cipher;
-use pedersen_scheme::{commitment::Commitment, key::CommitmentKey as PedersenKey};
+use pedersen_scheme::{commitment::Commitment, key::CommitmentKey as PedersenKey, value::Value};
 use ps_sig;
 
 use sigma_protocols::{com_enc_eq, com_eq_sig, com_mult};
@@ -15,6 +15,7 @@ pub enum CDIVerificationError {
     IdCredPub,
     Signature,
     Dlog,
+    Policy,
 }
 
 impl Display for CDIVerificationError {
@@ -24,6 +25,7 @@ impl Display for CDIVerificationError {
             CDIVerificationError::IdCredPub => write!(f, "IdCredPubVerificationError"),
             CDIVerificationError::Signature => write!(f, "SignatureVerificationError"),
             CDIVerificationError::Dlog => write!(f, "DlogVerificationError"),
+            CDIVerificationError::Policy => write!(f, "PolicyVerificationError"),
         }
     }
 }
@@ -80,9 +82,74 @@ pub fn verify_cdi<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         return Err(CDIVerificationError::Signature);
     }
 
-    // TODO: Check commitment openings.
+    let check_policy = verify_policy(
+        &global_context.on_chain_commitment_key,
+        &commitments,
+        &cdi.policy,
+        &cdi.proof_policy,
+    );
 
+    if !check_policy {
+        return Err(CDIVerificationError::Policy);
+    }
     Ok(())
+}
+
+fn verify_policy<C: Curve>(
+    commitment_key: &PedersenKey<C>,
+    commitments: &CredDeploymentCommitments<C>,
+    policy: &Policy<C>,
+    policy_proof: &PolicyProof<C>,
+) -> bool {
+    let variant_scalar = C::scalar_from_u64(u64::from(policy.variant)).unwrap();
+    let expiry_scalar = C::scalar_from_u64(policy.expiry.timestamp() as u64).unwrap();
+
+    let cmm_vec = &commitments.cmm_attributes;
+
+    let b1 = commitment_key.open(
+        &Value(vec![variant_scalar]),
+        &policy_proof.variant_rand,
+        &cmm_vec[0],
+    );
+    if !b1 {
+        return false;
+    }
+    let b2 = commitment_key.open(
+        &Value(vec![expiry_scalar]),
+        &policy_proof.expiry_rand,
+        &cmm_vec[1],
+    );
+    if !b2 {
+        return false;
+    }
+
+    // NOTE: This is basic proof-of concept. The correct solution is to instead
+    // check that both lists come in increasing order of idx. Then the check
+    // will be linear in the number of items in the policy, as opposed to
+    // quadratic as it is now.
+    for (idx, v) in policy.policy_vec.iter() {
+        if (usize::from(idx + 2) < cmm_vec.len()) {
+            if let Some(pos) = policy_proof
+                .cmm_opening_map
+                .iter()
+                .position(|idx_1| *idx == idx_1.0)
+            {
+                // found a randomness, now check opening
+                if !commitment_key.open(
+                    &Value(vec![*v]),
+                    &policy_proof.cmm_opening_map[pos].1,
+                    &cmm_vec[usize::from(idx + 2)],
+                ) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    true
 }
 
 fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
