@@ -76,6 +76,7 @@ pub struct IpArData<C: Curve> {
     pub prf_key_enc: Cipher<C>,
 }
 /// Data created by the credential holder to support anonymity revocation.
+#[derive(Debug, PartialEq, Eq)]
 pub struct ChainArData<C: Curve> {
     /// Identity of the anonymity revoker.
     pub ar_name: String,
@@ -139,7 +140,7 @@ pub struct ArInfo<C: Curve> {
 #[derive(Debug)]
 pub struct SigRetrievalRandomness<P: Pairing>(pub P::ScalarField);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CredDeploymentCommitments<C: Curve> {
     // commitment to id_cred_sec
     pub cmm_id_cred_sec: pedersen::Commitment<C>,
@@ -151,6 +152,7 @@ pub struct CredDeploymentCommitments<C: Curve> {
     pub cmm_attributes: Vec<pedersen::Commitment<C>>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Proof of knowledge of IdCredSec corresponding to the commitment made on
     /// the chain. The commitment is signed by the IP, and so this proof makes
@@ -170,7 +172,7 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub proof_policy: PolicyProof<C>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Policy<C: Curve> {
     pub variant: u16,
     pub expiry: NaiveDateTime,
@@ -179,11 +181,13 @@ pub struct Policy<C: Curve> {
     pub policy_vec: Vec<(u16, C::Scalar)>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum SchemeId {
     Ed25519,
     CL,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct PolicyProof<C: Curve> {
     /// Randomness to open the variant commitment.
     pub variant_rand: C::Scalar,
@@ -196,6 +200,7 @@ pub struct PolicyProof<C: Curve> {
 }
 
 /// Values (as opposed to proofs) in credential deployment.
+#[derive(Debug, PartialEq, Eq)]
 pub struct CredentialDeploymentValues<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Id of the signature scheme of the account. The verification key must
     /// correspond to the
@@ -219,6 +224,7 @@ pub struct CredentialDeploymentValues<P: Pairing, C: Curve<Scalar = P::ScalarFie
     pub commitments: CredDeploymentCommitments<C>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct CredDeploymentInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub values: CredentialDeploymentValues<P, C>,
     pub proofs: CredDeploymentProofs<P, C>,
@@ -464,7 +470,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredentialDeploymentValues<P
         let sig_bytes = self.acc_pub_key.to_bytes();
         v.extend_from_slice(&(sig_bytes.len() as u16).to_be_bytes());
         v.extend_from_slice(&sig_bytes);
-        v.extend_from_slice(&self.acc_pub_key.to_bytes());
         v.extend_from_slice(&self.reg_id.curve_to_bytes());
         v.extend_from_slice(&short_string_to_bytes(&self.ip_identity));
         v.extend_from_slice(&self.ar_data.to_bytes());

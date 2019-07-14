@@ -17,6 +17,8 @@ use rand::*;
 
 use pedersen_scheme::key as pedersen_key;
 
+use std::io::Cursor;
+
 type ExampleCurve = <Bls12 as Pairing>::G_1;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -138,6 +140,25 @@ fn test_pipeline() {
         &acc_data,
         &randomness,
     );
+
+    let bytes = cdi.to_bytes();
+    let des = CredDeploymentInfo::<Bls12, ExampleCurve>::from_bytes(&mut Cursor::new(&bytes));
+    assert!(des.is_some(), "Deserialization must be successful.");
+    // FIXME: Have better equality instances for CDI that do not place needless
+    // restrictions on the pairing (such as having PartialEq instnace).
+    // For now we just check that the last item in the proofs deserialized
+    // correctly.
+    assert_eq!(
+        des.unwrap().proofs.proof_policy,
+        cdi.proofs.proof_policy,
+        "It should deserialize back to what we started with."
+    );
+    assert_eq!(
+        des.unwrap().proofs.proof_policy,
+        cdi.proofs.proof_policy,
+        "It should deserialize back to what we started with."
+    );
+
     // assert_eq!(4, cdi.commitments.cmm_attributes.len(), "Attribute list length
     // check."); now check that the generated credentials are indeed valid.
     let cdi_check = verify_cdi(&global_ctx, ip_info, cdi);

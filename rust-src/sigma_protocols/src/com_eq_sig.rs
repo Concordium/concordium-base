@@ -11,7 +11,7 @@ use std::io::Cursor;
 // C_j = g^m_j h^_r_j
 // for public values a, b, C_j in G_1, and  X', Y_j', g' in G_2
 // and known pairing e
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct ComEqSigProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     challenge:        P::ScalarField,
     randomised_point: (P::G_2, Vec<C>),
