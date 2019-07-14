@@ -10,7 +10,7 @@ use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{cipher::Cipher, public::PublicKey, secret::SecretKey};
 use hex::{decode, encode};
-use id::{account_holder::*, identity_provider::*, types::*, chain::*};
+use id::{account_holder::*, chain::*, identity_provider::*, types::*};
 use pairing::{
     bls12_381::{Bls12, Fr, FrRepr},
     PrimeField,
@@ -612,7 +612,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             match (
                 v.get("signature").and_then(json_base16_decode),
                 v.get("preIdentityObject").and_then(json_to_pio),
-                v.get("ipInfo").and_then(json_to_ip_info)
+                v.get("ipInfo").and_then(json_to_ip_info),
             ) {
                 (Some(sig_bytes), Some(pio), Some(ip_info)) => {
                     if let Ok(ip_sig) = ps_sig::Signature::from_bytes(&mut Cursor::new(&sig_bytes))
@@ -620,17 +620,17 @@ fn handle_deploy_credential(matches: &ArgMatches) {
                         (ip_sig, pio, ip_info)
                     } else {
                         eprintln!("Malformed input.");
-                        return
+                        return;
                     }
                 }
                 (_, _, _) => {
                     eprintln!("Could not parse JSON.");
-                    return
+                    return;
                 }
             }
         } else {
             eprintln!("Could not parse JSON.");
-            return
+            return;
         }
     };
 
@@ -671,10 +671,10 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     for idx in atts {
         revealed_attributes.push((idx as u16, ExampleAttribute::to_field_element(&alist[idx])))
     }
-    let policy = Policy{
-        variant: pio.alist.variant,
-        expiry: pio.alist.expiry,
-        policy_vec: revealed_attributes
+    let policy = Policy {
+        variant:    pio.alist.variant,
+        expiry:     pio.alist.expiry,
+        policy_vec: revealed_attributes,
     };
 
     // We now generate or read account verification/signature key pair.
@@ -747,8 +747,8 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         &ip_sig,
         &policy,
         &acc_data,
-        &randomness
-            );
+        &randomness,
+    );
     let checked = verify_cdi(&global_ctx, ip_info, cdi);
     println!("{:?}", checked);
     unimplemented!()
@@ -870,8 +870,8 @@ fn handle_act_as_ip(matches: &ArgMatches) {
     //     if let Some(gc) = read_global_context() {
     //         gc
     //     } else {
-    //         eprintln!("Cannot read global context information database. Terminating.");
-    //         return;
+    //         eprintln!("Cannot read global context information database.
+    // Terminating.");         return;
     //     }
     // };
     // FIXME: Clone should not be necessary. Refactor.
@@ -977,8 +977,8 @@ fn handle_start_ip(matches: &ArgMatches) {
     //     if let Some(gc) = read_global_context() {
     //         gc
     //     } else {
-    //         eprintln!("Cannot read global context information database. Terminating.");
-    //         return;
+    //         eprintln!("Cannot read global context information database.
+    // Terminating.");         return;
     //     }
     // };
 

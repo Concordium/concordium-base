@@ -1,5 +1,6 @@
 use crate::types::*;
 
+use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
@@ -14,14 +15,13 @@ use pedersen_scheme::{
 use ps_sig;
 use rand::*;
 use sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, dlog};
-use core::fmt::{self, Display};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CDIVerificationError {
     RegId,
     IdCredPub,
     Signature,
-    Dlog
+    Dlog,
 }
 
 impl Display for CDIVerificationError {
@@ -35,10 +35,7 @@ impl Display for CDIVerificationError {
     }
 }
 
-pub fn verify_cdi<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
->(
+pub fn verify_cdi<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     global_context: &GlobalContext<C>,
     ip_info: IpInfo<P, C>,
     cdi: CredDeploymentInfo<P, C>,
@@ -52,7 +49,7 @@ pub fn verify_cdi<
         &cdi.proofs.proof_id_cred_pub,
     );
     if !check_id_cred_pub {
-        return Err(CDIVerificationError::IdCredPub)
+        return Err(CDIVerificationError::IdCredPub);
     }
 
     let check_reg_id = verify_pok_reg_id(
@@ -64,7 +61,7 @@ pub fn verify_cdi<
     );
 
     if !check_reg_id {
-        return Err(CDIVerificationError::RegId)
+        return Err(CDIVerificationError::RegId);
     }
 
     let challenge_prefix = [0; 32];
@@ -75,7 +72,7 @@ pub fn verify_cdi<
     );
 
     if !verify_dlog {
-        return Err(CDIVerificationError::Dlog)
+        return Err(CDIVerificationError::Dlog);
     }
 
     let check_pok_sig = verify_pok_sig(
@@ -87,7 +84,7 @@ pub fn verify_cdi<
     );
 
     if !check_pok_sig {
-        return Err(CDIVerificationError::Signature)
+        return Err(CDIVerificationError::Signature);
     }
 
     // TODO: Check commitment openings.
@@ -113,7 +110,7 @@ fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let n = commitments.cmm_attributes.len();
 
-    let gxs = yxs[..n+2].to_vec();
+    let gxs = yxs[..n + 2].to_vec();
 
     let challenge_prefix = [0; 32];
 

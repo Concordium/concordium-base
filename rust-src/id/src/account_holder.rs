@@ -153,8 +153,7 @@ where
     // FIXME: We need to have the generator as parameter. Right now this all
     // works by accident because the generator is always chosen as C::one_point().
     let id_cred_pub = aci.acc_holder_info.id_cred.id_cred_pub;
-    let (id_cred_pub_enc, id_cred_pub_rand) =
-        ip_info
+    let (id_cred_pub_enc, id_cred_pub_rand) = ip_info
         .ar_info
         .ar_public_key
         .encrypt_rand(&mut csprng, &ElgamalMessage::<C>(id_cred_pub));
@@ -321,7 +320,7 @@ fn compute_pok_sig<
     gxs.push(yxs[2]);
     gxs_sec.push(C::scalar_from_u64(alist.expiry.timestamp() as u64).unwrap());
     gxs.push(yxs[3]);
-    for i in 4..n+2 {
+    for i in 4..n + 2 {
         gxs_sec.push(att_vec[i - 4].to_field_element());
         gxs.push(yxs[i]);
     }
