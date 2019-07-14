@@ -1,4 +1,3 @@
-use chrono::NaiveDateTime;
 use curve_arithmetic::{curve_arithmetic::*, serialization as curve_serialization};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as acc_sig_scheme;
@@ -11,7 +10,7 @@ use ps_sig::{public as pssig, signature::*};
 
 use sigma_protocols::{
     com_enc_eq::ComEncEqProof, com_eq::ComEqProof, com_eq_different_groups::ComEqDiffGrpsProof,
-    com_eq_sig::ComEqSigProof, com_mult::ComMultProof, dlog::DlogProof,
+    com_eq_sig::ComEqSigProof, com_mult::ComMultProof,
 };
 
 use byteorder::{BigEndian, ReadBytesExt};
@@ -20,14 +19,16 @@ use std::io::{Cursor, Read};
 pub struct CommitmentParams<C: Curve>(pub (C, C));
 pub struct ElgamalParams<C: Curve>(pub (C, C));
 
-pub trait Attribute<F: Field> {
+pub trait Attribute<F: Field>: Copy + Clone + Sized + Send + Sync {
     fn to_field_element(&self) -> F;
+    fn to_bytes(&self) -> Box<[u8]>;
+    fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self>;
 }
 
 #[derive(Clone, Debug)]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     pub variant:  u16,
-    pub expiry:   NaiveDateTime,
+    pub expiry:   u64,
     pub alist:    Vec<AttributeType>,
     pub _phantom: std::marker::PhantomData<F>,
 }
@@ -173,12 +174,14 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Policy<C: Curve> {
+pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub variant: u16,
-    pub expiry: NaiveDateTime,
+    /// Expiry time, in seconds since the unix epoch, ignoring leap seconds.
+    pub expiry: u64,
     /// TODO: Policy should not be scalars, but rather attributetype elements
     /// (which means we need an additional parameter).
-    pub policy_vec: Vec<(u16, C::Scalar)>,
+    pub policy_vec: Vec<(u16, AttributeType)>,
+    pub _phantom: std::marker::PhantomData<C>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -201,7 +204,11 @@ pub struct PolicyProof<C: Curve> {
 
 /// Values (as opposed to proofs) in credential deployment.
 #[derive(Debug, PartialEq, Eq)]
-pub struct CredentialDeploymentValues<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+pub struct CredentialDeploymentValues<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
     /// Id of the signature scheme of the account. The verification key must
     /// correspond to the
     pub acc_scheme_id: SchemeId,
@@ -216,7 +223,7 @@ pub struct CredentialDeploymentValues<P: Pairing, C: Curve<Scalar = P::ScalarFie
     /// to remove the anonymity of the account.
     pub ar_data: ChainArData<C>,
     /// Policy of this credential object.
-    pub policy: Policy<C>,
+    pub policy: Policy<C, AttributeType>,
     /// Signature derived from the signature of the pre-identity object by the
     /// IP
     pub sig: Signature<P>,
@@ -225,8 +232,12 @@ pub struct CredentialDeploymentValues<P: Pairing, C: Curve<Scalar = P::ScalarFie
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct CredDeploymentInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    pub values: CredentialDeploymentValues<P, C>,
+pub struct CredDeploymentInfo<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    pub values: CredentialDeploymentValues<P, C, AttributeType>,
     pub proofs: CredDeploymentProofs<P, C>,
 }
 
@@ -412,35 +423,35 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
     }
 }
 
-impl<C: Curve> Policy<C> {
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> Policy<C, AttributeType> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut vec = Vec::with_capacity(4);
         vec.extend_from_slice(&self.variant.to_be_bytes());
-        vec.extend_from_slice(&self.expiry.timestamp().to_be_bytes());
+        vec.extend_from_slice(&self.expiry.to_be_bytes());
         let l = self.policy_vec.len();
         vec.extend_from_slice(&(l as u16).to_be_bytes());
         for (idx, v) in self.policy_vec.iter() {
             vec.extend_from_slice(&idx.to_be_bytes());
-            vec.extend_from_slice(&C::scalar_to_bytes(v));
+            vec.extend_from_slice(&v.to_bytes());
         }
         vec
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let variant = cur.read_u16::<BigEndian>().ok()?;
-        let timestamp = cur.read_i64::<BigEndian>().ok()?;
-        let expiry = NaiveDateTime::from_timestamp(timestamp, 0);
+        let expiry = cur.read_u64::<BigEndian>().ok()?;
         let len = cur.read_u16::<BigEndian>().ok()?;
         let mut policy_vec = Vec::with_capacity(len as usize);
         for _ in 0..len {
             let idx = cur.read_u16::<BigEndian>().ok()?;
-            let scalar = curve_serialization::read_curve_scalar::<C>(cur).ok()?;
-            policy_vec.push((idx, scalar));
+            let att = AttributeType::from_bytes(cur)?;
+            policy_vec.push((idx, att));
         }
         Some(Policy {
             variant,
             expiry,
             policy_vec,
+            _phantom: Default::default(),
         })
     }
 }
@@ -462,7 +473,9 @@ impl SchemeId {
     }
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredentialDeploymentValues<P, C> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    CredentialDeploymentValues<P, C, AttributeType>
+{
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut v = self.acc_scheme_id.to_bytes().to_vec();
         // NOTE: Serialize the public key with length to match what is in Haskell code
@@ -504,7 +517,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredentialDeploymentValues<P
     }
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentInfo<P, C> {
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
+    CredDeploymentInfo<P, C, AttributeType>
+{
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut v = self.values.to_bytes();
         v.extend_from_slice(&self.proofs.to_bytes());

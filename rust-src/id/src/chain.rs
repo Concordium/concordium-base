@@ -32,10 +32,14 @@ impl Display for CDIVerificationError {
     }
 }
 
-pub fn verify_cdi<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+pub fn verify_cdi<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
     global_context: &GlobalContext<C>,
     ip_info: IpInfo<P, C>,
-    cdi: CredDeploymentInfo<P, C>,
+    cdi: CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     // Compute the challenge prefix by hashing the values.
     let mut hasher = Sha512::new();
@@ -104,14 +108,14 @@ pub fn verify_cdi<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     Ok(())
 }
 
-fn verify_policy<C: Curve>(
+fn verify_policy<C: Curve, AttributeType: Attribute<C::Scalar>>(
     commitment_key: &PedersenKey<C>,
     commitments: &CredDeploymentCommitments<C>,
-    policy: &Policy<C>,
+    policy: &Policy<C, AttributeType>,
     policy_proof: &PolicyProof<C>,
 ) -> bool {
     let variant_scalar = C::scalar_from_u64(u64::from(policy.variant)).unwrap();
-    let expiry_scalar = C::scalar_from_u64(policy.expiry.timestamp() as u64).unwrap();
+    let expiry_scalar = C::scalar_from_u64(policy.expiry).unwrap();
 
     let cmm_vec = &commitments.cmm_attributes;
 
@@ -137,7 +141,7 @@ fn verify_policy<C: Curve>(
     // will be linear in the number of items in the policy, as opposed to
     // quadratic as it is now.
     for (idx, v) in policy.policy_vec.iter() {
-        if (usize::from(idx + 2) < cmm_vec.len()) {
+        if usize::from(idx + 2) < cmm_vec.len() {
             if let Some(pos) = policy_proof
                 .cmm_opening_map
                 .iter()
@@ -145,7 +149,7 @@ fn verify_policy<C: Curve>(
             {
                 // found a randomness, now check opening
                 if !commitment_key.open(
-                    &Value(vec![*v]),
+                    &Value(vec![v.to_field_element()]),
                     &policy_proof.cmm_opening_map[pos].1,
                     &cmm_vec[usize::from(idx + 2)],
                 ) {

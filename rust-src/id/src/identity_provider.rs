@@ -4,7 +4,7 @@ use elgamal::cipher::Cipher;
 use pedersen_scheme::commitment::Commitment as PedersenCommitment;
 use ps_sig;
 use rand::*;
-use sigma_protocols::{com_enc_eq::*, com_eq::*, com_eq_different_groups::*, dlog::*};
+use sigma_protocols::{com_enc_eq::*, com_eq::*, com_eq_different_groups::*};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Declined(pub Reason);
@@ -60,7 +60,6 @@ pub fn verify_credentials<
         return Err(Declined(Reason::FailedToVerifyPrfData));
     }
     let message: ps_sig::UnknownMessage<P> = compute_message(
-        &pre_id_obj.id_cred_pub_ip,
         &pre_id_obj.cmm_prf,
         &pre_id_obj.cmm_sc,
         &pre_id_obj.alist,
@@ -71,7 +70,6 @@ pub fn verify_credentials<
 }
 
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
-    id_cred_pub: &P::G_1,
     cmm_prf: &PedersenCommitment<P::G_1>,
     cmm_sc: &PedersenCommitment<P::G_1>,
     att_list: &AttributeList<P::ScalarField, AttributeType>,
@@ -79,7 +77,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
 ) -> ps_sig::UnknownMessage<P> {
     // TODO: handle the errors
     let variant = P::G_1::scalar_from_u64(u64::from(att_list.variant)).unwrap();
-    let expiry = P::G_1::scalar_from_u64(att_list.expiry.timestamp() as u64).unwrap();
+    let expiry = P::G_1::scalar_from_u64(att_list.expiry).unwrap();
     let mut message = cmm_sc.0;
     message = message.plus_point(&cmm_prf.0);
     let att_vec = &att_list.alist;

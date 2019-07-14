@@ -5,6 +5,7 @@ use std::fmt;
 use ed25519_dalek as ed25519;
 use eddsa_ed25519 as ed25519_wrapper;
 
+use byteorder::{BigEndian, ReadBytesExt};
 use curve_arithmetic::{Curve, Pairing};
 use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
@@ -127,6 +128,38 @@ impl Attribute<<Bls12 as Pairing>::ScalarField> for ExampleAttribute {
             ExampleAttribute::Business(b) => Fr::from_repr(FrRepr::from(u64::from(*b))).unwrap(),
         }
     }
+
+    fn to_bytes(&self) -> Box<[u8]> {
+        match self {
+            ExampleAttribute::Age(x) => vec![0, *x].into_boxed_slice(),
+            ExampleAttribute::Citizenship(c) => {
+                let mut v = vec![1];
+                v.extend_from_slice(&c.to_be_bytes());
+                v.into_boxed_slice()
+            }
+            ExampleAttribute::MaxAccount(x) => {
+                let mut v = vec![2];
+                v.extend_from_slice(&x.to_be_bytes());
+                v.into_boxed_slice()
+            }
+            ExampleAttribute::Business(b) => vec![3, if *b { 1 } else { 0 }].into_boxed_slice(),
+        }
+    }
+
+    fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let k = cur.read_u8().ok()?;
+        match k {
+            0 => Some(ExampleAttribute::Age(cur.read_u8().ok()?)),
+            1 => Some(ExampleAttribute::Citizenship(
+                cur.read_u16::<BigEndian>().ok()?,
+            )),
+            2 => Some(ExampleAttribute::MaxAccount(
+                cur.read_u16::<BigEndian>().ok()?,
+            )),
+            3 => Some(ExampleAttribute::Business(cur.read_u8().ok()? != 0)),
+            _ => None,
+        }
+    }
 }
 
 fn example_attribute_to_json(att: ExampleAttribute) -> Value {
@@ -157,17 +190,17 @@ fn read_max_account() -> io::Result<ExampleAttribute> {
     Ok(ExampleAttribute::MaxAccount(options[select]))
 }
 
-fn parse_expiry_date(input: &str) -> io::Result<NaiveDateTime> {
+fn parse_expiry_date(input: &str) -> io::Result<u64> {
     let mut input = input.to_owned();
     input.push_str(" 23:59:59");
     let dt = NaiveDateTime::parse_from_str(&input, "%d %B %Y %H:%M:%S")
         .map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
-    Ok(dt)
+    Ok(dt.timestamp() as u64)
 }
 
 /// Reads the expiry date. Only the day, the expiry time is set at the end of
 /// that day.
-fn read_expiry_date() -> io::Result<NaiveDateTime> {
+fn read_expiry_date() -> io::Result<u64> {
     let input: String = Input::new().with_prompt("Expiry date").interact()?;
     parse_expiry_date(&input)
 }
@@ -265,7 +298,7 @@ fn alist_to_json(alist: &ExampleAttributeList) -> Value {
         .collect();
     json!({
         "variant": alist.variant,
-        "expiryDate": alist.expiry.format("%d %B %Y").to_string(),
+        "expiryDate": alist.expiry,
         "items": alist_vec
     })
 }
@@ -273,7 +306,7 @@ fn alist_to_json(alist: &ExampleAttributeList) -> Value {
 fn json_to_alist(v: &Value) -> Option<ExampleAttributeList> {
     let obj = v.as_object()?;
     let variant = obj.get("variant")?;
-    let expiry = parse_expiry_date(obj.get("expiryDate").and_then(Value::as_str)?).ok()?;
+    let expiry = obj.get("expiryDate").and_then(Value::as_u64)?;
     let items_val = obj.get("items")?;
     let items = items_val.as_array()?;
     let alist_vec: Option<Vec<ExampleAttribute>> =
@@ -669,12 +702,13 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // from the above and the pre-identity object we make a policy
     let mut revealed_attributes = Vec::with_capacity(atts.len());
     for idx in atts {
-        revealed_attributes.push((idx as u16, ExampleAttribute::to_field_element(&alist[idx])))
+        revealed_attributes.push((idx as u16, alist[idx]))
     }
     let policy = Policy {
         variant:    pio.alist.variant,
         expiry:     pio.alist.expiry,
         policy_vec: revealed_attributes,
+        _phantom:   Default::default(),
     };
 
     // We now generate or read account verification/signature key pair.
@@ -692,8 +726,11 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         }
     };
     if !known_acc {
-        println!("Generated fresh verification and signature key of the account.");
-        output_json(&account_data_to_json(&acc_data))
+        println!(
+            "Generated fresh verification and signature key of the account to file \
+             account_keys.json"
+        );
+        write_json_to_file("account_keys.json", &account_data_to_json(&acc_data)).ok();
     }
 
     // finally we also read the credential holder information with secret keys
@@ -729,7 +766,6 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             return;
         }
     };
-    output_json(&json_base16_encode(&randomness.to_bytes()));
     // Now we have have everything we need to generate the proofs
     // we have
     // - chi
@@ -749,9 +785,34 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         &acc_data,
         &randomness,
     );
-    let checked = verify_cdi(&global_ctx, ip_info, cdi);
-    println!("{:?}", checked);
-    unimplemented!()
+    // Double check that the generated CDI is going to be successfully
+    // validated.
+    // let checked = verify_cdi(&global_ctx, ip_info, cdi);
+    // if let Err(e) = checked {
+    //        eprintln!("Something went terribly wrong and the generated CDI is not
+    // valid because {}", e);      return
+    //  };
+
+    // Now simply output the credential object in the transaction format
+    // accepted by the simple-client for sending transactions.
+
+    let values = cdi.values;
+
+    let js = json!({
+        "schemeId": if values.acc_scheme_id == SchemeId::Ed25519 {"Ed25519"} else {"CL"},
+        "verifyKey": json_base16_encode(&values.acc_pub_key.to_bytes()),
+        "regId": json_base16_encode(&values.reg_id.curve_to_bytes()),
+        "ipIdentity": values.ip_identity.clone(),
+        "arData": chain_ar_data_to_json(&values.ar_data),
+        "policy": policy_to_json(&values.policy),
+        "IPSignature": json_base16_encode(&values.sig.to_bytes()),
+    });
+}
+
+fn policy_to_json<C: Curve, AttributeType: Attribute<C::Scalar>>(
+    policy: &Policy<C, AttributeType>,
+) {
+    panic!()
 }
 
 fn read_account_data<P: AsRef<Path>>(path: P) -> Option<AccountData> {

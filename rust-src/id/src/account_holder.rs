@@ -15,7 +15,7 @@ use pedersen_scheme::{
 };
 use ps_sig;
 use rand::*;
-use sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, dlog};
+use sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult};
 
 /// Generate PreIdentityObject out of the account holder information,
 /// the chosen anonymity revoker information, and the necessary contextual
@@ -121,8 +121,8 @@ where
 
 pub fn generate_cdi<
     P: Pairing,
-    AttributeType: Attribute<C::Scalar>,
     C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
 >(
     ip_info: &IpInfo<P, C>,
     global_context: &GlobalContext<C>,
@@ -131,10 +131,10 @@ pub fn generate_cdi<
     prio: &PreIdentityObject<P, C, AttributeType>,
     cred_counter: u8,
     ip_sig: &ps_sig::Signature<P>,
-    policy: &Policy<C>,
+    policy: &Policy<C, AttributeType>,
     acc_data: &AccountData,
     sig_retrieval_rand: &SigRetrievalRandomness<P>,
-) -> CredDeploymentInfo<P, C>
+) -> CredDeploymentInfo<P, C, AttributeType>
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
@@ -270,8 +270,8 @@ where
     }
 }
 
-fn open_policy_commitments<C: Curve>(
-    policy: &Policy<C>,
+fn open_policy_commitments<C: Curve, AttributeType: Attribute<C::Scalar>>(
+    policy: &Policy<C, AttributeType>,
     commitment_rands: &CommitmentsRandomness<C>,
 ) -> PolicyProof<C> {
     // FIXME: Handle this more resiliantly.
@@ -333,7 +333,7 @@ fn compute_pok_sig<
     gxs.push(yxs[1]);
     gxs_sec.push(C::scalar_from_u64(u64::from(alist.variant)).unwrap());
     gxs.push(yxs[2]);
-    gxs_sec.push(C::scalar_from_u64(alist.expiry.timestamp() as u64).unwrap());
+    gxs_sec.push(C::scalar_from_u64(alist.expiry).unwrap());
     gxs.push(yxs[3]);
     for i in 4..n + 2 {
         gxs_sec.push(att_vec[i - 4].to_field_element());
@@ -385,7 +385,7 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     let (cmm_prf, prf_rand) = commitment_key.commit(&Value(vec![*prf_scalar]), csprng);
     let variant_scalar = C::scalar_from_u64(u64::from(alist.variant)).unwrap();
     let (cmm_variant, variant_rand) = commitment_key.commit(&Value(vec![variant_scalar]), csprng);
-    let expiry_scalar = C::scalar_from_u64(alist.expiry.timestamp() as u64).unwrap();
+    let expiry_scalar = C::scalar_from_u64(alist.expiry as u64).unwrap();
     let (cmm_expiry, expiry_rand) = commitment_key.commit(&Value(vec![expiry_scalar]), csprng);
     let cred_counter_scalar = C::scalar_from_u64(u64::from(cred_counter)).unwrap();
     let (cmm_cred_counter, cred_counter_rand) =

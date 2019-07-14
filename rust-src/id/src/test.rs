@@ -1,6 +1,7 @@
 use std::fmt;
 
 use crate::{account_holder::*, chain::*, identity_provider::*, types::*};
+use byteorder::{BigEndian, ReadBytesExt};
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519 as ed25519;
@@ -10,8 +11,6 @@ use pairing::{
     PrimeField,
 };
 use ps_sig;
-
-use chrono::NaiveDateTime;
 
 use rand::*;
 
@@ -52,6 +51,38 @@ impl Attribute<<Bls12 as Pairing>::ScalarField> for ExampleAttribute {
             ExampleAttribute::Business(b) => Fr::from_repr(FrRepr::from(u64::from(*b))).unwrap(),
         }
     }
+
+    fn to_bytes(&self) -> Box<[u8]> {
+        match self {
+            ExampleAttribute::Age(x) => vec![0, *x].into_boxed_slice(),
+            ExampleAttribute::Citizenship(c) => {
+                let mut v = vec![1];
+                v.extend_from_slice(&c.to_be_bytes());
+                v.into_boxed_slice()
+            }
+            ExampleAttribute::MaxAccount(x) => {
+                let mut v = vec![2];
+                v.extend_from_slice(&x.to_be_bytes());
+                v.into_boxed_slice()
+            }
+            ExampleAttribute::Business(b) => vec![3, if *b { 1 } else { 0 }].into_boxed_slice(),
+        }
+    }
+
+    fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let k = cur.read_u8().ok()?;
+        match k {
+            0 => Some(ExampleAttribute::Age(cur.read_u8().ok()?)),
+            1 => Some(ExampleAttribute::Citizenship(
+                cur.read_u16::<BigEndian>().ok()?,
+            )),
+            2 => Some(ExampleAttribute::MaxAccount(
+                cur.read_u16::<BigEndian>().ok()?,
+            )),
+            3 => Some(ExampleAttribute::Business(cur.read_u8().ok()? != 0)),
+            _ => None,
+        }
+    }
 }
 
 #[test]
@@ -89,7 +120,7 @@ fn test_pipeline() {
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
     let variant = 0;
-    let expiry_date = NaiveDateTime::from_timestamp(12334, 0);
+    let expiry_date = 123123123;
     let alist = vec![ExampleAttribute::MaxAccount(55), ExampleAttribute::Age(31)];
     let aci = AccCredentialInfo {
         acc_holder_info: ah_info,
@@ -120,7 +151,8 @@ fn test_pipeline() {
     let policy = Policy {
         variant,
         expiry: expiry_date,
-        policy_vec: vec![(1, ExampleAttribute::Age(31).to_field_element())],
+        policy_vec: vec![(1, ExampleAttribute::Age(31))],
+        _phantom: Default::default(),
     };
 
     let kp = ed25519::generate_keypair();
@@ -142,17 +174,14 @@ fn test_pipeline() {
     );
 
     let bytes = cdi.to_bytes();
-    let des = CredDeploymentInfo::<Bls12, ExampleCurve>::from_bytes(&mut Cursor::new(&bytes));
+    let des = CredDeploymentInfo::<Bls12, ExampleCurve, ExampleAttribute>::from_bytes(
+        &mut Cursor::new(&bytes),
+    );
     assert!(des.is_some(), "Deserialization must be successful.");
     // FIXME: Have better equality instances for CDI that do not place needless
     // restrictions on the pairing (such as having PartialEq instnace).
     // For now we just check that the last item in the proofs deserialized
     // correctly.
-    assert_eq!(
-        des.unwrap().proofs.proof_policy,
-        cdi.proofs.proof_policy,
-        "It should deserialize back to what we started with."
-    );
     assert_eq!(
         des.unwrap().proofs.proof_policy,
         cdi.proofs.proof_policy,
