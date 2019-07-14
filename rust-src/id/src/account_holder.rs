@@ -1,5 +1,7 @@
 use crate::types::*;
 
+use sha2::{Digest, Sha512};
+
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
@@ -183,10 +185,31 @@ where
         &mut csprng,
     );
 
+    // We have all the values now.
+    // FIXME: With more uniform infrastructure we can avoid all the cloning here.
+    let cred_values = CredentialDeploymentValues {
+        acc_scheme_id: SchemeId::Ed25519,
+        reg_id,
+        sig: blinded_sig.clone(),
+        ar_data,
+        ip_identity: ip_info.ip_identity.clone(),
+        policy: policy.clone(),
+        acc_pub_key: acc_data.verify_key.clone(),
+        commitments: commitments.clone(),
+    };
+
+    // Compute the challenge prefix by hashing the values.
+    let mut hasher = Sha512::new();
+    hasher.input(&cred_values.to_bytes());
+    let challenge_prefix = hasher.result();
+
+    // and then use it to generate all the proofs.
+
     // Compute the proof of the fact that the encryption of idcredpub we
     // computed above corresponds to the same id_cred_sec that is signed by the
     // identity provider (and commited to)
     let pok_id_cred_pub = compute_pok_id_cred_pub(
+        &challenge_prefix,
         &ip_info,
         &global_context,
         &id_cred_sec,
@@ -201,6 +224,7 @@ where
     // the cred_counter x. At the moment there is no proof that x is less than
     // max_account.
     let pok_reg_id = compute_pok_reg_id(
+        &challenge_prefix,
         &global_context.on_chain_commitment_key,
         prf_key,
         &commitments.cmm_prf,
@@ -215,6 +239,7 @@ where
 
     // Proof of knowledge of the signature of the identity provider.
     let pok_sig = compute_pok_sig(
+        &challenge_prefix,
         &global_context.on_chain_commitment_key,
         &commitments,
         &commitment_rands,
@@ -227,32 +252,21 @@ where
         &mut csprng,
     );
 
-    // TODO: Fix
-    let challenge_prefix = [0; 32];
-
     // Proof of knowledge of the secret key corresponding to the public
     // (verification) key.
     let proof_acc_sk =
         eddsa_dlog::prove_dlog_ed25519(&challenge_prefix, &acc_data.verify_key, &acc_data.sign_key);
-
     let cdp = CredDeploymentProofs {
         proof_id_cred_pub: pok_id_cred_pub,
         proof_ip_sig: pok_sig,
         proof_reg_id: pok_reg_id,
         proof_acc_sk,
+        proof_policy: open_policy_commitments(&policy, &commitment_rands),
     };
 
     CredDeploymentInfo {
-        acc_scheme_id: SchemeId::Ed25519,
-        reg_id,
-        sig: blinded_sig,
-        ar_data,
-        ip_identity: ip_info.ip_identity.clone(),
-        policy: policy.clone(),
-        acc_pub_key: acc_data.verify_key,
-        commitments,
+        values: cred_values,
         proofs: cdp,
-        proof_policy: open_policy_commitments(&policy, &commitment_rands),
     }
 }
 
@@ -284,6 +298,7 @@ fn compute_pok_sig<
     AttributeType: Attribute<C::Scalar>,
     R: Rng,
 >(
+    challenge_prefix: &[u8],
     commitment_key: &PedersenKey<C>,
     commitments: &CredDeploymentCommitments<C>,
     commitment_rands: &CommitmentsRandomness<C>,
@@ -324,7 +339,6 @@ fn compute_pok_sig<
         gxs_sec.push(att_vec[i - 4].to_field_element());
         gxs.push(yxs[i]);
     }
-    let challenge_prefix = [0; 32];
 
     let gxs_pair = a; // CHECK with Bassel
 
@@ -407,6 +421,7 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
 }
 
 fn compute_pok_reg_id<C: Curve, R: Rng>(
+    challenge_prefix: &[u8],
     on_chain_commitment_key: &PedersenKey<C>,
     prf_key: prf::SecretKey<C>,
     cmm_prf: &Commitment<C>,
@@ -443,11 +458,11 @@ fn compute_pok_reg_id<C: Curve, R: Rng>(
 
     let secret = [s1, s2, s3];
 
-    let challenge_prefix = [0; 32]; // FIXME
     com_mult::prove_com_mult(csprng, &challenge_prefix, &public, &secret, &coeff)
 }
 
 fn compute_pok_id_cred_pub<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
+    challenge_prefix: &[u8],
     ip_info: &IpInfo<P, C>,
     global_context: &GlobalContext<C>,
     id_cred_sec: &C::Scalar,
@@ -457,8 +472,6 @@ fn compute_pok_id_cred_pub<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng
     id_cred_sec_rand: &C::Scalar,
     csprng: &mut R,
 ) -> com_enc_eq::ComEncEqProof<C> {
-    // FIXME
-    let challenge_prefix = [0; 32];
     let public = (id_cred_pub_enc.0, id_cred_pub_enc.1, cmm_id_cred_sec.0);
     // FIXME: The one_point needs to be a parameter.
     let ar_info = &ip_info.ar_info;
