@@ -26,7 +26,7 @@ pub trait Attribute<F: Field> {
 
 #[derive(Clone, Debug)]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
-    pub variant:  u32,
+    pub variant:  u16,
     pub expiry:   NaiveDateTime,
     pub alist:    Vec<AttributeType>,
     pub _phantom: std::marker::PhantomData<F>,

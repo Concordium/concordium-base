@@ -14,16 +14,35 @@ use pedersen_scheme::{
 use ps_sig;
 use rand::*;
 use sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, dlog};
+use core::fmt::{self, Display};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CDIVerificationError {
+    RegId,
+    IdCredPub,
+    Signature,
+    Dlog
+}
+
+impl Display for CDIVerificationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            CDIVerificationError::RegId => write!(f, "RegIdVerificationError"),
+            CDIVerificationError::IdCredPub => write!(f, "IdCredPubVerificationError"),
+            CDIVerificationError::Signature => write!(f, "SignatureVerificationError"),
+            CDIVerificationError::Dlog => write!(f, "DlogVerificationError"),
+        }
+    }
+}
 
 pub fn verify_cdi<
     P: Pairing,
-    AttributeType: Attribute<C::Scalar>,
     C: Curve<Scalar = P::ScalarField>,
 >(
     global_context: &GlobalContext<C>,
     ip_info: IpInfo<P, C>,
     cdi: CredDeploymentInfo<P, C>,
-) -> bool {
+) -> Result<(), CDIVerificationError> {
     let commitments = cdi.commitments;
     let check_id_cred_pub = verify_pok_id_cred_pub(
         &global_context,
@@ -32,6 +51,9 @@ pub fn verify_cdi<
         &commitments.cmm_id_cred_sec,
         &cdi.proofs.proof_id_cred_pub,
     );
+    if !check_id_cred_pub {
+        return Err(CDIVerificationError::IdCredPub)
+    }
 
     let check_reg_id = verify_pok_reg_id(
         &global_context.on_chain_commitment_key,
@@ -41,6 +63,10 @@ pub fn verify_cdi<
         &cdi.proofs.proof_reg_id,
     );
 
+    if !check_reg_id {
+        return Err(CDIVerificationError::RegId)
+    }
+
     let check_pok_sig = verify_pok_sig(
         &global_context.on_chain_commitment_key,
         &commitments,
@@ -49,15 +75,24 @@ pub fn verify_cdi<
         &cdi.proofs.proof_ip_sig,
     );
 
+    if !check_pok_sig {
+        return Err(CDIVerificationError::Signature)
+    }
+
     let challenge_prefix = [0; 32];
-    let verify_key_check = eddsa_dlog::verify_dlog_ed25519(
+    let verify_dlog = eddsa_dlog::verify_dlog_ed25519(
         &challenge_prefix,
         &cdi.acc_pub_key,
         &cdi.proofs.proof_acc_sk,
     );
 
+    if !verify_dlog {
+        return Err(CDIVerificationError::Dlog)
+    }
+
     // TODO: Check commitment openings.
-    true
+
+    Ok(())
 }
 
 fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
@@ -76,7 +111,9 @@ fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let (q_pair, q) = (a, P::G_2::one_point());
 
-    let gxs = yxs.to_vec();
+    let n = commitments.cmm_attributes.len();
+
+    let gxs = yxs[..n+2].to_vec();
 
     let challenge_prefix = [0; 32];
 

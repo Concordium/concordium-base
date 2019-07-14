@@ -122,7 +122,7 @@ pub fn generate_cdi<
     AttributeType: Attribute<C::Scalar>,
     C: Curve<Scalar = P::ScalarField>,
 >(
-    context: &Context<P, C>,
+    ip_info: &IpInfo<P, C>,
     global_context: &GlobalContext<C>,
 
     aci: &AccCredentialInfo<P, C, AttributeType>,
@@ -153,13 +153,13 @@ where
     // FIXME: We need to have the generator as parameter. Right now this all
     // works by accident because the generator is always chosen as C::one_point().
     let id_cred_pub = aci.acc_holder_info.id_cred.id_cred_pub;
-    let (id_cred_pub_enc, id_cred_pub_rand) = context
-        .ip_info
+    let (id_cred_pub_enc, id_cred_pub_rand) =
+        ip_info
         .ar_info
         .ar_public_key
         .encrypt_rand(&mut csprng, &ElgamalMessage::<C>(id_cred_pub));
 
-    let ip_pub_key = &context.ip_info.ip_verify_key;
+    let ip_pub_key = &ip_info.ip_verify_key;
 
     let ar_data = ChainArData {
         ar_name: prio.ip_ar_data.ar_name.clone(),
@@ -187,7 +187,7 @@ where
     // computed above corresponds to the same id_cred_sec that is signed by the
     // identity provider (and commited to)
     let pok_id_cred_pub = compute_pok_id_cred_pub(
-        &context,
+        &ip_info,
         &global_context,
         &id_cred_sec,
         &id_cred_pub_enc,
@@ -247,7 +247,7 @@ where
         reg_id,
         sig: ip_sig.clone(),
         ar_data,
-        ip_identity: context.ip_info.ip_identity.clone(),
+        ip_identity: ip_info.ip_identity.clone(),
         policy: policy.clone(),
         acc_pub_key: acc_data.verify_key,
         commitments,
@@ -316,8 +316,12 @@ fn compute_pok_sig<
     let prf_key_scalar = prf_key.0;
     gxs_sec.push(prf_key_scalar);
     gxs.push(yxs[1]);
-    for i in 2..n {
-        gxs_sec.push(att_vec[i - 2].to_field_element());
+    gxs_sec.push(C::scalar_from_u64(u64::from(alist.variant)).unwrap());
+    gxs.push(yxs[2]);
+    gxs_sec.push(C::scalar_from_u64(alist.expiry.timestamp() as u64).unwrap());
+    gxs.push(yxs[3]);
+    for i in 4..n+2 {
+        gxs_sec.push(att_vec[i - 4].to_field_element());
         gxs.push(yxs[i]);
     }
     let challenge_prefix = [0; 32];
@@ -444,7 +448,7 @@ fn compute_pok_reg_id<C: Curve, R: Rng>(
 }
 
 fn compute_pok_id_cred_pub<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
-    context: &Context<P, C>,
+    ip_info: &IpInfo<P, C>,
     global_context: &GlobalContext<C>,
     id_cred_sec: &C::Scalar,
     id_cred_pub_enc: &Cipher<C>,
@@ -457,7 +461,7 @@ fn compute_pok_id_cred_pub<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng
     let challenge_prefix = [0; 32];
     let public = (id_cred_pub_enc.0, id_cred_pub_enc.1, cmm_id_cred_sec.0);
     // FIXME: The one_point needs to be a parameter.
-    let ar_info = &context.ip_info.ar_info;
+    let ar_info = &ip_info.ar_info;
     let cmm_key = &global_context.on_chain_commitment_key;
     let base = (
         ar_info.ar_elgamal_generator,
