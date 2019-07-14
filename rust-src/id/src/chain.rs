@@ -2,19 +2,12 @@ use crate::types::*;
 
 use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
-use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
-use elgamal::{cipher::Cipher, message::Message as ElgamalMessage};
-use pairing::Field;
-use pedersen_scheme::{
-    commitment::Commitment,
-    key::{CommitmentKey, CommitmentKey as PedersenKey},
-    value as pedersen,
-    value::Value,
-};
+use elgamal::cipher::Cipher;
+use pedersen_scheme::{commitment::Commitment, key::CommitmentKey as PedersenKey};
 use ps_sig;
-use rand::*;
-use sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, dlog};
+
+use sigma_protocols::{com_enc_eq, com_eq_sig, com_mult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CDIVerificationError {
