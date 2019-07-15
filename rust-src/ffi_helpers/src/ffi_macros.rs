@@ -61,7 +61,6 @@ macro_rules! macro_generate_commitment_key {
     };
 }
 
-
 #[macro_export]
 macro_rules! macro_free_ffi {
     ($function_name:ident, $type:ty) => {

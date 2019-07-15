@@ -566,38 +566,38 @@ impl<C: Curve> PolicyProof<C> {
         })
     }
 }
-impl<C:Curve> ArInfo<C> {
-    pub fn to_bytes(&self) -> Box<[u8]>{
+impl<C: Curve> ArInfo<C> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
         let mut r = short_string_to_bytes(&self.ar_name);
         r.extend_from_slice(&self.ar_public_key.to_bytes());
         r.extend_from_slice(&self.ar_elgamal_generator.curve_to_bytes());
         r.into_boxed_slice()
     }
 
-    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self>{
-          let ar_name = bytes_to_short_string(cur)?;
-          let ar_public_key = elgamal::PublicKey::from_bytes(cur).ok()?;
-          let ar_elgamal_generator = C::bytes_to_curve(cur).ok()?;
-          Some(ArInfo{
-              ar_name, 
-              ar_public_key,
-              ar_elgamal_generator
-          })
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let ar_name = bytes_to_short_string(cur)?;
+        let ar_public_key = elgamal::PublicKey::from_bytes(cur).ok()?;
+        let ar_elgamal_generator = C::bytes_to_curve(cur).ok()?;
+        Some(ArInfo {
+            ar_name,
+            ar_public_key,
+            ar_elgamal_generator,
+        })
     }
 }
-impl<P:Pairing, C:Curve<Scalar=P::ScalarField>> IpInfo<P, C> {
-    pub fn to_bytes(&self) -> Box<[u8]>{
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
         let mut r = short_string_to_bytes(&self.ip_identity);
         r.extend_from_slice(&self.ip_verify_key.to_bytes());
         r.extend_from_slice(&self.ar_info.to_bytes());
         r.into_boxed_slice()
     }
 
-    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self>{
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let ip_identity = bytes_to_short_string(cur)?;
         let ip_verify_key = pssig::PublicKey::from_bytes(cur).ok()?;
         let ar_info = ArInfo::from_bytes(cur)?;
-        Some(IpInfo{
+        Some(IpInfo {
             ip_identity,
             ip_verify_key,
             ar_info,
@@ -605,8 +605,8 @@ impl<P:Pairing, C:Curve<Scalar=P::ScalarField>> IpInfo<P, C> {
     }
 }
 
-impl<P:Pairing, C:Curve<Scalar=P::ScalarField>> Context<P, C>{
-    pub fn to_bytes(&self) -> Box<[u8]>{
+impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Context<P, C> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
         let mut r = vec![];
         r.extend_from_slice(&self.ip_info.to_bytes());
         r.extend_from_slice(&self.dlog_base.curve_to_bytes());
@@ -622,7 +622,7 @@ impl<P:Pairing, C:Curve<Scalar=P::ScalarField>> Context<P, C>{
         let commitment_key_sc = PedersenKey::from_bytes(cur).ok()?;
         let commitment_key_prf = PedersenKey::from_bytes(cur).ok()?;
         let commitment_key_ar = PedersenKey::from_bytes(cur).ok()?;
-        Some(Context{
+        Some(Context {
             ip_info,
             dlog_base,
             commitment_key_sc,
@@ -632,21 +632,20 @@ impl<P:Pairing, C:Curve<Scalar=P::ScalarField>> Context<P, C>{
     }
 }
 
-impl<C:Curve> GlobalContext<C>{
-    pub fn to_bytes(&self) -> Box<[u8]>{
+impl<C: Curve> GlobalContext<C> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
         let mut r = vec![];
         r.extend_from_slice(&self.dlog_base_chain.curve_to_bytes());
         r.extend_from_slice(&self.on_chain_commitment_key.to_bytes());
         r.into_boxed_slice()
     }
 
-    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self>{
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let dlog_base_chain = C::bytes_to_curve(cur).ok()?;
         let on_chain_commitment_key = PedersenKey::from_bytes(cur).ok()?;
-        Some(GlobalContext{
+        Some(GlobalContext {
             dlog_base_chain,
             on_chain_commitment_key,
         })
     }
-
 }
