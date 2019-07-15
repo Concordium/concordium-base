@@ -190,12 +190,10 @@ where
     let cred_values = CredentialDeploymentValues {
         acc_scheme_id: SchemeId::Ed25519,
         reg_id,
-        sig: blinded_sig.clone(),
         ar_data,
         ip_identity: ip_info.ip_identity.clone(),
         policy: policy.clone(),
         acc_pub_key: acc_data.verify_key.clone(),
-        commitments: commitments.clone(),
     };
 
     // Compute the challenge prefix by hashing the values.
@@ -257,6 +255,8 @@ where
     let proof_acc_sk =
         eddsa_dlog::prove_dlog_ed25519(&challenge_prefix, &acc_data.verify_key, &acc_data.sign_key);
     let cdp = CredDeploymentProofs {
+        sig: blinded_sig,
+        commitments,
         proof_id_cred_pub: pok_id_cred_pub,
         proof_ip_sig: pok_sig,
         proof_reg_id: pok_reg_id,

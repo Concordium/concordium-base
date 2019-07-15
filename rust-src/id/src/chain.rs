@@ -46,7 +46,7 @@ pub fn verify_cdi<
     hasher.input(&cdi.values.to_bytes());
     let challenge_prefix = hasher.result();
 
-    let commitments = cdi.values.commitments;
+    let commitments = cdi.proofs.commitments;
     let check_id_cred_pub = verify_pok_id_cred_pub(
         &challenge_prefix,
         &global_context,
@@ -87,7 +87,7 @@ pub fn verify_cdi<
         &global_context.on_chain_commitment_key,
         &commitments,
         &ip_info.ip_verify_key,
-        &cdi.values.sig,
+        &cdi.proofs.sig,
         &cdi.proofs.proof_ip_sig,
     );
 

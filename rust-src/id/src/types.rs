@@ -155,6 +155,11 @@ pub struct CredDeploymentCommitments<C: Curve> {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Signature derived from the signature of the pre-identity object by the
+    /// IP
+    pub sig: Signature<P>,
+    /// Individual commitments to each item in the attribute list.
+    pub commitments: CredDeploymentCommitments<C>,
     /// Proof of knowledge of IdCredSec corresponding to the commitment made on
     /// the chain. The commitment is signed by the IP, and so this proof makes
     /// sure that we have encrypted IDCredPub correctly so anonymity can be
@@ -204,11 +209,7 @@ pub struct PolicyProof<C: Curve> {
 
 /// Values (as opposed to proofs) in credential deployment.
 #[derive(Debug, PartialEq, Eq)]
-pub struct CredentialDeploymentValues<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-> {
+pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Id of the signature scheme of the account. The verification key must
     /// correspond to the
     pub acc_scheme_id: SchemeId,
@@ -224,11 +225,6 @@ pub struct CredentialDeploymentValues<
     pub ar_data: ChainArData<C>,
     /// Policy of this credential object.
     pub policy: Policy<C, AttributeType>,
-    /// Signature derived from the signature of the pre-identity object by the
-    /// IP
-    pub sig: Signature<P>,
-    /// Individual commitments to each item in the attribute list.
-    pub commitments: CredDeploymentCommitments<C>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -237,7 +233,7 @@ pub struct CredDeploymentInfo<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
-    pub values: CredentialDeploymentValues<P, C, AttributeType>,
+    pub values: CredentialDeploymentValues<C, AttributeType>,
     pub proofs: CredDeploymentProofs<P, C>,
 }
 
@@ -399,7 +395,9 @@ impl<C: Curve> CredDeploymentCommitments<C> {
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = self.proof_id_cred_pub.to_bytes();
+        let mut out = self.sig.to_bytes().to_vec();
+        out.extend_from_slice(&self.commitments.to_bytes());
+        out.extend(&self.proof_id_cred_pub.to_bytes());
         out.extend_from_slice(&self.proof_ip_sig.to_bytes());
         out.extend_from_slice(&self.proof_reg_id.to_bytes());
         out.extend_from_slice(&self.proof_acc_sk.to_bytes());
@@ -408,12 +406,16 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let sig = Signature::from_bytes(cur).ok()?;
+        let commitments = CredDeploymentCommitments::from_bytes(cur)?;
         let proof_id_cred_pub = ComEncEqProof::from_bytes(cur).ok()?;
         let proof_ip_sig = ComEqSigProof::from_bytes(cur).ok()?;
         let proof_reg_id = ComMultProof::from_bytes(cur).ok()?;
         let proof_acc_sk = Ed25519DlogProof::from_bytes(cur).ok()?;
         let proof_policy = PolicyProof::from_bytes(cur)?;
         Some(CredDeploymentProofs {
+            sig,
+            commitments,
             proof_id_cred_pub,
             proof_ip_sig,
             proof_reg_id,
@@ -473,9 +475,7 @@ impl SchemeId {
     }
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    CredentialDeploymentValues<P, C, AttributeType>
-{
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C, AttributeType> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut v = self.acc_scheme_id.to_bytes().to_vec();
         // NOTE: Serialize the public key with length to match what is in Haskell code
@@ -487,8 +487,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         v.extend_from_slice(&short_string_to_bytes(&self.ip_identity));
         v.extend_from_slice(&self.ar_data.to_bytes());
         v.extend_from_slice(&self.policy.to_bytes());
-        v.extend_from_slice(&self.sig.to_bytes());
-        v.extend_from_slice(&self.commitments.to_bytes());
         v
     }
 
@@ -502,17 +500,13 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
         let ip_identity = bytes_to_short_string(cur)?;
         let ar_data = ChainArData::from_bytes(cur)?;
         let policy = Policy::from_bytes(cur)?;
-        let sig = Signature::from_bytes(cur).ok()?;
-        let commitments = CredDeploymentCommitments::from_bytes(cur)?;
         Some(CredentialDeploymentValues {
             acc_scheme_id,
             acc_pub_key,
             reg_id,
             ip_identity,
             ar_data,
-            sig,
             policy,
-            commitments,
         })
     }
 }
