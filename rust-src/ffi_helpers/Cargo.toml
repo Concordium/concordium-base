@@ -1,11 +1,12 @@
 [package]
-name = "ffi_macros"
+name = "ffi_helpers"
 version = "0.1.0"
 authors = ["Concordium"]
 edition = "2018"
 
 [dependencies]
+libc = "0.2"
 
 [lib]
-name = "ffi_macros"
-path = "src/ffi_macros.rs"
+name = "ffi_helpers"
+path = "src/lib.rs"

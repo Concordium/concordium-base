@@ -1,4 +1,4 @@
-// use ffi_macros::*;
+// use ffi_helpers::*;
 
 // use crate::curve_arithmetic::*;
 // use libc::size_t;

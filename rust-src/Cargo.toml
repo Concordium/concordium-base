@@ -11,7 +11,7 @@ members=[
    "ps_sig",
    "sigma_protocols",
    "id",
-   "ffi_macros",
+   "ffi_helpers",
    "simple_id_client",
 ]
 

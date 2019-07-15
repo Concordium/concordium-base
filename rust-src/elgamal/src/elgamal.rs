@@ -153,15 +153,6 @@ macro_rules! macro_derive_from_bytes {
     };
 }
 
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn free_array_len(ptr: *mut u8, len: size_t) {
-    let s = mut_slice_from_c_bytes!(ptr, len as usize);
-    unsafe {
-        Box::from_raw(s.as_mut_ptr());
-    }
-}
-
 pub fn encrypt_u64_bitwise_iter<C: Curve>(
     pk: PublicKey<C>,
     e: u64,
