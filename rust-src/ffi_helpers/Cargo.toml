@@ -10,3 +10,4 @@ libc = "0.2"
 [lib]
 name = "ffi_helpers"
 path = "src/lib.rs"
+crate-type = ["rlib", "staticlib", "cdylib"]

@@ -1,9 +1,16 @@
+use pedersen_scheme::key::CommitmentKey as PedersenKey;
 use crate::types::*;
 use curve_arithmetic::curve_arithmetic::*;
-use pairing::bls12_381::G1;
+use pairing::bls12_381::{Bls12,G1};
 use std::io::{Cursor, Read};
 
-#[derive(Copy, Clone)]
+use ffi_helpers::*;
+use std::slice;
+use libc::size_t;
+use rand::thread_rng;
+use failure::Error;
+
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum AttributeKind {
     U8(u8),
     U16(u16),
@@ -110,8 +117,50 @@ pub extern "C" fn verify_cdi(global_context_ptr: *const u8, ip_info_ptr: *const 
 
 */
 
+macro_derive_from_bytes!(pedersen_key_from_bytes, PedersenKey<G1>, PedersenKey::from_bytes);
+macro_derive_to_bytes!(pedersen_key_to_bytes, PedersenKey<G1>);
+macro_free_ffi!(pedersen_key_free, PedersenKey<G1>);
+macro_generate_commitment_key!(pedersen_key_gen, PedersenKey<G1>, PedersenKey::generate);
+
+macro_derive_from_bytes!(ps_sig_key_from_bytes, ps_sig::PublicKey<Bls12>, ps_sig::PublicKey::from_bytes);
+macro_derive_to_bytes!(ps_sig_key_to_bytes, ps_sig::PublicKey<Bls12>);
+macro_free_ffi!(ps_sig_key_free, ps_sig::PublicKey<Bls12>);
+macro_generate_commitment_key!(ps_sig_key_gen, ps_sig::PublicKey<Bls12>, ps_sig::PublicKey::arbitrary);
+
+pub struct ElgamalGenerator(G1);
+
+impl ElgamalGenerator{
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        self.0.curve_to_bytes()
+    }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let r = G1::bytes_to_curve(cur)?;
+        Ok(ElgamalGenerator(r))
+    }
+
+    pub fn generate() -> Self {
+        ElgamalGenerator(G1::generate(&mut thread_rng()))
+    }
+}
+
+macro_derive_from_bytes!(elgamal_gen_from_bytes, ElgamalGenerator, ElgamalGenerator::from_bytes);
+macro_derive_to_bytes!(elgamal_gen_to_bytes, ElgamalGenerator);
+macro_free_ffi!(elgamal_gen_free, ElgamalGenerator);
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn elgamal_gen_gen() -> *const ElgamalGenerator {
+    Box::into_raw(Box::new(ElgamalGenerator::generate()))
+}
 
 
 
-
-
+macro_derive_from_bytes!(elgamal_pub_key_from_bytes, elgamal::PublicKey<G1>, elgamal::PublicKey::from_bytes);
+macro_derive_to_bytes!(elgamal_pub_key_to_bytes, elgamal::PublicKey<G1>);
+macro_free_ffi!(elgamal_pub_key_free, elgamal::PublicKey<G1>);
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn elgamal_pub_key_gen() -> *const elgamal::PublicKey<G1> {
+    let sk = elgamal::secret::SecretKey::generate(&mut thread_rng());
+    Box::into_raw(Box::new(elgamal::PublicKey::from(&sk)))
+}

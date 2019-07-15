@@ -41,7 +41,7 @@ impl<C: Curve> CommitmentKey<C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let gs = &self.0;
         let h = &self.1;
-        let mut bytes: Vec<u8> = Vec::with_capacity((gs.len() + 1) * C::GROUP_ELEMENT_LENGTH);
+        let mut bytes: Vec<u8> = Vec::with_capacity(4 + (gs.len() + 1) * C::GROUP_ELEMENT_LENGTH);
         write_curve_elements(gs, &mut bytes);
         write_curve_element(h, &mut bytes);
         bytes.into_boxed_slice()

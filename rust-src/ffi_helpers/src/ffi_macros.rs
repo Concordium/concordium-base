@@ -40,7 +40,7 @@ macro_rules! macro_derive_from_bytes {
         pub extern "C" fn $function_name(input_bytes: *mut u8, input_len: size_t) -> *const $type {
             let len = input_len as usize;
             let bytes = slice_from_c_bytes!(input_bytes, len);
-            let e = $from(&bytes);
+            let e = $from(&mut Cursor::new(&bytes));
             match e {
                 Ok(r) => Box::into_raw(Box::new(r)),
                 Err(_) => ::std::ptr::null(),
@@ -48,6 +48,19 @@ macro_rules! macro_derive_from_bytes {
         }
     };
 }
+
+#[macro_export]
+macro_rules! macro_generate_commitment_key {
+    ($function_name:ident, $type:ty, $generator:expr) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub extern "C" fn $function_name(n: size_t) -> *const $type {
+            let mut csprng = thread_rng();
+            Box::into_raw(Box::new($generator(n, &mut csprng)))
+        }
+    };
+}
+
 
 #[macro_export]
 macro_rules! macro_free_ffi {

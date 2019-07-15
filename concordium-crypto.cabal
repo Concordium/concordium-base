@@ -34,7 +34,10 @@ Library
                    Data.FixedByteString
                    Concordium.ID.Types
                    Concordium.ID.Account
+                   Concordium.Crypto.FFIDataTypes
                    Concordium.Crypto.ByteStringHelpers
+
+  Other-modules:  Concordium.Crypto.FFIHelpers
 
   Build-depends:  base >=4.7
                 , bytestring >=0.10
@@ -54,7 +57,9 @@ Library
   extra-libraries: ec_vrf_ed25519
                    sha_2, 
                    eddsa_ed25519,
-                   sigma_protocols
+                   sigma_protocols,
+                   ffi_helpers,
+                   id
 
   if os(windows)
         extra-libraries: ws2_32
