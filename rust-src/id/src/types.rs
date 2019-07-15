@@ -209,10 +209,7 @@ pub struct PolicyProof<C: Curve> {
 
 /// Values (as opposed to proofs) in credential deployment.
 #[derive(Debug, PartialEq, Eq)]
-pub struct CredentialDeploymentValues<
-    C: Curve,
-    AttributeType: Attribute<C::Scalar>,
-> {
+pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Id of the signature scheme of the account. The verification key must
     /// correspond to the
     pub acc_scheme_id: SchemeId,
@@ -478,9 +475,7 @@ impl SchemeId {
     }
 }
 
-impl<C: Curve, AttributeType: Attribute<C::Scalar>>
-    CredentialDeploymentValues<C, AttributeType>
-{
+impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C, AttributeType> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut v = self.acc_scheme_id.to_bytes().to_vec();
         // NOTE: Serialize the public key with length to match what is in Haskell code

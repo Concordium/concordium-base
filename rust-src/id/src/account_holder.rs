@@ -256,7 +256,7 @@ where
         eddsa_dlog::prove_dlog_ed25519(&challenge_prefix, &acc_data.verify_key, &acc_data.sign_key);
     let cdp = CredDeploymentProofs {
         sig: blinded_sig,
-        commitments: commitments,
+        commitments,
         proof_id_cred_pub: pok_id_cred_pub,
         proof_ip_sig: pok_sig,
         proof_reg_id: pok_reg_id,
