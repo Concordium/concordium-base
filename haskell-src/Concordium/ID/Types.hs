@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings, LambdaCase #-}
 {-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia #-}
 module Concordium.ID.Types where
 
@@ -120,17 +120,26 @@ instance Serialize Proofs where
     l <- fromIntegral <$> getWord32be
     Proofs <$> getByteString l
 
--- |Maximum size of an attribute in bytes.
--- This is determined by the field element size.
-data AttributeSize
+data AttributeValue =
+  ATWord8 !Word8
+  | ATWord16 !Word16
+  | ATWord32 !Word32
+  | ATWord64 !Word64
+  deriving(Show, Eq)
 
-instance FBS.FixedLength AttributeSize where
-  fixedLength _ = 32
+instance Serialize AttributeValue where
+    put (ATWord8 w) = putWord8 0 <> putWord8 w
+    put (ATWord16 w) = putWord8 1 <> putWord16be w
+    put (ATWord32 w) = putWord8 2 <> putWord32be w
+    put (ATWord64 w) = putWord8 3 <> putWord64be w
 
-newtype AttributeValue = AttributeValue (FBS.FixedByteString AttributeSize)
-    deriving(Eq)
-    deriving(Show) via (FBSHex AttributeSize)
-    deriving(Serialize) via (FBSHex AttributeSize)
+    get = getWord8 >>= \case
+      0 -> ATWord8 <$> getWord8
+      1 -> ATWord16 <$> getWord16be
+      2 -> ATWord32 <$> getWord32be
+      3 -> ATWord64 <$> getWord64be
+      _ -> fail "Uknown attribute type."
+    
 
 -- |For the moment the policies we support are simply opening of specific commitments.
 data PolicyItem = PolicyItem {

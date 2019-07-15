@@ -810,8 +810,6 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         "ipIdentity": values.ip_identity.clone(),
         "arData": chain_ar_data_to_json(&values.ar_data),
         "policy": policy_to_json(&values.policy),
-        "IPSignature": json_base16_encode(&values.sig.to_bytes()),
-        "commitments": json_base16_encode(&values.commitments.to_bytes()),
         "proofs": json_base16_encode(&cdi.proofs.to_bytes()),
     });
     if let Some(json_file) = matches.value_of("out") {
