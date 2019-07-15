@@ -93,3 +93,25 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
         }
     }
 }
+
+/*
+pub extern "C" fn verify_cdi(global_context_ptr: *const u8, ip_info_ptr: *const u8, cdi_ptr: *const u8) -> int32_t {
+    if global_context_ptr.is_null() {
+        return -3;
+    }
+    if ip_info_ptr.is_null(){
+        return -4
+    }
+    if cdi_ptr.is_null(){
+        return -5
+    }
+
+}
+
+*/
+
+
+
+
+
+
