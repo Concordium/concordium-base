@@ -1,5 +1,5 @@
 use crate::types::*;
-use curve_arithmetic::{curve_arithmetic::*};
+use curve_arithmetic::curve_arithmetic::*;
 use pairing::bls12_381::G1;
 use std::io::{Cursor, Read};
 
