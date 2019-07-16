@@ -1,7 +1,8 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.FFIDataTypes
   (PedersenKey, PsSigKey, ElgamalGen, ElgamalPublicKey, ElgamalCipher,
-  generatePedersenKey, generatePsSigKey, generateElgamalGen, generateElgamalPublicKey, generateElgamalCipher)
+  generatePedersenKey, generatePsSigKey, generateElgamalGen, generateElgamalPublicKey, generateElgamalCipher,
+  withPedersenKey, withPsSigKey, withElgamalGen, withElgamalPublicKey)
   where
 
 import Foreign.ForeignPtr
@@ -46,6 +47,17 @@ foreign import ccall unsafe "elgamal_cipher_to_bytes" toBytesElgamalCipher :: Pt
 foreign import ccall unsafe "elgamal_cipher_from_bytes" fromBytesElgamalCipher :: Ptr Word8 -> CSize -> IO (Ptr ElgamalCipher)
 foreign import ccall unsafe "elgamal_cipher_gen" generateElgamalCipherPtr :: IO (Ptr ElgamalCipher)
 
+withPedersenKey :: PedersenKey -> (Ptr PedersenKey -> IO b) -> IO b
+withPedersenKey (PedersenKey fp) = withForeignPtr fp
+
+withPsSigKey :: PsSigKey -> (Ptr PsSigKey -> IO b) -> IO b
+withPsSigKey (PsSigKey fp) = withForeignPtr fp
+
+withElgamalGen :: ElgamalGen -> (Ptr ElgamalGen -> IO b) -> IO b
+withElgamalGen (ElgamalGen fp) = withForeignPtr fp
+
+withElgamalPublicKey :: ElgamalPublicKey -> (Ptr ElgamalPublicKey -> IO b) -> IO b
+withElgamalPublicKey (ElgamalPublicKey fp) = withForeignPtr fp
 
 -- |NOTE: This instance is different than the rust one. We add explicit length
 -- information up front.

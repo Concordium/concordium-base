@@ -163,6 +163,11 @@ newtype ARName = ARName ByteString
     deriving(Show, Eq)
     deriving Serialize via Short65K
 
+-- |Public key of an anonymity revoker.
+newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
+    deriving(Eq, Show, Serialize)
+
+
 -- |Encryption of data with anonymity revoker's public key.
 newtype AREnc = AREnc ElgamalCipher
     deriving(Eq, Show, Serialize)

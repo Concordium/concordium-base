@@ -1,18 +1,48 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.ID.Account where
 
 import Concordium.ID.Types
+import Concordium.Crypto.FFIDataTypes
 import GHC.Word
 import Data.ByteString.Random.MWC
 import Concordium.Crypto.SignatureScheme
 import qualified Concordium.Crypto.SHA224 as SHA224
 import qualified Data.ByteString as BS
 import qualified Data.FixedByteString as FBS
+import System.IO.Unsafe
+import Foreign.Ptr
+import Foreign.C.Types
+import Data.Int
+import Data.ByteString.Unsafe
+
 import Data.Base58String.Bitcoin
 
-verifyCredential :: CredentialDeploymentInformation -> Bool
-verifyCredential _ = True
+import Data.ByteString as BS
+
+type CredentialDeploymentInformationBytes = ByteString
+
+foreign import ccall unsafe "verify_cdi_ffi" verifyCDIFFI
+               :: Ptr PedersenKey
+               -> Ptr ElgamalGen
+               -> Ptr ElgamalPublicKey
+               -> Ptr PsSigKey
+               -> Ptr Word8
+               -> CSize
+               -> IO Int32
+
+
+verifyCredential :: PedersenKey -> ElgamalGen -> AnonymityRevokerPublicKey -> IdentityProviderPublicKey -> CredentialDeploymentInformationBytes -> Bool
+verifyCredential pedersenKey elgamalGenerator (AnonymityRevokerPublicKey anonPK) (IP_PK idPK) cdiBytes = unsafeDupablePerformIO $ do
+    res <- withPedersenKey pedersenKey $
+           \pedersenKeyPtr -> withElgamalGen elgamalGenerator $
+           \elgamalGeneratorPtr -> withElgamalPublicKey anonPK $
+           \anonPKPtr -> withPsSigKey idPK $
+           \ipVerifyKeyPtr -> unsafeUseAsCStringLen cdiBytes $
+           \(cdiBytesPtr, cdiBytesLen) -> verifyCDIFFI pedersenKeyPtr elgamalGeneratorPtr anonPKPtr ipVerifyKeyPtr (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
+    return (res == 1)
+
 
 registrationId :: IO CredentialRegistrationID
 registrationId = (random 48) >>= (return . RegIdCred . FBS.fromByteString)
