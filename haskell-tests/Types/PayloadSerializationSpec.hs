@@ -25,31 +25,31 @@ import Control.Monad
 
 import Data.Int
 
-genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
-genCredentialDeploymentInformation = do
-  cdvVerifyKey <- VerifyKey . BS.pack <$> vector 37
-  cdvSigScheme <- elements [Ed25519]
-  cdvRegId <- RegIdCred . FBS.pack <$> vector (FBS.fixedLength (undefined :: RegIdSize))
-  cdvIpId <- IP_ID . BS.pack <$> vector 53
-  cdvArData <- do
-    ardName <- ARName . BS.pack <$> (vector =<< choose (0,1000))
-    ardIdCredPubEnc <- AREnc . BS.pack <$> (vector =<< choose(30,80))
-    return AnonymityRevocationData{..}
-  cdvPolicy <- do
-    l <- choose (0,1000)
-    pAttributeListVariant <- arbitrary
-    pExpiry <- arbitrary
-    pItems <- replicateM l genPolicyItem
-    return Policy{..}
-  cdiProofs <- do l <- choose (0, 10000)
-                  Proofs . BS.pack <$> vector l
-  let cdiValues = CredentialDeploymentValues{..}
-  return CredentialDeploymentInformation{..}
+-- genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
+-- genCredentialDeploymentInformation = do
+--   cdvVerifyKey <- VerifyKey . BS.pack <$> vector 37
+--   cdvSigScheme <- elements [Ed25519]
+--   cdvRegId <- RegIdCred . FBS.pack <$> vector (FBS.fixedLength (undefined :: RegIdSize))
+--   cdvIpId <- IP_ID . BS.pack <$> vector 53
+--   cdvArData <- do
+--     ardName <- ARName . BS.pack <$> (vector =<< choose (0,1000))
+--     ardIdCredPubEnc <- AREnc . BS.pack <$> (vector =<< choose(30,80))
+--     return AnonymityRevocationData{..}
+--   cdvPolicy <- do
+--     l <- choose (0,1000)
+--     pAttributeListVariant <- arbitrary
+--     pExpiry <- arbitrary
+--     pItems <- replicateM l genPolicyItem
+--     return Policy{..}
+--   cdiProofs <- do l <- choose (0, 10000)
+--                   Proofs . BS.pack <$> vector l
+--   let cdiValues = CredentialDeploymentValues{..}
+--   return CredentialDeploymentInformation{..}
 
 genPolicyItem :: Gen PolicyItem
 genPolicyItem = do
   piIndex <- arbitrary
-  piValue <- AttributeValue . FBS.pack <$> vector (FBS.fixedLength (undefined :: AttributeSize))
+  piValue <- oneof [ATWord8 <$> arbitrary, ATWord16 <$> arbitrary, ATWord32 <$> arbitrary, ATWord64 <$> arbitrary]
   return PolicyItem{..}
 
 genPayload :: Gen Payload
@@ -57,7 +57,7 @@ genPayload = oneof [genDeployModule,
                     genInit,
                     genUpdate,
                     genTransfer,
-                    genCredential,
+--                  genCredential,
                     genEncryption,
                     genAddBaker,
                     genRemoveBaker,
@@ -67,7 +67,7 @@ genPayload = oneof [genDeployModule,
                     genUndelegateStake
                     ]
   where 
-        genCredential = DeployCredential <$> genCredentialDeploymentInformation
+--        genCredential = DeployCredential <$> genCredentialDeploymentInformation
 
         genDeployModule = DeployModule <$> genModule
 
