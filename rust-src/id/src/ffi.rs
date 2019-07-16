@@ -246,8 +246,8 @@ mod test {
     fn test_pipeline() {
         let mut csprng = thread_rng();
 
-        let secret = <Bls12 as Pairing>::G_1::generate_scalar(&mut csprng);
-        let public = <Bls12 as Pairing>::G_1::one_point().mul_by_scalar(&secret);
+        let secret = G1::generate_scalar(&mut csprng);
+        let public = G1::one_point().mul_by_scalar(&secret);
         let ah_info = CredentialHolderInfo::<<Bls12 as Pairing>::G_1, ExampleCurve> {
             id_ah:   "ACCOUNT_HOLDER".to_owned(),
             id_cred: IdCredentials {

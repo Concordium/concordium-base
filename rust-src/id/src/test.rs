@@ -1,13 +1,13 @@
 use std::fmt;
 
-use crate::{account_holder::*, chain::*, identity_provider::*, types::*};
+use crate::{account_holder::*, chain::*, ffi::*, identity_provider::*, types::*};
 use byteorder::{BigEndian, ReadBytesExt};
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519 as ed25519;
 use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::{
-    bls12_381::{Bls12, Fr, FrRepr},
+    bls12_381::{Bls12, Fr, FrRepr, G1},
     PrimeField,
 };
 use ps_sig;
@@ -16,74 +16,16 @@ use rand::*;
 
 use pedersen_scheme::key as pedersen_key;
 
-use std::io::Cursor;
+use std::{
+    fs::File,
+    io::{Cursor, Write},
+};
 
-type ExampleCurve = <Bls12 as Pairing>::G_1;
+type ExampleCurve = G1;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-#[allow(dead_code)]
-pub enum ExampleAttribute {
-    Age(u8),
-    Citizenship(u16),
-    MaxAccount(u16),
-    Business(bool),
-}
+type ExampleAttribute = AttributeKind;
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
-
-impl fmt::Display for ExampleAttribute {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ExampleAttribute::Age(x) => write!(f, "Age({})", x),
-            ExampleAttribute::Citizenship(c) => write!(f, "Citizenship({})", c),
-            ExampleAttribute::MaxAccount(x) => write!(f, "MaxAccount({})", x),
-            ExampleAttribute::Business(b) => write!(f, "Business({})", b),
-        }
-    }
-}
-
-impl Attribute<<Bls12 as Pairing>::ScalarField> for ExampleAttribute {
-    fn to_field_element(&self) -> <Bls12 as Pairing>::ScalarField {
-        match self {
-            ExampleAttribute::Age(x) => Fr::from_repr(FrRepr::from(u64::from(*x))).unwrap(),
-            ExampleAttribute::Citizenship(c) => Fr::from_repr(FrRepr::from(u64::from(*c))).unwrap(),
-            ExampleAttribute::MaxAccount(x) => Fr::from_repr(FrRepr::from(u64::from(*x))).unwrap(),
-            ExampleAttribute::Business(b) => Fr::from_repr(FrRepr::from(u64::from(*b))).unwrap(),
-        }
-    }
-
-    fn to_bytes(&self) -> Box<[u8]> {
-        match self {
-            ExampleAttribute::Age(x) => vec![0, *x].into_boxed_slice(),
-            ExampleAttribute::Citizenship(c) => {
-                let mut v = vec![1];
-                v.extend_from_slice(&c.to_be_bytes());
-                v.into_boxed_slice()
-            }
-            ExampleAttribute::MaxAccount(x) => {
-                let mut v = vec![2];
-                v.extend_from_slice(&x.to_be_bytes());
-                v.into_boxed_slice()
-            }
-            ExampleAttribute::Business(b) => vec![3, if *b { 1 } else { 0 }].into_boxed_slice(),
-        }
-    }
-
-    fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let k = cur.read_u8().ok()?;
-        match k {
-            0 => Some(ExampleAttribute::Age(cur.read_u8().ok()?)),
-            1 => Some(ExampleAttribute::Citizenship(
-                cur.read_u16::<BigEndian>().ok()?,
-            )),
-            2 => Some(ExampleAttribute::MaxAccount(
-                cur.read_u16::<BigEndian>().ok()?,
-            )),
-            3 => Some(ExampleAttribute::Business(cur.read_u8().ok()? != 0)),
-            _ => None,
-        }
-    }
-}
 
 #[test]
 fn test_pipeline() {
@@ -121,7 +63,7 @@ fn test_pipeline() {
 
     let variant = 0;
     let expiry_date = 123123123;
-    let alist = vec![ExampleAttribute::MaxAccount(55), ExampleAttribute::Age(31)];
+    let alist = vec![AttributeKind::U16(55), AttributeKind::U8(31)];
     let aci = AccCredentialInfo {
         acc_holder_info: ah_info,
         prf_key,
@@ -151,7 +93,7 @@ fn test_pipeline() {
     let policy = Policy {
         variant,
         expiry: expiry_date,
-        policy_vec: vec![(1, ExampleAttribute::Age(31))],
+        policy_vec: vec![(1, AttributeKind::U8(31))],
         _phantom: Default::default(),
     };
 
@@ -172,6 +114,24 @@ fn test_pipeline() {
         &acc_data,
         &randomness,
     );
+
+    let mut out = Vec::new();
+    eprintln!("{:?}", &global_ctx.dlog_base_chain);
+    eprintln!("{:?}", &global_ctx.on_chain_commitment_key);
+    eprintln!("{:?}", &global_ctx.on_chain_commitment_key.to_bytes());
+    eprintln!("{:?}", &ip_info.ar_info.ar_elgamal_generator);
+
+    // out.extend_from_slice(&global_ctx.dlog_base_chain.curve_to_bytes());
+    // out.extend_from_slice(&((global_ctx.on_chain_commitment_key.to_bytes().len()
+    // as u32).to_be_bytes())); out.extend_from_slice(&global_ctx.
+    // on_chain_commitment_key.to_bytes()); out.extend_from_slice(&ip_info.
+    // ar_info.ar_elgamal_generator.curve_to_bytes()); out.extend_from_slice(&
+    // ip_info.ar_info.ar_public_key.to_bytes()); out.extend_from_slice(&
+    // ((ip_info.ip_verify_key.to_bytes().len() as u32).to_be_bytes()));
+    // out.extend_from_slice(&ip_info.ip_verify_key.to_bytes());
+    // out.extend_from_slice(&cdi.to_bytes());
+    // let file = File::create("foo.bin");
+    // file.unwrap().write_all(&out);
 
     let bytes = cdi.to_bytes();
     let des = CredDeploymentInfo::<Bls12, ExampleCurve, ExampleAttribute>::from_bytes(

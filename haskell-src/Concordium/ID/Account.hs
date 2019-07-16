@@ -24,23 +24,25 @@ import Data.ByteString as BS
 type CredentialDeploymentInformationBytes = ByteString
 
 foreign import ccall unsafe "verify_cdi_ffi" verifyCDIFFI
-               :: Ptr PedersenKey
+               :: Ptr ElgamalGen
+               -> Ptr PedersenKey
+               -> Ptr PsSigKey
                -> Ptr ElgamalGen
                -> Ptr ElgamalPublicKey
-               -> Ptr PsSigKey
                -> Ptr Word8
                -> CSize
                -> IO Int32
 
 
-verifyCredential :: PedersenKey -> ElgamalGen -> AnonymityRevokerPublicKey -> IdentityProviderPublicKey -> CredentialDeploymentInformationBytes -> Bool
-verifyCredential pedersenKey elgamalGenerator (AnonymityRevokerPublicKey anonPK) (IP_PK idPK) cdiBytes = unsafeDupablePerformIO $ do
-    res <- withPedersenKey pedersenKey $
-           \pedersenKeyPtr -> withElgamalGen elgamalGenerator $
+verifyCredential :: ElgamalGen -> PedersenKey -> IdentityProviderPublicKey -> ElgamalGen -> AnonymityRevokerPublicKey -> CredentialDeploymentInformationBytes -> Bool
+verifyCredential elgamalGen pedersenKey (IP_PK idPK) arElgamalGenerator (AnonymityRevokerPublicKey anonPK) cdiBytes = unsafeDupablePerformIO $ do
+    res <- withElgamalGen elgamalGen $
+           \elgamalGenPtr ->withPedersenKey pedersenKey $
+           \pedersenKeyPtr -> withElgamalGen arElgamalGenerator $
            \elgamalGeneratorPtr -> withElgamalPublicKey anonPK $
            \anonPKPtr -> withPsSigKey idPK $
            \ipVerifyKeyPtr -> unsafeUseAsCStringLen cdiBytes $
-           \(cdiBytesPtr, cdiBytesLen) -> verifyCDIFFI pedersenKeyPtr elgamalGeneratorPtr anonPKPtr ipVerifyKeyPtr (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
+           \(cdiBytesPtr, cdiBytesLen) -> verifyCDIFFI elgamalGenPtr pedersenKeyPtr ipVerifyKeyPtr elgamalGeneratorPtr anonPKPtr (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
     return (res == 1)
 
 

@@ -236,7 +236,7 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 mod tests {
     use super::*;
     use crate::common::*;
-    use pairing::bls12_381::{Bls12, G1Affine, G2Affine};
+    use pairing::bls12_381::{Bls12, G1, G2};
     // use curve_arithmetic::curve_arithmetic::*;
 
     // pub fn prove_mod_com_eq<P: Pairing, R: Rng>(
@@ -255,23 +255,23 @@ mod tests {
         for i in 1..20 {
             let mut y_sk = vec![<Bls12 as Pairing>::ScalarField::zero(); i];
             let mut y_pk = vec![<Bls12 as Pairing>::G_2::zero_point(); i];
-            let x_sk = <G2Affine as Curve>::generate_scalar(&mut csprng);
-            let x_pk = <G2Affine as Curve>::one_point().mul_by_scalar(&x_sk);
-            let a_1 = <G1Affine as Curve>::generate(&mut csprng);
+            let x_sk = <G2 as Curve>::generate_scalar(&mut csprng);
+            let x_pk = <G2 as Curve>::one_point().mul_by_scalar(&x_sk);
+            let a_1 = <G1 as Curve>::generate(&mut csprng);
             let mut a_2_exp = x_sk;
             // let mut a_2_exp = <Bls12 as Pairing>::ScalarField::zero();
 
             let mut att_list = vec![<Bls12 as Pairing>::ScalarField::zero(); i];
             let (g, h) = (
-                <G1Affine as Curve>::generate(&mut csprng),
-                <G1Affine as Curve>::generate(&mut csprng),
+                <G1 as Curve>::generate(&mut csprng),
+                <G1 as Curve>::generate(&mut csprng),
             );
-            let mut comm_vec = vec![<G1Affine as Curve>::zero_point(); i];
+            let mut comm_vec = vec![<G1 as Curve>::zero_point(); i];
             let mut pedersen_rands = vec![<Bls12 as Pairing>::ScalarField::zero(); i];
 
             for j in 0..i {
                 y_sk[j] = <Bls12 as Pairing>::generate_scalar(&mut csprng);
-                y_pk[j] = <G2Affine as Curve>::one_point().mul_by_scalar(&y_sk[j]);
+                y_pk[j] = <G2 as Curve>::one_point().mul_by_scalar(&y_sk[j]);
                 att_list[j] = <Bls12 as Pairing>::generate_scalar(&mut csprng);
                 pedersen_rands[j] = <Bls12 as Pairing>::generate_scalar(&mut csprng);
                 let mut tmp = y_sk[j];
@@ -292,11 +292,11 @@ mod tests {
                 (a_2.plus_point(&a_1.mul_by_scalar(&t))).mul_by_scalar(&r),
             );
             let eval_pair = a_2_hid;
-            let eval = <G2Affine as Curve>::one_point();
+            let eval = <G2 as Curve>::one_point();
             let p_pair = a_1_hid;
             let p = x_pk;
             let q_pair = a_1_hid;
-            let q = <G2Affine as Curve>::one_point();
+            let q = <G2 as Curve>::one_point();
             let gxs_pair = a_1_hid;
             let gxs = y_pk;
             let q_sec = t;
@@ -355,9 +355,9 @@ mod tests {
             let lrp2 = csprng.gen_range(1, 30);
             let mut rp2 = Vec::with_capacity(lrp2);
             for _ in 0..lrp2 {
-                rp2.push(<G1Affine as Curve>::generate(&mut csprng));
+                rp2.push(<G1 as Curve>::generate(&mut csprng));
             }
-            let rp1 = <G2Affine as Curve>::generate(&mut csprng);
+            let rp1 = <G2 as Curve>::generate(&mut csprng);
             let lw1 = csprng.gen_range(1, 87);
             let mut w1 = Vec::with_capacity(lw1);
             for _ in 0..lw1 {
