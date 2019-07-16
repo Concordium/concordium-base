@@ -186,6 +186,17 @@ pub fn chunks_to_value<C:Curve>(chunks: Vec<C::Scalar>) -> C::Scalar{
     C::bytes_to_scalar(&mut Cursor::new(&scalar_bytes)).unwrap()
 }
 
+pub fn encrypt_in_chunks<C:Curve, R:Rng> (pk :&PublicKey<C>, val: &C::Scalar, chunk_size: usize, csprng: &mut R) -> Vec<Cipher<C>>{
+    let chunks = value_to_chunks::<C>(val, chunk_size);
+    pk.encrypt_exponent_vec(csprng, &chunks.as_slice())
+}
+
+pub fn decrypt_from_chunks<C:Curve>(sk: &SecretKey<C>, cipher: & Vec<Cipher<C>>) -> C::Scalar{
+    let scalars = cipher.into_par_iter().map(|c| sk.decrypt_exponent(c));
+    chunks_to_value::<C>(scalars.collect())
+
+}
+
 pub fn encrypt_u64_bitwise_iter<C: Curve>(
     pk: PublicKey<C>,
     e: u64,
@@ -540,5 +551,34 @@ mod tests {
           chunking_test_G_1,
           G1 
       }
+
+        macro_rules! macro_test_chunked_encrypt_decrypt{
+            ($function_name:ident, $curve_type:path) => {
+                #[test]
+                pub fn $function_name() {
+                    let mut csprng = thread_rng();
+                    let sk = SecretKey::<$curve_type>::generate(&mut csprng);
+                    let pk = PublicKey::<$curve_type>::from(&sk); 
+                    //let possible_chunk_sizes = [1, 2, 4];
+                    let possible_chunk_sizes = [4];
+
+                    for _i in 1..2 {
+                        let scalar = <$curve_type>::generate_scalar(&mut csprng);
+                        let chunk_size_index: usize = csprng.gen_range(0, possible_chunk_sizes.len());
+                        let chunk_size = possible_chunk_sizes[chunk_size_index];
+                        let cipher = encrypt_in_chunks::<$curve_type, ThreadRng>(&pk, &scalar, chunk_size, &mut csprng);
+                        let retrieved_scalar = decrypt_from_chunks::<$curve_type>(&sk, &cipher);
+                        //assert!(true);
+                        assert_eq!(scalar, retrieved_scalar);
+
+                    }
+                }
+            };
+        }
+
+          macro_test_chunked_encrypt_decrypt!{
+            chunked_encrypt_decrypt_test_G_1,
+            G1
+        }
 }
 
