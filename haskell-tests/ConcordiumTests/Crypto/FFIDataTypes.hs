@@ -27,6 +27,9 @@ testSerializeElgamalGen = testSerialize (const generateElgamalGen)
 testSerializeElgamalPublicKey :: Property
 testSerializeElgamalPublicKey = testSerialize (const generateElgamalPublicKey)
 
+testSerializeElgamalCipher :: Property
+testSerializeElgamalCipher = testSerialize (const generateElgamalCipher)
+
 
 tests :: Spec
 tests = describe "Concordium.Crypto.FFIDataTypes" $ do
@@ -35,3 +38,4 @@ tests = describe "Concordium.Crypto.FFIDataTypes" $ do
         it "ps sig key key" testSerializePsSigKey
         it "elgamal gen key" testSerializeElgamalGen
         it "elgamal public key" testSerializeElgamalPublicKey
+        it "elgamal cipher" testSerializeElgamalCipher

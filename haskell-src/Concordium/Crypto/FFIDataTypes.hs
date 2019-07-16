@@ -1,7 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.FFIDataTypes
-  (PedersenKey, PsSigKey, ElgamalGen, ElgamalPublicKey,
-  generatePedersenKey, generatePsSigKey, generateElgamalGen, generateElgamalPublicKey)
+  (PedersenKey, PsSigKey, ElgamalGen, ElgamalPublicKey, ElgamalCipher,
+  generatePedersenKey, generatePsSigKey, generateElgamalGen, generateElgamalPublicKey, generateElgamalCipher)
   where
 
 import Foreign.ForeignPtr
@@ -19,6 +19,7 @@ newtype PedersenKey = PedersenKey (ForeignPtr PedersenKey)
 newtype PsSigKey = PsSigKey (ForeignPtr PsSigKey)
 newtype ElgamalGen = ElgamalGen (ForeignPtr ElgamalGen)
 newtype ElgamalPublicKey = ElgamalPublicKey (ForeignPtr ElgamalPublicKey)
+newtype ElgamalCipher = ElgamalCipher (ForeignPtr ElgamalCipher)
 
 foreign import ccall unsafe "&pedersen_key_free" freePedersenKey :: FunPtr (Ptr PedersenKey -> IO ())
 foreign import ccall unsafe "pedersen_key_to_bytes" toBytesPedersenKey :: Ptr PedersenKey -> Ptr CSize -> IO (Ptr Word8)
@@ -39,6 +40,12 @@ foreign import ccall unsafe "&elgamal_pub_key_free" freeElgamalPublicKey :: FunP
 foreign import ccall unsafe "elgamal_pub_key_to_bytes" toBytesElgamalPublicKey :: Ptr ElgamalPublicKey -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "elgamal_pub_key_from_bytes" fromBytesElgamalPublicKey :: Ptr Word8 -> CSize -> IO (Ptr ElgamalPublicKey)
 foreign import ccall unsafe "elgamal_pub_key_gen" generateElgamalPublicKeyPtr :: IO (Ptr ElgamalPublicKey)
+
+foreign import ccall unsafe "&elgamal_cipher_free" freeElgamalCipher :: FunPtr (Ptr ElgamalCipher -> IO ())
+foreign import ccall unsafe "elgamal_cipher_to_bytes" toBytesElgamalCipher :: Ptr ElgamalCipher -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "elgamal_cipher_from_bytes" fromBytesElgamalCipher :: Ptr Word8 -> CSize -> IO (Ptr ElgamalCipher)
+foreign import ccall unsafe "elgamal_cipher_gen" generateElgamalCipherPtr :: IO (Ptr ElgamalCipher)
+
 
 -- |NOTE: This instance is different than the rust one. We add explicit length
 -- information up front.
@@ -93,18 +100,19 @@ generatePsSigKey n = do
   PsSigKey <$> newForeignPtr freePsSigKey ptr
 
 
--- |NOTE: This instance is different than the rust one. We add explicit length
--- information up front.
+elgamalGroupLen :: Int
+elgamalGroupLen = 48
+
 instance Serialize ElgamalGen where
   get = do
-    v <- getWord32be
-    bs <- getByteString (fromIntegral v)
+    bs <- getByteString elgamalGroupLen
     case fromBytesHelper freeElgamalGen fromBytesElgamalGen bs of
       Nothing -> fail "Cannot decode cipher."
       Just x -> return $ ElgamalGen x
 
-  put (ElgamalGen e) = let bs = toBytesHelper toBytesElgamalGen $ e
-                     in putByteString (runPut (putWord32be (fromIntegral (BS.length bs))) <> bs)
+  put (ElgamalGen e) =
+    let bs = toBytesHelper toBytesElgamalGen $ e
+    in putByteString bs
 
 instance Show ElgamalGen where
   show = byteStringToHex . BS.drop 4 . encode
@@ -122,14 +130,14 @@ generateElgamalGen = do
 -- information up front.
 instance Serialize ElgamalPublicKey where
   get = do
-    v <- getWord32be
-    bs <- getByteString (fromIntegral v)
+    bs <- getByteString elgamalGroupLen
     case fromBytesHelper freeElgamalPublicKey fromBytesElgamalPublicKey bs of
       Nothing -> fail "Cannot decode cipher."
       Just x -> return $ ElgamalPublicKey x
 
-  put (ElgamalPublicKey e) = let bs = toBytesHelper toBytesElgamalPublicKey $ e
-                     in putByteString (runPut (putWord32be (fromIntegral (BS.length bs))) <> bs)
+  put (ElgamalPublicKey e) =
+    let bs = toBytesHelper toBytesElgamalPublicKey $ e
+    in putByteString bs
 
 instance Show ElgamalPublicKey where
   show = byteStringToHex . BS.drop 4 . encode
@@ -142,3 +150,28 @@ generateElgamalPublicKey :: IO ElgamalPublicKey
 generateElgamalPublicKey = do
   ptr <- generateElgamalPublicKeyPtr
   ElgamalPublicKey <$> newForeignPtr freeElgamalPublicKey ptr
+
+-- |NOTE: This instance is different than the rust one. We add explicit length
+-- information up front.
+instance Serialize ElgamalCipher where
+  get = do
+    bs <- getByteString (2 * elgamalGroupLen)
+    case fromBytesHelper freeElgamalCipher fromBytesElgamalCipher bs of
+      Nothing -> fail "Cannot decode cipher."
+      Just x -> return $ ElgamalCipher x
+
+  put (ElgamalCipher e) =
+    let bs = toBytesHelper toBytesElgamalCipher $ e
+    in putByteString bs
+
+instance Show ElgamalCipher where
+  show = byteStringToHex . BS.drop 4 . encode
+
+-- |This instance should only be used for testing
+instance Eq ElgamalCipher where
+  key == key' = encode key == encode key'
+
+generateElgamalCipher :: IO ElgamalCipher
+generateElgamalCipher = do
+  ptr <- generateElgamalCipherPtr
+  ElgamalCipher <$> newForeignPtr freeElgamalCipher ptr

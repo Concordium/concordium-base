@@ -18,6 +18,7 @@ import Control.Exception
 import Control.Monad
 import qualified Data.Text as Text
 import Concordium.Crypto.ByteStringHelpers
+import Concordium.Crypto.FFIDataTypes
 
 accountAddressSize :: Int
 accountAddressSize = 21
@@ -68,11 +69,9 @@ newtype IdentityProviderIdentity  = IP_ID ByteString
     deriving Show via ByteStringHex
     deriving Serialize via Short65K
 
--- Public key of Identity provider
-newtype IdentityProviderPublicKey = IP_PK ByteString
-    deriving(Eq, Hashable)
-    deriving Show via ByteStringHex
-    deriving Serialize via Short65K
+-- Public key of the Identity provider
+newtype IdentityProviderPublicKey = IP_PK PsSigKey
+    deriving(Eq, Show, Serialize)
 
 -- Signing key for accounts (eddsa key)
 type AccountSigningKey = SignKey  
@@ -165,10 +164,8 @@ newtype ARName = ARName ByteString
     deriving Serialize via Short65K
 
 -- |Encryption of data with anonymity revoker's public key.
-newtype AREnc = AREnc ByteString
-    deriving(Eq)
-    deriving Show via ByteStringHex
-    deriving Serialize via Short65K
+newtype AREnc = AREnc ElgamalCipher
+    deriving(Eq, Show, Serialize)
 
 -- |Data needed on-chain to revoke anonymity of the account holder.
 data AnonymityRevocationData = AnonymityRevocationData {
@@ -288,3 +285,6 @@ deserializeCDIPartial bs = loop (runGetPartial getCDIPartial bs)
     where loop (Fail err _) = Left err
           loop (Partial k) = loop (k empty)
           loop (Done r rest) = Right (r, rest)
+
+test :: FilePath -> IO (Either String (CredentialDeploymentValues, ByteString))
+test fn = deserializeCDIPartial <$> BS.readFile fn

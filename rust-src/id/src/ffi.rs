@@ -35,10 +35,10 @@ impl AttributeKind {
 
     fn to_u64(&self) -> u64 {
         match self {
-            AttributeKind::U8(x) => (*x as u64),
-            AttributeKind::U16(x) => (*x as u64),
-            AttributeKind::U32(x) => (*x as u64),
-            AttributeKind::U64(x) => (*x as u64),
+            AttributeKind::U8(x) => u64::from(*x),
+            AttributeKind::U16(x) => u64::from(*x),
+            AttributeKind::U32(x) => u64::from(*x),
+            AttributeKind::U64(x) => *x,
         }
     }
 }
@@ -107,6 +107,8 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
     }
 }
 
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn verify_cdi(
     global_context_ptr: *const u8,
     global_context_len: size_t,
@@ -211,10 +213,22 @@ macro_derive_from_bytes!(
 macro_derive_to_bytes!(elgamal_pub_key_to_bytes, elgamal::PublicKey<G1>);
 macro_free_ffi!(elgamal_pub_key_free, elgamal::PublicKey<G1>);
 #[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn elgamal_pub_key_gen() -> *const elgamal::PublicKey<G1> {
     let sk = elgamal::secret::SecretKey::generate(&mut thread_rng());
     Box::into_raw(Box::new(elgamal::PublicKey::from(&sk)))
+}
+
+macro_derive_from_bytes!(
+    elgamal_cipher_from_bytes,
+    elgamal::cipher::Cipher<G1>,
+    elgamal::cipher::Cipher::from_bytes
+);
+macro_derive_to_bytes!(elgamal_cipher_to_bytes, elgamal::cipher::Cipher<G1>);
+macro_free_ffi!(elgamal_cipher_free, elgamal::cipher::Cipher<G1>);
+#[no_mangle]
+pub extern "C" fn elgamal_cipher_gen() -> *const elgamal::cipher::Cipher<G1> {
+    let mut csprng = thread_rng();
+    Box::into_raw(Box::new(elgamal::cipher::Cipher::generate(&mut csprng)))
 }
 
 #[cfg(test)]
