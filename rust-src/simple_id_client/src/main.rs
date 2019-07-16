@@ -1,21 +1,15 @@
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
-use std::fmt;
-
 use ed25519_dalek as ed25519;
 use eddsa_ed25519 as ed25519_wrapper;
 
-use byteorder::{BigEndian, ReadBytesExt};
 use curve_arithmetic::{Curve, Pairing};
 use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{cipher::Cipher, public::PublicKey, secret::SecretKey};
 use hex::{decode, encode};
-use id::{account_holder::*, chain::*, identity_provider::*, types::*};
-use pairing::{
-    bls12_381::{Bls12, Fr, FrRepr},
-    PrimeField,
-};
+use id::{account_holder::*, ffi::*, identity_provider::*, types::*};
+use pairing::bls12_381::Bls12;
 use ps_sig;
 
 use chrono::NaiveDateTime;
@@ -98,78 +92,9 @@ fn mk_ar_name(n: usize) -> String {
     s
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum ExampleAttribute {
-    Age(u8),
-    Citizenship(u16),
-    MaxAccount(u16),
-    Business(bool),
-}
+type ExampleAttribute = AttributeKind;
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
-
-impl fmt::Display for ExampleAttribute {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ExampleAttribute::Age(x) => write!(f, "Age({})", x),
-            ExampleAttribute::Citizenship(c) => write!(f, "Citizenship({})", c),
-            ExampleAttribute::MaxAccount(x) => write!(f, "MaxAccount({})", x),
-            ExampleAttribute::Business(b) => write!(f, "Business({})", b),
-        }
-    }
-}
-
-impl Attribute<<Bls12 as Pairing>::ScalarField> for ExampleAttribute {
-    fn to_field_element(&self) -> <Bls12 as Pairing>::ScalarField {
-        match self {
-            ExampleAttribute::Age(x) => Fr::from_repr(FrRepr::from(u64::from(*x))).unwrap(),
-            ExampleAttribute::Citizenship(c) => Fr::from_repr(FrRepr::from(u64::from(*c))).unwrap(),
-            ExampleAttribute::MaxAccount(x) => Fr::from_repr(FrRepr::from(u64::from(*x))).unwrap(),
-            ExampleAttribute::Business(b) => Fr::from_repr(FrRepr::from(u64::from(*b))).unwrap(),
-        }
-    }
-
-    fn to_bytes(&self) -> Box<[u8]> {
-        match self {
-            ExampleAttribute::Age(x) => vec![0, *x].into_boxed_slice(),
-            ExampleAttribute::Citizenship(c) => {
-                let mut v = vec![1];
-                v.extend_from_slice(&c.to_be_bytes());
-                v.into_boxed_slice()
-            }
-            ExampleAttribute::MaxAccount(x) => {
-                let mut v = vec![2];
-                v.extend_from_slice(&x.to_be_bytes());
-                v.into_boxed_slice()
-            }
-            ExampleAttribute::Business(b) => vec![3, if *b { 1 } else { 0 }].into_boxed_slice(),
-        }
-    }
-
-    fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let k = cur.read_u8().ok()?;
-        match k {
-            0 => Some(ExampleAttribute::Age(cur.read_u8().ok()?)),
-            1 => Some(ExampleAttribute::Citizenship(
-                cur.read_u16::<BigEndian>().ok()?,
-            )),
-            2 => Some(ExampleAttribute::MaxAccount(
-                cur.read_u16::<BigEndian>().ok()?,
-            )),
-            3 => Some(ExampleAttribute::Business(cur.read_u8().ok()? != 0)),
-            _ => None,
-        }
-    }
-}
-
-fn example_attribute_to_json(att: ExampleAttribute) -> Value {
-    match att {
-        ExampleAttribute::Age(x) => json!({ "age": x }),
-        ExampleAttribute::Citizenship(c) => json!({ "citizenship": c }),
-        ExampleAttribute::MaxAccount(x) => json!({ "maxAccount": x }),
-        ExampleAttribute::Business(b) => json!({ "business": b }),
-    }
-}
 
 /// Show fields of the type of fields of the given attribute list.
 fn show_attribute_format(variant: u16) -> &'static str {
@@ -180,6 +105,18 @@ fn show_attribute_format(variant: u16) -> &'static str {
     }
 }
 
+fn show_attribute(variant: u16, idx: usize, att: &ExampleAttribute) -> String {
+    match (variant, idx) {
+        (0, 0) => format!("MaxAccount({})", att.to_u64()).to_string(),
+        (0, 1) => format!("Age({})", att.to_u64()).to_string(),
+        (1, 0) => format!("MaxAccount({})", att.to_u64()).to_string(),
+        (1, 1) => format!("Age({})", att.to_u64()).to_string(),
+        (1, 2) => format!("Citizenship({})", att.to_u64()).to_string(),
+        (1, 3) => format!("Business({})", att.to_u64() != 0).to_string(),
+        (_, _) => panic!("This should not happen. Precondition violated."),
+    }
+}
+
 fn read_max_account() -> io::Result<ExampleAttribute> {
     let options = vec![10, 25, 50, 100, 200, 255];
     let select = Select::new()
@@ -187,7 +124,7 @@ fn read_max_account() -> io::Result<ExampleAttribute> {
         .items(&options)
         .default(0)
         .interact()?;
-    Ok(ExampleAttribute::MaxAccount(options[select]))
+    Ok(AttributeKind::U8(options[select]))
 }
 
 fn parse_expiry_date(input: &str) -> io::Result<u64> {
@@ -211,15 +148,15 @@ fn read_attribute_list(variant: u16) -> io::Result<Vec<ExampleAttribute>> {
     let max_acc = read_max_account()?;
     let age = Input::new().with_prompt("Your age").interact()?;
     match variant {
-        0 => Ok(vec![max_acc, ExampleAttribute::Age(age)]),
+        0 => Ok(vec![max_acc, AttributeKind::U8(age)]),
         1 => {
             let citizenship = Input::new().with_prompt("Citizenship").interact()?; // TODO: use drop-down/select with
             let business = Input::new().with_prompt("Are you a business").interact()?;
             Ok(vec![
                 max_acc,
-                ExampleAttribute::Age(age),
-                ExampleAttribute::Citizenship(citizenship),
-                ExampleAttribute::Business(business),
+                AttributeKind::U8(age),
+                AttributeKind::U16(citizenship),
+                AttributeKind::U8(if business { 1 } else { 0 }),
             ])
         }
         _ => panic!("This should not be reachable. Precondition violated."),
@@ -278,45 +215,77 @@ fn json_to_chi<C: Curve, T: Curve<Scalar = C::Scalar>>(
 fn json_to_example_attribute(v: &Value) -> Option<ExampleAttribute> {
     let mp = v.as_object()?;
     if let Some(age) = mp.get("age") {
-        Some(ExampleAttribute::Age(age.as_u64()? as u8))
+        Some(AttributeKind::U8(age.as_u64()? as u8))
     } else if let Some(citizenship) = mp.get("citizenship") {
-        Some(ExampleAttribute::Citizenship(citizenship.as_u64()? as u16))
+        Some(AttributeKind::U16(citizenship.as_u64()? as u16))
     } else if let Some(max_account) = mp.get("maxAccount") {
-        Some(ExampleAttribute::MaxAccount(max_account.as_u64()? as u16))
+        Some(AttributeKind::U8(max_account.as_u64()? as u8))
     } else if let Some(business) = mp.get("business") {
-        Some(ExampleAttribute::Business(business.as_u64()? != 0))
+        Some(AttributeKind::U8(business.as_u64()? as u8))
     } else {
         None
     }
 }
 
 fn alist_to_json(alist: &ExampleAttributeList) -> Value {
-    let alist_vec: Vec<Value> = alist
-        .alist
-        .iter()
-        .map(|x| example_attribute_to_json(*x))
-        .collect();
-    json!({
-        "variant": alist.variant,
-        "expiryDate": alist.expiry,
-        "items": alist_vec
-    })
+    match alist.variant {
+        0 => json!({
+            "variant": alist.variant,
+            "expiryDate": alist.expiry,
+            "maxAccount": alist.alist[0].to_u64(),
+            "age": alist.alist[1].to_u64(),
+        }),
+        1 => json!({
+            "variant": alist.variant,
+            "expiryDate": alist.expiry,
+            "maxAccount": alist.alist[0].to_u64(),
+            "age": alist.alist[1].to_u64(),
+            "citizenship": alist.alist[2].to_u64(),
+            "business": alist.alist[3].to_u64() == 1,
+        }),
+        _ => Value::Null,
+    }
 }
 
 fn json_to_alist(v: &Value) -> Option<ExampleAttributeList> {
     let obj = v.as_object()?;
-    let variant = obj.get("variant")?;
+    let variant = obj.get("variant").and_then(Value::as_u64)?;
     let expiry = obj.get("expiryDate").and_then(Value::as_u64)?;
-    let items_val = obj.get("items")?;
-    let items = items_val.as_array()?;
-    let alist_vec: Option<Vec<ExampleAttribute>> =
-        items.iter().map(json_to_example_attribute).collect();
-    Some(AttributeList {
-        variant: variant.as_u64()? as u16,
-        expiry,
-        alist: alist_vec?,
-        _phantom: Default::default(),
-    })
+    match variant {
+        0 => {
+            let max_account = obj.get("maxAccount").and_then(Value::as_u64)?;
+            let age = obj.get("age").and_then(Value::as_u64)?;
+            let alist = vec![
+                AttributeKind::U8(max_account as u8),
+                AttributeKind::U8(age as u8),
+            ];
+            Some(AttributeList {
+                variant: variant as u16,
+                expiry,
+                alist,
+                _phantom: Default::default(),
+            })
+        }
+        1 => {
+            let max_account = obj.get("maxAccount").and_then(Value::as_u64)?;
+            let age = obj.get("age").and_then(Value::as_u64)?;
+            let citizenship = obj.get("citizenship").and_then(Value::as_u64)?;
+            let business = obj.get("business").and_then(Value::as_bool)?;
+            let alist = vec![
+                AttributeKind::U8(max_account as u8),
+                AttributeKind::U8(age as u8),
+                AttributeKind::U16(citizenship as u16),
+                AttributeKind::U8(if business { 1 } else { 0 }),
+            ];
+            Some(AttributeList {
+                variant: variant as u16,
+                expiry,
+                alist,
+                _phantom: Default::default(),
+            })
+        }
+        _ => None,
+    }
 }
 
 fn aci_to_json(aci: &AccCredentialInfo<Bls12, <Bls12 as Pairing>::G_1, ExampleAttribute>) -> Value {
@@ -687,8 +656,8 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // we first ask the user to select which credentials they wish to reveal
     let alist = &pio.alist.alist;
     let mut alist_str: Vec<String> = Vec::with_capacity(alist.len());
-    for a in alist.iter() {
-        alist_str.push(a.to_string());
+    for (idx, a) in alist.iter().enumerate() {
+        alist_str.push(show_attribute(pio.alist.variant, idx, a));
     }
     // the interface of checkboxes is less than ideal.
     let alist_items: Vec<&str> = alist_str.iter().map(String::as_str).collect();

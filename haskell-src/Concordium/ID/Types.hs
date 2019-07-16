@@ -285,6 +285,3 @@ deserializeCDIPartial bs = loop (runGetPartial getCDIPartial bs)
     where loop (Fail err _) = Left err
           loop (Partial k) = loop (k empty)
           loop (Done r rest) = Right (r, rest)
-
-test :: FilePath -> IO (Either String (CredentialDeploymentValues, ByteString))
-test fn = deserializeCDIPartial <$> BS.readFile fn

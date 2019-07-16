@@ -14,7 +14,10 @@ use failure::Error;
 use ffi_helpers::*;
 use libc::size_t;
 use rand::thread_rng;
+use byteorder::{BigEndian, ReadBytesExt};
 
+
+/// Concrete attribute kinds
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum AttributeKind {
     U8(u8),
@@ -33,7 +36,7 @@ impl AttributeKind {
         }
     }
 
-    fn to_u64(&self) -> u64 {
+    pub fn to_u64(&self) -> u64 {
         match self {
             AttributeKind::U8(x) => u64::from(*x),
             AttributeKind::U16(x) => u64::from(*x),
@@ -52,25 +55,25 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
         match self {
             AttributeKind::U8(x) => {
                 let mut buff = [0u8; 2];
-                buff[0] = 1u8;
+                buff[0] = 0u8;
                 buff[1..].copy_from_slice(&x.to_be_bytes());
                 Box::new(buff)
             }
             AttributeKind::U16(x) => {
                 let mut buff = [0u8; 3];
-                buff[0] = 2u8;
+                buff[0] = 1u8;
                 buff[1..].copy_from_slice(&x.to_be_bytes());
                 Box::new(buff)
             }
             AttributeKind::U32(x) => {
                 let mut buff = [0u8; 5];
-                buff[0] = 4u8;
+                buff[0] = 2u8;
                 buff[1..].copy_from_slice(&x.to_be_bytes());
                 Box::new(buff)
             }
             AttributeKind::U64(x) => {
                 let mut buff = [0u8; 9];
-                buff[0] = 8u8;
+                buff[0] = 3u8;
                 buff[1..].copy_from_slice(&x.to_be_bytes());
                 Box::new(buff)
             }
@@ -82,30 +85,27 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
         let mut size_buff = [0u8; 1];
         cur.read_exact(&mut size_buff).ok()?;
         match size_buff[0] {
+            0 => {
+                let r = cur.read_u8().ok()?;
+                Some(AttributeKind::U8(r))
+            }
             1 => {
-                let mut buf = [0u8; 1];
-                cur.read_exact(&mut buf).ok()?;
-                Some(AttributeKind::U8(u8::from_be_bytes(buf)))
+                let r = cur.read_u16::<BigEndian>().ok()?;
+                Some(AttributeKind::U16(r))
             }
             2 => {
-                let mut buf = [0u8; 2];
-                cur.read_exact(&mut buf).ok()?;
-                Some(AttributeKind::U16(u16::from_be_bytes(buf)))
+                let r = cur.read_u32::<BigEndian>().ok()?;
+                Some(AttributeKind::U32(r))
             }
-            4 => {
-                let mut buf = [0u8; 4];
-                cur.read_exact(&mut buf).ok()?;
-                Some(AttributeKind::U32(u32::from_be_bytes(buf)))
-            }
-            8 => {
-                let mut buf = [0u8; 8];
-                cur.read_exact(&mut buf).ok()?;
-                Some(AttributeKind::U64(u64::from_be_bytes(buf)))
+            3 => {
+                let r = cur.read_u64::<BigEndian>().ok()?;
+                Some(AttributeKind::U64(r))
             }
             _ => None,
         }
     }
 }
+
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
