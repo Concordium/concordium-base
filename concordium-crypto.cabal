@@ -85,6 +85,7 @@ Test-Suite tests
    ConcordiumTests.Crypto.SHA224
    ConcordiumTests.Crypto.Ed25519Signature
    ConcordiumTests.Crypto.VRF
+   ConcordiumTests.Crypto.FFIDataTypes
 
 Executable perf-test
   default-language: Haskell2010

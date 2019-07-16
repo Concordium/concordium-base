@@ -1,5 +1,8 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
-module Concordium.Crypto.FFIDataTypes where
+module Concordium.Crypto.FFIDataTypes
+  (PedersenKey, PsSigKey, ElgamalGen, ElgamalPublicKey,
+  generatePedersenKey, generatePsSigKey, generateElgamalGen, generateElgamalPublicKey)
+  where
 
 import Foreign.ForeignPtr
 import Foreign.Ptr
@@ -53,6 +56,10 @@ instance Serialize PedersenKey where
 instance Show PedersenKey where
   show = byteStringToHex . BS.drop 4 . encode
 
+-- |This instance should only be used for testing
+instance Eq PedersenKey where
+  key == key' = encode key == encode key'
+
 generatePedersenKey :: Int -> IO PedersenKey
 generatePedersenKey n = do
   ptr <- generatePedersenKeyPtr (fromIntegral n)
@@ -76,6 +83,10 @@ instance Serialize PsSigKey where
 instance Show PsSigKey where
   show = byteStringToHex . BS.drop 4 . encode
 
+-- |This instance should only be used for testing
+instance Eq PsSigKey where
+  key == key' = encode key == encode key'
+
 generatePsSigKey :: Int -> IO PsSigKey
 generatePsSigKey n = do
   ptr <- generatePsSigKeyPtr (fromIntegral n)
@@ -98,6 +109,10 @@ instance Serialize ElgamalGen where
 instance Show ElgamalGen where
   show = byteStringToHex . BS.drop 4 . encode
 
+-- |This instance should only be used for testing
+instance Eq ElgamalGen where
+  key == key' = encode key == encode key'
+
 generateElgamalGen :: IO ElgamalGen
 generateElgamalGen = do
   ptr <- generateElgamalGenPtr
@@ -118,6 +133,10 @@ instance Serialize ElgamalPublicKey where
 
 instance Show ElgamalPublicKey where
   show = byteStringToHex . BS.drop 4 . encode
+
+-- |This instance should only be used for testing
+instance Eq ElgamalPublicKey where
+  key == key' = encode key == encode key'
 
 generateElgamalPublicKey :: IO ElgamalPublicKey
 generateElgamalPublicKey = do
