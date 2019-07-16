@@ -10,12 +10,11 @@ use std::{
     slice,
 };
 
+use byteorder::{BigEndian, ReadBytesExt};
 use failure::Error;
 use ffi_helpers::*;
 use libc::size_t;
 use rand::thread_rng;
-use byteorder::{BigEndian, ReadBytesExt};
-
 
 /// Concrete attribute kinds
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -106,52 +105,51 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
     }
 }
 
-
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn verify_cdi(
-    global_context_ptr: *const u8,
-    global_context_len: size_t,
-    ip_info_ptr: *const u8,
-    ip_info_len: size_t,
+pub extern "C" fn verify_cdi_ffi(
+    gc_dlogbase_ptr: *const G1,
+    gc_cmm_key_ptr: *const PedersenKey<G1>,
+    ip_verify_key_ptr: *const ps_sig::PublicKey<Bls12>,
+    ip_ar_elgamal_generator_ptr: *const G1,
+    ip_ar_pub_key_ptr: *const elgamal::PublicKey<G1>,
     cdi_ptr: *const u8,
     cdi_len: size_t,
 ) -> i32 {
-    if global_context_ptr.is_null() {
+    if gc_dlogbase_ptr.is_null() {
         return -6;
     }
-    if ip_info_ptr.is_null() {
+    if gc_cmm_key_ptr.is_null() {
         return -7;
     }
-    if cdi_ptr.is_null() {
+    if ip_verify_key_ptr.is_null() {
         return -8;
     }
+    if ip_ar_pub_key_ptr.is_null() {
+        return -9;
+    }
+    if ip_ar_elgamal_generator_ptr.is_null() {
+        return -10;
+    }
 
-    let global_context_bytes =
-        unsafe { slice::from_raw_parts(global_context_ptr, global_context_len) };
-    let ip_info_bytes = unsafe { slice::from_raw_parts(ip_info_ptr, ip_info_len) };
-    let cdi_bytes = unsafe { slice::from_raw_parts(cdi_ptr, cdi_len) };
+    let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
 
-    match GlobalContext::<G1>::from_bytes(&mut Cursor::new(&global_context_bytes)) {
-        None => return -9,
-        Some(gc) => {
-            match IpInfo::<Bls12, G1>::from_bytes(&mut Cursor::new(&ip_info_bytes)) {
-                None => return -10,
-                Some(ip_info) => match CredDeploymentInfo::<Bls12, G1, AttributeKind>::from_bytes(
-                    &mut Cursor::new(&cdi_bytes),
-                ) {
-                    None => return -11,
-                    Some(cdi) => {
-                        match chain::verify_cdi::<Bls12, G1, AttributeKind>(&gc, ip_info, cdi) {
-                            Ok(()) => 1, // verification succeeded
-                            Err(CDIVerificationError::RegId) => -1,
-                            Err(CDIVerificationError::IdCredPub) => -2,
-                            Err(CDIVerificationError::Signature) => -3,
-                            Err(CDIVerificationError::Dlog) => -4,
-                            Err(CDIVerificationError::Policy) => -5,
-                        }
-                    }
-                },
+    match CredDeploymentInfo::<Bls12, G1, AttributeKind>::from_bytes(&mut Cursor::new(&cdi_bytes)) {
+        None => return -11,
+        Some(cdi) => {
+            match chain::verify_cdi_worker::<Bls12, G1, AttributeKind>(
+                from_ptr!(gc_cmm_key_ptr),
+                from_ptr!(ip_ar_elgamal_generator_ptr),
+                from_ptr!(ip_ar_pub_key_ptr),
+                from_ptr!(ip_verify_key_ptr),
+                cdi,
+            ) {
+                Ok(()) => 1, // verification succeeded
+                Err(CDIVerificationError::RegId) => -1,
+                Err(CDIVerificationError::IdCredPub) => -2,
+                Err(CDIVerificationError::Signature) => -3,
+                Err(CDIVerificationError::Dlog) => -4,
+                Err(CDIVerificationError::Policy) => -5,
             }
         }
     }
@@ -234,30 +232,23 @@ pub extern "C" fn elgamal_cipher_gen() -> *const elgamal::cipher::Cipher<G1> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{account_holder::*, identity_provider::*, types::*};
-    use byteorder::{BigEndian, ReadBytesExt};
-    use curve_arithmetic::{Curve, Pairing};
+    use crate::{account_holder::*, identity_provider::*};
     use dodis_yampolskiy_prf::secret as prf;
     use eddsa_ed25519 as ed25519;
     use elgamal::{public::PublicKey, secret::SecretKey};
-    use pairing::{
-        bls12_381::{Bls12, Fr, FrRepr},
-        PrimeField,
-    };
+    use pairing::bls12_381::Bls12;
     use pedersen_scheme::key as pedersen_key;
     use ps_sig;
-    use rand::*;
-    use std::{fmt, io::Cursor};
 
     type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
-    type ExampleCurve = <Bls12 as Pairing>::G_1;
+    type ExampleCurve = G1;
     #[test]
     fn test_pipeline() {
         let mut csprng = thread_rng();
 
-        let secret = ExampleCurve::generate_scalar(&mut csprng);
-        let public = ExampleCurve::one_point().mul_by_scalar(&secret);
-        let ah_info = CredentialHolderInfo::<ExampleCurve, ExampleCurve> {
+        let secret = <Bls12 as Pairing>::G_1::generate_scalar(&mut csprng);
+        let public = <Bls12 as Pairing>::G_1::one_point().mul_by_scalar(&secret);
+        let ah_info = CredentialHolderInfo::<<Bls12 as Pairing>::G_1, ExampleCurve> {
             id_ah:   "ACCOUNT_HOLDER".to_owned(),
             id_cred: IdCredentials {
                 id_cred_sec:    secret,
@@ -289,7 +280,7 @@ mod test {
         let expiry_date = 123123123;
         let alist = vec![AttributeKind::U8(55), AttributeKind::U64(313123333)];
 
-        let aci = AccCredentialInfo {
+        let aci = AccCredentialInfo::<Bls12, ExampleCurve, AttributeKind> {
             acc_holder_info: ah_info,
             prf_key,
             attributes: ExampleAttributeList {
@@ -309,7 +300,7 @@ mod test {
         assert!(sig_ok.is_ok());
 
         let ip_sig = sig_ok.unwrap();
-        let global_ctx = GlobalContext {
+        let global_ctx = GlobalContext::<G1> {
             dlog_base_chain:         ExampleCurve::one_point(),
             on_chain_commitment_key: pedersen_key::CommitmentKey::generate(1, &mut csprng),
         };
@@ -358,18 +349,21 @@ mod test {
             &randomness,
         );
 
-        let cdi_bytes = &*cdi.to_bytes();
+        let cdi_bytes = cdi.to_bytes();
         let cdi_bytes_len = cdi_bytes.len() as size_t;
-        let ip_info_bytes = &*ip_info.to_bytes();
-        let ip_info_bytes_len = ip_info_bytes.len() as size_t;
-        let global_context_bytes = &*global_ctx.to_bytes();
-        let global_context_bytes_len = global_context_bytes.len() as size_t;
 
-        let cdi_check = verify_cdi(
-            global_context_bytes.as_ptr(),
-            global_context_bytes_len,
-            ip_info_bytes.as_ptr(),
-            ip_info_bytes_len,
+        let dlog_base_ptr = Box::into_raw(Box::new(global_ctx.dlog_base_chain));
+        let cmm_key_ptr = Box::into_raw(Box::new(global_ctx.on_chain_commitment_key));
+        let ip_verify_key_ptr = Box::into_raw(Box::new(ip_info.ip_verify_key));
+        let elgamal_generator_ptr = Box::into_raw(Box::new(ip_info.ar_info.ar_elgamal_generator));
+        let ar_public_key_ptr = Box::into_raw(Box::new(ip_info.ar_info.ar_public_key));
+
+        let cdi_check = verify_cdi_ffi(
+            dlog_base_ptr,
+            cmm_key_ptr,
+            ip_verify_key_ptr,
+            elgamal_generator_ptr,
+            ar_public_key_ptr,
             cdi_bytes.as_ptr(),
             cdi_bytes_len,
         );
@@ -377,11 +371,12 @@ mod test {
         assert_eq!(cdi_check, 1);
         let wrong_cdi_bytes = &*wrong_cdi.to_bytes();
         let wrong_cdi_bytes_len = wrong_cdi_bytes.len() as size_t;
-        let wrong_cdi_check = verify_cdi(
-            global_context_bytes.as_ptr(),
-            global_context_bytes_len,
-            ip_info_bytes.as_ptr(),
-            ip_info_bytes_len,
+        let wrong_cdi_check = verify_cdi_ffi(
+            dlog_base_ptr,
+            cmm_key_ptr,
+            ip_verify_key_ptr,
+            elgamal_generator_ptr,
+            ar_public_key_ptr,
             wrong_cdi_bytes.as_ptr(),
             wrong_cdi_bytes_len,
         );

@@ -80,7 +80,7 @@ macro_rules! macro_free_ffi {
 #[macro_export]
 macro_rules! from_ptr {
     ($ptr:expr) => {{
-        assert!(!$ptr.is_null());
+        debug_assert!(!$ptr.is_null());
         unsafe { &*$ptr }
     }};
 }
@@ -88,7 +88,7 @@ macro_rules! from_ptr {
 #[macro_export]
 macro_rules! slice_from_c_bytes_worker {
     ($cstr:expr, $length:expr, $null_ptr_error:expr, $reader:expr) => {{
-        assert!(!$cstr.is_null(), $null_ptr_error);
+        debug_assert!(!$cstr.is_null(), $null_ptr_error);
         unsafe { $reader($cstr, $length) }
     }};
 }

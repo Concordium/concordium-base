@@ -5,7 +5,7 @@ use sha2::{Digest, Sha512};
 use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
-use elgamal::cipher::Cipher;
+use elgamal::{cipher::Cipher, public::PublicKey};
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey as PedersenKey, value::Value};
 use ps_sig;
 
@@ -38,7 +38,27 @@ pub fn verify_cdi<
     AttributeType: Attribute<C::Scalar>,
 >(
     global_context: &GlobalContext<C>,
-    ip_info: IpInfo<P, C>,
+    ip_info: &IpInfo<P, C>,
+    cdi: CredDeploymentInfo<P, C, AttributeType>,
+) -> Result<(), CDIVerificationError> {
+    verify_cdi_worker(
+        &global_context.on_chain_commitment_key,
+        &ip_info.ar_info.ar_elgamal_generator,
+        &ip_info.ar_info.ar_public_key,
+        &ip_info.ip_verify_key,
+        cdi,
+    )
+}
+
+pub fn verify_cdi_worker<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
+    on_chain_commitment_key: &PedersenKey<C>,
+    ar_info_generator: &C,
+    ar_info_public_key: &PublicKey<C>,
+    ip_verify_key: &ps_sig::PublicKey<P>,
     cdi: CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     // Compute the challenge prefix by hashing the values.
@@ -49,8 +69,9 @@ pub fn verify_cdi<
     let commitments = cdi.proofs.commitments;
     let check_id_cred_pub = verify_pok_id_cred_pub(
         &challenge_prefix,
-        &global_context,
-        &ip_info.ar_info,
+        on_chain_commitment_key,
+        ar_info_generator,
+        ar_info_public_key,
         &cdi.values.ar_data.id_cred_pub_enc,
         &commitments.cmm_id_cred_sec,
         &cdi.proofs.proof_id_cred_pub,
@@ -61,7 +82,7 @@ pub fn verify_cdi<
 
     let check_reg_id = verify_pok_reg_id(
         &challenge_prefix,
-        &global_context.on_chain_commitment_key,
+        on_chain_commitment_key,
         &commitments.cmm_prf,
         &commitments.cmm_cred_counter,
         cdi.values.reg_id,
@@ -84,9 +105,9 @@ pub fn verify_cdi<
 
     let check_pok_sig = verify_pok_sig(
         &challenge_prefix,
-        &global_context.on_chain_commitment_key,
+        on_chain_commitment_key,
         &commitments,
-        &ip_info.ip_verify_key,
+        ip_verify_key,
         &cdi.proofs.sig,
         &cdi.proofs.proof_ip_sig,
     );
@@ -96,7 +117,7 @@ pub fn verify_cdi<
     }
 
     let check_policy = verify_policy(
-        &global_context.on_chain_commitment_key,
+        on_chain_commitment_key,
         &commitments,
         &cdi.values.policy,
         &cdi.proofs.proof_policy,
@@ -224,18 +245,19 @@ fn verify_pok_reg_id<C: Curve>(
 
 fn verify_pok_id_cred_pub<C: Curve>(
     challenge_prefix: &[u8],
-    global_context: &GlobalContext<C>,
-    ar_info: &ArInfo<C>,
+    on_chain_commitment_key: &PedersenKey<C>,
+    ar_info_generator: &C,
+    ar_info_public_key: &PublicKey<C>,
     id_cred_pub_enc: &Cipher<C>,
     cmm_id_cred_sec: &Commitment<C>,
     proof: &com_enc_eq::ComEncEqProof<C>,
 ) -> bool {
     let public = (id_cred_pub_enc.0, id_cred_pub_enc.1, cmm_id_cred_sec.0);
     // FIXME: The one_point needs to be a parameter.
-    let cmm_key = &global_context.on_chain_commitment_key;
+    let cmm_key = on_chain_commitment_key;
     let base = (
-        ar_info.ar_elgamal_generator,
-        ar_info.ar_public_key.0,
+        *ar_info_generator,
+        ar_info_public_key.0,
         cmm_key.0[0],
         cmm_key.1,
     );

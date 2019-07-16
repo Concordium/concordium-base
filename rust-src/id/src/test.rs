@@ -190,6 +190,6 @@ fn test_pipeline() {
 
     // assert_eq!(4, cdi.commitments.cmm_attributes.len(), "Attribute list length
     // check."); now check that the generated credentials are indeed valid.
-    let cdi_check = verify_cdi(&global_ctx, ip_info, cdi);
+    let cdi_check = verify_cdi(&global_ctx, &ip_info, cdi);
     assert_eq!(cdi_check, Ok(()));
 }

@@ -538,15 +538,15 @@ impl Curve for G2Affine {
 
 impl Pairing for Bls12 {
     type BaseField = <Bls12 as Engine>::Fq;
-    type G_1 = <Bls12 as Engine>::G1Affine;
-    type G_2 = <Bls12 as Engine>::G2Affine;
+    type G_1 = <Bls12 as Engine>::G1;
+    type G_2 = <Bls12 as Engine>::G2;
     type ScalarField = Fr;
     type TargetField = <Bls12 as Engine>::Fqk;
 
     const SCALAR_LENGTH: usize = 32;
 
-    fn pair(p: <Bls12 as Engine>::G1Affine, q: <Bls12 as Engine>::G2Affine) -> Self::TargetField {
-        <Bls12 as Engine>::pairing(p, q)
+    fn pair(p: <Bls12 as Engine>::G1, q: <Bls12 as Engine>::G2) -> Self::TargetField {
+        <Bls12 as Engine>::pairing(p.into_affine(), q.into_affine())
     }
 
     fn scalar_to_bytes(e: &Self::ScalarField) -> Box<[u8]> {
