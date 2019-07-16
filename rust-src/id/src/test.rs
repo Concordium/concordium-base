@@ -115,11 +115,7 @@ fn test_pipeline() {
         &randomness,
     );
 
-    let mut out = Vec::new();
-    eprintln!("{:?}", &global_ctx.dlog_base_chain);
-    eprintln!("{:?}", &global_ctx.on_chain_commitment_key);
-    eprintln!("{:?}", &global_ctx.on_chain_commitment_key.to_bytes());
-    eprintln!("{:?}", &ip_info.ar_info.ar_elgamal_generator);
+    // let mut out = Vec::new();
 
     // out.extend_from_slice(&global_ctx.dlog_base_chain.curve_to_bytes());
     // out.extend_from_slice(&((global_ctx.on_chain_commitment_key.to_bytes().len()
