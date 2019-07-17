@@ -395,17 +395,26 @@ impl<C: Curve> CredDeploymentCommitments<C> {
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = self.sig.to_bytes().to_vec();
+        // we use the first 4 bytes to encode the final length of the serialization.
+        // This is unnecessary because proofs are structured and subparts have their
+        // length, but having the extra 4 bytes (which is negligible compared to
+        // the rest of the data) allows us to treat the proofs as a binary blob
+        // in many other places.
+        let mut out = vec![0, 0, 0, 0];
+        out.extend_from_slice(&self.sig.to_bytes());
         out.extend_from_slice(&self.commitments.to_bytes());
         out.extend(&self.proof_id_cred_pub.to_bytes());
         out.extend_from_slice(&self.proof_ip_sig.to_bytes());
         out.extend_from_slice(&self.proof_reg_id.to_bytes());
         out.extend_from_slice(&self.proof_acc_sk.to_bytes());
         out.extend_from_slice(&self.proof_policy.to_bytes());
+        let len = (out.len() - 4) as u32;
+        out[0..4].copy_from_slice(&len.to_be_bytes());
         out
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let _redundant = cur.read_u32::<BigEndian>();
         let sig = Signature::from_bytes(cur).ok()?;
         let commitments = CredDeploymentCommitments::from_bytes(cur)?;
         let proof_id_cred_pub = ComEncEqProof::from_bytes(cur).ok()?;

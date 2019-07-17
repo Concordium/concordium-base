@@ -1,25 +1,16 @@
-use std::fmt;
-
 use crate::{account_holder::*, chain::*, ffi::*, identity_provider::*, types::*};
-use byteorder::{BigEndian, ReadBytesExt};
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519 as ed25519;
 use elgamal::{public::PublicKey, secret::SecretKey};
-use pairing::{
-    bls12_381::{Bls12, Fr, FrRepr, G1},
-    PrimeField,
-};
+use pairing::bls12_381::{Bls12, G1};
 use ps_sig;
 
 use rand::*;
 
 use pedersen_scheme::key as pedersen_key;
 
-use std::{
-    fs::File,
-    io::{Cursor, Write},
-};
+use std::io::Cursor;
 
 type ExampleCurve = G1;
 
@@ -146,6 +137,6 @@ fn test_pipeline() {
 
     // assert_eq!(4, cdi.commitments.cmm_attributes.len(), "Attribute list length
     // check."); now check that the generated credentials are indeed valid.
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, cdi);
+    let cdi_check = verify_cdi(&global_ctx, &ip_info, &cdi);
     assert_eq!(cdi_check, Ok(()));
 }

@@ -39,7 +39,7 @@ pub fn verify_cdi<
 >(
     global_context: &GlobalContext<C>,
     ip_info: &IpInfo<P, C>,
-    cdi: CredDeploymentInfo<P, C, AttributeType>,
+    cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     verify_cdi_worker(
         &global_context.on_chain_commitment_key,
@@ -59,14 +59,14 @@ pub fn verify_cdi_worker<
     ar_info_generator: &C,
     ar_info_public_key: &PublicKey<C>,
     ip_verify_key: &ps_sig::PublicKey<P>,
-    cdi: CredDeploymentInfo<P, C, AttributeType>,
+    cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     // Compute the challenge prefix by hashing the values.
     let mut hasher = Sha512::new();
     hasher.input(&cdi.values.to_bytes());
     let challenge_prefix = hasher.result();
 
-    let commitments = cdi.proofs.commitments;
+    let commitments = &cdi.proofs.commitments;
     let check_id_cred_pub = verify_pok_id_cred_pub(
         &challenge_prefix,
         on_chain_commitment_key,

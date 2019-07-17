@@ -142,7 +142,7 @@ pub extern "C" fn verify_cdi_ffi(
                 from_ptr!(ip_ar_elgamal_generator_ptr),
                 from_ptr!(ip_ar_pub_key_ptr),
                 from_ptr!(ip_verify_key_ptr),
-                cdi,
+                &cdi,
             ) {
                 Ok(()) => 1, // verification succeeded
                 Err(CDIVerificationError::RegId) => -1,
