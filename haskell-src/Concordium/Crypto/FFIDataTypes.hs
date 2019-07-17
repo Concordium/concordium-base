@@ -127,7 +127,7 @@ instance Serialize ElgamalGen where
     in putByteString bs
 
 instance Show ElgamalGen where
-  show = byteStringToHex . BS.drop 4 . encode
+  show = byteStringToHex . encode
 
 -- |This instance should only be used for testing
 instance Eq ElgamalGen where
@@ -152,7 +152,7 @@ instance Serialize ElgamalPublicKey where
     in putByteString bs
 
 instance Show ElgamalPublicKey where
-  show = byteStringToHex . BS.drop 4 . encode
+  show = byteStringToHex . encode
 
 -- |This instance should only be used for testing
 instance Eq ElgamalPublicKey where
@@ -177,7 +177,7 @@ instance Serialize ElgamalCipher where
     in putByteString bs
 
 instance Show ElgamalCipher where
-  show = byteStringToHex . BS.drop 4 . encode
+  show = byteStringToHex . encode
 
 -- |This instance should only be used for testing
 instance Eq ElgamalCipher where
