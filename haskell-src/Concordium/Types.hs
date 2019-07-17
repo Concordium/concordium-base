@@ -7,7 +7,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# OPTIONS_GHC -Wall #-}
-module Concordium.Types (module Concordium.Types, AccountAddress(..)) where
+module Concordium.Types (module Concordium.Types, AccountAddress(..), SchemeId, AccountVerificationKey) where
 
 import GHC.Generics
 
