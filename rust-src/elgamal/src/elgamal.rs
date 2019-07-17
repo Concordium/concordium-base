@@ -153,6 +153,50 @@ macro_rules! macro_derive_from_bytes {
     };
 }
 
+//endianness sensetive
+pub fn value_to_chunks<C: Curve>(val: &C::Scalar, chunk_size:usize) -> Vec<C::Scalar> {
+    assert!(chunk_size <= C::SCALAR_LENGTH);
+    assert_eq!(C::SCALAR_LENGTH % chunk_size, 0);
+    let n = C::SCALAR_LENGTH/chunk_size;
+    let scalar_bytes = &*C::scalar_to_bytes(&val);
+    let mut scalar_chunks = Vec::with_capacity(n);
+    for i in (0..scalar_bytes.len()).step_by(chunk_size) {
+        let mut buf = vec![0u8;C::SCALAR_LENGTH-chunk_size];
+        buf.extend_from_slice(&scalar_bytes[i..(i+chunk_size)]);
+        let scalar = C::bytes_to_scalar(&mut Cursor::new(&buf)).unwrap(); 
+        scalar_chunks.push(scalar);
+    }
+    scalar_chunks
+}
+
+pub fn chunks_to_value<C:Curve>(chunks: Vec<C::Scalar>) -> C::Scalar{
+    let number_of_chunks = chunks.len();
+    assert!(number_of_chunks <= C::SCALAR_LENGTH);
+    assert_eq!(C::SCALAR_LENGTH % number_of_chunks, 0);
+    let chunk_size = C::SCALAR_LENGTH/number_of_chunks;
+    let assertion_vec = vec![0u8; C::SCALAR_LENGTH - chunk_size];
+    let mut scalar_bytes:Vec<u8> = Vec::with_capacity(C::SCALAR_LENGTH);
+    let mut i = 0;
+    for chunk in chunks.iter(){
+        let chunk_bytes = &*C::scalar_to_bytes(&chunk);
+        assert_eq!(&chunk_bytes[..C::SCALAR_LENGTH - chunk_size], assertion_vec.as_slice());
+        scalar_bytes.extend_from_slice(&chunk_bytes[C::SCALAR_LENGTH - chunk_size ..]);
+        i = i+1;
+    }
+    C::bytes_to_scalar(&mut Cursor::new(&scalar_bytes)).unwrap()
+}
+
+pub fn encrypt_in_chunks<C:Curve, R:Rng> (pk :&PublicKey<C>, val: &C::Scalar, chunk_size: usize, csprng: &mut R) -> Vec<Cipher<C>>{
+    let chunks = value_to_chunks::<C>(val, chunk_size);
+    pk.encrypt_exponent_vec(csprng, &chunks.as_slice())
+}
+
+pub fn decrypt_from_chunks<C:Curve>(sk: &SecretKey<C>, cipher: & Vec<Cipher<C>>) -> C::Scalar{
+    let scalars = cipher.into_par_iter().map(|c| sk.decrypt_exponent(c));
+    chunks_to_value::<C>(scalars.collect())
+
+}
+
 pub fn encrypt_u64_bitwise_iter<C: Curve>(
     pk: PublicKey<C>,
     e: u64,
@@ -318,6 +362,8 @@ macro_derive_to_bytes!(cipher_to_bytes_g2, Cipher<G2>);
 
 #[cfg(test)]
 mod tests {
+    use rand::Rng;
+
     use super::*;
     use pairing::Field;
     macro_rules! macro_test_encrypt_decrypt_success {
@@ -478,4 +524,61 @@ mod tests {
         decrypt_u64_unsafe_g2,
         <G2 as Curve>::GROUP_ELEMENT_LENGTH
     }
+
+        macro_rules! macro_test_chunking {
+          ($function_name:ident, $curve_type:path) => {
+              #[test]
+              pub fn $function_name() {
+                  let mut csprng = thread_rng();
+                  let possible_chunk_sizes = [1, 2, 4, 8, 16, 32];
+                  //let possible_chunk_sizes = [32];
+
+                  for _i in 1..100 {
+                      let scalar = <$curve_type>::generate_scalar(&mut csprng);
+                      let chunk_size_index: usize = csprng.gen_range(0, possible_chunk_sizes.len());
+                      let chunk_size = possible_chunk_sizes[chunk_size_index];
+                      let chunks = value_to_chunks::<$curve_type>(&scalar, chunk_size);
+                      let retrieved_scalar = chunks_to_value::<$curve_type>(chunks);
+                      //assert!(true);
+                      assert_eq!(scalar, retrieved_scalar);
+
+                  }
+              }
+          };
+      }
+
+        macro_test_chunking!{
+          chunking_test_G_1,
+          G1 
+      }
+
+        macro_rules! macro_test_chunked_encrypt_decrypt{
+            ($function_name:ident, $curve_type:path) => {
+                #[test]
+                pub fn $function_name() {
+                    let mut csprng = thread_rng();
+                    let sk = SecretKey::<$curve_type>::generate(&mut csprng);
+                    let pk = PublicKey::<$curve_type>::from(&sk); 
+                    //let possible_chunk_sizes = [1, 2, 4];
+                    let possible_chunk_sizes = [4];
+
+                    for _i in 1..2 {
+                        let scalar = <$curve_type>::generate_scalar(&mut csprng);
+                        let chunk_size_index: usize = csprng.gen_range(0, possible_chunk_sizes.len());
+                        let chunk_size = possible_chunk_sizes[chunk_size_index];
+                        let cipher = encrypt_in_chunks::<$curve_type, ThreadRng>(&pk, &scalar, chunk_size, &mut csprng);
+                        let retrieved_scalar = decrypt_from_chunks::<$curve_type>(&sk, &cipher);
+                        //assert!(true);
+                        assert_eq!(scalar, retrieved_scalar);
+
+                    }
+                }
+            };
+        }
+
+          macro_test_chunked_encrypt_decrypt!{
+            chunked_encrypt_decrypt_test_G_1,
+            G1
+        }
 }
+
