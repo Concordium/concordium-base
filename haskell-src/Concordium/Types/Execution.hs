@@ -246,6 +246,12 @@ encodePayload = EncodedPayload . S.encode
 decodePayload :: EncodedPayload -> Either String Payload
 decodePayload (EncodedPayload s) = S.decode s
 
+{-# INLINE payloadBodyBytes #-}
+-- |Get the body of the payload as bytes. Essentially just remove the
+-- first byte which encodes the type.
+payloadBodyBytes :: EncodedPayload -> BS.ByteString
+payloadBodyBytes (EncodedPayload s) = if BS.null s then BS.empty else BS.tail s
+
 -- |Events which are generated during transaction execution.
 -- These are only used for commited transactions.
 data Event = ModuleDeployed !Core.ModuleRef
