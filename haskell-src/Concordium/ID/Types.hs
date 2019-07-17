@@ -52,17 +52,6 @@ safeDecodeBase58Address bs = do
     Left (ErrorCall _) -> return Nothing
     Right dec -> return (Just (AccountAddress . FBS.fromByteString . toBytes $ dec))
 
--- Public key of Anonimity Revoker (Elgamal)
-newtype AnonimityRevokerPublicKey = AR_PK ByteString
-    deriving(Eq)
-    deriving Show via ByteStringHex
-
--- Name of Identity Revoker
-newtype AnonimityRevokerIdentity  = AR_ID ByteString 
-    deriving (Eq)
-    deriving Show via ByteStringHex
-    deriving Serialize via Short65K
-
 -- Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID ByteString
     deriving (Eq, Hashable)
