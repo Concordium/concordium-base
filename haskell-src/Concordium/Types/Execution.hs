@@ -302,6 +302,7 @@ data RejectReason = ModuleNotWF !(TypingError Core.UA) -- ^Error raised when typ
                   | OutOfEnergy -- ^We ran of out energy to process this transaction.
                   | Rejected -- ^Rejected due to contract logic.
                   | DuplicateAccountRegistrationID IDTypes.CredentialRegistrationID
+                  | NonExistentIdentityProvider !IDTypes.IdentityProviderIdentity
                   | AccountCredentialInvalid
                   | AccountEncryptionKeyAlreadyExists AccountAddress IDTypes.AccountEncryptionKey
                   | NonExistentRewardAccount !AccountAddress -- ^Reward account desired by the baker does not exist.
