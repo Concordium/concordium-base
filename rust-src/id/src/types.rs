@@ -414,7 +414,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let _redundant = cur.read_u32::<BigEndian>();
+        let _redundant = cur.read_u32::<BigEndian>().ok()?;
         let sig = Signature::from_bytes(cur).ok()?;
         let commitments = CredDeploymentCommitments::from_bytes(cur)?;
         let proof_id_cred_pub = ComEncEqProof::from_bytes(cur).ok()?;

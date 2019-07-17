@@ -8,7 +8,7 @@ use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{cipher::Cipher, public::PublicKey, secret::SecretKey};
 use hex::{decode, encode};
-use id::{account_holder::*, ffi::*, identity_provider::*, types::*};
+use id::{account_holder::*, chain::verify_cdi, ffi::*, identity_provider::*, types::*};
 use pairing::bls12_381::Bls12;
 use ps_sig;
 
@@ -740,6 +740,12 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             return;
         }
     };
+    // We ask what regid index they would like to use.
+    let x = match Input::new().with_prompt("Index").interact() {
+        Ok(x) => x,
+        Err(_) => 0, // default index
+    };
+
     // Now we have have everything we need to generate the proofs
     // we have
     // - chi
@@ -748,24 +754,28 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // - signature of the identity provider
     // - acc_data of the account onto which we are deploying this credential
     //   (private and public)
+
     let cdi = generate_cdi(
         &ip_info,
         &global_ctx,
         &aci,
         &pio,
-        0,
+        x,
         &ip_sig,
         &policy,
         &acc_data,
         &randomness,
     );
-    // Double check that the generated CDI is going to be successfully
-    // validated.
-    // let checked = verify_cdi(&global_ctx, ip_info, cdi);
-    // if let Err(e) = checked {
-    //        eprintln!("Something went terribly wrong and the generated CDI is not
-    // valid because {}", e);      return
-    //  };
+
+    // Double check that the generated CDI is going to be successfully validated.
+    let checked = verify_cdi(&global_ctx, &ip_info, &cdi);
+    if let Err(e) = checked {
+        eprintln!(
+            "Something went terribly wrong and the generated CDI is not valid because {}",
+            e
+        );
+        return;
+    };
 
     // Now simply output the credential object in the transaction format
     // accepted by the simple-client for sending transactions.
@@ -779,7 +789,8 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         "ipIdentity": values.ip_identity.clone(),
         "arData": chain_ar_data_to_json(&values.ar_data),
         "policy": policy_to_json(&values.policy),
-        "proofs": json_base16_encode(&cdi.proofs.to_bytes()),
+        // NOTE: Since proofs encode their own length we do not output those first 4 bytes
+        "proofs": json_base16_encode(&cdi.proofs.to_bytes()[4..]),
     });
     if let Some(json_file) = matches.value_of("out") {
         match write_json_to_file(json_file, &js) {

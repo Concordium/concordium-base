@@ -75,7 +75,7 @@ instance Enum SchemeId where
                  Just x -> x
                  Nothing -> errorWithoutStackTrace "SchemeId.toEnum: bad argument"
     fromEnum CL = 0
-    fromEnum Ed25519= 1
+    fromEnum Ed25519 = 1
 
 toScheme :: Word8 -> Maybe SchemeId
 toScheme n | n == 0 = Just CL
