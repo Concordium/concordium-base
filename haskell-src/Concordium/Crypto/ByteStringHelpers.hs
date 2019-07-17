@@ -16,6 +16,10 @@ import           Foreign.Marshal.Utils
 import           System.IO.Unsafe
 import           Control.Monad
 import Data.Serialize
+import qualified Data.ByteString.Base16 as BS16
+import Data.Text.Encoding as Text
+
+import qualified Data.Aeson as AE
 
 wordToHex :: Word8 -> [Char]
 wordToHex x = printf "%.2x" x
@@ -104,3 +108,11 @@ instance Serialize Short65K where
   get = do
     l <- fromIntegral <$> getWord16be
     Short65K <$> getByteString l
+
+-- |JSON instances based on base16 encoding.
+instance AE.ToJSON ByteStringHex where
+  toJSON v = AE.toJSON $ show v
+
+-- |JSON instances based on base16 encoding.
+instance AE.FromJSON ByteStringHex where
+  parseJSON v = ByteStringHex . fst . BS16.decode . Text.encodeUtf8 <$> AE.parseJSON v

@@ -14,14 +14,12 @@ import GHC.Generics
 import Data.Hashable
 import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
-import Data.Aeson.TH
 import Foreign.Storable(peek)
 import Foreign.Ptr(castPtr)
 import Data.Base58String.Bitcoin
 import System.IO.Unsafe
 import Control.Exception
 import Control.Monad
-import Data.Char
 import qualified Data.Text as Text
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Crypto.FFIDataTypes
@@ -61,7 +59,7 @@ safeDecodeBase58Address bs = do
 -- Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID ByteString
     deriving (Eq, Hashable)
-    deriving Show via ByteStringHex
+    deriving Show via ByteString
     deriving Serialize via Short65K
 
 -- Public key of the Identity provider
@@ -71,15 +69,8 @@ newtype IdentityProviderPublicKey = IP_PK PsSigKey
 instance ToJSON IdentityProviderIdentity where
   toJSON v = toJSON $ show v
 
--- Length + data (serializes with `put :: Bytestring -> Put`)
 instance FromJSON IdentityProviderIdentity where
-  parseJSON v = do
-    ipid <- parseJSON v
-    let plainBs = fst . BS16.decode . Text.encodeUtf8 $ ipid
-    case decode . flip BS.append plainBs $
-         encode (fromIntegral . BS.length $ plainBs :: Word16) of
-      Left e  -> fail e
-      Right n -> return n
+  parseJSON v = IP_ID . encodeUtf8 <$> parseJSON v
 
 -- Signing key for accounts (eddsa key)
 type AccountSigningKey = SignKey
@@ -127,6 +118,8 @@ instance FromJSON CredentialRegistrationID where
 newtype Proofs = Proofs ByteString
     deriving(Eq)
     deriving(Show) via ByteStringHex
+    deriving(ToJSON) via ByteStringHex
+    deriving(FromJSON) via ByteStringHex
 
 -- |NB: This puts the length information up front, which is possibly not what we
 -- want.
@@ -158,15 +151,16 @@ instance Serialize AttributeValue where
       3 -> ATWord64 <$> getWord64be
       _ -> fail "Uknown attribute type."
 
+toBase16 :: Serialize a => a -> Text.Text
+toBase16 = Text.decodeUtf8 . BS16.encode . encode
 
 instance ToJSON AttributeValue where
-  toJSON v = toJSON $ show v
+  toJSON v = String (toBase16 v)
 
--- Data (serializes with `putByteString :: Bytestring -> Put`)
 instance FromJSON AttributeValue where
   parseJSON v = do
-    crid <- parseJSON v
-    case decode . fst . BS16.decode . Text.encodeUtf8 $ crid of
+    aValueEncoded <- parseJSON v
+    case decode . fst . BS16.decode . Text.encodeUtf8 $ aValueEncoded of
       Left e  -> fail e
       Right n -> return n
 
@@ -179,7 +173,18 @@ data PolicyItem = PolicyItem {
   piValue :: AttributeValue
   } deriving(Eq, Show)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 2, constructorTagModifier = (\x -> (toLower . head $ x) : (tail x))} ''PolicyItem)
+instance ToJSON PolicyItem where
+  toJSON PolicyItem{..} =
+    object [
+    "index" .= piIndex,
+    "piValue" .= piValue
+    ]
+
+instance FromJSON PolicyItem where
+  parseJSON = withObject "PolicyItem" $ \v -> do
+    piIndex <- v .: "index"
+    piValue <- v .: "value"
+    return PolicyItem{..}
 
 data Policy = Policy {
   -- |Variant of the attribute list this policy belongs to.
@@ -190,13 +195,24 @@ data Policy = Policy {
   pItems :: [PolicyItem]
   } deriving(Eq, Show)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 1, constructorTagModifier = (\x -> (toLower . head $ x) : (tail x))} ''Policy)
+instance ToJSON Policy where
+  toJSON (Policy{..}) = object [
+    "variant" .= pAttributeListVariant,
+    "expiry" .= pExpiry,
+    "revealedItems" .= toJSON pItems
+    ]
+
+instance FromJSON Policy where
+  parseJSON = withObject "Policy" $ \v -> do
+    pAttributeListVariant <- v .: "variant"
+    pExpiry <- v .: "expiry"
+    pItems <- v .: "revealedItems"
+    return Policy{..}
 
 -- |Unique identifier of the anonymity revoker. At most 65k bytes in length.
 newtype ARName = ARName ByteString
     deriving(Show, Eq)
     deriving Serialize via Short65K
-
 
 -- |Public key of an anonymity revoker.
 newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
@@ -205,11 +221,9 @@ newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
 instance ToJSON ARName where
   toJSON v = toJSON $ show v
 
-
+-- |NB: This just reads the string. No decoding.
 instance FromJSON ARName where
-  parseJSON v = do
-    crid <- parseJSON v
-    ARName <$> Text.encodeUtf8 $ crid
+  parseJSON v = ARName . Text.encodeUtf8 <$> parseJSON v
 
 -- |Encryption of data with anonymity revoker's public key.
 newtype AREnc = AREnc ElgamalCipher
@@ -218,11 +232,10 @@ newtype AREnc = AREnc ElgamalCipher
 instance ToJSON AREnc where
   toJSON v = toJSON $ show v
 
--- Data (serializes with `putByteString :: Bytestring -> Put`)
 instance FromJSON AREnc where
   parseJSON v = do
-    crid <- parseJSON v
-    case decode . fst . BS16.decode . Text.encodeUtf8 $ crid of
+    arEnc <- parseJSON v
+    case decode . fst . BS16.decode . Text.encodeUtf8 $ arEnc of
       Left e  -> fail e
       Right n -> return n
 
@@ -234,7 +247,18 @@ data AnonymityRevocationData = AnonymityRevocationData {
   ardIdCredPubEnc :: AREnc
   } deriving(Eq, Show)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 3, constructorTagModifier = (\x -> (toLower . head $ x) : (tail x))} ''AnonymityRevocationData)
+
+instance ToJSON AnonymityRevocationData where
+  toJSON (AnonymityRevocationData{..}) = object [
+    "arName" .= ardName,
+    "idCredPubEnc" .= ardIdCredPubEnc
+    ]
+
+instance FromJSON AnonymityRevocationData where
+  parseJSON = withObject "AnonymityRevocationData" $ \v -> do
+    ardName <- v .: "arName"
+    ardIdCredPubEnc <- v .: "idCredPubEnc"
+    return AnonymityRevocationData{..}
 
 instance Serialize AnonymityRevocationData where
   put AnonymityRevocationData{..} =
@@ -260,6 +284,26 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
   cdvPolicy :: Policy
 } deriving(Eq, Show)
 
+instance ToJSON CredentialDeploymentValues where
+  toJSON CredentialDeploymentValues{..} =
+    object [
+    "schemeId" .= cdvSigScheme,
+    "verifyKey" .= cdvVerifyKey,
+    "regId" .= cdvRegId,
+    "ipIdentity" .= cdvIpId,
+    "arData" .= cdvArData,
+    "policy" .= cdvPolicy
+    ]
+
+instance FromJSON CredentialDeploymentValues where
+  parseJSON = withObject "CredentialDeploymentValues" $ \v -> do
+    cdvSigScheme <- v .: "schemeId"
+    cdvVerifyKey <- v .: "verifyKey"
+    cdvRegId <- v .: "regId"
+    cdvIpId <- v .: "ipIdentity"
+    cdvArData <- v .: "arData"
+    cdvPolicy <- v .: "policy"
+    return CredentialDeploymentValues{..}
 
 getPolicy :: Get Policy
 getPolicy = do
@@ -288,7 +332,6 @@ putPolicyItem PolicyItem{..} =
    putWord16be piIndex <>
    put piValue
 
-
 instance Serialize CredentialDeploymentValues where
   get = do
     cdvSigScheme <- get
@@ -307,8 +350,6 @@ instance Serialize CredentialDeploymentValues where
     put cdvArData <>
     putPolicy cdvPolicy
 
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 3, constructorTagModifier = (\x -> (toLower . head $ x) : (tail x))} ''CredentialDeploymentValues)
-
 -- |The credential deployment information consists of values deployed and the
 -- proofs about them.
 data CredentialDeploymentInformation = CredentialDeploymentInformation {
@@ -319,26 +360,23 @@ data CredentialDeploymentInformation = CredentialDeploymentInformation {
   }
   deriving (Show)
 
--- |This instance should not be used for transaction handling.
--- It is only here so we can serialize genesis data.
+-- |NB: This must match the one defined in rust. In particular the
+-- proof is serialized with 4 byte length.
 instance Serialize CredentialDeploymentInformation where
   put CredentialDeploymentInformation{..} =
     put cdiValues <> put cdiProofs
   get = CredentialDeploymentInformation <$> get <*> get
 
--- NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
+-- |NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
 instance Eq CredentialDeploymentInformation where
   cdi1 == cdi2 = cdiValues cdi1 == cdiValues cdi2
 
 instance FromJSON CredentialDeploymentInformation where
-  parseJSON (Object v) = do
-    cdi <- v .: "values"
-    proofs <- v .: "proofs"
-    let plainBs = fst . BS16.decode . Text.encodeUtf8 $ proofs
-    case decode . flip BS.append plainBs $
-         encode (fromIntegral . BS.length $ plainBs :: Word32) of
-      Left e  -> fail e
-      Right n -> return $ CredentialDeploymentInformation cdi n
+  parseJSON = withObject "CredentialDeploymentInformation" $ \v -> do
+    cdiValues <- parseJSON (Object v)
+    proofsText <- v .: "proofs"
+    return CredentialDeploymentInformation{cdiProofs = Proofs (fst . BS16.decode . Text.encodeUtf8 $ proofsText),
+                                           ..}
 
 -- |Partially deserialize the CDI, leaving the proofs as leftover.
 -- Designed to be used with 'runGetPartial'.
