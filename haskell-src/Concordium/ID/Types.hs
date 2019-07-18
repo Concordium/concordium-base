@@ -200,12 +200,14 @@ instance FromJSON Policy where
 
 -- |Unique identifier of the anonymity revoker. At most 65k bytes in length.
 newtype ARName = ARName ByteString
-    deriving(Show, Eq)
+    deriving(Eq)
     deriving Serialize via Short65K
+    deriving Show via ByteString
 
 -- |Public key of an anonymity revoker.
 newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
-    deriving(Eq, Show, Serialize)
+    deriving(Eq, Serialize)
+    deriving Show via ElgamalPublicKey
 
 instance ToJSON ARName where
   toJSON v = toJSON $ show v
@@ -216,7 +218,8 @@ instance FromJSON ARName where
 
 -- |Encryption of data with anonymity revoker's public key.
 newtype AREnc = AREnc ElgamalCipher
-    deriving(Eq, Show, Serialize)
+    deriving(Eq, Serialize)
+    deriving Show via ElgamalCipher
 
 instance ToJSON AREnc where
   toJSON v = toJSON $ show v
