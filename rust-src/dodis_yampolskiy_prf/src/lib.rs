@@ -7,9 +7,5 @@ extern crate rand_core;
 #[cfg(feature = "serde")]
 extern crate serde;
 
-mod constants;
-mod dodis_yampolskiy_prf;
 mod errors;
-mod secret;
-
-pub use crate::dodis_yampolskiy_prf::*;
+pub mod secret;

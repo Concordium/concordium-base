@@ -1,0 +1,13 @@
+[package]
+name = "ffi_helpers"
+version = "0.1.0"
+authors = ["Concordium"]
+edition = "2018"
+
+[dependencies]
+libc = "0.2"
+
+[lib]
+name = "ffi_helpers"
+path = "src/lib.rs"
+crate-type = ["rlib", "staticlib", "cdylib"]

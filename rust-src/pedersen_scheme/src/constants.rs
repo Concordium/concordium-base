@@ -13,17 +13,17 @@
 // pub const COMMITMENT_KEY_LENGTH: usize = 48*2;
 
 // length of a commitment
-pub const COMMITMENT_LENGTH: usize = 48;
+// pub const COMMITMENT_LENGTH: usize = 48;
 
 // length of randomness
-pub const RANDOMNESS_LENGTH: usize = FIELD_ELEMENT_LENGTH;
+// pub const RANDOMNESS_LENGTH: usize = FIELD_ELEMENT_LENGTH;
 
 // size of hiding prarmeter in bytes
 // this is the size of compressed gropu element
 // pub const HIDING_PARAM_LENGTH: usize= 48;
 
 // length of gruop element in bytes
-pub const GROUP_ELEMENT_LENGTH: usize = 48;
+// pub const GROUP_ELEMENT_LENGTH: usize = 48;
 
 // length of field element in bytes
-pub const FIELD_ELEMENT_LENGTH: usize = 32;
+// pub const FIELD_ELEMENT_LENGTH: usize = 32;

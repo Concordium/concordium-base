@@ -5,7 +5,6 @@ import           Concordium.Crypto.ByteStringHelpers
 import           Data.ByteString            (ByteString)
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Lazy       as L
-import           Data.ByteString.Internal   (create, toForeignPtr)
 import qualified Data.ByteString.Lazy.Char8 as LC
 import           Data.ByteString.Builder
 import           Foreign.Ptr
@@ -13,8 +12,6 @@ import           Foreign.ForeignPtr
 import           Data.Word
 import           System.IO.Unsafe
 import           Control.Monad
-import           Foreign.Marshal.Array
-import           Foreign.Marshal.Alloc
 import           Data.Serialize
 import           Data.Hashable               
 import           Data.Bits
@@ -97,7 +94,7 @@ hash_update :: ByteString -> Ptr SHA224Ctx ->  IO ()
 hash_update b ptr = withByteStringPtr b $ \message -> rs_sha224_update ptr message (fromIntegral $ B.length b)
 
 hash_final :: Ptr SHA224Ctx -> IO (FixedByteString DigestSize)
-hash_final ptr = FBS.create  $ \hash -> rs_sha224_final hash ptr
+hash_final ptr = FBS.create  $ \hsh -> rs_sha224_final hsh ptr
 
 
 hashLazy :: L.ByteString -> Hash

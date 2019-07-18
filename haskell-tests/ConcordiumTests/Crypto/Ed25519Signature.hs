@@ -1,36 +1,36 @@
 module ConcordiumTests.Crypto.Ed25519Signature where
 
 import           Concordium.Crypto.Ed25519Signature
-import qualified Concordium.Crypto.SignatureScheme as SCH 
 import           Concordium.Crypto.SignatureScheme (KeyPair(..)) 
-import System.Random
 import Data.Serialize
 import qualified Data.ByteString as BS
 import Data.Word
 import Test.QuickCheck
 import Test.Hspec
 
+forallKP :: Testable prop => (KeyPair -> prop) -> Property
+forallKP = forAll genKeyPair
 
 testSerializeSignKeyEd25519 :: Property
-testSerializeSignKeyEd25519   = property $ ck
+testSerializeSignKeyEd25519 = forallKP $ ck
     where
         ck :: KeyPair -> Property
         ck kp = Right (signKey kp) === runGet get (runPut $ put (signKey kp))
 
 testSerializeVerifyKeyEd25519  :: Property
-testSerializeVerifyKeyEd25519  = property $ ck
+testSerializeVerifyKeyEd25519  = forallKP $ ck
     where
         ck :: KeyPair -> Property
         ck kp = Right (verifyKey kp) === runGet get (runPut $ put (verifyKey kp))
 
 testSerializeKeyPairEd25519  :: Property
-testSerializeKeyPairEd25519  = property $ ck
+testSerializeKeyPairEd25519  = forallKP $ ck
     where
         ck :: KeyPair -> Property
         ck kp = Right kp === runGet get (runPut $ put kp)
 
 testSerializeSignatureEd25519 :: Property
-testSerializeSignatureEd25519 = property $ ck
+testSerializeSignatureEd25519 = forallKP $ ck
     where
         ck :: KeyPair -> [Word8] -> Property
         ck kp doc0 = let doc = BS.pack doc0 in
@@ -38,13 +38,17 @@ testSerializeSignatureEd25519 = property $ ck
                             Right sig === runGet get (runPut $ put sig)
 
 testNoDocCollisionEd25519 :: Property
-testNoDocCollisionEd25519 = property $ \kp d1 d2 -> d1 /= d2 ==> sign  kp (BS.pack d1) /= sign  kp (BS.pack d2)
+testNoDocCollisionEd25519 = forallKP $ \kp d1 d2 -> d1 /= d2 ==> sign  kp (BS.pack d1) /= sign  kp (BS.pack d2)
 
 testNoKeyPairCollisionEd25519 :: Property
-testNoKeyPairCollisionEd25519 = property $ \kp1 kp2 d -> kp1 /= kp2 ==> sign  kp1 (BS.pack d) /= sign  kp2 (BS.pack d)
+testNoKeyPairCollisionEd25519 =
+    forallKP $
+    \kp1 ->
+      forallKP $
+      \kp2 d -> kp1 /= kp2 ==> sign  kp1 (BS.pack d) /= sign  kp2 (BS.pack d)
 
 testSignVerifyEd25519 :: Property
-testSignVerifyEd25519 = property $ ck
+testSignVerifyEd25519 = forallKP $ ck
     where
         ck :: KeyPair -> [Word8] -> Bool
         ck kp doc0 = let doc = BS.pack doc0 in
@@ -52,7 +56,7 @@ testSignVerifyEd25519 = property $ ck
 
 
 testSignVerifyEd25519DocumentCollision :: Property
-testSignVerifyEd25519DocumentCollision = property $ ck
+testSignVerifyEd25519DocumentCollision = forallKP $ ck
     where
         ck :: KeyPair -> [Word8] -> [Word8] -> Property
         ck kp doc0 doc1 = -- check that if we sign doc0 and then check the
@@ -64,13 +68,13 @@ testSignVerifyEd25519DocumentCollision = property $ ck
 
 
 tests :: Spec
-tests = parallel $ describe "Concordium.Crypto.Ed25519Signature" $ do
+tests = describe "Concordium.Crypto.Ed25519Signature" $ do
             describe "serialization" $ do
                 it "sign key" $ testSerializeSignKeyEd25519 
                 it "verify key" $ testSerializeVerifyKeyEd25519 
                 it "key pair" $ testSerializeKeyPairEd25519 
                 it "signature" $ testSerializeSignatureEd25519
             it "verify signature" $ withMaxSuccess 10000 $ testSignVerifyEd25519
-            it "verify fails when checking different document" $ withMaxSuccess 100000 $ testSignVerifyEd25519DocumentCollision
-            it "no collision on document" $ withMaxSuccess 100000 $ testNoDocCollisionEd25519
-            it "no collision on key pair" $ withMaxSuccess 100000 $ testNoKeyPairCollisionEd25519
+            it "verify fails when checking different document" $ withMaxSuccess 10000 $ testSignVerifyEd25519DocumentCollision
+            it "no collision on document" $ withMaxSuccess 10000 $ testNoDocCollisionEd25519
+            it "no collision on key pair" $ withMaxSuccess 10000 $ testNoKeyPairCollisionEd25519

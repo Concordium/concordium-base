@@ -12,13 +12,13 @@
 #![allow(non_snake_case)]
 
 use core::fmt::{self, Display};
-use pairing::PrimeFieldDecodingError;
+use curve_arithmetic::curve_arithmetic::FieldDecodingError;
 
 /// Internal errors.  
 
 #[derive(Debug)]
 pub(crate) enum InternalError {
-    DecodingError(PrimeFieldDecodingError),
+    DecodingError(FieldDecodingError),
     DivisionByZero,
 }
 

@@ -13,30 +13,28 @@ use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
+#[cfg(feature = "serde")]
+use std::marker::PhantomData;
 
-use crate::{
-    constants::*,
-    errors::{InternalError::*, *},
-};
-use pairing::{
-    bls12_381::{G1Compressed, G1},
-    CurveAffine, CurveProjective, EncodedPoint,
-};
-#[cfg(test)]
+use crate::errors::*;
+
+use curve_arithmetic::curve_arithmetic::*;
+
 use rand::*;
+use std::io::Cursor;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub struct Cipher(pub(crate) G1, pub(crate) G1);
+pub struct Cipher<C: Curve>(pub C, pub C);
 
-impl Cipher {
+impl<C: Curve> Cipher<C> {
     /// Convert this cipher key to a byte array.
 
     #[inline]
-    pub fn to_bytes(&self) -> [u8; CIPHER_LENGTH] {
-        let mut ar = [0u8; CIPHER_LENGTH];
-        ar[..CIPHER_LENGTH / 2].copy_from_slice(self.0.into_affine().into_compressed().as_ref());
-        ar[CIPHER_LENGTH / 2..].copy_from_slice(self.1.into_affine().into_compressed().as_ref());
-        ar
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut ar = Vec::with_capacity(2 * C::GROUP_ELEMENT_LENGTH);
+        ar.extend_from_slice(&self.0.curve_to_bytes());
+        ar.extend_from_slice(&self.1.curve_to_bytes());
+        ar.into_boxed_slice()
     }
 
     /// Construct a cipher from a slice of bytes.
@@ -44,23 +42,10 @@ impl Cipher {
     /// A `Result` whose okay value is a cipher key or whose error value
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes_unchecked(bytes: &[u8]) -> Result<Cipher, ElgamalError> {
-        if bytes.len() != CIPHER_LENGTH {
-            return Err(ElgamalError(CipherLengthError));
-        }
-        let mut g = G1Compressed::empty();
-        let mut h = G1Compressed::empty();
-        g.as_mut().copy_from_slice(&bytes[0..CIPHER_LENGTH / 2]);
-        h.as_mut()
-            .copy_from_slice(&bytes[CIPHER_LENGTH / 2..CIPHER_LENGTH]);
-
-        match g.into_affine_unchecked() {
-            Err(x) => Err(ElgamalError(GDecodingError(x))),
-            Ok(g_affine) => match h.into_affine_unchecked() {
-                Err(x) => Err(ElgamalError(GDecodingError(x))),
-                Ok(h_affine) => Ok(Cipher(G1::from(g_affine), G1::from(h_affine))),
-            },
-        }
+    pub fn from_bytes_unchecked(bytes: &mut Cursor<&[u8]>) -> Result<Cipher<C>, ElgamalError> {
+        let g = C::bytes_to_curve_unchecked(bytes)?;
+        let h = C::bytes_to_curve_unchecked(bytes)?;
+        Ok(Cipher(g, h))
     }
 
     /// Construct a cipher from a slice of bytes.
@@ -68,29 +53,23 @@ impl Cipher {
     /// A `Result` whose okay value is a cipher key or whose error value
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<Cipher, ElgamalError> {
-        if bytes.len() != CIPHER_LENGTH {
-            return Err(ElgamalError(CipherLengthError));
-        }
-        let mut g = G1Compressed::empty();
-        let mut h = G1Compressed::empty();
-        g.as_mut().copy_from_slice(&bytes[0..CIPHER_LENGTH / 2]);
-        h.as_mut()
-            .copy_from_slice(&bytes[CIPHER_LENGTH / 2..CIPHER_LENGTH]);
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Cipher<C>, ElgamalError> {
+        let g = C::bytes_to_curve(bytes)?;
+        let h = C::bytes_to_curve(bytes)?;
+        Ok(Cipher(g, h))
+    }
 
-        match g.into_affine() {
-            Err(x) => Err(ElgamalError(GDecodingError(x))),
-            Ok(g_affine) => match h.into_affine() {
-                Err(x) => Err(ElgamalError(GDecodingError(x))),
-                Ok(h_affine) => Ok(Cipher(G1::from(g_affine), G1::from(h_affine))),
-            },
-        }
+    /// Generate a random cipher.
+    pub fn generate<T>(csprng: &mut T) -> Self
+    where
+        T: Rng, {
+        Cipher(C::generate(csprng), C::generate(csprng))
     }
 }
 
 // serialization feature for cipher
 #[cfg(feature = "serde")]
-impl Serialize for Cipher {
+impl<C: Curve> Serialize for Cipher<C> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer, {
@@ -99,44 +78,50 @@ impl Serialize for Cipher {
 }
 
 #[cfg(feature = "serde")]
-impl<'d> Deserialize<'d> for Cipher {
+impl<'d, C: Curve> Deserialize<'d> for Cipher<C> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'d>, {
-        struct CipherVisitor;
+        struct CipherVisitor<C: Curve>(PhantomData<C>);
 
-        impl<'d> Visitor<'d> for CipherVisitor {
-            type Value = Cipher;
+        impl<'d, C: Curve> Visitor<'d> for CipherVisitor<C> {
+            type Value = Cipher<C>;
 
             fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 formatter.write_str("An Elgamal Cipher key as a 96-bytes")
             }
 
-            fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Cipher, E>
+            fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Cipher<C>, E>
             where
-                E: SerdeError, {
+                E: SerdeError,
+                C: Curve, {
                 Cipher::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }
         }
-        deserializer.deserialize_bytes(CipherVisitor)
+        deserializer.deserialize_bytes(CipherVisitor(PhantomData))
     }
 }
-#[test]
-pub fn cipher_to_byte_conversion() {
-    let mut csprng = thread_rng();
-    for _i in 1..100 {
-        let a = G1::rand(&mut csprng);
-        let b = G1::rand(&mut csprng);
-        let c = Cipher(a, b);
-        let s = Cipher::from_bytes(&c.to_bytes());
-        assert!(s.is_ok());
-        assert_eq!(c, s.unwrap());
-        // let sk = SecretKey::generate(&mut csprng);
-        // let pk = PublicKey::from(&sk);
-        // let r = pk.to_bytes();
-        // let res_pk2= PublicKey::from_bytes(&r);
-        // assert!(res_pk2.is_ok());
-        // let pk2= res_pk2.unwrap();
-        // assert_eq!(pk2, pk);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::{G1, G2};
+
+    macro_rules! macro_test_cipher_to_byte_conversion {
+        ($function_name:ident, $curve_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for _i in 1..100 {
+                    let c: Cipher<$curve_type> = Cipher::generate(&mut csprng);
+                    let s = Cipher::from_bytes(&mut Cursor::new(&c.to_bytes()));
+                    assert!(s.is_ok());
+                    assert_eq!(c, s.unwrap());
+                }
+            }
+        };
     }
+
+    macro_test_cipher_to_byte_conversion!(key_to_cipher_conversion_g1, G1);
+    macro_test_cipher_to_byte_conversion!(key_to_cipher_conversion_g2, G2);
 }

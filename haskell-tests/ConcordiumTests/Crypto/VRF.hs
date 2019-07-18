@@ -40,7 +40,7 @@ testProofToHashDeterministic = property $ \kp doc0 -> monadicIO $ do
         return $ VRF.proofToHash pf1 === VRF.proofToHash pf2
 
 tests :: Spec
-tests = parallel $ describe "Concordium.Crypto.VRF" $ do
+tests = describe "Concordium.Crypto.VRF" $ do
     describe "serialization" $ do
         it "public key" testSerializePublicKey
         it "private key" testSerializePrivateKey

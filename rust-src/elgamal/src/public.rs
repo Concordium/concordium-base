@@ -20,82 +20,68 @@ use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
+#[cfg(feature = "serde")]
+use std::marker::PhantomData;
 
-use pairing::{
-    bls12_381::{Fr, G1Compressed, G1},
-    CurveAffine, CurveProjective, EncodedPoint,
-};
+use crate::{cipher::*, errors::*, message::*, secret::*};
 
-use crate::{
-    cipher::*,
-    constants::*,
-    errors::{
-        InternalError::{GDecodingError, PublicKeyLengthError},
-        *,
-    },
-    message::*,
-    secret::*,
-};
+use curve_arithmetic::Curve;
+
+use std::io::Cursor;
 
 /// Elgamal public key .
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub struct PublicKey(pub(crate) G1);
+pub struct PublicKey<C: Curve>(pub C);
 
-impl Debug for PublicKey {
+impl<C: Curve> Debug for PublicKey<C> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         write!(f, "PublicKey({:?})", self.0)
     }
 }
 
-impl<'a> From<&'a SecretKey> for PublicKey {
+impl<'a, C: Curve> From<&'a SecretKey<C>> for PublicKey<C> {
     /// Derive this public key from its corresponding `SecretKey`.
-    fn from(secret_key: &SecretKey) -> PublicKey {
-        let mut t = G1::one();
-        t.mul_assign(secret_key.0);
-        PublicKey(t)
+    fn from(secret_key: &SecretKey<C>) -> PublicKey<C> {
+        let g: C = PublicKey::generator();
+        PublicKey(g.mul_by_scalar(&secret_key.0))
     }
 }
 
-impl PublicKey {
+impl<C: Curve> PublicKey<C> {
     /// Convert this public key to a byte array.
     #[inline]
-    pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
-        let mut ar = [0u8; PUBLIC_KEY_LENGTH];
-        ar.copy_from_slice(self.0.into_affine().into_compressed().as_ref());
-        ar
-    }
+    pub fn to_bytes(&self) -> Box<[u8]> { C::curve_to_bytes(&self.0) }
 
     /// Construct a public key from a slice of bytes.
     ///
     /// A `Result` whose okay value is a public key or whose error value
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey, ElgamalError> {
-        if bytes.len() != PUBLIC_KEY_LENGTH {
-            return Err(ElgamalError(PublicKeyLengthError));
-        }
-        let mut g = G1Compressed::empty();
-        g.as_mut().copy_from_slice(&bytes);
-        match g.into_affine() {
-            Err(x) => Err(ElgamalError(GDecodingError(x))),
-            Ok(g_affine) => Ok(PublicKey(G1::from(g_affine))),
-        }
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, ElgamalError> {
+        let h = C::bytes_to_curve(bytes)?;
+        Ok(PublicKey(h))
     }
 
     #[inline]
-    pub fn encrypt<T>(&self, csprng: &mut T, m: &Message) -> Cipher
+    /// Encrypt and returned the randomness used. NB: Randomness must be kept
+    /// private.
+    pub fn encrypt_rand<T>(&self, csprng: &mut T, m: &Message<C>) -> (Cipher<C>, C::Scalar)
     where
         T: Rng, {
-        let fr = Fr::rand(csprng); // k
-        let mut t = G1::one(); // g
-        t.mul_assign(fr); // kg
-        let mut s = self.0;
-        s.mul_assign(fr); // kag
-        s.add_assign(&m.0); // kag + m
-        Cipher(t, s)
+        let k = C::generate_scalar(csprng);
+        let g = C::one_point().mul_by_scalar(&k);
+        let s = self.0.mul_by_scalar(&k).plus_point(&m.0);
+        (Cipher(g, s), k)
     }
 
-    // pub fn encrypt_bin_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
+    #[inline]
+    pub fn encrypt<T>(&self, csprng: &mut T, m: &Message<C>) -> Cipher<C>
+    where
+        T: Rng, {
+        self.encrypt_rand(csprng, m).0
+    }
+
+    // pub fn encrypt_bin_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher<C>
     // where T:Rng{
     // if !e {
     // self.encrypt(csprng, &Message(G1::zero()))
@@ -103,7 +89,7 @@ impl PublicKey {
     // self.encrypt(csprng, &Message(G1::one()))
     // }
     // }
-    // pub fn encrypt_binary_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher
+    // pub fn encrypt_binary_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher<C>
     // where T:Rng {
     // let mut csprng = thread_rng();
     // if !e {
@@ -112,43 +98,54 @@ impl PublicKey {
     // self.encrypt(&mut csprng, &Message(G1::one()))
     // }
     // }
-    pub fn hide(&self, k: Fr, m: &Message) -> Cipher {
-        let mut t = G1::one(); // g
-        t.mul_assign(k); // kg
-        let mut s = self.0;
-        s.mul_assign(k); // kag
-        s.add_assign(&m.0); // kag + m
+    pub fn hide(&self, k: &C::Scalar, message: &Message<C>) -> Cipher<C> {
+        let g = C::one_point();
+        let t = g.mul_by_scalar(k);
+        let s = self.0.mul_by_scalar(&k).plus_point(&message.0);
         Cipher(t, s)
     }
 
-    pub fn hide_binary_exp(&self, h: Fr, e: bool) -> Cipher {
+    pub fn hide_binary_exp(&self, h: &C::Scalar, e: bool) -> Cipher<C> {
         if !e {
-            self.hide(h, &Message(G1::zero()))
+            self.hide(h, &Message(C::zero_point()))
         } else {
-            self.hide(h, &Message(G1::one()))
+            self.hide(h, &Message(C::one_point()))
         }
     }
 
-    pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &Fr) -> Cipher
+    /// Encrypt as an exponent, and return the randomness used.
+    pub fn encrypt_exponent_rand<T>(
+        &self,
+        csprng: &mut T,
+        e: &C::Scalar,
+    ) -> (Cipher<C>, C::Scalar)
     where
         T: Rng, {
-        let mut m = G1::one(); // g
-        let e2 = *e;
-        m.mul_assign(e2); // g^e
-        self.encrypt(csprng, &Message(m))
+        let m = C::one_point().mul_by_scalar(e);
+        self.encrypt_rand(csprng, &Message(m))
     }
 
-    pub fn encrypt_exponent_vec<T>(&self, csprng: &mut T, e: &[Fr]) -> Vec<Cipher>
+    pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &C::Scalar) -> Cipher<C>
+    where
+        T: Rng, {
+        self.encrypt_exponent_rand(csprng, e).0
+    }
+
+    pub fn encrypt_exponent_vec<T>(&self, csprng: &mut T, e: &[C::Scalar]) -> Vec<Cipher<C>>
     where
         T: Rng, {
         e.iter()
             .map(|x| self.encrypt_exponent(csprng, &x))
             .collect()
     }
+
+    /// TODO: This is a hack to get the prototype working. Abstraction layers
+    /// need a rethink.
+    pub fn generator() -> C { C::one_point() }
 }
 
 #[cfg(feature = "serde")]
-impl Serialize for PublicKey {
+impl<C: Curve> Serialize for PublicKey<C> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer, {
@@ -157,39 +154,53 @@ impl Serialize for PublicKey {
 }
 
 #[cfg(feature = "serde")]
-impl<'d> Deserialize<'d> for PublicKey {
+impl<'d, C: Curve> Deserialize<'d> for PublicKey<C> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'d>, {
-        struct PublicKeyVisitor;
+        struct PublicKeyVisitor<C: Curve>(PhantomData<C>);
 
-        impl<'d> Visitor<'d> for PublicKeyVisitor {
-            type Value = PublicKey;
+        impl<'d, C: Curve> Visitor<'d> for PublicKeyVisitor<C> {
+            type Value = PublicKey<C>;
 
             fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 formatter.write_str("An Elgamal public key as a 48-bytes")
             }
 
-            fn visit_bytes<E>(self, bytes: &[u8]) -> Result<PublicKey, E>
+            fn visit_bytes<E>(self, bytes: &[u8]) -> Result<PublicKey<C>, E>
             where
                 E: SerdeError, {
                 PublicKey::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
             }
         }
-        deserializer.deserialize_bytes(PublicKeyVisitor)
+        deserializer.deserialize_bytes(PublicKeyVisitor(PhantomData))
     }
 }
 
-#[test]
-pub fn key_to_byte_conversion() {
-    let mut csprng = thread_rng();
-    for _i in 1..100 {
-        let sk = SecretKey::generate(&mut csprng);
-        let pk = PublicKey::from(&sk);
-        let r = pk.to_bytes();
-        let res_pk2 = PublicKey::from_bytes(&r);
-        assert!(res_pk2.is_ok());
-        let pk2 = res_pk2.unwrap();
-        assert_eq!(pk2, pk);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::{G1, G2};
+
+    macro_rules! macro_test_key_to_byte_conversion {
+        ($function_name:ident, $curve_type:path) => {
+            #[test]
+            pub fn $function_name() {
+                let mut csprng = thread_rng();
+                for _i in 1..100 {
+                    let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
+                    let pk = PublicKey::from(&sk);
+                    let r = pk.to_bytes();
+                    let res_pk2 = PublicKey::from_bytes(&mut Cursor::new(&r));
+                    assert!(res_pk2.is_ok());
+                    let pk2 = res_pk2.unwrap();
+                    assert_eq!(pk2, pk);
+                }
+            }
+        };
     }
+
+    macro_test_key_to_byte_conversion!(key_to_byte_conversion_g1, G1);
+    macro_test_key_to_byte_conversion!(key_to_byte_conversion_g2, G2);
+
 }

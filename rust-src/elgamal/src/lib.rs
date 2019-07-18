@@ -13,10 +13,9 @@ extern crate rayon;
 extern crate serde;
 
 pub mod cipher;
-mod constants;
 pub mod elgamal;
 mod errors;
-mod message;
+pub mod message;
 pub mod public;
 pub mod secret;
 
