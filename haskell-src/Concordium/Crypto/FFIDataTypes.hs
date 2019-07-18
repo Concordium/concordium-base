@@ -16,6 +16,8 @@ import Concordium.Crypto.FFIHelpers
 import Data.Word
 import Data.ByteString as BS
 
+import qualified Data.Aeson as AE
+
 newtype PedersenKey = PedersenKey (ForeignPtr PedersenKey)
 newtype PsSigKey = PsSigKey (ForeignPtr PsSigKey)
 newtype ElgamalGen = ElgamalGen (ForeignPtr ElgamalGen)
@@ -75,6 +77,12 @@ instance Serialize PedersenKey where
 instance Show PedersenKey where
   show = byteStringToHex . BS.drop 4 . encode
 
+instance AE.ToJSON PedersenKey where
+  toJSON v = AE.String (serializeBase16WithLength4 v)
+
+instance AE.FromJSON PedersenKey where
+  parseJSON = AE.withText "PedersenKey in base16" deserializeBase16WithLength4
+
 -- |This instance should only be used for testing
 instance Eq PedersenKey where
   key == key' = encode key == encode key'
@@ -106,6 +114,12 @@ instance Show PsSigKey where
 instance Eq PsSigKey where
   key == key' = encode key == encode key'
 
+instance AE.ToJSON PsSigKey where
+  toJSON v = AE.String (serializeBase16WithLength4 v)
+
+instance AE.FromJSON PsSigKey where
+  parseJSON = AE.withText "PsSigKey in base16" deserializeBase16WithLength4
+
 generatePsSigKey :: Int -> IO PsSigKey
 generatePsSigKey n = do
   ptr <- generatePsSigKeyPtr (fromIntegral n)
@@ -133,6 +147,12 @@ instance Show ElgamalGen where
 instance Eq ElgamalGen where
   key == key' = encode key == encode key'
 
+instance AE.ToJSON ElgamalGen where
+  toJSON v = AE.String (serializeBase16 v)
+
+instance AE.FromJSON ElgamalGen where
+  parseJSON = AE.withText "Elgamal generator in base16" deserializeBase16
+
 generateElgamalGen :: IO ElgamalGen
 generateElgamalGen = do
   ptr <- generateElgamalGenPtr
@@ -158,6 +178,12 @@ instance Show ElgamalPublicKey where
 instance Eq ElgamalPublicKey where
   key == key' = encode key == encode key'
 
+instance AE.ToJSON ElgamalPublicKey where
+  toJSON v = AE.String (serializeBase16 v)
+
+instance AE.FromJSON ElgamalPublicKey where
+  parseJSON = AE.withText "Elgamal public key in base16" deserializeBase16
+
 generateElgamalPublicKey :: IO ElgamalPublicKey
 generateElgamalPublicKey = do
   ptr <- generateElgamalPublicKeyPtr
@@ -182,6 +208,12 @@ instance Show ElgamalCipher where
 -- |This instance should only be used for testing
 instance Eq ElgamalCipher where
   key == key' = encode key == encode key'
+
+instance AE.ToJSON ElgamalCipher where
+  toJSON v = AE.String (serializeBase16 v)
+
+instance AE.FromJSON ElgamalCipher where
+  parseJSON = AE.withText "Elgamal cipher in base16" deserializeBase16
 
 generateElgamalCipher :: IO ElgamalCipher
 generateElgamalCipher = do

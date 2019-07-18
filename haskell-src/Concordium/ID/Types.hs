@@ -109,11 +109,7 @@ instance ToJSON CredentialRegistrationID where
 
 -- Data (serializes with `putByteString :: Bytestring -> Put`)
 instance FromJSON CredentialRegistrationID where
-  parseJSON v = do
-    crid <- parseJSON v
-    case decode . fst . BS16.decode . Text.encodeUtf8 $ crid of
-      Left e  -> fail e
-      Right n -> return n
+  parseJSON = withText "Credential registration ID in base16" deserializeBase16
 
 newtype Proofs = Proofs ByteString
     deriving(Eq)
@@ -151,18 +147,11 @@ instance Serialize AttributeValue where
       3 -> ATWord64 <$> getWord64be
       _ -> fail "Uknown attribute type."
 
-toBase16 :: Serialize a => a -> Text.Text
-toBase16 = Text.decodeUtf8 . BS16.encode . encode
-
 instance ToJSON AttributeValue where
-  toJSON v = String (toBase16 v)
+  toJSON v = String (serializeBase16 v)
 
 instance FromJSON AttributeValue where
-  parseJSON v = do
-    aValueEncoded <- parseJSON v
-    case decode . fst . BS16.decode . Text.encodeUtf8 $ aValueEncoded of
-      Left e  -> fail e
-      Right n -> return n
+  parseJSON = withText "AttributeValue" deserializeBase16
 
 -- |For the moment the policies we support are simply opening of specific commitments.
 data PolicyItem = PolicyItem {
@@ -233,11 +222,7 @@ instance ToJSON AREnc where
   toJSON v = toJSON $ show v
 
 instance FromJSON AREnc where
-  parseJSON v = do
-    arEnc <- parseJSON v
-    case decode . fst . BS16.decode . Text.encodeUtf8 $ arEnc of
-      Left e  -> fail e
-      Right n -> return n
+  parseJSON v = AREnc <$> parseJSON v
 
 -- |Data needed on-chain to revoke anonymity of the account holder.
 data AnonymityRevocationData = AnonymityRevocationData {

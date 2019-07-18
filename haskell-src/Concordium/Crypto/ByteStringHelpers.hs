@@ -19,7 +19,11 @@ import Data.Serialize
 import qualified Data.ByteString.Base16 as BS16
 import Data.Text.Encoding as Text
 
+import Control.Monad.Fail(MonadFail)
 import qualified Data.Aeson as AE
+import qualified Data.Aeson.Types as AE
+import qualified Data.Text as Text
+import Prelude hiding (fail)
 
 wordToHex :: Word8 -> [Char]
 wordToHex x = printf "%.2x" x
@@ -115,4 +119,41 @@ instance AE.ToJSON ByteStringHex where
 
 -- |JSON instances based on base16 encoding.
 instance AE.FromJSON ByteStringHex where
-  parseJSON v = ByteStringHex . fst . BS16.decode . Text.encodeUtf8 <$> AE.parseJSON v
+  parseJSON = AE.withText "ByteStringHex" $ \t ->
+    let (bs, rest) = BS16.decode (Text.encodeUtf8 t)
+    in if BS.null rest then return (ByteStringHex bs)
+       else AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
+
+-- |Use the serialize instance of a type to deserialize 
+deserializeBase16 :: (Serialize a, MonadFail m) => Text.Text -> m a
+deserializeBase16 t =
+        if BS.null rest then
+            case decode bs of
+                Left er -> fail er
+                Right r -> return r
+        else
+            fail $ "Could not decode as base-16: " ++ show t
+    where
+        (bs, rest) = BS16.decode (Text.encodeUtf8 t)
+
+-- |Use the serialize instance to convert from base 16 to value, but add
+-- explicit length as 4 bytes big endian in front.
+deserializeBase16WithLength4 :: (Serialize a, MonadFail m) => Text.Text -> m a
+deserializeBase16WithLength4 t =
+        if BS.null rest then
+            case decode (runPut (putWord32be (fromIntegral (BS.length bs))) <> bs) of
+                Left er -> fail er
+                Right r -> return r
+        else
+            fail $ "Could not decode as base-16: " ++ show t
+    where
+        (bs, rest) = BS16.decode (Text.encodeUtf8 t)
+
+
+serializeBase16 :: (Serialize a) => a -> Text.Text
+serializeBase16 = Text.decodeUtf8 . BS16.encode . encode
+
+-- |Serialize a type whose serialization puts an explicit length up front.
+-- The length is 4 bytes and is cut off by this function.
+serializeBase16WithLength4 :: (Serialize a) => a -> Text.Text
+serializeBase16WithLength4 = Text.decodeUtf8 . BS16.encode . BS.drop 4 . encode
