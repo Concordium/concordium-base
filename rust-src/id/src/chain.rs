@@ -196,16 +196,18 @@ fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 ) -> bool {
     let ps_sig::Signature(a, b) = blinded_sig;
     let (eval_pair, eval) = (b, P::G_2::one_point());
-    let (g, h) = ((commitment_key.0)[0], commitment_key.1);
-    let ps_sig::PublicKey(_gen1, _gen2, _, yxs, x) = ip_pub_key;
+    let (g_base, h_base) = ((commitment_key.0)[0], commitment_key.1);
+    let ps_sig::PublicKey(_gen1, _gen2, _, yxs, ip_pub_key_x) = ip_pub_key;
 
-    let (p_pair, p) = (a, x);
+    let (p_pair, p) = (a, ip_pub_key_x);
 
     let (q_pair, q) = (a, P::G_2::one_point());
 
-    let n = commitments.cmm_attributes.len();
+    // number of commitments in the attribute list
+    // to these we add commitments to idcredsec and prf key K
+    let user_cmm_atts_len = commitments.cmm_attributes.len();
 
-    let gxs = yxs[..n + 2].to_vec();
+    let gxs = yxs[..user_cmm_atts_len + 2].to_vec();
 
     let gxs_pair = a; // CHECK with Bassel
 
@@ -218,7 +220,12 @@ fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     com_eq_sig::verify_com_eq_sig::<P, C>(
         &challenge_prefix,
         &((*eval_pair, eval), comm_vec),
-        &((*p_pair, *p), (*q_pair, q), (*gxs_pair, gxs), (g, h)),
+        &(
+            (*p_pair, *p),
+            (*q_pair, q),
+            (*gxs_pair, gxs),
+            (g_base, h_base),
+        ),
         proof,
     )
 }

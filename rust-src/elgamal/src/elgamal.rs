@@ -176,7 +176,6 @@ pub fn chunks_to_value<C: Curve>(chunks: Vec<C::Scalar>) -> C::Scalar {
     let chunk_size = C::SCALAR_LENGTH / number_of_chunks;
     let assertion_vec = vec![0u8; C::SCALAR_LENGTH - chunk_size];
     let mut scalar_bytes: Vec<u8> = Vec::with_capacity(C::SCALAR_LENGTH);
-    let mut i = 0;
     for chunk in chunks.iter() {
         let chunk_bytes = &*C::scalar_to_bytes(&chunk);
         assert_eq!(
@@ -184,7 +183,6 @@ pub fn chunks_to_value<C: Curve>(chunks: Vec<C::Scalar>) -> C::Scalar {
             assertion_vec.as_slice()
         );
         scalar_bytes.extend_from_slice(&chunk_bytes[C::SCALAR_LENGTH - chunk_size..]);
-        i = i + 1;
     }
     C::bytes_to_scalar(&mut Cursor::new(&scalar_bytes)).unwrap()
 }
@@ -199,7 +197,7 @@ pub fn encrypt_in_chunks<C: Curve, R: Rng>(
     pk.encrypt_exponent_vec(csprng, &chunks.as_slice())
 }
 
-pub fn decrypt_from_chunks<C: Curve>(sk: &SecretKey<C>, cipher: &Vec<Cipher<C>>) -> C::Scalar {
+pub fn decrypt_from_chunks<C: Curve>(sk: &SecretKey<C>, cipher: &[Cipher<C>]) -> C::Scalar {
     let scalars = cipher.into_par_iter().map(|c| sk.decrypt_exponent(c));
     chunks_to_value::<C>(scalars.collect())
 }
@@ -554,7 +552,7 @@ mod tests {
     }
 
     macro_test_chunking! {
-        chunking_test_G_1,
+        chunking_test_g1,
         G1
     }
 
@@ -566,7 +564,7 @@ mod tests {
                 let sk = SecretKey::<$curve_type>::generate(&mut csprng);
                 let pk = PublicKey::<$curve_type>::from(&sk);
                 // let possible_chunk_sizes = [1, 2, 4];
-                let possible_chunk_sizes = [4];
+                let possible_chunk_sizes = [2];
 
                 for _i in 1..2 {
                     let scalar = <$curve_type>::generate_scalar(&mut csprng);
@@ -587,7 +585,7 @@ mod tests {
     }
 
     macro_test_chunked_encrypt_decrypt! {
-        chunked_encrypt_decrypt_test_G_1,
+        chunked_encrypt_decrypt_test_g1,
         G1
     }
 }

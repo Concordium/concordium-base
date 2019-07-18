@@ -91,7 +91,7 @@ pub fn prove_aggregate_dlog<T: Curve, R: Rng>(
 
 pub fn verify_aggregate_dlog<T: Curve>(
     challenge_prefix: &[u8],
-    coeff: &Vec<T>,
+    coeff: &[T],
     public: &T,
     proof: &AggregateDlogProof<T>,
 ) -> bool {

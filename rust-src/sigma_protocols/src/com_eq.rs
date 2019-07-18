@@ -55,7 +55,7 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
     secret: &(Vec<T::Scalar>, Vec<T::Scalar>), //([b_i], [a_i])
     csprng: &mut R,
 ) -> ComEqProof<T> {
-    let (g, h, gxs) = coeff;
+    let (g_base, h_base, gxs) = coeff;
     let (bxs, axs) = secret;
     let (cxs, y) = evaluation;
     let n = cxs.len();
@@ -84,10 +84,12 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
             let s_i = T::generate_scalar(csprng);
             rands[i] = (r_i, s_i);
             tmp_u = tmp_u.plus_point(&gxs[i].mul_by_scalar(&r_i));
-            vxs[i] = g.mul_by_scalar(&r_i).plus_point(&h.mul_by_scalar(&s_i));
+            vxs[i] = g_base
+                .mul_by_scalar(&r_i)
+                .plus_point(&h_base.mul_by_scalar(&s_i));
             hasher2.input(&*vxs[i].curve_to_bytes());
         }
-        hasher2.input(&*tmp_u.curve_to_bytes());
+        hasher2.input(tmp_u.curve_to_bytes());
         hash.copy_from_slice(hasher2.result().as_slice());
         match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
             Err(_) => {}
@@ -116,6 +118,8 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
         witness: (wxs, zxs),
     }
 }
+
+#[allow(clippy::many_single_char_names)]
 pub fn verify_com_eq<T: Curve>(
     challenge_prefix: &[u8],
     evaluation: &(Vec<T>, T),
@@ -157,18 +161,8 @@ pub fn verify_com_eq<T: Curve>(
         hasher.input(&*u.curve_to_bytes());
         hash.copy_from_slice(hasher.result().as_slice());
         match T::bytes_to_scalar(&mut Cursor::new(&hash)) {
-            Ok(x) => {
-                if x == *challenge {
-                    return true;
-                } else {
-                    println!("x!= challenge");
-                    return false;
-                }
-            }
-            Err(_) => {
-                println!("wrong hash");
-                false
-            }
+            Ok(x) => x == *challenge,
+            Err(_) => false,
         }
     } else {
         false

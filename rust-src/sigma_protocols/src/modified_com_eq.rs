@@ -48,6 +48,7 @@ impl<T: Curve> ModifiedComEqProof<T> {
     }
 }
 
+#[allow(clippy::many_single_char_names)]
 pub fn prove_com_eq<T: Curve, R: Rng>(
     challenge_prefix: &[u8],
     evaluation: &(Vec<T>, T),
@@ -70,7 +71,7 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
     let mut challenge = T::Scalar::zero();
     let mut zxs = axs.clone();
     let mut wxs = bxs.clone();
-    let mut wit = sec.clone();
+    let mut wit = *sec;
     let mut rands = vec![(T::Scalar::zero(), T::Scalar::zero()); n];
     hasher.input(challenge_prefix);
     for ev in cxs.iter() {
@@ -124,6 +125,7 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
     }
 }
 
+#[allow(clippy::many_single_char_names)]
 pub fn verify_com_eq<T: Curve>(
     challenge_prefix: &[u8],
     evaluation: &(Vec<T>, T),
@@ -149,7 +151,7 @@ pub fn verify_com_eq<T: Curve>(
             return false;
         }
     }
-    let mut p_exp = challenge.clone();
+    let mut p_exp = *challenge;
     p_exp.negate();
     p_exp.add_assign(&T::Scalar::one());
     u_c = u_c.plus_point(&q.mul_by_scalar(&wit));

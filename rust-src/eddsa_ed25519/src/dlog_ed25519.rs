@@ -151,7 +151,7 @@ pub fn verify_dlog_ed25519(
         None => false,
         Some(public) => {
             proof.randomised_point
-                == public * &proof.challenge + &proof.witness * &constants::ED25519_BASEPOINT_TABLE
+                == public * proof.challenge + &proof.witness * &constants::ED25519_BASEPOINT_TABLE
         }
     }
 }

@@ -212,21 +212,6 @@ fn json_to_chi<C: Curve, T: Curve<Scalar = C::Scalar>>(
     Some(info)
 }
 
-fn json_to_example_attribute(v: &Value) -> Option<ExampleAttribute> {
-    let mp = v.as_object()?;
-    if let Some(age) = mp.get("age") {
-        Some(AttributeKind::U8(age.as_u64()? as u8))
-    } else if let Some(citizenship) = mp.get("citizenship") {
-        Some(AttributeKind::U16(citizenship.as_u64()? as u16))
-    } else if let Some(max_account) = mp.get("maxAccount") {
-        Some(AttributeKind::U8(max_account.as_u64()? as u8))
-    } else if let Some(business) = mp.get("business") {
-        Some(AttributeKind::U8(business.as_u64()? as u8))
-    } else {
-        None
-    }
-}
-
 fn alist_to_json(alist: &ExampleAttributeList) -> Value {
     match alist.variant {
         0 => json!({
@@ -400,14 +385,14 @@ fn chain_ar_data_to_json<C: Curve>(ar_data: &ChainArData<C>) -> Value {
     })
 }
 
-fn json_to_chain_ar_data(v: &Value) -> Option<ChainArData<ExampleCurve>> {
-    let ar_name = v.get("arName")?.as_str()?;
-    let id_cred_pub_enc = Cipher::from_bytes(m_json_decode!(v, "idCredPubEnc")).ok()?;
-    Some(ChainArData {
-        ar_name: ar_name.to_owned(),
-        id_cred_pub_enc,
-    })
-}
+// fn json_to_chain_ar_data(v: &Value) -> Option<ChainArData<ExampleCurve>> {
+//     let ar_name = v.get("arName")?.as_str()?;
+//     let id_cred_pub_enc = Cipher::from_bytes(m_json_decode!(v,
+// "idCredPubEnc")).ok()?;     Some(ChainArData {
+//         ar_name: ar_name.to_owned(),
+//         id_cred_pub_enc,
+//     })
+// }
 
 fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>) -> Value {
     json!({

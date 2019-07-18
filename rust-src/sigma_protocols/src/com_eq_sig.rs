@@ -6,6 +6,13 @@ use sha2::{Digest, Sha256};
 use failure::Error;
 use std::io::Cursor;
 
+type ComEqSigProofWitness<P, C> = (
+    (
+        <P as Pairing>::ScalarField,
+        Vec<<P as Pairing>::ScalarField>,
+    ),
+    Vec<<C as Curve>::Scalar>,
+);
 // proof that you know values (m_1,...,m_n), t, (r_1,...,n) such
 // e(a,X') . Prod e(a,Y_j')^m_j . e(a,g')^t = e(b,g')
 // C_j = g^m_j h^_r_j
@@ -15,7 +22,7 @@ use std::io::Cursor;
 pub struct ComEqSigProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     challenge:        P::ScalarField,
     randomised_point: (P::G_2, Vec<C>),
-    witness:          ((P::ScalarField, Vec<P::ScalarField>), Vec<C::Scalar>),
+    witness:          ComEqSigProofWitness<P, C>,
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> PartialEq for ComEqSigProof<P, C> {
@@ -60,16 +67,27 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> ComEqSigProof<P, C> {
     }
 }
 
+type ComEqSigCoefficients<P, C> = (
+    (<P as Pairing>::G_1, <P as Pairing>::G_2),
+    (<P as Pairing>::G_1, <P as Pairing>::G_2),
+    (<P as Pairing>::G_1, Vec<<P as Pairing>::G_2>),
+    (C, C),
+);
+
+type ComEqSigSecret<P, C> = (
+    (
+        <P as Pairing>::ScalarField,
+        Vec<<P as Pairing>::ScalarField>,
+    ),
+    Vec<<C as Curve>::Scalar>,
+);
+
+#[allow(clippy::many_single_char_names)]
 pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
     challenge_prefix: &[u8],
     evaluation: &((P::G_1, P::G_2), Vec<C>),
-    coeff: &(
-        (P::G_1, P::G_2),
-        (P::G_1, P::G_2),
-        (P::G_1, Vec<P::G_2>),
-        (C, C),
-    ),
-    secret: &((P::ScalarField, Vec<P::ScalarField>), Vec<C::Scalar>),
+    coeff: &ComEqSigCoefficients<P, C>,
+    secret: &ComEqSigSecret<P, C>,
     csprng: &mut R,
 ) -> ComEqSigProof<P, C> {
     let ((eval_pair, eval), comm_vec) = evaluation;
@@ -87,7 +105,7 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
     // let mut rands = vec![(T::Scalar::zero(), T::Scalar::zero()); n];
     let mut challenge = <P::G_2 as Curve>::Scalar::zero();
 
-    let mut q_wit = q_sec.clone();
+    let mut q_wit = *q_sec;
 
     let mut gxs_wit = gxs_sec.clone();
     let mut gxs_rands = vec![<P::G_2 as Curve>::Scalar::zero(); n];
@@ -157,15 +175,11 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
     }
 }
 
+#[allow(clippy::many_single_char_names)]
 pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     challenge_prefix: &[u8],
     evaluation: &((P::G_1, P::G_2), Vec<C>),
-    coeff: &(
-        (P::G_1, P::G_2),
-        (P::G_1, P::G_2),
-        (P::G_1, Vec<P::G_2>),
-        (C, C),
-    ),
+    coeff: &ComEqSigCoefficients<P, C>,
     proof: &ComEqSigProof<P, C>,
 ) -> bool {
     let challenge = &proof.challenge;
@@ -196,7 +210,7 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     }
     let mut u_c = <P::TargetField as Field>::one();
     let u_2 = P::pair(*gxs_pair, tmp_u);
-    let mut p_exp = challenge.clone();
+    let mut p_exp = *challenge;
     p_exp.negate();
     p_exp.add_assign(&<P::G_2 as Curve>::Scalar::one());
     let u_4 = P::pair(*p_pair, p.mul_by_scalar(&p_exp));

@@ -65,9 +65,9 @@ pub fn prove_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>, R: Rng>
     hasher.input(&*public_2.curve_to_bytes());
     let mut hash = [0u8; 32];
     let mut suc = false;
-    let mut w_1 = secret.0.clone();
-    let mut w_2 = secret.1.clone();
-    let mut w_3 = secret.2.clone();
+    let mut w_1 = secret.0;
+    let mut w_2 = secret.1;
+    let mut w_3 = secret.2;
     let mut challenge = C1::Scalar::zero();
     let mut randomised_point = (C1::zero_point(), C2::zero_point());
     while !suc {

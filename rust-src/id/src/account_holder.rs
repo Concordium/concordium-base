@@ -119,6 +119,7 @@ where
     (prio, SigRetrievalRandomness(sig_retrieval_rand))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn generate_cdi<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -172,7 +173,7 @@ where
 
     // and then we blind the signature to disassociate it from the message.
     // only the second part is used (as per the protocol)
-    let (blinded_sig, _r, t) = ps_sig::blind_sig(&retrieved_sig, &mut csprng);
+    let (blinded_sig, _r, blinded_sig_rand_sec) = ps_sig::blind_sig(&retrieved_sig, &mut csprng);
 
     // We now compute commitments to all the items in the attribute list.
     // We use the on-chain pedersen commitment key.
@@ -193,7 +194,7 @@ where
         ar_data,
         ip_identity: ip_info.ip_identity.clone(),
         policy: policy.clone(),
-        acc_pub_key: acc_data.verify_key.clone(),
+        acc_pub_key: acc_data.verify_key,
     };
 
     // Compute the challenge prefix by hashing the values.
@@ -246,7 +247,7 @@ where
         &alist,
         &ip_pub_key,
         &blinded_sig,
-        &t,
+        &blinded_sig_rand_sec,
         &mut csprng,
     );
 
@@ -292,6 +293,7 @@ fn open_policy_commitments<C: Curve, AttributeType: Attribute<C::Scalar>>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compute_pok_sig<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -307,25 +309,28 @@ fn compute_pok_sig<
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_pub_key: &ps_sig::PublicKey<P>,
     blinded_sig: &ps_sig::Signature<P>,
-    t: &P::ScalarField,
+    blinded_sig_rand_sec: &P::ScalarField,
     csprng: &mut R,
 ) -> com_eq_sig::ComEqSigProof<P, C> {
     let att_vec = &alist.alist;
-    let n = att_vec.len() + 2; // CHECK
+    // number of user chosen attributes. To these there are always
+    // two attributes (idCredSec and prf key added).
+    let num_user_attributes = att_vec.len() + 2;
+    let num_total_attributes = num_user_attributes + 2;
 
     let ps_sig::Signature(a, b) = blinded_sig;
     let (eval_pair, eval) = (b, P::G_2::one_point());
-    let (g, h) = ((commitment_key.0)[0], commitment_key.1);
-    let ps_sig::PublicKey(_gen1, _gen2, _, yxs, x) = ip_pub_key;
-    assert!(yxs.len() >= n + 2);
+    let (g_base, h_base) = ((commitment_key.0)[0], commitment_key.1);
+    let ps_sig::PublicKey(_gen1, _gen2, _, yxs, ip_pub_key_x) = ip_pub_key;
+    assert!(yxs.len() >= num_total_attributes);
 
-    let (p_pair, p) = (a, x);
+    let (p_pair, p) = (a, ip_pub_key_x);
 
     let (q_pair, q) = (a, P::G_2::one_point());
-    let q_sec = t;
+    let q_sec = blinded_sig_rand_sec;
 
-    let mut gxs = Vec::with_capacity(n + 2);
-    let mut gxs_sec = Vec::with_capacity(n + 2);
+    let mut gxs = Vec::with_capacity(num_total_attributes);
+    let mut gxs_sec = Vec::with_capacity(num_total_attributes);
     gxs_sec.push(*id_cred_sec);
     gxs.push(yxs[0]);
     let prf_key_scalar = prf_key.0;
@@ -335,19 +340,19 @@ fn compute_pok_sig<
     gxs.push(yxs[2]);
     gxs_sec.push(C::scalar_from_u64(alist.expiry).unwrap());
     gxs.push(yxs[3]);
-    for i in 4..n + 2 {
+    for i in 4..num_total_attributes {
         gxs_sec.push(att_vec[i - 4].to_field_element());
         gxs.push(yxs[i]);
     }
 
     let gxs_pair = a; // CHECK with Bassel
 
-    let mut pedersen_rands = Vec::with_capacity(n + 2);
+    let mut pedersen_rands = Vec::with_capacity(num_total_attributes);
     pedersen_rands.push(commitment_rands.id_cred_sec_rand);
     pedersen_rands.push(commitment_rands.prf_rand);
     pedersen_rands.extend_from_slice(&commitment_rands.attributes_rand);
 
-    let mut comm_vec = Vec::with_capacity(n + 2);
+    let mut comm_vec = Vec::with_capacity(num_total_attributes);
     comm_vec.push(commitments.cmm_id_cred_sec.0);
     comm_vec.push(commitments.cmm_prf.0);
     for v in commitments.cmm_attributes.iter() {
@@ -356,7 +361,12 @@ fn compute_pok_sig<
     com_eq_sig::prove_com_eq_sig::<P, C, R>(
         &challenge_prefix,
         &((*eval_pair, eval), comm_vec),
-        &((*p_pair, *p), (*q_pair, q), (*gxs_pair, gxs), (g, h)),
+        &(
+            (*p_pair, *p),
+            (*q_pair, q),
+            (*gxs_pair, gxs),
+            (g_base, h_base),
+        ),
         &((*q_sec, gxs_sec), pedersen_rands),
         csprng,
     )
@@ -420,6 +430,7 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     (cdc, cr)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compute_pok_reg_id<C: Curve, R: Rng>(
     challenge_prefix: &[u8],
     on_chain_commitment_key: &PedersenKey<C>,
@@ -461,6 +472,7 @@ fn compute_pok_reg_id<C: Curve, R: Rng>(
     com_mult::prove_com_mult(csprng, &challenge_prefix, &public, &secret, &coeff)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compute_pok_id_cred_pub<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
     challenge_prefix: &[u8],
     ip_info: &IpInfo<P, C>,

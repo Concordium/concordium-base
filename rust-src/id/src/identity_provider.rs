@@ -106,15 +106,16 @@ fn verify_knowledge_of_id_cred_sec<C: Curve>(
     verify_com_eq(&[], &(vec![*c], *pk), &(*h, *g, vec![*base]), &proof)
 }
 
-fn verify_vrf_key_data<C_1: Curve, C_2: Curve<Scalar = C_1::Scalar>>(
-    comm_1_params: &CommitmentParams<C_1>,
-    comm_1: &PedersenCommitment<C_1>,
-    comm_2_params: &CommitmentParams<C_2>,
-    comm_2: &PedersenCommitment<C_2>,
-    elgamal_params: &ElgamalParams<C_2>,
-    cipher: &Cipher<C_2>,
-    com_eq_diff_grps_proof: &ComEqDiffGrpsProof<C_1, C_2>,
-    comm_enc_eq_proof: &ComEncEqProof<C_2>,
+#[allow(clippy::too_many_arguments)]
+fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
+    comm_1_params: &CommitmentParams<C1>,
+    comm_1: &PedersenCommitment<C1>,
+    comm_2_params: &CommitmentParams<C2>,
+    comm_2: &PedersenCommitment<C2>,
+    elgamal_params: &ElgamalParams<C2>,
+    cipher: &Cipher<C2>,
+    com_eq_diff_grps_proof: &ComEqDiffGrpsProof<C1, C2>,
+    comm_enc_eq_proof: &ComEncEqProof<C2>,
 ) -> bool {
     let (g_1, h_1) = comm_1_params.0;
     let (g_2, h_2) = comm_2_params.0;

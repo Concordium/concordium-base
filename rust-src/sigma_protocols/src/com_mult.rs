@@ -8,11 +8,16 @@ use std::io::Cursor;
 
 use curve_arithmetic::serialization::*;
 
+type ComMultProofWitness<T> = (
+    [(<T as Curve>::Scalar, <T as Curve>::Scalar); 3],
+    <T as Curve>::Scalar,
+);
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ComMultProof<T: Curve> {
     challenge:        T::Scalar,
     randomised_point: ([T; 3], T),
-    witness:          ([(T::Scalar, T::Scalar); 3], T::Scalar),
+    witness:          ComMultProofWitness<T>,
 }
 
 impl<T: Curve> ComMultProof<T> {
@@ -116,7 +121,7 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
                 } else {
                     challenge = x;
                     for i in 0..3 {
-                        let (mut s_1i, mut s_2i) = secret[i].clone();
+                        let (mut s_1i, mut s_2i) = secret[i];
                         let (r_i, t_i) = rands[i];
                         s_1i.mul_assign(&challenge);
                         s_1i.negate();

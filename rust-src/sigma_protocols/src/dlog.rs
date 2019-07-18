@@ -63,7 +63,7 @@ pub fn prove_dlog<T: Curve, R: Rng>(
                     println!("x = 0");
                 } else {
                     challenge = x;
-                    witness = secret.clone();
+                    witness = *secret;
                     witness.mul_assign(&challenge);
                     witness.negate();
                     witness.add_assign(&rand_scalar);
