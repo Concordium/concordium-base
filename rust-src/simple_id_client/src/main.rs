@@ -642,6 +642,10 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
             return;
         }
     };
+    if ar_info.ar_name != ar_data.ar_name {
+        eprintln!("Wrong anonymity revoker private data provided.");
+        return;
+    }
     println!(
         "IdCredPub of the credential owner is {}",
         encode(&private.decrypt(&ar_data.id_cred_pub_enc).to_bytes())
