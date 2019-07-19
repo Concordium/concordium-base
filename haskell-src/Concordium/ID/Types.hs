@@ -67,7 +67,7 @@ newtype IdentityProviderPublicKey = IP_PK PsSigKey
     deriving(Eq, Show, Serialize)
 
 instance ToJSON IdentityProviderIdentity where
-  toJSON v = toJSON $ show v
+  toJSON (IP_ID v) = String (Text.decodeUtf8 v)
 
 instance FromJSON IdentityProviderIdentity where
   parseJSON v = IP_ID . encodeUtf8 <$> parseJSON v
@@ -105,7 +105,7 @@ newtype CredentialRegistrationID = RegIdCred (FBS.FixedByteString RegIdSize)
     deriving Serialize via (FBSHex RegIdSize)
 
 instance ToJSON CredentialRegistrationID where
-  toJSON v = toJSON $ show v
+  toJSON v = String (Text.pack (show v))
 
 -- Data (serializes with `putByteString :: Bytestring -> Put`)
 instance FromJSON CredentialRegistrationID where
@@ -210,7 +210,7 @@ newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
     deriving Show via ElgamalPublicKey
 
 instance ToJSON ARName where
-  toJSON v = toJSON $ show v
+  toJSON (ARName v) = String (Text.decodeUtf8 v)
 
 -- |NB: This just reads the string. No decoding.
 instance FromJSON ARName where
@@ -220,9 +220,7 @@ instance FromJSON ARName where
 newtype AREnc = AREnc ElgamalCipher
     deriving(Eq, Serialize)
     deriving Show via ElgamalCipher
-
-instance ToJSON AREnc where
-  toJSON v = toJSON $ show v
+    deriving ToJSON via AREnc 
 
 instance FromJSON AREnc where
   parseJSON v = AREnc <$> parseJSON v
