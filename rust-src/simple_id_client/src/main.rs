@@ -385,14 +385,14 @@ fn chain_ar_data_to_json<C: Curve>(ar_data: &ChainArData<C>) -> Value {
     })
 }
 
-// fn json_to_chain_ar_data(v: &Value) -> Option<ChainArData<ExampleCurve>> {
-//     let ar_name = v.get("arName")?.as_str()?;
-//     let id_cred_pub_enc = Cipher::from_bytes(m_json_decode!(v,
-// "idCredPubEnc")).ok()?;     Some(ChainArData {
-//         ar_name: ar_name.to_owned(),
-//         id_cred_pub_enc,
-//     })
-// }
+fn json_to_chain_ar_data(v: &Value) -> Option<ChainArData<ExampleCurve>> {
+    let ar_name = v.get("arName")?.as_str()?;
+    let id_cred_pub_enc = Cipher::from_bytes(m_json_decode!(v, "idCredPubEnc")).ok()?;
+    Some(ChainArData {
+        ar_name: ar_name.to_owned(),
+        id_cred_pub_enc,
+    })
+}
 
 fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>) -> Value {
     json!({
@@ -574,6 +574,26 @@ If not present a fresh key-pair will be generated.",
                         .value_name("FILE")
                         .help("File to output the JSON transaction payload to."),
                 ),
+        )
+        .subcommand(
+            SubCommand::with_name("revoke-anonymity")
+                .about("Take a deployed credential and determine who it belongs to.")
+                .arg(
+                    Arg::with_name("credential")
+                        .long("credential")
+                        .short("c")
+                        .value_name("FILE")
+                        .required(true)
+                        .help("File with the JSON encoded credential."),
+                )
+                .arg(
+                    Arg::with_name("ar-private")
+                        .long("ar-private")
+                        .short("a")
+                        .value_name("FILE")
+                        .required(true)
+                        .help("File with anonymity revoker's private and public keys."),
+                ),
         );
     let matches = app.get_matches();
     let exec_if = |x: &str| matches.subcommand_matches(x);
@@ -583,6 +603,53 @@ If not present a fresh key-pair will be generated.",
     exec_if("generate-global").map(handle_generate_global);
     exec_if("ip-sign-pio").map(handle_act_as_ip);
     exec_if("deploy-credential").map(handle_deploy_credential);
+    exec_if("revoke-anonymity").map(handle_revoke_anonymity);
+}
+
+/// Revoke the anonymity of the credential.
+fn handle_revoke_anonymity(matches: &ArgMatches) {
+    let v = match matches.value_of("credential").map(read_json_from_file) {
+        Some(Ok(v)) => v,
+        Some(Err(x)) => {
+            eprintln!("Could not read credential because {}", x);
+            return;
+        }
+        None => panic!("Should not happen since the argument is mandatory."),
+    };
+    let ar_data = match v.get("arData").and_then(json_to_chain_ar_data) {
+        Some(ar_data) => ar_data,
+        None => {
+            eprintln!("Could not parse anonymity revocation data.");
+            return;
+        }
+    };
+
+    let v = match matches.value_of("ar-private").map(read_json_from_file) {
+        Some(Ok(v)) => v,
+        Some(Err(x)) => {
+            eprintln!(
+                "Could not read private anonymity revoker data because {}",
+                x
+            );
+            return;
+        }
+        None => panic!("Should not happen since the argument is mandatory."),
+    };
+    let (ar_info, private) = match json_to_private_ar_info(&v) {
+        Some(p) => p,
+        None => {
+            eprintln!("Could not decode the JSON object with private AR data.");
+            return;
+        }
+    };
+    println!(
+        "IdCredPub of the credential owner is {}",
+        encode(&private.decrypt(&ar_data.id_cred_pub_enc).to_bytes())
+    );
+    println!(
+        "Contact the identity provider with this information to get the real-life identity of the \
+         user."
+    );
 }
 
 /// Read the identity object, select attributes to reveal and create a
@@ -1111,6 +1178,24 @@ fn ar_info_to_json<C: Curve>(ar_info: &ArInfo<C>) -> Value {
         "arPublicKey": json_base16_encode(&ar_info.ar_public_key.to_bytes()),
         "arElgamalGenerator": json_base16_encode(&ar_info.ar_elgamal_generator.curve_to_bytes())
     })
+}
+
+fn json_to_private_ar_info<C: Curve>(v: &Value) -> Option<(ArInfo<C>, SecretKey<C>)> {
+    let v = v.as_object()?;
+    let public = v.get("publicArInfo")?;
+    let ar_name = public.get("arName")?.as_str()?.to_owned();
+    let ar_public_key = PublicKey::<C>::from_bytes(m_json_decode!(public, "arPublicKey")).ok()?;
+    let ar_elgamal_generator =
+        C::bytes_to_curve(m_json_decode!(public, "arElgamalGenerator")).ok()?;
+    let private = SecretKey::from_bytes(m_json_decode!(v, "arPrivateKey")).ok()?;
+    Some((
+        ArInfo {
+            ar_name,
+            ar_public_key,
+            ar_elgamal_generator,
+        },
+        private,
+    ))
 }
 
 /// Generate identity providers with public and private information as well as
