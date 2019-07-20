@@ -25,6 +25,7 @@ module Concordium.Crypto.VRF(
 import           Concordium.Crypto.ByteStringHelpers
 import           Data.ByteString            (ByteString)
 import qualified Data.ByteString            as B
+import qualified Data.ByteString.Unsafe as B
 import qualified Data.FixedByteString       as FBS
 import           Foreign.Ptr
 import           Data.Word
@@ -179,18 +180,18 @@ prove (KeyPair (PrivateKey sk) (PublicKey pk)) b = Proof <$>
                                         (FBS.create $ \prf -> 
                                            FBS.withPtr pk $ \pk' -> 
                                                FBS.withPtr sk $ \sk' -> 
-                                                   withByteStringPtr b $ \b' -> 
-                                                       rs_prove prf pk' sk' b' (fromIntegral $ B.length b))
+                                                   B.unsafeUseAsCStringLen b $ \(b', blen) -> 
+                                                       rs_prove prf pk' sk' (castPtr b') (fromIntegral $ blen))
 
 -- |Verify a VRF proof.
 verify :: PublicKey -> ByteString -> Proof -> Bool
 verify (PublicKey pk) alpha (Proof prf) = cIntToBool $ unsafeDupablePerformIO $ 
                                                 FBS.withPtr pk $ \pk' ->
                                                    FBS.withPtr prf $ \pi' ->
-                                                     withByteStringPtr alpha $ \alpha'->
-                                                       rs_verify pk' pi' alpha' (fromIntegral $ B.length alpha)
+                                                     B.unsafeUseAsCStringLen alpha $ \(alpha', alphalen)->
+                                                       rs_verify pk' pi' (castPtr alpha') (fromIntegral $ alphalen)
               where
-                  cIntToBool x =  x > 0
+                  cIntToBool x = x > 0
                                                            
 -- |Generate a 256-bit hash from a VRF proof.
 proofToHash :: Proof -> Hash

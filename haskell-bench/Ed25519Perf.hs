@@ -4,19 +4,20 @@ import Criterion
 import Criterion.Main
 import Criterion.Types
 
-import Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as BS
+import Data.ByteString.Short as BSS
 
 import Concordium.Crypto.SignatureScheme
 import Concordium.Crypto.Ed25519Signature as S
 
 -- setupEnv :: Int -> IO (SignKey, VerifyKey, ByteString)
-setupSignEnv :: Int -> IO (ByteString, ByteString, ByteString)
+setupSignEnv :: Int -> IO (ShortByteString, ShortByteString, BS.ByteString)
 setupSignEnv n = do
   let doc = BS.replicate n '0'
-  kp@(KeyPair (SignKey sk) (VerifyKey pk)) <- newKeyPair
+  (KeyPair (SignKey sk) (VerifyKey pk)) <- newKeyPair
   return (sk, pk, doc)
 
-setupVerifyEnv :: Int -> IO (ByteString, ByteString, ByteString)
+setupVerifyEnv :: Int -> IO (ShortByteString, ShortByteString, BS.ByteString)
 setupVerifyEnv n = do
   let doc = BS.replicate n '8'
   kp@(KeyPair _ (VerifyKey pk)) <- newKeyPair

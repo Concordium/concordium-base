@@ -3,7 +3,7 @@
 module Concordium.Crypto.SHA224 where
 import           Concordium.Crypto.ByteStringHelpers
 import           Data.ByteString            (ByteString)
-import qualified Data.ByteString            as B
+import qualified Data.ByteString.Unsafe as B
 import qualified Data.ByteString.Lazy       as L
 import qualified Data.ByteString.Lazy.Char8 as LC
 import           Data.ByteString.Builder
@@ -41,13 +41,13 @@ createSha224Ctx = do
   ptr <- rs_sha224_init
   if ptr /= nullPtr
     then do
-      foreignPtr <- newForeignPtr_   ptr
+      foreignPtr <- newForeignPtr_ ptr
       return $ Just foreignPtr
     else
       return Nothing
 
 digestSize :: Int
-digestSize = 28 
+digestSize = 28
 
 data DigestSize
 
@@ -91,7 +91,7 @@ hash b = Hash $ unsafeDupablePerformIO $
                                            withForeignPtr ctx_ptr  (\ctx -> hash_final ctx)
 
 hash_update :: ByteString -> Ptr SHA224Ctx ->  IO ()
-hash_update b ptr = withByteStringPtr b $ \message -> rs_sha224_update ptr message (fromIntegral $ B.length b)
+hash_update b ptr = B.unsafeUseAsCStringLen b $ \(message, mlen) -> rs_sha224_update ptr (castPtr message) (fromIntegral mlen)
 
 hash_final :: Ptr SHA224Ctx -> IO (FixedByteString DigestSize)
 hash_final ptr = FBS.create  $ \hsh -> rs_sha224_final hsh ptr
