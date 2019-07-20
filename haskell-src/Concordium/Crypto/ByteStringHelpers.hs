@@ -37,6 +37,10 @@ byteStringToHex b= L.concatMap wordToHex ls
 withByteStringPtr :: ShortByteString -> (Ptr Word8 -> IO a) -> IO a
 withByteStringPtr bs f = BSU.unsafeUseAsCString (BSS.fromShort bs) (f . castPtr)
 
+{-# INLINE withByteStringPtrLen #-}
+withByteStringPtrLen :: ShortByteString -> (Ptr Word8 -> Int -> IO a) -> IO a
+withByteStringPtrLen bs f = BSU.unsafeUseAsCStringLen (BSS.fromShort bs) (\(ptr, len) -> f (castPtr ptr) len)
+
 {-# INLINE withAllocatedShortByteString #-}
 withAllocatedShortByteString :: Int -> (Ptr Word8 -> IO a) -> IO (a, ShortByteString)
 withAllocatedShortByteString n f =

@@ -58,8 +58,8 @@ instance FBS.FixedLength DigestSize where
 newtype Hash = Hash (FBS.FixedByteString DigestSize) deriving (Eq, Ord, Bits, Bounded, Enum)
 
 instance Serialize Hash where
-    put (Hash h) = putByteString $ FBS.toByteString h
-    get = Hash . FBS.fromByteString <$> getByteString digestSize 
+    put (Hash h) = putShortByteString $ FBS.toShortByteString h
+    get = Hash . FBS.fromShortByteString <$> getShortByteString digestSize 
 
 instance Show Hash where
     show (Hash h) = LC.unpack (toLazyByteString $ byteStringHex $ FBS.toByteString h)
@@ -80,7 +80,7 @@ instance Read Hash where
 
 instance Hashable Hash where
     hashWithSalt s (Hash b) = hashWithSalt s (FBS.toByteString b)
-    hash (Hash b) = unsafeDupablePerformIO $ FBS.withPtr b $ \p -> peek (castPtr p)
+    hash (Hash b) = unsafeDupablePerformIO $ FBS.withPtrReadOnly b $ \p -> peek (castPtr p)
 
 hash :: ByteString -> Hash
 hash b = Hash $ unsafeDupablePerformIO $

@@ -55,6 +55,7 @@ Library
                 , vector >= 0.12
                 , template-haskell >= 2.14
                 , text >= 1.2.3.1
+                , primitive == 0.6.*
 
   extra-libraries: ec_vrf_ed25519
                    sha_2, 

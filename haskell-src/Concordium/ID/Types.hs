@@ -16,10 +16,7 @@ import GHC.Generics
 import Data.Hashable
 import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
-import Foreign.Storable(peek)
-import Foreign.Ptr(castPtr)
 import Data.Base58String.Bitcoin
-import System.IO.Unsafe
 import Control.Exception
 import Control.Monad
 import qualified Data.Text as Text
@@ -40,9 +37,9 @@ instance Serialize AccountAddress where
     get = AccountAddress . FBS.fromByteString <$> getByteString accountAddressSize
 
 instance Hashable AccountAddress where
-    hashWithSalt s (AccountAddress b) = hashWithSalt s (FBS.toByteString b)
-    hash (AccountAddress b) = unsafeDupablePerformIO $ FBS.withPtr b $ \p -> peek (castPtr p)
-
+    hashWithSalt s (AccountAddress b) = hashWithSalt s (FBS.toShortByteString b)
+    -- |FIXME: The first byte of the address is mostly the same so this method is not the best.
+    hash (AccountAddress b) = fromIntegral (FBS.unsafeReadWord64 b)
 
 instance Show AccountAddress where
   show = Text.unpack . addressToBase58

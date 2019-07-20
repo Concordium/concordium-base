@@ -3,6 +3,8 @@
 module Concordium.Crypto.SHA256 where
 import           Concordium.Crypto.ByteStringHelpers
 import           Data.ByteString            (ByteString)
+import           Data.ByteString.Short(ShortByteString)
+import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Unsafe as B
 import qualified Data.ByteString.Lazy       as L
 import qualified Data.ByteString.Lazy.Char8 as LC
@@ -17,7 +19,6 @@ import           Data.Hashable
 import           Data.Bits
 import qualified Data.FixedByteString       as FBS
 import           Data.FixedByteString       (FixedByteString)
-import           Foreign.Storable           (peek)
 import           Text.Read
 import           Data.Char
 
@@ -58,8 +59,8 @@ instance FBS.FixedLength DigestSize where
 newtype Hash = Hash (FBS.FixedByteString DigestSize) deriving (Eq, Ord, Bits, Bounded, Enum)
 
 instance Serialize Hash where
-    put (Hash h) = putByteString $ FBS.toByteString h
-    get = Hash . FBS.fromByteString <$> getByteString digestSize 
+    put (Hash h) = putShortByteString $ FBS.toShortByteString h
+    get = Hash . FBS.fromShortByteString <$> getShortByteString digestSize 
 
 instance Show Hash where
     show (Hash h) = LC.unpack (toLazyByteString $ byteStringHex $ FBS.toByteString h)
@@ -79,8 +80,8 @@ instance Read Hash where
     readListPrec = readListPrecDefault
 
 instance Hashable Hash where
-    hashWithSalt s (Hash b) = hashWithSalt s (FBS.toByteString b)
-    hash (Hash b) = unsafeDupablePerformIO $ FBS.withPtr b $ \p -> peek (castPtr p)
+    hashWithSalt s (Hash b) = hashWithSalt s (FBS.toShortByteString b)
+    hash (Hash b) = fromIntegral (FBS.unsafeReadWord64 b)
 
 hash :: ByteString -> Hash
 hash b = Hash $ unsafeDupablePerformIO $
@@ -90,9 +91,23 @@ hash b = Hash $ unsafeDupablePerformIO $
                         Just ctx_ptr -> withForeignPtr ctx_ptr  (\ctx -> hash_update b ctx) >>
                                            withForeignPtr ctx_ptr  (\ctx -> hash_final ctx)
 
+hashShort :: ShortByteString -> Hash
+hashShort b = Hash $ unsafeDupablePerformIO $
+              do maybe_ctx <- createSha256Ctx
+                 case maybe_ctx of
+                   Nothing -> error "Failed to initialize hash"
+                   Just ctx_ptr ->
+                     withForeignPtr ctx_ptr  (\ctx -> hash_update_short b ctx) >>
+                     withForeignPtr ctx_ptr  (\ctx -> hash_final ctx)
+
+
 hash_update :: ByteString -> Ptr SHA256Ctx ->  IO ()
 hash_update b ptr = B.unsafeUseAsCStringLen b $
     \(message, mlen) -> rs_sha256_update ptr (castPtr message) (fromIntegral mlen)
+
+hash_update_short :: ShortByteString -> Ptr SHA256Ctx ->  IO ()
+hash_update_short b ptr = withByteStringPtrLen b $
+    \message mlen -> rs_sha256_update ptr (castPtr message) (fromIntegral mlen)
 
 hash_final :: Ptr SHA256Ctx -> IO (FixedByteString DigestSize)
 hash_final ptr = FBS.create  $ \hsh -> rs_sha256_final hsh ptr
@@ -135,3 +150,9 @@ hashToInt (Hash h) = case runGet getInt64be (FBS.toByteString h) of
 -- Gives the same result a serializing, but more efficient.
 hashToByteString :: Hash -> ByteString
 hashToByteString (Hash h) = FBS.toByteString h
+
+-- |Convert a 'Hash' to a 'ShortByteString'.
+-- Gives the same result a serializing, but more efficient.
+-- This is much more efficient thatn 'hashToByteString'. It involves no copying.
+hashToShortByteString :: Hash -> ShortByteString
+hashToShortByteString (Hash h) = FBS.toShortByteString h

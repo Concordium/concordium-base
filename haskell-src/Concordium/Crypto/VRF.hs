@@ -146,10 +146,12 @@ newPrivKey =
            0 -> error "Private key generation failed"
            _ -> return (PrivateKey sk)
 
+-- |FIXME: This function should not error. It should fail gracefully by returning
+-- Maybe or Either.
 pubKey :: PrivateKey -> IO PublicKey
 pubKey (PrivateKey sk) = do suc <- newIORef (0::Int)
                             pk  <- FBS.create $ \pub -> 
-                                 do pc <- FBS.withPtr sk $ \y -> rs_public_key pub y
+                                 do pc <- FBS.withPtrReadOnly sk $ \y -> rs_public_key pub y
                                     if (pc == 1) 
                                        then writeIORef suc 1
                                        else writeIORef suc 0
@@ -178,16 +180,16 @@ test = do kp@(KeyPair sk pk) <- newKeyPair
 prove :: KeyPair -> ByteString -> IO Proof
 prove (KeyPair (PrivateKey sk) (PublicKey pk)) b = Proof <$>
                                         (FBS.create $ \prf -> 
-                                           FBS.withPtr pk $ \pk' -> 
-                                               FBS.withPtr sk $ \sk' -> 
+                                           FBS.withPtrReadOnly pk $ \pk' -> 
+                                               FBS.withPtrReadOnly sk $ \sk' -> 
                                                    B.unsafeUseAsCStringLen b $ \(b', blen) -> 
                                                        rs_prove prf pk' sk' (castPtr b') (fromIntegral $ blen))
 
 -- |Verify a VRF proof.
 verify :: PublicKey -> ByteString -> Proof -> Bool
 verify (PublicKey pk) alpha (Proof prf) = cIntToBool $ unsafeDupablePerformIO $ 
-                                                FBS.withPtr pk $ \pk' ->
-                                                   FBS.withPtr prf $ \pi' ->
+                                                FBS.withPtrReadOnly pk $ \pk' ->
+                                                   FBS.withPtrReadOnly prf $ \pi' ->
                                                      B.unsafeUseAsCStringLen alpha $ \(alpha', alphalen)->
                                                        rs_verify pk' pi' (castPtr alpha') (fromIntegral $ alphalen)
               where
@@ -196,10 +198,10 @@ verify (PublicKey pk) alpha (Proof prf) = cIntToBool $ unsafeDupablePerformIO $
 -- |Generate a 256-bit hash from a VRF proof.
 proofToHash :: Proof -> Hash
 proofToHash (Proof p) =  Hash $ FBS.unsafeCreate $ \x -> 
-        FBS.withPtr p $ \p' -> rs_proof_to_hash x p' >> return()
+        FBS.withPtrReadOnly p $ \p' -> rs_proof_to_hash x p' >> return()
 
 -- |Verify a VRF public key.
 verifyKey :: PublicKey -> Bool
 verifyKey (PublicKey pk) =  x > 0 
             where
-               x = unsafeDupablePerformIO $ FBS.withPtr pk $ \pk' -> rs_verify_key pk'
+               x = unsafeDupablePerformIO $ FBS.withPtrReadOnly pk rs_verify_key
