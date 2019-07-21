@@ -53,10 +53,10 @@ fbsHex :: FBS.FixedLength a => FBS.FixedByteString a -> String
 fbsHex = byteStringToHex . FBS.toByteString
 
 fbsPut :: FBS.FixedLength a => FBS.FixedByteString a -> Put
-fbsPut = putByteString . FBS.toByteString
+fbsPut = putShortByteString . FBS.toShortByteString
 
 fbsGet :: forall a . FBS.FixedLength a => Get (FBS.FixedByteString a)
-fbsGet = FBS.fromByteString <$> getByteString (FBS.fixedLength (undefined :: a))
+fbsGet = FBS.fromShortByteString <$> getShortByteString (FBS.fixedLength (undefined :: a))
 
 -- |Wrapper used to automatically derive Show instances in base16 for types
 -- simply wrapping bytestrings.

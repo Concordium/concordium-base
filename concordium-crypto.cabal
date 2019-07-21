@@ -22,7 +22,7 @@ Library
   default-language: Haskell2010
   default-extensions:      ForeignFunctionInterface
 
-  ghc-options: -Wall
+  ghc-options: -Wall -O2
   hs-source-dirs: haskell-src
   Exposed-modules: Concordium.Crypto.SHA256	
                    Concordium.Crypto.SHA224	

@@ -1,14 +1,11 @@
-{-# LANGUAGE ForeignFunctionInterface , GeneralizedNewtypeDeriving, OverloadedStrings #-}
+{-# LANGUAGE ForeignFunctionInterface , GeneralizedNewtypeDeriving, DerivingVia, OverloadedStrings #-}
 
 module Concordium.Crypto.SHA256 where
 import           Concordium.Crypto.ByteStringHelpers
 import           Data.ByteString            (ByteString)
 import           Data.ByteString.Short(ShortByteString)
-import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Unsafe as B
 import qualified Data.ByteString.Lazy       as L
-import qualified Data.ByteString.Lazy.Char8 as LC
-import           Data.ByteString.Builder
 import           Foreign.Ptr
 import           Foreign.ForeignPtr
 import           Data.Word
@@ -56,14 +53,10 @@ instance FBS.FixedLength DigestSize where
     fixedLength _ = digestSize
 
 -- |A SHA256 hash.  32 bytes.
-newtype Hash = Hash (FBS.FixedByteString DigestSize) deriving (Eq, Ord, Bits, Bounded, Enum)
-
-instance Serialize Hash where
-    put (Hash h) = putShortByteString $ FBS.toShortByteString h
-    get = Hash . FBS.fromShortByteString <$> getShortByteString digestSize 
-
-instance Show Hash where
-    show (Hash h) = LC.unpack (toLazyByteString $ byteStringHex $ FBS.toByteString h)
+newtype Hash = Hash (FBS.FixedByteString DigestSize)
+  deriving (Eq, Ord, Bits, Bounded, Enum)
+  deriving Serialize via FBSHex DigestSize
+  deriving Show via FBSHex DigestSize
 
 instance Read Hash where
     readPrec = Hash . FBS.pack <$> mapM (const readHexByte) [1..digestSize]
@@ -88,8 +81,9 @@ hash b = Hash $ unsafeDupablePerformIO $
                    do maybe_ctx <- createSha256Ctx
                       case maybe_ctx of
                         Nothing -> error "Failed to initialize hash"
-                        Just ctx_ptr -> withForeignPtr ctx_ptr  (\ctx -> hash_update b ctx) >>
-                                           withForeignPtr ctx_ptr  (\ctx -> hash_final ctx)
+                        Just ctx_ptr -> withForeignPtr ctx_ptr $ \ctx -> do
+                          hash_update b ctx
+                          hash_final ctx
 
 hashShort :: ShortByteString -> Hash
 hashShort b = Hash $ unsafeDupablePerformIO $
@@ -97,8 +91,9 @@ hashShort b = Hash $ unsafeDupablePerformIO $
                  case maybe_ctx of
                    Nothing -> error "Failed to initialize hash"
                    Just ctx_ptr ->
-                     withForeignPtr ctx_ptr  (\ctx -> hash_update_short b ctx) >>
-                     withForeignPtr ctx_ptr  (\ctx -> hash_final ctx)
+                     withForeignPtr ctx_ptr $ \ctx -> do
+                        hash_update_short b ctx 
+                        hash_final ctx
 
 
 hash_update :: ByteString -> Ptr SHA256Ctx ->  IO ()
@@ -106,12 +101,13 @@ hash_update b ptr = B.unsafeUseAsCStringLen b $
     \(message, mlen) -> rs_sha256_update ptr (castPtr message) (fromIntegral mlen)
 
 hash_update_short :: ShortByteString -> Ptr SHA256Ctx ->  IO ()
-hash_update_short b ptr = withByteStringPtrLen b $
-    \message mlen -> rs_sha256_update ptr (castPtr message) (fromIntegral mlen)
+hash_update_short b ctx = withByteStringPtrLen b $
+    \message mlen -> rs_sha256_update ctx (castPtr message) (fromIntegral mlen)
 
+-- |NB: hash_final deallocates the context pointed to by the first argument.
+-- Hence it is impossible to use hash_final twice with the same context.
 hash_final :: Ptr SHA256Ctx -> IO (FixedByteString DigestSize)
-hash_final ptr = FBS.create  $ \hsh -> rs_sha256_final hsh ptr
-
+hash_final ptr = FBS.create $ \hsh -> rs_sha256_final hsh ptr
 
 hashLazy :: L.ByteString -> Hash
 hashLazy b = Hash $ unsafeDupablePerformIO $
@@ -136,15 +132,13 @@ hashTest path = do b <- L.readFile path
 -- 'Double' is only 53 bits, there is inevitably some loss.  This also means
 -- that the outcome 1 is not possible.
 hashToDouble :: Hash -> Double
-hashToDouble (Hash h) = case runGet getWord64be (FBS.toByteString h) of
-    Left e -> error e
-    Right w -> encodeFloat (toInteger w) (-64)
+hashToDouble (Hash h) =
+    let w = FBS.unsafeReadWord64 h in
+    encodeFloat (toInteger w) (-64)
 
 -- |Convert a 'Hash' to an 'Int'.
 hashToInt :: Hash -> Int
-hashToInt (Hash h) = case runGet getInt64be (FBS.toByteString h) of
-    Left e -> error e
-    Right i -> fromIntegral i
+hashToInt (Hash h) = fromIntegral . FBS.unsafeReadWord64 $ h
 
 -- |Convert a 'Hash' to a 'ByteString'.
 -- Gives the same result a serializing, but more efficient.
@@ -153,6 +147,6 @@ hashToByteString (Hash h) = FBS.toByteString h
 
 -- |Convert a 'Hash' to a 'ShortByteString'.
 -- Gives the same result a serializing, but more efficient.
--- This is much more efficient thatn 'hashToByteString'. It involves no copying.
+-- This is much more efficient than 'hashToByteString'. It involves no copying.
 hashToShortByteString :: Hash -> ShortByteString
 hashToShortByteString (Hash h) = FBS.toShortByteString h
