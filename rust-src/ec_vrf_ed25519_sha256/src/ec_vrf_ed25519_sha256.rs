@@ -174,13 +174,9 @@ pub extern "C" fn ec_vrf_prove(
     let res_sk = SecretKey::from_bytes(secret_key_bytes);
     let res_pk = PublicKey::from_bytes(public_key_bytes);
     if res_sk.is_err() {
-        eprintln!("SECRET KEY: {:?}", secret_key_bytes.iter());
-        eprintln!("PUBLIC KEY: {:?}", public_key_bytes.iter());
         return -1;
     };
     if res_pk.is_err() {
-        eprintln!("SECRET KEY: {:?}", secret_key_bytes.iter());
-        eprintln!("PUBLIC KEY: {:?}", public_key_bytes.iter());
         return -2;
     };
     let sk = res_sk.unwrap();
@@ -229,7 +225,6 @@ pub extern "C" fn ec_vrf_proof_to_hash(hash: &mut [u8; 32], pi: &[u8; 80]) {
     match proof {
         Ok(proof) => hash.copy_from_slice(&proof.to_hash()),
         Err(e) => {
-            eprintln!("{:?}", pi.iter());
             panic!("Proof Parsing failed because {}", e);
         }
     }
