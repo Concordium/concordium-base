@@ -218,8 +218,8 @@ data Type annot origin =
   -- |Polymorphic quantification. Using De-Bruijn representation.
   TForall !(Type annot origin)
   -- |Function types.
-  | TArr !(Type annot origin) !(Type annot origin)     
-  -- |Type variables, but also imported or defined types.
+  | TArr !(Type annot origin) !(Type annot origin)
+  -- |Bound type variables. Note that namespaces for bound type and term variables are distinct.
   | TVar !BoundTyVar
   -- |Type application, i.e., List Int. This will always be "declared datatype applied to types".
   | TApp !(DataTyName origin) ![(Type annot origin)]
@@ -304,11 +304,13 @@ data ConstraintDecl annot v
       constraintName :: !TyName
       -- |Senders of a constraint are methods which can be used to send messages to
       -- other contracts. They should be of type (and will be typechecked to be)
-      -- ref C -> T -> Transaction where ref C is address of contracts
-      -- implementing interface/class C.
+      -- Instance(n) -> t -> Amount -> Transaction where Instance(n) is the contraint
+      -- type introduced by this declaration.
       , senders   :: ![Sender (Type annot v)] 
       -- |Getters of a constraint are methods which can be used to access the state
-      -- of any instance implementing this class. They are of type ref C -> T.
+      -- of any instance implementing this class. They should be of type (and will be
+      -- typechecked to be) Instance(n) -> t where Instance(n) is the contraint
+      -- type introduce by this declaration.
       , getters   :: ![Getter (Type annot v)] 
       }
     deriving (Generic, Functor, Foldable, Traversable)
