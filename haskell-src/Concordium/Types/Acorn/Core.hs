@@ -305,7 +305,7 @@ data ConstraintDecl annot v
       -- |Senders of a constraint are methods which can be used to send messages to
       -- other contracts. They should be of type (and will be typechecked to be)
       -- Instance(n) -> t -> Amount -> Transaction where Instance(n) is the contraint
-      -- type introduce by this declaration.
+      -- type introduced by this declaration.
       , senders   :: ![Sender (Type annot v)] 
       -- |Getters of a constraint are methods which can be used to access the state
       -- of any instance implementing this class. They should be of type (and will be
