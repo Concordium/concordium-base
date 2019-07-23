@@ -462,9 +462,8 @@ data Module annot =
 deriving instance (AnnotContext Eq annot) => Eq (Module annot)
 deriving instance (AnnotContext Show annot) => Show (Module annot)
 
--- |Visibility of a definition or type from within an other module
--- (modules only export public definitions and types and only
--- those can be accessed from other modules).
+-- |Visibility of a definition or type from within another module
+-- (only public definitions and types can be accessed from other modules).
 data Visibility = Public | Private
   deriving (Show, Eq, Generic)
 
