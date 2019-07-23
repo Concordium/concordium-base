@@ -462,13 +462,17 @@ data Module annot =
 deriving instance (AnnotContext Eq annot) => Eq (Module annot)
 deriving instance (AnnotContext Show annot) => Show (Module annot)
 
--- |Whether a definition can be called from other modules or not.
+-- |Visibility of a definition or type from within an other module
+-- (modules only export public definitions and types and only
+-- those can be accessed from other modules).
 data Visibility = Public | Private
   deriving (Show, Eq, Generic)
 
--- |Whether a datatype is exported or not.
-data DataTyVisibility = None | OnlyType | All
-    deriving(Show, Eq, Generic)
+-- |'Visibility' of a datatype's type and its constructors.
+data DataTyVisibility = None -- ^ Both type and constructors are private.
+                      | OnlyType -- ^ Only the type is public, the constructors are private.
+                      | All -- ^ Both type and constructors are public.
+  deriving(Show, Eq, Generic)
 
 -- plays the role of the prim module. Invalid otherwise.
 emptyModule :: Module annot
