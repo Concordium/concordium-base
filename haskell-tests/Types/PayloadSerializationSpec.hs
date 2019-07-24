@@ -8,9 +8,10 @@ import Test.QuickCheck
 
 import Data.ByteString.Lazy as BSL
 import Data.ByteString as BS
+import Data.ByteString.Short as BSS
 
 import Concordium.Types
-import Concordium.Crypto.SignatureScheme(VerifyKey(..), SchemeId(Ed25519))
+import Concordium.Crypto.SignatureScheme(VerifyKey(..))
 import Concordium.Types.Execution
 import Concordium.Types(Amount(..), Address(..))
 import Concordium.ID.Types
@@ -20,8 +21,6 @@ import Data.FixedByteString as FBS
 import qualified Data.Serialize as S
 
 import Types.CoreAllGen
-
-import Control.Monad
 
 import Data.Int
 
@@ -94,11 +93,11 @@ genPayload = oneof [genDeployModule,
         -- NB: if the encryption key is going to be fixed length this needs to change
         genEncryption = do
           l <- choose (30,50)
-          DeployEncryptionKey . EncKeyAcc . BS.pack <$> vector l
+          DeployEncryptionKey . EncKeyAcc . BSS.pack <$> vector l
 
         genAddBaker = do
           abElectionVerifyKey <- VRF.publicKey <$> arbitrary
-          abSignatureVerifyKey <- VerifyKey . BS.pack <$> (vector =<< choose (30,80))
+          abSignatureVerifyKey <- VerifyKey . BSS.pack <$> (vector =<< choose (30,80))
           abAccount <- genAddress
           abProof <- genProof
           return AddBaker{..}
@@ -118,7 +117,7 @@ genPayload = oneof [genDeployModule,
 
         genUpdateBakerSignKey = do
           ubsId <- genBakerId
-          ubsKey <- VerifyKey . BS.pack <$> (vector =<< choose (30,80))
+          ubsKey <- VerifyKey . BSS.pack <$> (vector =<< choose (30,80))
           ubsProof <- genProof
           return UpdateBakerSignKey{..}
 
