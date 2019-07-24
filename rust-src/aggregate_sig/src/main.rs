@@ -47,6 +47,32 @@ fn scalar_from_message<P: Pairing>(m: &[u8]) -> P::ScalarField {
     }
 }
 
+fn verify<P: Pairing>(message: &[u8], public_key: PublicKey<P>, signature: Signature<P>) -> bool {
+    let scalar: P::ScalarField = scalar_from_message::<P>(message);
+    let g1_hash = P::G_1::one_point().mul_by_scalar(&scalar);
+    let left_hand_side = P::pair(signature.0, P::G_2::one_point());
+    let right_hand_side = P::pair(g1_hash, public_key.0);
+    left_hand_side == right_hand_side
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use pairing::bls12_381::Bls12;
+    use rand::thread_rng;
+
+    #[test]
+    fn test_sign_and_verify() {
+        let mut csprng = thread_rng();
+        let sk = SecretKey::<Bls12>::generate(&mut csprng);
+        let pk = PublicKey::from_secret(&sk);
+
+        let m = [1u8, 64];
+        let signature = sign_message(&sk, &m);
+        assert!(verify(&m, pk, signature))
+    }
+}
+
 fn main() {
     println!("Hello, world!");
 }
