@@ -259,7 +259,6 @@ data Value annot =
              VClosure !(RTEnv annot) !(Expr annot) -- ^Functions evaluate to closures.
              | VRecClosure !(RTEnv annot) !Int ![Expr annot] -- ^Recursive functions evaluate to recursive closures.
              | VLiteral !Core.Literal    -- ^Base literals.
-             | VAmount !Amount
              | VConstructor !Core.Name ![Value annot] -- ^Constructors applied to arguments.
                                              -- FIXME: Should use sequence instead of list here as well since it is usually built by appending to the back.
              | VInstance { vinstance_ls :: !(Value annot)
@@ -273,9 +272,8 @@ data Value annot =
 -- If you try to serialize with a value which is not storable the methods will fail.
 putStorable :: P.Putter (Value annot)
 putStorable (VLiteral l) = P.putWord8 0 <> Core.putLit l
-putStorable (VAmount (Amount a)) = P.putWord8 1 <> P.putWord64be a
 putStorable (VConstructor n vals) = do
-  P.putWord8 2
+  P.putWord8 1
   Core.putName n
   Core.putLength vals
   mapM_ putStorable vals
@@ -286,8 +284,7 @@ getStorable = do
   h <- G.getWord8
   case h of
     0 -> VLiteral <$> Core.getLit
-    1 -> (VAmount . Amount) <$> G.getWord64be
-    2 -> do
+    1 -> do
       name <- Core.getName
       l <- Core.getLength
       vals <- replicateM l getStorable
