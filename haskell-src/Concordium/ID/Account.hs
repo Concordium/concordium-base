@@ -20,6 +20,7 @@ import Data.ByteString.Unsafe
 import Data.Base58String.Bitcoin
 
 import Data.ByteString as BS
+import Data.ByteString.Short as BSS
 
 type CredentialDeploymentInformationBytes = ByteString
 
@@ -48,7 +49,7 @@ verifyCredential elgamalGen pedersenKey (IP_PK idPK) arElgamalGenerator (Anonymi
 
 registrationId :: IO CredentialRegistrationID
 registrationId = (random 48) >>= (return . RegIdCred . FBS.fromByteString)
-    
+
 base58decodeAddr :: Base58String -> AccountAddress
 base58decodeAddr bs = AccountAddress (FBS.fromByteString (toBytes bs))
 
@@ -65,7 +66,7 @@ accountScheme (AccountAddress s) = toScheme (FBS.getByte s 0)
 accountAddress :: AccountVerificationKey -> SchemeId -> AccountAddress 
 accountAddress (VerifyKey x) y =  AccountAddress (FBS.fromByteString $ BS.cons sch (BS.take (accountAddressSize - 1) bs))
     where 
-        (SHA224.Hash r) = SHA224.hash x
+        (SHA224.Hash r) = SHA224.hash (BSS.fromShort x)
         bs = FBS.toByteString r
         sch:: Word8
         sch = fromIntegral $ fromEnum y

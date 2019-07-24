@@ -1,45 +1,33 @@
 {-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia #-}
 module Concordium.Crypto.SignatureScheme where
-import Data.ByteString (ByteString)
 import Data.Word
 import Data.Serialize
-import qualified Data.Serialize as S
 import Data.Aeson hiding (encode)
 import Concordium.Crypto.ByteStringHelpers
 import Data.Text hiding (drop)
-import qualified  Data.Text.Encoding as TE
 import Prelude hiding (drop)
-import qualified Data.ByteString.Base16              as BS16
 
-import qualified Data.ByteString as BS
+import Data.ByteString (ByteString)
+import Data.ByteString.Short (ShortByteString)
 
-newtype SignKey = SignKey ByteString
+newtype SignKey = SignKey ShortByteString
     deriving (Eq)
     deriving Show via ByteStringHex
     deriving Serialize via Short65K
 
-newtype VerifyKey = VerifyKey ByteString
+newtype VerifyKey = VerifyKey ShortByteString
     deriving (Eq, Ord)
     deriving Show via ByteStringHex
     deriving Serialize via Short65K
+    deriving FromJSON via Short65K
+    deriving ToJSON via Short65K
 
-instance ToJSON VerifyKey where
-  toJSON v = object [pack "verifyKey" .= show v]
-
--- Length + data (serializes with `put :: Bytestring -> Put`)
-instance FromJSON VerifyKey where
-  parseJSON v = do
-    verifKey <- parseJSON v
-    let plainBs = fst . BS16.decode . TE.encodeUtf8 $ verifKey
-    case S.decode . flip BS.append plainBs $
-         S.encode (fromIntegral . BS.length $ plainBs :: Word16) of
-      Left e  -> fail e
-      Right n -> return n
-
-newtype Signature = Signature ByteString
+newtype Signature = Signature ShortByteString
     deriving (Eq, Ord)
     deriving Show via ByteStringHex
     deriving Serialize via Short65K
+    deriving FromJSON via Short65K
+    deriving ToJSON via Short65K
 
 data SchemeId = Ed25519 | CL
     deriving (Eq, Show)

@@ -39,6 +39,18 @@ testProofToHashDeterministic = property $ \kp doc0 -> monadicIO $ do
         pf2 <- run $ VRF.prove kp doc
         return $ VRF.proofToHash pf1 === VRF.proofToHash pf2
 
+-- Generate a bunch of proofs and convert them to hashes. They should be
+-- different. This is really regression testing the FFI bug where a generated
+-- proof was not valid.
+stressTest :: Property
+stressTest = property $ \kp doc0 doc1 -> monadicIO $
+        let doc = BS.pack doc0
+            doc' = BS.pack doc1 in do
+              pf1 <- run $ VRF.prove kp doc
+              pf2 <- run $ VRF.prove kp doc'
+              return $ (VRF.proofToHash pf1 == VRF.proofToHash pf2) == (doc == doc')
+
+
 tests :: Spec
 tests = describe "Concordium.Crypto.VRF" $ do
     describe "serialization" $ do
@@ -49,3 +61,9 @@ tests = describe "Concordium.Crypto.VRF" $ do
     it "verify generated public key" testGenVerifyKey
     it "verify proof" testProveVerify
     it "output of VRF is independent of proof" testProofToHashDeterministic
+    parallel $ do
+      it "stress testing vrf proof to hash 1 " $ withMaxSuccess 100000 stressTest
+      it "stress testing vrf proof to hash 2" $ withMaxSuccess 100000 stressTest
+      it "stress testing vrf proof to hash 3" $ withMaxSuccess 100000 stressTest
+      it "stress testing vrf proof to hash 4" $ withMaxSuccess 100000 stressTest
+      it "stress testing vrf proof to hash 5" $ withMaxSuccess 100000 stressTest
