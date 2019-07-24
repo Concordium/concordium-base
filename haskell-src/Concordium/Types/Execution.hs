@@ -13,6 +13,7 @@ import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Short as BSS
 import Data.Void
 
 import qualified Concordium.Types.Acorn.Core as Core
@@ -240,17 +241,20 @@ instance S.Serialize Payload where
 
 {-# INLINE encodePayload #-}
 encodePayload :: Payload -> EncodedPayload
-encodePayload = EncodedPayload . S.encode
+encodePayload = EncodedPayload . BSS.toShort . S.encode
 
 {-# INLINE decodePayload #-}
 decodePayload :: EncodedPayload -> Either String Payload
-decodePayload (EncodedPayload s) = S.decode s
+decodePayload (EncodedPayload s) = S.decode (BSS.fromShort s)
 
 {-# INLINE payloadBodyBytes #-}
 -- |Get the body of the payload as bytes. Essentially just remove the
 -- first byte which encodes the type.
 payloadBodyBytes :: EncodedPayload -> BS.ByteString
-payloadBodyBytes (EncodedPayload s) = if BS.null s then BS.empty else BS.tail s
+payloadBodyBytes (EncodedPayload ss) =
+  if BSS.null ss
+  then BS.empty
+  else BS.tail (BSS.fromShort ss)
 
 -- |Events which are generated during transaction execution.
 -- These are only used for commited transactions.

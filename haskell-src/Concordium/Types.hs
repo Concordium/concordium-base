@@ -25,6 +25,7 @@ import Data.Hashable(Hashable)
 import Data.Word
 import Data.ByteString.Char8(ByteString)
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.ByteString.Builder(toLazyByteString, byteStringHex)
 import Data.Bits
@@ -283,11 +284,11 @@ newAccount _accountVerificationKey _accountSignatureScheme = Account {
     }
 
 -- |Serialized payload of the transaction
-newtype EncodedPayload = EncodedPayload { _spayload :: ByteString }
+newtype EncodedPayload = EncodedPayload { _spayload :: BSS.ShortByteString }
     deriving(Eq, Show)
 
 payloadSize :: EncodedPayload -> Int
-payloadSize = BS.length . _spayload
+payloadSize = BSS.length . _spayload
 
 -- |NB: We explicitly put the length first, even though the body is already
 -- serialized and thus it would normally not be necessary to do so. The reason
@@ -296,11 +297,11 @@ payloadSize = BS.length . _spayload
 -- precisely the length of the body.
 instance S.Serialize EncodedPayload where
   put (EncodedPayload p) = 
-    P.putWord32be (fromIntegral (BS.length p)) <>
-    P.putByteString p
+    P.putWord32be (fromIntegral (BSS.length p)) <>
+    P.putShortByteString p
   get = do
     l <- fromIntegral <$> G.getWord32be
-    EncodedPayload <$> G.getByteString l
+    EncodedPayload <$> G.getShortByteString l
 
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
