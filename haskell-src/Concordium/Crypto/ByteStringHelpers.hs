@@ -2,18 +2,10 @@
 module Concordium.Crypto.ByteStringHelpers where
 
 import           Text.Printf
-import           Data.ByteString hiding (length)
-import qualified Data.ByteString as BS
-import           Data.ByteString.Unsafe
 import qualified Data.FixedByteString as FBS
-import           Data.ByteString.Internal
 import           Foreign.Ptr
-import           Foreign.ForeignPtr
 import           Data.Word
 import qualified Data.List as L
-import           Foreign.Storable
-import           Foreign.Marshal.Utils
-import           System.IO.Unsafe
 import           Control.Monad
 import Data.Serialize
 import qualified Data.ByteString.Base16 as BS16
@@ -25,71 +17,53 @@ import qualified Data.Aeson.Types as AE
 import qualified Data.Text as Text
 import Prelude hiding (fail)
 
+import Foreign.Marshal
+import Data.ByteString(ByteString)
+import Data.ByteString.Short (ShortByteString)
+import qualified Data.ByteString.Short as BSS
+import qualified Data.ByteString.Short.Internal as BSS
+import qualified Data.ByteString.Unsafe as BSU
+import qualified Data.ByteString as BS
+
 wordToHex :: Word8 -> [Char]
 wordToHex x = printf "%.2x" x
-
 
 byteStringToHex :: ByteString -> String
 byteStringToHex b= L.concatMap wordToHex ls
     where
-        ls = unpack b
+        ls = BS.unpack b
 
-withByteStringPtr :: ByteString -> (Ptr Word8 -> IO a) -> IO a
-withByteStringPtr b f =  withForeignPtr fptr $ \ptr -> f (ptr `plusPtr` off)
-    where (fptr, off, _) = toForeignPtr b
+{-# INLINE withByteStringPtr #-}
+withByteStringPtr :: ShortByteString -> (Ptr Word8 -> IO a) -> IO a
+withByteStringPtr bs f = BSU.unsafeUseAsCString (BSS.fromShort bs) (f . castPtr)
 
-unsafeEqForeignPtr :: (Storable a, Eq a) => Int -> ForeignPtr a -> ForeignPtr a -> Bool
-unsafeEqForeignPtr n f1 f2 = unsafePerformIO $
-    withForeignPtr f1 $
-      \f1p -> withForeignPtr f2 $
-        \f2p -> foldM (\acc k -> if acc then (==) <$> peekElemOff f1p k <*> peekElemOff f2p k else return False) True [0..n-1]
+{-# INLINE withByteStringPtrLen #-}
+withByteStringPtrLen :: ShortByteString -> (Ptr Word8 -> Int -> IO a) -> IO a
+withByteStringPtrLen bs f = BSU.unsafeUseAsCStringLen (BSS.fromShort bs) (\(ptr, len) -> f (castPtr ptr) len)
 
-unsafeForeignPtrToList :: Storable a => Int -> ForeignPtr a -> [a]
-unsafeForeignPtrToList n f = unsafePerformIO $ withForeignPtr f $ \p -> mapM (peekElemOff p) [0..n-1]
-
-unsafeForeignPtrHex :: Int -> ForeignPtr Word8 -> String
-unsafeForeignPtrHex n f = byteStringToHex . pack $ (unsafeForeignPtrToList n f)
+{-# INLINE withAllocatedShortByteString #-}
+withAllocatedShortByteString :: Int -> (Ptr Word8 -> IO a) -> IO (a, ShortByteString)
+withAllocatedShortByteString n f =
+  allocaBytes n $ \ptr -> do
+  r <- f ptr
+  sbs <- BSS.createFromPtr ptr n
+  return (r, sbs)
 
 fbsHex :: FBS.FixedLength a => FBS.FixedByteString a -> String
 fbsHex = byteStringToHex . FBS.toByteString
 
 fbsPut :: FBS.FixedLength a => FBS.FixedByteString a -> Put
-fbsPut = putByteString . FBS.toByteString
+fbsPut = putShortByteString . FBS.toShortByteString
 
 fbsGet :: forall a . FBS.FixedLength a => Get (FBS.FixedByteString a)
-fbsGet = FBS.fromByteString <$> getByteString (FBS.fixedLength (undefined :: a))
-
-putForeignPtrWord8 :: Int -> ForeignPtr Word8 -> Put
-putForeignPtrWord8 n fp = putWord32be (fromIntegral n) <> mapM_ putWord8 (unsafeForeignPtrToList n fp)
-
-getForeignPtrWord8 :: Get (Int, ForeignPtr Word8)
-getForeignPtrWord8 = do
-  n <- fromIntegral <$> getWord32be
-  bs <- getByteString n
-  let r = unsafeDupablePerformIO $ do
-        fp <- mallocForeignPtrBytes n
-        withForeignPtr fp $
-            \fpp ->
-              unsafeUseAsCString bs $
-                \bsp -> copyBytes (castPtr fpp) bsp n
-        return fp
-  return (n, r)
-
--- |This is a safe method as long as the first argument <= length of the list.
--- Giving the first argument makes the method more efficient in current use cases.
-listToForeignPtr :: Int -> [Word8] -> ForeignPtr Word8
-listToForeignPtr n wds = unsafeDupablePerformIO $ do
-        fp <- mallocForeignPtrBytes n
-        withForeignPtr fp $
-            \fpp -> zipWithM_ (pokeByteOff fpp) [0..n-1] wds
-        return fp
+fbsGet = FBS.fromShortByteString <$> getShortByteString (FBS.fixedLength (undefined :: a))
 
 -- |Wrapper used to automatically derive Show instances in base16 for types
 -- simply wrapping bytestrings.
-newtype ByteStringHex = ByteStringHex ByteString
+newtype ByteStringHex = ByteStringHex ShortByteString
 
 instance Show ByteStringHex where
-  show (ByteStringHex s) = byteStringToHex s
+  show (ByteStringHex s) = byteStringToHex (BSS.fromShort s)
 
 -- |Wrapper used to automatically derive Show instances in base16 for types
 -- simply wrapping fixed byte stringns.
@@ -103,25 +77,40 @@ instance FBS.FixedLength a => Serialize (FBSHex a) where
   get = FBSHex <$> fbsGet
 
 -- |Type whose only purpose is to enable derivation of serialization instances.
-newtype Short65K = Short65K ByteString
+newtype Short65K = Short65K ShortByteString
 
 instance Serialize Short65K where
   put (Short65K bs) =
-    putWord16be (fromIntegral (BS.length bs)) <>
-    putByteString bs
+    putWord16be (fromIntegral (BSS.length bs)) <>
+    putShortByteString bs
   get = do
     l <- fromIntegral <$> getWord16be
-    Short65K <$> getByteString l
+    Short65K <$> getShortByteString l
+
+instance Show Short65K where
+  show (Short65K s) = byteStringToHex (BSS.fromShort s)
+
+-- |JSON instances based on base16 encoding.
+instance AE.ToJSON Short65K where
+  toJSON v = AE.String (Text.pack (show v))
+
+-- |JSON instances based on base16 encoding.
+instance AE.FromJSON Short65K where
+  parseJSON = AE.withText "Short65K" $ \t ->
+    let (bs, rest) = BS16.decode (Text.encodeUtf8 t)
+    in if BS.null rest then return (Short65K (BSS.toShort bs))
+       else AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
+
 
 -- |JSON instances based on base16 encoding.
 instance AE.ToJSON ByteStringHex where
-  toJSON v = AE.toJSON $ show v
+  toJSON v = AE.String (Text.pack (show v))
 
 -- |JSON instances based on base16 encoding.
 instance AE.FromJSON ByteStringHex where
   parseJSON = AE.withText "ByteStringHex" $ \t ->
     let (bs, rest) = BS16.decode (Text.encodeUtf8 t)
-    in if BS.null rest then return (ByteStringHex bs)
+    in if BS.null rest then return (ByteStringHex (BSS.toShort bs))
        else AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
 
 -- |Use the serialize instance of a type to deserialize 
