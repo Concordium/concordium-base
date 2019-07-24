@@ -13,5 +13,5 @@ members=[
    "id",
    "ffi_helpers",
    "simple_id_client",
+   "aggregate_sig",
 ]
-
