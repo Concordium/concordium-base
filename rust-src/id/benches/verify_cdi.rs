@@ -1,8 +1,8 @@
-use id::{account_holder::*, chain::*, ffi::*, identity_provider::*, types::*};
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519 as ed25519;
 use elgamal::{public::PublicKey, secret::SecretKey};
+use id::{account_holder::*, chain::*, ffi::*, identity_provider::*, types::*};
 use pairing::bls12_381::{Bls12, G1};
 use ps_sig;
 
@@ -20,7 +20,11 @@ type ExampleAttribute = AttributeKind;
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
 
-pub fn setup() -> (GlobalContext<ExampleCurve>, IpInfo<Bls12, ExampleCurve>, CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute>) {
+pub fn setup() -> (
+    GlobalContext<ExampleCurve>,
+    IpInfo<Bls12, ExampleCurve>,
+    CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute>,
+) {
     let mut csprng = thread_rng();
 
     let secret = ExampleCurve::generate_scalar(&mut csprng);
@@ -119,27 +123,24 @@ pub fn bench_verify_with_serialize(c: &mut Criterion) {
         b.iter(|| {
             let des = CredDeploymentInfo::<Bls12, ExampleCurve, ExampleAttribute>::from_bytes(
                 &mut Cursor::new(&bytes),
-            ).unwrap();
+            )
+            .unwrap();
             verify_cdi(&global_ctx, &ip_info, &des)
-        })};
+        })
+    };
     c.bench_function("Verify CDI with serialization", bench_with_serialize);
 }
-
 
 pub fn bench_verify_without_serialize(c: &mut Criterion) {
     let (global_ctx, ip_info, cdi) = setup();
 
-    let bench_without_serialize = move |b : &mut Bencher| {
-        b.iter(|| {
-            verify_cdi(&global_ctx, &ip_info, &cdi)
-        })};
+    let bench_without_serialize =
+        move |b: &mut Bencher| b.iter(|| verify_cdi(&global_ctx, &ip_info, &cdi));
 
     c.bench_function("Verify CDI without serialization", bench_without_serialize);
 }
 
-
-                    
-criterion_group!{
+criterion_group! {
     name = verify_cdi_benches;
     config = Criterion::default();
     targets =
