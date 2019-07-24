@@ -16,7 +16,6 @@ import Concordium.Types.Execution
 import Concordium.Types(Amount(..), Address(..))
 import Concordium.ID.Types
 import qualified Concordium.Crypto.VRF as VRF
-import Data.FixedByteString as FBS
 
 import qualified Data.Serialize as S
 
