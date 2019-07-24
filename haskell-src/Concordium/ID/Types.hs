@@ -22,6 +22,7 @@ import Control.Monad
 import qualified Data.Text as Text
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Crypto.FFIDataTypes
+import Control.DeepSeq
 
 accountAddressSize :: Int
 accountAddressSize = 21
@@ -63,7 +64,7 @@ newtype IdentityProviderIdentity  = IP_ID ShortByteString
 
 -- Public key of the Identity provider
 newtype IdentityProviderPublicKey = IP_PK PsSigKey
-    deriving(Eq, Show, Serialize)
+    deriving(Eq, Show, Serialize, NFData)
 
 instance ToJSON IdentityProviderIdentity where
   toJSON (IP_ID v) = String (Text.decodeUtf8 (BSS.fromShort v))
@@ -205,7 +206,7 @@ newtype ARName = ARName ShortByteString
 
 -- |Public key of an anonymity revoker.
 newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
-    deriving(Eq, Serialize)
+    deriving(Eq, Serialize, NFData)
     deriving Show via ElgamalPublicKey
 
 instance ToJSON ARName where
