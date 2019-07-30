@@ -72,8 +72,8 @@ fn scalar_from_message<P: Pairing>(m: &[u8]) -> P::ScalarField {
 // should probably not take ownership of signature
 pub fn verify<P: Pairing>(
     message: &[u8],
-    public_key: PublicKey<P>,
-    signature: Signature<P>,
+    public_key: &PublicKey<P>,
+    signature: &Signature<P>,
 ) -> bool {
     let scalar: P::ScalarField = scalar_from_message::<P>(message);
     let g1_hash = P::G_1::one_point().mul_by_scalar(&scalar);
@@ -208,13 +208,13 @@ mod test {
             // should verify correctly
             let m = rng.gen::<[u8; 32]>();
             let signature = sign_message(&sk, &m);
-            assert!(verify(&m, pk, signature));
+            assert!(verify(&m, &pk, &signature));
 
             // should not verify!
             let signature = sign_message(&sk, &m);
             let sk2 = SecretKey::<Bls12>::generate(&mut rng);
             let pk2 = PublicKey::from_secret(&sk2);
-            assert!(!verify(&m, pk2, signature))
+            assert!(!verify(&m, &pk2, &signature))
         }
     }
 
@@ -245,8 +245,6 @@ mod test {
         assert!(verify_aggregate_sig_v1(&m_pk_pairs, sig));
     }
 
-    use std::time::{Duration, Instant};
-
     #[test]
     fn test_aggregate_sign_and_verify_v2_once() {
         let seed: &[_] = &[1];
@@ -261,10 +259,7 @@ mod test {
             m_pk_pairs.push((&ms[i], pks[i].clone()));
         }
 
-        let start = Instant::now();
         assert!(verify_aggregate_sig_v2(&m_pk_pairs, sig));
-        let duration = start.elapsed();
-        println!("verify_aggregate_sig_v2 took time: {:?}", duration);
     }
 
     #[test]
@@ -333,8 +328,4 @@ mod test {
     // }
 
     // TODO: add more realistic test cases of sign/verify, including signatures that are rejected
-}
-
-fn main() {
-    println!("Hello, world!");
 }
