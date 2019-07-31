@@ -41,8 +41,8 @@ fn bench_sign_and_verify(c: &mut Criterion) {
 
     let sk = SecretKey::<Bls12>::generate(&mut csprng);
     let pk = PublicKey::<Bls12>::from_secret(&sk);
-    let sig = sign_message(&sk, m.as_slice());
-    c.bench_function("sign", move |b| b.iter(|| sign_message(&sk, m.as_slice())));
+    let sig = sign_message(m.as_slice(), &sk);
+    c.bench_function("sign", move |b| b.iter(|| sign_message(m.as_slice(), &sk)));
     c.bench_function("verify", move |b| {
         b.iter(|| verify(m_clone.as_slice(), &pk, &sig))
     });
@@ -56,8 +56,8 @@ fn bench_aggregate_sig(c: &mut Criterion) {
 
     let m1 = rand_m_of_length!(1000, csprng);
     let m2 = rand_m_of_length!(1000, csprng);
-    let sig1 = sign_message(&sk1, &m1);
-    let sig2 = sign_message(&sk2, &m2);
+    let sig1 = sign_message(&m1, &sk1);
+    let sig2 = sign_message(&m2, &sk2);
     // TODO, make code below work
 
     c.bench_function("aggregate_signature", move |b| {
@@ -82,91 +82,42 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
     let (sks, pks) = get_sks_pks!(n, csprng);
     let ms: Vec<_> = n_rand_ms_of_length!(n, 1000, csprng);
 
-    let mut agg_sig = sign_message(&sks[0], &ms[0]);
+    let mut agg_sig = sign_message(&ms[0], &sks[0]);
     for i in 1..n {
-        let new_sig = sign_message(&sks[i], &ms[i]);
+        let new_sig = sign_message(&ms[i], &sks[i]);
         agg_sig = aggregate_sig(new_sig, agg_sig);
     }
 
-    let ms_clone = ms.clone();
-    let pks_clone = pks.clone();
-    let agg_sig_clone = agg_sig.clone();
-
-    c.bench_function("verify_aggregate_v1", move |b| {
+    c.bench_function("verify_aggregate_sig", move |b| {
+        let ms = ms.clone();
         let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::with_capacity(n);
         for i in 0..n {
-            let m_pk = (ms_clone[i].as_slice(), pks_clone[i].clone());
+            let m_pk = (ms[i].as_slice(), pks[i].clone());
             m_pk_pairs.push(m_pk);
         }
-        b.iter(|| verify_aggregate_sig_v1(&m_pk_pairs.clone(), agg_sig_clone.clone()))
-    });
-
-    let ms_clone = ms.clone();
-    let pks_clone = pks.clone();
-    let agg_sig_clone = agg_sig.clone();
-    c.bench_function("verify_aggregate_v2", move |b| {
-        let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::with_capacity(n);
-        for i in 0..n {
-            let m_pk = (ms_clone[i].as_slice(), pks_clone[i].clone());
-            m_pk_pairs.push(m_pk);
-        }
-        b.iter(|| verify_aggregate_sig_v2(&m_pk_pairs.clone(), agg_sig_clone.clone()))
-    });
-
-    let ms_clone = ms.clone();
-    let pks_clone = pks.clone();
-    let agg_sig_clone = agg_sig.clone();
-    c.bench_function("verify_aggregate_v3", move |b| {
-        let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::with_capacity(n);
-        for i in 0..n {
-            let m_pk = (ms_clone[i].as_slice(), pks_clone[i].clone());
-            m_pk_pairs.push(m_pk);
-        }
-        b.iter(|| verify_aggregate_sig_v3(&m_pk_pairs.clone(), agg_sig_clone.clone()))
-    });
-
-    let ms_clone = ms.clone();
-    let pks_clone = pks.clone();
-    let agg_sig_clone = agg_sig.clone();
-    c.bench_function("verify_aggregate_v4", move |b| {
-        let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::with_capacity(n);
-        for i in 0..n {
-            let m_pk = (ms_clone[i].as_slice(), pks_clone[i].clone());
-            m_pk_pairs.push(m_pk);
-        }
-        b.iter(|| verify_aggregate_sig_v4(&m_pk_pairs.clone(), agg_sig_clone.clone()))
-    });
-
-    let ms_clone = ms.clone();
-    let pks_clone = pks.clone();
-    let agg_sig_clone = agg_sig.clone();
-    c.bench_function("verify_aggregate_v5", move |b| {
-        let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::with_capacity(n);
-        for i in 0..n {
-            let m_pk = (ms_clone[i].as_slice(), pks_clone[i].clone());
-            m_pk_pairs.push(m_pk);
-        }
-        b.iter(|| verify_aggregate_sig_v5(&m_pk_pairs.clone(), agg_sig_clone.clone()))
+        b.iter(|| verify_aggregate_sig(&m_pk_pairs.clone(), &agg_sig.clone()))
     });
 }
 
-fn bench_has_duplicates(c: &mut Criterion) {
-    let mut csprng = thread_rng();
-    let n = 200;
-    let mut ms: Vec<_> = Vec::new();
-    for _ in 0..n {
-        let m = rand_m_of_length!(n, csprng);
-        ms.push(m);
-    }
-
-    c.bench_function("has_duplicates", move |b| {
-        let ms: Vec<&[u8]> = ms.iter().map(|x| x.as_slice()).collect();
-        b.iter(|| has_duplicates(ms.clone()))
-    });
-}
+// to bench has_duplicates, expose it in aggregate_sig.rs by making it public
+//
+// fn bench_has_duplicates(c: &mut Criterion) {
+//     let mut csprng = thread_rng();
+//     let n = 200;
+//     let mut ms: Vec<_> = Vec::new();
+//     for _ in 0..n {
+//         let m = rand_m_of_length!(n, csprng);
+//         ms.push(m);
+//     }
+//
+//     c.bench_function("has_duplicates", move |b| {
+//         let ms: Vec<&[u8]> = ms.iter().map(|x| x.as_slice()).collect();
+//         b.iter(|| has_duplicates(ms.clone()))
+//     });
+// }
 
 criterion_group!(sign_and_verify, bench_sign_and_verify);
 criterion_group!(aggregate, bench_aggregate_sig);
 criterion_group!(verify_aggregate, bench_verify_aggregate_sig);
-criterion_group!(has_dups, bench_has_duplicates);
-criterion_main!(sign_and_verify, aggregate, verify_aggregate, has_dups);
+// criterion_group!(has_dups, bench_has_duplicates);
+criterion_main!(sign_and_verify, aggregate, verify_aggregate);
