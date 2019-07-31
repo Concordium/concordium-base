@@ -147,6 +147,54 @@ pub fn verify_aggregate_sig_v2<P: Pairing>(
         == P::pair(P::G_1::one_point(), product_of_pks_mul_by_hash)
 }
 
+pub fn verify_aggregate_sig_v3<P: Pairing>(
+    m_pk_pairs: &[(&[u8], PublicKey<P>)],
+    signature: Signature<P>,
+) -> bool {
+    // check for duplicates
+    let ms: Vec<&[u8]> = m_pk_pairs.iter().map(|x| x.0).collect();
+    if has_duplicates(ms) {
+        return false;
+    }
+
+    let (m0, pk0) = &m_pk_pairs[0];
+    let scalar0 = scalar_from_message::<P>(m0);
+    let mut prod_so_far = pk0.0.mul_by_scalar(&scalar0);
+    for i in 1..m_pk_pairs.len() {
+        let (m, pk) = &m_pk_pairs[i];
+        let scalar = scalar_from_message::<P>(m);
+        let pk_mul = pk.0.mul_by_scalar(&scalar);
+        prod_so_far = prod_so_far.plus_point(&pk_mul);
+    }
+
+    P::pair(signature.0, P::G_2::one_point())
+        == P::pair(P::G_1::one_point(), prod_so_far)
+}
+
+pub fn verify_aggregate_sig_v4<P: Pairing>(
+    m_pk_pairs: &[(&[u8], PublicKey<P>)],
+    signature: Signature<P>,
+) -> bool {
+    // check for duplicates
+    let ms: Vec<&[u8]> = m_pk_pairs.iter().map(|x| x.0).collect();
+    if has_duplicates(ms) {
+        return false;
+    }
+
+    let (m0, pk0) = &m_pk_pairs[0];
+    let scalar0 = scalar_from_message::<P>(m0);
+    let mut prod_so_far = pk0.0.mul_by_scalar(&scalar0);
+    for i in 1..m_pk_pairs.len() {
+        let (m, pk) = &m_pk_pairs[i];
+        let scalar = scalar_from_message::<P>(m);
+        let pk_mul = pk.0.mul_by_scalar(&scalar);
+        prod_so_far = prod_so_far.plus_point(&pk_mul);
+    }
+
+    P::pair(signature.0, P::G_2::one_point())
+        == P::pair(P::G_1::one_point(), prod_so_far)
+}
+
 fn hash_message(m: &[u8]) -> [u8; 64] {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
@@ -158,7 +206,7 @@ fn hash_message(m: &[u8]) -> [u8; 64] {
 // This is not very efficient - the sorting algorithm can exit as soon as it encounters an equality
 // and report that a duplicate indeed exists.
 // Consider building hashmap or Btree and exit as soon as a duplicate is seen
-fn has_duplicates(messages: Vec<&[u8]>) -> bool {
+pub fn has_duplicates(messages: Vec<&[u8]>) -> bool {
     let mut message_hashes: Vec<Hash> = messages
         .iter()
         .map(|x| {
@@ -269,6 +317,23 @@ mod test {
         }
 
         assert!(verify_aggregate_sig_v2(&m_pk_pairs, sig));
+    }
+
+    #[test]
+    fn test_aggregate_sign_and_verify_v2_mod_once() {
+        let seed: &[_] = &[1];
+        let mut rng: StdRng = SeedableRng::from_seed(seed);
+
+        let (sks, pks) = get_sks_pks!(SIGNERS, rng);
+        let ms = get_random_messages!(SIGNERS, rng);
+        let sig = aggregate_sigs!(ms, sks);
+
+        let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
+        for i in 0..SIGNERS {
+            m_pk_pairs.push((&ms[i], pks[i].clone()));
+        }
+
+        assert!(verify_aggregate_sig_v2_mod(&m_pk_pairs, sig));
     }
 
     #[test]
