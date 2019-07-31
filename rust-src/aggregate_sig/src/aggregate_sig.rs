@@ -167,11 +167,39 @@ pub fn verify_aggregate_sig_v3<P: Pairing>(
         prod_so_far = prod_so_far.plus_point(&pk_mul);
     }
 
-    P::pair(signature.0, P::G_2::one_point())
-        == P::pair(P::G_1::one_point(), prod_so_far)
+    P::pair(signature.0, P::G_2::one_point()) == P::pair(P::G_1::one_point(), prod_so_far)
 }
 
+use rayon::prelude::*;
 pub fn verify_aggregate_sig_v4<P: Pairing>(
+    m_pk_pairs: &[(&[u8], PublicKey<P>)],
+    signature: Signature<P>,
+) -> bool {
+    // check for duplicates
+    let ms: Vec<&[u8]> = m_pk_pairs.iter().map(|x| x.0).collect();
+    if has_duplicates(ms) {
+        return false;
+    }
+
+    let pks_mul_by_scalars: Vec<_> = m_pk_pairs
+        .par_iter()
+        .map(|(m, pk)| {
+            let scalar = scalar_from_message::<P>(m);
+            pk.0.mul_by_scalar(&scalar)
+        })
+        .collect();
+
+    let mut prod_so_far = pks_mul_by_scalars[0];
+    for i in 1..m_pk_pairs.len() {
+        prod_so_far = prod_so_far.plus_point(&pks_mul_by_scalars[i]);
+    }
+
+    P::pair(signature.0, P::G_2::one_point()) == P::pair(P::G_1::one_point(), prod_so_far)
+}
+
+use std::sync::{Arc, Mutex};
+
+pub fn verify_aggregate_sig_v5<P: Pairing>(
     m_pk_pairs: &[(&[u8], PublicKey<P>)],
     signature: Signature<P>,
 ) -> bool {
@@ -183,16 +211,33 @@ pub fn verify_aggregate_sig_v4<P: Pairing>(
 
     let (m0, pk0) = &m_pk_pairs[0];
     let scalar0 = scalar_from_message::<P>(m0);
-    let mut prod_so_far = pk0.0.mul_by_scalar(&scalar0);
-    for i in 1..m_pk_pairs.len() {
-        let (m, pk) = &m_pk_pairs[i];
+    let prod_so_far = Arc::new(Mutex::new(pk0.0.mul_by_scalar(&scalar0)));
+
+    m_pk_pairs.par_iter().skip(1).for_each(|(m, pk)| {
         let scalar = scalar_from_message::<P>(m);
         let pk_mul = pk.0.mul_by_scalar(&scalar);
-        prod_so_far = prod_so_far.plus_point(&pk_mul);
-    }
+        let mut prod = prod_so_far.lock().unwrap();
+        *prod = prod.plus_point(&pk_mul);
+    });
 
-    P::pair(signature.0, P::G_2::one_point())
-        == P::pair(P::G_1::one_point(), prod_so_far)
+    // let mut handles = vec![];
+    // for i in 1..m_pk_pairs.len() {
+    //     let ptr = Arc::clone(&prod_so_far);
+    //     let (m, pk) = &m_pk_pairs[i];
+    //     let handle = thread::spawn(move || {
+    //         let scalar = scalar_from_message::<P>(m);
+    //         let pk_mul = pk.0.mul_by_scalar(&scalar);
+    //         let mut prod = ptr.lock().unwrap();
+    //         *prod = prod.plus_point(&pk_mul);
+    //     });
+    //     handles.push(handle);
+    // }
+    //
+    // for handle in handles {
+    //     handle.join().unwrap();
+    // }
+    let prod = *prod_so_far.lock().unwrap();
+    P::pair(signature.0, P::G_2::one_point()) == P::pair(P::G_1::one_point(), prod)
 }
 
 fn hash_message(m: &[u8]) -> [u8; 64] {
@@ -286,55 +331,31 @@ mod test {
         }};
     }
 
-    #[test]
-    fn test_aggregate_sign_and_verify_v1_once() {
-        let seed: &[_] = &[1];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
+    macro_rules! test_agg_verify_fn {
+        ($test:ident, $f:ident) => {
+            #[test]
+            fn $test() {
+                let seed: &[_] = &[1];
+                let mut rng: StdRng = SeedableRng::from_seed(seed);
 
-        let (sks, pks) = get_sks_pks!(SIGNERS, rng);
-        let ms = get_random_messages!(SIGNERS, rng);
-        let sig = aggregate_sigs!(ms, sks);
+                let (sks, pks) = get_sks_pks!(SIGNERS, rng);
+                let ms = get_random_messages!(SIGNERS, rng);
+                let sig = aggregate_sigs!(ms, sks);
 
-        let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
-        for i in 0..SIGNERS {
-            m_pk_pairs.push((&ms[i], pks[i].clone()));
-        }
-        assert!(verify_aggregate_sig_v1(&m_pk_pairs, sig));
+                let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
+                for i in 0..SIGNERS {
+                    m_pk_pairs.push((&ms[i], pks[i].clone()));
+                }
+                assert!($f(&m_pk_pairs, sig));
+            }
+        };
     }
 
-    #[test]
-    fn test_aggregate_sign_and_verify_v2_once() {
-        let seed: &[_] = &[1];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
-
-        let (sks, pks) = get_sks_pks!(SIGNERS, rng);
-        let ms = get_random_messages!(SIGNERS, rng);
-        let sig = aggregate_sigs!(ms, sks);
-
-        let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
-        for i in 0..SIGNERS {
-            m_pk_pairs.push((&ms[i], pks[i].clone()));
-        }
-
-        assert!(verify_aggregate_sig_v2(&m_pk_pairs, sig));
-    }
-
-    #[test]
-    fn test_aggregate_sign_and_verify_v2_mod_once() {
-        let seed: &[_] = &[1];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
-
-        let (sks, pks) = get_sks_pks!(SIGNERS, rng);
-        let ms = get_random_messages!(SIGNERS, rng);
-        let sig = aggregate_sigs!(ms, sks);
-
-        let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
-        for i in 0..SIGNERS {
-            m_pk_pairs.push((&ms[i], pks[i].clone()));
-        }
-
-        assert!(verify_aggregate_sig_v2(&m_pk_pairs, sig));
-    }
+    test_agg_verify_fn!(test_v1, verify_aggregate_sig_v1);
+    test_agg_verify_fn!(test_v2, verify_aggregate_sig_v2);
+    test_agg_verify_fn!(test_v3, verify_aggregate_sig_v3);
+    test_agg_verify_fn!(test_v4, verify_aggregate_sig_v4);
+    test_agg_verify_fn!(test_v5, verify_aggregate_sig_v5);
 
     #[test]
     fn test_has_duplicates() {

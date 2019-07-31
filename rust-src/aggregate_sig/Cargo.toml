@@ -8,6 +8,7 @@ edition = "2018"
 rand = "0.4"
 sha2 = "0"
 pairing = "0"
+rayon = "1.1.0"
 
 [dependencies.curve_arithmetic]
 path = "../curve_arithmetic"

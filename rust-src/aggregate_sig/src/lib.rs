@@ -1,4 +1,5 @@
 extern crate rand;
+extern crate rayon;
 
 pub mod aggregate_sig;
 mod errors;

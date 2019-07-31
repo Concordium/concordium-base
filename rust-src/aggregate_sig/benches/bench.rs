@@ -66,16 +66,14 @@ fn bench_aggregate_sig(c: &mut Criterion) {
 }
 
 macro_rules! n_rand_ms_of_length {
-    ($n:expr, $length:expr, $rng:expr) => {
-        {
-            let mut ms: Vec<_> = Vec::with_capacity($n);
-            for _ in 0..$n {
-                let m = rand_m_of_length!($length, $rng);
-                ms.push(m);
-            }
-            ms
+    ($n:expr, $length:expr, $rng:expr) => {{
+        let mut ms: Vec<_> = Vec::with_capacity($n);
+        for _ in 0..$n {
+            let m = rand_m_of_length!($length, $rng);
+            ms.push(m);
         }
-    }
+        ms
+    }};
 }
 
 fn bench_verify_aggregate_sig(c: &mut Criterion) {
@@ -93,7 +91,6 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
     let ms_clone = ms.clone();
     let pks_clone = pks.clone();
     let agg_sig_clone = agg_sig.clone();
-
 
     c.bench_function("verify_aggregate_v1", move |b| {
         let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::with_capacity(n);
@@ -126,6 +123,30 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
             m_pk_pairs.push(m_pk);
         }
         b.iter(|| verify_aggregate_sig_v3(&m_pk_pairs.clone(), agg_sig_clone.clone()))
+    });
+
+    let ms_clone = ms.clone();
+    let pks_clone = pks.clone();
+    let agg_sig_clone = agg_sig.clone();
+    c.bench_function("verify_aggregate_v4", move |b| {
+        let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::with_capacity(n);
+        for i in 0..n {
+            let m_pk = (ms_clone[i].as_slice(), pks_clone[i].clone());
+            m_pk_pairs.push(m_pk);
+        }
+        b.iter(|| verify_aggregate_sig_v4(&m_pk_pairs.clone(), agg_sig_clone.clone()))
+    });
+
+    let ms_clone = ms.clone();
+    let pks_clone = pks.clone();
+    let agg_sig_clone = agg_sig.clone();
+    c.bench_function("verify_aggregate_v5", move |b| {
+        let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::with_capacity(n);
+        for i in 0..n {
+            let m_pk = (ms_clone[i].as_slice(), pks_clone[i].clone());
+            m_pk_pairs.push(m_pk);
+        }
+        b.iter(|| verify_aggregate_sig_v5(&m_pk_pairs.clone(), agg_sig_clone.clone()))
     });
 }
 
