@@ -5,10 +5,10 @@ authors = ["bassel <bassel.mannaa@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-pairing = "0"
+pairing = "0.14"
 rand    = "0.4"
 failure = "0.1"
-libc = "0.2.58"
+libc = "0.2"
 byteorder = "1.3"
 
 [dependencies.ffi_helpers]
