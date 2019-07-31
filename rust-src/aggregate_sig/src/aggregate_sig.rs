@@ -333,7 +333,7 @@ mod test {
             m_pk_pairs.push((&ms[i], pks[i].clone()));
         }
 
-        assert!(verify_aggregate_sig_v2_mod(&m_pk_pairs, sig));
+        assert!(verify_aggregate_sig_v2(&m_pk_pairs, sig));
     }
 
     #[test]
