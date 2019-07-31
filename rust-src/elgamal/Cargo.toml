@@ -5,15 +5,15 @@ authors = ["Concordium AG <info@concordium.com>"]
 edition = "2018"
 
 [dependencies]
-pairing = "0"
-failure       = "0"
+pairing = "0.14"
+failure       = "0.1"
 rand    = "0.4"
-rand_core = "0"
-clear_on_drop = "0"
-bitvec ="0.2.0"
-rayon = "1"
-serde = {version = "1", optional = true}
-libc  = "0"
+rand_core = "0.5"
+clear_on_drop = "0.2"
+bitvec ="0.9"
+rayon = "1.1"
+serde = {version = "1.0", optional = true}
+libc  = "0.2"
 
 [dependencies.curve_arithmetic]
 path = "../curve_arithmetic"
