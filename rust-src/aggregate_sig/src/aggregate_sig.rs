@@ -2,11 +2,11 @@ use curve_arithmetic::Curve;
 use curve_arithmetic::Pairing;
 use pairing::Field;
 use rand::Rng;
+use rayon::iter::*;
 use sha2::{Digest, Sha512};
 use std::cmp::Ordering;
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
-use rayon::iter::*;
 
 use crate::errors::AggregateSigError;
 
