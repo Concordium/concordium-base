@@ -61,7 +61,7 @@ fn bench_aggregate_sig(c: &mut Criterion) {
     // TODO, make code below work
 
     c.bench_function("aggregate_signature", move |b| {
-        b.iter(|| aggregate_sig(sig1.clone(), sig2.clone()))
+        b.iter(|| aggregate_sig(&sig1.clone(), &sig2.clone()))
     });
 }
 
@@ -85,7 +85,7 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
     let mut agg_sig = sign_message(&ms[0], &sks[0]);
     for i in 1..n {
         let new_sig = sign_message(&ms[i], &sks[i]);
-        agg_sig = aggregate_sig(new_sig, agg_sig);
+        agg_sig = aggregate_sig(&new_sig, &agg_sig);
     }
 
     c.bench_function("verify_aggregate_sig", move |b| {
@@ -96,6 +96,29 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
             m_pk_pairs.push(m_pk);
         }
         b.iter(|| verify_aggregate_sig(&m_pk_pairs.clone(), &agg_sig.clone()))
+    });
+}
+
+fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
+    let mut csprng = thread_rng();
+    let n = 200;
+    let (sks, pks) = get_sks_pks!(n, csprng);
+    let m = rand_m_of_length!(1000, csprng);
+
+    let mut agg_sig = sign_message(&m, &sks[0]);
+    for i in 1..n {
+        let new_sig = sign_message(&m, &sks[i]);
+        agg_sig = aggregate_sig(&new_sig, &agg_sig);
+    }
+
+    c.bench_function("verify_aggregate_sig_trusted_keys", move |b| {
+        let m = m.clone();
+        let mut pks_: Vec<PublicKey<Bls12>> = Vec::with_capacity(n);
+        for i in 0..n {
+            let pk = pks[i].clone();
+            pks_.push(pk);
+        }
+        b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks_.clone(), &agg_sig.clone()))
     });
 }
 
@@ -119,5 +142,14 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
 criterion_group!(sign_and_verify, bench_sign_and_verify);
 criterion_group!(aggregate, bench_aggregate_sig);
 criterion_group!(verify_aggregate, bench_verify_aggregate_sig);
+criterion_group!(
+    verify_aggregate_trusted_keys,
+    bench_verify_aggregate_sig_trusted_keys
+);
 // criterion_group!(has_dups, bench_has_duplicates);
-criterion_main!(sign_and_verify, aggregate, verify_aggregate);
+criterion_main!(
+    sign_and_verify,
+    aggregate,
+    verify_aggregate,
+    verify_aggregate_trusted_keys
+);

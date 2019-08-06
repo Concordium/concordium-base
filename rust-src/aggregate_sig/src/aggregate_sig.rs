@@ -107,8 +107,8 @@ pub fn verify<P: Pairing>(
 
 // Aggregates the two signatures.
 pub fn aggregate_sig<P: Pairing>(
-    my_signature: Signature<P>,
-    aggregated_signature: Signature<P>,
+    my_signature: &Signature<P>,
+    aggregated_signature: &Signature<P>,
 ) -> Signature<P> {
     Signature(aggregated_signature.0.plus_point(&my_signature.0))
 }
@@ -139,6 +139,21 @@ pub fn verify_aggregate_sig<P: Pairing>(
     P::pair(signature.0, P::G_2::one_point()) == P::pair(P::G_1::one_point(), prod)
 }
 
+pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
+    m: &[u8],
+    pks: &[PublicKey<P>],
+    signature: &Signature<P>,
+) -> bool {
+    let mut sum = pks[0].0;
+    pks.iter().skip(1).for_each(|x| {
+        sum = sum.plus_point(&x.0);
+    });
+    P::pair(signature.0, P::G_2::one_point())
+        == P::pair(
+            P::G_1::one_point().mul_by_scalar(&scalar_from_message::<P>(m)),
+            sum,
+        )
+}
 // Checks for duplicates in a list of messages
 // This is not very efficient - the sorting algorithm can exit as soon as it encounters an equality
 // and report that a duplicate indeed exists.
@@ -220,7 +235,7 @@ mod test {
             let mut sig = sign_message(&$messages[0], &$sks[0]);
             for i in 1..$sks.len() {
                 let my_sig = sign_message(&$messages[i], &$sks[i]);
-                sig = aggregate_sig(my_sig, sig);
+                sig = aggregate_sig(&my_sig, &sig);
             }
             sig
         }};
@@ -261,6 +276,21 @@ mod test {
         }
     }
 
+    #[test]
+    fn test_verify_aggregate_sig_trusted_keys() {
+        let seed: &[_] = &[1];
+        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        for _ in 0..TEST_ITERATIONS {
+            let (sks, pks) = get_sks_pks!(SIGNERS, rng);
+            let m: [u8; 32] = rng.gen::<[u8; 32]>();
+            let sigs: Vec<Signature<Bls12>> = sks.iter().map(|sk| sign_message(&m, &sk)).collect();
+            let mut agg_sig = sigs[0].clone();
+            sigs.iter().skip(1).for_each(|x| {
+                agg_sig = aggregate_sig(&x, &agg_sig);
+            });
+            assert!(verify_aggregate_sig_trusted_keys(&m, &pks, &agg_sig));
+        }
+    }
     #[test]
     fn test_has_duplicates() {
         let seed: &[_] = &[1];
