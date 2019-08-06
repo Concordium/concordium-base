@@ -24,7 +24,6 @@ import Control.Exception(assert)
 import Data.Hashable(Hashable)
 import Data.Word
 import Data.ByteString.Char8(ByteString)
-import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.ByteString.Builder(toLazyByteString, byteStringHex)
