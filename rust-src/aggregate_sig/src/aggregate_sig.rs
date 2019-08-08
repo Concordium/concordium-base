@@ -3,13 +3,14 @@ use curve_arithmetic::Pairing;
 use pairing::Field;
 use rand::Rng;
 use rayon::iter::*;
+use rayon::join;
 use sha2::{Digest, Sha512};
 use std::cmp::Ordering;
 use std::io::Cursor;
-use std::sync::{Arc, Mutex};
 
 use crate::errors::AggregateSigError;
 
+// A wrapper for sha512 hashes. Only use is to have the Ord trait on [u8; 64] for sorting an array of hashes
 struct Hash([u8; 64]);
 
 impl PartialEq for Hash {
@@ -41,11 +42,19 @@ impl<P: Pairing> SecretKey<P> {
     }
 }
 
-#[derive(Clone, Debug)]
+impl<P: Pairing> Clone for SecretKey<P> {
+    fn clone(&self) -> Self {
+        SecretKey(self.0)
+    }
+}
+
+impl<P: Pairing> Copy for SecretKey<P> {}
+
+#[derive(Debug)]
 pub struct PublicKey<P: Pairing>(P::G_2);
 
 impl<P: Pairing> PublicKey<P> {
-    pub fn from_secret(sk: &SecretKey<P>) -> PublicKey<P> {
+    pub fn from_secret(sk: SecretKey<P>) -> PublicKey<P> {
         PublicKey(P::G_2::one_point().mul_by_scalar(&sk.0))
     }
 
@@ -59,14 +68,30 @@ impl<P: Pairing> PublicKey<P> {
     }
 }
 
-#[derive(Clone, Debug)]
+impl<P: Pairing> Clone for PublicKey<P> {
+    fn clone(&self) -> Self {
+        PublicKey(self.0)
+    }
+}
+
+impl<P: Pairing> Copy for PublicKey<P> {}
+
+#[derive(Debug)]
 pub struct Signature<P: Pairing>(P::G_1);
+
+impl<P: Pairing> Clone for Signature<P> {
+    fn clone(&self) -> Self {
+        Signature(self.0)
+    }
+}
+
+impl<P: Pairing> Copy for Signature<P> {}
 
 // Sign a message using the supplied secret key.
 // Signing can potentially be optimized by having a proper hash fucntion from the message space
 // (&[u8]) to G_1. Currently we hash the message using Sha512 and decode it into a scalar of G_1
 // and multiply the generator of G_1 with this
-pub fn sign_message<P: Pairing>(message: &[u8], secret_key: &SecretKey<P>) -> Signature<P> {
+pub fn sign_message<P: Pairing>(message: &[u8], secret_key: SecretKey<P>) -> Signature<P> {
     let mut scalar: P::ScalarField = scalar_from_message::<P>(message);
     // the hash is generator^scalar, the signature is hash^secret_key. We multiply scalars before
     // group operation for faster computation
@@ -97,26 +122,31 @@ fn hash_message(m: &[u8]) -> [u8; 64] {
 // Verifies a single message and signature pair
 pub fn verify<P: Pairing>(
     message: &[u8],
-    public_key: &PublicKey<P>,
-    signature: &Signature<P>,
+    public_key: PublicKey<P>,
+    signature: Signature<P>,
 ) -> bool {
     let scalar: P::ScalarField = scalar_from_message::<P>(message);
     let g1_hash = P::G_1::one_point().mul_by_scalar(&scalar);
-    P::pair(signature.0, P::G_2::one_point()) == P::pair(g1_hash, public_key.0)
+
+    // compute pairings in parallel
+    let (pair1, pair2): (P::TargetField, P::TargetField) = join(
+        || P::pair(signature.0, P::G_2::one_point()),
+        || P::pair(g1_hash, public_key.0),
+    );
+    pair1 == pair2
 }
 
-// Aggregates the two signatures.
+// Aggregates the two signatures. Commutative operation
 pub fn aggregate_sig<P: Pairing>(
-    my_signature: &Signature<P>,
-    aggregated_signature: &Signature<P>,
+    my_signature: Signature<P>,
+    aggregated_signature: Signature<P>,
 ) -> Signature<P> {
     Signature(aggregated_signature.0.plus_point(&my_signature.0))
 }
 
-// Verifies a list of (message, public key) pairs with signature.
 pub fn verify_aggregate_sig<P: Pairing>(
     m_pk_pairs: &[(&[u8], PublicKey<P>)],
-    signature: &Signature<P>,
+    signature: Signature<P>,
 ) -> bool {
     // check for duplicates in messages. Reject if any
     let ms: Vec<&[u8]> = m_pk_pairs.iter().map(|x| x.0).collect();
@@ -124,36 +154,49 @@ pub fn verify_aggregate_sig<P: Pairing>(
         return false;
     }
 
-    let (m0, pk0) = &m_pk_pairs[0];
-    let scalar0 = scalar_from_message::<P>(m0);
-    let prod_so_far = Arc::new(Mutex::new(pk0.0.mul_by_scalar(&scalar0)));
+    let sum = m_pk_pairs
+        .par_iter()
+        .fold(
+            || P::G_2::zero_point(),
+            |_sum, x| {
+                let (m, pk) = x;
+                let scalar = scalar_from_message::<P>(m);
+                let pk_mul = pk.0.mul_by_scalar(&scalar);
+                pk_mul
+            },
+        )
+        .reduce(|| P::G_2::zero_point(), |sum, x| sum.plus_point(&x));
 
-    m_pk_pairs.par_iter().skip(1).for_each(|(m, pk)| {
-        let scalar = scalar_from_message::<P>(m);
-        let pk_mul = pk.0.mul_by_scalar(&scalar);
-        let mut prod = prod_so_far.lock().unwrap();
-        *prod = prod.plus_point(&pk_mul);
-    });
-
-    let prod = *prod_so_far.lock().unwrap();
-    P::pair(signature.0, P::G_2::one_point()) == P::pair(P::G_1::one_point(), prod)
+    // compute pairings in parallel
+    let (pair1, pair2): (P::TargetField, P::TargetField) = join(
+        || P::pair(signature.0, P::G_2::one_point()),
+        || P::pair(P::G_1::one_point(), sum),
+    );
+    pair1 == pair2
 }
 
 pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
     m: &[u8],
     pks: &[PublicKey<P>],
-    signature: &Signature<P>,
+    signature: Signature<P>,
 ) -> bool {
-    let mut sum = pks[0].0;
-    pks.iter().skip(1).for_each(|x| {
-        sum = sum.plus_point(&x.0);
-    });
-    P::pair(signature.0, P::G_2::one_point())
-        == P::pair(
-            P::G_1::one_point().mul_by_scalar(&scalar_from_message::<P>(m)),
-            sum,
-        )
+    let sum = pks
+        .iter()
+        .fold(P::G_2::zero_point(), |sum, x| sum.plus_point(&x.0));
+
+    // compute pairings in parallel
+    let (pair1, pair2): (P::TargetField, P::TargetField) = join(
+        || P::pair(signature.0, P::G_2::one_point()),
+        || {
+            P::pair(
+                P::G_1::one_point().mul_by_scalar(&scalar_from_message::<P>(m)),
+                sum,
+            )
+        },
+    );
+    pair1 == pair2
 }
+
 // Checks for duplicates in a list of messages
 // This is not very efficient - the sorting algorithm can exit as soon as it encounters an equality
 // and report that a duplicate indeed exists.
@@ -181,61 +224,57 @@ mod test {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, StdRng};
 
-    const SIGNERS: usize = 10;
+    const SIGNERS: usize = 20;
     const TEST_ITERATIONS: usize = 1000;
 
     // returns a pair of lists (sks, pks), such that sks[i] and pks[i] are corresponding secret and
     // public key
-    macro_rules! get_sks_pks {
-        ($amt:expr, $rng:expr) => {{
-            let sks: Vec<SecretKey<Bls12>> = (0..$amt)
-                .map(|_| SecretKey::<Bls12>::generate(&mut $rng))
-                .collect();
+    fn get_sks_pks<P: Pairing>(
+        amt: usize,
+        rng: &mut StdRng,
+    ) -> (Vec<SecretKey<P>>, Vec<PublicKey<P>>) {
+        let sks: Vec<SecretKey<P>> = (0..amt).map(|_| SecretKey::<P>::generate(rng)).collect();
 
-            let pks: Vec<PublicKey<Bls12>> = sks
-                .iter()
-                .map(|x| PublicKey::<Bls12>::from_secret(x))
-                .collect();
-
-            (sks, pks)
-        };};
+        let pks: Vec<PublicKey<P>> = sks
+            .iter()
+            .map(|x| PublicKey::<P>::from_secret(*x))
+            .collect();
+        (sks, pks)
     }
 
     // returns a list of random bytes (of length 32)
-    macro_rules! get_random_messages {
-        ($amt:expr, $rng:expr) => {{
-            let ms: Vec<[u8; 32]> = (0..$amt).map(|_| $rng.gen::<[u8; 32]>()).collect();
-            ms
-        }};
+    fn get_random_messages<R: Rng>(amt: usize, rng: &mut R) -> Vec<[u8; 32]> {
+        (0..amt).map(|_| rng.gen::<[u8; 32]>()).collect()
     }
 
     #[test]
     fn test_sign_and_verify() {
         let seed: &[_] = &[1];
         let mut rng: StdRng = SeedableRng::from_seed(seed);
-        let sk = SecretKey::<Bls12>::generate(&mut rng);
-        let pk = PublicKey::from_secret(&sk);
 
         for _ in 0..TEST_ITERATIONS {
+            let sk = SecretKey::<Bls12>::generate(&mut rng);
+            let pk = PublicKey::from_secret(sk);
+
             // should verify correctly
             let m = rng.gen::<[u8; 32]>();
-            let signature = sign_message(&m, &sk);
-            assert!(verify(&m, &pk, &signature));
+            let signature = sign_message(&m, sk);
+            assert!(verify(&m, pk, signature));
 
             // should not verify!
-            let signature = sign_message(&m, &sk);
+            let signature = sign_message(&m, sk);
             let sk2 = SecretKey::<Bls12>::generate(&mut rng);
-            let pk2 = PublicKey::from_secret(&sk2);
-            assert!(!verify(&m, &pk2, &signature))
+            let pk2 = PublicKey::from_secret(sk2);
+            assert!(!verify(&m, pk2, signature))
         }
     }
 
     macro_rules! aggregate_sigs {
         ($messages:expr, $sks:expr) => {{
-            let mut sig = sign_message(&$messages[0], &$sks[0]);
+            let mut sig = sign_message(&$messages[0], $sks[0]);
             for i in 1..$sks.len() {
-                let my_sig = sign_message(&$messages[i], &$sks[i]);
-                sig = aggregate_sig(&my_sig, &sig);
+                let my_sig = sign_message(&$messages[i], $sks[i]);
+                sig = aggregate_sig(my_sig, sig);
             }
             sig
         }};
@@ -246,10 +285,10 @@ mod test {
         let seed: &[_] = &[1];
         let mut rng: StdRng = SeedableRng::from_seed(seed);
 
-        let (sks, pks) = get_sks_pks!(SIGNERS, rng);
+        let (sks, pks) = get_sks_pks(SIGNERS, &mut rng);
 
         for _ in 0..TEST_ITERATIONS {
-            let ms = get_random_messages!(SIGNERS, rng);
+            let ms = get_random_messages(SIGNERS, &mut rng);
             let sig = aggregate_sigs!(ms, sks);
 
             let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
@@ -258,21 +297,21 @@ mod test {
             }
 
             // signature should verify
-            assert!(verify_aggregate_sig(&m_pk_pairs, &sig));
+            assert!(verify_aggregate_sig(&m_pk_pairs, sig));
 
             let (m_, pk_) = m_pk_pairs.pop().unwrap();
-            let new_pk = PublicKey::<Bls12>::from_secret(&SecretKey::<Bls12>::generate(&mut rng));
+            let new_pk = PublicKey::<Bls12>::from_secret(SecretKey::<Bls12>::generate(&mut rng));
             m_pk_pairs.push((m_, new_pk));
 
             // altering a public key should make verification fail
-            assert!(!verify_aggregate_sig(&m_pk_pairs, &sig));
+            assert!(!verify_aggregate_sig(&m_pk_pairs, sig));
 
             let new_m: [u8; 32] = rng.gen::<[u8; 32]>();
             m_pk_pairs.pop();
             m_pk_pairs.push((&new_m, pk_));
 
             // altering a message should make verification fail
-            assert!(!verify_aggregate_sig(&m_pk_pairs, &sig));
+            assert!(!verify_aggregate_sig(&m_pk_pairs, sig));
         }
     }
 
@@ -281,16 +320,37 @@ mod test {
         let seed: &[_] = &[1];
         let mut rng: StdRng = SeedableRng::from_seed(seed);
         for _ in 0..TEST_ITERATIONS {
-            let (sks, pks) = get_sks_pks!(SIGNERS, rng);
+            let (sks, pks) = get_sks_pks(SIGNERS, &mut rng);
             let m: [u8; 32] = rng.gen::<[u8; 32]>();
-            let sigs: Vec<Signature<Bls12>> = sks.iter().map(|sk| sign_message(&m, &sk)).collect();
+            let sigs: Vec<Signature<Bls12>> = sks.iter().map(|sk| sign_message(&m, *sk)).collect();
             let mut agg_sig = sigs[0].clone();
             sigs.iter().skip(1).for_each(|x| {
-                agg_sig = aggregate_sig(&x, &agg_sig);
+                agg_sig = aggregate_sig(*x, agg_sig);
             });
-            assert!(verify_aggregate_sig_trusted_keys(&m, &pks, &agg_sig));
+
+            assert!(verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig));
+
+            // test changing message makes verification fails
+            let m_alt: [u8; 32] = rng.gen::<[u8; 32]>();
+            assert!(!verify_aggregate_sig_trusted_keys(&m_alt, &pks, agg_sig));
+
+            // test that adding or removing a public key makes verification fail
+            let mut pks_alt = pks.clone();
+            pks_alt.push(PublicKey::<Bls12>::from_secret(
+                SecretKey::<Bls12>::generate(&mut rng),
+            ));
+            assert!(!verify_aggregate_sig_trusted_keys(&m, &pks_alt, agg_sig));
+
+            // test that removing a public key makes verification fail
+            pks_alt.pop();
+            pks_alt.pop();
+            assert!(!verify_aggregate_sig_trusted_keys(&m, &pks_alt, agg_sig));
+
+            let agg_sig_alt = Signature(<Bls12 as Pairing>::G_1::generate(&mut rng));
+            assert!(!verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig_alt));
         }
     }
+
     #[test]
     fn test_has_duplicates() {
         let seed: &[_] = &[1];
