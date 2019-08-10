@@ -100,6 +100,10 @@ pub fn sign_message<P: Pairing>(message: &[u8], secret_key: SecretKey<P>) -> Sig
     Signature(signature)
 }
 
+fn hash_message_to_g1<P: Pairing>(m: &[u8]) -> P::G_1 {
+    P::G_1::one_point().mul_by_scalar(&scalar_from_message::<P>(m))
+}
+
 // Hashes the supplied message using Sha512 and decodes to the scalarfield of P, repeats until
 // succesfully decoding.
 fn scalar_from_message<P: Pairing>(m: &[u8]) -> P::ScalarField {
@@ -120,13 +124,8 @@ fn hash_message(m: &[u8]) -> [u8; 64] {
 }
 
 // Verifies a single message and signature pair
-pub fn verify<P: Pairing>(
-    message: &[u8],
-    public_key: PublicKey<P>,
-    signature: Signature<P>,
-) -> bool {
-    let scalar: P::ScalarField = scalar_from_message::<P>(message);
-    let g1_hash = P::G_1::one_point().mul_by_scalar(&scalar);
+pub fn verify<P: Pairing>(m: &[u8], public_key: PublicKey<P>, signature: Signature<P>) -> bool {
+    let g1_hash = hash_message_to_g1::<P>(m);
 
     // compute pairings in parallel
     let (pair1, pair2): (P::TargetField, P::TargetField) = join(
@@ -148,31 +147,31 @@ pub fn verify_aggregate_sig<P: Pairing>(
     m_pk_pairs: &[(&[u8], PublicKey<P>)],
     signature: Signature<P>,
 ) -> bool {
-    // check for duplicates in messages. Reject if any
-    let ms: Vec<&[u8]> = m_pk_pairs.iter().map(|x| x.0).collect();
-    if has_duplicates(ms) {
+    // Check for duplicates in messages. Reject if any
+    if has_duplicates(m_pk_pairs.iter().map(|x| x.0)) {
         return false;
     }
 
-    let sum = m_pk_pairs
+    let product = m_pk_pairs
         .par_iter()
         .fold(
-            || P::G_2::zero_point(),
+            || P::TargetField::zero(),
             |_sum, x| {
                 let (m, pk) = x;
-                let scalar = scalar_from_message::<P>(m);
-                let pk_mul = pk.0.mul_by_scalar(&scalar);
-                pk_mul
+                let g1_hash = hash_message_to_g1::<P>(m);
+                P::pair(g1_hash, pk.0)
             },
         )
-        .reduce(|| P::G_2::zero_point(), |sum, x| sum.plus_point(&x));
+        .reduce(
+            || P::TargetField::one(),
+            |prod, x| {
+                let mut p = prod;
+                p.mul_assign(&x);
+                p
+            },
+        );
 
-    // compute pairings in parallel
-    let (pair1, pair2): (P::TargetField, P::TargetField) = join(
-        || P::pair(signature.0, P::G_2::one_point()),
-        || P::pair(P::G_1::one_point(), sum),
-    );
-    pair1 == pair2
+    P::pair(signature.0, P::G_2::one_point()) == product
 }
 
 pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
@@ -187,12 +186,7 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
     // compute pairings in parallel
     let (pair1, pair2): (P::TargetField, P::TargetField) = join(
         || P::pair(signature.0, P::G_2::one_point()),
-        || {
-            P::pair(
-                P::G_1::one_point().mul_by_scalar(&scalar_from_message::<P>(m)),
-                sum,
-            )
-        },
+        || P::pair(hash_message_to_g1::<P>(m), sum),
     );
     pair1 == pair2
 }
@@ -201,9 +195,8 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
 // This is not very efficient - the sorting algorithm can exit as soon as it encounters an equality
 // and report that a duplicate indeed exists.
 // Consider building hashmap or Btree and exit as soon as a duplicate is seen
-fn has_duplicates(messages: Vec<&[u8]>) -> bool {
-    let mut message_hashes: Vec<Hash> = messages
-        .iter()
+fn has_duplicates<'a>(messages_iter: impl Iterator<Item = &'a [u8]>) -> bool {
+    let mut message_hashes: Vec<Hash> = messages_iter
         .map(|x| {
             let h = hash_message(x);
             Hash(h)
@@ -224,7 +217,7 @@ mod test {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, StdRng};
 
-    const SIGNERS: usize = 20;
+    const SIGNERS: usize = 10;
     const TEST_ITERATIONS: usize = 1000;
 
     // returns a pair of lists (sks, pks), such that sks[i] and pks[i] are corresponding secret and
@@ -358,6 +351,8 @@ mod test {
 
         for _ in 0..TEST_ITERATIONS {
             let mut ms: Vec<[u8; 8]> = (0..SIGNERS).map(|x| x.to_le_bytes()).collect();
+
+            // Make a duplication in the messages
             let random_idx1: usize = rng.gen_range(0, SIGNERS);
             let mut random_idx2: usize = rng.gen_range(0, SIGNERS);
             while random_idx1 == random_idx2 {
@@ -365,11 +360,9 @@ mod test {
             }
             ms[random_idx1] = ms[random_idx2];
 
-            let mut ms_pointers: Vec<&[u8]> = Vec::new();
-            for i in 0..SIGNERS {
-                ms_pointers.push(&ms[i]);
-            }
-            assert!(has_duplicates(ms_pointers));
+            let iter = (0..SIGNERS).map(|i| -> &[u8] { &ms[i] });
+            let result = has_duplicates(iter);
+            assert!(result);
         }
     }
 }
