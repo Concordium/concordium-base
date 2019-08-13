@@ -2,10 +2,13 @@
 // - bm@concordium.com
 //
 
+use crate::bls12_381_hashing::*;
 use crate::curve_arithmetic::*;
 use byteorder::{BigEndian, ReadBytesExt};
 use pairing::{
-    bls12_381::{Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2},
+    bls12_381::{
+        Bls12, Fq, FqRepr, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2,
+    },
     CurveAffine, CurveProjective, EncodedPoint, Engine, PrimeField,
 };
 use rand::*;
@@ -19,9 +22,13 @@ impl Curve for G2 {
     const GROUP_ELEMENT_LENGTH: usize = 96;
     const SCALAR_LENGTH: usize = 32;
 
-    fn zero_point() -> Self { G2::zero() }
+    fn zero_point() -> Self {
+        G2::zero()
+    }
 
-    fn one_point() -> Self { G2::one() }
+    fn one_point() -> Self {
+        G2::one()
+    }
 
     fn inverse_point(&self) -> Self {
         let mut x = *self;
@@ -29,7 +36,9 @@ impl Curve for G2 {
         x
     }
 
-    fn is_zero_point(&self) -> bool { self.is_zero() }
+    fn is_zero_point(&self) -> bool {
+        self.is_zero()
+    }
 
     fn double_point(&self) -> Self {
         let mut x = *self;
@@ -56,7 +65,9 @@ impl Curve for G2 {
         p
     }
 
-    fn compress(&self) -> Self::Compressed { self.into_affine().into_compressed() }
+    fn compress(&self) -> Self::Compressed {
+        self.into_affine().into_compressed()
+    }
 
     fn decompress(c: &Self::Compressed) -> Result<G2, CurveDecodingError> {
         match c.into_affine() {
@@ -138,9 +149,17 @@ impl Curve for G2 {
         }
     }
 
-    fn generate<T: Rng>(csprng: &mut T) -> Self { G2::rand(csprng) }
+    fn generate<T: Rng>(csprng: &mut T) -> Self {
+        G2::rand(csprng)
+    }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar {
+        Fr::rand(csprng)
+    }
+
+    fn hash_to_group_element(b: &[u8]) -> Self {
+        unimplemented!("hashing to G2 of Bls12_381 is not implemented")
+    }
 }
 
 impl Curve for G1 {
@@ -151,9 +170,13 @@ impl Curve for G1 {
     const GROUP_ELEMENT_LENGTH: usize = 48;
     const SCALAR_LENGTH: usize = 32;
 
-    fn zero_point() -> Self { G1::zero() }
+    fn zero_point() -> Self {
+        G1::zero()
+    }
 
-    fn one_point() -> Self { G1::one() }
+    fn one_point() -> Self {
+        G1::one()
+    }
 
     fn inverse_point(&self) -> Self {
         let mut x = *self;
@@ -161,7 +184,9 @@ impl Curve for G1 {
         x
     }
 
-    fn is_zero_point(&self) -> bool { self.is_zero() }
+    fn is_zero_point(&self) -> bool {
+        self.is_zero()
+    }
 
     fn double_point(&self) -> Self {
         let mut x = *self;
@@ -188,7 +213,9 @@ impl Curve for G1 {
         p
     }
 
-    fn compress(&self) -> Self::Compressed { self.into_affine().into_compressed() }
+    fn compress(&self) -> Self::Compressed {
+        self.into_affine().into_compressed()
+    }
 
     fn decompress(c: &Self::Compressed) -> Result<G1, CurveDecodingError> {
         match c.into_affine() {
@@ -271,9 +298,18 @@ impl Curve for G1 {
         }
     }
 
-    fn generate<T: Rng>(csprng: &mut T) -> Self { G1::rand(csprng) }
+    fn generate<T: Rng>(csprng: &mut T) -> Self {
+        G1::rand(csprng)
+    }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar {
+        Fr::rand(csprng)
+    }
+
+    fn hash_to_group_element(bytes: &[u8]) -> Self {
+        // WIP, see bls12_381_hashing.rs
+        unimplemented!("hashing to G1 of Bls12_381 is not implemented");
+    }
 }
 
 impl Curve for G1Affine {
@@ -284,9 +320,13 @@ impl Curve for G1Affine {
     const GROUP_ELEMENT_LENGTH: usize = 48;
     const SCALAR_LENGTH: usize = 32;
 
-    fn zero_point() -> Self { G1Affine::zero() }
+    fn zero_point() -> Self {
+        G1Affine::zero()
+    }
 
-    fn one_point() -> Self { G1Affine::one() }
+    fn one_point() -> Self {
+        G1Affine::one()
+    }
 
     fn inverse_point(&self) -> Self {
         let mut x = self.into_projective();
@@ -294,7 +334,9 @@ impl Curve for G1Affine {
         x.into_affine()
     }
 
-    fn is_zero_point(&self) -> bool { self.is_zero() }
+    fn is_zero_point(&self) -> bool {
+        self.is_zero()
+    }
 
     fn double_point(&self) -> Self {
         let mut x = self.into_projective();
@@ -319,7 +361,9 @@ impl Curve for G1Affine {
         self.mul(s).into_affine()
     }
 
-    fn compress(&self) -> Self::Compressed { self.into_compressed() }
+    fn compress(&self) -> Self::Compressed {
+        self.into_compressed()
+    }
 
     fn decompress(c: &Self::Compressed) -> Result<G1Affine, CurveDecodingError> {
         match c.into_affine() {
@@ -401,9 +445,17 @@ impl Curve for G1Affine {
         }
     }
 
-    fn generate<T: Rng>(csprng: &mut T) -> Self { G1::rand(csprng).into_affine() }
+    fn generate<T: Rng>(csprng: &mut T) -> Self {
+        G1::rand(csprng).into_affine()
+    }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar {
+        Fr::rand(csprng)
+    }
+
+    fn hash_to_group_element(b: &[u8]) -> Self {
+        unimplemented!("hashing to G1Affine of Bls12_381 is not implemented")
+    }
 }
 
 impl Curve for G2Affine {
@@ -414,9 +466,13 @@ impl Curve for G2Affine {
     const GROUP_ELEMENT_LENGTH: usize = 96;
     const SCALAR_LENGTH: usize = 32;
 
-    fn zero_point() -> Self { G2Affine::zero() }
+    fn zero_point() -> Self {
+        G2Affine::zero()
+    }
 
-    fn one_point() -> Self { G2Affine::one() }
+    fn one_point() -> Self {
+        G2Affine::one()
+    }
 
     fn inverse_point(&self) -> Self {
         let mut x = self.into_projective();
@@ -424,7 +480,9 @@ impl Curve for G2Affine {
         x.into_affine()
     }
 
-    fn is_zero_point(&self) -> bool { self.is_zero() }
+    fn is_zero_point(&self) -> bool {
+        self.is_zero()
+    }
 
     fn double_point(&self) -> Self {
         let mut x = self.into_projective();
@@ -449,7 +507,9 @@ impl Curve for G2Affine {
         self.mul(s).into_affine()
     }
 
-    fn compress(&self) -> Self::Compressed { self.into_compressed() }
+    fn compress(&self) -> Self::Compressed {
+        self.into_compressed()
+    }
 
     fn decompress(c: &Self::Compressed) -> Result<G2Affine, CurveDecodingError> {
         match c.into_affine() {
@@ -531,9 +591,17 @@ impl Curve for G2Affine {
         }
     }
 
-    fn generate<T: Rng>(csprng: &mut T) -> Self { G2::rand(csprng).into_affine() }
+    fn generate<T: Rng>(csprng: &mut T) -> Self {
+        G2::rand(csprng).into_affine()
+    }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar {
+        Fr::rand(csprng)
+    }
+
+    fn hash_to_group_element(b: &[u8]) -> Self {
+        unimplemented!("hashing to G2Affine of Bls12_381 is not implemented")
+    }
 }
 
 impl Pairing for Bls12 {
@@ -560,7 +628,9 @@ impl Pairing for Bls12 {
         Box::new(bytes)
     }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::ScalarField { Fr::rand(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::ScalarField {
+        Fr::rand(csprng)
+    }
 
     fn bytes_to_scalar(bytes: &mut Cursor<&[u8]>) -> Result<Self::ScalarField, FieldDecodingError> {
         let mut frrepr: FrRepr = FrRepr([0u64; 4]);
