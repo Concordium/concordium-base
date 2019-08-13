@@ -118,9 +118,11 @@ encodeInteger z0 = unsafeCreate (initBytes z0 (fixedLength (undefined :: a) - 1)
                 initBytes (shiftR z 8) (off - 1) ptr
             | otherwise = return ()
 
+-- |Convert a 'FixedByteString' to an unsigned 'Integer' with big endian encoding.
 decodeIntegerUnsigned :: forall a. (FixedLength a) => FixedByteString a -> Integer
-decodeIntegerUnsigned (FixedByteString fbs) = foldrByteArray (\v acc -> acc `shiftL` 8 .|. toInteger (v :: Word8)) 0 fbs
+decodeIntegerUnsigned fbs = foldl (\acc v -> acc `shiftL` 8 .|. toInteger (v :: Word8)) 0 (unpack fbs)
 
+-- |Convert a 'FixedByteString' to a signed 'Integer' with big endian encoding.
 decodeIntegerSigned :: forall a. (FixedLength a) => FixedByteString a -> Integer
 decodeIntegerSigned (FixedByteString fbs) = doDecode 0 0 fbs
     where
@@ -286,10 +288,15 @@ withPtrReadOnlyST (FixedByteString ba) f = runST comp
           size = fixedLength (undefined :: s)
 
 
--- |Read the first 8 bytes as a Word64 in __little__ endian. This will lead to
+-- |Read the first 8 bytes as a Word64 in __host__ endian. This will lead to
 -- problems if the size of the fixed bytestring is not at least 8 bytes, hence
 -- this function is unsafe.
 {-# INLINE unsafeReadWord64 #-}
 unsafeReadWord64 :: FixedByteString s -> Word64
 unsafeReadWord64 (FixedByteString fbs) = indexByteArray fbs 0
 
+-- |Read the first 8 bytes as a Word64 in __big__ endian.  If there are fewer
+-- than 8 bytes, these will be used as the low-order bytes (i.e. we pad with 0s on
+-- the left).
+readWord64be :: (FixedLength s) => FixedByteString s -> Word64
+readWord64be = foldl (\acc v -> acc `shiftL` 8 .|. fromIntegral (v :: Word8)) 0 . take 8 . unpack

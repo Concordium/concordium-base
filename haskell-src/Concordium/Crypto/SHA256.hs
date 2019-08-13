@@ -133,12 +133,12 @@ hashTest path = do b <- L.readFile path
 -- that the outcome 1 is not possible.
 hashToDouble :: Hash -> Double
 hashToDouble (Hash h) =
-    let w = FBS.unsafeReadWord64 h in
+    let w = FBS.readWord64be h in
     encodeFloat (toInteger w) (-64)
 
 -- |Convert a 'Hash' to an 'Int'.
 hashToInt :: Hash -> Int
-hashToInt (Hash h) = fromIntegral . FBS.unsafeReadWord64 $ h
+hashToInt (Hash h) = fromIntegral . FBS.readWord64be $ h
 
 -- |Convert a 'Hash' to a 'ByteString'.
 -- Gives the same result a serializing, but more efficient.
