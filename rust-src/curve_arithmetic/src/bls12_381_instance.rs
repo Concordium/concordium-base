@@ -9,7 +9,7 @@ use pairing::{
     bls12_381::{
         Bls12, Fq, FqRepr, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2,
     },
-    CurveAffine, CurveProjective, EncodedPoint, Engine, PrimeField,
+    CurveAffine, CurveProjective, EncodedPoint, Engine, Field, PrimeField,
 };
 use rand::*;
 use std::io::{Cursor, Read};
@@ -158,7 +158,7 @@ impl Curve for G2 {
     }
 
     fn hash_to_group_element(b: &[u8]) -> Self {
-        unimplemented!("hashing to G2 of Bls12_381 is not implemented")
+        unimplemented!("hash_to_group_element for G2 of Bls12_381 is not implemented")
     }
 }
 
@@ -307,8 +307,59 @@ impl Curve for G1 {
     }
 
     fn hash_to_group_element(bytes: &[u8]) -> Self {
-        // WIP, see bls12_381_hashing.rs
-        unimplemented!("hashing to G1 of Bls12_381 is not implemented");
+        let u: Fq = hash_bytes_to_fq(bytes);
+        let mut u_pow2 = u;
+        u_pow2.square();
+        let mut u_pow4 = u_pow2;
+        u_pow4.square();
+
+        let mut u_pow4_minus_u_pow2_plus_one = u_pow4;
+        u_pow4_minus_u_pow2_plus_one.sub_assign(&u_pow2);
+        u_pow4_minus_u_pow2_plus_one.add_assign(&Fq::one());
+        let b = Fq::from_repr(FqRepr(E11_B)).unwrap(); // this unwrap can't fail, E11_B is an element of the field
+        let mut n = b;
+        n.mul_assign(&u_pow4_minus_u_pow2_plus_one);
+
+        let mut u_pow2_minus_u_pow4 = u_pow2;
+        u_pow2_minus_u_pow4.sub_assign(&u_pow4);
+        let a = Fq::from_repr(FqRepr(E11_A)).unwrap(); // this unwrap can't fail, E11_A is an element of the field
+        let mut d = a;
+        d.mul_assign(&u_pow2_minus_u_pow4);
+
+        // if d, the denominator of X0(u), is 0 then we set the denominator to -a instead, since -b/a is square in Fq
+        if d.is_zero() {
+            d = a;
+            d.negate();
+        }
+
+        let mut d_pow2 = d;
+        d_pow2.square();
+        let mut v = d_pow2;
+        v.mul_assign(&d);
+        let mut n_pow3 = n;
+        n_pow3.square();
+        n_pow3.mul_assign(&n);
+        let mut a_mul_n_mul_d_pow2 = a;
+        a_mul_n_mul_d_pow2.mul_assign(&n);
+        a_mul_n_mul_d_pow2.mul_assign(&d_pow2);
+        let mut b_mul_v = b;
+        b_mul_v.mul_assign(&v);
+        let mut u = n_pow3;
+        u.add_assign(&a_mul_n_mul_d_pow2);
+        u.add_assign(&b_mul_v);
+
+        let mut v_pow3 = v;
+        v_pow3.square();
+        v_pow3.mul_assign(&v);
+        let mut alpha_factor = u;
+        alpha_factor.mul_assign(&v_pow3);
+        alpha_factor = alpha_factor.pow(&P_MINUS_3_DIV_4);
+        let mut alpha = u;
+        alpha.mul_assign(&v);
+        alpha.mul_assign(&alpha_factor);
+
+        //Self::zero_point()
+        unimplemented!("hash_to_group_element for G1 of Bls12_381 is not implemented");
     }
 }
 
@@ -454,7 +505,7 @@ impl Curve for G1Affine {
     }
 
     fn hash_to_group_element(b: &[u8]) -> Self {
-        unimplemented!("hashing to G1Affine of Bls12_381 is not implemented")
+        unimplemented!("hash_to_group_element for G1Affine of Bls12_381 is not implemented")
     }
 }
 
@@ -600,7 +651,7 @@ impl Curve for G2Affine {
     }
 
     fn hash_to_group_element(b: &[u8]) -> Self {
-        unimplemented!("hashing to G2Affine of Bls12_381 is not implemented")
+        unimplemented!("hash_to_group_element for G2Affine of Bls12_381 is not implemented")
     }
 }
 

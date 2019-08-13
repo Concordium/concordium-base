@@ -8,6 +8,15 @@ use pairing::{
 use sha2::{Digest, Sha512};
 use std::io::Cursor;
 
+pub const P_MINUS_3_DIV_4: [u64; 6] = [
+    0xee7fbfffffffeaaa,
+    0x07aaffffac54ffff,
+    0xd9cc34a83dac3d89,
+    0xd91dd2e13ce144af,
+    0x92c6e9ed90d2eb35,
+    0x680447a8e5ff9a6,
+];
+
 pub const E11_B: [u64; 6] = [
     0xd1cc48e98e172be0,
     0x5a23215a316ceaa5,
