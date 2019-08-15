@@ -308,89 +308,142 @@ impl Curve for G1 {
 
     fn hash_to_group_element(bytes: &[u8]) -> Self {
         let t: Fq = hash_bytes_to_fq(bytes);
-        let mut t_pow2 = t;
-        t_pow2.square();
-        let mut t_pow4 = t_pow2;
-        t_pow4.square();
 
-        let mut t_pow4_minus_t_pow2_plus_one = t_pow4;
-        t_pow4_minus_t_pow2_plus_one.sub_assign(&t_pow2);
-        t_pow4_minus_t_pow2_plus_one.add_assign(&Fq::one());
-        let b = Fq::from_repr(FqRepr(E11_B)).unwrap(); // this unwrap can't fail, E11_B is an element of the field
+        // compute N
+        let mut t2 = t;
+        t2.square();                                    // t^2
+        let mut t4 = t2;
+        t4.square();                                    // t^4
+        let mut t4_t2_1 = t4;
+        t4_t2_1.sub_assign(&t2);
+        t4_t2_1.add_assign(&Fq::one());                 // t^4 - t^2 + 1
+        let b = Fq::from_repr(FqRepr(E11_B)).unwrap();  // this unwrap can't fail, E11_B is an element of the field
         let mut n = b;
-        n.mul_assign(&t_pow4_minus_t_pow2_plus_one);
+        n.mul_assign(&t4_t2_1);                         // N = b(t^4 - t^2 + 1)
 
-        let mut t_pow2_minus_t_pow4 = t_pow2;
-        t_pow2_minus_t_pow4.sub_assign(&t_pow4);
-        let a = Fq::from_repr(FqRepr(E11_A)).unwrap(); // this unwrap can't fail, E11_A is an element of the field
+        // compute D
+        let mut t2_t4 = t2;
+        t2_t4.sub_assign(&t4);                          // t^2 - t^4
+        let a = Fq::from_repr(FqRepr(E11_A)).unwrap();  // this unwrap can't fail, E11_A is an element of the field
         let mut d = a;
-        d.mul_assign(&t_pow2_minus_t_pow4);
+        d.mul_assign(&t2_t4);                           // D = a(t^2 - t^4) = -a(t^4 - t^2)
 
-        // if d, the denominator of X0(u), is 0 then we set the denominator to -a instead, since -b/a is square in Fq
+        // if d, the denominator of X0(u), is 0 then we set the denominator to -a instead, since
+        // -b/a is square in Fq
         if d.is_zero() {
             d = a;
             d.negate();
         }
 
-        let mut d_pow2 = d;
-        d_pow2.square();
-        let mut v = d_pow2;
-        v.mul_assign(&d);
-        let mut n_pow3 = n;
-        n_pow3.square();
-        n_pow3.mul_assign(&n);
-        let mut a_mul_n_mul_d_pow2 = a;
-        a_mul_n_mul_d_pow2.mul_assign(&n);
-        a_mul_n_mul_d_pow2.mul_assign(&d_pow2);
-        let mut b_mul_v = b;
-        b_mul_v.mul_assign(&v);
-        let mut u = n_pow3;
-        u.add_assign(&a_mul_n_mul_d_pow2);
-        u.add_assign(&b_mul_v);
+        // compute V and U
+        let mut d2 = d;
+        d2.square();            // D^2
+        let mut v = d2;
+        v.mul_assign(&d);       // V = D^3
+        let mut n3 = n;
+        n3.square();
+        n3.mul_assign(&n);      // N^3
+        let mut and2 = a;
+        and2.mul_assign(&n);
+        and2.mul_assign(&d2);   // aND^2
+        let mut bv = b;
+        bv.mul_assign(&v);      // bV = bD^3
+        let mut u = n3;
+        u.add_assign(&and2);
+        u.add_assign(&bv);      // U = N^3 + aND^2 + bD^3
 
-        let mut v_pow3 = v;
-        v_pow3.square();
-        v_pow3.mul_assign(&v);
-        let mut alpha_factor = u;
-        alpha_factor.mul_assign(&v_pow3);
-        alpha_factor = alpha_factor.pow(&P_MINUS_3_DIV_4);
+        // compute alpha
+        let mut v3 = v;
+        v3.square();
+        v3.mul_assign(&v);                      // V^3
+        let mut uv3p34 = u;
+        uv3p34.mul_assign(&v3);
+        uv3p34 = uv3p34.pow(&P_MINUS_3_DIV_4);  // (UV^3)^((p-3)/4))
         let mut alpha = u;
         alpha.mul_assign(&v);
-        alpha.mul_assign(&alpha_factor);
+        alpha.mul_assign(&uv3p34);              // alpha = UV(UV^3)^((p-3)/4))
 
-        let mut alpha_pow2_mul_v_minus_u = alpha;
-        alpha_pow2_mul_v_minus_u.square();
-        alpha_pow2_mul_v_minus_u.mul_assign(&v);
-        alpha_pow2_mul_v_minus_u.sub_assign(&u);
+        // We use jacobian projective coordinates when computing the isogeny
+        let mut x_proj: Fq;
+        let mut y_proj: Fq;
+        let z_proj = d;
 
-        // We use jacobian projective coordinates when computing SWU
-        let mut x_jac: Fq;
-        let mut y_jac: Fq;
-        let z_jac: Fq = d;
-
-        if alpha_pow2_mul_v_minus_u.is_zero() {
-            x_jac = n;
-            x_jac.mul_assign(&d);
-            y_jac = alpha;
-            y_jac.mul_assign(&v);
+        // compute alpha^2-V to check if g(X_0(t)) is square in Fq
+        // if alpha^2 == V, then g(X_0(t)) is square, so we can pick y = sqrt(g(X_0(t)))
+        let mut alpha2v_u = alpha;
+        alpha2v_u.square();
+        alpha2v_u.mul_assign(&v);
+        alpha2v_u.sub_assign(&u);
+        if alpha2v_u.is_zero() { // g(X_0(t)) is square in Fq
+            x_proj = n;
+            x_proj.mul_assign(&d);               // X = ND
+            y_proj = Fq::one();
             match fq_sign(t) {
-                Sign::Minus => y_jac.negate(),
+                Sign::Minus => y_proj.negate(),
                 Sign::Plus => (),
             }
-        } else {
-            x_jac = t_pow2;
-            x_jac.mul_assign(&n);
-            x_jac.mul_assign(&d);
-            x_jac.negate();
-            y_jac = t_pow2;
-            y_jac.mul_assign(&t);
-            y_jac.mul_assign(&alpha);
-            y_jac.mul_assign(&v);
+            y_proj.mul_assign(&alpha);
+            y_proj.mul_assign(&v);               // Y = Sgn_0(t) alpha D^3
+        } else { // g(X_1(t)) is square in Fq
+            x_proj = Fq::one();
+            x_proj.negate();
+            x_proj.mul_assign(&t2);
+            x_proj.mul_assign(&n);
+            x_proj.mul_assign(&d);               // X = - t^2 ND
+            y_proj = t2;
+            y_proj.mul_assign(&t);
+            y_proj.mul_assign(&alpha);
+            y_proj.mul_assign(&v);               // Y = t^3 alpha D^3
         }
 
-        let (_x, _y, _z) = iso_11(x_jac, y_jac, z_jac);
-        //unimplemented!("hash_to_group_element for G1 of Bls12_381 is not implemented");
-        Self::one_point()
+        // For development - delete later.
+        // Check that the resulting point is actually on the 11isogenous curve
+        let mut x3 = x_proj;
+        x3.square();
+        x3.mul_assign(&x_proj);
+        let mut z2 = z_proj;
+        z2.square();
+        let mut axz2 = a;
+        axz2.mul_assign(&x_proj);
+        axz2.mul_assign(&z2);
+        let mut z3 = z2;
+        z3.mul_assign(&z_proj);
+        let mut bz3 = b;
+        bz3.mul_assign(&z3);
+        let mut x3_axz2_bz3 = x3;
+        x3_axz2_bz3.add_assign(&axz2);
+        x3_axz2_bz3.add_assign(&bz3);
+        let mut y2z = y_proj;
+        y2z.square();
+        y2z.mul_assign(&z_proj);
+        assert!(y2z == x3_axz2_bz3);
+
+        // Evaluate the 11-isogeny
+        let (x, y, z) = iso_11(x_proj, y_proj, z_proj);
+
+        // For development - delete later.
+        // check if x,y,z is a point on the curve y^2 z = x^3 + 4z^3
+        let mut y2z = y;
+        y2z.square();
+        y2z.mul_assign(&z);
+        let mut z3 = z;
+        z3.square();
+        z3.mul_assign(&z);
+        let mut bz3 = Fq::from_repr(FqRepr::from(4)).unwrap();
+        bz3.mul_assign(&z3);
+        let mut x3_bz3 = x;
+        x3_bz3.square();
+        x3_bz3.mul_assign(&x);
+        x3_bz3.add_assign(&bz3);
+        // println!("y2z:         {}", y2z);
+        // println!("x3_bz3:      {}", x3_bz3);
+        // println!("y2z_repr:    {}", y2z.into_repr());
+        // println!("x3_bz3_repr: {}", x3_bz3.into_repr());
+        assert!(y2z == x3_bz3);
+
+        // TODO: clear cofactors by exponentiating with (1-z) and apply section 5, method 2
+
+        unimplemented!("hash_to_group_element for G1 of Bls12_381 is not implemented");
     }
 }
 
@@ -405,22 +458,22 @@ fn fq_sign(a: Fq) -> Sign {
 fn iso_11(x: Fq, y: Fq, z: Fq) -> (Fq, Fq, Fq) {
     // Compute Z^2i for i = 1,...,15
     let mut z_pow_2i: [Fq; 15] = [z; 15];
-    z_pow_2i[0].square(); // Z^2
+    z_pow_2i[0].square();                   // Z^2
     z_pow_2i[1] = z_pow_2i[0];
-    z_pow_2i[1].square(); // Z^4
+    z_pow_2i[1].square();                   // Z^4
     let mut z_ = z_pow_2i[1];
     z_.mul_assign(&z_pow_2i[1]);
-    z_pow_2i[2] = z_; // Z^6
+    z_pow_2i[2] = z_;                       // Z^6
     z_pow_2i[3] = z_pow_2i[1];
-    z_pow_2i[3].square(); // Z^8
-    for i in 0..3 { // Z^10, Z^12, Z^14,
+    z_pow_2i[3].square();                   // Z^8
+    for i in 0..3 {                         // Z^10, Z^12, Z^14,
         z_ = z_pow_2i[3+i];
         z_.mul_assign(&z_pow_2i[0]);
         z_pow_2i[4+i] = z_;
     }
     z_pow_2i[7] = z_pow_2i[3];
-    z_pow_2i[7].square(); // Z^16
-    for i in 0..7 { // Z^18, Z^20, Z^22, Z^24, Z^26, Z^28, Z^30,
+    z_pow_2i[7].square();                   // Z^16
+    for i in 0..7 {                         // Z^18, Z^20, Z^22, Z^24, Z^26, Z^28, Z^30,
         z_ = z_pow_2i[7+i];
         z_.mul_assign(&z_pow_2i[0]);
         z_pow_2i[8+i] = z_;
@@ -444,17 +497,17 @@ fn iso_11(x: Fq, y: Fq, z: Fq) -> (Fq, Fq, Fq) {
 
     let mut x_den_ = Fq::from_repr(FqRepr(K2[10])).unwrap(); // unwrapping the Ki constants never fails
     horner!(x_den_, K2, x);
-    let mut x_den = z;
-    x_den.square();
+    let mut x_den = z_pow_2i[0];
     x_den.mul_assign(&x_den_);
 
-    let mut y_num = Fq::from_repr(FqRepr(K3[15])).unwrap(); // unwrapping the Ki constants never fails
-    horner!(y_num, K3, y);
+    let mut y_num_ = Fq::from_repr(FqRepr(K3[15])).unwrap(); // unwrapping the Ki constants never fails
+    horner!(y_num_, K3, y);
+    let mut y_num = y;
+    y_num.mul_assign(&y_num_);
 
     let mut y_den_ = Fq::from_repr(FqRepr(K4[15])).unwrap(); // unwrapping the Ki constants never fails
     horner!(y_den_, K4, y);
-    let mut y_den = z;
-    y_den.square();
+    let mut y_den = z_pow_2i[0];
     y_den.mul_assign(&z);
     y_den.mul_assign(&y_den_);
 
@@ -819,6 +872,16 @@ impl Pairing for Bls12 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // For development only, delete later
+    #[test]
+    fn smoke_test_hash() {
+        let mut rng = thread_rng();
+        for _i in 0..1000 {
+            let bytes = rng.gen::<[u8; 32]>();
+            let _ = <Bls12 as Pairing>::G_1::hash_to_group_element(&bytes);
+        }
+    }
 
     macro_rules! macro_test_scalar_byte_conversion {
         ($function_name:ident, $p:path) => {

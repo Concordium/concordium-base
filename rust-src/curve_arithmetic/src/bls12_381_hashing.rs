@@ -549,4 +549,6 @@ mod tests {
 
     test_const!(test_e11_a, E11_A);
     test_const!(test_e11_b, E11_B);
+    test_const!(test_p_minus_3_div_4, P_MINUS_3_DIV_4);
+    test_const!(test_p_minus_1_div_2, P_MINUS_1_DIV_2);
 }
