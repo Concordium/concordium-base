@@ -307,24 +307,24 @@ impl Curve for G1 {
     }
 
     fn hash_to_group_element(bytes: &[u8]) -> Self {
-        let u: Fq = hash_bytes_to_fq(bytes);
-        let mut u_pow2 = u;
-        u_pow2.square();
-        let mut u_pow4 = u_pow2;
-        u_pow4.square();
+        let t: Fq = hash_bytes_to_fq(bytes);
+        let mut t_pow2 = t;
+        t_pow2.square();
+        let mut t_pow4 = t_pow2;
+        t_pow4.square();
 
-        let mut u_pow4_minus_u_pow2_plus_one = u_pow4;
-        u_pow4_minus_u_pow2_plus_one.sub_assign(&u_pow2);
-        u_pow4_minus_u_pow2_plus_one.add_assign(&Fq::one());
+        let mut t_pow4_minus_t_pow2_plus_one = t_pow4;
+        t_pow4_minus_t_pow2_plus_one.sub_assign(&t_pow2);
+        t_pow4_minus_t_pow2_plus_one.add_assign(&Fq::one());
         let b = Fq::from_repr(FqRepr(E11_B)).unwrap(); // this unwrap can't fail, E11_B is an element of the field
         let mut n = b;
-        n.mul_assign(&u_pow4_minus_u_pow2_plus_one);
+        n.mul_assign(&t_pow4_minus_t_pow2_plus_one);
 
-        let mut u_pow2_minus_u_pow4 = u_pow2;
-        u_pow2_minus_u_pow4.sub_assign(&u_pow4);
+        let mut t_pow2_minus_t_pow4 = t_pow2;
+        t_pow2_minus_t_pow4.sub_assign(&t_pow4);
         let a = Fq::from_repr(FqRepr(E11_A)).unwrap(); // this unwrap can't fail, E11_A is an element of the field
         let mut d = a;
-        d.mul_assign(&u_pow2_minus_u_pow4);
+        d.mul_assign(&t_pow2_minus_t_pow4);
 
         // if d, the denominator of X0(u), is 0 then we set the denominator to -a instead, since -b/a is square in Fq
         if d.is_zero() {
@@ -358,9 +358,123 @@ impl Curve for G1 {
         alpha.mul_assign(&v);
         alpha.mul_assign(&alpha_factor);
 
-        //Self::zero_point()
-        unimplemented!("hash_to_group_element for G1 of Bls12_381 is not implemented");
+        let mut alpha_pow2_mul_v_minus_u = alpha;
+        alpha_pow2_mul_v_minus_u.square();
+        alpha_pow2_mul_v_minus_u.mul_assign(&v);
+        alpha_pow2_mul_v_minus_u.sub_assign(&u);
+
+        // We use jacobian projective coordinates when computing SWU
+        let mut x_jac: Fq;
+        let mut y_jac: Fq;
+        let z_jac: Fq = d;
+
+        if alpha_pow2_mul_v_minus_u.is_zero() {
+            x_jac = n;
+            x_jac.mul_assign(&d);
+            y_jac = alpha;
+            y_jac.mul_assign(&v);
+            match fq_sign(t) {
+                Sign::Minus => y_jac.negate(),
+                Sign::Plus => (),
+            }
+        } else {
+            x_jac = t_pow2;
+            x_jac.mul_assign(&n);
+            x_jac.mul_assign(&d);
+            x_jac.negate();
+            y_jac = t_pow2;
+            y_jac.mul_assign(&t);
+            y_jac.mul_assign(&alpha);
+            y_jac.mul_assign(&v);
+        }
+
+        let (_x, _y, _z) = iso_11(x_jac, y_jac, z_jac);
+        //unimplemented!("hash_to_group_element for G1 of Bls12_381 is not implemented");
+        Self::one_point()
     }
+}
+
+fn fq_sign(a: Fq) -> Sign {
+    if a.into_repr() > FqRepr(P_MINUS_1_DIV_2) {
+        Sign::Minus
+    } else {
+        Sign::Plus
+    }
+}
+
+fn iso_11(x: Fq, y: Fq, z: Fq) -> (Fq, Fq, Fq) {
+    // Compute Z^2i for i = 1,...,15
+    let mut z_pow_2i: [Fq; 15] = [z; 15];
+    z_pow_2i[0].square(); // Z^2
+    z_pow_2i[1] = z_pow_2i[0];
+    z_pow_2i[1].square(); // Z^4
+    let mut z_ = z_pow_2i[1];
+    z_.mul_assign(&z_pow_2i[1]);
+    z_pow_2i[2] = z_; // Z^6
+    z_pow_2i[3] = z_pow_2i[1];
+    z_pow_2i[3].square(); // Z^8
+    for i in 0..3 { // Z^10, Z^12, Z^14,
+        z_ = z_pow_2i[3+i];
+        z_.mul_assign(&z_pow_2i[0]);
+        z_pow_2i[4+i] = z_;
+    }
+    z_pow_2i[7] = z_pow_2i[3];
+    z_pow_2i[7].square(); // Z^16
+    for i in 0..7 { // Z^18, Z^20, Z^22, Z^24, Z^26, Z^28, Z^30,
+        z_ = z_pow_2i[7+i];
+        z_.mul_assign(&z_pow_2i[0]);
+        z_pow_2i[8+i] = z_;
+    }
+
+    macro_rules! horner {
+        ($init:expr, $ks:expr, $var:expr) => {
+            {
+                for i in 0..($ks.len() - 1) {
+                    $init.mul_assign(&$var);
+                    let mut c = Fq::from_repr(FqRepr($ks[($ks.len() - 2)-i])).unwrap(); // unwrapping the Ki constants never fails
+                    c.mul_assign(&z_pow_2i[i]);
+                    $init.add_assign(&c);
+                }
+            }
+        }
+    }
+
+    let mut x_num = Fq::from_repr(FqRepr(K1[11])).unwrap(); // unwrapping the Ki constants never fails
+    horner!(x_num, K1, x);
+
+    let mut x_den_ = Fq::from_repr(FqRepr(K2[10])).unwrap(); // unwrapping the Ki constants never fails
+    horner!(x_den_, K2, x);
+    let mut x_den = z;
+    x_den.square();
+    x_den.mul_assign(&x_den_);
+
+    let mut y_num = Fq::from_repr(FqRepr(K3[15])).unwrap(); // unwrapping the Ki constants never fails
+    horner!(y_num, K3, y);
+
+    let mut y_den_ = Fq::from_repr(FqRepr(K4[15])).unwrap(); // unwrapping the Ki constants never fails
+    horner!(y_den_, K4, y);
+    let mut y_den = z;
+    y_den.square();
+    y_den.mul_assign(&z);
+    y_den.mul_assign(&y_den_);
+
+    let mut z_jac = x_den;
+    z_jac.mul_assign(&y_den);
+    let mut x_jac = x_num;
+    x_jac.mul_assign(&y_den);
+    x_jac.mul_assign(&z_jac);
+    let mut z_jac_pow2 = z_jac;
+    z_jac_pow2.square();
+    let mut y_jac = y_num;
+    y_jac.mul_assign(&x_den);
+    y_jac.mul_assign(&z_jac_pow2);
+
+    (x_jac, y_jac, z_jac)
+}
+
+enum Sign {
+    Minus,
+    Plus,
 }
 
 impl Curve for G1Affine {

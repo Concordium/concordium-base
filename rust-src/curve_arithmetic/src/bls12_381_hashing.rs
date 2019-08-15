@@ -8,7 +8,7 @@ use pairing::{
 use sha2::{Digest, Sha512};
 use std::io::Cursor;
 
-pub const P_MINUS_3_DIV_4: [u64; 6] = [
+pub(crate) const P_MINUS_3_DIV_4: [u64; 6] = [
     0xee7fbfffffffeaaa,
     0x07aaffffac54ffff,
     0xd9cc34a83dac3d89,
@@ -17,7 +17,16 @@ pub const P_MINUS_3_DIV_4: [u64; 6] = [
     0x680447a8e5ff9a6,
 ];
 
-pub const E11_B: [u64; 6] = [
+pub(crate) const P_MINUS_1_DIV_2: [u64; 6] = [
+    0xdcff7fffffffd555,
+    0x0f55ffff58a9ffff,
+    0xb39869507b587b12,
+    0xb23ba5c279c2895f,
+    0x258dd3db21a5d66b,
+    0xd0088f51cbff34d,
+];
+
+pub(crate) const E11_B: [u64; 6] = [
     0xd1cc48e98e172be0,
     0x5a23215a316ceaa5,
     0xa0b9c14fcef35ef5,
@@ -26,7 +35,7 @@ pub const E11_B: [u64; 6] = [
     0x12e2908d11688030,
 ];
 
-pub const E11_A: [u64; 6] = [
+pub(crate) const E11_A: [u64; 6] = [
     0x5cf428082d584c1d,
     0x98936f8da0e0f97f,
     0xd8e8981aefd881ac,
@@ -35,7 +44,7 @@ pub const E11_A: [u64; 6] = [
     0x00144698a3b8e943,
 ];
 
-pub const K1: [[u64; 6]; 12] = [
+pub(crate) const K1: [[u64; 6]; 12] = [
     [
         0xaeac1662734649b7,
         0x5610c2d5f2e62d6e,
@@ -134,7 +143,7 @@ pub const K1: [[u64; 6]; 12] = [
     ],
 ];
 
-pub const K2: [[u64; 6]; 11] = [
+pub(crate) const K2: [[u64; 6]; 11] = [
     [
         0x993cf9fa40d21b1c,
         0xb558d681be343df8,
@@ -218,7 +227,7 @@ pub const K2: [[u64; 6]; 11] = [
     [0x1, 0x0, 0x0, 0x0, 0x0, 0x0],
 ];
 
-pub const K3: [[u64; 6]; 16] = [
+pub(crate) const K3: [[u64; 6]; 16] = [
     [
         0xbe9845719707bb33,
         0xcd0c7aee9b3ba3c2,
@@ -349,7 +358,7 @@ pub const K3: [[u64; 6]; 16] = [
     ],
 ];
 
-pub const K4: [[u64; 6]; 16] = [
+pub(crate) const K4: [[u64; 6]; 16] = [
     [
         0x01479253b03663c1,
         0x07f3688ef60c206d,
@@ -473,7 +482,7 @@ pub const K4: [[u64; 6]; 16] = [
     [0x1, 0x0, 0x0, 0x0, 0x0, 0x0],
 ];
 
-pub fn hash_bytes_to_fq(b: &[u8]) -> Fq {
+pub(crate) fn hash_bytes_to_fq(b: &[u8]) -> Fq {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
     h.input(b);
