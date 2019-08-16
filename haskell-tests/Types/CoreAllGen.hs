@@ -41,15 +41,26 @@ genType = sized $ genType'
                            ,genArr n
                            ,genApp n
                            ,genForall n]
-        genBaseType = TBase <$> elements [TInt128, TInt256, TInt32, TInt64, TWord128, TWord256, TWord32, TWord64, TByteStr32, TByteString, TCAddress, TAAddress]
-        genAtom = flip TApp [] <$> genDataTyName
-        basetys = [genBaseType, genAtom]
+        genBaseType = TBase <$> elements [TInt128,
+                                          TInt256,
+                                          TInt32,
+                                          TInt64,
+                                          TWord128,
+                                          TWord256,
+                                          TWord32,
+                                          TWord64,
+                                          TByteStr32,
+                                          TByteString,
+                                          TCAddress,
+                                          TAAddress]
+        genTyAtom = flip TApp [] <$> genDataTyName
+        basetys = [genBaseType, genTyAtom]
         genArr n | n > 0 = liftM2 TArr (genType' (n `div` 2)) (genType' (n `div` 2))
                  | otherwise = liftM2 TArr (oneof basetys) (oneof basetys)
         genApp n | n > 0 = do
                      l <- choose (0, n)
                      TApp <$> genDataTyName <*> vectorOf l (genType' (n `div` ((l+1) * (l+1))))
-                 | otherwise = genAtom
+                 | otherwise = genTyAtom
         genForall n | n > 0 = TForall <$> (genType' (n-1))
                     | otherwise = TForall <$> oneof basetys
 
@@ -60,6 +71,13 @@ genType = sized $ genType'
 -- TODO remove when implementing Int256
 minInt256 :: Integer
 minInt256 = 2^(255 :: Int)
+
+genAtom :: Gen (Atom ModuleName)
+genAtom = oneof [Literal <$> genLit, atoms]
+  where atoms = oneof [Var . BoundVar <$> genBoundVar
+                      ,Var . LocalDef <$> genName
+                      ,Var <$> liftM2 Imported genName genModuleName
+                      ]
 
 genLit :: Gen Literal
 genLit = oneof [Str . BS.pack <$> arbitrary
@@ -101,21 +119,17 @@ genExpr = sized genExpr'
                              ,genLet n
                              ,genLetRec n
                              ,genCase n
-                             ,genTy n]
-        atoms = oneof [Atom . BoundVar <$> genBoundVar
-                      ,Atom . LocalDef <$> genName
-                      ,Atom <$> liftM2 Imported genName genModuleName
-                      ]
+                             ,genTypeApp n]
 
+        atoms = Atom <$> genAtom
         genLambda n | n > 0 = liftM2 Lambda (genType' n) (genExpr' (n `div` 2))
-                    | otherwise = liftM2 Lambda (genType' n) (atoms)
+                    | otherwise = Lambda <$> (genType' n) <*> atoms
         genTLambda n | n > 0 = TLambda <$> (genExpr' (n - 1))
-                     | otherwise = TLambda <$> atoms
-        genApp n | n > 0 = liftM2 App (genExpr' (n `div` 2)) (genExpr' (n `div` 2))
-                 | otherwise = liftM2 App (atoms) (atoms)
-        genLet n | n > 0 = liftM2 Let (genExpr' (n `div` 2)) (genExpr' (n `div` 2))
-                 | otherwise = liftM2 Let atoms atoms
-        genTy n = resize (max 0 (n-1)) $ Type <$> (genType' n)
+                     | otherwise = TLambda . Atom <$> genAtom
+        genApp _ = liftM2 App genAtom genAtom
+        genLet n | n > 0 = liftM3 Let (genType' n) (genExpr' (n `div` 2)) (genExpr' (n `div` 2))
+                 | otherwise = Let <$> (genType' n) <*> atoms <*> atoms
+        genTypeApp n = TypeApp <$> genAtom <*> (genType' n)
         genLetRec n | n > 0 = do l <- choose (0,n)
                                  cs <- vectorOf l (do tdom <- (genType' n)
                                                       texp <- genExpr' (n `div` (l+2))
@@ -125,15 +139,17 @@ genExpr = sized genExpr'
                                  return (LetRec cs e)
                     | otherwise = LetRec [] <$> atoms
         genCase n | n > 0 = do l <- choose (1,n)
-                               e <- genExpr' (n `div` (l+1))
+                               e <- genAtom
+                               t <- genType' n
                                cs <- vectorOf l (do pat <- genPat
                                                     texp <- if n > 0 then genExpr' (n `div` 2) else atoms
                                                     return (pat, texp))
-                               return (Case e cs)
-                  | otherwise = do e <- atoms
+                               return (Case e t cs)
+                  | otherwise = do e <- genAtom
+                                   t <- genType' n
                                    p <- genPat
                                    e' <- atoms
-                                   return $ Case e [(p, e')]
+                                   return $ Case e t [(p, e')]
         genType' n = resize n $ genType
 
 genConstraintRef :: Gen (ConstraintRef ModuleName)
