@@ -1,5 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -102,12 +103,16 @@ data Variable boundvar name origin =
 
 instance (Hashable a, Hashable b, Hashable c) => Hashable (Variable a b c)
 
+-- |Values needed to express let-normal form of expressions.
+data Atom origin =
+  Literal !Literal
+  | Var !(Variable BoundVar Name origin)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+
 data Expr annot origin
   = 
-  -- |Basic literals.
-    Literal !Literal           
-  -- |Variables. Include constructors, imported definitions, but also bound variables.
-  | Atom !(Variable BoundVar Name origin)
+  -- |Basic literals and variables.
+  Atom !(Atom origin)
   -- |An anonymous function with type of its argument. We use the de-bruijn
   -- representation of bound variables, hence no variable name.
   | Lambda !(Type annot origin) !(Expr annot origin)
@@ -116,10 +121,10 @@ data Expr annot origin
   -- binder only increases De-Bruijn level of type variables.
   | TLambda !(Expr annot origin)
   -- |Application of an expression, includes term and type applications.
-  | App !(Expr annot origin) !(Expr annot origin)
+  | App !(Atom origin) !(Atom origin)
   -- |Local let binding, non-recursive (Let e e') is let e in e' (we use
   -- De-Bruijn convention here as well).
-  | Let !(Expr annot origin) !(Expr annot origin)
+  | Let !(Type annot origin) !(Expr annot origin) !(Expr annot origin)
   -- |Mutually recursive let. The list of binders can be empty. In the example
   -- 
   -- @
@@ -131,10 +136,10 @@ data Expr annot origin
   --   * in expression @ebody@ DeBruijn index 0 refers to (the functions defined by) @e2@ and 1 to @e1@
   | LetRec ![(Type annot origin, Expr annot origin, Type annot origin)] !(Expr annot origin)
   -- |Case expression, the list of alternatives should be non-empty. In bodies
-  -- of branches we again use the De-Bruijn convention.
-  | Case !(Expr annot origin) ![(Pattern annot origin, Expr annot origin)]
-  -- |Types are also expressions (since we have explicit type application)
-  | Type !(Type annot origin)
+  -- of branches we again use the De-Bruijn convention. The type is the result type of all the branches.
+  | Case !(Atom origin) !(Type annot origin) ![(Pattern annot origin, Expr annot origin)]
+  -- |Type application (instantiation of universally qualified term).
+  | TypeApp !(Atom origin) !(Type annot origin)
   -- |Free-form annotation. The field is strict so that setting annot=Data.Void
   -- we can disable this constructor.
   | EAnnot !(ExprAnnot annot) !(Expr annot origin)
@@ -142,7 +147,6 @@ data Expr annot origin
 
 deriving instance (AnnotContext Eq annot, Eq origin) => Eq (Expr annot origin)
 deriving instance (AnnotContext Show annot, Show origin) => Show (Expr annot origin)
-
 
 -- TODO: We could simply merge PCtor and PVar into one and just use variable for
 -- everything.
@@ -154,11 +158,11 @@ data Pattern annot origin =
   PVar 
   -- |Fully instantiated constructor. Constructor can be either locally declared or imported.
   | PCtor !(CTorName origin)
-  -- And finally we can match on literals.
+  -- |And finally we can match on literals.
   -- NB:FIXME:This will probably need to be narrowed since matching 128-byte
   -- strings is quite different than matching ints, and we probably do not want
   -- to allow matching on all literals.
-  | PLiteral !Literal                 -- Matching a literal.
+  | PLiteral !Literal
   | PAnnot !(PatternAnnot annot) !(Pattern annot origin)
   deriving (Generic, Functor, Foldable, Traversable)
 
@@ -524,57 +528,71 @@ instance S.Serialize origin => S.Serialize (ConstraintDecl annot origin) where
   get = getConstraintDecl
   put = putConstraintDecl
 
+putAtom :: S.Serialize origin => P.Putter (Atom origin)
+putAtom (Literal l) =
+  P.putWord8 0 <>
+  putLit l
+putAtom (Var at) =
+  case at of
+    BoundVar bv ->
+      P.putWord8 1 <>
+      putBoundVar bv
+    LocalDef l ->
+      P.putWord8 2 <>
+      putName l
+    Imported l orig ->
+      P.putWord8 3 <>
+      putName l <>
+      S.put orig
+
 putExpr :: S.Serialize origin => P.Putter (Expr annot origin)
-putExpr (Literal l) = do P.putWord8 10
-                         putLit l
-putExpr (Atom at) = case at of
-                        BoundVar bv -> do P.putWord8 0
-                                          putBoundVar bv
-                        LocalDef l -> do P.putWord8 1
-                                         putName l
-                        Imported l orig -> do P.putWord8 2
-                                              putName l
-                                              S.put orig
+putExpr (Atom a) =
+  P.putWord8 0 <>
+  putAtom a
 putExpr (EAnnot _ e) = putExpr e
-putExpr (Lambda ty body) = do
-  P.putWord8 3
-  putType ty
+putExpr (Lambda ty body) =
+  P.putWord8 1 <>
+  putType ty <>
   putExpr body
-putExpr (TLambda body) = do
-  P.putWord8 4
+putExpr (TLambda body) =
+  P.putWord8 2 <>
   putExpr body
-putExpr (App e1 e2) = do
-  P.putWord8 5
-  putExpr e1
+putExpr (App e1 e2) =
+  P.putWord8 3 <>
+  putAtom e1 <>
+  putAtom e2
+putExpr (Let ty e1 e2) =
+  P.putWord8 4 <>
+  putType ty <>
+  putExpr e1 <>
   putExpr e2
-putExpr (Let e1 e2) = do
-  P.putWord8 6
-  putExpr e1
-  putExpr e2
-putExpr (LetRec fs e) = do
-  P.putWord8 7
-  putLength fs
-  mapM_ (\(t, expr, t') -> putType t >> putExpr expr >> putType t') fs
+putExpr (LetRec fs e) =
+  P.putWord8 5 <>
+  putLength fs <>
+  mapM_ (\(t, expr, t') -> putType t >> putExpr expr >> putType t') fs <>
   putExpr e
-putExpr (Case e cases) = do
-  P.putWord8 8
-  putExpr e
-  putLength cases
+putExpr (Case e t cases) =
+  P.putWord8 6 <>
+  putAtom e <>
+  putType t <>
+  putLength cases <>
   mapM_ (\(p, expr) -> putPat p >> putExpr expr) cases
-putExpr (Type ty) = do
-  P.putWord8 9
+putExpr (TypeApp a ty) =
+  P.putWord8 7 <>
+  putAtom a <>
   putType ty
 
 putPat :: S.Serialize origin => P.Putter (Pattern annot origin)
-putPat PVar = do
-  P.putWord8 0
-putPat (PCtor ctor) = case ctor of
-                          LocalCTor cname -> do P.putWord8 1
-                                                putName cname
-                          ImportedCTor cname origin -> do
-                            P.putWord8 2
-                            putName cname
-                            S.put origin
+putPat PVar = P.putWord8 0
+putPat (PCtor ctor) =
+  case ctor of
+    LocalCTor cname ->
+      P.putWord8 1 <>
+      putName cname
+    ImportedCTor cname origin ->
+      P.putWord8 2 <>
+      putName cname <>
+      S.put origin
 
 putPat (PLiteral lit) = do
   P.putWord8 3
@@ -582,21 +600,22 @@ putPat (PLiteral lit) = do
 putPat (PAnnot _ p) = putPat p -- NB: Annotation is ignored.
 
 putLit :: P.Putter Literal
-putLit l = case l of
-             Str bs -> do P.putWord8 0
-                          P.putWord32be (fromIntegral . BS.length $ bs)
-                          P.putByteString bs
-             Int32 i -> P.putWord8 1 *> P.putInt32be i
-             Int64 i -> P.putWord8 2 *> P.putInt64be i
-             Int128 i -> P.putWord8 3 *> putInt128be i
-             Int256 i -> P.putWord8 4 *> putInt256be i
-             Word32 i -> P.putWord8 5 *> P.putWord32be i
-             Word64 i -> P.putWord8 6 *> P.putWord64be i
-             Word128 i -> P.putWord8 7 *> putWord128be i
-             Word256 i -> P.putWord8 8 *> putWord256be i
-             ByteStr32 bs -> P.putWord8 9 *> P.putByteString bs
-             CAddress addr -> P.putWord8 10 *> putCAddress addr
-             AAddress addr -> P.putWord8 11 *> putAAddress addr
+putLit l =
+  case l of
+    Str bs -> do P.putWord8 0
+                 P.putWord32be (fromIntegral . BS.length $ bs)
+                 P.putByteString bs
+    Int32 i -> P.putWord8 1 <> P.putInt32be i
+    Int64 i -> P.putWord8 2 <> P.putInt64be i
+    Int128 i -> P.putWord8 3 <> putInt128be i
+    Int256 i -> P.putWord8 4 <> putInt256be i
+    Word32 i -> P.putWord8 5 <> P.putWord32be i
+    Word64 i -> P.putWord8 6 <> P.putWord64be i
+    Word128 i -> P.putWord8 7 <> putWord128be i
+    Word256 i -> P.putWord8 8 <> putWord256be i
+    ByteStr32 bs -> P.putWord8 9 <> P.putByteString bs
+    CAddress addr -> P.putWord8 10 <> putCAddress addr
+    AAddress addr -> P.putWord8 11 <> putAAddress addr
 
 putCAddress :: P.Putter ContractAddress
 putCAddress = S.put
@@ -615,18 +634,22 @@ putDataTyName n = case n of
 
 
 putType :: S.Serialize origin => P.Putter (Type annot origin)
-putType (TForall t) = do P.putWord8 0
-                         putType t
-putType (TArr t1 t2) = do P.putWord8 1
-                          putType t1
-                          putType t2
-putType (TVar at) = do P.putWord8 2
-                       putBoundTyVar at
-putType (TApp t1 t2) = do P.putWord8 3
-                          putDataTyName t1
-                          putLength t2
-                          mapM_ putType t2
-putType (TAnnot _ t) = putType t -- NB: annotation is ignored                          
+putType (TForall t) =
+  P.putWord8 0 <>
+  putType t
+putType (TArr t1 t2) =
+  P.putWord8 1 <>
+  putType t1 <>
+  putType t2
+putType (TVar at) =
+  P.putWord8 2 <>
+  putBoundTyVar at
+putType (TApp t1 t2) =
+  P.putWord8 3 <>
+  putDataTyName t1 <>
+  putLength t2 <>
+  mapM_ putType t2
+putType (TAnnot _ t) = putType t -- NB: annotation is ignored
 putType (TBase tbase) = case tbase of
   TInt32 -> P.putWord8 4
   TInt64 -> P.putWord8 5
@@ -811,29 +834,37 @@ getLit = do h <- G.getWord8
               11 -> AAddress <$> getAAddress
               _ -> fail "Not a valid literal."
 
+getAtom :: S.Serialize origin => G.Get (Atom origin)
+getAtom = 
+  G.getWord8 >>= \case
+    0 -> Literal <$> getLit
+    1 -> Var . BoundVar <$> getBoundVar
+    2 -> Var . LocalDef <$> getName
+    3 -> Var <$> (Imported <$> getName <*> S.get)
+    _ -> fail "Not a valid atom."
+
 getExpr :: S.Serialize origin => G.Get (Expr annot origin)
 getExpr = do h <- G.getWord8
              case h of
-               10 -> Literal <$> getLit
-               0 -> Atom . BoundVar <$> getBoundVar
-               1 -> Atom . LocalDef <$> getName
-               2 -> Atom <$> liftM2 Imported getName S.get
-               3 -> liftM2 Lambda getType getExpr
-               4 -> TLambda <$> getExpr
-               5 -> liftM2 App getExpr getExpr
-               6 -> liftM2 Let getExpr getExpr
-               7 -> do l <- getLength
-                       tms <- replicateM l $ do tdom <- getType
-                                                expr <- getExpr
-                                                tcod <- getType
-                                                return (tdom, expr, tcod)
+               0 -> Atom <$> getAtom
+               1 -> Lambda <$> getType <*> getExpr
+               2 -> TLambda <$> getExpr
+               3 -> App <$> getAtom <*> getAtom
+               4 -> Let <$> getType <*> getExpr <*> getExpr
+               5 -> do l <- getLength
+                       tms <- replicateM l $ do
+                         tdom <- getType
+                         expr <- getExpr
+                         tcod <- getType
+                         return (tdom, expr, tcod)
                        body <- getExpr
                        return $ LetRec tms body
-               8 -> do e <- getExpr
+               6 -> do e <- getAtom
+                       ty <- getType
                        l <- getLength
                        cases <- replicateM l $ liftM2 (,) getPat getExpr
-                       return $ Case e cases
-               9 -> Type <$> getType
+                       return $ Case e ty cases
+               7 -> TypeApp <$> getAtom <*> getType
                _ -> fail "Not a valid expression."
 
 getConstraintRef :: G.Get (ConstraintRef ModuleName)
