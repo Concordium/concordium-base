@@ -120,8 +120,9 @@ data Expr annot origin
   -- that type and term variables are different classes, so going under a type
   -- binder only increases De-Bruijn level of type variables.
   | TLambda !(Expr annot origin)
-  -- |Application of an expression, includes term and type applications.
-  | App !(Atom origin) !(Atom origin)
+  -- |Application of an expression to an atom. The first argument is an expression
+  --
+  | App !(Expr annot origin) !(Atom origin)
   -- |Local let binding, non-recursive (Let e e') is let e in e' (we use
   -- De-Bruijn convention here as well).
   | Let !(Type annot origin) !(Expr annot origin) !(Expr annot origin)
@@ -137,9 +138,11 @@ data Expr annot origin
   | LetRec ![(Type annot origin, Expr annot origin, Type annot origin)] !(Expr annot origin)
   -- |Case expression, the list of alternatives should be non-empty. In bodies
   -- of branches we again use the De-Bruijn convention. The type is the result type of all the branches.
-  | Case !(Atom origin) !(Type annot origin) ![(Pattern annot origin, Expr annot origin)]
-  -- |Type application (instantiation of universally qualified term).
-  | TypeApp !(Atom origin) !(Type annot origin)
+  | Case !(Atom origin) ![(Pattern annot origin, Expr annot origin)]
+  -- |Type application (instantiation of universally qualified term) with a list of types.
+  -- We use a list of types in order to reduce the need for typing annotations for intermediate applications.
+  -- The list can be empty, in which case the term is equivalent to the first one.
+  | TypeApp !(Atom origin) ![Type annot origin]
   -- |Free-form annotation. The field is strict so that setting annot=Data.Void
   -- we can disable this constructor.
   | EAnnot !(ExprAnnot annot) !(Expr annot origin)
@@ -432,6 +435,7 @@ data Import = Import {iModule :: ModuleRef
 data Definition annot origin = Definition {
   dVis :: !Visibility
   , dName :: !Name
+  , dType :: !(Type annot origin)
   , dExpr :: !(Expr annot origin)
   }
   deriving (Generic, Functor, Foldable, Traversable)
@@ -559,7 +563,7 @@ putExpr (TLambda body) =
   putExpr body
 putExpr (App e1 e2) =
   P.putWord8 3 <>
-  putAtom e1 <>
+  putExpr e1 <>
   putAtom e2
 putExpr (Let ty e1 e2) =
   P.putWord8 4 <>
@@ -571,16 +575,16 @@ putExpr (LetRec fs e) =
   putLength fs <>
   mapM_ (\(t, expr, t') -> putType t >> putExpr expr >> putType t') fs <>
   putExpr e
-putExpr (Case e t cases) =
+putExpr (Case e cases) =
   P.putWord8 6 <>
   putAtom e <>
-  putType t <>
   putLength cases <>
   mapM_ (\(p, expr) -> putPat p >> putExpr expr) cases
-putExpr (TypeApp a ty) =
+putExpr (TypeApp a tys) =
   P.putWord8 7 <>
   putAtom a <>
-  putType ty
+  putLength tys <>
+  mapM_ putType tys
 
 putPat :: S.Serialize origin => P.Putter (Pattern annot origin)
 putPat PVar = P.putWord8 0
@@ -743,7 +747,7 @@ putModule Module{..} = do
   putLength mConstraintDecls
   mapM_ putConstraintDecl mConstraintDecls
   putLength mDefs
-  mapM_ (\Definition{..} -> putName dName >> putVisibility dVis >> putExpr dExpr) mDefs
+  mapM_ (\Definition{..} -> putName dName <> putVisibility dVis <> putType dType <> putExpr dExpr) mDefs
   putLength mContracts
   mapM_ putContract mContracts
   P.putWord32be mVersion
@@ -849,7 +853,10 @@ getExpr = do h <- G.getWord8
                0 -> Atom <$> getAtom
                1 -> Lambda <$> getType <*> getExpr
                2 -> TLambda <$> getExpr
-               3 -> App <$> getAtom <*> getAtom
+               3 -> do
+                 f <- getExpr
+                 atom <- getAtom
+                 return $! App f atom
                4 -> Let <$> getType <*> getExpr <*> getExpr
                5 -> do l <- getLength
                        tms <- replicateM l $ do
@@ -860,11 +867,14 @@ getExpr = do h <- G.getWord8
                        body <- getExpr
                        return $ LetRec tms body
                6 -> do e <- getAtom
-                       ty <- getType
                        l <- getLength
                        cases <- replicateM l $ liftM2 (,) getPat getExpr
-                       return $ Case e ty cases
-               7 -> TypeApp <$> getAtom <*> getType
+                       return $ Case e cases
+               7 -> do
+                 a <- getAtom
+                 l <- getLength
+                 tys <- replicateM l getType
+                 return $! TypeApp a tys
                _ -> fail "Not a valid expression."
 
 getConstraintRef :: G.Get (ConstraintRef ModuleName)
@@ -934,6 +944,7 @@ getDefinition :: G.Get (Definition annot ModuleName)
 getDefinition = do
   dName <- getName
   dVis <- getVisibility
+  dType <- getType
   dExpr <- getExpr
   return $ Definition{..}
 
