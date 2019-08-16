@@ -126,10 +126,17 @@ genExpr = sized genExpr'
                     | otherwise = Lambda <$> (genType' n) <*> atoms
         genTLambda n | n > 0 = TLambda <$> (genExpr' (n - 1))
                      | otherwise = TLambda . Atom <$> genAtom
-        genApp _ = liftM2 App genAtom genAtom
+        genApp n = do
+          e <- genExpr' n
+          a <- genAtom
+          return $ App e a
         genLet n | n > 0 = liftM3 Let (genType' n) (genExpr' (n `div` 2)) (genExpr' (n `div` 2))
                  | otherwise = Let <$> (genType' n) <*> atoms <*> atoms
-        genTypeApp n = TypeApp <$> genAtom <*> (genType' n)
+        genTypeApp n = do
+          f <- genAtom
+          l <- choose (0, n)
+          tys <- replicateM l (genType' (n `div` (l + 1)))
+          return $ TypeApp f tys
         genLetRec n | n > 0 = do l <- choose (0,n)
                                  cs <- vectorOf l (do tdom <- (genType' n)
                                                       texp <- genExpr' (n `div` (l+2))
@@ -140,16 +147,14 @@ genExpr = sized genExpr'
                     | otherwise = LetRec [] <$> atoms
         genCase n | n > 0 = do l <- choose (1,n)
                                e <- genAtom
-                               t <- genType' n
                                cs <- vectorOf l (do pat <- genPat
                                                     texp <- if n > 0 then genExpr' (n `div` 2) else atoms
                                                     return (pat, texp))
-                               return (Case e t cs)
+                               return (Case e cs)
                   | otherwise = do e <- genAtom
-                                   t <- genType' n
                                    p <- genPat
                                    e' <- atoms
-                                   return $ Case e t [(p, e')]
+                                   return $ Case e [(p, e')]
         genType' n = resize n $ genType
 
 genConstraintRef :: Gen (ConstraintRef ModuleName)
@@ -209,6 +214,7 @@ genDefinition :: Gen (Definition UA ModuleName)
 genDefinition = do
   dName <- genName
   dVis <- genVisibility
+  dType <- genType
   dExpr <- genExpr
   return $ Definition{..}
 
