@@ -9,6 +9,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# OPTIONS_GHC -Wall #-}
@@ -36,6 +37,7 @@ import Control.Monad
 
 import Data.Int
 import Data.Bits
+import qualified Data.Vector as Vec
 import Data.Word
 import qualified Concordium.Types.Acorn.NumericTypes as NumTys
 
@@ -404,6 +406,82 @@ substTy t t' = go (fromIntegral (0::Word32)) t
         liftTy l n ta@(TVar v) | v >= l = TVar (v + n)
                                | otherwise = ta
         liftTy l n (TAnnot a ty) = TAnnot a (liftTy l n ty)
+
+-- |Given a list of types and a type of the shape \forall \alpha_1 ... \forall \alpha_n
+-- compute whether applying the type to the list of types results in the goal type.
+{-# SPECIALIZE checkTyEqWithSubst :: [Type UA ModuleRef] -> Type UA ModuleRef -> Type UA ModuleRef -> Bool #-}
+checkTyEqWithSubst :: forall origin annot . Eq origin => [Type annot origin] -> Type annot origin -> Type annot origin -> Bool 
+checkTyEqWithSubst subst ty goalTy = case getBody 0 0 subst ty of
+                                       Nothing -> False
+                                       Just (start, body) -> go (fromIntegral start) True 0 0 body goalTy
+  where getBody start _ [] body = Just (start, body)
+        getBody start n (_:rest) (TForall body) = getBody start (n+1) rest body
+        getBody start n (_:rest) (TVar v) | v < n =
+          -- note that unsafeIndex here is safe because we maintain the invariant
+          -- start + n < len
+          let tyIdx = fromIntegral (start + fromIntegral (n - v))
+          in getBody (tyIdx + 1) 0 rest (Vec.unsafeIndex vec tyIdx)
+        getBody _ _ _ _ = Nothing
+
+        vec = Vec.fromList subst
+
+        len :: Int
+        len = Vec.length vec
+
+        isEqVar v (TVar v') = v == v'
+        isEqVar _ _ = False
+
+        go
+          :: Int -- Location in 'vec' in which the substitution starts.
+          -> Bool -- Whether we are the top-level and have to decrease vars due to removed binders.
+          -> Int -- How much the variables ought to have been lifted in the left type.
+          -> Int -- How many binders we are currently under.
+          -> Type annot origin
+          -> Type annot origin
+          -> Bool
+        go start remove lift binders (TApp t tys) (TApp t' tys')
+            | t == t' = allPairs (go start remove lift binders) tys tys'
+            | otherwise = False
+        go start remove lift binders (TArr t1 t2) (TArr t1' t2') =
+          go start remove lift binders t1 t1' && go start remove lift binders t2 t2'
+        go _ _ _ _ (TBase tb) (TBase tb') = tb == tb'
+        go start remove lift binders (TForall t1) (TForall t2) = go start remove lift (binders + 1) t1 t2
+        go start remove lift binders (TVar v) t =
+          if v < fromIntegral binders then isEqVar v t
+          else if remove then -- we are at the top-level
+            if fromIntegral v - binders < len - start then
+              let testLevel = len - 1 - (start + fromIntegral v - binders)
+              in go start False binders 0 (Vec.unsafeIndex vec testLevel) t
+            else isEqVar (fromIntegral (fromIntegral v - (len - start))) t
+          else
+            let correctLevel = v + fromIntegral lift in
+            isEqVar correctLevel t
+        go start remove lift binders (TAnnot _ t) t' = go start remove lift binders t t'
+        go start remove lift binders t (TAnnot _ t') = go start remove lift binders t t'
+        go _ _ _ _ _ _ = False
+
+
+allPairs :: (a -> b -> Bool) -> [a] -> [b] -> Bool
+allPairs p = go
+  where go (x:xs) (y:ys) = 
+          if p x y then go xs ys
+          else False
+        go [] [] = True
+        go _ _ = False
+
+-- |Check that liftFreeBy l t1 == t2
+checkLiftedTyEq :: Eq origin => BoundTyVar -> Type annot origin -> Type annot origin -> Bool
+checkLiftedTyEq l = go 0
+  where go n (TApp t tys) (TApp t' tys') = t == t' && allPairs (go n) tys tys'
+        go n (TArr t1 t2) (TArr t1' t2') = go n t1 t1' && go n t2 t2'
+        go n (TAnnot _ t) t' = go n t t'
+        go n t (TAnnot _ t') = go n t t'
+        go _ (TBase tb) (TBase tb') = tb == tb'
+        go n (TForall t) (TForall t') = go (n+1) t t'
+        go n (TVar v) (TVar v')
+            | v < n = v == v'
+            | otherwise = v + l == v'
+        go _ _ _ = False
 
 -- |Lift all free variables by 1 (to be used when going under type lambda in typechecking terms).
 liftFree :: Type annot origin -> Type annot origin

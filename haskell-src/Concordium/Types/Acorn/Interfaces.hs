@@ -1,3 +1,4 @@
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -32,6 +33,8 @@ import qualified Data.Serialize as S
 
 import Concordium.Types
 import qualified Concordium.Types.Acorn.Core as Core
+
+import Data.Void(absurd)
 
 -- * Datatypes involved in typechecking, and any other operations involving types.
 
@@ -493,6 +496,23 @@ class Monad m => TypecheckerMonad annot m | m -> annot where
   getExportedType :: Core.ModuleRef -> Core.TyName -> m (Maybe (Int, HashMap Core.Name [Type annot Core.ModuleRef]))
   getExportedConstraints :: Core.ModuleRef -> Core.TyName -> m (Maybe (Core.ConstraintDecl annot Core.ModuleRef))
 
+  -- |Only for logging. On chain all the domain types are void so these cannot be used.
+  logExprAnnot :: Core.ExprAnnot annot -> m ()
+  logPatternAnnot :: Core.PatternAnnot annot -> m ()
+  logTypeAnnot :: Core.TypeAnnot annot -> m ()
+
+  -- |Default instances for unannotated terms.
+  default logExprAnnot :: annot ~ Core.UA => Core.ExprAnnot annot -> m ()
+  logExprAnnot = absurd
+  {-# INLINE logExprAnnot #-}
+  default logPatternAnnot :: annot ~ Core.UA => Core.PatternAnnot annot -> m ()
+  logPatternAnnot = absurd
+  {-# INLINE logPatternAnnot #-}
+  default logTypeAnnot :: annot ~ Core.UA => Core.TypeAnnot annot -> m ()
+  logTypeAnnot = absurd
+  {-# INLINE logTypeAnnot #-}
+
+
 -- |The ability to retrieve static information, static meaning no local state of
 -- contracts, nor amounts. This is sufficient for typechecking and compiling
 -- modules and is used by the scheduler.
@@ -518,7 +538,10 @@ instance StaticEnvironmentMonad annot m => StaticEnvironmentMonad annot (MaybeT 
   getModuleInterfaces = lift . getModuleInterfaces
 
 
-instance StaticEnvironmentMonad annot m => TypecheckerMonad annot (ExceptT (TypingError annot) m) where
+-- |This can only be used with unannotated terms. It is therefore meant for on-chain use.
+-- For local use one should implement a custom instance of the typechecker monad which
+-- has custom behaviour for different (custom) annotations.
+instance (StaticEnvironmentMonad annot m, annot ~ Core.UA) => TypecheckerMonad annot (ExceptT (TypingError annot) m) where
   {-# INLINE getExportedTermType #-}
   getExportedTermType mref n = 
     getInterface mref >>=
