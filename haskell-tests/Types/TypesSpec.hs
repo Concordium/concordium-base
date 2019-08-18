@@ -22,15 +22,17 @@ repeatSubst _ _ = error "Should not occur. Test input incorrect."
 
 substSpec :: Property
 substSpec = forAll (listOf genType) $
-            \subst -> forAll genType $
+            \subst -> forAll (arbitrary :: Gen Word32) $
+            \lift -> forAll genType $
             \body -> let n = length subst
                          closed = last . take (fromIntegral n + 1) . iterate TForall $ body
-                     in checkTyEqWithSubst subst closed (repeatSubst subst closed)
+                     in checkTyEqWithSubst (fromIntegral lift) subst closed (repeatSubst subst (liftFreeBy (fromIntegral lift) closed))
 
 liftedSpec :: Property
 liftedSpec = forAll genType $
              \ty -> forAll (arbitrary :: Gen Word32) $
-             \n -> checkLiftedTyEq (fromIntegral n) ty (liftFreeBy (fromIntegral n) ty)
+             \n -> checkLiftedTyEq (fromIntegral n) 0 ty (liftFreeBy (fromIntegral n) ty)
+                   && checkLiftedTyEq 0 (fromIntegral n) (liftFreeBy (fromIntegral n) ty) ty
 
 
 nestedTest :: Bool
@@ -39,7 +41,7 @@ nestedTest =
         t = TForall (TVar (BTV 0))
         subst = [t, TVar (BTV 0)]
         goalTy = TVar (BTV 0)
-    in checkTyEqWithSubst subst t goalTy
+    in checkTyEqWithSubst 0 subst t goalTy
 
 tests :: Spec
 tests = describe "Substitution + equality testing." $ do
