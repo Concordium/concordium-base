@@ -156,13 +156,13 @@ deriving instance (AnnotContext Show annot, Show origin) => Show (Expr annot ori
 -- TODO: We could simply merge PCtor and PVar into one and just use variable for
 -- everything.
 
--- | We do not allow nested patterns since checking incompleteness is NP-hard,
+-- |We do not allow nested patterns since checking incompleteness is NP-hard,
 -- which we cannot allow for security reasons.
 data Pattern annot origin =
   -- |We do not need to give it a name because we are using De-Bruijn convention for bound variables.
-  PVar 
+  PVar
   -- |Fully instantiated constructor. Constructor can be either locally declared or imported.
-  | PCtor !(CTorName origin)
+  | PCtor !(CTorName origin) ![Type annot origin]
   -- |And finally we can match on literals.
   -- NB:FIXME:This will probably need to be narrowed since matching 128-byte
   -- strings is quite different than matching ints, and we probably do not want
@@ -673,15 +673,16 @@ putExpr (TypeApp a tys) =
 
 putPat :: S.Serialize origin => P.Putter (Pattern annot origin)
 putPat PVar = P.putWord8 0
-putPat (PCtor ctor) =
-  case ctor of
-    LocalCTor cname ->
-      P.putWord8 1 <>
-      putName cname
-    ImportedCTor cname origin ->
-      P.putWord8 2 <>
-      putName cname <>
-      S.put origin
+putPat (PCtor ctor tys) =
+  let hd = case ctor of
+             LocalCTor cname ->
+                 P.putWord8 1 <>
+                 putName cname
+             ImportedCTor cname origin ->
+               P.putWord8 2 <>
+               putName cname <>
+               S.put origin
+  in hd <> putLength tys <> mapM_ putType tys
 
 putPat (PLiteral lit) = do
   P.putWord8 3
@@ -901,8 +902,8 @@ getPat :: S.Serialize origin => G.Get (Pattern annot origin)
 getPat = do h <- G.getWord8
             case h of
               0 -> return $ PVar
-              1 -> PCtor . LocalCTor <$> getName
-              2 -> PCtor <$> liftM2 ImportedCTor getName S.get
+              1 -> PCtor . LocalCTor <$> getName <*> (getLength >>= flip replicateM getType)
+              2 -> PCtor <$> liftM2 ImportedCTor getName S.get <*> (getLength >>= flip replicateM getType)
               3 -> PLiteral <$> getLit
               _ -> fail "Not a valid pattern."
 
