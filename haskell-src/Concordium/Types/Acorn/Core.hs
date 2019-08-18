@@ -122,9 +122,9 @@ data Expr annot origin
   -- that type and term variables are different classes, so going under a type
   -- binder only increases De-Bruijn level of type variables.
   | TLambda !(Expr annot origin)
-  -- |Application of an expression to an atom. The first argument is an expression
-  --
-  | App !(Expr annot origin) !(Atom origin)
+  -- |Application of an expression to a list of atoms.
+  -- We use a list to be able to reduce the number of intermediate annotations needed.
+  | App !(Atom origin) ![Atom origin]
   -- |Local let binding, non-recursive (Let e e') is let e in e' (we use
   -- De-Bruijn convention here as well).
   | Let !(Type annot origin) !(Expr annot origin) !(Expr annot origin)
@@ -409,11 +409,15 @@ substTy t t' = go (fromIntegral (0::Word32)) t
 
 -- |Given a list of types and a type of the shape \forall \alpha_1 ... \forall \alpha_n
 -- compute whether applying the type to the list of types results in the goal type.
-{-# SPECIALIZE checkTyEqWithSubst :: [Type UA ModuleRef] -> Type UA ModuleRef -> Type UA ModuleRef -> Bool #-}
-checkTyEqWithSubst :: forall origin annot . Eq origin => [Type annot origin] -> Type annot origin -> Type annot origin -> Bool 
-checkTyEqWithSubst subst ty goalTy = case getBody 0 0 subst ty of
-                                       Nothing -> False
-                                       Just (start, body) -> go (fromIntegral start) True 0 0 body goalTy
+{-# SPECIALIZE checkTyEqWithSubst :: BoundTyVar -> [Type UA ModuleRef] -> Type UA ModuleRef -> Type UA ModuleRef -> Bool #-}
+checkTyEqWithSubst :: forall origin annot . Eq origin => BoundTyVar -> [Type annot origin] -> Type annot origin -> Type annot origin -> Bool 
+checkTyEqWithSubst toLift subst ty goalTy =
+  case getBody 0 0 subst ty of
+    Nothing -> False
+    Just (start, body) ->
+      if start == 0 then process 0 (fromIntegral toLift) True 0 0 body goalTy
+      else process (fromIntegral start) 0 True 0 0 body goalTy
+
   where getBody start _ [] body = Just (start, body)
         getBody start n (_:rest) (TForall body) = getBody start (n+1) rest body
         getBody start n (_:rest) (TVar v) | v < n =
@@ -431,34 +435,36 @@ checkTyEqWithSubst subst ty goalTy = case getBody 0 0 subst ty of
         isEqVar v (TVar v') = v == v'
         isEqVar _ _ = False
 
-        go
+        process
           :: Int -- Location in 'vec' in which the substitution starts.
+          -> Int -- How much to lift the top-level.
           -> Bool -- Whether we are the top-level and have to decrease vars due to removed binders.
           -> Int -- How much the variables ought to have been lifted in the left type.
           -> Int -- How many binders we are currently under.
           -> Type annot origin
           -> Type annot origin
           -> Bool
-        go start remove lift binders (TApp t tys) (TApp t' tys')
-            | t == t' = allPairs (go start remove lift binders) tys tys'
-            | otherwise = False
-        go start remove lift binders (TArr t1 t2) (TArr t1' t2') =
-          go start remove lift binders t1 t1' && go start remove lift binders t2 t2'
-        go _ _ _ _ (TBase tb) (TBase tb') = tb == tb'
-        go start remove lift binders (TForall t1) (TForall t2) = go start remove lift (binders + 1) t1 t2
-        go start remove lift binders (TVar v) t =
-          if v < fromIntegral binders then isEqVar v t
-          else if remove then -- we are at the top-level
-            if fromIntegral v - binders < len - start then
-              let testLevel = len - 1 - (start + fromIntegral v - binders)
-              in go start False binders 0 (Vec.unsafeIndex vec testLevel) t
-            else isEqVar (fromIntegral (fromIntegral v - (len - start))) t
-          else
-            let correctLevel = v + fromIntegral lift in
-            isEqVar correctLevel t
-        go start remove lift binders (TAnnot _ t) t' = go start remove lift binders t t'
-        go start remove lift binders t (TAnnot _ t') = go start remove lift binders t t'
-        go _ _ _ _ _ _ = False
+        process start iToLift = go
+          where go remove lift binders (TApp t tys) (TApp t' tys')
+                    | t == t' = allPairs (go remove lift binders) tys tys'
+                    | otherwise = False
+                go remove lift binders (TArr t1 t2) (TArr t1' t2') =
+                    go remove lift binders t1 t1' && go remove lift binders t2 t2'
+                go _ _ _ (TBase tb) (TBase tb') = tb == tb'
+                go remove lift binders (TForall t1) (TForall t2) = go remove lift (binders + 1) t1 t2
+                go remove lift binders (TVar v) t =
+                  if v < fromIntegral binders then isEqVar v t
+                  else if remove then -- we are at the top-level
+                    if fromIntegral v - binders < len - start then
+                      let testLevel = len - 1 - (start + fromIntegral v - binders)
+                      in go False binders 0 (Vec.unsafeIndex vec testLevel) t
+                    else isEqVar (fromIntegral (fromIntegral v - (len - start) + iToLift)) t
+                  else
+                    let correctLevel = v + fromIntegral lift in
+                      isEqVar correctLevel t
+                go remove lift binders (TAnnot _ t) t' = go remove lift binders t t'
+                go remove lift binders t (TAnnot _ t') = go remove lift binders t t'
+                go _ _ _ _ _ = False
 
 
 allPairs :: (a -> b -> Bool) -> [a] -> [b] -> Bool
@@ -470,8 +476,8 @@ allPairs p = go
         go _ _ = False
 
 -- |Check that liftFreeBy l t1 == t2
-checkLiftedTyEq :: Eq origin => BoundTyVar -> Type annot origin -> Type annot origin -> Bool
-checkLiftedTyEq l = go 0
+checkLiftedTyEq :: Eq origin => BoundTyVar -> BoundTyVar -> Type annot origin -> Type annot origin -> Bool
+checkLiftedTyEq l1 l2 = go 0
   where go n (TApp t tys) (TApp t' tys') = t == t' && allPairs (go n) tys tys'
         go n (TArr t1 t2) (TArr t1' t2') = go n t1 t1' && go n t2 t2'
         go n (TAnnot _ t) t' = go n t t'
@@ -480,7 +486,7 @@ checkLiftedTyEq l = go 0
         go n (TForall t) (TForall t') = go (n+1) t t'
         go n (TVar v) (TVar v')
             | v < n = v == v'
-            | otherwise = v + l == v'
+            | otherwise = v' >= n && v + l1 == v' + l2
         go _ _ _ = False
 
 -- |Lift all free variables by 1 (to be used when going under type lambda in typechecking terms).
@@ -641,8 +647,9 @@ putExpr (TLambda body) =
   putExpr body
 putExpr (App e1 e2) =
   P.putWord8 3 <>
-  putExpr e1 <>
-  putAtom e2
+  putAtom e1 <>
+  putLength e2 <>
+  mapM_ putAtom e2
 putExpr (Let ty e1 e2) =
   P.putWord8 4 <>
   putType ty <>
@@ -932,9 +939,10 @@ getExpr = do h <- G.getWord8
                1 -> Lambda <$> getType <*> getExpr
                2 -> TLambda <$> getExpr
                3 -> do
-                 f <- getExpr
                  atom <- getAtom
-                 return $! App f atom
+                 l <- getLength
+                 atoms <- replicateM l getAtom 
+                 return $! App atom atoms
                4 -> Let <$> getType <*> getExpr <*> getExpr
                5 -> do l <- getLength
                        tms <- replicateM l $ do

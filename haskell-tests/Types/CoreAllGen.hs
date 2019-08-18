@@ -127,9 +127,10 @@ genExpr = sized genExpr'
         genTLambda n | n > 0 = TLambda <$> (genExpr' (n - 1))
                      | otherwise = TLambda . Atom <$> genAtom
         genApp n = do
-          e <- genExpr' n
-          a <- genAtom
-          return $ App e a
+          l <- choose (0, n)
+          atom <- genAtom
+          atms <- replicateM l genAtom
+          return $ App atom atms
         genLet n | n > 0 = liftM3 Let (genType' n) (genExpr' (n `div` 2)) (genExpr' (n `div` 2))
                  | otherwise = Let <$> (genType' n) <*> atoms <*> atoms
         genTypeApp n = do
