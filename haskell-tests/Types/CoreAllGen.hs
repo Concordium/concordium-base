@@ -98,8 +98,8 @@ genLit = oneof [Str . BS.pack <$> arbitrary
 
 genPat :: Gen (Pattern UA ModuleName)
 genPat = oneof [return $ PVar
-               ,PCtor . LocalCTor <$> genName
-               ,PCtor <$> liftM2 ImportedCTor genName genModuleName
+               ,PCtor . LocalCTor <$> genName <*> (choose (0,123) >>= flip replicateM genType)
+               ,PCtor <$> liftM2 ImportedCTor genName genModuleName <*> (choose (0,123) >>= flip replicateM genType)
                ,PLiteral <$> genLit
                ]
 
