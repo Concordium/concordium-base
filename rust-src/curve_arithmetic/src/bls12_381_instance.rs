@@ -157,7 +157,7 @@ impl Curve for G2 {
         Fr::rand(csprng)
     }
 
-    fn hash_to_group_element(b: &[u8]) -> Self {
+    fn hash_to_group_element(_b: &[u8]) -> Self {
         unimplemented!("hash_to_group_element for G2 of Bls12_381 is not implemented")
     }
 }
@@ -307,6 +307,7 @@ impl Curve for G1 {
     }
 
     fn hash_to_group_element(bytes: &[u8]) -> Self {
+        println!("{:?}", bytes);
         let t: Fq = hash_bytes_to_fq(bytes);
 
         // compute N
@@ -403,43 +404,45 @@ impl Curve for G1 {
         x3.mul_assign(&x_proj);
         let mut z2 = z_proj;
         z2.square();
-        let mut axz2 = a;
-        axz2.mul_assign(&x_proj);
-        axz2.mul_assign(&z2);
-        let mut z3 = z2;
-        z3.mul_assign(&z_proj);
-        let mut bz3 = b;
-        bz3.mul_assign(&z3);
-        let mut x3_axz2_bz3 = x3;
-        x3_axz2_bz3.add_assign(&axz2);
-        x3_axz2_bz3.add_assign(&bz3);
-        let mut y2z = y_proj;
-        y2z.square();
-        y2z.mul_assign(&z_proj);
-        assert!(y2z == x3_axz2_bz3);
+        let mut z4 = z2;
+        z4.square();
+        let mut axz4 = a;
+        axz4.mul_assign(&x_proj);
+        axz4.mul_assign(&z4);
+        let mut z6 = z4;
+        z6.mul_assign(&z2);
+        let mut bz6 = b;
+        bz6.mul_assign(&z6);
+        let mut x3_axz4_bz6 = x3;
+        x3_axz4_bz6.add_assign(&axz4);
+        x3_axz4_bz6.add_assign(&bz6);
+        let mut y2 = y_proj;
+        y2.square();
+        assert!(y2 == x3_axz4_bz6);
 
         // Evaluate the 11-isogeny
         let (x, y, z) = iso_11(x_proj, y_proj, z_proj);
 
         // For development - delete later.
-        // check if x,y,z is a point on the curve y^2 z = x^3 + 4z^3
-        let mut y2z = y;
-        y2z.square();
-        y2z.mul_assign(&z);
-        let mut z3 = z;
-        z3.square();
-        z3.mul_assign(&z);
-        let mut bz3 = Fq::from_repr(FqRepr::from(4)).unwrap();
-        bz3.mul_assign(&z3);
-        let mut x3_bz3 = x;
-        x3_bz3.square();
-        x3_bz3.mul_assign(&x);
-        x3_bz3.add_assign(&bz3);
+        // check if x,y,z is a point on the curve y^2 = x^3 + 4
+        let mut y2 = y;
+        y2.square();
+        let mut z2 = z;
+        z2.square();
+        let mut z6 = z2;
+        z6.square();
+        z6.mul_assign(&z2);
+        let mut bz6 = Fq::from_repr(FqRepr::from(4)).unwrap();
+        bz6.mul_assign(&z6);
+        let mut x3_bz6 = x;
+        x3_bz6.square();
+        x3_bz6.mul_assign(&x);
+        x3_bz6.add_assign(&bz6);
         // println!("y2z:         {}", y2z);
         // println!("x3_bz3:      {}", x3_bz3);
         // println!("y2z_repr:    {}", y2z.into_repr());
         // println!("x3_bz3_repr: {}", x3_bz3.into_repr());
-        assert!(y2z == x3_bz3);
+        assert!(y2 == x3_bz6);
 
         // TODO: clear cofactors by exponentiating with (1-z) and apply section 5, method 2
 
@@ -462,7 +465,7 @@ fn iso_11(x: Fq, y: Fq, z: Fq) -> (Fq, Fq, Fq) {
     z_pow_2i[1] = z_pow_2i[0];
     z_pow_2i[1].square();                   // Z^4
     let mut z_ = z_pow_2i[1];
-    z_.mul_assign(&z_pow_2i[1]);
+    z_.mul_assign(&z_pow_2i[0]);
     z_pow_2i[2] = z_;                       // Z^6
     z_pow_2i[3] = z_pow_2i[1];
     z_pow_2i[3].square();                   // Z^8
@@ -501,12 +504,12 @@ fn iso_11(x: Fq, y: Fq, z: Fq) -> (Fq, Fq, Fq) {
     x_den.mul_assign(&x_den_);
 
     let mut y_num_ = Fq::from_repr(FqRepr(K3[15])).unwrap(); // unwrapping the Ki constants never fails
-    horner!(y_num_, K3, y);
+    horner!(y_num_, K3, x);
     let mut y_num = y;
     y_num.mul_assign(&y_num_);
 
     let mut y_den_ = Fq::from_repr(FqRepr(K4[15])).unwrap(); // unwrapping the Ki constants never fails
-    horner!(y_den_, K4, y);
+    horner!(y_den_, K4, x);
     let mut y_den = z_pow_2i[0];
     y_den.mul_assign(&z);
     y_den.mul_assign(&y_den_);
@@ -671,7 +674,7 @@ impl Curve for G1Affine {
         Fr::rand(csprng)
     }
 
-    fn hash_to_group_element(b: &[u8]) -> Self {
+    fn hash_to_group_element(_b: &[u8]) -> Self {
         unimplemented!("hash_to_group_element for G1Affine of Bls12_381 is not implemented")
     }
 }
@@ -817,7 +820,7 @@ impl Curve for G2Affine {
         Fr::rand(csprng)
     }
 
-    fn hash_to_group_element(b: &[u8]) -> Self {
+    fn hash_to_group_element(_b: &[u8]) -> Self {
         unimplemented!("hash_to_group_element for G2Affine of Bls12_381 is not implemented")
     }
 }
@@ -877,7 +880,7 @@ mod tests {
     #[test]
     fn smoke_test_hash() {
         let mut rng = thread_rng();
-        for _i in 0..1000 {
+        for _i in 0..100000 {
             let bytes = rng.gen::<[u8; 32]>();
             let _ = <Bls12 as Pairing>::G_1::hash_to_group_element(&bytes);
         }
