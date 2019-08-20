@@ -1,9 +1,10 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings, LambdaCase #-}
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia, DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Concordium.ID.Types where
 
 import Data.Word
+import Data.Data(Data, Typeable)
 import Data.ByteString(ByteString)
 import Data.ByteString.Short(ShortByteString)
 import qualified Data.ByteString.Short as BSS
@@ -27,11 +28,12 @@ import Control.DeepSeq
 accountAddressSize :: Int
 accountAddressSize = 21
 data AccountAddressSize
+   deriving(Data, Typeable)
 instance FBS.FixedLength AccountAddressSize where
     fixedLength _ = accountAddressSize
 
 newtype AccountAddress =  AccountAddress (FBS.FixedByteString AccountAddressSize)
-    deriving(Eq, Ord, Generic)
+    deriving(Eq, Ord, Generic, Data, Typeable)
 
 instance Serialize AccountAddress where
     put (AccountAddress h) = putByteString $ FBS.toByteString h

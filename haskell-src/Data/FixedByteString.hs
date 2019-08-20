@@ -1,8 +1,9 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE ScopedTypeVariables, ForeignFunctionInterface #-}
+{-# LANGUAGE ScopedTypeVariables, ForeignFunctionInterface, DeriveDataTypeable #-}
 module Data.FixedByteString where
 
+import Data.Data(Typeable, Data)
 import Foreign.Ptr
 import Foreign.Storable
 import Foreign.Marshal.Utils
@@ -30,6 +31,7 @@ class FixedLength a where
 -- is determined by the type parameter @a@, which should be an
 -- instance of 'FixedLength', as @fixedLength (undefined :: a)@.
 newtype FixedByteString a = FixedByteString ByteArray
+  deriving(Data, Typeable)
 
 -- |NB: We need to be very careful with compiler optimizations here.
 -- The issue is that newPinnedByteArray does not depend on f as the argument (only on f)
