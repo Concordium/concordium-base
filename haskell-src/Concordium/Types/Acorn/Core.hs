@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE LambdaCase #-}
@@ -18,6 +19,7 @@ module Concordium.Types.Acorn.Core(module Concordium.Types.Acorn.Core,
 where
 
 import GHC.Types(Constraint)
+import Data.Data(Typeable, Data)
 import Data.Void
 
 import Data.ByteString.Char8(ByteString)
@@ -49,6 +51,8 @@ type family PatternAnnot a
 type family TypeAnnot a
 
 data UA -- used to express a term/pattern/type is unannotated
+  deriving(Data, Typeable)
+
 type instance ExprAnnot UA = Void
 type instance TypeAnnot UA = Void
 type instance PatternAnnot UA = Void
@@ -73,7 +77,7 @@ data Literal =
   | ByteStr32 !ByteString
   | CAddress !ContractAddress
   | AAddress !AccountAddress
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Generic, Typeable, Data)
 
 instance Hashable Literal
 
@@ -86,13 +90,13 @@ instance Hashable Literal
 -- and again, it is another thing to consider in the implementation, and thus we
 -- rather avoid it.
 newtype Name = Name Word32
-    deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num)
+    deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num, Typeable, Data)
 
 newtype BoundVar = BV Word32
-    deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num)
+    deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num, Typeable, Data)
 
 newtype BoundTyVar = BTV Word32
-    deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num)
+    deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num, Typeable, Data)
 
 data Variable boundvar name origin =
   -- |Variables bound by lambda abstractions.
@@ -101,7 +105,7 @@ data Variable boundvar name origin =
   | LocalDef !name
   -- |Variables referring to imported definitions.
   | Imported !name !origin
-    deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+    deriving (Show, Eq, Generic, Functor, Foldable, Traversable, Typeable, Data)
 
 instance (Hashable a, Hashable b, Hashable c) => Hashable (Variable a b c)
 
@@ -109,7 +113,7 @@ instance (Hashable a, Hashable b, Hashable c) => Hashable (Variable a b c)
 data Atom origin =
   Literal !Literal
   | Var !(Variable BoundVar Name origin)
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Show, Functor, Foldable, Traversable, Typeable, Data)
 
 data Expr annot origin
   = 
@@ -152,6 +156,8 @@ data Expr annot origin
 
 deriving instance (AnnotContext Eq annot, Eq origin) => Eq (Expr annot origin)
 deriving instance (AnnotContext Show annot, Show origin) => Show (Expr annot origin)
+deriving instance (AnnotContext Typeable annot, Data origin) => Typeable (Expr annot origin)
+deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Expr annot origin)
 
 -- TODO: We could simply merge PCtor and PVar into one and just use variable for
 -- everything.
@@ -173,12 +179,14 @@ data Pattern annot origin =
 
 deriving instance (AnnotContext Eq annot, Eq origin) => Eq (Pattern annot origin)
 deriving instance (AnnotContext Show annot, Show origin) => Show (Pattern annot origin)
+deriving instance (AnnotContext Typeable annot, Data origin) => Typeable (Pattern annot origin)
+deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Pattern annot origin)
 
 data CTorName origin = LocalCTor {ctorName :: !Name}
                      | ImportedCTor {ctorName :: !Name
                                     ,ctorOrigin :: !origin
                                     }
-  deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
+  deriving (Eq, Show, Generic, Functor, Foldable, Traversable, Typeable, Data)
 
 instance Hashable origin => Hashable (CTorName origin)
 
@@ -195,7 +203,7 @@ data TBase =
            | TByteStr32
            | TCAddress  -- contract address 
            | TAAddress  -- account address
-    deriving (Show, Eq, Generic)
+    deriving (Show, Eq, Generic, Typeable, Data)
 
 -- |To be able to know whether a set of patterns is exhaustive we need to know how many inhabitants there are of a particular type.
 numInhab :: TBase -> Maybe Integer
@@ -210,13 +218,13 @@ instance Hashable TBase
 
 -- |Equivalent to Name, but separated for sanity checking.
 newtype TyName = TyName Word32
-    deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num)
+    deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num, Typeable, Data)
 
 data DataTyName origin = LocalDataTy {dataTyName :: !TyName}
                        | ImportedDataTy {dataTyName :: !TyName
                                         ,dataTyOrigin :: !origin
                                         }
-  deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
+  deriving (Eq, Show, Generic, Functor, Foldable, Traversable, Typeable, Data)
 
 instance Hashable origin => Hashable (DataTyName origin)
 
@@ -238,6 +246,8 @@ data Type annot origin =
   deriving (Generic, Functor, Foldable, Traversable)
 
 deriving instance (AnnotContext Show annot, Show origin) => Show (Type annot origin)
+deriving instance (AnnotContext Typeable annot) => Typeable (Type annot origin)
+deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Type annot origin)
 
 -- |The Eq instance ignores annotations.
 instance Eq origin => Eq (Type annot origin) where
@@ -278,6 +288,9 @@ data DataCon annot origin = DataCon {dcName :: !Name
 
 deriving instance (AnnotContext Eq annot, Eq origin) => Eq (DataCon annot origin)
 deriving instance (AnnotContext Show annot, Show origin) => Show (DataCon annot origin)
+deriving instance (AnnotContext Typeable annot, Typeable v) => Typeable (DataCon annot v)
+deriving instance (AnnotContext Data annot, Data annot, Data v) => Data (DataCon annot v)
+
 
 -- | A datatype declaration is a name, plus the number of type parameters, plus
 -- a non-empty list of constructors.
@@ -292,6 +305,8 @@ data DataType annot origin =
 
 deriving instance (AnnotContext Eq annot, Eq origin) => Eq (DataType annot origin)
 deriving instance (AnnotContext Show annot, Show origin) => Show (DataType annot origin)
+deriving instance (AnnotContext Typeable annot, Typeable v) => Typeable (DataType annot v)
+deriving instance (AnnotContext Data annot, Data annot, Data v) => Data (DataType annot v)
 
 -- |The parameter v in 'Sender' and 'Getter' are going to be instantiated with
 -- Type in 'ConstraintDecl' and with 'Expr' in 'ConstraintImpl'.
@@ -299,13 +314,13 @@ data Sender v = Sender {
                        sName :: !Name
                        , sVal :: !v
                        }
-    deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+    deriving (Show, Eq, Generic, Functor, Foldable, Traversable, Typeable, Data)
 
 data Getter v = Getter {
                        gName :: !Name
                        , gVal :: !v
                        }
-    deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+    deriving (Show, Eq, Generic, Functor, Foldable, Traversable, Typeable, Data)
 
 data ConstraintDecl annot v
     = ConstraintDecl
@@ -326,11 +341,13 @@ data ConstraintDecl annot v
 
 deriving instance (AnnotContext Eq annot, Eq origin) => Eq (ConstraintDecl annot origin)
 deriving instance (AnnotContext Show annot, Show origin) => Show (ConstraintDecl annot origin)
+deriving instance (AnnotContext Typeable annot, Typeable v) => Typeable (ConstraintDecl annot v)
+deriving instance (AnnotContext Data annot, Data annot, Data v) => Data (ConstraintDecl annot v)
 
 -- |Canonical reference to a constraint.
 data ConstraintRef origin = ImportedCR {crName :: !TyName, crMod :: !origin}
                           | LocalCR { crName :: !TyName }
-  deriving(Show, Eq, Ord, Generic, Foldable, Functor, Traversable)
+  deriving(Show, Eq, Ord, Generic, Foldable, Functor, Traversable, Typeable, Data)
 
 instance Hashable a => Hashable (ConstraintRef a)
 
@@ -345,6 +362,8 @@ data ConstraintImpl annot origin
 
 deriving instance (AnnotContext Eq annot, Eq origin) => Eq (ConstraintImpl annot origin)
 deriving instance (AnnotContext Show annot, Show origin) => Show (ConstraintImpl annot origin)
+deriving instance (AnnotContext Typeable annot, Typeable origin) => Typeable (ConstraintImpl annot origin)
+deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (ConstraintImpl annot origin)
 
 -- |A contract has a name, an init method, and a receive method. The type of
 -- local state is inferred from the type of the init method, and the type of
@@ -361,6 +380,8 @@ data Contract annot a = Contract {
 
 deriving instance (AnnotContext Eq annot, Eq origin) => Eq (Contract annot origin)
 deriving instance (AnnotContext Show annot, Show origin) => Show (Contract annot origin)
+deriving instance (AnnotContext Typeable annot, Typeable origin) => Typeable (Contract annot origin)
+deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Contract annot origin)
 
 -- * Utility functions used during typechecking.
 
@@ -514,7 +535,7 @@ liftFreeBy k = if k == 0 then id else go 0
 data Import = Import {iModule :: ModuleRef
                      ,iAs :: ModuleName
                      }
-  deriving(Show, Eq, Generic)
+  deriving(Show, Eq, Generic, Typeable, Data)
 
 data Definition annot origin = Definition {
   dVis :: !Visibility
@@ -526,10 +547,12 @@ data Definition annot origin = Definition {
 
 deriving instance (AnnotContext Eq annot, Eq origin) => Eq (Definition annot origin)
 deriving instance (AnnotContext Show annot, Show origin) => Show (Definition annot origin)
+deriving instance (AnnotContext Typeable annot, Typeable origin) => Typeable (Definition annot origin)
+deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Definition annot origin)
 
 -- |Name, but differentiated for sanity checking. But in practice there can never be a confusion between module names and term and type names.
 newtype ModuleName = ModuleName { moduleName :: Word32 }
-    deriving(Show, Eq, Ord, Enum, Generic, Hashable, Num, Real, Integral)
+    deriving(Show, Eq, Ord, Enum, Generic, Hashable, Num, Real, Integral, Typeable, Data)
 
 -- Version of the environment the contract is valid for. Should probably be something more structured than a word.
 type Version = Word32
@@ -553,17 +576,19 @@ data Module annot =
 
 deriving instance (AnnotContext Eq annot) => Eq (Module annot)
 deriving instance (AnnotContext Show annot) => Show (Module annot)
+deriving instance (AnnotContext Typeable annot) => Typeable (Module annot)
+deriving instance (AnnotContext Data annot, Data annot) => Data (Module annot)
 
 -- |Visibility of a definition or type from within another module
 -- (only public definitions and types can be accessed from other modules).
 data Visibility = Public | Private
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Generic, Typeable, Data)
 
 -- |'Visibility' of a datatype's type and its constructors.
 data DataTyVisibility = None -- ^ Both type and constructors are private.
                       | OnlyType -- ^ Only the type is public, the constructors are private.
                       | All -- ^ Both type and constructors are public.
-  deriving(Show, Eq, Generic)
+  deriving(Show, Eq, Generic, Typeable, Data)
 
 -- plays the role of the prim module. Invalid otherwise.
 emptyModule :: Module annot
