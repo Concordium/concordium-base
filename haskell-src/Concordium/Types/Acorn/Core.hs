@@ -496,7 +496,8 @@ allPairs p = go
         go [] [] = True
         go _ _ = False
 
--- |Check that liftFreeBy l t1 == t2
+-- |Check that two types, each lifted by a certain level, are equal.
+-- Equivalent to @liftFreeBy l1 t1 == liftedFreeBy l2 t2@.
 checkLiftedTyEq :: Eq origin => BoundTyVar -> BoundTyVar -> Type annot origin -> Type annot origin -> Bool
 checkLiftedTyEq l1 l2 = go 0
   where go n (TApp t tys) (TApp t' tys') = t == t' && allPairs (go n) tys tys'
