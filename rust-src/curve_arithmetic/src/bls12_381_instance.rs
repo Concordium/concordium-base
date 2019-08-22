@@ -9,8 +9,9 @@ use pairing::{
     bls12_381::{
         Bls12, Fq, FqRepr, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2,
     },
-    CurveAffine, CurveProjective, EncodedPoint, Engine, Field, PrimeField,
+    CurveAffine, CurveProjective, EncodedPoint, Engine,
 };
+use ff::{Field, PrimeField};
 use rand::*;
 use std::io::{Cursor, Read};
 

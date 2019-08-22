@@ -3,8 +3,8 @@ use byteorder::{BigEndian, ReadBytesExt};
 use bytes::IntoBuf;
 use pairing::{
     bls12_381::{Fq, FqRepr},
-    PrimeField,
 };
+use ff::{PrimeField};
 use sha2::{Digest, Sha512};
 use std::io::Cursor;
 
@@ -518,16 +518,14 @@ mod tests {
     use super::*;
     use pairing::bls12_381::{Fq, FqRepr};
 
-    fn fq_from_u64arr(arr: [u64; 6]) -> Fq {
-        Fq::from_repr(FqRepr(arr)).unwrap()
-    }
-
     macro_rules! test_k {
         ($test_name:ident, $l:expr) => {
             #[test]
             fn $test_name() {
                 for k in $l {
-                    let _ = fq_from_u64arr(*k);
+                    let fq_ = Fq::from_repr(FqRepr(*k)).unwrap();
+                    let repr = fq_.into_repr();
+                    assert!(FqRepr(*k) == repr);
                 }
             }
         };
@@ -542,7 +540,9 @@ mod tests {
         ($test_name:ident, $k:expr) => {
             #[test]
             fn $test_name() {
-                let _ = fq_from_u64arr($k);
+                let fq_ = Fq::from_repr(FqRepr($k)).unwrap();
+                let repr = fq_.into_repr();
+                assert!(FqRepr($k) == repr);
             }
         };
     }

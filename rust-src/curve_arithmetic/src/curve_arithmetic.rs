@@ -3,7 +3,7 @@
 //
 
 use failure::Fail;
-use pairing::{Field, PrimeField, PrimeFieldDecodingError};
+use ff::{Field, PrimeField, PrimeFieldDecodingError};
 use rand::*;
 use std::{
     fmt::{Debug, Display, Formatter},
