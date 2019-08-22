@@ -2,16 +2,13 @@
 // - bm@concordium.com
 //
 
-use crate::bls12_381_hashing::*;
 use crate::curve_arithmetic::*;
 use byteorder::{BigEndian, ReadBytesExt};
+use ff::PrimeField;
 use pairing::{
-    bls12_381::{
-        Bls12, Fq, FqRepr, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2,
-    },
+    bls12_381::{Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2},
     CurveAffine, CurveProjective, EncodedPoint, Engine,
 };
-use ff::{Field, PrimeField};
 use rand::*;
 use std::io::{Cursor, Read};
 
@@ -23,13 +20,9 @@ impl Curve for G2 {
     const GROUP_ELEMENT_LENGTH: usize = 96;
     const SCALAR_LENGTH: usize = 32;
 
-    fn zero_point() -> Self {
-        G2::zero()
-    }
+    fn zero_point() -> Self { G2::zero() }
 
-    fn one_point() -> Self {
-        G2::one()
-    }
+    fn one_point() -> Self { G2::one() }
 
     fn inverse_point(&self) -> Self {
         let mut x = *self;
@@ -37,9 +30,7 @@ impl Curve for G2 {
         x
     }
 
-    fn is_zero_point(&self) -> bool {
-        self.is_zero()
-    }
+    fn is_zero_point(&self) -> bool { self.is_zero() }
 
     fn double_point(&self) -> Self {
         let mut x = *self;
@@ -66,9 +57,7 @@ impl Curve for G2 {
         p
     }
 
-    fn compress(&self) -> Self::Compressed {
-        self.into_affine().into_compressed()
-    }
+    fn compress(&self) -> Self::Compressed { self.into_affine().into_compressed() }
 
     fn decompress(c: &Self::Compressed) -> Result<G2, CurveDecodingError> {
         match c.into_affine() {
@@ -150,15 +139,11 @@ impl Curve for G2 {
         }
     }
 
-    fn generate<T: Rng>(csprng: &mut T) -> Self {
-        G2::rand(csprng)
-    }
+    fn generate<T: Rng>(csprng: &mut T) -> Self { G2::rand(csprng) }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar {
-        Fr::rand(csprng)
-    }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
 
-    fn hash_to_group_element(_b: &[u8]) -> Self {
+    fn hash_to_group(_b: &[u8]) -> Self {
         unimplemented!("hash_to_group_element for G2 of Bls12_381 is not implemented")
     }
 }
@@ -171,13 +156,9 @@ impl Curve for G1 {
     const GROUP_ELEMENT_LENGTH: usize = 48;
     const SCALAR_LENGTH: usize = 32;
 
-    fn zero_point() -> Self {
-        G1::zero()
-    }
+    fn zero_point() -> Self { G1::zero() }
 
-    fn one_point() -> Self {
-        G1::one()
-    }
+    fn one_point() -> Self { G1::one() }
 
     fn inverse_point(&self) -> Self {
         let mut x = *self;
@@ -185,9 +166,7 @@ impl Curve for G1 {
         x
     }
 
-    fn is_zero_point(&self) -> bool {
-        self.is_zero()
-    }
+    fn is_zero_point(&self) -> bool { self.is_zero() }
 
     fn double_point(&self) -> Self {
         let mut x = *self;
@@ -214,9 +193,7 @@ impl Curve for G1 {
         p
     }
 
-    fn compress(&self) -> Self::Compressed {
-        self.into_affine().into_compressed()
-    }
+    fn compress(&self) -> Self::Compressed { self.into_affine().into_compressed() }
 
     fn decompress(c: &Self::Compressed) -> Result<G1, CurveDecodingError> {
         match c.into_affine() {
@@ -299,239 +276,11 @@ impl Curve for G1 {
         }
     }
 
-    fn generate<T: Rng>(csprng: &mut T) -> Self {
-        G1::rand(csprng)
-    }
+    fn generate<T: Rng>(csprng: &mut T) -> Self { G1::rand(csprng) }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar {
-        Fr::rand(csprng)
-    }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
 
-    fn hash_to_group_element(bytes: &[u8]) -> Self {
-        println!("{:?}", bytes);
-        let t: Fq = hash_bytes_to_fq(bytes);
-
-        // compute N
-        let mut t2 = t;
-        t2.square();                                    // t^2
-        let mut t4 = t2;
-        t4.square();                                    // t^4
-        let mut t4_t2_1 = t4;
-        t4_t2_1.sub_assign(&t2);
-        t4_t2_1.add_assign(&Fq::one());                 // t^4 - t^2 + 1
-        let b = Fq::from_repr(FqRepr(E11_B)).unwrap();  // this unwrap can't fail, E11_B is an element of the field
-        let mut n = b;
-        n.mul_assign(&t4_t2_1);                         // N = b(t^4 - t^2 + 1)
-
-        // compute D
-        let mut t2_t4 = t2;
-        t2_t4.sub_assign(&t4);                          // t^2 - t^4
-        let a = Fq::from_repr(FqRepr(E11_A)).unwrap();  // this unwrap can't fail, E11_A is an element of the field
-        let mut d = a;
-        d.mul_assign(&t2_t4);                           // D = a(t^2 - t^4) = -a(t^4 - t^2)
-
-        // if d, the denominator of X0(u), is 0 then we set the denominator to -a instead, since
-        // -b/a is square in Fq
-        if d.is_zero() {
-            d = a;
-            d.negate();
-        }
-
-        // compute V and U
-        let mut d2 = d;
-        d2.square();            // D^2
-        let mut v = d2;
-        v.mul_assign(&d);       // V = D^3
-        let mut n3 = n;
-        n3.square();
-        n3.mul_assign(&n);      // N^3
-        let mut and2 = a;
-        and2.mul_assign(&n);
-        and2.mul_assign(&d2);   // aND^2
-        let mut bv = b;
-        bv.mul_assign(&v);      // bV = bD^3
-        let mut u = n3;
-        u.add_assign(&and2);
-        u.add_assign(&bv);      // U = N^3 + aND^2 + bD^3
-
-        // compute alpha
-        let mut v3 = v;
-        v3.square();
-        v3.mul_assign(&v);                      // V^3
-        let mut uv3p34 = u;
-        uv3p34.mul_assign(&v3);
-        uv3p34 = uv3p34.pow(&P_MINUS_3_DIV_4);  // (UV^3)^((p-3)/4))
-        let mut alpha = u;
-        alpha.mul_assign(&v);
-        alpha.mul_assign(&uv3p34);              // alpha = UV(UV^3)^((p-3)/4))
-
-        // We use jacobian projective coordinates when computing the isogeny
-        let mut x_proj: Fq;
-        let mut y_proj: Fq;
-        let z_proj = d;
-
-        // compute alpha^2-V to check if g(X_0(t)) is square in Fq
-        // if alpha^2 == V, then g(X_0(t)) is square, so we can pick y = sqrt(g(X_0(t)))
-        let mut alpha2v_u = alpha;
-        alpha2v_u.square();
-        alpha2v_u.mul_assign(&v);
-        alpha2v_u.sub_assign(&u);
-        if alpha2v_u.is_zero() { // g(X_0(t)) is square in Fq
-            x_proj = n;
-            x_proj.mul_assign(&d);               // X = ND
-            y_proj = Fq::one();
-            match fq_sign(t) {
-                Sign::Minus => y_proj.negate(),
-                Sign::Plus => (),
-            }
-            y_proj.mul_assign(&alpha);
-            y_proj.mul_assign(&v);               // Y = Sgn_0(t) alpha D^3
-        } else { // g(X_1(t)) is square in Fq
-            x_proj = Fq::one();
-            x_proj.negate();
-            x_proj.mul_assign(&t2);
-            x_proj.mul_assign(&n);
-            x_proj.mul_assign(&d);               // X = - t^2 ND
-            y_proj = t2;
-            y_proj.mul_assign(&t);
-            y_proj.mul_assign(&alpha);
-            y_proj.mul_assign(&v);               // Y = t^3 alpha D^3
-        }
-
-        // For development - delete later.
-        // Check that the resulting point is actually on the 11isogenous curve
-        let mut x3 = x_proj;
-        x3.square();
-        x3.mul_assign(&x_proj);
-        let mut z2 = z_proj;
-        z2.square();
-        let mut z4 = z2;
-        z4.square();
-        let mut axz4 = a;
-        axz4.mul_assign(&x_proj);
-        axz4.mul_assign(&z4);
-        let mut z6 = z4;
-        z6.mul_assign(&z2);
-        let mut bz6 = b;
-        bz6.mul_assign(&z6);
-        let mut x3_axz4_bz6 = x3;
-        x3_axz4_bz6.add_assign(&axz4);
-        x3_axz4_bz6.add_assign(&bz6);
-        let mut y2 = y_proj;
-        y2.square();
-        assert!(y2 == x3_axz4_bz6);
-
-        // Evaluate the 11-isogeny
-        let (x, y, z) = iso_11(x_proj, y_proj, z_proj);
-
-        // For development - delete later.
-        // check if x,y,z is a point on the curve y^2 = x^3 + 4
-        let mut y2 = y;
-        y2.square();
-        let mut z2 = z;
-        z2.square();
-        let mut z6 = z2;
-        z6.square();
-        z6.mul_assign(&z2);
-        let mut bz6 = Fq::from_repr(FqRepr::from(4)).unwrap();
-        bz6.mul_assign(&z6);
-        let mut x3_bz6 = x;
-        x3_bz6.square();
-        x3_bz6.mul_assign(&x);
-        x3_bz6.add_assign(&bz6);
-        // println!("y2z:         {}", y2z);
-        // println!("x3_bz3:      {}", x3_bz3);
-        // println!("y2z_repr:    {}", y2z.into_repr());
-        // println!("x3_bz3_repr: {}", x3_bz3.into_repr());
-        assert!(y2 == x3_bz6);
-
-        // TODO: clear cofactors by exponentiating with (1-z) and apply section 5, method 2
-
-        unimplemented!("hash_to_group_element for G1 of Bls12_381 is not implemented");
-    }
-}
-
-fn fq_sign(a: Fq) -> Sign {
-    if a.into_repr() > FqRepr(P_MINUS_1_DIV_2) {
-        Sign::Minus
-    } else {
-        Sign::Plus
-    }
-}
-
-fn iso_11(x: Fq, y: Fq, z: Fq) -> (Fq, Fq, Fq) {
-    // Compute Z^2i for i = 1,...,15
-    let mut z_pow_2i: [Fq; 15] = [z; 15];
-    z_pow_2i[0].square();                   // Z^2
-    z_pow_2i[1] = z_pow_2i[0];
-    z_pow_2i[1].square();                   // Z^4
-    let mut z_ = z_pow_2i[1];
-    z_.mul_assign(&z_pow_2i[0]);
-    z_pow_2i[2] = z_;                       // Z^6
-    z_pow_2i[3] = z_pow_2i[1];
-    z_pow_2i[3].square();                   // Z^8
-    for i in 0..3 {                         // Z^10, Z^12, Z^14,
-        z_ = z_pow_2i[3+i];
-        z_.mul_assign(&z_pow_2i[0]);
-        z_pow_2i[4+i] = z_;
-    }
-    z_pow_2i[7] = z_pow_2i[3];
-    z_pow_2i[7].square();                   // Z^16
-    for i in 0..7 {                         // Z^18, Z^20, Z^22, Z^24, Z^26, Z^28, Z^30,
-        z_ = z_pow_2i[7+i];
-        z_.mul_assign(&z_pow_2i[0]);
-        z_pow_2i[8+i] = z_;
-    }
-
-    macro_rules! horner {
-        ($init:expr, $ks:expr, $var:expr) => {
-            {
-                for i in 0..($ks.len() - 1) {
-                    $init.mul_assign(&$var);
-                    let mut c = Fq::from_repr(FqRepr($ks[($ks.len() - 2)-i])).unwrap(); // unwrapping the Ki constants never fails
-                    c.mul_assign(&z_pow_2i[i]);
-                    $init.add_assign(&c);
-                }
-            }
-        }
-    }
-
-    let mut x_num = Fq::from_repr(FqRepr(K1[11])).unwrap(); // unwrapping the Ki constants never fails
-    horner!(x_num, K1, x);
-
-    let mut x_den_ = Fq::from_repr(FqRepr(K2[10])).unwrap(); // unwrapping the Ki constants never fails
-    horner!(x_den_, K2, x);
-    let mut x_den = z_pow_2i[0];
-    x_den.mul_assign(&x_den_);
-
-    let mut y_num_ = Fq::from_repr(FqRepr(K3[15])).unwrap(); // unwrapping the Ki constants never fails
-    horner!(y_num_, K3, x);
-    let mut y_num = y;
-    y_num.mul_assign(&y_num_);
-
-    let mut y_den_ = Fq::from_repr(FqRepr(K4[15])).unwrap(); // unwrapping the Ki constants never fails
-    horner!(y_den_, K4, x);
-    let mut y_den = z_pow_2i[0];
-    y_den.mul_assign(&z);
-    y_den.mul_assign(&y_den_);
-
-    let mut z_jac = x_den;
-    z_jac.mul_assign(&y_den);
-    let mut x_jac = x_num;
-    x_jac.mul_assign(&y_den);
-    x_jac.mul_assign(&z_jac);
-    let mut z_jac_pow2 = z_jac;
-    z_jac_pow2.square();
-    let mut y_jac = y_num;
-    y_jac.mul_assign(&x_den);
-    y_jac.mul_assign(&z_jac_pow2);
-
-    (x_jac, y_jac, z_jac)
-}
-
-enum Sign {
-    Minus,
-    Plus,
+    fn hash_to_group(bytes: &[u8]) -> Self { Self::hash_to_group_element(bytes) }
 }
 
 impl Curve for G1Affine {
@@ -542,13 +291,9 @@ impl Curve for G1Affine {
     const GROUP_ELEMENT_LENGTH: usize = 48;
     const SCALAR_LENGTH: usize = 32;
 
-    fn zero_point() -> Self {
-        G1Affine::zero()
-    }
+    fn zero_point() -> Self { G1Affine::zero() }
 
-    fn one_point() -> Self {
-        G1Affine::one()
-    }
+    fn one_point() -> Self { G1Affine::one() }
 
     fn inverse_point(&self) -> Self {
         let mut x = self.into_projective();
@@ -556,9 +301,7 @@ impl Curve for G1Affine {
         x.into_affine()
     }
 
-    fn is_zero_point(&self) -> bool {
-        self.is_zero()
-    }
+    fn is_zero_point(&self) -> bool { self.is_zero() }
 
     fn double_point(&self) -> Self {
         let mut x = self.into_projective();
@@ -583,9 +326,7 @@ impl Curve for G1Affine {
         self.mul(s).into_affine()
     }
 
-    fn compress(&self) -> Self::Compressed {
-        self.into_compressed()
-    }
+    fn compress(&self) -> Self::Compressed { self.into_compressed() }
 
     fn decompress(c: &Self::Compressed) -> Result<G1Affine, CurveDecodingError> {
         match c.into_affine() {
@@ -667,15 +408,11 @@ impl Curve for G1Affine {
         }
     }
 
-    fn generate<T: Rng>(csprng: &mut T) -> Self {
-        G1::rand(csprng).into_affine()
-    }
+    fn generate<T: Rng>(csprng: &mut T) -> Self { G1::rand(csprng).into_affine() }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar {
-        Fr::rand(csprng)
-    }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
 
-    fn hash_to_group_element(_b: &[u8]) -> Self {
+    fn hash_to_group(_b: &[u8]) -> Self {
         unimplemented!("hash_to_group_element for G1Affine of Bls12_381 is not implemented")
     }
 }
@@ -688,13 +425,9 @@ impl Curve for G2Affine {
     const GROUP_ELEMENT_LENGTH: usize = 96;
     const SCALAR_LENGTH: usize = 32;
 
-    fn zero_point() -> Self {
-        G2Affine::zero()
-    }
+    fn zero_point() -> Self { G2Affine::zero() }
 
-    fn one_point() -> Self {
-        G2Affine::one()
-    }
+    fn one_point() -> Self { G2Affine::one() }
 
     fn inverse_point(&self) -> Self {
         let mut x = self.into_projective();
@@ -702,9 +435,7 @@ impl Curve for G2Affine {
         x.into_affine()
     }
 
-    fn is_zero_point(&self) -> bool {
-        self.is_zero()
-    }
+    fn is_zero_point(&self) -> bool { self.is_zero() }
 
     fn double_point(&self) -> Self {
         let mut x = self.into_projective();
@@ -729,9 +460,7 @@ impl Curve for G2Affine {
         self.mul(s).into_affine()
     }
 
-    fn compress(&self) -> Self::Compressed {
-        self.into_compressed()
-    }
+    fn compress(&self) -> Self::Compressed { self.into_compressed() }
 
     fn decompress(c: &Self::Compressed) -> Result<G2Affine, CurveDecodingError> {
         match c.into_affine() {
@@ -813,15 +542,11 @@ impl Curve for G2Affine {
         }
     }
 
-    fn generate<T: Rng>(csprng: &mut T) -> Self {
-        G2::rand(csprng).into_affine()
-    }
+    fn generate<T: Rng>(csprng: &mut T) -> Self { G2::rand(csprng).into_affine() }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar {
-        Fr::rand(csprng)
-    }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
 
-    fn hash_to_group_element(_b: &[u8]) -> Self {
+    fn hash_to_group(_b: &[u8]) -> Self {
         unimplemented!("hash_to_group_element for G2Affine of Bls12_381 is not implemented")
     }
 }
@@ -850,9 +575,7 @@ impl Pairing for Bls12 {
         Box::new(bytes)
     }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::ScalarField {
-        Fr::rand(csprng)
-    }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::ScalarField { Fr::rand(csprng) }
 
     fn bytes_to_scalar(bytes: &mut Cursor<&[u8]>) -> Result<Self::ScalarField, FieldDecodingError> {
         let mut frrepr: FrRepr = FrRepr([0u64; 4]);
@@ -881,9 +604,9 @@ mod tests {
     #[test]
     fn smoke_test_hash() {
         let mut rng = thread_rng();
-        for _i in 0..100000 {
+        for _i in 0..10000 {
             let bytes = rng.gen::<[u8; 32]>();
-            let _ = <Bls12 as Pairing>::G_1::hash_to_group_element(&bytes);
+            let _ = <Bls12 as Pairing>::G_1::hash_to_group(&bytes);
         }
     }
 

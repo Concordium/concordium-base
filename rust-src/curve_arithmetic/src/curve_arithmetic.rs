@@ -16,15 +16,11 @@ pub enum FieldDecodingError {
 }
 
 impl From<PrimeFieldDecodingError> for FieldDecodingError {
-    fn from(_err: PrimeFieldDecodingError) -> Self {
-        FieldDecodingError::NotFieldElement
-    }
+    fn from(_err: PrimeFieldDecodingError) -> Self { FieldDecodingError::NotFieldElement }
 }
 
 impl Display for FieldDecodingError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "Not a field element.")
-    }
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result { write!(f, "Not a field element.") }
 }
 
 impl Fail for FieldDecodingError {}
@@ -35,16 +31,13 @@ pub enum CurveDecodingError {
 }
 
 impl Display for CurveDecodingError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "Not a point on the curve.")
-    }
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result { write!(f, "Not a point on the curve.") }
 }
 
 impl Fail for CurveDecodingError {}
 
 pub trait Curve:
-    Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static
-{
+    Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static {
     type Scalar: Field;
     type Base: Field;
     type Compressed;
@@ -69,7 +62,7 @@ pub trait Curve:
     fn generate<R: Rng>(rng: &mut R) -> Self;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar;
     fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError>;
-    fn hash_to_group_element(m: &[u8]) -> Self;
+    fn hash_to_group(m: &[u8]) -> Self;
 }
 
 pub trait Pairing: Sized + 'static + Clone {

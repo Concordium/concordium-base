@@ -194,6 +194,10 @@ macro_rules! curve_impl {
                 (*self).into()
             }
 
+            fn hash_to_group_element(bytes: &[u8]) -> Self {
+                let p = Self::Projective::hash_to_group_element(bytes);
+                p.into()
+            }
         }
 
         impl Rand for $projective {
@@ -552,6 +556,10 @@ macro_rules! curve_impl {
                 *self = res;
             }
 
+            fn hash_to_group_element(bytes: &[u8]) -> Self {
+                Self::hash_to_group(bytes)
+            }
+
             fn into_affine(&self) -> $affine {
                 (*self).into()
             }
@@ -621,12 +629,19 @@ macro_rules! curve_impl {
 }
 
 pub mod g1 {
-    use super::super::{Bls12, Fq, Fq12, FqRepr, Fr, FrRepr};
-    use super::g2::G2Affine;
+    use super::{
+        super::{Bls12, Fq, Fq12, FqRepr, Fr, FrRepr},
+        g2::G2Affine,
+    };
+    use bytes::BufMut;
     use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr, SqrtField};
     use rand::{Rand, Rng};
     use std::fmt;
-    use {CurveAffine, CurveProjective, EncodedPoint, Engine, GroupDecodingError};
+    use CurveAffine;
+    use CurveProjective;
+    use EncodedPoint;
+    use Engine;
+    use GroupDecodingError;
 
     curve_impl!(
         "G1",
@@ -644,15 +659,11 @@ pub mod g1 {
     pub struct G1Uncompressed([u8; 96]);
 
     impl AsRef<[u8]> for G1Uncompressed {
-        fn as_ref(&self) -> &[u8] {
-            &self.0
-        }
+        fn as_ref(&self) -> &[u8] { &self.0 }
     }
 
     impl AsMut<[u8]> for G1Uncompressed {
-        fn as_mut(&mut self) -> &mut [u8] {
-            &mut self.0
-        }
+        fn as_mut(&mut self) -> &mut [u8] { &mut self.0 }
     }
 
     impl fmt::Debug for G1Uncompressed {
@@ -664,12 +675,10 @@ pub mod g1 {
     impl EncodedPoint for G1Uncompressed {
         type Affine = G1Affine;
 
-        fn empty() -> Self {
-            G1Uncompressed([0; 96])
-        }
-        fn size() -> usize {
-            96
-        }
+        fn empty() -> Self { G1Uncompressed([0; 96]) }
+
+        fn size() -> usize { 96 }
+
         fn into_affine(&self) -> Result<G1Affine, GroupDecodingError> {
             let affine = self.into_affine_unchecked()?;
 
@@ -681,6 +690,7 @@ pub mod g1 {
                 Ok(affine)
             }
         }
+
         fn into_affine_unchecked(&self) -> Result<G1Affine, GroupDecodingError> {
             // Create a copy of this representation.
             let mut copy = self.0;
@@ -722,16 +732,17 @@ pub mod g1 {
                 }
 
                 Ok(G1Affine {
-                    x: Fq::from_repr(x).map_err(|e| {
+                    x:        Fq::from_repr(x).map_err(|e| {
                         GroupDecodingError::CoordinateDecodingError("x coordinate", e)
                     })?,
-                    y: Fq::from_repr(y).map_err(|e| {
+                    y:        Fq::from_repr(y).map_err(|e| {
                         GroupDecodingError::CoordinateDecodingError("y coordinate", e)
                     })?,
                     infinity: false,
                 })
             }
         }
+
         fn from_affine(affine: G1Affine) -> Self {
             let mut res = Self::empty();
 
@@ -754,15 +765,11 @@ pub mod g1 {
     pub struct G1Compressed([u8; 48]);
 
     impl AsRef<[u8]> for G1Compressed {
-        fn as_ref(&self) -> &[u8] {
-            &self.0
-        }
+        fn as_ref(&self) -> &[u8] { &self.0 }
     }
 
     impl AsMut<[u8]> for G1Compressed {
-        fn as_mut(&mut self) -> &mut [u8] {
-            &mut self.0
-        }
+        fn as_mut(&mut self) -> &mut [u8] { &mut self.0 }
     }
 
     impl fmt::Debug for G1Compressed {
@@ -774,12 +781,10 @@ pub mod g1 {
     impl EncodedPoint for G1Compressed {
         type Affine = G1Affine;
 
-        fn empty() -> Self {
-            G1Compressed([0; 48])
-        }
-        fn size() -> usize {
-            48
-        }
+        fn empty() -> Self { G1Compressed([0; 48]) }
+
+        fn size() -> usize { 48 }
+
         fn into_affine(&self) -> Result<G1Affine, GroupDecodingError> {
             let affine = self.into_affine_unchecked()?;
 
@@ -791,6 +796,7 @@ pub mod g1 {
                 Ok(affine)
             }
         }
+
         fn into_affine_unchecked(&self) -> Result<G1Affine, GroupDecodingError> {
             // Create a copy of this representation.
             let mut copy = self.0;
@@ -834,6 +840,7 @@ pub mod g1 {
                 G1Affine::get_point_from_x(x, greatest).ok_or(GroupDecodingError::NotOnCurve)
             }
         }
+
         fn from_affine(affine: G1Affine) -> Self {
             let mut res = Self::empty();
 
@@ -874,15 +881,13 @@ pub mod g1 {
 
         fn get_generator() -> Self {
             G1Affine {
-                x: super::super::fq::G1_GENERATOR_X,
-                y: super::super::fq::G1_GENERATOR_Y,
+                x:        super::super::fq::G1_GENERATOR_X,
+                y:        super::super::fq::G1_GENERATOR_Y,
                 infinity: false,
             }
         }
 
-        fn get_coeff_b() -> Fq {
-            super::super::fq::B_COEFF
-        }
+        fn get_coeff_b() -> Fq { super::super::fq::B_COEFF }
 
         fn perform_pairing(&self, other: &G2Affine) -> Fq12 {
             super::super::Bls12::pairing(*self, *other)
@@ -917,18 +922,84 @@ pub mod g1 {
 
             ret
         }
+
+        // Implements section 4 and 5 construction #2 of https://eprint.iacr.org/2019/403.pdf
+        fn hash_to_group(bytes: &[u8]) -> Self {
+            // Concatenate the message with 0u8 and 1u8 respectively
+            // The paper suggests concatenating a single bit - but since the point is to
+            // get two unrelated field elements, concatenating with 0u8 and 1u8 is ok
+            let mut bytes0: Vec<u8> = bytes.to_vec();
+            bytes0.put(0u8);
+            let mut bytes1: Vec<u8> = bytes.to_vec();
+            bytes1.put(1u8);
+
+            // Notice, this hashing functions varies from the one used by the paper
+            // We use sha512 iteratively until the first 48 bytes of the resulting
+            // digest represents a field element
+            let t0 = super::super::fq::hash_bytes_to_fq(&bytes0);
+            let t1 = super::super::fq::hash_bytes_to_fq(&bytes1);
+
+            // compute the two points on E1'(Fq) - the 11 isogenous curve
+            let (x0, y0, z0) = super::super::fq::simplified_swu(t0);
+            let (x1, y1, z1) = super::super::fq::simplified_swu(t1);
+
+            // evaluate the 11-isogeny on the points.
+            // it is faster to add the two points before evaluating the isogeny, but
+            // we omit this for now, since we don't have an efficient implementation
+            // of the curve.
+            let (x0, y0, z0) = super::super::fq::iso_11(x0, y0, z0);
+            let (x1, y1, z1) = super::super::fq::iso_11(x1, y1, z1);
+
+            // add the two points on E1: y^2 = x^3 + 4
+            let mut p0 = G1 {
+                x: x0,
+                y: y0,
+                z: z0,
+            };
+            let p1 = G1 {
+                x: x1,
+                y: y1,
+                z: z1,
+            };
+            p0.add_assign(&p1);
+
+            // Clear cofactors
+            p0.mul_assign(1 + 15132376222941642752);
+            p0
+        }
     }
 
     #[derive(Clone, Debug)]
     pub struct G1Prepared(pub(crate) G1Affine);
 
     impl G1Prepared {
-        pub fn is_zero(&self) -> bool {
-            self.0.is_zero()
-        }
+        pub fn is_zero(&self) -> bool { self.0.is_zero() }
 
-        pub fn from_affine(p: G1Affine) -> Self {
-            G1Prepared(p)
+        pub fn from_affine(p: G1Affine) -> Self { G1Prepared(p) }
+    }
+
+    #[test]
+    fn test_hash_g1() {
+        use rand::thread_rng;
+        let mut rng = thread_rng();
+        for _i in 0..10000 {
+            let bytes = rng.gen::<[u8; 32]>();
+            let p = G1::hash_to_group_element(&bytes);
+            let affine = p.into_affine();
+            assert!(affine.is_on_curve());
+            assert!(affine.is_in_correct_subgroup_assuming_on_curve());
+        }
+    }
+
+    #[test]
+    fn test_hash_g1affine() {
+        use rand::thread_rng;
+        let mut rng = thread_rng();
+        for _i in 0..10000 {
+            let bytes = rng.gen::<[u8; 32]>();
+            let p = G1Affine::hash_to_group_element(&bytes);
+            assert!(p.is_on_curve());
+            assert!(p.is_in_correct_subgroup_assuming_on_curve());
         }
     }
 
@@ -952,8 +1023,8 @@ pub mod g1 {
                 let negyrepr = negy.into_repr();
 
                 let p = G1Affine {
-                    x: x,
-                    y: if yrepr < negyrepr { y } else { negy },
+                    x,
+                    y:        if yrepr < negyrepr { y } else { negy },
                     infinity: false,
                 };
                 assert!(!p.is_in_correct_subgroup_assuming_on_curve());
@@ -980,22 +1051,24 @@ pub mod g1 {
         // Reject point on isomorphic twist (b = 24)
         {
             let p = G1Affine {
-                x: Fq::from_repr(FqRepr([
+                x:        Fq::from_repr(FqRepr([
                     0xc58d887b66c035dc,
                     0x10cbfd301d553822,
                     0xaf23e064f1131ee5,
                     0x9fe83b1b4a5d648d,
                     0xf583cc5a508f6a40,
                     0xc3ad2aefde0bb13,
-                ])).unwrap(),
-                y: Fq::from_repr(FqRepr([
+                ]))
+                .unwrap(),
+                y:        Fq::from_repr(FqRepr([
                     0x60aa6f9552f03aae,
                     0xecd01d5181300d35,
                     0x8af1cdb8aa8ce167,
                     0xe760f57922998c9d,
                     0x953703f5795a39e5,
                     0xfe3ae0922df702c,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
                 infinity: false,
             };
             assert!(!p.is_on_curve());
@@ -1005,22 +1078,24 @@ pub mod g1 {
         // Reject point on a twist (b = 3)
         {
             let p = G1Affine {
-                x: Fq::from_repr(FqRepr([
+                x:        Fq::from_repr(FqRepr([
                     0xee6adf83511e15f5,
                     0x92ddd328f27a4ba6,
                     0xe305bd1ac65adba7,
                     0xea034ee2928b30a8,
                     0xbd8833dc7c79a7f7,
                     0xe45c9f0c0438675,
-                ])).unwrap(),
-                y: Fq::from_repr(FqRepr([
+                ]))
+                .unwrap(),
+                y:        Fq::from_repr(FqRepr([
                     0x3b450eb1ab7b5dad,
                     0xa65cb81e975e8675,
                     0xaa548682b21726e5,
                     0x753ddf21a2601d20,
                     0x532d0b640bd3ff8b,
                     0x118d2c543f031102,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
                 infinity: false,
             };
             assert!(!p.is_on_curve());
@@ -1031,22 +1106,24 @@ pub mod g1 {
         // There is only one r-order subgroup, as r does not divide the cofactor.
         {
             let p = G1Affine {
-                x: Fq::from_repr(FqRepr([
+                x:        Fq::from_repr(FqRepr([
                     0x76e1c971c6db8fe8,
                     0xe37e1a610eff2f79,
                     0x88ae9c499f46f0c0,
                     0xf35de9ce0d6b4e84,
                     0x265bddd23d1dec54,
                     0x12a8778088458308,
-                ])).unwrap(),
-                y: Fq::from_repr(FqRepr([
+                ]))
+                .unwrap(),
+                y:        Fq::from_repr(FqRepr([
                     0x8a22defa0d526256,
                     0xc57ca55456fcb9ae,
                     0x1ba194e89bab2610,
                     0x921beef89d4f29df,
                     0x5b6fda44ad85fa78,
                     0xed74ab9f302cbe0,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
                 infinity: false,
             };
             assert!(p.is_on_curve());
@@ -1064,7 +1141,8 @@ pub mod g1 {
                 0x485e77d50a5df10d,
                 0x4c6fcac4b55fd479,
                 0x86ed4d9906fb064,
-            ])).unwrap(),
+            ]))
+            .unwrap(),
             y: Fq::from_repr(FqRepr([
                 0xd25ee6461538c65,
                 0x9f3bbb2ecd3719b9,
@@ -1072,7 +1150,8 @@ pub mod g1 {
                 0xcefca68333c35288,
                 0x570c8005f8573fa6,
                 0x152ca696fe034442,
-            ])).unwrap(),
+            ]))
+            .unwrap(),
             z: Fq::one(),
         };
 
@@ -1084,7 +1163,8 @@ pub mod g1 {
                 0x5f44314ec5e3fb03,
                 0x24e8538737c6e675,
                 0x8abd623a594fba8,
-            ])).unwrap(),
+            ]))
+            .unwrap(),
             y: Fq::from_repr(FqRepr([
                 0x6b0528f088bb7044,
                 0x2fdeb5c82917ff9e,
@@ -1092,34 +1172,34 @@ pub mod g1 {
                 0xd65104c6f95a872a,
                 0x1f2998a5a9c61253,
                 0xe74846154a9e44,
-            ])).unwrap(),
+            ]))
+            .unwrap(),
             z: Fq::one(),
         });
 
         let p = G1Affine::from(p);
 
-        assert_eq!(
-            p,
-            G1Affine {
-                x: Fq::from_repr(FqRepr([
-                    0x6dd3098f22235df,
-                    0xe865d221c8090260,
-                    0xeb96bb99fa50779f,
-                    0xc4f9a52a428e23bb,
-                    0xd178b28dd4f407ef,
-                    0x17fb8905e9183c69
-                ])).unwrap(),
-                y: Fq::from_repr(FqRepr([
-                    0xd0de9d65292b7710,
-                    0xf6a05f2bcf1d9ca7,
-                    0x1040e27012f20b64,
-                    0xeec8d1a5b7466c58,
-                    0x4bc362649dce6376,
-                    0x430cbdc5455b00a
-                ])).unwrap(),
-                infinity: false,
-            }
-        );
+        assert_eq!(p, G1Affine {
+            x:        Fq::from_repr(FqRepr([
+                0x6dd3098f22235df,
+                0xe865d221c8090260,
+                0xeb96bb99fa50779f,
+                0xc4f9a52a428e23bb,
+                0xd178b28dd4f407ef,
+                0x17fb8905e9183c69
+            ]))
+            .unwrap(),
+            y:        Fq::from_repr(FqRepr([
+                0xd0de9d65292b7710,
+                0xf6a05f2bcf1d9ca7,
+                0x1040e27012f20b64,
+                0xeec8d1a5b7466c58,
+                0x4bc362649dce6376,
+                0x430cbdc5455b00a
+            ]))
+            .unwrap(),
+            infinity: false,
+        });
     }
 
     #[test]
@@ -1132,7 +1212,8 @@ pub mod g1 {
                 0x485e77d50a5df10d,
                 0x4c6fcac4b55fd479,
                 0x86ed4d9906fb064,
-            ])).unwrap(),
+            ]))
+            .unwrap(),
             y: Fq::from_repr(FqRepr([
                 0xd25ee6461538c65,
                 0x9f3bbb2ecd3719b9,
@@ -1140,7 +1221,8 @@ pub mod g1 {
                 0xcefca68333c35288,
                 0x570c8005f8573fa6,
                 0x152ca696fe034442,
-            ])).unwrap(),
+            ]))
+            .unwrap(),
             z: Fq::one(),
         };
 
@@ -1148,28 +1230,27 @@ pub mod g1 {
 
         let p = G1Affine::from(p);
 
-        assert_eq!(
-            p,
-            G1Affine {
-                x: Fq::from_repr(FqRepr([
-                    0xf939ddfe0ead7018,
-                    0x3b03942e732aecb,
-                    0xce0e9c38fdb11851,
-                    0x4b914c16687dcde0,
-                    0x66c8baf177d20533,
-                    0xaf960cff3d83833
-                ])).unwrap(),
-                y: Fq::from_repr(FqRepr([
-                    0x3f0675695f5177a8,
-                    0x2b6d82ae178a1ba0,
-                    0x9096380dd8e51b11,
-                    0x1771a65b60572f4e,
-                    0x8b547c1313b27555,
-                    0x135075589a687b1e
-                ])).unwrap(),
-                infinity: false,
-            }
-        );
+        assert_eq!(p, G1Affine {
+            x:        Fq::from_repr(FqRepr([
+                0xf939ddfe0ead7018,
+                0x3b03942e732aecb,
+                0xce0e9c38fdb11851,
+                0x4b914c16687dcde0,
+                0x66c8baf177d20533,
+                0xaf960cff3d83833
+            ]))
+            .unwrap(),
+            y:        Fq::from_repr(FqRepr([
+                0x3f0675695f5177a8,
+                0x2b6d82ae178a1ba0,
+                0x9096380dd8e51b11,
+                0x1771a65b60572f4e,
+                0x8b547c1313b27555,
+                0x135075589a687b1e
+            ]))
+            .unwrap(),
+            infinity: false,
+        });
     }
 
     #[test]
@@ -1182,42 +1263,46 @@ pub mod g1 {
         // y = 2291134451313223670499022936083127939567618746216464377735567679979105510603740918204953301371880765657042046687078
 
         let a = G1Affine {
-            x: Fq::from_repr(FqRepr([
+            x:        Fq::from_repr(FqRepr([
                 0xea431f2cc38fc94d,
                 0x3ad2354a07f5472b,
                 0xfe669f133f16c26a,
                 0x71ffa8021531705,
                 0x7418d484386d267,
                 0xd5108d8ff1fbd6,
-            ])).unwrap(),
-            y: Fq::from_repr(FqRepr([
+            ]))
+            .unwrap(),
+            y:        Fq::from_repr(FqRepr([
                 0xa776ccbfe9981766,
                 0x255632964ff40f4a,
                 0xc09744e650b00499,
                 0x520f74773e74c8c3,
                 0x484c8fc982008f0,
                 0xee2c3d922008cc6,
-            ])).unwrap(),
+            ]))
+            .unwrap(),
             infinity: false,
         };
 
         let b = G1Affine {
-            x: Fq::from_repr(FqRepr([
+            x:        Fq::from_repr(FqRepr([
                 0xe06cdb156b6356b6,
                 0xd9040b2d75448ad9,
                 0xe702f14bb0e2aca5,
                 0xc6e05201e5f83991,
                 0xf7c75910816f207c,
                 0x18d4043e78103106,
-            ])).unwrap(),
-            y: Fq::from_repr(FqRepr([
+            ]))
+            .unwrap(),
+            y:        Fq::from_repr(FqRepr([
                 0xa776ccbfe9981766,
                 0x255632964ff40f4a,
                 0xc09744e650b00499,
                 0x520f74773e74c8c3,
                 0x484c8fc982008f0,
                 0xee2c3d922008cc6,
-            ])).unwrap(),
+            ]))
+            .unwrap(),
             infinity: false,
         };
 
@@ -1225,22 +1310,24 @@ pub mod g1 {
         // x = 52901198670373960614757979459866672334163627229195745167587898707663026648445040826329033206551534205133090753192
         // y = 1711275103908443722918766889652776216989264073722543507596490456144926139887096946237734327757134898380852225872709
         let c = G1Affine {
-            x: Fq::from_repr(FqRepr([
+            x:        Fq::from_repr(FqRepr([
                 0xef4f05bdd10c8aa8,
                 0xad5bf87341a2df9,
                 0x81c7424206b78714,
                 0x9676ff02ec39c227,
                 0x4c12c15d7e55b9f3,
                 0x57fd1e317db9bd,
-            ])).unwrap(),
-            y: Fq::from_repr(FqRepr([
+            ]))
+            .unwrap(),
+            y:        Fq::from_repr(FqRepr([
                 0x1288334016679345,
                 0xf955cd68615ff0b5,
                 0xa6998dbaa600f18a,
                 0x1267d70db51049fb,
                 0x4696deb9ab2ba3e7,
                 0xb1e4e11177f59d4,
-            ])).unwrap(),
+            ]))
+            .unwrap(),
             infinity: false,
         };
 
@@ -1260,18 +1347,22 @@ pub mod g1 {
     }
 
     #[test]
-    fn g1_curve_tests() {
-        ::tests::curve::curve_tests::<G1>();
-    }
+    fn g1_curve_tests() { ::tests::curve::curve_tests::<G1>(); }
 }
 
 pub mod g2 {
-    use super::super::{Bls12, Fq, Fq12, Fq2, FqRepr, Fr, FrRepr};
-    use super::g1::G1Affine;
+    use super::{
+        super::{Bls12, Fq, Fq12, Fq2, FqRepr, Fr, FrRepr},
+        g1::G1Affine,
+    };
     use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr, SqrtField};
     use rand::{Rand, Rng};
     use std::fmt;
-    use {CurveAffine, CurveProjective, EncodedPoint, Engine, GroupDecodingError};
+    use CurveAffine;
+    use CurveProjective;
+    use EncodedPoint;
+    use Engine;
+    use GroupDecodingError;
 
     curve_impl!(
         "G2",
@@ -1289,15 +1380,11 @@ pub mod g2 {
     pub struct G2Uncompressed([u8; 192]);
 
     impl AsRef<[u8]> for G2Uncompressed {
-        fn as_ref(&self) -> &[u8] {
-            &self.0
-        }
+        fn as_ref(&self) -> &[u8] { &self.0 }
     }
 
     impl AsMut<[u8]> for G2Uncompressed {
-        fn as_mut(&mut self) -> &mut [u8] {
-            &mut self.0
-        }
+        fn as_mut(&mut self) -> &mut [u8] { &mut self.0 }
     }
 
     impl fmt::Debug for G2Uncompressed {
@@ -1309,12 +1396,10 @@ pub mod g2 {
     impl EncodedPoint for G2Uncompressed {
         type Affine = G2Affine;
 
-        fn empty() -> Self {
-            G2Uncompressed([0; 192])
-        }
-        fn size() -> usize {
-            192
-        }
+        fn empty() -> Self { G2Uncompressed([0; 192]) }
+
+        fn size() -> usize { 192 }
+
         fn into_affine(&self) -> Result<G2Affine, GroupDecodingError> {
             let affine = self.into_affine_unchecked()?;
 
@@ -1326,6 +1411,7 @@ pub mod g2 {
                 Ok(affine)
             }
         }
+
         fn into_affine_unchecked(&self) -> Result<G2Affine, GroupDecodingError> {
             // Create a copy of this representation.
             let mut copy = self.0;
@@ -1371,7 +1457,7 @@ pub mod g2 {
                 }
 
                 Ok(G2Affine {
-                    x: Fq2 {
+                    x:        Fq2 {
                         c0: Fq::from_repr(x_c0).map_err(|e| {
                             GroupDecodingError::CoordinateDecodingError("x coordinate (c0)", e)
                         })?,
@@ -1379,7 +1465,7 @@ pub mod g2 {
                             GroupDecodingError::CoordinateDecodingError("x coordinate (c1)", e)
                         })?,
                     },
-                    y: Fq2 {
+                    y:        Fq2 {
                         c0: Fq::from_repr(y_c0).map_err(|e| {
                             GroupDecodingError::CoordinateDecodingError("y coordinate (c0)", e)
                         })?,
@@ -1391,6 +1477,7 @@ pub mod g2 {
                 })
             }
         }
+
         fn from_affine(affine: G2Affine) -> Self {
             let mut res = Self::empty();
 
@@ -1415,15 +1502,11 @@ pub mod g2 {
     pub struct G2Compressed([u8; 96]);
 
     impl AsRef<[u8]> for G2Compressed {
-        fn as_ref(&self) -> &[u8] {
-            &self.0
-        }
+        fn as_ref(&self) -> &[u8] { &self.0 }
     }
 
     impl AsMut<[u8]> for G2Compressed {
-        fn as_mut(&mut self) -> &mut [u8] {
-            &mut self.0
-        }
+        fn as_mut(&mut self) -> &mut [u8] { &mut self.0 }
     }
 
     impl fmt::Debug for G2Compressed {
@@ -1435,12 +1518,10 @@ pub mod g2 {
     impl EncodedPoint for G2Compressed {
         type Affine = G2Affine;
 
-        fn empty() -> Self {
-            G2Compressed([0; 96])
-        }
-        fn size() -> usize {
-            96
-        }
+        fn empty() -> Self { G2Compressed([0; 96]) }
+
+        fn size() -> usize { 96 }
+
         fn into_affine(&self) -> Result<G2Affine, GroupDecodingError> {
             let affine = self.into_affine_unchecked()?;
 
@@ -1452,6 +1533,7 @@ pub mod g2 {
                 Ok(affine)
             }
         }
+
         fn into_affine_unchecked(&self) -> Result<G2Affine, GroupDecodingError> {
             // Create a copy of this representation.
             let mut copy = self.0;
@@ -1503,6 +1585,7 @@ pub mod g2 {
                 G2Affine::get_point_from_x(x, greatest).ok_or(GroupDecodingError::NotOnCurve)
             }
         }
+
         fn from_affine(affine: G2Affine) -> Self {
             let mut res = Self::empty();
 
@@ -1538,11 +1621,11 @@ pub mod g2 {
     impl G2Affine {
         fn get_generator() -> Self {
             G2Affine {
-                x: Fq2 {
+                x:        Fq2 {
                     c0: super::super::fq::G2_GENERATOR_X_C0,
                     c1: super::super::fq::G2_GENERATOR_X_C1,
                 },
-                y: Fq2 {
+                y:        Fq2 {
                     c0: super::super::fq::G2_GENERATOR_Y_C0,
                     c1: super::super::fq::G2_GENERATOR_Y_C1,
                 },
@@ -1606,11 +1689,15 @@ pub mod g2 {
 
             ret
         }
+
+        fn hash_to_group(_bytes: &[u8]) -> Self {
+            unimplemented!("hashing to group element is not implemented for G2 or G2Affine");
+        }
     }
 
     #[derive(Clone, Debug)]
     pub struct G2Prepared {
-        pub(crate) coeffs: Vec<(Fq2, Fq2, Fq2)>,
+        pub(crate) coeffs:   Vec<(Fq2, Fq2, Fq2)>,
         pub(crate) infinity: bool,
     }
 
@@ -1632,8 +1719,8 @@ pub mod g2 {
                 negy.negate();
 
                 let p = G2Affine {
-                    x: x,
-                    y: if y < negy { y } else { negy },
+                    x,
+                    y:        if y < negy { y } else { negy },
                     infinity: false,
                 };
 
@@ -1660,7 +1747,7 @@ pub mod g2 {
         // Reject point on isomorphic twist (b = 3 * (u + 1))
         {
             let p = G2Affine {
-                x: Fq2 {
+                x:        Fq2 {
                     c0: Fq::from_repr(FqRepr([
                         0xa757072d9fa35ba9,
                         0xae3fb2fb418f6e8a,
@@ -1668,7 +1755,8 @@ pub mod g2 {
                         0x7a17a004747e3dbe,
                         0xcc65406a7c2e5a73,
                         0x10b8c03d64db4d0c,
-                    ])).unwrap(),
+                    ]))
+                    .unwrap(),
                     c1: Fq::from_repr(FqRepr([
                         0xd30e70fe2f029778,
                         0xda30772df0f5212e,
@@ -1676,9 +1764,10 @@ pub mod g2 {
                         0xfb777e5b9b568608,
                         0x789bac1fec71a2b9,
                         0x1342f02e2da54405,
-                    ])).unwrap(),
+                    ]))
+                    .unwrap(),
                 },
-                y: Fq2 {
+                y:        Fq2 {
                     c0: Fq::from_repr(FqRepr([
                         0xfe0812043de54dca,
                         0xe455171a3d47a646,
@@ -1686,7 +1775,8 @@ pub mod g2 {
                         0x663015d9410eb608,
                         0x78e82a79d829a544,
                         0x40a00545bb3c1e,
-                    ])).unwrap(),
+                    ]))
+                    .unwrap(),
                     c1: Fq::from_repr(FqRepr([
                         0x4709802348e79377,
                         0xb5ac4dc9204bcfbd,
@@ -1694,7 +1784,8 @@ pub mod g2 {
                         0x15008b1dc399e8df,
                         0x68128fd0548a3829,
                         0x16a613db5c873aaa,
-                    ])).unwrap(),
+                    ]))
+                    .unwrap(),
                 },
                 infinity: false,
             };
@@ -1705,7 +1796,7 @@ pub mod g2 {
         // Reject point on a twist (b = 2 * (u + 1))
         {
             let p = G2Affine {
-                x: Fq2 {
+                x:        Fq2 {
                     c0: Fq::from_repr(FqRepr([
                         0xf4fdfe95a705f917,
                         0xc2914df688233238,
@@ -1713,7 +1804,8 @@ pub mod g2 {
                         0x41abba710d6c692c,
                         0xffcc4b2b62ce8484,
                         0x6993ec01b8934ed,
-                    ])).unwrap(),
+                    ]))
+                    .unwrap(),
                     c1: Fq::from_repr(FqRepr([
                         0xb94e92d5f874e26,
                         0x44516408bc115d95,
@@ -1721,9 +1813,10 @@ pub mod g2 {
                         0xa5a0c2b7131f3555,
                         0x83800965822367e7,
                         0x10cf1d3ad8d90bfa,
-                    ])).unwrap(),
+                    ]))
+                    .unwrap(),
                 },
-                y: Fq2 {
+                y:        Fq2 {
                     c0: Fq::from_repr(FqRepr([
                         0xbf00334c79701d97,
                         0x4fe714f9ff204f9a,
@@ -1731,7 +1824,8 @@ pub mod g2 {
                         0x5a9171720e73eb51,
                         0x38eb4fd8d658adb7,
                         0xb649051bbc1164d,
-                    ])).unwrap(),
+                    ]))
+                    .unwrap(),
                     c1: Fq::from_repr(FqRepr([
                         0x9225814253d7df75,
                         0xc196c2513477f887,
@@ -1739,7 +1833,8 @@ pub mod g2 {
                         0x55f2b8efad953e04,
                         0x7379345eda55265e,
                         0x377f2e6208fd4cb,
-                    ])).unwrap(),
+                    ]))
+                    .unwrap(),
                 },
                 infinity: false,
             };
@@ -1751,7 +1846,7 @@ pub mod g2 {
         // There is only one r-order subgroup, as r does not divide the cofactor.
         {
             let p = G2Affine {
-                x: Fq2 {
+                x:        Fq2 {
                     c0: Fq::from_repr(FqRepr([
                         0x262cea73ea1906c,
                         0x2f08540770fabd6,
@@ -1759,7 +1854,8 @@ pub mod g2 {
                         0x2199bc19c48c393d,
                         0x4a151b732a6075bf,
                         0x17762a3b9108c4a7,
-                    ])).unwrap(),
+                    ]))
+                    .unwrap(),
                     c1: Fq::from_repr(FqRepr([
                         0x26f461e944bbd3d1,
                         0x298f3189a9cf6ed6,
@@ -1767,9 +1863,10 @@ pub mod g2 {
                         0x7e147f3f9e6e241,
                         0x72a9b63583963fff,
                         0x158b0083c000462,
-                    ])).unwrap(),
+                    ]))
+                    .unwrap(),
                 },
-                y: Fq2 {
+                y:        Fq2 {
                     c0: Fq::from_repr(FqRepr([
                         0x91fb0b225ecf103b,
                         0x55d42edc1dc46ba0,
@@ -1777,7 +1874,8 @@ pub mod g2 {
                         0x68cad19430706b4d,
                         0x3ccfb97b924dcea8,
                         0x1660f93434588f8d,
-                    ])).unwrap(),
+                    ]))
+                    .unwrap(),
                     c1: Fq::from_repr(FqRepr([
                         0xaaed3985b6dcb9c7,
                         0xc1e985d6d898d9f4,
@@ -1785,7 +1883,8 @@ pub mod g2 {
                         0x3940a2dbb914b529,
                         0xbeb88137cf34f3e7,
                         0x1699ee577c61b694,
-                    ])).unwrap(),
+                    ]))
+                    .unwrap(),
                 },
                 infinity: false,
             };
@@ -1805,7 +1904,8 @@ pub mod g2 {
                     0x72556c999f3707ac,
                     0x4617f2e6774e9711,
                     0x100b2fe5bffe030b,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
                 c1: Fq::from_repr(FqRepr([
                     0x7a33555977ec608,
                     0xe23039d1fe9c0881,
@@ -1813,7 +1913,8 @@ pub mod g2 {
                     0x4637c4f417667e2e,
                     0x93ebe7c3e41f6acc,
                     0xde884f89a9a371b,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
             },
             y: Fq2 {
                 c0: Fq::from_repr(FqRepr([
@@ -1823,7 +1924,8 @@ pub mod g2 {
                     0x25fd427b4122f231,
                     0xd83112aace35cae,
                     0x191b2432407cbb7f,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
                 c1: Fq::from_repr(FqRepr([
                     0xf68ae82fe97662f5,
                     0xe986057068b50b7d,
@@ -1831,7 +1933,8 @@ pub mod g2 {
                     0x9eaa6d19de569196,
                     0xf6a03d31e2ec2183,
                     0x3bdafaf7ca9b39b,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
             },
             z: Fq2::one(),
         };
@@ -1845,7 +1948,8 @@ pub mod g2 {
                     0x8e73a96b329ad190,
                     0x27c546f75ee1f3ab,
                     0xa33d27add5e7e82,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
                 c1: Fq::from_repr(FqRepr([
                     0x93b1ebcd54870dfe,
                     0xf1578300e1342e11,
@@ -1853,7 +1957,8 @@ pub mod g2 {
                     0x2089faf462438296,
                     0x828e5848cd48ea66,
                     0x141ecbac1deb038b,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
             },
             y: Fq2 {
                 c0: Fq::from_repr(FqRepr([
@@ -1863,7 +1968,8 @@ pub mod g2 {
                     0x2767032fc37cc31d,
                     0xd5ee2aba84fd10fe,
                     0x16576ccd3dd0a4e8,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
                 c1: Fq::from_repr(FqRepr([
                     0x4da9b6f6a96d1dd2,
                     0x9657f7da77f1650e,
@@ -1871,55 +1977,57 @@ pub mod g2 {
                     0x31898db63f87363a,
                     0xabab040ddbd097cc,
                     0x11ad236b9ba02990,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
             },
             z: Fq2::one(),
         });
 
         let p = G2Affine::from(p);
 
-        assert_eq!(
-            p,
-            G2Affine {
-                x: Fq2 {
-                    c0: Fq::from_repr(FqRepr([
-                        0xcde7ee8a3f2ac8af,
-                        0xfc642eb35975b069,
-                        0xa7de72b7dd0e64b7,
-                        0xf1273e6406eef9cc,
-                        0xababd760ff05cb92,
-                        0xd7c20456617e89
-                    ])).unwrap(),
-                    c1: Fq::from_repr(FqRepr([
-                        0xd1a50b8572cbd2b8,
-                        0x238f0ac6119d07df,
-                        0x4dbe924fe5fd6ac2,
-                        0x8b203284c51edf6b,
-                        0xc8a0b730bbb21f5e,
-                        0x1a3b59d29a31274
-                    ])).unwrap(),
-                },
-                y: Fq2 {
-                    c0: Fq::from_repr(FqRepr([
-                        0x9e709e78a8eaa4c9,
-                        0xd30921c93ec342f4,
-                        0x6d1ef332486f5e34,
-                        0x64528ab3863633dc,
-                        0x159384333d7cba97,
-                        0x4cb84741f3cafe8
-                    ])).unwrap(),
-                    c1: Fq::from_repr(FqRepr([
-                        0x242af0dc3640e1a4,
-                        0xe90a73ad65c66919,
-                        0x2bd7ca7f4346f9ec,
-                        0x38528f92b689644d,
-                        0xb6884deec59fb21f,
-                        0x3c075d3ec52ba90
-                    ])).unwrap(),
-                },
-                infinity: false,
-            }
-        );
+        assert_eq!(p, G2Affine {
+            x:        Fq2 {
+                c0: Fq::from_repr(FqRepr([
+                    0xcde7ee8a3f2ac8af,
+                    0xfc642eb35975b069,
+                    0xa7de72b7dd0e64b7,
+                    0xf1273e6406eef9cc,
+                    0xababd760ff05cb92,
+                    0xd7c20456617e89
+                ]))
+                .unwrap(),
+                c1: Fq::from_repr(FqRepr([
+                    0xd1a50b8572cbd2b8,
+                    0x238f0ac6119d07df,
+                    0x4dbe924fe5fd6ac2,
+                    0x8b203284c51edf6b,
+                    0xc8a0b730bbb21f5e,
+                    0x1a3b59d29a31274
+                ]))
+                .unwrap(),
+            },
+            y:        Fq2 {
+                c0: Fq::from_repr(FqRepr([
+                    0x9e709e78a8eaa4c9,
+                    0xd30921c93ec342f4,
+                    0x6d1ef332486f5e34,
+                    0x64528ab3863633dc,
+                    0x159384333d7cba97,
+                    0x4cb84741f3cafe8
+                ]))
+                .unwrap(),
+                c1: Fq::from_repr(FqRepr([
+                    0x242af0dc3640e1a4,
+                    0xe90a73ad65c66919,
+                    0x2bd7ca7f4346f9ec,
+                    0x38528f92b689644d,
+                    0xb6884deec59fb21f,
+                    0x3c075d3ec52ba90
+                ]))
+                .unwrap(),
+            },
+            infinity: false,
+        });
     }
 
     #[test]
@@ -1933,7 +2041,8 @@ pub mod g2 {
                     0x72556c999f3707ac,
                     0x4617f2e6774e9711,
                     0x100b2fe5bffe030b,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
                 c1: Fq::from_repr(FqRepr([
                     0x7a33555977ec608,
                     0xe23039d1fe9c0881,
@@ -1941,7 +2050,8 @@ pub mod g2 {
                     0x4637c4f417667e2e,
                     0x93ebe7c3e41f6acc,
                     0xde884f89a9a371b,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
             },
             y: Fq2 {
                 c0: Fq::from_repr(FqRepr([
@@ -1951,7 +2061,8 @@ pub mod g2 {
                     0x25fd427b4122f231,
                     0xd83112aace35cae,
                     0x191b2432407cbb7f,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
                 c1: Fq::from_repr(FqRepr([
                     0xf68ae82fe97662f5,
                     0xe986057068b50b7d,
@@ -1959,7 +2070,8 @@ pub mod g2 {
                     0x9eaa6d19de569196,
                     0xf6a03d31e2ec2183,
                     0x3bdafaf7ca9b39b,
-                ])).unwrap(),
+                ]))
+                .unwrap(),
             },
             z: Fq2::one(),
         };
@@ -1968,55 +2080,53 @@ pub mod g2 {
 
         let p = G2Affine::from(p);
 
-        assert_eq!(
-            p,
-            G2Affine {
-                x: Fq2 {
-                    c0: Fq::from_repr(FqRepr([
-                        0x91ccb1292727c404,
-                        0x91a6cb182438fad7,
-                        0x116aee59434de902,
-                        0xbcedcfce1e52d986,
-                        0x9755d4a3926e9862,
-                        0x18bab73760fd8024
-                    ])).unwrap(),
-                    c1: Fq::from_repr(FqRepr([
-                        0x4e7c5e0a2ae5b99e,
-                        0x96e582a27f028961,
-                        0xc74d1cf4ef2d5926,
-                        0xeb0cf5e610ef4fe7,
-                        0x7b4c2bae8db6e70b,
-                        0xf136e43909fca0
-                    ])).unwrap(),
-                },
-                y: Fq2 {
-                    c0: Fq::from_repr(FqRepr([
-                        0x954d4466ab13e58,
-                        0x3ee42eec614cf890,
-                        0x853bb1d28877577e,
-                        0xa5a2a51f7fde787b,
-                        0x8b92866bc6384188,
-                        0x81a53fe531d64ef
-                    ])).unwrap(),
-                    c1: Fq::from_repr(FqRepr([
-                        0x4c5d607666239b34,
-                        0xeddb5f48304d14b3,
-                        0x337167ee6e8e3cb6,
-                        0xb271f52f12ead742,
-                        0x244e6c2015c83348,
-                        0x19e2deae6eb9b441
-                    ])).unwrap(),
-                },
-                infinity: false,
-            }
-        );
+        assert_eq!(p, G2Affine {
+            x:        Fq2 {
+                c0: Fq::from_repr(FqRepr([
+                    0x91ccb1292727c404,
+                    0x91a6cb182438fad7,
+                    0x116aee59434de902,
+                    0xbcedcfce1e52d986,
+                    0x9755d4a3926e9862,
+                    0x18bab73760fd8024
+                ]))
+                .unwrap(),
+                c1: Fq::from_repr(FqRepr([
+                    0x4e7c5e0a2ae5b99e,
+                    0x96e582a27f028961,
+                    0xc74d1cf4ef2d5926,
+                    0xeb0cf5e610ef4fe7,
+                    0x7b4c2bae8db6e70b,
+                    0xf136e43909fca0
+                ]))
+                .unwrap(),
+            },
+            y:        Fq2 {
+                c0: Fq::from_repr(FqRepr([
+                    0x954d4466ab13e58,
+                    0x3ee42eec614cf890,
+                    0x853bb1d28877577e,
+                    0xa5a2a51f7fde787b,
+                    0x8b92866bc6384188,
+                    0x81a53fe531d64ef
+                ]))
+                .unwrap(),
+                c1: Fq::from_repr(FqRepr([
+                    0x4c5d607666239b34,
+                    0xeddb5f48304d14b3,
+                    0x337167ee6e8e3cb6,
+                    0xb271f52f12ead742,
+                    0x244e6c2015c83348,
+                    0x19e2deae6eb9b441
+                ]))
+                .unwrap(),
+            },
+            infinity: false,
+        });
     }
 
     #[test]
-    fn g2_curve_tests() {
-        ::tests::curve::curve_tests::<G2>();
-    }
+    fn g2_curve_tests() { ::tests::curve::curve_tests::<G2>(); }
 }
 
-pub use self::g1::*;
-pub use self::g2::*;
+pub use self::{g1::*, g2::*};

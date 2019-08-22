@@ -1,8 +1,7 @@
-extern crate pairing;
 extern crate ff;
+extern crate pairing;
 
 pub mod bls12_381_ffi;
-mod bls12_381_hashing;
 pub mod bls12_381_instance;
 pub mod curve_arithmetic;
 

@@ -12,9 +12,10 @@
 #![deny(missing_debug_implementations)]
 
 extern crate byteorder;
-#[macro_use]
+extern crate bytes;
 extern crate ff;
 extern crate rand;
+extern crate sha2;
 
 #[cfg(test)]
 pub mod tests;
@@ -25,8 +26,7 @@ mod wnaf;
 pub use self::wnaf::Wnaf;
 
 use ff::{Field, PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine, SqrtField};
-use std::error::Error;
-use std::fmt;
+use std::{error::Error, fmt};
 
 /// An "engine" is a collection of types (fields, elliptic curve groups, etc.)
 /// with well-defined relationships. In particular, the G1/G2 curve groups are
@@ -38,8 +38,7 @@ pub trait Engine: ScalarEngine {
             Base = Self::Fq,
             Scalar = Self::Fr,
             Affine = Self::G1Affine,
-        >
-        + From<Self::G1Affine>;
+        > + From<Self::G1Affine>;
 
     /// The affine representation of an element in G1.
     type G1Affine: CurveAffine<
@@ -49,8 +48,7 @@ pub trait Engine: ScalarEngine {
             Projective = Self::G1,
             Pair = Self::G2Affine,
             PairingResult = Self::Fqk,
-        >
-        + From<Self::G1>;
+        > + From<Self::G1>;
 
     /// The projective representation of an element in G2.
     type G2: CurveProjective<
@@ -58,8 +56,7 @@ pub trait Engine: ScalarEngine {
             Base = Self::Fqe,
             Scalar = Self::Fr,
             Affine = Self::G2Affine,
-        >
-        + From<Self::G2Affine>;
+        > + From<Self::G2Affine>;
 
     /// The affine representation of an element in G2.
     type G2Affine: CurveAffine<
@@ -69,8 +66,7 @@ pub trait Engine: ScalarEngine {
             Projective = Self::G2,
             Pair = Self::G1Affine,
             PairingResult = Self::Fqk,
-        >
-        + From<Self::G2>;
+        > + From<Self::G2>;
 
     /// The base field that hosts G1.
     type Fq: PrimeField + SqrtField;
@@ -98,11 +94,11 @@ pub trait Engine: ScalarEngine {
     fn pairing<G1, G2>(p: G1, q: G2) -> Self::Fqk
     where
         G1: Into<Self::G1Affine>,
-        G2: Into<Self::G2Affine>,
-    {
+        G2: Into<Self::G2Affine>, {
         Self::final_exponentiation(&Self::miller_loop(
             [(&(p.into().prepare()), &(q.into().prepare()))].into_iter(),
-        )).unwrap()
+        ))
+        .unwrap()
     }
 }
 
@@ -119,8 +115,7 @@ pub trait CurveProjective:
     + fmt::Debug
     + fmt::Display
     + rand::Rand
-    + 'static
-{
+    + 'static {
     type Engine: Engine<Fr = Self::Scalar>;
     type Scalar: PrimeField + SqrtField;
     type Base: SqrtField;
@@ -165,23 +160,27 @@ pub trait CurveProjective:
     /// Performs scalar multiplication of this element.
     fn mul_assign<S: Into<<Self::Scalar as PrimeField>::Repr>>(&mut self, other: S);
 
+    /// Hash bytes to group element
+    /// See section 4 and 5 construction #2 of https://eprint.iacr.org/2019/403.pdf
+    fn hash_to_group_element(bytes: &[u8]) -> Self;
+
     /// Converts this element into its affine representation.
     fn into_affine(&self) -> Self::Affine;
 
-    /// Recommends a wNAF window table size given a scalar. Always returns a number
-    /// between 2 and 22, inclusive.
+    /// Recommends a wNAF window table size given a scalar. Always returns a
+    /// number between 2 and 22, inclusive.
     fn recommended_wnaf_for_scalar(scalar: <Self::Scalar as PrimeField>::Repr) -> usize;
 
-    /// Recommends a wNAF window size given the number of scalars you intend to multiply
-    /// a base by. Always returns a number between 2 and 22, inclusive.
+    /// Recommends a wNAF window size given the number of scalars you intend to
+    /// multiply a base by. Always returns a number between 2 and 22,
+    /// inclusive.
     fn recommended_wnaf_for_num_scalars(num_scalars: usize) -> usize;
 }
 
 /// Affine representation of an elliptic curve point guaranteed to be
 /// in the correct prime order subgroup.
 pub trait CurveAffine:
-    Copy + Clone + Sized + Send + Sync + fmt::Debug + fmt::Display + PartialEq + Eq + 'static
-{
+    Copy + Clone + Sized + Send + Sync + fmt::Debug + fmt::Display + PartialEq + Eq + 'static {
     type Engine: Engine<Fr = Self::Scalar>;
     type Scalar: PrimeField + SqrtField;
     type Base: SqrtField;
@@ -214,6 +213,10 @@ pub trait CurveAffine:
     /// Perform a pairing
     fn pairing_with(&self, other: &Self::Pair) -> Self::PairingResult;
 
+    /// Hash bytes to group element
+    /// See section 4 and 5 construction #2 of https://eprint.iacr.org/2019/403.pdf
+    fn hash_to_group_element(bytes: &[u8]) -> Self;
+
     /// Converts this element into its affine representation.
     fn into_projective(&self) -> Self::Projective;
 
@@ -223,8 +226,8 @@ pub trait CurveAffine:
         <Self::Compressed as EncodedPoint>::from_affine(*self)
     }
 
-    /// Converts this element into its uncompressed encoding, so long as it's not
-    /// the point at infinity.
+    /// Converts this element into its uncompressed encoding, so long as it's
+    /// not the point at infinity.
     fn into_uncompressed(&self) -> Self::Uncompressed {
         <Self::Uncompressed as EncodedPoint>::from_affine(*self)
     }
@@ -232,8 +235,7 @@ pub trait CurveAffine:
 
 /// An encoded elliptic curve point, which should essentially wrap a `[u8; N]`.
 pub trait EncodedPoint:
-    Sized + Send + Sync + AsRef<[u8]> + AsMut<[u8]> + Clone + Copy + 'static
-{
+    Sized + Send + Sync + AsRef<[u8]> + AsMut<[u8]> + Clone + Copy + 'static {
     type Affine: CurveAffine;
 
     /// Creates an empty representation.

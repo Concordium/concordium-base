@@ -1,5 +1,9 @@
 use super::fq2::Fq2;
+use byteorder::{BigEndian, ReadBytesExt};
+use bytes::IntoBuf;
 use ff::{Field, PrimeField, PrimeFieldDecodingError, PrimeFieldRepr};
+use sha2::{Digest, Sha512};
+use std::io::Cursor;
 
 // B coefficient of BLS12-381 curve, 4.
 pub const B_COEFF: Fq = Fq(FqRepr([
@@ -11,9 +15,9 @@ pub const B_COEFF: Fq = Fq(FqRepr([
     0x9d645513d83de7e,
 ]));
 
-// The generators of G1/G2 are computed by finding the lexicographically smallest valid x coordinate,
-// and its lexicographically smallest y coordinate and multiplying it by the cofactor such that the
-// result is nonzero.
+// The generators of G1/G2 are computed by finding the lexicographically
+// smallest valid x coordinate, and its lexicographically smallest y coordinate
+// and multiplying it by the cofactor such that the result is nonzero.
 
 // Generator of G1
 // x = 3685416753713387016781088315183077757961620795782546409894578378688607592378376318836054947676345821548104185464507
@@ -1164,6 +1168,733 @@ fn test_frob_coeffs() {
     );
 }
 
+pub(crate) const P_MINUS_3_DIV_4: [u64; 6] = [
+    0xee7fbfffffffeaaa,
+    0x07aaffffac54ffff,
+    0xd9cc34a83dac3d89,
+    0xd91dd2e13ce144af,
+    0x92c6e9ed90d2eb35,
+    0x680447a8e5ff9a6,
+];
+
+pub(crate) const P_MINUS_1_DIV_2: [u64; 6] = [
+    0xdcff7fffffffd555,
+    0x0f55ffff58a9ffff,
+    0xb39869507b587b12,
+    0xb23ba5c279c2895f,
+    0x258dd3db21a5d66b,
+    0xd0088f51cbff34d,
+];
+
+pub(crate) const E11_B: [u64; 6] = [
+    0xd1cc48e98e172be0,
+    0x5a23215a316ceaa5,
+    0xa0b9c14fcef35ef5,
+    0x2016c1f0f24f4070,
+    0x018b12e8753eee3b,
+    0x12e2908d11688030,
+];
+
+pub(crate) const E11_A: [u64; 6] = [
+    0x5cf428082d584c1d,
+    0x98936f8da0e0f97f,
+    0xd8e8981aefd881ac,
+    0xb0ea985383ee66a8,
+    0x3d693a02c96d4982,
+    0x00144698a3b8e943,
+];
+
+// Coefficients of the 11-isogeny rational maps,
+// See https://eprint.iacr.org/2019/403.pdf section 4
+pub(crate) const K1: [[u64; 6]; 12] = [
+    [
+        0xaeac1662734649b7,
+        0x5610c2d5f2e62d6e,
+        0xf2627b56cdb4e2c8,
+        0x6b303e88a2d7005f,
+        0xb809101dd9981585,
+        0x11a05f2b1e833340,
+    ],
+    [
+        0xe834eef1b3cb83bb,
+        0x4838f2a6f318c356,
+        0xf565e33c70d1e86b,
+        0x7c17e75b2f6a8417,
+        0x0588bab22147a81c,
+        0x17294ed3e943ab2f,
+    ],
+    [
+        0xe0179f9dac9edcb0,
+        0x958c3e3d2a09729f,
+        0x6878e501ec68e25c,
+        0xce032473295983e5,
+        0x1d1048c5d10a9a1b,
+        0xd54005db97678ec,
+    ],
+    [
+        0xc5b388641d9b6861,
+        0x5336e25ce3107193,
+        0xf1b33289f1b33083,
+        0xd7f5e4656a8dbf25,
+        0x4e0609d307e55412,
+        0x1778e7166fcc6db7,
+    ],
+    [
+        0x51154ce9ac8895d9,
+        0x985a286f301e77c4,
+        0x086eeb65982fac18,
+        0x99db995a1257fb3f,
+        0x6642b4b3e4118e54,
+        0xe99726a3199f443,
+    ],
+    [
+        0xcd13c1c66f652983,
+        0xa0870d2dcae73d19,
+        0x9ed3ab9097e68f90,
+        0xdb3cb17dd952799b,
+        0x01d1201bf7a74ab5,
+        0x1630c3250d7313ff,
+    ],
+    [
+        0xddd7f225a139ed84,
+        0x8da25128c1052eca,
+        0x9008e218f9c86b2a,
+        0xb11586264f0f8ce1,
+        0x6a3726c38ae652bf,
+        0xd6ed6553fe44d29,
+    ],
+    [
+        0x9ccb5618e3f0c88e,
+        0x39b7c8f8c8f475af,
+        0xa682c62ef0f27533,
+        0x356de5ab275b4db1,
+        0xe8743884d1117e53,
+        0x17b81e7701abdbe2,
+    ],
+    [
+        0x6d71986a8497e317,
+        0x4fa295f296b74e95,
+        0xa2c596c928c5d1de,
+        0xc43b756ce79f5574,
+        0x7b90b33563be990d,
+        0x80d3cf1f9a78fc4,
+    ],
+    [
+        0x7f241067be390c9e,
+        0xa3190b2edc032779,
+        0x676314baf4bb1b7f,
+        0xdd2ecb803a0c5c99,
+        0x2e0c37515d138f22,
+        0x169b1f8e1bcfa7c4,
+    ],
+    [
+        0xca67df3f1605fb7b,
+        0xf69b771f8c285dec,
+        0xd50af36003b14866,
+        0xfa7dccdde6787f96,
+        0x72d8ec09d2565b0d,
+        0x10321da079ce07e2,
+    ],
+    [
+        0xa9c8ba2e8ba2d229,
+        0xc24b1b80b64d391f,
+        0x23c0bf1bc24c6b68,
+        0x31d79d7e22c837bc,
+        0xbd1e962381edee3d,
+        0x6e08c248e260e70,
+    ],
+];
+
+pub(crate) const K2: [[u64; 6]; 11] = [
+    [
+        0x993cf9fa40d21b1c,
+        0xb558d681be343df8,
+        0x9c9588617fc8ac62,
+        0x01d5ef4ba35b48ba,
+        0x18b2e62f4bd3fa6f,
+        0x8ca8d548cff19ae,
+    ],
+    [
+        0xe5c8276ec82b3bff,
+        0x13daa8846cb026e9,
+        0x0126c2588c48bf57,
+        0x7041e8ca0cf0800c,
+        0x48b4711298e53636,
+        0x12561a5deb559c43,
+    ],
+    [
+        0xfcc239ba5cb83e19,
+        0xd6a3d0967c94fedc,
+        0xfca64e00b11aceac,
+        0x6f89416f5a718cd1,
+        0x8137e629bff2991f,
+        0xb2962fe57a3225e,
+    ],
+    [
+        0x130de8938dc62cd8,
+        0x4976d5243eecf5c4,
+        0x54cca8abc28d6fd0,
+        0x5b08243f16b16551,
+        0xc83aafef7c40eb54,
+        0x3425581a58ae2fe,
+    ],
+    [
+        0x539d395b3532a21e,
+        0x9bd29ba81f35781d,
+        0x8d6b44e833b306da,
+        0xffdfc759a12062bb,
+        0x0a6f1d5f43e7a07d,
+        0x13a8e162022914a8,
+    ],
+    [
+        0xc02df9a29f6304a5,
+        0x7400d24bc4228f11,
+        0x0a43bcef24b8982f,
+        0x395735e9ce9cad4d,
+        0x55390f7f0506c6e9,
+        0xe7355f8e4e667b9,
+    ],
+    [
+        0xec2574496ee84a3a,
+        0xea73b3538f0de06c,
+        0x4e2e073062aede9c,
+        0x570f5799af53a189,
+        0x0f3e0c63e0596721,
+        0x772caacf1693619,
+    ],
+    [
+        0x11f7d99bbdcc5a5e,
+        0x0fa5b9489d11e2d3,
+        0x1996e1cdf9822c58,
+        0x6e7f63c21bca68a8,
+        0x30b3f5b074cf0199,
+        0x14a7ac2a9d64a8b2,
+    ],
+    [
+        0x4776ec3a79a1d641,
+        0x03826692abba4370,
+        0x74100da67f398835,
+        0xe07f8d1d7161366b,
+        0x5e920b3dafc7a3cc,
+        0xa10ecf6ada54f82,
+    ],
+    [
+        0x2d6384d168ecdd0a,
+        0x93174e4b4b786500,
+        0x76df533978f31c15,
+        0xf682b4ee96f7d037,
+        0x476d6e3eb3a56680,
+        0x95fc13ab9e92ad4,
+    ],
+    [0x1, 0x0, 0x0, 0x0, 0x0, 0x0],
+];
+
+pub(crate) const K3: [[u64; 6]; 16] = [
+    [
+        0xbe9845719707bb33,
+        0xcd0c7aee9b3ba3c2,
+        0x2b52af6c956543d3,
+        0x11ad138e48a86952,
+        0x259d1f094980dcfa,
+        0x90d97c81ba24ee0,
+    ],
+    [
+        0xe097e75a2e41c696,
+        0xd6c56711962fa8bf,
+        0x0f906343eb67ad34,
+        0x1223e96c254f383d,
+        0xd51036d776fb4683,
+        0x134996a104ee5811,
+    ],
+    [
+        0xb8dfe240c72de1f6,
+        0xd26d521628b00523,
+        0xc344be4b91400da7,
+        0x2552e2d658a31ce2,
+        0xf4a384c86a3b4994,
+        0xcc786baa966e66,
+    ],
+    [
+        0xa6355c77b0e5f4cb,
+        0xde405aba9ec61dec,
+        0x09e4a3ec03251cf9,
+        0xd42aa7b90eeb791c,
+        0x7898751ad8746757,
+        0x1f86376e8981c21,
+    ],
+    [
+        0x41b6daecf2e8fedb,
+        0x2ee7f8dc099040a8,
+        0x79833fd221351adc,
+        0x195536fbe3ce50b8,
+        0x5caf4fe2a21529c4,
+        0x8cc03fdefe0ff13,
+    ],
+    [
+        0x99b23ab13633a5f0,
+        0x203f6326c95a8072,
+        0x76505c3d3ad5544e,
+        0x74a7d0d4afadb7bd,
+        0x2211e11db8f0a6a0,
+        0x16603fca40634b6a,
+    ],
+    [
+        0xc961f8855fe9d6f2,
+        0x47a87ac2460f415e,
+        0x5231413c4d634f37,
+        0xe75bb8ca2be184cb,
+        0xb2c977d027796b3c,
+        0x4ab0b9bcfac1bbc,
+    ],
+    [
+        0xa15e4ca31870fb29,
+        0x42f64550fedfe935,
+        0xfd038da6c26c8426,
+        0x170a05bfe3bdd81f,
+        0xde9926bd2ca6c674,
+        0x987c8d5333ab86f,
+    ],
+    [
+        0x60370e577bdba587,
+        0x69d65201c78607a3,
+        0x1e8b6e6a1f20cabe,
+        0x8f3abd16679dc26c,
+        0xe88c9e221e4da1bb,
+        0x9fc4018bd96684b,
+    ],
+    [
+        0x2bafaaebca731c30,
+        0x9b3f7055dd4eba6f,
+        0x06985e7ed1e4d43b,
+        0xc42a0ca7915af6fe,
+        0x223abde7ada14a23,
+        0xe1bba7a1186bdb5,
+    ],
+    [
+        0xe813711ad011c132,
+        0x31bf3a5cce3fbafc,
+        0xd1183e416389e610,
+        0xcd2fcbcb6caf493f,
+        0x0dfd0b8f1d43fb93,
+        0x19713e47937cd1be,
+    ],
+    [
+        0xce07c8a4d0074d8e,
+        0x49d9cdf41b44d606,
+        0x2e6bfe7f911f6432,
+        0x523559b8aaf0c246,
+        0xb918c143fed2edcc,
+        0x18b46a908f36f6de,
+    ],
+    [
+        0x0d4c04f00b971ef8,
+        0x06c851c1919211f2,
+        0xc02710e807b4633f,
+        0x7aa7b12a3426b08e,
+        0xd155096004f53f44,
+        0xb182cac101b9399,
+    ],
+    [
+        0x42d9d3f5db980133,
+        0xc6cf90ad1c232a64,
+        0x13e6632d3c40659c,
+        0x757b3b080d4c1580,
+        0x72fc00ae7be315dc,
+        0x245a394ad1eca9b,
+    ],
+    [
+        0x866b1e715475224b,
+        0x6ba1049b6579afb7,
+        0xd9ab0f5d396a7ce4,
+        0x5e673d81d7e86568,
+        0x02a159f748c4a3fc,
+        0x5c129645e44cf11,
+    ],
+    [
+        0x04b456be69c8b604,
+        0xb665027efec01c77,
+        0x57add4fa95af01b2,
+        0xcb181d8f84965a39,
+        0x4ea50b3b42df2eb5,
+        0x15e6be4e990f03ce,
+    ],
+];
+
+pub(crate) const K4: [[u64; 6]; 16] = [
+    [
+        0x01479253b03663c1,
+        0x07f3688ef60c206d,
+        0xeec3232b5be72e7a,
+        0x601a6de578980be6,
+        0x52181140fad0eae9,
+        0x16112c4c3a9c98b2,
+    ],
+    [
+        0x32f6102c2e49a03d,
+        0x78a4260763529e35,
+        0xa4a10356f453e01f,
+        0x85c84ff731c4d59c,
+        0x1a0cbd6c43c348b8,
+        0x1962d75c2381201e,
+    ],
+    [
+        0x1e2538b53dbf67f2,
+        0xa6757cd636f96f89,
+        0x0c35a5dd279cd2ec,
+        0x78c4855551ae7f31,
+        0x6faaae7d6e8eb157,
+        0x58df3306640da27,
+    ],
+    [
+        0xa8d26d98445f5416,
+        0x727364f2c28297ad,
+        0x123da489e726af41,
+        0xd115c5dbddbcd30e,
+        0xf20d23bf89edb4d1,
+        0x16b7d288798e5395,
+    ],
+    [
+        0xda39142311a5001d,
+        0xa20b15dc0fd2eded,
+        0x542eda0fc9dec916,
+        0xc6d19c9f0f69bbb0,
+        0xb00cc912f8228ddc,
+        0xbe0e079545f43e4,
+    ],
+    [
+        0x02c6477faaf9b7ac,
+        0x49f38db9dfa9cce2,
+        0xc5ecd87b6f0f5a64,
+        0xb70152c65550d881,
+        0x9fb266eaac783182,
+        0x8d9e5297186db2d,
+    ],
+    [
+        0x3d1a1399126a775c,
+        0xd5fa9c01a58b1fb9,
+        0x5dd365bc400a0051,
+        0x5eecfdfa8d0cf8ef,
+        0xc3ba8734ace9824b,
+        0x166007c08a99db2f,
+    ],
+    [
+        0x60ee415a15812ed9,
+        0xb920f5b00801dee4,
+        0xfeb34fd206357132,
+        0xe5a4375efa1f4fd7,
+        0x03bcddfabba6ff6e,
+        0x16a3ef08be3ea7ea,
+    ],
+    [
+        0x6b233d9d55535d4a,
+        0x52cfe2f7bb924883,
+        0xabc5750c4bf39b48,
+        0xf9fb0ce4c6af5920,
+        0x1a1be54fd1d74cc4,
+        0x1866c8ed336c6123,
+    ],
+    [
+        0x346ef48bb8913f55,
+        0xc7385ea3d529b35e,
+        0x5308592e7ea7d4fb,
+        0x3216f763e13d87bb,
+        0xea820597d94a8490,
+        0x167a55cda70a6e1c,
+    ],
+    [
+        0x00f8b49cba8f6aa8,
+        0x71a5c29f4f830604,
+        0x0e591b36e636a5c8,
+        0x9c6dd039bb61a629,
+        0x48f010a01ad2911d,
+        0x4d2f259eea405bd,
+    ],
+    [
+        0x9684b529e2561092,
+        0x16f968986f7ebbea,
+        0x8c0f9a88cea79135,
+        0x7f94ff8aefce42d2,
+        0xf5852c1e48c50c47,
+        0xaccbb67481d033f,
+    ],
+    [
+        0x1e99b138573345cc,
+        0x93000763e3b90ac1,
+        0x7d5ceef9a00d9b86,
+        0x543346d98adf0226,
+        0xc3613144b45f1496,
+        0xad6b9514c767fe3,
+    ],
+    [
+        0xd1fadc1326ed06f7,
+        0x420517bd8714cc80,
+        0xcb748df27942480e,
+        0xbf565b94e72927c1,
+        0x628bdd0d53cd76f2,
+        0x2660400eb2e4f3b,
+    ],
+    [
+        0x4415473a1d634b8f,
+        0x5ca2f570f1349780,
+        0x324efcd6356caa20,
+        0x71c40f65e273b853,
+        0x6b24255e0d7819c1,
+        0xe0fa1d816ddc03e,
+    ],
+    [0x1, 0x0, 0x0, 0x0, 0x0, 0x0],
+];
+
+// Hash to Fq by hashing using Sha512 and decode the first 48 bytes as an uint
+// in big endian. If this number is higher than q, retry.
+pub(crate) fn hash_bytes_to_fq(b: &[u8]) -> Fq {
+    let mut h = Sha512::new();
+    let mut hash: [u8; 64] = [0u8; 64];
+    h.input(b);
+    hash.copy_from_slice(h.result().as_slice());
+    let mut buffer = hash.into_buf();
+
+    match decode_hash_to_fq(&mut buffer) {
+        Ok(fq) => fq,
+        Err(_) => hash_bytes_to_fq(&hash),
+    }
+}
+
+fn decode_hash_to_fq(bytes: &mut Cursor<&[u8]>) -> Result<Fq, PrimeFieldDecodingError> {
+    let mut fqrepr: FqRepr = FqRepr([0u64; 6]);
+    let mut i = true;
+    for digit in fqrepr.as_mut().iter_mut().rev() {
+        *digit = bytes
+            .read_u64::<BigEndian>()
+            .map_err(|_| PrimeFieldDecodingError::NotInField("Not in field".into()))?;
+        if i {
+            *digit &= !(1 << 63);
+            i = false;
+        }
+    }
+    match Fq::from_repr(fqrepr) {
+        Ok(fq) => Ok(fq),
+        Err(_) => Err(PrimeFieldDecodingError::NotInField("Not in field".into())),
+    }
+}
+
+// Implements section 4 of https://eprint.iacr.org/2019/403.pdf
+pub(crate) fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
+    // compute N
+    let mut t2 = t;
+    t2.square(); // t^2
+    let mut t4 = t2;
+    t4.square(); // t^4
+    let mut t4_t2_1 = t4;
+    t4_t2_1.sub_assign(&t2);
+    t4_t2_1.add_assign(&Fq::one()); // t^4 - t^2 + 1
+    let b = Fq::from_repr(FqRepr(E11_B)).unwrap(); // this unwrap can't fail, E11_B is an element of the field
+    let mut n = b;
+    n.mul_assign(&t4_t2_1); // N = b(t^4 - t^2 + 1)
+
+    // compute D
+    let mut t2_t4 = t2;
+    t2_t4.sub_assign(&t4); // t^2 - t^4
+    let a = Fq::from_repr(FqRepr(E11_A)).unwrap(); // this unwrap can't fail, E11_A is an element of the field
+    let mut d = a;
+    d.mul_assign(&t2_t4); // D = a(t^2 - t^4) = -a(t^4 - t^2)
+
+    // if d, the denominator of X0(u), is 0 then we set the denominator to -a
+    // instead, since -b/a is square in Fq
+    if d.is_zero() {
+        d = a;
+        d.negate();
+    }
+
+    // compute V and U
+    let mut d2 = d;
+    d2.square(); // D^2
+    let mut v = d2;
+    v.mul_assign(&d); // V = D^3
+    let mut n3 = n;
+    n3.square();
+    n3.mul_assign(&n); // N^3
+    let mut and2 = a;
+    and2.mul_assign(&n);
+    and2.mul_assign(&d2); // aND^2
+    let mut bv = b;
+    bv.mul_assign(&v); // bV = bD^3
+    let mut u = n3;
+    u.add_assign(&and2);
+    u.add_assign(&bv); // U = N^3 + aND^2 + bD^3
+
+    // compute alpha
+    let mut v3 = v;
+    v3.square();
+    v3.mul_assign(&v); // V^3
+    let mut uv3p34 = u;
+    uv3p34.mul_assign(&v3);
+    uv3p34 = uv3p34.pow(&P_MINUS_3_DIV_4); // (UV^3)^((p-3)/4))
+    let mut alpha = u;
+    alpha.mul_assign(&v);
+    alpha.mul_assign(&uv3p34); // alpha = UV(UV^3)^((p-3)/4))
+
+    // We use jacobian projective coordinates when computing the isogeny
+    let mut x_proj: Fq;
+    let mut y_proj: Fq;
+    let z_proj = d;
+
+    // compute alpha^2-V to check if g(X_0(t)) is square in Fq
+    // if alpha^2 == V, then g(X_0(t)) is square, so we can pick y = sqrt(g(X_0(t)))
+    let mut alpha2v_u = alpha;
+    alpha2v_u.square();
+    alpha2v_u.mul_assign(&v);
+    alpha2v_u.sub_assign(&u);
+    if alpha2v_u.is_zero() {
+        // g(X_0(t)) is square in Fq
+        x_proj = n;
+        x_proj.mul_assign(&d); // X = ND
+        y_proj = Fq::one();
+        match sign(t) {
+            Sign::Minus => y_proj.negate(),
+            Sign::Plus => (),
+        }
+        y_proj.mul_assign(&alpha);
+        y_proj.mul_assign(&v); // Y = Sgn_0(t) alpha D^3
+    } else {
+        // g(X_1(t)) is square in Fq
+        x_proj = Fq::one();
+        x_proj.negate();
+        x_proj.mul_assign(&t2);
+        x_proj.mul_assign(&n);
+        x_proj.mul_assign(&d); // X = - t^2 ND
+        y_proj = t2;
+        y_proj.mul_assign(&t);
+        y_proj.mul_assign(&alpha);
+        y_proj.mul_assign(&v); // Y = t^3 alpha D^3
+    }
+
+    (x_proj, y_proj, z_proj)
+}
+
+// Computes the 11-isogeny from E1'(Fq): y^2 = x^3 + E11_A x + E11_B
+// used for hashing
+pub(crate) fn iso_11(x: Fq, y: Fq, z: Fq) -> (Fq, Fq, Fq) {
+    // Compute Z^2i for i = 1,...,15
+    let mut z_pow_2i: [Fq; 15] = [z; 15];
+    z_pow_2i[0].square(); // Z^2
+    z_pow_2i[1] = z_pow_2i[0];
+    z_pow_2i[1].square(); // Z^4
+    let mut z_ = z_pow_2i[1];
+    z_.mul_assign(&z_pow_2i[0]);
+    z_pow_2i[2] = z_; // Z^6
+    z_pow_2i[3] = z_pow_2i[1];
+    z_pow_2i[3].square(); // Z^8
+    for i in 0..3 {
+        // Z^10, Z^12, Z^14,
+        z_ = z_pow_2i[3 + i];
+        z_.mul_assign(&z_pow_2i[0]);
+        z_pow_2i[4 + i] = z_;
+    }
+    z_pow_2i[7] = z_pow_2i[3];
+    z_pow_2i[7].square(); // Z^16
+    for i in 0..7 {
+        // Z^18, Z^20, Z^22, Z^24, Z^26, Z^28, Z^30,
+        z_ = z_pow_2i[7 + i];
+        z_.mul_assign(&z_pow_2i[0]);
+        z_pow_2i[8 + i] = z_;
+    }
+
+    // Macro for evaluating polynomials using Horner's rule
+    // Donald E. Knuth. Seminumerical Algorithms, volume 2 of The Art of Computer
+    // Programming, chapter 4.6.4. Addison-Wesley, 3rd edition, 1997
+    macro_rules! horner {
+        ($init:expr, $ks:expr, $var:expr) => {
+            {
+                for i in 0..($ks.len() - 1) {
+                    $init.mul_assign(&$var);
+                    let mut c = Fq::from_repr(FqRepr($ks[($ks.len() - 2)-i])).unwrap(); // unwrapping the Ki constants never fails
+                    c.mul_assign(&z_pow_2i[i]);
+                    $init.add_assign(&c);
+                }
+            }
+        }
+    }
+
+    let mut x_num = Fq::from_repr(FqRepr(K1[11])).unwrap(); // unwrapping the Ki constants never fails
+    horner!(x_num, K1, x);
+
+    let mut x_den_ = Fq::from_repr(FqRepr(K2[10])).unwrap(); // unwrapping the Ki constants never fails
+    horner!(x_den_, K2, x);
+    let mut x_den = z_pow_2i[0];
+    x_den.mul_assign(&x_den_);
+
+    let mut y_num_ = Fq::from_repr(FqRepr(K3[15])).unwrap(); // unwrapping the Ki constants never fails
+    horner!(y_num_, K3, x);
+    let mut y_num = y;
+    y_num.mul_assign(&y_num_);
+
+    let mut y_den_ = Fq::from_repr(FqRepr(K4[15])).unwrap(); // unwrapping the Ki constants never fails
+    horner!(y_den_, K4, x);
+    let mut y_den = z_pow_2i[0];
+    y_den.mul_assign(&z);
+    y_den.mul_assign(&y_den_);
+
+    let mut z_jac = x_den;
+    z_jac.mul_assign(&y_den);
+    let mut x_jac = x_num;
+    x_jac.mul_assign(&y_den);
+    x_jac.mul_assign(&z_jac);
+    let mut z_jac_pow2 = z_jac;
+    z_jac_pow2.square();
+    let mut y_jac = y_num;
+    y_jac.mul_assign(&x_den);
+    y_jac.mul_assign(&z_jac_pow2);
+
+    (x_jac, y_jac, z_jac)
+}
+
+pub(crate) fn sign(a: Fq) -> Sign {
+    if a.into_repr() > FqRepr(P_MINUS_1_DIV_2) {
+        Sign::Minus
+    } else {
+        Sign::Plus
+    }
+}
+
+pub(crate) enum Sign {
+    Minus,
+    Plus,
+}
+
+macro_rules! test_isogeny_constants {
+    ($test_name:ident, $l:expr) => {
+        #[test]
+        fn $test_name() {
+            for k in $l {
+                let fq_ = Fq::from_repr(FqRepr(*k)).unwrap();
+                let repr = fq_.into_repr();
+                assert!(FqRepr(*k) == repr);
+            }
+        }
+    };
+}
+
+test_isogeny_constants!(test_k1, &K1);
+test_isogeny_constants!(test_k2, &K2);
+test_isogeny_constants!(test_k3, &K3);
+test_isogeny_constants!(test_k4, &K4);
+
+macro_rules! test_const {
+    ($test_name:ident, $k:expr) => {
+        #[test]
+        fn $test_name() {
+            let fq_ = Fq::from_repr(FqRepr($k)).unwrap();
+            let repr = fq_.into_repr();
+            assert!(FqRepr($k) == repr);
+        }
+    };
+}
+
+test_const!(test_e11_a, E11_A);
+test_const!(test_e11_b, E11_B);
+test_const!(test_p_minus_3_div_4, P_MINUS_3_DIV_4);
+test_const!(test_p_minus_1_div_2, P_MINUS_1_DIV_2);
+
 #[test]
 fn test_neg_one() {
     let mut o = Fq::one();
@@ -1574,26 +2305,24 @@ fn test_fq_is_valid() {
     a.0.sub_noborrow(&FqRepr::from(1));
     assert!(a.is_valid());
     assert!(Fq(FqRepr::from(0)).is_valid());
-    assert!(
-        Fq(FqRepr([
-            0xdf4671abd14dab3e,
-            0xe2dc0c9f534fbd33,
-            0x31ca6c880cc444a6,
-            0x257a67e70ef33359,
-            0xf9b29e493f899b36,
-            0x17c8be1800b9f059
-        ])).is_valid()
-    );
-    assert!(
-        !Fq(FqRepr([
-            0xffffffffffffffff,
-            0xffffffffffffffff,
-            0xffffffffffffffff,
-            0xffffffffffffffff,
-            0xffffffffffffffff,
-            0xffffffffffffffff
-        ])).is_valid()
-    );
+    assert!(Fq(FqRepr([
+        0xdf4671abd14dab3e,
+        0xe2dc0c9f534fbd33,
+        0x31ca6c880cc444a6,
+        0x257a67e70ef33359,
+        0xf9b29e493f899b36,
+        0x17c8be1800b9f059
+    ]))
+    .is_valid());
+    assert!(!Fq(FqRepr([
+        0xffffffffffffffff,
+        0xffffffffffffffff,
+        0xffffffffffffffff,
+        0xffffffffffffffff,
+        0xffffffffffffffff,
+        0xffffffffffffffff
+    ]))
+    .is_valid());
 
     let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -1929,7 +2658,8 @@ fn test_fq_squaring() {
             0xdc05c659b4e15b27,
             0x79361e5a802c6a23,
             0x24bcbe5d51b9a6f
-        ])).unwrap()
+        ]))
+        .unwrap()
     );
 
     let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
@@ -2061,16 +2791,15 @@ fn test_fq_sqrt() {
 #[test]
 fn test_fq_from_into_repr() {
     // q + 1 should not be in the field
-    assert!(
-        Fq::from_repr(FqRepr([
-            0xb9feffffffffaaac,
-            0x1eabfffeb153ffff,
-            0x6730d2a0f6b0f624,
-            0x64774b84f38512bf,
-            0x4b1ba7b6434bacd7,
-            0x1a0111ea397fe69a
-        ])).is_err()
-    );
+    assert!(Fq::from_repr(FqRepr([
+        0xb9feffffffffaaac,
+        0x1eabfffeb153ffff,
+        0x6730d2a0f6b0f624,
+        0x64774b84f38512bf,
+        0x4b1ba7b6434bacd7,
+        0x1a0111ea397fe69a
+    ]))
+    .is_err());
 
     // q should not be in the field
     assert!(Fq::from_repr(Fq::char()).is_err());
@@ -2204,14 +2933,11 @@ fn test_fq_ordering() {
 }
 
 #[test]
-fn fq_repr_tests() {
-    ::tests::repr::random_repr_tests::<FqRepr>();
-}
+fn fq_repr_tests() { ::tests::repr::random_repr_tests::<FqRepr>(); }
 
 #[test]
 fn test_fq_legendre() {
-    use ff::LegendreSymbol::*;
-    use ff::SqrtField;
+    use ff::{LegendreSymbol::*, SqrtField};
 
     assert_eq!(QuadraticResidue, Fq::one().legendre());
     assert_eq!(Zero, Fq::zero().legendre());

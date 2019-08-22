@@ -1,6 +1,4 @@
-use super::fq::FROBENIUS_COEFF_FQ12_C1;
-use super::fq2::Fq2;
-use super::fq6::Fq6;
+use super::{fq::FROBENIUS_COEFF_FQ12_C1, fq2::Fq2, fq6::Fq6};
 use ff::Field;
 use rand::{Rand, Rng};
 
@@ -27,9 +25,7 @@ impl Rand for Fq12 {
 }
 
 impl Fq12 {
-    pub fn conjugate(&mut self) {
-        self.c1.negate();
-    }
+    pub fn conjugate(&mut self) { self.c1.negate(); }
 
     pub fn mul_by_014(&mut self, c0: &Fq2, c1: &Fq2, c4: &Fq2) {
         let mut aa = self.c0;
@@ -63,9 +59,7 @@ impl Field for Fq12 {
         }
     }
 
-    fn is_zero(&self) -> bool {
-        self.c0.is_zero() && self.c1.is_zero()
-    }
+    fn is_zero(&self) -> bool { self.c0.is_zero() && self.c1.is_zero() }
 
     fn double(&mut self) {
         self.c0.double();
@@ -165,8 +159,8 @@ fn test_fq12_mul_by_014() {
         a.mul_by_014(&c0, &c1, &c5);
         b.mul_assign(&Fq12 {
             c0: Fq6 {
-                c0: c0,
-                c1: c1,
+                c0,
+                c1,
                 c2: Fq2::zero(),
             },
             c1: Fq6 {

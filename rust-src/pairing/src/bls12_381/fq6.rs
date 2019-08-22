@@ -1,5 +1,7 @@
-use super::fq::{FROBENIUS_COEFF_FQ6_C1, FROBENIUS_COEFF_FQ6_C2};
-use super::fq2::Fq2;
+use super::{
+    fq::{FROBENIUS_COEFF_FQ6_C1, FROBENIUS_COEFF_FQ6_C2},
+    fq2::Fq2,
+};
 use ff::Field;
 use rand::{Rand, Rng};
 
@@ -126,9 +128,7 @@ impl Field for Fq6 {
         }
     }
 
-    fn is_zero(&self) -> bool {
-        self.c0.is_zero() && self.c1.is_zero() && self.c2.is_zero()
-    }
+    fn is_zero(&self) -> bool { self.c0.is_zero() && self.c1.is_zero() && self.c2.is_zero() }
 
     fn double(&mut self) {
         self.c0.double();
@@ -336,7 +336,7 @@ fn test_fq6_mul_by_1() {
         a.mul_by_1(&c1);
         b.mul_assign(&Fq6 {
             c0: Fq2::zero(),
-            c1: c1,
+            c1,
             c2: Fq2::zero(),
         });
 
@@ -356,8 +356,8 @@ fn test_fq6_mul_by_01() {
 
         a.mul_by_01(&c0, &c1);
         b.mul_assign(&Fq6 {
-            c0: c0,
-            c1: c1,
+            c0,
+            c1,
             c2: Fq2::zero(),
         });
 

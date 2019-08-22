@@ -1,6 +1,10 @@
 use rand::{Rand, SeedableRng, XorShiftRng};
 
-use {CurveAffine, CurveProjective, Engine, Field, PrimeField};
+use CurveAffine;
+use CurveProjective;
+use Engine;
+use Field;
+use PrimeField;
 
 pub fn engine_tests<E: Engine>() {
     let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);

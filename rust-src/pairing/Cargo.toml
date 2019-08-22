@@ -17,6 +17,8 @@ repository = "https://github.com/ebfull/pairing"
 [dependencies]
 rand = "0.4"
 byteorder = "1"
+bytes = "0.4.12"
+sha2 = "0"
 ff = { version = "0.4", features = ["derive"] }
 
 [features]

@@ -8,15 +8,17 @@ mod fr;
 #[cfg(test)]
 mod tests;
 
-pub use self::ec::{
-    G1, G1Affine, G1Compressed, G1Prepared, G1Uncompressed, G2, G2Affine, G2Compressed, G2Prepared,
-    G2Uncompressed,
+pub use self::{
+    ec::{
+        G1Affine, G1Compressed, G1Prepared, G1Uncompressed, G2Affine, G2Compressed, G2Prepared,
+        G2Uncompressed, G1, G2,
+    },
+    fq::{Fq, FqRepr},
+    fq12::Fq12,
+    fq2::Fq2,
+    fq6::Fq6,
+    fr::{Fr, FrRepr},
 };
-pub use self::fq::{Fq, FqRepr};
-pub use self::fq12::Fq12;
-pub use self::fq2::Fq2;
-pub use self::fq6::Fq6;
-pub use self::fr::{Fr, FrRepr};
 
 use super::{CurveAffine, Engine};
 
@@ -34,13 +36,13 @@ impl ScalarEngine for Bls12 {
 }
 
 impl Engine for Bls12 {
+    type Fq = Fq;
+    type Fqe = Fq2;
+    type Fqk = Fq12;
     type G1 = G1;
     type G1Affine = G1Affine;
     type G2 = G2;
     type G2Affine = G2Affine;
-    type Fq = Fq;
-    type Fqe = Fq2;
-    type Fqk = Fq12;
 
     fn miller_loop<'a, I>(i: I) -> Self::Fqk
     where
@@ -49,8 +51,7 @@ impl Engine for Bls12 {
                 &'a <Self::G1Affine as CurveAffine>::Prepared,
                 &'a <Self::G2Affine as CurveAffine>::Prepared,
             ),
-        >,
-    {
+        >, {
         let mut pairs = vec![];
         for &(p, q) in i {
             if !p.is_zero() && !q.is_zero() {
@@ -166,14 +167,12 @@ impl Engine for Bls12 {
 }
 
 impl G2Prepared {
-    pub fn is_zero(&self) -> bool {
-        self.infinity
-    }
+    pub fn is_zero(&self) -> bool { self.infinity }
 
     pub fn from_affine(q: G2Affine) -> Self {
         if q.is_zero() {
             return G2Prepared {
-                coeffs: vec![],
+                coeffs:   vec![],
                 infinity: true,
             };
         }
@@ -364,6 +363,4 @@ impl G2Prepared {
 }
 
 #[test]
-fn bls12_engine_tests() {
-    ::tests::engine::engine_tests::<Bls12>();
-}
+fn bls12_engine_tests() { ::tests::engine::engine_tests::<Bls12>(); }

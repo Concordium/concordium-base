@@ -3,22 +3,26 @@ use *;
 
 #[test]
 fn test_pairing_result_against_relic() {
-    /*
-    Sent to me from Diego Aranha (author of RELIC library):
-
-    1250EBD871FC0A92 A7B2D83168D0D727 272D441BEFA15C50 3DD8E90CE98DB3E7 B6D194F60839C508 A84305AACA1789B6
-    089A1C5B46E5110B 86750EC6A5323488 68A84045483C92B7 AF5AF689452EAFAB F1A8943E50439F1D 59882A98EAA0170F
-    1368BB445C7C2D20 9703F239689CE34C 0378A68E72A6B3B2 16DA0E22A5031B54 DDFF57309396B38C 881C4C849EC23E87
-    193502B86EDB8857 C273FA075A505129 37E0794E1E65A761 7C90D8BD66065B1F FFE51D7A579973B1 315021EC3C19934F
-    01B2F522473D1713 91125BA84DC4007C FBF2F8DA752F7C74 185203FCCA589AC7 19C34DFFBBAAD843 1DAD1C1FB597AAA5
-    018107154F25A764 BD3C79937A45B845 46DA634B8F6BE14A 8061E55CCEBA478B 23F7DACAA35C8CA7 8BEAE9624045B4B6
-    19F26337D205FB46 9CD6BD15C3D5A04D C88784FBB3D0B2DB DEA54D43B2B73F2C BB12D58386A8703E 0F948226E47EE89D
-    06FBA23EB7C5AF0D 9F80940CA771B6FF D5857BAAF222EB95 A7D2809D61BFE02E 1BFD1B68FF02F0B8 102AE1C2D5D5AB1A
-    11B8B424CD48BF38 FCEF68083B0B0EC5 C81A93B330EE1A67 7D0D15FF7B984E89 78EF48881E32FAC9 1B93B47333E2BA57
-    03350F55A7AEFCD3 C31B4FCB6CE5771C C6A0E9786AB59733 20C806AD36082910 7BA810C5A09FFDD9 BE2291A0C25A99A2
-    04C581234D086A99 02249B64728FFD21 A189E87935A95405 1C7CDBA7B3872629 A4FAFC05066245CB 9108F0242D0FE3EF
-    0F41E58663BF08CF 068672CBD01A7EC7 3BACA4D72CA93544 DEFF686BFD6DF543 D48EAA24AFE47E1E FDE449383B676631
-    */
+    // Sent to me from Diego Aranha (author of RELIC library):
+    //
+    // 1250EBD871FC0A92 A7B2D83168D0D727 272D441BEFA15C50 3DD8E90CE98DB3E7
+    // B6D194F60839C508 A84305AACA1789B6 089A1C5B46E5110B 86750EC6A5323488
+    // 68A84045483C92B7 AF5AF689452EAFAB F1A8943E50439F1D 59882A98EAA0170F
+    // 1368BB445C7C2D20 9703F239689CE34C 0378A68E72A6B3B2 16DA0E22A5031B54
+    // DDFF57309396B38C 881C4C849EC23E87 193502B86EDB8857 C273FA075A505129
+    // 37E0794E1E65A761 7C90D8BD66065B1F FFE51D7A579973B1 315021EC3C19934F
+    // 01B2F522473D1713 91125BA84DC4007C FBF2F8DA752F7C74 185203FCCA589AC7
+    // 19C34DFFBBAAD843 1DAD1C1FB597AAA5 018107154F25A764 BD3C79937A45B845
+    // 46DA634B8F6BE14A 8061E55CCEBA478B 23F7DACAA35C8CA7 8BEAE9624045B4B6
+    // 19F26337D205FB46 9CD6BD15C3D5A04D C88784FBB3D0B2DB DEA54D43B2B73F2C
+    // BB12D58386A8703E 0F948226E47EE89D 06FBA23EB7C5AF0D 9F80940CA771B6FF
+    // D5857BAAF222EB95 A7D2809D61BFE02E 1BFD1B68FF02F0B8 102AE1C2D5D5AB1A
+    // 11B8B424CD48BF38 FCEF68083B0B0EC5 C81A93B330EE1A67 7D0D15FF7B984E89
+    // 78EF48881E32FAC9 1B93B47333E2BA57 03350F55A7AEFCD3 C31B4FCB6CE5771C
+    // C6A0E9786AB59733 20C806AD36082910 7BA810C5A09FFDD9 BE2291A0C25A99A2
+    // 04C581234D086A99 02249B64728FFD21 A189E87935A95405 1C7CDBA7B3872629
+    // A4FAFC05066245CB 9108F0242D0FE3EF 0F41E58663BF08CF 068672CBD01A7EC7
+    // 3BACA4D72CA93544 DEFF686BFD6DF543 D48EAA24AFE47E1E FDE449383B676631
 
     assert_eq!(Bls12::pairing(G1::one(), G2::one()), Fq12 {
         c0: Fq6 {
@@ -117,7 +121,10 @@ fn test_g1_uncompressed_invalid_vectors() {
             if let Err(GroupDecodingError::UnexpectedInformation) = z.into_affine() {
                 // :)
             } else {
-                panic!("should have rejected the point because the parity bit should not be set if the point is at infinity");
+                panic!(
+                    "should have rejected the point because the parity bit should not be set if \
+                     the point is at infinity"
+                );
             }
         }
 
@@ -127,7 +134,10 @@ fn test_g1_uncompressed_invalid_vectors() {
             if let Err(GroupDecodingError::UnexpectedInformation) = z.into_affine() {
                 // :)
             } else {
-                panic!("should have rejected the point because the coordinates should be zeroes at the point at infinity");
+                panic!(
+                    "should have rejected the point because the coordinates should be zeroes at \
+                     the point at infinity"
+                );
             }
         }
     }
@@ -192,7 +202,8 @@ fn test_g1_uncompressed_invalid_vectors() {
             x3b.add_assign(&Fq::from_repr(FqRepr::from(4)).unwrap()); // TODO: perhaps expose coeff_b through API?
 
             if let Some(y) = x3b.sqrt() {
-                // We know this is on the curve, but it's likely not going to be in the correct subgroup.
+                // We know this is on the curve, but it's likely not going to be in the correct
+                // subgroup.
                 x.into_repr().write_be(&mut o.as_mut()[0..]).unwrap();
                 y.into_repr().write_be(&mut o.as_mut()[48..]).unwrap();
 
@@ -231,7 +242,10 @@ fn test_g2_uncompressed_invalid_vectors() {
             if let Err(GroupDecodingError::UnexpectedInformation) = z.into_affine() {
                 // :)
             } else {
-                panic!("should have rejected the point because the parity bit should not be set if the point is at infinity");
+                panic!(
+                    "should have rejected the point because the parity bit should not be set if \
+                     the point is at infinity"
+                );
             }
         }
 
@@ -241,7 +255,10 @@ fn test_g2_uncompressed_invalid_vectors() {
             if let Err(GroupDecodingError::UnexpectedInformation) = z.into_affine() {
                 // :)
             } else {
-                panic!("should have rejected the point because the coordinates should be zeroes at the point at infinity");
+                panic!(
+                    "should have rejected the point because the coordinates should be zeroes at \
+                     the point at infinity"
+                );
             }
         }
     }
@@ -332,7 +349,8 @@ fn test_g2_uncompressed_invalid_vectors() {
             }); // TODO: perhaps expose coeff_b through API?
 
             if let Some(y) = x3b.sqrt() {
-                // We know this is on the curve, but it's likely not going to be in the correct subgroup.
+                // We know this is on the curve, but it's likely not going to be in the correct
+                // subgroup.
                 x.c1.into_repr().write_be(&mut o.as_mut()[0..]).unwrap();
                 x.c0.into_repr().write_be(&mut o.as_mut()[48..]).unwrap();
                 y.c1.into_repr().write_be(&mut o.as_mut()[96..]).unwrap();
@@ -373,7 +391,10 @@ fn test_g1_compressed_invalid_vectors() {
             if let Err(GroupDecodingError::UnexpectedInformation) = z.into_affine() {
                 // :)
             } else {
-                panic!("should have rejected the point because the parity bit should not be set if the point is at infinity");
+                panic!(
+                    "should have rejected the point because the parity bit should not be set if \
+                     the point is at infinity"
+                );
             }
         }
 
@@ -383,7 +404,10 @@ fn test_g1_compressed_invalid_vectors() {
             if let Err(GroupDecodingError::UnexpectedInformation) = z.into_affine() {
                 // :)
             } else {
-                panic!("should have rejected the point because the coordinates should be zeroes at the point at infinity");
+                panic!(
+                    "should have rejected the point because the coordinates should be zeroes at \
+                     the point at infinity"
+                );
             }
         }
     }
@@ -450,7 +474,8 @@ fn test_g1_compressed_invalid_vectors() {
             x3b.add_assign(&Fq::from_repr(FqRepr::from(4)).unwrap()); // TODO: perhaps expose coeff_b through API?
 
             if let Some(_) = x3b.sqrt() {
-                // We know this is on the curve, but it's likely not going to be in the correct subgroup.
+                // We know this is on the curve, but it's likely not going to be in the correct
+                // subgroup.
                 x.into_repr().write_be(&mut o.as_mut()[0..]).unwrap();
                 o.as_mut()[0] |= 0b1000_0000;
 
@@ -489,7 +514,10 @@ fn test_g2_compressed_invalid_vectors() {
             if let Err(GroupDecodingError::UnexpectedInformation) = z.into_affine() {
                 // :)
             } else {
-                panic!("should have rejected the point because the parity bit should not be set if the point is at infinity");
+                panic!(
+                    "should have rejected the point because the parity bit should not be set if \
+                     the point is at infinity"
+                );
             }
         }
 
@@ -499,7 +527,10 @@ fn test_g2_compressed_invalid_vectors() {
             if let Err(GroupDecodingError::UnexpectedInformation) = z.into_affine() {
                 // :)
             } else {
-                panic!("should have rejected the point because the coordinates should be zeroes at the point at infinity");
+                panic!(
+                    "should have rejected the point because the coordinates should be zeroes at \
+                     the point at infinity"
+                );
             }
         }
     }
@@ -591,7 +622,8 @@ fn test_g2_compressed_invalid_vectors() {
             }); // TODO: perhaps expose coeff_b through API?
 
             if let Some(_) = x3b.sqrt() {
-                // We know this is on the curve, but it's likely not going to be in the correct subgroup.
+                // We know this is on the curve, but it's likely not going to be in the correct
+                // subgroup.
                 x.c1.into_repr().write_be(&mut o.as_mut()[0..]).unwrap();
                 x.c0.into_repr().write_be(&mut o.as_mut()[48..]).unwrap();
                 o.as_mut()[0] |= 0b1000_0000;
