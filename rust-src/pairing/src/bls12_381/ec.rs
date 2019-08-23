@@ -1024,7 +1024,7 @@ pub mod g1 {
 
                 let p = G1Affine {
                     x,
-                    y:        if yrepr < negyrepr { y } else { negy },
+                    y: if yrepr < negyrepr { y } else { negy },
                     infinity: false,
                 };
                 assert!(!p.is_in_correct_subgroup_assuming_on_curve());
@@ -1720,7 +1720,7 @@ pub mod g2 {
 
                 let p = G2Affine {
                     x,
-                    y:        if y < negy { y } else { negy },
+                    y: if y < negy { y } else { negy },
                     infinity: false,
                 };
 

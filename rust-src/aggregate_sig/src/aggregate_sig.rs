@@ -1,51 +1,39 @@
-use curve_arithmetic::Curve;
-use curve_arithmetic::Pairing;
-use pairing::Field;
+use curve_arithmetic::{Curve, Pairing};
+use ff::Field;
 use rand::Rng;
-use rayon::iter::*;
-use rayon::join;
+use rayon::{iter::*, join};
 use sha2::{Digest, Sha512};
-use std::cmp::Ordering;
-use std::io::Cursor;
+use std::{cmp::Ordering, io::Cursor};
 
 use crate::errors::AggregateSigError;
 
-// A wrapper for sha512 hashes. Only use is to have the Ord trait on [u8; 64] for sorting an array of hashes
+// A wrapper for sha512 hashes. Only use is to have the Ord trait on [u8; 64]
+// for sorting an array of hashes
 struct Hash([u8; 64]);
 
 impl PartialEq for Hash {
-    fn eq(&self, other: &Self) -> bool {
-        self.0[0..63] == other.0[0..63]
-    }
+    fn eq(&self, other: &Self) -> bool { self.0[0..63] == other.0[0..63] }
 }
 
 impl Eq for Hash {}
 
 impl PartialOrd for Hash {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(&other))
-    }
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(&other)) }
 }
 
 impl Ord for Hash {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.0[0..63].cmp(&other.0[0..63])
-    }
+    fn cmp(&self, other: &Self) -> Ordering { self.0[0..63].cmp(&other.0[0..63]) }
 }
 
 #[derive(Debug)]
 pub struct SecretKey<P: Pairing>(P::ScalarField);
 
 impl<P: Pairing> SecretKey<P> {
-    pub fn generate<R: Rng>(rng: &mut R) -> SecretKey<P> {
-        SecretKey(P::generate_scalar(rng))
-    }
+    pub fn generate<R: Rng>(rng: &mut R) -> SecretKey<P> { SecretKey(P::generate_scalar(rng)) }
 }
 
 impl<P: Pairing> Clone for SecretKey<P> {
-    fn clone(&self) -> Self {
-        SecretKey(self.0)
-    }
+    fn clone(&self) -> Self { SecretKey(self.0) }
 }
 
 impl<P: Pairing> Copy for SecretKey<P> {}
@@ -63,15 +51,11 @@ impl<P: Pairing> PublicKey<P> {
         Ok(PublicKey(point))
     }
 
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        P::G_2::curve_to_bytes(&self.0)
-    }
+    pub fn to_bytes(&self) -> Box<[u8]> { P::G_2::curve_to_bytes(&self.0) }
 }
 
 impl<P: Pairing> Clone for PublicKey<P> {
-    fn clone(&self) -> Self {
-        PublicKey(self.0)
-    }
+    fn clone(&self) -> Self { PublicKey(self.0) }
 }
 
 impl<P: Pairing> Copy for PublicKey<P> {}
@@ -80,21 +64,20 @@ impl<P: Pairing> Copy for PublicKey<P> {}
 pub struct Signature<P: Pairing>(P::G_1);
 
 impl<P: Pairing> Clone for Signature<P> {
-    fn clone(&self) -> Self {
-        Signature(self.0)
-    }
+    fn clone(&self) -> Self { Signature(self.0) }
 }
 
 impl<P: Pairing> Copy for Signature<P> {}
 
 // Sign a message using the supplied secret key.
-// Signing can potentially be optimized by having a proper hash fucntion from the message space
-// (&[u8]) to G_1. Currently we hash the message using Sha512 and decode it into a scalar of G_1
-// and multiply the generator of G_1 with this
+// Signing can potentially be optimized by having a proper hash fucntion from
+// the message space (&[u8]) to G_1. Currently we hash the message using Sha512
+// and decode it into a scalar of G_1 and multiply the generator of G_1 with
+// this
 pub fn sign_message<P: Pairing>(message: &[u8], secret_key: SecretKey<P>) -> Signature<P> {
-    let mut scalar: P::ScalarField = scalar_from_message::<P>(message);
-    // the hash is generator^scalar, the signature is hash^secret_key. We multiply scalars before
-    // group operation for faster computation
+    let mut scalar = scalar_from_message::<P>(message);
+    // the hash is generator^scalar, the signature is hash^secret_key. We multiply
+    // scalars before group operation for faster computation
     scalar.mul_assign(&secret_key.0);
     let signature = P::G_1::one_point().mul_by_scalar(&scalar);
     Signature(signature)
@@ -104,8 +87,8 @@ fn hash_message_to_g1<P: Pairing>(m: &[u8]) -> P::G_1 {
     P::G_1::one_point().mul_by_scalar(&scalar_from_message::<P>(m))
 }
 
-// Hashes the supplied message using Sha512 and decodes to the scalarfield of P, repeats until
-// succesfully decoding.
+// Hashes the supplied message using Sha512 and decodes to the scalarfield of P,
+// repeats until succesfully decoding.
 fn scalar_from_message<P: Pairing>(m: &[u8]) -> P::ScalarField {
     let hashed_message = hash_message(m);
     match P::bytes_to_scalar(&mut Cursor::new(&hashed_message)) {
@@ -155,7 +138,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
     let product = m_pk_pairs
         .par_iter()
         .fold(
-            || P::TargetField::zero(),
+            || <P::TargetField as Field>::zero(),
             |_sum, x| {
                 let (m, pk) = x;
                 let g1_hash = hash_message_to_g1::<P>(m);
@@ -163,7 +146,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
             },
         )
         .reduce(
-            || P::TargetField::one(),
+            || <P::TargetField as Field>::one(),
             |prod, x| {
                 let mut p = prod;
                 p.mul_assign(&x);
@@ -192,8 +175,8 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
 }
 
 // Checks for duplicates in a list of messages
-// This is not very efficient - the sorting algorithm can exit as soon as it encounters an equality
-// and report that a duplicate indeed exists.
+// This is not very efficient - the sorting algorithm can exit as soon as it
+// encounters an equality and report that a duplicate indeed exists.
 // Consider building hashmap or Btree and exit as soon as a duplicate is seen
 fn has_duplicates<'a>(messages_iter: impl Iterator<Item = &'a [u8]>) -> bool {
     let mut message_hashes: Vec<Hash> = messages_iter
@@ -220,8 +203,8 @@ mod test {
     const SIGNERS: usize = 10;
     const TEST_ITERATIONS: usize = 1000;
 
-    // returns a pair of lists (sks, pks), such that sks[i] and pks[i] are corresponding secret and
-    // public key
+    // returns a pair of lists (sks, pks), such that sks[i] and pks[i] are
+    // corresponding secret and public key
     fn get_sks_pks<P: Pairing>(
         amt: usize,
         rng: &mut StdRng,

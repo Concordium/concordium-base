@@ -6,7 +6,7 @@ use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use elgamal::{cipher::Cipher, message::Message as ElgamalMessage};
-use pairing::Field;
+use ff::Field;
 use pedersen_scheme::{
     commitment::Commitment,
     key::{CommitmentKey, CommitmentKey as PedersenKey},

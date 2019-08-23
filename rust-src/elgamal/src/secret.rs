@@ -20,7 +20,7 @@ use crate::{cipher::*, errors::*, message::*};
 use rand::*;
 
 use curve_arithmetic::Curve;
-use pairing::Field;
+use ff::Field;
 
 use std::io::Cursor;
 
@@ -63,10 +63,10 @@ impl<C: Curve> SecretKey<C> {
 
     pub fn decrypt_exponent(&self, c: &Cipher<C>) -> C::Scalar {
         let Message(m) = self.decrypt(c);
-        let mut a = C::Scalar::zero();
+        let mut a = <C::Scalar as Field>::zero();
         let mut i = C::zero_point();
         let one = C::one_point();
-        let field_one = C::Scalar::one();
+        let field_one = <C::Scalar as Field>::one();
         while m != i {
             i = i.plus_point(&one);
             a.add_assign(&field_one);

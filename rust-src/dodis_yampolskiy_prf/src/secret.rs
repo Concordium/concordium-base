@@ -19,7 +19,7 @@ use crate::errors::{
     *,
 };
 use curve_arithmetic::curve_arithmetic::Curve;
-use pairing::Field;
+use ff::Field;
 use rand::*;
 
 use std::io::Cursor;

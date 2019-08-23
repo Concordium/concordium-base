@@ -6,11 +6,11 @@ edition = "2018"
 
 [dependencies]
 ed25519-dalek = "1.0.0-pre.1"
-curve25519-dalek = "1"
-rand          = "0.6.5"
-serde         = "1"
-sha2      = "0"
-failure   = "0"
+curve25519-dalek = "1.2"
+rand          = "0.6"
+serde         = "1.0"
+sha2      = "0.8"
+failure   = "0.1"
 
 [dev-dependencies]
 criterion = "0.2"

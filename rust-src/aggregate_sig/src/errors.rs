@@ -1,5 +1,4 @@
-use std::error::Error;
-use std::fmt;
+use std::{error::Error, fmt};
 
 #[derive(Debug)]
 pub(crate) enum InternalError {
@@ -26,13 +25,9 @@ impl From<curve_arithmetic::CurveDecodingError> for AggregateSigError {
 }
 
 impl fmt::Display for AggregateSigError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 impl Error for AggregateSigError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(&self.0)
-    }
+    fn source(&self) -> Option<&(dyn Error + 'static)> { Some(&self.0) }
 }

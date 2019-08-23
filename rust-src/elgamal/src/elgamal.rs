@@ -370,7 +370,7 @@ mod tests {
     use rand::Rng;
 
     use super::*;
-    use pairing::Field;
+    use ff::Field;
     macro_rules! macro_test_encrypt_decrypt_success {
         ($function_name:ident, $curve_type:path) => {
             #[test]

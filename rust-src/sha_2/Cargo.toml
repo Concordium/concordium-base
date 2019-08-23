@@ -5,7 +5,7 @@ authors = ["Concordium AG <info@concordium.com>"]
 edition = "2018"
 
 [dependencies]
-sha2 = "0"
+sha2 = "0.8"
 
 [lib]
 name = "sha_2"
