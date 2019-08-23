@@ -137,22 +137,16 @@ pub fn verify_aggregate_sig<P: Pairing>(
 
     let product = m_pk_pairs
         .par_iter()
-        .fold(
-            || <P::TargetField as Field>::zero(),
-            |_sum, x| {
-                let (m, pk) = x;
-                let g1_hash = hash_message_to_g1::<P>(m);
-                P::pair(g1_hash, pk.0)
-            },
-        )
-        .reduce(
-            || <P::TargetField as Field>::one(),
-            |prod, x| {
-                let mut p = prod;
-                p.mul_assign(&x);
-                p
-            },
-        );
+        .fold(<P::TargetField as Field>::zero, |_sum, x| {
+            let (m, pk) = x;
+            let g1_hash = hash_message_to_g1::<P>(m);
+            P::pair(g1_hash, pk.0)
+        })
+        .reduce(<P::TargetField as Field>::one, |prod, x| {
+            let mut p = prod;
+            p.mul_assign(&x);
+            p
+        });
 
     P::pair(signature.0, P::G_2::one_point()) == product
 }
