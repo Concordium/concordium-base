@@ -1,7 +1,7 @@
 mod g1 {
-    use rand::{Rand, SeedableRng, XorShiftRng};
+    use rand::{Rand, Rng, SeedableRng, XorShiftRng};
 
-    use pairing::{bls12_381::*, CurveProjective};
+    use pairing::{bls12_381::*, CurveAffine, CurveProjective};
 
     #[bench]
     fn bench_g1_mul_assign(b: &mut ::test::Bencher) {
@@ -59,6 +59,37 @@ mod g1 {
             tmp
         });
     }
+
+    #[bench]
+    fn bench_g1_hash_to_group_proj(b: &mut ::test::Bencher) {
+        const SAMPLES: usize = 1000;
+
+        let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let v: Vec<[u8; 32]> = (0..SAMPLES).map(|_| rng.gen::<[u8; 32]>()).collect();
+
+        let mut count = 0;
+        b.iter(|| {
+            let _ = <G1 as CurveProjective>::hash_to_group_element(&v[count]);
+            count = (count + 1) % SAMPLES;
+        });
+    }
+
+    #[bench]
+    fn bench_g1_hash_to_group_affine(b: &mut ::test::Bencher) {
+        const SAMPLES: usize = 1000;
+
+        let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let v: Vec<[u8; 32]> = (0..SAMPLES).map(|_| rng.gen::<[u8; 32]>()).collect();
+
+        let mut count = 0;
+        b.iter(|| {
+            let _ = <G1Affine as CurveAffine>::hash_to_group_element(&v[count]);
+            count = (count + 1) % SAMPLES;
+        });
+    }
+
 }
 
 mod g2 {
