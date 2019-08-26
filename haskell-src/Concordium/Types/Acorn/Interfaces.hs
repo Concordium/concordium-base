@@ -80,10 +80,10 @@ data TypingError annot =
                  | TypeAbstractionNotAppliedToType (Core.Expr annot Core.ModuleRef)
                  -- |A type appears where a term is expected.
                  | TypeWhereTermExpected (Core.Type annot ModuleRef)
-                 -- |A term is applied which is neither of a function type, nor
-                 -- universal type. The first argument is the term to be
-                 -- applied, the second its type.
-                 | OnlyAbstractionsCanBeApplied (Core.Expr annot Core.ModuleRef) (Core.Type annot ModuleRef)
+                 -- |In an application for terms, the given term cannot be applied to
+                 -- an argument because the term (atom) is not of a function type
+                 -- but of the given type.
+                 | NotAFunctionType (Core.Type annot ModuleRef)
                  -- |The type of an argument given to a function does not match
                  -- the function's definition. The first argument is the actual
                  -- type, the second the expected type.
@@ -247,10 +247,13 @@ data TypingError annot =
                  -- |The public definition (explicit definition or datatype constructor)
                  -- with the given name has a private type.
                  | PublicDefinitionWithPrivateType Core.Name (Core.Type annot ModuleRef)
-                 -- |An expression to be type checked has not the type specified
+                 -- |A (sub)expression to be type checked has not the type specified
                  -- as the expected type. The first argument is the type encountered,
                  -- the second is the expected type.
                  | UnexpectedType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
+                 -- |Like 'UnexpectedType' but where the actual type is not calculated.
+                 -- The (sub)expression might even not be well-typed. TODO verify
+                 | UnexpectedType' (Core.Type annot ModuleRef)
 
 deriving instance Core.AnnotContext Eq annot => Eq (TypingError annot)
 deriving instance Core.AnnotContext Show annot => Show (TypingError annot)
