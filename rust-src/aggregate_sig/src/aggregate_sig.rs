@@ -74,27 +74,10 @@ impl<P: Pairing> Copy for Signature<P> {}
 // the message space (&[u8]) to G_1. Currently we hash the message using Sha512
 // and decode it into a scalar of G_1 and multiply the generator of G_1 with
 // this
-pub fn sign_message<P: Pairing>(message: &[u8], secret_key: SecretKey<P>) -> Signature<P> {
-    let mut scalar = scalar_from_message::<P>(message);
-    // the hash is generator^scalar, the signature is hash^secret_key. We multiply
-    // scalars before group operation for faster computation
-    scalar.mul_assign(&secret_key.0);
-    let signature = P::G_1::one_point().mul_by_scalar(&scalar);
+pub fn sign_message<P: Pairing>(m: &[u8], secret_key: SecretKey<P>) -> Signature<P> {
+    let g1_hash = P::G_1::hash_to_group(m);
+    let signature = g1_hash.mul_by_scalar(&secret_key.0);
     Signature(signature)
-}
-
-fn hash_message_to_g1<P: Pairing>(m: &[u8]) -> P::G_1 {
-    P::G_1::one_point().mul_by_scalar(&scalar_from_message::<P>(m))
-}
-
-// Hashes the supplied message using Sha512 and decodes to the scalarfield of P,
-// repeats until succesfully decoding.
-fn scalar_from_message<P: Pairing>(m: &[u8]) -> P::ScalarField {
-    let hashed_message = hash_message(m);
-    match P::bytes_to_scalar(&mut Cursor::new(&hashed_message)) {
-        Ok(scalar) => scalar,
-        Err(_) => scalar_from_message::<P>(&hashed_message), // Perhaps set upper bound?
-    }
 }
 
 // hashes a message using Sha512
@@ -108,7 +91,7 @@ fn hash_message(m: &[u8]) -> [u8; 64] {
 
 // Verifies a single message and signature pair
 pub fn verify<P: Pairing>(m: &[u8], public_key: PublicKey<P>, signature: Signature<P>) -> bool {
-    let g1_hash = hash_message_to_g1::<P>(m);
+    let g1_hash = P::G_1::hash_to_group(m);
 
     // compute pairings in parallel
     let (pair1, pair2): (P::TargetField, P::TargetField) = join(
@@ -139,7 +122,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
         .par_iter()
         .fold(<P::TargetField as Field>::zero, |_sum, x| {
             let (m, pk) = x;
-            let g1_hash = hash_message_to_g1::<P>(m);
+            let g1_hash = P::G_1::hash_to_group(m);
             P::pair(g1_hash, pk.0)
         })
         .reduce(<P::TargetField as Field>::one, |prod, x| {
@@ -163,7 +146,7 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
     // compute pairings in parallel
     let (pair1, pair2): (P::TargetField, P::TargetField) = join(
         || P::pair(signature.0, P::G_2::one_point()),
-        || P::pair(hash_message_to_g1::<P>(m), sum),
+        || P::pair(P::G_1::hash_to_group(m), sum),
     );
     pair1 == pair2
 }
