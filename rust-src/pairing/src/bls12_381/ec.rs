@@ -1003,6 +1003,75 @@ pub mod g1 {
         }
     }
 
+    // #[test]
+    // fn test_iso11() {
+    //     let x = Fq::from_repr(FqRepr([
+    //         0x68608ed954cbac6f,
+    //         0x65676cfc0f8bfb80,
+    //         0xd70a6c11c45d1c07,
+    //         0x7e8458a01605e048,
+    //         0xff5d19ee27f38db3,
+    //         0x18156d91aae27cc,
+    //         ])).unwrap();
+    //     println!("displaying x: {}", x);
+    //     let y = Fq::from_repr(FqRepr([
+    //         0xddb6c5f190d758cc,
+    //         0x5b3e6c9220fc6a55,
+    //         0xe052aaf632d5ffcf,
+    //         0xc4c8305e904e5446,
+    //         0x70beb5d30c08ee74,
+    //         0xae9ca0eb3be343e,
+    //         ])).unwrap();
+    //     println!("displaying y: {}", y);
+    //     let z = Fq::from_repr(FqRepr::from(1)).unwrap();
+    //     println!("displaying z: {}", z);
+    //
+    //
+    //     let (x_iso, y_iso, z_iso) = super::super::fq::iso_11(x, y, z);
+    //
+    //     let x_expected = Fq::from_repr(FqRepr([
+    //         0x68608ed954cbac6f,
+    //         0x65676cfc0f8bfb80,
+    //         0xd70a6c11c45d1c07,
+    //         0x7e8458a01605e048,
+    //         0xff5d19ee27f38db3,
+    //         0x18156d91aae27cc,
+    //         ])).unwrap();
+    //     println!("displaying x_expected: {}", x_expected);
+    //     println!("displaying x_iso:      {}", x_iso);
+    //     let y_expected = Fq::from_repr(FqRepr([
+    //         0xddb6c5f190d758cc,
+    //         0x5b3e6c9220fc6a55,
+    //         0xe052aaf632d5ffcf,
+    //         0xc4c8305e904e5446,
+    //         0x70beb5d30c08ee74,
+    //         0xae9ca0eb3be343e,
+    //         ])).unwrap();
+    //     println!("displaying y_expected: {}", y_expected);
+    //     println!("displaying y_iso:      {}", y_iso);
+    //     let z_expected = Fq::from_repr(FqRepr::from(1)).unwrap();
+    //     println!("displaying z_expected: {}", z_expected);
+    //     println!("displaying z_iso:      {}", z_iso);
+    //
+    //     let result = G1{
+    //         x: x_iso,
+    //         y: y_iso,
+    //         z: z_iso,
+    //     };
+    //     let expected = G1{
+    //         x: x_expected,
+    //         y: y_expected,
+    //         z: z_expected,
+    //     };
+    //     let mut zero = result;
+    //     zero.sub_assign(&expected);
+    //     assert!(zero == G1::zero());
+    //
+    //     assert!(x_expected == x_iso);
+    //     assert!(y_expected == y_iso);
+    //     assert!(z_expected == z_iso);
+    // }
+
     #[test]
     fn g1_generator() {
         use SqrtField;

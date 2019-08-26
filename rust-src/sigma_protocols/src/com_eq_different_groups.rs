@@ -227,5 +227,4 @@ mod tests {
             assert_eq!(ap, app.unwrap());
         }
     }
-
 }

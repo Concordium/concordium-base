@@ -1896,6 +1896,129 @@ test_const!(test_p_minus_3_div_4, P_MINUS_3_DIV_4);
 test_const!(test_p_minus_1_div_2, P_MINUS_1_DIV_2);
 
 #[test]
+fn test_iso11() {
+    fn test_isogeny_map(x: Fq, y: Fq, z: Fq, x_expected: Fq, y_expected: Fq, z_expected: Fq) {
+        let (x_iso, y_iso, z_iso) = iso_11(x, y, z);
+
+        let z_inverse = z_iso.inverse().unwrap();
+        let mut z_inverse2 = z_inverse;
+        z_inverse2.square();
+        let mut z_inverse3 = z_inverse2;
+        z_inverse3.mul_assign(&z_inverse);
+        let mut x_iso = x_iso;
+        x_iso.mul_assign(&z_inverse2);
+        let mut y_iso = y_iso;
+        y_iso.mul_assign(&z_inverse3);
+        let mut z_iso = z_iso;
+        z_iso.mul_assign(&z_inverse);
+
+        print!("x_iso:      {}", x_iso);
+        print!("y_iso:      {}", y_iso);
+        print!("z_iso:      {}", z_iso);
+        print!("x_expected: {}", x_expected);
+        print!("y_expected: {}", y_expected);
+        print!("z_expected: {}", z_expected);
+
+        assert!(x_expected == x_iso);
+        assert!(y_expected == y_iso);
+        assert!(z_expected == z_iso);
+    }
+
+    // test case 1, affine point on 11-isogeny:
+    // x: 231676323333219032364207663160931012408135689080701790049416995747433764605315759399331076266193515570430995049583,
+    // y: 1679701275502850236404761224635518110616107305447740765847030766801057551645601784778242705363960817147253464979660
+    // resulting point on y^2 = x^3 + 4:
+    // x: 2462470316687406725265935944033330307865993658929330879249576046234792668690184598793893670391772666445389495997970
+    // y: 1305585544177362738895827194786305935351300563185311476107805270117356948076235166602872188538678439100090683175388
+    let x = Fq::from_repr(FqRepr([
+        0x68608ed954cbac6f,
+        0x65676cfc0f8bfb80,
+        0xd70a6c11c45d1c07,
+        0x7e8458a01605e048,
+        0xff5d19ee27f38db3,
+        0x18156d91aae27cc,
+    ]))
+    .unwrap();
+    let y = Fq::from_repr(FqRepr([
+        0xddb6c5f190d758cc,
+        0x5b3e6c9220fc6a55,
+        0xe052aaf632d5ffcf,
+        0xc4c8305e904e5446,
+        0x70beb5d30c08ee74,
+        0xae9ca0eb3be343e,
+    ]))
+    .unwrap();
+    let z = Fq::from_repr(FqRepr([1, 0, 0, 0, 0, 0])).unwrap();
+    let x_expected = Fq::from_repr(FqRepr([
+        0x579fc665b50b1612,
+        0x84f14441fecfb0d8,
+        0x7dbc911b151848c7,
+        0xd96c755dd2b0a190,
+        0xe9fc535fe433bf3b,
+        0xfffbdf8b8989a76,
+    ]))
+    .unwrap();
+    let y_expected = Fq::from_repr(FqRepr([
+        0x93ab61d6e91b31dc,
+        0x1042678018e3cdc7,
+        0x9027928a6135e9ad,
+        0x00f896c024c7bfcc,
+        0xa40980cf7b0ad597,
+        0x87b8914dbe39524,
+    ]))
+    .unwrap();
+    let z_expected = Fq::from_repr(FqRepr([1, 0, 0, 0, 0, 0])).unwrap();
+    test_isogeny_map(x, y, z, x_expected, y_expected, z_expected);
+
+    // test case 2, affine point on 11-isogeny:
+    // x: 200672990962149954463803146802967864720527670550092954518341273224587459684808873511630728943600649771874365573754
+    // y: 3771658320633238787764443471835928880231542729858183816905716275784304196017898359904922975462921081984123896844037
+    // the x,y,z coordinates below are the jacobian coordinates (x*1000000^2,
+    // y*1000000^3, 1000000) resulting point on y^2 = x^3 + 4:
+    // x: 751464328052491409370915162588147071834631858446608699879213045826820895244140093535995699583970173378180279055064
+    // y: 3766342793094137890660475956436782650146903774069499310802413350809867070503035142752911481430587061848145471128246
+    let x = Fq::from_repr(FqRepr([
+        0x71ae3b7c4614ac63,
+        0x0645eeb5fe9a5714,
+        0xc3ce0a80be8d8e34,
+        0xd63ecf7124c3f319,
+        0x5d8492ffc6f05671,
+        0xadc0dda804ea96a,
+    ]))
+    .unwrap();
+    let y = Fq::from_repr(FqRepr([
+        0xf4112fd0ccb6f2a7,
+        0x7425fc157162679e,
+        0x6de4be0915cc3a49,
+        0x08239de97826c864,
+        0x288f77250bf33de4,
+        0x247b456e0a426b8,
+    ]))
+    .unwrap();
+    let z = Fq::from_repr(FqRepr([0xf4240, 0, 0, 0, 0, 0])).unwrap();
+    let x_expected = Fq::from_repr(FqRepr([
+        0x6a2e445da19e32d8,
+        0x686f68e3be0c200e,
+        0x66626a48f825305c,
+        0x900b2832f3b69833,
+        0x48949ce6f9ba8435,
+        0x4e1e27e358d07c1,
+    ]))
+    .unwrap();
+    let y_expected = Fq::from_repr(FqRepr([
+        0xc9483a6d60dec2b6,
+        0x8b8586d8c8ca556f,
+        0x09279c0316e87332,
+        0x348bd993c7cadb0c,
+        0xf5a74b1bb7ab0896,
+        0x18786da2bb432953,
+    ]))
+    .unwrap();
+    let z_expected = Fq::from_repr(FqRepr([1, 0, 0, 0, 0, 0])).unwrap();
+    test_isogeny_map(x, y, z, x_expected, y_expected, z_expected);
+}
+
+#[test]
 fn test_neg_one() {
     let mut o = Fq::one();
     o.negate();
