@@ -1645,7 +1645,7 @@ pub(crate) const K4: [[u64; 6]; 16] = [
 ];
 
 // Hash to Fq by hashing using Sha512 and decode the first 48 bytes as an uint
-// in big endian. If this number is higher than q, retry.
+// in big endian. If this number is larger than q, retry.
 pub(crate) fn hash_bytes_to_fq(b: &[u8]) -> Fq {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
@@ -1679,6 +1679,23 @@ fn decode_hash_to_fq(bytes: &mut Cursor<&[u8]>) -> Result<Fq, PrimeFieldDecoding
 
 // Implements section 4 of https://eprint.iacr.org/2019/403.pdf
 pub(crate) fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
+    // this check can be made faster by replacing the constructions of one,
+    // zero and minus_one with constants, as done with B_COEFF
+    let one = Fq::from_repr(FqRepr::from(1)).unwrap();
+    let zero = Fq::from_repr(FqRepr::from(0)).unwrap();
+    let minus_one = Fq::from_repr(FqRepr([
+        0xb9feffffffffaaaa,
+        0x1eabfffeb153ffff,
+        0x6730d2a0f6b0f624,
+        0x64774b84f38512bf,
+        0x4b1ba7b6434bacd7,
+        0x1a0111ea397fe69a,
+    ]))
+    .unwrap();
+    if t == one || t == zero || t == minus_one {
+        return (zero, one, zero);
+    }
+
     // compute N
     let mut t2 = t;
     t2.square(); // t^2
@@ -1701,6 +1718,7 @@ pub(crate) fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
     // if d, the denominator of X0(u), is 0 then we set the denominator to -a
     // instead, since -b/a is square in Fq
     if d.is_zero() {
+        println!("d was zero!");
         d = a;
         d.negate();
     }
@@ -1748,27 +1766,190 @@ pub(crate) fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
         // g(X_0(t)) is square in Fq
         x_proj = n;
         x_proj.mul_assign(&d); // X = ND
-        y_proj = Fq::one();
+        y_proj = alpha;
+        y_proj.mul_assign(&v); // Y = alpha D^3
+                               // multiply y by sign
         match sign(t) {
-            Sign::Minus => y_proj.negate(),
             Sign::Plus => (),
+            Sign::Minus => y_proj.negate(),
         }
-        y_proj.mul_assign(&alpha);
-        y_proj.mul_assign(&v); // Y = Sgn_0(t) alpha D^3
     } else {
         // g(X_1(t)) is square in Fq
-        x_proj = Fq::one();
-        x_proj.negate();
-        x_proj.mul_assign(&t2);
+        x_proj = t2;
         x_proj.mul_assign(&n);
-        x_proj.mul_assign(&d); // X = - t^2 ND
+        x_proj.mul_assign(&d);
+        x_proj.negate(); // X = - t^2 ND
         y_proj = t2;
         y_proj.mul_assign(&t);
         y_proj.mul_assign(&alpha);
         y_proj.mul_assign(&v); // Y = t^3 alpha D^3
     }
-
     (x_proj, y_proj, z_proj)
+}
+
+#[test]
+fn test_simplified_swu() {
+    fn test_point_at_inf(t: Fq) {
+        let (x, y, z) = simplified_swu(t);
+        assert_eq!(x, Fq::zero());
+        assert_eq!(y, Fq::one());
+        assert_eq!(z, Fq::zero());
+    }
+
+    let t = Fq::one();
+    test_point_at_inf(t);
+    let t = Fq::zero();
+    test_point_at_inf(t);
+    let mut t = Fq::one();
+    t.negate();
+    test_point_at_inf(t);
+
+    fn test(t: Fq, expected_x: Fq, expected_y: Fq) {
+        let (x, y, z) = simplified_swu(t);
+
+        let z_inverse = z.inverse().unwrap();
+        let mut z_inverse2 = z_inverse;
+        z_inverse2.square();
+        let mut z_inverse3 = z_inverse2;
+        z_inverse3.mul_assign(&z_inverse);
+        let mut x = x;
+        x.mul_assign(&z_inverse2);
+        let mut y = y;
+        y.mul_assign(&z_inverse3);
+
+        println!("t         : {}", t);
+        println!("x         : {}", x);
+        println!("expected x: {}", expected_x);
+        println!("y         : {}", y);
+        println!("expected y: {}", expected_y);
+
+        assert!(expected_x == x);
+        assert!(expected_y == y);
+    }
+
+    // g(X0(t0))^((p-1)/2) == 1
+    // sign(t0) = Plus
+    let t0 = Fq::from_repr(FqRepr([
+        0x60020964873e1264,
+        0x1c1c6afa860d8600,
+        0x8dd8e12da6b833c0,
+        0x35b6384ca795d17d,
+        0x2371da3f9c675eed,
+        0x969b9cc7315e4ac,
+    ]))
+    .unwrap();
+    let expected_x = Fq::from_repr(FqRepr([
+        0xbcd2ceaab47d55c4,
+        0x0df13adc16356f5c,
+        0x816547444f05b17d,
+        0x6aaf1de330a9d09e,
+        0x9b2a0d54346a068e,
+        0x8968f732dbad02a,
+    ]))
+    .unwrap();
+    let expected_y = Fq::from_repr(FqRepr([
+        0x8ad0b1aed441d0a2,
+        0x830ea0c294779dff,
+        0x725a3823e2850722,
+        0x73eb067edfbfc9bf,
+        0x40bedd967d35f688,
+        0x11ec46738b7631c3,
+    ]))
+    .unwrap();
+    test(t0, expected_x, expected_y);
+
+    // g(X0(t1))^((p-1)/2) == 1
+    // sign(t1) = Minus
+    let t1 = Fq::from_repr(FqRepr([
+        0x067f6840d661620c,
+        0x3e8f682b456faae4,
+        0xcd9109b45f9ffc63,
+        0xb32802e3e19c195e,
+        0xda23e2c7bb0bbb1b,
+        0x128ca46d7ba7268d,
+    ]))
+    .unwrap();
+    let expected_x = Fq::from_repr(FqRepr([
+        0x2e079116e9e85d2d,
+        0x48c4e273b7d14a48,
+        0x30ccb4314efb43a4,
+        0x093da5b2b13be8b4,
+        0x7bfba7a144a45cb9,
+        0x888d8e87baad9c2,
+    ]))
+    .unwrap();
+    let expected_y = Fq::from_repr(FqRepr([
+        0x6da0f00e3a3e3b53,
+        0xea14b5d50f14b790,
+        0x1fe00315fce28200,
+        0xd05182042257d2b4,
+        0x7ed9889b59a528e2,
+        0xcd6450cd98477ae,
+    ]))
+    .unwrap();
+    test(t1, expected_x, expected_y);
+
+    // g(X0(t2))^((p-1)/2) != 1
+    // sign(t2) = Minus
+    let t2 = Fq::from_repr(FqRepr([
+        0x414831e9ea6a1c7c,
+        0x6dd4649aa57b7d28,
+        0x9de20ab9ee5fc81c,
+        0x703b927016735818,
+        0x6c12f670b2f9ee68,
+        0x154ed432ba8d7d84,
+    ]))
+    .unwrap();
+    let expected_x = Fq::from_repr(FqRepr([
+        0x540b426a6cc9b007,
+        0xb97f4768c2944bba,
+        0x3c8ca5b097e3ee74,
+        0x6505cb2ada43ef11,
+        0xdfe5627c6c1d9079,
+        0x537d5f03530d09e,
+    ]))
+    .unwrap();
+    let expected_y = Fq::from_repr(FqRepr([
+        0xe15bdfb065c828d9,
+        0x1c67182a42ad8600,
+        0xac5abeefae61495e,
+        0x149fa85fe17bcebc,
+        0x869b5bbb33801bf4,
+        0x14e44b5a03cfcc14,
+    ]))
+    .unwrap();
+    test(t2, expected_x, expected_y);
+
+    // g(X0(t3))^((p-1)/2) != 1
+    // sign(t3) = Plus
+    let t3 = Fq::from_repr(FqRepr([
+        0x67575ab9f2cdc376,
+        0x89bc64f8b0c846a1,
+        0xd685f682eb983119,
+        0xf8a297a516eeaa6e,
+        0xdbe4a8fd0901af2c,
+        0xbdb5243c7b6b15,
+    ]))
+    .unwrap();
+    let expected_x = Fq::from_repr(FqRepr([
+        0xae13df3509345c9b,
+        0x8f8455f1f235b2ce,
+        0x69fdceaaf9728fd8,
+        0x42f8d90c54684e6f,
+        0xb16ee9f40dd57aa5,
+        0x646144588fd3473,
+    ]))
+    .unwrap();
+    let expected_y = Fq::from_repr(FqRepr([
+        0x64ef53cc0839aa33,
+        0x3c6441b5575e0059,
+        0xcfbb85cc60d0004f,
+        0x3dec01a1567cd3d3,
+        0x1c08615aaa838968,
+        0xc89264ed2bf4ee2,
+    ]))
+    .unwrap();
+    test(t3, expected_x, expected_y);
 }
 
 // Computes the 11-isogeny from E1'(Fq): y^2 = x^3 + E11_A x + E11_B
@@ -1856,9 +2037,36 @@ pub(crate) fn sign(a: Fq) -> Sign {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum Sign {
     Minus,
     Plus,
+}
+
+#[test]
+fn test_sign() {
+    match sign(Fq::from_repr(FqRepr::from(1)).unwrap()) {
+        Sign::Plus => (),
+        Sign::Minus => panic!("Sign should be Plus"),
+    };
+    match sign(Fq::from_repr(FqRepr(P_MINUS_1_DIV_2)).unwrap()) {
+        Sign::Plus => (),
+        Sign::Minus => panic!("Sign should be Plus"),
+    };
+    match sign(
+        Fq::from_repr(FqRepr([
+            0xdcff7fffffffd556,
+            0x0f55ffff58a9ffff,
+            0xb39869507b587b12,
+            0xb23ba5c279c2895f,
+            0x258dd3db21a5d66b,
+            0xd0088f51cbff34d,
+        ]))
+        .unwrap(),
+    ) {
+        Sign::Minus => (),
+        Sign::Plus => panic!("Sign should be Minus"),
+    };
 }
 
 macro_rules! test_isogeny_constants {
@@ -1912,13 +2120,6 @@ fn test_iso11() {
         let mut z_iso = z_iso;
         z_iso.mul_assign(&z_inverse);
 
-        print!("x_iso:      {}", x_iso);
-        print!("y_iso:      {}", y_iso);
-        print!("z_iso:      {}", z_iso);
-        print!("x_expected: {}", x_expected);
-        print!("y_expected: {}", y_expected);
-        print!("z_expected: {}", z_expected);
-
         assert!(x_expected == x_iso);
         assert!(y_expected == y_iso);
         assert!(z_expected == z_iso);
@@ -1927,7 +2128,7 @@ fn test_iso11() {
     // test case 1, affine point on 11-isogeny:
     // x: 231676323333219032364207663160931012408135689080701790049416995747433764605315759399331076266193515570430995049583,
     // y: 1679701275502850236404761224635518110616107305447740765847030766801057551645601784778242705363960817147253464979660
-    // resulting point on y^2 = x^3 + 4:
+    // resulting affine point on y^2 = x^3 + 4, computed using Sage:
     // x: 2462470316687406725265935944033330307865993658929330879249576046234792668690184598793893670391772666445389495997970
     // y: 1305585544177362738895827194786305935351300563185311476107805270117356948076235166602872188538678439100090683175388
     let x = Fq::from_repr(FqRepr([
@@ -1974,7 +2175,8 @@ fn test_iso11() {
     // x: 200672990962149954463803146802967864720527670550092954518341273224587459684808873511630728943600649771874365573754
     // y: 3771658320633238787764443471835928880231542729858183816905716275784304196017898359904922975462921081984123896844037
     // the x,y,z coordinates below are the jacobian coordinates (x*1000000^2,
-    // y*1000000^3, 1000000) resulting point on y^2 = x^3 + 4:
+    // y*1000000^3, 1000000) resulting affine point on y^2 = x^3 + 4, computed
+    // using Sage:
     // x: 751464328052491409370915162588147071834631858446608699879213045826820895244140093535995699583970173378180279055064
     // y: 3766342793094137890660475956436782650146903774069499310802413350809867070503035142752911481430587061848145471128246
     let x = Fq::from_repr(FqRepr([
