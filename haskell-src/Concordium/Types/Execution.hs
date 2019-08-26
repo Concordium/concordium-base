@@ -271,12 +271,11 @@ data Event = ModuleDeployed !Core.ModuleRef
            | BakerKeyUpdated !BakerId !BakerSignVerifyKey
            | StakeDelegated !BakerId
            | StakeUndelegated
-
   deriving (Show)
 
 -- |Used internally by the scheduler since internal messages are sent as values,
 -- and top-level messages are acorn expressions.
-data MessageFormat = ValueMessage !(Value NoAnnot) | ExprMessage !(Expr NoAnnot)
+data MessageFormat = ValueMessage !(Value NoAnnot) | ExprMessage !(LinkedExpr NoAnnot)
     deriving(Show)
 
 -- |Result of a valid transaction is either a reject with a reason or a
