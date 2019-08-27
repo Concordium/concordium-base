@@ -336,6 +336,5 @@ data ChainMetadata =
 type BlockHash = Hash.Hash
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
--- TODO: The hash is redundant; should be removed
-type BlockNonce = (VRF.Hash, VRF.Proof)
+type BlockNonce = VRF.Proof
 
