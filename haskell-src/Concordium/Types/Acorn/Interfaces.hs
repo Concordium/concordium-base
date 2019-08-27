@@ -26,7 +26,6 @@ import qualified Data.HashMap.Strict as Map
 import qualified Data.Sequence as Seq
 import Data.Int
 import Data.Maybe(fromJust)
-import Data.Foldable
 import Control.Monad.Trans.Maybe
 import Control.Monad.Except
 
@@ -475,8 +474,8 @@ type ReceiveMethod = Expr
 type SenderTy = Expr
 type GetterTy = Expr
 
-type LinkedInitMethod = UnlinkedExpr
-type LinkedReceiveMethod = UnlinkedExpr 
+type LinkedInitMethod annot = LinkedExpr annot
+type LinkedReceiveMethod annot = LinkedExpr annot
 
 -- |A 'ContractValue' is what a contract evaluates to. It contains the code of the init and receive methods.
 data ContractValue linked annot = ContractValue
@@ -568,6 +567,10 @@ class Monad m => InterpreterMonad annot m | m -> annot where
 class Monad m => LinkerMonad annot m | m -> annot where
   getExprInModule :: Core.ModuleRef -> Core.Name -> m (Maybe (UnlinkedExpr annot))
 
+  tryGetLinkedExpr :: Core.ModuleRef -> Core.Name -> m (Maybe (LinkedExpr annot))
+
+  putLinkedExpr :: Core.ModuleRef -> Core.Name -> LinkedExpr annot -> m ()
+
 class Monad m => TypecheckerMonad annot m | m -> annot where
   getExportedTermType :: Core.ModuleRef -> Core.Name -> m (Maybe (Type annot Core.ModuleRef))
   getExportedType :: Core.ModuleRef -> Core.TyName -> m (Maybe (Int, HashMap Core.Name [Type annot Core.ModuleRef]))
@@ -636,11 +639,3 @@ instance (StaticEnvironmentMonad annot m, annot ~ Core.UA) => TypecheckerMonad a
     getInterface mref >>=
       \case Nothing -> throwError $ ModuleNotExists mref
             Just iface -> return $ Map.lookup n (exportedConstraints iface)
-
-
-instance (annot ~ Core.ExprAnnot tannot, StaticEnvironmentMonad tannot m) => LinkerMonad annot (MaybeT m) where
-  {-# INLINE getExprInModule #-}
-  getExprInModule mref n =
-    getModuleInterfaces mref >>=
-      \case Nothing -> return Nothing
-            Just (_, viface) -> return (Map.lookup n (viDefs viface))
