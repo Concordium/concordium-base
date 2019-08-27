@@ -507,8 +507,8 @@ checkLiftedTyEq l1 l2 = go 0
         go _ (TBase tb) (TBase tb') = tb == tb'
         go n (TForall t) (TForall t') = go (n+1) t t'
         go n (TVar v) (TVar v')
-            | v < n = v == v'
-            | otherwise = v' >= n && v + l1 == v' + l2
+            | v < n = v == v' -- bound variables
+            | otherwise = v' >= n && v + l1 == v' + l2 -- free variables are lifted
         go _ _ _ = False
 
 -- |Lift all free variables by 1 (to be used when going under type lambda in typechecking terms).
