@@ -75,7 +75,8 @@ type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
 type VoterVRFPublicKey = VRF.PublicKey
 type VoterSignKey = Sig.SignKey
-type VoterPower = Int
+newtype VoterPower = VoterPower Int
+    deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Show, Integral, S.Serialize)
 
 -- * Blockchain specific types.
 -- Eventually these will be replaced by types given by the global store.
