@@ -119,6 +119,11 @@ data TypingError annot =
                  -- |A more specific case of 'UnexpectedPatternType'. The constructor used in the
                  -- pattern is not a type constructor of the discriminee type.
                  | UnexpectedTypeConstructorInPattern (Core.CTorName Core.ModuleRef)
+                 -- |The number of type annotations given by a constructor pattern
+                 -- does not match the number of arguments of the corresponding constructor.
+                 -- The first argument is the number of given type annotations, the second
+                 -- the number of arguments the constructor has.
+                 | IncorrectNumberOfConstructorArgumentsInPattern Int Int
                  -- |A more specific case of 'UnexpectedPatternType'. A constructor pattern occurs
                  -- at a place where the discriminee has a base type.
                  | TypeConstructorWhereLiteralOrVariableExpected (Core.CTorName Core.ModuleRef)
