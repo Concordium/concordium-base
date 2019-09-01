@@ -259,8 +259,9 @@ data TypingError annot =
                  -- the second is the expected type.
                  | UnexpectedType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
                  -- |Like 'UnexpectedType' but where the actual type is not calculated.
-                 -- The (sub)expression might even not be well-typed. TODO verify
-                 | UnexpectedType' (Core.Type annot ModuleRef)
+                 -- The first argument is the type of wrong shape which might not even
+                 -- be a well-formed type.
+                 | UnexpectedShapeOfType (Core.Type annot ModuleRef)
 
 deriving instance Core.AnnotContext Eq annot => Eq (TypingError annot)
 deriving instance Core.AnnotContext Show annot => Show (TypingError annot)
