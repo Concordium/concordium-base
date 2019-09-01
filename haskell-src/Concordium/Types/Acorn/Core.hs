@@ -396,9 +396,9 @@ applyTy ts t = go t 0
         go (TApp t1 t2) n = TApp t1 (map (flip go n) t2)
         go (TArr t1 t2) n = TArr (go t1 n) (go t2 n)
         go (TForall t1) n = TForall (go t1 (n+1))
-        -- FIXME: It is not clear that fromIntegral is always correct here. Documentation states it preserves representation, not sign.
-        go ta@(TVar v) n | fromIntegral v >= n && fromIntegral v - n < len = ts !! (fromIntegral v - n)
-                         | otherwise = liftFreeBy (fromIntegral n) ta
+        go ta@(TVar v) n | fromIntegral v >= n && fromIntegral v - n < len =
+                           liftFreeBy (fromIntegral n) (ts !! (fromIntegral v - n))
+                         | otherwise = ta -- in well-formed types this case only happen for bound variables ( v < n )
         go (TAnnot a ty) n = TAnnot a (go ty n)
 
 -- TODO: FIXME: We should not use this during typechecking since it can cause
@@ -487,7 +487,6 @@ checkTyEqWithSubst toLift subst ty goalTy =
                 go remove lift binders t (TAnnot _ t') = go remove lift binders t t'
                 go _ _ _ _ _ = False
 
-
 allPairs :: (a -> b -> Bool) -> [a] -> [b] -> Bool
 allPairs p = go
   where go (x:xs) (y:ys) = 
@@ -509,6 +508,25 @@ checkLiftedTyEq l1 l2 = go 0
         go n (TVar v) (TVar v')
             | v < n = v == v' -- bound variables
             | otherwise = v' >= n && v + l1 == v' + l2 -- free variables are lifted
+        go _ _ _ = False
+
+checkAppliedLiftedTyEq :: Eq origin => BoundTyVar -> Vec.Vector (Type annot origin) -> Type annot origin -> Type annot origin -> Bool
+checkAppliedLiftedTyEq lift inst = go 0
+  where ninst = fromIntegral (length inst)
+
+        go _ (TBase tb) (TBase tb') = tb == tb'
+        go n (TArr t1 t2) (TArr t1' t2') = go n t1 t1' && go n t2 t2'
+        go n (TAnnot _ t) t' = go n t t'
+        go n t (TAnnot _ t') = go n t t'
+        go n (TForall t1) (TForall t2) = go (n+1) t1 t2
+        go n (TApp t tys) (TApp t' tys') = t == t' && allPairs (go n) tys tys'
+        go n (TVar v) t
+            | v < n =
+              case t of
+                TVar v' -> v == v'
+                _ -> False
+            | v - n < ninst = checkLiftedTyEq (lift + fromIntegral n) 0 (Vec.unsafeIndex inst (fromIntegral (v - n))) t
+            | otherwise = False -- this case should not happen. The only free type variables should be those substituted for.
         go _ _ _ = False
 
 -- |Lift all free variables by 1 (to be used when going under type lambda in typechecking terms).
