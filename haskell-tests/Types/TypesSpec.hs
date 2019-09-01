@@ -8,9 +8,12 @@ import Types.CoreAllGen
 import Concordium.Types
 import Concordium.Types.Acorn.Core
 
+import qualified Data.Vector as Vec
+
 import Test.Hspec
 import Test.QuickCheck
 
+import Control.Monad
 import Data.Word
 
 repeatSubst :: [Type annot origin]
@@ -34,7 +37,6 @@ liftedSpec = forAll genType $
              \n -> checkLiftedTyEq (fromIntegral n) 0 ty (liftFreeBy (fromIntegral n) ty)
                    && checkLiftedTyEq 0 (fromIntegral n) (liftFreeBy (fromIntegral n) ty) ty
 
-
 nestedTest :: Bool
 nestedTest =                                         
     let t :: Type UA ModuleRef
@@ -43,9 +45,18 @@ nestedTest =
         goalTy = TVar (BTV 0)
     in checkTyEqWithSubst 0 subst t goalTy
 
+applySpec :: Property
+applySpec = forAll (arbitrary :: Gen Word8) $
+            \n -> forAll (replicateM (fromIntegral n) genType) $
+            \inst -> forAll (genTypeBounded (fromIntegral n)) $
+            \t -> forAll (arbitrary :: Gen Word8) $
+            \lift -> let closed = applyTy (map (liftFreeBy (fromIntegral lift)) inst) t
+                     in checkAppliedLiftedTyEq (fromIntegral lift) (Vec.fromList inst) t closed
+
 tests :: Spec
 tests = describe "Substitution + equality testing." $ do
   specify "Substitution with top-level foralls" (withMaxSuccess 10000 substSpec)
   specify "Lifted type equality check" (withMaxSuccess 10000 liftedSpec)
   specify "Nested foralls unit test" nestedTest
+  specify "Type instantiation with lifting" applySpec
 

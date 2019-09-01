@@ -34,13 +34,15 @@ genModuleName = ModuleName <$> arbitrary
 genDataTyName :: Gen (DataTyName ModuleName)
 genDataTyName = oneof [LocalDataTy <$> genTyName, ImportedDataTy <$> genTyName <*> genModuleName]
 
-genType :: Gen (Type UA ModuleName)
-genType = sized $ genType'
-  where genType' n = oneof [genBaseType
-                           ,TVar <$> genBoundTyVar
-                           ,genArr n
-                           ,genApp n
-                           ,genForall n]
+-- Generate a type with bounded free type variables.
+genTypeBounded :: Word -> Gen (Type UA ModuleName)
+genTypeBounded nFree = sized $ genType' nFree
+  where genType' nFree' n = oneof $ [genBaseType
+                                     ,genArr nFree' n
+                                     ,genApp nFree' n
+                                     ,genForall nFree' n] ++
+                                     [TVar . BTV . fromIntegral <$> choose (0, nFree' - 1) | nFree' > 0]
+
         genBaseType = TBase <$> elements [TInt128,
                                           TInt256,
                                           TInt32,
@@ -55,14 +57,17 @@ genType = sized $ genType'
                                           TAAddress]
         genTyAtom = flip TApp [] <$> genDataTyName
         basetys = [genBaseType, genTyAtom]
-        genArr n | n > 0 = liftM2 TArr (genType' (n `div` 2)) (genType' (n `div` 2))
-                 | otherwise = liftM2 TArr (oneof basetys) (oneof basetys)
-        genApp n | n > 0 = do
-                     l <- choose (0, n)
-                     TApp <$> genDataTyName <*> vectorOf l (genType' (n `div` ((l+1) * (l+1))))
-                 | otherwise = genTyAtom
-        genForall n | n > 0 = TForall <$> (genType' (n-1))
-                    | otherwise = TForall <$> oneof basetys
+        genArr nFree' n | n > 0 = liftM2 TArr (genType' nFree' (n `div` 2)) (genType' nFree' (n `div` 2))
+                         | otherwise = liftM2 TArr (oneof basetys) (oneof basetys)
+        genApp nFree' n | n > 0 = do
+                             l <- choose (0, n)
+                             TApp <$> genDataTyName <*> vectorOf l (genType' nFree' (n `div` ((l+1) * (l+1))))
+                         | otherwise = genTyAtom
+        genForall nFree' n | n > 0 = TForall <$> (genType' (nFree' + 1) (n-1))
+                            | otherwise = TForall <$> oneof basetys
+
+genType :: Gen (Type UA ModuleName)
+genType = genTypeBounded =<< arbitrary
 
 -- TODO remove?
 -- minInt128 :: Integer
