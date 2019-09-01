@@ -269,8 +269,9 @@ data Event = ModuleDeployed !Core.ModuleRef
            | BakerRemoved !BakerId
            | BakerAccountUpdated !BakerId !AccountAddress
            | BakerKeyUpdated !BakerId !BakerSignVerifyKey
-           | StakeDelegated !BakerId
-           | StakeUndelegated
+           | StakeDelegated !BakerId -- TODO: This should have the account number as well.
+           | StakeUndelegated -- TODO: This should have the account number as well.
+           -- TODO: Add gas spent event
   deriving (Show)
 
 -- |Used internally by the scheduler since internal messages are sent as values,
