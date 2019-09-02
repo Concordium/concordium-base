@@ -140,8 +140,9 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
     signature: Signature<P>,
 ) -> bool {
     let sum = pks
-        .iter()
-        .fold(P::G_2::zero_point(), |sum, x| sum.plus_point(&x.0));
+        .par_iter()
+        .fold(P::G_2::zero_point, |_sum, x| x.0)
+        .reduce(P::G_2::zero_point, |sum, x| sum.plus_point(&x));
 
     // compute pairings in parallel
     let (pair1, pair2): (P::TargetField, P::TargetField) = join(
