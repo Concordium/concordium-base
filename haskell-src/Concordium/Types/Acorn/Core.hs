@@ -385,8 +385,14 @@ deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Co
 
 -- * Utility functions used during typechecking.
 
--- |Apply a type of the form forall .... to a list of types.
--- Used to instantiate the arity arguments of datatype constructors during typechecking.
+-- NOTE: This should not be used during typechecking since it can be very costly in relation
+-- to term size.
+-- | Apply a type to a list of types: If n is the length of the list, replace the first
+-- n free type variables in the type by the corresponding types in the list (the one with
+-- the lowest De-Bruijn index with the first type in the list etc.). This includes lifting
+-- in the to be applied types to avoid capturing. Thus "applyTy [2→2] (∀0→1) = 0→(3→3)".
+-- Note that further free variables (if the type contains more than n) are not updated.
+-- This function can be used to instantiate the arity arguments of datatype constructors.
 applyTy :: [Type annot origin] -> Type annot origin -> Type annot origin
 applyTy ts t = go t 0
   where len :: Int
@@ -401,10 +407,12 @@ applyTy ts t = go t 0
                          | otherwise = ta -- in well-formed types this case only happen for bound variables ( v < n )
         go (TAnnot a ty) n = TAnnot a (go ty n)
 
--- TODO: FIXME: We should not use this during typechecking since it can cause
+-- NOTE: This should not be used during typechecking since it can cause
 -- exponential blow up in term size when we blindly substitute.
--- |'substTy' t₁ t₂ replaces the variable "0" in t₁ with t₂
--- Substitution is capture avoiding.
+-- |'substTy' τ₁ τ₂ replaces the first free type variable (the one with the
+-- lowest De-Bruijn index) in τ₁ with τ₂. This includes lifting in τ₂ to avoid capturing,
+-- and renaming of further free type variables in τ₁.
+-- Thus "substTy (0→1) 1 = 1→0" and "substTy (∀(0→1)) (∀(0→1)) = ∀(0→(∀(0→2)))".
 substTy :: Type annot origin -> Type annot origin -> Type annot origin
 substTy t t' = go (fromIntegral (0::Word32)) t
   where go _ ty@(TBase _) = ty
@@ -428,10 +436,25 @@ substTy t t' = go (fromIntegral (0::Word32)) t
                                | otherwise = ta
         liftTy l n (TAnnot a ty) = TAnnot a (liftTy l n ty)
 
--- |Given a list of types and a type of the shape \forall \alpha_1 ... \forall \alpha_n
--- compute whether applying the type to the list of types results in the goal type.
+-- | Given a list of types and a type of the shape ∀α₁⋯∀αₙ.τ, check
+-- whether applying τ to the list of types results in the goal type.
+-- This includes lifting in the to be applied types to avoid capturing as well as
+-- correcting the names of free variables.
+-- Equivalent to first using 'substTy' to substitute the types and then using 'checkLiftedTyEq'.
 {-# SPECIALIZE checkTyEqWithSubst :: BoundTyVar -> [Type UA ModuleRef] -> Type UA ModuleRef -> Type UA ModuleRef -> Bool #-}
-checkTyEqWithSubst :: forall origin annot . Eq origin => BoundTyVar -> [Type annot origin] -> Type annot origin -> Type annot origin -> Bool 
+checkTyEqWithSubst
+  :: forall origin annot . Eq origin
+  => BoundTyVar -- ^ The amount of levels the source type should be lifted by.
+  -- | The types to be applied to the source type. These can contain free type variables.
+  -> [Type annot origin]
+  -- | The source type of the shape ∀α₁⋯∀αₙ.τ the given list of types is to be applied to. It can contain
+  -- free type variables. If n is the length of the list, the first n free type variables in τ are replaced
+  -- by the corresponding types in the list (the one with the lowest De-Bruijn index with the first type
+  -- in the list etc.).
+  -> Type annot origin
+  -- | The goal type the applied type is checked to be equal to. It can contain free type variables.
+  -> Type annot origin
+  -> Bool
 checkTyEqWithSubst toLift subst ty goalTy =
   case getBody 0 0 subst ty of
     Nothing -> False
@@ -510,7 +533,23 @@ checkLiftedTyEq l1 l2 = go 0
             | otherwise = v' >= n && v + l1 == v' + l2 -- free variables are lifted
         go _ _ _ = False
 
-checkAppliedLiftedTyEq :: Eq origin => BoundTyVar -> Vec.Vector (Type annot origin) -> Type annot origin -> Type annot origin -> Bool
+-- | Check whether a type applied to some types equals a given type.
+-- This includes lifting in the to be applied types to avoid capturing but further free variables
+-- are not renamed.
+-- Equivalent to first using 'applyTy' to substitute the types and then using 'checkLiftedTyEq'.
+checkAppliedLiftedTyEq
+  :: Eq origin
+  => BoundTyVar -- ^ The amount of levels the source type should be lifted by.
+  -- | The types to be applied to the source type. These can contain free type variables.
+  -> Vec.Vector (Type annot origin)
+  -- | The source type the given vector of types is to be applied to. It must have at most as many
+  -- free type variables as the length n of the given vector of types. Up to n free type variables
+  -- in τ are replaced by the corresponding types in the list (the one with the lowest De-Bruijn
+  -- index with the first type in the list etc.).
+  -> Type annot origin
+  -- | The goal type the applied type is checked to be equal to. It can contain free type variables.
+  -> Type annot origin
+  -> Bool
 checkAppliedLiftedTyEq lift inst = go 0
   where ninst = fromIntegral (length inst)
 
@@ -525,8 +564,11 @@ checkAppliedLiftedTyEq lift inst = go 0
               case t of
                 TVar v' -> v == v'
                 _ -> False
-            | v - n < ninst = checkLiftedTyEq (lift + fromIntegral n) 0 (Vec.unsafeIndex inst (fromIntegral (v - n))) t
-            | otherwise = False -- this case should not happen. The only free type variables should be those substituted for.
+            | v - n < ninst =
+                checkLiftedTyEq (lift + fromIntegral n) 0 (Vec.unsafeIndex inst (fromIntegral (v - n))) t
+            -- The following case (a free variable with no type to substitute for) does not occur when the
+            -- first given type has at most as many free variables as the length of the given vector of types.
+            | otherwise = False
         go _ _ _ = False
 
 -- |Lift all free variables by 1 (to be used when going under type lambda in typechecking terms).
