@@ -1,3 +1,4 @@
+use crate::errors::AggregateSigError;
 use curve_arithmetic::{Curve, Pairing};
 use ff::Field;
 use rand::Rng;
@@ -5,31 +6,18 @@ use rayon::{iter::*, join};
 use sha2::{Digest, Sha512};
 use std::{cmp::Ordering, io::Cursor};
 
-use crate::errors::AggregateSigError;
-
-// A wrapper for sha512 hashes. Only use is to have the Ord trait on [u8; 64]
-// for sorting an array of hashes
-struct Hash([u8; 64]);
-
-impl PartialEq for Hash {
-    fn eq(&self, other: &Self) -> bool { self.0[0..63] == other.0[0..63] }
-}
-
-impl Eq for Hash {}
-
-impl PartialOrd for Hash {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(&other)) }
-}
-
-impl Ord for Hash {
-    fn cmp(&self, other: &Self) -> Ordering { self.0[0..63].cmp(&other.0[0..63]) }
-}
-
 #[derive(Debug)]
 pub struct SecretKey<P: Pairing>(P::ScalarField);
 
 impl<P: Pairing> SecretKey<P> {
     pub fn generate<R: Rng>(rng: &mut R) -> SecretKey<P> { SecretKey(P::generate_scalar(rng)) }
+
+    pub fn from_bytes(b: &mut Cursor<&[u8]>) -> Result<SecretKey<P>, AggregateSigError> {
+        let s = P::bytes_to_scalar(b)?;
+        Ok(SecretKey(s))
+    }
+
+    pub fn to_bytes(&self) -> Box<[u8]> { P::scalar_to_bytes(&self.0) }
 }
 
 impl<P: Pairing> Clone for SecretKey<P> {
@@ -90,7 +78,11 @@ fn hash_message(m: &[u8]) -> [u8; 64] {
 }
 
 // Verifies a single message and signature pair
-pub fn verify<P: Pairing>(m: &[u8], public_key: PublicKey<P>, signature: Signature<P>) -> bool {
+pub fn verify_signature<P: Pairing>(
+    m: &[u8],
+    public_key: PublicKey<P>,
+    signature: Signature<P>,
+) -> bool {
     let g1_hash = P::G_1::hash_to_group(m);
 
     // compute pairings in parallel
@@ -152,6 +144,24 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
     pair1 == pair2
 }
 
+// A wrapper for sha512 hashes. Only use is to have the Ord trait on [u8; 64]
+// for sorting an array of hashes. See has_duplicates below
+struct Hash([u8; 64]);
+
+impl PartialEq for Hash {
+    fn eq(&self, other: &Self) -> bool { self.0[0..63] == other.0[0..63] }
+}
+
+impl Eq for Hash {}
+
+impl PartialOrd for Hash {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(&other)) }
+}
+
+impl Ord for Hash {
+    fn cmp(&self, other: &Self) -> Ordering { self.0[0..63].cmp(&other.0[0..63]) }
+}
+
 // Checks for duplicates in a list of messages
 // This is not very efficient - the sorting algorithm can exit as soon as it
 // encounters an equality and report that a duplicate indeed exists.
@@ -202,6 +212,26 @@ mod test {
     }
 
     #[test]
+    fn test_to_from_bytes_identity() {
+        let seed: &[_] = &[1];
+        let mut rng: StdRng = SeedableRng::from_seed(seed);
+
+        for _ in 0..1000 {
+            let sk = SecretKey::<Bls12>::generate(&mut rng);
+            let pk = PublicKey::<Bls12>::from_secret(sk);
+            let sk_bytes = sk.to_bytes();
+            let pk_bytes = pk.to_bytes();
+            let sk_from_bytes =
+                SecretKey::<Bls12>::from_bytes(&mut Cursor::new(&sk_bytes)).unwrap();
+            let pk_from_bytes =
+                PublicKey::<Bls12>::from_bytes(&mut Cursor::new(&pk_bytes)).unwrap();
+
+            assert_eq!(sk.0, sk_from_bytes.0);
+            assert_eq!(pk.0, pk_from_bytes.0);
+        }
+    }
+
+    #[test]
     fn test_sign_and_verify() {
         let seed: &[_] = &[1];
         let mut rng: StdRng = SeedableRng::from_seed(seed);
@@ -213,13 +243,13 @@ mod test {
             // should verify correctly
             let m = rng.gen::<[u8; 32]>();
             let signature = sign_message(&m, sk);
-            assert!(verify(&m, pk, signature));
+            assert!(verify_signature(&m, pk, signature));
 
             // should not verify!
             let signature = sign_message(&m, sk);
             let sk2 = SecretKey::<Bls12>::generate(&mut rng);
             let pk2 = PublicKey::from_secret(sk2);
-            assert!(!verify(&m, pk2, signature))
+            assert!(!verify_signature(&m, pk2, signature))
         }
     }
 

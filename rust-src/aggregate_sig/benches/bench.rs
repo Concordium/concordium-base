@@ -110,7 +110,20 @@ fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
         agg_sig = aggregate_sig(new_sig, agg_sig);
     }
 
-    c.bench_function("verify_aggregate_sig_trusted_keys", move |b| {
+    c.bench_function("verify_aggregate_sig_trusted_keys_200", move |b| {
+        b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
+    });
+
+    let n = 3000;
+    let (sks, pks) = get_sks_pks!(n, csprng);
+    let m = rand_m_of_length!(1000, csprng);
+
+    let mut agg_sig = sign_message(&m, sks[0]);
+    for i in 1..n {
+        let new_sig = sign_message(&m, sks[i]);
+        agg_sig = aggregate_sig(new_sig, agg_sig);
+    }
+    c.bench_function("verify_aggregate_sig_trusted_keys_3000", move |b| {
         b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
     });
 }
