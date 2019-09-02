@@ -269,8 +269,8 @@ data Event = ModuleDeployed !Core.ModuleRef
            | BakerRemoved !BakerId
            | BakerAccountUpdated !BakerId !AccountAddress
            | BakerKeyUpdated !BakerId !BakerSignVerifyKey
-           | StakeDelegated !BakerId -- TODO: This should have the account number as well.
-           | StakeUndelegated -- TODO: This should have the account number as well.
+           | StakeDelegated !AccountAddress !BakerId
+           | StakeUndelegated !AccountAddress
            -- TODO: Add gas spent event
   deriving (Show)
 
