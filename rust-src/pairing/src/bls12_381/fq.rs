@@ -1768,7 +1768,7 @@ pub(crate) fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
         x_proj.mul_assign(&d); // X = ND
         y_proj = alpha;
         y_proj.mul_assign(&v); // Y = alpha D^3
-                               // multiply y by sign
+                               // multiply y by sign(t)
         match sign(t) {
             Sign::Plus => (),
             Sign::Minus => y_proj.negate(),
