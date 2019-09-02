@@ -18,11 +18,25 @@ import Data.ByteString as BS
 
 import qualified Data.Aeson as AE
 
+import Control.DeepSeq
+
 newtype PedersenKey = PedersenKey (ForeignPtr PedersenKey)
 newtype PsSigKey = PsSigKey (ForeignPtr PsSigKey)
 newtype ElgamalGen = ElgamalGen (ForeignPtr ElgamalGen)
 newtype ElgamalPublicKey = ElgamalPublicKey (ForeignPtr ElgamalPublicKey)
 newtype ElgamalCipher = ElgamalCipher (ForeignPtr ElgamalCipher)
+
+-- |Instances for benchmarking
+instance NFData PedersenKey where
+    rnf = (`seq` ())
+instance NFData PsSigKey where
+    rnf = (`seq` ())
+instance NFData ElgamalGen where
+    rnf = (`seq` ())
+instance NFData ElgamalPublicKey where
+    rnf = (`seq` ())
+instance NFData ElgamalCipher where
+    rnf = (`seq` ())
 
 foreign import ccall unsafe "&pedersen_key_free" freePedersenKey :: FunPtr (Ptr PedersenKey -> IO ())
 foreign import ccall unsafe "pedersen_key_to_bytes" toBytesPedersenKey :: Ptr PedersenKey -> Ptr CSize -> IO (Ptr Word8)

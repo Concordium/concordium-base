@@ -1,10 +1,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings, LambdaCase #-}
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia, DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Concordium.ID.Types where
 
 import Data.Word
-import Data.ByteString (ByteString, empty)
+import Data.Data(Data, Typeable)
+import Data.ByteString(ByteString)
+import Data.ByteString.Short(ShortByteString)
+import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BS16
 import qualified Data.FixedByteString as FBS
@@ -14,33 +17,32 @@ import GHC.Generics
 import Data.Hashable
 import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
-import Foreign.Storable(peek)
-import Foreign.Ptr(castPtr)
 import Data.Base58String.Bitcoin
-import System.IO.Unsafe
 import Control.Exception
 import Control.Monad
 import qualified Data.Text as Text
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Crypto.FFIDataTypes
+import Control.DeepSeq
 
 accountAddressSize :: Int
 accountAddressSize = 21
 data AccountAddressSize
+   deriving(Data, Typeable)
 instance FBS.FixedLength AccountAddressSize where
     fixedLength _ = accountAddressSize
 
 newtype AccountAddress =  AccountAddress (FBS.FixedByteString AccountAddressSize)
-    deriving(Eq, Ord, Generic)
+    deriving(Eq, Ord, Generic, Data, Typeable)
 
 instance Serialize AccountAddress where
     put (AccountAddress h) = putByteString $ FBS.toByteString h
     get = AccountAddress . FBS.fromByteString <$> getByteString accountAddressSize
 
 instance Hashable AccountAddress where
-    hashWithSalt s (AccountAddress b) = hashWithSalt s (FBS.toByteString b)
-    hash (AccountAddress b) = unsafeDupablePerformIO $ FBS.withPtr b $ \p -> peek (castPtr p)
-
+    hashWithSalt s (AccountAddress b) = hashWithSalt s (FBS.toShortByteString b)
+    -- |FIXME: The first byte of the address is mostly the same so this method is not the best.
+    hash (AccountAddress b) = fromIntegral (FBS.unsafeReadWord64 b)
 
 instance Show AccountAddress where
   show = Text.unpack . addressToBase58
@@ -57,20 +59,20 @@ safeDecodeBase58Address bs = do
     Right dec -> return (Just (AccountAddress . FBS.fromByteString . toBytes $ dec))
 
 -- Name of Identity Provider
-newtype IdentityProviderIdentity  = IP_ID ByteString
+newtype IdentityProviderIdentity  = IP_ID ShortByteString
     deriving (Eq, Hashable)
-    deriving Show via ByteString
+    deriving Show via ShortByteString
     deriving Serialize via Short65K
 
 -- Public key of the Identity provider
 newtype IdentityProviderPublicKey = IP_PK PsSigKey
-    deriving(Eq, Show, Serialize)
+    deriving(Eq, Show, Serialize, NFData)
 
 instance ToJSON IdentityProviderIdentity where
-  toJSON (IP_ID v) = String (Text.decodeUtf8 v)
+  toJSON (IP_ID v) = String (Text.decodeUtf8 (BSS.fromShort v))
 
 instance FromJSON IdentityProviderIdentity where
-  parseJSON v = IP_ID . encodeUtf8 <$> parseJSON v
+  parseJSON v = IP_ID . BSS.toShort . encodeUtf8 <$> parseJSON v
 
 -- Signing key for accounts (eddsa key)
 type AccountSigningKey = SignKey
@@ -82,15 +84,15 @@ type AccountVerificationKey = VerifyKey
 type AccountSignature = Signature
 
 -- decryption key for accounts (Elgamal?)
-newtype AccountDecryptionKey = DecKeyAcc ByteString
+newtype AccountDecryptionKey = DecKeyAcc ShortByteString
     deriving(Eq)
-    deriving Show via ByteStringHex
+    deriving Show via Short65K
     deriving Serialize via Short65K
 
 -- encryption key for accounts (Elgamal?)
-newtype AccountEncryptionKey = EncKeyAcc ByteString
+newtype AccountEncryptionKey = EncKeyAcc ShortByteString
     deriving (Eq)
-    deriving Show via ByteStringHex
+    deriving Show via Short65K
     deriving Serialize via Short65K
 
 data RegIdSize
@@ -111,7 +113,7 @@ instance ToJSON CredentialRegistrationID where
 instance FromJSON CredentialRegistrationID where
   parseJSON = withText "Credential registration ID in base16" deserializeBase16
 
-newtype Proofs = Proofs ByteString
+newtype Proofs = Proofs ShortByteString
     deriving(Eq)
     deriving(Show) via ByteStringHex
     deriving(ToJSON) via ByteStringHex
@@ -121,11 +123,11 @@ newtype Proofs = Proofs ByteString
 -- want.
 instance Serialize Proofs where
   put (Proofs bs) =
-    putWord32be (fromIntegral (BS.length bs)) <>
-    putByteString bs
+    putWord32be (fromIntegral (BSS.length bs)) <>
+    putShortByteString bs
   get = do
     l <- fromIntegral <$> getWord32be
-    Proofs <$> getByteString l
+    Proofs <$> getShortByteString l
 
 data AttributeValue =
   ATWord8 !Word8
@@ -199,22 +201,22 @@ instance FromJSON Policy where
     return Policy{..}
 
 -- |Unique identifier of the anonymity revoker. At most 65k bytes in length.
-newtype ARName = ARName ByteString
+newtype ARName = ARName ShortByteString
     deriving(Eq)
     deriving Serialize via Short65K
-    deriving Show via ByteString
+    deriving Show via ShortByteString
 
 -- |Public key of an anonymity revoker.
 newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
-    deriving(Eq, Serialize)
+    deriving(Eq, Serialize, NFData)
     deriving Show via ElgamalPublicKey
 
 instance ToJSON ARName where
-  toJSON (ARName v) = String (Text.decodeUtf8 v)
+  toJSON (ARName v) = String (Text.decodeUtf8 . BSS.fromShort $ v)
 
 -- |NB: This just reads the string. No decoding.
 instance FromJSON ARName where
-  parseJSON v = ARName . Text.encodeUtf8 <$> parseJSON v
+  parseJSON v = ARName . BSS.toShort . Text.encodeUtf8 <$> parseJSON v
 
 -- |Encryption of data with anonymity revoker's public key.
 newtype AREnc = AREnc ElgamalCipher
@@ -361,7 +363,7 @@ instance FromJSON CredentialDeploymentInformation where
   parseJSON = withObject "CredentialDeploymentInformation" $ \v -> do
     cdiValues <- parseJSON (Object v)
     proofsText <- v .: "proofs"
-    return CredentialDeploymentInformation{cdiProofs = Proofs (fst . BS16.decode . Text.encodeUtf8 $ proofsText),
+    return CredentialDeploymentInformation{cdiProofs = Proofs (BSS.toShort . fst . BS16.decode . Text.encodeUtf8 $ proofsText),
                                            ..}
 
 -- |Partially deserialize the CDI, leaving the proofs as leftover.
@@ -379,5 +381,5 @@ getCDIPartial = do
 deserializeCDIPartial :: ByteString -> Either String (CredentialDeploymentValues, ByteString)
 deserializeCDIPartial bs = loop (runGetPartial getCDIPartial bs)
     where loop (Fail err _) = Left err
-          loop (Partial k) = loop (k empty)
+          loop (Partial k) = loop (k BS.empty)
           loop (Done r rest) = Right (r, rest)
