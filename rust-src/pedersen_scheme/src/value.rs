@@ -15,7 +15,6 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::errors::{InternalError::FieldDecodingError, *};
 use curve_arithmetic::{curve_arithmetic::*, serialization::*};
 
 use failure::Error;
@@ -24,7 +23,7 @@ use std::io::Cursor;
 
 /// A  value
 #[derive(Debug, PartialEq, Eq)]
-pub struct Value<C: Curve>(pub Vec<C::Scalar>);
+pub struct Value<C: Curve>(pub C::Scalar);
 
 // Overwrite value  material with null bytes when it goes out of scope.
 // impl Drop for Value {
@@ -37,47 +36,28 @@ impl<C: Curve> Value<C> {
     // turn value vector into a byte aray
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
-        let vs = &self.0;
-        let mut bytes: Vec<u8> = Vec::with_capacity(vs.len() * C::SCALAR_LENGTH);
-        write_curve_scalars::<C>(vs, &mut bytes);
+        let v = &self.0;
+        let mut bytes: Vec<u8> = Vec::with_capacity(C::SCALAR_LENGTH);
+        write_curve_scalar::<C>(v, &mut bytes);
         bytes.into_boxed_slice()
     }
 
-    #[inline]
-    pub fn value_to_bytes(scalar: &C::Scalar) -> Box<[u8]> { C::scalar_to_bytes(scalar) }
-
-    /// Construct a value vec from a slice of bytes.
+    /// Construct a value  from a slice of bytes.
     ///
     /// A `Result` whose okay value is a Value vec  or whose error value
     /// is an `CommitmentError` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<Value<C>, Error> {
-        let vs = read_curve_scalars::<C>(cur)?;
+        let vs = read_curve_scalar::<C>(cur)?;
         Ok(Value(vs))
     }
 
-    /// Construct a single `Value` from a slice of bytes.
-    ///
-    /// A `Result` whose okay value is an Value  or whose error value
-    /// is an `CommitmentError` wrapping the internal error that occurred.
-    #[inline]
-    pub fn value_from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<C::Scalar, CommitmentError> {
-        match C::bytes_to_scalar(bytes) {
-            Ok(scalar) => Ok(scalar),
-            Err(_) => Err(CommitmentError(FieldDecodingError)),
-        }
-    }
-
     /// Generate a sing `Value` from a `csprng`.
-    pub fn generate<T>(n: usize, csprng: &mut T) -> Value<C>
+    pub fn generate<T>(csprng: &mut T) -> Value<C>
     where
         T: Rng, {
-        let mut vs: Vec<C::Scalar> = Vec::with_capacity(n);
-        for _i in 0..n {
-            vs.push(C::generate_scalar(csprng));
-        }
 
-        Value(vs)
+        Value(C::generate_scalar(csprng))
     }
 }
 
@@ -90,8 +70,8 @@ mod tests {
             #[test]
             pub fn $function_name() {
                 let mut csprng = thread_rng();
-                for i in 1..20 {
-                    let val = Value::<$curve_type>::generate(i, &mut csprng);
+                for _i in 1..20 {
+                    let val = Value::<$curve_type>::generate(&mut csprng);
                     let res_val2 =
                         Value::<$curve_type>::from_bytes(&mut Cursor::new(&val.to_bytes()));
                     assert!(res_val2.is_ok());

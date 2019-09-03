@@ -21,7 +21,7 @@ use curve_arithmetic::curve_arithmetic::*;
 use std::io::Cursor;
 
 /// A Commitment is a group element .
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Commitment<C: Curve>(pub C);
 
 impl<C: Curve> Commitment<C> {

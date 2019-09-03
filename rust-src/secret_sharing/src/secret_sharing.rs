@@ -3,8 +3,8 @@ use pairing::Field;
 use rand::*;
 
 pub struct SharingData<C: Curve> {
-    coefficients: Vec<(u64, C::Scalar)>,
-    shares:       Vec<(u64, C::Scalar)>,
+    pub coefficients: Vec<(u64, C::Scalar)>,
+    pub shares:       Vec<(u64, C::Scalar)>,
 }
 
 pub fn share<C: Curve, R: Rng>(
@@ -14,10 +14,6 @@ pub fn share<C: Curve, R: Rng>(
     csprng: &mut R,
 ) -> SharingData<C> {
     let deg = revealing_threshold - 1; // the degree of polynomial
-                                       // if (number_of_shares as u64).overflowing_pow(deg as u32).1 {println!("{},{}",
-                                       // number_of_shares, revealing_threshold);}
-                                       // println!("xxx---{}", (number_of_shares as u64).overflowing_pow(deg).1);
-                                       // assert!(!((number_of_shares as u64).overflowing_pow(deg as u32).1));
     let coefficients: Vec<(u64, C::Scalar)> = (1..deg + 1)
         .into_iter()
         .map(|x| (x, C::generate_scalar(csprng)))

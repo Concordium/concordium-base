@@ -3,12 +3,14 @@ use crate::types::*;
 use sha2::{Digest, Sha512};
 
 use curve_arithmetic::{Curve, Pairing};
+use secret_sharing::secret_sharing::*;
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use elgamal::{cipher::Cipher, message::Message as ElgamalMessage};
 use pairing::Field;
 use pedersen_scheme::{
     commitment::Commitment,
+    randomness::Randomness,
     key::{CommitmentKey, CommitmentKey as PedersenKey},
     value as pedersen,
     value::Value,
@@ -39,6 +41,7 @@ where
     let prf::SecretKey(prf_key_scalar) = aci.prf_key;
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
     // revocation.
+    let prf_key_data = compute_prf_key_data(&prf, &context.choice_ar_parameters, &context.ip_info.ar_info.1);
     let (prf_key_enc, prf_key_enc_rand) = context
         .ip_info
         .ar_info
@@ -117,6 +120,74 @@ where
     let mut sig_retrieval_rand = cmm_sc_rand;
     sig_retrieval_rand.add_assign(&rand_cmm_prf);
     (prio, SigRetrievalRandomness(sig_retrieval_rand))
+}
+
+pub struct SingleArData<C:Curve>{
+    ar_name: String,
+    share: C::Scalar,
+    share_number: u64,
+    encrypted_share: Cipher<C>,
+    encryption_randomness: C::Scalar,
+    cmm_to_share: Randomness<C>,
+    randomness_cmm_to_share<C>
+}
+#[inline]
+fn compute_prf_key_data<C:Curve> (prf_key: &prf::Key, ar_parameters: (Vec<ArInfo<C>>, u64), commitment_key: &PedersenKey<C>)-> Vec<SingleArData<C>>{
+    let n = ar_parameters.0.len() as u64;  
+    let t = ar_parameters.1;
+    let mut csprng = thread_rng();
+    let prf_key_scalar = prf_key.0;
+    let (cmm_prf, cmm_prf_rand) = commitment_key.commit(prf_key_scalar, &mut csprng);
+    let sharing_data = share(&prf_key_scalar, n, t, &mut csprng);
+    let cmm_sharing_coefficients:Vec<(u64, Commitment<C>>) = Vec::with_capacity(t);
+    cmm_sharing_coefficients[0] = (0, cmm_prf);
+    let cmm_coeff_randomness: Vec<(u64, Randomness<C>>) = Vec::with_capacity(t);
+    cmm_coeff_randomness = (0, cmm_prf_rand);
+    for i in 1..t{
+        let (cmm, rnd) = commitment_key.commit(sharing_data.coefficients[i].1, &mut csprng);
+        cmm_sharing_coefficients[i] = (i as u64, cmm);
+        cmm_coeff_randomness[i] = (i as u64, rnd);
+    }
+    let ar_prf_data :Vec<SingleArData<C>> = Vec::with_capacity(n);
+    for i in 1..n+1 {
+        let ar = ar_parameters.0[i-1];
+        let pk = ar.ar_public_key;
+        let share = sharing_data.shares[i-1].1;
+        assert_eq!(i as u64, sharing_data.shares[i-1].0);
+        let (cipher, rnd2) = pk.encrypt_exponent_rand(&mut csprng, &share);
+        let (cmm, rnd) = commitment_to_share(i as u64, &cmm_sharing_coeff, &cmm_coeff_randomness, &mut csprng);
+        let ar_data = 
+            SingleArData{
+            ar_name: ar.ar_name,
+            share: share,
+            share_number: i as u64,
+            encrypted_share: cipher,
+            encryption_randomness: rnd2,
+            cmm_to_share: Commitment(cmm),
+            randomness_cmm_to_share: Randomness(rnd),
+        }
+        ar_prf_data.push(ar_data)
+    }
+
+}
+
+#[inline(always)]
+fn commitment_to_share<C:Curve, R:Rng>(share_number: u64, coeff_commitments: &Vec<Commitment<C>>, coeff_randomness: &Vec<Randomness<C>>, &mut csprng: R )
+ -> (Commitment<C>,Randomness<C>){
+    let deg = coeff_commitments.len()-1;
+    let mut cmm_share_point : C = coeff_commitments[0].0;
+    let mut cmm_share_randomness_scalar : C::Scalar = coeff_randomness[0].0;
+    for i in 1..(deg+1) {
+        j_pow_i = scalar_from_u64(share_number).pow([i as u64]);
+        let a = (coeff_commitment[i].0).mul_by_scalar(&j_pow_i);
+        cmm_share_point = cmm_share_point.plus_point(&a);
+        let mut r = coeff_randomness[i].0;
+        r.mul_assign(&j_pow_i);
+        cmm_share_randomness_scalar.mul_assign(&r);
+    }
+    let cmm = Commitment(cmm_share_point); 
+    let rnd = Randomness(cmm_share_randomness_scalar);
+    (cmm,rnd) 
 }
 
 #[allow(clippy::too_many_arguments)]
