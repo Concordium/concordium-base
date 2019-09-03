@@ -1106,7 +1106,13 @@ getModule = do
 -- * Deriving module reference from serialization
 -- |Hash of a serialization of a module, encoded into base16
 moduleHash :: Module annot -> ModuleRef
-moduleHash =  ModuleRef . SHA256.hash . P.runPut . putModule 
+moduleHash = ModuleRef . SHA256.hash . P.runPut . putModule
+
+moduleHashWithSize :: Module annot -> (ModuleRef, Word64)
+moduleHashWithSize mod =
+  let bs = P.runPut (putModule mod)
+  in (ModuleRef (SHA256.hash bs), fromIntegral (BS.length bs))
+
 
 --
 bit128ToPair :: Integer -> (Word64, Word64)

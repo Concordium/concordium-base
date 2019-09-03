@@ -25,6 +25,7 @@ import Data.HashMap.Strict(HashMap)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Sequence as Seq
 import Data.Int
+import Data.Word
 import Data.Maybe(fromJust)
 import Control.Monad.Trans.Maybe
 import Control.Monad.Except
@@ -55,6 +56,7 @@ deriving instance Core.AnnotContext Show annot => Show (ContractInterface annot)
 -- Lists public functions which can be called, and types of methods.
 data Interface annot = Interface
     { uniqueName :: !Core.ModuleRef
+    , iSize :: Word64
     , importedModules :: !(HashMap Core.ModuleName Core.ModuleRef)
     , exportedTypes :: !(HashMap Core.TyName (Int, HashMap Core.Name [Type annot Core.ModuleRef]))
     , exportedTerms :: !(HashMap Core.Name (Type annot Core.ModuleRef))
@@ -67,7 +69,7 @@ deriving instance Core.AnnotContext Show annot => Show (Interface annot)
 deriving instance Core.AnnotContext Eq annot => Eq (Interface annot)
 
 emptyInterface :: Core.ModuleRef -> Interface annot
-emptyInterface mref = Interface mref Map.empty Map.empty Map.empty Map.empty Map.empty
+emptyInterface mref = Interface mref 0 Map.empty Map.empty Map.empty Map.empty Map.empty
 
 type ModuleInterfaces annot = HashMap Core.ModuleRef (Interface annot)
 
@@ -546,6 +548,7 @@ getExportedTypes = do
 instance S.Serialize (Interface annot) where
   put (Interface{..}) =
     S.put uniqueName <>
+    P.putWord64be iSize <>
     putHashMap importedModules <>
     putExportedTypes exportedTypes <>
     putHashMap exportedTerms <>
@@ -554,6 +557,7 @@ instance S.Serialize (Interface annot) where
 
   get = do
     uniqueName <- S.get
+    iSize <- G.getWord64be
     importedModules <- getHashMap
     exportedTypes <- getExportedTypes
     exportedTerms <- getHashMap
