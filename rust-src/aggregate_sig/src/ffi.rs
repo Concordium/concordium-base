@@ -87,19 +87,56 @@ pub extern "C" fn bls_aggregate(
     Box::into_raw(Box::new(sig1.aggregate(*sig2)))
 }
 
-// #[no_mangle]
-// #[allow(clippy::not_unsafe_ptr_arg_deref)]
-// pub extern "C" fn bls_verify_aggregate(
-//     m_ptr: *const u8,
-//     m_len: size_t,
-//     pks_ptr: *const PublicKey<Bls12>,
-//     pks_len: size_t,
-//     sig_ptr: *const Signature<Bls12>,
-// ) -> bool {
-//     let m_len = m_len as usize;
-//     let m_bytes = slice_from_c_bytes!(m_ptr, m_len);
-//     let pks = from_ptr!(pks_ptr);
-//
-//     let sig = from_ptr!(sig_ptr);
-//     verify_aggregate_sig_trusted_keys(&m_bytes, pks, *sig)
-// }
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn bls_verify_aggregate(
+    m_ptr: *const u8,
+    m_len: size_t,
+    pks_ptr: *const *const PublicKey<Bls12>,
+    pks_len: size_t,
+    sig_ptr: *const Signature<Bls12>,
+) -> bool {
+    let m_len = m_len as usize;
+    let m_bytes = slice_from_c_bytes!(m_ptr, m_len);
+
+    debug_assert!(!pks_ptr.is_null(), "null pointer");
+    let pks_: &[*const PublicKey<Bls12>] = unsafe { slice::from_raw_parts(pks_ptr, pks_len) };
+    // Collecting the public keys in a vector is currently necessary as
+    // verify_aggregate_sig_trusted_keys takes an array of public keys.
+    // It might be desirable to make it take references instead.
+    let pks: Vec<PublicKey<Bls12>> = pks_.iter().map(|pk| *from_ptr!(*pk)).collect();
+    let sig = from_ptr!(sig_ptr);
+    verify_aggregate_sig_trusted_keys(&m_bytes, &pks, *sig)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rand::{Rng, SeedableRng, StdRng};
+
+    #[test]
+    fn test_verify_aggregate_ffi() {
+        let seed: &[_] = &[1];
+        let mut rng: StdRng = SeedableRng::from_seed(seed);
+
+        for _ in 0..100 {
+            let m = rng.gen::<[u8; 32]>();
+            let sk1 = SecretKey::<Bls12>::generate(&mut rng);
+            let sk2 = SecretKey::<Bls12>::generate(&mut rng);
+            let pk1 = PublicKey::<Bls12>::from_secret(sk1);
+            let pk2 = PublicKey::<Bls12>::from_secret(sk2);
+            let mut sig = sk1.sign(&m);
+            sig = sig.aggregate(sk2.sign(&m));
+
+            let m_ptr: *const u8 = &m as *const _;
+            let m_len: size_t = 32;
+            let pks_ptr: *const *const PublicKey<Bls12> =
+                &[&pk1 as *const _, &pk2 as *const _] as *const *const _;
+            let pks_len: size_t = 2;
+            let sig_ptr: *const Signature<Bls12> = &sig;
+            assert!(bls_verify_aggregate(
+                m_ptr, m_len, pks_ptr, pks_len, sig_ptr
+            ));
+        }
+    }
+}

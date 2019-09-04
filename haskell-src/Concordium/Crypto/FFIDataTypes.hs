@@ -83,7 +83,7 @@ foreign import ccall unsafe "bls_sig_from_bytes" fromBytesBlsSignature :: Ptr Wo
 foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> Ptr CSize -> Ptr BlsSecretKey -> IO (Ptr BlsSignature)
 foreign import ccall unsafe "bls_verify" verifyBls :: Ptr Word8 -> Ptr CSize -> Ptr BlsPublicKey -> Ptr BlsSignature -> Bool
 foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr BlsSignature -> Ptr BlsSignature -> IO (Ptr BlsSignature)
--- foreign import ccall unsafe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> [Ptr BlsPublicKey] -> Ptr BlsSignature -> Bool
+foreign import ccall unsafe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr BlsPublicKey) -> CSize -> Ptr BlsSignature -> Bool
 
 withPedersenKey :: PedersenKey -> (Ptr PedersenKey -> IO b) -> IO b
 withPedersenKey (PedersenKey fp) = withForeignPtr fp
