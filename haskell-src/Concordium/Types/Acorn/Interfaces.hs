@@ -448,9 +448,9 @@ deriving instance (v ~ linked (Expr linked annot), Eq v, Eq annot) => Eq (Expr l
 data ImplementsValue linked annot = ImplementsValue
     {
     -- |The list of sender methods for a particular constraint this contract implements.
-    ivSenders :: !(Vector (SenderTy linked annot)),
+    ivSenders :: !(Vector (SenderTy linked annot, Word64)),
     -- |The list of getter methods for a particular constraint this contract implements.
-    ivGetters :: !(Vector (GetterTy linked annot))
+    ivGetters :: !(Vector (GetterTy linked annot, Word64))
     } deriving(Functor)
 
 deriving instance (v ~ linked (Expr linked annot), Show v, Show annot) => Show (ImplementsValue linked annot)
@@ -458,7 +458,7 @@ deriving instance (v ~ linked (Expr linked annot), Eq v, Eq annot) => Eq (Implem
 
 type LinkedImplementsValue = ImplementsValue Linked
 
-newtype Unlinked a = Unlinked ()
+data Unlinked a = Unlinked
     deriving(Eq, Show, Functor)
 
 type UnlinkedExpr = Expr Unlinked
@@ -468,10 +468,17 @@ newtype Linked a = Linked a
 
 type LinkedExpr annot = Expr Linked annot
 
+data LinkedExprWithDeps annot = LinkedExprWithDeps {
+  -- |The actual linked expression.
+  leExpr :: !(LinkedExpr annot),
+  -- |List of dependencies with sizes.
+  leDeps :: !(HashMap (Core.ModuleRef, Core.Name) Word64)
+  } deriving(Eq, Show, Functor)
+
 data Foreign =
   Local !Core.Name
   |Imported !Core.ModuleRef !Core.Name
-  deriving(Eq, Show, Generic)
+  deriving(Eq, Show, Generic, Ord)
 
 instance Hashable Foreign
 
@@ -489,9 +496,9 @@ type LinkedReceiveMethod annot = LinkedExpr annot
 data ContractValue linked annot = ContractValue
     {
       -- |The compiled initilization method.
-      cvInitMethod :: !(InitMethod linked annot),
+      cvInitMethod :: !(InitMethod linked annot, Word64),
       -- |The compiled receive method.
-      cvReceiveMethod :: !(ReceiveMethod linked annot),
+      cvReceiveMethod :: !(ReceiveMethod linked annot, Word64),
       -- |A map of all the implemented constraints.
       cvImplements :: !(HashMap (Core.ModuleRef, Core.TyName) (ImplementsValue linked annot)) 
     } deriving(Generic, Functor)
@@ -508,7 +515,8 @@ deriving instance (v ~ linked (Expr linked annot), Eq v, Eq annot) => Eq (Contra
 data ValueInterface linked annot = ValueInterface {
   -- |Compiled top-level definitions.
   -- Private and public (since at runtime a public definition might depend on the private one).
-  viDefs :: !(HashMap Core.Name (Expr linked annot)),
+  -- We also record the sizes of terms.
+  viDefs :: !(HashMap Core.Name (Expr linked annot, Word64)),
   -- |Exported contracts with their init and receive methods.
   viContracts :: !(HashMap Core.TyName (ContractValue linked annot))
   } deriving(Functor)
@@ -575,11 +583,11 @@ class Monad m => InterpreterMonad annot m | m -> annot where
   getCurrentContractState :: ContractAddress -> m (Maybe (HashMap AbsoluteConstraintRef (LinkedImplementsValue annot), Value annot))
 
 class Monad m => LinkerMonad annot m | m -> annot where
-  getExprInModule :: Core.ModuleRef -> Core.Name -> m (Maybe (UnlinkedExpr annot))
+  getExprInModule :: Core.ModuleRef -> Core.Name -> m (Maybe (UnlinkedExpr annot, Word64))
 
-  tryGetLinkedExpr :: Core.ModuleRef -> Core.Name -> m (Maybe (LinkedExpr annot))
+  tryGetLinkedExpr :: Core.ModuleRef -> Core.Name -> m (Maybe (LinkedExprWithDeps annot))
 
-  putLinkedExpr :: Core.ModuleRef -> Core.Name -> LinkedExpr annot -> m ()
+  putLinkedExpr :: Core.ModuleRef -> Core.Name -> LinkedExprWithDeps annot -> m ()
 
 class Monad m => TypecheckerMonad annot m | m -> annot where
   getExportedTermType :: Core.ModuleRef -> Core.Name -> m (Maybe (Type annot Core.ModuleRef))

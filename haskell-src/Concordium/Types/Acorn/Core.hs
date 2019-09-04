@@ -79,6 +79,22 @@ data Literal =
   | AAddress !AccountAddress
   deriving (Show, Eq, Generic, Typeable, Data)
 
+-- |Size of a literal in bytes used in computation of the size of linked terms
+literalSize :: Literal -> Word64
+literalSize = \case
+  Str s -> fromIntegral (BS.length s)
+  Int32 _ -> 4
+  Int64 _ -> 8
+  Int128 _ -> 16
+  Int256 _ -> 32
+  Word32 _ -> 4
+  Word64 _ -> 8
+  Word128 _ -> 16
+  Word256 _ -> 32
+  ByteStr32 _ -> 32
+  CAddress _ -> 16
+  AAddress _ -> 21
+
 instance Hashable Literal
 
 -- |Allowed names are only 32-bit unsigned integers. The reason for not having strings as
