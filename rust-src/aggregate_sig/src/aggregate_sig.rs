@@ -6,6 +6,10 @@ use rayon::{iter::*, join};
 use sha2::{Digest, Sha512};
 use std::{cmp::Ordering, io::Cursor};
 
+pub const PUBLIC_KEY_SIZE: usize = 96;
+pub const SECRET_KEY_SIZE: usize = 32;
+pub const SIGNATURE_SIZE: usize  = 48;
+
 #[derive(Debug)]
 pub struct SecretKey<P: Pairing>(P::ScalarField);
 
@@ -18,6 +22,18 @@ impl<P: Pairing> SecretKey<P> {
     }
 
     pub fn to_bytes(&self) -> Box<[u8]> { P::scalar_to_bytes(&self.0) }
+
+    // Sign a message using the SecretKey
+    pub fn sign(&self, m: &[u8]) -> Signature<P> {
+        let g1_hash = P::G_1::hash_to_group(m);
+        let signature = g1_hash.mul_by_scalar(&self.0);
+        Signature(signature)
+    }
+
+    // Returns the size of signature as a bytearray
+    pub fn len() -> usize {
+        P::SCALAR_LENGTH
+    }
 }
 
 impl<P: Pairing> Clone for SecretKey<P> {
@@ -34,12 +50,28 @@ impl<P: Pairing> PublicKey<P> {
         PublicKey(P::G_2::one_point().mul_by_scalar(&sk.0))
     }
 
+    // Verifies a single message and signature pair using this PublicKey
+    pub fn verify(&self, m: &[u8], signature: Signature<P>,) -> bool {
+        let g1_hash = P::G_1::hash_to_group(m);
+        // compute pairings in parallel
+        let (pair1, pair2): (P::TargetField, P::TargetField) = join(
+            || P::pair(signature.0, P::G_2::one_point()),
+            || P::pair(g1_hash, self.0),
+        );
+        pair1 == pair2
+    }
+
     pub fn from_bytes(b: &mut Cursor<&[u8]>) -> Result<PublicKey<P>, AggregateSigError> {
         let point = P::G_2::bytes_to_curve(b)?;
         Ok(PublicKey(point))
     }
 
     pub fn to_bytes(&self) -> Box<[u8]> { P::G_2::curve_to_bytes(&self.0) }
+
+    // Returns the size of signature as a bytearray
+    pub fn len() -> usize {
+        P::G_2::GROUP_ELEMENT_LENGTH
+    }
 }
 
 impl<P: Pairing> Clone for PublicKey<P> {
@@ -51,55 +83,30 @@ impl<P: Pairing> Copy for PublicKey<P> {}
 #[derive(Debug)]
 pub struct Signature<P: Pairing>(P::G_1);
 
+impl<P: Pairing> Signature<P> {
+    // Aggregates this signatures with the given signature.
+    pub fn aggregate(&self, to_aggregate: Signature<P>) -> Signature<P> {
+        Signature(self.0.plus_point(&to_aggregate.0))
+    }
+
+    pub fn from_bytes(b: &mut Cursor<&[u8]>) -> Result<Signature<P>, AggregateSigError> {
+        let point = P::G_1::bytes_to_curve(b)?;
+        Ok(Signature(point))
+    }
+
+    pub fn to_bytes(&self) -> Box<[u8]> { P::G_1::curve_to_bytes(&self.0) }
+
+    // Returns the size of signature as a bytearray
+    pub fn len() -> usize {
+        P::G_1::GROUP_ELEMENT_LENGTH
+    }
+}
+
 impl<P: Pairing> Clone for Signature<P> {
     fn clone(&self) -> Self { Signature(self.0) }
 }
 
 impl<P: Pairing> Copy for Signature<P> {}
-
-// Sign a message using the supplied secret key.
-// Signing can potentially be optimized by having a proper hash fucntion from
-// the message space (&[u8]) to G_1. Currently we hash the message using Sha512
-// and decode it into a scalar of G_1 and multiply the generator of G_1 with
-// this
-pub fn sign_message<P: Pairing>(m: &[u8], secret_key: SecretKey<P>) -> Signature<P> {
-    let g1_hash = P::G_1::hash_to_group(m);
-    let signature = g1_hash.mul_by_scalar(&secret_key.0);
-    Signature(signature)
-}
-
-// hashes a message using Sha512
-fn hash_message(m: &[u8]) -> [u8; 64] {
-    let mut h = Sha512::new();
-    let mut hash: [u8; 64] = [0u8; 64];
-    h.input(m);
-    hash.copy_from_slice(h.result().as_slice());
-    hash
-}
-
-// Verifies a single message and signature pair
-pub fn verify_signature<P: Pairing>(
-    m: &[u8],
-    public_key: PublicKey<P>,
-    signature: Signature<P>,
-) -> bool {
-    let g1_hash = P::G_1::hash_to_group(m);
-
-    // compute pairings in parallel
-    let (pair1, pair2): (P::TargetField, P::TargetField) = join(
-        || P::pair(signature.0, P::G_2::one_point()),
-        || P::pair(g1_hash, public_key.0),
-    );
-    pair1 == pair2
-}
-
-// Aggregates the two signatures. Commutative operation
-pub fn aggregate_sig<P: Pairing>(
-    my_signature: Signature<P>,
-    aggregated_signature: Signature<P>,
-) -> Signature<P> {
-    Signature(aggregated_signature.0.plus_point(&my_signature.0))
-}
 
 pub fn verify_aggregate_sig<P: Pairing>(
     m_pk_pairs: &[(&[u8], PublicKey<P>)],
@@ -182,6 +189,15 @@ fn has_duplicates<'a>(messages_iter: impl Iterator<Item = &'a [u8]>) -> bool {
     false
 }
 
+// hashes a message using Sha512
+fn hash_message(m: &[u8]) -> [u8; 64] {
+    let mut h = Sha512::new();
+    let mut hash: [u8; 64] = [0u8; 64];
+    h.input(m);
+    hash.copy_from_slice(h.result().as_slice());
+    hash
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -212,26 +228,6 @@ mod test {
     }
 
     #[test]
-    fn test_to_from_bytes_identity() {
-        let seed: &[_] = &[1];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
-
-        for _ in 0..1000 {
-            let sk = SecretKey::<Bls12>::generate(&mut rng);
-            let pk = PublicKey::<Bls12>::from_secret(sk);
-            let sk_bytes = sk.to_bytes();
-            let pk_bytes = pk.to_bytes();
-            let sk_from_bytes =
-                SecretKey::<Bls12>::from_bytes(&mut Cursor::new(&sk_bytes)).unwrap();
-            let pk_from_bytes =
-                PublicKey::<Bls12>::from_bytes(&mut Cursor::new(&pk_bytes)).unwrap();
-
-            assert_eq!(sk.0, sk_from_bytes.0);
-            assert_eq!(pk.0, pk_from_bytes.0);
-        }
-    }
-
-    #[test]
     fn test_sign_and_verify() {
         let seed: &[_] = &[1];
         let mut rng: StdRng = SeedableRng::from_seed(seed);
@@ -242,23 +238,23 @@ mod test {
 
             // should verify correctly
             let m = rng.gen::<[u8; 32]>();
-            let signature = sign_message(&m, sk);
-            assert!(verify_signature(&m, pk, signature));
+            let signature = sk.sign(&m);
+            assert!(pk.verify(&m, signature));
 
             // should not verify!
-            let signature = sign_message(&m, sk);
+            let signature = sk.sign(&m);
             let sk2 = SecretKey::<Bls12>::generate(&mut rng);
             let pk2 = PublicKey::from_secret(sk2);
-            assert!(!verify_signature(&m, pk2, signature))
+            assert!(!pk2.verify(&m, signature))
         }
     }
 
     macro_rules! aggregate_sigs {
         ($messages:expr, $sks:expr) => {{
-            let mut sig = sign_message(&$messages[0], $sks[0]);
+            let mut sig = $sks[0].sign(&$messages[0]);
             for i in 1..$sks.len() {
-                let my_sig = sign_message(&$messages[i], $sks[i]);
-                sig = aggregate_sig(my_sig, sig);
+                let my_sig = $sks[i].sign(&$messages[i]);
+                sig = sig.aggregate(my_sig);
             }
             sig
         }};
@@ -306,10 +302,10 @@ mod test {
         for _ in 0..TEST_ITERATIONS {
             let (sks, pks) = get_sks_pks(SIGNERS, &mut rng);
             let m: [u8; 32] = rng.gen::<[u8; 32]>();
-            let sigs: Vec<Signature<Bls12>> = sks.iter().map(|sk| sign_message(&m, *sk)).collect();
+            let sigs: Vec<Signature<Bls12>> = sks.iter().map(|sk| sk.sign(&m)).collect();
             let mut agg_sig = sigs[0].clone();
             sigs.iter().skip(1).for_each(|x| {
-                agg_sig = aggregate_sig(*x, agg_sig);
+                agg_sig = agg_sig.aggregate(*x);
             });
 
             assert!(verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig));
@@ -354,6 +350,55 @@ mod test {
             let iter = (0..SIGNERS).map(|i| -> &[u8] { &ms[i] });
             let result = has_duplicates(iter);
             assert!(result);
+        }
+    }
+
+    #[test]
+    fn test_to_from_bytes_identity() {
+        let seed: &[_] = &[1];
+        let mut rng: StdRng = SeedableRng::from_seed(seed);
+
+        for _ in 0..1000 {
+            let m = rng.gen::<[u8; 32]>();
+            let sk = SecretKey::<Bls12>::generate(&mut rng);
+            let pk = PublicKey::<Bls12>::from_secret(sk);
+            let sig = sk.sign(&m);
+            let sk_bytes = sk.to_bytes();
+            let pk_bytes = pk.to_bytes();
+            let sig_bytes = sig.to_bytes();
+            let sk_from_bytes =
+                SecretKey::<Bls12>::from_bytes(&mut Cursor::new(&sk_bytes)).unwrap();
+            let pk_from_bytes =
+                PublicKey::<Bls12>::from_bytes(&mut Cursor::new(&pk_bytes)).unwrap();
+            let sig_from_bytes =
+                Signature::<Bls12>::from_bytes(&mut Cursor::new(&sig_bytes)).unwrap();
+
+            assert_eq!(sig.0, sig_from_bytes.0);
+            assert_eq!(sk.0, sk_from_bytes.0);
+            assert_eq!(pk.0, pk_from_bytes.0);
+            assert!(pk.verify(&m, sig_from_bytes));
+            assert!(pk_from_bytes.verify(&m, sig_from_bytes));
+        }
+    }
+
+    #[test]
+    fn test_to_bytes_correct_length() {
+        let seed: &[_] = &[1];
+        let mut rng: StdRng = SeedableRng::from_seed(seed);
+
+        for _ in 0..1000 {
+            let m = rng.gen::<[u8; 32]>();
+            let sk = SecretKey::<Bls12>::generate(&mut rng);
+            let pk = PublicKey::<Bls12>::from_secret(sk);
+            let sig = sk.sign(&m);
+
+            let sk_bytes = sk.to_bytes();
+            let pk_bytes = pk.to_bytes();
+            let sig_bytes = sig.to_bytes();
+
+            assert_eq!(sk_bytes.len(), SecretKey::<Bls12>::len());
+            assert_eq!(pk_bytes.len(), PublicKey::<Bls12>::len());
+            assert_eq!(sig_bytes.len(), Signature::<Bls12>::len());
         }
     }
 }
