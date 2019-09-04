@@ -213,14 +213,16 @@ data TypingError annot =
                  -- constraint this error refers to, the third the name of the
                  -- method that is implemented and the fourth the name of the
                  -- method that is expected to be implemented.
-                 | ContractUnexpectedGetterImplementation Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
+                 | ContractUnexpectedGetterImplementation
+                   Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
                  -- |An implementation of a sender method in a contract does not
                  -- match the expected method to be implemented at that position.
                  -- The first and second arguments are the name of the contract and the
                  -- constraint this error refers to, the third the name of the
                  -- method that is implemented and the fourth the name of the
                  -- method that is expected to be implemented.
-                 | ContractUnexpectedSenderImplementation Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
+                 | ContractUnexpectedSenderImplementation
+                   Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
                  -- |The public definition (explicit definition or datatype constructor)
                  -- with the given name has a private type.
                  | PublicDefinitionWithPrivateType Core.Name (Core.Type annot ModuleRef)
@@ -228,6 +230,11 @@ data TypingError annot =
                  -- as the expected type. The first argument is the type encountered,
                  -- the second is the expected type.
                  | UnexpectedType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
+                 -- |Type application failed or the resulting type is not the expected type.
+                 -- The first argument is the type the list of types in the second argument
+                 -- is to be applied to, the third argument the expected resulting type.
+                 | UnexpectedTypeOrFailureInTypeApplication
+                   (Core.Type annot ModuleRef) [Core.Type annot ModuleRef] (Core.Type annot ModuleRef)
                  -- |Like 'UnexpectedType' but where the actual type is not calculated.
                  -- The first argument is the type of wrong shape which might not even
                  -- be a well-formed type.
