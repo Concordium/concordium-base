@@ -25,6 +25,9 @@ newtype PsSigKey = PsSigKey (ForeignPtr PsSigKey)
 newtype ElgamalGen = ElgamalGen (ForeignPtr ElgamalGen)
 newtype ElgamalPublicKey = ElgamalPublicKey (ForeignPtr ElgamalPublicKey)
 newtype ElgamalCipher = ElgamalCipher (ForeignPtr ElgamalCipher)
+newtype BlsPublicKey = BlsPublicKey (ForeignPtr BlsPublicKey)
+newtype BlsSecretKey = BlsSecretKey (ForeignPtr BlsSecretKey)
+newtype BlsSignature = BlsSignature (ForeignPtr BlsSignature)
 
 -- |Instances for benchmarking
 instance NFData PedersenKey where
@@ -62,6 +65,25 @@ foreign import ccall unsafe "&elgamal_cipher_free" freeElgamalCipher :: FunPtr (
 foreign import ccall unsafe "elgamal_cipher_to_bytes" toBytesElgamalCipher :: Ptr ElgamalCipher -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "elgamal_cipher_from_bytes" fromBytesElgamalCipher :: Ptr Word8 -> CSize -> IO (Ptr ElgamalCipher)
 foreign import ccall unsafe "elgamal_cipher_gen" generateElgamalCipherPtr :: IO (Ptr ElgamalCipher)
+
+foreign import ccall unsafe "&bls_free_sk" freeBlsSecretKey :: FunPtr (Ptr BlsSecretKey -> IO ())
+foreign import ccall unsafe "bls_generate_secretkey" generateBlsSecretKey :: IO (Ptr BlsSecretKey)
+foreign import ccall unsafe "bls_secret_to_bytes" toBytesBlsSecretKey :: Ptr BlsSecretKey -> IO (Ptr Word8)
+foreign import ccall unsafe "bls_sk_from_bytes" fromBytesBlsSecretKey :: Ptr Word8 -> IO (Ptr BlsSecretKey)
+
+foreign import ccall unsafe "&bls_free_pk" freeBlsPublicKey :: FunPtr (Ptr BlsPublicKey -> IO ())
+foreign import ccall unsafe "bls_derive_publickey" deriveBlsPublicKey :: Ptr BlsSecretKey -> IO (Ptr BlsPublicKey)
+foreign import ccall unsafe "bls_pk_to_bytes" toBytesBlsPublicKey :: Ptr BlsPublicKey -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "bls_pk_from_bytes" fromBytesBlsPublicKey :: Ptr Word8 -> IO (Ptr BlsPublicKey)
+
+foreign import ccall unsafe "&bls_free_sig" freeBlsSignature :: FunPtr (Ptr BlsSignature -> IO ())
+foreign import ccall unsafe "bls_sig_to_bytes" toBytesBlsSignature :: Ptr BlsSignature -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "bls_sig_from_bytes" fromBytesBlsSignature :: Ptr Word8 -> IO (Ptr BlsSignature)
+
+foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> Ptr CSize -> Ptr BlsSecretKey -> IO (Ptr BlsSignature)
+foreign import ccall unsafe "bls_verify" verifyBls :: Ptr Word8 -> Ptr CSize -> Ptr BlsPublicKey -> Ptr BlsSignature -> Bool
+foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr BlsSignature -> Ptr BlsSignature -> IO (Ptr BlsSignature)
+-- foreign import ccall unsafe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> [Ptr BlsPublicKey] -> Ptr BlsSignature -> Bool
 
 withPedersenKey :: PedersenKey -> (Ptr PedersenKey -> IO b) -> IO b
 withPedersenKey (PedersenKey fp) = withForeignPtr fp

@@ -8,7 +8,7 @@ use std::{cmp::Ordering, io::Cursor};
 
 pub const PUBLIC_KEY_SIZE: usize = 96;
 pub const SECRET_KEY_SIZE: usize = 32;
-pub const SIGNATURE_SIZE: usize  = 48;
+pub const SIGNATURE_SIZE: usize = 48;
 
 #[derive(Debug)]
 pub struct SecretKey<P: Pairing>(P::ScalarField);
@@ -31,9 +31,7 @@ impl<P: Pairing> SecretKey<P> {
     }
 
     // Returns the size of signature as a bytearray
-    pub fn len() -> usize {
-        P::SCALAR_LENGTH
-    }
+    pub fn len() -> usize { P::SCALAR_LENGTH }
 }
 
 impl<P: Pairing> Clone for SecretKey<P> {
@@ -51,7 +49,7 @@ impl<P: Pairing> PublicKey<P> {
     }
 
     // Verifies a single message and signature pair using this PublicKey
-    pub fn verify(&self, m: &[u8], signature: Signature<P>,) -> bool {
+    pub fn verify(&self, m: &[u8], signature: Signature<P>) -> bool {
         let g1_hash = P::G_1::hash_to_group(m);
         // compute pairings in parallel
         let (pair1, pair2): (P::TargetField, P::TargetField) = join(
@@ -69,9 +67,7 @@ impl<P: Pairing> PublicKey<P> {
     pub fn to_bytes(&self) -> Box<[u8]> { P::G_2::curve_to_bytes(&self.0) }
 
     // Returns the size of signature as a bytearray
-    pub fn len() -> usize {
-        P::G_2::GROUP_ELEMENT_LENGTH
-    }
+    pub fn len() -> usize { P::G_2::GROUP_ELEMENT_LENGTH }
 }
 
 impl<P: Pairing> Clone for PublicKey<P> {
@@ -97,9 +93,7 @@ impl<P: Pairing> Signature<P> {
     pub fn to_bytes(&self) -> Box<[u8]> { P::G_1::curve_to_bytes(&self.0) }
 
     // Returns the size of signature as a bytearray
-    pub fn len() -> usize {
-        P::G_1::GROUP_ELEMENT_LENGTH
-    }
+    pub fn len() -> usize { P::G_1::GROUP_ELEMENT_LENGTH }
 }
 
 impl<P: Pairing> Clone for Signature<P> {
