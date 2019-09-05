@@ -73,7 +73,13 @@ pub struct AccCredentialInfo<
 pub struct IpArData<C: Curve> {
     ///List of anonymity revokers along with encryptions of
     ///their shares of the prf keys
-    pub ar_name_enc_pairs: Vec<(String, Cipher<C>)>,
+    pub ar_name: String,
+    pub enc_prf_key_share: Cipher<C>,
+    pub prf_key_share_number: u64, 
+    ///proof that the computed commitment to the share
+    ///contains the same value as the encryption
+    pub proof_com_enc_eq: ComEncEqProof<C>,
+    //pub ar_name_enc_pairs: Vec<(String, Cipher<C>)>,
 }
 /// Data created by the credential holder to support anonymity revocation.
 #[derive(Debug, PartialEq, Eq)]
@@ -95,7 +101,7 @@ pub struct PreIdentityObject<
     pub id_cred_pub_ip: P::G_1,
     /// Information on the chosen anonymity revoker, and the encryption of the
     /// account holder's prf key with the anonymity revoker's encryption key.
-    pub ip_ar_data: IpArData<C>,
+    pub ip_ar_data: Vec<IpArData<C>>,
     /// Chosen attribute list.
     pub alist: AttributeList<C::Scalar, AttributeType>,
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub
@@ -105,20 +111,12 @@ pub struct PreIdentityObject<
     pub cmm_sc: pedersen::Commitment<P::G_1>,
     /// Commitment to the prf key.
     pub cmm_prf: pedersen::Commitment<P::G_1>,
-    /// commitment to the prf key in the same group as the elgamal key of the
-    /// anonymity revoker
-    pub snd_cmm_prf: pedersen::Commitment<C>,
     /// commitments to the coefficients of the polynomial 
     /// These commitments are in the same group as sn_cmm_prf
     /// used to share the prf key
     /// K + b1 X + b2 X^2...
     /// where K is the prf key
-    /// we send only commitments B1, B2,..etc to b1, b2,..
-    /// together with snd_cmm_prf we have a commitment to the whole polynomial
-    pub cmm_prf_sharing_coeff:Vec<pedersen::Commitment<C>>,
-    /// Proof that the encryption of the prf key in ip_ar_data is the same as
-    /// the key in snd_cmm_prf (hidden behind the commitment).
-    pub proof_com_enc_eq: ComEncEqProof<C>,
+    pub cmm_prf_sharing_coeff:Vec<(u64,pedersen::Commitment<C>)>,
     /// Proof that the first and snd commitments to the prf are hiding the same
     /// value
     pub proof_com_eq: ComEqDiffGrpsProof<P::G_1, C>,
@@ -272,7 +270,7 @@ pub struct Context<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub commitment_key_prf: PedersenKey<P::G_1>,
     /// choice of anonyimity revocation parameters
     /// that is a choice of subset of anonymity revokers
-    /// along with (n,t) parameter n shares, t threshold
+    /// threshold  parameter
     pub choice_ar_parameters:(Vec<ArInfo<C>>, u64),
 }
 
@@ -338,27 +336,39 @@ pub fn bytes_to_short_string(cur: &mut Cursor<&[u8]>) -> Option<String> {
     cur.read_exact(&mut svec).ok()?;
     String::from_utf8(svec).ok()
 }
+/*
+pub struct IpArData<C: Curve> {
+      ///List of anonymity revokers along with encryptions of
+      ///their shares of the prf keys
+      pub ar_name: String,
+      pub enc_prf_key_share: Cipher<C>,
+      pub prf_key_share_number: u64,
+      ///proof that the computed commitment to the share
+      ///contains the same value as the encryption
+      pub poof_com_enc_eq: ComEncEqProof<C>,
+      //pub ar_name_enc_pairs: Vec<(String, Cipher<C>)>,
+ }
+ */
 
 impl<C: Curve> IpArData<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let vec = &self.ar_name_enc_pairs;
-        let mut out = Vec::new();
-        out.extend_from_slice(&(vec.len() as u16).to_be_bytes());
-        for (name, enc) in vec.iter(){
-            out.extend(short_string_to_bytes(&name).iter().cloned());
-            out.extend_from_slice(&enc.to_bytes());
-        }
+        let mut out = short_string_to_bytes(&self.ar_name);
+        out.extend_from_slice(&self.enc_prf_key_share.to_bytes());
+        out.extend_from_slice(&self.prf_key_share_number.to_be_bytes());
+        out.extend_from_slice(&self.proof_com_enc_eq.to_bytes());
         out
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let len = cur.read_u16::<BigEndian>().ok()?;
-        let mut vec: Vec<(String, Cipher<C>)> = Vec::with_capacity(len as usize);
-        for _ in 0..len{ 
-            vec.push((bytes_to_short_string(cur)?, Cipher::from_bytes(cur).ok()?));
-        }
+        let ar_name = bytes_to_short_string(cur)?;
+        let enc_prf_key_share = Cipher::from_bytes(cur).ok()?; 
+        let prf_key_share_number = cur.read_u64::<BigEndian>().ok()?;
+        let proof_com_enc_eq = ComEncEqProof::from_bytes(cur).ok()?;
         Some(IpArData {
-            ar_name_enc_pairs: vec,
+            ar_name: ar_name,
+            enc_prf_key_share: enc_prf_key_share,
+            prf_key_share_number: prf_key_share_number,
+            proof_com_enc_eq: proof_com_enc_eq,
         })
     }
 }

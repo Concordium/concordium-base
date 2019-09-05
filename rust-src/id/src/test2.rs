@@ -1,4 +1,4 @@
- use crate::types::*;
+use crate::types::*;
 
 use sha2::{Digest, Sha512};
 
@@ -22,6 +22,7 @@ use sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, c
 use secret_sharing::{share};
 use curve_arithmetic::bls12_381_instance::*;
 use pairing::bls12_381::G1;
+use account_holder::*;
 
 fn generate_ar_info<C: Curve> (n: usize) -> Vec<(DecryptionKey<C>, ArInfo<C>)>{
     let mut v : Vec<(DecryptionKey<C>,ArInfo<C>)> = Vec::with_capacity(n);
@@ -51,7 +52,7 @@ pub fn test(){
         ar_dec_keys.push(sk);
     }
     let ck = PedersenKey::<G1>::generate(&mut csprng);
-    let v = compute_prf_key_data(&prf_key, &(ar_parameters, 5), &ck);
+    let (v, cmm_prf_sharing_coeff, _) = compute_prf_key_data(&prf_key, &(ar_parameters.clone(), 5), &ck);
     for i in 0..8{
         let message = ar_dec_keys[i].decrypt(&v[i].encrypted_share);
         assert_eq!(<G1 as Curve>::one_point().mul_by_scalar(&v[i].share), message.0);
@@ -74,8 +75,18 @@ pub fn test(){
         assert!(ck.open(&Value(item.share), &item.randomness_cmm_to_share, &item.cmm_to_share));
     }
 
-}
+    for i in 0..v.len(){
+        let (e_1, e_2) = (v[i].encrypted_share.0, v[i].encrypted_share.1);
+        let e_3 = v[i].cmm_to_share.0;
+        let public_key = (ar_parameters[i].ar_public_key).0.clone();
+        let proof = &v[i].proof_com_enc_eq;
+        assert!(com_enc_eq::verify_com_enc_eq(&[], &(<G1 as Curve>::one_point(), public_key, ck.0, ck.1), &(e_1, e_2, e_3), &proof));
+    }
 
+
+}
+/*
+#[derive(Clone)]
 pub struct SingleArData<C:Curve>{
       ar_name: String,
       share: C::Scalar,
@@ -83,10 +94,11 @@ pub struct SingleArData<C:Curve>{
       encrypted_share: Cipher<C>,
       encryption_randomness: C::Scalar,
       cmm_to_share: Commitment<C>,
-      randomness_cmm_to_share: Randomness<C>
+      randomness_cmm_to_share: Randomness<C>,
+      proof_com_enc_eq: com_enc_eq::ComEncEqProof<C>,
   }
   #[inline]
-fn compute_prf_key_data<C:Curve> (prf_key: &prf::SecretKey<C>, ar_parameters: &(Vec<ArInfo<C>>, u64), commitment_key: &PedersenKey<C>)-> Vec<SingleArData<C>>{
+fn compute_prf_key_data<C:Curve> (prf_key: &prf::SecretKey<C>, ar_parameters: &(Vec<ArInfo<C>>, u64), commitment_key: &PedersenKey<C>)-> (Vec<SingleArData<C>>, Vec<(u64, Commitment<C>)>){
       let n = ar_parameters.0.len() as u64;
       let t = ar_parameters.1;
       let mut csprng = thread_rng();
@@ -110,6 +122,7 @@ fn compute_prf_key_data<C:Curve> (prf_key: &prf::SecretKey<C>, ar_parameters: &(
           assert_eq!(i as u64, sharing_data.shares[(i as usize)-1].0);
           let (cipher, rnd2) = pk.encrypt_exponent_rand(&mut csprng, &share);
           let (cmm, rnd) = commitment_to_share(i as u64, &cmm_sharing_coefficients, &cmm_coeff_randomness);
+          let proof = com_enc_eq::prove_com_enc_eq(&mut csprng, &[], &(cipher.0, cipher.1, cmm.0), &(rnd2, share, rnd.0), &(C::one_point(), pk.0, commitment_key.0, commitment_key.1)); 
           let ar_data =
               SingleArData{
               ar_name: ar.ar_name.clone(),
@@ -119,11 +132,11 @@ fn compute_prf_key_data<C:Curve> (prf_key: &prf::SecretKey<C>, ar_parameters: &(
               encryption_randomness: rnd2,
               cmm_to_share: cmm,
               randomness_cmm_to_share: rnd,
+              proof_com_enc_eq: proof,
           };
           ar_prf_data.push(ar_data)
       }
-      ar_prf_data
-
+      (ar_prf_data, cmm_sharing_coefficients)
 }
 
 #[inline(always)]
@@ -147,3 +160,4 @@ fn commitment_to_share<C:Curve>(share_number: u64, coeff_commitments: &Vec<(u64,
       let rnd = Randomness(cmm_share_randomness_scalar);
       (cmm,rnd)
 }
+*/
