@@ -193,7 +193,7 @@ where
         acc_scheme_id: SchemeId::Ed25519,
         reg_id,
         ar_data,
-        ip_identity: ip_info.ip_identity.clone(),
+        ip_identity: ip_info.ip_identity,
         policy: policy.clone(),
         acc_pub_key: acc_data.verify_key,
     };

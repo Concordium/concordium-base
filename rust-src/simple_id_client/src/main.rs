@@ -14,18 +14,17 @@ use ps_sig;
 
 use chrono::NaiveDateTime;
 
-use std::io::Cursor;
-
 use rand::*;
-use serde_json::{json, to_string_pretty, Value};
+use serde_json::{json, to_string_pretty, Map, Value};
 
 use pedersen_scheme::{commitment::Commitment, key as pedersen_key};
 
 use sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups};
 
 use std::{
+    convert::TryFrom,
     fs::File,
-    io::{self, BufReader, Error, ErrorKind, Write},
+    io::{self, BufReader, Cursor, Error, ErrorKind, Write},
     path::Path,
 };
 
@@ -302,6 +301,10 @@ fn global_context_to_json(global: &GlobalContext<ExampleCurve>) -> Value {
     })
 }
 
+fn json_read_u32(v: &Map<String, Value>, key: &str) -> Option<u32> {
+    u32::try_from(v.get(key)?.as_u64()?).ok()
+}
+
 fn json_to_global_context(v: &Value) -> Option<GlobalContext<ExampleCurve>> {
     let obj = v.as_object()?;
     let dlog_base_bytes = obj.get("dLogBaseChain").and_then(json_base16_decode)?;
@@ -321,21 +324,25 @@ fn json_to_global_context(v: &Value) -> Option<GlobalContext<ExampleCurve>> {
 
 fn json_to_ip_info(ip_val: &Value) -> Option<IpInfo<Bls12, <Bls12 as Pairing>::G_1>> {
     let ip_val = ip_val.as_object()?;
-    let ip_identity = ip_val.get("ipIdentity")?.as_str()?;
+    let ip_identity = json_read_u32(ip_val, "ipIdentity")?;
+    let ip_description = ip_val.get("ipDescription")?.as_str()?;
     let ip_verify_key = ps_sig::PublicKey::from_bytes(&mut Cursor::new(&json_base16_decode(
         ip_val.get("ipVerifyKey")?,
     )?))
     .ok()?;
-    let id_ar_name = ip_val.get("arName")?.as_str()?;
+    let id_ar_identity = json_read_u32(ip_val, "arIdentity")?;
+    let id_ar_description = ip_val.get("arDescription")?.as_str()?;
     let id_ar_public_key =
         elgamal::PublicKey::from_bytes(m_json_decode!(ip_val, "arPublicKey")).ok()?;
     let id_ar_elgamal_generator =
         Curve::bytes_to_curve(m_json_decode!(ip_val, "arElgamalGenerator")).ok()?;
     Some(IpInfo {
-        ip_identity: ip_identity.to_owned(),
+        ip_identity,
+        ip_description: ip_description.to_owned(),
         ip_verify_key,
         ar_info: ArInfo {
-            ar_name:              id_ar_name.to_owned(),
+            ar_identity:          id_ar_identity,
+            ar_description:       id_ar_description.to_owned(),
             ar_public_key:        id_ar_public_key,
             ar_elgamal_generator: id_ar_elgamal_generator,
         },
@@ -351,7 +358,8 @@ fn ip_info_to_json(ipinfo: &IpInfo<Bls12, <Bls12 as Pairing>::G_1>) -> Value {
     json!({
                                    "ipIdentity": ipinfo.ip_identity,
                                    "ipVerifyKey": json_base16_encode(&ipinfo.ip_verify_key.to_bytes()),
-                                   "arName": ipinfo.ar_info.ar_name,
+                                   "arIdentity": ipinfo.ar_info.ar_identity,
+                                   "arDescription": ipinfo.ar_info.ar_description,
                                    "arPublicKey": json_base16_encode(&ipinfo.ar_info.ar_public_key.to_bytes()),
                                    "arElgamalGenerator": json_base16_encode(&ipinfo.ar_info.ar_elgamal_generator.curve_to_bytes())
     })
@@ -364,32 +372,35 @@ fn ip_infos_to_json(ipinfos: &[IpInfo<Bls12, <Bls12 as Pairing>::G_1>]) -> Value
 
 fn ip_ar_data_to_json<C: Curve>(ar_data: &IpArData<C>) -> Value {
     json!({
-        "arName": ar_data.ar_name.clone(),
+        "arIdentity": ar_data.ar_identity,
+        "arDescription": ar_data.ar_description.clone(),
         "prfKeyEncryption": json_base16_encode(&ar_data.prf_key_enc.to_bytes()),
     })
 }
 
 fn json_to_ip_ar_data(v: &Value) -> Option<IpArData<ExampleCurve>> {
-    let ar_name = v.get("arName")?.as_str()?;
+    let ar_identity = json_read_u32(v.as_object()?, "arIdentity")?;
+    let ar_description = v.as_object()?.get("arDescription")?.as_str()?;
     let prf_key_enc = Cipher::from_bytes(m_json_decode!(v, "prfKeyEncryption")).ok()?;
     Some(IpArData {
-        ar_name: ar_name.to_owned(),
+        ar_identity,
+        ar_description: ar_description.to_owned(),
         prf_key_enc,
     })
 }
 
 fn chain_ar_data_to_json<C: Curve>(ar_data: &ChainArData<C>) -> Value {
     json!({
-        "arName": ar_data.ar_name.clone(),
+        "arIdentity": ar_data.ar_identity,
         "idCredPubEnc": json_base16_encode(&ar_data.id_cred_pub_enc.to_bytes()),
     })
 }
 
 fn json_to_chain_ar_data(v: &Value) -> Option<ChainArData<ExampleCurve>> {
-    let ar_name = v.get("arName")?.as_str()?;
+    let ar_identity = json_read_u32(v.as_object()?, "arIdentity")?;
     let id_cred_pub_enc = Cipher::from_bytes(m_json_decode!(v, "idCredPubEnc")).ok()?;
     Some(ChainArData {
-        ar_name: ar_name.to_owned(),
+        ar_identity,
         id_cred_pub_enc,
     })
 }
@@ -642,7 +653,7 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
             return;
         }
     };
-    if ar_info.ar_name != ar_data.ar_name {
+    if ar_info.ar_identity != ar_data.ar_identity {
         eprintln!("Wrong anonymity revoker private data provided.");
         return;
     }
@@ -842,7 +853,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         "schemeId": if values.acc_scheme_id == SchemeId::Ed25519 {"Ed25519"} else {"CL"},
         "verifyKey": json_base16_encode(&values.acc_pub_key.to_bytes()),
         "regId": json_base16_encode(&values.reg_id.curve_to_bytes()),
-        "ipIdentity": values.ip_identity.clone(),
+        "ipIdentity": values.ip_identity,
         "arData": chain_ar_data_to_json(&values.ar_data),
         "policy": policy_to_json(&values.policy),
         // NOTE: Since proofs encode their own length we do not output those first 4 bytes
@@ -1120,8 +1131,8 @@ fn handle_start_ip(matches: &ArgMatches) {
     let mut ips_names = Vec::with_capacity(ips.len());
     for x in ips.iter() {
         ips_names.push(format!(
-            "Identity provider {}, its anonymity revoker is {}",
-            &x.ip_identity, &x.ar_info.ar_name
+            "Identity provider {}, {}, its anonymity revoker is {}, {}",
+            &x.ip_identity, &x.ip_description, &x.ar_info.ar_identity, &x.ar_info.ar_description
         ))
     }
 
@@ -1178,7 +1189,8 @@ fn handle_start_ip(matches: &ArgMatches) {
 
 fn ar_info_to_json<C: Curve>(ar_info: &ArInfo<C>) -> Value {
     json!({
-        "arName": ar_info.ar_name,
+        "arIdentity": ar_info.ar_identity,
+        "arDescription": ar_info.ar_description.clone(),
         "arPublicKey": json_base16_encode(&ar_info.ar_public_key.to_bytes()),
         "arElgamalGenerator": json_base16_encode(&ar_info.ar_elgamal_generator.curve_to_bytes())
     })
@@ -1187,14 +1199,16 @@ fn ar_info_to_json<C: Curve>(ar_info: &ArInfo<C>) -> Value {
 fn json_to_private_ar_info<C: Curve>(v: &Value) -> Option<(ArInfo<C>, SecretKey<C>)> {
     let v = v.as_object()?;
     let public = v.get("publicArInfo")?;
-    let ar_name = public.get("arName")?.as_str()?.to_owned();
+    let ar_identity = json_read_u32(public.as_object()?, "arIdentity")?;
+    let ar_description = public.get("arDescription")?.as_str()?.to_owned();
     let ar_public_key = PublicKey::<C>::from_bytes(m_json_decode!(public, "arPublicKey")).ok()?;
     let ar_elgamal_generator =
         C::bytes_to_curve(m_json_decode!(public, "arElgamalGenerator")).ok()?;
     let private = SecretKey::from_bytes(m_json_decode!(v, "arPrivateKey")).ok()?;
     Some((
         ArInfo {
-            ar_name,
+            ar_identity,
+            ar_description,
             ar_public_key,
             ar_elgamal_generator,
         },
@@ -1222,7 +1236,8 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let ar_secret_key = SecretKey::generate(&mut csprng);
         let ar_public_key = PublicKey::from(&ar_secret_key);
         let ar_info = ArInfo {
-            ar_name: mk_ar_name(id),
+            ar_identity: id as u32,
+            ar_description: mk_ar_name(id),
             ar_public_key,
             ar_elgamal_generator: PublicKey::generator(),
         };
@@ -1235,7 +1250,8 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         write_json_to_file(&ar_fname, &private_js).ok()?;
 
         let ip_info = IpInfo {
-            ip_identity: mk_ip_name(id),
+            ip_identity: id as u32,
+            ip_description: mk_ip_name(id),
             ip_verify_key: id_public_key,
             ar_info,
         };
