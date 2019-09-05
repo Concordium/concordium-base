@@ -41,7 +41,7 @@ where
     let prf::SecretKey(prf_key_scalar) = aci.prf_key;
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
     // revocation.
-    let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) = compute_prf_key_data(&aci.prf_key, &context.choice_ar_parameters, &context.ip_info.ar_info.1);
+    let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data(&aci.prf_key.0, &context.choice_ar_parameters, &context.ip_info.ar_info.1);
     let number_of_ars = context.choice_ar_parameters.0.len();
     let mut ip_ar_data: Vec<IpArData<C>> = Vec::with_capacity(number_of_ars);
     for item in prf_key_data{
@@ -117,13 +117,12 @@ pub struct SingleArData<C:Curve>{
       proof_com_enc_eq: com_enc_eq::ComEncEqProof<C>,
 }
 #[inline]
-pub fn compute_prf_key_data<C:Curve> (prf_key: &prf::SecretKey<C>, ar_parameters: &(Vec<ArInfo<C>>, u64), commitment_key: &PedersenKey<C>)-> (Vec<SingleArData<C>>, Vec<(u64, Commitment<C>)>, Vec<(u64, Randomness<C>)>){
+pub fn compute_sharing_data<C:Curve> (shared_scalar: &C::Scalar, ar_parameters: &(Vec<ArInfo<C>>, u64), commitment_key: &PedersenKey<C>)-> (Vec<SingleArData<C>>, Vec<(u64, Commitment<C>)>, Vec<(u64, Randomness<C>)>){
         let n = ar_parameters.0.len() as u64;
         let t = ar_parameters.1;
         let mut csprng = thread_rng();
-        let prf_key_scalar = prf_key.0;
-        let (cmm_prf, cmm_prf_rand) = commitment_key.commit(&Value(prf_key_scalar), &mut csprng);
-        let sharing_data = share::<C, ThreadRng>(&prf_key_scalar, n, t, &mut csprng);
+        let (cmm_prf, cmm_prf_rand) = commitment_key.commit(&Value(*shared_scalar), &mut csprng);
+        let sharing_data = share::<C, ThreadRng>(&shared_scalar, n, t, &mut csprng);
         let mut cmm_sharing_coefficients:Vec<(u64, Commitment<C>)> = Vec::with_capacity(t as usize);
         cmm_sharing_coefficients.push((0, cmm_prf));
         let mut cmm_coeff_randomness: Vec<(u64, Randomness<C>)> = Vec::with_capacity(t as usize);

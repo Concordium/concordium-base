@@ -25,6 +25,11 @@ fn check_ar_parameters <C: Curve>(
     true
 }
 */
+
+fn check_ar_parameters<C:Curve> (choice_ar_parameters: &(Vec<ArInfo<C>>, u64), ip_ar_info: &Vec<ArInfo<C>>)-> bool{
+    ///some business logic here
+    true
+}
 pub fn verify_credentials<
     P: Pairing,
     AttributeType: Attribute<P::ScalarField>,
@@ -50,9 +55,9 @@ pub fn verify_credentials<
     }
 
     //VRF
- //   if !check_ar_parameters(&context.choice_ar_paameters, &context_ip_info.ar_info.0){
- //       return Err(Declined(WrongArParameters))
- //   }
+    if !check_ar_parameters(&context.choice_ar_parameters, &context.ip_info.ar_info.0){
+        return Err(Declined(Reason::WrongArParameters));
+    }
     //ar commitment key
     let ar_ck = context.ip_info.ar_info.1;
     let comm_2_params =
@@ -177,34 +182,3 @@ fn verify_vrf_key_data<C1:Curve, C2:Curve<Scalar = C1::Scalar>>(
           Commitment(cmm_share_point)
  }
 
-/*
-#[allow(clippy::too_many_arguments)]
-fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
-    comm_1_params: &CommitmentParams<C1>,
-    comm_1: &PedersenCommitment<C1>,
-    comm_2_params: &CommitmentParams<C2>,
-    comm_2: &PedersenCommitment<C2>,
-    elgamal_params: &ElgamalParams<C2>,
-    cipher: &Cipher<C2>,
-    comm_enc_eq_proof: &ComEncEqProof<C2>,
-) -> bool {
-    let (g_1, h_1) = comm_1_params.0;
-    let (g_2, h_2) = comm_2_params.0;
-    let c_1 = comm_1.0;
-    let c_2 = comm_2.0;
-    let b_1 = verify_com_eq_diff_grps(
-        &[],
-        &((g_1, h_1), (g_2, h_2)),
-        &(c_1, c_2),
-        com_eq_diff_grps_proof,
-    );
-    if !b_1 {
-        return false;
-    }
-    let (g, h) = elgamal_params.0;
-    let (e_1, e_2) = (cipher.0, cipher.1);
-    let coeff = (g, h, g_2, h_2);
-    let eval = (e_1, e_2, c_2);
-    verify_com_enc_eq(&[], &coeff, &eval, comm_enc_eq_proof)
-}
-*/
