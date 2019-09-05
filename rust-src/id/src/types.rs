@@ -72,7 +72,9 @@ pub struct AccCredentialInfo<
 
 pub struct IpArData<C: Curve> {
     /// Identity of the anonymity revoker.
-    pub ar_name: String,
+    pub ar_identity: u32,
+    /// Free form description, used to locate the identity provider off-chain.
+    pub ar_description: String,
     /// Encryption of the prf key of the credential holder.
     pub prf_key_enc: Cipher<C>,
 }
@@ -80,7 +82,9 @@ pub struct IpArData<C: Curve> {
 #[derive(Debug, PartialEq, Eq)]
 pub struct ChainArData<C: Curve> {
     /// Identity of the anonymity revoker.
-    pub ar_name: String,
+    /// NB: We don't need the text description here on how to get in touch
+    /// with the anonymity revoker because that is already on chain.
+    pub ar_identity: u32,
     /// Encryption of public identity credentials
     pub id_cred_pub_enc: Cipher<C>,
 }
@@ -121,7 +125,10 @@ pub struct PreIdentityObject<
 /// Public information about an identity provider.
 #[derive(Debug, Clone)]
 pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    pub ip_identity: String,
+    /// Unique identifier of the identity provider.
+    pub ip_identity: u32,
+    /// Free form description, e.g., how to contact them off-chain
+    pub ip_description: String,
     pub ip_verify_key: pssig::PublicKey<P>,
     /// In the current design the identity provider chooses a single anonymity
     /// revoker. This will be changed in the future.
@@ -133,7 +140,8 @@ pub struct ArInfo<C: Curve> {
     /// The name and public key of the anonymity revoker chosen by this identity
     /// provider. In the future each identity provider will allow a set of
     /// anonymity revokers.
-    pub ar_name: String,
+    pub ar_identity: u32,
+    pub ar_description: String,
     pub ar_public_key: elgamal::PublicKey<C>,
     pub ar_elgamal_generator: C,
 }
@@ -219,7 +227,7 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     pub reg_id: C,
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
-    pub ip_identity: String,
+    pub ip_identity: u32,
     /// Anonymity revocation data. Which anonymity revokers have the capability
     /// to remove the anonymity of the account.
     pub ar_data: ChainArData<C>,
@@ -330,16 +338,20 @@ pub fn bytes_to_short_string(cur: &mut Cursor<&[u8]>) -> Option<String> {
 
 impl<C: Curve> IpArData<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut r = short_string_to_bytes(&self.ar_name);
+        let mut r = Vec::with_capacity(4);
+        r.extend_from_slice(&self.ar_identity.to_be_bytes());
+        r.extend_from_slice(&short_string_to_bytes(&self.ar_description));
         r.extend_from_slice(&self.prf_key_enc.to_bytes());
         r
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let ar_name = bytes_to_short_string(cur)?;
+        let ar_identity = cur.read_u32::<BigEndian>().ok()?;
+        let ar_description = bytes_to_short_string(cur)?;
         let prf_key_enc = Cipher::from_bytes(cur).ok()?;
         Some(IpArData {
-            ar_name,
+            ar_identity,
+            ar_description,
             prf_key_enc,
         })
     }
@@ -347,16 +359,17 @@ impl<C: Curve> IpArData<C> {
 
 impl<C: Curve> ChainArData<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut r = short_string_to_bytes(&self.ar_name);
+        let mut r = Vec::with_capacity(4);
+        r.extend_from_slice(&self.ar_identity.to_be_bytes());
         r.extend_from_slice(&self.id_cred_pub_enc.to_bytes());
         r
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let ar_name = bytes_to_short_string(cur)?;
+        let ar_identity = cur.read_u32::<BigEndian>().ok()?;
         let id_cred_pub_enc = Cipher::from_bytes(cur).ok()?;
         Some(ChainArData {
-            ar_name,
+            ar_identity,
             id_cred_pub_enc,
         })
     }
@@ -493,7 +506,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
         v.extend_from_slice(&(sig_bytes.len() as u16).to_be_bytes());
         v.extend_from_slice(&sig_bytes);
         v.extend_from_slice(&self.reg_id.curve_to_bytes());
-        v.extend_from_slice(&short_string_to_bytes(&self.ip_identity));
+        v.extend_from_slice(&self.ip_identity.to_be_bytes());
         v.extend_from_slice(&self.ar_data.to_bytes());
         v.extend_from_slice(&self.policy.to_bytes());
         v
@@ -506,7 +519,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
         cur.read_exact(&mut buf).ok()?;
         let acc_pub_key = acc_sig_scheme::PublicKey::from_bytes(&buf).ok()?;
         let reg_id = curve_serialization::read_curve::<C>(cur).ok()?;
-        let ip_identity = bytes_to_short_string(cur)?;
+        let ip_identity = cur.read_u32::<BigEndian>().ok()?;
         let ar_data = ChainArData::from_bytes(cur)?;
         let policy = Policy::from_bytes(cur)?;
         Some(CredentialDeploymentValues {
@@ -577,18 +590,22 @@ impl<C: Curve> PolicyProof<C> {
 }
 impl<C: Curve> ArInfo<C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
-        let mut r = short_string_to_bytes(&self.ar_name);
+        let mut r = Vec::with_capacity(4);
+        r.extend_from_slice(&self.ar_identity.to_be_bytes());
+        r.extend_from_slice(&short_string_to_bytes(&self.ar_description));
         r.extend_from_slice(&self.ar_public_key.to_bytes());
         r.extend_from_slice(&self.ar_elgamal_generator.curve_to_bytes());
         r.into_boxed_slice()
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let ar_name = bytes_to_short_string(cur)?;
+        let ar_identity = cur.read_u32::<BigEndian>().ok()?;
+        let ar_description = bytes_to_short_string(cur)?;
         let ar_public_key = elgamal::PublicKey::from_bytes(cur).ok()?;
         let ar_elgamal_generator = C::bytes_to_curve(cur).ok()?;
         Some(ArInfo {
-            ar_name,
+            ar_identity,
+            ar_description,
             ar_public_key,
             ar_elgamal_generator,
         })
@@ -596,18 +613,22 @@ impl<C: Curve> ArInfo<C> {
 }
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
-        let mut r = short_string_to_bytes(&self.ip_identity);
+        let mut r = Vec::with_capacity(4);
+        r.extend_from_slice(&self.ip_identity.to_be_bytes());
+        r.extend_from_slice(&short_string_to_bytes(&self.ip_description));
         r.extend_from_slice(&self.ip_verify_key.to_bytes());
         r.extend_from_slice(&self.ar_info.to_bytes());
         r.into_boxed_slice()
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let ip_identity = bytes_to_short_string(cur)?;
+        let ip_identity = cur.read_u32::<BigEndian>().ok()?;
+        let ip_description = bytes_to_short_string(cur)?;
         let ip_verify_key = pssig::PublicKey::from_bytes(cur).ok()?;
         let ar_info = ArInfo::from_bytes(cur)?;
         Some(IpInfo {
             ip_identity,
+            ip_description,
             ip_verify_key,
             ar_info,
         })

@@ -263,13 +263,15 @@ mod test {
         let ar_secret_key = SecretKey::generate(&mut csprng);
         let ar_public_key = PublicKey::from(&ar_secret_key);
         let ar_info = ArInfo {
-            ar_name: "AR".to_owned(),
+            ar_identity: 0,
+            ar_description: "AR".to_owned(),
             ar_public_key,
             ar_elgamal_generator: PublicKey::generator(),
         };
 
         let ip_info = IpInfo {
-            ip_identity: "ID".to_owned(),
+            ip_identity: 3,
+            ip_description: "ID".to_owned(),
             ip_verify_key: id_public_key,
             ar_info,
         };
