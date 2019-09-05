@@ -48,3 +48,7 @@ version = "0"
 [dependencies.eddsa_ed25519]
 path = "../eddsa_ed25519"
 version = "0"
+
+[lib]
+name = "client_server_helpers"
+path = "src/lib.rs"
