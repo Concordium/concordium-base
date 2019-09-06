@@ -441,3 +441,83 @@ pub fn ip_data_to_json(v: &IpData) -> Value {
         "publicIdInfo": ip_info_to_json(&v.0)
     })
 }
+
+static ALIST_BASIC_PERSON: &'static [&'static str] = &[
+    "maxAccount",
+    "creationTime",
+    "birthYear",
+    "residenceCountryCode",
+];
+// basic person
+// accredited investor
+static ALIST_ACCREDITED_INVESTOR: &'static [&'static str] = &[
+    "maxAccount",
+    "creationTime",
+    "residenceCountryCode",
+    "assetsOwnedLB",
+];
+
+static ALIST_DRIVER: &'static [&'static str] = &[
+    "maxAccount",
+    "creationTime",
+    "birthYear",
+    "residenceCountryCode",
+    "drivingLicenseCountryCode",
+    "drivingLicenseIssueDate",
+    "drivingLicenseExpiry",
+    "drivingLicenseCategories",
+];
+
+static ALIST_BASIC_COMPANY: &'static [&'static str] = &[
+    "maxAccount",
+    "creationTime",
+    "registrationCountryCode",
+    "isEUVAT",
+    "VATNumber",
+];
+
+static ALIST_BASIC_VEHICLE: &'static [&'static str] = &[
+    "maxAccount",
+    "creationTime",
+    "brandId",
+    "registrationCountryCode",
+    "vehicleClass",
+    "numPassengerSeats",
+    "modelYear",
+    "productionYear",
+    "modelId",
+    "engineType",
+    "engineSize",
+    "VIN",
+];
+
+static ALIST_BASIC_IOT: &'static [&'static str] = &[
+    "maxAccount",
+    "creationTime",
+    "deviceType",
+    "deviceManufacturer",
+    "deviceSerial",
+    "deviceSpecific1",
+    "deviceSpecific2",
+    "deviceSpecific3",
+];
+
+static ATTRIBUTE_LISTS: &'static [&'static [&'static str]] = &[
+    ALIST_BASIC_PERSON,
+    ALIST_ACCREDITED_INVESTOR,
+    ALIST_DRIVER,
+    ALIST_BASIC_COMPANY,
+    ALIST_BASIC_VEHICLE,
+    ALIST_BASIC_IOT,
+];
+
+// index of the attribute in the list, if such a thing exists
+pub fn attribute_index(variant: u16, s: &str) -> Option<u16> {
+    let variant = variant as usize;
+    if variant < ATTRIBUTE_LISTS.len() {
+        let i = ATTRIBUTE_LISTS[variant].iter().position(|x| *x == s)?;
+        Some(i as u16)
+    } else {
+        None
+    }
+}

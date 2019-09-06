@@ -209,24 +209,6 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
     rouille::Response::json(&response)
 }
 
-fn attribute_index(variant: u16, s: &str) -> Option<u16> {
-    match variant {
-        0 => match s {
-            "maxAccount" => Some(0),
-            "age" => Some(1),
-            _ => None,
-        },
-        1 => match s {
-            "maxAccount" => Some(0),
-            "age" => Some(1),
-            "citizenship" => Some(2),
-            "business" => Some(3),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
 fn read_revealed_items(
     variant: u16,
     alist: &[ExampleAttribute],
