@@ -254,7 +254,7 @@ mod test {
 
         let variant = 0;
         let expiry_date = 123123123;
-        let alist = vec![AttributeKind::U8(55), AttributeKind::U64(313123333)];
+        let alist = vec![AttributeKind::from(55), AttributeKind::from(313123333)];
 
         let aci = AccCredentialInfo::<Bls12, ExampleCurve, AttributeKind> {
             acc_holder_info: ah_info,
@@ -284,14 +284,14 @@ mod test {
         let policy = Policy {
             variant,
             expiry: expiry_date,
-            policy_vec: vec![(0, AttributeKind::U8(55))],
+            policy_vec: vec![(0, AttributeKind::from(55))],
             _phantom: Default::default(),
         };
 
         let wrong_policy = Policy {
             variant,
             expiry: expiry_date,
-            policy_vec: vec![(0, AttributeKind::U8(5))],
+            policy_vec: vec![(0, AttributeKind::from(5))],
             _phantom: Default::default(),
         };
 

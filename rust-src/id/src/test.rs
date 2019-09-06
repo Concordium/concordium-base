@@ -56,7 +56,7 @@ fn test_pipeline() {
 
     let variant = 0;
     let expiry_date = 123123123;
-    let alist = vec![AttributeKind::U16(55), AttributeKind::U8(31)];
+    let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
     let aci = AccCredentialInfo {
         acc_holder_info: ah_info,
         prf_key,
@@ -86,7 +86,7 @@ fn test_pipeline() {
     let policy = Policy {
         variant,
         expiry: expiry_date,
-        policy_vec: vec![(1, AttributeKind::U8(31))],
+        policy_vec: vec![(1, AttributeKind::from(31))],
         _phantom: Default::default(),
     };
 
