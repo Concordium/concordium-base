@@ -1,5 +1,6 @@
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
+use ed25519_dalek as ed25519;
 use elgamal::cipher::Cipher;
 use hex::{decode, encode};
 use id::{ffi::*, types::*};
@@ -21,7 +22,11 @@ use std::{
     path::Path,
 };
 
-type ExampleCurve = <Bls12 as Pairing>::G_1;
+pub type ExampleCurve = <Bls12 as Pairing>::G_1;
+
+pub type ExampleAttribute = AttributeKind;
+
+pub type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
 
 macro_rules! m_json_decode {
     ($val:expr, $key:expr) => {
@@ -53,10 +58,6 @@ pub fn read_identity_providers() -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>:
         None
     }
 }
-
-type ExampleAttribute = AttributeKind;
-
-type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
 
 /// Show fields of the type of fields of the given attribute list.
 pub fn show_attribute_format(variant: u16) -> &'static str {
@@ -199,6 +200,25 @@ pub fn json_to_alist(v: &Value) -> Option<ExampleAttributeList> {
     }
 }
 
+pub fn json_to_account_data(v: &Value) -> Option<AccountData> {
+    let v = v.as_object()?;
+    let verify_key =
+        ed25519::PublicKey::from_bytes(&v.get("verifyKey").and_then(json_base16_decode)?).ok()?;
+    let sign_key =
+        ed25519::SecretKey::from_bytes(&v.get("signKey").and_then(json_base16_decode)?).ok()?;
+    Some(AccountData {
+        verify_key,
+        sign_key,
+    })
+}
+
+pub fn account_data_to_json(acc: &AccountData) -> Value {
+    json!({
+        "verifyKey": json_base16_encode(acc.verify_key.as_bytes()),
+        "signKey": json_base16_encode(acc.sign_key.as_bytes()),
+    })
+}
+
 pub fn aci_to_json(
     aci: &AccCredentialInfo<Bls12, <Bls12 as Pairing>::G_1, ExampleAttribute>,
 ) -> Value {
@@ -234,6 +254,10 @@ pub fn json_read_u32(v: &Map<String, Value>, key: &str) -> Option<u32> {
     u32::try_from(v.get(key)?.as_u64()?).ok()
 }
 
+pub fn json_read_u8(v: &Map<String, Value>, key: &str) -> Option<u8> {
+    u8::try_from(v.get(key)?.as_u64()?).ok()
+}
+
 pub fn json_to_global_context(v: &Value) -> Option<GlobalContext<ExampleCurve>> {
     let obj = v.as_object()?;
     let dlog_base_bytes = obj.get("dLogBaseChain").and_then(json_base16_decode)?;
@@ -249,6 +273,21 @@ pub fn json_to_global_context(v: &Value) -> Option<GlobalContext<ExampleCurve>> 
         on_chain_commitment_key: cmk,
     };
     Some(gc)
+}
+
+pub fn policy_to_json<C: Curve, AttributeType: Attribute<C::Scalar>>(
+    policy: &Policy<C, AttributeType>,
+) -> Value {
+    let revealed: Vec<Value> = policy
+        .policy_vec
+        .iter()
+        .map(|(idx, value)| json!({"index": idx, "value": json_base16_encode(&value.to_bytes())}))
+        .collect();
+    json!({
+        "variant": policy.variant,
+        "expiry": policy.expiry,
+        "revealedItems": revealed
+    })
 }
 
 pub fn json_to_ip_info(ip_val: &Value) -> Option<IpInfo<Bls12, <Bls12 as Pairing>::G_1>> {
@@ -278,7 +317,7 @@ pub fn json_to_ip_info(ip_val: &Value) -> Option<IpInfo<Bls12, <Bls12 as Pairing
     })
 }
 
-pub fn json_to_ip_infos(v: &Value) -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>::G_1>>> {
+pub fn json_to_ip_infos(v: &Value) -> Option<Vec<IpInfo<Bls12, ExampleCurve>>> {
     let ips_arr = v.as_array()?;
     ips_arr.iter().map(json_to_ip_info).collect()
 }
@@ -286,6 +325,7 @@ pub fn json_to_ip_infos(v: &Value) -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing
 pub fn ip_info_to_json(ipinfo: &IpInfo<Bls12, <Bls12 as Pairing>::G_1>) -> Value {
     json!({
                                    "ipIdentity": ipinfo.ip_identity,
+                                   "ipDescription": ipinfo.ip_description,
                                    "ipVerifyKey": json_base16_encode(&ipinfo.ip_verify_key.to_bytes()),
                                    "arIdentity": ipinfo.ar_info.ar_identity,
                                    "arDescription": ipinfo.ar_info.ar_description,
@@ -380,5 +420,24 @@ pub fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, E
         snd_cmm_prf,
         proof_com_enc_eq,
         proof_com_eq,
+    })
+}
+
+/// Private and public data on an identity provider.
+pub type IpData = (IpInfo<Bls12, ExampleCurve>, ps_sig::SecretKey<Bls12>);
+
+pub fn json_to_ip_data(v: &Value) -> Option<IpData> {
+    let id_cred_sec = ps_sig::SecretKey::from_bytes(&mut Cursor::new(&json_base16_decode(
+        v.get("idPrivateKey")?,
+    )?))
+    .ok()?;
+    let ip_info = json_to_ip_info(v.get("publicIdInfo")?)?;
+    Some((ip_info, id_cred_sec))
+}
+
+pub fn ip_data_to_json(v: &IpData) -> Value {
+    json!({
+        "idPrivateKey": json_base16_encode(&v.1.to_bytes()),
+        "publicIdInfo": ip_info_to_json(&v.0)
     })
 }

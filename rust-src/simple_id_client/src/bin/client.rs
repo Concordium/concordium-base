@@ -1,6 +1,5 @@
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
-use ed25519_dalek as ed25519;
 use eddsa_ed25519 as ed25519_wrapper;
 
 use curve_arithmetic::{Curve, Pairing};
@@ -24,8 +23,6 @@ use std::{
 };
 
 use client_server_helpers::*;
-
-type ExampleCurve = <Bls12 as Pairing>::G_1;
 
 macro_rules! m_json_decode {
     ($val:expr, $key:expr) => {
@@ -65,8 +62,6 @@ fn mk_ar_name(n: usize) -> String {
     s.push_str(&n.to_string());
     s
 }
-
-type ExampleAttribute = AttributeKind;
 
 /// Show fields of the type of fields of the given attribute list.
 fn show_attribute_format(variant: u16) -> &'static str {
@@ -556,43 +551,9 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     }
 }
 
-fn policy_to_json<C: Curve, AttributeType: Attribute<C::Scalar>>(
-    policy: &Policy<C, AttributeType>,
-) -> Value {
-    let revealed: Vec<Value> = policy
-        .policy_vec
-        .iter()
-        .map(|(idx, value)| json!({"index": idx, "value": json_base16_encode(&value.to_bytes())}))
-        .collect();
-    json!({
-        "variant": policy.variant,
-        "expiry": policy.expiry,
-        "revealedItems": revealed
-    })
-}
-
 fn read_account_data<P: AsRef<Path>>(path: P) -> Option<AccountData> {
     let v = read_json_from_file(path).ok()?;
     json_to_account_data(&v)
-}
-
-fn json_to_account_data(v: &Value) -> Option<AccountData> {
-    let v = v.as_object()?;
-    let verify_key =
-        ed25519::PublicKey::from_bytes(&v.get("verifyKey").and_then(json_base16_decode)?).ok()?;
-    let sign_key =
-        ed25519::SecretKey::from_bytes(&v.get("signKey").and_then(json_base16_decode)?).ok()?;
-    Some(AccountData {
-        verify_key,
-        sign_key,
-    })
-}
-
-fn account_data_to_json(acc: &AccountData) -> Value {
-    json!({
-        "verifyKey": json_base16_encode(acc.verify_key.as_bytes()),
-        "signKey": json_base16_encode(acc.sign_key.as_bytes()),
-    })
 }
 
 /// Create a new CHI object (essentially new idCredPub and idCredSec).
@@ -631,22 +592,6 @@ fn handle_create_chi(matches: &ArgMatches) {
         println!("Generated account holder information.");
         output_json(&js)
     }
-}
-
-/// load private and public information on identity providers
-/// Private and public data on an identity provider.
-type IpData = (
-    IpInfo<Bls12, <Bls12 as Pairing>::G_1>,
-    ps_sig::SecretKey<Bls12>,
-);
-
-fn json_to_ip_data(v: &Value) -> Option<IpData> {
-    let id_cred_sec = ps_sig::SecretKey::from_bytes(&mut Cursor::new(&json_base16_decode(
-        v.get("idPrivateKey")?,
-    )?))
-    .ok()?;
-    let ip_info = json_to_ip_info(v.get("publicIdInfo")?)?;
-    Some((ip_info, id_cred_sec))
 }
 
 /// Act as the identity provider. Read the pre-identity object and load the
