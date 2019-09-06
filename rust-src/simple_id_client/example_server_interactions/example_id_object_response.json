@@ -1,0 +1,47 @@
+{
+    "ipIdentity": 0,
+    "preIdentityObject": {
+        "accountHolderName": "Aleš",
+        "attributeList": {
+            "age": 31,
+            "business": true,
+            "citizenship": 38,
+            "expiryDate": 1910822399,
+            "maxAccount": 200,
+            "variant": 1
+        },
+        "idCredPubIp": "929b9f83a095f9c65e5b90a1da71ba1643aa52294b2df48671a82b126fb75dddf1661759e68069b7a87cd19347be627c",
+        "idCredSecCommitment": "9215eec41a14350ed9eae438984c2f719c9f5fe12d4d4301e63e791f6994163a4c7046c265635cf9c411429d52c2402d",
+        "ipArData": {
+            "arDescription": "anonymity_revoker-0",
+            "arIdentity": 0,
+            "prfKeyEncryption": "ab486d46e24db272839683fd13ef9041148af7b7fc64d1a37781b03ac7a7c9563b951399e6a1052fd046d67773a2349098a2f45c4bf18dc4eec64fe40ee831d919b47a5558796b24b5a2431fbe892202df82646e6717699a712671ef980f36bf"
+        },
+        "pokSecCred": "63994139028fd5843cfbae94fcf6cf97141faf9ccb6f0302ae3a7e59c15818bb00000001a4cfb12d6d33908d2690215294f01d919f67723cfeb0cc6ae28fa893e52fccfc9c95c05f98a7a890f9d088e3d6ff80e9b38e7b8c9d888c9d5b88c27db1f7ed53d03991a28aff6ce2bf9369b606aef78151c5b1f5726450479ba4bedd690aa70d000000010f7d2404e0d58b9fed2075609d679abdda7409419c273aac5c3738132debd57d00000001185f717fd80205ba4da4ae57fdc22e382cc1508ef3fcdf9a4eb94d8e72023a66",
+        "prfKeyCommitmentWithAR": "af21201056c7e287357f133653baf86c03bd463d29da81a1bad639ee1cd24e0e2ce6f36ae8599d8ab187ad02e864751a",
+        "prfKeyCommitmentWithID": "ad0ee0900b20a2e29d282e30e1d349be944f53e56235d8579b37b39ed765ef8ffd37a6d184610072796fb9f767b6e696",
+        "proofCommitmentsSame": "615434a03267e06eb01fab70f593227765fb394d3e7b8f7cfee4574eac3aaebaae7d9aab0bfc33aead60a258e30c7ce73de77337749f2c294aa3e2eb82ecd263dec0cefd0bbfed92ba82f17092acf18fa1c0aeff1479f65e0dac9f9fe99faefc0d8e9bf24ff2f5923795ed6496f2821cbcce5b5fb1dd46cff10f1066a746ad6c189f31d99f21edf69065295812bbd2634d382e3d04599c202cff80d4b76ee7716d6dfa0de8727e548d1b2df8750f96e46abe4ffe3879a2b91d62a9c873e4e0781c51a11413435885179bcd3b268f890dfa86dc246bd3d3054933540f44b9b14a",
+        "proofEncryptionPrf": "32898c955f2f46dcecf0b9074548fa272e60f799eb8f465af23c11b0c723031eaab136c8ed896d0b0a6dd7f92f80bda3f1c3caf712ec83d60dc7640bea5ea47787461d576d8bdedf8265fbba0fae2c2a85a865a9331e8df128c620e3fc04f9690afa38b4f29cee322221b408e1e58dd89882d4b71dc42ed7d51661330da2213699c8d5408faf710b2273584f88f5ced4d4eee5e2a10af85b2ad469f3ba2711130abc379d21709606ac4cee2ce5b59e2325510828277c62d81e0a57a0edddbff409129ac06980cc4bf28d2b3387b064e01a751cbf1bc613231488fc17ec2a6411c96f059a6e33d03ce6d756f158a7bd1e25d91e6cbe1d5e4057500fdecbaba773cfc40b5562cae78d022793277a22d4cd"
+    },
+    "privateData": {
+        "ACI": {
+            "attributes": {
+                "age": 31,
+                "business": true,
+                "citizenship": 38,
+                "expiryDate": 1910822399,
+                "maxAccount": 200,
+                "variant": 1
+            },
+            "credentialHolderInformation": {
+                "idCredPublic": "929b9f83a095f9c65e5b90a1da71ba1643aa52294b2df48671a82b126fb75dddf1661759e68069b7a87cd19347be627c",
+                "idCredPublicIP": "929b9f83a095f9c65e5b90a1da71ba1643aa52294b2df48671a82b126fb75dddf1661759e68069b7a87cd19347be627c",
+                "idCredSecret": "0cb96a1746ce08db10a240b416ec749c408d52aedd3eae8c7bb93fa2b754c095",
+                "name": "Aleš"
+            },
+            "prfKey": "14010d50621a10b13e24e8ea6b19802202f9bf163bcdfa77500fc8244a8a60c6"
+        },
+        "PIORandomness": "50099c7315144100da2da8f64e53041bdccfd0a72a050a4b77ef48a958b206e5"
+    },
+    "signature": "86828e8d017f29fd7cf89756fd8db924c51d8ebe2a03a663bb3d44db7e93f0a28e86e01cdea9203b2ac77b80c9a21165aca393256cfd2938a1d6ffee241d41de2b56cd58043bbc68a88e9406e666e1f5077c24a05082dd7c14c75561de8ffc14"
+}

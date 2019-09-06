@@ -1,0 +1,12 @@
+{
+    "ipIdentity": 0,
+    "name": "Aleš",
+    "attributes": {
+      "age": 31,
+      "business": true,
+      "citizenship": 38,
+      "expiryDate": 1910822399,
+      "maxAccount": 200,
+      "variant": 1
+    }
+}
