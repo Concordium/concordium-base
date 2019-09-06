@@ -6,102 +6,76 @@ use curve_arithmetic::curve_arithmetic::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
 use std::{
+    fmt,
     io::{Cursor, Read},
     slice,
+    str::FromStr,
 };
 
-use byteorder::{BigEndian, ReadBytesExt};
 use failure::Error;
 use ffi_helpers::*;
 use libc::size_t;
+use num::bigint::BigUint;
 use rand::thread_rng;
 
 /// Concrete attribute kinds
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub enum AttributeKind {
-    U8(u8),
-    U16(u16),
-    U32(u32),
-    U64(u64),
-}
+pub struct AttributeKind([u8; 31]);
 
 impl AttributeKind {
-    pub fn size_of(&self) -> usize {
+    pub fn size_of(&self) -> usize { 31 }
+}
+
+pub fn attribute_from_string(s: &str) -> Option<AttributeKind> {
+    let buint = BigUint::from_str(s).ok()?;
+    if buint < BigUint::from_bytes_be(&[255; 31]) {
+        let bytes = buint.to_bytes_be();
+        let mut buf = [0; 31];
+        buf[31 - bytes.len()..].copy_from_slice(&bytes);
+        Some(AttributeKind(buf))
+    } else {
+        None
+    }
+}
+
+impl fmt::Display for AttributeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AttributeKind::U8(_) => 1,
-            AttributeKind::U16(_) => 2,
-            AttributeKind::U32(_) => 4,
-            AttributeKind::U64(_) => 8,
+            AttributeKind(x) => write!(f, "{}", BigUint::from_bytes_be(x)),
         }
     }
+}
 
-    pub fn to_u64(&self) -> u64 {
-        match self {
-            AttributeKind::U8(x) => u64::from(*x),
-            AttributeKind::U16(x) => u64::from(*x),
-            AttributeKind::U32(x) => u64::from(*x),
-            AttributeKind::U64(x) => *x,
-        }
+impl From<u64> for AttributeKind {
+    fn from(x: u64) -> Self {
+        let mut buf = [0u8; 31];
+        buf[23..].copy_from_slice(&x.to_be_bytes());
+        AttributeKind(buf)
     }
 }
 
 impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
     fn to_field_element(&self) -> <G1 as Curve>::Scalar {
-        <G1 as Curve>::scalar_from_u64(self.to_u64()).unwrap()
+        match self {
+            AttributeKind(x) => {
+                let mut buf = [0u8; 32];
+                buf[1..].copy_from_slice(x);
+                <G1 as Curve>::bytes_to_scalar(&mut Cursor::new(&buf)).unwrap()
+            }
+        }
     }
 
     fn to_bytes(&self) -> Box<[u8]> {
         match self {
-            AttributeKind::U8(x) => {
-                let mut buff = [0u8; 2];
-                buff[0] = 0u8;
-                buff[1..].copy_from_slice(&x.to_be_bytes());
-                Box::new(buff)
-            }
-            AttributeKind::U16(x) => {
-                let mut buff = [0u8; 3];
-                buff[0] = 1u8;
-                buff[1..].copy_from_slice(&x.to_be_bytes());
-                Box::new(buff)
-            }
-            AttributeKind::U32(x) => {
-                let mut buff = [0u8; 5];
-                buff[0] = 2u8;
-                buff[1..].copy_from_slice(&x.to_be_bytes());
-                Box::new(buff)
-            }
-            AttributeKind::U64(x) => {
-                let mut buff = [0u8; 9];
-                buff[0] = 3u8;
-                buff[1..].copy_from_slice(&x.to_be_bytes());
-                Box::new(buff)
-            }
+            AttributeKind(x) => Box::new(*x),
         }
     }
 
     fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         // let bytes = cur.get_ref();
-        let mut size_buff = [0u8; 1];
-        cur.read_exact(&mut size_buff).ok()?;
-        match size_buff[0] {
-            0 => {
-                let r = cur.read_u8().ok()?;
-                Some(AttributeKind::U8(r))
-            }
-            1 => {
-                let r = cur.read_u16::<BigEndian>().ok()?;
-                Some(AttributeKind::U16(r))
-            }
-            2 => {
-                let r = cur.read_u32::<BigEndian>().ok()?;
-                Some(AttributeKind::U32(r))
-            }
-            3 => {
-                let r = cur.read_u64::<BigEndian>().ok()?;
-                Some(AttributeKind::U64(r))
-            }
-            _ => None,
-        }
+        let mut r = [0u8; 31];
+        cur.read_exact(&mut r).ok();
+        Some(AttributeKind(r))
     }
 }
 

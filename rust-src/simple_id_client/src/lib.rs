@@ -70,12 +70,12 @@ pub fn show_attribute_format(variant: u16) -> &'static str {
 
 pub fn show_attribute(variant: u16, idx: usize, att: &ExampleAttribute) -> String {
     match (variant, idx) {
-        (0, 0) => format!("MaxAccount({})", att.to_u64()).to_string(),
-        (0, 1) => format!("Age({})", att.to_u64()).to_string(),
-        (1, 0) => format!("MaxAccount({})", att.to_u64()).to_string(),
-        (1, 1) => format!("Age({})", att.to_u64()).to_string(),
-        (1, 2) => format!("Citizenship({})", att.to_u64()).to_string(),
-        (1, 3) => format!("Business({})", att.to_u64() != 0).to_string(),
+        (0, 0) => format!("MaxAccount({})", att.to_string()).to_string(),
+        (0, 1) => format!("Age({})", att.to_string()).to_string(),
+        (1, 0) => format!("MaxAccount({})", att.to_string()).to_string(),
+        (1, 1) => format!("Age({})", att.to_string()).to_string(),
+        (1, 2) => format!("Citizenship({})", att.to_string()).to_string(),
+        (1, 3) => format!("Business({})", *att != AttributeKind::from(0)).to_string(),
         (_, _) => panic!("This should not happen. Precondition violated."),
     }
 }
@@ -137,67 +137,6 @@ pub fn json_to_chi<C: Curve, T: Curve<Scalar = C::Scalar>>(
         },
     };
     Some(info)
-}
-
-pub fn alist_to_json(alist: &ExampleAttributeList) -> Value {
-    match alist.variant {
-        0 => json!({
-            "variant": alist.variant,
-            "expiryDate": alist.expiry,
-            "maxAccount": alist.alist[0].to_u64(),
-            "age": alist.alist[1].to_u64(),
-        }),
-        1 => json!({
-            "variant": alist.variant,
-            "expiryDate": alist.expiry,
-            "maxAccount": alist.alist[0].to_u64(),
-            "age": alist.alist[1].to_u64(),
-            "citizenship": alist.alist[2].to_u64(),
-            "business": alist.alist[3].to_u64() == 1,
-        }),
-        _ => Value::Null,
-    }
-}
-
-pub fn json_to_alist(v: &Value) -> Option<ExampleAttributeList> {
-    let obj = v.as_object()?;
-    let variant = obj.get("variant").and_then(Value::as_u64)?;
-    let expiry = obj.get("expiryDate").and_then(Value::as_u64)?;
-    match variant {
-        0 => {
-            let max_account = obj.get("maxAccount").and_then(Value::as_u64)?;
-            let age = obj.get("age").and_then(Value::as_u64)?;
-            let alist = vec![
-                AttributeKind::U8(max_account as u8),
-                AttributeKind::U8(age as u8),
-            ];
-            Some(AttributeList {
-                variant: variant as u16,
-                expiry,
-                alist,
-                _phantom: Default::default(),
-            })
-        }
-        1 => {
-            let max_account = obj.get("maxAccount").and_then(Value::as_u64)?;
-            let age = obj.get("age").and_then(Value::as_u64)?;
-            let citizenship = obj.get("citizenship").and_then(Value::as_u64)?;
-            let business = obj.get("business").and_then(Value::as_bool)?;
-            let alist = vec![
-                AttributeKind::U8(max_account as u8),
-                AttributeKind::U8(age as u8),
-                AttributeKind::U16(citizenship as u16),
-                AttributeKind::U8(if business { 1 } else { 0 }),
-            ];
-            Some(AttributeList {
-                variant: variant as u16,
-                expiry,
-                alist,
-                _phantom: Default::default(),
-            })
-        }
-        _ => None,
-    }
 }
 
 pub fn json_to_account_data(v: &Value) -> Option<AccountData> {
@@ -517,6 +456,44 @@ pub fn attribute_index(variant: u16, s: &str) -> Option<u16> {
     if variant < ATTRIBUTE_LISTS.len() {
         let i = ATTRIBUTE_LISTS[variant].iter().position(|x| *x == s)?;
         Some(i as u16)
+    } else {
+        None
+    }
+}
+
+pub fn alist_to_json(alist: &ExampleAttributeList) -> Value {
+    let mut mp = Map::with_capacity(2);
+    mp.insert("variant".to_owned(), Value::from(alist.variant));
+    mp.insert("expiryDate".to_owned(), Value::from(alist.expiry));
+    if (alist.variant as usize) < ATTRIBUTE_LISTS.len()
+        && alist.alist.len() == ATTRIBUTE_LISTS[alist.variant as usize].len()
+    {
+        let keys = ATTRIBUTE_LISTS[alist.variant as usize];
+        for (i, v) in alist.alist.iter().enumerate() {
+            mp.insert(keys[i].to_string(), Value::from(v.to_string()));
+        }
+        Value::Object(mp)
+    } else {
+        Value::Null
+    }
+}
+
+pub fn json_to_alist(v: &Value) -> Option<ExampleAttributeList> {
+    let obj = v.as_object()?;
+    let variant = obj.get("variant").and_then(Value::as_u64)?;
+    let expiry = obj.get("expiryDate").and_then(Value::as_u64)?;
+    if (variant as usize) < ATTRIBUTE_LISTS.len() {
+        let keys = ATTRIBUTE_LISTS[variant as usize];
+        let mut alist = Vec::with_capacity(keys.len());
+        for key in keys {
+            alist.push(attribute_from_string(v.get(key)?.as_str()?)?);
+        }
+        Some(AttributeList {
+            variant: variant as u16,
+            expiry,
+            alist,
+            _phantom: Default::default(),
+        })
     } else {
         None
     }

@@ -72,18 +72,6 @@ fn show_attribute_format(variant: u16) -> &'static str {
     }
 }
 
-fn show_attribute(variant: u16, idx: usize, att: &ExampleAttribute) -> String {
-    match (variant, idx) {
-        (0, 0) => format!("MaxAccount({})", att.to_u64()).to_string(),
-        (0, 1) => format!("Age({})", att.to_u64()).to_string(),
-        (1, 0) => format!("MaxAccount({})", att.to_u64()).to_string(),
-        (1, 1) => format!("Age({})", att.to_u64()).to_string(),
-        (1, 2) => format!("Citizenship({})", att.to_u64()).to_string(),
-        (1, 3) => format!("Business({})", att.to_u64() != 0).to_string(),
-        (_, _) => panic!("This should not happen. Precondition violated."),
-    }
-}
-
 fn read_max_account() -> io::Result<ExampleAttribute> {
     let options = vec![10, 25, 50, 100, 200, 255];
     let select = Select::new()
@@ -91,7 +79,7 @@ fn read_max_account() -> io::Result<ExampleAttribute> {
         .items(&options)
         .default(0)
         .interact()?;
-    Ok(AttributeKind::U8(options[select]))
+    Ok(AttributeKind::from(options[select]))
 }
 
 /// Reads the expiry date. Only the day, the expiry time is set at the end of
@@ -105,17 +93,17 @@ fn read_expiry_date() -> io::Result<u64> {
 /// input. Fails if the user input is not well-formed.
 fn read_attribute_list(variant: u16) -> io::Result<Vec<ExampleAttribute>> {
     let max_acc = read_max_account()?;
-    let age = Input::new().with_prompt("Your age").interact()?;
+    let age: u64 = Input::new().with_prompt("Your age").interact()?;
     match variant {
-        0 => Ok(vec![max_acc, AttributeKind::U8(age)]),
+        0 => Ok(vec![max_acc, AttributeKind::from(age)]),
         1 => {
-            let citizenship = Input::new().with_prompt("Citizenship").interact()?; // TODO: use drop-down/select with
-            let business = Input::new().with_prompt("Are you a business").interact()?;
+            let citizenship: u64 = Input::new().with_prompt("Citizenship").interact()?; // TODO: use drop-down/select with
+            let business: bool = Input::new().with_prompt("Are you a business").interact()?;
             Ok(vec![
                 max_acc,
-                AttributeKind::U8(age),
-                AttributeKind::U16(citizenship),
-                AttributeKind::U8(if business { 1 } else { 0 }),
+                AttributeKind::from(age),
+                AttributeKind::from(citizenship),
+                AttributeKind::from(if business { 1 } else { 0 }),
             ])
         }
         _ => panic!("This should not be reachable. Precondition violated."),
