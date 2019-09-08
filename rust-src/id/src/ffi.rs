@@ -5,14 +5,9 @@ use crate::{
 use curve_arithmetic::curve_arithmetic::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
-use std::{
-    error::Error as StdError,
-    fmt,
-    io::{Cursor, Read},
-    slice,
-    str::FromStr,
-};
+use std::{error::Error as StdError, fmt, io::Cursor, slice, str::FromStr};
 
+use byteorder::ReadBytesExt;
 use failure::Error;
 use ffi_helpers::*;
 use libc::size_t;
@@ -86,26 +81,32 @@ impl From<u64> for AttributeKind {
 
 impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
     fn to_field_element(&self) -> <G1 as Curve>::Scalar {
-        match self {
-            AttributeKind(x) => {
-                let mut buf = [0u8; 32];
-                buf[1..].copy_from_slice(x);
-                <G1 as Curve>::bytes_to_scalar(&mut Cursor::new(&buf)).unwrap()
-            }
-        }
+        let AttributeKind(x) = self;
+        let mut buf = [0u8; 32];
+        buf[1..].copy_from_slice(x);
+        <G1 as Curve>::bytes_to_scalar(&mut Cursor::new(&buf)).unwrap()
     }
 
     fn to_bytes(&self) -> Box<[u8]> {
-        match self {
-            AttributeKind(x) => Box::new(*x),
-        }
+        let AttributeKind(x) = self;
+        let bytes = (BigUint::from_bytes_be(x)).to_bytes_be();
+        let l = bytes.len();
+        let mut buf = vec![l as u8; l + 1];
+        buf[1..].copy_from_slice(&bytes);
+        buf.into_boxed_slice()
     }
 
     fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        // let bytes = cur.get_ref();
-        let mut r = [0u8; 31];
-        cur.read_exact(&mut r).ok();
-        Some(AttributeKind(r))
+        let l = cur.read_u8().ok()?;
+        if l <= 31 {
+            let mut r = [0u8; 31];
+            for i in (31 - l)..31 {
+                r[i as usize] = cur.read_u8().ok()?;
+            }
+            Some(AttributeKind(r))
+        } else {
+            None
+        }
     }
 }
 
