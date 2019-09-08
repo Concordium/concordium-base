@@ -8,7 +8,7 @@ The server is a minimalistic HTTP server that understands 4 requests. It needs a
 - a file with some "global" parameters. These are some common commitment keys, generators, etc. This file is needed during credential generation and credential checking on-chain. If the parameters do not match credential checking will fail.
 - a file with a list of identity providers with all of their **public** and **private** data. Private keys are needed because the server acts as the identity provider. The public data from identity providers must also match of that on the chain (supplied in the genesis data) in order for the credentials to validate.
 
-Example files can be found in [global parameters](example_server_interactions/global.json) and [identity providers](identity-providers-public-private.json).
+Example files can be found in [global parameters](example_server_interactions/global.json) and [identity providers](example_server_interactions/identity-providers-public-private.json).
 
 To generate fresh instances of parameters you need to use the `client` binary, see its documentation.
 
