@@ -18,8 +18,9 @@ use pedersen_scheme::key as pedersen_key;
 
 use std::{
     fs::File,
-    io::{self, Cursor, Write},
+    io::{self, Cursor, Error, ErrorKind, Write},
     path::Path,
+    str::FromStr,
 };
 
 use client_server_helpers::*;
@@ -63,25 +64,6 @@ fn mk_ar_name(n: usize) -> String {
     s
 }
 
-/// Show fields of the type of fields of the given attribute list.
-fn show_attribute_format(variant: u16) -> &'static str {
-    match variant {
-        0 => "[ExpiryDate, MaxAccount, Age]",
-        1 => "[ExpiryDate, MaxAccount, Age, Citizenship, Business]",
-        _ => unimplemented!("Only two formats of attribute lists supported."),
-    }
-}
-
-fn read_max_account() -> io::Result<ExampleAttribute> {
-    let options = vec![10, 25, 50, 100, 200, 255];
-    let select = Select::new()
-        .with_prompt("Choose maximum number of accounts")
-        .items(&options)
-        .default(0)
-        .interact()?;
-    Ok(AttributeKind::from(options[select]))
-}
-
 /// Reads the expiry date. Only the day, the expiry time is set at the end of
 /// that day.
 fn read_expiry_date() -> io::Result<u64> {
@@ -92,22 +74,16 @@ fn read_expiry_date() -> io::Result<u64> {
 /// Given the chosen variant of the attribute list read off the fields from user
 /// input. Fails if the user input is not well-formed.
 fn read_attribute_list(variant: u16) -> io::Result<Vec<ExampleAttribute>> {
-    let max_acc = read_max_account()?;
-    let age: u64 = Input::new().with_prompt("Your age").interact()?;
-    match variant {
-        0 => Ok(vec![max_acc, AttributeKind::from(age)]),
-        1 => {
-            let citizenship: u64 = Input::new().with_prompt("Citizenship").interact()?; // TODO: use drop-down/select with
-            let business: bool = Input::new().with_prompt("Are you a business").interact()?;
-            Ok(vec![
-                max_acc,
-                AttributeKind::from(age),
-                AttributeKind::from(citizenship),
-                AttributeKind::from(if business { 1 } else { 0 }),
-            ])
-        }
-        _ => panic!("This should not be reachable. Precondition violated."),
+    let mut res = Vec::with_capacity(ATTRIBUTE_LISTS[variant as usize].len());
+    for key in ATTRIBUTE_LISTS[variant as usize] {
+        let input: String = Input::new().with_prompt(key).interact()?;
+        // NB: The index of an attribute must be the same as the one returned in
+        // attribute_index. Otherwise there will be strange issues, very likely.
+        res.push(
+            AttributeKind::from_str(&input).map_err(|e| Error::new(ErrorKind::InvalidData, e))?,
+        );
     }
+    Ok(res)
 }
 
 fn main() {
@@ -385,7 +361,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // the interface of checkboxes is less than ideal.
     let alist_items: Vec<&str> = alist_str.iter().map(String::as_str).collect();
     let atts: Vec<usize> = match Checkboxes::new()
-        .with_prompt("Select which attributes you wish to reveal.")
+        .with_prompt("Select which attributes you wish to reveal")
         .items(&alist_items)
         .interact()
     {
@@ -669,11 +645,14 @@ fn handle_start_ip(matches: &ArgMatches) {
     };
     let mut csprng = thread_rng();
     let prf_key = prf::SecretKey::generate(&mut csprng);
+    let alists: Vec<String> = ATTRIBUTE_LISTS
+        .iter()
+        .map(|alist| alist.join(", "))
+        .collect();
     let alist_type = {
         match Select::new()
             .with_prompt("Select attribute list type:")
-            .item(&show_attribute_format(0))
-            .item(&show_attribute_format(1))
+            .items(&alists)
             .default(0)
             .interact()
         {

@@ -17,9 +17,11 @@ use sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups};
 
 use std::{
     convert::TryFrom,
+    fmt::Display,
     fs::File,
     io::{self, BufReader, Cursor, Error, ErrorKind, Write},
     path::Path,
+    str::FromStr,
 };
 
 pub type ExampleCurve = <Bls12 as Pairing>::G_1;
@@ -69,15 +71,7 @@ pub fn show_attribute_format(variant: u16) -> &'static str {
 }
 
 pub fn show_attribute(variant: u16, idx: usize, att: &ExampleAttribute) -> String {
-    match (variant, idx) {
-        (0, 0) => format!("MaxAccount({})", att.to_string()).to_string(),
-        (0, 1) => format!("Age({})", att.to_string()).to_string(),
-        (1, 0) => format!("MaxAccount({})", att.to_string()).to_string(),
-        (1, 1) => format!("Age({})", att.to_string()).to_string(),
-        (1, 2) => format!("Citizenship({})", att.to_string()).to_string(),
-        (1, 3) => format!("Business({})", *att != AttributeKind::from(0)).to_string(),
-        (_, _) => panic!("This should not happen. Precondition violated."),
-    }
+    format!("{}: {}", ATTRIBUTE_LISTS[variant as usize][idx], att)
 }
 
 pub fn parse_expiry_date(input: &str) -> io::Result<u64> {
@@ -216,11 +210,13 @@ pub fn json_to_global_context(v: &Value) -> Option<GlobalContext<ExampleCurve>> 
 
 pub fn policy_to_json<C: Curve, AttributeType: Attribute<C::Scalar>>(
     policy: &Policy<C, AttributeType>,
-) -> Value {
+) -> Value
+where
+    AttributeType: Display, {
     let revealed: Vec<Value> = policy
         .policy_vec
         .iter()
-        .map(|(idx, value)| json!({"index": idx, "value": json_base16_encode(&value.to_bytes())}))
+        .map(|(idx, value)| json!({"index": idx, "value": format!("{}", value)}))
         .collect();
     json!({
         "variant": policy.variant,
@@ -381,22 +377,21 @@ pub fn ip_data_to_json(v: &IpData) -> Value {
     })
 }
 
-static ALIST_BASIC_PERSON: &'static [&'static str] = &[
+static ALIST_BASIC_PERSON: &[&str] = &[
     "maxAccount",
     "creationTime",
     "birthYear",
     "residenceCountryCode",
 ];
-// basic person
-// accredited investor
-static ALIST_ACCREDITED_INVESTOR: &'static [&'static str] = &[
+
+static ALIST_ACCREDITED_INVESTOR: &[&str] = &[
     "maxAccount",
     "creationTime",
     "residenceCountryCode",
     "assetsOwnedLB",
 ];
 
-static ALIST_DRIVER: &'static [&'static str] = &[
+static ALIST_DRIVER: &[&str] = &[
     "maxAccount",
     "creationTime",
     "birthYear",
@@ -407,7 +402,7 @@ static ALIST_DRIVER: &'static [&'static str] = &[
     "drivingLicenseCategories",
 ];
 
-static ALIST_BASIC_COMPANY: &'static [&'static str] = &[
+static ALIST_BASIC_COMPANY: &[&str] = &[
     "maxAccount",
     "creationTime",
     "registrationCountryCode",
@@ -415,7 +410,7 @@ static ALIST_BASIC_COMPANY: &'static [&'static str] = &[
     "VATNumber",
 ];
 
-static ALIST_BASIC_VEHICLE: &'static [&'static str] = &[
+static ALIST_BASIC_VEHICLE: &[&str] = &[
     "maxAccount",
     "creationTime",
     "brandId",
@@ -430,7 +425,7 @@ static ALIST_BASIC_VEHICLE: &'static [&'static str] = &[
     "VIN",
 ];
 
-static ALIST_BASIC_IOT: &'static [&'static str] = &[
+static ALIST_BASIC_IOT: &[&str] = &[
     "maxAccount",
     "creationTime",
     "deviceType",
@@ -441,7 +436,7 @@ static ALIST_BASIC_IOT: &'static [&'static str] = &[
     "deviceSpecific3",
 ];
 
-static ATTRIBUTE_LISTS: &'static [&'static [&'static str]] = &[
+pub static ATTRIBUTE_LISTS: &[&[&str]] = &[
     ALIST_BASIC_PERSON,
     ALIST_ACCREDITED_INVESTOR,
     ALIST_DRIVER,
@@ -463,8 +458,11 @@ pub fn attribute_index(variant: u16, s: &str) -> Option<u16> {
 
 pub fn alist_to_json(alist: &ExampleAttributeList) -> Value {
     let mut mp = Map::with_capacity(2);
-    mp.insert("variant".to_owned(), Value::from(alist.variant));
-    mp.insert("expiryDate".to_owned(), Value::from(alist.expiry));
+    mp.insert("variant".to_owned(), Value::from(alist.variant.to_string()));
+    mp.insert(
+        "expiryDate".to_owned(),
+        Value::from(alist.expiry.to_string()),
+    );
     if (alist.variant as usize) < ATTRIBUTE_LISTS.len()
         && alist.alist.len() == ATTRIBUTE_LISTS[alist.variant as usize].len()
     {
@@ -478,15 +476,27 @@ pub fn alist_to_json(alist: &ExampleAttributeList) -> Value {
     }
 }
 
+/// Either parse a string wrapped uint or an uint itself.
+pub fn parse_u64(v: &Value) -> Option<u64> {
+    v.as_u64().or_else(|| u64::from_str(v.as_str()?).ok())
+}
+
 pub fn json_to_alist(v: &Value) -> Option<ExampleAttributeList> {
     let obj = v.as_object()?;
-    let variant = obj.get("variant").and_then(Value::as_u64)?;
-    let expiry = obj.get("expiryDate").and_then(Value::as_u64)?;
+    // either parse a string wrapped int or an int itself.
+    let variant = obj.get("variant").and_then(parse_u64)?;
+    // either parse a string wrapped int or an int itself.
+    let expiry = obj.get("expiryDate").and_then(parse_u64)?;
     if (variant as usize) < ATTRIBUTE_LISTS.len() {
         let keys = ATTRIBUTE_LISTS[variant as usize];
         let mut alist = Vec::with_capacity(keys.len());
         for key in keys {
-            alist.push(attribute_from_string(v.get(key)?.as_str()?)?);
+            let val = v.get(key)?;
+            if let Some(u) = parse_u64(val) {
+                alist.push(AttributeKind::from(u))
+            } else {
+                alist.push(AttributeKind::from_str(val.as_str()?).ok()?)
+            }
         }
         Some(AttributeList {
             variant: variant as u16,

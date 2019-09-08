@@ -6,6 +6,7 @@ use curve_arithmetic::curve_arithmetic::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
 use std::{
+    error::Error as StdError,
     fmt,
     io::{Cursor, Read},
     slice,
@@ -15,26 +16,55 @@ use std::{
 use failure::Error;
 use ffi_helpers::*;
 use libc::size_t;
-use num::bigint::BigUint;
+use num::bigint::{BigUint, ParseBigIntError};
 use rand::thread_rng;
 
 /// Concrete attribute kinds
 #[derive(Copy, Clone, PartialEq, Eq)]
+// represented as big-endian bytes.
 pub struct AttributeKind([u8; 31]);
 
-impl AttributeKind {
-    pub fn size_of(&self) -> usize { 31 }
+#[derive(Debug)]
+pub enum ParseAttributeError {
+    IntDecodingFailed(ParseBigIntError),
+    ValueTooLarge,
 }
 
-pub fn attribute_from_string(s: &str) -> Option<AttributeKind> {
-    let buint = BigUint::from_str(s).ok()?;
-    if buint < BigUint::from_bytes_be(&[255; 31]) {
-        let bytes = buint.to_bytes_be();
-        let mut buf = [0; 31];
-        buf[31 - bytes.len()..].copy_from_slice(&bytes);
-        Some(AttributeKind(buf))
-    } else {
-        None
+impl From<ParseBigIntError> for ParseAttributeError {
+    fn from(err: ParseBigIntError) -> Self { ParseAttributeError::IntDecodingFailed(err) }
+}
+
+impl StdError for ParseAttributeError {
+    fn description(&self) -> &str {
+        match self {
+            ParseAttributeError::IntDecodingFailed(ref x) => x.description(),
+            ParseAttributeError::ValueTooLarge => "Value out of range.",
+        }
+    }
+}
+
+impl fmt::Display for ParseAttributeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ParseAttributeError::IntDecodingFailed(ref e) => e.fmt(f),
+            ParseAttributeError::ValueTooLarge => "Value out of range.".fmt(f),
+        }
+    }
+}
+
+impl FromStr for AttributeKind {
+    type Err = ParseAttributeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let buint = BigUint::from_str(s)?;
+        if buint.bits() <= 31 * 8 {
+            let bytes = buint.to_bytes_be();
+            let mut buf = [0; 31];
+            buf[31 - bytes.len()..].copy_from_slice(&bytes);
+            Ok(AttributeKind(buf))
+        } else {
+            Err(ParseAttributeError::ValueTooLarge)
+        }
     }
 }
 

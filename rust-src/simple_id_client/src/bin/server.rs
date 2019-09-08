@@ -258,6 +258,7 @@ pub fn main() {
         ip_infos,
         global_params,
     };
+
     rouille::start_server("localhost:8000", move |request| {
         router!(request,
                 // get global cryptographic parameters
