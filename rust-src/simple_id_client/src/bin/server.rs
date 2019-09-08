@@ -11,6 +11,7 @@ use curve_arithmetic::Curve;
 use rand::*;
 use serde_json::{json, to_string_pretty, Value};
 
+use clap::{App, AppSettings, Arg};
 use std::io::Cursor;
 
 // server imports
@@ -228,15 +229,43 @@ fn read_revealed_items(
 }
 
 // TODO: Pass filename as parameter
-fn read_ip_infos() -> Option<IpInfos> {
-    let v = read_json_from_file("database/identity-providers-public-private.json").ok()?;
+fn read_ip_infos(filename: &str) -> Option<IpInfos> {
+    let v = read_json_from_file(filename).ok()?;
     let v = v.as_array()?;
     v.iter().map(json_to_ip_data).collect()
 }
 
 pub fn main() {
+    let app = App::new("Server exposing creation of identity objects and credentials")
+        .version("0.31830988618")
+        .author("Concordium")
+        .setting(AppSettings::ColoredHelp)
+        .arg(
+            Arg::with_name("global")
+                .short("G")
+                .long("global")
+                .default_value(GLOBAL_CONTEXT)
+                .value_name("FILE")
+                .help("File with crypographic parameters."),
+        )
+        .arg(
+            Arg::with_name("ips")
+                .short("I")
+                .long("ips")
+                .default_value("identity_providers_public_private.json")
+                .value_name("FILE")
+                .help("File with public and private information on IPs and ARs."),
+        );
+
+    let matches = app.get_matches();
+
+    let gc_file = matches.value_of("global").unwrap_or(GLOBAL_CONTEXT);
+    let ips_file = matches
+        .value_of("ips")
+        .unwrap_or("identity_providers_public_private.json");
+
     let gc = {
-        if let Some(gc) = read_global_context() {
+        if let Some(gc) = read_global_context(gc_file) {
             gc
         } else {
             eprintln!("Could not read global cryptographic parameters. Aborting.");
@@ -245,7 +274,7 @@ pub fn main() {
     };
 
     let ips = {
-        if let Some(ips) = read_ip_infos() {
+        if let Some(ips) = read_ip_infos(ips_file) {
             ips
         } else {
             eprintln!("Could not read identity providers file. Aborting.");

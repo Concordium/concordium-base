@@ -31,12 +31,10 @@ macro_rules! m_json_decode {
     };
 }
 
-static GLOBAL_CONTEXT: &str = "database/global.json";
 static IP_PREFIX: &str = "database/identity_provider-";
 static AR_PREFIX: &str = "database/anonymity_revoker-";
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "anonymity_revoker-";
-static IDENTITY_PROVIDERS: &str = "database/identity_providers.json";
 
 fn mk_ip_filename(n: usize) -> String {
     let mut s = IP_PREFIX.to_string();
@@ -343,7 +341,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // we also read the global context from another json file (called
     // global.context). We need commitment keys and other data in there.
     let global_ctx = {
-        if let Some(gc) = read_global_context() {
+        if let Some(gc) = read_global_context(GLOBAL_CONTEXT) {
             gc
         } else {
             eprintln!("Cannot read global context information database. Terminating.");

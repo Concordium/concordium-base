@@ -36,11 +36,11 @@ macro_rules! m_json_decode {
     };
 }
 
-static GLOBAL_CONTEXT: &str = "database/global.json";
-static IDENTITY_PROVIDERS: &str = "database/identity_providers.json";
+pub static GLOBAL_CONTEXT: &str = "database/global.json";
+pub static IDENTITY_PROVIDERS: &str = "database/identity_providers.json";
 
-pub fn read_global_context() -> Option<GlobalContext<ExampleCurve>> {
-    if let Ok(Some(gc)) = read_json_from_file(GLOBAL_CONTEXT)
+pub fn read_global_context(filename: &str) -> Option<GlobalContext<ExampleCurve>> {
+    if let Ok(Some(gc)) = read_json_from_file(filename)
         .as_ref()
         .map(json_to_global_context)
     {
