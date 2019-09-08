@@ -3,45 +3,45 @@
     "preIdentityObject": {
         "accountHolderName": "Aleš",
         "attributeList": {
-            "age": 31,
-            "business": true,
-            "citizenship": 38,
-            "expiryDate": 1910822399,
-            "maxAccount": 200,
-            "variant": 1
+            "birthYear": "2013",
+            "creationTime": "1341324324",
+            "expiryDate": "1910822399",
+            "maxAccount": "30",
+            "residenceCountryCode": "386",
+            "variant": "0"
         },
-        "idCredPubIp": "929b9f83a095f9c65e5b90a1da71ba1643aa52294b2df48671a82b126fb75dddf1661759e68069b7a87cd19347be627c",
-        "idCredSecCommitment": "9215eec41a14350ed9eae438984c2f719c9f5fe12d4d4301e63e791f6994163a4c7046c265635cf9c411429d52c2402d",
+        "idCredPubIp": "a40a4d4891d95e6c809d38df94576bedb65aaa1e696c49989ec57ce8e6719ec2fa322ecc7ebbb9bd6cc95bb7aaeacee0",
+        "idCredSecCommitment": "8a4586d05bde327e8c3e7fca5d2e5efcb0e4f8f22ed7ab79c370b7e84d191c6c7e21f04f9c705e42dea3ad2b15c11b9b",
         "ipArData": {
             "arDescription": "anonymity_revoker-0",
             "arIdentity": 0,
-            "prfKeyEncryption": "ab486d46e24db272839683fd13ef9041148af7b7fc64d1a37781b03ac7a7c9563b951399e6a1052fd046d67773a2349098a2f45c4bf18dc4eec64fe40ee831d919b47a5558796b24b5a2431fbe892202df82646e6717699a712671ef980f36bf"
+            "prfKeyEncryption": "83544306a9099439bd3cb05b58e26a46b8dabbd52a3d0ed299c757ae8cc9eb4c8e8071bfbb581ffcbdaa64d87e7f9433a44d4996eea33b326ae4934d1728c20467d0c18203d2210e9e09d14b358dd4632d190f17269097998b83bdaf7e807b44"
         },
-        "pokSecCred": "63994139028fd5843cfbae94fcf6cf97141faf9ccb6f0302ae3a7e59c15818bb00000001a4cfb12d6d33908d2690215294f01d919f67723cfeb0cc6ae28fa893e52fccfc9c95c05f98a7a890f9d088e3d6ff80e9b38e7b8c9d888c9d5b88c27db1f7ed53d03991a28aff6ce2bf9369b606aef78151c5b1f5726450479ba4bedd690aa70d000000010f7d2404e0d58b9fed2075609d679abdda7409419c273aac5c3738132debd57d00000001185f717fd80205ba4da4ae57fdc22e382cc1508ef3fcdf9a4eb94d8e72023a66",
-        "prfKeyCommitmentWithAR": "af21201056c7e287357f133653baf86c03bd463d29da81a1bad639ee1cd24e0e2ce6f36ae8599d8ab187ad02e864751a",
-        "prfKeyCommitmentWithID": "ad0ee0900b20a2e29d282e30e1d349be944f53e56235d8579b37b39ed765ef8ffd37a6d184610072796fb9f767b6e696",
-        "proofCommitmentsSame": "615434a03267e06eb01fab70f593227765fb394d3e7b8f7cfee4574eac3aaebaae7d9aab0bfc33aead60a258e30c7ce73de77337749f2c294aa3e2eb82ecd263dec0cefd0bbfed92ba82f17092acf18fa1c0aeff1479f65e0dac9f9fe99faefc0d8e9bf24ff2f5923795ed6496f2821cbcce5b5fb1dd46cff10f1066a746ad6c189f31d99f21edf69065295812bbd2634d382e3d04599c202cff80d4b76ee7716d6dfa0de8727e548d1b2df8750f96e46abe4ffe3879a2b91d62a9c873e4e0781c51a11413435885179bcd3b268f890dfa86dc246bd3d3054933540f44b9b14a",
-        "proofEncryptionPrf": "32898c955f2f46dcecf0b9074548fa272e60f799eb8f465af23c11b0c723031eaab136c8ed896d0b0a6dd7f92f80bda3f1c3caf712ec83d60dc7640bea5ea47787461d576d8bdedf8265fbba0fae2c2a85a865a9331e8df128c620e3fc04f9690afa38b4f29cee322221b408e1e58dd89882d4b71dc42ed7d51661330da2213699c8d5408faf710b2273584f88f5ced4d4eee5e2a10af85b2ad469f3ba2711130abc379d21709606ac4cee2ce5b59e2325510828277c62d81e0a57a0edddbff409129ac06980cc4bf28d2b3387b064e01a751cbf1bc613231488fc17ec2a6411c96f059a6e33d03ce6d756f158a7bd1e25d91e6cbe1d5e4057500fdecbaba773cfc40b5562cae78d022793277a22d4cd"
+        "pokSecCred": "57045da8b683ab61e40a53dbd8f3c11fd81df2abc271dbd0be241770b0886fee0000000187668fbcefa5246ee12236b1976ca8ea90ddcc1fdba3ffbc5b00f059267f768ab114b14ea1bed92ea3a43d554bc8e5758fbcc682f96a448488de02f864d6d9430a795ab3d4fc255a8e27f80589e65566b6ef40140ad89cc8bcb7b6eb456578aa00000001506f4f7c5fbb6c550b2e3f99d6df07ef70ac1a1b959fee25a47deb79280ac069000000015d63a0ce6c9082d634f6ceb15c511d0b42a94f3c4517fcced4aebc81621225ec",
+        "prfKeyCommitmentWithAR": "878e5a09173df1170d52fbcc45cab68b021a66147ae570dffa9b13e06ae383a6195ba7374a88cddc6da3545bf3b78e71",
+        "prfKeyCommitmentWithID": "98d79a59b839f7dce74920d430a1e081c8b7989fafc5aa2ef66724feccfa7981504954753225f93cf6d82f34b9e5f9de",
+        "proofCommitmentsSame": "16b344af4360c8f57bc6516e30b91ca41cdf1de049d78fb3edfa22fe33d62fda965d00bb3adce96f4ab4fceeb4264cc09975c555e0212d894d4e14232f56a1f0d7649d6b980d4cd511621dbdfc3ec68ca0f7079333cf8706de59e929da67c1a6d32be24eaf1652d98e80809dc05b0230a44d4b78931034a145660dae6efba0b7578a3b6e2681fa047fad40646754e61ec6a68bd28c033c1827e3b41ce71b539f228756c7edc905ca909302986e760cbfd48ee2e640376a5358c1be99bef80a5c570049d1a875b0234ca55323c3980ca7c6f7ce1ae28f5b40c1ff5ef98f5f167d",
+        "proofEncryptionPrf": "612a6b50fe77c212c6db8dc155ba67631095faa3663506bb4a140d43734c2c57b423d63872a42735abd6f8c590d21f76dbcb67bae67f9237197f1c68b438cf0365c95a3afe183d3288ea3ca6997296d7a412336635b00e262be1f7694301d55d5756fbadd29a4f9f206af1e8e3653488cd1c1f74e383dfe558a6262e5247512a83070a5042ca2c01afc2d12601100001b331a70438e448b8e0d02e1d584197715898f072bde420c4f80c47d94ae444c1462b8b0ef19ece5a80f1d7133e3db90a6de6308ae91f1e0aa32e8bf02751a724213505d58b0665d728875f275c04a1858024444185fedccfae5e0677e615be1c4f3c482a7100934d4a2a04547120f0e6e750513ad00ac01ad426311ae9bc34a8"
     },
     "privateData": {
         "ACI": {
             "attributes": {
-                "age": 31,
-                "business": true,
-                "citizenship": 38,
-                "expiryDate": 1910822399,
-                "maxAccount": 200,
-                "variant": 1
+                "birthYear": "2013",
+                "creationTime": "1341324324",
+                "expiryDate": "1910822399",
+                "maxAccount": "30",
+                "residenceCountryCode": "386",
+                "variant": "0"
             },
             "credentialHolderInformation": {
-                "idCredPublic": "929b9f83a095f9c65e5b90a1da71ba1643aa52294b2df48671a82b126fb75dddf1661759e68069b7a87cd19347be627c",
-                "idCredPublicIP": "929b9f83a095f9c65e5b90a1da71ba1643aa52294b2df48671a82b126fb75dddf1661759e68069b7a87cd19347be627c",
-                "idCredSecret": "0cb96a1746ce08db10a240b416ec749c408d52aedd3eae8c7bb93fa2b754c095",
+                "idCredPublic": "a40a4d4891d95e6c809d38df94576bedb65aaa1e696c49989ec57ce8e6719ec2fa322ecc7ebbb9bd6cc95bb7aaeacee0",
+                "idCredPublicIP": "a40a4d4891d95e6c809d38df94576bedb65aaa1e696c49989ec57ce8e6719ec2fa322ecc7ebbb9bd6cc95bb7aaeacee0",
+                "idCredSecret": "16677c010adcd24fd2fef0d17ddbcc5097db9fd197dfdd39587e4a30f8939b29",
                 "name": "Aleš"
             },
-            "prfKey": "14010d50621a10b13e24e8ea6b19802202f9bf163bcdfa77500fc8244a8a60c6"
+            "prfKey": "3d22a4a7e09ea0305d959b2c6557727492110a78963a84a1764a56108de680dc"
         },
-        "PIORandomness": "50099c7315144100da2da8f64e53041bdccfd0a72a050a4b77ef48a958b206e5"
+        "PIORandomness": "17098b4b3a873bc478b86acd2b6a3dcb9d1fe2971322a3b443ea47282ea9ee9c"
     },
-    "signature": "86828e8d017f29fd7cf89756fd8db924c51d8ebe2a03a663bb3d44db7e93f0a28e86e01cdea9203b2ac77b80c9a21165aca393256cfd2938a1d6ffee241d41de2b56cd58043bbc68a88e9406e666e1f5077c24a05082dd7c14c75561de8ffc14"
+    "signature": "8afe2ff23655c1952d88fc1a5614d0fc2d3d60e909b2c7feffb86122f098c8831a3833a875268fbb2572b725b21649c68a637ebb1c36b2d704a8d33fb5117ee45aa949e2d49277525ad2bae7bebc1b6a2c600f6c8840804ce4545711f1a61ed6"
 }

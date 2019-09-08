@@ -2,11 +2,11 @@
     "ipIdentity": 0,
     "name": "Aleš",
     "attributes": {
-      "age": 31,
-      "business": true,
-      "citizenship": 38,
-      "expiryDate": 1910822399,
-      "maxAccount": 200,
-      "variant": 1
+      "birthYear": "2013",
+      "creationTime": "1341324324",
+      "expiryDate": "1910822399",
+      "maxAccount": "30",
+      "residenceCountryCode": "386",
+      "variant": "0"
     }
 }

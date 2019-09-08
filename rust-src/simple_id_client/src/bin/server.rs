@@ -255,6 +255,14 @@ pub fn main() {
                 .default_value("identity_providers_public_private.json")
                 .value_name("FILE")
                 .help("File with public and private information on IPs and ARs."),
+        )
+        .arg(
+            Arg::with_name("address")
+                .short("a")
+                .long("address")
+                .default_value("localhost:8000")
+                .value_name("HOST")
+                .help("Address on which the server is listening."),
         );
 
     let matches = app.get_matches();
@@ -263,6 +271,8 @@ pub fn main() {
     let ips_file = matches
         .value_of("ips")
         .unwrap_or("identity_providers_public_private.json");
+
+    let address = matches.value_of("address").unwrap_or("localhost:8000");
 
     let gc = {
         if let Some(gc) = read_global_context(gc_file) {
@@ -288,7 +298,7 @@ pub fn main() {
         global_params,
     };
 
-    rouille::start_server("localhost:8000", move |request| {
+    rouille::start_server(address, move |request| {
         router!(request,
                 // get global cryptographic parameters
                 (GET) (/globalparams) => { respond_global_params(request, &ss) },
