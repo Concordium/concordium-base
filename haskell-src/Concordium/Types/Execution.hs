@@ -269,8 +269,9 @@ data Event = ModuleDeployed !Core.ModuleRef
            | BakerRemoved !BakerId
            | BakerAccountUpdated !BakerId !AccountAddress
            | BakerKeyUpdated !BakerId !BakerSignVerifyKey
-           | StakeDelegated !BakerId
-           | StakeUndelegated
+           | StakeDelegated !AccountAddress !BakerId
+           | StakeUndelegated !AccountAddress
+           -- TODO: Add gas spent event
   deriving (Show)
 
 -- |Used internally by the scheduler since internal messages are sent as values,
@@ -280,13 +281,13 @@ data MessageFormat = ValueMessage !(Value NoAnnot) | ExprMessage !(LinkedExpr No
 
 -- |Result of a valid transaction is either a reject with a reason or a
 -- successful transaction with a list of events which occurred during execution.
-type ValidResult = Either RejectReason [Event]
+type ValidResult = Either (RejectReason, Amount) [Event]
 
 {-# COMPLETE TxSuccess, TxReject #-}
 pattern TxSuccess :: [Event] -> ValidResult
-pattern TxReject :: RejectReason -> ValidResult
+pattern TxReject :: RejectReason -> Amount -> ValidResult
 pattern TxSuccess a = Right a
-pattern TxReject e = Left e
+pattern TxReject e a = Left (e, a)
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
 data RejectReason = ModuleNotWF !(TypingError Core.UA) -- ^Error raised when typechecking of the module has failed.
