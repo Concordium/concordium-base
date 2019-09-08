@@ -12,7 +12,10 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BS16
 import qualified Data.FixedByteString as FBS
 import Concordium.Crypto.SignatureScheme
+import Data.Bits
 import Data.Serialize
+import qualified Data.Serialize.Put as Put
+import qualified Data.Serialize.Get as Get
 import GHC.Generics
 import Data.Hashable
 import Data.Text.Encoding as Text
@@ -59,20 +62,24 @@ safeDecodeBase58Address bs = do
     Right dec -> return (Just (AccountAddress . FBS.fromByteString . toBytes $ dec))
 
 -- Name of Identity Provider
-newtype IdentityProviderIdentity  = IP_ID ShortByteString
+newtype IdentityProviderIdentity  = IP_ID Word32
     deriving (Eq, Hashable)
-    deriving Show via ShortByteString
-    deriving Serialize via Short65K
+    deriving Show via Word32
+
+instance Serialize IdentityProviderIdentity where
+  put (IP_ID w) = Put.putWord32be w
+
+  get = IP_ID <$> Get.getWord32be
 
 -- Public key of the Identity provider
 newtype IdentityProviderPublicKey = IP_PK PsSigKey
     deriving(Eq, Show, Serialize, NFData)
 
 instance ToJSON IdentityProviderIdentity where
-  toJSON (IP_ID v) = String (Text.decodeUtf8 (BSS.fromShort v))
+  toJSON (IP_ID v) = toJSON v
 
 instance FromJSON IdentityProviderIdentity where
-  parseJSON v = IP_ID . BSS.toShort . encodeUtf8 <$> parseJSON v
+  parseJSON v = IP_ID <$> parseJSON v
 
 -- Signing key for accounts (eddsa key)
 type AccountSigningKey = SignKey
@@ -129,25 +136,31 @@ instance Serialize Proofs where
     l <- fromIntegral <$> getWord32be
     Proofs <$> getShortByteString l
 
-data AttributeValue =
-  ATWord8 !Word8
-  | ATWord16 !Word16
-  | ATWord32 !Word32
-  | ATWord64 !Word64
+-- |We assume an non-negative integer.
+newtype AttributeValue = AttributeValue Integer
   deriving(Show, Eq)
 
-instance Serialize AttributeValue where
-    put (ATWord8 w) = putWord8 0 <> putWord8 w
-    put (ATWord16 w) = putWord8 1 <> putWord16be w
-    put (ATWord32 w) = putWord8 2 <> putWord32be w
-    put (ATWord64 w) = putWord8 3 <> putWord64be w
+-- |Unroll a positive integer into little-endian bytes.
+unroll :: Integer -> [Word8]
+unroll v | v < 0 = error "Negative integer, precondition violated."
+         | v == 0 = [0]
+         | otherwise = go v
+  where go 0 = []
+        go n = let (d, m) = divMod n 256
+               in fromIntegral m : go d
 
-    get = getWord8 >>= \case
-      0 -> ATWord8 <$> getWord8
-      1 -> ATWord16 <$> getWord16be
-      2 -> ATWord32 <$> getWord32be
-      3 -> ATWord64 <$> getWord64be
-      _ -> fail "Uknown attribute type."
+instance Serialize AttributeValue where
+    put (AttributeValue i) =
+        let bytes = unroll i in
+          putWord8 (fromIntegral (length bytes)) <>
+          mapM_ putWord8 (reverse bytes)
+
+    get = do
+      l <- getWord8
+      if l <= 31 then do
+        bytes <- replicateM (fromIntegral l) getWord8
+        return . AttributeValue $! foldl (\acc b -> acc `shiftL` 8 + fromIntegral b) 0 bytes
+      else fail "Attribute malformed. Must fit into 31 bytes."
 
 instance ToJSON AttributeValue where
   toJSON v = String (serializeBase16 v)
@@ -200,11 +213,14 @@ instance FromJSON Policy where
     pItems <- v .: "revealedItems"
     return Policy{..}
 
--- |Unique identifier of the anonymity revoker. At most 65k bytes in length.
-newtype ARName = ARName ShortByteString
+-- |Unique identifier of the anonymity revoker.
+newtype ARName = ARName Word32
     deriving(Eq)
-    deriving Serialize via Short65K
-    deriving Show via ShortByteString
+    deriving Show via Word32
+
+instance Serialize ARName where
+  put (ARName n) = Put.putWord32be n
+  get = ARName <$> Get.getWord32be
 
 -- |Public key of an anonymity revoker.
 newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
@@ -212,11 +228,11 @@ newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
     deriving Show via ElgamalPublicKey
 
 instance ToJSON ARName where
-  toJSON (ARName v) = String (Text.decodeUtf8 . BSS.fromShort $ v)
+  toJSON (ARName v) = toJSON v
 
 -- |NB: This just reads the string. No decoding.
 instance FromJSON ARName where
-  parseJSON v = ARName . BSS.toShort . Text.encodeUtf8 <$> parseJSON v
+  parseJSON v = ARName <$> parseJSON v
 
 -- |Encryption of data with anonymity revoker's public key.
 newtype AREnc = AREnc ElgamalCipher
