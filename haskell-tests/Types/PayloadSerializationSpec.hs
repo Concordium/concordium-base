@@ -47,7 +47,7 @@ import Data.Int
 genPolicyItem :: Gen PolicyItem
 genPolicyItem = do
   piIndex <- arbitrary
-  piValue <- oneof [ATWord8 <$> arbitrary, ATWord16 <$> arbitrary, ATWord32 <$> arbitrary, ATWord64 <$> arbitrary]
+  piValue <- AttributeValue . (\x -> abs x `mod` 2^(248 :: Int)) <$> arbitrary
   return PolicyItem{..}
 
 genPayload :: Gen Payload
