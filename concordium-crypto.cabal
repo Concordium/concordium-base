@@ -40,7 +40,8 @@ Library
   Other-modules:  Concordium.Crypto.FFIHelpers
 
   Build-depends:  base >=4.7
-                , aeson
+                , aeson >= 1.4.2
+                , scientific >= 0.3.6
                 , bytestring >=0.10
                 , base16-bytestring
                 , cereal >=0.5.7

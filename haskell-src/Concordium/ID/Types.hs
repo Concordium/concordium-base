@@ -18,6 +18,7 @@ import qualified Data.Serialize.Put as Put
 import qualified Data.Serialize.Get as Get
 import GHC.Generics
 import Data.Hashable
+import qualified Data.Text.Read as Text
 import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
 import Data.Base58String.Bitcoin
@@ -27,6 +28,8 @@ import qualified Data.Text as Text
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Crypto.FFIDataTypes
 import Control.DeepSeq
+
+import Data.Scientific
 
 accountAddressSize :: Int
 accountAddressSize = 21
@@ -163,10 +166,25 @@ instance Serialize AttributeValue where
       else fail "Attribute malformed. Must fit into 31 bytes."
 
 instance ToJSON AttributeValue where
-  toJSON v = String (serializeBase16 v)
+  toJSON (AttributeValue v) = toJSON (show v)
 
 instance FromJSON AttributeValue where
-  parseJSON = withText "AttributeValue" deserializeBase16
+  parseJSON (String s) =
+    case Text.decimal s of
+      Left err -> fail err
+      Right (i, rest)
+          | Text.null rest -> do
+              if i >= 0 && i < 2^(248 :: Word) then
+                return (AttributeValue i)
+              else fail "Input out of range."
+          | otherwise -> fail $ "Input malformed, remaining input: " ++ Text.unpack rest
+
+  parseJSON (Number n) = do
+    case toBoundedInteger n :: Maybe Word64 of
+      Just x -> return (AttributeValue (fromIntegral x))
+      Nothing -> fail "Not an integer in correct range."
+
+  parseJSON _ = fail "Attribute value must be either a string or an int."
 
 -- |For the moment the policies we support are simply opening of specific commitments.
 data PolicyItem = PolicyItem {
@@ -254,13 +272,13 @@ data AnonymityRevocationData = AnonymityRevocationData {
 
 instance ToJSON AnonymityRevocationData where
   toJSON (AnonymityRevocationData{..}) = object [
-    "arName" .= ardName,
+    "arIdentity" .= ardName,
     "idCredPubEnc" .= ardIdCredPubEnc
     ]
 
 instance FromJSON AnonymityRevocationData where
   parseJSON = withObject "AnonymityRevocationData" $ \v -> do
-    ardName <- v .: "arName"
+    ardName <- v .: "arIdentity"
     ardIdCredPubEnc <- v .: "idCredPubEnc"
     return AnonymityRevocationData{..}
 
