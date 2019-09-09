@@ -1,0 +1,10 @@
+-- module ConcordiumTests.Crypto.BlsSignature where
+--
+-- import           Concordium.Crypto.BlsSignature
+-- import Data.Word
+-- import Test.QuickCheck
+-- import Test.Hspec
+--
+-- testGenSecretKey :: Property
+-- testGenSecretKey =
+--
