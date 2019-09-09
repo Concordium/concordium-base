@@ -82,12 +82,12 @@ pub struct IpArData<C: Curve> {
     //pub ar_name_enc_pairs: Vec<(String, Cipher<C>)>,
 }
 /// Data created by the credential holder to support anonymity revocation.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ChainArData<C: Curve> {
     pub ar_name: String,
     pub enc_id_cred_pub_share: Cipher<C>,
     pub id_cred_pub_share_number: u64,
-    pub proof_com_enc_eq: ComEncEqProof<C>,
+    //pub proof_com_enc_eq: ComEncEqProof<C>,
 }
 
 /// Information sent from the account holder to the identity provider.
@@ -103,6 +103,10 @@ pub struct PreIdentityObject<
     /// Information on the chosen anonymity revoker, and the encryption of the
     /// account holder's prf key with the anonymity revoker's encryption key.
     pub ip_ar_data: Vec<IpArData<C>>,
+    /// choice of anonyimity revocation parameters
+    /// that is a choice of subset of anonymity revokers
+    /// threshold  parameter
+    pub choice_ar_parameters:(Vec<ArInfo<C>>, u64),
     /// Chosen attribute list.
     pub alist: AttributeList<C::Scalar, AttributeType>,
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub
@@ -134,7 +138,7 @@ pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub ar_info: (Vec<ArInfo<C>>, PedersenKey<C>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArInfo<C: Curve> {
     /// The name and public key of the anonymity revoker chosen by this identity
     /// provider. In the future each identity provider will allow a set of
@@ -164,7 +168,7 @@ pub struct CredDeploymentCommitments<C: Curve> {
     /// where S is id_cred_sec
     /// we send only commitments B1, B2,..etc to b1, b2,..
     /// together with cmm_id_cred_sec we have a commitment to the whole polynomial
-    pub cmm_id_cred_sec_sharing_coeff:Vec<pedersen::Commitment<C>>,
+    pub cmm_id_cred_sec_sharing_coeff: Vec<(u64,pedersen::Commitment<C>)>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -174,12 +178,10 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub sig: Signature<P>,
     /// Individual commitments to each item in the attribute list.
     pub commitments: CredDeploymentCommitments<C>,
-    /// Proof of knowledge of IdCredSec corresponding to the commitment made on
-    /// the chain. The commitment is signed by the IP, and so this proof makes
-    /// sure that we have shared id_cred_sec and encrypted IDCredPub correctly so anonymity can be
-    /// revoked.
-    /// this is done with respect to cmm_id_cred_sec_sharing_coeff
-    pub proof_id_cred_pub: Vec<ComEncEqProof<C>>,
+    /// Proof of equality of encrypted share of id_cred_pub and 
+    /// commitments in chain_ar_data. 
+    /// each proof is indexed by the share number.
+    pub proof_id_cred_pub: Vec<(u64,ComEncEqProof<C>)>,
     /// Proof of knowledge of signature of Identity Provider on the list
     /// (idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n])
     pub proof_ip_sig: ComEqSigProof<P, C>,
@@ -240,6 +242,8 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     pub ar_data: Vec<ChainArData<C>>,
     /// Policy of this credential object.
     pub policy: Policy<C, AttributeType>,
+    ///ar_parameters
+    pub choice_ar_parameters: Vec<ArInfo<C>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -338,19 +342,6 @@ pub fn bytes_to_short_string(cur: &mut Cursor<&[u8]>) -> Option<String> {
     cur.read_exact(&mut svec).ok()?;
     String::from_utf8(svec).ok()
 }
-/*
-pub struct IpArData<C: Curve> {
-      ///List of anonymity revokers along with encryptions of
-      ///their shares of the prf keys
-      pub ar_name: String,
-      pub enc_prf_key_share: Cipher<C>,
-      pub prf_key_share_number: u64,
-      ///proof that the computed commitment to the share
-      ///contains the same value as the encryption
-      pub poof_com_enc_eq: ComEncEqProof<C>,
-      //pub ar_name_enc_pairs: Vec<(String, Cipher<C>)>,
- }
- */
 
 impl<C: Curve> IpArData<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -380,7 +371,6 @@ impl<C: Curve> ChainArData<C> {
           let mut out = short_string_to_bytes(&self.ar_name);
           out.extend_from_slice(&self.enc_id_cred_pub_share.to_bytes());
           out.extend_from_slice(&self.id_cred_pub_share_number.to_be_bytes());
-          out.extend_from_slice(&self.proof_com_enc_eq.to_bytes());
           out
       }
 
@@ -388,12 +378,10 @@ impl<C: Curve> ChainArData<C> {
           let ar_name = bytes_to_short_string(cur)?;
           let enc_id_cred_pub_share = Cipher::from_bytes(cur).ok()?;
           let id_cred_pub_share_number = cur.read_u64::<BigEndian>().ok()?;
-          let proof_com_enc_eq = ComEncEqProof::from_bytes(cur).ok()?;
           Some(ChainArData {
               ar_name: ar_name,
               enc_id_cred_pub_share: enc_id_cred_pub_share,
               id_cred_pub_share_number: id_cred_pub_share_number,
-              proof_com_enc_eq: proof_com_enc_eq,
           })
       }
 
@@ -411,7 +399,8 @@ impl<C: Curve> CredDeploymentCommitments<C> {
         }
         let cmm_id_cred_sec_sharing_coeff = &self.cmm_id_cred_sec_sharing_coeff;
         out.extend_from_slice(&(cmm_id_cred_sec_sharing_coeff.len() as u16).to_be_bytes());
-        for cmm in cmm_id_cred_sec_sharing_coeff.iter() {
+        for (n,cmm) in cmm_id_cred_sec_sharing_coeff.iter() {
+            out.extend_from_slice(&n.to_be_bytes());
             out.extend_from_slice(&cmm.to_bytes());
         }
         out
@@ -429,7 +418,8 @@ impl<C: Curve> CredDeploymentCommitments<C> {
         let len = cur.read_u16::<BigEndian>().ok()?;
         let mut cmm_id_cred_sec_sharing_coeff= Vec::with_capacity(len as usize);
         for _ in 0..l{
-            cmm_id_cred_sec_sharing_coeff.push(pedersen::Commitment::from_bytes(cur).ok()?);
+            let n = cur.read_u64::<BigEndian>().ok()?;
+            cmm_id_cred_sec_sharing_coeff.push((n,pedersen::Commitment::from_bytes(cur).ok()?));
         }
         Some(CredDeploymentCommitments {
             cmm_id_cred_sec,
@@ -452,10 +442,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
         out.extend_from_slice(&self.sig.to_bytes());
         out.extend_from_slice(&self.commitments.to_bytes());
         out.extend_from_slice(&(self.proof_id_cred_pub.len() as u16).to_be_bytes());
-        for p in self.proof_id_cred_pub.iter(){
-            out.extend(p.to_bytes());
+        for (i,p) in self.proof_id_cred_pub.iter(){
+            out.extend_from_slice(&i.to_be_bytes());
+            out.extend_from_slice(&p.to_bytes());
         }
-        //out.extend(&self.proof_id_cred_pub.to_bytes());
         out.extend_from_slice(&self.proof_ip_sig.to_bytes());
         out.extend_from_slice(&self.proof_reg_id.to_bytes());
         out.extend_from_slice(&self.proof_acc_sk.to_bytes());
@@ -472,7 +462,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
         let l = cur.read_u16::<BigEndian>().ok()?;
         let mut proof_id_cred_pub = Vec::with_capacity(l as usize);
         for _ in 0..l{
-            proof_id_cred_pub.push(ComEncEqProof::from_bytes(cur).ok()?);
+            proof_id_cred_pub.push((cur.read_u64::<BigEndian>().ok()?,ComEncEqProof::from_bytes(cur).ok()?));
         }
         let proof_ip_sig = ComEqSigProof::from_bytes(cur).ok()?;
         let proof_reg_id = ComMultProof::from_bytes(cur).ok()?;
@@ -555,6 +545,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
             v.extend_from_slice(&ar.to_bytes());
         }
         v.extend_from_slice(&self.policy.to_bytes());
+        v.extend_from_slice(&(self.choice_ar_parameters.len() as u16).to_be_bytes());
+        for ar in self.choice_ar_parameters.iter(){
+            v.extend_from_slice(&ar.to_bytes());
+        }
         v
     }
 
@@ -568,8 +562,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
         let ip_identity = bytes_to_short_string(cur)?;
         let number_of_ars = cur.read_u16::<BigEndian>().ok()?;
         let mut ar_data = Vec::new();
-        for i in 0..number_of_ars{
+        for _ in 0..number_of_ars{
            ar_data.push(ChainArData::from_bytes(cur)?); 
+        }
+        let mut choice_ar_parameters = Vec::new();
+        let number_of_ars = cur.read_u16::<BigEndian>().ok()?;
+        for _ in 0..number_of_ars{
+           choice_ar_parameters.push(ArInfo::from_bytes(cur)?); 
         }
         let policy = Policy::from_bytes(cur)?;
         Some(CredentialDeploymentValues {
@@ -578,6 +577,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
             reg_id,
             ip_identity,
             ar_data,
+            choice_ar_parameters,
             policy,
         })
     }

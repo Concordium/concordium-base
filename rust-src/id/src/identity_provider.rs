@@ -1,6 +1,5 @@
 use crate::types::*;
 use curve_arithmetic::curve_arithmetic::*;
-use elgamal::cipher::Cipher;
 use pedersen_scheme::commitment::Commitment; 
 use pedersen_scheme::key::CommitmentKey;
 use ps_sig;
@@ -17,17 +16,9 @@ pub enum Reason {
     FailedToVerifyPrfData,
     WrongArParameters,
 }
-/*
-fn check_ar_parameters <C: Curve>(
-    &Vec <ArInfo<C>>)-> bool
-{
-    ///some business logic
-    true
-}
-*/
 
-fn check_ar_parameters<C:Curve> (choice_ar_parameters: &(Vec<ArInfo<C>>, u64), ip_ar_info: &Vec<ArInfo<C>>)-> bool{
-    ///some business logic here
+fn check_ar_parameters<C:Curve> (_choice_ar_parameters: &(Vec<ArInfo<C>>, u64), _ip_ar_info: &Vec<ArInfo<C>>)-> bool{
+    //some business logic here
     true
 }
 pub fn verify_credentials<
@@ -39,7 +30,7 @@ pub fn verify_credentials<
     context: Context<P, C>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Declined> {
-    ///IDCredSec
+    //IDCredSec
     let comm_sc_params =
         CommitmentParams((context.commitment_key_sc.0, context.commitment_key_sc.1));
 
@@ -60,9 +51,6 @@ pub fn verify_credentials<
     }
     //ar commitment key
     let ar_ck = context.ip_info.ar_info.1;
-    let comm_2_params =
-        CommitmentParams((ar_ck.0, ar_ck.1));
-    let ar_info = context.ip_info.ar_info.0;
     let b_2 =  verify_vrf_key_data(
       &context.commitment_key_prf,
       &pre_id_obj.cmm_prf,
@@ -149,7 +137,7 @@ fn verify_vrf_key_data<C1:Curve, C2:Curve<Scalar = C1::Scalar>>(
     //let cmm_to_shares = Vec::new();
     for ar in ip_ar_data.iter(){
         let cmm_share = commitment_to_share(ar.prf_key_share_number, cmm_sharing_coeff);
-        ///finding the right encryption key
+        //finding the right encryption key
         
         match choice_ar_parameters.into_iter().find(|&x| x.ar_name == ar.ar_name){
             None => return false,
