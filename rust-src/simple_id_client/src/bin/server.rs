@@ -278,7 +278,10 @@ pub fn main() {
         if let Some(gc) = read_global_context(gc_file) {
             gc
         } else {
-            eprintln!("Could not read global cryptographic parameters from {}. Aborting.", gc_file);
+            eprintln!(
+                "Could not read global cryptographic parameters from {}. Aborting.",
+                gc_file
+            );
             return;
         }
     };
@@ -287,7 +290,10 @@ pub fn main() {
         if let Some(ips) = read_ip_infos(ips_file) {
             ips
         } else {
-            eprintln!("Could not read identity providers file {}. Aborting.", ips_file);
+            eprintln!(
+                "Could not read identity providers file {}. Aborting.",
+                ips_file
+            );
             return;
         }
     };
