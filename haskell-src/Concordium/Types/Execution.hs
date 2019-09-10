@@ -30,7 +30,7 @@ data InternalMessage annot = TSend !ContractAddress !Amount !(Value annot) | TSi
 type Proof = BS.ByteString
 
 -- |The transaction payload. Defines the supported kinds of transactions.
-data Payload = 
+data Payload =
   -- |Put module on the chain.
   DeployModule {
     -- |Module source.
@@ -90,7 +90,7 @@ data Payload =
       -- |Address of the account the baker wants to be rewarded to.
       abAccount :: !AccountAddress,
       -- |Proof of at least the following facts
-      -- 
+      --
       --   * the baker owns the account on the given address (knows the private key)
       --   * the baker owns private keys corresponding to the public keys (election and signature)
       --   * the baker is allowed to become a baker: THIS NEEDS SPEC
@@ -271,11 +271,12 @@ data Event = ModuleDeployed !Core.ModuleRef
            | BakerKeyUpdated !BakerId !BakerSignVerifyKey
            | StakeDelegated !BakerId
            | StakeUndelegated
+
   deriving (Show)
 
 -- |Used internally by the scheduler since internal messages are sent as values,
 -- and top-level messages are acorn expressions.
-data MessageFormat = ValueMessage !(Value NoAnnot) | ExprMessage !(LinkedExpr NoAnnot)
+data MessageFormat = ValueMessage !(Value NoAnnot) | ExprMessage !(Expr NoAnnot)
     deriving(Show)
 
 -- |Result of a valid transaction is either a reject with a reason or a

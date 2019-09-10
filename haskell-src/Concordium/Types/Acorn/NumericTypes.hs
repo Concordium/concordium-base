@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 {-|
 Provides signed and unsigned integral data types of fixed bit length with safe (checked and defaulting) arithmetic operations.
 
@@ -13,7 +12,6 @@ Both GCC and Clang provide checked add, mult, sub operations which we should use
 module Concordium.Types.Acorn.NumericTypes where
 
 import GHC.Generics
-import Data.Data(Data, Typeable)
 import Data.Hashable(Hashable)
 
 import Data.Maybe
@@ -31,12 +29,12 @@ toIntegral x = -- NOTE: do not use check whether (toInteger $ fromInteger $ toIn
 -- |Convert from one Integral to another.
 -- |If the argument value is withing the target type's range, the value is
 -- preserved. Otherwise it is "normalized" into the target type's range such that
--- 
+--
 --   * @toIntegralNormalizing 1 = 1@
 --   * @toIntegralNormalizing (x + y) = toIntegralNormalizing x + toIntegralNormalizing y@
 --   * @toIntegralNormalizing (x * y) = toIntegralNormalizing x * toIntegralNormalizing y@
 --   * @toIntegralNormalizing (-x) = - toIntegralNormalizing x@
--- 
+--
 -- In particular, in two's complement representation, if a and b have the same
 -- bit size the bit representation is maintained.
 --
@@ -102,7 +100,7 @@ maxInt128 = 2^(127 :: Int) - 1
 
 -- | A 128-bit integer behaving like fixed-size integers in two's complement representation with respect to minBound/maxBound and overflow arithmetics. Note that in contrast to Data.Int.Int64, this does not produce an exception for (minBound `div` -1) but will adopt a value out of bounds. To avoid this, use the provided checked or defaulting operations. Enum methods might not be reasonable and should not be used.
 newtype Int128 = Int128 Integer
-  deriving(Generic, Hashable, Eq, Ord, Real, Enum, Integral, Typeable, Data)
+  deriving(Generic, Hashable, Eq, Ord, Real, Enum, Integral)
   -- Real and Enum are required for Integral
 
 instance Show Int128 where
@@ -140,7 +138,7 @@ maxWord128 = 2^(128 :: Int) - 1
 
 -- | A 128-bit unsigned integer adhering to the calculation rules in the ring Z/(2^128)Z (that is, integer arithmetics modulo 2^128). Enum methods might not be reasonable and should not be used.
 newtype Word128 = Word128 Integer -- TODO is there an unlimited Word datatype / should use it?
-  deriving(Generic, Hashable, Eq, Ord, Real, Enum, Integral, Typeable, Data)
+  deriving(Generic, Hashable, Eq, Ord, Real, Enum, Integral)
   -- Real and Enum are required for Integral
 
 instance Show Word128 where

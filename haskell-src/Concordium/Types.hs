@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -11,7 +10,7 @@
 module Concordium.Types (module Concordium.Types, AccountAddress(..), SchemeId, AccountVerificationKey) where
 
 import GHC.Generics
-import Data.Data(Typeable, Data)
+
 
 import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
@@ -84,7 +83,6 @@ newtype VoterPower = VoterPower Int
 
 newtype ContractIndex = ContractIndex Word64
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Bits, Integral)
-    deriving (Typeable, Data)
 
 instance S.Serialize ContractIndex where
     get = ContractIndex <$> G.getWord64be
@@ -92,15 +90,14 @@ instance S.Serialize ContractIndex where
 
 newtype ContractSubindex = ContractSubindex Word64
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
-    deriving (Typeable, Data)
 
 instance S.Serialize ContractSubindex where
     get = ContractSubindex <$> G.getWord64be
     put (ContractSubindex i) = P.putWord64be i
 
 data ContractAddress = ContractAddress { contractIndex :: !ContractIndex
-                                       , contractSubindex :: !ContractSubindex} 
-    deriving(Eq, Ord, Generic, Typeable, Data)
+                                       , contractSubindex :: !ContractSubindex}
+    deriving(Eq, Ord, Generic)
 
 instance FromJSON ContractAddress where
   parseJSON = withObject "ContractAddress" $ \v -> do
@@ -125,7 +122,7 @@ instance S.Serialize ContractAddress where
 
 -- |Unique module reference.
 newtype ModuleRef = ModuleRef {moduleRef :: Hash.Hash}
-    deriving(Eq, Ord, Hashable, Typeable, Data)
+    deriving(Eq, Ord, Hashable)
 
 instance Show ModuleRef where
   show (ModuleRef m) = show m
@@ -299,7 +296,7 @@ payloadSize = BSS.length . _spayload
 -- though the body cannot be deserialized. Thus it is important to know
 -- precisely the length of the body.
 instance S.Serialize EncodedPayload where
-  put (EncodedPayload p) = 
+  put (EncodedPayload p) =
     P.putWord32be (fromIntegral (BSS.length p)) <>
     P.putShortByteString p
   get = do
@@ -321,7 +318,7 @@ newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, 
 data ChainMetadata =
   ChainMetadata { slotNumber :: Slot
                 -- |Height of the current block (the block which the transaction is going to be a part of).
-                , blockHeight :: BlockHeight 
+                , blockHeight :: BlockHeight
                 -- |Height of the last finalized block. NB: Each block has a
                 -- pointer to the last finalized block, and this field is the
                 -- height of that block. This information is stable with respect
@@ -338,4 +335,3 @@ type BlockHash = Hash.Hash
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
-
