@@ -159,6 +159,8 @@ pub struct CredDeploymentCommitments<C: Curve> {
     pub cmm_prf: pedersen::Commitment<C>,
     // commitment to credential counter
     pub cmm_cred_counter: pedersen::Commitment<C>,
+    // commitments  ar handles
+    pub cmm_ars: Vec<pedersen::Commitment<C>>,
     // commitments to the attribute list
     pub cmm_attributes: Vec<pedersen::Commitment<C>>,
     /// commitments to the coefficients of the polynomial
@@ -403,6 +405,11 @@ impl<C: Curve> CredDeploymentCommitments<C> {
         let mut out = Vec::from(self.cmm_id_cred_sec.to_bytes());
         out.extend_from_slice(&self.cmm_prf.to_bytes());
         out.extend_from_slice(&self.cmm_cred_counter.to_bytes());
+        let ars = &self.cmm_ars;
+        out.extend_from_slice(&(ars.len() as u16).to_be_bytes());
+        for a in ars {
+            out.extend_from_slice(&a.to_bytes());
+        }
         let atts = &self.cmm_attributes;
         out.extend_from_slice(&(atts.len() as u16).to_be_bytes());
         for a in atts {
@@ -421,6 +428,11 @@ impl<C: Curve> CredDeploymentCommitments<C> {
         let cmm_id_cred_sec = pedersen::Commitment::from_bytes(cur).ok()?;
         let cmm_prf = pedersen::Commitment::from_bytes(cur).ok()?;
         let cmm_cred_counter = pedersen::Commitment::from_bytes(cur).ok()?;
+        let m = cur.read_u16::<BigEndian>().ok()?;
+        let mut cmm_ars = Vec::with_capacity(m as usize);
+        for _ in 0..m {
+            cmm_ars.push(pedersen::Commitment::from_bytes(cur).ok()?);
+        }
         let l = cur.read_u16::<BigEndian>().ok()?;
         let mut cmm_attributes = Vec::with_capacity(l as usize);
         for _ in 0..l {
@@ -436,6 +448,7 @@ impl<C: Curve> CredDeploymentCommitments<C> {
             cmm_id_cred_sec,
             cmm_prf,
             cmm_cred_counter,
+            cmm_ars,
             cmm_attributes,
             cmm_id_cred_sec_sharing_coeff,
         })

@@ -274,12 +274,15 @@ where
     // and then we blind the signature to disassociate it from the message.
     // only the second part is used (as per the protocol)
     let (blinded_sig, _r, blinded_sig_rand_sec) = ps_sig::blind_sig(&retrieved_sig, &mut csprng);
+    
+    let ar_list = prio.choice_ar_parameters.0.iter().map(|x| x.ar_handle).collect();
 
     // We now compute commitments to all the items in the attribute list.
     // We use the on-chain pedersen commitment key.
     let (commitments, commitment_rands) = compute_commitments(
         &global_context.on_chain_commitment_key,
         &alist,
+        &ar_list,
         &prf_key,
         cred_counter,
         &cmm_id_cred_sec_sharing_coeff,
@@ -524,6 +527,7 @@ pub struct CommitmentsRandomness<C: Curve> {
 fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     commitment_key: &PedersenKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
+    ar_list: &Vec<u64>,
     prf_key: &prf::SecretKey<C>,
     cred_counter: u8,
     cmm_id_cred_sec_sharing_coeff: &Vec<(u64, Commitment<C>)>,
@@ -557,11 +561,17 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
         cmm_attributes.push(cmm);
         attributes_rand.push(rand);
     }
+    let m = ar_list.len();
+    let mut cmm_ars = Vec::with_capacity(m);
+    for ar in ar_list.iter(){
+        cmm_ars.push(commitment_key.hide(&Value(C::scalar_from_u64(*ar).unwrap()), &Randomness(C::Scalar::zero())));
+    }
     let cdc = CredDeploymentCommitments {
         cmm_id_cred_sec,
         cmm_prf,
         cmm_cred_counter,
         cmm_attributes,
+        cmm_ars,
         cmm_id_cred_sec_sharing_coeff: cmm_id_cred_sec_sharing_coeff.clone(),
     };
 

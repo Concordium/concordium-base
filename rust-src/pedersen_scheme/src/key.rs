@@ -63,7 +63,7 @@ impl<C: Curve> CommitmentKey<C> {
         (self.hide(s, &r), r)
     }
 
-    fn hide(&self, s: &Value<C>, r: &Randomness<C>) -> Commitment<C> {
+    pub fn hide(&self, s: &Value<C>, r: &Randomness<C>) -> Commitment<C> {
         let h = self.1;
         let g = self.0;
         let m = s.0;

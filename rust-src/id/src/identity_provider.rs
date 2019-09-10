@@ -67,9 +67,11 @@ pub fn verify_credentials<
     if !b_2 {
         return Err(Declined(Reason::FailedToVerifyPrfData));
     }
+    let ar_handles = pre_id_obj.choice_ar_parameters.0.iter().map(|x| x.ar_handle).collect();
     let message: ps_sig::UnknownMessage<P> = compute_message(
         &pre_id_obj.cmm_prf,
         &pre_id_obj.cmm_sc,
+        &ar_handles,
         &pre_id_obj.alist,
         &context.ip_info.ip_verify_key,
     );
@@ -80,6 +82,7 @@ pub fn verify_credentials<
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     cmm_prf: &Commitment<P::G_1>,
     cmm_sc: &Commitment<P::G_1>,
+    ar_list: &Vec<u64>,
     att_list: &AttributeList<P::ScalarField, AttributeType>,
     ps_public_key: &ps_sig::PublicKey<P>,
 ) -> ps_sig::UnknownMessage<P> {
@@ -90,12 +93,17 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     message = message.plus_point(&cmm_prf.0);
     let att_vec = &att_list.alist;
     let n = att_vec.len();
+    let m = ar_list.len();
     let key_vec = &ps_public_key.2;
     assert!(key_vec.len() >= n + 4);
     message = message.plus_point(&key_vec[2].mul_by_scalar(&variant));
     message = message.plus_point(&key_vec[3].mul_by_scalar(&expiry));
-    for i in 4..(n + 4) {
-        let att = att_vec[i - 4].to_field_element();
+    for i in 4..(m + 4) {
+        let ar_handle = <P::G_1 as Curve>::scalar_from_u64(ar_list[i-4]).unwrap();
+        message = message.plus_point(&key_vec[i].mul_by_scalar(&ar_handle));
+    }
+    for i in (m+4)..(n + m + 4) {
+        let att = att_vec[i - m - 4].to_field_element();
         message = message.plus_point(&key_vec[i].mul_by_scalar(&att))
     }
 
