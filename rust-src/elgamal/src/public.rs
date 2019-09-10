@@ -69,7 +69,7 @@ impl<C: Curve> PublicKey<C> {
     where
         T: Rng, {
         let k = C::generate_scalar(csprng);
-        let g = C::one_point().mul_by_scalar(&k);
+        let g = PublicKey::<C>::generator().mul_by_scalar(&k);
         let s = self.0.mul_by_scalar(&k).plus_point(&m.0);
         (Cipher(g, s), k)
     }
@@ -99,7 +99,7 @@ impl<C: Curve> PublicKey<C> {
     // }
     // }
     pub fn hide(&self, k: &C::Scalar, message: &Message<C>) -> Cipher<C> {
-        let g = C::one_point();
+        let g : C = PublicKey::generator();
         let t = g.mul_by_scalar(k);
         let s = self.0.mul_by_scalar(&k).plus_point(&message.0);
         Cipher(t, s)
@@ -121,7 +121,7 @@ impl<C: Curve> PublicKey<C> {
     ) -> (Cipher<C>, C::Scalar)
     where
         T: Rng, {
-        let m = C::one_point().mul_by_scalar(e);
+        let m = PublicKey::<C>::generator().mul_by_scalar(e);
         self.encrypt_rand(csprng, &Message(m))
     }
 

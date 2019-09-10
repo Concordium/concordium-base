@@ -6,9 +6,11 @@ use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use elgamal::{cipher::Cipher, public::PublicKey};
-use pedersen_scheme::{commitment::Commitment, key::CommitmentKey, value::Value, randomness::Randomness};
-use ps_sig;
 use pairing::Field;
+use pedersen_scheme::{
+    commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
+};
+use ps_sig;
 
 use sigma_protocols::{com_enc_eq, com_eq_sig, com_mult};
 
@@ -19,6 +21,7 @@ pub enum CDIVerificationError {
     Signature,
     Dlog,
     Policy,
+    AR,
 }
 
 impl Display for CDIVerificationError {
@@ -29,6 +32,7 @@ impl Display for CDIVerificationError {
             CDIVerificationError::Signature => write!(f, "SignatureVerificationError"),
             CDIVerificationError::Dlog => write!(f, "DlogVerificationError"),
             CDIVerificationError::Policy => write!(f, "PolicyVerificationError"),
+            CDIVerificationError::AR => write!(f, "AnonimityRevokerVerificationError"),
         }
     }
 }
@@ -42,10 +46,19 @@ pub fn verify_cdi<
     ip_info: &IpInfo<P, C>,
     cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
+    let ars = cdi.values.choice_ar_parameters.clone();
+    let mut choice_ar_parameters = Vec::with_capacity(ars.len());
+    for handle in ars.into_iter(){
+        match ip_info.ar_info.0.iter().find(|&x| x.ar_handle == handle){
+            None => return Err(CDIVerificationError::AR),
+            Some(ar_info) => choice_ar_parameters.push(ar_info.clone())
+        }
+
+    }
     verify_cdi_worker(
         &global_context.on_chain_commitment_key,
-        &ip_info.ar_info,
         &ip_info.ip_verify_key,
+        choice_ar_parameters,
         cdi,
     )
 }
@@ -56,8 +69,8 @@ pub fn verify_cdi_worker<
     AttributeType: Attribute<C::Scalar>,
 >(
     on_chain_commitment_key: &CommitmentKey<C>,
-    ar_info: &(Vec<ArInfo<C>>, CommitmentKey<C>),
     ip_verify_key: &ps_sig::PublicKey<P>,
+    choice_ar_parameters: Vec<ArInfo<C>>,
     cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     // Compute the challenge prefix by hashing the values.
@@ -69,7 +82,7 @@ pub fn verify_cdi_worker<
     let check_id_cred_pub = verify_id_cred_pub_sharing_data(
         &challenge_prefix,
         on_chain_commitment_key,
-        &cdi.values.choice_ar_parameters,
+        &choice_ar_parameters,
         &cdi.values.ar_data,
         &commitments.cmm_id_cred_sec_sharing_coeff,
         &cdi.proofs.proof_id_cred_pub,
@@ -127,62 +140,67 @@ pub fn verify_cdi_worker<
     Ok(())
 }
 
-/*
-   let check_id_cred_pub = verify_id_cred_pub_sharing_data(
-          &challenge_prefix,
-          on_chain_commitment_key,
-          &cdi.choice_ar_parameters,
-          &cdi.values.ar_data,
-          &commitments.cmm_id_cred_sec,
-          &commitments.cmm_id_cred-sec_sharing_coeff,
-          &cdi.proofs.proof_id_cred_pub,
-      );
-*/
+// let check_id_cred_pub = verify_id_cred_pub_sharing_data(
+// &challenge_prefix,
+// on_chain_commitment_key,
+// &cdi.choice_ar_parameters,
+// &cdi.values.ar_data,
+// &commitments.cmm_id_cred_sec,
+// &commitments.cmm_id_cred-sec_sharing_coeff,
+// &cdi.proofs.proof_id_cred_pub,
+// );
 fn verify_id_cred_pub_sharing_data<C: Curve>(
-      challenge_prefix: &[u8],
-      commitment_key: &CommitmentKey<C>,
-      choice_ar_parameters: &Vec<ArInfo<C>>,
-      chain_ar_data : &Vec<ChainArData<C>>,
-      cmm_sharing_coeff: &Vec<(u64,Commitment<C>)>,
-      proof_id_cred_pub:&Vec<(u64, com_enc_eq::ComEncEqProof<C>)>,
-      )-> bool{
-      let CommitmentKey(g_1, h_1) = commitment_key;
-      //let cmm_to_shares = Vec::new();
-      for ar in chain_ar_data.iter(){
-          let cmm_share = commitment_to_share(ar.id_cred_pub_share_number, cmm_sharing_coeff);
-          match proof_id_cred_pub.into_iter().find(|&x| x.0 == ar.id_cred_pub_share_number) {
-              None => return false,
-              Some((_,proof)) => match choice_ar_parameters.into_iter().find(|&x| x.ar_name == ar.ar_name){
+    challenge_prefix: &[u8],
+    commitment_key: &CommitmentKey<C>,
+    choice_ar_parameters: &Vec<ArInfo<C>>,
+    chain_ar_data: &Vec<ChainArData<C>>,
+    cmm_sharing_coeff: &Vec<(u64, Commitment<C>)>,
+    proof_id_cred_pub: &Vec<(u64, com_enc_eq::ComEncEqProof<C>)>,
+) -> bool {
+    let CommitmentKey(g_1, h_1) = commitment_key;
+    // let cmm_to_shares = Vec::new();
+    for ar in chain_ar_data.iter() {
+        let cmm_share = commitment_to_share(ar.id_cred_pub_share_number, cmm_sharing_coeff);
+        match proof_id_cred_pub
+            .into_iter()
+            .find(|&x| x.0 == ar.id_cred_pub_share_number)
+        {
+            None => return false,
+            Some((_, proof)) => match choice_ar_parameters
+                .into_iter()
+                .find(|&x| x.ar_name == ar.ar_name)
+            {
                 None => return false,
-                Some(ar_info) =>{
-                   let (g,h) = (ar_info.ar_elgamal_generator, ar_info.ar_public_key.0);
-                   let (e_1, e_2) = (ar.enc_id_cred_pub_share.0, ar.enc_id_cred_pub_share.1);
-                   let coeff = (g, h, *g_1, *h_1);
-                   let eval = (e_1, e_2, cmm_share.0);
-                   if !com_enc_eq::verify_com_enc_eq(&[], &coeff, &eval, proof){
-                       return false;
-                   }
+                Some(ar_info) => {
+                    let (g, h) = (PublicKey::generator(), ar_info.ar_public_key.0);
+                    let (e_1, e_2) = (ar.enc_id_cred_pub_share.0, ar.enc_id_cred_pub_share.1);
+                    let coeff = (g, h, *g_1, *h_1);
+                    let eval = (e_1, e_2, cmm_share.0);
+                    if !com_enc_eq::verify_com_enc_eq(&challenge_prefix, &coeff, &eval, proof) {
+                        return false;
+                    }
                 }
-            }
-         }
-      }
-      true
+            },
+        }
+    }
+    true
 }
 #[inline(always)]
-pub fn commitment_to_share<C:Curve>(share_number: u64, coeff_commitments: &Vec<(u64,Commitment<C>)>)
-         -> Commitment<C>{
-            let deg = coeff_commitments.len()-1;
-            let mut cmm_share_point : C = (coeff_commitments[0].1).0;
-            for i in 1..(deg+1) {
-                let j_pow_i: C::Scalar = C::scalar_from_u64(share_number).unwrap().pow([i as u64]);
-                let (s, Commitment(cmm_point)) = coeff_commitments[i];
-                assert_eq!(s as usize, i);
-                let a = cmm_point.mul_by_scalar(&j_pow_i);
-                cmm_share_point = cmm_share_point.plus_point(&a);
-            }
-            Commitment(cmm_share_point)
+pub fn commitment_to_share<C: Curve>(
+    share_number: u64,
+    coeff_commitments: &Vec<(u64, Commitment<C>)>,
+) -> Commitment<C> {
+    let deg = coeff_commitments.len() - 1;
+    let mut cmm_share_point: C = (coeff_commitments[0].1).0;
+    for i in 1..(deg + 1) {
+        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number).unwrap().pow([i as u64]);
+        let (s, Commitment(cmm_point)) = coeff_commitments[i];
+        assert_eq!(s as usize, i);
+        let a = cmm_point.mul_by_scalar(&j_pow_i);
+        cmm_share_point = cmm_share_point.plus_point(&a);
+    }
+    Commitment(cmm_share_point)
 }
-
 
 fn verify_policy<C: Curve, AttributeType: Attribute<C::Scalar>>(
     commitment_key: &CommitmentKey<C>,
@@ -304,26 +322,24 @@ fn verify_pok_reg_id<C: Curve>(
 
     com_mult::verify_com_mult(&challenge_prefix, &coeff, &public, &proof)
 }
-/*
-fn verify_pok_id_cred_pub<C: Curve>(
-    challenge_prefix: &[u8],
-    on_chain_commitment_key: &PedersenKey<C>,
-    ar_info_generator: &C,
-    ar_info_public_key: &PublicKey<C>,
-    id_cred_pub_enc: &Cipher<C>,
-    cmm_id_cred_sec: &Commitment<C>,
-    proof: &com_enc_eq::ComEncEqProof<C>,
-) -> bool {
-    let public = (id_cred_pub_enc.0, id_cred_pub_enc.1, cmm_id_cred_sec.0);
-    // FIXME: The one_point needs to be a parameter.
-    let cmm_key = on_chain_commitment_key;
-    let base = (
-        *ar_info_generator,
-        ar_info_public_key.0,
-        cmm_key.0[0],
-        cmm_key.1,
-    );
-
-    com_enc_eq::verify_com_enc_eq::<C>(&challenge_prefix, &base, &public, proof)
-}
-*/
+// fn verify_pok_id_cred_pub<C: Curve>(
+// challenge_prefix: &[u8],
+// on_chain_commitment_key: &PedersenKey<C>,
+// ar_info_generator: &C,
+// ar_info_public_key: &PublicKey<C>,
+// id_cred_pub_enc: &Cipher<C>,
+// cmm_id_cred_sec: &Commitment<C>,
+// proof: &com_enc_eq::ComEncEqProof<C>,
+// ) -> bool {
+// let public = (id_cred_pub_enc.0, id_cred_pub_enc.1, cmm_id_cred_sec.0);
+// FIXME: The one_point needs to be a parameter.
+// let cmm_key = on_chain_commitment_key;
+// let base = (
+// ar_info_generator,
+// ar_info_public_key.0,
+// cmm_key.0[0],
+// cmm_key.1,
+// );
+//
+// com_enc_eq::verify_com_enc_eq::<C>(&challenge_prefix, &base, &public, proof)
+// }

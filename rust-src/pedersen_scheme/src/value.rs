@@ -56,7 +56,6 @@ impl<C: Curve> Value<C> {
     pub fn generate<T>(csprng: &mut T) -> Value<C>
     where
         T: Rng, {
-
         Value(C::generate_scalar(csprng))
     }
 }

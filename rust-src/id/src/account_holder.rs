@@ -3,20 +3,21 @@ use crate::types::*;
 use sha2::{Digest, Sha512};
 
 use curve_arithmetic::{Curve, Pairing};
-use secret_sharing::secret_sharing::*;
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
-use elgamal::{cipher::Cipher};
+use elgamal::cipher::Cipher;
+use elgamal::public::PublicKey;
 use pairing::Field;
 use pedersen_scheme::{
     commitment::Commitment,
-    randomness::Randomness,
     key::{CommitmentKey, CommitmentKey as PedersenKey},
+    randomness::Randomness,
     value as pedersen,
     value::Value,
 };
 use ps_sig;
 use rand::*;
+use secret_sharing::secret_sharing::*;
 use sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult};
 
 /// Generate PreIdentityObject out of the account holder information,
@@ -38,25 +39,47 @@ where
     let mut csprng = thread_rng();
     let id_ah = aci.acc_holder_info.id_ah.clone();
     let id_cred_pub_ip = aci.acc_holder_info.id_cred.id_cred_pub_ip;
+    //PRF related computation
     let prf::SecretKey(prf_key_scalar) = aci.prf_key;
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
     // revocation.
-    let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data(&aci.prf_key.0, &context.choice_ar_parameters, &context.ip_info.ar_info.1);
+    let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data(
+        &aci.prf_key.0,
+        &context.choice_ar_parameters,
+        &context.ip_info.ar_info.1,
+    );
     let number_of_ars = context.choice_ar_parameters.0.len();
     let mut ip_ar_data: Vec<IpArData<C>> = Vec::with_capacity(number_of_ars);
     let ar_commitment_key = context.ip_info.ar_info.1;
-    for item in prf_key_data.iter(){
-        match context.choice_ar_parameters.0.iter().find(|&x| x.ar_name ==item.ar_name){
-            None => panic!("cannot find Ar"),
-            Some(ar_info)=> {
-                let proof = com_enc_eq::prove_com_enc_eq(&mut csprng, &[], &(item.encrypted_share.0, item.encrypted_share.1, item.cmm_to_share.0), &(item.encryption_randomness, item.share, item.randomness_cmm_to_share.0), &(ar_info.ar_elgamal_generator, ar_info.ar_public_key.0, ar_commitment_key.0, ar_commitment_key.1));
-        ip_ar_data.push(IpArData{
-            ar_name: item.ar_name.clone(),
-            enc_prf_key_share: item.encrypted_share,
-            prf_key_share_number: item.share_number,
-            proof_com_enc_eq: proof,
-        });
-            }}
+    for item in prf_key_data.iter() {
+        let proof = com_enc_eq::prove_com_enc_eq(
+                    &mut csprng,
+                    &[],
+                    &(
+                        item.encrypted_share.0,
+                        item.encrypted_share.1,
+                        item.cmm_to_share.0,
+                    ),
+                    &(
+                        item.encryption_randomness,
+                        item.share,
+                        item.randomness_cmm_to_share.0,
+                    ),
+                    &(
+                        PublicKey::generator(),
+                        item.ar_public_key.0,
+                        ar_commitment_key.0,
+                        ar_commitment_key.1,
+                    ),
+                );
+                ip_ar_data.push(IpArData {
+                    ar_name:              item.ar_name.clone(),
+                    enc_prf_key_share:    item.encrypted_share,
+                    prf_key_share_number: item.share_number,
+                    proof_com_enc_eq:     proof,
+                });
+            
+        
     }
     let alist = aci.attributes.clone();
 
@@ -74,11 +97,11 @@ where
             &mut csprng,
         )
     };
-let (cmm_prf, rand_cmm_prf) = context
+    let (cmm_prf, rand_cmm_prf) = context
         .commitment_key_prf
         .commit(&pedersen::Value(prf_key_scalar), &mut csprng);
     let snd_cmm_prf = cmm_prf_sharing_coeff[0].1;
-    let rand_snd_cmm_prf = cmm_coeff_randomness[0].1; 
+    let rand_snd_cmm_prf = cmm_coeff_randomness[0].1;
     // now generate the proof that the commitment hidden in snd_cmm_prf is to
     // the same prf key as the one encrypted in id_ar_data via anonymity revokers
     // public key.
@@ -87,10 +110,7 @@ let (cmm_prf, rand_cmm_prf) = context
         // TODO: Check that this is the correct order of secret values.
         let secret = (prf_key_scalar, rand_cmm_prf.0, rand_snd_cmm_prf.0);
         let coeff = (
-            (
-                context.commitment_key_prf.0,
-                context.commitment_key_prf.1,
-            ),
+            (context.commitment_key_prf.0, context.commitment_key_prf.1),
             ((context.ip_info.ar_info.1).0, (context.ip_info.ar_info.1).1),
         );
         com_eq_different_groups::prove_com_eq_diff_grps(&mut csprng, &[], &public, &secret, &coeff)
@@ -113,79 +133,94 @@ let (cmm_prf, rand_cmm_prf) = context
 }
 
 #[derive(Clone)]
-pub struct SingleArData<C:Curve>{
-      ar_name: String,
-      share: C::Scalar,
-      share_number: u64,
-      encrypted_share: Cipher<C>,
-      encryption_randomness: C::Scalar,
-      cmm_to_share: Commitment<C>,
-      randomness_cmm_to_share: Randomness<C>,
-      //proof_com_enc_eq: com_enc_eq::ComEncEqProof<C>,
+pub struct SingleArData<C: Curve> {
+    ar_name:                 String,
+    share:                   C::Scalar,
+    share_number:            u64,
+    encrypted_share:         Cipher<C>,
+    encryption_randomness:   C::Scalar,
+    cmm_to_share:            Commitment<C>,
+    randomness_cmm_to_share: Randomness<C>,
+    ar_public_key: elgamal::PublicKey<C>, 
 }
 #[inline]
-pub fn compute_sharing_data<C:Curve> (shared_scalar: &C::Scalar, ar_parameters: &(Vec<ArInfo<C>>, u64), commitment_key: &PedersenKey<C>)-> (Vec<SingleArData<C>>, Vec<(u64, Commitment<C>)>, Vec<(u64, Randomness<C>)>){
-        let n = ar_parameters.0.len() as u64;
-        let t = ar_parameters.1;
-        let mut csprng = thread_rng();
-        let (cmm_prf, cmm_prf_rand) = commitment_key.commit(&Value(*shared_scalar), &mut csprng);
-        let sharing_data = share::<C, ThreadRng>(&shared_scalar, n, t, &mut csprng);
-        let mut cmm_sharing_coefficients:Vec<(u64, Commitment<C>)> = Vec::with_capacity(t as usize);
-        cmm_sharing_coefficients.push((0, cmm_prf));
-        let mut cmm_coeff_randomness: Vec<(u64, Randomness<C>)> = Vec::with_capacity(t as usize);
-        cmm_coeff_randomness.push((0, cmm_prf_rand));
-        for i in 1..(t as usize){
-            let (cmm, rnd) = commitment_key.commit(&Value(sharing_data.coefficients[i as usize-1].1), &mut csprng);
-            cmm_sharing_coefficients.push((i as u64, cmm));
-            cmm_coeff_randomness.push((i as u64, rnd));
-        }
-        let mut ar_prf_data :Vec<SingleArData<C>> = Vec::with_capacity(n as usize);
-        for i in 1..n+1 {
-            let ar = &ar_parameters.0[(i as usize)-1];
-            let pk = ar.ar_public_key;
-            let share = sharing_data.shares[(i as usize)-1].1;
-            assert_eq!(i as u64, sharing_data.shares[(i as usize)-1].0);
-            let (cipher, rnd2) = pk.encrypt_exponent_rand(&mut csprng, &share);
-            let (cmm, rnd) = commitment_to_share(i as u64, &cmm_sharing_coefficients, &cmm_coeff_randomness);
-            //let proof = com_enc_eq::prove_com_enc_eq(&mut csprng, &challenge_prefix, &(cipher.0, cipher.1, cmm.0), &(rnd2, share, rnd.0), &(ar.ar_elgamal_generator, pk.0, commitment_key.0, commitment_key.1));
-            let ar_data =
-                SingleArData{
-                ar_name: ar.ar_name.clone(),
-                share: share,
-                share_number: i as u64,
-                encrypted_share: cipher,
-                encryption_randomness: rnd2,
-                cmm_to_share: cmm,
-                randomness_cmm_to_share: rnd,
-             //   proof_com_enc_eq: proof,
-            };
-            ar_prf_data.push(ar_data)
-        }
-        (ar_prf_data, cmm_sharing_coefficients, cmm_coeff_randomness)
+pub fn compute_sharing_data<C: Curve>(
+    shared_scalar: &C::Scalar,
+    ar_parameters: &(Vec<ArInfo<C>>, u64),
+    commitment_key: &PedersenKey<C>,
+) -> (
+    Vec<SingleArData<C>>,
+    Vec<(u64, Commitment<C>)>,
+    Vec<(u64, Randomness<C>)>,
+) {
+    let n = ar_parameters.0.len() as u64;
+    let t = ar_parameters.1;
+    let mut csprng = thread_rng();
+    let (cmm_prf, cmm_prf_rand) = commitment_key.commit(&Value(*shared_scalar), &mut csprng);
+    let sharing_data = share::<C, ThreadRng>(&shared_scalar, n, t, &mut csprng);
+    let mut cmm_sharing_coefficients: Vec<(u64, Commitment<C>)> = Vec::with_capacity(t as usize);
+    cmm_sharing_coefficients.push((0, cmm_prf));
+    let mut cmm_coeff_randomness: Vec<(u64, Randomness<C>)> = Vec::with_capacity(t as usize);
+    cmm_coeff_randomness.push((0, cmm_prf_rand));
+    for i in 1..(t as usize) {
+        let (cmm, rnd) = commitment_key.commit(
+            &Value(sharing_data.coefficients[i as usize - 1].1),
+            &mut csprng,
+        );
+        cmm_sharing_coefficients.push((i as u64, cmm));
+        cmm_coeff_randomness.push((i as u64, rnd));
+    }
+    let mut ar_prf_data: Vec<SingleArData<C>> = Vec::with_capacity(n as usize);
+    for i in 1..n + 1 {
+        let ar = &ar_parameters.0[(i as usize) - 1];
+        let pk = ar.ar_public_key;
+        let share = sharing_data.shares[(i as usize) - 1].1;
+        assert_eq!(i as u64, sharing_data.shares[(i as usize) - 1].0);
+        let (cipher, rnd2) = pk.encrypt_exponent_rand(&mut csprng, &share);
+        let (cmm, rnd) =
+            commitment_to_share(i as u64, &cmm_sharing_coefficients, &cmm_coeff_randomness);
+        // let proof = com_enc_eq::prove_com_enc_eq(&mut csprng, &challenge_prefix,
+        // &(cipher.0, cipher.1, cmm.0), &(rnd2, share, rnd.0),
+        // &(ar.ar_elgamal_generator, pk.0, commitment_key.0, commitment_key.1));
+        let ar_data = SingleArData {
+            ar_name: ar.ar_name.clone(),
+            share,
+            share_number: i as u64,
+            encrypted_share: cipher,
+            encryption_randomness: rnd2,
+            cmm_to_share: cmm,
+            randomness_cmm_to_share: rnd,
+            ar_public_key: pk,
+        };
+        ar_prf_data.push(ar_data)
+    }
+    (ar_prf_data, cmm_sharing_coefficients, cmm_coeff_randomness)
 }
 
 #[inline(always)]
-pub fn commitment_to_share<C:Curve>(share_number: u64, coeff_commitments: &Vec<(u64,Commitment<C>)>, coeff_randomness: &Vec<(u64,Randomness<C>)>)
-     -> (Commitment<C>,Randomness<C>){
-        let deg = coeff_commitments.len()-1;
-        let mut cmm_share_point : C = (coeff_commitments[0].1).0;
-        let mut cmm_share_randomness_scalar : C::Scalar = (coeff_randomness[0].1).0;
-        for i in 1..(deg+1) {
-            let j_pow_i: C::Scalar = C::scalar_from_u64(share_number).unwrap().pow([i as u64]);
-            let (s, Commitment(cmm_point)) = coeff_commitments[i];
-            assert_eq!(s as usize, i);
-            let a = cmm_point.mul_by_scalar(&j_pow_i);
-            cmm_share_point = cmm_share_point.plus_point(&a);
-            //let mut r = C::scalar_from_u64(coeff_randomness[i].0).unwrap();
-            let mut r = (coeff_randomness[i].1).0;
-            r.mul_assign(&j_pow_i);
-            cmm_share_randomness_scalar.add_assign(&r);
-        }
-        let cmm = Commitment(cmm_share_point);
-        let rnd = Randomness(cmm_share_randomness_scalar);
-        (cmm,rnd)
+pub fn commitment_to_share<C: Curve>(
+    share_number: u64,
+    coeff_commitments: &Vec<(u64, Commitment<C>)>,
+    coeff_randomness: &Vec<(u64, Randomness<C>)>,
+) -> (Commitment<C>, Randomness<C>) {
+    let deg = coeff_commitments.len() - 1;
+    let mut cmm_share_point: C = (coeff_commitments[0].1).0;
+    let mut cmm_share_randomness_scalar: C::Scalar = (coeff_randomness[0].1).0;
+    for i in 1..(deg + 1) {
+        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number).unwrap().pow([i as u64]);
+        let (s, Commitment(cmm_point)) = coeff_commitments[i];
+        assert_eq!(s as usize, i);
+        let a = cmm_point.mul_by_scalar(&j_pow_i);
+        cmm_share_point = cmm_share_point.plus_point(&a);
+        // let mut r = C::scalar_from_u64(coeff_randomness[i].0).unwrap();
+        let mut r = (coeff_randomness[i].1).0;
+        r.mul_assign(&j_pow_i);
+        cmm_share_randomness_scalar.add_assign(&r);
+    }
+    let cmm = Commitment(cmm_share_point);
+    let rnd = Randomness(cmm_share_randomness_scalar);
+    (cmm, rnd)
 }
-
 
 #[allow(clippy::too_many_arguments)]
 pub fn generate_cdi<
@@ -219,17 +254,17 @@ where
 
     let reg_id = commitment_base.mul_by_scalar(&reg_id_exponent);
     let ar_commitment_key = ip_info.ar_info.1;
-    let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data(&id_cred_sec, &prio.choice_ar_parameters, &ar_commitment_key);
+    let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) =
+        compute_sharing_data(&id_cred_sec, &prio.choice_ar_parameters, &ar_commitment_key);
     let number_of_ars = prio.choice_ar_parameters.0.len();
     let mut ar_data: Vec<ChainArData<C>> = Vec::with_capacity(number_of_ars);
-    for item in id_cred_data.iter(){
-          ar_data.push(ChainArData{
-              ar_name: item.ar_name.clone(),
-              enc_id_cred_pub_share: item.encrypted_share,
-              id_cred_pub_share_number: item.share_number,
-          });
+    for item in id_cred_data.iter() {
+        ar_data.push(ChainArData {
+            ar_name:                  item.ar_name.clone(),
+            enc_id_cred_pub_share:    item.encrypted_share,
+            id_cred_pub_share_number: item.share_number,
+        });
     }
-
 
     let ip_pub_key = &ip_info.ip_verify_key;
 
@@ -258,7 +293,7 @@ where
         acc_scheme_id: SchemeId::Ed25519,
         reg_id,
         ar_data,
-        choice_ar_parameters: prio.choice_ar_parameters.0.clone(),
+        choice_ar_parameters: prio.choice_ar_parameters.0.iter().map(|x| x.ar_handle).collect(),
         ip_identity: ip_info.ip_identity.clone(),
         policy: policy.clone(),
         acc_pub_key: acc_data.verify_key,
@@ -270,14 +305,38 @@ where
     let challenge_prefix = hasher.result();
 
     let mut pok_id_cred_pub = Vec::with_capacity(number_of_ars);
-    for item in id_cred_data.iter(){
-          match prio.choice_ar_parameters.0.iter().find(|&x| x.ar_name ==item.ar_name){
-              None => panic!("cannot find Ar"),
-              Some(ar_info)=> {
-                  let proof = com_enc_eq::prove_com_enc_eq(&mut csprng, &challenge_prefix, &(item.encrypted_share.0, item.encrypted_share.1, item.cmm_to_share.0), &(item.encryption_randomness, item.share, item.randomness_cmm_to_share.0), &(ar_info.ar_elgamal_generator, ar_info.ar_public_key.0, global_context.on_chain_commitment_key.0, global_context.on_chain_commitment_key.1));
-                  pok_id_cred_pub.push((item.share_number, proof));
-              }
-          }
+    for item in id_cred_data.iter() {
+        match prio
+            .choice_ar_parameters
+            .0
+            .iter()
+            .find(|&x| x.ar_name == item.ar_name)
+        {
+            None => panic!("cannot find Ar"),
+            Some(ar_info) => {
+                let proof = com_enc_eq::prove_com_enc_eq(
+                    &mut csprng,
+                    &challenge_prefix,
+                    &(
+                        item.encrypted_share.0,
+                        item.encrypted_share.1,
+                        item.cmm_to_share.0,
+                    ),
+                    &(
+                        item.encryption_randomness,
+                        item.share,
+                        item.randomness_cmm_to_share.0,
+                    ),
+                    &(
+                        PublicKey::generator(),
+                        ar_info.ar_public_key.0,
+                        global_context.on_chain_commitment_key.0,
+                        global_context.on_chain_commitment_key.1,
+                    ),
+                );
+                pok_id_cred_pub.push((item.share_number, proof));
+            }
+        }
     }
     // and then use it to generate all the proofs.
 
@@ -285,17 +344,17 @@ where
     // computed above corresponds to the same id_cred_sec that is signed by the
     // identity provider (and commited to)
 
-//    let pok_id_cred_pub = compute_pok_id_cred_pub(
-//        &challenge_prefix,
-//        &ip_info,
-//        &global_context,
-//        &id_cred_sec,
-//        &id_cred_pub_enc,
-//        &id_cred_pub_rand,
-//        &commitments.cmm_id_cred_sec,
-//        &commitment_rands.id_cred_sec_rand.0,
-//        &mut csprng,
-//    );
+    //    let pok_id_cred_pub = compute_pok_id_cred_pub(
+    //        &challenge_prefix,
+    //        &ip_info,
+    //        &global_context,
+    //        &id_cred_sec,
+    //        &id_cred_pub_enc,
+    //        &id_cred_pub_rand,
+    //        &commitments.cmm_id_cred_sec,
+    //        &commitment_rands.id_cred_sec_rand.0,
+    //        &mut csprng,
+    //    );
 
     // Proof that the registration id is computed correctly from the prf key K and
     // the cred_counter x. At the moment there is no proof that x is less than
@@ -348,7 +407,6 @@ where
         proofs: cdp,
     }
 }
-
 
 fn open_policy_commitments<C: Curve, AttributeType: Attribute<C::Scalar>>(
     policy: &Policy<C, AttributeType>,
@@ -446,7 +504,10 @@ fn compute_pok_sig<
             (*gxs_pair, gxs),
             (g_base, h_base),
         ),
-        &((*q_sec, gxs_sec), pedersen_rands.iter().map(|x| x.0).collect()),
+        &(
+            (*q_sec, gxs_sec),
+            pedersen_rands.iter().map(|x| x.0).collect(),
+        ),
         csprng,
     )
 }
@@ -465,14 +526,14 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     alist: &AttributeList<C::Scalar, AttributeType>,
     prf_key: &prf::SecretKey<C>,
     cred_counter: u8,
-    cmm_id_cred_sec_sharing_coeff: &Vec<(u64,Commitment<C>)>,
-    cmm_coeff_randomness: &Vec<(u64,Randomness<C>)>,
+    cmm_id_cred_sec_sharing_coeff: &Vec<(u64, Commitment<C>)>,
+    cmm_coeff_randomness: &Vec<(u64, Randomness<C>)>,
     csprng: &mut R,
 ) -> (CredDeploymentCommitments<C>, CommitmentsRandomness<C>) {
     let (c, cmm_id_cred_sec) = cmm_id_cred_sec_sharing_coeff[0];
-    assert_eq!(c,0);
+    assert_eq!(c, 0);
     let (cc, id_cred_sec_rand) = cmm_coeff_randomness[0];
-    assert_eq!(cc,0);
+    assert_eq!(cc, 0);
     let (cmm_id_cred_sec, id_cred_sec_rand) = (cmm_id_cred_sec, id_cred_sec_rand);
     let prf::SecretKey(prf_scalar) = prf_key;
     let (cmm_prf, prf_rand) = commitment_key.commit(&Value(*prf_scalar), csprng);
@@ -501,7 +562,7 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
         cmm_prf,
         cmm_cred_counter,
         cmm_attributes,
-        cmm_id_cred_sec_sharing_coeff:cmm_id_cred_sec_sharing_coeff.clone(),
+        cmm_id_cred_sec_sharing_coeff: cmm_id_cred_sec_sharing_coeff.clone(),
     };
 
     let cr = CommitmentsRandomness {
@@ -513,7 +574,6 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
 
     (cdc, cr)
 }
-
 
 #[allow(clippy::too_many_arguments)]
 fn compute_pok_reg_id<C: Curve, R: Rng>(
@@ -556,31 +616,29 @@ fn compute_pok_reg_id<C: Curve, R: Rng>(
 
     com_mult::prove_com_mult(csprng, &challenge_prefix, &public, &secret, &coeff)
 }
-/*
-#[allow(clippy::too_many_arguments)]
-fn compute_pok_id_cred_pub<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
-    challenge_prefix: &[u8],
-    ip_info: &IpInfo<P, C>,
-    global_context: &GlobalContext<C>,
-    id_cred_sec: &C::Scalar,
-    id_cred_pub_enc: &Cipher<C>,
-    id_cred_pub_rand: &C::Scalar,
-    cmm_id_cred_sec: &Commitment<C>,
-    id_cred_sec_rand: &C::Scalar,
-    csprng: &mut R,
-) -> com_enc_eq::ComEncEqProof<C> {
-    let public = (id_cred_pub_enc.0, id_cred_pub_enc.1, cmm_id_cred_sec.0);
-    // FIXME: The one_point needs to be a parameter.
-    let ar_info = &ip_info.ar_info;
-    let cmm_key = &global_context.on_chain_commitment_key;
-    let base = (
-        ar_info.ar_elgamal_generator,
-        ar_info.ar_public_key.0,
-        cmm_key.0,
-        cmm_key.1,
-    );
-    let secret = (*id_cred_pub_rand, *id_cred_sec, *id_cred_sec_rand);
-
-    com_enc_eq::prove_com_enc_eq::<C, R>(csprng, &challenge_prefix, &public, &secret, &base)
-}
-*/
+// #[allow(clippy::too_many_arguments)]
+// fn compute_pok_id_cred_pub<P: Pairing, C: Curve<Scalar = P::ScalarField>, R:
+// Rng>( challenge_prefix: &[u8],
+// ip_info: &IpInfo<P, C>,
+// global_context: &GlobalContext<C>,
+// id_cred_sec: &C::Scalar,
+// id_cred_pub_enc: &Cipher<C>,
+// id_cred_pub_rand: &C::Scalar,
+// cmm_id_cred_sec: &Commitment<C>,
+// id_cred_sec_rand: &C::Scalar,
+// csprng: &mut R,
+// ) -> com_enc_eq::ComEncEqProof<C> {
+// let public = (id_cred_pub_enc.0, id_cred_pub_enc.1, cmm_id_cred_sec.0);
+// FIXME: The one_point needs to be a parameter.
+// let ar_info = &ip_info.ar_info;
+// let cmm_key = &global_context.on_chain_commitment_key;
+// let base = (
+// ar_info.ar_elgamal_generator,
+// ar_info.ar_public_key.0,
+// cmm_key.0,
+// cmm_key.1,
+// );
+// let secret = (*id_cred_pub_rand, *id_cred_sec, *id_cred_sec_rand);
+//
+// com_enc_eq::prove_com_enc_eq::<C, R>(csprng, &challenge_prefix, &public,
+// &secret, &base) }

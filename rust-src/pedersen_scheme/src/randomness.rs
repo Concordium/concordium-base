@@ -3,7 +3,7 @@
 // Authors:
 // - bm@concordium.com
 
-//! Randomness 
+//! Randomness
 //! The randomness used in commitment
 
 #[cfg(feature = "serde")]
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-//use crate::errors::{InternalError::FieldDecodingError};
+// use crate::errors::{InternalError::FieldDecodingError};
 use curve_arithmetic::{curve_arithmetic::*, serialization::*};
 
 use failure::Error;
@@ -50,7 +50,6 @@ impl<C: Curve> Randomness<C> {
     pub fn generate<T>(csprng: &mut T) -> Randomness<C>
     where
         T: Rng, {
-
         Randomness(C::generate_scalar(csprng))
     }
 }
@@ -76,7 +75,13 @@ mod tests {
         };
     }
 
-    macro_test_randomness_to_byte_conversion!(randomness_to_byte_conversion_bls12_381_g1_affine, G1Affine);
+    macro_test_randomness_to_byte_conversion!(
+        randomness_to_byte_conversion_bls12_381_g1_affine,
+        G1Affine
+    );
 
-    macro_test_randomness_to_byte_conversion!(randomness_to_byte_conversion_bls12_381_g2_affine, G2Affine);
+    macro_test_randomness_to_byte_conversion!(
+        randomness_to_byte_conversion_bls12_381_g2_affine,
+        G2Affine
+    );
 }

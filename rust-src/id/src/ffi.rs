@@ -111,8 +111,6 @@ pub extern "C" fn verify_cdi_ffi(
     gc_dlogbase_ptr: *const G1,
     gc_cmm_key_ptr: *const PedersenKey<G1>,
     ip_verify_key_ptr: *const ps_sig::PublicKey<Bls12>,
-    ip_ar_elgamal_generator_ptr: *const G1,
-    ip_ar_pub_key_ptr: *const elgamal::PublicKey<G1>,
     cdi_ptr: *const u8,
     cdi_len: size_t,
 ) -> i32 {
@@ -139,7 +137,6 @@ pub extern "C" fn verify_cdi_ffi(
         Some(cdi) => {
             match chain::verify_cdi_worker::<Bls12, G1, AttributeKind>(
                 from_ptr!(gc_cmm_key_ptr),
-                from_ptr!(ip_ar_elgamal_generator_ptr),
                 from_ptr!(ip_ar_pub_key_ptr),
                 from_ptr!(ip_verify_key_ptr),
                 &cdi,

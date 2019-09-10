@@ -5,11 +5,7 @@
 
 //! Commitment key type
 
-use crate::{
-    commitment::*,
-    value::*,
-    randomness::*,
-};
+use crate::{commitment::*, randomness::*, value::*};
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
 #[cfg(feature = "serde")]
@@ -41,7 +37,7 @@ impl<C: Curve> CommitmentKey<C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let g = &self.0;
         let h = &self.1;
-        let mut bytes: Vec<u8> = Vec::with_capacity( 2 * C::GROUP_ELEMENT_LENGTH);
+        let mut bytes: Vec<u8> = Vec::with_capacity(2 * C::GROUP_ELEMENT_LENGTH);
         write_curve_element(g, &mut bytes);
         write_curve_element(h, &mut bytes);
         bytes.into_boxed_slice()
@@ -59,12 +55,12 @@ impl<C: Curve> CommitmentKey<C> {
         let h = read_curve(cur)?;
         Ok(CommitmentKey(g, h))
     }
-    
-     pub fn commit<T>(&self, s: &Value<C>, csprng: &mut T) -> (Commitment<C>, Randomness<C>)
-      where
-          T: Rng, {
-          let r = Randomness::<C>::generate(csprng);
-          (self.hide(s, &r), r) 
+
+    pub fn commit<T>(&self, s: &Value<C>, csprng: &mut T) -> (Commitment<C>, Randomness<C>)
+    where
+        T: Rng, {
+        let r = Randomness::<C>::generate(csprng);
+        (self.hide(s, &r), r)
     }
 
     fn hide(&self, s: &Value<C>, r: &Randomness<C>) -> Commitment<C> {
@@ -78,28 +74,27 @@ impl<C: Curve> CommitmentKey<C> {
     }
 
     pub fn open(&self, s: &Value<C>, r: &Randomness<C>, c: &Commitment<C>) -> bool {
-        self.hide(s,r) == *c
+        self.hide(s, r) == *c
     }
+
     pub fn generate<T>(csprng: &mut T) -> CommitmentKey<C>
     where
         T: Rng, {
         let h = C::generate(csprng);
         let g = C::generate(csprng);
-        CommitmentKey(g,h)
+        CommitmentKey(g, h)
     }
-    /*
-    /// Generate a `CommitmentKey` for `n` values from a `csprng`.
-    pub fn generate<T>(n: usize, csprng: &mut T) -> CommitmentKey<C>
-    where
-        T: Rng, {
-        let mut gs: Vec<C> = Vec::with_capacity(n);
-        for _i in 0..n {
-            gs.push(C::generate(csprng));
-        }
-        let h = C::generate(csprng);
-        CommitmentKey(gs, h)
-    }
-    */
+    // Generate a `CommitmentKey` for `n` values from a `csprng`.
+    // pub fn generate<T>(n: usize, csprng: &mut T) -> CommitmentKey<C>
+    // where
+    // T: Rng, {
+    // let mut gs: Vec<C> = Vec::with_capacity(n);
+    // for _i in 0..n {
+    // gs.push(C::generate(csprng));
+    // }
+    // let h = C::generate(csprng);
+    // CommitmentKey(gs, h)
+    // }
 }
 
 #[cfg(test)]

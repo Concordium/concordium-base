@@ -46,7 +46,7 @@ fn lagrange<C: Curve>(kxs: &Vec<u64>, i: u64) -> C::Scalar {
             Some(z) => {
                 fe_j.mul_assign(&z);
                 fe_j.mul_assign(&accum);
-                fe_j 
+                fe_j
             }
         }
     })
@@ -75,10 +75,10 @@ mod test {
             let sufficient_sample = sample(&mut csprng, &sharing_data.shares, threshold as usize);
             let revealed_data: Fr = reveal::<G1>(sufficient_sample);
             assert_eq!(revealed_data, secret);
-            let insufficient_sample = sample(&mut csprng, &sharing_data.shares, (threshold-1) as usize);
+            let insufficient_sample =
+                sample(&mut csprng, &sharing_data.shares, (threshold - 1) as usize);
             let revealed_data: Fr = reveal::<G1>(insufficient_sample);
             assert_ne!(revealed_data, secret);
-
         }
     }
 }

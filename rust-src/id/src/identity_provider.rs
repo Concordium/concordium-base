@@ -1,11 +1,11 @@
 use crate::types::*;
 use curve_arithmetic::curve_arithmetic::*;
-use pedersen_scheme::commitment::Commitment; 
-use pedersen_scheme::key::CommitmentKey;
+use pairing::Field;
+use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use ps_sig;
 use rand::*;
 use sigma_protocols::{com_enc_eq::*, com_eq::*, com_eq_different_groups::*};
-use pairing::Field;
+use elgamal::public::PublicKey;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Declined(pub Reason);
@@ -17,8 +17,11 @@ pub enum Reason {
     WrongArParameters,
 }
 
-fn check_ar_parameters<C:Curve> (_choice_ar_parameters: &(Vec<ArInfo<C>>, u64), _ip_ar_info: &Vec<ArInfo<C>>)-> bool{
-    //some business logic here
+fn check_ar_parameters<C: Curve>(
+    _choice_ar_parameters: &(Vec<ArInfo<C>>, u64),
+    _ip_ar_info: &Vec<ArInfo<C>>,
+) -> bool {
+    // some business logic here
     true
 }
 pub fn verify_credentials<
@@ -30,7 +33,7 @@ pub fn verify_credentials<
     context: Context<P, C>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Declined> {
-    //IDCredSec
+    // IDCredSec
     let comm_sc_params =
         CommitmentParams((context.commitment_key_sc.0, context.commitment_key_sc.1));
 
@@ -45,22 +48,22 @@ pub fn verify_credentials<
         return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
     }
 
-    //VRF
-    if !check_ar_parameters(&context.choice_ar_parameters, &context.ip_info.ar_info.0){
+    // VRF
+    if !check_ar_parameters(&context.choice_ar_parameters, &context.ip_info.ar_info.0) {
         return Err(Declined(Reason::WrongArParameters));
     }
-    //ar commitment key
+    // ar commitment key
     let ar_ck = context.ip_info.ar_info.1;
-    let b_2 =  verify_vrf_key_data(
-      &context.commitment_key_prf,
-      &pre_id_obj.cmm_prf,
-      &ar_ck,
-      &pre_id_obj.cmm_prf_sharing_coeff,
-      &pre_id_obj.ip_ar_data,
-      &context.choice_ar_parameters.0,
-      &pre_id_obj.proof_com_eq,
-      );
-    
+    let b_2 = verify_vrf_key_data(
+        &context.commitment_key_prf,
+        &pre_id_obj.cmm_prf,
+        &ar_ck,
+        &pre_id_obj.cmm_prf_sharing_coeff,
+        &pre_id_obj.ip_ar_data,
+        &context.choice_ar_parameters.0,
+        &pre_id_obj.proof_com_eq,
+    );
+
     if !b_2 {
         return Err(Declined(Reason::FailedToVerifyPrfData));
     }
@@ -111,15 +114,15 @@ fn verify_knowledge_of_id_cred_sec<C: Curve>(
     verify_com_eq(&[], &(vec![*c], *pk), &(*h, *g, vec![*base]), &proof)
 }
 
-fn verify_vrf_key_data<C1:Curve, C2:Curve<Scalar = C1::Scalar>>(
+fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
     ip_commitment_key: &CommitmentKey<C1>,
-    cmm_vrf          : &Commitment<C1>,
+    cmm_vrf: &Commitment<C1>,
     ar_commitment_key: &CommitmentKey<C2>,
-    cmm_sharing_coeff: &Vec<(u64,Commitment<C2>)>,
-    ip_ar_data : &Vec<IpArData<C2>>,
+    cmm_sharing_coeff: &Vec<(u64, Commitment<C2>)>,
+    ip_ar_data: &Vec<IpArData<C2>>,
     choice_ar_parameters: &Vec<ArInfo<C2>>,
     com_eq_diff_grps_proof: &ComEqDiffGrpsProof<C1, C2>,
-    )-> bool{
+) -> bool {
     let CommitmentKey(g_1, h_1) = ip_commitment_key;
     let CommitmentKey(g_2, h_2) = ar_commitment_key;
     let Commitment(cmm_vrf_point) = cmm_vrf;
@@ -127,26 +130,29 @@ fn verify_vrf_key_data<C1:Curve, C2:Curve<Scalar = C1::Scalar>>(
     assert_eq!(coeff_number, 0);
     let b_1 = verify_com_eq_diff_grps::<C1, C2>(
         &[],
-        &((*g_1,*h_1), (*g_2,*h_2)),
+        &((*g_1, *h_1), (*g_2, *h_2)),
         &(*cmm_vrf_point, cmm_vrf_point_ar_group),
-        com_eq_diff_grps_proof
-        );
+        com_eq_diff_grps_proof,
+    );
     if !b_1 {
         return false;
     }
-    //let cmm_to_shares = Vec::new();
-    for ar in ip_ar_data.iter(){
+    // let cmm_to_shares = Vec::new();
+    for ar in ip_ar_data.iter() {
         let cmm_share = commitment_to_share(ar.prf_key_share_number, cmm_sharing_coeff);
-        //finding the right encryption key
-        
-        match choice_ar_parameters.into_iter().find(|&x| x.ar_name == ar.ar_name){
+        // finding the right encryption key
+
+        match choice_ar_parameters
+            .into_iter()
+            .find(|&x| x.ar_name == ar.ar_name)
+        {
             None => return false,
-            Some(ar_info) =>{
-                let (g,h) = (ar_info.ar_elgamal_generator, ar_info.ar_public_key.0);
+            Some(ar_info) => {
+                let (g, h) = (PublicKey::generator(), ar_info.ar_public_key.0);
                 let (e_1, e_2) = (ar.enc_prf_key_share.0, ar.enc_prf_key_share.1);
                 let coeff = (g, h, *g_2, *h_2);
                 let eval = (e_1, e_2, cmm_share.0);
-                if !verify_com_enc_eq(&[], &coeff, &eval, &ar.proof_com_enc_eq){
+                if !verify_com_enc_eq(&[], &coeff, &eval, &ar.proof_com_enc_eq) {
                     return false;
                 }
             }
@@ -156,17 +162,18 @@ fn verify_vrf_key_data<C1:Curve, C2:Curve<Scalar = C1::Scalar>>(
 }
 
 #[inline(always)]
- pub fn commitment_to_share<C:Curve>(share_number: u64, coeff_commitments: &Vec<(u64,Commitment<C>)>) 
-       -> Commitment<C>{
-          let deg = coeff_commitments.len()-1;
-          let mut cmm_share_point : C = (coeff_commitments[0].1).0;
-          for i in 1..(deg+1) {
-              let j_pow_i: C::Scalar = C::scalar_from_u64(share_number).unwrap().pow([i as u64]);
-              let (s, Commitment(cmm_point)) = coeff_commitments[i];
-              assert_eq!(s as usize, i);
-              let a = cmm_point.mul_by_scalar(&j_pow_i);
-              cmm_share_point = cmm_share_point.plus_point(&a);
-          }
-          Commitment(cmm_share_point)
- }
-
+pub fn commitment_to_share<C: Curve>(
+    share_number: u64,
+    coeff_commitments: &Vec<(u64, Commitment<C>)>,
+) -> Commitment<C> {
+    let deg = coeff_commitments.len() - 1;
+    let mut cmm_share_point: C = (coeff_commitments[0].1).0;
+    for i in 1..(deg + 1) {
+        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number).unwrap().pow([i as u64]);
+        let (s, Commitment(cmm_point)) = coeff_commitments[i];
+        assert_eq!(s as usize, i);
+        let a = cmm_point.mul_by_scalar(&j_pow_i);
+        cmm_share_point = cmm_share_point.plus_point(&a);
+    }
+    Commitment(cmm_share_point)
+}

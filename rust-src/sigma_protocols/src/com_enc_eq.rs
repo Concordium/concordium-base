@@ -46,11 +46,11 @@ impl<T: Curve> ComEncEqProof<T> {
         })
     }
 }
-///public (e_1, e_2, e_3)
-///secret (s_1, s_2, s_3)
-///base (g_1, h_1, g, h)
-///prove that you know s_1, s_2, s_3 s.t
-///e_1 = g_1^s_1, e_2 = g_1^s_2 h_1^s_1, e_3 = g^s_2 h^s_3
+/// public (e_1, e_2, e_3)
+/// secret (s_1, s_2, s_3)
+/// base (g_1, h_1, g, h)
+/// prove that you know s_1, s_2, s_3 s.t
+/// e_1 = g_1^s_1, e_2 = g_1^s_2 h_1^s_1, e_3 = g^s_2 h^s_3
 pub fn prove_com_enc_eq<T: Curve, R: Rng>(
     csprng: &mut R,
     challenge_prefix: &[u8],

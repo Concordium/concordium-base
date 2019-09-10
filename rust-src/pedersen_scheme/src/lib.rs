@@ -13,7 +13,7 @@ mod constants;
 mod errors;
 pub mod key;
 pub mod pedersen_scheme;
-pub mod value;
 pub mod randomness;
+pub mod value;
 
-pub use crate::{key::*, pedersen_scheme::*, commitment::*, value::*, randomness::*};
+pub use crate::{commitment::*, key::*, pedersen_scheme::*, randomness::*, value::*};
