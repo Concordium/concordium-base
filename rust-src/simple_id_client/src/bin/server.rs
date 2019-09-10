@@ -95,8 +95,8 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
                 "signature": json_base16_encode(&sig.to_bytes()),
                 "ipIdentity": ip_id,
                 "privateData": json!({
-                    "ACI": aci_to_json(&aci),
-                    "PIORandomness": json_base16_encode(&randomness.to_bytes())
+                    "aci": aci_to_json(&aci),
+                    "pioRandomness": json_base16_encode(&randomness.to_bytes())
                 })
             });
             rouille::Response::json(&response)
@@ -123,9 +123,9 @@ fn parse_generate_credential_input_json(v: &Value) -> Option<GenerateCredentialD
     let pio = json_to_pio(v.get("preIdentityObject")?)?;
     let private = v.get("privateData")?;
     let randomness = SigRetrievalRandomness::from_bytes(&mut Cursor::new(&json_base16_decode(
-        private.get("PIORandomness")?,
+        private.get("pioRandomness")?,
     )?))?;
-    let aci = json_to_aci(private.get("ACI")?)?;
+    let aci = json_to_aci(private.get("aci")?)?;
     let policy_items = {
         if let Some(items) = v.get("revealedItems") {
             read_revealed_items(pio.alist.variant, &pio.alist.alist, items)?
@@ -252,7 +252,7 @@ pub fn main() {
             Arg::with_name("ips")
                 .short("I")
                 .long("ips")
-                .default_value("identity_providers_public_private.json")
+                .default_value("database/identity_providers_public_private.json")
                 .value_name("FILE")
                 .help("File with public and private information on IPs and ARs."),
         )
@@ -270,7 +270,7 @@ pub fn main() {
     let gc_file = matches.value_of("global").unwrap_or(GLOBAL_CONTEXT);
     let ips_file = matches
         .value_of("ips")
-        .unwrap_or("identity_providers_public_private.json");
+        .unwrap_or("database/identity_providers_public_private.json");
 
     let address = matches.value_of("address").unwrap_or("localhost:8000");
 
@@ -278,7 +278,10 @@ pub fn main() {
         if let Some(gc) = read_global_context(gc_file) {
             gc
         } else {
-            eprintln!("Could not read global cryptographic parameters. Aborting.");
+            eprintln!(
+                "Could not read global cryptographic parameters from {}. Aborting.",
+                gc_file
+            );
             return;
         }
     };
@@ -287,7 +290,10 @@ pub fn main() {
         if let Some(ips) = read_ip_infos(ips_file) {
             ips
         } else {
-            eprintln!("Could not read identity providers file. Aborting.");
+            eprintln!(
+                "Could not read identity providers file {}. Aborting.",
+                ips_file
+            );
             return;
         }
     };
