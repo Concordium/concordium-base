@@ -252,7 +252,7 @@ pub fn main() {
             Arg::with_name("ips")
                 .short("I")
                 .long("ips")
-                .default_value("identity_providers_public_private.json")
+                .default_value("database/identity_providers_public_private.json")
                 .value_name("FILE")
                 .help("File with public and private information on IPs and ARs."),
         )
@@ -270,7 +270,7 @@ pub fn main() {
     let gc_file = matches.value_of("global").unwrap_or(GLOBAL_CONTEXT);
     let ips_file = matches
         .value_of("ips")
-        .unwrap_or("identity_providers_public_private.json");
+        .unwrap_or("database/identity_providers_public_private.json");
 
     let address = matches.value_of("address").unwrap_or("localhost:8000");
 
@@ -278,7 +278,7 @@ pub fn main() {
         if let Some(gc) = read_global_context(gc_file) {
             gc
         } else {
-            eprintln!("Could not read global cryptographic parameters. Aborting.");
+            eprintln!("Could not read global cryptographic parameters from {}. Aborting.", gc_file);
             return;
         }
     };
@@ -287,7 +287,7 @@ pub fn main() {
         if let Some(ips) = read_ip_infos(ips_file) {
             ips
         } else {
-            eprintln!("Could not read identity providers file. Aborting.");
+            eprintln!("Could not read identity providers file {}. Aborting.", ips_file);
             return;
         }
     };
