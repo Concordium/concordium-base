@@ -419,7 +419,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             return;
         }
     };
-    let aci = match private_value.get("ACI").and_then(json_to_aci) {
+    let aci = match private_value.get("aci").and_then(json_to_aci) {
         Some(aci) => aci,
         None => {
             eprintln!("Could not read ACI.");
@@ -743,7 +743,7 @@ fn handle_start_ip(matches: &ArgMatches) {
 
     let aci_js = aci_to_json(&aci);
     let js = json!({
-        "ACI": aci_js,
+        "aci": aci_js,
         "randomness": json_base16_encode(&randomness.to_bytes())
     });
     if let Some(aci_out_path) = matches.value_of("private") {

@@ -95,8 +95,8 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
                 "signature": json_base16_encode(&sig.to_bytes()),
                 "ipIdentity": ip_id,
                 "privateData": json!({
-                    "ACI": aci_to_json(&aci),
-                    "PIORandomness": json_base16_encode(&randomness.to_bytes())
+                    "aci": aci_to_json(&aci),
+                    "pioRandomness": json_base16_encode(&randomness.to_bytes())
                 })
             });
             rouille::Response::json(&response)
@@ -123,9 +123,9 @@ fn parse_generate_credential_input_json(v: &Value) -> Option<GenerateCredentialD
     let pio = json_to_pio(v.get("preIdentityObject")?)?;
     let private = v.get("privateData")?;
     let randomness = SigRetrievalRandomness::from_bytes(&mut Cursor::new(&json_base16_decode(
-        private.get("PIORandomness")?,
+        private.get("pioRandomness")?,
     )?))?;
-    let aci = json_to_aci(private.get("ACI")?)?;
+    let aci = json_to_aci(private.get("aci")?)?;
     let policy_items = {
         if let Some(items) = v.get("revealedItems") {
             read_revealed_items(pio.alist.variant, &pio.alist.alist, items)?
