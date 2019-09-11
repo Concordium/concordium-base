@@ -13,6 +13,7 @@ import Foreign.Ptr
 import Foreign.C.Types
 import Data.Word
 import Data.ByteString as BS
+import Data.Serialize
 
 import qualified Data.Aeson as AE
 

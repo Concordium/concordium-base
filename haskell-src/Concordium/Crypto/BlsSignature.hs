@@ -6,8 +6,10 @@ module Concordium.Crypto.BlsSignature
 
 import Foreign.ForeignPtr
 import Foreign.Ptr
+import Foreign.Marshal.Array
 import Foreign.C.Types
 import Data.Serialize
+import Data.List as List
 import Data.Word
 import Data.ByteString
 import Data.ByteString.Unsafe as BS
@@ -31,10 +33,10 @@ foreign import ccall unsafe "&bls_free_sig" freeBlsSignature :: FunPtr (Ptr BlsS
 foreign import ccall unsafe "bls_sig_to_bytes" toBytesBlsSignature :: Ptr BlsSignature -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "bls_sig_from_bytes" fromBytesBlsSignature :: Ptr Word8 -> IO (Ptr BlsSignature)
 
-foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> Ptr CSize -> Ptr BlsSecretKey -> IO (Ptr BlsSignature)
-foreign import ccall unsafe "bls_verify" verifyBls :: Ptr Word8 -> Ptr CSize -> Ptr BlsPublicKey -> Ptr BlsSignature -> IO Bool
+foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> CSize -> Ptr BlsSecretKey -> IO (Ptr BlsSignature)
+foreign import ccall unsafe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr BlsPublicKey -> Ptr BlsSignature -> IO Bool
 foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr BlsSignature -> Ptr BlsSignature -> IO (Ptr BlsSignature)
-foreign import ccall unsafe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr BlsPublicKey) -> CSize -> Ptr BlsSignature -> Bool
+foreign import ccall unsafe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr BlsPublicKey) -> CSize -> Ptr BlsSignature -> IO Bool
 
 withBlsSecretKey :: BlsSecretKey -> (Ptr BlsSecretKey -> IO b) -> IO b
 withBlsSecretKey (BlsSecretKey fp) = withForeignPtr fp
@@ -59,7 +61,7 @@ sign :: ByteString -> BlsSecretKey -> BlsSignature
 sign m sk = BlsSignature <$> unsafeDupablePerformIO $ do
   sigptr <- BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
     withBlsSecretKey sk $ \sk' ->
-    signBls (castPtr m') (castPtr (intPtrToPtr (IntPtr mlen))) sk'
+    signBls (castPtr m') (fromIntegral mlen) sk'
   newForeignPtr freeBlsSignature sigptr
 
 verify :: ByteString -> BlsPublicKey -> BlsSignature -> Bool
@@ -67,7 +69,7 @@ verify m pk sig = unsafeDupablePerformIO $ do
   BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
     withBlsPublicKey pk $ \pk' ->
     withBlsSignature sig $ \sig' ->
-    verifyBls (castPtr m') (castPtr (intPtrToPtr (IntPtr mlen))) pk' sig'
+    verifyBls (castPtr m') (fromIntegral mlen) pk' sig'
 
 aggregate :: BlsSignature -> BlsSignature -> BlsSignature
 aggregate sig1 sig2 = BlsSignature <$> unsafeDupablePerformIO $ do
@@ -76,5 +78,14 @@ aggregate sig1 sig2 = BlsSignature <$> unsafeDupablePerformIO $ do
     aggregateBls sig1' sig2'
   newForeignPtr freeBlsSignature sigptr
 
--- verifyBLsAggregate :: ByteString -> [BlsPublicKey] -> Signature -> Bool
--- verifyBLsAggregate msg pks sig = do
+verifyAggregate :: ByteString -> [BlsPublicKey] -> BlsSignature -> Bool
+verifyAggregate m pks sig = unsafeDupablePerformIO $ do
+  BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
+    withBlsSignature sig $ \sig' ->
+    withKeyArray [] pks $ \arrlen -> \headptr ->
+      verifyBlsAggregate (castPtr m') (fromIntegral mlen) headptr (fromIntegral arrlen) sig'
+    where
+      withKeyArray ps [] f = withArrayLen ps f
+      withKeyArray ps (pk:pks) f = withBlsPublicKey pk $ \pk' -> withKeyArray (pk':ps) pks f
+
+--
