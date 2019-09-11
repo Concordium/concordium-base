@@ -15,6 +15,8 @@ use rand::{CryptoRng, Rng, RngCore};
 
 use sha2::Sha512;
 
+use subtle::{Choice, ConstantTimeEq};
+
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
 #[cfg(feature = "serde")]
@@ -29,6 +31,10 @@ use crate::{constants::*, errors::*, public::*};
 /// An EdDSA secret key.
 #[derive(Default)] // we derive Default in order to use the clear() method in Drop
 pub struct SecretKey(pub(crate) [u8; SECRET_KEY_LENGTH]);
+
+impl ConstantTimeEq for SecretKey {
+    fn ct_eq(&self, other: &Self) -> Choice { self.0.ct_eq(&other.0) }
+}
 
 impl Debug for SecretKey {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
@@ -48,7 +54,7 @@ impl AsRef<[u8]> for SecretKey {
 impl SecretKey {
     /// Convert this secret key to a byte array.
     #[inline]
-    pub fn to_bytes(&self) -> [u8; SECRET_KEY_LENGTH] { self.0 }
+    pub fn to_bytes(&self) -> Box<[u8]> { Box::new(self.0) }
 
     /// View this secret key as a byte array.
     #[inline]
@@ -78,7 +84,7 @@ impl SecretKey {
         public_key: &PublicKey,
         message: &[u8],
         rng: &mut R,
-    ) -> Result<Proof, ProofError> {
+    ) -> Proof {
         ExpandedSecretKey::from(self).prove(&public_key, &message, rng)
     }
 
@@ -246,7 +252,7 @@ impl ExpandedSecretKey {
         public_key: &PublicKey,
         message: &[u8],
         rng: &mut R,
-    ) -> Result<Proof, ProofError> {
+    ) -> Proof {
         let h: EdwardsPoint = public_key.hash_to_curve(message).expect("prove failed");
         // let x = self.mangle_scalar_bits_and_return_scalar(); //secret key
         let x = self.key;
@@ -264,7 +270,7 @@ impl ExpandedSecretKey {
         ]);
         let k_minus_cx = k - (c * x);
 
-        Ok(Proof(h_to_x, c, k_minus_cx))
+        Proof(h_to_x, c, k_minus_cx)
     }
 }
 

@@ -32,6 +32,29 @@ testProveVerify = property $ \kp doc0 -> monadicIO $ do
                     pf <- run $ VRF.prove kp doc
                     return $ VRF.verify (VRF.publicKey kp) doc pf
 
+testPublicKeyOrd :: Property
+testPublicKeyOrd = property $ \(kp1, kp2) ->
+  let k1 = case compare (VRF.publicKey kp1) (VRF.publicKey kp2) of
+             LT -> property True
+             GT -> property True
+             EQ -> kp1 === kp2
+      k2 = compare (VRF.publicKey kp1) (VRF.publicKey kp1) === EQ
+      k3 = compare (VRF.publicKey kp2) (VRF.publicKey kp2) === EQ
+  in k1 .&&. k2 .&&. k3
+
+testProofOrd :: Property
+testProofOrd = property $ \kp doc0 -> monadicIO $ do
+  let doc = BS.pack doc0
+  pf1 <- run $ VRF.prove kp doc
+  pf2 <- run $ VRF.prove kp doc
+  let k1 = case compare pf1 pf2 of
+             LT -> property True
+             GT -> property True
+             EQ -> pf1 === pf2
+  let k2 = compare pf1 pf1 === EQ
+  let k3 = compare pf2 pf2 === EQ
+  return (k1 .&&. k2 .&&. k3)
+
 testProofToHashDeterministic :: Property
 testProofToHashDeterministic = property $ \kp doc0 -> monadicIO $ do
         let doc = BS.pack doc0
@@ -58,6 +81,9 @@ tests = describe "Concordium.Crypto.VRF" $ do
         it "private key" testSerializePrivateKey
         it "keypair" testSerializeKeyPair
         it "proof" testSerializeProof
+    describe "Ord instance compatibility with Eq" $ do
+      it "public key" testPublicKeyOrd
+      it "proof" testProofOrd
     it "verify generated public key" testGenVerifyKey
     it "verify proof" testProveVerify
     it "output of VRF is independent of proof" testProofToHashDeterministic
