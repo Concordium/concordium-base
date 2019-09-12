@@ -255,7 +255,6 @@ where
     };
 
     let reg_id = commitment_base.mul_by_scalar(&reg_id_exponent);
-    let ar_commitment_key = ip_info.ar_info.1;
    
     let ar_list = prio.choice_ar_parameters.0.clone();
     let mut choice_ars= Vec::with_capacity(ar_list.len());
@@ -512,7 +511,7 @@ fn compute_pok_sig<
     pedersen_rands.push(commitment_rands.id_cred_sec_rand);
     pedersen_rands.push(commitment_rands.prf_rand);
     pedersen_rands.extend_from_slice(&commitment_rands.attributes_rand);
-    for ar in ar_list.iter(){
+    for _ar in ar_list.iter(){
         pedersen_rands.push(Randomness(C::Scalar::zero()));
     }
 

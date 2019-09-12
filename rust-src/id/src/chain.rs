@@ -5,7 +5,7 @@ use sha2::{Digest, Sha512};
 use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
-use elgamal::{cipher::Cipher, public::PublicKey};
+use elgamal::{public::PublicKey};
 use pairing::Field;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
@@ -47,11 +47,19 @@ pub fn verify_cdi<
     cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     let ars = cdi.values.choice_ar_handles.clone();
+    let ar_commitments = cdi.proofs.commitments.cmm_ars.clone();
+    if ars.len() != ar_commitments.len(){
+        return Err(CDIVerificationError::AR)
+    }
     let mut choice_ar_parameters = Vec::with_capacity(ars.len());
     for handle in ars.into_iter(){
-        match ip_info.ar_info.0.iter().find(|&x| x.ar_handle == handle){
+        //check that the handle is in the commitment list
+        match ar_commitments.iter().find(|&x| *x == global_context.on_chain_commitment_key.hide(&Value(C::scalar_from_u64(handle).unwrap()), &Randomness(C::Scalar::zero()))){
             None => return Err(CDIVerificationError::AR),
-            Some(ar_info) => choice_ar_parameters.push(ar_info.clone())
+            Some(_) => match ip_info.ar_info.0.iter().find(|&x| x.ar_handle == handle){
+                None => return Err(CDIVerificationError::AR),
+                Some(ar_info) => choice_ar_parameters.push(ar_info.clone())
+            }
         }
 
     }
