@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -10,7 +11,7 @@
 module Concordium.Types (module Concordium.Types, AccountAddress(..), SchemeId, AccountVerificationKey) where
 
 import GHC.Generics
-
+import Data.Data(Typeable, Data)
 
 import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
@@ -83,6 +84,7 @@ newtype VoterPower = VoterPower Int
 
 newtype ContractIndex = ContractIndex Word64
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Bits, Integral)
+    deriving (Typeable, Data)
 
 instance S.Serialize ContractIndex where
     get = ContractIndex <$> G.getWord64be
@@ -90,6 +92,7 @@ instance S.Serialize ContractIndex where
 
 newtype ContractSubindex = ContractSubindex Word64
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
+    deriving (Typeable, Data)
 
 instance S.Serialize ContractSubindex where
     get = ContractSubindex <$> G.getWord64be
@@ -97,7 +100,7 @@ instance S.Serialize ContractSubindex where
 
 data ContractAddress = ContractAddress { contractIndex :: !ContractIndex
                                        , contractSubindex :: !ContractSubindex}
-    deriving(Eq, Ord, Generic)
+    deriving(Eq, Ord, Generic, Typeable, Data)
 
 instance FromJSON ContractAddress where
   parseJSON = withObject "ContractAddress" $ \v -> do
@@ -122,7 +125,7 @@ instance S.Serialize ContractAddress where
 
 -- |Unique module reference.
 newtype ModuleRef = ModuleRef {moduleRef :: Hash.Hash}
-    deriving(Eq, Ord, Hashable)
+    deriving(Eq, Ord, Hashable, Typeable, Data)
 
 instance Show ModuleRef where
   show (ModuleRef m) = show m
