@@ -106,7 +106,7 @@ pub struct PreIdentityObject<
     /// choice of anonyimity revocation parameters
     /// the vec is a vector of ar handles
     /// the second element of the pair is the threshold for revocation. 
-    pub choice_ar_parameters: (Vec<ArInfo<C>>, u64),
+    pub choice_ar_parameters: (Vec<u64>, u64),
     /// Chosen attribute list.
     pub alist: AttributeList<C::Scalar, AttributeType>,
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub
@@ -132,6 +132,7 @@ pub struct PreIdentityObject<
 pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub ip_identity: String,
     pub ip_verify_key: pssig::PublicKey<P>,
+    pub dlog_base: P::G_1,
     /// list of approved anonymity revokers along with
     /// a shared commitment key
     /// TODO: How is this shared commitment key generated??
@@ -245,7 +246,7 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     /// Policy of this credential object.
     pub policy: Policy<C, AttributeType>,
     /// ar_parameters, vector of ar handles
-    pub choice_ar_parameters: Vec<u64>,
+    pub choice_ar_handles: Vec<u64>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -304,15 +305,15 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     choice_ar_handles: (Vec<u64>, u64),
 ) -> Context<P, C> {
     // TODO: Check with Bassel that these parameters are correct.
-    let dlog_base = <P as Pairing>::G_1::one_point();
+    let dlog_base = ip_info.dlog_base; 
     let commitment_key_sc = PedersenKey(ip_info.ip_verify_key.2[0], dlog_base);
     let commitment_key_prf = PedersenKey(ip_info.ip_verify_key.2[1], dlog_base);
-    let mut choice_ar_parameters = Vec::with_capacity(choice_ar_handles.0.len());
+    let mut choice_ars = Vec::with_capacity(choice_ar_handles.0.len());
     let ip_ar_parameters = &ip_info.ar_info.0.clone();
     for ar in choice_ar_handles.0.into_iter(){
         match ip_ar_parameters.into_iter().find(|&x| x.ar_handle == ar ){
             None => panic!("AR handle not in the IP list"),
-            Some(ar_info) => choice_ar_parameters.push(ar_info.clone()),
+            Some(ar_info) => choice_ars.push(ar_info.clone()),
             
         }
         
@@ -324,7 +325,7 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         dlog_base,
         commitment_key_sc,
         commitment_key_prf,
-        choice_ar_parameters: (choice_ar_parameters, choice_ar_handles.1),
+        choice_ar_parameters: (choice_ars, choice_ar_handles.1),
     }
 }
 
@@ -440,9 +441,8 @@ impl<C: Curve> CredDeploymentCommitments<C> {
         }
         let len = cur.read_u16::<BigEndian>().ok()?;
         let mut cmm_id_cred_sec_sharing_coeff = Vec::with_capacity(len as usize);
-        for _ in 0..l {
-            let n = cur.read_u64::<BigEndian>().ok()?;
-            cmm_id_cred_sec_sharing_coeff.push((n, pedersen::Commitment::from_bytes(cur).ok()?));
+        for _ in 0..len {
+            cmm_id_cred_sec_sharing_coeff.push((cur.read_u64::<BigEndian>().ok()?, pedersen::Commitment::from_bytes(cur).ok()?));
         }
         Some(CredDeploymentCommitments {
             cmm_id_cred_sec,
@@ -572,8 +572,8 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
             v.extend_from_slice(&ar.to_bytes());
         }
         v.extend_from_slice(&self.policy.to_bytes());
-        v.extend_from_slice(&(self.choice_ar_parameters.len() as u16).to_be_bytes());
-        for ar in self.choice_ar_parameters.iter() {
+        v.extend_from_slice(&(self.choice_ar_handles.len() as u16).to_be_bytes());
+        for ar in self.choice_ar_handles.iter() {
             v.extend_from_slice(&ar.to_be_bytes());
         }
         v
@@ -588,23 +588,23 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
         let reg_id = curve_serialization::read_curve::<C>(cur).ok()?;
         let ip_identity = bytes_to_short_string(cur)?;
         let number_of_ars = cur.read_u16::<BigEndian>().ok()?;
-        let mut ar_data = Vec::new();
+        let mut ar_data = Vec::with_capacity(number_of_ars as usize);
         for _ in 0..number_of_ars {
             ar_data.push(ChainArData::from_bytes(cur)?);
         }
-        let mut choice_ar_parameters = Vec::new();
-        let number_of_ars = cur.read_u16::<BigEndian>().ok()?;
-        for _ in 0..number_of_ars {
-            choice_ar_parameters.push(cur.read_u64::<BigEndian>().ok()?);
-        }
         let policy = Policy::from_bytes(cur)?;
+        let number_of_ars = cur.read_u16::<BigEndian>().ok()?;
+        let mut choice_ar_handles = Vec::with_capacity(number_of_ars as usize);
+        for _ in 0..number_of_ars {
+            choice_ar_handles.push(cur.read_u64::<BigEndian>().ok()?);
+        }
         Some(CredentialDeploymentValues {
             acc_scheme_id,
             acc_pub_key,
             reg_id,
             ip_identity,
             ar_data,
-            choice_ar_parameters,
+            choice_ar_handles,
             policy,
         })
     }
@@ -615,14 +615,16 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
 {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut v = self.values.to_bytes();
-        v.extend_from_slice(&self.proofs.to_bytes());
+        let proof_bytes = self.proofs.to_bytes();
+        v.extend_from_slice(&proof_bytes);
         v
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let values = CredentialDeploymentValues::from_bytes(cur)?;
-        let proofs = CredDeploymentProofs::from_bytes(cur)?;
-        Some(CredDeploymentInfo { values, proofs })
+        let values = CredentialDeploymentValues::from_bytes(cur);
+
+        let proofs = CredDeploymentProofs::<P,C>::from_bytes(cur);
+        Some(CredDeploymentInfo { values: values?, proofs: proofs? })
     }
 }
 
@@ -688,6 +690,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut r = short_string_to_bytes(&self.ip_identity);
         r.extend_from_slice(&self.ip_verify_key.to_bytes());
+        r.extend_from_slice(&self.dlog_base.curve_to_bytes());
         let l = &self.ar_info.0.len();
         r.extend_from_slice(&l.to_be_bytes());
         for item in &self.ar_info.0 {
@@ -700,6 +703,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let ip_identity = bytes_to_short_string(cur)?;
         let ip_verify_key = pssig::PublicKey::from_bytes(cur).ok()?;
+        let dlog_base = P::G_1::bytes_to_curve(cur).ok()?; 
         let l = cur.read_u16::<BigEndian>().ok()?;
         let mut ar_list = Vec::with_capacity(l as usize);
         for _ in 0..l {
@@ -709,6 +713,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
         Some(IpInfo {
             ip_identity,
             ip_verify_key,
+            dlog_base,
             ar_info,
         })
     }

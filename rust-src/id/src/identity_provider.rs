@@ -30,15 +30,19 @@ pub fn verify_credentials<
     C: Curve<Scalar = P::ScalarField>,
 >(
     pre_id_obj: &PreIdentityObject<P, C, AttributeType>,
-    context: Context<P, C>,
+    //context: Context<P, C>,
+    ip_info: &IpInfo<P, C>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Declined> {
+    let dlog_base = ip_info.dlog_base;
+    let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.2[0], dlog_base);
+    let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.2[1], dlog_base);
     // IDCredSec
     let comm_sc_params =
-        CommitmentParams((context.commitment_key_sc.0, context.commitment_key_sc.1));
+        CommitmentParams((commitment_key_sc.0, commitment_key_sc.1));
 
     let b_1 = verify_knowledge_of_id_cred_sec::<P::G_1>(
-        &context.dlog_base,
+        &dlog_base,
         &comm_sc_params,
         &pre_id_obj.id_cred_pub_ip,
         &pre_id_obj.cmm_sc,
@@ -48,32 +52,45 @@ pub fn verify_credentials<
         return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
     }
 
+    let choice_ar_handles = pre_id_obj.choice_ar_parameters.0.clone();
+    let revocation_threshold = pre_id_obj.choice_ar_parameters.1;
+   
+    let number_of_ars = choice_ar_handles.len();
+    let mut choice_ars = Vec::with_capacity(number_of_ars);
+    for ar in choice_ar_handles.iter(){
+          match ip_info.ar_info.0.iter().find(|&x| x.ar_handle == *ar ){
+              None => return Err(Declined(Reason::WrongArParameters)),
+              Some(ar_info) => choice_ars.push(ar_info.clone()),
+
+          }
+    }
+
     // VRF
-    if !check_ar_parameters(&context.choice_ar_parameters, &context.ip_info.ar_info.0) {
+    let choice_ar_parameters = (choice_ars, revocation_threshold);
+    if !check_ar_parameters(&choice_ar_parameters , &ip_info.ar_info.0) {
         return Err(Declined(Reason::WrongArParameters));
     }
     // ar commitment key
-    let ar_ck = context.ip_info.ar_info.1;
+    let ar_ck = ip_info.ar_info.1;
     let b_2 = verify_vrf_key_data(
-        &context.commitment_key_prf,
+        &commitment_key_prf,
         &pre_id_obj.cmm_prf,
         &ar_ck,
         &pre_id_obj.cmm_prf_sharing_coeff,
         &pre_id_obj.ip_ar_data,
-        &context.choice_ar_parameters.0,
+        &choice_ar_parameters.0,
         &pre_id_obj.proof_com_eq,
     );
 
     if !b_2 {
         return Err(Declined(Reason::FailedToVerifyPrfData));
     }
-    let ar_handles = pre_id_obj.choice_ar_parameters.0.iter().map(|x| x.ar_handle).collect();
     let message: ps_sig::UnknownMessage<P> = compute_message(
         &pre_id_obj.cmm_prf,
         &pre_id_obj.cmm_sc,
-        &ar_handles,
+        &choice_ar_handles,
         &pre_id_obj.alist,
-        &context.ip_info.ip_verify_key,
+        &ip_info.ip_verify_key,
     );
     let mut csprng = thread_rng();
     Ok(ip_secret_key.sign_unknown_message(&message, &mut csprng))
@@ -98,14 +115,14 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     assert!(key_vec.len() >= n + 4);
     message = message.plus_point(&key_vec[2].mul_by_scalar(&variant));
     message = message.plus_point(&key_vec[3].mul_by_scalar(&expiry));
-    for i in 4..(m + 4) {
-        let ar_handle = <P::G_1 as Curve>::scalar_from_u64(ar_list[i-4]).unwrap();
-        message = message.plus_point(&key_vec[i].mul_by_scalar(&ar_handle));
-    }
-    for i in (m+4)..(n + m + 4) {
-        let att = att_vec[i - m - 4].to_field_element();
+    for i in 4..(n + 4) {
+        let att = att_vec[i - 4].to_field_element();
         message = message.plus_point(&key_vec[i].mul_by_scalar(&att))
     }
+    for i in (n+4)..(m + n + 4) {
+          let ar_handle = <P::G_1 as Curve>::scalar_from_u64(ar_list[i-n-4]).unwrap();
+          message = message.plus_point(&key_vec[i].mul_by_scalar(&ar_handle));
+      }
 
     ps_sig::UnknownMessage(message)
 }

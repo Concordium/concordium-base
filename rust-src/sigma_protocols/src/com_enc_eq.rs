@@ -58,6 +58,7 @@ pub fn prove_com_enc_eq<T: Curve, R: Rng>(
     secret: &(T::Scalar, T::Scalar, T::Scalar),
     base: &(T, T, T, T),
 ) -> ComEncEqProof<T> {
+    let (e_1, e_2, e_3) = public;
     let mut hasher = Sha256::new();
     hasher.input(challenge_prefix);
     hasher.input(&*public.0.curve_to_bytes());
@@ -65,6 +66,11 @@ pub fn prove_com_enc_eq<T: Curve, R: Rng>(
     hasher.input(&*public.2.curve_to_bytes());
     let (g_1, h_1, g, h) = base;
     let (s_1, s_2, s_3) = secret;
+
+    //assertions
+    assert_eq!(*e_1, g_1.mul_by_scalar(&s_1), "first public value wrong");
+    assert_eq!(*e_2, g_1.mul_by_scalar(&s_2).plus_point(&h_1.mul_by_scalar(&s_1)), "second public value wrong");
+    assert_eq!(*e_3, g.mul_by_scalar(&s_2).plus_point(&h.mul_by_scalar(&s_3)), "third public value wrong");
     let mut a_1 = T::zero_point();
     let mut a_2 = T::zero_point();
     let mut a_3 = T::zero_point();

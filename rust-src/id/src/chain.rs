@@ -46,7 +46,7 @@ pub fn verify_cdi<
     ip_info: &IpInfo<P, C>,
     cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
-    let ars = cdi.values.choice_ar_parameters.clone();
+    let ars = cdi.values.choice_ar_handles.clone();
     let mut choice_ar_parameters = Vec::with_capacity(ars.len());
     for handle in ars.into_iter(){
         match ip_info.ar_info.0.iter().find(|&x| x.ar_handle == handle){
@@ -127,6 +127,7 @@ pub fn verify_cdi_worker<
         return Err(CDIVerificationError::Signature);
     }
 
+
     let check_policy = verify_policy(
         on_chain_commitment_key,
         &commitments,
@@ -165,7 +166,7 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
             .into_iter()
             .find(|&x| x.0 == ar.id_cred_pub_share_number)
         {
-            None => return false,
+            None => {assert!(false, "111111");return false},
             Some((_, proof)) => match choice_ar_parameters
                 .into_iter()
                 .find(|&x| x.ar_name == ar.ar_name)
@@ -177,6 +178,7 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
                     let coeff = (g, h, *g_1, *h_1);
                     let eval = (e_1, e_2, cmm_share.0);
                     if !com_enc_eq::verify_com_enc_eq(&challenge_prefix, &coeff, &eval, proof) {
+                        assert!(false,"22222");
                         return false;
                     }
                 }
@@ -279,8 +281,9 @@ fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // number of commitments in the attribute list
     // to these we add commitments to idcredsec and prf key K
     let user_cmm_atts_len = commitments.cmm_attributes.len();
+    let user_cmm_ars_len = commitments.cmm_ars.len();
 
-    let gxs = yxs[..user_cmm_atts_len + 2].to_vec();
+    let gxs = yxs[..user_cmm_atts_len + user_cmm_ars_len + 2].to_vec();
 
     let gxs_pair = a; // CHECK with Bassel
 
@@ -288,7 +291,10 @@ fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     comm_vec.push(commitments.cmm_id_cred_sec.0);
     comm_vec.push(commitments.cmm_prf.0);
     for v in commitments.cmm_attributes.iter() {
-        comm_vec.push(v.0);
+          comm_vec.push(v.0);
+    }
+    for ar in commitments.cmm_ars.iter(){
+        comm_vec.push(ar.0);
     }
     com_eq_sig::verify_com_eq_sig::<P, C>(
         &challenge_prefix,

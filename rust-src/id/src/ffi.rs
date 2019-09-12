@@ -104,7 +104,7 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
         }
     }
 }
-
+/*
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn verify_cdi_ffi(
@@ -380,3 +380,4 @@ mod test {
         assert_ne!(wrong_cdi_check, 1);
     }
 }
+*/

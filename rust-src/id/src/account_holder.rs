@@ -115,11 +115,13 @@ where
         );
         com_eq_different_groups::prove_com_eq_diff_grps(&mut csprng, &[], &public, &secret, &coeff)
     };
+    let ar_handles = context.choice_ar_parameters.0.iter().map(|x| x.ar_handle).collect();
+    let revocation_threshold = context.choice_ar_parameters.1;
     let prio = PreIdentityObject {
         id_ah,
         id_cred_pub_ip,
         ip_ar_data,
-        choice_ar_parameters: context.choice_ar_parameters.clone(),
+        choice_ar_parameters: (ar_handles, revocation_threshold),
         alist,
         cmm_sc,
         pok_sc,
@@ -254,8 +256,22 @@ where
 
     let reg_id = commitment_base.mul_by_scalar(&reg_id_exponent);
     let ar_commitment_key = ip_info.ar_info.1;
+   
+    let ar_list = prio.choice_ar_parameters.0.clone();
+    let mut choice_ars= Vec::with_capacity(ar_list.len());
+      let ip_ar_parameters = &ip_info.ar_info.0.clone();
+      for ar in ar_list.iter(){
+          match ip_ar_parameters.into_iter().find(|&x| x.ar_handle == *ar ){
+              None => panic!("AR handle not in the IP list"),
+              Some(ar_info) => choice_ars.push(ar_info.clone()),
+
+          }
+
+      }
+    let choice_ar_parameters = (choice_ars, prio.choice_ar_parameters.1);
+
     let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) =
-        compute_sharing_data(&id_cred_sec, &prio.choice_ar_parameters, &ar_commitment_key);
+        compute_sharing_data(&id_cred_sec, &choice_ar_parameters, &global_context.on_chain_commitment_key);
     let number_of_ars = prio.choice_ar_parameters.0.len();
     let mut ar_data: Vec<ChainArData<C>> = Vec::with_capacity(number_of_ars);
     for item in id_cred_data.iter() {
@@ -275,7 +291,6 @@ where
     // only the second part is used (as per the protocol)
     let (blinded_sig, _r, blinded_sig_rand_sec) = ps_sig::blind_sig(&retrieved_sig, &mut csprng);
     
-    let ar_list = prio.choice_ar_parameters.0.iter().map(|x| x.ar_handle).collect();
 
     // We now compute commitments to all the items in the attribute list.
     // We use the on-chain pedersen commitment key.
@@ -296,7 +311,7 @@ where
         acc_scheme_id: SchemeId::Ed25519,
         reg_id,
         ar_data,
-        choice_ar_parameters: prio.choice_ar_parameters.0.iter().map(|x| x.ar_handle).collect(),
+        choice_ar_handles: ar_list,
         ip_identity: ip_info.ip_identity.clone(),
         policy: policy.clone(),
         acc_pub_key: acc_data.verify_key,
@@ -309,10 +324,7 @@ where
 
     let mut pok_id_cred_pub = Vec::with_capacity(number_of_ars);
     for item in id_cred_data.iter() {
-        match prio
-            .choice_ar_parameters
-            .0
-            .iter()
+        match choice_ar_parameters.0.iter()
             .find(|&x| x.ar_name == item.ar_name)
         {
             None => panic!("cannot find Ar"),
@@ -385,6 +397,7 @@ where
         &id_cred_sec,
         &prf_key,
         &alist,
+        &cred_values.choice_ar_handles,
         &ip_pub_key,
         &blinded_sig,
         &blinded_sig_rand_sec,
@@ -447,6 +460,7 @@ fn compute_pok_sig<
     id_cred_sec: &P::ScalarField,
     prf_key: &prf::SecretKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
+    ar_list:&Vec<u64>,
     ip_pub_key: &ps_sig::PublicKey<P>,
     blinded_sig: &ps_sig::Signature<P>,
     blinded_sig_rand_sec: &P::ScalarField,
@@ -457,6 +471,9 @@ fn compute_pok_sig<
     // two attributes (idCredSec and prf key added).
     let num_user_attributes = att_vec.len() + 2;
     let num_total_attributes = num_user_attributes + 2;
+    let num_ars = commitments.cmm_ars.len();
+    let num_total_commitments = num_total_attributes + num_ars;
+
 
     let ps_sig::Signature(a, b) = blinded_sig;
     let (eval_pair, eval) = (b, P::G_2::one_point());
@@ -469,8 +486,8 @@ fn compute_pok_sig<
     let (q_pair, q) = (a, P::G_2::one_point());
     let q_sec = blinded_sig_rand_sec;
 
-    let mut gxs = Vec::with_capacity(num_total_attributes);
-    let mut gxs_sec = Vec::with_capacity(num_total_attributes);
+    let mut gxs = Vec::with_capacity(num_total_commitments);
+    let mut gxs_sec = Vec::with_capacity(num_total_commitments);
     gxs_sec.push(*id_cred_sec);
     gxs.push(yxs[0]);
     let prf_key_scalar = prf_key.0;
@@ -484,19 +501,30 @@ fn compute_pok_sig<
         gxs_sec.push(att_vec[i - 4].to_field_element());
         gxs.push(yxs[i]);
     }
+    for i in num_total_attributes..num_total_commitments {
+          gxs_sec.push(<P::G_1 as Curve>::scalar_from_u64(ar_list[i-num_total_attributes]).unwrap());
+          gxs.push(yxs[i]);
+    }
 
     let gxs_pair = a; // CHECK with Bassel
 
-    let mut pedersen_rands = Vec::with_capacity(num_total_attributes);
+    let mut pedersen_rands = Vec::with_capacity(num_total_commitments);
     pedersen_rands.push(commitment_rands.id_cred_sec_rand);
     pedersen_rands.push(commitment_rands.prf_rand);
     pedersen_rands.extend_from_slice(&commitment_rands.attributes_rand);
+    for ar in ar_list.iter(){
+        pedersen_rands.push(Randomness(C::Scalar::zero()));
+    }
 
     let mut comm_vec = Vec::with_capacity(num_total_attributes);
     comm_vec.push(commitments.cmm_id_cred_sec.0);
     comm_vec.push(commitments.cmm_prf.0);
     for v in commitments.cmm_attributes.iter() {
         comm_vec.push(v.0);
+    }
+
+    for ar in commitments.cmm_ars.iter(){
+        comm_vec.push(ar.0);
     }
     com_eq_sig::prove_com_eq_sig::<P, C, R>(
         &challenge_prefix,

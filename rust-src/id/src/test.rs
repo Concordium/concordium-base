@@ -33,21 +33,52 @@ fn test_pipeline() {
         },
     };
 
-    let id_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
-    let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
+    let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
+    let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
-    let ar_secret_key = SecretKey::generate(&mut csprng);
-    let ar_public_key = PublicKey::from(&ar_secret_key);
-    let ar_info = ArInfo {
-        ar_name: "AR".to_owned(),
-        ar_public_key,
-        ar_elgamal_generator: PublicKey::generator(),
+    
+
+    let ar1_secret_key = SecretKey::generate(&mut csprng);
+    let ar1_public_key = PublicKey::from(&ar1_secret_key);
+    let ar1_info = ArInfo::<G1> {
+        ar_name: "AR1".to_owned(),
+        ar_handle: 1,
+        ar_public_key: ar1_public_key,
     };
+
+   let ar2_secret_key = SecretKey::generate(&mut csprng);
+   let ar2_public_key = PublicKey::from(&ar2_secret_key);
+   let ar2_info = ArInfo::<G1> {
+        ar_name: "AR2".to_owned(),
+        ar_handle: 2,
+        ar_public_key: ar2_public_key,
+    };
+
+    let ar3_secret_key = SecretKey::generate(&mut csprng);
+    let ar3_public_key = PublicKey::from(&ar3_secret_key);
+    let ar3_info = ArInfo::<G1> {
+         ar_name: "AR3".to_owned(),
+         ar_handle: 3,
+         ar_public_key: ar3_public_key,
+    };
+
+    let ar4_secret_key = SecretKey::generate(&mut csprng);
+    let ar4_public_key = PublicKey::from(&ar4_secret_key);
+    let ar4_info = ArInfo::<G1> {
+         ar_name: "AR4".to_owned(),
+         ar_handle: 4,
+         ar_public_key: ar4_public_key,
+    };
+
+    let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
+    let dlog_base = <G1 as Curve>::one_point();
 
     let ip_info = IpInfo {
         ip_identity: "ID".to_owned(),
-        ip_verify_key: id_public_key,
-        ar_info,
+        ip_verify_key: ip_public_key,
+        dlog_base: dlog_base,
+        ar_info: (vec![ar1_info, ar2_info, ar3_info, ar4_info], ar_ck),
+//        ar_info: (vec![ar1_info], ar_ck),
     };
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -66,10 +97,10 @@ fn test_pipeline() {
         },
     };
 
-    let context = make_context_from_ip_info(ip_info.clone());
+    let context = make_context_from_ip_info(ip_info.clone(), (vec![1,2,4], 2));
     let (pio, randomness) = generate_pio(&context, &aci);
 
-    let sig_ok = verify_credentials(&pio, context, &id_secret_key);
+    let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
 
     // First test, check that we have a valid signature.
     assert!(sig_ok.is_ok());
@@ -78,7 +109,7 @@ fn test_pipeline() {
 
     let global_ctx = GlobalContext {
         dlog_base_chain:         ExampleCurve::one_point(),
-        on_chain_commitment_key: pedersen_key::CommitmentKey::generate(1, &mut csprng),
+        on_chain_commitment_key: pedersen_key::CommitmentKey::generate(&mut csprng),
     };
 
     let policy = Policy {
@@ -119,6 +150,18 @@ fn test_pipeline() {
     // out.extend_from_slice(&cdi.to_bytes());
     // let file = File::create("foo.bin");
     // file.unwrap().write_all(&out);
+
+    let value_bytes = cdi.values.to_bytes();
+    let cdi_values = CredentialDeploymentValues::<ExampleCurve, ExampleAttribute>::from_bytes(&mut Cursor::new(&value_bytes));
+    assert!(cdi_values.is_some(), "VAlUES Deserialization must be successful.");
+
+    let cmm_bytes = cdi.proofs.commitments.to_bytes();
+    let cdi_commitments = CredDeploymentCommitments::<ExampleCurve>::from_bytes(&mut Cursor::new(&cmm_bytes));
+    assert!(cdi_commitments.is_some(), "commitments Deserialization must be successful.");
+
+    let proofs_bytes = cdi.proofs.to_bytes();
+    let cdi_proofs = CredDeploymentProofs::<Bls12, ExampleCurve>::from_bytes(&mut Cursor::new(&proofs_bytes));
+    assert!(cdi_proofs.is_some(), "Proofs Deserialization must be successful.");
 
     let bytes = cdi.to_bytes();
     let des = CredDeploymentInfo::<Bls12, ExampleCurve, ExampleAttribute>::from_bytes(
