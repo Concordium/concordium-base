@@ -11,11 +11,11 @@ import qualified ConcordiumTests.Crypto.FFIVerify
 
 main :: IO  ()
 main = hspec $ parallel $ do
-    -- ConcordiumTests.Crypto.FFIVerify.tests
-    -- ConcordiumTests.Crypto.FFIDataTypes.tests
-    -- ConcordiumTests.Crypto.SHA256.tests
-    -- ConcordiumTests.Crypto.SHA224.tests
-    -- ConcordiumTests.Crypto.Ed25519Signature.tests
+    ConcordiumTests.Crypto.FFIVerify.tests
+    ConcordiumTests.Crypto.FFIDataTypes.tests
+    ConcordiumTests.Crypto.SHA256.tests
+    ConcordiumTests.Crypto.SHA224.tests
+    ConcordiumTests.Crypto.Ed25519Signature.tests
     ConcordiumTests.Crypto.VRF.tests
 
     -- --NB: The following tests are far from complete. They do not test what
