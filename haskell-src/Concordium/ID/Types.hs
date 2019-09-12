@@ -166,7 +166,7 @@ instance Serialize AttributeValue where
       else fail "Attribute malformed. Must fit into 31 bytes."
 
 instance ToJSON AttributeValue where
-  toJSON (AttributeValue v) = toJSON (show v)
+  toJSON (AttributeValue v) = String (Text.pack (show v))
 
 instance FromJSON AttributeValue where
   parseJSON (String s) =
@@ -218,10 +218,10 @@ data Policy = Policy {
   } deriving(Eq, Show)
 
 instance ToJSON Policy where
-  toJSON (Policy{..}) = object [
+  toJSON Policy{..} = object [
     "variant" .= pAttributeListVariant,
     "expiry" .= pExpiry,
-    "revealedItems" .= toJSON pItems
+    "revealedItems" .= pItems
     ]
 
 instance FromJSON Policy where
@@ -256,7 +256,7 @@ instance FromJSON ARName where
 newtype AREnc = AREnc ElgamalCipher
     deriving(Eq, Serialize)
     deriving Show via ElgamalCipher
-    deriving ToJSON via AREnc 
+    deriving ToJSON via ElgamalCipher
 
 instance FromJSON AREnc where
   parseJSON v = AREnc <$> parseJSON v
