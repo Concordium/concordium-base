@@ -189,7 +189,7 @@ applyAmountDelta del amt =
 -- |The type used to count exact execution cost. This cost is then converted to
 -- amounts in some way.
 newtype Energy = Energy { _energy :: Word64 }
-    deriving(Eq, Enum, Ord, Num, Real, Integral, Hashable)
+    deriving(Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded)
 
 instance Show Energy where
   show = show . _energy

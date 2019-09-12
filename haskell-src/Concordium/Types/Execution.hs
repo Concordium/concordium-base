@@ -30,7 +30,7 @@ data InternalMessage annot = TSend !ContractAddress !Amount !(Value annot) | TSi
 type Proof = BS.ByteString
 
 -- |The transaction payload. Defines the supported kinds of transactions.
-data Payload =
+data Payload = 
   -- |Put module on the chain.
   DeployModule {
     -- |Module source.
@@ -90,7 +90,7 @@ data Payload =
       -- |Address of the account the baker wants to be rewarded to.
       abAccount :: !AccountAddress,
       -- |Proof of at least the following facts
-      --
+      -- 
       --   * the baker owns the account on the given address (knows the private key)
       --   * the baker owns private keys corresponding to the public keys (election and signature)
       --   * the baker is allowed to become a baker: THIS NEEDS SPEC
@@ -269,25 +269,25 @@ data Event = ModuleDeployed !Core.ModuleRef
            | BakerRemoved !BakerId
            | BakerAccountUpdated !BakerId !AccountAddress
            | BakerKeyUpdated !BakerId !BakerSignVerifyKey
-           | StakeDelegated !BakerId
-           | StakeUndelegated
-
+           | StakeDelegated !AccountAddress !BakerId
+           | StakeUndelegated !AccountAddress
+           -- TODO: Add gas spent event
   deriving (Show)
 
 -- |Used internally by the scheduler since internal messages are sent as values,
 -- and top-level messages are acorn expressions.
-data MessageFormat = ValueMessage !(Value NoAnnot) | ExprMessage !(Expr NoAnnot)
+data MessageFormat = ValueMessage !(Value NoAnnot) | ExprMessage !(LinkedExpr NoAnnot)
     deriving(Show)
 
 -- |Result of a valid transaction is either a reject with a reason or a
 -- successful transaction with a list of events which occurred during execution.
-type ValidResult = Either RejectReason [Event]
+type ValidResult = Either (RejectReason, Amount) [Event]
 
 {-# COMPLETE TxSuccess, TxReject #-}
 pattern TxSuccess :: [Event] -> ValidResult
-pattern TxReject :: RejectReason -> ValidResult
+pattern TxReject :: RejectReason -> Amount -> ValidResult
 pattern TxSuccess a = Right a
-pattern TxReject e = Left e
+pattern TxReject e a = Left (e, a)
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
 data RejectReason = ModuleNotWF !(TypingError Core.UA) -- ^Error raised when typechecking of the module has failed.
