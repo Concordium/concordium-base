@@ -1,4 +1,4 @@
-use crate::{account_holder::*, chain::*, ffi::*, identity_provider::*, types::*};
+use crate::{account_holder::*, chain::*, ffi::*, identity_provider::*, types::*, anonymity_revoker::*};
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519 as ed25519;
@@ -182,4 +182,14 @@ fn test_pipeline() {
     // check."); now check that the generated credentials are indeed valid.
     let cdi_check = verify_cdi(&global_ctx, &ip_info, &cdi);
     assert_eq!(cdi_check, Ok(()));
+
+    //revoking anonymity
+    let second_ar =cdi.values.ar_data.iter().find(|&x| x.ar_name == "AR2").unwrap();
+    let decrypted_share_ar2 = (second_ar.id_cred_pub_share_number, ar2_secret_key.decrypt(&second_ar.enc_id_cred_pub_share));
+    let fourth_ar =cdi.values.ar_data.iter().find(|&x| x.ar_name == "AR4").unwrap();
+    let decrypted_share_ar4 = (fourth_ar.id_cred_pub_share_number, ar4_secret_key.decrypt(&fourth_ar.enc_id_cred_pub_share));
+    let revealed_id_cred_pub = reveal_id_cred_pub(&vec![decrypted_share_ar2, decrypted_share_ar4]);
+    assert_eq!(revealed_id_cred_pub, aci.acc_holder_info.id_cred.id_cred_pub);
+
+   
 }
