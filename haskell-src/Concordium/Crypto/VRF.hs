@@ -34,6 +34,7 @@ import           Foreign.C.Types
 import           Concordium.Crypto.SHA256
 import           System.Random
 import           Test.QuickCheck (Arbitrary(..))
+import qualified Data.Aeson as AE
 import Data.Int
 import Foreign.ForeignPtr
 import Concordium.Crypto.FFIHelpers
@@ -95,6 +96,12 @@ instance Serialize Proof where
     let bs = toBytesHelper toBytesProof p
     in putByteString bs
 
+instance AE.FromJSON Proof where
+  parseJSON = AE.withText "VRF.Proof" deserializeBase16
+
+instance AE.ToJSON Proof where
+  toJSON v = AE.String (serializeBase16 v)
+
 instance Eq Proof where
   Proof p1 == Proof p2 = eqHelper p1 p2 proofEq
 
@@ -123,6 +130,12 @@ instance Serialize PublicKey where
     let bs = toBytesHelper toBytesPublicKey p
     in putByteString bs
 
+instance AE.FromJSON PublicKey where
+  parseJSON = AE.withText "VRF.PublicKey" deserializeBase16
+
+instance AE.ToJSON PublicKey where
+  toJSON v = AE.String (serializeBase16 v)
+
 instance Eq PublicKey where
   PublicKey p1 == PublicKey p2 = eqHelper p1 p2 publicKeyEq
 
@@ -137,7 +150,6 @@ instance Ord PublicKey where
           -1 -> return LT
           _ -> error "Should not happen. FFI import breaks precondition."
 
-
 instance Show PublicKey where
   show = byteStringToHex . encode
 
@@ -151,6 +163,12 @@ instance Serialize SecretKey where
   put (SecretKey p) =
     let bs = toBytesHelper toBytesSecretKey p
     in putByteString bs
+
+instance AE.FromJSON SecretKey where
+  parseJSON = AE.withText "VRF.SecretKey" deserializeBase16
+
+instance AE.ToJSON SecretKey where
+  toJSON v = AE.String (serializeBase16 v)
 
 instance Show SecretKey where
   show = byteStringToHex . encode

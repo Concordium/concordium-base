@@ -8,12 +8,19 @@ import qualified Data.ByteString as BS
 import Test.QuickCheck.Monadic
 import Test.QuickCheck
 import Test.Hspec
+import qualified Data.Aeson as AE
 
 testSerializePublicKey :: Property
 testSerializePublicKey = property $ \kp -> Right (VRF.publicKey kp) === runGet get (runPut $ put $ VRF.publicKey kp)
 
 testSerializePrivateKey :: Property
 testSerializePrivateKey = property $ \kp -> Right (VRF.privateKey kp) === runGet get (runPut $ put $ VRF.privateKey kp)
+
+testSerializePublicKeyJSON :: Property
+testSerializePublicKeyJSON = property $ \kp -> Just (VRF.publicKey kp) === AE.decode (AE.encode (VRF.publicKey kp))
+
+testSerializePrivateKeyJSON :: Property
+testSerializePrivateKeyJSON = property $ \kp -> Just (VRF.privateKey kp) === AE.decode (AE.encode (VRF.privateKey kp))
 
 testSerializeKeyPair :: Property
 testSerializeKeyPair = property $ \(kp :: VRF.KeyPair) -> Right kp === runGet get (runPut $ put kp)
@@ -81,6 +88,8 @@ tests = describe "Concordium.Crypto.VRF" $ do
         it "private key" testSerializePrivateKey
         it "keypair" testSerializeKeyPair
         it "proof" testSerializeProof
+        it "public key JSON" testSerializePublicKeyJSON
+        it "private key JSON" testSerializePrivateKeyJSON
     describe "Ord instance compatibility with Eq" $ do
       it "public key" testPublicKeyOrd
       it "proof" testProofOrd
