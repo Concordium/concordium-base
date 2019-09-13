@@ -58,7 +58,7 @@ pub fn verify_credentials<
     let number_of_ars = choice_ar_handles.len();
     let mut choice_ars = Vec::with_capacity(number_of_ars);
     for ar in choice_ar_handles.iter(){
-          match ip_info.ar_info.0.iter().find(|&x| x.ar_handle == *ar ){
+          match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == *ar ){
               None => return Err(Declined(Reason::WrongArParameters)),
               Some(ar_info) => choice_ars.push(ar_info.clone()),
 
@@ -120,7 +120,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
         message = message.plus_point(&key_vec[i].mul_by_scalar(&att))
     }
     for i in (n+4)..(m + n + 4) {
-          let ar_handle = <P::G_1 as Curve>::scalar_from_u64(ar_list[i-n-4]).unwrap();
+          let ar_handle = <P::G_1 as Curve>::scalar_from_u64(ar_list[i-n-4] as u64).unwrap();
           message = message.plus_point(&key_vec[i].mul_by_scalar(&ar_handle));
       }
 
@@ -169,7 +169,7 @@ fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
 
         match choice_ar_parameters
             .into_iter()
-            .find(|&x| x.ar_name == ar.ar_name)
+            .find(|&x| x.ar_identity == ar.ar_identity)
         {
             None => return false,
             Some(ar_info) => {
@@ -194,7 +194,7 @@ pub fn commitment_to_share<C: Curve>(
     let deg = coeff_commitments.len() - 1;
     let mut cmm_share_point: C = (coeff_commitments[0].1).0;
     for i in 1..(deg + 1) {
-        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number).unwrap().pow([i as u64]);
+        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number as u64).unwrap().pow([i as u64]);
         let (s, Commitment(cmm_point)) = coeff_commitments[i];
         assert_eq!(s as usize, i);
         let a = cmm_point.mul_by_scalar(&j_pow_i);

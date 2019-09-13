@@ -54,9 +54,9 @@ pub fn verify_cdi<
     let mut choice_ar_parameters = Vec::with_capacity(ars.len());
     for handle in ars.into_iter(){
         //check that the handle is in the commitment list
-        match ar_commitments.iter().find(|&x| *x == global_context.on_chain_commitment_key.hide(&Value(C::scalar_from_u64(handle).unwrap()), &Randomness(C::Scalar::zero()))){
+        match ar_commitments.iter().find(|&x| *x == global_context.on_chain_commitment_key.hide(&Value(C::scalar_from_u64(handle as u64).unwrap()), &Randomness(C::Scalar::zero()))){
             None => return Err(CDIVerificationError::AR),
-            Some(_) => match ip_info.ar_info.0.iter().find(|&x| x.ar_handle == handle){
+            Some(_) => match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == handle){
                 None => return Err(CDIVerificationError::AR),
                 Some(ar_info) => choice_ar_parameters.push(ar_info.clone())
             }
@@ -149,15 +149,6 @@ pub fn verify_cdi_worker<
     Ok(())
 }
 
-// let check_id_cred_pub = verify_id_cred_pub_sharing_data(
-// &challenge_prefix,
-// on_chain_commitment_key,
-// &cdi.choice_ar_parameters,
-// &cdi.values.ar_data,
-// &commitments.cmm_id_cred_sec,
-// &commitments.cmm_id_cred-sec_sharing_coeff,
-// &cdi.proofs.proof_id_cred_pub,
-// );
 fn verify_id_cred_pub_sharing_data<C: Curve>(
     challenge_prefix: &[u8],
     commitment_key: &CommitmentKey<C>,
@@ -177,7 +168,7 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
             None => {assert!(false, "111111");return false},
             Some((_, proof)) => match choice_ar_parameters
                 .into_iter()
-                .find(|&x| x.ar_name == ar.ar_name)
+                .find(|&x| x.ar_identity == ar.ar_identity)
             {
                 None => return false,
                 Some(ar_info) => {
@@ -203,7 +194,7 @@ pub fn commitment_to_share<C: Curve>(
     let deg = coeff_commitments.len() - 1;
     let mut cmm_share_point: C = (coeff_commitments[0].1).0;
     for i in 1..(deg + 1) {
-        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number).unwrap().pow([i as u64]);
+        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number as u64).unwrap().pow([i as u64]);
         let (s, Commitment(cmm_point)) = coeff_commitments[i];
         assert_eq!(s as usize, i);
         let a = cmm_point.mul_by_scalar(&j_pow_i);

@@ -15,6 +15,10 @@ failure   = "0.1"
 [dev-dependencies]
 criterion = "0.2"
 
+[[bench]]
+name = "eddsa_benchmarks"
+harness = false
+
 [lib]
 name = "eddsa_ed25519"
 crate-type = ["rlib", "staticlib", "cdylib"]

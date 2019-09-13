@@ -18,6 +18,7 @@ import System.IO.Unsafe
 foreign import ccall unsafe "free_array_len"
    rs_free_array_len :: Ptr Word8 -> CSize -> IO ()
 
+
 toBytesHelper ::  (Ptr a -> Ptr CSize -> IO (Ptr Word8)) -> ForeignPtr a -> ByteString
 toBytesHelper f m = unsafeDupablePerformIO $ do
   withForeignPtr m $
@@ -33,3 +34,10 @@ fromBytesHelper finalizer f bs = unsafeDupablePerformIO $ do
   if ptr == nullPtr then
     return Nothing
   else Just <$> newForeignPtr finalizer ptr
+
+eqHelper :: ForeignPtr a -> ForeignPtr a -> (Ptr a -> Ptr a -> IO Word8) -> Bool
+eqHelper fp1 fp2 f = unsafeDupablePerformIO $ do
+  withForeignPtr fp1 $ \p1 ->
+    withForeignPtr fp2 $ \p2 -> do
+      r <- f p1 p2
+      return (r /= 0)

@@ -16,6 +16,8 @@ chrono = "0.4"
 ed25519-dalek = "1.0.0-pre.1"
 byteorder = "1.3"
 
+rouille = "3.0"
+
 [dependencies.sigma_protocols]
 path = "../sigma_protocols"
 version = "0"
@@ -47,3 +49,7 @@ version = "0"
 [dependencies.eddsa_ed25519]
 path = "../eddsa_ed25519"
 version = "0"
+
+[lib]
+name = "client_server_helpers"
+path = "src/lib.rs"

@@ -1,9 +1,10 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings, LambdaCase #-}
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia, DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Concordium.ID.Types where
 
 import Data.Word
+import Data.Data(Data, Typeable)
 import Data.ByteString(ByteString)
 import Data.ByteString.Short(ShortByteString)
 import qualified Data.ByteString.Short as BSS
@@ -11,9 +12,13 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BS16
 import qualified Data.FixedByteString as FBS
 import Concordium.Crypto.SignatureScheme
+import Data.Bits
 import Data.Serialize
+import qualified Data.Serialize.Put as Put
+import qualified Data.Serialize.Get as Get
 import GHC.Generics
 import Data.Hashable
+import qualified Data.Text.Read as Text
 import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
 import Data.Base58String.Bitcoin
@@ -24,14 +29,17 @@ import Concordium.Crypto.ByteStringHelpers
 import Concordium.Crypto.FFIDataTypes
 import Control.DeepSeq
 
+import Data.Scientific
+
 accountAddressSize :: Int
 accountAddressSize = 21
 data AccountAddressSize
+   deriving(Data, Typeable)
 instance FBS.FixedLength AccountAddressSize where
     fixedLength _ = accountAddressSize
 
 newtype AccountAddress =  AccountAddress (FBS.FixedByteString AccountAddressSize)
-    deriving(Eq, Ord, Generic)
+    deriving(Eq, Ord, Generic, Data, Typeable)
 
 instance Serialize AccountAddress where
     put (AccountAddress h) = putByteString $ FBS.toByteString h
@@ -57,20 +65,24 @@ safeDecodeBase58Address bs = do
     Right dec -> return (Just (AccountAddress . FBS.fromByteString . toBytes $ dec))
 
 -- Name of Identity Provider
-newtype IdentityProviderIdentity  = IP_ID ShortByteString
+newtype IdentityProviderIdentity  = IP_ID Word32
     deriving (Eq, Hashable)
-    deriving Show via ShortByteString
-    deriving Serialize via Short65K
+    deriving Show via Word32
+
+instance Serialize IdentityProviderIdentity where
+  put (IP_ID w) = Put.putWord32be w
+
+  get = IP_ID <$> Get.getWord32be
 
 -- Public key of the Identity provider
 newtype IdentityProviderPublicKey = IP_PK PsSigKey
     deriving(Eq, Show, Serialize, NFData)
 
 instance ToJSON IdentityProviderIdentity where
-  toJSON (IP_ID v) = String (Text.decodeUtf8 (BSS.fromShort v))
+  toJSON (IP_ID v) = toJSON v
 
 instance FromJSON IdentityProviderIdentity where
-  parseJSON v = IP_ID . BSS.toShort . encodeUtf8 <$> parseJSON v
+  parseJSON v = IP_ID <$> parseJSON v
 
 -- Signing key for accounts (eddsa key)
 type AccountSigningKey = SignKey
@@ -127,31 +139,52 @@ instance Serialize Proofs where
     l <- fromIntegral <$> getWord32be
     Proofs <$> getShortByteString l
 
-data AttributeValue =
-  ATWord8 !Word8
-  | ATWord16 !Word16
-  | ATWord32 !Word32
-  | ATWord64 !Word64
+-- |We assume an non-negative integer.
+newtype AttributeValue = AttributeValue Integer
   deriving(Show, Eq)
 
-instance Serialize AttributeValue where
-    put (ATWord8 w) = putWord8 0 <> putWord8 w
-    put (ATWord16 w) = putWord8 1 <> putWord16be w
-    put (ATWord32 w) = putWord8 2 <> putWord32be w
-    put (ATWord64 w) = putWord8 3 <> putWord64be w
+-- |Unroll a positive integer into little-endian bytes.
+unroll :: Integer -> [Word8]
+unroll v | v < 0 = error "Negative integer, precondition violated."
+         | v == 0 = [0]
+         | otherwise = go v
+  where go 0 = []
+        go n = let (d, m) = divMod n 256
+               in fromIntegral m : go d
 
-    get = getWord8 >>= \case
-      0 -> ATWord8 <$> getWord8
-      1 -> ATWord16 <$> getWord16be
-      2 -> ATWord32 <$> getWord32be
-      3 -> ATWord64 <$> getWord64be
-      _ -> fail "Uknown attribute type."
+instance Serialize AttributeValue where
+    put (AttributeValue i) =
+        let bytes = unroll i in
+          putWord8 (fromIntegral (length bytes)) <>
+          mapM_ putWord8 (reverse bytes)
+
+    get = do
+      l <- getWord8
+      if l <= 31 then do
+        bytes <- replicateM (fromIntegral l) getWord8
+        return . AttributeValue $! foldl (\acc b -> acc `shiftL` 8 + fromIntegral b) 0 bytes
+      else fail "Attribute malformed. Must fit into 31 bytes."
 
 instance ToJSON AttributeValue where
-  toJSON v = String (serializeBase16 v)
+  toJSON (AttributeValue v) = String (Text.pack (show v))
 
 instance FromJSON AttributeValue where
-  parseJSON = withText "AttributeValue" deserializeBase16
+  parseJSON (String s) =
+    case Text.decimal s of
+      Left err -> fail err
+      Right (i, rest)
+          | Text.null rest -> do
+              if i >= 0 && i < 2^(248 :: Word) then
+                return (AttributeValue i)
+              else fail "Input out of range."
+          | otherwise -> fail $ "Input malformed, remaining input: " ++ Text.unpack rest
+
+  parseJSON (Number n) = do
+    case toBoundedInteger n :: Maybe Word64 of
+      Just x -> return (AttributeValue (fromIntegral x))
+      Nothing -> fail "Not an integer in correct range."
+
+  parseJSON _ = fail "Attribute value must be either a string or an int."
 
 -- |For the moment the policies we support are simply opening of specific commitments.
 data PolicyItem = PolicyItem {
@@ -185,10 +218,10 @@ data Policy = Policy {
   } deriving(Eq, Show)
 
 instance ToJSON Policy where
-  toJSON (Policy{..}) = object [
+  toJSON Policy{..} = object [
     "variant" .= pAttributeListVariant,
     "expiry" .= pExpiry,
-    "revealedItems" .= toJSON pItems
+    "revealedItems" .= pItems
     ]
 
 instance FromJSON Policy where
@@ -198,11 +231,14 @@ instance FromJSON Policy where
     pItems <- v .: "revealedItems"
     return Policy{..}
 
--- |Unique identifier of the anonymity revoker. At most 65k bytes in length.
-newtype ARName = ARName ShortByteString
+-- |Unique identifier of the anonymity revoker.
+newtype ARName = ARName Word32
     deriving(Eq)
-    deriving Serialize via Short65K
-    deriving Show via ShortByteString
+    deriving Show via Word32
+
+instance Serialize ARName where
+  put (ARName n) = Put.putWord32be n
+  get = ARName <$> Get.getWord32be
 
 -- |Public key of an anonymity revoker.
 newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
@@ -210,17 +246,17 @@ newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
     deriving Show via ElgamalPublicKey
 
 instance ToJSON ARName where
-  toJSON (ARName v) = String (Text.decodeUtf8 . BSS.fromShort $ v)
+  toJSON (ARName v) = toJSON v
 
 -- |NB: This just reads the string. No decoding.
 instance FromJSON ARName where
-  parseJSON v = ARName . BSS.toShort . Text.encodeUtf8 <$> parseJSON v
+  parseJSON v = ARName <$> parseJSON v
 
 -- |Encryption of data with anonymity revoker's public key.
 newtype AREnc = AREnc ElgamalCipher
     deriving(Eq, Serialize)
     deriving Show via ElgamalCipher
-    deriving ToJSON via AREnc 
+    deriving ToJSON via ElgamalCipher
 
 instance FromJSON AREnc where
   parseJSON v = AREnc <$> parseJSON v
@@ -236,13 +272,13 @@ data AnonymityRevocationData = AnonymityRevocationData {
 
 instance ToJSON AnonymityRevocationData where
   toJSON (AnonymityRevocationData{..}) = object [
-    "arName" .= ardName,
+    "arIdentity" .= ardName,
     "idCredPubEnc" .= ardIdCredPubEnc
     ]
 
 instance FromJSON AnonymityRevocationData where
   parseJSON = withObject "AnonymityRevocationData" $ \v -> do
-    ardName <- v .: "arName"
+    ardName <- v .: "arIdentity"
     ardIdCredPubEnc <- v .: "idCredPubEnc"
     return AnonymityRevocationData{..}
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface , GeneralizedNewtypeDeriving, DerivingVia, OverloadedStrings #-}
+{-# LANGUAGE ForeignFunctionInterface , GeneralizedNewtypeDeriving, DerivingVia, OverloadedStrings, DeriveDataTypeable #-}
 
 module Concordium.Crypto.SHA256 where
 import           Concordium.Crypto.ByteStringHelpers
@@ -18,6 +18,7 @@ import qualified Data.FixedByteString       as FBS
 import           Data.FixedByteString       (FixedByteString)
 import           Text.Read
 import           Data.Char
+import Data.Data(Typeable, Data)
 
 data SHA256Ctx
 
@@ -48,13 +49,14 @@ digestSize :: Int
 digestSize = 32
 
 data DigestSize
+  deriving(Typeable, Data)
 
 instance FBS.FixedLength DigestSize where
     fixedLength _ = digestSize
 
 -- |A SHA256 hash.  32 bytes.
 newtype Hash = Hash (FBS.FixedByteString DigestSize)
-  deriving (Eq, Ord, Bits, Bounded, Enum)
+  deriving (Eq, Ord, Bits, Bounded, Enum, Typeable, Data)
   deriving Serialize via FBSHex DigestSize
   deriving Show via FBSHex DigestSize
 
@@ -133,12 +135,12 @@ hashTest path = do b <- L.readFile path
 -- that the outcome 1 is not possible.
 hashToDouble :: Hash -> Double
 hashToDouble (Hash h) =
-    let w = FBS.unsafeReadWord64 h in
+    let w = FBS.readWord64be h in
     encodeFloat (toInteger w) (-64)
 
 -- |Convert a 'Hash' to an 'Int'.
 hashToInt :: Hash -> Int
-hashToInt (Hash h) = fromIntegral . FBS.unsafeReadWord64 $ h
+hashToInt (Hash h) = fromIntegral . FBS.readWord64be $ h
 
 -- |Convert a 'Hash' to a 'ByteString'.
 -- Gives the same result a serializing, but more efficient.

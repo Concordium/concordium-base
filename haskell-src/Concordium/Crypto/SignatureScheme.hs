@@ -14,6 +14,8 @@ newtype SignKey = SignKey ShortByteString
     deriving (Eq)
     deriving Show via ByteStringHex
     deriving Serialize via Short65K
+    deriving FromJSON via Short65K
+    deriving ToJSON via Short65K
 
 newtype VerifyKey = VerifyKey ShortByteString
     deriving (Eq, Ord)

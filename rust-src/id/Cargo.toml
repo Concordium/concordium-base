@@ -16,6 +16,7 @@ libc = "0.2"
 chrono = "0.4.7"
 ed25519-dalek = "1.0.0-pre.1"
 byteorder = "1.3"
+num = "0.2"
 
 [dependencies.eddsa_ed25519]
 path = "../eddsa_ed25519"

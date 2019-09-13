@@ -36,6 +36,7 @@ fn test_pipeline() {
     let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
+<<<<<<< HEAD
     
 
     let ar1_secret_key = SecretKey::generate(&mut csprng);
@@ -68,24 +69,40 @@ fn test_pipeline() {
          ar_name: "AR4".to_owned(),
          ar_handle: 4,
          ar_public_key: ar4_public_key,
+=======
+    let ar_secret_key = SecretKey::generate(&mut csprng);
+    let ar_public_key = PublicKey::from(&ar_secret_key);
+    let ar_info = ArInfo {
+        ar_identity: 13,
+        ar_description: "AR".to_owned(),
+        ar_public_key,
+        ar_elgamal_generator: PublicKey::generator(),
+>>>>>>> master
     };
 
     let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
     let dlog_base = <G1 as Curve>::one_point();
 
     let ip_info = IpInfo {
+<<<<<<< HEAD
         ip_identity: "ID".to_owned(),
         ip_verify_key: ip_public_key,
         dlog_base: dlog_base,
         ar_info: (vec![ar1_info, ar2_info, ar3_info, ar4_info], ar_ck),
 //        ar_info: (vec![ar1_info], ar_ck),
+=======
+        ip_identity: 88,
+        ip_description: "ID".to_owned(),
+        ip_verify_key: id_public_key,
+        ar_info,
+>>>>>>> master
     };
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
     let variant = 0;
     let expiry_date = 123123123;
-    let alist = vec![AttributeKind::U16(55), AttributeKind::U8(31)];
+    let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
     let aci = AccCredentialInfo {
         acc_holder_info: ah_info,
         prf_key,
@@ -115,7 +132,7 @@ fn test_pipeline() {
     let policy = Policy {
         variant,
         expiry: expiry_date,
-        policy_vec: vec![(1, AttributeKind::U8(31))],
+        policy_vec: vec![(1, AttributeKind::from(31))],
         _phantom: Default::default(),
     };
 

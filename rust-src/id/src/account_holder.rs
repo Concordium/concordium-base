@@ -73,7 +73,7 @@ where
                     ),
                 );
                 ip_ar_data.push(IpArData {
-                    ar_name:              item.ar_name.clone(),
+                    ar_identity:              item.ar_identity.clone(),
                     enc_prf_key_share:    item.encrypted_share,
                     prf_key_share_number: item.share_number,
                     proof_com_enc_eq:     proof,
@@ -115,7 +115,7 @@ where
         );
         com_eq_different_groups::prove_com_eq_diff_grps(&mut csprng, &[], &public, &secret, &coeff)
     };
-    let ar_handles = context.choice_ar_parameters.0.iter().map(|x| x.ar_handle).collect();
+    let ar_handles = context.choice_ar_parameters.0.iter().map(|x| x.ar_identity).collect();
     let revocation_threshold = context.choice_ar_parameters.1;
     let prio = PreIdentityObject {
         id_ah,
@@ -136,7 +136,7 @@ where
 
 #[derive(Clone)]
 pub struct SingleArData<C: Curve> {
-    ar_name:                 String,
+    ar_identity:                u64,
     share:                   C::Scalar,
     share_number:            u64,
     encrypted_share:         Cipher<C>,
@@ -159,7 +159,7 @@ pub fn compute_sharing_data<C: Curve>(
     let t = ar_parameters.1;
     let mut csprng = thread_rng();
     let (cmm_prf, cmm_prf_rand) = commitment_key.commit(&Value(*shared_scalar), &mut csprng);
-    let sharing_data = share::<C, ThreadRng>(&shared_scalar, n, t, &mut csprng);
+    let sharing_data = share::<C, ThreadRng>(&shared_scalar, n, t as u64, &mut csprng);
     let mut cmm_sharing_coefficients: Vec<(u64, Commitment<C>)> = Vec::with_capacity(t as usize);
     cmm_sharing_coefficients.push((0, cmm_prf));
     let mut cmm_coeff_randomness: Vec<(u64, Randomness<C>)> = Vec::with_capacity(t as usize);
@@ -185,7 +185,7 @@ pub fn compute_sharing_data<C: Curve>(
         // &(cipher.0, cipher.1, cmm.0), &(rnd2, share, rnd.0),
         // &(ar.ar_elgamal_generator, pk.0, commitment_key.0, commitment_key.1));
         let ar_data = SingleArData {
-            ar_name: ar.ar_name.clone(),
+            ar_identity: ar.ar_identity.clone(),
             share,
             share_number: i as u64,
             encrypted_share: cipher,
@@ -260,7 +260,7 @@ where
     let mut choice_ars= Vec::with_capacity(ar_list.len());
       let ip_ar_parameters = &ip_info.ar_info.0.clone();
       for ar in ar_list.iter(){
-          match ip_ar_parameters.into_iter().find(|&x| x.ar_handle == *ar ){
+          match ip_ar_parameters.into_iter().find(|&x| x.ar_identity == *ar ){
               None => panic!("AR handle not in the IP list"),
               Some(ar_info) => choice_ars.push(ar_info.clone()),
 
@@ -275,7 +275,7 @@ where
     let mut ar_data: Vec<ChainArData<C>> = Vec::with_capacity(number_of_ars);
     for item in id_cred_data.iter() {
         ar_data.push(ChainArData {
-            ar_name:                  item.ar_name.clone(),
+            ar_identity:                  item.ar_identity.clone(),
             enc_id_cred_pub_share:    item.encrypted_share,
             id_cred_pub_share_number: item.share_number,
         });
@@ -324,7 +324,7 @@ where
     let mut pok_id_cred_pub = Vec::with_capacity(number_of_ars);
     for item in id_cred_data.iter() {
         match choice_ar_parameters.0.iter()
-            .find(|&x| x.ar_name == item.ar_name)
+            .find(|&x| x.ar_identity == item.ar_identity)
         {
             None => panic!("cannot find Ar"),
             Some(ar_info) => {

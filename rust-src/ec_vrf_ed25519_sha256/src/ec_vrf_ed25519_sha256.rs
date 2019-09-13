@@ -19,6 +19,11 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
+use ffi_helpers::*;
+use libc::size_t;
+use std::cmp::Ordering;
+use subtle::ConstantTimeEq;
+
 pub use sha2::Sha512;
 
 pub use curve25519_dalek::digest::Digest;
@@ -98,11 +103,7 @@ impl Keypair {
     }
 
     /// prove a message with this keypair's secret key.
-    pub fn prove<R: RngCore + CryptoRng>(
-        &self,
-        message: &[u8],
-        rng: &mut R,
-    ) -> Result<Proof, ProofError> {
+    pub fn prove<R: RngCore + CryptoRng>(&self, message: &[u8], rng: &mut R) -> Proof {
         let expanded: ExpandedSecretKey = (&self.secret).into();
 
         expanded.prove(&self.public, &message, rng)
@@ -157,82 +158,92 @@ impl<'d> Deserialize<'d> for Keypair {
 }
 
 // foreign interface
+
+// Boilerplate serialization functions.
+macro_derive_from_bytes_no_cursor!(ec_vrf_proof_from_bytes, Proof, Proof::from_bytes);
+macro_derive_from_bytes_no_cursor!(
+    ec_vrf_public_key_from_bytes,
+    PublicKey,
+    PublicKey::from_bytes
+);
+macro_derive_from_bytes_no_cursor!(
+    ec_vrf_secret_key_from_bytes,
+    SecretKey,
+    SecretKey::from_bytes
+);
+macro_derive_to_bytes!(ec_vrf_proof_to_bytes, Proof);
+macro_derive_to_bytes!(ec_vrf_public_key_to_bytes, PublicKey);
+macro_derive_to_bytes!(ec_vrf_secret_key_to_bytes, SecretKey);
+// Cleanup of allocated structs.
+macro_free_ffi!(ec_vrf_proof_free, Proof);
+macro_free_ffi!(ec_vrf_public_key_free, PublicKey);
+macro_free_ffi!(ec_vrf_secret_key_free, SecretKey);
+
+// equality testing
+macro_derive_binary!(ec_vrf_proof_eq, Proof, Proof::eq);
+macro_derive_binary!(ec_vrf_public_key_eq, PublicKey, PublicKey::eq);
+// NB: Using constant time comparison.
+macro_derive_binary!(ec_vrf_secret_key_eq, SecretKey, |x, y| bool::from(
+    SecretKey::ct_eq(x, y)
+));
+
+// ord instance for proof
+
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-// Error encoding
-//-1 secret key extraction failed
-//-2 public key extraction failed
-// 0 proving failed
-// 1 success
+/// Generate a VRF proof. This function assumes the arguments are not
+/// null-pointers and it always returns a non-null pointer.
+/// NB: This function is non-deterministic (i.e., uses randomness).
 pub extern "C" fn ec_vrf_prove(
-    proof: &mut [u8; PROOF_LENGTH],
-    public_key_bytes: &[u8; PUBLIC_KEY_LENGTH],
-    secret_key_bytes: &[u8; SECRET_KEY_LENGTH],
+    public: *const PublicKey,
+    secret: *const SecretKey,
     message: *const u8,
-    len: usize,
-) -> i32 {
-    let res_sk = SecretKey::from_bytes(secret_key_bytes);
-    let res_pk = PublicKey::from_bytes(public_key_bytes);
-    if res_sk.is_err() {
-        return -1;
-    };
-    if res_pk.is_err() {
-        return -2;
-    };
-    let sk = res_sk.unwrap();
-    let pk = res_pk.unwrap();
+    len: size_t,
+) -> *const Proof {
+    let sk = from_ptr!(secret);
+    let pk = from_ptr!(public);
 
-    assert!(!message.is_null(), "Null pointer in ec_vrf_prove");
-    let data: &[u8] = unsafe { slice::from_raw_parts(message, len) };
+    let data: &[u8] = slice_from_c_bytes!(message, len);
     let mut csprng = thread_rng();
-    match sk.prove(&pk, data, &mut csprng) {
-        Err(_) => 0,
-        Ok(p) => {
-            proof.copy_from_slice(&p.to_bytes());
-            1
-        }
-    }
+    let proof = sk.prove(&pk, data, &mut csprng);
+    Box::into_raw(Box::new(proof))
 }
 
 #[no_mangle]
-pub extern "C" fn ec_vrf_priv_key(secret_key_bytes: &mut [u8; SECRET_KEY_LENGTH]) -> i32 {
+/// Generate a new secret key using the system random number generator.
+/// The result is always a non-null pointer.
+pub extern "C" fn ec_vrf_priv_key() -> *const SecretKey {
     let mut csprng = thread_rng();
     let sk = SecretKey::generate(&mut csprng);
-    secret_key_bytes.copy_from_slice(&sk.to_bytes());
-    1
-}
-
-// error encodeing
-// bad input
-#[no_mangle]
-pub extern "C" fn ec_vrf_pub_key(
-    public_key_bytes: &mut [u8; 32],
-    secret_key_bytes: &[u8; 32],
-) -> i32 {
-    let res_sk = SecretKey::from_bytes(secret_key_bytes);
-    if res_sk.is_err() {
-        return -1;
-    };
-    let sk = res_sk.unwrap();
-    let pk = PublicKey::from(&sk);
-    public_key_bytes.copy_from_slice(&pk.to_bytes());
-    1
+    Box::into_raw(Box::new(sk))
 }
 
 #[no_mangle]
-pub extern "C" fn ec_vrf_proof_to_hash(hash: &mut [u8; 32], pi: &[u8; 80]) {
-    let proof = Proof::from_bytes(&pi);
-    match proof {
-        Ok(proof) => hash.copy_from_slice(&proof.to_hash()),
-        Err(e) => {
-            panic!("Proof Parsing failed because {}", e);
-        }
-    }
+/// Derive a public key from a secret key.
+/// We assume the secret key pointer is non-null.
+/// The result is always a non-null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn ec_vrf_pub_key(secret_key: *const SecretKey) -> *const PublicKey {
+    let sk = from_ptr!(secret_key);
+    let pk = PublicKey::from(sk);
+    Box::into_raw(Box::new(pk))
 }
 
 #[no_mangle]
-pub extern "C" fn ec_vrf_verify_key(key: &[u8; 32]) -> i32 {
-    if PublicKey::verify_key(key) {
+/// Compute hash of a proof.
+/// We assume the proof pointer is non-null.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn ec_vrf_proof_to_hash(hash_ptr: *mut u8, proof_ptr: *const Proof) {
+    let hash = mut_slice_from_c_bytes!(hash_ptr, 32);
+    let proof = from_ptr!(proof_ptr);
+    hash.copy_from_slice(&proof.to_hash())
+}
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn ec_vrf_verify_key(key_ptr: *const PublicKey) -> i32 {
+    let key = from_ptr!(key_ptr);
+    if key.verify_key() {
         1
     } else {
         0
@@ -241,30 +252,78 @@ pub extern "C" fn ec_vrf_verify_key(key: &[u8; 32]) -> i32 {
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
+/// Verify. Returns 1 if verification successful and 0 otherwise.
+/// We assume all pointers are non-null.
 pub extern "C" fn ec_vrf_verify(
-    public_key_bytes: &[u8; 32],
-    proof_bytes: &[u8; 80],
-    message: *const u8,
-    len: usize,
+    public_key_ptr: *const PublicKey,
+    proof_ptr: *const Proof,
+    message_ptr: *const u8,
+    len: size_t,
 ) -> i32 {
-    let res_pk = PublicKey::from_bytes(public_key_bytes);
-    if res_pk.is_err() {
-        return -2;
-    };
-    let pk = res_pk.unwrap();
+    let pk = from_ptr!(public_key_ptr);
+    let proof = from_ptr!(proof_ptr);
+    let message: &[u8] = slice_from_c_bytes!(message_ptr, len);
 
-    let res_proof = Proof::from_bytes(&proof_bytes);
-    if res_proof.is_err() {
-        return -1;
-    };
-    let proof = res_proof.unwrap();
-
-    assert!(!message.is_null(), "Null pointer in ec_vrf_prove");
-    let data: &[u8] = unsafe { slice::from_raw_parts(message, len) };
-
-    if pk.verify(proof, data) {
+    if pk.verify(proof, message) {
         1
     } else {
         0
+    }
+}
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+// support ord instance needed in Haskell
+pub extern "C" fn ec_vrf_proof_cmp(proof_ptr_1: *const Proof, proof_ptr_2: *const Proof) -> i32 {
+    // optimistic check first.
+    if proof_ptr_1 == proof_ptr_2 {
+        return 0;
+    }
+
+    let p1 = from_ptr!(proof_ptr_1);
+    let p2 = from_ptr!(proof_ptr_2);
+    match p1.2.as_bytes().cmp(p2.2.as_bytes()) {
+        Ordering::Less => return -1,
+        Ordering::Greater => return 1,
+        Ordering::Equal => (),
+    }
+
+    // we now have that the last component is equal
+    // check the middle scalar
+    match p1.1.as_bytes().cmp(p2.1.as_bytes()) {
+        Ordering::Less => return -1,
+        Ordering::Greater => return 1,
+        Ordering::Equal => (),
+    }
+
+    // the scalars are equal, need to check the edwards point
+    match p1.0.compress().as_bytes().cmp(p2.0.compress().as_bytes()) {
+        Ordering::Less => -1,
+        Ordering::Equal => 0,
+        Ordering::Greater => 1,
+    }
+}
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+// ord instance for public keys
+pub extern "C" fn ec_vrf_public_key_cmp(
+    public_key_ptr_1: *const PublicKey,
+    public_key_ptr_2: *const PublicKey,
+) -> i32 {
+    // optimistic check first.
+    if public_key_ptr_1 == public_key_ptr_2 {
+        return 0;
+    }
+
+    let p1 = from_ptr!(public_key_ptr_1);
+    let p2 = from_ptr!(public_key_ptr_2);
+
+    // only compare the compressed point since the
+    // decompressed one is derived.
+    match p1.0.as_bytes().cmp(p2.0.as_bytes()) {
+        Ordering::Less => -1,
+        Ordering::Equal => 0,
+        Ordering::Greater => 1,
     }
 }
