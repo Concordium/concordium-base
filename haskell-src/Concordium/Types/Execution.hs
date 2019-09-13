@@ -260,7 +260,7 @@ payloadBodyBytes (EncodedPayload ss) =
 -- These are only used for commited transactions.
 data Event = ModuleDeployed !Core.ModuleRef
            | ContractInitialized !Core.ModuleRef !Core.TyName !ContractAddress
-           | Updated !ContractAddress !Amount !MessageFormat
+           | Updated !Address !ContractAddress !Amount !MessageFormat
            | Transferred !Address !Amount !Address
            | AccountCreated !AccountAddress
            | CredentialDeployed !IDTypes.CredentialDeploymentValues
