@@ -63,7 +63,7 @@ instance S.Serialize BakerId where
     get = BakerId <$> G.getWord64be
     put (BakerId i) = P.putWord64be i
 
-type LeadershipElectionNonce = ByteString
+type LeadershipElectionNonce = Hash.Hash
 type BakerSignVerifyKey = Sig.VerifyKey
 type BakerSignPrivateKey = Sig.KeyPair
 type BakerElectionVerifyKey = VRF.PublicKey
