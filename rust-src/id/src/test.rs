@@ -36,66 +36,49 @@ fn test_pipeline() {
     let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
-<<<<<<< HEAD
     
 
     let ar1_secret_key = SecretKey::generate(&mut csprng);
     let ar1_public_key = PublicKey::from(&ar1_secret_key);
     let ar1_info = ArInfo::<G1> {
-        ar_name: "AR1".to_owned(),
-        ar_handle: 1,
+        ar_identity: 1,
+        ar_description: "A good AR".to_string(),
         ar_public_key: ar1_public_key,
     };
 
    let ar2_secret_key = SecretKey::generate(&mut csprng);
    let ar2_public_key = PublicKey::from(&ar2_secret_key);
    let ar2_info = ArInfo::<G1> {
-        ar_name: "AR2".to_owned(),
-        ar_handle: 2,
+        ar_identity: 2,
+        ar_description: "A nice AR".to_string(),
         ar_public_key: ar2_public_key,
     };
 
     let ar3_secret_key = SecretKey::generate(&mut csprng);
     let ar3_public_key = PublicKey::from(&ar3_secret_key);
     let ar3_info = ArInfo::<G1> {
-         ar_name: "AR3".to_owned(),
-         ar_handle: 3,
+         ar_identity: 3,
+         ar_description: "Weird AR".to_string(),
          ar_public_key: ar3_public_key,
     };
 
     let ar4_secret_key = SecretKey::generate(&mut csprng);
     let ar4_public_key = PublicKey::from(&ar4_secret_key);
     let ar4_info = ArInfo::<G1> {
-         ar_name: "AR4".to_owned(),
-         ar_handle: 4,
+         ar_identity: 4,
+         ar_description: "Ok AR".to_string(),
          ar_public_key: ar4_public_key,
-=======
-    let ar_secret_key = SecretKey::generate(&mut csprng);
-    let ar_public_key = PublicKey::from(&ar_secret_key);
-    let ar_info = ArInfo {
-        ar_identity: 13,
-        ar_description: "AR".to_owned(),
-        ar_public_key,
-        ar_elgamal_generator: PublicKey::generator(),
->>>>>>> master
     };
 
     let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
     let dlog_base = <G1 as Curve>::one_point();
 
     let ip_info = IpInfo {
-<<<<<<< HEAD
-        ip_identity: "ID".to_owned(),
+        ip_identity: 88,
+        ip_description: "IP88".to_string(),
         ip_verify_key: ip_public_key,
         dlog_base: dlog_base,
         ar_info: (vec![ar1_info, ar2_info, ar3_info, ar4_info], ar_ck),
-//        ar_info: (vec![ar1_info], ar_ck),
-=======
-        ip_identity: 88,
-        ip_description: "ID".to_owned(),
-        ip_verify_key: id_public_key,
-        ar_info,
->>>>>>> master
     };
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -201,9 +184,9 @@ fn test_pipeline() {
     assert_eq!(cdi_check, Ok(()));
 
     //revoking anonymity
-    let second_ar =cdi.values.ar_data.iter().find(|&x| x.ar_name == "AR2").unwrap();
+    let second_ar =cdi.values.ar_data.iter().find(|&x| x.ar_identity == 2).unwrap();
     let decrypted_share_ar2 = (second_ar.id_cred_pub_share_number, ar2_secret_key.decrypt(&second_ar.enc_id_cred_pub_share));
-    let fourth_ar =cdi.values.ar_data.iter().find(|&x| x.ar_name == "AR4").unwrap();
+    let fourth_ar =cdi.values.ar_data.iter().find(|&x| x.ar_identity == 4).unwrap();
     let decrypted_share_ar4 = (fourth_ar.id_cred_pub_share_number, ar4_secret_key.decrypt(&fourth_ar.enc_id_cred_pub_share));
     let revealed_id_cred_pub = reveal_id_cred_pub(&vec![decrypted_share_ar2, decrypted_share_ar4]);
     assert_eq!(revealed_id_cred_pub, aci.acc_holder_info.id_cred.id_cred_pub);
