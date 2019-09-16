@@ -62,10 +62,10 @@ instance Enum SchemeId where
     toEnum n = case toScheme (fromIntegral n) of 
                  Just x -> x
                  Nothing -> errorWithoutStackTrace "SchemeId.toEnum: bad argument"
-    fromEnum Ed25519 = 1
+    fromEnum Ed25519 = 0
 
 toScheme :: Word8 -> Maybe SchemeId
-toScheme n | n == 1 = Just Ed25519
+toScheme n | n == 0 = Just Ed25519
            | otherwise = Nothing
 
 data SignatureScheme = SigScheme {schemeId :: SchemeId,
