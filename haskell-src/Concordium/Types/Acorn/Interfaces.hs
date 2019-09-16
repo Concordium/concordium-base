@@ -80,22 +80,10 @@ data TypingError annot =
                  -- argument is the number of given parameters, the second the
                  -- expected number.
                    IncorrectNumberOfTypeParameters Int Int
-                 -- |A type abstraction is applied to a term which is not a type.
-                 | TypeAbstractionNotAppliedToType (Core.Expr annot Core.ModuleRef)
-                 -- |A type appears where a term is expected.
-                 | TypeWhereTermExpected (Core.Type annot ModuleRef)
                  -- |In an application for terms, the given term cannot be applied to
                  -- an argument because the term (atom) is not of a function type
                  -- but of the given type.
                  | NotAFunctionType (Core.Type annot ModuleRef)
-                 -- |The type of an argument given to a function does not match
-                 -- the function's definition. The first argument is the actual
-                 -- type, the second the expected type.
-                 | UnexpectedArgumentType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
-                 -- |The result type of a defined function (e.g. in a letrec)
-                 -- does not match the specified result type. The first argument
-                 -- is the actual type, the second the specified type.
-                 | ResultTypeNotAsSpecified (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
                  -- |The type of the discriminee in a case expression is not
                  -- fully instantiated.
                  | NonFullyInstantiatedTypeAsCaseArgument -- NOTE: Could add name of declared datatype
@@ -132,10 +120,6 @@ data TypingError annot =
                  -- |A more specific case of 'UnexpectedPatternType'. A litreal occurs at a place
                  -- where the discriminee has a declared datatype.
                  | LiteralWhereTypeConstructorExpected Core.Literal
-                 -- |The body of a case alternative does not have
-                 -- the correct type. The first argument is the actual type, the
-                 -- second is the expected type.
-                 | UnexpectedCaseAlternativeResultType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
                  -- |A variable used in an expression is not bound.
                  | UndefinedVariable Core.BoundVar
                  -- |A free type variable occurs in an expression.
@@ -173,11 +157,6 @@ data TypingError annot =
                  -- type (in the context of the types specified by the init
                  -- method). The argument is the name of the contract this error refers to.
                  | ContractReceiveMethodHasIncorrectType Core.TyName
-                 -- |A more specific case of 'ContractReceiveMethodHasIncorrectType'
-                 -- where the result type is not as required. The first
-                 -- argument is the name of the contract this error refers to
-                 -- and the second is the result type of the receive method.
-                 | ContractReceiveMethodHasIncorrectResultType Core.TyName (Core.Type annot ModuleRef)
                  -- |The contract's message type as specified by the receive
                  -- method is not a storable type. The first argument is the
                  -- name of the contract this error refers to, the second the
@@ -234,25 +213,16 @@ data TypingError annot =
                  -- constraint this error refers to, the third the name of the
                  -- method that is implemented and the fourth the name of the
                  -- method that is expected to be implemented.
-                 | ContractUnexpectedGetterImplementation Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
+                 | ContractUnexpectedGetterImplementation
+                   Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
                  -- |An implementation of a sender method in a contract does not
                  -- match the expected method to be implemented at that position.
                  -- The first and second arguments are the name of the contract and the
                  -- constraint this error refers to, the third the name of the
                  -- method that is implemented and the fourth the name of the
                  -- method that is expected to be implemented.
-                 | ContractUnexpectedSenderImplementation Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
-                 -- |An implementation of a getter method in a contract does not
-                 -- have the correct type. The first and second arguments are
-                 -- the name of the contract and the constraint this error
-                 -- refers to, the third the incorrect type of the implementation.
-                 | ContractUnexpectedGetterType Core.TyName (Core.ConstraintRef Core.ModuleRef) (Core.Type annot ModuleRef)
-                 -- |An implementation of a sender method in a contract does not
-                 -- have the correct type. The first and second arguments are
-                 -- the name of the contract and the constraint this error
-                 -- refers to, the third the incorrect type of the
-                 -- implementation.
-                 | ContractUnexpectedSenderType Core.TyName (Core.ConstraintRef Core.ModuleRef) (Core.Type annot ModuleRef)
+                 | ContractUnexpectedSenderImplementation
+                   Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
                  -- |The public definition (explicit definition or datatype constructor)
                  -- with the given name has a private type.
                  | PublicDefinitionWithPrivateType Core.Name (Core.Type annot ModuleRef)
@@ -260,6 +230,11 @@ data TypingError annot =
                  -- as the expected type. The first argument is the type encountered,
                  -- the second is the expected type.
                  | UnexpectedType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
+                 -- |Type application failed or the resulting type is not the expected type.
+                 -- The first argument is the type the list of types in the second argument
+                 -- is to be applied to, the third argument the expected resulting type.
+                 | UnexpectedTypeOrFailureInTypeApplication
+                   (Core.Type annot ModuleRef) [Core.Type annot ModuleRef] (Core.Type annot ModuleRef)
                  -- |Like 'UnexpectedType' but where the actual type is not calculated.
                  -- The first argument is the type of wrong shape which might not even
                  -- be a well-formed type.

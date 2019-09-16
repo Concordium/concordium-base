@@ -260,10 +260,10 @@ payloadBodyBytes (EncodedPayload ss) =
 -- These are only used for commited transactions.
 data Event = ModuleDeployed !Core.ModuleRef
            | ContractInitialized !Core.ModuleRef !Core.TyName !ContractAddress
-           | Updated !ContractAddress !Amount !MessageFormat
+           | Updated !Address !ContractAddress !Amount !MessageFormat
            | Transferred !Address !Amount !Address
            | AccountCreated !AccountAddress
-           | CredentialDeployed !IDTypes.CredentialDeploymentInformation
+           | CredentialDeployed !IDTypes.CredentialDeploymentValues
            | AccountEncryptionKeyDeployed AccountAddress IDTypes.AccountEncryptionKey
            | BakerAdded !BakerId
            | BakerRemoved !BakerId
@@ -271,7 +271,6 @@ data Event = ModuleDeployed !Core.ModuleRef
            | BakerKeyUpdated !BakerId !BakerSignVerifyKey
            | StakeDelegated !AccountAddress !BakerId
            | StakeUndelegated !AccountAddress
-           -- TODO: Add gas spent event
   deriving (Show)
 
 -- |Used internally by the scheduler since internal messages are sent as values,
@@ -281,13 +280,18 @@ data MessageFormat = ValueMessage !(Value NoAnnot) | ExprMessage !(LinkedExpr No
 
 -- |Result of a valid transaction is either a reject with a reason or a
 -- successful transaction with a list of events which occurred during execution.
-type ValidResult = Either (RejectReason, Amount) [Event]
+-- We also record the cost of the transaction.
+data ValidResult =
+  TxSuccess {
+    vrEvents :: ![Event],
+    vrTransactionCost :: !Amount
+  } |
+  TxReject {
+    vrRejectReason :: !RejectReason,
+    vrTransactionCost :: !Amount
+  }
+  deriving(Show)
 
-{-# COMPLETE TxSuccess, TxReject #-}
-pattern TxSuccess :: [Event] -> ValidResult
-pattern TxReject :: RejectReason -> Amount -> ValidResult
-pattern TxSuccess a = Right a
-pattern TxReject e a = Left (e, a)
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
 data RejectReason = ModuleNotWF !(TypingError Core.UA) -- ^Error raised when typechecking of the module has failed.
