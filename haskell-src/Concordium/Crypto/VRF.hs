@@ -37,6 +37,7 @@ import           Concordium.Crypto.SHA256
 import           System.Random
 import           Test.QuickCheck (Arbitrary(..))
 import Data.Int
+import qualified Data.Aeson as AE
 
 foreign import ccall "ec_vrf_priv_key" rs_priv_key :: Ptr Word8 -> IO CInt
 foreign import ccall "ec_vrf_pub_key" rs_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
@@ -58,6 +59,7 @@ newtype PublicKey = PublicKey (FBS.FixedByteString PublicKeySize)
     deriving (Eq, Ord)
     deriving Show via FBSHex PublicKeySize
     deriving Serialize via FBSHex PublicKeySize
+    deriving (AE.ToJSON, AE.FromJSON) via FBSHex PublicKeySize
 
 -- |The size of a VRF private key in bytes (32).
 privateKeySize :: Int
@@ -72,6 +74,7 @@ newtype PrivateKey = PrivateKey (FBS.FixedByteString PrivateKeySize)
     deriving (Eq)
     deriving Show via (FBSHex PrivateKeySize)
     deriving Serialize via (FBSHex PrivateKeySize)
+    deriving (AE.ToJSON, AE.FromJSON) via FBSHex PrivateKeySize
 
 -- |The size of a VRF proof in bytes (80).
 proofSize :: Int
@@ -86,6 +89,7 @@ newtype Proof = Proof (FBS.FixedByteString ProofSize)
     deriving (Eq, Ord)
     deriving Show via (FBSHex ProofSize)
     deriving Serialize via (FBSHex ProofSize)
+    deriving (AE.ToJSON, AE.FromJSON) via FBSHex ProofSize
 
 -- |A VRF key pair.
 data KeyPair = KeyPair {
