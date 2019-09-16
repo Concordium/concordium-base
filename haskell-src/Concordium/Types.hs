@@ -315,6 +315,8 @@ newtype Slot = Slot {theSlot :: Word64} deriving (Eq, Ord, Num, Real, Enum, Inte
 genesisSlot :: Slot
 genesisSlot = 0
 
+type EpochLength = Slot
+
 newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
 
 -- |Blockchain metadata as needed by contract execution.
