@@ -5,7 +5,7 @@
 
 module Concordium.Crypto.VRF(
     PublicKey,
-    PrivateKey,
+    SecretKey,
     newPrivKey,
     pubKey,
     KeyPair(..),
@@ -19,7 +19,6 @@ module Concordium.Crypto.VRF(
     verifyKey,
     hashToDouble,
     hashToInt,
-    test
 ) where
 
 import           Concordium.Crypto.ByteStringHelpers
@@ -32,77 +31,160 @@ import           Data.Word
 import           System.IO.Unsafe
 import           Data.Serialize
 import           Foreign.C.Types
-import           Data.IORef
 import           Concordium.Crypto.SHA256
 import           System.Random
 import           Test.QuickCheck (Arbitrary(..))
-import Data.Int
 import qualified Data.Aeson as AE
+import Data.Int
+import Foreign.ForeignPtr
+import Concordium.Crypto.FFIHelpers
 
-foreign import ccall "ec_vrf_priv_key" rs_priv_key :: Ptr Word8 -> IO CInt
-foreign import ccall "ec_vrf_pub_key" rs_public_key :: Ptr Word8 -> Ptr Word8 -> IO CInt
-foreign import ccall "ec_vrf_prove" rs_prove :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO Int32
-foreign import ccall "ec_vrf_proof_to_hash" rs_proof_to_hash :: Ptr Word8 -> Ptr Word8 -> IO CInt
-foreign import ccall "ec_vrf_verify_key" rs_verify_key :: Ptr Word8 -> CInt
-foreign import ccall "ec_vrf_verify" rs_verify :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Word32-> IO CInt
+newtype PublicKey = PublicKey (ForeignPtr PublicKey)
+newtype SecretKey = SecretKey (ForeignPtr SecretKey)
+newtype Proof = Proof (ForeignPtr Proof)
 
--- |The size of a VRF public key in bytes (32).
+foreign import ccall unsafe "&ec_vrf_proof_free" freeProof :: FunPtr (Ptr Proof -> IO ())
+foreign import ccall unsafe "&ec_vrf_public_key_free" freePublicKey :: FunPtr (Ptr PublicKey -> IO ())
+foreign import ccall unsafe "&ec_vrf_secret_key_free" freeSecretKey :: FunPtr (Ptr SecretKey -> IO ())
+foreign import ccall unsafe "ec_vrf_proof_to_bytes" toBytesProof :: Ptr Proof -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ec_vrf_public_key_to_bytes" toBytesPublicKey :: Ptr PublicKey -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ec_vrf_secret_key_to_bytes" toBytesSecretKey :: Ptr SecretKey -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ec_vrf_proof_from_bytes" fromBytesProof :: Ptr Word8 -> CSize -> IO (Ptr Proof)
+foreign import ccall unsafe "ec_vrf_public_key_from_bytes" fromBytesPublicKey :: Ptr Word8 -> CSize -> IO (Ptr PublicKey)
+foreign import ccall unsafe "ec_vrf_secret_key_from_bytes" fromBytesSecretKey :: Ptr Word8 -> CSize -> IO (Ptr SecretKey)
+foreign import ccall unsafe "ec_vrf_priv_key" generateSecretKey :: IO (Ptr SecretKey)
+
+foreign import ccall unsafe "ec_vrf_proof_eq" proofEq :: Ptr Proof -> Ptr Proof -> IO Word8
+foreign import ccall unsafe "ec_vrf_public_key_eq" publicKeyEq :: Ptr PublicKey -> Ptr PublicKey -> IO Word8
+foreign import ccall unsafe "ec_vrf_secret_key_eq" secretKeyEq :: Ptr SecretKey -> Ptr SecretKey -> IO Word8
+
+foreign import ccall unsafe "ec_vrf_proof_cmp" proofOrd :: Ptr Proof -> Ptr Proof -> IO Int32
+foreign import ccall unsafe "ec_vrf_public_key_cmp" publicKeyOrd :: Ptr PublicKey -> Ptr PublicKey -> IO Int32
+
+foreign import ccall "ec_vrf_pub_key" rs_public_key :: Ptr SecretKey -> IO (Ptr PublicKey)
+foreign import ccall "ec_vrf_prove" rs_prove :: Ptr PublicKey -> Ptr SecretKey -> Ptr Word8 -> CSize -> IO (Ptr Proof)
+foreign import ccall "ec_vrf_proof_to_hash" rs_proof_to_hash :: Ptr Word8 -> Ptr Proof -> IO ()
+foreign import ccall "ec_vrf_verify_key" rs_verify_key :: Ptr PublicKey -> IO Bool
+foreign import ccall "ec_vrf_verify" rs_verify :: Ptr PublicKey -> Ptr Proof -> Ptr Word8 -> CSize -> IO Int32
+
+withProof :: Proof -> (Ptr Proof -> IO b) -> IO b
+withProof (Proof fp) = withForeignPtr fp
+
+withPublicKey :: PublicKey -> (Ptr PublicKey -> IO b) -> IO b
+withPublicKey (PublicKey fp) = withForeignPtr fp
+
+withSecretKey :: SecretKey -> (Ptr SecretKey -> IO b) -> IO b
+withSecretKey (SecretKey fp) = withForeignPtr fp
+
 publicKeySize :: Int
 publicKeySize = 32
 
-data PublicKeySize
-instance FBS.FixedLength PublicKeySize where
-    fixedLength _ = publicKeySize
+secretKeySize :: Int
+secretKeySize = 32
 
--- |A VRF public key. 32 bytes.
-newtype PublicKey = PublicKey (FBS.FixedByteString PublicKeySize)
-    deriving (Eq, Ord)
-    deriving Show via FBSHex PublicKeySize
-    deriving Serialize via FBSHex PublicKeySize
-    deriving (AE.ToJSON, AE.FromJSON) via FBSHex PublicKeySize
-
--- |The size of a VRF private key in bytes (32).
-privateKeySize :: Int
-privateKeySize = 32
-
-data PrivateKeySize
-instance FBS.FixedLength PrivateKeySize where
-    fixedLength _ = privateKeySize
-
--- |A VRF private key. 32 bytes.
-newtype PrivateKey = PrivateKey (FBS.FixedByteString PrivateKeySize)
-    deriving (Eq)
-    deriving Show via (FBSHex PrivateKeySize)
-    deriving Serialize via (FBSHex PrivateKeySize)
-    deriving (AE.ToJSON, AE.FromJSON) via FBSHex PrivateKeySize
-
--- |The size of a VRF proof in bytes (80).
 proofSize :: Int
 proofSize = 80
 
-data ProofSize
-instance FBS.FixedLength ProofSize where
-    fixedLength _ = proofSize
+instance Serialize Proof where
+  get = do
+    bs <- getByteString proofSize
+    case fromBytesHelper freeProof fromBytesProof bs of
+      Nothing -> fail "Cannot decode proof."
+      Just x -> return $ Proof x
 
--- |A VRF proof. 80 bytes.
-newtype Proof = Proof (FBS.FixedByteString ProofSize)
-    deriving (Eq, Ord)
-    deriving Show via (FBSHex ProofSize)
-    deriving Serialize via (FBSHex ProofSize)
-    deriving (AE.ToJSON, AE.FromJSON) via FBSHex ProofSize
+  put (Proof p) =
+    let bs = toBytesHelper toBytesProof p
+    in putByteString bs
+
+instance AE.FromJSON Proof where
+  parseJSON = AE.withText "VRF.Proof" deserializeBase16
+
+instance AE.ToJSON Proof where
+  toJSON v = AE.String (serializeBase16 v)
+
+instance Eq Proof where
+  Proof p1 == Proof p2 = eqHelper p1 p2 proofEq
+
+instance Ord Proof where
+  compare p1 p2 = unsafeDupablePerformIO $! 
+    withProof p1 $ \p1Ptr ->
+      withProof p2 $ \p2Ptr -> do
+        r <- proofOrd p1Ptr p2Ptr
+        case r of
+          0 -> return EQ
+          1 -> return GT
+          -1 -> return LT
+          _ -> error "Should not happen. FFI import breaks precondition."
+
+instance Show Proof where
+  show = byteStringToHex . encode
+
+instance Serialize PublicKey where
+  get = do
+    bs <- getByteString publicKeySize
+    case fromBytesHelper freePublicKey fromBytesPublicKey bs of
+      Nothing -> fail "Cannot decode public key."
+      Just x -> return $ PublicKey x
+
+  put (PublicKey p) =
+    let bs = toBytesHelper toBytesPublicKey p
+    in putByteString bs
+
+instance AE.FromJSON PublicKey where
+  parseJSON = AE.withText "VRF.PublicKey" deserializeBase16
+
+instance AE.ToJSON PublicKey where
+  toJSON v = AE.String (serializeBase16 v)
+
+instance Eq PublicKey where
+  PublicKey p1 == PublicKey p2 = eqHelper p1 p2 publicKeyEq
+
+instance Ord PublicKey where
+  compare p1 p2 = unsafeDupablePerformIO $! 
+    withPublicKey p1 $ \p1Ptr ->
+      withPublicKey p2 $ \p2Ptr -> do
+        r <- publicKeyOrd p1Ptr p2Ptr
+        case r of
+          0 -> return EQ
+          1 -> return GT
+          -1 -> return LT
+          _ -> error "Should not happen. FFI import breaks precondition."
+
+instance Show PublicKey where
+  show = byteStringToHex . encode
+
+instance Serialize SecretKey where
+  get = do
+    bs <- getByteString secretKeySize
+    case fromBytesHelper freeSecretKey fromBytesSecretKey bs of
+      Nothing -> fail "Cannot decode secret key."
+      Just x -> return $ SecretKey x
+
+  put (SecretKey p) =
+    let bs = toBytesHelper toBytesSecretKey p
+    in putByteString bs
+
+instance AE.FromJSON SecretKey where
+  parseJSON = AE.withText "VRF.SecretKey" deserializeBase16
+
+instance AE.ToJSON SecretKey where
+  toJSON v = AE.String (serializeBase16 v)
+
+instance Show SecretKey where
+  show = byteStringToHex . encode
+
+instance Eq SecretKey where
+  SecretKey p1 == SecretKey p2 = eqHelper p1 p2 secretKeyEq
 
 -- |A VRF key pair.
 data KeyPair = KeyPair {
-    privateKey :: PrivateKey,
+    privateKey :: SecretKey,
     publicKey :: PublicKey
 } deriving (Eq, Show)
 
 instance Serialize KeyPair where
-    put (KeyPair priv pub) = put priv >> put pub
-    get = do
-        priv <- get
-        pub <- get
-        return $ KeyPair priv pub
+    put (KeyPair priv pub) = put priv <> put pub
+    get = KeyPair <$> get <*> get
 
 -- |Generate a key pair using a given random generator.
 -- Useful for generating deterministic pseudo-random keys.
@@ -110,87 +192,60 @@ randomKeyPair :: RandomGen g => g -> (KeyPair, g)
 randomKeyPair gen = (key, gen')
         where
             (gen0, gen') = split gen
-            privKey = PrivateKey $ FBS.pack $ randoms gen0
-            key = KeyPair privKey (pubKey privKey)
+            secretKeyBytes = B.pack . take secretKeySize $ randoms gen0
+            secretKey =
+              case decode secretKeyBytes of
+                Left err -> error $ "Should not happen since any 32 bytes are a valid secret key: " ++ err
+                Right sk -> sk
+            key = KeyPair secretKey (pubKey secretKey)
 
 instance Arbitrary KeyPair where
     arbitrary = fst . randomKeyPair . mkStdGen <$> arbitrary
-
 
 -- |Generate a new key pair using the system random number generator.
 newKeyPair :: IO KeyPair
 newKeyPair = do sk <- newPrivKey 
                 return (KeyPair sk (pubKey sk))
 
-newPrivKey :: IO PrivateKey
+newPrivKey :: IO SecretKey
 newPrivKey = 
-    do suc <- newIORef (0::Int)
-       sk <- FBS.create $ \priv -> 
-           do rc <-  rs_priv_key priv 
-              case rc of
-                   1 ->  do writeIORef suc 1 
-                   _ ->  do writeIORef suc 0 
-       suc' <- readIORef suc
-       case suc' of
-           0 -> error "Private key generation failed"
-           _ -> return (PrivateKey sk)
+    do ptr <- generateSecretKey
+       SecretKey <$> newForeignPtr freeSecretKey ptr
 
--- |FIXME: This function should not error. It should fail gracefully by returning
--- Maybe or Either.
-pubKey :: PrivateKey -> PublicKey
-pubKey (PrivateKey sk) = PublicKey $! FBS.unsafeCreate $ \pub -> do
-                            pc <- FBS.withPtrReadOnly sk $ \y -> rs_public_key pub y
-                            if (pc == 1) then
-                               return ()
-                            else 
-                              error "Public key generation failed"
-
-
-test :: IO () 
-test = do kp@(KeyPair sk pk) <- newKeyPair
-          _ <- putStrLn("SK: " ++ show sk)
-          _ <- putStrLn("PK: " ++ show pk)
-          _ <- putStrLn("MESSAGE:") 
-          alpha <- B.getLine
-          prf <- prove kp alpha
-          let valid = verify pk alpha prf 
-              h' = proofToHash prf 
-           in
-              putStrLn ("Proof: " ++ show prf) >>
-              putStrLn ("PK IS " ++ if verifyKey pk then "OK" else "BAD") >>
-              putStrLn ("Verification: " ++ if valid then "VALID" else "INVALID") >>
-              putStrLn ("Proof hash: " ++ show h')
+pubKey :: SecretKey -> PublicKey
+pubKey sk = unsafeDupablePerformIO $!
+    withSecretKey sk $
+      \skPtr -> do
+        pkPtr <- rs_public_key skPtr
+        PublicKey <$> newForeignPtr freePublicKey pkPtr
 
 -- |Generate a VRF proof.
 prove :: KeyPair -> ByteString -> IO Proof
-prove (KeyPair (PrivateKey sk) (PublicKey pk)) b = Proof <$>
-                                        (FBS.create $ \prf -> 
-                                           FBS.withPtrReadOnly pk $ \pk' -> 
-                                               FBS.withPtrReadOnly sk $ \sk' -> 
-                                                   B.unsafeUseAsCStringLen b $ \(b', blen) -> do
-                                                       r <- rs_prove prf pk' sk' (castPtr b') (fromIntegral $ blen)
-                                                       if r == 1 then return () else (error $ "Could not prove: " ++ show r))
+prove (KeyPair sk pk) b = do
+  withPublicKey pk $ \pkPtr ->
+    withSecretKey sk $ \skPtr ->
+      B.unsafeUseAsCStringLen b $ \(bPtr, blen) -> do
+        res <- rs_prove pkPtr skPtr (castPtr bPtr) (fromIntegral blen)
+        Proof <$> newForeignPtr freeProof res
 
 -- |Verify a VRF proof.
 verify :: PublicKey -> ByteString -> Proof -> Bool
-verify (PublicKey pk) alpha (Proof prf) = cIntToBool $! unsafeDupablePerformIO $
-                                                FBS.withPtrReadOnly pk $ \pk' ->
-                                                   FBS.withPtrReadOnly prf $ \pi' ->
-                                                     B.unsafeUseAsCStringLen alpha $ \(alpha', alphalen)->
-                                                       rs_verify pk' pi' (castPtr alpha') (fromIntegral $ alphalen)
-              where
-                  cIntToBool x = x > 0
+verify pk alpha prf = unsafeDupablePerformIO $!
+  withPublicKey pk $ \pkPtr ->
+    withProof prf $ \prfPtr ->
+      B.unsafeUseAsCStringLen alpha $ \(alphaPtr, alphaLen) -> do
+        res <- rs_verify pkPtr prfPtr (castPtr alphaPtr) (fromIntegral alphaLen)
+        return $! res == 1
 
--- |FIXME: This function is unsafe. It will cause a runtime exception in foreign
--- code if the proof is not valid (not a point on the curve). Either the function
--- should be marked as such or should return an option.
 -- |Generate a 256-bit hash from a VRF proof.
 proofToHash :: Proof -> Hash
-proofToHash (Proof p) =  Hash (FBS.unsafeCreate $ \x ->
-                                  FBS.withPtrReadOnly p $ \p' -> rs_proof_to_hash x p' >> return())
+proofToHash prf =  Hash (FBS.unsafeCreate $ \x ->
+                            withProof prf $ \prfPtr -> rs_proof_to_hash x prfPtr)
 
 -- |Verify a VRF public key.
+-- NB: This is redundant if only functions in this module are used to construct
+-- public keys. Deserialization makes sure that the public key is always valid,
+-- and given a valid secret key the derived public key is always valid as well.
 verifyKey :: PublicKey -> Bool
-verifyKey (PublicKey pk) =  x > 0 
-            where
-               x = FBS.withPtrReadOnlyST pk (return . rs_verify_key)
+verifyKey pk = unsafeDupablePerformIO $!
+    withPublicKey pk rs_verify_key
