@@ -63,7 +63,7 @@ instance S.Serialize BakerId where
     get = BakerId <$> G.getWord64be
     put (BakerId i) = P.putWord64be i
 
-type LeadershipElectionNonce = ByteString
+type LeadershipElectionNonce = Hash.Hash
 type BakerSignVerifyKey = Sig.VerifyKey
 type BakerSignPrivateKey = Sig.KeyPair
 type BakerElectionVerifyKey = VRF.PublicKey
@@ -309,11 +309,13 @@ instance S.Serialize EncodedPayload where
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
 
-newtype Slot = Slot Word64 deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
+newtype Slot = Slot {theSlot :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
 
 -- |The slot number of the genesis block (0).
 genesisSlot :: Slot
 genesisSlot = 0
+
+type EpochLength = Slot
 
 newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
 
