@@ -200,7 +200,6 @@ pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum SchemeId {
     Ed25519,
-    CL,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -483,15 +482,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Policy<C, AttributeType> {
 impl SchemeId {
     pub fn to_bytes(&self) -> [u8; 1] {
         match self {
-            SchemeId::CL => [0],
-            SchemeId::Ed25519 => [1],
+            SchemeId::Ed25519 => [0],
         }
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<SchemeId> {
         match cur.read_u8().ok()? {
-            0 => Some(SchemeId::CL),
-            1 => Some(SchemeId::Ed25519),
+            0 => Some(SchemeId::Ed25519),
             _ => None,
         }
     }
