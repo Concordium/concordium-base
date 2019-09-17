@@ -42,7 +42,7 @@ instance FromJSON SchemeId where
     name <- parseJSON v
     case name of
       "Ed25519" -> return Ed25519
-      err -> fail err
+      err -> fail $ "Unknown signature scheme '" ++ err ++ "'."
 
 data KeyPair = KeyPair {
       signKey :: !SignKey,
@@ -52,7 +52,9 @@ data KeyPair = KeyPair {
 instance Serialize SchemeId where
     put x = putWord8 (fromIntegral (fromEnum x))
     get = do e <- getWord8 
-             return $  toEnum (fromIntegral e)
+             case toScheme e of
+               Just s -> return s
+               Nothing -> fail "Unknown signature scheme."
 
 instance Serialize KeyPair where
     put (KeyPair sk vk) = put sk <> put vk
