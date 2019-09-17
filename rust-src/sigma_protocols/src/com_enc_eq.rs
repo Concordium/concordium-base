@@ -67,10 +67,18 @@ pub fn prove_com_enc_eq<T: Curve, R: Rng>(
     let (g_1, h_1, g, h) = base;
     let (s_1, s_2, s_3) = secret;
 
-    //assertions
+    // assertions
     assert_eq!(*e_1, g_1.mul_by_scalar(&s_1), "first public value wrong");
-    assert_eq!(*e_2, g_1.mul_by_scalar(&s_2).plus_point(&h_1.mul_by_scalar(&s_1)), "second public value wrong");
-    assert_eq!(*e_3, g.mul_by_scalar(&s_2).plus_point(&h.mul_by_scalar(&s_3)), "third public value wrong");
+    assert_eq!(
+        *e_2,
+        g_1.mul_by_scalar(&s_2).plus_point(&h_1.mul_by_scalar(&s_1)),
+        "second public value wrong"
+    );
+    assert_eq!(
+        *e_3,
+        g.mul_by_scalar(&s_2).plus_point(&h.mul_by_scalar(&s_3)),
+        "third public value wrong"
+    );
     let mut a_1 = T::zero_point();
     let mut a_2 = T::zero_point();
     let mut a_3 = T::zero_point();

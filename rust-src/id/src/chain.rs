@@ -5,7 +5,7 @@ use sha2::{Digest, Sha512};
 use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
-use elgamal::{public::PublicKey};
+use elgamal::public::PublicKey;
 use pairing::Field;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
@@ -48,20 +48,24 @@ pub fn verify_cdi<
 ) -> Result<(), CDIVerificationError> {
     let ars = cdi.values.choice_ar_handles.clone();
     let ar_commitments = cdi.proofs.commitments.cmm_ars.clone();
-    if ars.len() != ar_commitments.len(){
-        return Err(CDIVerificationError::AR)
+    if ars.len() != ar_commitments.len() {
+        return Err(CDIVerificationError::AR);
     }
     let mut choice_ar_parameters = Vec::with_capacity(ars.len());
-    for handle in ars.into_iter(){
-        //check that the handle is in the commitment list
-        match ar_commitments.iter().find(|&x| *x == global_context.on_chain_commitment_key.hide(&Value(C::scalar_from_u64(handle as u64).unwrap()), &Randomness(C::Scalar::zero()))){
+    for handle in ars.into_iter() {
+        // check that the handle is in the commitment list
+        match ar_commitments.iter().find(|&x| {
+            *x == global_context.on_chain_commitment_key.hide(
+                &Value(C::scalar_from_u64(handle as u64).unwrap()),
+                &Randomness(C::Scalar::zero()),
+            )
+        }) {
             None => return Err(CDIVerificationError::AR),
-            Some(_) => match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == handle){
+            Some(_) => match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == handle) {
                 None => return Err(CDIVerificationError::AR),
-                Some(ar_info) => choice_ar_parameters.push(ar_info.clone())
-            }
+                Some(ar_info) => choice_ar_parameters.push(ar_info.clone()),
+            },
         }
-
     }
     verify_cdi_worker(
         &global_context.on_chain_commitment_key,
@@ -135,7 +139,6 @@ pub fn verify_cdi_worker<
         return Err(CDIVerificationError::Signature);
     }
 
-
     let check_policy = verify_policy(
         on_chain_commitment_key,
         &commitments,
@@ -165,7 +168,10 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
             .into_iter()
             .find(|&x| x.0 == ar.id_cred_pub_share_number)
         {
-            None => {assert!(false, "111111");return false},
+            None => {
+                assert!(false, "111111");
+                return false;
+            }
             Some((_, proof)) => match choice_ar_parameters
                 .into_iter()
                 .find(|&x| x.ar_identity == ar.ar_identity)
@@ -177,7 +183,7 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
                     let coeff = (g, h, *g_1, *h_1);
                     let eval = (e_1, e_2, cmm_share.0);
                     if !com_enc_eq::verify_com_enc_eq(&challenge_prefix, &coeff, &eval, proof) {
-                        assert!(false,"22222");
+                        assert!(false, "22222");
                         return false;
                     }
                 }
@@ -194,7 +200,9 @@ pub fn commitment_to_share<C: Curve>(
     let deg = coeff_commitments.len() - 1;
     let mut cmm_share_point: C = (coeff_commitments[0].1).0;
     for i in 1..(deg + 1) {
-        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number as u64).unwrap().pow([i as u64]);
+        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number as u64)
+            .unwrap()
+            .pow([i as u64]);
         let (s, Commitment(cmm_point)) = coeff_commitments[i];
         assert_eq!(s as usize, i);
         let a = cmm_point.mul_by_scalar(&j_pow_i);
@@ -290,9 +298,9 @@ fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     comm_vec.push(commitments.cmm_id_cred_sec.0);
     comm_vec.push(commitments.cmm_prf.0);
     for v in commitments.cmm_attributes.iter() {
-          comm_vec.push(v.0);
+        comm_vec.push(v.0);
     }
-    for ar in commitments.cmm_ars.iter(){
+    for ar in commitments.cmm_ars.iter() {
         comm_vec.push(ar.0);
     }
     com_eq_sig::verify_com_eq_sig::<P, C>(

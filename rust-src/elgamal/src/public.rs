@@ -99,7 +99,7 @@ impl<C: Curve> PublicKey<C> {
     // }
     // }
     pub fn hide(&self, k: &C::Scalar, message: &Message<C>) -> Cipher<C> {
-        let g : C = PublicKey::generator();
+        let g: C = PublicKey::generator();
         let t = g.mul_by_scalar(k);
         let s = self.0.mul_by_scalar(&k).plus_point(&message.0);
         Cipher(t, s)

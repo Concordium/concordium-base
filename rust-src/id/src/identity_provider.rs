@@ -1,11 +1,11 @@
 use crate::types::*;
 use curve_arithmetic::curve_arithmetic::*;
+use elgamal::public::PublicKey;
 use pairing::Field;
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use ps_sig;
 use rand::*;
 use sigma_protocols::{com_enc_eq::*, com_eq::*, com_eq_different_groups::*};
-use elgamal::public::PublicKey;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Declined(pub Reason);
@@ -30,7 +30,7 @@ pub fn verify_credentials<
     C: Curve<Scalar = P::ScalarField>,
 >(
     pre_id_obj: &PreIdentityObject<P, C, AttributeType>,
-    //context: Context<P, C>,
+    // context: Context<P, C>,
     ip_info: &IpInfo<P, C>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Declined> {
@@ -38,8 +38,7 @@ pub fn verify_credentials<
     let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.2[0], dlog_base);
     let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.2[1], dlog_base);
     // IDCredSec
-    let comm_sc_params =
-        CommitmentParams((commitment_key_sc.0, commitment_key_sc.1));
+    let comm_sc_params = CommitmentParams((commitment_key_sc.0, commitment_key_sc.1));
 
     let b_1 = verify_knowledge_of_id_cred_sec::<P::G_1>(
         &dlog_base,
@@ -54,20 +53,19 @@ pub fn verify_credentials<
 
     let choice_ar_handles = pre_id_obj.choice_ar_parameters.0.clone();
     let revocation_threshold = pre_id_obj.choice_ar_parameters.1;
-   
+
     let number_of_ars = choice_ar_handles.len();
     let mut choice_ars = Vec::with_capacity(number_of_ars);
-    for ar in choice_ar_handles.iter(){
-          match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == *ar ){
-              None => return Err(Declined(Reason::WrongArParameters)),
-              Some(ar_info) => choice_ars.push(ar_info.clone()),
-
-          }
+    for ar in choice_ar_handles.iter() {
+        match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == *ar) {
+            None => return Err(Declined(Reason::WrongArParameters)),
+            Some(ar_info) => choice_ars.push(ar_info.clone()),
+        }
     }
 
     // VRF
     let choice_ar_parameters = (choice_ars, revocation_threshold);
-    if !check_ar_parameters(&choice_ar_parameters , &ip_info.ar_info.0) {
+    if !check_ar_parameters(&choice_ar_parameters, &ip_info.ar_info.0) {
         return Err(Declined(Reason::WrongArParameters));
     }
     // ar commitment key
@@ -119,10 +117,10 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
         let att = att_vec[i - 4].to_field_element();
         message = message.plus_point(&key_vec[i].mul_by_scalar(&att))
     }
-    for i in (n+4)..(m + n + 4) {
-          let ar_handle = <P::G_1 as Curve>::scalar_from_u64(ar_list[i-n-4] as u64).unwrap();
-          message = message.plus_point(&key_vec[i].mul_by_scalar(&ar_handle));
-      }
+    for i in (n + 4)..(m + n + 4) {
+        let ar_handle = <P::G_1 as Curve>::scalar_from_u64(ar_list[i - n - 4] as u64).unwrap();
+        message = message.plus_point(&key_vec[i].mul_by_scalar(&ar_handle));
+    }
 
     ps_sig::UnknownMessage(message)
 }
@@ -194,7 +192,9 @@ pub fn commitment_to_share<C: Curve>(
     let deg = coeff_commitments.len() - 1;
     let mut cmm_share_point: C = (coeff_commitments[0].1).0;
     for i in 1..(deg + 1) {
-        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number as u64).unwrap().pow([i as u64]);
+        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number as u64)
+            .unwrap()
+            .pow([i as u64]);
         let (s, Commitment(cmm_point)) = coeff_commitments[i];
         assert_eq!(s as usize, i);
         let a = cmm_point.mul_by_scalar(&j_pow_i);

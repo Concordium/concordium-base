@@ -61,14 +61,13 @@ pub fn reveal<C: Curve>(shares: &Vec<(u64, C::Scalar)>) -> C::Scalar {
     })
 }
 
-pub fn reveal_in_group<C:Curve>(shares: &Vec<(u64, C)>)-> C {
-    let kxs: Vec<u64> = shares.iter().map(|(fst, _)|  *fst).collect();
-    shares.iter().fold(C::zero_point(), |accum, (i,v)| {
+pub fn reveal_in_group<C: Curve>(shares: &Vec<(u64, C)>) -> C {
+    let kxs: Vec<u64> = shares.iter().map(|(fst, _)| *fst).collect();
+    shares.iter().fold(C::zero_point(), |accum, (i, v)| {
         let s = lagrange::<C>(&kxs, *i);
         let vs = v.mul_by_scalar(&s);
         vs.plus_point(&accum)
-    }) 
-
+    })
 }
 
 mod test {
@@ -83,20 +82,32 @@ mod test {
             let secret_point = <G1 as Curve>::one_point().mul_by_scalar(&secret);
             let threshold = csprng.gen_range(1, i + 1);
             let sharing_data = share::<G1, ThreadRng>(&secret, i, threshold, &mut csprng);
-            let sufficient_sample:Vec<(u64, <G1 as Curve>::Scalar)> = sample(&mut csprng, &sharing_data.shares, threshold as usize).into_iter().map(|&(n,s)| (n,s)).collect();
-            let sufficient_sample_points = sufficient_sample.iter().map(|(n,s)| (*n, G1::one_point().mul_by_scalar(&s))).collect();
+            let sufficient_sample: Vec<(u64, <G1 as Curve>::Scalar)> =
+                sample(&mut csprng, &sharing_data.shares, threshold as usize)
+                    .into_iter()
+                    .map(|&(n, s)| (n, s))
+                    .collect();
+            let sufficient_sample_points = sufficient_sample
+                .iter()
+                .map(|(n, s)| (*n, G1::one_point().mul_by_scalar(&s)))
+                .collect();
             let revealed_data: Fr = reveal::<G1>(&sufficient_sample);
             assert_eq!(revealed_data, secret);
-            let revealed_data_point : G1 = reveal_in_group::<G1>(&sufficient_sample_points);
+            let revealed_data_point: G1 = reveal_in_group::<G1>(&sufficient_sample_points);
             assert_eq!(revealed_data_point, secret_point);
             let insufficient_sample: Vec<(u64, <G1 as Curve>::Scalar)> =
-                sample(&mut csprng, &sharing_data.shares, (threshold - 1) as usize).into_iter().map(|&(n,s)| (n,s)).collect();
-            let insufficient_sample_points =insufficient_sample.iter().map(|(n,s)| (*n, G1::one_point().mul_by_scalar(&s))).collect(); 
+                sample(&mut csprng, &sharing_data.shares, (threshold - 1) as usize)
+                    .into_iter()
+                    .map(|&(n, s)| (n, s))
+                    .collect();
+            let insufficient_sample_points = insufficient_sample
+                .iter()
+                .map(|(n, s)| (*n, G1::one_point().mul_by_scalar(&s)))
+                .collect();
             let revealed_data: Fr = reveal::<G1>(&insufficient_sample);
             assert_ne!(revealed_data, secret);
             let revealed_data_point: G1 = reveal_in_group::<G1>(&insufficient_sample_points);
             assert_ne!(revealed_data_point, secret_point);
-
         }
     }
 }

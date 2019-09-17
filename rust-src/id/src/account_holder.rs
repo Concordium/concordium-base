@@ -5,8 +5,7 @@ use sha2::{Digest, Sha512};
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
-use elgamal::cipher::Cipher;
-use elgamal::public::PublicKey;
+use elgamal::{cipher::Cipher, public::PublicKey};
 use pairing::Field;
 use pedersen_scheme::{
     commitment::Commitment,
@@ -39,7 +38,7 @@ where
     let mut csprng = thread_rng();
     let id_ah = aci.acc_holder_info.id_ah.clone();
     let id_cred_pub_ip = aci.acc_holder_info.id_cred.id_cred_pub_ip;
-    //PRF related computation
+    // PRF related computation
     let prf::SecretKey(prf_key_scalar) = aci.prf_key;
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
     // revocation.
@@ -53,33 +52,31 @@ where
     let ar_commitment_key = context.ip_info.ar_info.1;
     for item in prf_key_data.iter() {
         let proof = com_enc_eq::prove_com_enc_eq(
-                    &mut csprng,
-                    &[],
-                    &(
-                        item.encrypted_share.0,
-                        item.encrypted_share.1,
-                        item.cmm_to_share.0,
-                    ),
-                    &(
-                        item.encryption_randomness,
-                        item.share,
-                        item.randomness_cmm_to_share.0,
-                    ),
-                    &(
-                        PublicKey::generator(),
-                        item.ar_public_key.0,
-                        ar_commitment_key.0,
-                        ar_commitment_key.1,
-                    ),
-                );
-                ip_ar_data.push(IpArData {
-                    ar_identity:              item.ar_identity.clone(),
-                    enc_prf_key_share:    item.encrypted_share,
-                    prf_key_share_number: item.share_number,
-                    proof_com_enc_eq:     proof,
-                });
-            
-        
+            &mut csprng,
+            &[],
+            &(
+                item.encrypted_share.0,
+                item.encrypted_share.1,
+                item.cmm_to_share.0,
+            ),
+            &(
+                item.encryption_randomness,
+                item.share,
+                item.randomness_cmm_to_share.0,
+            ),
+            &(
+                PublicKey::generator(),
+                item.ar_public_key.0,
+                ar_commitment_key.0,
+                ar_commitment_key.1,
+            ),
+        );
+        ip_ar_data.push(IpArData {
+            ar_identity:          item.ar_identity.clone(),
+            enc_prf_key_share:    item.encrypted_share,
+            prf_key_share_number: item.share_number,
+            proof_com_enc_eq:     proof,
+        });
     }
     let alist = aci.attributes.clone();
 
@@ -115,7 +112,12 @@ where
         );
         com_eq_different_groups::prove_com_eq_diff_grps(&mut csprng, &[], &public, &secret, &coeff)
     };
-    let ar_handles = context.choice_ar_parameters.0.iter().map(|x| x.ar_identity).collect();
+    let ar_handles = context
+        .choice_ar_parameters
+        .0
+        .iter()
+        .map(|x| x.ar_identity)
+        .collect();
     let revocation_threshold = context.choice_ar_parameters.1;
     let prio = PreIdentityObject {
         id_ah,
@@ -136,14 +138,14 @@ where
 
 #[derive(Clone)]
 pub struct SingleArData<C: Curve> {
-    ar_identity:                u64,
+    ar_identity:             u64,
     share:                   C::Scalar,
     share_number:            u64,
     encrypted_share:         Cipher<C>,
     encryption_randomness:   C::Scalar,
     cmm_to_share:            Commitment<C>,
     randomness_cmm_to_share: Randomness<C>,
-    ar_public_key: elgamal::PublicKey<C>, 
+    ar_public_key:           elgamal::PublicKey<C>,
 }
 #[inline]
 pub fn compute_sharing_data<C: Curve>(
@@ -255,27 +257,28 @@ where
     };
 
     let reg_id = commitment_base.mul_by_scalar(&reg_id_exponent);
-   
+
     let ar_list = prio.choice_ar_parameters.0.clone();
-    let mut choice_ars= Vec::with_capacity(ar_list.len());
-      let ip_ar_parameters = &ip_info.ar_info.0.clone();
-      for ar in ar_list.iter(){
-          match ip_ar_parameters.into_iter().find(|&x| x.ar_identity == *ar ){
-              None => panic!("AR handle not in the IP list"),
-              Some(ar_info) => choice_ars.push(ar_info.clone()),
-
-          }
-
-      }
+    let mut choice_ars = Vec::with_capacity(ar_list.len());
+    let ip_ar_parameters = &ip_info.ar_info.0.clone();
+    for ar in ar_list.iter() {
+        match ip_ar_parameters.into_iter().find(|&x| x.ar_identity == *ar) {
+            None => panic!("AR handle not in the IP list"),
+            Some(ar_info) => choice_ars.push(ar_info.clone()),
+        }
+    }
     let choice_ar_parameters = (choice_ars, prio.choice_ar_parameters.1);
 
-    let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) =
-        compute_sharing_data(&id_cred_sec, &choice_ar_parameters, &global_context.on_chain_commitment_key);
+    let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data(
+        &id_cred_sec,
+        &choice_ar_parameters,
+        &global_context.on_chain_commitment_key,
+    );
     let number_of_ars = prio.choice_ar_parameters.0.len();
     let mut ar_data: Vec<ChainArData<C>> = Vec::with_capacity(number_of_ars);
     for item in id_cred_data.iter() {
         ar_data.push(ChainArData {
-            ar_identity:                  item.ar_identity.clone(),
+            ar_identity:              item.ar_identity.clone(),
             enc_id_cred_pub_share:    item.encrypted_share,
             id_cred_pub_share_number: item.share_number,
         });
@@ -289,7 +292,6 @@ where
     // and then we blind the signature to disassociate it from the message.
     // only the second part is used (as per the protocol)
     let (blinded_sig, _r, blinded_sig_rand_sec) = ps_sig::blind_sig(&retrieved_sig, &mut csprng);
-    
 
     // We now compute commitments to all the items in the attribute list.
     // We use the on-chain pedersen commitment key.
@@ -323,7 +325,9 @@ where
 
     let mut pok_id_cred_pub = Vec::with_capacity(number_of_ars);
     for item in id_cred_data.iter() {
-        match choice_ar_parameters.0.iter()
+        match choice_ar_parameters
+            .0
+            .iter()
             .find(|&x| x.ar_identity == item.ar_identity)
         {
             None => panic!("cannot find Ar"),
@@ -459,7 +463,7 @@ fn compute_pok_sig<
     id_cred_sec: &P::ScalarField,
     prf_key: &prf::SecretKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
-    ar_list:&Vec<u64>,
+    ar_list: &Vec<u64>,
     ip_pub_key: &ps_sig::PublicKey<P>,
     blinded_sig: &ps_sig::Signature<P>,
     blinded_sig_rand_sec: &P::ScalarField,
@@ -472,7 +476,6 @@ fn compute_pok_sig<
     let num_total_attributes = num_user_attributes + 2;
     let num_ars = commitments.cmm_ars.len();
     let num_total_commitments = num_total_attributes + num_ars;
-
 
     let ps_sig::Signature(a, b) = blinded_sig;
     let (eval_pair, eval) = (b, P::G_2::one_point());
@@ -501,8 +504,9 @@ fn compute_pok_sig<
         gxs.push(yxs[i]);
     }
     for i in num_total_attributes..num_total_commitments {
-          gxs_sec.push(<P::G_1 as Curve>::scalar_from_u64(ar_list[i-num_total_attributes]).unwrap());
-          gxs.push(yxs[i]);
+        gxs_sec
+            .push(<P::G_1 as Curve>::scalar_from_u64(ar_list[i - num_total_attributes]).unwrap());
+        gxs.push(yxs[i]);
     }
 
     let gxs_pair = a; // CHECK with Bassel
@@ -511,7 +515,7 @@ fn compute_pok_sig<
     pedersen_rands.push(commitment_rands.id_cred_sec_rand);
     pedersen_rands.push(commitment_rands.prf_rand);
     pedersen_rands.extend_from_slice(&commitment_rands.attributes_rand);
-    for _ar in ar_list.iter(){
+    for _ar in ar_list.iter() {
         pedersen_rands.push(Randomness(C::Scalar::zero()));
     }
 
@@ -522,7 +526,7 @@ fn compute_pok_sig<
         comm_vec.push(v.0);
     }
 
-    for ar in commitments.cmm_ars.iter(){
+    for ar in commitments.cmm_ars.iter() {
         comm_vec.push(ar.0);
     }
     com_eq_sig::prove_com_eq_sig::<P, C, R>(
@@ -590,8 +594,11 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     }
     let m = ar_list.len();
     let mut cmm_ars = Vec::with_capacity(m);
-    for ar in ar_list.iter(){
-        cmm_ars.push(commitment_key.hide(&Value(C::scalar_from_u64(*ar).unwrap()), &Randomness(C::Scalar::zero())));
+    for ar in ar_list.iter() {
+        cmm_ars.push(commitment_key.hide(
+            &Value(C::scalar_from_u64(*ar).unwrap()),
+            &Randomness(C::Scalar::zero()),
+        ));
     }
     let cdc = CredDeploymentCommitments {
         cmm_id_cred_sec,
