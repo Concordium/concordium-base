@@ -38,11 +38,10 @@ pub fn verify_credentials<
     let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.2[0], dlog_base);
     let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.2[1], dlog_base);
     // IDCredSec
-    let comm_sc_params = CommitmentParams((commitment_key_sc.0, commitment_key_sc.1));
 
     let b_1 = verify_knowledge_of_id_cred_sec::<P::G_1>(
         &dlog_base,
-        &comm_sc_params,
+        &commitment_key_sc,
         &pre_id_obj.id_cred_pub_ip,
         &pre_id_obj.cmm_sc,
         &pre_id_obj.pok_sc,
@@ -127,13 +126,13 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
 
 fn verify_knowledge_of_id_cred_sec<C: Curve>(
     base: &C,
-    cmm_params: &CommitmentParams<C>,
+    ck: &CommitmentKey<C>,
     pk: &C,
     commitment: &Commitment<C>,
     proof: &ComEqProof<C>,
 ) -> bool {
     let Commitment(c) = commitment;
-    let CommitmentParams((h, g)) = cmm_params;
+    let CommitmentKey(h, g) = ck;
     verify_com_eq(&[], &(vec![*c], *pk), &(*h, *g, vec![*base]), &proof)
 }
 
@@ -141,7 +140,7 @@ fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
     ip_commitment_key: &CommitmentKey<C1>,
     cmm_vrf: &Commitment<C1>,
     ar_commitment_key: &CommitmentKey<C2>,
-    cmm_sharing_coeff: &Vec<(u64, Commitment<C2>)>,
+    cmm_sharing_coeff: &Vec< Commitment<C2>>,
     ip_ar_data: &Vec<IpArData<C2>>,
     choice_ar_parameters: &Vec<ArInfo<C2>>,
     com_eq_diff_grps_proof: &ComEqDiffGrpsProof<C1, C2>,
@@ -149,8 +148,7 @@ fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
     let CommitmentKey(g_1, h_1) = ip_commitment_key;
     let CommitmentKey(g_2, h_2) = ar_commitment_key;
     let Commitment(cmm_vrf_point) = cmm_vrf;
-    let (coeff_number, Commitment(cmm_vrf_point_ar_group)) = cmm_sharing_coeff[0];
-    assert_eq!(coeff_number, 0);
+    let Commitment(cmm_vrf_point_ar_group) = cmm_sharing_coeff[0];
     let b_1 = verify_com_eq_diff_grps::<C1, C2>(
         &[],
         &((*g_1, *h_1), (*g_2, *h_2)),
@@ -187,16 +185,15 @@ fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
 #[inline(always)]
 pub fn commitment_to_share<C: Curve>(
     share_number: u64,
-    coeff_commitments: &Vec<(u64, Commitment<C>)>,
+    coeff_commitments: &Vec<Commitment<C>>,
 ) -> Commitment<C> {
     let deg = coeff_commitments.len() - 1;
-    let mut cmm_share_point: C = (coeff_commitments[0].1).0;
+    let mut cmm_share_point: C = coeff_commitments[0].0;
     for i in 1..(deg + 1) {
         let j_pow_i: C::Scalar = C::scalar_from_u64(share_number as u64)
             .unwrap()
             .pow([i as u64]);
-        let (s, Commitment(cmm_point)) = coeff_commitments[i];
-        assert_eq!(s as usize, i);
+        let Commitment(cmm_point) = coeff_commitments[i];
         let a = cmm_point.mul_by_scalar(&j_pow_i);
         cmm_share_point = cmm_share_point.plus_point(&a);
     }

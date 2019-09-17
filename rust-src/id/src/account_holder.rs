@@ -89,7 +89,7 @@ where
         com_eq::prove_com_eq(
             &[],
             &(vec![cmm_sc_point], id_cred_pub_ip),
-            &(*sc_ck_1, *sc_ck_2, vec![context.dlog_base]),
+            &(*sc_ck_1, *sc_ck_2, vec![context.ip_info.dlog_base]),
             &(vec![cmm_sc_rand.0], vec![id_cred_sec]),
             &mut csprng,
         )
@@ -97,8 +97,8 @@ where
     let (cmm_prf, rand_cmm_prf) = context
         .commitment_key_prf
         .commit(&pedersen::Value(prf_key_scalar), &mut csprng);
-    let snd_cmm_prf = cmm_prf_sharing_coeff[0].1;
-    let rand_snd_cmm_prf = cmm_coeff_randomness[0].1;
+    let snd_cmm_prf = cmm_prf_sharing_coeff[0];
+    let rand_snd_cmm_prf = cmm_coeff_randomness[0];
     // now generate the proof that the commitment hidden in snd_cmm_prf is to
     // the same prf key as the one encrypted in id_ar_data via anonymity revokers
     // public key.
@@ -154,27 +154,27 @@ pub fn compute_sharing_data<C: Curve>(
     commitment_key: &PedersenKey<C>,
 ) -> (
     Vec<SingleArData<C>>,
-    Vec<(u64, Commitment<C>)>,
-    Vec<(u64, Randomness<C>)>,
+    Vec<Commitment<C>>,
+    Vec<Randomness<C>>,
 ) {
     let n = ar_parameters.0.len() as u64;
     let t = ar_parameters.1;
     let mut csprng = thread_rng();
-    let (cmm_prf, cmm_prf_rand) = commitment_key.commit(&Value(*shared_scalar), &mut csprng);
+    let (cmm_scalar, cmm_scalar_rand) = commitment_key.commit(&Value(*shared_scalar), &mut csprng);
     let sharing_data = share::<C, ThreadRng>(&shared_scalar, n, t as u64, &mut csprng);
-    let mut cmm_sharing_coefficients: Vec<(u64, Commitment<C>)> = Vec::with_capacity(t as usize);
-    cmm_sharing_coefficients.push((0, cmm_prf));
-    let mut cmm_coeff_randomness: Vec<(u64, Randomness<C>)> = Vec::with_capacity(t as usize);
-    cmm_coeff_randomness.push((0, cmm_prf_rand));
+    let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(t as usize);
+    cmm_sharing_coefficients.push(cmm_scalar);
+    let mut cmm_coeff_randomness: Vec<Randomness<C>> = Vec::with_capacity(t as usize);
+    cmm_coeff_randomness.push(cmm_scalar_rand);
     for i in 1..(t as usize) {
         let (cmm, rnd) = commitment_key.commit(
             &Value(sharing_data.coefficients[i as usize - 1].1),
             &mut csprng,
         );
-        cmm_sharing_coefficients.push((i as u64, cmm));
-        cmm_coeff_randomness.push((i as u64, rnd));
+        cmm_sharing_coefficients.push(cmm);
+        cmm_coeff_randomness.push(rnd);
     }
-    let mut ar_prf_data: Vec<SingleArData<C>> = Vec::with_capacity(n as usize);
+    let mut ar_data: Vec<SingleArData<C>> = Vec::with_capacity(n as usize);
     for i in 1..n + 1 {
         let ar = &ar_parameters.0[(i as usize) - 1];
         let pk = ar.ar_public_key;
@@ -186,7 +186,7 @@ pub fn compute_sharing_data<C: Curve>(
         // let proof = com_enc_eq::prove_com_enc_eq(&mut csprng, &challenge_prefix,
         // &(cipher.0, cipher.1, cmm.0), &(rnd2, share, rnd.0),
         // &(ar.ar_elgamal_generator, pk.0, commitment_key.0, commitment_key.1));
-        let ar_data = SingleArData {
+        let single_ar_data = SingleArData {
             ar_identity: ar.ar_identity.clone(),
             share,
             share_number: i as u64,
@@ -196,28 +196,27 @@ pub fn compute_sharing_data<C: Curve>(
             randomness_cmm_to_share: rnd,
             ar_public_key: pk,
         };
-        ar_prf_data.push(ar_data)
+        ar_data.push(single_ar_data)
     }
-    (ar_prf_data, cmm_sharing_coefficients, cmm_coeff_randomness)
+    (ar_data, cmm_sharing_coefficients, cmm_coeff_randomness)
 }
 
 #[inline(always)]
 pub fn commitment_to_share<C: Curve>(
     share_number: u64,
-    coeff_commitments: &Vec<(u64, Commitment<C>)>,
-    coeff_randomness: &Vec<(u64, Randomness<C>)>,
+    coeff_commitments: &Vec<Commitment<C>>,
+    coeff_randomness: &Vec<Randomness<C>>,
 ) -> (Commitment<C>, Randomness<C>) {
     let deg = coeff_commitments.len() - 1;
-    let mut cmm_share_point: C = (coeff_commitments[0].1).0;
-    let mut cmm_share_randomness_scalar: C::Scalar = (coeff_randomness[0].1).0;
+    let mut cmm_share_point: C = (coeff_commitments[0]).0;
+    let mut cmm_share_randomness_scalar: C::Scalar = (coeff_randomness[0]).0;
     for i in 1..(deg + 1) {
         let j_pow_i: C::Scalar = C::scalar_from_u64(share_number).unwrap().pow([i as u64]);
-        let (s, Commitment(cmm_point)) = coeff_commitments[i];
-        assert_eq!(s as usize, i);
+        let Commitment(cmm_point) = coeff_commitments[i];
         let a = cmm_point.mul_by_scalar(&j_pow_i);
         cmm_share_point = cmm_share_point.plus_point(&a);
         // let mut r = C::scalar_from_u64(coeff_randomness[i].0).unwrap();
-        let mut r = (coeff_randomness[i].1).0;
+        let mut r = (coeff_randomness[i]).0;
         r.mul_assign(&j_pow_i);
         cmm_share_randomness_scalar.add_assign(&r);
     }
@@ -520,7 +519,8 @@ fn compute_pok_sig<
     }
 
     let mut comm_vec = Vec::with_capacity(num_total_attributes);
-    comm_vec.push(commitments.cmm_id_cred_sec.0);
+    let cmm_id_cred_sec = commitments.cmm_id_cred_sec_sharing_coeff[0]; 
+    comm_vec.push(cmm_id_cred_sec.0);
     comm_vec.push(commitments.cmm_prf.0);
     for v in commitments.cmm_attributes.iter() {
         comm_vec.push(v.0);
@@ -561,15 +561,11 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     ar_list: &Vec<u64>,
     prf_key: &prf::SecretKey<C>,
     cred_counter: u8,
-    cmm_id_cred_sec_sharing_coeff: &Vec<(u64, Commitment<C>)>,
-    cmm_coeff_randomness: &Vec<(u64, Randomness<C>)>,
+    cmm_id_cred_sec_sharing_coeff: &Vec<Commitment<C>>,
+    cmm_coeff_randomness: &Vec<Randomness<C>>,
     csprng: &mut R,
 ) -> (CredDeploymentCommitments<C>, CommitmentsRandomness<C>) {
-    let (c, cmm_id_cred_sec) = cmm_id_cred_sec_sharing_coeff[0];
-    assert_eq!(c, 0);
-    let (cc, id_cred_sec_rand) = cmm_coeff_randomness[0];
-    assert_eq!(cc, 0);
-    let (cmm_id_cred_sec, id_cred_sec_rand) = (cmm_id_cred_sec, id_cred_sec_rand);
+    let id_cred_sec_rand = cmm_coeff_randomness[0];
     let prf::SecretKey(prf_scalar) = prf_key;
     let (cmm_prf, prf_rand) = commitment_key.commit(&Value(*prf_scalar), csprng);
     let variant_scalar = C::scalar_from_u64(u64::from(alist.variant)).unwrap();
@@ -601,7 +597,7 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
         ));
     }
     let cdc = CredDeploymentCommitments {
-        cmm_id_cred_sec,
+        //cmm_id_cred_sec,
         cmm_prf,
         cmm_cred_counter,
         cmm_attributes,

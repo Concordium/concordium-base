@@ -157,7 +157,7 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
     commitment_key: &CommitmentKey<C>,
     choice_ar_parameters: &Vec<ArInfo<C>>,
     chain_ar_data: &Vec<ChainArData<C>>,
-    cmm_sharing_coeff: &Vec<(u64, Commitment<C>)>,
+    cmm_sharing_coeff: &Vec<Commitment<C>>,
     proof_id_cred_pub: &Vec<(u64, com_enc_eq::ComEncEqProof<C>)>,
 ) -> bool {
     let CommitmentKey(g_1, h_1) = commitment_key;
@@ -195,16 +195,15 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
 #[inline(always)]
 pub fn commitment_to_share<C: Curve>(
     share_number: u64,
-    coeff_commitments: &Vec<(u64, Commitment<C>)>,
+    coeff_commitments: &Vec<Commitment<C>>,
 ) -> Commitment<C> {
     let deg = coeff_commitments.len() - 1;
-    let mut cmm_share_point: C = (coeff_commitments[0].1).0;
+    let mut cmm_share_point: C = coeff_commitments[0].0;
     for i in 1..(deg + 1) {
         let j_pow_i: C::Scalar = C::scalar_from_u64(share_number as u64)
             .unwrap()
             .pow([i as u64]);
-        let (s, Commitment(cmm_point)) = coeff_commitments[i];
-        assert_eq!(s as usize, i);
+        let Commitment(cmm_point) = coeff_commitments[i];
         let a = cmm_point.mul_by_scalar(&j_pow_i);
         cmm_share_point = cmm_share_point.plus_point(&a);
     }
@@ -295,7 +294,8 @@ fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let gxs_pair = a; // CHECK with Bassel
 
     let mut comm_vec = Vec::with_capacity(gxs.len());
-    comm_vec.push(commitments.cmm_id_cred_sec.0);
+    let cmm_id_cred_sec = commitments.cmm_id_cred_sec_sharing_coeff[0];
+    comm_vec.push(cmm_id_cred_sec.0);
     comm_vec.push(commitments.cmm_prf.0);
     for v in commitments.cmm_attributes.iter() {
         comm_vec.push(v.0);
