@@ -45,9 +45,7 @@ data Payload =
       -- |Name of the contract (relative to the module) to initialize.
       icContractName :: !Core.TyName,
       -- |Parameter to the init method. Relative to the module (as if it were a term at the end of the module).
-      icParam :: !(Core.Expr Core.UA Core.ModuleName),
-      -- |Derived field, serialized size of the parameter.
-      icSize :: !Int
+      icParam :: !(Core.Expr Core.UA Core.ModuleName)
       }
   -- |Update an existing contract instance.
   | Update {
@@ -56,9 +54,7 @@ data Payload =
       -- |The address of the contract to invoke.
       uAddress :: !ContractAddress,
       -- |Message to invoke the receive method with.
-      uMessage :: !(Core.Expr Core.UA Core.ModuleName),
-      -- |Derived field, serialized size of the message.
-      uSize :: !Int
+      uMessage :: !(Core.Expr Core.UA Core.ModuleName)
       }
   -- |Simple transfer from an account to either a contract or an account.
   | Transfer {
@@ -194,17 +190,13 @@ instance S.Serialize Payload where
               icAmount <- S.get
               icModRef <- getModuleRef
               icContractName <- Core.getTyName
-              pstart <- G.bytesRead
               icParam <- Core.getExpr
-              pend <- G.bytesRead
-              return InitContract{icSize = pend - pstart,..}
+              return InitContract{..}
             2 -> do
               uAmount <- S.get
               uAddress <- S.get
-              pstart <- G.bytesRead
               uMessage <- Core.getExpr
-              pend <- G.bytesRead
-              return Update{uSize = pend - pstart,..}
+              return Update{..}
             3 -> do
               tToAddress <- S.get
               tAmount <- S.get

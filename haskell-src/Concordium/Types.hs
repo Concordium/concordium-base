@@ -299,8 +299,8 @@ putPayload = P.putShortByteString . _spayload
 getPayload :: Word32 -> G.Get EncodedPayload
 getPayload n = EncodedPayload <$> G.getShortByteString (fromIntegral n)
 
-payloadSize :: EncodedPayload -> Int
-payloadSize = BSS.length . _spayload
+payloadSize :: EncodedPayload -> Word32
+payloadSize = fromIntegral . BSS.length . _spayload
 
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
