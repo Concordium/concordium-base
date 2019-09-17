@@ -290,21 +290,17 @@ newAccount _accountVerificationKey _accountSignatureScheme = Account {
 newtype EncodedPayload = EncodedPayload { _spayload :: BSS.ShortByteString }
     deriving(Eq, Show)
 
+-- |There is no corresponding getter (to fit into the Serialize instance) since
+-- encoded payload does not encode its own length. See 'getPayload' below.
+putPayload :: P.Putter EncodedPayload
+putPayload = P.putShortByteString . _spayload
+
+-- |Get payload with given length.
+getPayload :: Word32 -> G.Get EncodedPayload
+getPayload n = EncodedPayload <$> G.getShortByteString (fromIntegral n)
+
 payloadSize :: EncodedPayload -> Int
 payloadSize = BSS.length . _spayload
-
--- |NB: We explicitly put the length first, even though the body is already
--- serialized and thus it would normally not be necessary to do so. The reason
--- we do it is that at the moment a transaction can appear on a block even
--- though the body cannot be deserialized. Thus it is important to know
--- precisely the length of the body.
-instance S.Serialize EncodedPayload where
-  put (EncodedPayload p) = 
-    P.putWord32be (fromIntegral (BSS.length p)) <>
-    P.putShortByteString p
-  get = do
-    l <- fromIntegral <$> G.getWord32be
-    EncodedPayload <$> G.getShortByteString l
 
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
