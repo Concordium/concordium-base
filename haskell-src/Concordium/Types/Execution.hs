@@ -276,11 +276,13 @@ data MessageFormat = ValueMessage !(Value NoAnnot) | ExprMessage !(LinkedExpr No
 data ValidResult =
   TxSuccess {
     vrEvents :: ![Event],
-    vrTransactionCost :: !Amount
+    vrTransactionCost :: !Amount,
+    vrEnergyCost :: !Energy
   } |
   TxReject {
     vrRejectReason :: !RejectReason,
-    vrTransactionCost :: !Amount
+    vrTransactionCost :: !Amount,
+    vrEnergyCost :: !Energy
   }
   deriving(Show)
 
