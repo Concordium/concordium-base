@@ -2,7 +2,7 @@ use crate::aggregate_sig::*;
 use ffi_helpers::*;
 use libc::size_t;
 use pairing::bls12_381::Bls12;
-use rand::thread_rng;
+use rand::{thread_rng, SeedableRng, StdRng};
 use std::{io::Cursor, slice};
 
 #[no_mangle]
@@ -107,6 +107,17 @@ pub extern "C" fn bls_verify_aggregate(
     let pks: Vec<PublicKey<Bls12>> = pks_.iter().map(|pk| *from_ptr!(*pk)).collect();
     let sig = from_ptr!(sig_ptr);
     verify_aggregate_sig_trusted_keys(&m_bytes, &pks, *sig)
+}
+
+// This is used for testing in haskell, providing deterministic key generation from seed
+// The seed is mutated when called, so that it can be used to call again.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn bls_generate_secretkey_from_seed(seed: size_t) -> *const SecretKey<Bls12> {
+    let s: &[_] = &[seed];
+    let mut rng: StdRng = SeedableRng::from_seed(s);
+    let key = Box::into_raw(Box::new(SecretKey::generate(&mut rng)));
+    key
 }
 
 #[cfg(test)]

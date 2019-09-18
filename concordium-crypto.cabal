@@ -64,7 +64,8 @@ Library
                    eddsa_ed25519,
                    sigma_protocols,
                    ffi_helpers,
-                   id
+                   id,
+                   aggregate_sig
 
   if os(windows)
         extra-libraries: ws2_32
@@ -92,6 +93,7 @@ Test-Suite tests
    ConcordiumTests.Crypto.VRF
    ConcordiumTests.Crypto.FFIDataTypes
    ConcordiumTests.Crypto.FFIVerify
+   ConcordiumTests.Crypto.BlsSignature
 
 benchmark perf
   default-language: Haskell2010

@@ -1,15 +1,13 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.BlsSignature
   (BlsPublicKey, BlsSecretKey, BlsSignature,
-  generateBlsSecretKey, deriveBlsPublicKey) -- sign, verify, aggregate, verifyAggregate
+  generateBlsSecretKey, generateBlsSecretKeyFromSeed, deriveBlsPublicKey, sign, verify, aggregate, verifyAggregate)
   where
 
 import Foreign.ForeignPtr
 import Foreign.Ptr
 import Foreign.Marshal.Array
 import Foreign.C.Types
-import Data.Serialize
-import Data.List as List
 import Data.Word
 import Data.ByteString
 import Data.ByteString.Unsafe as BS
@@ -17,6 +15,10 @@ import System.IO.Unsafe
 
 newtype BlsPublicKey = BlsPublicKey (ForeignPtr BlsPublicKey)
 newtype BlsSecretKey = BlsSecretKey (ForeignPtr BlsSecretKey)
+
+instance Show BlsSecretKey where
+  showsPrec p (BlsSecretKey fp) = showsPrec p fp
+
 newtype BlsSignature = BlsSignature (ForeignPtr BlsSignature)
 
 foreign import ccall unsafe "&bls_free_sk" freeBlsSecretKey :: FunPtr (Ptr BlsSecretKey -> IO ())
@@ -46,6 +48,11 @@ withBlsPublicKey (BlsPublicKey fp) = withForeignPtr fp
 
 withBlsSignature :: BlsSignature -> (Ptr BlsSignature -> IO b) -> IO b
 withBlsSignature (BlsSignature fp) = withForeignPtr fp
+
+-- TODO: implement Show for all types
+-- TODO: implement Eq for all types
+-- TODO: implement Ord for all types
+-- TODO (maybe) implement Serialize, FromJSON, ToJSON for all types
 
 generateBlsSecretKey :: IO BlsSecretKey
 generateBlsSecretKey = do
@@ -78,6 +85,8 @@ aggregate sig1 sig2 = BlsSignature <$> unsafeDupablePerformIO $ do
     aggregateBls sig1' sig2'
   newForeignPtr freeBlsSignature sigptr
 
+--- Verify a signature on bytestring under the list of public keys
+--- The order of the public key list is irrelevant to the result
 verifyAggregate :: ByteString -> [BlsPublicKey] -> BlsSignature -> Bool
 verifyAggregate m pks sig = unsafeDupablePerformIO $ do
   BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
@@ -88,4 +97,11 @@ verifyAggregate m pks sig = unsafeDupablePerformIO $ do
       withKeyArray ps [] f = withArrayLen ps f
       withKeyArray ps (pk:pks) f = withBlsPublicKey pk $ \pk' -> withKeyArray (pk':ps) pks f
 
---
+-- The following functions are only for testing purposes
+-- Provides deterministic key generation from seed.
+foreign import ccall unsafe "bls_generate_secretkey_from_seed" generateBlsSecretKeyPtrFromSeed :: CSize -> IO (Ptr BlsSecretKey)
+
+generateBlsSecretKeyFromSeed :: CSize -> BlsSecretKey
+generateBlsSecretKeyFromSeed seed = unsafeDupablePerformIO $ do
+  ptr <- generateBlsSecretKeyPtrFromSeed seed
+  (BlsSecretKey <$> newForeignPtr freeBlsSecretKey ptr)

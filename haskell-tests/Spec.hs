@@ -8,6 +8,7 @@ import qualified ConcordiumTests.Crypto.Ed25519Signature
 import qualified ConcordiumTests.Crypto.VRF
 import qualified ConcordiumTests.Crypto.FFIDataTypes
 import qualified ConcordiumTests.Crypto.FFIVerify
+import qualified ConcordiumTests.Crypto.BlsSignature
 
 main :: IO  ()
 main = hspec $ parallel $ do
@@ -17,6 +18,7 @@ main = hspec $ parallel $ do
     ConcordiumTests.Crypto.SHA224.tests
     ConcordiumTests.Crypto.Ed25519Signature.tests
     ConcordiumTests.Crypto.VRF.tests
+    ConcordiumTests.Crypto.BlsSignature.tests
 
     -- --NB: The following tests are far from complete. They do not test what
     -- -- happens when data is corrupt in various ways (number of commmited values
