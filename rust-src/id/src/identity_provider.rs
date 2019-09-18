@@ -140,7 +140,7 @@ fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
     ip_commitment_key: &CommitmentKey<C1>,
     cmm_vrf: &Commitment<C1>,
     ar_commitment_key: &CommitmentKey<C2>,
-    cmm_sharing_coeff: &Vec< Commitment<C2>>,
+    cmm_sharing_coeff: &Vec<Commitment<C2>>,
     ip_ar_data: &Vec<IpArData<C2>>,
     choice_ar_parameters: &Vec<ArInfo<C2>>,
     com_eq_diff_grps_proof: &ComEqDiffGrpsProof<C1, C2>,

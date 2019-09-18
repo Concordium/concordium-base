@@ -74,11 +74,11 @@ fn test_pipeline() {
     let dlog_base = <G1 as Curve>::one_point();
 
     let ip_info = IpInfo {
-        ip_identity:    88,
+        ip_identity: 88,
         ip_description: "IP88".to_string(),
-        ip_verify_key:  ip_public_key,
+        ip_verify_key: ip_public_key,
         dlog_base,
-        ar_info:        (vec![ar1_info, ar2_info, ar3_info, ar4_info], ar_ck),
+        ar_info: (vec![ar1_info, ar2_info, ar3_info, ar4_info], ar_ck),
     };
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
