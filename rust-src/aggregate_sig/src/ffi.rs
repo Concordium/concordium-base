@@ -109,8 +109,9 @@ pub extern "C" fn bls_verify_aggregate(
     verify_aggregate_sig_trusted_keys(&m_bytes, &pks, *sig)
 }
 
-// This is used for testing in haskell, providing deterministic key generation from seed
-// The seed is mutated when called, so that it can be used to call again.
+// This is used for testing in haskell, providing deterministic key generation
+// from seed The seed is mutated when called, so that it can be used to call
+// again.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn bls_generate_secretkey_from_seed(seed: size_t) -> *const SecretKey<Bls12> {
