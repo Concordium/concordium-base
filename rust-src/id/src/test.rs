@@ -39,13 +39,15 @@ fn test_pipeline() {
     let ar_secret_key = SecretKey::generate(&mut csprng);
     let ar_public_key = PublicKey::from(&ar_secret_key);
     let ar_info = ArInfo {
-        ar_name: "AR".to_owned(),
+        ar_identity: 13,
+        ar_description: "AR".to_owned(),
         ar_public_key,
         ar_elgamal_generator: PublicKey::generator(),
     };
 
     let ip_info = IpInfo {
-        ip_identity: "ID".to_owned(),
+        ip_identity: 88,
+        ip_description: "ID".to_owned(),
         ip_verify_key: id_public_key,
         ar_info,
     };
@@ -54,7 +56,7 @@ fn test_pipeline() {
 
     let variant = 0;
     let expiry_date = 123123123;
-    let alist = vec![AttributeKind::U16(55), AttributeKind::U8(31)];
+    let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
     let aci = AccCredentialInfo {
         acc_holder_info: ah_info,
         prf_key,
@@ -84,7 +86,7 @@ fn test_pipeline() {
     let policy = Policy {
         variant,
         expiry: expiry_date,
-        policy_vec: vec![(1, AttributeKind::U8(31))],
+        policy_vec: vec![(1, AttributeKind::from(31))],
         _phantom: Default::default(),
     };
 

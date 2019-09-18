@@ -38,8 +38,7 @@ pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
     Scalar::from_bytes_mod_order(c_bytes)
 }
 
-#[derive(Copy, Clone)]
-
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Proof(pub EdwardsPoint, pub Scalar, pub Scalar);
 
 // impl Clone for Proof {
@@ -57,18 +56,24 @@ impl Debug for Proof {
 impl Proof {
     /// Convert this `Proof` to a byte array.
     #[inline]
-    pub fn to_bytes(&self) -> [u8; PROOF_LENGTH] {
+    pub fn to_bytes(&self) -> Box<[u8]> {
         let c = &self.1.reduce().to_bytes();
         // assert c is within range
         assert_eq!(c[16..32], [0u8; 16]);
-        let mut proof_bytes: [u8; PROOF_LENGTH] = [0u8; PROOF_LENGTH];
+        let mut proof_bytes = vec![0u8; PROOF_LENGTH];
         proof_bytes[..32].copy_from_slice(&self.0.compress().to_bytes()[..]);
         proof_bytes[32..48].copy_from_slice(&c[..16]);
         proof_bytes[48..].copy_from_slice(&self.2.reduce().to_bytes()[..]);
-        proof_bytes
+        proof_bytes.into_boxed_slice()
     }
 
-    pub fn from_bytes(proof_bytes: &[u8; PROOF_LENGTH]) -> Result<Self, ProofError> {
+    pub fn from_bytes(proof_bytes: &[u8]) -> Result<Self, ProofError> {
+        if proof_bytes.len() != PROOF_LENGTH {
+            return Err(ProofError(InternalError::BytesLength {
+                name:   "Proof::from_bytes",
+                length: proof_bytes.len(),
+            }));
+        }
         let mut point_bytes: [u8; 32] = [0u8; 32];
         point_bytes.copy_from_slice(&proof_bytes[..32]);
         let mut scalar_bytes1: [u8; 32] = [0u8; 32];

@@ -65,8 +65,8 @@ newtype ByteStringHex = ByteStringHex ShortByteString
 instance Show ByteStringHex where
   show (ByteStringHex s) = byteStringToHex (BSS.fromShort s)
 
--- |Wrapper used to automatically derive Show instances in base16 for types
--- simply wrapping fixed byte stringns.
+-- |Wrapper used to automatically derive Show and JSON instances in base16 for
+-- types simply wrapping fixed byte stringns.
 newtype FBSHex a = FBSHex (FBS.FixedByteString a)
 
 instance FBS.FixedLength a => Show (FBSHex a) where
@@ -75,6 +75,16 @@ instance FBS.FixedLength a => Show (FBSHex a) where
 instance FBS.FixedLength a => Serialize (FBSHex a) where
   put (FBSHex s) = fbsPut s
   get = FBSHex <$> fbsGet
+
+instance FBS.FixedLength a => AE.ToJSON (FBSHex a) where
+  toJSON = AE.String . serializeBase16
+
+instance FBS.FixedLength a => AE.FromJSON (FBSHex a) where
+  parseJSON = AE.withText "FixedByteStringHex" $ \t ->
+    let (bs, rest) = BS16.decode (Text.encodeUtf8 t)
+    in if BS.null rest && BS.length bs == FBS.fixedLength (undefined :: a) then return (FBSHex (FBS.fromByteString bs))
+       else if not (BS.null rest) then AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
+            else AE.typeMismatch "Decoded string not of correct length" (AE.String t)
 
 -- |Type whose only purpose is to enable derivation of serialization instances.
 newtype Short65K = Short65K ShortByteString

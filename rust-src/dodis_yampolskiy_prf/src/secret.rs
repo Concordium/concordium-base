@@ -54,12 +54,10 @@ impl<C: Curve> SecretKey<C> {
             return Err(PrfError(DecodingError(y)));
         }
         let x = res_x.unwrap();
-        let k = self.0;
-        let mut kx = k;
-        // kx.add_assign(&k);
-        kx.add_assign(&x);
+        let mut k = self.0;
+        k.add_assign(&x);
 
-        match kx.inverse() {
+        match k.inverse() {
             None => Err(PrfError(DivisionByZero)),
             Some(y) => Ok(y),
         }

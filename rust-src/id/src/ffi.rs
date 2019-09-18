@@ -5,102 +5,107 @@ use crate::{
 use curve_arithmetic::curve_arithmetic::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
-use std::{
-    io::{Cursor, Read},
-    slice,
-};
+use std::{error::Error as StdError, fmt, io::Cursor, slice, str::FromStr};
 
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::ReadBytesExt;
 use failure::Error;
 use ffi_helpers::*;
 use libc::size_t;
+use num::bigint::{BigUint, ParseBigIntError};
 use rand::thread_rng;
 
 /// Concrete attribute kinds
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub enum AttributeKind {
-    U8(u8),
-    U16(u16),
-    U32(u32),
-    U64(u64),
+// represented as big-endian bytes.
+pub struct AttributeKind([u8; 31]);
+
+#[derive(Debug)]
+pub enum ParseAttributeError {
+    IntDecodingFailed(ParseBigIntError),
+    ValueTooLarge,
 }
 
-impl AttributeKind {
-    pub fn size_of(&self) -> usize {
+impl From<ParseBigIntError> for ParseAttributeError {
+    fn from(err: ParseBigIntError) -> Self { ParseAttributeError::IntDecodingFailed(err) }
+}
+
+impl StdError for ParseAttributeError {
+    fn description(&self) -> &str {
         match self {
-            AttributeKind::U8(_) => 1,
-            AttributeKind::U16(_) => 2,
-            AttributeKind::U32(_) => 4,
-            AttributeKind::U64(_) => 8,
+            ParseAttributeError::IntDecodingFailed(ref x) => x.description(),
+            ParseAttributeError::ValueTooLarge => "Value out of range.",
         }
     }
+}
 
-    pub fn to_u64(&self) -> u64 {
+impl fmt::Display for ParseAttributeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            AttributeKind::U8(x) => u64::from(*x),
-            AttributeKind::U16(x) => u64::from(*x),
-            AttributeKind::U32(x) => u64::from(*x),
-            AttributeKind::U64(x) => *x,
+            ParseAttributeError::IntDecodingFailed(ref e) => e.fmt(f),
+            ParseAttributeError::ValueTooLarge => "Value out of range.".fmt(f),
         }
+    }
+}
+
+impl FromStr for AttributeKind {
+    type Err = ParseAttributeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let buint = BigUint::from_str(s)?;
+        if buint.bits() <= 31 * 8 {
+            let bytes = buint.to_bytes_be();
+            let mut buf = [0; 31];
+            buf[31 - bytes.len()..].copy_from_slice(&bytes);
+            Ok(AttributeKind(buf))
+        } else {
+            Err(ParseAttributeError::ValueTooLarge)
+        }
+    }
+}
+
+impl fmt::Display for AttributeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AttributeKind(x) => write!(f, "{}", BigUint::from_bytes_be(x)),
+        }
+    }
+}
+
+impl From<u64> for AttributeKind {
+    fn from(x: u64) -> Self {
+        let mut buf = [0u8; 31];
+        buf[23..].copy_from_slice(&x.to_be_bytes());
+        AttributeKind(buf)
     }
 }
 
 impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
     fn to_field_element(&self) -> <G1 as Curve>::Scalar {
-        <G1 as Curve>::scalar_from_u64(self.to_u64()).unwrap()
+        let AttributeKind(x) = self;
+        let mut buf = [0u8; 32];
+        buf[1..].copy_from_slice(x);
+        <G1 as Curve>::bytes_to_scalar(&mut Cursor::new(&buf)).unwrap()
     }
 
     fn to_bytes(&self) -> Box<[u8]> {
-        match self {
-            AttributeKind::U8(x) => {
-                let mut buff = [0u8; 2];
-                buff[0] = 0u8;
-                buff[1..].copy_from_slice(&x.to_be_bytes());
-                Box::new(buff)
-            }
-            AttributeKind::U16(x) => {
-                let mut buff = [0u8; 3];
-                buff[0] = 1u8;
-                buff[1..].copy_from_slice(&x.to_be_bytes());
-                Box::new(buff)
-            }
-            AttributeKind::U32(x) => {
-                let mut buff = [0u8; 5];
-                buff[0] = 2u8;
-                buff[1..].copy_from_slice(&x.to_be_bytes());
-                Box::new(buff)
-            }
-            AttributeKind::U64(x) => {
-                let mut buff = [0u8; 9];
-                buff[0] = 3u8;
-                buff[1..].copy_from_slice(&x.to_be_bytes());
-                Box::new(buff)
-            }
-        }
+        let AttributeKind(x) = self;
+        let bytes = (BigUint::from_bytes_be(x)).to_bytes_be();
+        let l = bytes.len();
+        let mut buf = vec![l as u8; l + 1];
+        buf[1..].copy_from_slice(&bytes);
+        buf.into_boxed_slice()
     }
 
     fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        // let bytes = cur.get_ref();
-        let mut size_buff = [0u8; 1];
-        cur.read_exact(&mut size_buff).ok()?;
-        match size_buff[0] {
-            0 => {
-                let r = cur.read_u8().ok()?;
-                Some(AttributeKind::U8(r))
+        let l = cur.read_u8().ok()?;
+        if l <= 31 {
+            let mut r = [0u8; 31];
+            for i in (31 - l)..31 {
+                r[i as usize] = cur.read_u8().ok()?;
             }
-            1 => {
-                let r = cur.read_u16::<BigEndian>().ok()?;
-                Some(AttributeKind::U16(r))
-            }
-            2 => {
-                let r = cur.read_u32::<BigEndian>().ok()?;
-                Some(AttributeKind::U32(r))
-            }
-            3 => {
-                let r = cur.read_u64::<BigEndian>().ok()?;
-                Some(AttributeKind::U64(r))
-            }
-            _ => None,
+            Some(AttributeKind(r))
+        } else {
+            None
         }
     }
 }
@@ -263,13 +268,15 @@ mod test {
         let ar_secret_key = SecretKey::generate(&mut csprng);
         let ar_public_key = PublicKey::from(&ar_secret_key);
         let ar_info = ArInfo {
-            ar_name: "AR".to_owned(),
+            ar_identity: 0,
+            ar_description: "AR".to_owned(),
             ar_public_key,
             ar_elgamal_generator: PublicKey::generator(),
         };
 
         let ip_info = IpInfo {
-            ip_identity: "ID".to_owned(),
+            ip_identity: 3,
+            ip_description: "ID".to_owned(),
             ip_verify_key: id_public_key,
             ar_info,
         };
@@ -278,7 +285,7 @@ mod test {
 
         let variant = 0;
         let expiry_date = 123123123;
-        let alist = vec![AttributeKind::U8(55), AttributeKind::U64(313123333)];
+        let alist = vec![AttributeKind::from(55), AttributeKind::from(313123333)];
 
         let aci = AccCredentialInfo::<Bls12, ExampleCurve, AttributeKind> {
             acc_holder_info: ah_info,
@@ -308,14 +315,14 @@ mod test {
         let policy = Policy {
             variant,
             expiry: expiry_date,
-            policy_vec: vec![(0, AttributeKind::U8(55))],
+            policy_vec: vec![(0, AttributeKind::from(55))],
             _phantom: Default::default(),
         };
 
         let wrong_policy = Policy {
             variant,
             expiry: expiry_date,
-            policy_vec: vec![(0, AttributeKind::U8(5))],
+            policy_vec: vec![(0, AttributeKind::from(5))],
             _phantom: Default::default(),
         };
 

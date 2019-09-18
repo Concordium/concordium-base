@@ -34,6 +34,4 @@ newKeyPair si =
 -- NB: The index in the vector must be fromEnum of the SchemeId, hence to and from enum should be 0 indexed.
 schemes :: Vector SignatureScheme
 schemes = Vec.fromList
-          [error "CL scheme not implemented."
-          ,ed25519
-          ]
+          [ed25519]

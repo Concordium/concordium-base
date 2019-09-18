@@ -72,20 +72,15 @@ impl<'a> From<&'a ExpandedSecretKey> for PublicKey {
 impl PublicKey {
     /// Convert this public key to a byte array.
     #[inline]
-    pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] { self.0.to_bytes() }
+    pub fn to_bytes(&self) -> Box<[u8]> { Box::new(self.0.to_bytes()) }
 
     /// View this public key as a byte array.
     #[inline]
     pub fn as_bytes(&self) -> &'_ [u8; PUBLIC_KEY_LENGTH] { &(self.0).0 }
 
-    /// Construct a `PublicKey` from a slice of bytes.
-    ///
-    /// # Warning
-    ///
-    /// The caller is responsible for ensuring that the bytes passed into this
-    /// method actually represent a
-    /// `curve25519_dalek::curve::CompressedEdwardsY` and that said
-    /// compressed point is actually a point on the curve.
+    /// Construct a `PublicKey` from a slice of bytes. This function always
+    /// results in a valid public key, in particular the curve point is not of
+    /// small order (and hence also not a point at infinity).
     #[inline]
     pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey, ProofError> {
         if bytes.len() != PUBLIC_KEY_LENGTH {
@@ -101,8 +96,13 @@ impl PublicKey {
         let point = compressed
             .decompress()
             .ok_or(ProofError(InternalError::PointDecompression))?;
-
-        Ok(PublicKey(compressed, point))
+        // Verify the public key is valid, c.f. verify_key below.
+        // In particular check that the point is not the point at infinity.
+        if !point.is_small_order() {
+            Ok(PublicKey(compressed, point))
+        } else {
+            Err(ProofError(InternalError::Verify))
+        }
     }
 
     /// Internal utility function for mangling the bits of a (formerly
@@ -146,19 +146,14 @@ impl PublicKey {
         Err(ProofError(InternalError::PointDecompression))
     }
 
-    pub fn verify_key(public_key_bytes: &[u8; 32]) -> bool {
-        match PublicKey::from_bytes(public_key_bytes) {
-            Ok(pk) => !pk.1.is_small_order(),
-            _ => false,
-        }
-    }
+    pub fn verify_key(&self) -> bool { !self.1.is_small_order() }
 
     // TODO : Rename variable names more appropriately
     #[allow(clippy::many_single_char_names)]
-    pub fn verify(&self, pi: Proof, message: &[u8]) -> bool {
+    pub fn verify(&self, pi: &Proof, message: &[u8]) -> bool {
         let Proof(point, c, s) = pi; // s should be equal k- c x, where k is random and x is secret key
                                      // self should be equal g^x
-        let g_to_s = &s * &constants::ED25519_BASEPOINT_TABLE; // should be equal to g^(k-c x)
+        let g_to_s = s * &constants::ED25519_BASEPOINT_TABLE; // should be equal to g^(k-c x)
         let self_to_c = c * self.1; // self_to_c should be equal to g^(cx)
         let u = self_to_c + g_to_s; // should equal g^k
         match self.hash_to_curve(message) {
@@ -173,7 +168,7 @@ impl PublicKey {
                     u.compress(),
                     v.compress(),
                 ]);
-                c == derivable_c
+                *c == derivable_c
             }
         }
     }

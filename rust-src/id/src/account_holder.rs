@@ -45,7 +45,8 @@ where
         .ar_public_key
         .encrypt_exponent_rand(&mut csprng, &prf_key_scalar);
     let ip_ar_data = IpArData {
-        ar_name: context.ip_info.ar_info.ar_name.clone(),
+        ar_identity: context.ip_info.ar_info.ar_identity,
+        ar_description: context.ip_info.ar_info.ar_description.clone(),
         prf_key_enc,
     };
     let alist = aci.attributes.clone();
@@ -164,7 +165,7 @@ where
     let ip_pub_key = &ip_info.ip_verify_key;
 
     let ar_data = ChainArData {
-        ar_name: prio.ip_ar_data.ar_name.clone(),
+        ar_identity: prio.ip_ar_data.ar_identity,
         id_cred_pub_enc,
     };
 
@@ -192,7 +193,7 @@ where
         acc_scheme_id: SchemeId::Ed25519,
         reg_id,
         ar_data,
-        ip_identity: ip_info.ip_identity.clone(),
+        ip_identity: ip_info.ip_identity,
         policy: policy.clone(),
         acc_pub_key: acc_data.verify_key,
     };
