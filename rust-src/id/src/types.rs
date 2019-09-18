@@ -295,10 +295,6 @@ pub struct Context<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider and anonymity
     /// revoker(s).
     pub ip_info: IpInfo<P, C>,
-    /// base point of the dlog proof (account holder knows secret credentials
-    /// corresponding to the public credentials), shared at least between id
-    /// provider and the account holder
-    //pub dlog_base: P::G_1,
     /// Commitment key shared by the identity provider and the account holder.
     /// It is used to generate commitments to the id cred sec key.
     pub commitment_key_sc: PedersenKey<P::G_1>,

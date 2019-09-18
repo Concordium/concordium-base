@@ -36,7 +36,7 @@ impl Display for CDIVerificationError {
         }
     }
 }
-
+///verify credential deployment info
 pub fn verify_cdi<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -46,6 +46,8 @@ pub fn verify_cdi<
     ip_info: &IpInfo<P, C>,
     cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
+    //anonimity revokation data
+    //preprocessing
     let ars = cdi.values.choice_ar_handles.clone();
     let ar_commitments = cdi.proofs.commitments.cmm_ars.clone();
     if ars.len() != ar_commitments.len() {
@@ -91,6 +93,7 @@ pub fn verify_cdi_worker<
     let challenge_prefix = hasher.result();
 
     let commitments = &cdi.proofs.commitments;
+    //verify id_cred sharing data
     let check_id_cred_pub = verify_id_cred_pub_sharing_data(
         &challenge_prefix,
         on_chain_commitment_key,
@@ -151,7 +154,7 @@ pub fn verify_cdi_worker<
     }
     Ok(())
 }
-
+///verify id_cred data
 fn verify_id_cred_pub_sharing_data<C: Curve>(
     challenge_prefix: &[u8],
     commitment_key: &CommitmentKey<C>,
@@ -164,14 +167,15 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
     // let cmm_to_shares = Vec::new();
     for ar in chain_ar_data.iter() {
         let cmm_share = commitment_to_share(ar.id_cred_pub_share_number, cmm_sharing_coeff);
+        //finding the correct AR data by share number
         match proof_id_cred_pub
             .into_iter()
             .find(|&x| x.0 == ar.id_cred_pub_share_number)
         {
             None => {
-                assert!(false, "111111");
                 return false;
             }
+            //finding the correct AR info
             Some((_, proof)) => match choice_ar_parameters
                 .into_iter()
                 .find(|&x| x.ar_identity == ar.ar_identity)
@@ -182,8 +186,8 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
                     let (e_1, e_2) = (ar.enc_id_cred_pub_share.0, ar.enc_id_cred_pub_share.1);
                     let coeff = (g, h, *g_1, *h_1);
                     let eval = (e_1, e_2, cmm_share.0);
+                    //verifying the proof
                     if !com_enc_eq::verify_com_enc_eq(&challenge_prefix, &coeff, &eval, proof) {
-                        assert!(false, "22222");
                         return false;
                     }
                 }
@@ -192,6 +196,8 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
     }
     true
 }
+//computing the commitment to a single share from the commitments to the
+//coefficients
 #[inline(always)]
 pub fn commitment_to_share<C: Curve>(
     share_number: u64,
