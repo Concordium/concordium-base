@@ -13,6 +13,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module Concordium.Types.Acorn.Interfaces where
@@ -20,6 +21,7 @@ module Concordium.Types.Acorn.Interfaces where
 import GHC.Generics(Generic)
 
 import Data.Vector(Vector)
+import qualified Data.Vector as Vector
 import Data.Hashable(Hashable)
 import Data.HashMap.Strict(HashMap)
 import qualified Data.HashMap.Strict as Map
@@ -368,6 +370,29 @@ data JumpTable linked annot =
             , defaultCase :: !(Maybe (Expr linked annot))}
     deriving(Functor)
 
+putJumpTable :: S.Putter (Expr linked annot) -> S.Putter (JumpTable linked annot)
+putJumpTable pe JumpTable{..} = do
+        P.putWord32be (fromIntegral $ Map.size jumpTable)
+        mapM_ putBranch (Map.toList jumpTable)
+        case defaultCase of
+            Nothing -> P.putWord8 0
+            Just e -> P.putWord8 1 >> pe e
+    where
+        putBranch (pat, e) = S.put pat >> pe e
+
+getJumpTable :: S.Get (Expr linked annot) -> S.Get (JumpTable linked annot)
+getJumpTable ge = do
+        nbranches <- G.getWord32be
+        jumpTable <- Map.fromList <$> replicateM (fromIntegral nbranches) getBranch
+        defaultCase <- G.getWord8 >>= \case
+            0 -> return Nothing
+            1 -> Just <$> ge
+            _ -> fail "Serialization failure: invalid jump table"
+        return JumpTable{..}
+    where
+        getBranch = (,) <$> S.get <*> ge
+
+
 deriving instance (v ~ linked (Expr linked annot), Show v, Show annot) => Show (JumpTable linked annot)
 deriving instance (v ~ linked (Expr linked annot), Eq v, Eq annot) => Eq (JumpTable linked annot)
 
@@ -386,12 +411,21 @@ jumpLit n (JumpTable jt _) = Map.lookup (Left n) jt
 -- |Reference. Positive means reference to locally bound (let, pattern, lambda),
 -- negative means result bound with LetForeign (and off-by-one since we start with -1)
 newtype Reference = Reference Int
-    deriving(Eq, Show, Num, Ord, Enum, Real, Integral)
+    deriving(Eq, Show, Num, Ord, Enum, Real, Integral, S.Serialize)
+
 
 data Atom =
   Literal !Core.Literal
   | BoundVar !Reference
   deriving (Show, Eq)
+
+instance S.Serialize Atom where
+    put (Literal l) = P.putWord8 0 <> S.put l
+    put (BoundVar ref) = P.putWord8 1 <> S.put ref
+    get = G.getWord8 >>= \case
+        0 -> Literal <$> S.get
+        1 -> BoundVar <$> S.get
+        _ -> fail "Serialization failure: unknown Atom"
 
 -- |Untyped terms with all external references replaced by links to other linked code.
 data Expr linked annot =
@@ -429,6 +463,53 @@ data Expr linked annot =
   | Annotate !annot !(Expr linked annot)
   deriving (Generic, Functor)
 
+-- |Serialize an 'Expr'.  Annotations are dropped.
+putExpr :: S.Putter (linked (Expr linked annot)) -> S.Putter (Expr linked annot)
+putExpr pl = pe
+    where
+        pe (Atom a) = P.putWord8 0 >> S.put a
+        pe (Lambda n e) = P.putWord8 1 >> S.put n >> pe e
+        pe (App ref vec) = P.putWord8 2 >> S.put ref >> S.put (Vector.toList vec)
+        pe (Let e1 e2) = P.putWord8 3 >> pe e1 >> pe e2
+        pe (LetForeign fref link e) = P.putWord8 4 >> S.put fref >> pl link >> pe e
+        pe (LetRec vec e) = P.putWord8 5 >> P.putWord32be (fromIntegral $ Vector.length vec) >> mapM_ pe vec >> pe e
+        pe (Case a jt) = P.putWord8 6 >> S.put a >> putJumpTable pe jt
+        pe (Read n) = P.putWord8 7 >> S.put n
+        pe (Send n) = P.putWord8 8 >> S.put n
+        pe (Cast c) = P.putWord8 9 >> S.put c
+        pe (UnCast) = P.putWord8 10
+        pe (PrimFun f) = P.putWord8 11 >> S.put f
+        pe (Constructor n) = P.putWord8 12 >> S.put n
+        pe (Annotate _ e) = pe e
+
+-- |Deserialize an 'Expr'.
+getExpr :: S.Get (linked (Expr linked annot)) -> S.Get (Expr linked annot)
+getExpr gl = ge
+    where
+        ge = G.getWord8 >>= \case
+            0 -> Atom <$> S.get
+            1 -> Lambda <$> S.get <*> ge
+            2 -> App <$> S.get <*> (Vector.fromList <$> S.get)
+            3 -> Let <$> ge <*> ge
+            4 -> LetForeign <$> S.get <*> gl <*> ge
+            5 -> do
+                n <- G.getWord32be
+                vec <- Vector.fromList <$> replicateM (fromIntegral n) ge
+                LetRec vec <$> ge
+            6 -> Case <$> S.get <*> getJumpTable ge
+            7 -> Read <$> S.get
+            8 -> Send <$> S.get
+            9 -> Cast <$> S.get
+            10 -> return UnCast
+            11 -> PrimFun <$> S.get
+            12 -> Constructor <$> S.get
+            _ -> fail "Serialization failure: unknown Expr"
+
+instance (forall a. S.Serialize a => S.Serialize (linked a)) => S.Serialize (Expr linked annot) where
+    put = putExpr S.put
+    get = getExpr S.get
+
+
 deriving instance (v ~ linked (Expr linked annot), Show v, Show annot) => Show (Expr linked annot)
 deriving instance (v ~ linked (Expr linked annot), Eq v, Eq annot) => Eq (Expr linked annot)
 
@@ -445,15 +526,23 @@ data ImplementsValue linked annot = ImplementsValue
 deriving instance (v ~ linked (Expr linked annot), Show v, Show annot) => Show (ImplementsValue linked annot)
 deriving instance (v ~ linked (Expr linked annot), Eq v, Eq annot) => Eq (ImplementsValue linked annot)
 
+instance (forall a. S.Serialize a => S.Serialize (linked a)) => S.Serialize (ImplementsValue linked annot) where
+    put (ImplementsValue{..}) = S.put (Vector.toList ivSenders) >> S.put (Vector.toList ivGetters)
+    get = ImplementsValue <$> (Vector.fromList <$> S.get) <*> (Vector.fromList <$> S.get)
+
 type LinkedImplementsValue = ImplementsValue Linked
 
 newtype Unlinked a = Unlinked ()
     deriving(Eq, Show, Functor)
 
+instance S.Serialize (Unlinked a) where
+    put _ = return ()
+    get = return (Unlinked ())
+
 type UnlinkedExpr = Expr Unlinked
 
 newtype Linked a = Linked a
-    deriving(Eq, Show, Functor)
+    deriving(Eq, Show, Functor, S.Serialize)
 
 type LinkedExpr annot = Expr Linked annot
 
@@ -461,6 +550,8 @@ data Foreign =
   Local !Core.Name
   |Imported !Core.ModuleRef !Core.Name
   deriving(Eq, Show, Generic)
+
+instance S.Serialize Foreign
 
 instance Hashable Foreign
 
@@ -491,6 +582,10 @@ type UnlinkedContractValue = ContractValue Unlinked
 deriving instance (v ~ linked (Expr linked annot), Show v, Show annot) => Show (ContractValue linked annot)
 deriving instance (v ~ linked (Expr linked annot), Eq v, Eq annot) => Eq (ContractValue linked annot)
 
+instance (forall a. S.Serialize a => S.Serialize (linked a)) => S.Serialize (ContractValue linked annot) where
+    put ContractValue{..} = S.put cvInitMethod >> S.put cvReceiveMethod >> putHashMap cvImplements
+    get = ContractValue <$> S.get <*> S.get <*> getHashMap
+
 -- |A mapping of identifiers to values, e.g., definitions to values, and of contract identifiers to their
 -- respective initialization functions and receive functions.
 -- A module evalutes to a value of this type.
@@ -506,6 +601,10 @@ deriving instance (v ~ linked (Expr linked annot), Show v, Show annot) => Show (
 
 type LinkedValueInterface = ValueInterface Linked
 type UnlinkedValueInterface = ValueInterface Unlinked
+
+instance (forall a. S.Serialize a => S.Serialize (linked a)) => S.Serialize (ValueInterface linked annot) where
+    put ValueInterface{..} = putHashMap viDefs >> putHashMap viContracts
+    get = ValueInterface <$> getHashMap <*> getHashMap
 
 -- |Empty value interface
 emptyValueInterface :: ValueInterface linked annot
