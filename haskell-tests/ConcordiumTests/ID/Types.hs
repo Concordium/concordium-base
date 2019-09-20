@@ -19,9 +19,9 @@ testJSON = forAll genAddress ck
 testFromBytes :: Property
 testFromBytes = forAll genAddress ck
   where ck :: AccountAddress -> Property
-        ck b58 = case addressFromBytes (BS8.pack (show b58)) of
-                   Nothing -> counterexample (show b58) False
-                   Just x -> x === b58
+        ck addr = case addressFromBytes (BS8.pack (show addr)) of
+                   Nothing -> counterexample ("Problem = " ++ show addr) False
+                   Just x -> x === addr
 
 
 genAddress :: Gen AccountAddress

@@ -4,6 +4,7 @@ module Data.Base58Encoding where
 import qualified Data.Vector.Storable as Vec
 import qualified Concordium.Crypto.SHA256 as H
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS8
 import Data.Bits
 import Data.Word
 import Data.Maybe
@@ -19,8 +20,10 @@ decodeTable = Vec.fromListN 256 (map (\x -> fromIntegral (fromMaybe 255 (Vec.ele
 -- |A bytestring wrapper that contains a valid base58 string, i.e., each byte in
 -- the bytestring is a valid base58 character.
 newtype Base58String = Base58String {raw :: BS.ByteString }
-    deriving Show via BS.ByteString
     deriving Eq via BS.ByteString
+
+instance Show Base58String where
+  show (Base58String bs) = BS8.unpack bs
 
 instance FromJSON Base58String where
   parseJSON = withText "Base58 string" $ \t ->
@@ -70,7 +73,7 @@ decodePositiveInteger' b = go 0 0
         go acc i | i == len = Just acc
                  | otherwise =
                    let r = Vec.unsafeIndex decodeTable (fromIntegral (BS.index b i))
-                   in if r < 58 then go (58 * acc + toInteger r) (i+1)
+                   in if r /= 255 then go (58 * acc + toInteger r) (i+1)
                       else Nothing
 
 decodeBytes' :: BS.ByteString -> Maybe BS.ByteString
@@ -110,4 +113,4 @@ base58CheckDecode input =
              else Nothing
 
 checkValidBase58 :: BS.ByteString -> Bool
-checkValidBase58 bs = BS.all (\x -> Vec.unsafeIndex decodeTable (fromIntegral x) < 58) bs
+checkValidBase58 bs = BS.all (\x -> (Vec.unsafeIndex decodeTable (fromIntegral x) /= 255)) bs
