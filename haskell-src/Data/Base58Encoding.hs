@@ -29,6 +29,7 @@ instance FromJSON Base58String where
        else fail "Not a valid base 58 string."
 
 instance ToJSON Base58String where
+  -- Decode here should be safe because of the invariant maintained by Base58String type.
   toJSON (Base58String bs) = String (Text.decodeUtf8 bs)
 
 -- |Encode a non-negative integer. This function will fail if given a negative

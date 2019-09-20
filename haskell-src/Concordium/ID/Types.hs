@@ -73,6 +73,17 @@ addressFromText text =
     Error _ -> Nothing
     Success r -> Just r
 
+-- |Take bytes which are presumed valid base58 encoding, and try to deserialize
+-- an address.
+addressFromBytes :: BS.ByteString -> Maybe AccountAddress
+addressFromBytes bs =
+  if checkValidBase58 bs then
+    case base58CheckDecode (Base58String bs) of 
+      Nothing -> Nothing
+      Just x | BS.length x == accountAddressSize -> Just (AccountAddress (FBS.fromByteString x))
+             | otherwise -> Nothing
+  else Nothing
+
 -- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32
     deriving (Eq, Hashable)
