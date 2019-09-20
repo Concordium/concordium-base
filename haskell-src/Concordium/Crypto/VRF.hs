@@ -224,6 +224,8 @@ prove :: KeyPair -> ByteString -> IO Proof
 prove (KeyPair sk pk) b = do
   withPublicKey pk $ \pkPtr ->
     withSecretKey sk $ \skPtr ->
+      -- this use of unsafe is fine because the called function checks
+      -- the length before dereferencing the data pointer of the payload
       B.unsafeUseAsCStringLen b $ \(bPtr, blen) -> do
         res <- rs_prove pkPtr skPtr (castPtr bPtr) (fromIntegral blen)
         Proof <$> newForeignPtr freeProof res
@@ -233,6 +235,8 @@ verify :: PublicKey -> ByteString -> Proof -> Bool
 verify pk alpha prf = unsafeDupablePerformIO $!
   withPublicKey pk $ \pkPtr ->
     withProof prf $ \prfPtr ->
+      -- this use of unsafe is fine because the called function
+      -- checks length first before dereferencing the data pointer
       B.unsafeUseAsCStringLen alpha $ \(alphaPtr, alphaLen) -> do
         res <- rs_verify pkPtr prfPtr (castPtr alphaPtr) (fromIntegral alphaLen)
         return $! res == 1

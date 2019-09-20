@@ -32,6 +32,8 @@ withByteStringPtr :: ShortByteString -> (Ptr Word8 -> IO a) -> IO a
 withByteStringPtr bs f = BSU.unsafeUseAsCString (BSS.fromShort bs) (f . castPtr)
 
 {-# INLINE withByteStringPtrLen #-}
+-- |NB: The passed in function must handle the case of the empty string gracefully.
+-- In particular if the short bytestring is empty then the passed in pointer can be arbitrary.
 withByteStringPtrLen :: ShortByteString -> (Ptr Word8 -> Int -> IO a) -> IO a
 withByteStringPtrLen bs f = BSU.unsafeUseAsCStringLen (BSS.fromShort bs) (\(ptr, len) -> f (castPtr ptr) len)
 

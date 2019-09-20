@@ -127,8 +127,12 @@ macro_rules! from_ptr {
 #[macro_export]
 macro_rules! slice_from_c_bytes_worker {
     ($cstr:expr, $length:expr, $null_ptr_error:expr, $reader:expr) => {{
-        debug_assert!(!$cstr.is_null(), $null_ptr_error);
-        unsafe { $reader($cstr, $length) }
+        if $length != 0 {
+            debug_assert!(!$cstr.is_null(), $null_ptr_error);
+            unsafe { $reader($cstr, $length) }
+        } else {
+            &[]
+        }
     }};
 }
 
@@ -143,11 +147,23 @@ macro_rules! slice_from_c_bytes {
 }
 
 #[macro_export]
+macro_rules! mut_slice_from_c_bytes_worker {
+    ($cstr:expr, $length:expr, $null_ptr_error:expr, $reader:expr) => {{
+        if $length != 0 {
+            debug_assert!(!$cstr.is_null(), $null_ptr_error);
+            unsafe { $reader($cstr, $length) }
+        } else {
+            &mut []
+        }
+    }};
+}
+
+#[macro_export]
 macro_rules! mut_slice_from_c_bytes {
     ($cstr:expr, $length:expr) => {
-        slice_from_c_bytes_worker!($cstr, $length, "Null pointer.", slice::from_raw_parts_mut)
+        mut_slice_from_c_bytes_worker!($cstr, $length, "Null pointer.", slice::from_raw_parts_mut)
     };
     ($cstr:expr, $length:expr, $null_ptr_error:expr) => {
-        slice_from_c_bytes_worker!($cstr, $length, $null_ptr_error, slice::from_raw_parts_mut)
+        mut_slice_from_c_bytes_worker!($cstr, $length, $null_ptr_error, slice::from_raw_parts_mut)
     };
 }

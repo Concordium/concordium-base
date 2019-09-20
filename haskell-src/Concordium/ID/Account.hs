@@ -41,6 +41,9 @@ verifyCredential elgamalGen pedersenKey (IP_PK idPK) arElgamalGenerator (Anonymi
            \elgamalGeneratorPtr -> withElgamalPublicKey anonPK $
            \anonPKPtr -> withPsSigKey idPK $
            \ipVerifyKeyPtr -> unsafeUseAsCStringLen cdiBytes $
+           -- this use of unsafe is fine since at this point we know the CDI
+           -- bytes is a non-empty string, so the pointer cdiBytesPtr will be
+           -- non-null
            \(cdiBytesPtr, cdiBytesLen) -> verifyCDIFFI elgamalGenPtr pedersenKeyPtr ipVerifyKeyPtr elgamalGeneratorPtr anonPKPtr (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
     return (res == 1)
 
