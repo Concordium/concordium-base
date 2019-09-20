@@ -32,6 +32,7 @@ Library
                    Concordium.Crypto.AccountSignatureSchemes
                    Concordium.Crypto.VRF
                    Data.FixedByteString
+                   Data.Base58Encoding
                    Concordium.ID.Types
                    Concordium.ID.Account
                    Concordium.Crypto.FFIDataTypes
@@ -51,7 +52,6 @@ Library
                 , containers >= 0.5.11.0
                 , time       >= 1.7
                 , random-bytestring >= 0.1.3.0
-                , base58string >= 0.10.0
                 , QuickCheck >= 2.10
                 , vector >= 0.12
                 , template-haskell >= 2.14
@@ -87,12 +87,15 @@ Test-Suite tests
                     , aeson >= 1.4.2
   ghc-options: -threaded -with-rtsopts=-N -Wall -O2
   other-modules:
+   ConcordiumTests.Data.Base58Encoding
    ConcordiumTests.Crypto.SHA256
    ConcordiumTests.Crypto.SHA224
    ConcordiumTests.Crypto.Ed25519Signature
    ConcordiumTests.Crypto.VRF
    ConcordiumTests.Crypto.FFIDataTypes
    ConcordiumTests.Crypto.FFIVerify
+   ConcordiumTests.ID.Types
+
 
 benchmark perf
   default-language: Haskell2010

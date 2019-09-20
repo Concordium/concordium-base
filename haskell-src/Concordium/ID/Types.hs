@@ -21,8 +21,6 @@ import Data.Hashable
 import qualified Data.Text.Read as Text
 import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
-import Data.Base58String.Bitcoin
-import Control.Exception
 import Control.Monad
 import qualified Data.Text as Text
 import Concordium.Crypto.ByteStringHelpers
@@ -30,6 +28,8 @@ import Concordium.Crypto.FFIDataTypes
 import Control.DeepSeq
 
 import Data.Scientific
+
+import Data.Base58Encoding
 
 accountAddressSize :: Int
 accountAddressSize = 21
@@ -50,21 +50,24 @@ instance Hashable AccountAddress where
     -- |FIXME: The first byte of the address is mostly the same so this method is not the best.
     hash (AccountAddress b) = fromIntegral (FBS.unsafeReadWord64 b)
 
+-- |Show the address in base58check format.
 instance Show AccountAddress where
-  show = Text.unpack . addressToBase58
-     where addressToBase58 (AccountAddress x) = toText . fromBytes $ FBS.toByteString x
+  show (AccountAddress x) = show . base58CheckEncode . FBS.toByteString $ x
 
--- |Decode an address encoded in base 58. This function is in the IO monad
--- because the library we are using does not support safe parsing.
--- TODO: The library should be replaced.
-safeDecodeBase58Address :: ByteString -> IO (Maybe AccountAddress)
-safeDecodeBase58Address bs = do
-  decoded <- try (evaluate (b58String bs))
-  case decoded of
-    Left (ErrorCall _) -> return Nothing
-    Right dec -> return (Just (AccountAddress . FBS.fromByteString . toBytes $ dec))
+-- |FIXME: Probably make sure the input size is not too big before doing base58check.
+instance FromJSON AccountAddress where
+  parseJSON v = do
+    b58 <- parseJSON v
+    case base58CheckDecode b58 of
+      Nothing -> fail "Base 58 checksum invalid."
+      Just x | BS.length x == accountAddressSize ->
+               return (AccountAddress (FBS.fromByteString x))
+             | otherwise -> fail "Address of incorrect length."
 
--- Name of Identity Provider
+instance ToJSON AccountAddress where
+  toJSON (AccountAddress v) = toJSON (base58CheckEncode (FBS.toByteString v))
+
+-- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32
     deriving (Eq, Hashable)
     deriving Show via Word32
