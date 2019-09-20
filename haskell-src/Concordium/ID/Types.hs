@@ -78,7 +78,7 @@ addressFromText text =
 addressFromBytes :: BS.ByteString -> Maybe AccountAddress
 addressFromBytes bs =
   if checkValidBase58 bs then
-    case base58CheckDecode (Base58String bs) of 
+    case base58CheckDecode' bs of 
       Nothing -> Nothing
       Just x | BS.length x == accountAddressSize -> Just (AccountAddress (FBS.fromByteString x))
              | otherwise -> Nothing

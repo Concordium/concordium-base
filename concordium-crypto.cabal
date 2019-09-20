@@ -39,6 +39,7 @@ Library
                    Concordium.Crypto.ByteStringHelpers
 
   Other-modules:  Concordium.Crypto.FFIHelpers
+                  Data.Base58Encoding.TH
 
   Build-depends:  base >=4.7
                 , aeson >= 1.4.2
