@@ -67,6 +67,12 @@ instance FromJSON AccountAddress where
 instance ToJSON AccountAddress where
   toJSON (AccountAddress v) = toJSON (base58CheckEncode (FBS.toByteString v))
 
+addressFromText :: Text.Text -> Maybe AccountAddress
+addressFromText text =
+  case fromJSON (String text) of
+    Error _ -> Nothing
+    Success r -> Just r
+
 -- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32
     deriving (Eq, Hashable)
