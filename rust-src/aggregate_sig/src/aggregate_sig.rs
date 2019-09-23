@@ -10,7 +10,7 @@ pub const PUBLIC_KEY_SIZE: usize = 96;
 pub const SECRET_KEY_SIZE: usize = 32;
 pub const SIGNATURE_SIZE: usize = 48;
 
-#[derive(Debug)]
+#[derive(Debug, Eq)]
 pub struct SecretKey<P: Pairing>(P::ScalarField);
 
 impl<P: Pairing> SecretKey<P> {
@@ -29,9 +29,6 @@ impl<P: Pairing> SecretKey<P> {
         let signature = g1_hash.mul_by_scalar(&self.0);
         Signature(signature)
     }
-
-    // Returns the size of signature as a bytearray
-    pub fn len() -> usize { P::SCALAR_LENGTH }
 }
 
 impl<P: Pairing> Clone for SecretKey<P> {
@@ -40,7 +37,13 @@ impl<P: Pairing> Clone for SecretKey<P> {
 
 impl<P: Pairing> Copy for SecretKey<P> {}
 
-#[derive(Debug)]
+impl<P: Pairing> PartialEq for SecretKey<P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+#[derive(Debug, Eq)]
 pub struct PublicKey<P: Pairing>(P::G_2);
 
 impl<P: Pairing> PublicKey<P> {
@@ -65,9 +68,6 @@ impl<P: Pairing> PublicKey<P> {
     }
 
     pub fn to_bytes(&self) -> Box<[u8]> { P::G_2::curve_to_bytes(&self.0) }
-
-    // Returns the size of signature as a bytearray
-    pub fn len() -> usize { P::G_2::GROUP_ELEMENT_LENGTH }
 }
 
 impl<P: Pairing> Clone for PublicKey<P> {
@@ -76,7 +76,13 @@ impl<P: Pairing> Clone for PublicKey<P> {
 
 impl<P: Pairing> Copy for PublicKey<P> {}
 
-#[derive(Debug)]
+impl<P: Pairing> PartialEq for PublicKey<P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+#[derive(Debug, Eq)]
 pub struct Signature<P: Pairing>(P::G_1);
 
 impl<P: Pairing> Signature<P> {
@@ -91,9 +97,6 @@ impl<P: Pairing> Signature<P> {
     }
 
     pub fn to_bytes(&self) -> Box<[u8]> { P::G_1::curve_to_bytes(&self.0) }
-
-    // Returns the size of signature as a bytearray
-    pub fn len() -> usize { P::G_1::GROUP_ELEMENT_LENGTH }
 }
 
 impl<P: Pairing> Clone for Signature<P> {
@@ -101,6 +104,12 @@ impl<P: Pairing> Clone for Signature<P> {
 }
 
 impl<P: Pairing> Copy for Signature<P> {}
+
+impl<P: Pairing> PartialEq for Signature<P> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
 
 pub fn verify_aggregate_sig<P: Pairing>(
     m_pk_pairs: &[(&[u8], PublicKey<P>)],
@@ -390,9 +399,9 @@ mod test {
             let pk_bytes = pk.to_bytes();
             let sig_bytes = sig.to_bytes();
 
-            assert_eq!(sk_bytes.len(), SecretKey::<Bls12>::len());
-            assert_eq!(pk_bytes.len(), PublicKey::<Bls12>::len());
-            assert_eq!(sig_bytes.len(), Signature::<Bls12>::len());
+            assert_eq!(sk_bytes.len(), 32);
+            assert_eq!(pk_bytes.len(), 96);
+            assert_eq!(sig_bytes.len(), 48);
         }
     }
 }

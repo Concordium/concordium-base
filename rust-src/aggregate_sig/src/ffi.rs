@@ -19,34 +19,40 @@ pub extern "C" fn bls_derive_publickey(sk_ptr: *const SecretKey<Bls12>) -> *cons
     Box::into_raw(Box::new(PublicKey::from_secret(*sk)))
 }
 
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn bls_sk_from_bytes(bytes_ptr: *const u8) -> *const SecretKey<Bls12> {
-    let bytes = slice_from_c_bytes!(bytes_ptr, PublicKey::<Bls12>::len());
-    let r = SecretKey::<Bls12>::from_bytes(&mut Cursor::new(&bytes));
-    match r {
-        Ok(sk) => Box::into_raw(Box::new(sk)),
-        Err(_) => ::std::ptr::null(),
-    }
-}
+// #[no_mangle]
+// #[allow(clippy::not_unsafe_ptr_arg_deref)]
+// pub extern "C" fn bls_sk_from_bytes(bytes_ptr: *const u8) -> *const SecretKey<Bls12> {
+//     let bytes = slice_from_c_bytes!(bytes_ptr, PublicKey::<Bls12>::len());
+//     let r = SecretKey::<Bls12>::from_bytes(&mut Cursor::new(&bytes));
+//     match r {
+//         Ok(sk) => Box::into_raw(Box::new(sk)),
+//         Err(_) => ::std::ptr::null(),
+//     }
+// }
+//
+// #[no_mangle]
+// #[allow(clippy::not_unsafe_ptr_arg_deref)]
+// pub extern "C" fn bls_pk_from_bytes(bytes_ptr: *const u8) -> *const PublicKey<Bls12> {
+//     let bytes = slice_from_c_bytes!(bytes_ptr, PublicKey::<Bls12>::len());
+//     let r = PublicKey::<Bls12>::from_bytes(&mut Cursor::new(&bytes));
+//     match r {
+//         Ok(pk) => Box::into_raw(Box::new(pk)),
+//         Err(_) => ::std::ptr::null(),
+//     }
+// }
 
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn bls_pk_from_bytes(bytes_ptr: *const u8) -> *const PublicKey<Bls12> {
-    let bytes = slice_from_c_bytes!(bytes_ptr, PublicKey::<Bls12>::len());
-    let r = PublicKey::<Bls12>::from_bytes(&mut Cursor::new(&bytes));
-    match r {
-        Ok(pk) => Box::into_raw(Box::new(pk)),
-        Err(_) => ::std::ptr::null(),
-    }
-}
-
+macro_derive_from_bytes!(bls_sk_from_bytes, SecretKey<Bls12>, SecretKey::from_bytes);
+macro_derive_from_bytes!(bls_pk_from_bytes, PublicKey<Bls12>, PublicKey::from_bytes);
+macro_derive_from_bytes!(bls_sig_from_bytes, Signature<Bls12>, Signature::from_bytes);
 macro_free_ffi!(bls_free_pk, PublicKey<Bls12>);
 macro_free_ffi!(bls_free_sk, SecretKey<Bls12>);
 macro_free_ffi!(bls_free_sig, Signature<Bls12>);
 macro_derive_to_bytes!(bls_pk_to_bytes, PublicKey<Bls12>);
 macro_derive_to_bytes!(bls_sk_to_bytes, SecretKey<Bls12>);
 macro_derive_to_bytes!(bls_sig_to_bytes, Signature<Bls12>);
+macro_derive_binary!(bls_sk_eq, SecretKey<Bls12>, SecretKey::eq);
+macro_derive_binary!(bls_pk_eq, PublicKey<Bls12>, PublicKey::eq);
+macro_derive_binary!(bls_sig_eq, Signature<Bls12>, Signature::eq);
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -149,6 +155,20 @@ mod test {
             assert!(bls_verify_aggregate(
                 m_ptr, m_len, pks_ptr, pks_len, sig_ptr
             ));
+        }
+    }
+
+    #[test]
+    fn test_eq() {
+        for _i in 0..10 {
+            let seed: &[_] = &[1];
+            let mut rng: StdRng = SeedableRng::from_seed(seed);
+            let sk1 = SecretKey::<Bls12>::generate(&mut rng);
+            let sk2 = SecretKey::<Bls12>::generate(&mut rng);
+            let sk1_ptr = &sk1 as *const _;
+            let sk2_ptr = &sk2 as *const _;
+            let comparison = bls_sk_eq(sk1_ptr, sk2_ptr);
+            assert!(comparison == 0)
         }
     }
 }
