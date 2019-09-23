@@ -26,6 +26,10 @@ version = "0"
 path = "../curve_arithmetic"
 version = "0"
 
+[dependencies.secret_sharing]
+path = "../secret_sharing"
+version = "0"
+
 [dependencies.elgamal]
 path = "../elgamal"
 version = "0"

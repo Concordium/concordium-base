@@ -40,19 +40,21 @@ fn respond_ips(_request: &rouille::Request, s: &ServerState) -> rouille::Respons
     rouille::Response::json(&json!(response))
 }
 
-fn parse_id_object_input_json(v: &Value) -> Option<(u32, String, ExampleAttributeList)> {
+fn parse_id_object_input_json(v: &Value) -> Option<(u32, String, Vec<u64>, ExampleAttributeList)> {
     let ip_id = json_read_u32(v.as_object()?, "ipIdentity")?;
     let user_name = v.get("name")?.as_str()?.to_owned();
+    let ar_values = v.get("anonymityRevokers")?.as_array()?;
+    let ars:Vec<u64> = ar_values.iter().map(parse_u64).collect::<Option<Vec<u64>>>()?;
     let alist = json_to_alist(v.get("attributes")?)?;
-    Some((ip_id, user_name, alist))
+    Some((ip_id, user_name, ars.clone(), alist))
 }
 
 fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Response {
     let v: Value = try_or_400!(rouille::input::json_input(request));
-    let (ip_id, name, attributes) = {
-        if let Some((ip_id, name, att)) = parse_id_object_input_json(&v) {
+    let (ip_id, name, ar_list, attributes) = {
+        if let Some((ip_id, name, ar_list, att)) = parse_id_object_input_json(&v) {
             if (ip_id as usize) < s.ip_infos.len() {
-                (ip_id as usize, name, att)
+                (ip_id as usize, name, ar_list, att)
             } else {
                 return rouille::Response::empty_400();
             }
@@ -84,10 +86,10 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
 
     let (ip_info, ip_sec_key) = &s.ip_infos[ip_id];
 
-    let context = make_context_from_ip_info(ip_info.clone());
+    let context = make_context_from_ip_info(ip_info.clone(), (ar_list, 1));
     let (pio, randomness) = generate_pio(&context, &aci);
 
-    let vf = verify_credentials(&pio, context, &ip_sec_key);
+    let vf = verify_credentials(&pio, &ip_info, &ip_sec_key);
     match vf {
         Ok(sig) => {
             let response = json!({
