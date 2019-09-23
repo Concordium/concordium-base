@@ -38,9 +38,7 @@ impl<P: Pairing> Clone for SecretKey<P> {
 impl<P: Pairing> Copy for SecretKey<P> {}
 
 impl<P: Pairing> PartialEq for SecretKey<P> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
 #[derive(Debug, Eq)]
@@ -77,9 +75,7 @@ impl<P: Pairing> Clone for PublicKey<P> {
 impl<P: Pairing> Copy for PublicKey<P> {}
 
 impl<P: Pairing> PartialEq for PublicKey<P> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
 #[derive(Debug, Eq)]
@@ -106,9 +102,7 @@ impl<P: Pairing> Clone for Signature<P> {
 impl<P: Pairing> Copy for Signature<P> {}
 
 impl<P: Pairing> PartialEq for Signature<P> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
 pub fn verify_aggregate_sig<P: Pairing>(

@@ -19,28 +19,6 @@ pub extern "C" fn bls_derive_publickey(sk_ptr: *const SecretKey<Bls12>) -> *cons
     Box::into_raw(Box::new(PublicKey::from_secret(*sk)))
 }
 
-// #[no_mangle]
-// #[allow(clippy::not_unsafe_ptr_arg_deref)]
-// pub extern "C" fn bls_sk_from_bytes(bytes_ptr: *const u8) -> *const SecretKey<Bls12> {
-//     let bytes = slice_from_c_bytes!(bytes_ptr, PublicKey::<Bls12>::len());
-//     let r = SecretKey::<Bls12>::from_bytes(&mut Cursor::new(&bytes));
-//     match r {
-//         Ok(sk) => Box::into_raw(Box::new(sk)),
-//         Err(_) => ::std::ptr::null(),
-//     }
-// }
-//
-// #[no_mangle]
-// #[allow(clippy::not_unsafe_ptr_arg_deref)]
-// pub extern "C" fn bls_pk_from_bytes(bytes_ptr: *const u8) -> *const PublicKey<Bls12> {
-//     let bytes = slice_from_c_bytes!(bytes_ptr, PublicKey::<Bls12>::len());
-//     let r = PublicKey::<Bls12>::from_bytes(&mut Cursor::new(&bytes));
-//     match r {
-//         Ok(pk) => Box::into_raw(Box::new(pk)),
-//         Err(_) => ::std::ptr::null(),
-//     }
-// }
-
 macro_derive_from_bytes!(bls_sk_from_bytes, SecretKey<Bls12>, SecretKey::from_bytes);
 macro_derive_from_bytes!(bls_pk_from_bytes, PublicKey<Bls12>, PublicKey::from_bytes);
 macro_derive_from_bytes!(bls_sig_from_bytes, Signature<Bls12>, Signature::from_bytes);
