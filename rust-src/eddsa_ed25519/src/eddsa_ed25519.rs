@@ -1,6 +1,7 @@
 use ed25519_dalek::*;
 use rand::*;
 
+use ffi_helpers::*;
 use std::slice;
 
 /// FIXME: Hack to get around different requirements for rand versions
@@ -48,8 +49,7 @@ pub extern "C" fn eddsa_sign(
 ) {
     let sk = SecretKey::from_bytes(secret_key_bytes).expect("bad secret key bytes");
     let pk = PublicKey::from_bytes(public_key_bytes).expect("bad public key bytes");
-    assert!(!message.is_null(), "Null pointer in eddsa_sign()");
-    let data: &[u8] = unsafe { slice::from_raw_parts(message, len) };
+    let data: &[u8] = slice_from_c_bytes!(message, len);
     let expanded_sk = ExpandedSecretKey::from(&sk);
     let signature = expanded_sk.sign(data, &pk);
     signature_bytes.copy_from_slice(&signature.to_bytes());
@@ -78,7 +78,7 @@ pub extern "C" fn eddsa_verify(
     let pk = pk_res.unwrap();
     let sig = sig_res.unwrap();
     assert!(!message.is_null(), "Null pointer in ec_vrf_prove");
-    let data: &[u8] = unsafe { slice::from_raw_parts(message, len) };
+    let data: &[u8] = slice_from_c_bytes!(message, len);
     match pk.verify(data, &sig) {
         Ok(_) => 1,
         _ => 0,

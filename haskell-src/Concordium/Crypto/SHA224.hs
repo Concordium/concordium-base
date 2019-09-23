@@ -91,7 +91,10 @@ hash b = Hash $ unsafeDupablePerformIO $
                                            withForeignPtr ctx_ptr  (\ctx -> hash_final ctx)
 
 hash_update :: ByteString -> Ptr SHA224Ctx ->  IO ()
-hash_update b ptr = B.unsafeUseAsCStringLen b $ \(message, mlen) -> rs_sha224_update ptr (castPtr message) (fromIntegral mlen)
+hash_update b ptr = B.unsafeUseAsCStringLen b $
+    -- the use of unsafe here is fine because hash_input handles the case
+    -- of len == 0 without dereferencing the data pointer
+    \(message, mlen) -> rs_sha224_update ptr (castPtr message) (fromIntegral mlen)
 
 hash_final :: Ptr SHA224Ctx -> IO (FixedByteString DigestSize)
 hash_final ptr = FBS.create  $ \hsh -> rs_sha224_final hsh ptr

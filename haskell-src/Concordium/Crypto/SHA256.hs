@@ -102,6 +102,8 @@ hashShort b = Hash $ unsafeDupablePerformIO $
 
 hash_update :: ByteString -> Ptr SHA256Ctx ->  IO ()
 hash_update b ptr = B.unsafeUseAsCStringLen b $
+    -- the use of unsafe here is fine because hash_input handles the case where
+    -- len == 0 without dereferencing the pointer.
     \(message, mlen) -> rs_sha256_update ptr (castPtr message) (fromIntegral mlen)
 
 hash_update_short :: ShortByteString -> Ptr SHA256Ctx ->  IO ()

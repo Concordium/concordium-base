@@ -21,14 +21,18 @@ pub extern "C" fn sha256_free(ptr: *mut Sha256) {
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn sha256_input(ptr: *mut Sha256, a: *const u8, len: usize) {
-    let hasher: &mut Sha256 = unsafe {
-        assert!(!ptr.is_null());
-        &mut *ptr
-    };
+    assert!(!ptr.is_null());
+    let hasher: &mut Sha256 = unsafe { &mut *ptr };
 
-    assert!(!a.is_null(), "Null pointer in sha256_input()");
-    let data: &[u8] = unsafe { slice::from_raw_parts(a, len) };
-    hasher.input(data);
+    // in case length == 0 the input string pointer can point to arbitrary data
+    // since we ought not to read any of it.
+    if len != 0 {
+        assert!(!a.is_null(), "Null pointer in sha256_input()");
+        let data: &[u8] = unsafe { slice::from_raw_parts(a, len) };
+        hasher.input(data);
+    } else {
+        hasher.input([]);
+    }
 }
 
 #[no_mangle]
@@ -61,14 +65,16 @@ pub extern "C" fn sha224_free(ptr: *mut Sha224) {
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn sha224_input(ptr: *mut Sha224, a: *const u8, len: usize) {
-    let hasher: &mut Sha224 = unsafe {
-        assert!(!ptr.is_null());
-        &mut *ptr
-    };
+    assert!(!ptr.is_null());
+    let hasher: &mut Sha224 = unsafe { &mut *ptr };
 
-    assert!(!a.is_null(), "Null pointer in sha224_input()");
-    let data: &[u8] = unsafe { slice::from_raw_parts(a, len) };
-    hasher.input(data);
+    if len != 0 {
+        assert!(!a.is_null(), "Null pointer in sha224_input()");
+        let data: &[u8] = unsafe { slice::from_raw_parts(a, len) };
+        hasher.input(data);
+    } else {
+        hasher.input([]);
+    }
 }
 
 #[no_mangle]

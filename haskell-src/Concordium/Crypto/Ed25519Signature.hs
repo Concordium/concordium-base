@@ -55,6 +55,8 @@ sign (KeyPair (SignKey sk) (VerifyKey pk)) m =
   Signature $ unsafeDupablePerformIO $ do
     ((), sig) <- withAllocatedShortByteString signatureSize $ \sig ->
       BS.unsafeUseAsCStringLen m $ \(m', mlen) -> 
+      -- this use of unsafe is fine because the sign function
+      -- checks the length before dereferencing the data pointer
       withByteStringPtr pk $ \pk' ->
       withByteStringPtr sk $ \sk' ->
       c_sign (castPtr m') (fromIntegral mlen) sk' pk' sig
@@ -64,7 +66,9 @@ verify :: VerifyKey -> ByteString -> Signature -> Bool
 verify (VerifyKey pk) m (Signature sig) =  suc > 0
    where
        suc = unsafeDupablePerformIO $ 
-         BS.unsafeUseAsCStringLen m $ \(m', mlen) -> 
+         BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
+         -- this use of unsafe is fine because the rust verify function
+         -- checks the length before dereferencing the data pointer
          withByteStringPtr pk $ \pk'->
          withByteStringPtr sig $ \sig' ->
          c_verify (castPtr m') (fromIntegral mlen) pk' sig'

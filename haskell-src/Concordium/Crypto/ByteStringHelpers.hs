@@ -1,11 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Concordium.Crypto.ByteStringHelpers where
 
-import           Text.Printf
 import qualified Data.FixedByteString as FBS
 import           Foreign.Ptr
 import           Data.Word
-import qualified Data.List as L
 import           Control.Monad
 import Data.Serialize
 import qualified Data.ByteString.Base16 as BS16
@@ -24,20 +22,18 @@ import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Short.Internal as BSS
 import qualified Data.ByteString.Unsafe as BSU
 import qualified Data.ByteString as BS
-
-wordToHex :: Word8 -> [Char]
-wordToHex x = printf "%.2x" x
+import qualified Data.ByteString.Char8 as BS8
 
 byteStringToHex :: ByteString -> String
-byteStringToHex b= L.concatMap wordToHex ls
-    where
-        ls = BS.unpack b
+byteStringToHex b = BS8.unpack (BS16.encode b)
 
 {-# INLINE withByteStringPtr #-}
 withByteStringPtr :: ShortByteString -> (Ptr Word8 -> IO a) -> IO a
 withByteStringPtr bs f = BSU.unsafeUseAsCString (BSS.fromShort bs) (f . castPtr)
 
 {-# INLINE withByteStringPtrLen #-}
+-- |NB: The passed in function must handle the case of the empty string gracefully.
+-- In particular if the short bytestring is empty then the passed in pointer can be arbitrary.
 withByteStringPtrLen :: ShortByteString -> (Ptr Word8 -> Int -> IO a) -> IO a
 withByteStringPtrLen bs f = BSU.unsafeUseAsCStringLen (BSS.fromShort bs) (\(ptr, len) -> f (castPtr ptr) len)
 

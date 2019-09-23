@@ -12,6 +12,10 @@ serde         = "1.0"
 sha2      = "0.8"
 failure   = "0.1"
 
+[dependencies.ffi_helpers]
+path = "../ffi_helpers"
+version = "0"
+
 [dev-dependencies]
 criterion = "0.2"
 
