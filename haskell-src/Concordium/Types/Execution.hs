@@ -298,7 +298,9 @@ data ValidResult =
     vrTransactionCost :: !Amount,
     vrEnergyCost :: !Energy
   }
-  deriving(Show)
+  deriving(Show, Generic)
+
+instance S.Serialize ValidResult
 
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.

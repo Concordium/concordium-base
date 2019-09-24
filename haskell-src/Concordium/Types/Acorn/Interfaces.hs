@@ -526,7 +526,7 @@ data Unlinked a = Unlinked
 
 instance S.Serialize (Unlinked a) where
     put _ = return ()
-    get = return (Unlinked ())
+    get = return Unlinked
 
 type UnlinkedExpr = Expr Unlinked
 
