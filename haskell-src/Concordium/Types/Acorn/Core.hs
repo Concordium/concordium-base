@@ -79,6 +79,22 @@ data Literal =
   | AAddress !AccountAddress
   deriving (Show, Eq, Generic, Typeable, Data)
 
+-- |Size of a literal in bytes used in computation of the size of linked terms
+literalSize :: Literal -> Word64
+literalSize = \case
+  Str s -> fromIntegral (BS.length s)
+  Int32 _ -> 4
+  Int64 _ -> 8
+  Int128 _ -> 16
+  Int256 _ -> 32
+  Word32 _ -> 4
+  Word64 _ -> 8
+  Word128 _ -> 16
+  Word256 _ -> 32
+  ByteStr32 _ -> 32
+  CAddress _ -> 16
+  AAddress _ -> 21
+
 instance Hashable Literal
 
 -- |Allowed names are only 32-bit unsigned integers. The reason for not having strings as
@@ -392,8 +408,22 @@ deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Co
 
 -- * Utility functions used during typechecking.
 
--- |Apply a type of the form forall .... to a list of types.
--- Used to instantiate the arity arguments of datatype constructors during typechecking.
+-- |Apply a type to a list of types: If n is the length of the list, replace the
+-- first n free type variables in the type by the corresponding types in the
+-- list. Concretely, if the type is @TApp c [BTV 0, BTV 1]@ list is @[Int64,
+-- Word64]@ then the resulting type is @TApp c [Int64, Word64]@.
+-- Binders are accounted for by lifting (i.e., substitution is capture avoiding).
+-- For instance, if the type is @TForall (BTV 1)@
+-- and the list is @[BTV 3]@ the resulting type will be @TForall (BTV 4)@.
+-- 
+-- If n is the length of the list then only free variables 0..n-1 are updated.
+-- The rest are not changed.
+-- 
+-- This function can be used to instantiate the arity arguments of datatype
+-- constructors.
+-- 
+-- NOTE: This should not be used during typechecking since it can be very costly
+-- in relation to term size.
 applyTy :: [Type annot origin] -> Type annot origin -> Type annot origin
 applyTy ts t = go t 0
   where len :: Int
@@ -403,15 +433,23 @@ applyTy ts t = go t 0
         go (TApp t1 t2) n = TApp t1 (map (flip go n) t2)
         go (TArr t1 t2) n = TArr (go t1 n) (go t2 n)
         go (TForall t1) n = TForall (go t1 (n+1))
-        -- FIXME: It is not clear that fromIntegral is always correct here. Documentation states it preserves representation, not sign.
-        go ta@(TVar v) n | fromIntegral v >= n && fromIntegral v - n < len = ts !! (fromIntegral v - n)
-                         | otherwise = liftFreeBy (fromIntegral n) ta
+        go ta@(TVar v) n | fromIntegral v >= n && fromIntegral v - n < len =
+                           liftFreeBy (fromIntegral n) (ts !! (fromIntegral v - n))
+                         | otherwise = ta -- in well-formed types this case only happen for bound variables ( v < n )
         go (TAnnot a ty) n = TAnnot a (go ty n)
 
--- TODO: FIXME: We should not use this during typechecking since it can cause
--- exponential blow up in term size when we blindly substitute.
--- |'substTy' t₁ t₂ replaces the variable "0" in t₁ with t₂
--- Substitution is capture avoiding.
+-- |'substTy' τ₁ τ₂ replaces the first free type variable (the one with the
+-- lowest De-Bruijn index) in τ₁ with τ₂. This includes lifting in τ₂ to avoid
+-- variable capture.
+-- Moreover any remaining free variables are decreased. This is because this function is
+-- meant to be used when the type being substituted into starts as ∀ α . τ and we substitute
+-- for the variable α, removing a binder. This means that all variables in τ that point beyond
+-- α must now be decreased.
+-- 
+-- Thus @substTy (0→1) 1 = 1→0@ and @substTy (∀(0→1)) (∀(0→1)) = ∀(0→(∀(0→2)))@.
+-- 
+-- NOTE: This should not be used during typechecking since it can cause
+-- exponential blow up (by repeated use) in term size when we blindly substitute.
 substTy :: Type annot origin -> Type annot origin -> Type annot origin
 substTy t t' = go (fromIntegral (0::Word32)) t
   where go _ ty@(TBase _) = ty
@@ -435,10 +473,30 @@ substTy t t' = go (fromIntegral (0::Word32)) t
                                | otherwise = ta
         liftTy l n (TAnnot a ty) = TAnnot a (liftTy l n ty)
 
--- |Given a list of types and a type of the shape \forall \alpha_1 ... \forall \alpha_n
--- compute whether applying the type to the list of types results in the goal type.
+-- |Given a list of types and a type of the shape ∀α₁⋯∀αₙ.τ, check
+-- whether applying τ to the list of types results in the goal type.
+-- This includes lifting in the to be applied types to avoid capturing as well as
+-- correcting the names of free variables.
+--
+-- There is a complication this function must address and why it is not entirely straightforward.
+-- Suppose we are instantiating the type ∀α.α with the list of [∀α.α, Int64].
+-- The result should be Int64.
+-- 
+-- This function is equivalent to first repeatedly stripping a ∀ and using
+-- 'substTy' to substitute the types and then using 'checkLiftedTyEq'.
 {-# SPECIALIZE checkTyEqWithSubst :: BoundTyVar -> [Type UA ModuleRef] -> Type UA ModuleRef -> Type UA ModuleRef -> Bool #-}
-checkTyEqWithSubst :: forall origin annot . Eq origin => BoundTyVar -> [Type annot origin] -> Type annot origin -> Type annot origin -> Bool 
+checkTyEqWithSubst
+  :: forall origin annot . Eq origin
+  => BoundTyVar
+  -- ^The number of levels the source type should be lifted by.
+  -> [Type annot origin]
+  -- ^The types to be applied to the source type. These can contain free type variables.
+  -> Type annot origin
+  -- ^The source type of the shape ∀α₁⋯∀αₙ.τ the given list of types is to be applied to. It can contain
+  -- free type variables.
+  -> Type annot origin
+  -- ^The goal type the applied type is checked to be equal to. It can contain free type variables.
+  -> Bool
 checkTyEqWithSubst toLift subst ty goalTy =
   case getBody 0 0 subst ty of
     Nothing -> False
@@ -494,7 +552,8 @@ checkTyEqWithSubst toLift subst ty goalTy =
                 go remove lift binders t (TAnnot _ t') = go remove lift binders t t'
                 go _ _ _ _ _ = False
 
-
+-- |Apply the predicate to all pairs of values.
+-- If the lists differ in length return @False@.
 allPairs :: (a -> b -> Bool) -> [a] -> [b] -> Bool
 allPairs p = go
   where go (x:xs) (y:ys) = 
@@ -503,7 +562,8 @@ allPairs p = go
         go [] [] = True
         go _ _ = False
 
--- |Check that liftFreeBy l t1 == t2
+-- |Check that two types, each lifted by a certain level, are equal.
+-- Equivalent to @liftFreeBy l1 t1 == liftedFreeBy l2 t2@.
 checkLiftedTyEq :: Eq origin => BoundTyVar -> BoundTyVar -> Type annot origin -> Type annot origin -> Bool
 checkLiftedTyEq l1 l2 = go 0
   where go n (TApp t tys) (TApp t' tys') = t == t' && allPairs (go n) tys tys'
@@ -513,8 +573,49 @@ checkLiftedTyEq l1 l2 = go 0
         go _ (TBase tb) (TBase tb') = tb == tb'
         go n (TForall t) (TForall t') = go (n+1) t t'
         go n (TVar v) (TVar v')
-            | v < n = v == v'
-            | otherwise = v' >= n && v + l1 == v' + l2
+            | v < n = v == v' -- bound variables
+            | otherwise = v' >= n && v + l1 == v' + l2 -- free variables are lifted
+        go _ _ _ = False
+
+-- |Check whether a type applied to some types equals a given type. This
+-- includes lifting in the to be applied types to avoid variable capture but
+-- further free variables are not renamed. Equivalent to first using 'applyTy'
+-- to substitute the types and then using 'checkLiftedTyEq'.
+checkAppliedLiftedTyEq
+  :: Eq origin
+  => BoundTyVar
+  -- ^The number of levels the source type should be lifted by.
+  -> Vec.Vector (Type annot origin)
+  -- ^The types to be applied to the source type. These can contain free type variables.
+  -> Type annot origin
+  -- ^The source type the given vector of types is to be applied to. It should
+  -- have at most as many free type variables as the length n of the given
+  -- vector of types (the function is still safe otherwise, and returns False).
+  -- Up to n free type variables in τ are replaced by the corresponding types in
+  -- the list (the one with the lowest De-Bruijn index with the first type in
+  -- the list etc.).
+  -> Type annot origin
+  -- ^The goal type the applied type is checked to be equal to.
+  -> Bool
+checkAppliedLiftedTyEq lift inst = go 0
+  where ninst = fromIntegral (length inst)
+
+        go _ (TBase tb) (TBase tb') = tb == tb'
+        go n (TArr t1 t2) (TArr t1' t2') = go n t1 t1' && go n t2 t2'
+        go n (TAnnot _ t) t' = go n t t'
+        go n t (TAnnot _ t') = go n t t'
+        go n (TForall t1) (TForall t2) = go (n+1) t1 t2
+        go n (TApp t tys) (TApp t' tys') = t == t' && allPairs (go n) tys tys'
+        go n (TVar v) t
+            | v < n =
+              case t of
+                TVar v' -> v == v'
+                _ -> False
+            | v - n < ninst =
+                checkLiftedTyEq (lift + fromIntegral n) 0 (Vec.unsafeIndex inst (fromIntegral (v - n))) t
+            -- The following case (a free variable with no type to substitute for) does not occur when the
+            -- first given type has at most as many free variables as the length of the given vector of types.
+            | otherwise = False
         go _ _ _ = False
 
 -- |Lift all free variables by 1 (to be used when going under type lambda in typechecking terms).
@@ -1094,7 +1195,13 @@ getModule = do
 -- * Deriving module reference from serialization
 -- |Hash of a serialization of a module, encoded into base16
 moduleHash :: Module annot -> ModuleRef
-moduleHash =  ModuleRef . SHA256.hash . P.runPut . putModule 
+moduleHash = ModuleRef . SHA256.hash . P.runPut . putModule
+
+moduleHashWithSize :: Module annot -> (ModuleRef, Word64)
+moduleHashWithSize mod =
+  let bs = P.runPut (putModule mod)
+  in (ModuleRef (SHA256.hash bs), fromIntegral (BS.length bs))
+
 
 --
 bit128ToPair :: Integer -> (Word64, Word64)

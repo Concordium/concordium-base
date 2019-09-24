@@ -47,7 +47,7 @@ import Data.Int
 genPolicyItem :: Gen PolicyItem
 genPolicyItem = do
   piIndex <- arbitrary
-  piValue <- oneof [ATWord8 <$> arbitrary, ATWord16 <$> arbitrary, ATWord32 <$> arbitrary, ATWord64 <$> arbitrary]
+  piValue <- AttributeValue . (\x -> abs x `mod` 2^(248 :: Int)) <$> arbitrary
   return PolicyItem{..}
 
 genPayload :: Gen Payload
@@ -74,15 +74,13 @@ genPayload = oneof [genDeployModule,
           mref <- genModuleRef
           name <- genTyName
           param <- genExpr
-          let paramSize = BS.length (S.encode param)
-          return $ InitContract amnt mref name param paramSize
+          return $ InitContract amnt mref name param
 
         genUpdate = do
           amnt <- Amount <$> arbitrary
           cref <- genCAddress
           msg <- genExpr
-          let msgSize = BS.length (S.encode msg)
-          return $ Update amnt cref msg msgSize
+          return $ Update amnt cref msg
 
         genTransfer = do
           a <- oneof [AddressContract <$> genCAddress, AddressAccount <$> genAddress]

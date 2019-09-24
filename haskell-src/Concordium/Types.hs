@@ -63,7 +63,7 @@ instance S.Serialize BakerId where
     get = BakerId <$> G.getWord64be
     put (BakerId i) = P.putWord64be i
 
-type LeadershipElectionNonce = ByteString
+type LeadershipElectionNonce = Hash.Hash
 type BakerSignVerifyKey = Sig.VerifyKey
 type BakerSignPrivateKey = Sig.KeyPair
 type BakerElectionVerifyKey = VRF.PublicKey
@@ -192,7 +192,7 @@ applyAmountDelta del amt =
 -- |The type used to count exact execution cost. This cost is then converted to
 -- amounts in some way.
 newtype Energy = Energy { _energy :: Word64 }
-    deriving(Eq, Enum, Ord, Num, Real, Integral, Hashable)
+    deriving(Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded)
 
 instance Show Energy where
   show = show . _energy
@@ -290,30 +290,28 @@ newAccount _accountVerificationKey _accountSignatureScheme = Account {
 newtype EncodedPayload = EncodedPayload { _spayload :: BSS.ShortByteString }
     deriving(Eq, Show)
 
-payloadSize :: EncodedPayload -> Int
-payloadSize = BSS.length . _spayload
+-- |There is no corresponding getter (to fit into the Serialize instance) since
+-- encoded payload does not encode its own length. See 'getPayload' below.
+putPayload :: P.Putter EncodedPayload
+putPayload = P.putShortByteString . _spayload
 
--- |NB: We explicitly put the length first, even though the body is already
--- serialized and thus it would normally not be necessary to do so. The reason
--- we do it is that at the moment a transaction can appear on a block even
--- though the body cannot be deserialized. Thus it is important to know
--- precisely the length of the body.
-instance S.Serialize EncodedPayload where
-  put (EncodedPayload p) = 
-    P.putWord32be (fromIntegral (BSS.length p)) <>
-    P.putShortByteString p
-  get = do
-    l <- fromIntegral <$> G.getWord32be
-    EncodedPayload <$> G.getShortByteString l
+-- |Get payload with given length.
+getPayload :: Word32 -> G.Get EncodedPayload
+getPayload n = EncodedPayload <$> G.getShortByteString (fromIntegral n)
+
+payloadSize :: EncodedPayload -> Word32
+payloadSize = fromIntegral . BSS.length . _spayload
 
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
 
-newtype Slot = Slot Word64 deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
+newtype Slot = Slot {theSlot :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
 
 -- |The slot number of the genesis block (0).
 genesisSlot :: Slot
 genesisSlot = 0
+
+type EpochLength = Slot
 
 newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
 

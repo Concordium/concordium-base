@@ -27,6 +27,7 @@ import Data.HashMap.Strict(HashMap)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Sequence as Seq
 import Data.Int
+import Data.Word
 import Data.Maybe(fromJust)
 import Control.Monad.Trans.Maybe
 import Control.Monad.Except
@@ -57,6 +58,7 @@ deriving instance Core.AnnotContext Show annot => Show (ContractInterface annot)
 -- Lists public functions which can be called, and types of methods.
 data Interface annot = Interface
     { uniqueName :: !Core.ModuleRef
+    , iSize :: Word64
     , importedModules :: !(HashMap Core.ModuleName Core.ModuleRef)
     , exportedTypes :: !(HashMap Core.TyName (Int, HashMap Core.Name [Type annot Core.ModuleRef]))
     , exportedTerms :: !(HashMap Core.Name (Type annot Core.ModuleRef))
@@ -69,7 +71,7 @@ deriving instance Core.AnnotContext Show annot => Show (Interface annot)
 deriving instance Core.AnnotContext Eq annot => Eq (Interface annot)
 
 emptyInterface :: Core.ModuleRef -> Interface annot
-emptyInterface mref = Interface mref Map.empty Map.empty Map.empty Map.empty Map.empty
+emptyInterface mref = Interface mref 0 Map.empty Map.empty Map.empty Map.empty Map.empty
 
 type ModuleInterfaces annot = HashMap Core.ModuleRef (Interface annot)
 
@@ -80,22 +82,10 @@ data TypingError annot =
                  -- argument is the number of given parameters, the second the
                  -- expected number.
                    IncorrectNumberOfTypeParameters Int Int
-                 -- |A type abstraction is applied to a term which is not a type.
-                 | TypeAbstractionNotAppliedToType (Core.Expr annot Core.ModuleRef)
-                 -- |A type appears where a term is expected.
-                 | TypeWhereTermExpected (Core.Type annot ModuleRef)
-                 -- |A term is applied which is neither of a function type, nor
-                 -- universal type. The first argument is the term to be
-                 -- applied, the second its type.
-                 | OnlyAbstractionsCanBeApplied (Core.Expr annot Core.ModuleRef) (Core.Type annot ModuleRef)
-                 -- |The type of an argument given to a function does not match
-                 -- the function's definition. The first argument is the actual
-                 -- type, the second the expected type.
-                 | UnexpectedArgumentType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
-                 -- |The result type of a defined function (e.g. in a letrec)
-                 -- does not match the specified result type. The first argument
-                 -- is the actual type, the second the specified type.
-                 | ResultTypeNotAsSpecified (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
+                 -- |In an application for terms, the given term cannot be applied to
+                 -- an argument because the term (atom) is not of a function type
+                 -- but of the given type.
+                 | NotAFunctionType (Core.Type annot ModuleRef)
                  -- |The type of the discriminee in a case expression is not
                  -- fully instantiated.
                  | NonFullyInstantiatedTypeAsCaseArgument -- NOTE: Could add name of declared datatype
@@ -121,16 +111,17 @@ data TypingError annot =
                  -- |A more specific case of 'UnexpectedPatternType'. The constructor used in the
                  -- pattern is not a type constructor of the discriminee type.
                  | UnexpectedTypeConstructorInPattern (Core.CTorName Core.ModuleRef)
+                 -- |The number of type annotations given by a constructor pattern
+                 -- does not match the number of arguments of the corresponding constructor.
+                 -- The first argument is the number of given type annotations, the second
+                 -- the number of arguments the constructor has.
+                 | IncorrectNumberOfConstructorArgumentsInPattern Int Int
                  -- |A more specific case of 'UnexpectedPatternType'. A constructor pattern occurs
                  -- at a place where the discriminee has a base type.
                  | TypeConstructorWhereLiteralOrVariableExpected (Core.CTorName Core.ModuleRef)
                  -- |A more specific case of 'UnexpectedPatternType'. A litreal occurs at a place
                  -- where the discriminee has a declared datatype.
                  | LiteralWhereTypeConstructorExpected Core.Literal
-                 -- |The body of a case alternative does not have
-                 -- the correct type. The first argument is the actual type, the
-                 -- second is the expected type.
-                 | UnexpectedCaseAlternativeResultType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
                  -- |A variable used in an expression is not bound.
                  | UndefinedVariable Core.BoundVar
                  -- |A free type variable occurs in an expression.
@@ -168,11 +159,6 @@ data TypingError annot =
                  -- type (in the context of the types specified by the init
                  -- method). The argument is the name of the contract this error refers to.
                  | ContractReceiveMethodHasIncorrectType Core.TyName
-                 -- |A more specific case of 'ContractReceiveMethodHasIncorrectType'
-                 -- where the result type is not as required. The first
-                 -- argument is the name of the contract this error refers to
-                 -- and the second is the result type of the receive method.
-                 | ContractReceiveMethodHasIncorrectResultType Core.TyName (Core.Type annot ModuleRef)
                  -- |The contract's message type as specified by the receive
                  -- method is not a storable type. The first argument is the
                  -- name of the contract this error refers to, the second the
@@ -229,32 +215,32 @@ data TypingError annot =
                  -- constraint this error refers to, the third the name of the
                  -- method that is implemented and the fourth the name of the
                  -- method that is expected to be implemented.
-                 | ContractUnexpectedGetterImplementation Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
+                 | ContractUnexpectedGetterImplementation
+                   Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
                  -- |An implementation of a sender method in a contract does not
                  -- match the expected method to be implemented at that position.
                  -- The first and second arguments are the name of the contract and the
                  -- constraint this error refers to, the third the name of the
                  -- method that is implemented and the fourth the name of the
                  -- method that is expected to be implemented.
-                 | ContractUnexpectedSenderImplementation Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
-                 -- |An implementation of a getter method in a contract does not
-                 -- have the correct type. The first and second arguments are
-                 -- the name of the contract and the constraint this error
-                 -- refers to, the third the incorrect type of the implementation.
-                 | ContractUnexpectedGetterType Core.TyName (Core.ConstraintRef Core.ModuleRef) (Core.Type annot ModuleRef)
-                 -- |An implementation of a sender method in a contract does not
-                 -- have the correct type. The first and second arguments are
-                 -- the name of the contract and the constraint this error
-                 -- refers to, the third the incorrect type of the
-                 -- implementation.
-                 | ContractUnexpectedSenderType Core.TyName (Core.ConstraintRef Core.ModuleRef) (Core.Type annot ModuleRef)
+                 | ContractUnexpectedSenderImplementation
+                   Core.TyName (Core.ConstraintRef Core.ModuleRef) Core.Name Core.Name
                  -- |The public definition (explicit definition or datatype constructor)
                  -- with the given name has a private type.
                  | PublicDefinitionWithPrivateType Core.Name (Core.Type annot ModuleRef)
-                 -- |An expression to be type checked has not the type specified
+                 -- |A (sub)expression to be type checked has not the type specified
                  -- as the expected type. The first argument is the type encountered,
                  -- the second is the expected type.
                  | UnexpectedType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
+                 -- |Type application failed or the resulting type is not the expected type.
+                 -- The first argument is the type the list of types in the second argument
+                 -- is to be applied to, the third argument the expected resulting type.
+                 | UnexpectedTypeOrFailureInTypeApplication
+                   (Core.Type annot ModuleRef) [Core.Type annot ModuleRef] (Core.Type annot ModuleRef)
+                 -- |Like 'UnexpectedType' but where the actual type is not calculated.
+                 -- The first argument is the type of wrong shape which might not even
+                 -- be a well-formed type.
+                 | UnexpectedShapeOfType (Core.Type annot ModuleRef)
     deriving (Generic)
 
 deriving instance Core.AnnotContext Eq annot => Eq (TypingError annot)
@@ -521,9 +507,9 @@ deriving instance (v ~ linked (Expr linked annot), Eq v, Eq annot) => Eq (Expr l
 data ImplementsValue linked annot = ImplementsValue
     {
     -- |The list of sender methods for a particular constraint this contract implements.
-    ivSenders :: !(Vector (SenderTy linked annot)),
+    ivSenders :: !(Vector (SenderTy linked annot, Word64)),
     -- |The list of getter methods for a particular constraint this contract implements.
-    ivGetters :: !(Vector (GetterTy linked annot))
+    ivGetters :: !(Vector (GetterTy linked annot, Word64))
     } deriving(Functor)
 
 deriving instance (v ~ linked (Expr linked annot), Show v, Show annot) => Show (ImplementsValue linked annot)
@@ -535,7 +521,7 @@ instance (forall a. S.Serialize a => S.Serialize (linked a)) => S.Serialize (Imp
 
 type LinkedImplementsValue = ImplementsValue Linked
 
-newtype Unlinked a = Unlinked ()
+data Unlinked a = Unlinked
     deriving(Eq, Show, Functor)
 
 instance S.Serialize (Unlinked a) where
@@ -549,10 +535,17 @@ newtype Linked a = Linked a
 
 type LinkedExpr annot = Expr Linked annot
 
+data LinkedExprWithDeps annot = LinkedExprWithDeps {
+  -- |The actual linked expression.
+  leExpr :: !(LinkedExpr annot),
+  -- |List of dependencies with sizes.
+  leDeps :: !(HashMap (Core.ModuleRef, Core.Name) Word64)
+  } deriving(Eq, Show, Functor)
+
 data Foreign =
   Local !Core.Name
   |Imported !Core.ModuleRef !Core.Name
-  deriving(Eq, Show, Generic)
+  deriving(Eq, Show, Generic, Ord)
 
 instance S.Serialize Foreign
 
@@ -572,9 +565,9 @@ type LinkedReceiveMethod annot = LinkedExpr annot
 data ContractValue linked annot = ContractValue
     {
       -- |The compiled initilization method.
-      cvInitMethod :: !(InitMethod linked annot),
+      cvInitMethod :: !(InitMethod linked annot, Word64),
       -- |The compiled receive method.
-      cvReceiveMethod :: !(ReceiveMethod linked annot),
+      cvReceiveMethod :: !(ReceiveMethod linked annot, Word64),
       -- |A map of all the implemented constraints.
       cvImplements :: !(HashMap (Core.ModuleRef, Core.TyName) (ImplementsValue linked annot)) 
     } deriving(Generic, Functor)
@@ -595,7 +588,8 @@ instance (forall a. S.Serialize a => S.Serialize (linked a)) => S.Serialize (Con
 data ValueInterface linked annot = ValueInterface {
   -- |Compiled top-level definitions.
   -- Private and public (since at runtime a public definition might depend on the private one).
-  viDefs :: !(HashMap Core.Name (Expr linked annot)),
+  -- We also record the sizes of terms.
+  viDefs :: !(HashMap Core.Name (Expr linked annot, Word64)),
   -- |Exported contracts with their init and receive methods.
   viContracts :: !(HashMap Core.TyName (ContractValue linked annot))
   } deriving(Functor)
@@ -639,6 +633,7 @@ getExportedTypes = do
 instance S.Serialize (Interface annot) where
   put (Interface{..}) =
     S.put uniqueName <>
+    P.putWord64be iSize <>
     putHashMap importedModules <>
     putExportedTypes exportedTypes <>
     putHashMap exportedTerms <>
@@ -647,6 +642,7 @@ instance S.Serialize (Interface annot) where
 
   get = do
     uniqueName <- S.get
+    iSize <- G.getWord64be
     importedModules <- getHashMap
     exportedTypes <- getExportedTypes
     exportedTerms <- getHashMap
@@ -664,11 +660,11 @@ class Monad m => InterpreterMonad annot m | m -> annot where
   getCurrentContractState :: ContractAddress -> m (Maybe (HashMap AbsoluteConstraintRef (LinkedImplementsValue annot), Value annot))
 
 class Monad m => LinkerMonad annot m | m -> annot where
-  getExprInModule :: Core.ModuleRef -> Core.Name -> m (Maybe (UnlinkedExpr annot))
+  getExprInModule :: Core.ModuleRef -> Core.Name -> m (Maybe (UnlinkedExpr annot, Word64))
 
-  tryGetLinkedExpr :: Core.ModuleRef -> Core.Name -> m (Maybe (LinkedExpr annot))
+  tryGetLinkedExpr :: Core.ModuleRef -> Core.Name -> m (Maybe (LinkedExprWithDeps annot))
 
-  putLinkedExpr :: Core.ModuleRef -> Core.Name -> LinkedExpr annot -> m ()
+  putLinkedExpr :: Core.ModuleRef -> Core.Name -> LinkedExprWithDeps annot -> m ()
 
 class Monad m => TypecheckerMonad annot m | m -> annot where
   getExportedTermType :: Core.ModuleRef -> Core.Name -> m (Maybe (Type annot Core.ModuleRef))
