@@ -96,7 +96,7 @@ newtype BoundVar = BV Word32
     deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num, Typeable, Data)
 
 newtype BoundTyVar = BTV Word32
-    deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num, Typeable, Data)
+    deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num, Typeable, Data, S.Serialize)
 
 data Variable boundvar name origin =
   -- |Variables bound by lambda abstractions.
@@ -182,11 +182,15 @@ deriving instance (AnnotContext Show annot, Show origin) => Show (Pattern annot 
 deriving instance (AnnotContext Typeable annot, Data origin) => Typeable (Pattern annot origin)
 deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Pattern annot origin)
 
+instance (AnnotContext S.Serialize annot, S.Serialize origin) => S.Serialize (Pattern annot origin)
+
 data CTorName origin = LocalCTor {ctorName :: !Name}
                      | ImportedCTor {ctorName :: !Name
                                     ,ctorOrigin :: !origin
                                     }
   deriving (Eq, Show, Generic, Functor, Foldable, Traversable, Typeable, Data)
+
+instance (S.Serialize origin) => S.Serialize (CTorName origin)
 
 instance Hashable origin => Hashable (CTorName origin)
 
@@ -213,6 +217,7 @@ numInhab TWord32 = Just $ 2^(32 :: Int)
 numInhab TWord64 = Just $ 2^(64 :: Int)
 numInhab _ = Nothing -- infinity for the purposes of typechecking.
 
+instance S.Serialize TBase
 
 instance Hashable TBase 
 
@@ -348,6 +353,8 @@ deriving instance (AnnotContext Data annot, Data annot, Data v) => Data (Constra
 data ConstraintRef origin = ImportedCR {crName :: !TyName, crMod :: !origin}
                           | LocalCR { crName :: !TyName }
   deriving(Show, Eq, Ord, Generic, Foldable, Functor, Traversable, Typeable, Data)
+
+instance (S.Serialize origin) => S.Serialize (ConstraintRef origin)
 
 instance Hashable a => Hashable (ConstraintRef a)
 

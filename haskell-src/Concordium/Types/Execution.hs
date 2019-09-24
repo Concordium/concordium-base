@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Concordium.Types.Execution where
 
 import Prelude hiding(fail)
@@ -15,6 +16,7 @@ import qualified Data.Serialize as S
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Void
+import GHC.Generics
 
 import qualified Concordium.Types.Acorn.Core as Core
 import Concordium.Types
@@ -271,12 +273,24 @@ data Event = ModuleDeployed !Core.ModuleRef
            | BakerKeyUpdated !BakerId !BakerSignVerifyKey
            | StakeDelegated !BakerId
            | StakeUndelegated
-  deriving (Show)
+  deriving (Show, Generic)
+
+instance S.Serialize Event
 
 -- |Used internally by the scheduler since internal messages are sent as values,
 -- and top-level messages are acorn expressions.
 data MessageFormat = ValueMessage !(Value NoAnnot) | ExprMessage !(LinkedExpr NoAnnot)
-    deriving(Show)
+    deriving(Show, Generic)
+
+instance S.Serialize MessageFormat where
+    put (ValueMessage v) = S.putWord8 0 >> putStorable v
+    put (ExprMessage e) = S.putWord8 1 >> S.put e
+    get = do
+        tag <- S.getWord8
+        case tag of
+            0 -> ValueMessage <$> getStorable
+            1 -> ExprMessage <$> S.get
+            _ -> fail "Invalid MessageFormat tag"
 
 -- |Result of a valid transaction is either a reject with a reason or a
 -- successful transaction with a list of events which occurred during execution.
@@ -320,7 +334,14 @@ data RejectReason = ModuleNotWF !(TypingError Core.UA) -- ^Error raised when typ
                   | InvalidBakerRemoveSource !AccountAddress
                   | UpdatingNonExistentBaker !BakerId
                   | InvalidStakeDelegationTarget !BakerId -- ^The target of stake delegation is not a valid baker.
-    deriving (Show)
+    deriving (Show, Generic)
+
+-- FIXME: This should almost certainly not go here.
+instance S.Serialize Void where
+    put _ = undefined
+    get = fail "Void type has no instance"
+
+instance S.Serialize RejectReason
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
                  | IncorrectSignature  -- ^Signature check failed.

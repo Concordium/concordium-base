@@ -255,9 +255,12 @@ data TypingError annot =
                  -- as the expected type. The first argument is the type encountered,
                  -- the second is the expected type.
                  | UnexpectedType (Core.Type annot ModuleRef) (Core.Type annot ModuleRef)
+    deriving (Generic)
 
 deriving instance Core.AnnotContext Eq annot => Eq (TypingError annot)
 deriving instance Core.AnnotContext Show annot => Show (TypingError annot)
+
+instance Core.AnnotContext S.Serialize annot => S.Serialize (TypingError annot)
 
 -- * Datatypes involved in execution of terms.
 
