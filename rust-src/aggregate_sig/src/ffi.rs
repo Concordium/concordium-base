@@ -93,6 +93,13 @@ pub extern "C" fn bls_verify_aggregate(
     verify_aggregate_sig_trusted_keys(&m_bytes, &pks, *sig)
 }
 
+// Only used for adding a dummy proof to the genesis block
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn bls_empty_sig() -> *const Signature<Bls12> {
+    Box::into_raw(Box::new(Signature::empty()))
+}
+
 // This is used for testing in haskell, providing deterministic key generation
 // from seed The seed is mutated when called, so that it can be used to call
 // again.

@@ -1,7 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.BlsSignature
   (BlsPublicKey, BlsSecretKey, BlsSignature,
-  generateBlsSecretKey, generateBlsSecretKeyFromSeed, deriveBlsPublicKey, sign, verify, aggregate, verifyAggregate)
+  generateBlsSecretKey, generateBlsSecretKeyFromSeed, deriveBlsPublicKey, sign, verify, aggregate, verifyAggregate, emptySignature)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -15,15 +15,7 @@ import Data.Word
 import Data.ByteString
 import Data.ByteString.Unsafe as BS
 import System.IO.Unsafe
-
-
-import           Data.ByteString            (ByteString)
-import qualified Data.FixedByteString       as FBS
-import           Data.Serialize
-import           System.Random
-import           Test.QuickCheck (Arbitrary(..))
-import qualified Data.Aeson as AE
-import Data.Int
+import Data.Serialize
 
 
 newtype BlsPublicKey = BlsPublicKey (ForeignPtr BlsPublicKey)
@@ -45,6 +37,7 @@ foreign import ccall unsafe "bls_pk_eq" equalsBlsPublicKey :: Ptr BlsPublicKey -
 foreign import ccall unsafe "&bls_free_sig" freeBlsSignature :: FunPtr (Ptr BlsSignature -> IO ())
 foreign import ccall unsafe "bls_sig_to_bytes" toBytesBlsSignature :: Ptr BlsSignature -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "bls_sig_from_bytes" fromBytesBlsSignature :: Ptr Word8 -> CSize -> IO (Ptr BlsSignature)
+foreign import ccall unsafe "bls_empty_sig" emptyBlsSig :: IO (Ptr BlsSignature)
 foreign import ccall unsafe "bls_sig_eq" equalsBlsSignature :: Ptr BlsSignature -> Ptr BlsSignature -> IO Word8
 
 foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> CSize -> Ptr BlsSecretKey -> IO (Ptr BlsSignature)
@@ -135,6 +128,11 @@ deriveBlsPublicKey sk = BlsPublicKey <$> unsafeDupablePerformIO $ do
   pkptr <- withBlsSecretKey sk $ \sk' -> deriveBlsPublicKeyPtr sk'
   newForeignPtr freeBlsPublicKey pkptr
 
+emptySignature :: BlsSignature
+emptySignature = BlsSignature <$> unsafeDupablePerformIO $ do
+  sigptr <- emptyBlsSig
+  newForeignPtr freeBlsSignature sigptr
+
 sign :: ByteString -> BlsSecretKey -> BlsSignature
 sign m sk = BlsSignature <$> unsafeDupablePerformIO $ do
   sigptr <- BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
@@ -166,7 +164,7 @@ verifyAggregate m pks sig = unsafeDupablePerformIO $ do
       verifyBlsAggregate (castPtr m') (fromIntegral mlen) headptr (fromIntegral arrlen) sig'
     where
       withKeyArray ps [] f = withArrayLen ps f
-      withKeyArray ps (pk:pks) f = withBlsPublicKey pk $ \pk' -> withKeyArray (pk':ps) pks f
+      withKeyArray ps (pk:pks_) f = withBlsPublicKey pk $ \pk' -> withKeyArray (pk':ps) pks_ f
 
 -- The following functions are only for testing purposes
 -- Provides deterministic key generation from seed.

@@ -92,6 +92,11 @@ impl<P: Pairing> Signature<P> {
         Ok(Signature(point))
     }
 
+    // Only used for creating a dummy signature for the genesis block
+    pub(crate) fn empty() -> Self {
+        Signature(P::G_1::one_point())
+    }
+
     pub fn to_bytes(&self) -> Box<[u8]> { P::G_1::curve_to_bytes(&self.0) }
 }
 
