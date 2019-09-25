@@ -50,8 +50,12 @@ fn mk_ip_name(n: usize) -> String {
     s
 }
 
-fn mk_ar_filename(n: usize) -> String {
-    let mut s = AR_PREFIX.to_string();
+fn mk_ar_filename(m: usize, n: usize) -> String {
+    let mut s = IP_PREFIX.to_string();
+    s.push_str(&m.to_string());
+    s.push_str("_");
+    s.push_str(&AR_NAME_PREFIX.to_string());
+    //let mut s = AR_PREFIX.to_string();
     s.push_str(&n.to_string());
     s.push_str(".json");
     s
@@ -233,6 +237,7 @@ If not present a fresh key-pair will be generated.",
                         .long("ar-private")
                         .short("a")
                         .multiple(true)
+                        .value_name("FILE(S)")
                         .required(true)
                         .help("File with anonymity revoker's private and public keys."),
                 ),
@@ -281,7 +286,7 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
     let mut ars = vec![];
     for ar_value in ar_values.iter(){
         match read_json_from_file(ar_value){
-                Err(y) => panic!("Could not read from ar file {}", y),
+                Err(y) => panic!("Could not read from ar file {} {}", ar_value, y),
                 Ok(val) => match json_to_private_ar_info(&val){
                     Some(p) => ars.push(p),
                     None => {
@@ -314,7 +319,7 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
  
     let number_of_ars = ars.len();
     if (number_of_ars as u64) < revokation_threshold {
-        eprintln!("insufficient number of anonymity revokers");
+        eprintln!("insufficient number of anonymity revokers {}, {}", number_of_ars, revokation_threshold);
         return;
     }
     let mut shares = vec![];
@@ -354,26 +359,32 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // we first read the signed pre-identity object
     let (ip_sig, pio, ip_info): (ps_sig::Signature<Bls12>, _, _) = {
         if let Some(v) = v.as_object() {
-            match (
-                v.get("signature").and_then(json_base16_decode),
-                v.get("preIdentityObject").and_then(json_to_pio),
-                v.get("ipInfo").and_then(json_to_ip_info),
-            ) {
-                (Some(sig_bytes), Some(pio), Some(ip_info)) => {
-                    if let Ok(ip_sig) = ps_sig::Signature::from_bytes(&mut Cursor::new(&sig_bytes))
-                    {
-                        (ip_sig, pio, ip_info)
-                    } else {
-                        eprintln!("Malformed input.");
+            match v.get("signature").and_then(json_base16_decode) {
+                None => {
+                    eprintln!("failed to parse signature");
+                    return;
+                },
+                Some(sig_bytes) => match v.get("preIdentityObject").and_then(json_to_pio){
+                    None => {
+                        eprintln!("failed to parse pio");
                         return;
+                    },
+                    Some(pio) => match v.get("ipInfo").and_then(json_to_ip_info){
+                        None => {
+                            eprintln!("failed to parse ip info");
+                            return;
+                        },
+                        Some(ip_info) => if let Ok(ip_sig) = ps_sig::Signature::from_bytes(&mut Cursor::new(&sig_bytes))
+                        {
+                            (ip_sig, pio, ip_info)
+                        } else {
+                            eprintln!("Malformed Signature");
+                            return;
+                        }
                     }
                 }
-                (_, _, _) => {
-                    eprintln!("Could not parse JSON.");
-                    return;
-                }
             }
-        } else {
+        }else{
             eprintln!("Could not parse JSON.");
             return;
         }
@@ -527,7 +538,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         "regId": json_base16_encode(&values.reg_id.curve_to_bytes()),
         "ipIdentity": values.ip_identity,
         "arData": chain_ar_data_to_json(&values.ar_data),
-        "revokationThreshold": proofs.commitments.cmm_id_cred_sec_sharing_coeff.len() + 1,
+        "revokationThreshold": 2,
         "policy": policy_to_json(&values.policy),
         // NOTE: Since proofs encode their own length we do not output those first 4 bytes
         "proofs": json_base16_encode(&cdi.proofs.to_bytes()[4..]),
@@ -556,7 +567,8 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     }
 }
 
-fn read_account_data<P: AsRef<Path>>(path: P) -> Option<AccountData> {
+fn read_account_data<P: AsRef<Path>>(path: P) -> Option<AccountData> 
+    where P: std::fmt::Debug {
     let v = read_json_from_file(path).ok()?;
     json_to_account_data(&v)
 }
@@ -575,12 +587,11 @@ fn handle_create_chi(matches: &ArgMatches) {
     let mut csprng = thread_rng();
     let secret = ExampleCurve::generate_scalar(&mut csprng);
     let public = ExampleCurve::one_point().mul_by_scalar(&secret);
-    let ah_info = CredentialHolderInfo::<ExampleCurve, ExampleCurve> {
+    let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_ah:   name,
         id_cred: IdCredentials {
             id_cred_sec:    secret,
             id_cred_pub:    public,
-            id_cred_pub_ip: public,
         },
     };
 
@@ -676,7 +687,7 @@ fn handle_start_ip(matches: &ArgMatches) {
     let chi = {
         if let Ok(Some(chi)) = read_json_from_file(&path)
             .as_ref()
-            .map(json_to_chi::<ExampleCurve, ExampleCurve>)
+            .map(json_to_chi::<ExampleCurve>)
         {
             chi
         } else {
@@ -777,6 +788,7 @@ fn handle_start_ip(matches: &ArgMatches) {
     };
 
 
+
     let ar_handles = ip_info.ar_info.0.clone();
     let mut ars:Vec<String> = Vec::with_capacity(ar_handles.len());
     for x in ar_handles.iter(){
@@ -785,6 +797,7 @@ fn handle_start_ip(matches: &ArgMatches) {
     }
     let mut choice_ars = vec![];
     let mrs:Vec<&str> = ars.iter().map(String::as_str).collect();
+
 
     let ar_info = Checkboxes::new()
         .with_prompt("Choose anonymity revokers")
@@ -800,7 +813,7 @@ fn handle_start_ip(matches: &ArgMatches) {
     }
 
 
-    let context = make_context_from_ip_info(ip_info, (choice_ars, 1));
+    let context = make_context_from_ip_info(ip_info, (choice_ars, 2));
     // and finally generate the pre-identity object
     // we also retrieve the randomness which we must keep private.
     // This randomness must be used
@@ -852,8 +865,6 @@ fn json_to_private_ar_info<C: Curve>(v: &Value) -> Option<(ArInfo<C>, SecretKey<
     let ar_identity = json_read_u64(public.as_object()?, "arIdentity")?;
     let ar_description = public.get("arDescription")?.as_str()?.to_owned();
     let ar_public_key = PublicKey::<C>::from_bytes(m_json_decode!(public, "arPublicKey")).ok()?;
-    let ar_elgamal_generator =
-        C::bytes_to_curve(m_json_decode!(public, "arElgamalGenerator")).ok()?;
     let private = SecretKey::from_bytes(m_json_decode!(v, "arPrivateKey")).ok()?;
     Some((
         ArInfo {
@@ -873,46 +884,85 @@ fn json_to_private_ar_info<C: Curve>(v: &Value) -> Option<(ArInfo<C>, SecretKey<
 fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
     let mut csprng = thread_rng();
     let num: usize = matches.value_of("num").unwrap_or("10").parse().ok()?;
+    println!("generating {} IPs", num);
     let mut res = Vec::with_capacity(num);
     for id in 0..num {
         let ip_fname = mk_ip_filename(id);
-        let ar_fname = mk_ar_filename(id);
+        let ar0_fname = mk_ar_filename(id, 0);
+        let ar1_fname = mk_ar_filename(id, 1);
+        let ar2_fname = mk_ar_filename(id, 2);
 
         // TODO: hard-coded for now, at most 8 items in the attribute list
         // (because signature length 10)
-        let id_secret_key = ps_sig::secret::SecretKey::generate(10, &mut csprng);
+        let id_secret_key = ps_sig::secret::SecretKey::generate(20, &mut csprng);
         let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
 
-        let ar_secret_key = SecretKey::generate(&mut csprng);
-        let ar_public_key = PublicKey::from(&ar_secret_key);
-        let ar_info = ArInfo {
-            ar_identity: id as u64,
-            ar_description: mk_ar_name(id),
-            ar_public_key,
+
+        let ar0_secret_key = SecretKey::generate(&mut csprng);
+        let ar0_public_key = PublicKey::from(&ar0_secret_key);
+        let ar0_info = ArInfo {
+            ar_identity: 0 as u64,
+            ar_description: mk_ar_name(0),
+            ar_public_key: ar0_public_key,
             //ar_elgamal_generator: PublicKey::generator(),
         };
 
-        let js = ar_info_to_json(&ar_info);
-        let private_js = json!({
-            "arPrivateKey": json_base16_encode(&ar_secret_key.to_bytes()),
-            "publicArInfo": js
+        let js0 = ar_info_to_json(&ar0_info);
+        let private_js0 = json!({
+            "arPrivateKey": json_base16_encode(&ar0_secret_key.to_bytes()),
+            "publicArInfo": js0
         });
-        write_json_to_file(&ar_fname, &private_js).ok()?;
 
-        let dlog_base = Curve::generate(&mut csprng);
+        let ar1_secret_key = SecretKey::generate(&mut csprng);
+          let ar1_public_key = PublicKey::from(&ar1_secret_key);
+          let ar1_info = ArInfo {
+              ar_identity: 1 as u64,
+              ar_description: mk_ar_name(1),
+              ar_public_key: ar1_public_key,
+              //ar_elgamal_generator: PublicKey::generator(),
+          };
+
+          let js1 = ar_info_to_json(&ar1_info);
+          let private_js1 = json!({
+              "arPrivateKey": json_base16_encode(&ar1_secret_key.to_bytes()),
+              "publicArInfo": js1
+          });
+
+          let ar2_secret_key = SecretKey::<ExampleCurve>::generate(&mut csprng);
+          let ar2_public_key = PublicKey::from(&ar2_secret_key);
+          let ar2_info = ArInfo {
+                ar_identity: 2 as u64,
+                ar_description: mk_ar_name(2),
+                ar_public_key: ar2_public_key,
+                //ar_elgamal_generator: PublicKey::generator(),
+          };
+
+          let js2 = ar_info_to_json(&ar2_info);
+          let private_js2 = json!({
+                "arPrivateKey": json_base16_encode(&ar2_secret_key.to_bytes()),
+                "publicArInfo": js2
+          });
+
+
+        write_json_to_file(&ar0_fname, &private_js0).ok()?;
+        write_json_to_file(&ar1_fname, &private_js1).ok()?;
+        write_json_to_file(&ar2_fname, &private_js2).ok()?;
+
+        let dlog_base = <Bls12 as Pairing>::G_1::one_point();
 
         let ip_info = IpInfo {
             ip_identity: id as u32,
             ip_description: mk_ip_name(id),
             ip_verify_key: id_public_key,
             dlog_base,
-            ar_info:(vec![ar_info], CommitmentKey::generate(&mut csprng)),
+            ar_info:(vec![ar0_info, ar1_info, ar2_info], CommitmentKey::<ExampleCurve>::generate(&mut csprng)),
         };
         let js = ip_info_to_json(&ip_info);
         let private_js = json!({
             "idPrivateKey": json_base16_encode(&id_secret_key.to_bytes()),
             "publicIdInfo": js
         });
+        println!("writing ip_{} in file {}", id, ip_fname);
         write_json_to_file(&ip_fname, &private_js).ok()?;
 
         res.push(ip_info);

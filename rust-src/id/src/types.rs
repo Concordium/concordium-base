@@ -39,25 +39,23 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
 /// if two groups have the same scalar field
 /// we can have two different public credentials from the same secret
 /// credentials
-pub struct IdCredentials<C: Curve, T: Curve<Scalar = C::Scalar>> {
+pub struct IdCredentials<C: Curve> {
     /// secret id credentials
     pub id_cred_sec: C::Scalar,
     /// public id credential in the curve C
     pub id_cred_pub: C,
-    /// public id credential in the Curve T
-    pub id_cred_pub_ip: T,
 }
 
 /// Private credential holder information. A user maintaints these
 /// through many different interactions with the identity provider and
 /// the chain.
 #[derive(Debug)]
-pub struct CredentialHolderInfo<C: Curve, T: Curve<Scalar = C::Scalar>> {
+pub struct CredentialHolderInfo<C: Curve> {
     /// Name of the credential holder.
     pub id_ah: String,
     /// Public and private keys of the credential holder. NB: These are distinct
     /// from the public/private keys of the account holders.
-    pub id_cred: IdCredentials<C, T>,
+    pub id_cred: IdCredentials<C>,
 }
 
 /// Private and public data chosen by the credential holder before the
@@ -65,11 +63,10 @@ pub struct CredentialHolderInfo<C: Curve, T: Curve<Scalar = C::Scalar>> {
 /// key and an attribute list.
 #[derive(Debug)]
 pub struct AccCredentialInfo<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
+    C: Curve,
     AttributeType: Attribute<C::Scalar>,
 > {
-    pub acc_holder_info: CredentialHolderInfo<C, P::G_1>,
+    pub acc_holder_info: CredentialHolderInfo<C>,
     /// Chosen prf key of the credential holder.
     pub prf_key: prf::SecretKey<C>,
     /// Chosen attribute list.
@@ -114,6 +111,7 @@ pub struct PreIdentityObject<
     pub id_ah: String,
     /// Public credential of the account holder only.
     pub id_cred_pub_ip: P::G_1,
+    pub id_cred_pub: C,
     /// Anonymity revocation data for the chosen anonymity revokers.
     pub ip_ar_data: Vec<IpArData<C>>,
     /// choice of anonyimity revocation parameters
@@ -124,11 +122,17 @@ pub struct PreIdentityObject<
     pub choice_ar_parameters: (Vec<u64>, u64),
     /// Chosen attribute list.
     pub alist: AttributeList<C::Scalar, AttributeType>,
-    /// Proof of knowledge of secret credentials corresponding to id_cred_pub
+    /// Proof of knowledge of secret credentials corresponding to id_cred_pub_ip
     /// matching the commitment cmm_sc
     pub pok_sc: ComEqProof<P::G_1>,
+    ///proof of knowledge of secret credential corresponding to snd_cmm_sc
+    pub snd_pok_sc: ComEqProof<C>,
     /// commitment to id cred sec
     pub cmm_sc: pedersen::Commitment<P::G_1>,
+    ///commitment to id cred sec in C
+    pub snd_cmm_sc:pedersen::Commitment<C>,
+    ///proof that cmm_sc and snd_cmm_sc are hiding the same thing
+    pub proof_com_eq_sc:ComEqDiffGrpsProof<P::G_1, C>,
     /// Commitment to the prf key in group G_1.
     pub cmm_prf: pedersen::Commitment<P::G_1>,
     /// commitments to the coefficients of the polynomial

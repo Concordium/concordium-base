@@ -37,7 +37,6 @@ pub fn verify_credentials<
     let dlog_base = ip_info.dlog_base;
     let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.2[0], dlog_base);
     let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.2[1], dlog_base);
-    // IDCredSec
 
     let b_1 = verify_knowledge_of_id_cred_sec::<P::G_1>(
         &dlog_base,
@@ -47,6 +46,29 @@ pub fn verify_credentials<
         &pre_id_obj.pok_sc,
     );
     if !b_1 {
+        return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
+    }
+
+    let ar_ck = ip_info.ar_info.1;
+    let b_11 = verify_knowledge_of_id_cred_sec::<C>(
+        &C::one_point(),
+        &ar_ck,
+        &pre_id_obj.id_cred_pub,
+        &pre_id_obj.snd_cmm_sc,
+        &pre_id_obj.snd_pok_sc,
+        
+        );
+    if !b_11{
+        return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
+    }
+
+    let b_111 = verify_com_eq_diff_grps::<P::G_1, C>(
+          &[],
+          &((commitment_key_sc.0, commitment_key_sc.1), (ar_ck.0, ar_ck.1)),
+          &(pre_id_obj.cmm_sc.0, pre_id_obj.snd_cmm_sc.0),
+          &pre_id_obj.proof_com_eq_sc,
+      );
+    if !b_111{
         return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
     }
 

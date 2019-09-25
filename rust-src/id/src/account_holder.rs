@@ -28,7 +28,7 @@ pub fn generate_pio<
     C: Curve<Scalar = P::ScalarField>,
 >(
     context: &Context<P, C>,
-    aci: &AccCredentialInfo<P, C, AttributeType>,
+    aci: &AccCredentialInfo<C, AttributeType>,
 ) -> (
     PreIdentityObject<P, C, AttributeType>,
     SigRetrievalRandomness<P>,
@@ -37,7 +37,8 @@ where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
     let id_ah = aci.acc_holder_info.id_ah.clone();
-    let id_cred_pub_ip = aci.acc_holder_info.id_cred.id_cred_pub_ip;
+    let id_cred_pub_ip = context.ip_info.dlog_base.mul_by_scalar(&aci.acc_holder_info.id_cred.id_cred_sec);//aci.acc_holder_info.id_cred.id_cred_pub_ip;
+    let id_cred_pub = aci.acc_holder_info.id_cred.id_cred_pub;
     // PRF related computation
     let prf::SecretKey(prf_key_scalar) = aci.prf_key;
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
@@ -103,6 +104,30 @@ where
             &mut csprng,
         )
     };
+
+    let ar_ck = context.ip_info.ar_info.1;
+    let (snd_cmm_sc, snd_cmm_sc_rand) = ar_ck.commit(&pedersen::Value(id_cred_sec), &mut csprng);
+    let snd_pok_sc = {
+        let Commitment(cmm_sc_point) = snd_cmm_sc;
+        let CommitmentKey(ck_1, ck_2) = ar_ck;
+        com_eq::prove_com_eq(
+            &[],
+            &(vec![cmm_sc_point], id_cred_pub),
+            &(ck_1, ck_2, vec![C::one_point()]),
+            &(vec![snd_cmm_sc_rand.0], vec![id_cred_sec]),
+            &mut csprng
+    };
+
+    let proof_com_eq_sc = {
+        let public =(cmm_sc.0, snd_cmm_sc.0);
+        let secret = (id_cred_sec, cmm_sc_rand.0, snd_cmm_sc_rand.0);
+        let coeff = (
+            (sc_ck.0, sc_ck.1),
+            (ar_ck.0, ar_ck.1)
+            );
+        com_eq_different_groups::prove_com_eq_diff_grps(&mut csprng, &[], &public, &secret, &coeff)
+    };
+
     // commitment to the prf key in the group of the IP
     let (cmm_prf, rand_cmm_prf) = context
         .commitment_key_prf
@@ -136,6 +161,10 @@ where
     let prio = PreIdentityObject {
         id_ah,
         id_cred_pub_ip,
+        id_cred_pub,
+        snd_pok_sc,
+        snd_cmm_sc,
+        proof_com_eq_sc,
         ip_ar_data,
         choice_ar_parameters: (ar_handles, revocation_threshold),
         alist,
@@ -258,7 +287,7 @@ pub fn generate_cdi<
 >(
     ip_info: &IpInfo<P, C>,
     global_context: &GlobalContext<C>,
-    aci: &AccCredentialInfo<P, C, AttributeType>,
+    aci: &AccCredentialInfo<C, AttributeType>,
     prio: &PreIdentityObject<P, C, AttributeType>,
     cred_counter: u8,
     ip_sig: &ps_sig::Signature<P>,

@@ -241,7 +241,6 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             Err(_) => false,
         }
     } else {
-        println!("paired u != u_c");
         false
     }
 }

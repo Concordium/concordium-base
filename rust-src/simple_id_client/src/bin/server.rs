@@ -69,12 +69,11 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
 
     let secret = ExampleCurve::generate_scalar(&mut csprng);
     let public = ExampleCurve::one_point().mul_by_scalar(&secret);
-    let chi = CredentialHolderInfo::<ExampleCurve, ExampleCurve> {
+    let chi = CredentialHolderInfo::<ExampleCurve> {
         id_ah:   name,
         id_cred: IdCredentials {
             id_cred_sec:    secret,
             id_cred_pub:    public,
-            id_cred_pub_ip: public,
         },
     };
 
@@ -112,7 +111,7 @@ type GenerateCredentialData = (
     PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>,
     pssig::Signature<Bls12>,
     SigRetrievalRandomness<Bls12>,
-    AccCredentialInfo<Bls12, ExampleCurve, ExampleAttribute>,
+    AccCredentialInfo<ExampleCurve, ExampleAttribute>,
     Vec<(u16, ExampleAttribute)>,
     u8,
 );
