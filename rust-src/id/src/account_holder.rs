@@ -37,7 +37,10 @@ where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
     let id_ah = aci.acc_holder_info.id_ah.clone();
-    let id_cred_pub_ip = context.ip_info.dlog_base.mul_by_scalar(&aci.acc_holder_info.id_cred.id_cred_sec);//aci.acc_holder_info.id_cred.id_cred_pub_ip;
+    let id_cred_pub_ip = context
+        .ip_info
+        .dlog_base
+        .mul_by_scalar(&aci.acc_holder_info.id_cred.id_cred_sec); // aci.acc_holder_info.id_cred.id_cred_pub_ip;
     let id_cred_pub = aci.acc_holder_info.id_cred.id_cred_pub;
     // PRF related computation
     let prf::SecretKey(prf_key_scalar) = aci.prf_key;
@@ -115,16 +118,14 @@ where
             &(vec![cmm_sc_point], id_cred_pub),
             &(ck_1, ck_2, vec![C::one_point()]),
             &(vec![snd_cmm_sc_rand.0], vec![id_cred_sec]),
-            &mut csprng
+            &mut csprng,
+        )
     };
 
     let proof_com_eq_sc = {
-        let public =(cmm_sc.0, snd_cmm_sc.0);
+        let public = (cmm_sc.0, snd_cmm_sc.0);
         let secret = (id_cred_sec, cmm_sc_rand.0, snd_cmm_sc_rand.0);
-        let coeff = (
-            (sc_ck.0, sc_ck.1),
-            (ar_ck.0, ar_ck.1)
-            );
+        let coeff = ((sc_ck.0, sc_ck.1), (ar_ck.0, ar_ck.1));
         com_eq_different_groups::prove_com_eq_diff_grps(&mut csprng, &[], &public, &secret, &coeff)
     };
 

@@ -62,10 +62,7 @@ pub struct CredentialHolderInfo<C: Curve> {
 /// interaction with the identity provider. The credential holder chooses a prf
 /// key and an attribute list.
 #[derive(Debug)]
-pub struct AccCredentialInfo<
-    C: Curve,
-    AttributeType: Attribute<C::Scalar>,
-> {
+pub struct AccCredentialInfo<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub acc_holder_info: CredentialHolderInfo<C>,
     /// Chosen prf key of the credential holder.
     pub prf_key: prf::SecretKey<C>,
@@ -125,14 +122,14 @@ pub struct PreIdentityObject<
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub_ip
     /// matching the commitment cmm_sc
     pub pok_sc: ComEqProof<P::G_1>,
-    ///proof of knowledge of secret credential corresponding to snd_cmm_sc
+    /// proof of knowledge of secret credential corresponding to snd_cmm_sc
     pub snd_pok_sc: ComEqProof<C>,
     /// commitment to id cred sec
     pub cmm_sc: pedersen::Commitment<P::G_1>,
-    ///commitment to id cred sec in C
-    pub snd_cmm_sc:pedersen::Commitment<C>,
-    ///proof that cmm_sc and snd_cmm_sc are hiding the same thing
-    pub proof_com_eq_sc:ComEqDiffGrpsProof<P::G_1, C>,
+    /// commitment to id cred sec in C
+    pub snd_cmm_sc: pedersen::Commitment<C>,
+    /// proof that cmm_sc and snd_cmm_sc are hiding the same thing
+    pub proof_com_eq_sc: ComEqDiffGrpsProof<P::G_1, C>,
     /// Commitment to the prf key in group G_1.
     pub cmm_prf: pedersen::Commitment<P::G_1>,
     /// commitments to the coefficients of the polynomial

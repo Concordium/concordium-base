@@ -29,8 +29,8 @@ fn test_pipeline() {
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_ah:   "ACCOUNT_HOLDER".to_owned(),
         id_cred: IdCredentials {
-            id_cred_sec:    secret,
-            id_cred_pub:    public,
+            id_cred_sec: secret,
+            id_cred_pub: public,
         },
     };
 
@@ -71,7 +71,7 @@ fn test_pipeline() {
 
     let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
     let dlog_base = <G1 as Curve>::one_point();
-    //let dlog_base = <G1 as Curve>::generate(&mut csprng);
+    // let dlog_base = <G1 as Curve>::generate(&mut csprng);
 
     let ip_info = IpInfo {
         ip_identity: 88,

@@ -6,7 +6,7 @@ use secret_sharing::secret_sharing::*;
 use curve_arithmetic::{Curve, Pairing};
 use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
-use elgamal::{public::PublicKey, secret::SecretKey, message::Message};
+use elgamal::{message::Message, public::PublicKey, secret::SecretKey};
 use hex::encode;
 use id::{account_holder::*, chain::verify_cdi, ffi::*, identity_provider::*, types::*};
 use pairing::bls12_381::Bls12;
@@ -55,7 +55,7 @@ fn mk_ar_filename(m: usize, n: usize) -> String {
     s.push_str(&m.to_string());
     s.push_str("_");
     s.push_str(&AR_NAME_PREFIX.to_string());
-    //let mut s = AR_PREFIX.to_string();
+    // let mut s = AR_PREFIX.to_string();
     s.push_str(&n.to_string());
     s.push_str(".json");
     s
@@ -255,7 +255,7 @@ If not present a fresh key-pair will be generated.",
 
 /// Revoke the anonymity of the credential.
 fn handle_revoke_anonymity(matches: &ArgMatches) {
-    let v:Value = match matches.value_of("credential").map(read_json_from_file) {
+    let v: Value = match matches.value_of("credential").map(read_json_from_file) {
         Some(Ok(r)) => r,
         Some(Err(x)) => {
             eprintln!("Could not read credential because {}", x);
@@ -263,14 +263,15 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
         }
         None => panic!("Should not happen since the argument is mandatory."),
     };
-    let revokation_threshold = match v.as_object(){
+    let revokation_threshold = match v.as_object() {
         None => panic!("could not read credential object"),
-        Some(s) => match json_read_u64(s, "revokationThreshold"){
+        Some(s) => match json_read_u64(s, "revokationThreshold") {
             None => panic!("could not read revokation threshold"),
             Some(r) => r,
         },
     };
-    //let revokation_threshold = json_read_u64(v.as_object(), "revokationThreshold")?; 
+    // let revokation_threshold = json_read_u64(v.as_object(),
+    // "revokationThreshold")?;
     let ar_data = match v.get("arData").and_then(json_to_chain_ar_data) {
         Some(ar_data) => ar_data,
         None => {
@@ -279,58 +280,64 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
         }
     };
 
-    let ar_values: Vec<_> = match matches.values_of("ar-private"){
+    let ar_values: Vec<_> = match matches.values_of("ar-private") {
         Some(v) => v.collect(),
-        None=> panic!("Could not read ar-private"),
+        None => panic!("Could not read ar-private"),
     };
     let mut ars = vec![];
-    for ar_value in ar_values.iter(){
-        match read_json_from_file(ar_value){
-                Err(y) => panic!("Could not read from ar file {} {}", ar_value, y),
-                Ok(val) => match json_to_private_ar_info(&val){
-                    Some(p) => ars.push(p),
-                    None => {
-                        eprintln!("Could not decode the JSON object with private AR data.");
-                        return;
-                    }
+    for ar_value in ar_values.iter() {
+        match read_json_from_file(ar_value) {
+            Err(y) => panic!("Could not read from ar file {} {}", ar_value, y),
+            Ok(val) => match json_to_private_ar_info(&val) {
+                Some(p) => ars.push(p),
+                None => {
+                    eprintln!("Could not decode the JSON object with private AR data.");
+                    return;
                 }
-            }
+            },
         }
-    
+    }
 
- //   let v = match matches.value_of("ar-private").map(read_json_from_file) {
- //       Some(Ok(v)) => v,
- //       Some(Err(x)) => {
- //           eprintln!(
- //               "Could not read private anonymity revoker data because {}",
- //               x
- //           );
- //           return;
- //       }
- //       None => panic!("Should not happen since the argument is mandatory."),
- //   };
- //   let (ar_info, private) = match json_to_private_ar_info(&v) {
- //       Some(p) => p,
- //       None => {
- //           eprintln!("Could not decode the JSON object with private AR data.");
- //           return;
- //       }
- //   };
- 
+    //   let v = match matches.value_of("ar-private").map(read_json_from_file) {
+    //       Some(Ok(v)) => v,
+    //       Some(Err(x)) => {
+    //           eprintln!(
+    //               "Could not read private anonymity revoker data because {}",
+    //               x
+    //           );
+    //           return;
+    //       }
+    //       None => panic!("Should not happen since the argument is mandatory."),
+    //   };
+    //   let (ar_info, private) = match json_to_private_ar_info(&v) {
+    //       Some(p) => p,
+    //       None => {
+    //           eprintln!("Could not decode the JSON object with private AR
+    // data.");           return;
+    //       }
+    //   };
+
     let number_of_ars = ars.len();
     if (number_of_ars as u64) < revokation_threshold {
-        eprintln!("insufficient number of anonymity revokers {}, {}", number_of_ars, revokation_threshold);
+        eprintln!(
+            "insufficient number of anonymity revokers {}, {}",
+            number_of_ars, revokation_threshold
+        );
         return;
     }
     let mut shares = vec![];
 
-    for (ar,private) in ars.into_iter(){
+    for (ar, private) in ars.into_iter() {
         match ar_data.iter().find(|&x| x.ar_identity == ar.ar_identity) {
-              None => {eprintln!("AR is not part of the credential"); return;}
-              Some(single_ar_data) => { let Message(m) = private.decrypt(&single_ar_data.enc_id_cred_pub_share);
-                  shares.push((single_ar_data.id_cred_pub_share_number, m))
+            None => {
+                eprintln!("AR is not part of the credential");
+                return;
+            }
+            Some(single_ar_data) => {
+                let Message(m) = private.decrypt(&single_ar_data.enc_id_cred_pub_share);
+                shares.push((single_ar_data.id_cred_pub_share_number, m))
+            }
         }
-    }
     }
     let id_cred_pub = reveal_in_group(&shares);
     println!(
@@ -363,28 +370,31 @@ fn handle_deploy_credential(matches: &ArgMatches) {
                 None => {
                     eprintln!("failed to parse signature");
                     return;
-                },
-                Some(sig_bytes) => match v.get("preIdentityObject").and_then(json_to_pio){
+                }
+                Some(sig_bytes) => match v.get("preIdentityObject").and_then(json_to_pio) {
                     None => {
                         eprintln!("failed to parse pio");
                         return;
-                    },
-                    Some(pio) => match v.get("ipInfo").and_then(json_to_ip_info){
+                    }
+                    Some(pio) => match v.get("ipInfo").and_then(json_to_ip_info) {
                         None => {
                             eprintln!("failed to parse ip info");
                             return;
-                        },
-                        Some(ip_info) => if let Ok(ip_sig) = ps_sig::Signature::from_bytes(&mut Cursor::new(&sig_bytes))
-                        {
-                            (ip_sig, pio, ip_info)
-                        } else {
-                            eprintln!("Malformed Signature");
-                            return;
                         }
-                    }
-                }
+                        Some(ip_info) => {
+                            if let Ok(ip_sig) =
+                                ps_sig::Signature::from_bytes(&mut Cursor::new(&sig_bytes))
+                            {
+                                (ip_sig, pio, ip_info)
+                            } else {
+                                eprintln!("Malformed Signature");
+                                return;
+                            }
+                        }
+                    },
+                },
             }
-        }else{
+        } else {
             eprintln!("Could not parse JSON.");
             return;
         }
@@ -567,8 +577,9 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     }
 }
 
-fn read_account_data<P: AsRef<Path>>(path: P) -> Option<AccountData> 
-    where P: std::fmt::Debug {
+fn read_account_data<P: AsRef<Path>>(path: P) -> Option<AccountData>
+where
+    P: std::fmt::Debug, {
     let v = read_json_from_file(path).ok()?;
     json_to_account_data(&v)
 }
@@ -590,8 +601,8 @@ fn handle_create_chi(matches: &ArgMatches) {
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_ah:   name,
         id_cred: IdCredentials {
-            id_cred_sec:    secret,
-            id_cred_pub:    public,
+            id_cred_sec: secret,
+            id_cred_pub: public,
         },
     };
 
@@ -653,7 +664,7 @@ fn handle_act_as_ip(matches: &ArgMatches) {
     //     }
     // };
     // FIXME: Clone should not be necessary. Refactor.
-    //let ctx = make_context_from_ip_info(ip_info.clone());
+    // let ctx = make_context_from_ip_info(ip_info.clone());
 
     let vf = verify_credentials(&pio, &ip_info, &ip_sec_key);
     match vf {
@@ -787,31 +798,27 @@ fn handle_start_ip(matches: &ArgMatches) {
         }
     };
 
-
-
     let ar_handles = ip_info.ar_info.0.clone();
-    let mut ars:Vec<String> = Vec::with_capacity(ar_handles.len());
-    for x in ar_handles.iter(){
+    let mut ars: Vec<String> = Vec::with_capacity(ar_handles.len());
+    for x in ar_handles.iter() {
         let s = format!("{}", x.ar_description);
-        ars.push(s); 
+        ars.push(s);
     }
     let mut choice_ars = vec![];
-    let mrs:Vec<&str> = ars.iter().map(String::as_str).collect();
-
+    let mrs: Vec<&str> = ars.iter().map(String::as_str).collect();
 
     let ar_info = Checkboxes::new()
         .with_prompt("Choose anonymity revokers")
         .items(&mrs)
-        .interact().unwrap();
-    if ar_info.is_empty(){
+        .interact()
+        .unwrap();
+    if ar_info.is_empty() {
         eprintln!("You need to select AR");
-        return
+        return;
     }
-    for idx in ar_info.into_iter(){
-          choice_ars.push(ar_handles[idx].ar_identity);
-        
+    for idx in ar_info.into_iter() {
+        choice_ars.push(ar_handles[idx].ar_identity);
     }
-
 
     let context = make_context_from_ip_info(ip_info, (choice_ars, 2));
     // and finally generate the pre-identity object
@@ -871,7 +878,7 @@ fn json_to_private_ar_info<C: Curve>(v: &Value) -> Option<(ArInfo<C>, SecretKey<
             ar_identity,
             ar_description,
             ar_public_key,
-            //ar_elgamal_generator,
+            // ar_elgamal_generator,
         },
         private,
     ))
@@ -897,14 +904,13 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let id_secret_key = ps_sig::secret::SecretKey::generate(20, &mut csprng);
         let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
 
-
         let ar0_secret_key = SecretKey::generate(&mut csprng);
         let ar0_public_key = PublicKey::from(&ar0_secret_key);
         let ar0_info = ArInfo {
-            ar_identity: 0 as u64,
+            ar_identity:    0 as u64,
             ar_description: mk_ar_name(0),
-            ar_public_key: ar0_public_key,
-            //ar_elgamal_generator: PublicKey::generator(),
+            ar_public_key:  ar0_public_key,
+            // ar_elgamal_generator: PublicKey::generator(),
         };
 
         let js0 = ar_info_to_json(&ar0_info);
@@ -914,35 +920,34 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         });
 
         let ar1_secret_key = SecretKey::generate(&mut csprng);
-          let ar1_public_key = PublicKey::from(&ar1_secret_key);
-          let ar1_info = ArInfo {
-              ar_identity: 1 as u64,
-              ar_description: mk_ar_name(1),
-              ar_public_key: ar1_public_key,
-              //ar_elgamal_generator: PublicKey::generator(),
-          };
+        let ar1_public_key = PublicKey::from(&ar1_secret_key);
+        let ar1_info = ArInfo {
+            ar_identity:    1 as u64,
+            ar_description: mk_ar_name(1),
+            ar_public_key:  ar1_public_key,
+            // ar_elgamal_generator: PublicKey::generator(),
+        };
 
-          let js1 = ar_info_to_json(&ar1_info);
-          let private_js1 = json!({
-              "arPrivateKey": json_base16_encode(&ar1_secret_key.to_bytes()),
-              "publicArInfo": js1
-          });
+        let js1 = ar_info_to_json(&ar1_info);
+        let private_js1 = json!({
+            "arPrivateKey": json_base16_encode(&ar1_secret_key.to_bytes()),
+            "publicArInfo": js1
+        });
 
-          let ar2_secret_key = SecretKey::<ExampleCurve>::generate(&mut csprng);
-          let ar2_public_key = PublicKey::from(&ar2_secret_key);
-          let ar2_info = ArInfo {
-                ar_identity: 2 as u64,
-                ar_description: mk_ar_name(2),
-                ar_public_key: ar2_public_key,
-                //ar_elgamal_generator: PublicKey::generator(),
-          };
+        let ar2_secret_key = SecretKey::<ExampleCurve>::generate(&mut csprng);
+        let ar2_public_key = PublicKey::from(&ar2_secret_key);
+        let ar2_info = ArInfo {
+            ar_identity:    2 as u64,
+            ar_description: mk_ar_name(2),
+            ar_public_key:  ar2_public_key,
+            // ar_elgamal_generator: PublicKey::generator(),
+        };
 
-          let js2 = ar_info_to_json(&ar2_info);
-          let private_js2 = json!({
-                "arPrivateKey": json_base16_encode(&ar2_secret_key.to_bytes()),
-                "publicArInfo": js2
-          });
-
+        let js2 = ar_info_to_json(&ar2_info);
+        let private_js2 = json!({
+              "arPrivateKey": json_base16_encode(&ar2_secret_key.to_bytes()),
+              "publicArInfo": js2
+        });
 
         write_json_to_file(&ar0_fname, &private_js0).ok()?;
         write_json_to_file(&ar1_fname, &private_js1).ok()?;
@@ -955,7 +960,10 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
             ip_description: mk_ip_name(id),
             ip_verify_key: id_public_key,
             dlog_base,
-            ar_info:(vec![ar0_info, ar1_info, ar2_info], CommitmentKey::<ExampleCurve>::generate(&mut csprng)),
+            ar_info: (
+                vec![ar0_info, ar1_info, ar2_info],
+                CommitmentKey::<ExampleCurve>::generate(&mut csprng),
+            ),
         };
         let js = ip_info_to_json(&ip_info);
         let private_js = json!({

@@ -44,7 +44,10 @@ fn parse_id_object_input_json(v: &Value) -> Option<(u32, String, Vec<u64>, Examp
     let ip_id = json_read_u32(v.as_object()?, "ipIdentity")?;
     let user_name = v.get("name")?.as_str()?.to_owned();
     let ar_values = v.get("anonymityRevokers")?.as_array()?;
-    let ars:Vec<u64> = ar_values.iter().map(parse_u64).collect::<Option<Vec<u64>>>()?;
+    let ars: Vec<u64> = ar_values
+        .iter()
+        .map(parse_u64)
+        .collect::<Option<Vec<u64>>>()?;
     let alist = json_to_alist(v.get("attributes")?)?;
     Some((ip_id, user_name, ars.clone(), alist))
 }
@@ -72,8 +75,8 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
     let chi = CredentialHolderInfo::<ExampleCurve> {
         id_ah:   name,
         id_cred: IdCredentials {
-            id_cred_sec:    secret,
-            id_cred_pub:    public,
+            id_cred_sec: secret,
+            id_cred_pub: public,
         },
     };
 

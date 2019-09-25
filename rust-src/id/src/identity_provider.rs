@@ -56,19 +56,21 @@ pub fn verify_credentials<
         &pre_id_obj.id_cred_pub,
         &pre_id_obj.snd_cmm_sc,
         &pre_id_obj.snd_pok_sc,
-        
-        );
-    if !b_11{
+    );
+    if !b_11 {
         return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
     }
 
     let b_111 = verify_com_eq_diff_grps::<P::G_1, C>(
-          &[],
-          &((commitment_key_sc.0, commitment_key_sc.1), (ar_ck.0, ar_ck.1)),
-          &(pre_id_obj.cmm_sc.0, pre_id_obj.snd_cmm_sc.0),
-          &pre_id_obj.proof_com_eq_sc,
-      );
-    if !b_111{
+        &[],
+        &(
+            (commitment_key_sc.0, commitment_key_sc.1),
+            (ar_ck.0, ar_ck.1),
+        ),
+        &(pre_id_obj.cmm_sc.0, pre_id_obj.snd_cmm_sc.0),
+        &pre_id_obj.proof_com_eq_sc,
+    );
+    if !b_111 {
         return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
     }
 
