@@ -23,7 +23,11 @@ import Data.Maybe
 -- NOTE: should use toIntegralSized when having implemented Bits
 -- |Converts from one Integral to another if it fits into its range
 toIntegral :: forall a b . (Integral a, Integral b, Bounded b) => a -> Maybe b
-toIntegral x = -- NOTE: do not use check whether (toInteger $ fromInteger $ toInteger x ) equals toInteger x (with fromInteger :: Integer -> b) as this might be satisfied even if x is out of bounds of the target type (fromInteger uses modulo)
+toIntegral x =
+  -- NOTE: do not use check whether (toInteger $ fromInteger $ toInteger x )
+  -- equals toInteger x (with fromInteger :: Integer -> b) as this might be
+  -- satisfied even if x is out of bounds of the target type (fromInteger uses
+  -- modulo)
   if toInteger x >= toInteger (minBound :: b) && toInteger x <= toInteger (maxBound :: b)
   then Just $ fromInteger $ toInteger x
   else Nothing
@@ -138,7 +142,9 @@ minWord128 = 0
 maxWord128 :: Integer
 maxWord128 = 2^(128 :: Int) - 1
 
--- | A 128-bit unsigned integer adhering to the calculation rules in the ring Z/(2^128)Z (that is, integer arithmetics modulo 2^128). Enum methods might not be reasonable and should not be used.
+-- | A 128-bit unsigned integer adhering to the calculation rules in the ring
+-- Z/(2^128)Z (that is, integer arithmetics modulo 2^128). Enum methods might
+-- not be reasonable and should not be used.
 newtype Word128 = Word128 Integer -- TODO is there an unlimited Word datatype / should use it?
   deriving(Generic, Hashable, Eq, Ord, Real, Enum, Integral, Typeable, Data)
   -- Real and Enum are required for Integral
