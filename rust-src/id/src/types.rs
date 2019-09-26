@@ -1,3 +1,4 @@
+use common;
 use curve_arithmetic::{curve_arithmetic::*, serialization as curve_serialization};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as acc_sig_scheme;
@@ -322,7 +323,7 @@ pub fn short_string_to_bytes(s: &str) -> Vec<u8> {
     let bytes = s.as_bytes();
     let l = bytes.len();
     assert!(l < 65536);
-    let mut out = Vec::with_capacity(l + 2);
+    let mut out = common::safe_with_capacity(l + 2);
     out.extend_from_slice(&(l as u16).to_be_bytes());
     out.extend_from_slice(bytes);
     out
@@ -464,7 +465,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Policy<C, AttributeType> {
         let variant = cur.read_u16::<BigEndian>().ok()?;
         let expiry = cur.read_u64::<BigEndian>().ok()?;
         let len = cur.read_u16::<BigEndian>().ok()?;
-        let mut policy_vec = Vec::with_capacity(len as usize);
+        let mut policy_vec = common::safe_with_capacity(len as usize);
         for _ in 0..len {
             let idx = cur.read_u16::<BigEndian>().ok()?;
             let att = AttributeType::from_bytes(cur)?;
@@ -572,7 +573,7 @@ impl<C: Curve> PolicyProof<C> {
         let variant_rand = C::bytes_to_scalar(cur).ok()?;
         let expiry_rand = C::bytes_to_scalar(cur).ok()?;
         let l = cur.read_u16::<BigEndian>().ok()?;
-        let mut cmm_opening_map = Vec::with_capacity(l as usize);
+        let mut cmm_opening_map = common::safe_with_capacity(l as usize);
         for _ in 0..l {
             let idx = cur.read_u16::<BigEndian>().ok()?;
             let scalar = curve_serialization::read_curve_scalar::<C>(cur).ok()?;
