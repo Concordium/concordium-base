@@ -1,10 +1,9 @@
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia, OverloadedStrings #-}
 module Concordium.Crypto.SignatureScheme where
 import Data.Word
 import Data.Serialize
 import Data.Aeson hiding (encode)
 import Concordium.Crypto.ByteStringHelpers
-import Data.Text hiding (drop)
 import Prelude hiding (drop)
 
 import Data.ByteString (ByteString)
@@ -35,7 +34,7 @@ data SchemeId = Ed25519
     deriving (Eq, Show)
 
 instance ToJSON SchemeId where
-  toJSON Ed25519 = object [pack "schemeId" .= "Ed25519"]
+  toJSON Ed25519 = String "Ed25519"
 
 instance FromJSON SchemeId where
   parseJSON v = do
