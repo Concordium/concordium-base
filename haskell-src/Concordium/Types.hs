@@ -252,7 +252,7 @@ data Account = Account {
   -- are expected to be rare.  The set is traversed when stake delegation
   -- changes.
   ,_accountInstances :: !(Set ContractAddress)
-  } deriving(Show)
+  } deriving(Show, Eq)
 
 makeLenses ''Account
 
