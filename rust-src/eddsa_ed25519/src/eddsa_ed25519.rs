@@ -77,7 +77,6 @@ pub extern "C" fn eddsa_verify(
 
     let pk = pk_res.unwrap();
     let sig = sig_res.unwrap();
-    assert!(!message.is_null(), "Null pointer in ec_vrf_prove");
     let data: &[u8] = slice_from_c_bytes!(message, len);
     match pk.verify(data, &sig) {
         Ok(_) => 1,
