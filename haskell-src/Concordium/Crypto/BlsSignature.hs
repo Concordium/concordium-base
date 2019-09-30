@@ -12,6 +12,7 @@ import Foreign.Ptr
 import Foreign.Marshal.Array
 import Foreign.C.Types
 import Data.Word
+import Data.Int
 import Data.ByteString
 import Data.ByteString.Unsafe as BS
 import System.IO.Unsafe
@@ -27,18 +28,21 @@ foreign import ccall unsafe "bls_generate_secretkey" generateBlsSecretKeyPtr :: 
 foreign import ccall unsafe "bls_sk_to_bytes" toBytesBlsSecretKey :: Ptr BlsSecretKey -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "bls_sk_from_bytes" fromBytesBlsSecretKey :: Ptr Word8 -> CSize -> IO (Ptr BlsSecretKey)
 foreign import ccall unsafe "bls_sk_eq" equalsBlsSecretKey :: Ptr BlsSecretKey -> Ptr BlsSecretKey -> IO Word8
+foreign import ccall unsafe "bls_sk_cmp" cmpBlsSecretKey :: Ptr BlsSecretKey -> Ptr BlsSecretKey -> IO Int32
 
 foreign import ccall unsafe "&bls_free_pk" freeBlsPublicKey :: FunPtr (Ptr BlsPublicKey -> IO ())
 foreign import ccall unsafe "bls_derive_publickey" deriveBlsPublicKeyPtr :: Ptr BlsSecretKey -> IO (Ptr BlsPublicKey)
 foreign import ccall unsafe "bls_pk_to_bytes" toBytesBlsPublicKey :: Ptr BlsPublicKey -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "bls_pk_from_bytes" fromBytesBlsPublicKey :: Ptr Word8 -> CSize -> IO (Ptr BlsPublicKey)
 foreign import ccall unsafe "bls_pk_eq" equalsBlsPublicKey :: Ptr BlsPublicKey -> Ptr BlsPublicKey -> IO Word8
+foreign import ccall unsafe "bls_pk_cmp" cmpBlsPublicKey :: Ptr BlsPublicKey -> Ptr BlsPublicKey -> IO Int32
 
 foreign import ccall unsafe "&bls_free_sig" freeBlsSignature :: FunPtr (Ptr BlsSignature -> IO ())
 foreign import ccall unsafe "bls_sig_to_bytes" toBytesBlsSignature :: Ptr BlsSignature -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "bls_sig_from_bytes" fromBytesBlsSignature :: Ptr Word8 -> CSize -> IO (Ptr BlsSignature)
 foreign import ccall unsafe "bls_empty_sig" emptyBlsSig :: IO (Ptr BlsSignature)
 foreign import ccall unsafe "bls_sig_eq" equalsBlsSignature :: Ptr BlsSignature -> Ptr BlsSignature -> IO Word8
+foreign import ccall unsafe "bls_sig_cmp" cmpBlsSignature :: Ptr BlsSignature -> Ptr BlsSignature -> IO Int32
 
 foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> CSize -> Ptr BlsSecretKey -> IO (Ptr BlsSignature)
 foreign import ccall unsafe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr BlsPublicKey -> Ptr BlsSignature -> IO Bool
@@ -81,6 +85,10 @@ instance Show BlsSecretKey where
 instance Eq BlsSecretKey where
   BlsSecretKey p1 == BlsSecretKey p2 = eqHelper p1 p2 equalsBlsSecretKey
 
+instance Ord BlsSecretKey where
+  compare (BlsSecretKey sk1) (BlsSecretKey sk2) =
+    cmpHelper sk1 sk2 cmpBlsSecretKey
+
 instance Serialize BlsPublicKey where
   get = do
     bs <- getByteString publicKeySize
@@ -97,6 +105,10 @@ instance Show BlsPublicKey where
 
 instance Eq BlsPublicKey where
   BlsPublicKey p1 == BlsPublicKey p2 = eqHelper p1 p2 equalsBlsPublicKey
+
+instance Ord BlsPublicKey where
+  compare (BlsPublicKey pk1) (BlsPublicKey pk2) =
+    cmpHelper pk1 pk2 cmpBlsPublicKey
 
 instance Serialize BlsSignature where
   get = do
@@ -115,7 +127,10 @@ instance Show BlsSignature where
 instance Eq BlsSignature where
   BlsSignature p1 == BlsSignature p2 = eqHelper p1 p2 equalsBlsSignature
 
--- TODO: implement Ord for all types
+instance Ord BlsSignature where
+  compare (BlsSignature sig1) (BlsSignature sig2) =
+    cmpHelper sig1 sig2 cmpBlsSignature
+
 -- TODO (maybe) FromJSON, ToJSON for all types
 
 generateBlsSecretKey :: IO BlsSecretKey

@@ -4,6 +4,7 @@ use libc::size_t;
 use pairing::bls12_381::Bls12;
 use rand::{thread_rng, SeedableRng, StdRng};
 use std::{io::Cursor, slice};
+use std::cmp::Ordering;
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -31,6 +32,32 @@ macro_derive_to_bytes!(bls_sig_to_bytes, Signature<Bls12>);
 macro_derive_binary!(bls_sk_eq, SecretKey<Bls12>, SecretKey::eq);
 macro_derive_binary!(bls_pk_eq, PublicKey<Bls12>, PublicKey::eq);
 macro_derive_binary!(bls_sig_eq, Signature<Bls12>, Signature::eq);
+
+macro_rules! macro_cmp {
+    ($function_name:ident, $type:ty) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        // support ord instance needed in Haskell
+        pub extern "C" fn $function_name(ptr1: *const $type, ptr2: *const $type) -> i32 {
+            // optimistic check first.
+            if ptr1 == ptr2 {
+                return 0;
+            }
+
+            let p1 = from_ptr!(ptr1);
+            let p2 = from_ptr!(ptr2);
+            match p1.to_bytes().cmp(&p2.to_bytes()) {
+                Ordering::Less => return -1,
+                Ordering::Greater => return 1,
+                Ordering::Equal => 0,
+            }
+        }
+    }
+}
+
+macro_cmp!(bls_pk_cmp, PublicKey<Bls12>);
+macro_cmp!(bls_sk_cmp, SecretKey<Bls12>);
+macro_cmp!(bls_sig_cmp, Signature<Bls12>);
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
