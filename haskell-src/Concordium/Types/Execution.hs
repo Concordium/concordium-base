@@ -319,6 +319,13 @@ data RejectReason = ModuleNotWF !(TypingError Core.UA) -- ^Error raised when typ
                   | InvalidBakerRemoveSource !AccountAddress
                   | UpdatingNonExistentBaker !BakerId
                   | InvalidStakeDelegationTarget !BakerId -- ^The target of stake delegation is not a valid baker.
+                  -- |A transaction should be sent from the baker's current account, but is not.
+                  | NotFromBakerAccount { nfbaFromAccount :: !AccountAddress, -- ^Sender account of the transaction
+                                          nfbaCurrentBakerAccount :: !AccountAddress -- ^Current baker account.
+                                        }
+
+                  -- |Special beta outcomes.
+                  | NotAllowedToManipulateBakers !AccountAddress
     deriving (Show)
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
