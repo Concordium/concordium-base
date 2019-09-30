@@ -1,7 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.BlsSignature
-  (BlsPublicKey, BlsSecretKey, BlsSignature,
-  generateBlsSecretKey, generateBlsSecretKeyFromSeed, deriveBlsPublicKey, sign, verify, aggregate, verifyAggregate, emptySignature)
+  (PublicKey, SecretKey, Signature,
+  generateSecretKey, generateSecretKeyFromSeed, derivePublicKey, sign, verify, aggregate, verifyAggregate, emptySignature)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -17,46 +17,47 @@ import Data.ByteString
 import Data.ByteString.Unsafe as BS
 import System.IO.Unsafe
 import Data.Serialize
+import qualified Data.Aeson as AE
 
 
-newtype BlsPublicKey = BlsPublicKey (ForeignPtr BlsPublicKey)
-newtype BlsSecretKey = BlsSecretKey (ForeignPtr BlsSecretKey)
-newtype BlsSignature = BlsSignature (ForeignPtr BlsSignature)
+newtype PublicKey = PublicKey (ForeignPtr PublicKey)
+newtype SecretKey = SecretKey (ForeignPtr SecretKey)
+newtype Signature = Signature (ForeignPtr Signature)
 
-foreign import ccall unsafe "&bls_free_sk" freeBlsSecretKey :: FunPtr (Ptr BlsSecretKey -> IO ())
-foreign import ccall unsafe "bls_generate_secretkey" generateBlsSecretKeyPtr :: IO (Ptr BlsSecretKey)
-foreign import ccall unsafe "bls_sk_to_bytes" toBytesBlsSecretKey :: Ptr BlsSecretKey -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "bls_sk_from_bytes" fromBytesBlsSecretKey :: Ptr Word8 -> CSize -> IO (Ptr BlsSecretKey)
-foreign import ccall unsafe "bls_sk_eq" equalsBlsSecretKey :: Ptr BlsSecretKey -> Ptr BlsSecretKey -> IO Word8
-foreign import ccall unsafe "bls_sk_cmp" cmpBlsSecretKey :: Ptr BlsSecretKey -> Ptr BlsSecretKey -> IO Int32
+foreign import ccall unsafe "&bls_free_sk" freeSecretKey :: FunPtr (Ptr SecretKey -> IO ())
+foreign import ccall unsafe "bls_generate_secretkey" generateSecretKeyPtr :: IO (Ptr SecretKey)
+foreign import ccall unsafe "bls_sk_to_bytes" toBytesSecretKey :: Ptr SecretKey -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "bls_sk_from_bytes" fromBytesSecretKey :: Ptr Word8 -> CSize -> IO (Ptr SecretKey)
+foreign import ccall unsafe "bls_sk_eq" equalsSecretKey :: Ptr SecretKey -> Ptr SecretKey -> IO Word8
+foreign import ccall unsafe "bls_sk_cmp" cmpSecretKey :: Ptr SecretKey -> Ptr SecretKey -> IO Int32
 
-foreign import ccall unsafe "&bls_free_pk" freeBlsPublicKey :: FunPtr (Ptr BlsPublicKey -> IO ())
-foreign import ccall unsafe "bls_derive_publickey" deriveBlsPublicKeyPtr :: Ptr BlsSecretKey -> IO (Ptr BlsPublicKey)
-foreign import ccall unsafe "bls_pk_to_bytes" toBytesBlsPublicKey :: Ptr BlsPublicKey -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "bls_pk_from_bytes" fromBytesBlsPublicKey :: Ptr Word8 -> CSize -> IO (Ptr BlsPublicKey)
-foreign import ccall unsafe "bls_pk_eq" equalsBlsPublicKey :: Ptr BlsPublicKey -> Ptr BlsPublicKey -> IO Word8
-foreign import ccall unsafe "bls_pk_cmp" cmpBlsPublicKey :: Ptr BlsPublicKey -> Ptr BlsPublicKey -> IO Int32
+foreign import ccall unsafe "&bls_free_pk" freePublicKey :: FunPtr (Ptr PublicKey -> IO ())
+foreign import ccall unsafe "bls_derive_publickey" derivePublicKeyPtr :: Ptr SecretKey -> IO (Ptr PublicKey)
+foreign import ccall unsafe "bls_pk_to_bytes" toBytesPublicKey :: Ptr PublicKey -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "bls_pk_from_bytes" fromBytesPublicKey :: Ptr Word8 -> CSize -> IO (Ptr PublicKey)
+foreign import ccall unsafe "bls_pk_eq" equalsPublicKey :: Ptr PublicKey -> Ptr PublicKey -> IO Word8
+foreign import ccall unsafe "bls_pk_cmp" cmpPublicKey :: Ptr PublicKey -> Ptr PublicKey -> IO Int32
 
-foreign import ccall unsafe "&bls_free_sig" freeBlsSignature :: FunPtr (Ptr BlsSignature -> IO ())
-foreign import ccall unsafe "bls_sig_to_bytes" toBytesBlsSignature :: Ptr BlsSignature -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "bls_sig_from_bytes" fromBytesBlsSignature :: Ptr Word8 -> CSize -> IO (Ptr BlsSignature)
-foreign import ccall unsafe "bls_empty_sig" emptyBlsSig :: IO (Ptr BlsSignature)
-foreign import ccall unsafe "bls_sig_eq" equalsBlsSignature :: Ptr BlsSignature -> Ptr BlsSignature -> IO Word8
-foreign import ccall unsafe "bls_sig_cmp" cmpBlsSignature :: Ptr BlsSignature -> Ptr BlsSignature -> IO Int32
+foreign import ccall unsafe "&bls_free_sig" freeSignature :: FunPtr (Ptr Signature -> IO ())
+foreign import ccall unsafe "bls_sig_to_bytes" toBytesSignature :: Ptr Signature -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "bls_sig_from_bytes" fromBytesSignature :: Ptr Word8 -> CSize -> IO (Ptr Signature)
+foreign import ccall unsafe "bls_empty_sig" emptyBlsSig :: IO (Ptr Signature)
+foreign import ccall unsafe "bls_sig_eq" equalsSignature :: Ptr Signature -> Ptr Signature -> IO Word8
+foreign import ccall unsafe "bls_sig_cmp" cmpSignature :: Ptr Signature -> Ptr Signature -> IO Int32
 
-foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> CSize -> Ptr BlsSecretKey -> IO (Ptr BlsSignature)
-foreign import ccall unsafe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr BlsPublicKey -> Ptr BlsSignature -> IO Bool
-foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr BlsSignature -> Ptr BlsSignature -> IO (Ptr BlsSignature)
-foreign import ccall unsafe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr BlsPublicKey) -> CSize -> Ptr BlsSignature -> IO Bool
+foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Signature)
+foreign import ccall unsafe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr PublicKey -> Ptr Signature -> IO Bool
+foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr Signature -> Ptr Signature -> IO (Ptr Signature)
+foreign import ccall unsafe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Bool
 
-withBlsSecretKey :: BlsSecretKey -> (Ptr BlsSecretKey -> IO b) -> IO b
-withBlsSecretKey (BlsSecretKey fp) = withForeignPtr fp
+withSecretKey :: SecretKey -> (Ptr SecretKey -> IO b) -> IO b
+withSecretKey (SecretKey fp) = withForeignPtr fp
 
-withBlsPublicKey :: BlsPublicKey -> (Ptr BlsPublicKey -> IO b) -> IO b
-withBlsPublicKey (BlsPublicKey fp) = withForeignPtr fp
+withPublicKey :: PublicKey -> (Ptr PublicKey -> IO b) -> IO b
+withPublicKey (PublicKey fp) = withForeignPtr fp
 
-withBlsSignature :: BlsSignature -> (Ptr BlsSignature -> IO b) -> IO b
-withBlsSignature (BlsSignature fp) = withForeignPtr fp
+withSignature :: Signature -> (Ptr Signature -> IO b) -> IO b
+withSignature (Signature fp) = withForeignPtr fp
 
 secretKeySize :: Int
 secretKeySize = 32
@@ -67,125 +68,153 @@ publicKeySize = 96
 signatureSize :: Int
 signatureSize = 48
 
-instance Serialize BlsSecretKey where
+
+-- SecretKey implementations
+
+instance Serialize SecretKey where
   get = do
     bs <- getByteString secretKeySize
-    case fromBytesHelper freeBlsSecretKey fromBytesBlsSecretKey bs of
-      Nothing -> fail "Cannot decode BlsSecretKey"
-      Just x -> return $ BlsSecretKey x
+    case fromBytesHelper freeSecretKey fromBytesSecretKey bs of
+      Nothing -> fail "Cannot decode SecretKey"
+      Just x -> return $ SecretKey x
 
-  put (BlsSecretKey p) =
-    let bs = toBytesHelper toBytesBlsSecretKey p
+  put (SecretKey p) =
+    let bs = toBytesHelper toBytesSecretKey p
     in putByteString bs
 
-instance Show BlsSecretKey where
+instance Show SecretKey where
   show = byteStringToHex . encode
-  --showsPrec p (BlsSecretKey fp) = showsPrec p fp
+  --showsPrec p (SecretKey fp) = showsPrec p fp
 
-instance Eq BlsSecretKey where
-  BlsSecretKey p1 == BlsSecretKey p2 = eqHelper p1 p2 equalsBlsSecretKey
+instance Eq SecretKey where
+  SecretKey p1 == SecretKey p2 = eqHelper p1 p2 equalsSecretKey
 
-instance Ord BlsSecretKey where
-  compare (BlsSecretKey sk1) (BlsSecretKey sk2) =
-    cmpHelper sk1 sk2 cmpBlsSecretKey
+instance Ord SecretKey where
+  compare (SecretKey sk1) (SecretKey sk2) =
+    cmpHelper sk1 sk2 cmpSecretKey
 
-instance Serialize BlsPublicKey where
+instance AE.FromJSON SecretKey where
+  parseJSON = AE.withText "Bls.SecretKey" deserializeBase16
+
+instance AE.ToJSON SecretKey where
+  toJSON v = AE.String (serializeBase16 v)
+
+
+-- PublicKey implementations
+
+instance Serialize PublicKey where
   get = do
     bs <- getByteString publicKeySize
-    case fromBytesHelper freeBlsPublicKey fromBytesBlsPublicKey bs of
-      Nothing -> fail "Cannot decode BlsPublicKey"
-      Just x -> return $ BlsPublicKey x
+    case fromBytesHelper freePublicKey fromBytesPublicKey bs of
+      Nothing -> fail "Cannot decode PublicKey"
+      Just x -> return $ PublicKey x
 
-  put (BlsPublicKey p) =
-    let bs = toBytesHelper toBytesBlsPublicKey p
+  put (PublicKey p) =
+    let bs = toBytesHelper toBytesPublicKey p
     in putByteString bs
 
-instance Show BlsPublicKey where
+instance Show PublicKey where
   show = byteStringToHex . encode
 
-instance Eq BlsPublicKey where
-  BlsPublicKey p1 == BlsPublicKey p2 = eqHelper p1 p2 equalsBlsPublicKey
+instance Eq PublicKey where
+  PublicKey p1 == PublicKey p2 = eqHelper p1 p2 equalsPublicKey
 
-instance Ord BlsPublicKey where
-  compare (BlsPublicKey pk1) (BlsPublicKey pk2) =
-    cmpHelper pk1 pk2 cmpBlsPublicKey
+instance Ord PublicKey where
+  compare (PublicKey pk1) (PublicKey pk2) =
+    cmpHelper pk1 pk2 cmpPublicKey
 
-instance Serialize BlsSignature where
+instance AE.FromJSON PublicKey where
+  parseJSON = AE.withText "Bls.PublicKey" deserializeBase16
+
+instance AE.ToJSON PublicKey where
+  toJSON v = AE.String (serializeBase16 v)
+
+
+-- Signature implementations
+
+instance Serialize Signature where
   get = do
     bs <- getByteString signatureSize
-    case fromBytesHelper freeBlsSignature fromBytesBlsSignature bs of
-      Nothing -> fail "Cannot decode BlsSignature"
-      Just x -> return $ BlsSignature x
+    case fromBytesHelper freeSignature fromBytesSignature bs of
+      Nothing -> fail "Cannot decode Signature"
+      Just x -> return $ Signature x
 
-  put (BlsSignature p) =
-    let bs = toBytesHelper toBytesBlsSignature p
+  put (Signature p) =
+    let bs = toBytesHelper toBytesSignature p
     in putByteString bs
 
-instance Show BlsSignature where
+instance Show Signature where
   show = byteStringToHex . encode
 
-instance Eq BlsSignature where
-  BlsSignature p1 == BlsSignature p2 = eqHelper p1 p2 equalsBlsSignature
+instance Eq Signature where
+  Signature p1 == Signature p2 = eqHelper p1 p2 equalsSignature
 
-instance Ord BlsSignature where
-  compare (BlsSignature sig1) (BlsSignature sig2) =
-    cmpHelper sig1 sig2 cmpBlsSignature
+instance Ord Signature where
+  compare (Signature sig1) (Signature sig2) =
+    cmpHelper sig1 sig2 cmpSignature
 
--- TODO (maybe) FromJSON, ToJSON for all types
+instance AE.FromJSON Signature where
+  parseJSON = AE.withText "Bls.Signature" deserializeBase16
 
-generateBlsSecretKey :: IO BlsSecretKey
-generateBlsSecretKey = do
-  ptr <- generateBlsSecretKeyPtr
-  BlsSecretKey <$> newForeignPtr freeBlsSecretKey ptr
+instance AE.ToJSON Signature where
+  toJSON v = AE.String (serializeBase16 v)
 
-deriveBlsPublicKey :: BlsSecretKey -> BlsPublicKey
-deriveBlsPublicKey sk = BlsPublicKey <$> unsafeDupablePerformIO $ do
-  pkptr <- withBlsSecretKey sk $ \sk' -> deriveBlsPublicKeyPtr sk'
-  newForeignPtr freeBlsPublicKey pkptr
 
-emptySignature :: BlsSignature
-emptySignature = BlsSignature <$> unsafeDupablePerformIO $ do
+-- Signature scheme implementation
+
+generateSecretKey :: IO SecretKey
+generateSecretKey = do
+  ptr <- generateSecretKeyPtr
+  SecretKey <$> newForeignPtr freeSecretKey ptr
+
+derivePublicKey :: SecretKey -> PublicKey
+derivePublicKey sk = PublicKey <$> unsafeDupablePerformIO $ do
+  pkptr <- withSecretKey sk $ \sk' -> derivePublicKeyPtr sk'
+  newForeignPtr freePublicKey pkptr
+
+emptySignature :: Signature
+emptySignature = Signature <$> unsafeDupablePerformIO $ do
   sigptr <- emptyBlsSig
-  newForeignPtr freeBlsSignature sigptr
+  newForeignPtr freeSignature sigptr
 
-sign :: ByteString -> BlsSecretKey -> BlsSignature
-sign m sk = BlsSignature <$> unsafeDupablePerformIO $ do
+sign :: ByteString -> SecretKey -> Signature
+sign m sk = Signature <$> unsafeDupablePerformIO $ do
   sigptr <- BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
-    withBlsSecretKey sk $ \sk' ->
+    withSecretKey sk $ \sk' ->
     signBls (castPtr m') (fromIntegral mlen) sk'
-  newForeignPtr freeBlsSignature sigptr
+  newForeignPtr freeSignature sigptr
 
-verify :: ByteString -> BlsPublicKey -> BlsSignature -> Bool
+verify :: ByteString -> PublicKey -> Signature -> Bool
 verify m pk sig = unsafeDupablePerformIO $ do
   BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
-    withBlsPublicKey pk $ \pk' ->
-    withBlsSignature sig $ \sig' ->
+    withPublicKey pk $ \pk' ->
+    withSignature sig $ \sig' ->
     verifyBls (castPtr m') (fromIntegral mlen) pk' sig'
 
-aggregate :: BlsSignature -> BlsSignature -> BlsSignature
-aggregate sig1 sig2 = BlsSignature <$> unsafeDupablePerformIO $ do
-  sigptr <- withBlsSignature sig1 $ \sig1' ->
-    withBlsSignature sig2 $ \sig2' ->
+aggregate :: Signature -> Signature -> Signature
+aggregate sig1 sig2 = Signature <$> unsafeDupablePerformIO $ do
+  sigptr <- withSignature sig1 $ \sig1' ->
+    withSignature sig2 $ \sig2' ->
     aggregateBls sig1' sig2'
-  newForeignPtr freeBlsSignature sigptr
+  newForeignPtr freeSignature sigptr
 
 --- Verify a signature on bytestring under the list of public keys
 --- The order of the public key list is irrelevant to the result
-verifyAggregate :: ByteString -> [BlsPublicKey] -> BlsSignature -> Bool
+verifyAggregate :: ByteString -> [PublicKey] -> Signature -> Bool
 verifyAggregate m pks sig = unsafeDupablePerformIO $ do
   BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
-    withBlsSignature sig $ \sig' ->
+    withSignature sig $ \sig' ->
     withKeyArray [] pks $ \arrlen -> \headptr ->
       verifyBlsAggregate (castPtr m') (fromIntegral mlen) headptr (fromIntegral arrlen) sig'
     where
       withKeyArray ps [] f = withArrayLen ps f
-      withKeyArray ps (pk:pks_) f = withBlsPublicKey pk $ \pk' -> withKeyArray (pk':ps) pks_ f
+      withKeyArray ps (pk:pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk':ps) pks_ f
 
 -- The following functions are only for testing purposes
 -- Provides deterministic key generation from seed.
-foreign import ccall unsafe "bls_generate_secretkey_from_seed" generateBlsSecretKeyPtrFromSeed :: CSize -> IO (Ptr BlsSecretKey)
+foreign import ccall unsafe "bls_generate_secretkey_from_seed" generateSecretKeyPtrFromSeed :: CSize -> IO (Ptr SecretKey)
 
-generateBlsSecretKeyFromSeed :: CSize -> BlsSecretKey
-generateBlsSecretKeyFromSeed seed = unsafeDupablePerformIO $ do
-  ptr <- generateBlsSecretKeyPtrFromSeed seed
-  (BlsSecretKey <$> newForeignPtr freeBlsSecretKey ptr)
+generateSecretKeyFromSeed :: CSize -> SecretKey
+generateSecretKeyFromSeed seed = unsafeDupablePerformIO $ do
+  ptr <- generateSecretKeyPtrFromSeed seed
+  (SecretKey <$> newForeignPtr freeSecretKey ptr)

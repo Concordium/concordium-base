@@ -6,28 +6,29 @@ import Test.QuickCheck
 import Test.Hspec
 import System.Random
 import Data.Serialize
+import qualified Data.Aeson as AE
 
-genSecretKey :: Gen BlsSecretKey
+genSecretKey :: Gen SecretKey
 genSecretKey = fst . randomSecretKey . mkStdGen <$> arbitrary
 
-randomSecretKey :: RandomGen g => g -> (BlsSecretKey, g)
+randomSecretKey :: RandomGen g => g -> (SecretKey, g)
 randomSecretKey gen = (sk, gen')
   where
     (nextSeed, gen') = random gen
-    sk = generateBlsSecretKeyFromSeed nextSeed
+    sk = generateSecretKeyFromSeed nextSeed
 
-genKeyPair :: Gen (BlsSecretKey, BlsPublicKey)
+genKeyPair :: Gen (SecretKey, PublicKey)
 genKeyPair =
   let gen = randomSecretKey . mkStdGen
   in makePair . fst . gen <$> arbitrary
     where
-      makePair :: BlsSecretKey -> (BlsSecretKey, BlsPublicKey)
-      makePair sk = (sk, deriveBlsPublicKey sk)
+      makePair :: SecretKey -> (SecretKey, PublicKey)
+      makePair sk = (sk, derivePublicKey sk)
 
-forAllSK :: Testable prop => (BlsSecretKey -> prop) -> Property
+forAllSK :: Testable prop => (SecretKey -> prop) -> Property
 forAllSK = forAll genSecretKey
 
-forAllKP :: Testable prop => ((BlsSecretKey, BlsPublicKey) -> prop) -> Property
+forAllKP :: Testable prop => ((SecretKey, PublicKey) -> prop) -> Property
 forAllKP = forAll genKeyPair
 
 -- Checks that two different keys doesn't produce the same signature on the same
@@ -52,7 +53,7 @@ testSignAndVerifyCollision = forAllKP $ \(sk, pk) m1 m2 ->
   m1 /= m2 ==>
     let sig1 = sign (BS.pack m1) sk
         sig2 = sign (BS.pack m2) sk
-    in not (verify (BS.pack m1) pk sig2 or verify (BS.pack m2) pk sig1)
+    in not ((verify (BS.pack m1) pk sig2) || (verify (BS.pack m2) pk sig1))
 
 testSerializeSecretKey :: Property
 testSerializeSecretKey = forAllSK $ \sk ->
@@ -67,6 +68,19 @@ testSerializeSignature = forAllSK $ \sk d ->
   let sig = sign (BS.pack d) sk in
   Right sig === runGet get (runPut $ put sig)
 
+testSerializePublicKeyJSON :: Property
+testSerializePublicKeyJSON = forAllSK $ \sk ->
+  Just sk === AE.decode (AE.encode sk)
+
+testSerializeSecretKeyJSON :: Property
+testSerializeSecretKeyJSON = forAllKP $ \(_, pk) ->
+  Just pk === AE.decode (AE.encode pk)
+
+testSerializeSignatureJSON :: Property
+testSerializeSignatureJSON = forAllSK $ \sk d ->
+  let sig = sign (BS.pack d) sk in
+  Just sig === AE.decode (AE.encode sig)
+
 tests :: Spec
 tests = describe "Concordium.Crypto.BlsSignature" $ do
             it "bls_key_collision" $ withMaxSuccess 10000 $ testKeyCollision
@@ -76,3 +90,6 @@ tests = describe "Concordium.Crypto.BlsSignature" $ do
             it "bls_serialize_sk" $ withMaxSuccess 10000 $ testSerializeSecretKey
             it "bls_serialize_pk" $ withMaxSuccess 10000 $ testSerializePublicKey
             it "bls_serialize_sig" $ withMaxSuccess 10000 $ testSerializeSignature
+            it "bls_json_pk" $ withMaxSuccess 10000 $ testSerializePublicKeyJSON
+            it "bls_json_sk" $ withMaxSuccess 10000 $ testSerializeSecretKeyJSON
+            it "bls_json_sig" $ withMaxSuccess 10000 $ testSerializeSignatureJSON
