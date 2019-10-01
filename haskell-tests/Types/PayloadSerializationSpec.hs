@@ -22,6 +22,8 @@ import qualified Data.Serialize as S
 import Types.CoreAllGen
 
 import Data.Int
+import System.Random
+import Concordium.Crypto.Proofs
 
 -- genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
 -- genCredentialDeploymentInformation = do
@@ -49,6 +51,9 @@ genPolicyItem = do
   piIndex <- arbitrary
   piValue <- AttributeValue . (\x -> abs x `mod` 2^(248 :: Int)) <$> arbitrary
   return PolicyItem{..}
+
+genDlogProof :: Gen Dlog25519Proof
+genDlogProof = fst . randomProof . mkStdGen <$> arbitrary
 
 genPayload :: Gen Payload
 genPayload = oneof [genDeployModule,
@@ -96,7 +101,9 @@ genPayload = oneof [genDeployModule,
           abElectionVerifyKey <- VRF.publicKey <$> arbitrary
           abSignatureVerifyKey <- VerifyKey . BSS.pack <$> (vector =<< choose (30,80))
           abAccount <- genAddress
-          abProof <- genProof
+          abProofSig <- genDlogProof
+          abProofElection <- genDlogProof
+          abProofAccount <- genDlogProof
           return AddBaker{..}
 
         genProof = choose (50,200) >>= vector >>= return . BS.pack
@@ -109,13 +116,13 @@ genPayload = oneof [genDeployModule,
         genUpdateBakerAccount = do
           ubaId <- genBakerId
           ubaAddress <- genAddress
-          ubaProof <- genProof
+          ubaProof <- genDlogProof
           return UpdateBakerAccount{..}
 
         genUpdateBakerSignKey = do
           ubsId <- genBakerId
           ubsKey <- VerifyKey . BSS.pack <$> (vector =<< choose (30,80))
-          ubsProof <- genProof
+          ubsProof <- genDlogProof
           return UpdateBakerSignKey{..}
 
         genBakerId = BakerId <$> arbitrary
