@@ -40,19 +40,24 @@ newtype FixedByteString a = FixedByteString ByteArray
 -- array which would be __very bad__.
 -- For this reason this function should not be inlined.
 -- Analogous reasoning applies do functions below that do the same copying.
-{-# NOINLINE create #-}
+{-# INLINE create #-}
 create :: forall a . FixedLength a => (Ptr Word8 -> IO ()) -> IO (FixedByteString a)
-create f = do
+create f = snd <$> createWith f
+
+{-# NOINLINE createWith #-}
+createWith :: forall a b . FixedLength a => (Ptr Word8 -> IO b) -> IO (b, FixedByteString a)
+createWith f = do
   mbarr <- newPinnedByteArray len
   let !(Addr ptr) = mutableByteArrayContents mbarr
-  f (Ptr ptr)
+  r <- f (Ptr ptr)
   touch mbarr  -- DO NOT REMOVE. GHC does strange things if you do leading to weird errors
                -- The issue probably that the dependency between mbarr and ptr is lost
                -- and so the optimizer sometimes seems to move the copy before the foreign
                -- call is done, leading to corrupt data.
   barr <- newByteArray len
   copyMutableByteArray barr 0 mbarr 0 len
-  FixedByteString <$> unsafeFreezeByteArray barr
+  fbarr <- unsafeFreezeByteArray barr
+  return (r, FixedByteString fbarr)
 
     where len = fixedLength (undefined :: a)
 

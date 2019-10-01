@@ -1,8 +1,10 @@
 use ed25519_dalek::*;
 use rand::*;
 
+use crate::dlog_ed25519::*;
 use ffi_helpers::*;
-use std::slice;
+use libc::size_t;
+use std::{io::Cursor, slice};
 
 /// FIXME: Hack to get around different requirements for rand versions
 /// between the pairing crate and this one.
@@ -82,4 +84,64 @@ pub extern "C" fn eddsa_verify(
         Ok(_) => 1,
         _ => 0,
     }
+}
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn eddsa_verify_dlog_ed25519(
+    challenge_prefix_ptr: *const u8,
+    challenge_len: size_t,
+    public_key_bytes: *const u8,
+    proof_bytes: *const u8,
+) -> i32 {
+    let challenge = slice_from_c_bytes!(challenge_prefix_ptr, challenge_len as usize);
+    let public_key = {
+        let pk_bytes = slice_from_c_bytes!(public_key_bytes, PUBLIC_KEY_LENGTH);
+        match PublicKey::from_bytes(pk_bytes) {
+            Err(_) => return -1,
+            Ok(pk) => pk,
+        }
+    };
+    let proof = {
+        let proof_bytes = slice_from_c_bytes!(proof_bytes, PROOF_LENGTH);
+        match Ed25519DlogProof::from_bytes(&mut Cursor::new(proof_bytes)) {
+            Err(_) => return -2,
+            Ok(proof) => proof,
+        }
+    };
+    if verify_dlog_ed25519(challenge, &public_key, &proof) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn eddsa_prove_dlog_ed25519(
+    challenge_prefix_ptr: *const u8,
+    challenge_len: size_t,
+    public_key_bytes: *const u8,
+    secret_key_bytes: *const u8,
+    proof_ptr: *mut u8,
+) -> i32 {
+    let challenge = slice_from_c_bytes!(challenge_prefix_ptr, challenge_len as usize);
+    let public_key = {
+        let pk_bytes = slice_from_c_bytes!(public_key_bytes, PUBLIC_KEY_LENGTH);
+        match PublicKey::from_bytes(pk_bytes) {
+            Err(_) => return -1,
+            Ok(pk) => pk,
+        }
+    };
+    let secret_key = {
+        let sk_bytes = slice_from_c_bytes!(secret_key_bytes, SECRET_KEY_LENGTH);
+        match SecretKey::from_bytes(sk_bytes) {
+            Err(_) => return -2,
+            Ok(sk) => sk,
+        }
+    };
+    let proof_bytes = mut_slice_from_c_bytes!(proof_ptr, PROOF_LENGTH);
+    let proof = prove_dlog_ed25519(challenge, &public_key, &secret_key);
+    proof_bytes.copy_from_slice(&proof.to_bytes());
+    return 0;
 }

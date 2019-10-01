@@ -37,6 +37,7 @@ Library
                    Concordium.ID.Account
                    Concordium.Crypto.FFIDataTypes
                    Concordium.Crypto.ByteStringHelpers
+                   Concordium.Crypto.Proofs
 
   Other-modules:  Concordium.Crypto.FFIHelpers
                   Data.Base58Encoding.TH
@@ -96,7 +97,7 @@ Test-Suite tests
    ConcordiumTests.Crypto.FFIDataTypes
    ConcordiumTests.Crypto.FFIVerify
    ConcordiumTests.ID.Types
-
+   ConcordiumTests.Crypto.Ed25519DlogProofs
 
 benchmark perf
   default-language: Haskell2010
