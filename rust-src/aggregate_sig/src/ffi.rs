@@ -3,8 +3,7 @@ use ffi_helpers::*;
 use libc::size_t;
 use pairing::bls12_381::Bls12;
 use rand::{thread_rng, SeedableRng, StdRng};
-use std::{io::Cursor, slice};
-use std::cmp::Ordering;
+use std::{cmp::Ordering, io::Cursor, slice};
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -52,7 +51,7 @@ macro_rules! macro_cmp {
                 Ordering::Equal => 0,
             }
         }
-    }
+    };
 }
 
 macro_cmp!(bls_pk_cmp, PublicKey<Bls12>);
