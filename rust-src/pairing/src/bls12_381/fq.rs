@@ -1168,6 +1168,7 @@ fn test_frob_coeffs() {
     );
 }
 
+// (p-3)/4 where p is the prime characteristic of the field Fq (p=q)
 pub(crate) const P_MINUS_3_DIV_4: [u64; 6] = [
     0xee7fbfffffffeaaa,
     0x07aaffffac54ffff,
@@ -1177,6 +1178,7 @@ pub(crate) const P_MINUS_3_DIV_4: [u64; 6] = [
     0x680447a8e5ff9a6,
 ];
 
+// (p-1)/2 where p is the prime characteristic of the field Fq (p=q)
 pub(crate) const P_MINUS_1_DIV_2: [u64; 6] = [
     0xdcff7fffffffd555,
     0x0f55ffff58a9ffff,
@@ -1186,6 +1188,7 @@ pub(crate) const P_MINUS_1_DIV_2: [u64; 6] = [
     0xd0088f51cbff34d,
 ];
 
+// The a-coefficient of the 11-isogenous curve to G1
 pub(crate) const E11_B: [u64; 6] = [
     0xd1cc48e98e172be0,
     0x5a23215a316ceaa5,
@@ -1195,6 +1198,7 @@ pub(crate) const E11_B: [u64; 6] = [
     0x12e2908d11688030,
 ];
 
+// The b-coefficient of the 11-isogenous curve to G1
 pub(crate) const E11_A: [u64; 6] = [
     0x5cf428082d584c1d,
     0x98936f8da0e0f97f,
@@ -1679,8 +1683,8 @@ fn decode_hash_to_fq(bytes: &mut Cursor<&[u8]>) -> Result<Fq, PrimeFieldDecoding
 
 // Implements section 4 of https://eprint.iacr.org/2019/403.pdf
 pub(crate) fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
-    // this check can be made faster by replacing the constructions of one,
-    // zero and minus_one with constants, as done with B_COEFF
+    // this check can be potentially be made faster by replacing the constructions of one,
+    // zero with constants, as done with B_COEFF
     let one = Fq::from_repr(FqRepr::from(1)).unwrap();
     let zero = Fq::from_repr(FqRepr::from(0)).unwrap();
     let minus_one = Fq::from_repr(FqRepr([
@@ -1768,7 +1772,7 @@ pub(crate) fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
         x_proj.mul_assign(&d); // X = ND
         y_proj = alpha;
         y_proj.mul_assign(&v); // Y = alpha D^3
-                               // multiply y by sign(t)
+        // multiply y by sign(t)
         match sign(t) {
             Sign::Plus => (),
             Sign::Minus => y_proj.negate(),
@@ -1787,6 +1791,7 @@ pub(crate) fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
     (x_proj, y_proj, z_proj)
 }
 
+// See readme for explanation of test cases
 #[test]
 fn test_simplified_swu() {
     fn test_point_at_inf(t: Fq) {
@@ -1827,6 +1832,12 @@ fn test_simplified_swu() {
         assert!(expected_y == y);
     }
 
+    // t0 = 969b9cc7315e4ac2371da3f9c675eed35b6384ca795d17d8dd8e12da6b833c01c1c6afa860d860060020964873e1264
+    // swu(t0) = (
+    //      8968f732dbad02a9b2a0d54346a068e6aaf1de330a9d09e816547444f05b17d0df13adc16356f5cbcd2ceaab47d55c4,
+    //      11ec46738b7631c340bedd967d35f68873eb067edfbfc9bf725a3823e2850722830ea0c294779dff8ad0b1aed441d0a2,
+    //      1,
+    // )
     // g(X0(t0))^((p-1)/2) == 1
     // sign(t0) = Plus
     let t0 = Fq::from_repr(FqRepr([
@@ -1858,6 +1869,12 @@ fn test_simplified_swu() {
     .unwrap();
     test(t0, expected_x, expected_y);
 
+    // t1 = 128ca46d7ba7268dda23e2c7bb0bbb1bb32802e3e19c195ecd9109b45f9ffc633e8f682b456faae4067f6840d661620c
+    // swu(t1) = (
+    //      888d8e87baad9c27bfba7a144a45cb9093da5b2b13be8b430ccb4314efb43a448c4e273b7d14a482e079116e9e85d2d,
+    //      cd6450cd98477ae7ed9889b59a528e2d05182042257d2b41fe00315fce28200ea14b5d50f14b7906da0f00e3a3e3b53,
+    //      1,
+    // )
     // g(X0(t1))^((p-1)/2) == 1
     // sign(t1) = Minus
     let t1 = Fq::from_repr(FqRepr([
@@ -1889,6 +1906,12 @@ fn test_simplified_swu() {
     .unwrap();
     test(t1, expected_x, expected_y);
 
+    // t2 = 154ed432ba8d7d846c12f670b2f9ee68703b9270167358189de20ab9ee5fc81c6dd4649aa57b7d28414831e9ea6a1c7c
+    // swu(t2) = (
+    //      537d5f03530d09edfe5627c6c1d90796505cb2ada43ef113c8ca5b097e3ee74b97f4768c2944bba540b426a6cc9b007,
+    //      14e44b5a03cfcc14869b5bbb33801bf4149fa85fe17bcebcac5abeefae61495e1c67182a42ad8600e15bdfb065c828d9,
+    //      1,
+    // )
     // g(X0(t2))^((p-1)/2) != 1
     // sign(t2) = Minus
     let t2 = Fq::from_repr(FqRepr([
@@ -1920,6 +1943,12 @@ fn test_simplified_swu() {
     .unwrap();
     test(t2, expected_x, expected_y);
 
+    // t3 = bdb5243c7b6b15dbe4a8fd0901af2cf8a297a516eeaa6ed685f682eb98311989bc64f8b0c846a167575ab9f2cdc376
+    // swu(t3) = (
+    //      646144588fd3473b16ee9f40dd57aa542f8d90c54684e6f69fdceaaf9728fd88f8455f1f235b2ceae13df3509345c9b,
+    //      c89264ed2bf4ee21c08615aaa8389683dec01a1567cd3d3cfbb85cc60d0004f3c6441b5575e005964ef53cc0839aa33,
+    //      1,
+    //  )
     // g(X0(t3))^((p-1)/2) != 1
     // sign(t3) = Plus
     let t3 = Fq::from_repr(FqRepr([
@@ -2128,6 +2157,7 @@ fn test_iso11() {
     // test case 1, affine point on 11-isogeny:
     // x: 231676323333219032364207663160931012408135689080701790049416995747433764605315759399331076266193515570430995049583,
     // y: 1679701275502850236404761224635518110616107305447740765847030766801057551645601784778242705363960817147253464979660
+    //
     // resulting affine point on y^2 = x^3 + 4, computed using Sage:
     // x: 2462470316687406725265935944033330307865993658929330879249576046234792668690184598793893670391772666445389495997970
     // y: 1305585544177362738895827194786305935351300563185311476107805270117356948076235166602872188538678439100090683175388
@@ -2174,9 +2204,9 @@ fn test_iso11() {
     // test case 2, affine point on 11-isogeny:
     // x: 200672990962149954463803146802967864720527670550092954518341273224587459684808873511630728943600649771874365573754
     // y: 3771658320633238787764443471835928880231542729858183816905716275784304196017898359904922975462921081984123896844037
-    // the x,y,z coordinates below are the jacobian coordinates (x*1000000^2,
-    // y*1000000^3, 1000000) resulting affine point on y^2 = x^3 + 4, computed
-    // using Sage:
+    // the x,y,z coordinates below are the jacobian coordinates (x*1000000^2, y*1000000^3, 1000000)
+    //
+    // resulting affine point on y^2 = x^3 + 4, computed using Sage:
     // x: 751464328052491409370915162588147071834631858446608699879213045826820895244140093535995699583970173378180279055064
     // y: 3766342793094137890660475956436782650146903774069499310802413350809867070503035142752911481430587061848145471128246
     let x = Fq::from_repr(FqRepr([
