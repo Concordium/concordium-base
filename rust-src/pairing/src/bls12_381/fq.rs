@@ -1683,8 +1683,8 @@ fn decode_hash_to_fq(bytes: &mut Cursor<&[u8]>) -> Result<Fq, PrimeFieldDecoding
 
 // Implements section 4 of https://eprint.iacr.org/2019/403.pdf
 pub(crate) fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
-    // this check can be potentially be made faster by replacing the constructions of one,
-    // zero with constants, as done with B_COEFF
+    // this check can be potentially be made faster by replacing the constructions
+    // of one, zero with constants, as done with B_COEFF
     let one = Fq::from_repr(FqRepr::from(1)).unwrap();
     let zero = Fq::from_repr(FqRepr::from(0)).unwrap();
     let minus_one = Fq::from_repr(FqRepr([
@@ -1772,7 +1772,7 @@ pub(crate) fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
         x_proj.mul_assign(&d); // X = ND
         y_proj = alpha;
         y_proj.mul_assign(&v); // Y = alpha D^3
-        // multiply y by sign(t)
+                               // multiply y by sign(t)
         match sign(t) {
             Sign::Plus => (),
             Sign::Minus => y_proj.negate(),
@@ -2204,7 +2204,8 @@ fn test_iso11() {
     // test case 2, affine point on 11-isogeny:
     // x: 200672990962149954463803146802967864720527670550092954518341273224587459684808873511630728943600649771874365573754
     // y: 3771658320633238787764443471835928880231542729858183816905716275784304196017898359904922975462921081984123896844037
-    // the x,y,z coordinates below are the jacobian coordinates (x*1000000^2, y*1000000^3, 1000000)
+    // the x,y,z coordinates below are the jacobian coordinates (x*1000000^2,
+    // y*1000000^3, 1000000)
     //
     // resulting affine point on y^2 = x^3 + 4, computed using Sage:
     // x: 751464328052491409370915162588147071834631858446608699879213045826820895244140093535995699583970173378180279055064
