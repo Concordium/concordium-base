@@ -110,9 +110,9 @@ pub extern "C" fn eddsa_verify_dlog_ed25519(
         }
     };
     if verify_dlog_ed25519(challenge, &public_key, &proof) {
-        return 1;
+        1
     } else {
-        return 0;
+        0
     }
 }
 
@@ -143,5 +143,5 @@ pub extern "C" fn eddsa_prove_dlog_ed25519(
     let proof_bytes = mut_slice_from_c_bytes!(proof_ptr, PROOF_LENGTH);
     let proof = prove_dlog_ed25519(challenge, &public_key, &secret_key);
     proof_bytes.copy_from_slice(&proof.to_bytes());
-    return 0;
+    0
 }
