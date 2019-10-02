@@ -9,6 +9,7 @@ import Data.ByteString(ByteString)
 import Data.ByteString.Short(ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Base16 as BS16
 import qualified Data.FixedByteString as FBS
 import Concordium.Crypto.SignatureScheme
@@ -22,6 +23,8 @@ import qualified Data.Text.Read as Text
 import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
 import Control.Monad
+import Control.Monad.Fail hiding(fail)
+import qualified Control.Monad.Fail as MF
 import qualified Data.Text as Text
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Crypto.FFIDataTypes
@@ -52,37 +55,48 @@ instance Hashable AccountAddress where
 
 -- |Show the address in base58check format.
 instance Show AccountAddress where
-  show (AccountAddress x) = show . base58CheckEncode . FBS.toByteString $ x
+  show = BS8.unpack . addressToBytes
 
 -- |FIXME: Probably make sure the input size is not too big before doing base58check.
 instance FromJSON AccountAddress where
-  parseJSON v = do
-    b58 <- parseJSON v
-    case base58CheckDecode b58 of
-      Nothing -> fail "Base 58 checksum invalid."
-      Just x | BS.length x == accountAddressSize ->
-               return (AccountAddress (FBS.fromByteString x))
-             | otherwise -> fail "Address of incorrect length."
+  parseJSON v = addressFromText =<< parseJSON v
 
 instance ToJSON AccountAddress where
-  toJSON (AccountAddress v) = toJSON (base58CheckEncode (FBS.toByteString v))
+  toJSON a = String (Text.decodeUtf8 (addressToBytes a))
 
-addressFromText :: Text.Text -> Maybe AccountAddress
-addressFromText text =
-  case fromJSON (String text) of
-    Error _ -> Nothing
-    Success r -> Just r
+addressFromText :: MonadFail m => Text.Text -> m AccountAddress
+addressFromText = addressFromBytes . Text.encodeUtf8
+
+-- |Convert an address to valid Base58 bytes.
+-- Uses version byte 1 for the base58check encoding.
+addressToBytes :: AccountAddress -> ByteString
+addressToBytes (AccountAddress v) = schemeId <> raw (base58CheckEncode (BS.cons 1 (BS.tail bs)))
+    where bs = FBS.toByteString v
+          schemeId = 
+            let bytes = encodePositiveInteger' (fromIntegral (BS.head bs))
+            in if BS.length bytes == 1 then BS8.cons '1' bytes
+               else bytes
+
 
 -- |Take bytes which are presumed valid base58 encoding, and try to deserialize
 -- an address.
-addressFromBytes :: BS.ByteString -> Maybe AccountAddress
+addressFromBytes :: MonadFail m => BS.ByteString -> m AccountAddress
 addressFromBytes bs =
-  if checkValidBase58 bs then
-    case base58CheckDecode' bs of 
-      Nothing -> Nothing
-      Just x | BS.length x == accountAddressSize -> Just (AccountAddress (FBS.fromByteString x))
-             | otherwise -> Nothing
-  else Nothing
+    if BS.length bs < 2 then
+      MF.fail "Address too short."
+    else
+      let (scheme, payload) = BS.splitAt 2 bs
+      in case decodePositiveInteger' scheme of
+           Nothing -> MF.fail "Could not decode scheme."
+           Just schemeId | schemeId >= 256 -> MF.fail "Scheme id not valid."
+                         | otherwise ->
+            case base58CheckDecode' payload of
+              Nothing -> MF.fail "Base 58 checksum invalid."
+              Just x | BS.length x == accountAddressSize ->
+                       let version = BS.head x
+                       in if version == 1 then return (AccountAddress (FBS.fromByteString (BS.cons (fromIntegral schemeId) (BS.tail x))))
+                          else fail "Unknown base58 check version byte."
+                     | otherwise -> MF.fail "Wrong address length."
 
 -- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32

@@ -19,6 +19,8 @@ pub struct Ed25519DlogProof {
     witness:          Scalar,
 }
 
+pub static PROOF_LENGTH: usize = 3 * 32;
+
 #[derive(Debug)]
 pub enum PointDecodingError {
     NotOnCurve,
@@ -115,13 +117,11 @@ pub fn prove_dlog_ed25519(
         hasher2.input(&randomised_point.compress().to_bytes());
         hash.copy_from_slice(&hasher2.result().as_slice()[..32]);
         let x = Scalar::from_bytes_mod_order(hash);
-        if x == Scalar::zero() {
-            println!("x = 0");
-        } else {
+        if x != Scalar::zero() {
             challenge = x;
             witness = rand_scalar - challenge * secret;
             suc = true;
-        }
+        } // else try another time.
     }
 
     Ed25519DlogProof {
@@ -144,7 +144,6 @@ pub fn verify_dlog_ed25519(
     hash.copy_from_slice(&hasher.result().as_slice()[..32]);
     let c = Scalar::from_bytes_mod_order(hash);
     if c != proof.challenge {
-        println!("wrong challenge");
         return false;
     }
     match point_from_public_key(&public_key) {

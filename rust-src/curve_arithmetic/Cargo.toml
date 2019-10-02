@@ -19,6 +19,9 @@ path = "../pairing"
 [dependencies.ffi_helpers]
 path = "../ffi_helpers"
 
+[dependencies.common]
+path = "../common"
+
 [lib]
 name = "curve_arithmetic"
 crate-type = ["rlib", "staticlib", "cdylib"]
