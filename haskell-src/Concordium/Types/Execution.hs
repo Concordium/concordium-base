@@ -20,6 +20,7 @@ import qualified Concordium.Types.Acorn.Core as Core
 import Concordium.Types
 import Concordium.Types.Acorn.Interfaces
 import qualified Concordium.ID.Types as IDTypes
+import Concordium.Crypto.Proofs
 
 type NoAnnot = Void
 
@@ -85,12 +86,21 @@ data Payload =
       abSignatureVerifyKey :: !BakerSignVerifyKey,
       -- |Address of the account the baker wants to be rewarded to.
       abAccount :: !AccountAddress,
-      -- |Proof of at least the following facts
-      -- 
-      --   * the baker owns the account on the given address (knows the private key)
-      --   * the baker owns private keys corresponding to the public keys (election and signature)
-      --   * the baker is allowed to become a baker: THIS NEEDS SPEC
-      abProof :: !Proof
+      -- |Proof that the baker owns the private key corresponding to the
+      -- signature verification key.
+      abProofSig :: !Dlog25519Proof,
+      -- |Proof that the baker owns the private key corresponding to the
+      -- election verification key.
+      abProofElection :: !Dlog25519Proof,
+      -- |Proof that the baker owns the privte key corresponding to the reward
+      -- account public key. This is needed at least for beta where we want to
+      -- control who can become a baker and thus cannot allow users to send
+      -- create their own bakers.
+      -- TODO: We could also alternatively just require a signature from one of the
+      -- beta accounts on the public data.
+      abProofAccount :: !Dlog25519Proof
+      -- FIXME: in the future also logic the baker is allowed to become a baker:
+      -- THIS NEEDS SPEC
       }
   -- |Remove an existing baker from the baker pool.
   | RemoveBaker {
@@ -109,7 +119,7 @@ data Payload =
       -- |Address of the new account. The account must exist.
       ubaAddress :: !AccountAddress,
       -- |Proof that the baker owns the new account.
-      ubaProof :: !Proof
+      ubaProof :: !Dlog25519Proof
       }
   -- |Update the signature (verification) key of the baker.
   | UpdateBakerSignKey {
@@ -118,7 +128,7 @@ data Payload =
       -- |New signature verification key.
       ubsKey :: !BakerSignVerifyKey,
       -- |Proof that the baker knows the private key of this verification key.
-      ubsProof :: !Proof
+      ubsProof :: !Dlog25519Proof
       }
   -- |Change which baker an account's stake is delegated to.
   -- If the ID is not valid, the delegation is not updated.
@@ -160,7 +170,9 @@ instance S.Serialize Payload where
     S.put abElectionVerifyKey <>
     S.put abSignatureVerifyKey <>
     S.put abAccount <>
-    S.put abProof
+    S.put abProofSig <>
+    S.put abProofElection <>
+    S.put abProofAccount
   put RemoveBaker{..} =
     P.putWord8 7 <>
     S.put rbId <>
@@ -211,7 +223,9 @@ instance S.Serialize Payload where
               abElectionVerifyKey <- S.get
               abSignatureVerifyKey <- S.get
               abAccount <- S.get
-              abProof <- S.get
+              abProofSig <- S.get
+              abProofElection <- S.get
+              abProofAccount <- S.get
               return AddBaker{..}
             7 -> do
               rbId <- S.get
@@ -319,6 +333,7 @@ data RejectReason = ModuleNotWF !(TypingError Core.UA) -- ^Error raised when typ
                   | InvalidBakerRemoveSource !AccountAddress
                   | UpdatingNonExistentBaker !BakerId
                   | InvalidStakeDelegationTarget !BakerId -- ^The target of stake delegation is not a valid baker.
+                  | DuplicateSignKey !BakerSignVerifyKey -- ^A baker with the given signing key already exists.
                   -- |A transaction should be sent from the baker's current account, but is not.
                   | NotFromBakerAccount { nfbaFromAccount :: !AccountAddress, -- ^Sender account of the transaction
                                           nfbaCurrentBakerAccount :: !AccountAddress -- ^Current baker account.
