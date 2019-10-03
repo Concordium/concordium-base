@@ -43,8 +43,8 @@ library:
     - -Wredundant-constraints
     - -fno-ignore-asserts
 
-executables:
-  Perf-test:
+benchmarks:
+  Perf-bench:
     main:            Perf.hs
     source-dirs:     perf
     ghc-options:
