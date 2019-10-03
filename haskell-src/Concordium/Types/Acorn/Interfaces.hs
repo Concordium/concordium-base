@@ -137,7 +137,7 @@ data TypingError annot =
                  | LocalNameNotInScope Core.Name
                  -- |The referenced imported definition does not exist in the given module.
                  | QualifiedNameNotInScope Core.ModuleRef Core.Name
-                 -- |A module with the given reference does not exist. Raised when
+                 -- |A module with the given reference does not exist. This is thrown when
                  -- trying to type-check an imported definition from a non-existing module.
                  | ModuleNotExists Core.ModuleRef
                  -- |The given name is already bound but is attempted to be
@@ -150,13 +150,18 @@ data TypingError annot =
                  | RedefinitionOfContract Core.TyName
                  -- |Attempting to declare a data type (with the given name) without constructors.
                  | DataTypeWithoutConstructors Core.TyName
-                 -- |The init method of a contract is not of the correct type.
+                 -- |The init method of a contract is not of the correct shape.
+                 -- This is thrown when attempting to extract the parameter type
+                 -- from the init method but the init method is not of the shape
+                 -- @Core.Lambda paramTy _@.
                  -- The argument is the name of the contract this error refers to.
-                 | ContractInitMethodHasIncorrectType Core.TyName
-                 -- |The receive method of a contract is not of the correct
-                 -- type (in the context of the types specified by the init
-                 -- method). The argument is the name of the contract this error refers to.
-                 | ContractReceiveMethodHasIncorrectType Core.TyName
+                 | ContractInitMethodHasIncorrectShape Core.TyName
+                 -- |The receive method of a contract is not of the correct shape.
+                 -- This is thrown when attempting to extract the model and message type
+                 -- from the receive method but the receive mthod is not of the shape
+                 -- @Core.Lambda _ (Core.Lambda modelTy (Core.Lambda _ (Core.Lambda _ (Core.Lambda (Core.TApp _ [msgTy]) _))))@.
+                 -- The argument is the name of the contract this error refers to.
+                 | ContractReceiveMethodHasIncorrectShape Core.TyName
                  -- |The contract's message type as specified by the receive
                  -- method is not a storable type. The first argument is the
                  -- name of the contract this error refers to, the second the
