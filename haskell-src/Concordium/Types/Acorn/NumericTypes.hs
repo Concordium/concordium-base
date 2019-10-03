@@ -35,12 +35,12 @@ toIntegral x =
 -- |Convert from one Integral to another.
 -- |If the argument value is withing the target type's range, the value is
 -- preserved. Otherwise it is "normalized" into the target type's range such that
--- 
+--
 --   * @toIntegralNormalizing 1 = 1@
 --   * @toIntegralNormalizing (x + y) = toIntegralNormalizing x + toIntegralNormalizing y@
 --   * @toIntegralNormalizing (x * y) = toIntegralNormalizing x * toIntegralNormalizing y@
 --   * @toIntegralNormalizing (-x) = - toIntegralNormalizing x@
--- 
+--
 -- In particular, in two's complement representation, if a and b have the same
 -- bit size the bit representation is maintained.
 --
