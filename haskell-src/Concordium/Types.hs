@@ -99,7 +99,7 @@ instance S.Serialize ContractSubindex where
     put (ContractSubindex i) = P.putWord64be i
 
 data ContractAddress = ContractAddress { contractIndex :: !ContractIndex
-                                       , contractSubindex :: !ContractSubindex} 
+                                       , contractSubindex :: !ContractSubindex}
     deriving(Eq, Ord, Generic, Typeable, Data)
 
 instance FromJSON ContractAddress where
@@ -319,7 +319,7 @@ newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, 
 data ChainMetadata =
   ChainMetadata { slotNumber :: Slot
                 -- |Height of the current block (the block which the transaction is going to be a part of).
-                , blockHeight :: BlockHeight 
+                , blockHeight :: BlockHeight
                 -- |Height of the last finalized block. NB: Each block has a
                 -- pointer to the last finalized block, and this field is the
                 -- height of that block. This information is stable with respect
@@ -336,4 +336,3 @@ type BlockHash = Hash.Hash
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
-
