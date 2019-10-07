@@ -134,8 +134,7 @@ pub extern "C" fn bls_empty_sig() -> *const Signature<Bls12> {
 pub extern "C" fn bls_generate_secretkey_from_seed(seed: size_t) -> *const SecretKey<Bls12> {
     let s: &[_] = &[seed];
     let mut rng: StdRng = SeedableRng::from_seed(s);
-    let key = Box::into_raw(Box::new(SecretKey::generate(&mut rng)));
-    key
+    Box::into_raw(Box::new(SecretKey::generate(&mut rng)))
 }
 
 #[cfg(test)]
