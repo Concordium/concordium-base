@@ -1,7 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.BlsSignature
   (PublicKey, SecretKey, Signature,
-  generateSecretKey, generateSecretKeyFromSeed, derivePublicKey, sign, verify, aggregate, verifyAggregate, emptySignature)
+  randomSecretKey, generateSecretKey, derivePublicKey, sign, verify, aggregate, verifyAggregate, emptySignature)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -17,6 +17,7 @@ import Data.ByteString
 import Data.ByteString.Unsafe as BS
 import System.IO.Unsafe
 import Data.Serialize
+import System.Random
 import qualified Data.Aeson as AE
 
 
@@ -213,6 +214,12 @@ verifyAggregate m pks sig = unsafeDupablePerformIO $ do
 -- The following functions are only for testing purposes
 -- Provides deterministic key generation from seed.
 foreign import ccall unsafe "bls_generate_secretkey_from_seed" generateSecretKeyPtrFromSeed :: CSize -> IO (Ptr SecretKey)
+
+randomSecretKey :: RandomGen g => g -> (SecretKey, g)
+randomSecretKey gen = (sk, gen')
+  where
+    (nextSeed, gen') = random gen
+    sk = generateSecretKeyFromSeed nextSeed
 
 generateSecretKeyFromSeed :: CSize -> SecretKey
 generateSecretKeyFromSeed seed = unsafeDupablePerformIO $ do

@@ -11,12 +11,6 @@ import qualified Data.Aeson as AE
 genSecretKey :: Gen SecretKey
 genSecretKey = fst . randomSecretKey . mkStdGen <$> arbitrary
 
-randomSecretKey :: RandomGen g => g -> (SecretKey, g)
-randomSecretKey gen = (sk, gen')
-  where
-    (nextSeed, gen') = random gen
-    sk = generateSecretKeyFromSeed nextSeed
-
 genKeyPair :: Gen (SecretKey, PublicKey)
 genKeyPair =
   let gen = randomSecretKey . mkStdGen
