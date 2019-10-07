@@ -1,10 +1,11 @@
 use crate::errors::AggregateSigError;
 use curve_arithmetic::{Curve, Pairing};
 use ff::Field;
+use generic_array::GenericArray;
 use rand::Rng;
 use rayon::{iter::*, join};
 use sha2::{Digest, Sha512};
-use std::{cmp::Ordering, io::Cursor};
+use std::io::Cursor;
 
 pub const PUBLIC_KEY_SIZE: usize = 96;
 pub const SECRET_KEY_SIZE: usize = 32;
@@ -113,7 +114,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
     signature: Signature<P>,
 ) -> bool {
     // Check for duplicates in messages. Reject if any
-    if has_duplicates(m_pk_pairs.iter().map(|x| x.0)) {
+    if has_duplicates(m_pk_pairs) {
         return false;
     }
 
@@ -153,36 +154,13 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
     pair1 == pair2
 }
 
-// A wrapper for sha512 hashes. Only use is to have the Ord trait on [u8; 64]
-// for sorting an array of hashes. See has_duplicates below
-struct Hash([u8; 64]);
-
-impl PartialEq for Hash {
-    fn eq(&self, other: &Self) -> bool { self.0[0..63] == other.0[0..63] }
-}
-
-impl Eq for Hash {}
-
-impl PartialOrd for Hash {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(&other)) }
-}
-
-impl Ord for Hash {
-    fn cmp(&self, other: &Self) -> Ordering { self.0[0..63].cmp(&other.0[0..63]) }
-}
-
 // Checks for duplicates in a list of messages
 // This is not very efficient - the sorting algorithm can exit as soon as it
 // encounters an equality and report that a duplicate indeed exists.
 // Consider building hashmap or Btree and exit as soon as a duplicate is seen
-fn has_duplicates<'a>(messages_iter: impl Iterator<Item = &'a [u8]>) -> bool {
-    let mut message_hashes: Vec<Hash> = messages_iter
-        .map(|x| {
-            let h = hash_message(x);
-            Hash(h)
-        })
-        .collect();
-    message_hashes.sort();
+fn has_duplicates<T>(messages: &[(&[u8], T)]) -> bool {
+    let mut message_hashes: Vec<_> = messages.iter().map(|x| hash_message(x.0)).collect();
+    message_hashes.sort_unstable();
     for i in 1..message_hashes.len() {
         if message_hashes[i - 1] == message_hashes[i] {
             return true;
@@ -192,12 +170,10 @@ fn has_duplicates<'a>(messages_iter: impl Iterator<Item = &'a [u8]>) -> bool {
 }
 
 // hashes a message using Sha512
-fn hash_message(m: &[u8]) -> [u8; 64] {
+fn hash_message(m: &[u8]) -> GenericArray<u8, <Sha512 as Digest>::OutputSize> {
     let mut h = Sha512::new();
-    let mut hash: [u8; 64] = [0u8; 64];
     h.input(m);
-    hash.copy_from_slice(h.result().as_slice());
-    hash
+    h.result()
 }
 
 #[cfg(test)]
@@ -206,8 +182,8 @@ mod test {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, StdRng};
 
-    const SIGNERS: usize = 15;
-    const TEST_ITERATIONS: usize = 1000;
+    const SIGNERS: usize = 1000;
+    const TEST_ITERATIONS: usize = 10;
 
     // returns a pair of lists (sks, pks), such that sks[i] and pks[i] are
     // corresponding secret and public key
@@ -339,18 +315,19 @@ mod test {
         let mut rng: StdRng = SeedableRng::from_seed(seed);
 
         for _ in 0..TEST_ITERATIONS {
+            // 33 is a dummy value since has_duplicates expects pairs.
             let mut ms: Vec<[u8; 8]> = (0..SIGNERS).map(|x| x.to_le_bytes()).collect();
 
             // Make a duplication in the messages
             let random_idx1: usize = rng.gen_range(0, SIGNERS);
             let mut random_idx2: usize = rng.gen_range(0, SIGNERS);
             while random_idx1 == random_idx2 {
-                random_idx2 = rng.gen_range(0, SIGNERS);
+                random_idx2 = rng.gen_range(0, SIGNERS)
             }
             ms[random_idx1] = ms[random_idx2];
+            let vs: Vec<(&[u8], ())> = ms.iter().map(|x| (&x[..], ())).collect();
 
-            let iter = (0..SIGNERS).map(|i| -> &[u8] { &ms[i] });
-            let result = has_duplicates(iter);
+            let result = has_duplicates(&vs);
             assert!(result);
         }
     }
