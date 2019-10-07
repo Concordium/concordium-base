@@ -41,10 +41,10 @@ fn bench_sign_and_verify(c: &mut Criterion) {
 
     let sk = SecretKey::<Bls12>::generate(&mut csprng);
     let pk = PublicKey::<Bls12>::from_secret(sk);
-    let sig = sign_message(m.as_slice(), sk);
-    c.bench_function("sign", move |b| b.iter(|| sign_message(m.as_slice(), sk)));
+    let sig = sk.sign(m.as_slice());
+    c.bench_function("sign", move |b| b.iter(|| sk.sign(m.as_slice())));
     c.bench_function("verify", move |b| {
-        b.iter(|| verify(m_clone.as_slice(), pk, sig))
+        b.iter(|| pk.verify(m_clone.as_slice(), sig))
     });
 }
 
@@ -56,12 +56,11 @@ fn bench_aggregate_sig(c: &mut Criterion) {
 
     let m1 = rand_m_of_length!(1000, csprng);
     let m2 = rand_m_of_length!(1000, csprng);
-    let sig1 = sign_message(&m1, sk1);
-    let sig2 = sign_message(&m2, sk2);
-    // TODO, make code below work
+    let sig1 = sk1.sign(&m1);
+    let sig2 = sk2.sign(&m2);
 
     c.bench_function("aggregate_signature", move |b| {
-        b.iter(|| aggregate_sig(sig1, sig2))
+        b.iter(|| sig1.aggregate(sig2))
     });
 }
 
@@ -82,10 +81,10 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
     let (sks, pks) = get_sks_pks!(n, csprng);
     let ms: Vec<_> = n_rand_ms_of_length!(n, 1000, csprng);
 
-    let mut agg_sig = sign_message(&ms[0], sks[0]);
+    let mut agg_sig = sks[0].sign(&ms[0]);
     for i in 1..n {
-        let new_sig = sign_message(&ms[i], sks[i]);
-        agg_sig = aggregate_sig(new_sig, agg_sig);
+        let new_sig = sks[i].sign(&ms[i]);
+        agg_sig = new_sig.aggregate(agg_sig);
     }
 
     c.bench_function("verify_aggregate_sig", move |b| {
@@ -104,10 +103,10 @@ fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
     let (sks, pks) = get_sks_pks!(n, csprng);
     let m = rand_m_of_length!(1000, csprng);
 
-    let mut agg_sig = sign_message(&m, sks[0]);
+    let mut agg_sig = sks[0].sign(&m);
     for i in 1..n {
-        let new_sig = sign_message(&m, sks[i]);
-        agg_sig = aggregate_sig(new_sig, agg_sig);
+        let new_sig = sks[i].sign(&m);
+        agg_sig = new_sig.aggregate(agg_sig);
     }
 
     c.bench_function("verify_aggregate_sig_trusted_keys_200", move |b| {
@@ -118,10 +117,10 @@ fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
     let (sks, pks) = get_sks_pks!(n, csprng);
     let m = rand_m_of_length!(1000, csprng);
 
-    let mut agg_sig = sign_message(&m, sks[0]);
+    let mut agg_sig = sks[0].sign(&m);
     for i in 1..n {
-        let new_sig = sign_message(&m, sks[i]);
-        agg_sig = aggregate_sig(new_sig, agg_sig);
+        let new_sig = sks[i].sign(&m);
+        agg_sig = new_sig.aggregate(agg_sig);
     }
     c.bench_function("verify_aggregate_sig_trusted_keys_3000", move |b| {
         b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
@@ -154,8 +153,8 @@ criterion_group!(
 );
 // criterion_group!(has_dups, bench_has_duplicates);
 criterion_main!(
-    sign_and_verify,
-    aggregate,
-    verify_aggregate,
+    // sign_and_verify,
+    // aggregate,
+    // verify_aggregate,
     verify_aggregate_trusted_keys
 );

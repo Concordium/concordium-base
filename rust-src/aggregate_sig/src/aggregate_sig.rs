@@ -119,10 +119,12 @@ pub fn verify_aggregate_sig<P: Pairing>(
 
     let product = m_pk_pairs
         .par_iter()
-        .fold(<P::TargetField as Field>::zero, |_sum, x| {
-            let (m, pk) = x;
+        .fold(<P::TargetField as Field>::one, |prod, (m, pk)| {
             let g1_hash = P::G_1::hash_to_group(m);
-            P::pair(g1_hash, pk.0)
+            let paired = P::pair(g1_hash, pk.0);
+            let mut p = prod;
+            p.mul_assign(&paired);
+            p
         })
         .reduce(<P::TargetField as Field>::one, |prod, x| {
             let mut p = prod;
@@ -140,7 +142,7 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
 ) -> bool {
     let sum = pks
         .par_iter()
-        .fold(P::G_2::zero_point, |_sum, x| x.0)
+        .fold(P::G_2::zero_point, |sum, x| sum.plus_point(&x.0))
         .reduce(P::G_2::zero_point, |sum, x| sum.plus_point(&x));
 
     // compute pairings in parallel
@@ -204,7 +206,7 @@ mod test {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, StdRng};
 
-    const SIGNERS: usize = 10;
+    const SIGNERS: usize = 15;
     const TEST_ITERATIONS: usize = 1000;
 
     // returns a pair of lists (sks, pks), such that sks[i] and pks[i] are
