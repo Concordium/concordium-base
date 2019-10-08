@@ -257,10 +257,8 @@ pub fn json_to_ip_info(ip_val: &Value) -> Option<IpInfo<Bls12, <Bls12 as Pairing
     let ck = pedersen_key::CommitmentKey::from_bytes(&mut Cursor::new(&ck_bytes)).ok()?;
 
     let ar_arr_bytes: &Vec<Value> = ip_val.get("anonymityRevokers")?.as_array()?;
-    let ar_arry: Option<Vec<ArInfo<<Bls12 as Pairing>::G_1>>> = ar_arr_bytes
-        .into_iter()
-        .map(|x| json_to_ar_info(x))
-        .collect();
+    let ar_arry: Option<Vec<ArInfo<<Bls12 as Pairing>::G_1>>> =
+        ar_arr_bytes.iter().map(json_to_ar_info).collect();
     Some(IpInfo {
         ip_identity,
         ip_description: ip_description.to_owned(),
@@ -316,7 +314,7 @@ pub fn json_to_ip_ar_data(v: &Value) -> Option<IpArData<ExampleCurve>> {
     })
 }
 
-pub fn chain_ar_data_to_json<C: Curve>(ar_data: &Vec<ChainArData<C>>) -> Value {
+pub fn chain_ar_data_to_json<C: Curve>(ar_data: &[ChainArData<C>]) -> Value {
     let arr: Vec<Value> = ar_data.iter().map(single_chain_ar_data_to_json).collect();
     json!(arr)
 }

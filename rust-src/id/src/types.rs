@@ -339,7 +339,7 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let mut choice_ars = Vec::with_capacity(choice_ar_handles.0.len());
     let ip_ar_parameters = &ip_info.ar_info.0.clone();
     for ar in choice_ar_handles.0.into_iter() {
-        match ip_ar_parameters.into_iter().find(|&x| x.ar_identity == ar) {
+        match ip_ar_parameters.iter().find(|&x| x.ar_identity == ar) {
             None => panic!("AR handle not in the IP list"),
             Some(ar_info) => choice_ars.push(ar_info.clone()),
         }

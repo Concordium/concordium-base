@@ -325,7 +325,7 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
         );
         return;
     }
-    let mut shares = vec![];
+    let mut shares = Vec::with_capacity(ars.len());
 
     for (ar, private) in ars.into_iter() {
         match ar_data.iter().find(|&x| x.ar_identity == ar.ar_identity) {
@@ -551,7 +551,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         "revokationThreshold": 2,
         "policy": policy_to_json(&values.policy),
         // NOTE: Since proofs encode their own length we do not output those first 4 bytes
-        "proofs": json_base16_encode(&cdi.proofs.to_bytes()[4..]),
+        "proofs": json_base16_encode(&proofs.to_bytes()[4..]),
     });
     if let Some(json_file) = matches.value_of("out") {
         match write_json_to_file(json_file, &js) {
@@ -799,13 +799,12 @@ fn handle_start_ip(matches: &ArgMatches) {
     };
 
     let ar_handles = ip_info.ar_info.0.clone();
-    let mut ars: Vec<String> = Vec::with_capacity(ar_handles.len());
-    for x in ar_handles.iter() {
-        let s = format!("{}", x.ar_description);
-        ars.push(s);
-    }
+    let mrs: Vec<&str> = ar_handles
+        .iter()
+        .map(|x| x.ar_description.as_str())
+        .collect();
+
     let mut choice_ars = vec![];
-    let mrs: Vec<&str> = ars.iter().map(String::as_str).collect();
 
     let ar_info = Checkboxes::new()
         .with_prompt("Choose anonymity revokers")

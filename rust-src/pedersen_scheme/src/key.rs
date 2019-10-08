@@ -66,10 +66,10 @@ impl<C: Curve> CommitmentKey<C> {
     pub fn hide(&self, s: &Value<C>, r: &Randomness<C>) -> Commitment<C> {
         let h = self.1;
         let g = self.0;
-        let m = s.0;
+        let message = s.0;
         let r_scalar = r.0;
         let hr = h.mul_by_scalar(&r_scalar);
-        let gm = g.mul_by_scalar(&m);
+        let gm = g.mul_by_scalar(&message);
         Commitment(hr.plus_point(&gm))
     }
 

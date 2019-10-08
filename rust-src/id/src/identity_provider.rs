@@ -19,7 +19,7 @@ pub enum Reason {
 
 fn check_ar_parameters<C: Curve>(
     _choice_ar_parameters: &(Vec<ArInfo<C>>, u64),
-    _ip_ar_info: &Vec<ArInfo<C>>,
+    _ip_ar_info: &[ArInfo<C>],
 ) -> bool {
     // some business logic here
     true
@@ -120,7 +120,7 @@ pub fn verify_credentials<
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     cmm_prf: &Commitment<P::G_1>,
     cmm_sc: &Commitment<P::G_1>,
-    ar_list: &Vec<u64>,
+    ar_list: &[u64],
     att_list: &AttributeList<P::ScalarField, AttributeType>,
     ps_public_key: &ps_sig::PublicKey<P>,
 ) -> ps_sig::UnknownMessage<P> {
@@ -164,9 +164,9 @@ fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
     ip_commitment_key: &CommitmentKey<C1>,
     cmm_vrf: &Commitment<C1>,
     ar_commitment_key: &CommitmentKey<C2>,
-    cmm_sharing_coeff: &Vec<Commitment<C2>>,
-    ip_ar_data: &Vec<IpArData<C2>>,
-    choice_ar_parameters: &Vec<ArInfo<C2>>,
+    cmm_sharing_coeff: &[Commitment<C2>],
+    ip_ar_data: &[IpArData<C2>],
+    choice_ar_parameters: &[ArInfo<C2>],
     com_eq_diff_grps_proof: &ComEqDiffGrpsProof<C1, C2>,
 ) -> bool {
     let CommitmentKey(g_1, h_1) = ip_commitment_key;
@@ -188,7 +188,7 @@ fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
         // finding the right encryption key
 
         match choice_ar_parameters
-            .into_iter()
+            .iter()
             .find(|&x| x.ar_identity == ar.ar_identity)
         {
             None => return false,
@@ -209,15 +209,13 @@ fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
 #[inline(always)]
 pub fn commitment_to_share<C: Curve>(
     share_number: u64,
-    coeff_commitments: &Vec<Commitment<C>>,
+    coeff_commitments: &[Commitment<C>],
 ) -> Commitment<C> {
-    let deg = coeff_commitments.len() - 1;
     let mut cmm_share_point: C = coeff_commitments[0].0;
-    for i in 1..(deg + 1) {
+    for (i, Commitment(cmm_point)) in coeff_commitments.iter().enumerate().skip(1) {
         let j_pow_i: C::Scalar = C::scalar_from_u64(share_number as u64)
             .unwrap()
             .pow([i as u64]);
-        let Commitment(cmm_point) = coeff_commitments[i];
         let a = cmm_point.mul_by_scalar(&j_pow_i);
         cmm_share_point = cmm_share_point.plus_point(&a);
     }

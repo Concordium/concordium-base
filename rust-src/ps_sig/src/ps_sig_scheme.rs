@@ -1,7 +1,7 @@
-use crate::{public::*, signature::*, unknown_message::*};
+use crate::{signature::*, unknown_message::*};
 use curve_arithmetic::curve_arithmetic::*;
 
-use pedersen_scheme::{commitment::Commitment, key::CommitmentKey, value::*};
+use pedersen_scheme::commitment::Commitment;
 use rand::*;
 // A method to generate a commitment key from the public key
 // pub fn commitment_key<C: Pairing>(pk: &PublicKey<C>) -> CommitmentKey<C::G_1>

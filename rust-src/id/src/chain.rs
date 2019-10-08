@@ -158,10 +158,10 @@ pub fn verify_cdi_worker<
 fn verify_id_cred_pub_sharing_data<C: Curve>(
     challenge_prefix: &[u8],
     commitment_key: &CommitmentKey<C>,
-    choice_ar_parameters: &Vec<ArInfo<C>>,
-    chain_ar_data: &Vec<ChainArData<C>>,
-    cmm_sharing_coeff: &Vec<Commitment<C>>,
-    proof_id_cred_pub: &Vec<(u64, com_enc_eq::ComEncEqProof<C>)>,
+    choice_ar_parameters: &[ArInfo<C>],
+    chain_ar_data: &[ChainArData<C>],
+    cmm_sharing_coeff: &[Commitment<C>],
+    proof_id_cred_pub: &[(u64, com_enc_eq::ComEncEqProof<C>)],
 ) -> bool {
     let CommitmentKey(g_1, h_1) = commitment_key;
     // let cmm_to_shares = Vec::new();
@@ -169,7 +169,7 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
         let cmm_share = commitment_to_share(ar.id_cred_pub_share_number, cmm_sharing_coeff);
         // finding the correct AR data by share number
         match proof_id_cred_pub
-            .into_iter()
+            .iter()
             .find(|&x| x.0 == ar.id_cred_pub_share_number)
         {
             None => {
@@ -177,7 +177,7 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
             }
             // finding the correct AR info
             Some((_, proof)) => match choice_ar_parameters
-                .into_iter()
+                .iter()
                 .find(|&x| x.ar_identity == ar.ar_identity)
             {
                 None => return false,
@@ -201,15 +201,13 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
 #[inline(always)]
 pub fn commitment_to_share<C: Curve>(
     share_number: u64,
-    coeff_commitments: &Vec<Commitment<C>>,
+    coeff_commitments: &[Commitment<C>],
 ) -> Commitment<C> {
-    let deg = coeff_commitments.len() - 1;
     let mut cmm_share_point: C = coeff_commitments[0].0;
-    for i in 1..(deg + 1) {
+    for (i, Commitment(cmm_point)) in coeff_commitments.iter().enumerate().skip(1) {
         let j_pow_i: C::Scalar = C::scalar_from_u64(share_number as u64)
             .unwrap()
             .pow([i as u64]);
-        let Commitment(cmm_point) = coeff_commitments[i];
         let a = cmm_point.mul_by_scalar(&j_pow_i);
         cmm_share_point = cmm_share_point.plus_point(&a);
     }
