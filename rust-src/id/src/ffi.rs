@@ -156,82 +156,87 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
 // }
 // }
 // }
-//
-// macro_derive_from_bytes!(
-// pedersen_key_from_bytes,
-// PedersenKey<G1>,
-// PedersenKey::from_bytes
-// );
-// macro_derive_to_bytes!(pedersen_key_to_bytes, PedersenKey<G1>);
-// macro_free_ffi!(pedersen_key_free, PedersenKey<G1>);
-// macro_generate_commitment_key!(pedersen_key_gen, PedersenKey<G1>,
-// PedersenKey::generate);
-//
-// macro_derive_from_bytes!(
-// ps_sig_key_from_bytes,
-// ps_sig::PublicKey<Bls12>,
-// ps_sig::PublicKey::from_bytes
-// );
-// macro_derive_to_bytes!(ps_sig_key_to_bytes, ps_sig::PublicKey<Bls12>);
-// macro_free_ffi!(ps_sig_key_free, ps_sig::PublicKey<Bls12>);
-// macro_generate_commitment_key!(
-// ps_sig_key_gen,
-// ps_sig::PublicKey<Bls12>,
-// ps_sig::PublicKey::arbitrary
-// );
-//
-// pub struct ElgamalGenerator(G1);
-//
-// impl ElgamalGenerator {
-// pub fn to_bytes(&self) -> Box<[u8]> { self.0.curve_to_bytes() }
-//
-// pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-// let r = G1::bytes_to_curve(cur)?;
-// Ok(ElgamalGenerator(r))
-// }
-//
-// pub fn generate() -> Self { ElgamalGenerator(G1::generate(&mut thread_rng()))
-// } }
-//
-// macro_derive_from_bytes!(
-// elgamal_gen_from_bytes,
-// ElgamalGenerator,
-// ElgamalGenerator::from_bytes
-// );
-// macro_derive_to_bytes!(elgamal_gen_to_bytes, ElgamalGenerator);
-// macro_free_ffi!(elgamal_gen_free, ElgamalGenerator);
-// #[no_mangle]
-// #[allow(clippy::not_unsafe_ptr_arg_deref)]
-// pub extern "C" fn elgamal_gen_gen() -> *const ElgamalGenerator {
-// Box::into_raw(Box::new(ElgamalGenerator::generate()))
-// }
-//
-// macro_derive_from_bytes!(
-// elgamal_pub_key_from_bytes,
-// elgamal::PublicKey<G1>,
-// elgamal::PublicKey::from_bytes
-// );
-// macro_derive_to_bytes!(elgamal_pub_key_to_bytes, elgamal::PublicKey<G1>);
-// macro_free_ffi!(elgamal_pub_key_free, elgamal::PublicKey<G1>);
-// #[no_mangle]
-// pub extern "C" fn elgamal_pub_key_gen() -> *const elgamal::PublicKey<G1> {
-// let sk = elgamal::secret::SecretKey::generate(&mut thread_rng());
-// Box::into_raw(Box::new(elgamal::PublicKey::from(&sk)))
-// }
-//
-// macro_derive_from_bytes!(
-// elgamal_cipher_from_bytes,
-// elgamal::cipher::Cipher<G1>,
-// elgamal::cipher::Cipher::from_bytes
-// );
-// macro_derive_to_bytes!(elgamal_cipher_to_bytes, elgamal::cipher::Cipher<G1>);
-// macro_free_ffi!(elgamal_cipher_free, elgamal::cipher::Cipher<G1>);
-// #[no_mangle]
-// pub extern "C" fn elgamal_cipher_gen() -> *const elgamal::cipher::Cipher<G1>
-// { let mut csprng = thread_rng();
-// Box::into_raw(Box::new(elgamal::cipher::Cipher::generate(&mut csprng)))
-// }
-//
+
+macro_derive_from_bytes!(
+    pedersen_key_from_bytes,
+    PedersenKey<G1>,
+    PedersenKey::from_bytes
+);
+macro_derive_to_bytes!(pedersen_key_to_bytes, PedersenKey<G1>);
+macro_free_ffi!(pedersen_key_free, PedersenKey<G1>);
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn pedersen_key_gen() -> *const PedersenKey<G1> {
+    let mut csprng = thread_rng();
+    Box::into_raw(Box::new(PedersenKey::generate(&mut csprng)))
+}
+
+macro_derive_from_bytes!(
+    ps_sig_key_from_bytes,
+    ps_sig::PublicKey<Bls12>,
+    ps_sig::PublicKey::from_bytes
+);
+macro_derive_to_bytes!(ps_sig_key_to_bytes, ps_sig::PublicKey<Bls12>);
+macro_free_ffi!(ps_sig_key_free, ps_sig::PublicKey<Bls12>);
+macro_generate_commitment_key!(
+    ps_sig_key_gen,
+    ps_sig::PublicKey<Bls12>,
+    ps_sig::PublicKey::arbitrary
+);
+
+pub struct ElgamalGenerator(G1);
+
+impl ElgamalGenerator {
+    pub fn to_bytes(&self) -> Box<[u8]> { self.0.curve_to_bytes() }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let r = G1::bytes_to_curve(cur)?;
+        Ok(ElgamalGenerator(r))
+    }
+
+    pub fn generate() -> Self { ElgamalGenerator(G1::generate(&mut thread_rng())) }
+}
+
+macro_derive_from_bytes!(
+    elgamal_gen_from_bytes,
+    ElgamalGenerator,
+    ElgamalGenerator::from_bytes
+);
+macro_derive_to_bytes!(elgamal_gen_to_bytes, ElgamalGenerator);
+macro_free_ffi!(elgamal_gen_free, ElgamalGenerator);
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn elgamal_gen_gen() -> *const ElgamalGenerator {
+    Box::into_raw(Box::new(ElgamalGenerator::generate()))
+}
+
+macro_derive_from_bytes!(
+    elgamal_pub_key_from_bytes,
+    elgamal::PublicKey<G1>,
+    elgamal::PublicKey::from_bytes
+);
+macro_derive_to_bytes!(elgamal_pub_key_to_bytes, elgamal::PublicKey<G1>);
+macro_free_ffi!(elgamal_pub_key_free, elgamal::PublicKey<G1>);
+#[no_mangle]
+pub extern "C" fn elgamal_pub_key_gen() -> *const elgamal::PublicKey<G1> {
+    let sk = elgamal::secret::SecretKey::generate(&mut thread_rng());
+    Box::into_raw(Box::new(elgamal::PublicKey::from(&sk)))
+}
+
+macro_derive_from_bytes!(
+    elgamal_cipher_from_bytes,
+    elgamal::cipher::Cipher<G1>,
+    elgamal::cipher::Cipher::from_bytes
+);
+macro_derive_to_bytes!(elgamal_cipher_to_bytes, elgamal::cipher::Cipher<G1>);
+macro_free_ffi!(elgamal_cipher_free, elgamal::cipher::Cipher<G1>);
+#[no_mangle]
+pub extern "C" fn elgamal_cipher_gen() -> *const elgamal::cipher::Cipher<G1> {
+    let mut csprng = thread_rng();
+    Box::into_raw(Box::new(elgamal::cipher::Cipher::generate(&mut csprng)))
+}
+
 // #[cfg(test)]
 // mod test {
 // use super::*;
