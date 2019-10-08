@@ -813,7 +813,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
 
         // TODO: hard-coded for now, at most 8 items in the attribute list
         // (because signature length 10)
-        let id_secret_key = ps_sig::secret::SecretKey::generate(10, &mut csprng);
+        let id_secret_key = ps_sig::secret::SecretKey::generate(20, &mut csprng);
         let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
 
         let ar_secret_key = SecretKey::generate(&mut csprng);
