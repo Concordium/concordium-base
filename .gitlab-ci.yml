@@ -13,6 +13,7 @@ stages:
   extends: .generic
   stage: test
   script:
+    - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/.insteadOf ssh://git@gitlab.com:22/
     - ( cd rust-src && cargo build --release && cp target/release/*.so /usr/local/lib )
     - stack test
 
@@ -20,6 +21,7 @@ stages:
   extends: .generic
   stage: test
   script:
+    - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/.insteadOf ssh://git@gitlab.com:22/
     - rustc --version && cargo --version
     - stack exec -- ghc --print-libdir
     - ( cd rust-src && cargo test --all --verbose --color=always)
@@ -43,6 +45,7 @@ stages:
   extends: .generic-lint
   stage: lint
   script:
+    - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/.insteadOf ssh://git@gitlab.com:22/
     - rustc --version && cargo --version
     - stack exec -- ghc --print-libdir
     - rustup component add clippy

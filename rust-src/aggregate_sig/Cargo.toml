@@ -17,8 +17,8 @@ path = "../curve_arithmetic"
 version = "0"
 
 [dependencies.pairing]
-path = "../pairing"
-version = "0"
+git = "ssh://git@gitlab.com:22/Concordium/rust/external/pairing.git"
+branch = "master"
 
 [dependencies.ffi_helpers]
 path= "../ffi_helpers"

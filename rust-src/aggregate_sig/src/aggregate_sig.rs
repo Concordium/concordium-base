@@ -182,7 +182,7 @@ mod test {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, StdRng};
 
-    const SIGNERS: usize = 1000;
+    const SIGNERS: usize = 500;
     const TEST_ITERATIONS: usize = 10;
 
     // returns a pair of lists (sks, pks), such that sks[i] and pks[i] are

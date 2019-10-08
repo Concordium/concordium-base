@@ -23,8 +23,8 @@ path = "../sigma_protocols"
 version = "0"
 
 [dependencies.pairing]
-path = "../pairing"
-version = "0"
+git = "ssh://git@gitlab.com:22/Concordium/rust/external/pairing.git"
+branch = "master"
 
 [dependencies.curve_arithmetic]
 path = "../curve_arithmetic"
