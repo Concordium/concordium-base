@@ -19,6 +19,7 @@ import           Data.FixedByteString       (FixedByteString)
 import           Text.Read
 import           Data.Char
 import Data.Data(Typeable, Data)
+import qualified Data.Aeson as AE
 
 data SHA256Ctx
 
@@ -59,6 +60,7 @@ newtype Hash = Hash (FBS.FixedByteString DigestSize)
   deriving (Eq, Ord, Bits, Bounded, Enum, Typeable, Data)
   deriving Serialize via FBSHex DigestSize
   deriving Show via FBSHex DigestSize
+  deriving (AE.ToJSON, AE.FromJSON) via FBSHex DigestSize
 
 instance Read Hash where
     readPrec = Hash . FBS.pack <$> mapM (const readHexByte) [1..digestSize]
@@ -100,6 +102,8 @@ hashShort b = Hash $ unsafeDupablePerformIO $
 
 hash_update :: ByteString -> Ptr SHA256Ctx ->  IO ()
 hash_update b ptr = B.unsafeUseAsCStringLen b $
+    -- the use of unsafe here is fine because hash_input handles the case where
+    -- len == 0 without dereferencing the pointer.
     \(message, mlen) -> rs_sha256_update ptr (castPtr message) (fromIntegral mlen)
 
 hash_update_short :: ShortByteString -> Ptr SHA256Ctx ->  IO ()

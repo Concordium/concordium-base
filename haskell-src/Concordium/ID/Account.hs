@@ -17,8 +17,6 @@ import Foreign.C.Types
 import Data.Int
 import Data.ByteString.Unsafe
 
-import Data.Base58String.Bitcoin
-
 import Data.ByteString as BS
 import Data.ByteString.Short as BSS
 
@@ -43,6 +41,9 @@ verifyCredential elgamalGen pedersenKey (IP_PK idPK) arElgamalGenerator (Anonymi
            \elgamalGeneratorPtr -> withElgamalPublicKey anonPK $
            \anonPKPtr -> withPsSigKey idPK $
            \ipVerifyKeyPtr -> unsafeUseAsCStringLen cdiBytes $
+           -- this use of unsafe is fine since at this point we know the CDI
+           -- bytes is a non-empty string, so the pointer cdiBytesPtr will be
+           -- non-null
            \(cdiBytesPtr, cdiBytesLen) -> verifyCDIFFI elgamalGenPtr pedersenKeyPtr ipVerifyKeyPtr elgamalGeneratorPtr anonPKPtr (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
     return (res == 1)
 
@@ -50,12 +51,8 @@ verifyCredential elgamalGen pedersenKey (IP_PK idPK) arElgamalGenerator (Anonymi
 registrationId :: IO CredentialRegistrationID
 registrationId = (random 48) >>= (return . RegIdCred . FBS.fromByteString)
 
-base58decodeAddr :: Base58String -> AccountAddress
-base58decodeAddr bs = AccountAddress (FBS.fromByteString (toBytes bs))
-
 accountScheme :: AccountAddress -> Maybe SchemeId
 accountScheme (AccountAddress s) = toScheme (FBS.getByte s 0)
-
 
 -- |Compute the account address from account's (public) verification key and the signature scheme identifier.
 -- The address is computed by the following algorithm

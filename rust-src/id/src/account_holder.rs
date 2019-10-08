@@ -526,7 +526,7 @@ fn compute_pok_sig<
 ) -> com_eq_sig::ComEqSigProof<P, C> {
     let att_vec = &alist.alist;
     // number of user chosen attributes. To these there are always
-    // two attributes (idCredSec and prf key added).
+    // two attributes (idCredSec and prf key) added.
     let num_user_attributes = att_vec.len() + 2;
     let num_total_attributes = num_user_attributes + 2;
     let num_ars = commitments.cmm_ars.len();

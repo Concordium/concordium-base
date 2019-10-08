@@ -1,10 +1,9 @@
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia, OverloadedStrings #-}
 module Concordium.Crypto.SignatureScheme where
 import Data.Word
 import Data.Serialize
 import Data.Aeson hiding (encode)
 import Concordium.Crypto.ByteStringHelpers
-import Data.Text hiding (drop)
 import Prelude hiding (drop)
 
 import Data.ByteString (ByteString)
@@ -31,20 +30,18 @@ newtype Signature = Signature ShortByteString
     deriving FromJSON via Short65K
     deriving ToJSON via Short65K
 
-data SchemeId = Ed25519 | CL
+data SchemeId = Ed25519
     deriving (Eq, Show)
 
 instance ToJSON SchemeId where
-  toJSON Ed25519 = object [pack "schemeId" .= "Ed25519"]
-  toJSON CL = object [pack "schemeId" .= "CL"]
+  toJSON Ed25519 = String "Ed25519"
 
 instance FromJSON SchemeId where
   parseJSON v = do
     name <- parseJSON v
     case name of
       "Ed25519" -> return Ed25519
-      "CL" -> return CL
-      _ -> fail "e"
+      err -> fail $ "Unknown signature scheme '" ++ err ++ "'."
 
 data KeyPair = KeyPair {
       signKey :: !SignKey,
@@ -54,7 +51,9 @@ data KeyPair = KeyPair {
 instance Serialize SchemeId where
     put x = putWord8 (fromIntegral (fromEnum x))
     get = do e <- getWord8 
-             return $  toEnum (fromIntegral e)
+             case toScheme e of
+               Just s -> return s
+               Nothing -> fail "Unknown signature scheme."
 
 instance Serialize KeyPair where
     put (KeyPair sk vk) = put sk <> put vk
@@ -64,12 +63,10 @@ instance Enum SchemeId where
     toEnum n = case toScheme (fromIntegral n) of 
                  Just x -> x
                  Nothing -> errorWithoutStackTrace "SchemeId.toEnum: bad argument"
-    fromEnum CL = 0
-    fromEnum Ed25519 = 1
+    fromEnum Ed25519 = 0
 
 toScheme :: Word8 -> Maybe SchemeId
-toScheme n | n == 0 = Just CL
-           | n == 1 = Just Ed25519
+toScheme n | n == 0 = Just Ed25519
            | otherwise = Nothing
 
 data SignatureScheme = SigScheme {schemeId :: SchemeId,

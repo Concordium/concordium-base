@@ -28,6 +28,8 @@ toBytesHelper f m = unsafeDupablePerformIO $ do
         len <- peek len_ptr
         unsafePackCStringFinalizer bytes_ptr (fromIntegral len) (rs_free_array_len bytes_ptr len)
 
+-- |NB: The passed function mussed handle the case of CSize == 0 gracefully without dereferencing the pointer.
+-- since the pointer can be a null-pointer or otherwise a dangling pointer.
 fromBytesHelper :: FinalizerPtr a -> (Ptr Word8 -> CSize -> IO (Ptr a)) -> ByteString -> Maybe (ForeignPtr a)
 fromBytesHelper finalizer f bs = unsafeDupablePerformIO $ do
   ptr <- unsafeUseAsCStringLen bs $ \(ptr, len) -> f (castPtr ptr :: Ptr Word8) (fromIntegral len :: CSize)

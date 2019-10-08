@@ -48,18 +48,16 @@ impl<C: Curve> SecretKey<C> {
     // At least it does not appear in the white paper.
     // CHECK!
     pub fn prf_exponent(&self, n: u8) -> Result<C::Scalar, PrfError> {
-        let res_x = C::scalar_from_u64(u64::from(n));
-        if res_x.is_err() {
-            let y = res_x.unwrap_err();
-            return Err(PrfError(DecodingError(y)));
-        }
-        let x = res_x.unwrap();
-        let mut k = self.0;
-        k.add_assign(&x);
-
-        match k.inverse() {
-            None => Err(PrfError(DivisionByZero)),
-            Some(y) => Ok(y),
+        match C::scalar_from_u64(u64::from(n)) {
+            Ok(x) => {
+                let mut k = self.0;
+                k.add_assign(&x);
+                match k.inverse() {
+                    None => Err(PrfError(DivisionByZero)),
+                    Some(y) => Ok(y),
+                }
+            }
+            Err(e) => Err(PrfError(DecodingError(e))),
         }
     }
 

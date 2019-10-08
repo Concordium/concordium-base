@@ -14,5 +14,6 @@ members=[
    "ffi_helpers",
    "simple_id_client",
    "secret_sharing",
+   "common"
 ]
 
