@@ -322,7 +322,7 @@ mod tests {
                 let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
                 let pk = PublicKey::from(&sk);
                 for _i in 1..10 {
-                    let n = csprng.gen_range(0,1000);
+                    let n = csprng.gen_range(0, 1000);
                     let mut e = <$curve_type as Curve>::Scalar::zero();
                     let one_scalar = <$curve_type as Curve>::Scalar::one();
                     for _ in 0..n {
