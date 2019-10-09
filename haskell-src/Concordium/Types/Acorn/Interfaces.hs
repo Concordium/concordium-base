@@ -41,7 +41,21 @@ import Data.Void(absurd)
 
 -- * Datatypes involved in typechecking, and any other operations involving types.
 
-type Type = Core.Type 
+type Type = Core.Type
+
+-- |Interface of a datatype.
+data DataTypeInterface annot = DataTypeInterface
+  { -- | The number of type parameters.
+    dtiParams :: !Int
+    -- | The datatype's constructors: a map of constructor names to their arity.
+  , dtiCtors :: !(HashMap Core.Name [Type annot Core.ModuleRef])
+    -- | The constructors' visbility (for a module interface: 'Core.Public' if
+    -- the constructors are exported)
+  , dtiCtorsVis :: !Core.Visibility
+  }
+  deriving(Eq, Generic)
+
+deriving instance Core.AnnotContext Show annot => Show (DataTypeInterface annot)
 
 -- |Interface of a contract.
 data ContractInterface annot = ContractInterface
@@ -52,13 +66,16 @@ data ContractInterface annot = ContractInterface
 
 deriving instance Core.AnnotContext Show annot => Show (ContractInterface annot)
 
+
 -- |Interface derived from a module. This is used in typechecking other modules.
 -- Lists public functions which can be called, and types of methods.
 data Interface annot = Interface
     { uniqueName :: !Core.ModuleRef
     , iSize :: Word64
     , importedModules :: !(HashMap Core.ModuleName Core.ModuleRef)
-    , exportedTypes :: !(HashMap Core.TyName (Int, HashMap Core.Name [Type annot Core.ModuleRef]))
+    -- | The datatypes the module exports.
+    , exportedTypes :: !(HashMap Core.TyName (DataTypeInterface annot))
+    -- | The terms the module exports.
     , exportedTerms :: !(HashMap Core.Name (Type annot Core.ModuleRef))
     , exportedContracts :: !(HashMap Core.TyName (ContractInterface annot))
     , exportedConstraints :: !(HashMap Core.TyName (Core.ConstraintDecl annot Core.ModuleRef))
@@ -524,21 +541,25 @@ putHashMap = S.put . Map.toList
 getHashMap :: (Eq a, Hashable a, S.Serialize a, S.Serialize b) => S.Get (HashMap a b)
 getHashMap = Map.fromList <$> S.get
 
+-- needed for DataTypeInterface instance
+instance S.Serialize (HashMap Core.Name [Type annot Core.ModuleRef]) where
+  put = putHashMap
+  get = getHashMap
 
-putExportedTypes :: (S.Serialize a, S.Serialize b, S.Serialize c, S.Serialize d) => HashMap a (b, HashMap c d) -> S.Put
-putExportedTypes = putHashMap . Map.map (\(i, m) -> (i, Map.toList m))
+instance S.Serialize Core.Visibility
+
+instance S.Serialize (DataTypeInterface annot)
 
 getExportedTypes :: (Eq a, Hashable a, Eq c, Hashable c, S.Serialize a, S.Serialize b, S.Serialize c, S.Serialize d) => S.Get (HashMap a (b, HashMap c d))
 getExportedTypes = do
   Map.map (\(i, m) -> (i, Map.fromList m)) <$> getHashMap
-  
 
 instance S.Serialize (Interface annot) where
   put (Interface{..}) =
     S.put uniqueName <>
     P.putWord64be iSize <>
     putHashMap importedModules <>
-    putExportedTypes exportedTypes <>
+    putHashMap exportedTypes <>
     putHashMap exportedTerms <>
     putHashMap exportedContracts <>
     putHashMap exportedConstraints
@@ -547,7 +568,7 @@ instance S.Serialize (Interface annot) where
     uniqueName <- S.get
     iSize <- G.getWord64be
     importedModules <- getHashMap
-    exportedTypes <- getExportedTypes
+    exportedTypes <- getHashMap
     exportedTerms <- getHashMap
     exportedContracts <- getHashMap
     exportedConstraints <- getHashMap
@@ -571,7 +592,7 @@ class Monad m => LinkerMonad annot m | m -> annot where
 
 class Monad m => TypecheckerMonad annot m | m -> annot where
   getExportedTermType :: Core.ModuleRef -> Core.Name -> m (Maybe (Type annot Core.ModuleRef))
-  getExportedType :: Core.ModuleRef -> Core.TyName -> m (Maybe (Int, HashMap Core.Name [Type annot Core.ModuleRef]))
+  getExportedType :: Core.ModuleRef -> Core.TyName -> m (Maybe (DataTypeInterface annot))
   getExportedConstraints :: Core.ModuleRef -> Core.TyName -> m (Maybe (Core.ConstraintDecl annot Core.ModuleRef))
 
   -- |Only for logging. On chain all the domain types are void so these cannot be used.
