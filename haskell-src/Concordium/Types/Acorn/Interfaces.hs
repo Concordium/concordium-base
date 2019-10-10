@@ -541,18 +541,17 @@ putHashMap = S.put . Map.toList
 getHashMap :: (Eq a, Hashable a, S.Serialize a, S.Serialize b) => S.Get (HashMap a b)
 getHashMap = Map.fromList <$> S.get
 
--- needed for DataTypeInterface instance
-instance S.Serialize (HashMap Core.Name [Type annot Core.ModuleRef]) where
-  put = putHashMap
-  get = getHashMap
+instance S.Serialize (DataTypeInterface annot) where
+  put (DataTypeInterface{..}) =
+    S.put dtiParams <>
+    putHashMap dtiCtors <>
+    Core.putVisibility dtiCtorsVis
 
-instance S.Serialize Core.Visibility
-
-instance S.Serialize (DataTypeInterface annot)
-
-getExportedTypes :: (Eq a, Hashable a, Eq c, Hashable c, S.Serialize a, S.Serialize b, S.Serialize c, S.Serialize d) => S.Get (HashMap a (b, HashMap c d))
-getExportedTypes = do
-  Map.map (\(i, m) -> (i, Map.fromList m)) <$> getHashMap
+  get = do
+    dtiParams <- S.get
+    dtiCtors <- getHashMap
+    dtiCtorsVis <- Core.getVisibility
+    return DataTypeInterface{..}
 
 instance S.Serialize (Interface annot) where
   put (Interface{..}) =
