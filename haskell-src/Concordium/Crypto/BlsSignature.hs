@@ -85,11 +85,14 @@ instance Serialize SecretKey where
 
 instance Show SecretKey where
   show = byteStringToHex . encode
-  --showsPrec p (SecretKey fp) = showsPrec p fp
 
+-- Serializes to bytes and compares bytes
+-- NOT CONSTANT TIME, USE ONLY FOR TESTING
 instance Eq SecretKey where
   SecretKey p1 == SecretKey p2 = eqHelper p1 p2 equalsSecretKey
 
+-- Serializes to bytes and compares bytes
+-- NOT CONSTANT TIME, USE ONLY FOR TESTING
 instance Ord SecretKey where
   compare (SecretKey sk1) (SecretKey sk2) =
     cmpHelper sk1 sk2 cmpSecretKey
@@ -117,9 +120,11 @@ instance Serialize PublicKey where
 instance Show PublicKey where
   show = byteStringToHex . encode
 
+-- Serializes to bytes and compares bytes
 instance Eq PublicKey where
   PublicKey p1 == PublicKey p2 = eqHelper p1 p2 equalsPublicKey
 
+-- Serializes to bytes and compares bytes
 instance Ord PublicKey where
   compare (PublicKey pk1) (PublicKey pk2) =
     cmpHelper pk1 pk2 cmpPublicKey
@@ -147,9 +152,11 @@ instance Serialize Signature where
 instance Show Signature where
   show = byteStringToHex . encode
 
+-- Serializes to bytes and compares bytes
 instance Eq Signature where
   Signature p1 == Signature p2 = eqHelper p1 p2 equalsSignature
 
+-- Serializes to bytes and compares bytes
 instance Ord Signature where
   compare (Signature sig1) (Signature sig2) =
     cmpHelper sig1 sig2 cmpSignature
@@ -170,7 +177,7 @@ generateSecretKey = do
 
 derivePublicKey :: SecretKey -> PublicKey
 derivePublicKey sk = PublicKey <$> unsafeDupablePerformIO $ do
-  pkptr <- withSecretKey sk $ \sk' -> derivePublicKeyPtr sk'
+  pkptr <- withSecretKey sk derivePublicKeyPtr
   newForeignPtr freePublicKey pkptr
 
 emptySignature :: Signature
@@ -180,17 +187,17 @@ emptySignature = Signature <$> unsafeDupablePerformIO $ do
 
 sign :: ByteString -> SecretKey -> Signature
 sign m sk = Signature <$> unsafeDupablePerformIO $ do
+  -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
   sigptr <- BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
-    withSecretKey sk $ \sk' ->
-    signBls (castPtr m') (fromIntegral mlen) sk'
+    withSecretKey sk $ signBls (castPtr m') (fromIntegral mlen)
   newForeignPtr freeSignature sigptr
 
 verify :: ByteString -> PublicKey -> Signature -> Bool
 verify m pk sig = unsafeDupablePerformIO $ do
+  -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
   BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
     withPublicKey pk $ \pk' ->
-    withSignature sig $ \sig' ->
-    verifyBls (castPtr m') (fromIntegral mlen) pk' sig'
+    withSignature sig $ verifyBls (castPtr m') (fromIntegral mlen) pk'
 
 aggregate :: Signature -> Signature -> Signature
 aggregate sig1 sig2 = Signature <$> unsafeDupablePerformIO $ do
@@ -203,6 +210,7 @@ aggregate sig1 sig2 = Signature <$> unsafeDupablePerformIO $ do
 --- The order of the public key list is irrelevant to the result
 verifyAggregate :: ByteString -> [PublicKey] -> Signature -> Bool
 verifyAggregate m pks sig = unsafeDupablePerformIO $ do
+  -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
   BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
     withSignature sig $ \sig' ->
     withKeyArray [] pks $ \arrlen -> \headptr ->
@@ -215,12 +223,18 @@ verifyAggregate m pks sig = unsafeDupablePerformIO $ do
 -- Provides deterministic key generation from seed.
 foreign import ccall unsafe "bls_generate_secretkey_from_seed" generateSecretKeyPtrFromSeed :: CSize -> IO (Ptr SecretKey)
 
+-- DO NOT USE IN PRODUCTION CODE!!!
+-- ONLY USED FOR TESTING!!!
+-- provides deterministic key generation for testing purposes.
 randomSecretKey :: RandomGen g => g -> (SecretKey, g)
 randomSecretKey gen = (sk, gen')
   where
     (nextSeed, gen') = random gen
     sk = generateSecretKeyFromSeed nextSeed
 
+-- DO NOT USE IN PRODUCTION CODE!!!
+-- ONLY USED FOR TESTING!!!
+-- provides deterministic key generation for testing purposes.
 generateSecretKeyFromSeed :: CSize -> SecretKey
 generateSecretKeyFromSeed seed = unsafeDupablePerformIO $ do
   ptr <- generateSecretKeyPtrFromSeed seed

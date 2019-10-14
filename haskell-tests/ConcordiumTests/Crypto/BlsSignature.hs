@@ -47,7 +47,7 @@ testSignAndVerifyCollision = forAllKP $ \(sk, pk) m1 m2 ->
   m1 /= m2 ==>
     let sig1 = sign (BS.pack m1) sk
         sig2 = sign (BS.pack m2) sk
-    in not ((verify (BS.pack m1) pk sig2) || (verify (BS.pack m2) pk sig1))
+    in not (verify (BS.pack m1) pk sig2) && not (verify (BS.pack m2) pk sig1)
 
 testSerializeSecretKey :: Property
 testSerializeSecretKey = forAllSK $ \sk ->

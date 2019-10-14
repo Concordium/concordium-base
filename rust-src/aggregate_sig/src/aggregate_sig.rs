@@ -11,6 +11,10 @@ pub const PUBLIC_KEY_SIZE: usize = 96;
 pub const SECRET_KEY_SIZE: usize = 32;
 pub const SIGNATURE_SIZE: usize = 48;
 
+// A Secret Key is a scalar in the scalarfield of the pairing.
+//
+// EQUALITY IS NOT CONSTANT TIME!!! Do not use in production
+// the trait is implemented only for testing purposes
 #[derive(Debug, Eq)]
 pub struct SecretKey<P: Pairing>(P::ScalarField);
 
@@ -38,19 +42,31 @@ impl<P: Pairing> Clone for SecretKey<P> {
 
 impl<P: Pairing> Copy for SecretKey<P> {}
 
+// NOT CONSTANT TIME!!!
+// USE ONLY FOR TESTING!!!
 impl<P: Pairing> PartialEq for SecretKey<P> {
     fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
+// A Public Key is a point on the second curve of the pairing
 #[derive(Debug, Eq)]
 pub struct PublicKey<P: Pairing>(P::G_2);
 
 impl<P: Pairing> PublicKey<P> {
+    // Derived from a secret key sk by exponentiating the generator of G2 with sk.
+    //
+    // For now, the generator used is the default generator of the underlying
+    // library however, this should be parametrized in the future
     pub fn from_secret(sk: SecretKey<P>) -> PublicKey<P> {
         PublicKey(P::G_2::one_point().mul_by_scalar(&sk.0))
     }
 
-    // Verifies a single message and signature pair using this PublicKey
+    // Verifies a single message and signature pair using this PublicKey by checking
+    // that     pairing(sig, g_2) == pairing(g1_hash(m), public_key)
+    // where g_2 is the generator of G2.
+    //
+    // For now, the generator used is the default generator of the underlying
+    // library however, this should be parametrized in the future
     pub fn verify(&self, m: &[u8], signature: Signature<P>) -> bool {
         let g1_hash = P::G_1::hash_to_group(m);
         // compute pairings in parallel
@@ -109,6 +125,13 @@ impl<P: Pairing> PartialEq for Signature<P> {
     fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
+// Verifies an aggregate signature on pairs (messages m_i, PK_i) for i=1..n by
+// checking     pairing(sig, g_2) == product_{i=0}^n ( pairing(g1_hash(m_i),
+// PK_i) ) where g_2 is the generator of G2.
+// Verification returns false if any two messages are not distinct
+//
+// For now, the generator used is the default generator of the underlying
+// library however, this should be parametrized in the future
 pub fn verify_aggregate_sig<P: Pairing>(
     m_pk_pairs: &[(&[u8], PublicKey<P>)],
     signature: Signature<P>,
@@ -140,6 +163,12 @@ pub fn verify_aggregate_sig<P: Pairing>(
     P::pair(signature.0, P::G_2::one_point()) == product
 }
 
+// Verifies an aggregate signature on the same message m under keys PK_i for
+// i=1..n by checking     pairing(sig, g_2) == pairing(g1_hash(m), sum_{i=0}^n
+// (PK_i)) where g_2 is the generator of G2.
+//
+// For now, the generator used is the default generator of the underlying
+// library however, this should be parametrized in the future
 pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
     m: &[u8],
     pks: &[PublicKey<P>],
