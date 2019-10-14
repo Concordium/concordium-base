@@ -236,8 +236,10 @@ pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
     pub variant: u16,
     /// Expiry time, in seconds since the unix epoch, ignoring leap seconds.
     pub expiry: u64,
-    /// TODO: Policy should not be scalars, but rather attributetype elements
-    /// (which means we need an additional parameter).
+    /// Revealed attributes, index in the attribute list together with the
+    /// value. The proof part of the credential contains the proof that
+    /// the revealed value is the same as that commited to and signed by the
+    /// identity provider.
     pub policy_vec: Vec<(u16, AttributeType)>,
     pub _phantom: std::marker::PhantomData<C>,
 }
