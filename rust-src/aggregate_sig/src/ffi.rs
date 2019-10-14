@@ -109,8 +109,12 @@ pub extern "C" fn bls_verify_aggregate(
     let m_len = m_len as usize;
     let m_bytes = slice_from_c_bytes!(m_ptr, m_len);
 
-    debug_assert!(!pks_ptr.is_null(), "null pointer");
-    let pks_: &[*const PublicKey<Bls12>] = unsafe { slice::from_raw_parts(pks_ptr, pks_len) };
+    let pks_: &[*const PublicKey<Bls12>] =
+        if pks_len == 0 {
+            &[]
+        } else {
+            unsafe { slice::from_raw_parts(pks_ptr, pks_len) }
+        };
     // Collecting the public keys in a vector is currently necessary as
     // verify_aggregate_sig_trusted_keys takes an array of public keys.
     // It might be desirable to make it take references instead.

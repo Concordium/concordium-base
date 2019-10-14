@@ -117,6 +117,10 @@ pub fn verify_aggregate_sig<P: Pairing>(
     if has_duplicates(m_pk_pairs) {
         return false;
     }
+    // verifying against the empty set of signers always fails
+    if m_pk_pairs.len() == 0 {
+        return false;
+    }
 
     let product = m_pk_pairs
         .par_iter()
@@ -141,6 +145,11 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
     pks: &[PublicKey<P>],
     signature: Signature<P>,
 ) -> bool {
+    // verifying against the empty set of signers always fails
+    if pks.len() == 0 {
+        return false;
+    }
+
     let sum = pks
         .par_iter()
         .fold(P::G_2::zero_point, |sum, x| sum.plus_point(&x.0))
@@ -306,6 +315,20 @@ mod test {
 
             let agg_sig_alt = Signature(<Bls12 as Pairing>::G_1::generate(&mut rng));
             assert!(!verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig_alt));
+        }
+    }
+
+    #[test]
+    fn test_verification_empty_signers() {
+        let seed: &[_] = &[1];
+        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        for _ in 0..TEST_ITERATIONS {
+            let sk = SecretKey::<Bls12>::generate(&mut rng);
+            let m: [u8; 32] = rng.gen::<[u8; 32]>();
+            let sig = sk.sign(&m);
+
+            assert!(!verify_aggregate_sig(&[], sig));
+            assert!(!verify_aggregate_sig_trusted_keys(&m, &[], sig));
         }
     }
 
