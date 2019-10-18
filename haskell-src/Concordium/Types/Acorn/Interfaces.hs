@@ -69,6 +69,11 @@ deriving instance Core.AnnotContext Show annot => Show (ContractInterface annot)
 
 -- |Interface derived from a module. This is used in typechecking other modules.
 -- Lists public functions which can be called, and types of methods.
+-- The following invariants are assumed:
+--   * All 'Type's are well-formed (where existance of modules is to be seen
+--     in the current context).
+--   * 'exportedTerms' includes the constructors of a datatype if and only if
+--     they are declared to be public in the corresponding 'DataTypeInterface'.
 data Interface annot = Interface
     { uniqueName :: !Core.ModuleRef
     , iSize :: Word64
