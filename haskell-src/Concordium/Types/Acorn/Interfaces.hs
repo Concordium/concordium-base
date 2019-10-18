@@ -49,7 +49,7 @@ data DataTypeInterface annot = DataTypeInterface
     dtiParams :: !Int
     -- | The datatype's constructors: a map of constructor names to their arity.
   , dtiCtors :: !(HashMap Core.Name [Type annot Core.ModuleRef])
-    -- | The constructors' visbility (for a module interface: 'Core.Public' if
+    -- | The constructors' visibility (for a module interface: 'Core.Public' if
     -- the constructors are exported)
   , dtiCtorsVis :: !Core.Visibility
   }
