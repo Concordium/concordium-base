@@ -9,23 +9,16 @@ Note that depending on the randomness, the execution time of some tests can vary
 {-# LANGUAGE TypeSynonymInstances #-}
 module Main where
 
--- import qualified Data.Map.Strict as Map
+import Prelude hiding (sum)
 
-import Control.Monad
-import Control.Concurrent
 import Control.Concurrent.Async
-import Data.List
+import Data.List hiding (sum)
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq((:<|)), (|>), (<|))
 
 import Data.Number.MPFR (MPFR)
 import qualified Data.Number.MPFR as MPFR
-import Data.Number.MPFR.Assignment as MPFR
-import Data.Number.MPFR.Internal as MPFR.Internal
-import Data.Number.MPFR.FFIhelper as MPFR.FFIhelper
 
-import Test.Hspec
-import Test.Hspec.QuickCheck
 import Test.QuickCheck as QC
 
 -- * Utilities
@@ -41,16 +34,6 @@ instance Show MPFRUnaryOp where
 
 instance Show MPFRBinaryOp where
   show _ = "<MPFR binary operation>"
-
--- randomStatePointer :: MPFR.Internal.Ptr MPFR.FFIhelper.GmpRandState
--- randomStatePointer = MPFR.newRandomStatePointer
-
--- rand :: MPFR.Precision -> Gen MPFR
--- rand p = do
---   return $ MPFR.urandomb randomStatePointer p
-
--- randList :: MPFR.Precision -> Int -> Gen [MPFR]
--- randList p n = return $ replicate n $ MPFR.urandomb randomStatePointer p
 
 -- | Generate an MPFR number from a random Int.
 -- NOTE: MPFR.urandomb does not seem to work (results in the same number on repeated calls),
@@ -164,17 +147,15 @@ runSuccessiveRandomOps p nNumbers nOps = do
   let nans :: Int = foldl' (\cnt m -> if MPFR.isNaN m then cnt+1 else cnt) 0 res
   let front20 = Seq.take 20 res
   let back20 = Seq.drop (nNumbers-20) res
-  let back2000 = Seq.drop (nNumbers-2000) res
+  -- let back2000 = Seq.drop (nNumbers-2000) res
   let foldedres = foldl' (MPFR.add MPFR.Near p) MPFR.zero res
   putStrLn $ "Front 20 of result list: " ++ show front20
   putStrLn $ "Back  20 of result list: " ++ show back20
   -- putStrLn $ "Result list: " ++ show res
   -- putStrLn $ "Back2000 of result list: " ++ show back2000
-  -- TODO The following two taking really long when the /operations/ are 10^6 instead of 10^5 (forever?) - why?
-    -- But counting NaNs succeeded once
   putStrLn $ "NaNs: " ++ show nans ++ " (" ++ show ((fromIntegral nans :: Double)*100 / (fromIntegral nNumbers)) ++ "%)"
   putStrLn $ "Sum of all resulting numbers: " ++ show foldedres
-  
+
 -- | Apply the given number of randomly chosen MPFR operations to a list of arguments of the given length.
 -- Unary operations are applied to the first element in the list, binary operations to the
 -- first and second as well as first and third. The results are added to the end of the list.
@@ -186,10 +167,6 @@ runSuccessiveRandomOpsParallel nParallel nNumbers nOps p =
     putStrLn $ "Random MPFR operations on random arguments and previous results, keeping "
                ++ show nNumbers ++ " MPFR numbers at all times"
     runSuccessiveRandomOps p nNumbers nOps -- keeping many MPFR numbers
-  -- describe ("Random MPFR operations on random arguments and previous results, keeping " ++ show nNumbers ++ " MPFR numbers at all times") $ modifyMaxSuccess (const 1) $ do -- NOTE: only need one run on this level
-  --   replicateM_ nParallel $ do
-  --     specify "Run" $ runSuccessiveRandomOps p nNumbers nOps -- keeping many MPFR numbers
-
 
 -- *** Testing MPFR operations on MPFRs and integers
 
@@ -237,21 +214,10 @@ runMixedMPFRIntegerParallel nParallel nNumbers p =
 showNumBits :: Int -> MPFR.Precision -> String
 showNumBits nNumbers p =
   let totalBits = nNumbers * (fromIntegral p)
-      order = logBase 10.0 (fromIntegral totalBits) in
+      order :: Double = logBase 10.0 (fromIntegral totalBits) in
     "10^" ++ show order ++ " bits"
 
 --- * Test slection
-
--- TODO make use of level specifying complexity of tests
--- NOTE: the time specification are from MSI laptop if not otherwise noted
--- tests :: Word -> Spec
--- tests lvl = describe "MPFRTest" $ parallel $ do
-  -- it "eNewton" $ eNewton 10 p1 `shouldBe` eNewton 10 p1
-  -- it "eNewton" $ eNewton 20 p1 `shouldBe` eNewton 20 p1
-  -- it "eNewton" $ eNewton 1000 p1 `shouldBe` eNewton 900 p1 -- This succeeds as the precision is not enough to catch the difference
-  -- it "eNewton" $ eNewton 300 p2 `shouldBe` eNewton 600 p2
-  -- it "eNewton" $ eNewton 300 p3 `shouldBe` eNewton 600 p3
-  -- runRandomOps 8 100000 100
 
 main :: IO ()
 main = do

@@ -20,7 +20,6 @@ description:         See README.md
 dependencies:
 - base >= 4.7 && < 5
 - containers >0.5.9.1
-- hspec >= 2.5
 - QuickCheck >= 2.10
 - async >= 2.2.1
 - hmpfr >= 0.4.4
