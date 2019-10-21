@@ -289,13 +289,13 @@ mod tests {
     use rand::Rng;
 
     use super::*;
-    use pairing::Field;
+    use ff::Field;
     macro_rules! macro_test_encrypt_decrypt_success {
         ($function_name:ident, $curve_type:path) => {
             #[test]
             pub fn $function_name() {
                 let mut csprng = thread_rng();
-                for _i in 1..100 {
+                for _i in 1..10 {
                     let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
                     let pk = PublicKey::from(&sk);
                     let m = Message::generate(&mut csprng);
@@ -321,11 +321,11 @@ mod tests {
                 let mut csprng = thread_rng();
                 let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
                 let pk = PublicKey::from(&sk);
-                for _i in 1..100 {
-                    let n = u64::rand(&mut csprng);
+                for _i in 1..10 {
+                    let n = csprng.gen_range(0, 1000);
                     let mut e = <$curve_type as Curve>::Scalar::zero();
                     let one_scalar = <$curve_type as Curve>::Scalar::one();
-                    for _ in 0..(n % 1000) {
+                    for _ in 0..n {
                         e.add_assign(&one_scalar);
                     }
                     let c = pk.encrypt_exponent(&mut csprng, &e);
@@ -346,7 +346,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
                 let pk = PublicKey::from(&sk);
-                for _i in 1..100 {
+                for _i in 1..10 {
                     let n = u64::rand(&mut csprng);
                     let c = encrypt_u64_bitwise(pk, n);
                     let n2 = decrypt_u64_bitwise(&sk, &c);
@@ -375,7 +375,7 @@ mod tests {
                 let pk = $derive_public_name(sk);
                 let mut xs = vec![0 as u8; byte_size];
                 let mut csprng = thread_rng();
-                for _i in 1..100 {
+                for _i in 1..10 {
                     let n = u64::rand(&mut csprng);
                     $encrypt_name(pk, n, xs.as_mut_ptr());
                     let result_ptr = Box::into_raw(Box::new(0));
@@ -421,7 +421,7 @@ mod tests {
                 let pk = $derive_public_name(sk);
                 let mut xs = vec![0; byte_size];
                 let mut csprng = thread_rng();
-                for _i in 1..100 {
+                for _i in 1..10 {
                     let n = u64::rand(&mut csprng);
                     $encrypt_name(pk, n, xs.as_mut_ptr());
                     let m = $decrypt_name(sk, xs.as_ptr());
@@ -457,7 +457,7 @@ mod tests {
                 let possible_chunk_sizes = [1, 2, 4, 8, 16, 32];
                 // let possible_chunk_sizes = [32];
 
-                for _i in 1..100 {
+                for _i in 1..10 {
                     let scalar = <$curve_type>::generate_scalar(&mut csprng);
                     let chunk_size_index: usize = csprng.gen_range(0, possible_chunk_sizes.len());
                     let chunk_size = possible_chunk_sizes[chunk_size_index];

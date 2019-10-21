@@ -1,6 +1,6 @@
 use curve_arithmetic::{curve_arithmetic::Curve, serialization::*};
 use failure::Error;
-use pairing::Field;
+use ff::Field;
 use rand::*;
 use sha2::{Digest, Sha256};
 use std::io::Cursor;
@@ -227,5 +227,4 @@ mod tests {
             assert_eq!(ap, app.unwrap());
         }
     }
-
 }

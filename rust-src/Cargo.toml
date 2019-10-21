@@ -13,6 +13,6 @@ members=[
    "id",
    "ffi_helpers",
    "simple_id_client",
-   "common"
+   "aggregate_sig",
+   "common",
 ]
-

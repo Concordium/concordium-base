@@ -4,9 +4,10 @@
 
 use crate::curve_arithmetic::*;
 use byteorder::{BigEndian, ReadBytesExt};
+use ff::PrimeField;
 use pairing::{
     bls12_381::{Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2},
-    CurveAffine, CurveProjective, EncodedPoint, Engine, PrimeField,
+    CurveAffine, CurveProjective, EncodedPoint, Engine,
 };
 use rand::*;
 use std::io::{Cursor, Read};
@@ -141,6 +142,10 @@ impl Curve for G2 {
     fn generate<T: Rng>(csprng: &mut T) -> Self { G2::rand(csprng) }
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
+
+    fn hash_to_group(_b: &[u8]) -> Self {
+        unimplemented!("hash_to_group_element for G2 of Bls12_381 is not implemented")
+    }
 }
 
 impl Curve for G1 {
@@ -274,6 +279,8 @@ impl Curve for G1 {
     fn generate<T: Rng>(csprng: &mut T) -> Self { G1::rand(csprng) }
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
+
+    fn hash_to_group(bytes: &[u8]) -> Self { Self::hash_to_group_element(bytes) }
 }
 
 impl Curve for G1Affine {
@@ -404,6 +411,10 @@ impl Curve for G1Affine {
     fn generate<T: Rng>(csprng: &mut T) -> Self { G1::rand(csprng).into_affine() }
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
+
+    fn hash_to_group(_b: &[u8]) -> Self {
+        unimplemented!("hash_to_group_element for G1Affine of Bls12_381 is not implemented")
+    }
 }
 
 impl Curve for G2Affine {
@@ -534,6 +545,10 @@ impl Curve for G2Affine {
     fn generate<T: Rng>(csprng: &mut T) -> Self { G2::rand(csprng).into_affine() }
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
+
+    fn hash_to_group(_b: &[u8]) -> Self {
+        unimplemented!("hash_to_group_element for G2Affine of Bls12_381 is not implemented")
+    }
 }
 
 impl Pairing for Bls12 {
@@ -584,6 +599,16 @@ impl Pairing for Bls12 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // For development only, delete later
+    #[test]
+    fn smoke_test_hash() {
+        let mut rng = thread_rng();
+        for _i in 0..10000 {
+            let bytes = rng.gen::<[u8; 32]>();
+            let _ = <Bls12 as Pairing>::G_1::hash_to_group(&bytes);
+        }
+    }
 
     macro_rules! macro_test_scalar_byte_conversion {
         ($function_name:ident, $p:path) => {

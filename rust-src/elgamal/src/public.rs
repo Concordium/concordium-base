@@ -202,5 +202,4 @@ mod tests {
 
     macro_test_key_to_byte_conversion!(key_to_byte_conversion_g1, G1);
     macro_test_key_to_byte_conversion!(key_to_byte_conversion_g2, G2);
-
 }

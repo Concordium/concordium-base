@@ -22,7 +22,7 @@ use crate::{
 };
 use curve_arithmetic::{curve_arithmetic::*, serialization::*};
 use failure::Error;
-use pairing::Field;
+use ff::Field;
 use std::io::Cursor;
 
 use rand::*;

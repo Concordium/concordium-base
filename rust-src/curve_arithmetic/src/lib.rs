@@ -1,3 +1,4 @@
+extern crate ff;
 extern crate pairing;
 
 pub mod bls12_381_ffi;

@@ -3,7 +3,6 @@
 extern crate clear_on_drop;
 extern crate core;
 extern crate failure;
-extern crate pairing;
 extern crate rand;
 extern crate rand_core;
 extern crate serde;

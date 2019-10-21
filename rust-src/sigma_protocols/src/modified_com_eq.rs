@@ -1,5 +1,5 @@
 use curve_arithmetic::curve_arithmetic::Curve;
-use pairing::Field;
+use ff::Field;
 use rand::*;
 use sha2::{Digest, Sha256};
 

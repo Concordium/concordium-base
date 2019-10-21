@@ -5,16 +5,15 @@ module Concordium.Crypto.FFIDataTypes
   withPedersenKey, withPsSigKey, withElgamalGen, withElgamalPublicKey)
   where
 
-import Foreign.ForeignPtr
-import Foreign.Ptr
-import Foreign.C.Types
-import Data.Serialize
-
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Crypto.FFIHelpers
 
+import Foreign.ForeignPtr
+import Foreign.Ptr
+import Foreign.C.Types
 import Data.Word
 import Data.ByteString as BS
+import Data.Serialize
 
 import qualified Data.Aeson as AE
 
@@ -74,6 +73,7 @@ withElgamalGen (ElgamalGen fp) = withForeignPtr fp
 
 withElgamalPublicKey :: ElgamalPublicKey -> (Ptr ElgamalPublicKey -> IO b) -> IO b
 withElgamalPublicKey (ElgamalPublicKey fp) = withForeignPtr fp
+
 
 -- |NOTE: This instance is different than the rust one. We add explicit length
 -- information up front.
