@@ -7,7 +7,3 @@ pub mod types;
 
 #[cfg(test)]
 mod test;
-// mod test2;
-
-//#[cfg(test)]
-// mod test;

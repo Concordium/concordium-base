@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 clap = "2.33"
 dialoguer = "0.4"
-pairing = "0.14"
+ff = "0.4"
 rand = "0.4"
 hex = "0.3"
 serde_json = "1.0"
@@ -21,6 +21,10 @@ rouille = "3.0"
 [dependencies.sigma_protocols]
 path = "../sigma_protocols"
 version = "0"
+
+[dependencies.pairing]
+git = "ssh://git@gitlab.com:22/Concordium/rust/external/pairing.git"
+branch = "master"
 
 [dependencies.curve_arithmetic]
 path = "../curve_arithmetic"

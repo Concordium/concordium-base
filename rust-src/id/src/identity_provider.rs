@@ -1,7 +1,7 @@
 use crate::types::*;
 use curve_arithmetic::curve_arithmetic::*;
 use elgamal::public::PublicKey;
-use pairing::Field;
+use ff::Field;
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use ps_sig;
 use rand::*;

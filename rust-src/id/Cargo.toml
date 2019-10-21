@@ -5,7 +5,7 @@ authors = ["Concordium AG <info@concordium.com>"]
 edition = "2018"
 
 [dependencies]
-pairing = "0.14"
+ff = "0.4"
 sha2      = "0.8"
 failure       = "0.1"
 rand    = "0.4"
@@ -24,6 +24,9 @@ version = "0"
 [dependencies.curve_arithmetic]
 path = "../curve_arithmetic"
 version = "0"
+[dependencies.pairing]
+git = "ssh://git@gitlab.com:22/Concordium/rust/external/pairing.git"
+branch = "master"
 [dependencies.sigma_protocols]
 path = "../sigma_protocols"
 version = "0"

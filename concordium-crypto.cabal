@@ -1,7 +1,7 @@
 Name:           concordium-crypto
 version:         0.1
 Synopsis:       Crypto infrastructure for Concordium block chain
-Description: 
+Description:
 License:        BSD3
 Author:         Concordium.com
 Stability:      Experimental
@@ -24,9 +24,10 @@ Library
 
   ghc-options: -Wall -O2
   hs-source-dirs: haskell-src
-  Exposed-modules: Concordium.Crypto.SHA256	
-                   Concordium.Crypto.SHA224	
+  Exposed-modules: Concordium.Crypto.SHA256
+                   Concordium.Crypto.SHA224
                    Concordium.Crypto.Ed25519Signature
+                   Concordium.Crypto.BlsSignature
                    Concordium.Crypto.BlockSignature
                    Concordium.Crypto.SignatureScheme
                    Concordium.Crypto.AccountSignatureSchemes
@@ -62,11 +63,12 @@ Library
                 , deepseq >= 1.4
 
   extra-libraries: ec_vrf_ed25519
-                   sha_2, 
+                   sha_2,
                    eddsa_ed25519,
                    sigma_protocols,
                    ffi_helpers,
-                   id
+                   id,
+                   aggregate_sig
 
   if os(windows)
         extra-libraries: ws2_32
@@ -96,6 +98,7 @@ Test-Suite tests
    ConcordiumTests.Crypto.VRF
    ConcordiumTests.Crypto.FFIDataTypes
    ConcordiumTests.Crypto.FFIVerify
+   ConcordiumTests.Crypto.BlsSignature
    ConcordiumTests.ID.Types
    ConcordiumTests.Crypto.Ed25519DlogProofs
 

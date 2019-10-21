@@ -3,7 +3,7 @@
 //
 
 use failure::Fail;
-use pairing::{Field, PrimeField, PrimeFieldDecodingError};
+use ff::{Field, PrimeField, PrimeFieldDecodingError};
 use rand::*;
 use std::{
     fmt::{Debug, Display, Formatter},
@@ -62,6 +62,7 @@ pub trait Curve:
     fn generate<R: Rng>(rng: &mut R) -> Self;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar;
     fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError>;
+    fn hash_to_group(m: &[u8]) -> Self;
 }
 
 pub trait Pairing: Sized + 'static + Clone {

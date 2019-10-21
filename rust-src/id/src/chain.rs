@@ -6,7 +6,7 @@ use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use elgamal::public::PublicKey;
-use pairing::Field;
+use ff::Field;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };

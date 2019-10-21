@@ -6,6 +6,7 @@ import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.Storable
 import Foreign.Marshal.Alloc
+import Data.Int
 import Data.Word
 import Data.ByteString
 import Data.ByteString.Unsafe
@@ -43,3 +44,19 @@ eqHelper fp1 fp2 f = unsafeDupablePerformIO $ do
     withForeignPtr fp2 $ \p2 -> do
       r <- f p1 p2
       return (r /= 0)
+
+-- |The given function should return
+--
+--  * 0 if the arguments are to be considered equal
+--  * 1 if the first argument is to be considered greater than the second
+--  * -1 if the first argument is to be considered less than the second
+cmpHelper :: ForeignPtr a -> ForeignPtr a -> (Ptr a -> Ptr a -> IO Int32) -> Ordering
+cmpHelper fp1 fp2 f = unsafeDupablePerformIO $ do
+  withForeignPtr fp1 $ \p1 ->
+    withForeignPtr fp2 $ \p2 -> do
+      r <- f p1 p2
+      case r of
+        0 -> return EQ
+        1 -> return GT
+        -1 -> return LT
+        _ -> error "Should not happen. FFI import breaks precondition."

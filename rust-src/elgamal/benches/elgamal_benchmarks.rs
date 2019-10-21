@@ -1,6 +1,5 @@
 // Authors:
 // - bm@concordium.com
-extern crate rand;
 use rand::*;
 
 #[macro_use]
@@ -8,11 +7,8 @@ extern crate criterion;
 
 use criterion::Criterion;
 
-extern crate elgamal;
-
 use elgamal::{elgamal::*, public::*, secret::*};
 
-extern crate pairing;
 use curve_arithmetic::Curve;
 use pairing::{bls12_381::G1, CurveAffine, CurveProjective, EncodedPoint};
 use rayon::iter::ParallelIterator;

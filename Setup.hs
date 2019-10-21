@@ -5,6 +5,7 @@ import Distribution.Simple.Setup
 import Distribution.Simple.Utils
 
 import System.Directory
+import System.Environment
 
 import Data.Maybe
 
@@ -38,8 +39,10 @@ updateExtraLibDirs localBuildInfo = do
 makeRust :: Args -> ConfigFlags -> IO HookedBuildInfo
 makeRust args flags = do
     let verbosity = fromFlag $ configVerbosity flags
-    rawSystemExit verbosity "cargo"
+    env <- getEnvironment
+    rawSystemExitWithEnv verbosity "cargo"
         ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"]
+        (("CARGO_NET_GIT_FETCH_WITH_CLI", "true") : env)
     return emptyHookedBuildInfo
 
 main = defaultMainWithHooks simpleUserHooks

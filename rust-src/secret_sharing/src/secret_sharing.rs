@@ -1,5 +1,5 @@
 use curve_arithmetic::curve_arithmetic::*;
-use pairing::Field;
+use ff::Field;
 use rand::*;
 
 pub struct SharingData<C: Curve> {
