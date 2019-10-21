@@ -103,7 +103,6 @@ instance AE.FromJSON SecretKey where
 instance AE.ToJSON SecretKey where
   toJSON v = AE.String (serializeBase16 v)
 
-
 -- PublicKey implementations
 
 instance Serialize PublicKey where
@@ -170,11 +169,13 @@ instance AE.ToJSON Signature where
 
 -- Signature scheme implementation
 
+-- |Generate a secret key using a system random number generator.
 generateSecretKey :: IO SecretKey
 generateSecretKey = do
   ptr <- generateSecretKeyPtr
   SecretKey <$> newForeignPtr freeSecretKey ptr
 
+-- |Derive a public key from a given secret key.
 derivePublicKey :: SecretKey -> PublicKey
 derivePublicKey sk = PublicKey <$> unsafeDupablePerformIO $ do
   pkptr <- withSecretKey sk derivePublicKeyPtr
@@ -192,6 +193,7 @@ sign m sk = Signature <$> unsafeDupablePerformIO $ do
     withSecretKey sk $ signBls (castPtr m') (fromIntegral mlen)
   newForeignPtr freeSignature sigptr
 
+-- |Verify a single signature.
 verify :: ByteString -> PublicKey -> Signature -> Bool
 verify m pk sig = unsafeDupablePerformIO $ do
   -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
@@ -199,6 +201,7 @@ verify m pk sig = unsafeDupablePerformIO $ do
     withPublicKey pk $ \pk' ->
     withSignature sig $ verifyBls (castPtr m') (fromIntegral mlen) pk'
 
+-- |Aggregate two signatures together.
 aggregate :: Signature -> Signature -> Signature
 aggregate sig1 sig2 = Signature <$> unsafeDupablePerformIO $ do
   sigptr <- withSignature sig1 $ \sig1' ->
@@ -206,8 +209,8 @@ aggregate sig1 sig2 = Signature <$> unsafeDupablePerformIO $ do
     aggregateBls sig1' sig2'
   newForeignPtr freeSignature sigptr
 
---- Verify a signature on bytestring under the list of public keys
---- The order of the public key list is irrelevant to the result
+-- |Verify a signature on bytestring under the list of public keys
+-- The order of the public key list is irrelevant to the result
 verifyAggregate :: ByteString -> [PublicKey] -> Signature -> Bool
 verifyAggregate m pks sig = unsafeDupablePerformIO $ do
   -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
@@ -223,18 +226,20 @@ verifyAggregate m pks sig = unsafeDupablePerformIO $ do
 -- Provides deterministic key generation from seed.
 foreign import ccall unsafe "bls_generate_secretkey_from_seed" generateSecretKeyPtrFromSeed :: CSize -> IO (Ptr SecretKey)
 
--- DO NOT USE IN PRODUCTION CODE!!!
+-- |DO NOT USE IN PRODUCTION CODE!!!
 -- ONLY USED FOR TESTING!!!
 -- provides deterministic key generation for testing purposes.
+{-# WARNING randomSecretKey "Not cryptographically secure." #-}
 randomSecretKey :: RandomGen g => g -> (SecretKey, g)
 randomSecretKey gen = (sk, gen')
   where
     (nextSeed, gen') = random gen
     sk = generateSecretKeyFromSeed nextSeed
 
--- DO NOT USE IN PRODUCTION CODE!!!
+-- |DO NOT USE IN PRODUCTION CODE!!!
 -- ONLY USED FOR TESTING!!!
 -- provides deterministic key generation for testing purposes.
+{-# WARNING generateSecretKeyFromSeed "Not cryptographically secure." #-}
 generateSecretKeyFromSeed :: CSize -> SecretKey
 generateSecretKeyFromSeed seed = unsafeDupablePerformIO $ do
   ptr <- generateSecretKeyPtrFromSeed seed

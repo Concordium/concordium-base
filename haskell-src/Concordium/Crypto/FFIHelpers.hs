@@ -45,7 +45,11 @@ eqHelper fp1 fp2 f = unsafeDupablePerformIO $ do
       r <- f p1 p2
       return (r /= 0)
 
--- The function f should abide to the requirements of the compare function of the Ord class
+-- |The given function should return
+--
+--  * 0 if the arguments are to be considered equal
+--  * 1 if the first argument is to be considered greater than the second
+--  * -1 if the first argument is to be considered less than the second
 cmpHelper :: ForeignPtr a -> ForeignPtr a -> (Ptr a -> Ptr a -> IO Int32) -> Ordering
 cmpHelper fp1 fp2 f = unsafeDupablePerformIO $ do
   withForeignPtr fp1 $ \p1 ->
