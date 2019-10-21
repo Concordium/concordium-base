@@ -196,11 +196,11 @@ runSuccessiveRandomOpsParallel nParallel nNumbers nOps p =
 -- | A deterministic stress test for MPFR producing a list of pairs of MPFR numbers and (very large) Integers.
 -- The objective is to have many allocations of large numbers, MPFR and Integer, because this /might/ cause issues.
 -- Each pair of numbers in the list is created from the previous pair by adding constants.
-runMixedMPFRInteger'
+runMixedMPFRInteger
   :: MPFR.Precision -- ^ The precision for the MPFR numbers but also roughly the amount of bits for the Integers.
   -> Int -- ^ The length of the list to produce. Computation time and memory consumption should scale linearly in this parameter.
   -> IO ()
-runMixedMPFRInteger' p nNumbers = do
+runMixedMPFRInteger p nNumbers = do
   let !res = foldl' step [(MPFR.one, 0 :: Integer)] [0..nNumbers]
   let (sumM, sumI) = foldl' (\(m,i) (m',i') -> (MPFR.add MPFR.Near p m m', i+i')) (MPFR.zero, intInitial) res -- TODO maybe this is not even creating res as a whole list (but there is increasing memory consumption)
   putStrLn $ "Sum of all MPFRs: " ++ show sumM ++ "\n"
@@ -221,16 +221,17 @@ runMixedMPFRInteger' p nNumbers = do
         (m',i'):(m,i):res
 
 
-runMixedMPFRInteger
+runMixedMPFRIntegerParallel
   :: Int -- ^ The number of threads to use
   -> Int -- ^ The length of the list to produce. Computation time and memory consumption should scale linearly in this parameter.
   -> MPFR.Precision -- ^ The precision for the MPFR numbers but also roughly the amount of bits for the Integers.
-  -> Spec
-runMixedMPFRInteger nParallel nNumbers p =
-  replicateM_ nParallel $
-  specify ("Parallel Integer and MPFR operations, keeping "
-                                   ++ show nNumbers ++ " MPFR numbers and large Integers in memory (~" ++ showNumBits nNumbers p ++ " for MPFR, similar amount for Integer)") $
-  runMixedMPFRInteger' p nNumbers -- keeping many MPFR numbers
+  -> IO ()
+runMixedMPFRIntegerParallel nParallel nNumbers p =
+  replicateConcurrently_ nParallel $ do
+    putStrLn $ "Parallel Integer and MPFR operations, keeping "
+               ++ show nNumbers ++ " MPFR numbers and large Integers in memory (~" ++ showNumBits nNumbers p
+               ++ " for MPFR, similar amount for Integer)"
+    runMixedMPFRInteger p nNumbers -- keeping many MPFR numbers
 
 
 showNumBits :: Int -> MPFR.Precision -> String
@@ -251,7 +252,6 @@ showNumBits nNumbers p =
   -- it "eNewton" $ eNewton 300 p2 `shouldBe` eNewton 600 p2
   -- it "eNewton" $ eNewton 300 p3 `shouldBe` eNewton 600 p3
   -- runRandomOps 8 100000 100
-  -- runMixedMPFRInteger 4 n6 p3 -- with n7 memory is going beond limits; on first tests, the RAM consumption by the test seems to equal the showNumBits amount
 
 main :: IO ()
 main = do
@@ -268,5 +268,6 @@ main = do
   let n8 = (10::Int)^(8::Int)
   let n9 = (10::Int)^(9::Int)
   -- successive parallel: nParallel nNumbers nOps precision
-  runSuccessiveRandomOpsParallel 4 n6 n5 p2
-  simpleSum n5 p2
+  -- runSuccessiveRandomOpsParallel 4 n6 n5 p2
+  -- simpleSum n5 p2
+  runMixedMPFRIntegerParallel 4 n6 p3 -- with n7 memory is going beond limits; on first tests, the RAM consumption by the test seems to equal the showNumBits amount
