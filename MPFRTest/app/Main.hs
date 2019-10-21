@@ -191,11 +191,11 @@ runMixedMPFRInteger p nNumbers = do
     intInc = max (2*intInitial `div` (fromIntegral nNumbers)) 1 :: Integer  -- step linearly through the whole range of value of same bit-length (within intInitial..2*intInitial)
     step ((m,i):res) _ =
       let m' = MPFR.add MPFR.Near p m mpfrInc
-          i' = case i of
-                 intMax -> intInitial -- make sure the memory size of the Integer does not increase much
-                 _ -> i + intInc
+          -- make sure the memory size of the Integer does not increase much
+          i' = if i == intMax then intInitial else i + intInc
       in
         (m',i'):(m,i):res
+    step [] _ = error "Implementation error."
 
 
 runMixedMPFRIntegerParallel
