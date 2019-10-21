@@ -88,34 +88,8 @@ binaryAppGen p = do
   y <- mpfrGen p
   return (op, x, y)
 
-runUnaryOp :: MPFR.Precision -> Property
-runUnaryOp p = do
-  forAll (unaryAppGen p) $ \(MPFRUnaryOp op, x) ->
-    let !res = op MPFR.Near p x -- make sure the library call is made
-    in res === res
-
-runBinaryOp :: MPFR.Precision -> Property
-runBinaryOp p = do
-  forAll (binaryAppGen p) $ \(MPFRBinaryOp op, x, y) ->
-    let !res = op MPFR.Near p x y -- make sure the library call is made
-    in res === res
-  -- forAll (binaryAppGen p) $ \(MPFRBinaryOp op, x, y) -> op MPFR.Near p x y === op MPFR.Near p x y
-  -- forAll (rand p)
-  --   (\x -> forAll (rand p)
-  --     (\y -> let !res = op MPFR.Near p x y in res === res))
-  -- y :: MPFR <- rand p
-  -- let !res = op MPFR.Near p x y
-  -- return $ property $ res == res
-
--- TODO maybe want to run just one operation
-  -- with shuffle can at least permute list
-  -- TODO make generator combining op and two parameters!
-
 
 -- * Tests
-
--- p :: MPFR.Precision
--- p = 1000
 
 -- ** Example computations
 
@@ -149,16 +123,6 @@ simpleSum nNumbers p = do
 
 -- ** Stress tests
 
--- *** Simple random test
-
--- | Run randomly chosen unary and binary MPFR operations on random arguments in parallel.
-runRandomOps :: Int -> Int -> MPFR.Precision -> Spec
-runRandomOps nParallel runs p = do
-  describe "Random MPFR operations on random arguments" $ modifyMaxSuccess (const runs) $ do
-    replicateM_ nParallel $ do
-      specify "MPFR binary op" $ runBinaryOp p
-      specify "MPFR unary op" $ runUnaryOp p
-
 -- *** More sophisticated random test
 
 -- | Apply the given operation to the first (or first/second and first/third) elements in the list and append the result(s) to the end of the list. The list maintains its length.
@@ -176,9 +140,6 @@ stepSuccessiveOp p op lastResults =
           !xy = binaryOp MPFR.Near p x y
           !xz = binaryOp MPFR.Near p x z in
         (z <| rest) |> xy |> xz
-
--- TODO might be interesting to see what results actual come out of this, maybe infinity...
-
 
 runSuccessiveOps :: MPFR.Precision -> [MPFROp] -> Seq MPFR -> Seq MPFR
 runSuccessiveOps p ops initialNumbers =
@@ -290,16 +251,6 @@ showNumBits nNumbers p =
   -- it "eNewton" $ eNewton 300 p2 `shouldBe` eNewton 600 p2
   -- it "eNewton" $ eNewton 300 p3 `shouldBe` eNewton 600 p3
   -- runRandomOps 8 100000 100
-  -- successive parallel: nParallel nNumbers nOps precision
-  -- runSuccessiveRandomOpsParallel 8 10000 100000 p1
-  -- runSuccessiveRandomOpsParallel 8 n5 n5 p3
-  -- runSuccessiveRandomOpsParallel 4 n6 500000 p3 -- This is fine
-  -- runSuccessiveRandomOpsParallel 1 n5 109111 p2 -- This is fine
-  -- runSuccessiveRandomOpsParallel 1 n5 199111 p2 -- This does not termiante at least for long; it even prints front and back of result list! (32s/sometimes very long) with sin/cos/tan and sinh; without any special functions ~1.2s, with sin/cos/tan: 15-18s
-  -- runSuccessiveRandomOpsParallel 4 n6 n7 p2 -- With only +,-,*,/ in 36s (also with just +,-), even this works; also with sqr/sqrt (get mostly NaNs then, but still 34-36s), also with exp/log; but not on X1, here it fails after having quickly reached 95% memory usage
-  -- runSuccessiveRandomOpsParallel 4 n6 n6 p2
-  -- runSuccessiveRandomOpsParallel 1 n5 199988 p2 -- Even here get fron 20 quite quickly; but the front 20 are the oldest...
-  -- runSuccessiveRandomOpsParallel 4 1000 10000 10 p1
   -- runMixedMPFRInteger 4 n6 p3 -- with n7 memory is going beond limits; on first tests, the RAM consumption by the test seems to equal the showNumBits amount
 
 main :: IO ()
@@ -316,5 +267,6 @@ main = do
   let n7 = (10::Int)^(7::Int)
   let n8 = (10::Int)^(8::Int)
   let n9 = (10::Int)^(9::Int)
+  -- successive parallel: nParallel nNumbers nOps precision
   runSuccessiveRandomOpsParallel 4 n6 n5 p2
   simpleSum n5 p2
