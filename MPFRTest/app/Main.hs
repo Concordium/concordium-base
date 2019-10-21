@@ -12,6 +12,8 @@ module Main where
 -- import qualified Data.Map.Strict as Map
 
 import Control.Monad
+import Control.Concurrent
+import Control.Concurrent.Async
 import Data.List
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq((:<|)), (|>), (<|))
@@ -217,12 +219,12 @@ runSuccessiveRandomOps p nNumbers nOps = do
 -- first and second as well as first and third. The results are added to the end of the list.
 -- This way, a list of MPFR numbers of the initial length is kept throughout the whole test.
 -- The number of new MPFR allocations should be nUnaryOps+2*nBinaryOps
-runSuccessiveRandomOpsParallel :: Int -> Int -> Int -> MPFR.Precision -> Spec
+runSuccessiveRandomOpsParallel :: Int -> Int -> Int -> MPFR.Precision -> IO ()
 runSuccessiveRandomOpsParallel nParallel nNumbers nOps p =
-  replicateM_ nParallel $
-  specify ("Random MPFR operations on random arguments and previous results, keeping "
-                                   ++ show nNumbers ++ " MPFR numbers at all times") $
-  runSuccessiveRandomOps p nNumbers nOps -- keeping many MPFR numbers
+  replicateConcurrently_ nParallel $ do
+    putStrLn $ "Random MPFR operations on random arguments and previous results, keeping "
+               ++ show nNumbers ++ " MPFR numbers at all times"
+    runSuccessiveRandomOps p nNumbers nOps -- keeping many MPFR numbers
   -- describe ("Random MPFR operations on random arguments and previous results, keeping " ++ show nNumbers ++ " MPFR numbers at all times") $ modifyMaxSuccess (const 1) $ do -- NOTE: only need one run on this level
   --   replicateM_ nParallel $ do
   --     specify "Run" $ runSuccessiveRandomOps p nNumbers nOps -- keeping many MPFR numbers
@@ -280,20 +282,8 @@ showNumBits nNumbers p =
 
 -- TODO make use of level specifying complexity of tests
 -- NOTE: the time specification are from MSI laptop if not otherwise noted
-tests :: Word -> Spec
-tests lvl = describe "MPFRTest" $ parallel $ do
-  let p1 = fromIntegral (10::Int) :: MPFR.Precision
-  let p2 = fromIntegral (10::Int)^(2::Int) :: MPFR.Precision
-  let p3 = fromIntegral (10::Int)^(3::Int) :: MPFR.Precision
-  let p4 = fromIntegral (10::Int)^(4::Int) :: MPFR.Precision
-  let n2 = (10::Int)^(2::Int)
-  let n3 = (10::Int)^(3::Int)
-  let n4 = (10::Int)^(4::Int)
-  let n5 = (10::Int)^(5::Int)
-  let n6 = (10::Int)^(6::Int)
-  let n7 = (10::Int)^(7::Int)
-  let n8 = (10::Int)^(8::Int)
-  let n9 = (10::Int)^(9::Int)
+-- tests :: Word -> Spec
+-- tests lvl = describe "MPFRTest" $ parallel $ do
   -- it "eNewton" $ eNewton 10 p1 `shouldBe` eNewton 10 p1
   -- it "eNewton" $ eNewton 20 p1 `shouldBe` eNewton 20 p1
   -- it "eNewton" $ eNewton 1000 p1 `shouldBe` eNewton 900 p1 -- This succeeds as the precision is not enough to catch the difference
@@ -311,7 +301,20 @@ tests lvl = describe "MPFRTest" $ parallel $ do
   -- runSuccessiveRandomOpsParallel 1 n5 199988 p2 -- Even here get fron 20 quite quickly; but the front 20 are the oldest...
   -- runSuccessiveRandomOpsParallel 4 1000 10000 10 p1
   -- runMixedMPFRInteger 4 n6 p3 -- with n7 memory is going beond limits; on first tests, the RAM consumption by the test seems to equal the showNumBits amount
-  specify "simpleSum" $ simpleSum n5 p2
 
 main :: IO ()
-main = return ()
+main = do
+  let p1 = fromIntegral (10::Int) :: MPFR.Precision
+  let p2 = fromIntegral (10::Int)^(2::Int) :: MPFR.Precision
+  let p3 = fromIntegral (10::Int)^(3::Int) :: MPFR.Precision
+  let p4 = fromIntegral (10::Int)^(4::Int) :: MPFR.Precision
+  let n2 = (10::Int)^(2::Int)
+  let n3 = (10::Int)^(3::Int)
+  let n4 = (10::Int)^(4::Int)
+  let n5 = (10::Int)^(5::Int)
+  let n6 = (10::Int)^(6::Int)
+  let n7 = (10::Int)^(7::Int)
+  let n8 = (10::Int)^(8::Int)
+  let n9 = (10::Int)^(9::Int)
+  runSuccessiveRandomOpsParallel 4 n6 n5 p2
+  simpleSum n5 p2
