@@ -141,7 +141,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
         return false;
     }
     // verifying against the empty set of signers always fails
-    if m_pk_pairs.len() == 0 {
+    if m_pk_pairs.is_empty() {
         return false;
     }
 
@@ -175,7 +175,7 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
     signature: Signature<P>,
 ) -> bool {
     // verifying against the empty set of signers always fails
-    if pks.len() == 0 {
+    if pks.is_empty() {
         return false;
     }
 
