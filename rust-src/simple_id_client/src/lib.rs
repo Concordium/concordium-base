@@ -172,12 +172,6 @@ pub fn json_to_aci(
     })
 }
 
-pub fn global_context_to_json(global: &GlobalContext<ExampleCurve>) -> Value {
-    json!({"dLogBaseChain": json_base16_encode(&global.dlog_base_chain.curve_to_bytes()),
-           "onChainCommitmentKey": json_base16_encode(&global.on_chain_commitment_key.to_bytes()),
-    })
-}
-
 pub fn json_read_u32(v: &Map<String, Value>, key: &str) -> Option<u32> {
     u32::try_from(v.get(key)?.as_u64()?).ok()
 }
@@ -222,71 +216,13 @@ where
     })
 }
 
-pub fn json_to_ar_info(ar_val: &Value) -> Option<ArInfo<<Bls12 as Pairing>::G_1>> {
-    let ar_val = ar_val.as_object()?;
-    let ar_identity = json_read_u64(ar_val, "arIdentity")?;
-    let ar_description = ar_val.get("arDescription")?.as_str()?;
-    let ar_public_key =
-        elgamal::PublicKey::from_bytes(m_json_decode!(ar_val, "arPublicKey")).ok()?;
-    Some(ArInfo {
-        ar_identity,
-        ar_description: ar_description.to_owned(),
-        ar_public_key,
-    })
-}
-pub fn ar_info_to_json<C: Curve>(ar_info: &ArInfo<C>) -> Value {
-    json!({
-        "arIdentity": ar_info.ar_identity,
-        "arDescription": ar_info.ar_description,
-        "arPublicKey": json_base16_encode(&ar_info.ar_public_key.to_bytes()),
-    })
-}
-pub fn json_to_ip_info(ip_val: &Value) -> Option<IpInfo<Bls12, <Bls12 as Pairing>::G_1>> {
-    let ip_val = ip_val.as_object()?;
-    let ip_identity = json_read_u32(ip_val, "ipIdentity")?;
-    let ip_description = ip_val.get("ipDescription")?.as_str()?;
-    let ip_verify_key = ps_sig::PublicKey::from_bytes(&mut Cursor::new(&json_base16_decode(
-        ip_val.get("ipVerifyKey")?,
-    )?))
-    .ok()?;
-    let dlog_base_bytes = ip_val.get("dLogBase").and_then(json_base16_decode)?;
-    let dlog_base =
-        <<Bls12 as Pairing>::G_1 as Curve>::bytes_to_curve(&mut Cursor::new(&dlog_base_bytes))
-            .ok()?;
-    let ck_bytes = ip_val.get("arCommitmentKey").and_then(json_base16_decode)?;
-    let ck = pedersen_key::CommitmentKey::from_bytes(&mut Cursor::new(&ck_bytes)).ok()?;
-
-    let ar_arr_bytes: &Vec<Value> = ip_val.get("anonymityRevokers")?.as_array()?;
-    let ar_arry: Option<Vec<ArInfo<<Bls12 as Pairing>::G_1>>> =
-        ar_arr_bytes.iter().map(json_to_ar_info).collect();
-    Some(IpInfo {
-        ip_identity,
-        ip_description: ip_description.to_owned(),
-        ip_verify_key,
-        dlog_base,
-        ar_info: (ar_arry?, ck),
-    })
-}
-
 pub fn json_to_ip_infos(v: &Value) -> Option<Vec<IpInfo<Bls12, ExampleCurve>>> {
     let ips_arr = v.as_array()?;
-    ips_arr.iter().map(json_to_ip_info).collect()
-}
-
-pub fn ip_info_to_json(ipinfo: &IpInfo<Bls12, <Bls12 as Pairing>::G_1>) -> Value {
-    let ars: Vec<Value> = ipinfo.ar_info.0.iter().map(ar_info_to_json).collect();
-    json!({
-                                   "ipIdentity": ipinfo.ip_identity,
-                                   "ipDescription": ipinfo.ip_description,
-                                   "dLogBase" : json_base16_encode(&ipinfo.dlog_base.curve_to_bytes()),
-                                   "ipVerifyKey": json_base16_encode(&ipinfo.ip_verify_key.to_bytes()),
-                                   "arCommitmentKey": json_base16_encode(&ipinfo.ar_info.1.to_bytes()),
-                                   "anonymityRevokers": json!(ars),
-    })
+    ips_arr.iter().map(IpInfo::from_json).collect()
 }
 
 pub fn ip_infos_to_json(ipinfos: &[IpInfo<Bls12, <Bls12 as Pairing>::G_1>]) -> Value {
-    let arr: Vec<Value> = ipinfos.iter().map(ip_info_to_json).collect();
+    let arr: Vec<Value> = ipinfos.iter().map(IpInfo::to_json).collect();
     json!(arr)
 }
 
@@ -451,14 +387,14 @@ pub fn json_to_ip_data(v: &Value) -> Option<IpData> {
         v.get("idPrivateKey")?,
     )?))
     .ok()?;
-    let ip_info = json_to_ip_info(v.get("publicIdInfo")?)?;
+    let ip_info = IpInfo::from_json(v.get("publicIdInfo")?)?;
     Some((ip_info, id_cred_sec))
 }
 
 pub fn ip_data_to_json(v: &IpData) -> Value {
     json!({
         "idPrivateKey": json_base16_encode(&v.1.to_bytes()),
-        "publicIdInfo": ip_info_to_json(&v.0)
+        "publicIdInfo": v.0.to_json()
     })
 }
 

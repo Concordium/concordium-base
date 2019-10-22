@@ -138,15 +138,12 @@ fn test_pipeline() {
     );
 
     // let mut out = Vec::new();
-
-    // out.extend_from_slice(&global_ctx.dlog_base_chain.curve_to_bytes());
-    // out.extend_from_slice(&((global_ctx.on_chain_commitment_key.to_bytes().len()
-    // as u32).to_be_bytes())); out.extend_from_slice(&global_ctx.
-    // on_chain_commitment_key.to_bytes()); out.extend_from_slice(&ip_info.
-    // ar_info.ar_elgamal_generator.curve_to_bytes()); out.extend_from_slice(&
-    // ip_info.ar_info.ar_public_key.to_bytes()); out.extend_from_slice(&
-    // ((ip_info.ip_verify_key.to_bytes().len() as u32).to_be_bytes()));
-    // out.extend_from_slice(&ip_info.ip_verify_key.to_bytes());
+    // let gc_bytes = global_ctx.to_bytes();
+    // out.extend_from_slice(&(gc_bytes.len() as u32).to_be_bytes());
+    // out.extend_from_slice(&gc_bytes);
+    // let ip_info_bytes = ip_info.to_bytes();
+    // out.extend_from_slice(&(ip_info_bytes.len() as u32).to_be_bytes());
+    // out.extend_from_slice(&ip_info_bytes);
     // out.extend_from_slice(&cdi.to_bytes());
     // let file = File::create("foo.bin");
     // file.unwrap().write_all(&out);

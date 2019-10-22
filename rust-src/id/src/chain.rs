@@ -46,33 +46,37 @@ pub fn verify_cdi<
     ip_info: &IpInfo<P, C>,
     cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
-    // anonimity revokation data
+    // anonimity revocation data
     // preprocessing
-    let ars = cdi.values.choice_ar_handles.clone();
-    let ar_commitments = cdi.proofs.commitments.cmm_ars.clone();
+    let ars = &cdi.values.choice_ar_handles;
+    let ar_commitments = &cdi.proofs.commitments.cmm_ars;
     if ars.len() != ar_commitments.len() {
         return Err(CDIVerificationError::AR);
     }
     let mut choice_ar_parameters = Vec::with_capacity(ars.len());
-    for handle in ars.into_iter() {
+    let zero = Randomness(C::Scalar::zero());
+
+    for &handle in ars.iter() {
         // check that the handle is in the commitment list
-        match ar_commitments.iter().find(|&x| {
-            *x == global_context.on_chain_commitment_key.hide(
-                &Value(C::scalar_from_u64(handle as u64).unwrap()),
-                &Randomness(C::Scalar::zero()),
-            )
-        }) {
+        let check_handle_p = |&&x: &&Commitment<C>| {
+            // compute the commitment with randomness zero
+            x == global_context
+                .on_chain_commitment_key
+                .hide(&Value(C::scalar_from_u64(handle as u64).unwrap()), &zero)
+        };
+        match ar_commitments.iter().find(check_handle_p) {
+            // if it is not then this credential is invalid
             None => return Err(CDIVerificationError::AR),
             Some(_) => match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == handle) {
                 None => return Err(CDIVerificationError::AR),
-                Some(ar_info) => choice_ar_parameters.push(ar_info.clone()),
+                Some(ar_info) => choice_ar_parameters.push(ar_info),
             },
         }
     }
     verify_cdi_worker(
         &global_context.on_chain_commitment_key,
         &ip_info.ip_verify_key,
-        choice_ar_parameters,
+        &choice_ar_parameters,
         cdi,
     )
 }
@@ -84,7 +88,7 @@ pub fn verify_cdi_worker<
 >(
     on_chain_commitment_key: &CommitmentKey<C>,
     ip_verify_key: &ps_sig::PublicKey<P>,
-    choice_ar_parameters: Vec<ArInfo<C>>,
+    choice_ar_parameters: &[&ArInfo<C>],
     cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     // Compute the challenge prefix by hashing the values.
@@ -97,7 +101,7 @@ pub fn verify_cdi_worker<
     let check_id_cred_pub = verify_id_cred_pub_sharing_data(
         &challenge_prefix,
         on_chain_commitment_key,
-        &choice_ar_parameters,
+        choice_ar_parameters,
         &cdi.values.ar_data,
         &commitments.cmm_id_cred_sec_sharing_coeff,
         &cdi.proofs.proof_id_cred_pub,
@@ -158,7 +162,7 @@ pub fn verify_cdi_worker<
 fn verify_id_cred_pub_sharing_data<C: Curve>(
     challenge_prefix: &[u8],
     commitment_key: &CommitmentKey<C>,
-    choice_ar_parameters: &[ArInfo<C>],
+    choice_ar_parameters: &[&ArInfo<C>],
     chain_ar_data: &[ChainArData<C>],
     cmm_sharing_coeff: &[Commitment<C>],
     proof_id_cred_pub: &[(u64, com_enc_eq::ComEncEqProof<C>)],

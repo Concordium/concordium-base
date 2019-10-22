@@ -31,6 +31,3 @@ decodeLookup' = do
                                   [Match (LitP (IntegerL (fromIntegral i)))
                                          (NormalB (LitE (IntegerL (fromIntegral (Vec.unsafeIndex decodeTable i))))) [] | i <- [0..255]]
                                ++ [defaultCase])
-
-
-  

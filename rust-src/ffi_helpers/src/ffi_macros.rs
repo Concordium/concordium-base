@@ -167,3 +167,60 @@ macro_rules! mut_slice_from_c_bytes {
         mut_slice_from_c_bytes_worker!($cstr, $length, $null_ptr_error, slice::from_raw_parts_mut)
     };
 }
+
+#[macro_export]
+macro_rules! macro_derive_to_json {
+    ($function_name:ident, $type:ty) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub extern "C" fn $function_name(
+            input_ptr: *mut $type,
+            output_len: *mut size_t,
+        ) -> *const u8 {
+            let input = from_ptr!(input_ptr);
+            // unwrap is OK here since we construct well-formed json.
+            let bytes = serde_json::to_vec(&input.to_json()).unwrap();
+            unsafe { *output_len = bytes.len() as size_t }
+            let ret_ptr = bytes.as_ptr();
+            ::std::mem::forget(bytes);
+            ret_ptr
+        }
+    };
+    ($function_name:ident, $type:ty, $f:expr) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub extern "C" fn $function_name(
+            input_ptr: *mut $type,
+            output_len: *mut size_t,
+        ) -> *const u8 {
+            let input = from_ptr!(input_ptr);
+            // unwrap is OK here since we construct well-formed json.
+            let bytes = serde_json::to_vec(&($f(&input))).unwrap();
+            unsafe { *output_len = bytes.len() as size_t }
+            let ret_ptr = bytes.as_ptr();
+            ::std::mem::forget(bytes);
+            ret_ptr
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! macro_derive_from_json {
+    ($function_name:ident, $type:ty, $from:expr) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub extern "C" fn $function_name(input_bytes: *mut u8, input_len: size_t) -> *const $type {
+            let len = input_len as usize;
+            let bytes = slice_from_c_bytes!(input_bytes, len);
+            let value = match serde_json::from_slice(&bytes) {
+                Err(_) => return ::std::ptr::null(),
+                Ok(v) => v,
+            };
+            let e = $from(&value);
+            match e {
+                Some(r) => Box::into_raw(Box::new(r)),
+                None => ::std::ptr::null(),
+            }
+        }
+    };
+}

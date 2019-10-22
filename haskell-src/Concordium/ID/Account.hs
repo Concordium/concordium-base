@@ -4,7 +4,6 @@
 module Concordium.ID.Account where
 
 import Concordium.ID.Types
-import Concordium.Crypto.FFIDataTypes
 import GHC.Word
 import Data.ByteString.Random.MWC
 import Concordium.Crypto.SignatureScheme
@@ -20,33 +19,29 @@ import Data.ByteString.Unsafe
 import Data.ByteString as BS
 import Data.ByteString.Short as BSS
 
+import Concordium.ID.Parameters
+import Concordium.ID.IdentityProvider
+
 type CredentialDeploymentInformationBytes = ByteString
 
 foreign import ccall unsafe "verify_cdi_ffi" verifyCDIFFI
-               :: Ptr ElgamalGen
-               -> Ptr PedersenKey
-               -> Ptr PsSigKey
-               -> Ptr ElgamalGen
-               -> Ptr ElgamalPublicKey
+               :: Ptr GlobalContext
+               -> Ptr IpInfo
                -> Ptr Word8
                -> CSize
                -> IO Int32
 
 
-verifyCredential :: ElgamalGen -> PedersenKey -> IdentityProviderPublicKey -> ElgamalGen -> AnonymityRevokerPublicKey -> CredentialDeploymentInformationBytes -> Bool
-verifyCredential elgamalGen pedersenKey (IP_PK idPK) arElgamalGenerator (AnonymityRevokerPublicKey anonPK) cdiBytes = unsafeDupablePerformIO $ do
-    res <- withElgamalGen elgamalGen $
-           \elgamalGenPtr ->withPedersenKey pedersenKey $
-           \pedersenKeyPtr -> withElgamalGen arElgamalGenerator $
-           \elgamalGeneratorPtr -> withElgamalPublicKey anonPK $
-           \anonPKPtr -> withPsSigKey idPK $
-           \ipVerifyKeyPtr -> unsafeUseAsCStringLen cdiBytes $
+verifyCredential :: GlobalContext -> IpInfo -> CredentialDeploymentInformationBytes -> Bool
+verifyCredential gc ipInfo cdiBytes = unsafeDupablePerformIO $ do
+    res <- withGlobalContext gc $ \gcPtr ->
+           withIpInfo ipInfo $ \ipInfoPtr ->
+           unsafeUseAsCStringLen cdiBytes $ \(cdiBytesPtr, cdiBytesLen) ->
            -- this use of unsafe is fine since at this point we know the CDI
            -- bytes is a non-empty string, so the pointer cdiBytesPtr will be
            -- non-null
-           \(cdiBytesPtr, cdiBytesLen) -> verifyCDIFFI elgamalGenPtr pedersenKeyPtr ipVerifyKeyPtr elgamalGeneratorPtr anonPKPtr (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
+           verifyCDIFFI gcPtr ipInfoPtr (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
     return (res == 1)
-
 
 registrationId :: IO CredentialRegistrationID
 registrationId = (random 48) >>= (return . RegIdCred . FBS.fromByteString)

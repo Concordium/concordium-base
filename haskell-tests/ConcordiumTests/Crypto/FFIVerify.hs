@@ -1,9 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module ConcordiumTests.Crypto.FFIVerify where
 
-import Concordium.Crypto.FFIDataTypes
-import Concordium.ID.Types
 import Concordium.ID.Account
+import Concordium.ID.Parameters
+import Concordium.ID.IdentityProvider
 
 import qualified Data.ByteString as BS
 import Data.Serialize
@@ -13,26 +13,17 @@ import Test.Hspec
 filePath :: FilePath
 filePath = "testdata/cdi-example.bin"
 
-getData :: Get (ElgamalGen, PedersenKey, ElgamalGen, AnonymityRevokerPublicKey, IdentityProviderPublicKey)
-getData = do
-  dlogBase <- get
-  cmmKey <- get
-  arGen <- get
-  arPubKey <- get
-  ipVerifyKey <- get
-  return (dlogBase, cmmKey, arGen, arPubKey, ipVerifyKey)
+getData :: Get (GlobalContext, IpInfo)
+getData = getTwoOf get get
 
-readData :: BS.ByteString -> Either String ((ElgamalGen, PedersenKey, ElgamalGen, AnonymityRevokerPublicKey, IdentityProviderPublicKey), BS.ByteString)
+readData :: BS.ByteString -> Either String ((GlobalContext, IpInfo), BS.ByteString)
 readData bs = loop (runGetPartial getData bs)
   where loop (Fail err _ ) = Left err
         loop (Partial k) = loop (k BS.empty)
         loop (Done r rest) = Right (r, rest)
 
-testVerify ::
-  (ElgamalGen, PedersenKey, ElgamalGen, AnonymityRevokerPublicKey, IdentityProviderPublicKey)
-  -> CredentialDeploymentInformationBytes
-  -> Bool
-testVerify (a, b, c, d, e) bs = verifyCredential a b e c d bs
+testVerify :: (GlobalContext, IpInfo) -> CredentialDeploymentInformationBytes -> Bool
+testVerify = uncurry verifyCredential
 
 test :: BS.ByteString -> Either String Bool
 test bs = case readData bs of

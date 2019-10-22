@@ -6,6 +6,7 @@ use ed25519_dalek as ed25519;
 use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
 use elgamal::cipher::Cipher;
 use ff::Field;
+use hex::{decode, encode};
 use pedersen_scheme::{commitment as pedersen, key::CommitmentKey as PedersenKey};
 use ps_sig::{public as pssig, signature::*};
 
@@ -14,8 +15,13 @@ use sigma_protocols::{
     com_eq_sig::ComEqSigProof, com_mult::ComMultProof,
 };
 
+use serde_json::{json, Map, Value};
+
 use byteorder::{BigEndian, ReadBytesExt};
-use std::io::{Cursor, Read};
+use std::{
+    convert::TryFrom,
+    io::{Cursor, Read},
+};
 
 pub trait Attribute<F: Field>: Copy + Clone + Sized + Send + Sync {
     // convert an attribute to a field element
@@ -691,6 +697,13 @@ impl<C: Curve> PolicyProof<C> {
         })
     }
 }
+
+macro_rules! m_json_decode {
+    ($val:expr, $key:expr) => {
+        &mut Cursor::new(&json_base16_decode($val.get($key)?)?)
+    };
+}
+
 impl<C: Curve> ArInfo<C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut r: Vec<u8> = Vec::from(&self.ar_identity.to_be_bytes()[..]);
@@ -711,7 +724,29 @@ impl<C: Curve> ArInfo<C> {
             ar_public_key,
         })
     }
+
+    pub fn from_json(ar_val: &Value) -> Option<Self> {
+        let ar_val = ar_val.as_object()?;
+        let ar_identity = json_read_u64(ar_val, "arIdentity")?;
+        let ar_description = ar_val.get("arDescription")?.as_str()?;
+        let ar_public_key =
+            elgamal::PublicKey::from_bytes(m_json_decode!(ar_val, "arPublicKey")).ok()?;
+        Some(ArInfo {
+            ar_identity,
+            ar_description: ar_description.to_owned(),
+            ar_public_key,
+        })
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({
+            "arIdentity": self.ar_identity,
+            "arDescription": self.ar_description,
+            "arPublicKey": json_base16_encode(&self.ar_public_key.to_bytes()),
+        })
+    }
 }
+
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut r = Vec::with_capacity(4);
@@ -719,8 +754,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
         r.extend_from_slice(&short_string_to_bytes(&self.ip_description));
         r.extend_from_slice(&self.ip_verify_key.to_bytes());
         r.extend_from_slice(&self.dlog_base.curve_to_bytes());
-        let l = &self.ar_info.0.len();
-        r.extend_from_slice(&l.to_be_bytes());
+        let l = self.ar_info.0.len();
+        r.extend_from_slice(&(l as u16).to_be_bytes());
         for item in &self.ar_info.0 {
             r.extend_from_slice(&item.to_bytes());
         }
@@ -747,7 +782,52 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
             ar_info,
         })
     }
+
+    pub fn from_json(ip_val: &Value) -> Option<Self> {
+        let ip_val = ip_val.as_object()?;
+        let ip_identity = json_read_u32(ip_val, "ipIdentity")?;
+        let ip_description = ip_val.get("ipDescription")?.as_str()?;
+        let ip_verify_key = pssig::PublicKey::from_bytes(&mut Cursor::new(&json_base16_decode(
+            ip_val.get("ipVerifyKey")?,
+        )?))
+        .ok()?;
+        let dlog_base_bytes = ip_val.get("dLogBase").and_then(json_base16_decode)?;
+        let dlog_base =
+            <P::G_1 as Curve>::bytes_to_curve(&mut Cursor::new(&dlog_base_bytes)).ok()?;
+        let ck_bytes = ip_val.get("arCommitmentKey").and_then(json_base16_decode)?;
+        let ck = PedersenKey::from_bytes(&mut Cursor::new(&ck_bytes)).ok()?;
+
+        let ar_arr_items: &Vec<Value> = ip_val.get("anonymityRevokers")?.as_array()?;
+        let m_ar_arry: Option<Vec<ArInfo<C>>> =
+            ar_arr_items.iter().map(ArInfo::from_json).collect();
+        let ar_arry = m_ar_arry?;
+        Some(IpInfo {
+            ip_identity,
+            ip_description: ip_description.to_owned(),
+            ip_verify_key,
+            dlog_base,
+            ar_info: (ar_arry, ck),
+        })
+    }
+
+    pub fn to_json(&self) -> Value {
+        let ars: Vec<Value> = self.ar_info.0.iter().map(ArInfo::to_json).collect();
+        json!({
+            "ipIdentity": self.ip_identity,
+            "ipDescription": self.ip_description,
+            "dLogBase" : json_base16_encode(&self.dlog_base.curve_to_bytes()),
+            "ipVerifyKey": json_base16_encode(&self.ip_verify_key.to_bytes()),
+            "arCommitmentKey": json_base16_encode(&self.ar_info.1.to_bytes()),
+            "anonymityRevokers": json!(ars),
+        })
+    }
 }
+
+fn json_read_u32(v: &Map<String, Value>, key: &str) -> Option<u32> {
+    u32::try_from(v.get(key)?.as_u64()?).ok()
+}
+
+fn json_read_u64(v: &Map<String, Value>, key: &str) -> Option<u64> { v.get(key)?.as_u64() }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Context<P, C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
@@ -783,6 +863,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Context<P, C> {
     }
 }
 
+fn json_base16_encode(v: &[u8]) -> Value { json!(encode(v)) }
+
+fn json_base16_decode(v: &Value) -> Option<Vec<u8>> { decode(v.as_str()?).ok() }
+
 impl<C: Curve> GlobalContext<C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut r = vec![];
@@ -797,6 +881,27 @@ impl<C: Curve> GlobalContext<C> {
         Some(GlobalContext {
             dlog_base_chain,
             on_chain_commitment_key,
+        })
+    }
+
+    pub fn from_json(v: &Value) -> Option<Self> {
+        let obj = v.as_object()?;
+        let dlog_base_bytes = obj.get("dLogBaseChain").and_then(json_base16_decode)?;
+        let dlog_base_chain = C::bytes_to_curve(&mut Cursor::new(&dlog_base_bytes)).ok()?;
+        let cmk_bytes = obj
+            .get("onChainCommitmentKey")
+            .and_then(json_base16_decode)?;
+        let cmk = PedersenKey::from_bytes(&mut Cursor::new(&cmk_bytes)).ok()?;
+        let gc = GlobalContext {
+            dlog_base_chain,
+            on_chain_commitment_key: cmk,
+        };
+        Some(gc)
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({"dLogBaseChain": json_base16_encode(&self.dlog_base_chain.curve_to_bytes()),
+               "onChainCommitmentKey": json_base16_encode(&self.on_chain_commitment_key.to_bytes()),
         })
     }
 }

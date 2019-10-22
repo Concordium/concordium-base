@@ -31,12 +31,12 @@ struct ServerState {
 }
 
 fn respond_global_params(_request: &rouille::Request, s: &ServerState) -> rouille::Response {
-    let response = to_string_pretty(&global_context_to_json(&s.global_params)).unwrap();
+    let response = to_string_pretty(&s.global_params.to_json()).unwrap();
     rouille::Response::text(response)
 }
 
 fn respond_ips(_request: &rouille::Request, s: &ServerState) -> rouille::Response {
-    let response: Vec<Value> = s.ip_infos.iter().map(|id| ip_info_to_json(&id.0)).collect();
+    let response: Vec<Value> = s.ip_infos.iter().map(|id| id.0.to_json()).collect();
     rouille::Response::json(&json!(response))
 }
 

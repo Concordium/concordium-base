@@ -1,67 +1,70 @@
-module Concordium.ID.IdentityProvider where
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
+module Concordium.ID.IdentityProvider
+  (IpInfo, ipInfoToJSON, jsonToIpInfo, withIpInfo)
+  where
 
-import           Concordium.Crypto.SignatureScheme
-import           Concordium.Crypto.Elgamal
-import qualified Data.ByteString as B
+import Concordium.Crypto.FFIHelpers
 
---newtype PublicKey = PK B.ByteString
-newtype ZKP = ZKP B.ByteString
-newtype Commitment = Cmt B.ByteString
+import Foreign.ForeignPtr
+import Foreign.Ptr
+import Foreign.C.Types
+import Data.Word
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS8
+import qualified Data.ByteString.Lazy as BSL
+import Data.Serialize
 
-type Attribute = String
+import qualified Data.Aeson as AE
 
-type AL = [Attribute]
+newtype IpInfo = IpInfo (ForeignPtr IpInfo)
 
-type IdAH =  String
---type IdCredPub = AHPK ByteString
---type IdCred = AHPK ByteString
---data AHI = AHI IdAH IdCredPub IdCredSec PrfKey AL --stored by AH
---data AHC = AHC IdIP AHI Signature
--- Signature on (IdCredSec, k, AL)
---data ACI = -- on the chain
-data IPIAH = IPIAH {ipiah_AhId                      ::  IdAH, 
-                    ipiah_AhAttrList                ::  AL  , 
-                    ipiah_AhIdCredPub               ::  PublicKey,
-                    ipiah_AhPrfKeyCommitment        ::  Commitment, 
-                    ipiah_ZkpOfPrfKeyAndIdCredSec   ::  ZKP,
-                    ipiah_ERegId                    ::  [(AR, [Cipher])],
-                    ipiah_zkpOfMatchingPrfKey       ::  ZKP 
-                   }
+foreign import ccall unsafe "&ip_info_free" freeIpInfo :: FunPtr (Ptr IpInfo -> IO ())
+foreign import ccall unsafe "ip_info_to_bytes" ipInfoToBytes :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ip_info_from_bytes" ipInfoFromBytes :: Ptr Word8 -> CSize -> IO (Ptr IpInfo)
+foreign import ccall unsafe "ip_info_to_json" ipInfoToJSONFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ip_info_from_json" ipInfoFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr IpInfo)
 
-type IdAR = String
-data AR = AR IdAR PublicKey
+withIpInfo :: IpInfo -> (Ptr IpInfo -> IO b) -> IO b
+withIpInfo (IpInfo fp) = withForeignPtr fp
 
-type REASON = String
-data CertificationOutcome = SUCCESS (Signature CL) | FAILURE REASON 
+-- This instance is different from the Rust one, it puts the length information up front.
+instance Serialize IpInfo where
+  get = do
+    v <- getWord32be
+    bs <- getByteString (fromIntegral v)
+    case fromBytesHelper freeIpInfo ipInfoFromBytes bs of
+      Nothing -> fail "Cannot decode IpInfo."
+      Just x -> return $! (IpInfo x)
 
+  put (IpInfo e) = let bs = toBytesHelper ipInfoToBytes e
+                   in putWord32be (fromIntegral (BS.length bs)) <> putByteString bs
 
--- | The commitment is a commitment to PRF key
---  the ZKP object contains a proof of knowledge of PRF key and 
---  secret key corresponding to the public key
-verifyKeys :: Commitment -> PublicKey-> ZKP -> Bool
-verifyKeys = undefined
+-- Show instance uses the JSON instance to pretty print the structure.
+instance Show IpInfo where
+  show = BS8.unpack . ipInfoToJSON
 
-verifyMatchingPrfKeyCommitment:: Commitment -> [(AR,[Cipher])] -> ZKP -> Bool 
-verifyMatchingPrfKeyCommitment  = undefined
+jsonToIpInfo :: BS.ByteString -> Maybe IpInfo
+jsonToIpInfo bs = IpInfo <$> fromJSONHelper freeIpInfo ipInfoFromJSONFFI bs
 
-certifyAH :: SignKey CL-> VerifyKey CL -> IPIAH -> CertificationOutcome 
-certifyAH signK verifyK ipiah = if (not b) 
-                                  then FAILURE "Verification of keys failed" 
-                               else if (not b') 
-                                  then FAILURE "Verification of AR data failed"
-                               else SUCCESS (sign signK verifyK B.empty)
-                    where
-                        prfKeyCommitment = ipiah_AhPrfKeyCommitment ipiah
-                        ahPubKey         = ipiah_AhIdCredPub ipiah
-                        prfKeys          = ipiah_ZkpOfPrfKeyAndIdCredSec ipiah
-                        eRegId           = ipiah_ERegId ipiah
-                        prfMatching      =  ipiah_zkpOfMatchingPrfKey ipiah
-                        b = verifyKeys prfKeyCommitment ahPubKey prfKeys
-                        b' = verifyMatchingPrfKeyCommitment prfKeyCommitment eRegId prfMatching
-                
-               
-              
-             
-                                                  
+ipInfoToJSON :: IpInfo -> BS.ByteString
+ipInfoToJSON (IpInfo ip) = toJSONHelper ipInfoToJSONFFI ip
 
+-- These JSON instances are very inefficient and should not be used in
+-- performance critical contexts, however they are fine for loading
+-- configuration data, or similar one-off uses.
 
+instance AE.FromJSON IpInfo where
+  parseJSON v@(AE.Object _) =
+    -- this is a terrible hack to avoid writing duplicate instances
+    -- hack in the sense of performance
+    case jsonToIpInfo (BSL.toStrict (AE.encode v)) of
+      Nothing -> fail "Could not decode IpInfo."
+      Just ipinfo -> return ipinfo
+  parseJSON _ = fail "IpInfo: Expected object."
+
+instance AE.ToJSON IpInfo where
+  toJSON ipinfo =
+    case AE.decodeStrict (ipInfoToJSON ipinfo) of
+      Nothing -> error "Internal error: Rust serialization does not produce valid JSON."
+      Just v -> v

@@ -36,6 +36,8 @@ Library
                    Data.Base58Encoding
                    Concordium.ID.Types
                    Concordium.ID.Account
+                   Concordium.ID.Parameters
+                   Concordium.ID.IdentityProvider
                    Concordium.Crypto.FFIDataTypes
                    Concordium.Crypto.ByteStringHelpers
                    Concordium.Crypto.Proofs
@@ -45,6 +47,7 @@ Library
 
   Build-depends:  base >=4.7
                 , aeson >= 1.4.2
+                , aeson-pretty >= 0.8
                 , scientific >= 0.3.6
                 , bytestring >=0.10
                 , base16-bytestring

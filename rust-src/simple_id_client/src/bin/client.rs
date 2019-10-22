@@ -33,7 +33,6 @@ macro_rules! m_json_decode {
 }
 
 static IP_PREFIX: &str = "database/identity_provider-";
-static AR_PREFIX: &str = "database/anonymity_revoker-";
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "anonymity_revoker-";
 
@@ -376,7 +375,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
                         eprintln!("failed to parse pio");
                         return;
                     }
-                    Some(pio) => match v.get("ipInfo").and_then(json_to_ip_info) {
+                    Some(pio) => match v.get("ipInfo").and_then(IpInfo::from_json) {
                         None => {
                             eprintln!("failed to parse ip info");
                             return;
@@ -675,7 +674,7 @@ fn handle_act_as_ip(matches: &ArgMatches) {
                 let js = json!({
                     "preIdentityObject": pio_to_json(&pio),
                     "signature": json_base16_encode(sig_bytes),
-                    "ipInfo": ip_info_to_json(&ip_info)
+                    "ipInfo": IpInfo::to_json(&ip_info)
                 });
                 if write_json_to_file(signed_out_path, &js).is_ok() {
                     println!("Wrote signed identity object to file.");
@@ -964,7 +963,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
                 CommitmentKey::<ExampleCurve>::generate(&mut csprng),
             ),
         };
-        let js = ip_info_to_json(&ip_info);
+        let js = ip_info.to_json();
         let private_js = json!({
             "idPrivateKey": json_base16_encode(&id_secret_key.to_bytes()),
             "publicIdInfo": js
@@ -990,5 +989,5 @@ fn handle_generate_global(_matches: &ArgMatches) -> Option<()> {
         // in the attribute list. This is so that we can reveal items individually.
         on_chain_commitment_key: CommitmentKey::generate(&mut csprng),
     };
-    write_json_to_file(GLOBAL_CONTEXT, &global_context_to_json(&gc)).ok()
+    write_json_to_file(GLOBAL_CONTEXT, &gc.to_json()).ok()
 }
