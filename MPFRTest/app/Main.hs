@@ -166,6 +166,7 @@ runSuccessiveRandomOpsParallel nParallel nNumbers nOps p =
   replicateConcurrently_ nParallel $ do
     putStrLn $ "Random MPFR operations on random arguments and previous results, keeping "
                ++ show nNumbers ++ " MPFR numbers at all times"
+               ++ ", amounting to ~" ++ showNumBits nNumbers p ++ " in memory"
     runSuccessiveRandomOps p nNumbers nOps -- keeping many MPFR numbers
 
 -- *** Testing MPFR operations on MPFRs and integers
@@ -210,12 +211,32 @@ runMixedMPFRIntegerParallel nParallel nNumbers p =
                ++ " for MPFR, similar amount for Integer)"
     runMixedMPFRInteger p nNumbers -- keeping many MPFR numbers
 
+-- NOTE: This is just a very rough estimate on how many bits hmpfr uses to represent the given amount of numbers.
+-- Source: https://hackage.haskell.org/package/hmpfr-0.4.4/docs/src/Data-Number-MPFR-FFIhelper.html,
+-- https://hackage.haskell.org/package/hmpfr-0.4.4/docs/Data-Number-MPFR-FFIhelper.html#t:MPFR
+calcNumBits :: Int -> MPFR.Precision -> Int
+calcNumBits nNumbers p =
+  -- TODO Complete/correct by looking at hmpfr code
+  let fixedPerNumber :: Int =
+        -- Haskell MPFR data structure
+          32 -- sign
+        + 64 -- precision
+        + 64 -- exponent
+        + 64 -- pointer to the limbs
+      bitsPerLimb :: Int =
+        64 -- the actual limb bits
+      -- TODO not sure whether this is the actual number of limbs
+      nLimbs :: Int = (fromIntegral p) `div` 64
+                    + (if (fromIntegral p :: Int) `mod` 64 > 0 then 1 else 0)
+  in nNumbers * (fixedPerNumber + nLimbs * bitsPerLimb)
 
 showNumBits :: Int -> MPFR.Precision -> String
 showNumBits nNumbers p =
-  let totalBits = nNumbers * (fromIntegral p)
+  let totalBits = calcNumBits nNumbers p
       order :: Double = logBase 10.0 (fromIntegral totalBits) in
     "10^" ++ show order ++ " bits"
+
+
 
 --- * Test slection
 
