@@ -187,7 +187,7 @@ runMixedMPFRInteger p nNumbers = do
     ++ "Sum of all Integers: " ++ show sumI
   where
     mpfrInc = MPFR.pi MPFR.Near p -- use an irrational constant
-    intInitial = 2^p :: Integer -- make the integers consume roughly the same amount of bits as the MPFRs
+    intInitial = 2^p :: Integer -- make the integers consume roughly the same amount of bits as the MPFR limbs (not counting overhead)
     intMax = 2 * intInitial :: Integer
     intInc = max (2*intInitial `div` (fromIntegral nNumbers)) 1 :: Integer  -- step linearly through the whole range of value of same bit-length (within intInitial..2*intInitial)
     step ((m,i):res) _ =
@@ -208,7 +208,7 @@ runMixedMPFRIntegerParallel nParallel nNumbers p =
   replicateConcurrently_ nParallel $ do
     putStrLn $ "Parallel Integer and MPFR operations, keeping "
                ++ show nNumbers ++ " MPFR numbers and large Integers in memory (~" ++ showNumBits nNumbers p
-               ++ " for MPFR, similar amount for Integer)"
+               ++ " for MPFR numbers)"
     runMixedMPFRInteger p nNumbers -- keeping many MPFR numbers
 
 -- NOTE: This is just a very rough estimate on how many bits hmpfr uses to represent the given amount of numbers.
