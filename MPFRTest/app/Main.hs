@@ -96,13 +96,24 @@ simpleSum
   -> MPFR.Precision
   -> IO ()
 simpleSum nNumbers p = do
-  putStrLn $ "Running simpleSum with " ++ show nNumbers ++ " MPFR numbers..."
+  putStrLn $ "Running simpleSum with " ++ show nNumbers ++ " " ++ show (fromIntegral p :: Int) ++ "-bit MPFR numbers..."
+  numbers <- take nNumbers <$> (generate $ infiniteListOf $ mpfrGen p)
+  let sum = foldl' (MPFR.add MPFR.Near p) MPFR.zero numbers
+  putStrLn $ "Sum: " ++ show sum
+
+-- | Like 'simpleSum' but sum up the numbers twice (the second sum starting with the previous sum)
+-- to make the numbers stay in memory.
+simpleSumRepeated
+  :: Int
+  -> MPFR.Precision
+  -> IO ()
+simpleSumRepeated nNumbers p = do
+  putStrLn $ "Running simpleSumRepeated with " ++ show nNumbers ++ " " ++ show (fromIntegral p :: Int) ++ "-bit MPFR numbers..."
   !numbers <- take nNumbers <$> (generate $ infiniteListOf $ mpfrGen p)
   let sum = foldl' (MPFR.add MPFR.Near p) MPFR.zero numbers
   putStrLn $ "Sum: " ++ show sum
-  let sum1 = foldl' (MPFR.add MPFR.Near p) MPFR.one numbers
-  putStrLn $ "Sum+1: " ++ show sum1
-
+  let sum2 = foldl' (MPFR.add MPFR.Near p) sum numbers
+  putStrLn $ "2*Sum: " ++ show sum2
 
 -- ** Stress tests
 
