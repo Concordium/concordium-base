@@ -16,6 +16,9 @@ import Data.Serialize
 
 import qualified Data.Aeson as AE
 
+-- |Cryptographic parameters needed to verify on-chain proofs, e.g.,
+-- group parameters (generators), commitment keys, in the future also
+-- common reference strings, etc.
 newtype GlobalContext = GlobalContext (ForeignPtr GlobalContext)
 
 foreign import ccall unsafe "&global_context_free" freeGlobalContext :: FunPtr (Ptr GlobalContext -> IO ())

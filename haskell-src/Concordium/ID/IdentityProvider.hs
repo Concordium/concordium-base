@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
 module Concordium.ID.IdentityProvider
-  (IpInfo, ipInfoToJSON, jsonToIpInfo, withIpInfo)
+  (IpInfo, ipInfoToJSON, jsonToIpInfo, withIpInfo, ipIdentity)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -13,7 +13,9 @@ import Data.Word
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy as BSL
+import Concordium.ID.Types
 import Data.Serialize
+import System.IO.Unsafe
 
 import qualified Data.Aeson as AE
 
@@ -24,6 +26,7 @@ foreign import ccall unsafe "ip_info_to_bytes" ipInfoToBytes :: Ptr IpInfo -> Pt
 foreign import ccall unsafe "ip_info_from_bytes" ipInfoFromBytes :: Ptr Word8 -> CSize -> IO (Ptr IpInfo)
 foreign import ccall unsafe "ip_info_to_json" ipInfoToJSONFFI :: Ptr IpInfo -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "ip_info_from_json" ipInfoFromJSONFFI :: Ptr Word8 -> CSize -> IO (Ptr IpInfo)
+foreign import ccall unsafe "ip_info_ip_identity" ipIdentityFFI :: Ptr IpInfo -> IO IdentityProviderIdentity
 
 withIpInfo :: IpInfo -> (Ptr IpInfo -> IO b) -> IO b
 withIpInfo (IpInfo fp) = withForeignPtr fp
@@ -49,6 +52,9 @@ jsonToIpInfo bs = IpInfo <$> fromJSONHelper freeIpInfo ipInfoFromJSONFFI bs
 
 ipInfoToJSON :: IpInfo -> BS.ByteString
 ipInfoToJSON (IpInfo ip) = toJSONHelper ipInfoToJSONFFI ip
+
+ipIdentity :: IpInfo -> IdentityProviderIdentity
+ipIdentity ipInfo = unsafeDupablePerformIO $ withIpInfo ipInfo ipIdentityFFI
 
 -- These JSON instances are very inefficient and should not be used in
 -- performance critical contexts, however they are fine for loading

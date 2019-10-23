@@ -183,6 +183,13 @@ macro_derive_to_bytes!(ip_info_to_bytes, IpInfo<Bls12, G1>);
 macro_derive_from_json!(ip_info_from_json, IpInfo<Bls12, G1>, IpInfo::from_json);
 macro_derive_to_json!(ip_info_to_json, IpInfo<Bls12, G1>);
 
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn ip_info_ip_identity(ip_info_ptr: *const IpInfo<Bls12, G1>) -> u32 {
+    let ip_info = from_ptr!(ip_info_ptr);
+    ip_info.ip_identity.0
+}
+
 // derive conversion methods for GlobalContext to be used in Haskell
 macro_free_ffi!(global_context_free, GlobalContext<G1>);
 macro_derive_from_bytes!(global_context_from_bytes, GlobalContext<G1>, |x| {
