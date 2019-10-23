@@ -49,7 +49,12 @@ pub fn verify_cdi<
 ) -> Result<(), CDIVerificationError> {
     // anonimity revocation data
     // preprocessing
-    let ars = &cdi.values.choice_ar_handles;
+    let ars = &cdi
+        .values
+        .ar_data
+        .iter()
+        .map(|x| x.ar_identity)
+        .collect::<Vec<ArIdentity>>();
     let ar_commitments = &cdi.proofs.commitments.cmm_ars;
     if ars.len() != ar_commitments.len() {
         return Err(CDIVerificationError::AR);

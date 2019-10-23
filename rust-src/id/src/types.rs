@@ -109,8 +109,9 @@ pub struct IpArData<C: Curve> {
     /// the commitments to the sharing coefficients
     pub proof_com_enc_eq: ComEncEqProof<C>,
 }
-/// data relating to a single anonymity revoker sent by the account holder to
-/// the chain typicall a vector of these will be sent to the chain
+/// Data relating to a single anonymity revoker sent by the account holder to
+/// the chain.
+/// Typically a vector of these will be sent to the chain.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ChainArData<C: Curve> {
     /// identity of the anonymity revoker
@@ -300,9 +301,6 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     pub ar_data: Vec<ChainArData<C>>,
     /// Policy of this credential object.
     pub policy: Policy<C, AttributeType>,
-    /// TODO: Redundant, could be deduced from ar_data
-    /// ar_parameters, vector of ar handles
-    pub choice_ar_handles: Vec<ArIdentity>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -615,10 +613,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
             v.extend_from_slice(&ar.to_bytes());
         }
         v.extend_from_slice(&self.policy.to_bytes());
-        v.extend_from_slice(&(self.choice_ar_handles.len() as u16).to_be_bytes());
-        for ar in self.choice_ar_handles.iter() {
-            v.extend_from_slice(&ar.to_bytes());
-        }
         v
     }
 
@@ -636,18 +630,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
             ar_data.push(ChainArData::from_bytes(cur)?);
         }
         let policy = Policy::from_bytes(cur)?;
-        let number_of_ars = cur.read_u16::<BigEndian>().ok()?;
-        let mut choice_ar_handles = Vec::with_capacity(number_of_ars as usize);
-        for _ in 0..number_of_ars {
-            choice_ar_handles.push(ArIdentity::from_bytes(cur)?);
-        }
         Some(CredentialDeploymentValues {
             acc_scheme_id,
             acc_pub_key,
             reg_id,
             ip_identity,
             ar_data,
-            choice_ar_handles,
             policy,
         })
     }

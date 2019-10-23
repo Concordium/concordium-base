@@ -373,7 +373,6 @@ where
         acc_scheme_id: SchemeId::Ed25519,
         reg_id,
         ar_data,
-        choice_ar_handles: ar_list,
         ip_identity: ip_info.ip_identity,
         policy: policy.clone(),
         acc_pub_key: acc_data.verify_key,
@@ -452,6 +451,8 @@ where
         &mut csprng,
     );
 
+    let choice_ar_handles: Vec<ArIdentity> =
+        cred_values.ar_data.iter().map(|x| x.ar_identity).collect();
     // Proof of knowledge of the signature of the identity provider.
     let pok_sig = compute_pok_sig(
         &challenge_prefix,
@@ -461,7 +462,7 @@ where
         &id_cred_sec,
         &prf_key,
         &alist,
-        &cred_values.choice_ar_handles,
+        &choice_ar_handles,
         &ip_pub_key,
         &blinded_sig,
         &blinded_sig_rand_sec,

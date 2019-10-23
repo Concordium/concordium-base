@@ -295,33 +295,45 @@ newtype AREnc = AREnc ElgamalCipher
 instance FromJSON AREnc where
   parseJSON v = AREnc <$> parseJSON v
 
+newtype ShareNumber = ShareNumber Word32
+    deriving (Eq, Show, Ord)
+    deriving (FromJSON, ToJSON) via Word32
+
+instance Serialize ShareNumber where
+  put (ShareNumber n) = Put.putWord32be n
+  get = ShareNumber <$> Get.getWord32be
+
 -- |Data needed on-chain to revoke anonymity of the account holder.
 data ChainArData = ChainArData {
   -- |Unique identifier of the anonimity revoker.
-  ardName :: ARName,
-  -- |Encryption of the public credentials with the anonymity revoker's public key.
-  ardIdCredPubEnc :: AREnc
+  ardName :: !ARName,
+  -- |Encrypted share of id cred pub
+  ardIdCredPubShare :: !AREnc,
+  -- |The share number of this share.
+  ardIdCredPubShareNumber :: !ShareNumber
   } deriving(Eq, Show)
 
 
 instance ToJSON ChainArData where
   toJSON (ChainArData{..}) = object [
     "arIdentity" .= ardName,
-    "idCredPubEnc" .= ardIdCredPubEnc
+    "encIdCredPubShare" .=  ardIdCredPubShare,
+    "idCredPubShareNumber" .= ardIdCredPubShareNumber
     ]
 
 instance FromJSON ChainArData where
   parseJSON = withObject "ChainArData" $ \v -> do
     ardName <- v .: "arIdentity"
-    ardIdCredPubEnc <- v .: "idCredPubEnc"
+    ardIdCredPubShare <- v .: "encIdCredPubShare"
+    ardIdCredPubShareNumber <- v .: "idCredPubShareNumber"
     return ChainArData{..}
 
 instance Serialize ChainArData where
   put ChainArData{..} =
     put ardName <>
-    put ardIdCredPubEnc
-  get = ChainArData <$> get <*> get
-
+    put ardIdCredPubShare <>
+    put ardIdCredPubShareNumber
+  get = ChainArData <$> get <*> get <*> get
 
 data CredentialDeploymentValues = CredentialDeploymentValues {
   -- |Signature scheme of the account to which this credential is deployed.
@@ -335,7 +347,7 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
   -- which this credential is derived.
   cdvIpId      :: IdentityProviderIdentity,
   -- |Anonymity revocation data associated with this credential.
-  cdvArData :: ChainArData,
+  cdvArData :: [ChainArData],
   -- |Policy. At the moment only opening of specific commitments.
   cdvPolicy :: Policy
 } deriving(Eq, Show)
@@ -394,7 +406,8 @@ instance Serialize CredentialDeploymentValues where
     cdvVerifyKey <- get
     cdvRegId <- get
     cdvIpId <- get
-    cdvArData <- get
+    l <- Get.getWord16be
+    cdvArData <- replicateM (fromIntegral l) get
     cdvPolicy <- getPolicy
     return CredentialDeploymentValues{..}
 
@@ -403,7 +416,8 @@ instance Serialize CredentialDeploymentValues where
     put cdvVerifyKey <>
     put cdvRegId <>
     put cdvIpId <>
-    put cdvArData <>
+    Put.putWord16be (fromIntegral (length cdvArData)) <>
+    mapM_ put cdvArData <>
     putPolicy cdvPolicy
 
 -- |The credential deployment information consists of values deployed and the
