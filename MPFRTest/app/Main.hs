@@ -160,19 +160,24 @@ runSuccessiveRandomOps p nNumbers nOps = do
   let back20 = Seq.drop (nNumbers-20) res
   -- let back2000 = Seq.drop (nNumbers-2000) res
   let foldedres = foldl' (MPFR.add MPFR.Near p) MPFR.zero res
-  putStrLn $ "Front 20 of result list: " ++ show front20
-  putStrLn $ "Back  20 of result list: " ++ show back20
-  -- putStrLn $ "Result list: " ++ show res
-  -- putStrLn $ "Back2000 of result list: " ++ show back2000
+  putStrLn $ "Front 20 of result sequence: " ++ show front20
+  putStrLn $ "Back  20 of result sequence: " ++ show back20
+  -- putStrLn $ "Result sequence: " ++ show res
+  -- putStrLn $ "Back2000 of result sequence: " ++ show back2000
   putStrLn $ "NaNs: " ++ show nans ++ " (" ++ show ((fromIntegral nans :: Double)*100 / (fromIntegral nNumbers)) ++ "%)"
   putStrLn $ "Sum of all resulting numbers: " ++ show foldedres
 
--- | Apply the given number of randomly chosen MPFR operations to a list of arguments of the given length.
--- Unary operations are applied to the first element in the list, binary operations to the
--- first and second as well as first and third. The results are added to the end of the list.
--- This way, a list of MPFR numbers of the initial length is kept throughout the whole test.
+-- | Apply the given number of randomly chosen MPFR operations to a sequence of MPFR numbers of the given length.
+-- Unary operations are applied to the first element in the sequence, binary operations to the
+-- first and second as well as first and third. The results are added to the end of the sequence.
+-- This way, a sequence of MPFR numbers of the initial length is kept throughout the whole test.
 -- The number of new MPFR allocations should be nUnaryOps+2*nBinaryOps
-runSuccessiveRandomOpsParallel :: Int -> Int -> Int -> MPFR.Precision -> IO ()
+runSuccessiveRandomOpsParallel
+  :: Int -- ^ The number of threads to use
+  -> Int -- ^ The length of the sequence to produce.
+  -> Int -- ^ The number of operations to run on the sequence.
+  -> MPFR.Precision -- ^ The precision for the MPFR numbers but also roughly the amount of bits for the Integers.
+  -> IO ()
 runSuccessiveRandomOpsParallel nParallel nNumbers nOps p =
   replicateConcurrently_ nParallel $ do
     putStrLn $ "Random MPFR operations on random arguments and previous results, keeping "
@@ -190,8 +195,11 @@ runMixedMPFRInteger
   -> Int -- ^ The length of the list to produce. Computation time and memory consumption should scale linearly in this parameter.
   -> IO ()
 runMixedMPFRInteger p nNumbers = do
+  -- NOTE This does not seem to keep all numbers in memory at the same time (even though
+  -- there is increasing and significant memory usage over time) but that is okay
+  -- as we just want the allocations (which must happen).
   let !res = foldl' step [(MPFR.one, 0 :: Integer)] [0..nNumbers]
-  let (sumM, sumI) = foldl' (\(m,i) (m',i') -> (MPFR.add MPFR.Near p m m', i+i')) (MPFR.zero, intInitial) res -- TODO maybe this is not even creating res as a whole list (but there is increasing memory consumption)
+  let (sumM, sumI) = foldl' (\(m,i) (m',i') -> (MPFR.add MPFR.Near p m m', i+i')) (MPFR.zero, intInitial) res
   putStrLn $ "Sum of all MPFRs: " ++ show sumM ++ "\n"
   -- NOTE: to show all digits, need another conversion function, but the following does not show the exponent?
     -- (fst $ MPFR.mpfrToString MPFR.Near (fromIntegral p) 2 sumM)
