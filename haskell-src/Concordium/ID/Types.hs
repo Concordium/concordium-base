@@ -296,7 +296,7 @@ instance FromJSON AREnc where
   parseJSON v = AREnc <$> parseJSON v
 
 -- |Data needed on-chain to revoke anonymity of the account holder.
-data AnonymityRevocationData = AnonymityRevocationData {
+data ChainArData = ChainArData {
   -- |Unique identifier of the anonimity revoker.
   ardName :: ARName,
   -- |Encryption of the public credentials with the anonymity revoker's public key.
@@ -304,23 +304,23 @@ data AnonymityRevocationData = AnonymityRevocationData {
   } deriving(Eq, Show)
 
 
-instance ToJSON AnonymityRevocationData where
-  toJSON (AnonymityRevocationData{..}) = object [
+instance ToJSON ChainArData where
+  toJSON (ChainArData{..}) = object [
     "arIdentity" .= ardName,
     "idCredPubEnc" .= ardIdCredPubEnc
     ]
 
-instance FromJSON AnonymityRevocationData where
-  parseJSON = withObject "AnonymityRevocationData" $ \v -> do
+instance FromJSON ChainArData where
+  parseJSON = withObject "ChainArData" $ \v -> do
     ardName <- v .: "arIdentity"
     ardIdCredPubEnc <- v .: "idCredPubEnc"
-    return AnonymityRevocationData{..}
+    return ChainArData{..}
 
-instance Serialize AnonymityRevocationData where
-  put AnonymityRevocationData{..} =
+instance Serialize ChainArData where
+  put ChainArData{..} =
     put ardName <>
     put ardIdCredPubEnc
-  get = AnonymityRevocationData <$> get <*> get
+  get = ChainArData <$> get <*> get
 
 
 data CredentialDeploymentValues = CredentialDeploymentValues {
@@ -335,7 +335,7 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
   -- which this credential is derived.
   cdvIpId      :: IdentityProviderIdentity,
   -- |Anonymity revocation data associated with this credential.
-  cdvArData :: AnonymityRevocationData,
+  cdvArData :: ChainArData,
   -- |Policy. At the moment only opening of specific commitments.
   cdvPolicy :: Policy
 } deriving(Eq, Show)

@@ -5,6 +5,7 @@ use hex::{decode, encode};
 use id::{ffi::*, types::*};
 use pairing::bls12_381::Bls12;
 use ps_sig;
+use secret_sharing::secret_sharing::*;
 
 use chrono::NaiveDateTime;
 
@@ -228,18 +229,18 @@ pub fn ip_infos_to_json(ipinfos: &[IpInfo<Bls12, <Bls12 as Pairing>::G_1>]) -> V
 
 pub fn ip_ar_data_to_json<C: Curve>(ar_data: &IpArData<C>) -> Value {
     json!({
-        "arIdentity": ar_data.ar_identity,
+        "arIdentity": ar_data.ar_identity.to_json(),
         "encPrfKeyShare": json_base16_encode(&ar_data.enc_prf_key_share.to_bytes()),
-        "prfKeyShareNumber": json!(ar_data.prf_key_share_number),
+        "prfKeyShareNumber": ar_data.prf_key_share_number.to_json(),
         "proofComEncEq" : json_base16_encode(&ar_data.proof_com_enc_eq.to_bytes()),
     })
 }
 
 pub fn json_to_ip_ar_data(v: &Value) -> Option<IpArData<ExampleCurve>> {
-    let ar_identity = json_read_u64(v.as_object()?, "arIdentity")?;
+    let ar_identity = ArIdentity::from_json(v.get("arIdentity")?)?;
     // let ar_description = v.as_object()?.get("arDescription")?.as_str()?;
     let enc_prf_key_share = Cipher::from_bytes(m_json_decode!(v, "encPrfKeyShare")).ok()?;
-    let prf_key_share_number = json_read_u64(v.as_object()?, "prfKeyShareNumber")?;
+    let prf_key_share_number = ShareNumber::from_json(v.get("prfKeyShareNumber")?)?;
     let proof_com_enc_eq = ComEncEqProof::from_bytes(m_json_decode!(v, "proofComEncEq")).ok()?;
 
     Some(IpArData {
@@ -256,16 +257,16 @@ pub fn chain_ar_data_to_json<C: Curve>(ar_data: &[ChainArData<C>]) -> Value {
 }
 pub fn single_chain_ar_data_to_json<C: Curve>(ar_data: &ChainArData<C>) -> Value {
     json!({
-        "arIdentity": ar_data.ar_identity,
+        "arIdentity": ar_data.ar_identity.to_json(),
         "encIdCredPubShare": json_base16_encode(&ar_data.enc_id_cred_pub_share.to_bytes()),
-        "idCredPubShareNumber": ar_data.id_cred_pub_share_number
+        "idCredPubShareNumber": ar_data.id_cred_pub_share_number.to_json()
     })
 }
 
 pub fn json_to_chain_single_ar_data(v: &Value) -> Option<ChainArData<ExampleCurve>> {
-    let ar_identity = json_read_u64(v.as_object()?, "arIdentity")?;
+    let ar_identity = ArIdentity::from_json(v.get("arIdentity")?)?;
     let enc_id_cred_pub_share = Cipher::from_bytes(m_json_decode!(v, "encIdCredPubShare")).ok()?;
-    let id_cred_pub_share_number = json_read_u64(v.as_object()?, "idCredPubShareNumber")?;
+    let id_cred_pub_share_number = ShareNumber::from_json(v.get("idCredPubShareNumber")?)?;
     Some(ChainArData {
         ar_identity,
         enc_id_cred_pub_share,
@@ -292,8 +293,8 @@ pub fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute
         "idCredPubIp": json_base16_encode(&pio.id_cred_pub_ip.curve_to_bytes()),
         "idCredPub": json_base16_encode(&pio.id_cred_pub.curve_to_bytes()),
         "ipArData": json!(arr),
-        "choiceArData":json!(pio.choice_ar_parameters.0),
-        "revokationThreshold":json!(pio.choice_ar_parameters.1),
+        "choiceArData":pio.choice_ar_parameters.0.iter().map(|&x| ArIdentity::to_json(x)).collect::<Vec<Value>>(),
+        "revokationThreshold":pio.choice_ar_parameters.1.to_json(),
         "attributeList": alist_to_json(&pio.alist),
         "pokSecCred": json_base16_encode(&pio.pok_sc.to_bytes()),
         "sndPokSecCred": json_base16_encode(&pio.snd_pok_sc.to_bytes()),
@@ -316,13 +317,13 @@ pub fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, E
         .map(json_to_ip_ar_data)
         .collect::<Option<Vec<IpArData<ExampleCurve>>>>(
     )?;
-    let choice_ar_data: Vec<u64> = v
+    let choice_ar_data: Vec<ArIdentity> = v
         .get("choiceArData")?
         .as_array()?
         .iter()
-        .map(|x| parse_u64(x))
-        .collect::<Option<Vec<u64>>>()?;
-    let revokation_threshold: u64 = json_read_u64(v.as_object()?, "revokationThreshold")?;
+        .map(ArIdentity::from_json)
+        .collect::<Option<Vec<ArIdentity>>>()?;
+    let revokation_threshold: Threshold = Threshold::from_json(v.get("revokationThreshold")?)?;
     let alist = json_to_alist(v.get("attributeList")?)?;
     let pok_sc = com_eq::ComEqProof::from_bytes(&mut Cursor::new(&json_base16_decode(
         v.get("pokSecCred")?,

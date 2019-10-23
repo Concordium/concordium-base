@@ -11,6 +11,7 @@ use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
 use ps_sig;
+use secret_sharing::secret_sharing::ShareNumber;
 
 use sigma_protocols::{com_enc_eq, com_eq_sig, com_mult};
 
@@ -62,7 +63,7 @@ pub fn verify_cdi<
             // compute the commitment with randomness zero
             x == global_context
                 .on_chain_commitment_key
-                .hide(&Value(C::scalar_from_u64(handle as u64).unwrap()), &zero)
+                .hide(&Value(handle.to_scalar::<C>()), &zero)
         };
         match ar_commitments.iter().find(check_handle_p) {
             // if it is not then this credential is invalid
@@ -165,7 +166,7 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
     choice_ar_parameters: &[&ArInfo<C>],
     chain_ar_data: &[ChainArData<C>],
     cmm_sharing_coeff: &[Commitment<C>],
-    proof_id_cred_pub: &[(u64, com_enc_eq::ComEncEqProof<C>)],
+    proof_id_cred_pub: &[(ShareNumber, com_enc_eq::ComEncEqProof<C>)],
 ) -> bool {
     let CommitmentKey(g_1, h_1) = commitment_key;
     // let cmm_to_shares = Vec::new();
@@ -204,14 +205,12 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
 // coefficients
 #[inline(always)]
 pub fn commitment_to_share<C: Curve>(
-    share_number: u64,
+    share_number: ShareNumber,
     coeff_commitments: &[Commitment<C>],
 ) -> Commitment<C> {
     let mut cmm_share_point: C = coeff_commitments[0].0;
     for (i, Commitment(cmm_point)) in coeff_commitments.iter().enumerate().skip(1) {
-        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number as u64)
-            .unwrap()
-            .pow([i as u64]);
+        let j_pow_i: C::Scalar = share_number.to_scalar::<C>().pow([i as u64]);
         let a = cmm_point.mul_by_scalar(&j_pow_i);
         cmm_share_point = cmm_share_point.plus_point(&a);
     }

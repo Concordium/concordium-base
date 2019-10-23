@@ -7,6 +7,7 @@ use eddsa_ed25519 as ed25519;
 use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::bls12_381::{Bls12, G1};
 use ps_sig;
+use secret_sharing::secret_sharing::Threshold;
 
 use rand::*;
 
@@ -40,7 +41,7 @@ fn test_pipeline() {
     let ar1_secret_key = SecretKey::generate(&mut csprng);
     let ar1_public_key = PublicKey::from(&ar1_secret_key);
     let ar1_info = ArInfo::<G1> {
-        ar_identity:    1,
+        ar_identity:    ArIdentity(1),
         ar_description: "A good AR".to_string(),
         ar_public_key:  ar1_public_key,
     };
@@ -48,7 +49,7 @@ fn test_pipeline() {
     let ar2_secret_key = SecretKey::generate(&mut csprng);
     let ar2_public_key = PublicKey::from(&ar2_secret_key);
     let ar2_info = ArInfo::<G1> {
-        ar_identity:    2,
+        ar_identity:    ArIdentity(2),
         ar_description: "A nice AR".to_string(),
         ar_public_key:  ar2_public_key,
     };
@@ -56,7 +57,7 @@ fn test_pipeline() {
     let ar3_secret_key = SecretKey::generate(&mut csprng);
     let ar3_public_key = PublicKey::from(&ar3_secret_key);
     let ar3_info = ArInfo::<G1> {
-        ar_identity:    3,
+        ar_identity:    ArIdentity(3),
         ar_description: "Weird AR".to_string(),
         ar_public_key:  ar3_public_key,
     };
@@ -64,7 +65,7 @@ fn test_pipeline() {
     let ar4_secret_key = SecretKey::generate(&mut csprng);
     let ar4_public_key = PublicKey::from(&ar4_secret_key);
     let ar4_info = ArInfo::<G1> {
-        ar_identity:    4,
+        ar_identity:    ArIdentity(4),
         ar_description: "Ok AR".to_string(),
         ar_public_key:  ar4_public_key,
     };
@@ -74,7 +75,7 @@ fn test_pipeline() {
     // let dlog_base = <G1 as Curve>::generate(&mut csprng);
 
     let ip_info = IpInfo {
-        ip_identity: 88,
+        ip_identity: IpIdentity(88),
         ip_description: "IP88".to_string(),
         ip_verify_key: ip_public_key,
         dlog_base,
@@ -97,7 +98,13 @@ fn test_pipeline() {
         },
     };
 
-    let context = make_context_from_ip_info(ip_info.clone(), (vec![1, 2, 4], 2));
+    let context = make_context_from_ip_info(
+        ip_info.clone(),
+        (
+            vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
+            Threshold(2),
+        ),
+    );
     let (pio, randomness) = generate_pio(&context, &aci);
 
     let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
@@ -198,17 +205,17 @@ fn test_pipeline() {
         .values
         .ar_data
         .iter()
-        .find(|&x| x.ar_identity == 2)
+        .find(|&x| x.ar_identity == ArIdentity(2))
         .unwrap();
     let decrypted_share_ar2 = (
-        second_ar.id_cred_pub_share_number,
+        second_ar.id_cred_pub_share_number.into(),
         ar2_secret_key.decrypt(&second_ar.enc_id_cred_pub_share),
     );
     let fourth_ar = cdi
         .values
         .ar_data
         .iter()
-        .find(|&x| x.ar_identity == 4)
+        .find(|&x| x.ar_identity == ArIdentity(4))
         .unwrap();
     let decrypted_share_ar4 = (
         fourth_ar.id_cred_pub_share_number,

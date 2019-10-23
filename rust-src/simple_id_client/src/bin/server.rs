@@ -12,14 +12,17 @@ use rand::*;
 use serde_json::{json, to_string_pretty, Value};
 
 use clap::{App, AppSettings, Arg};
+use secret_sharing::secret_sharing::Threshold;
 use std::io::Cursor;
+
+use std::collections::HashMap;
 
 // server imports
 #[macro_use]
 extern crate rouille;
 
 /// Public and **private** data about identity providers.
-type IpInfos = Vec<IpData>;
+type IpInfos = HashMap<IpIdentity, IpData>;
 
 struct ServerState {
     /// Public and private information about the identity providers.
@@ -40,26 +43,27 @@ fn respond_ips(_request: &rouille::Request, s: &ServerState) -> rouille::Respons
     rouille::Response::json(&json!(response))
 }
 
-fn parse_id_object_input_json(v: &Value) -> Option<(u32, String, Vec<u64>, ExampleAttributeList)> {
-    let ip_id = json_read_u32(v.as_object()?, "ipIdentity")?;
+fn parse_id_object_input_json(
+    v: &Value,
+) -> Option<(IpIdentity, String, Vec<ArIdentity>, ExampleAttributeList)> {
+    let ip_id = IpIdentity::from_json(v.get("ipIdentity")?)?;
     let user_name = v.get("name")?.as_str()?.to_owned();
     let ar_values = v.get("anonymityRevokers")?.as_array()?;
-    let ars: Vec<u64> = ar_values
+    let ars: Vec<ArIdentity> = ar_values
         .iter()
-        .map(parse_u64)
-        .collect::<Option<Vec<u64>>>()?;
+        .map(ArIdentity::from_json)
+        .collect::<Option<Vec<ArIdentity>>>()?;
     let alist = json_to_alist(v.get("attributes")?)?;
     Some((ip_id, user_name, ars.clone(), alist))
 }
 
 fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Response {
     let v: Value = try_or_400!(rouille::input::json_input(request));
-    let (ip_id, name, ar_list, attributes) = {
+    let (ip_info, name, ar_list, attributes) = {
         if let Some((ip_id, name, ar_list, att)) = parse_id_object_input_json(&v) {
-            if (ip_id as usize) < s.ip_infos.len() {
-                (ip_id as usize, name, ar_list, att)
-            } else {
-                return rouille::Response::empty_400();
+            match s.ip_infos.get(&ip_id) {
+                Some(ip_info) => (ip_info, name, ar_list, att),
+                None => return rouille::Response::empty_400(),
             }
         } else {
             return rouille::Response::empty_400();
@@ -86,9 +90,10 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
         attributes,
     };
 
-    let (ip_info, ip_sec_key) = &s.ip_infos[ip_id];
+    let (ip_info, ip_sec_key) = ip_info;
 
-    let context = make_context_from_ip_info(ip_info.clone(), (ar_list, 1));
+    // FIXME: Why is there a hard-coded threshold of 1?
+    let context = make_context_from_ip_info(ip_info.clone(), (ar_list, Threshold(1)));
     let (pio, randomness) = generate_pio(&context, &aci);
 
     let vf = verify_credentials(&pio, &ip_info, &ip_sec_key);
@@ -97,7 +102,7 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
             let response = json!({
                 "preIdentityObject": pio_to_json(&pio),
                 "signature": json_base16_encode(&sig.to_bytes()),
-                "ipIdentity": ip_id,
+                "ipIdentity": ip_info.ip_identity.to_json(),
                 "privateData": json!({
                     "aci": aci_to_json(&aci),
                     "pioRandomness": json_base16_encode(&randomness.to_bytes())
@@ -110,7 +115,7 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
 }
 
 type GenerateCredentialData = (
-    u32,
+    IpIdentity,
     PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>,
     pssig::Signature<Bls12>,
     SigRetrievalRandomness<Bls12>,
@@ -120,7 +125,7 @@ type GenerateCredentialData = (
 );
 
 fn parse_generate_credential_input_json(v: &Value) -> Option<GenerateCredentialData> {
-    let ip_id = json_read_u32(v.as_object()?, "ipIdentity")?;
+    let ip_id = IpIdentity::from_json(v.get("ipIdentity")?)?;
     let sig =
         pssig::Signature::from_bytes(&mut Cursor::new(&json_base16_decode(v.get("signature")?)?))
             .ok()?;
@@ -148,24 +153,17 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
         if let Some((ip_id, pio, sig, sig_randomness, aci, items, n_acc)) =
             parse_generate_credential_input_json(&v)
         {
-            if (ip_id as usize) < s.ip_infos.len() {
-                let policy: Policy<ExampleCurve, ExampleAttribute> = Policy {
-                    variant:    pio.alist.variant,
-                    expiry:     pio.alist.expiry,
-                    policy_vec: items,
-                    _phantom:   Default::default(),
-                };
-                (
-                    &s.ip_infos[ip_id as usize].0,
-                    pio,
-                    sig,
-                    sig_randomness,
-                    aci,
-                    policy,
-                    n_acc,
-                )
-            } else {
-                return rouille::Response::empty_400();
+            match s.ip_infos.get(&ip_id) {
+                Some(ref ip_info) => {
+                    let policy: Policy<ExampleCurve, ExampleAttribute> = Policy {
+                        variant:    pio.alist.variant,
+                        expiry:     pio.alist.expiry,
+                        policy_vec: items,
+                        _phantom:   Default::default(),
+                    };
+                    (&ip_info.0, pio, sig, sig_randomness, aci, policy, n_acc)
+                }
+                None => return rouille::Response::empty_400(),
             }
         } else {
             return rouille::Response::empty_400();
@@ -200,7 +198,7 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
         "schemeId": if values.acc_scheme_id == SchemeId::Ed25519 {"Ed25519"} else {"CL"},
         "verifyKey": json_base16_encode(&values.acc_pub_key.to_bytes()),
         "regId": json_base16_encode(&values.reg_id.curve_to_bytes()),
-        "ipIdentity": values.ip_identity,
+        "ipIdentity": values.ip_identity.to_json(),
         "arData": chain_ar_data_to_json(&values.ar_data),
         "policy": policy_to_json(&values.policy),
         // NOTE: Since proofs encode their own length we do not output those first 4 bytes
@@ -236,7 +234,12 @@ fn read_revealed_items(
 fn read_ip_infos(filename: &str) -> Option<IpInfos> {
     let v = read_json_from_file(filename).ok()?;
     let v = v.as_array()?;
-    v.iter().map(json_to_ip_data).collect()
+    let mut r = HashMap::with_capacity(v.len());
+    for js in v.iter() {
+        let data = json_to_ip_data(js)?;
+        r.insert(data.0.ip_identity, data);
+    }
+    Some(r)
 }
 
 pub fn main() {

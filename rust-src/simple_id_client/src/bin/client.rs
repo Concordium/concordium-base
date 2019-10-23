@@ -545,7 +545,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         "schemeId": if values.acc_scheme_id == SchemeId::Ed25519 {"Ed25519"} else {"CL"},
         "verifyKey": json_base16_encode(&values.acc_pub_key.to_bytes()),
         "regId": json_base16_encode(&values.reg_id.curve_to_bytes()),
-        "ipIdentity": values.ip_identity,
+        "ipIdentity": values.ip_identity.to_json(),
         "arData": chain_ar_data_to_json(&values.ar_data),
         "revokationThreshold": 2,
         "policy": policy_to_json(&values.policy),
@@ -818,7 +818,7 @@ fn handle_start_ip(matches: &ArgMatches) {
         choice_ars.push(ar_handles[idx].ar_identity);
     }
 
-    let context = make_context_from_ip_info(ip_info, (choice_ars, 2));
+    let context = make_context_from_ip_info(ip_info, (choice_ars, Threshold(2)));
     // and finally generate the pre-identity object
     // we also retrieve the randomness which we must keep private.
     // This randomness must be used
@@ -857,7 +857,7 @@ fn handle_start_ip(matches: &ArgMatches) {
 
 fn ar_info_to_json<C: Curve>(ar_info: &ArInfo<C>) -> Value {
     json!({
-        "arIdentity": ar_info.ar_identity,
+        "arIdentity": ar_info.ar_identity.to_json(),
         "arDescription": ar_info.ar_description.clone(),
         "arPublicKey": json_base16_encode(&ar_info.ar_public_key.to_bytes()),
         //"arElgamalGenerator": json_base16_encode(&ar_info.ar_elgamal_generator.curve_to_bytes())
@@ -867,7 +867,7 @@ fn ar_info_to_json<C: Curve>(ar_info: &ArInfo<C>) -> Value {
 fn json_to_private_ar_info<C: Curve>(v: &Value) -> Option<(ArInfo<C>, SecretKey<C>)> {
     let v = v.as_object()?;
     let public = v.get("publicArInfo")?;
-    let ar_identity = json_read_u64(public.as_object()?, "arIdentity")?;
+    let ar_identity = ArIdentity::from_json(public.get("arIdentity")?)?;
     let ar_description = public.get("arDescription")?.as_str()?.to_owned();
     let ar_public_key = PublicKey::<C>::from_bytes(m_json_decode!(public, "arPublicKey")).ok()?;
     let private = SecretKey::from_bytes(m_json_decode!(v, "arPrivateKey")).ok()?;
@@ -905,7 +905,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let ar0_secret_key = SecretKey::generate(&mut csprng);
         let ar0_public_key = PublicKey::from(&ar0_secret_key);
         let ar0_info = ArInfo {
-            ar_identity:    0 as u64,
+            ar_identity:    ArIdentity(0u32),
             ar_description: mk_ar_name(0),
             ar_public_key:  ar0_public_key,
             // ar_elgamal_generator: PublicKey::generator(),
@@ -920,7 +920,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let ar1_secret_key = SecretKey::generate(&mut csprng);
         let ar1_public_key = PublicKey::from(&ar1_secret_key);
         let ar1_info = ArInfo {
-            ar_identity:    1 as u64,
+            ar_identity:    ArIdentity(1u32),
             ar_description: mk_ar_name(1),
             ar_public_key:  ar1_public_key,
             // ar_elgamal_generator: PublicKey::generator(),
@@ -935,7 +935,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let ar2_secret_key = SecretKey::<ExampleCurve>::generate(&mut csprng);
         let ar2_public_key = PublicKey::from(&ar2_secret_key);
         let ar2_info = ArInfo {
-            ar_identity:    2 as u64,
+            ar_identity:    ArIdentity(2u32),
             ar_description: mk_ar_name(2),
             ar_public_key:  ar2_public_key,
             // ar_elgamal_generator: PublicKey::generator(),
@@ -954,7 +954,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let dlog_base = <Bls12 as Pairing>::G_1::one_point();
 
         let ip_info = IpInfo {
-            ip_identity: id as u32,
+            ip_identity: IpIdentity(id as u32),
             ip_description: mk_ip_name(id),
             ip_verify_key: id_public_key,
             dlog_base,

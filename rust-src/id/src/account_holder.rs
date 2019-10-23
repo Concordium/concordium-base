@@ -184,9 +184,9 @@ where
 /// a convenient data structure to collect data related to a single AR
 #[derive(Clone)]
 pub struct SingleArData<C: Curve> {
-    ar_identity:             u64,
+    ar_identity:             ArIdentity,
     share:                   C::Scalar,
-    share_number:            u64,
+    share_number:            ShareNumber,
     encrypted_share:         Cipher<C>,
     encryption_randomness:   C::Scalar,
     cmm_to_share:            Commitment<C>,
@@ -198,29 +198,30 @@ type SharingData<C> = (Vec<SingleArData<C>>, Vec<Commitment<C>>, Vec<Randomness<
 
 /// a function to compute sharing data
 pub fn compute_sharing_data<C: Curve>(
-    shared_scalar: &C::Scalar,             // scalar to be shared
-    ar_parameters: &(Vec<ArInfo<C>>, u64), // Anonimity revokers
-    commitment_key: &PedersenKey<C>,       // commitment key
+    shared_scalar: &C::Scalar,                   // scalar to be shared
+    ar_parameters: &(Vec<ArInfo<C>>, Threshold), // Anonimity revokers
+    commitment_key: &PedersenKey<C>,             // commitment key
 ) -> SharingData<C> {
-    let n = ar_parameters.0.len() as u64;
+    let n = ar_parameters.0.len() as u32;
     let t = ar_parameters.1;
+    let tu: u32 = t.into();
     let mut csprng = thread_rng();
     // first commit to the scalar
     let (cmm_scalar, cmm_scalar_rand) = commitment_key.commit(&Value(*shared_scalar), &mut csprng);
     // share the scalar
-    let sharing_data = share::<C, ThreadRng>(&shared_scalar, n, t as u64, &mut csprng);
+    let sharing_data = share::<C, ThreadRng>(&shared_scalar, ShareNumber::from(n), t, &mut csprng);
     // commitments to the sharing coefficients
-    let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(t as usize);
+    let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(tu as usize);
     // first coefficient is the shared scalar
     cmm_sharing_coefficients.push(cmm_scalar);
     // randomness values corresponding to the commitments
-    let mut cmm_coeff_randomness: Vec<Randomness<C>> = Vec::with_capacity(t as usize);
+    let mut cmm_coeff_randomness: Vec<Randomness<C>> = Vec::with_capacity(tu as usize);
     // first randomness is the one used in commiting to the scalar
     cmm_coeff_randomness.push(cmm_scalar_rand);
     // fill the rest
-    for i in 1..(t as usize) {
+    for i in 1..tu {
         let (cmm, rnd) = commitment_key.commit(
-            &Value(sharing_data.coefficients[i as usize - 1].1),
+            &Value(sharing_data.coefficients[i as usize - 1]),
             &mut csprng,
         );
         cmm_sharing_coefficients.push(cmm);
@@ -229,20 +230,24 @@ pub fn compute_sharing_data<C: Curve>(
     // a vector of Ar data
     let mut ar_data: Vec<SingleArData<C>> = Vec::with_capacity(n as usize);
     for i in 1..=n {
-        let ar = &ar_parameters.0[(i as usize) - 1];
+        // FIXME, we should not be using u64
+        let si = ShareNumber::from(i as u32);
+        let ar = &ar_parameters.0[i as usize - 1];
         let pk = ar.ar_public_key;
         let share = sharing_data.shares[(i as usize) - 1].1;
-        assert_eq!(i as u64, sharing_data.shares[(i as usize) - 1].0);
+        assert_eq!(
+            ShareNumber::from(i),
+            sharing_data.shares[(i as usize) - 1].0
+        );
         // encrypt the share
         let (cipher, rnd2) = pk.encrypt_exponent_rand(&mut csprng, &share);
         // compute the commitment to this share from the commitment to the coeff
-        let (cmm, rnd) =
-            commitment_to_share(i as u64, &cmm_sharing_coefficients, &cmm_coeff_randomness);
+        let (cmm, rnd) = commitment_to_share(si, &cmm_sharing_coefficients, &cmm_coeff_randomness);
         // fill Ar data
         let single_ar_data = SingleArData {
             ar_identity: ar.ar_identity,
             share,
-            share_number: i as u64,
+            share_number: si,
             encrypted_share: cipher,
             encryption_randomness: rnd2,
             cmm_to_share: cmm,
@@ -258,7 +263,7 @@ pub fn compute_sharing_data<C: Curve>(
 /// the coefficients of the polynomial
 #[inline(always)]
 pub fn commitment_to_share<C: Curve>(
-    share_number: u64,
+    share_number: ShareNumber,
     coeff_commitments: &[Commitment<C>],
     coeff_randomness: &[Randomness<C>],
 ) -> (Commitment<C>, Randomness<C>) {
@@ -266,7 +271,7 @@ pub fn commitment_to_share<C: Curve>(
     let mut cmm_share_point: C = (coeff_commitments[0]).0;
     let mut cmm_share_randomness_scalar: C::Scalar = (coeff_randomness[0]).0;
     for i in 1..=deg {
-        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number).unwrap().pow([i as u64]);
+        let j_pow_i: C::Scalar = share_number.to_scalar::<C>().pow([i as u64]);
         let Commitment(cmm_point) = coeff_commitments[i];
         let a = cmm_point.mul_by_scalar(&j_pow_i);
         cmm_share_point = cmm_share_point.plus_point(&a);
@@ -519,7 +524,7 @@ fn compute_pok_sig<
     id_cred_sec: &P::ScalarField,
     prf_key: &prf::SecretKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
-    ar_list: &[u64],
+    ar_list: &[ArIdentity],
     ip_pub_key: &ps_sig::PublicKey<P>,
     blinded_sig: &ps_sig::Signature<P>,
     blinded_sig_rand_sec: &P::ScalarField,
@@ -560,8 +565,7 @@ fn compute_pok_sig<
         gxs.push(yxs[i]);
     }
     for i in num_total_attributes..num_total_commitments {
-        gxs_sec
-            .push(<P::G_1 as Curve>::scalar_from_u64(ar_list[i - num_total_attributes]).unwrap());
+        gxs_sec.push(ar_list[i - num_total_attributes].to_scalar::<P::G_1>());
         gxs.push(yxs[i]);
     }
 
@@ -617,7 +621,7 @@ pub struct CommitmentsRandomness<C: Curve> {
 fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     commitment_key: &PedersenKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
-    ar_list: &[u64],
+    ar_list: &[ArIdentity],
     prf_key: &prf::SecretKey<C>,
     cred_counter: u8,
     cmm_id_cred_sec_sharing_coeff: &[Commitment<C>],
@@ -654,10 +658,8 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     // otherwise verification will fail
     let mut cmm_ars = Vec::with_capacity(m);
     for ar in ar_list.iter() {
-        cmm_ars.push(commitment_key.hide(
-            &Value(C::scalar_from_u64(*ar).unwrap()),
-            &Randomness(C::Scalar::zero()),
-        ));
+        cmm_ars
+            .push(commitment_key.hide(&Value(ar.to_scalar::<C>()), &Randomness(C::Scalar::zero())));
     }
     let cdc = CredDeploymentCommitments {
         // cmm_id_cred_sec,

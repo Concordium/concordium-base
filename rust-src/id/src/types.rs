@@ -9,19 +9,35 @@ use ff::Field;
 use hex::{decode, encode};
 use pedersen_scheme::{commitment as pedersen, key::CommitmentKey as PedersenKey};
 use ps_sig::{public as pssig, signature::*};
+use secret_sharing::secret_sharing::{ShareNumber, Threshold};
 
 use sigma_protocols::{
     com_enc_eq::ComEncEqProof, com_eq::ComEqProof, com_eq_different_groups::ComEqDiffGrpsProof,
     com_eq_sig::ComEqSigProof, com_mult::ComMultProof,
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 use byteorder::{BigEndian, ReadBytesExt};
 use std::{
     convert::TryFrom,
+    fmt,
     io::{Cursor, Read},
 };
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+pub struct IpIdentity(pub u32);
+
+impl fmt::Display for IpIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+pub struct ArIdentity(pub u32);
+
+impl fmt::Display for ArIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+}
 
 pub trait Attribute<F: Field>: Copy + Clone + Sized + Send + Sync {
     // convert an attribute to a field element
@@ -82,11 +98,11 @@ pub struct AccCredentialInfo<C: Curve, AttributeType: Attribute<C::Scalar>> {
 pub struct IpArData<C: Curve> {
     /// identity of the anonymity revoker (for now this needs to be unique per
     /// IP) if stored in the chain it needs to be unique in general
-    pub ar_identity: u64,
+    pub ar_identity: ArIdentity,
     /// encrypted share of the prf key
     pub enc_prf_key_share: Cipher<C>,
     /// the number of the share
-    pub prf_key_share_number: u64,
+    pub prf_key_share_number: ShareNumber,
     /// proof that the computed commitment to the share
     /// contains the same value as the encryption
     /// the commitment to the share is not sent but computed from
@@ -98,11 +114,11 @@ pub struct IpArData<C: Curve> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ChainArData<C: Curve> {
     /// identity of the anonymity revoker
-    pub ar_identity: u64,
+    pub ar_identity: ArIdentity,
     /// encrypted share of id cred pub
     pub enc_id_cred_pub_share: Cipher<C>,
     /// the number of the share
-    pub id_cred_pub_share_number: u64,
+    pub id_cred_pub_share_number: ShareNumber,
 }
 
 /// Information sent from the account holder to the identity provider.
@@ -123,7 +139,7 @@ pub struct PreIdentityObject<
     /// the second element of the pair is the threshold for revocation.
     /// must be less than or equal the length of the vector.
     /// NB:IP needs to check this
-    pub choice_ar_parameters: (Vec<u64>, u64),
+    pub choice_ar_parameters: (Vec<ArIdentity>, Threshold),
     /// Chosen attribute list.
     pub alist: AttributeList<C::Scalar, AttributeType>,
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub_ip
@@ -154,7 +170,7 @@ pub struct PreIdentityObject<
 #[derive(Debug, Clone)]
 pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Unique identifier of the identity provider.
-    pub ip_identity: u32,
+    pub ip_identity: IpIdentity,
     /// Free form description, e.g., how to contact them off-chain
     pub ip_description: String,
     /// PS publice signature key of the IP
@@ -173,7 +189,7 @@ pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArInfo<C: Curve> {
     /// unique identifier of the anonymity revoker
-    pub ar_identity: u64,
+    pub ar_identity: ArIdentity,
     /// description of the anonymity revoker (e.g. name, contact number)
     pub ar_description: String,
     /// elgamal encryption key of the anonymity revoker
@@ -220,7 +236,7 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Proofs that the encrypted shares of id_cred_pub and
     /// commitments (in chain_ar_data) hide the same values.
     /// each proof is indexed by the share number.
-    pub proof_id_cred_pub: Vec<(u64, ComEncEqProof<C>)>,
+    pub proof_id_cred_pub: Vec<(ShareNumber, ComEncEqProof<C>)>,
     /// Proof of knowledge of signature of Identity Provider on the list
     /// (idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n],
     /// AR[1], ..., AR[m])
@@ -279,14 +295,14 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     pub reg_id: C,
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
-    pub ip_identity: u32,
+    pub ip_identity: IpIdentity,
     /// Anonymity revocation data.
     pub ar_data: Vec<ChainArData<C>>,
     /// Policy of this credential object.
     pub policy: Policy<C, AttributeType>,
-    /// Redundant, could be deduced from ar_data
+    /// TODO: Redundant, could be deduced from ar_data
     /// ar_parameters, vector of ar handles
-    pub choice_ar_handles: Vec<u64>,
+    pub choice_ar_handles: Vec<ArIdentity>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -316,7 +332,7 @@ pub struct Context<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// choice of anonyimity revocation parameters
     /// that is a choice of subset of anonymity revokers
     /// threshold  parameter
-    pub choice_ar_parameters: (Vec<ArInfo<C>>, u64),
+    pub choice_ar_parameters: (Vec<ArInfo<C>>, Threshold),
 }
 
 pub struct GlobalContext<C: Curve> {
@@ -338,7 +354,7 @@ pub struct GlobalContext<C: Curve> {
 /// of parameters, e.g., dlog-proof base point.
 pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     ip_info: IpInfo<P, C>,
-    choice_ar_handles: (Vec<u64>, u64),
+    choice_ar_handles: (Vec<ArIdentity>, Threshold),
 ) -> Context<P, C> {
     // TODO: Check with Bassel that these parameters are correct.
     let dlog_base = ip_info.dlog_base;
@@ -393,17 +409,17 @@ pub fn bytes_to_short_string(cur: &mut Cursor<&[u8]>) -> Option<String> {
 
 impl<C: Curve> IpArData<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::from(&self.ar_identity.to_be_bytes()[..]);
+        let mut out = Vec::from(self.ar_identity.to_bytes());
         out.extend_from_slice(&self.enc_prf_key_share.to_bytes());
-        out.extend_from_slice(&self.prf_key_share_number.to_be_bytes());
+        out.extend_from_slice(&self.prf_key_share_number.to_bytes());
         out.extend_from_slice(&self.proof_com_enc_eq.to_bytes());
         out
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let ar_identity = cur.read_u64::<BigEndian>().ok()?;
+        let ar_identity = ArIdentity::from_bytes(cur)?;
         let enc_prf_key_share = Cipher::from_bytes(cur).ok()?;
-        let prf_key_share_number = cur.read_u64::<BigEndian>().ok()?;
+        let prf_key_share_number = ShareNumber::from_bytes(cur)?;
         let proof_com_enc_eq = ComEncEqProof::from_bytes(cur).ok()?;
         Some(IpArData {
             ar_identity,
@@ -416,16 +432,16 @@ impl<C: Curve> IpArData<C> {
 
 impl<C: Curve> ChainArData<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::from(&self.ar_identity.to_be_bytes()[..]);
+        let mut out = Vec::from(self.ar_identity.to_bytes());
         out.extend_from_slice(&self.enc_id_cred_pub_share.to_bytes());
-        out.extend_from_slice(&self.id_cred_pub_share_number.to_be_bytes());
+        out.extend_from_slice(&self.id_cred_pub_share_number.to_bytes());
         out
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let ar_identity = cur.read_u64::<BigEndian>().ok()?;
+        let ar_identity = ArIdentity::from_bytes(cur)?;
         let enc_id_cred_pub_share = Cipher::from_bytes(cur).ok()?;
-        let id_cred_pub_share_number = cur.read_u64::<BigEndian>().ok()?;
+        let id_cred_pub_share_number = ShareNumber::from_bytes(cur)?;
         Some(ChainArData {
             ar_identity,
             enc_id_cred_pub_share,
@@ -496,7 +512,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
         out.extend_from_slice(&self.commitments.to_bytes());
         out.extend_from_slice(&(self.proof_id_cred_pub.len() as u16).to_be_bytes());
         for (i, p) in self.proof_id_cred_pub.iter() {
-            out.extend_from_slice(&i.to_be_bytes());
+            out.extend_from_slice(&i.to_bytes());
             out.extend_from_slice(&p.to_bytes());
         }
         out.extend_from_slice(&self.proof_ip_sig.to_bytes());
@@ -516,7 +532,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
         let mut proof_id_cred_pub = Vec::with_capacity(l as usize);
         for _ in 0..l {
             proof_id_cred_pub.push((
-                cur.read_u64::<BigEndian>().ok()?,
+                ShareNumber::from_bytes(cur)?,
                 ComEncEqProof::from_bytes(cur).ok()?,
             ));
         }
@@ -593,7 +609,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
         v.extend_from_slice(&(sig_bytes.len() as u16).to_be_bytes());
         v.extend_from_slice(&sig_bytes);
         v.extend_from_slice(&self.reg_id.curve_to_bytes());
-        v.extend_from_slice(&self.ip_identity.to_be_bytes());
+        v.extend_from_slice(&self.ip_identity.to_bytes());
         v.extend_from_slice(&(self.ar_data.len() as u16).to_be_bytes());
         for ar in self.ar_data.iter() {
             v.extend_from_slice(&ar.to_bytes());
@@ -601,7 +617,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
         v.extend_from_slice(&self.policy.to_bytes());
         v.extend_from_slice(&(self.choice_ar_handles.len() as u16).to_be_bytes());
         for ar in self.choice_ar_handles.iter() {
-            v.extend_from_slice(&ar.to_be_bytes());
+            v.extend_from_slice(&ar.to_bytes());
         }
         v
     }
@@ -613,7 +629,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
         cur.read_exact(&mut buf).ok()?;
         let acc_pub_key = acc_sig_scheme::PublicKey::from_bytes(&buf).ok()?;
         let reg_id = curve_serialization::read_curve::<C>(cur).ok()?;
-        let ip_identity = cur.read_u32::<BigEndian>().ok()?;
+        let ip_identity = IpIdentity::from_bytes(cur)?;
         let number_of_ars = cur.read_u16::<BigEndian>().ok()?;
         let mut ar_data = Vec::with_capacity(number_of_ars as usize);
         for _ in 0..number_of_ars {
@@ -623,7 +639,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
         let number_of_ars = cur.read_u16::<BigEndian>().ok()?;
         let mut choice_ar_handles = Vec::with_capacity(number_of_ars as usize);
         for _ in 0..number_of_ars {
-            choice_ar_handles.push(cur.read_u64::<BigEndian>().ok()?);
+            choice_ar_handles.push(ArIdentity::from_bytes(cur)?);
         }
         Some(CredentialDeploymentValues {
             acc_scheme_id,
@@ -704,18 +720,52 @@ macro_rules! m_json_decode {
     };
 }
 
+impl IpIdentity {
+    pub fn to_bytes(self) -> Box<[u8]> { Box::from(self.0.to_be_bytes()) }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let r = cur.read_u32::<BigEndian>().ok()?;
+        Some(IpIdentity(r))
+    }
+
+    pub fn to_json(self) -> Value { json!(self.0) }
+
+    pub fn from_json(v: &Value) -> Option<Self> {
+        let v = u32::try_from(v.as_u64()?).ok()?;
+        Some(IpIdentity(v))
+    }
+}
+
+impl ArIdentity {
+    /// Curve scalars must be big enough to accommodate all 32 bit unsigned
+    /// integers.
+    pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)).unwrap() }
+
+    pub fn to_bytes(self) -> Box<[u8]> { Box::from(self.0.to_be_bytes()) }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let r = cur.read_u32::<BigEndian>().ok()?;
+        Some(ArIdentity(r))
+    }
+
+    pub fn to_json(self) -> Value { json!(self.0) }
+
+    pub fn from_json(v: &Value) -> Option<Self> {
+        let v = u32::try_from(v.as_u64()?).ok()?;
+        Some(ArIdentity(v))
+    }
+}
+
 impl<C: Curve> ArInfo<C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
-        let mut r: Vec<u8> = Vec::from(&self.ar_identity.to_be_bytes()[..]);
-        // let mut r = Vec::with_capacity(4);
-        // r.extend_from_slice(self.ar_identity.to_be_bytes());
+        let mut r: Vec<u8> = Vec::from(self.ar_identity.to_bytes());
         r.extend_from_slice(&short_string_to_bytes(&self.ar_description));
         r.extend_from_slice(&self.ar_public_key.to_bytes());
         r.into_boxed_slice()
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let ar_identity = cur.read_u64::<BigEndian>().ok()?;
+        let ar_identity = ArIdentity::from_bytes(cur)?;
         let ar_description = bytes_to_short_string(cur)?;
         let ar_public_key = elgamal::PublicKey::from_bytes(cur).ok()?;
         Some(ArInfo {
@@ -727,7 +777,7 @@ impl<C: Curve> ArInfo<C> {
 
     pub fn from_json(ar_val: &Value) -> Option<Self> {
         let ar_val = ar_val.as_object()?;
-        let ar_identity = json_read_u64(ar_val, "arIdentity")?;
+        let ar_identity = ArIdentity::from_json(ar_val.get("arIdentity")?)?;
         let ar_description = ar_val.get("arDescription")?.as_str()?;
         let ar_public_key =
             elgamal::PublicKey::from_bytes(m_json_decode!(ar_val, "arPublicKey")).ok()?;
@@ -740,7 +790,7 @@ impl<C: Curve> ArInfo<C> {
 
     pub fn to_json(&self) -> Value {
         json!({
-            "arIdentity": self.ar_identity,
+            "arIdentity": self.ar_identity.to_json(),
             "arDescription": self.ar_description,
             "arPublicKey": json_base16_encode(&self.ar_public_key.to_bytes()),
         })
@@ -750,7 +800,7 @@ impl<C: Curve> ArInfo<C> {
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut r = Vec::with_capacity(4);
-        r.extend_from_slice(&self.ip_identity.to_be_bytes());
+        r.extend_from_slice(&self.ip_identity.to_bytes());
         r.extend_from_slice(&short_string_to_bytes(&self.ip_description));
         r.extend_from_slice(&self.ip_verify_key.to_bytes());
         r.extend_from_slice(&self.dlog_base.curve_to_bytes());
@@ -764,7 +814,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let ip_identity = cur.read_u32::<BigEndian>().ok()?;
+        let ip_identity = IpIdentity::from_bytes(cur)?;
         let ip_description = bytes_to_short_string(cur)?;
         let ip_verify_key = pssig::PublicKey::from_bytes(cur).ok()?;
         let dlog_base = P::G_1::bytes_to_curve(cur).ok()?;
@@ -785,7 +835,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
 
     pub fn from_json(ip_val: &Value) -> Option<Self> {
         let ip_val = ip_val.as_object()?;
-        let ip_identity = json_read_u32(ip_val, "ipIdentity")?;
+        let ip_identity = IpIdentity::from_json(ip_val.get("ipIdentity")?)?;
         let ip_description = ip_val.get("ipDescription")?.as_str()?;
         let ip_verify_key = pssig::PublicKey::from_bytes(&mut Cursor::new(&json_base16_decode(
             ip_val.get("ipVerifyKey")?,
@@ -813,7 +863,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
     pub fn to_json(&self) -> Value {
         let ars: Vec<Value> = self.ar_info.0.iter().map(ArInfo::to_json).collect();
         json!({
-            "ipIdentity": self.ip_identity,
+            "ipIdentity": self.ip_identity.to_json(),
             "ipDescription": self.ip_description,
             "dLogBase" : json_base16_encode(&self.dlog_base.curve_to_bytes()),
             "ipVerifyKey": json_base16_encode(&self.ip_verify_key.to_bytes()),
@@ -823,24 +873,18 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
     }
 }
 
-fn json_read_u32(v: &Map<String, Value>, key: &str) -> Option<u32> {
-    u32::try_from(v.get(key)?.as_u64()?).ok()
-}
-
-fn json_read_u64(v: &Map<String, Value>, key: &str) -> Option<u64> { v.get(key)?.as_u64() }
-
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Context<P, C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut r = vec![];
         r.extend_from_slice(&self.ip_info.to_bytes());
         r.extend_from_slice(&self.commitment_key_sc.to_bytes());
         r.extend_from_slice(&self.commitment_key_prf.to_bytes());
-        let l = &self.choice_ar_parameters.0.len();
+        let l: u32 = self.choice_ar_parameters.0.len() as u32; // no more than u32 parameters supported.
         r.extend_from_slice(&l.to_be_bytes());
         for item in &self.choice_ar_parameters.0 {
             r.extend_from_slice(&item.to_bytes());
         }
-        r.extend_from_slice(&self.choice_ar_parameters.1.to_be_bytes());
+        r.extend_from_slice(&self.choice_ar_parameters.1.to_bytes());
         r.into_boxed_slice()
     }
 
@@ -848,12 +892,12 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Context<P, C> {
         let ip_info = IpInfo::from_bytes(cur)?;
         let commitment_key_sc = PedersenKey::from_bytes(cur).ok()?;
         let commitment_key_prf = PedersenKey::from_bytes(cur).ok()?;
-        let l = cur.read_u16::<BigEndian>().ok()?;
+        let l = cur.read_u32::<BigEndian>().ok()?;
         let mut ar_list = Vec::with_capacity(l as usize);
         for _ in 0..l {
             ar_list.push(ArInfo::from_bytes(cur)?);
         }
-        let choice_ar_parameters = (ar_list, cur.read_u64::<BigEndian>().ok()?);
+        let choice_ar_parameters = (ar_list, Threshold::from_bytes(cur)?);
         Some(Context {
             ip_info,
             commitment_key_sc,

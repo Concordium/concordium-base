@@ -5,6 +5,7 @@ use ff::Field;
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use ps_sig;
 use rand::*;
+use secret_sharing::secret_sharing::{ShareNumber, Threshold};
 use sigma_protocols::{com_enc_eq::*, com_eq::*, com_eq_different_groups::*};
 
 #[derive(Debug, Clone, Copy)]
@@ -18,7 +19,7 @@ pub enum Reason {
 }
 
 fn check_ar_parameters<C: Curve>(
-    _choice_ar_parameters: &(Vec<ArInfo<C>>, u64),
+    _choice_ar_parameters: &(Vec<ArInfo<C>>, Threshold),
     _ip_ar_info: &[ArInfo<C>],
 ) -> bool {
     // some business logic here
@@ -120,7 +121,7 @@ pub fn verify_credentials<
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     cmm_prf: &Commitment<P::G_1>,
     cmm_sc: &Commitment<P::G_1>,
-    ar_list: &[u64],
+    ar_list: &[ArIdentity],
     att_list: &AttributeList<P::ScalarField, AttributeType>,
     ps_public_key: &ps_sig::PublicKey<P>,
 ) -> ps_sig::UnknownMessage<P> {
@@ -141,7 +142,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
         message = message.plus_point(&key_vec[i].mul_by_scalar(&att))
     }
     for i in (n + 4)..(m + n + 4) {
-        let ar_handle = <P::G_1 as Curve>::scalar_from_u64(ar_list[i - n - 4] as u64).unwrap();
+        let ar_handle = ar_list[i - n - 4].to_scalar::<P::G_1>();
         message = message.plus_point(&key_vec[i].mul_by_scalar(&ar_handle));
     }
 
@@ -208,14 +209,12 @@ fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
 
 #[inline(always)]
 pub fn commitment_to_share<C: Curve>(
-    share_number: u64,
+    share_number: ShareNumber,
     coeff_commitments: &[Commitment<C>],
 ) -> Commitment<C> {
     let mut cmm_share_point: C = coeff_commitments[0].0;
     for (i, Commitment(cmm_point)) in coeff_commitments.iter().enumerate().skip(1) {
-        let j_pow_i: C::Scalar = C::scalar_from_u64(share_number as u64)
-            .unwrap()
-            .pow([i as u64]);
+        let j_pow_i: C::Scalar = share_number.to_scalar::<C>().pow([i as u64]);
         let a = cmm_point.mul_by_scalar(&j_pow_i);
         cmm_share_point = cmm_share_point.plus_point(&a);
     }
