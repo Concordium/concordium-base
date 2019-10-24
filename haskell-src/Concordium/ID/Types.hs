@@ -303,6 +303,15 @@ instance Serialize ShareNumber where
   put (ShareNumber n) = Put.putWord32be n
   get = ShareNumber <$> Get.getWord32be
 
+newtype Threshold = Threshold Word32
+    deriving (Eq, Show, Ord)
+    deriving (FromJSON, ToJSON) via Word32
+
+instance Serialize Threshold where
+  put (Threshold n) = Put.putWord32be n
+  get = Threshold <$> Get.getWord32be
+
+
 -- |Data needed on-chain to revoke anonymity of the account holder.
 data ChainArData = ChainArData {
   -- |Unique identifier of the anonimity revoker.
@@ -346,6 +355,8 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
   -- |Identity of the identity provider who signed the identity object from
   -- which this credential is derived.
   cdvIpId      :: IdentityProviderIdentity,
+  -- |Revocation threshold. Any set of this many anonymity revokers can reveal IdCredPub.
+  cdvThreshold :: Threshold,
   -- |Anonymity revocation data associated with this credential.
   cdvArData :: [ChainArData],
   -- |Policy. At the moment only opening of specific commitments.
@@ -359,6 +370,7 @@ instance ToJSON CredentialDeploymentValues where
     "verifyKey" .= cdvVerifyKey,
     "regId" .= cdvRegId,
     "ipIdentity" .= cdvIpId,
+    "revocationThreshold" .= cdvThreshold,
     "arData" .= cdvArData,
     "policy" .= cdvPolicy
     ]
@@ -369,6 +381,7 @@ instance FromJSON CredentialDeploymentValues where
     cdvVerifyKey <- v .: "verifyKey"
     cdvRegId <- v .: "regId"
     cdvIpId <- v .: "ipIdentity"
+    cdvThreshold <- v.: "revocationThreshold"
     cdvArData <- v .: "arData"
     cdvPolicy <- v .: "policy"
     return CredentialDeploymentValues{..}
@@ -406,6 +419,7 @@ instance Serialize CredentialDeploymentValues where
     cdvVerifyKey <- get
     cdvRegId <- get
     cdvIpId <- get
+    cdvThreshold <- get
     l <- Get.getWord16be
     cdvArData <- replicateM (fromIntegral l) get
     cdvPolicy <- getPolicy
@@ -416,6 +430,7 @@ instance Serialize CredentialDeploymentValues where
     put cdvVerifyKey <>
     put cdvRegId <>
     put cdvIpId <>
+    put cdvThreshold <>
     Put.putWord16be (fromIntegral (length cdvArData)) <>
     mapM_ put cdvArData <>
     putPolicy cdvPolicy

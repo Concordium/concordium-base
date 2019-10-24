@@ -547,7 +547,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         "verifyKey": json_base16_encode(&values.acc_pub_key.to_bytes()),
         "regId": json_base16_encode(&values.reg_id.curve_to_bytes()),
         "ipIdentity": values.ip_identity.to_json(),
-        "revocationThreshold": pio.choice_ar_parameters.1.to_json(),
+        "revocationThreshold": values.threshold.to_json(),
         "arData": chain_ar_data_to_json(&values.ar_data),
         "policy": policy_to_json(&values.policy),
         // NOTE: Since proofs encode their own length we do not output those first 4 bytes
