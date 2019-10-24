@@ -11,7 +11,7 @@ use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
 use ps_sig;
-use secret_sharing::secret_sharing::ShareNumber;
+use secret_sharing::secret_sharing::{ShareNumber, Threshold};
 
 use sigma_protocols::{com_enc_eq, com_eq_sig, com_mult};
 
@@ -55,28 +55,15 @@ pub fn verify_cdi<
         .iter()
         .map(|x| x.ar_identity)
         .collect::<Vec<ArIdentity>>();
-    let ar_commitments = &cdi.proofs.commitments.cmm_ars;
-    if ars.len() != ar_commitments.len() {
-        return Err(CDIVerificationError::AR);
-    }
-    let mut choice_ar_parameters = Vec::with_capacity(ars.len());
-    let zero = Randomness(C::Scalar::zero());
 
+    let mut choice_ar_parameters = Vec::with_capacity(ars.len());
+
+    // find ArInfo's corresponding to this credential in the
+    // IpInfo.
     for &handle in ars.iter() {
-        // check that the handle is in the commitment list
-        let check_handle_p = |&&x: &&Commitment<C>| {
-            // compute the commitment with randomness zero
-            x == global_context
-                .on_chain_commitment_key
-                .hide(&Value(handle.to_scalar::<C>()), &zero)
-        };
-        match ar_commitments.iter().find(check_handle_p) {
-            // if it is not then this credential is invalid
+        match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == handle) {
             None => return Err(CDIVerificationError::AR),
-            Some(_) => match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == handle) {
-                None => return Err(CDIVerificationError::AR),
-                Some(ar_info) => choice_ar_parameters.push(ar_info),
-            },
+            Some(ar_info) => choice_ar_parameters.push(ar_info),
         }
     }
     verify_cdi_worker(
@@ -142,6 +129,8 @@ pub fn verify_cdi_worker<
     let check_pok_sig = verify_pok_sig(
         &challenge_prefix,
         on_chain_commitment_key,
+        cdi.values.threshold,
+        choice_ar_parameters,
         &commitments,
         ip_verify_key,
         &cdi.proofs.sig,
@@ -279,9 +268,12 @@ fn verify_policy<C: Curve, AttributeType: Attribute<C::Scalar>>(
     true
 }
 
+#[allow(clippy::too_many_arguments)]
 fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     challenge_prefix: &[u8],
     commitment_key: &CommitmentKey<C>,
+    threshold: Threshold,
+    choice_ar_parameters: &[&ArInfo<C>],
     commitments: &CredDeploymentCommitments<C>,
     ip_pub_key: &ps_sig::PublicKey<P>,
     blinded_sig: &ps_sig::Signature<P>,
@@ -299,9 +291,11 @@ fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // number of commitments in the attribute list
     // to these we add commitments to idcredsec and prf key K
     let user_cmm_atts_len = commitments.cmm_attributes.len();
-    let user_cmm_ars_len = commitments.cmm_ars.len();
 
-    let gxs = yxs[..user_cmm_atts_len + user_cmm_ars_len + 2].to_vec();
+    // commitments to anonymity revokers
+    let user_cmm_ars_len = choice_ar_parameters.len();
+
+    let gxs = yxs[..user_cmm_atts_len + user_cmm_ars_len + 3].to_vec();
 
     let gxs_pair = a; // CHECK with Bassel
 
@@ -309,12 +303,28 @@ fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let cmm_id_cred_sec = commitments.cmm_id_cred_sec_sharing_coeff[0];
     comm_vec.push(cmm_id_cred_sec.0);
     comm_vec.push(commitments.cmm_prf.0);
+
+    // compute commitments with randomness 0
+    let zero = Randomness(C::Scalar::zero());
+    // add commitment to threshold with randomness 0
+    comm_vec.push(
+        commitment_key
+            .hide(&Value(threshold.to_scalar::<C>()), &zero)
+            .0,
+    );
+    // and all commitments to ARs with randomness 0
+    for ar in choice_ar_parameters {
+        comm_vec.push(
+            commitment_key
+                .hide(&Value(ar.ar_identity.to_scalar::<C>()), &zero)
+                .0,
+        );
+    }
+
     for v in commitments.cmm_attributes.iter() {
         comm_vec.push(v.0);
     }
-    for ar in commitments.cmm_ars.iter() {
-        comm_vec.push(ar.0);
-    }
+
     com_eq_sig::verify_com_eq_sig::<P, C>(
         &challenge_prefix,
         &((*eval_pair, eval), comm_vec),
@@ -347,24 +357,3 @@ fn verify_pok_reg_id<C: Curve>(
 
     com_mult::verify_com_mult(&challenge_prefix, &coeff, &public, &proof)
 }
-// fn verify_pok_id_cred_pub<C: Curve>(
-// challenge_prefix: &[u8],
-// on_chain_commitment_key: &PedersenKey<C>,
-// ar_info_generator: &C,
-// ar_info_public_key: &PublicKey<C>,
-// id_cred_pub_enc: &Cipher<C>,
-// cmm_id_cred_sec: &Commitment<C>,
-// proof: &com_enc_eq::ComEncEqProof<C>,
-// ) -> bool {
-// let public = (id_cred_pub_enc.0, id_cred_pub_enc.1, cmm_id_cred_sec.0);
-// FIXME: The one_point needs to be a parameter.
-// let cmm_key = on_chain_commitment_key;
-// let base = (
-// ar_info_generator,
-// ar_info_public_key.0,
-// cmm_key.0[0],
-// cmm_key.1,
-// );
-//
-// com_enc_eq::verify_com_enc_eq::<C>(&challenge_prefix, &base, &public, proof)
-// }

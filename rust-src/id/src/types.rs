@@ -211,13 +211,6 @@ pub struct CredDeploymentCommitments<C: Curve> {
     pub cmm_prf: pedersen::Commitment<C>,
     /// commitment to credential counter
     pub cmm_cred_counter: pedersen::Commitment<C>,
-    /// commitments to anonymity revokers
-    /// The account holder needs to commit to a list of ARs
-    /// These are checked against the IP signatures
-    /// to make sure the prf sharing and id_cred sharing are done
-    /// w.r.t. the same list of ARs
-    /// These commitments will be sent with randomness 0.
-    pub cmm_ars: Vec<pedersen::Commitment<C>>,
     /// list of commitments to the attributes
     pub cmm_attributes: Vec<pedersen::Commitment<C>>,
     /// commitments to the coefficients of the polynomial
@@ -297,7 +290,12 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
     pub ip_identity: IpIdentity,
-    /// Anonymity revocation data.
+    /// Anonymity revocation threshold. Must be <= length of ar_data.
+    pub threshold: Threshold,
+    /// Anonymity revocation data. List of anonymity revokers which can revoke
+    /// identity. NB: The order is important since it is the same order as that
+    /// signed by the identity provider, and permuting the list will invalidate
+    /// the signature from the identity provider.
     pub ar_data: Vec<ChainArData<C>>,
     /// Policy of this credential object.
     pub policy: Policy<C, AttributeType>,
@@ -452,11 +450,6 @@ impl<C: Curve> CredDeploymentCommitments<C> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::from(self.cmm_prf.to_bytes());
         out.extend_from_slice(&self.cmm_cred_counter.to_bytes());
-        let ars = &self.cmm_ars;
-        out.extend_from_slice(&(ars.len() as u16).to_be_bytes());
-        for a in ars {
-            out.extend_from_slice(&a.to_bytes());
-        }
         let atts = &self.cmm_attributes;
         out.extend_from_slice(&(atts.len() as u16).to_be_bytes());
         for a in atts {
@@ -473,11 +466,6 @@ impl<C: Curve> CredDeploymentCommitments<C> {
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let cmm_prf = pedersen::Commitment::from_bytes(cur).ok()?;
         let cmm_cred_counter = pedersen::Commitment::from_bytes(cur).ok()?;
-        let m = cur.read_u16::<BigEndian>().ok()?;
-        let mut cmm_ars = Vec::with_capacity(m as usize);
-        for _ in 0..m {
-            cmm_ars.push(pedersen::Commitment::from_bytes(cur).ok()?);
-        }
         let l = cur.read_u16::<BigEndian>().ok()?;
         let mut cmm_attributes = Vec::with_capacity(l as usize);
         for _ in 0..l {
@@ -491,7 +479,6 @@ impl<C: Curve> CredDeploymentCommitments<C> {
         Some(CredDeploymentCommitments {
             cmm_prf,
             cmm_cred_counter,
-            cmm_ars,
             cmm_attributes,
             cmm_id_cred_sec_sharing_coeff,
         })
@@ -608,6 +595,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
         v.extend_from_slice(&sig_bytes);
         v.extend_from_slice(&self.reg_id.curve_to_bytes());
         v.extend_from_slice(&self.ip_identity.to_bytes());
+        v.extend_from_slice(&self.threshold.to_bytes());
         v.extend_from_slice(&(self.ar_data.len() as u16).to_be_bytes());
         for ar in self.ar_data.iter() {
             v.extend_from_slice(&ar.to_bytes());
@@ -624,6 +612,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
         let acc_pub_key = acc_sig_scheme::PublicKey::from_bytes(&buf).ok()?;
         let reg_id = curve_serialization::read_curve::<C>(cur).ok()?;
         let ip_identity = IpIdentity::from_bytes(cur)?;
+        let threshold = Threshold::from_bytes(cur)?;
         let number_of_ars = cur.read_u16::<BigEndian>().ok()?;
         let mut ar_data = Vec::with_capacity(number_of_ars as usize);
         for _ in 0..number_of_ars {
@@ -635,6 +624,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
             acc_pub_key,
             reg_id,
             ip_identity,
+            threshold,
             ar_data,
             policy,
         })

@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 use pedersen_scheme::key::CommitmentKey;
 
 use std::{
+    cmp::max,
     fs::File,
     io::{self, Cursor, Error, ErrorKind, Write},
     path::Path,
@@ -546,8 +547,8 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         "verifyKey": json_base16_encode(&values.acc_pub_key.to_bytes()),
         "regId": json_base16_encode(&values.reg_id.curve_to_bytes()),
         "ipIdentity": values.ip_identity.to_json(),
+        "revocationThreshold": pio.choice_ar_parameters.1.to_json(),
         "arData": chain_ar_data_to_json(&values.ar_data),
-        "revokationThreshold": 2,
         "policy": policy_to_json(&values.policy),
         // NOTE: Since proofs encode their own length we do not output those first 4 bytes
         "proofs": json_base16_encode(&proofs.to_bytes()[4..]),
@@ -763,16 +764,6 @@ fn handle_start_ip(matches: &ArgMatches) {
         }
     };
 
-    // we also read the global context from another json file
-    // let global_ctx = {
-    //     if let Some(gc) = read_global_context() {
-    //         gc
-    //     } else {
-    //         eprintln!("Cannot read global context information database.
-    // Terminating.");         return;
-    //     }
-    // };
-
     // names of identity providers the user can choose from, together with the
     // names of anonymity revokers associated with them
     let mut ips_names = Vec::with_capacity(ips.len());
@@ -810,6 +801,7 @@ fn handle_start_ip(matches: &ArgMatches) {
         .items(&mrs)
         .interact()
         .unwrap();
+    let num_ars = ar_info.len();
     if ar_info.is_empty() {
         eprintln!("You need to select AR");
         return;
@@ -818,7 +810,25 @@ fn handle_start_ip(matches: &ArgMatches) {
         choice_ars.push(ar_handles[idx].ar_identity);
     }
 
-    let context = make_context_from_ip_info(ip_info, (choice_ars, Threshold(2)));
+    let threshold = {
+        if let Ok(threshold) = Select::new()
+            .with_prompt("Revocation threshold")
+            .items(&(1..=num_ars).collect::<Vec<usize>>())
+            .default(1)
+            .interact()
+        {
+            Threshold(threshold as u32)
+        } else {
+            let d = max(1, num_ars - 1);
+            println!(
+                "Selecting default value (= {}) for revocation threshold.",
+                d
+            );
+            Threshold(d as u32)
+        }
+    };
+
+    let context = make_context_from_ip_info(ip_info, (choice_ars, threshold));
     // and finally generate the pre-identity object
     // we also retrieve the randomness which we must keep private.
     // This randomness must be used
@@ -892,13 +902,15 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
     println!("generating {} IPs", num);
     let mut res = Vec::with_capacity(num);
     for id in 0..num {
+        // generate an identity provider and for each
+        // identity provider three anonymity revokers
         let ip_fname = mk_ip_filename(id);
         let ar0_fname = mk_ar_filename(id, 0);
         let ar1_fname = mk_ar_filename(id, 1);
         let ar2_fname = mk_ar_filename(id, 2);
 
-        // TODO: hard-coded for now, at most 8 items in the attribute list
-        // (because signature length 10)
+        // TODO: hard-coded length of the key for now, but should be changed
+        // based on the maximum length of the attribute list
         let id_secret_key = ps_sig::secret::SecretKey::generate(20, &mut csprng);
         let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
 
@@ -908,7 +920,6 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
             ar_identity:    ArIdentity(0u32),
             ar_description: mk_ar_name(0),
             ar_public_key:  ar0_public_key,
-            // ar_elgamal_generator: PublicKey::generator(),
         };
 
         let js0 = ar_info_to_json(&ar0_info);

@@ -43,6 +43,10 @@ impl From<u32> for ShareNumber {
 pub struct Threshold(pub u32);
 
 impl Threshold {
+    /// Curve scalars must be big enough to accommodate all 32 bit unsigned
+    /// integers.
+    pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)).unwrap() }
+
     pub fn to_bytes(self) -> Box<[u8]> { Box::from(self.0.to_be_bytes()) }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {

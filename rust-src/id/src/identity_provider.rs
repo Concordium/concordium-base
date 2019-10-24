@@ -31,7 +31,6 @@ pub fn verify_credentials<
     C: Curve<Scalar = P::ScalarField>,
 >(
     pre_id_obj: &PreIdentityObject<P, C, AttributeType>,
-    // context: Context<P, C>,
     ip_info: &IpInfo<P, C>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Declined> {
@@ -110,6 +109,7 @@ pub fn verify_credentials<
     let message: ps_sig::UnknownMessage<P> = compute_message(
         &pre_id_obj.cmm_prf,
         &pre_id_obj.cmm_sc,
+        pre_id_obj.choice_ar_parameters.1,
         &choice_ar_handles,
         &pre_id_obj.alist,
         &ip_info.ip_verify_key,
@@ -121,6 +121,7 @@ pub fn verify_credentials<
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     cmm_prf: &Commitment<P::G_1>,
     cmm_sc: &Commitment<P::G_1>,
+    threshold: Threshold,
     ar_list: &[ArIdentity],
     att_list: &AttributeList<P::ScalarField, AttributeType>,
     ps_public_key: &ps_sig::PublicKey<P>,
@@ -128,24 +129,40 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     // TODO: handle the errors
     let variant = P::G_1::scalar_from_u64(u64::from(att_list.variant)).unwrap();
     let expiry = P::G_1::scalar_from_u64(att_list.expiry).unwrap();
+
+    // the list to be signed consists of (in that order)
+    // - commitment to idcredsec
+    // - commitment to prf key
+    // - anonymity revocation threshold
+    // - list of anonymity revokers
+    // - variant of the attribute list
+    // - expiry date of the attribute list
+    // - attribute list elements
+
     let mut message = cmm_sc.0;
     message = message.plus_point(&cmm_prf.0);
     let att_vec = &att_list.alist;
-    let n = att_vec.len();
     let m = ar_list.len();
+    let n = att_vec.len();
     let key_vec = &ps_public_key.2;
-    assert!(key_vec.len() >= n + 4);
-    message = message.plus_point(&key_vec[2].mul_by_scalar(&variant));
-    message = message.plus_point(&key_vec[3].mul_by_scalar(&expiry));
-    for i in 4..(n + 4) {
-        let att = att_vec[i - 4].to_field_element();
-        message = message.plus_point(&key_vec[i].mul_by_scalar(&att))
-    }
-    for i in (n + 4)..(m + n + 4) {
-        let ar_handle = ar_list[i - n - 4].to_scalar::<P::G_1>();
+
+    // FIXME: Handle error gracefully, do not panic.
+    assert!(key_vec.len() >= n + m + 3 + 2);
+
+    // add threshold to the message
+    message = message.plus_point(&key_vec[2].mul_by_scalar(&threshold.to_scalar::<P::G_1>()));
+    // and add all anonymity revocation
+    for i in 3..(m + 3) {
+        let ar_handle = ar_list[i - 3].to_scalar::<P::G_1>();
         message = message.plus_point(&key_vec[i].mul_by_scalar(&ar_handle));
     }
 
+    message = message.plus_point(&key_vec[m + 3].mul_by_scalar(&variant));
+    message = message.plus_point(&key_vec[m + 3 + 1].mul_by_scalar(&expiry));
+    for i in (m + 3 + 2)..(m + 3 + 2 + n) {
+        let att = att_vec[i - m - 3 - 2].to_field_element();
+        message = message.plus_point(&key_vec[i].mul_by_scalar(&att))
+    }
     ps_sig::UnknownMessage(message)
 }
 

@@ -161,7 +161,7 @@ fn test_pipeline() {
     );
     assert!(
         cdi_values.is_some(),
-        "VAlUES Deserialization must be successful."
+        "VALUES Deserialization must be successful."
     );
 
     let cmm_bytes = cdi.proofs.commitments.to_bytes();
@@ -226,4 +226,22 @@ fn test_pipeline() {
         revealed_id_cred_pub,
         aci.acc_holder_info.id_cred.id_cred_pub
     );
+
+    // generate a new cdi from a modified pre-identity object in which we swapped
+    // two anonymity revokers. Verification of this credential should fail the
+    // signature at the very least.
+    let mut cdi = generate_cdi(
+        &ip_info,
+        &global_ctx,
+        &aci,
+        &pio,
+        0,
+        &ip_sig,
+        &policy,
+        &acc_data,
+        &randomness,
+    );
+    cdi.values.ar_data.rotate_left(1);
+    let cdi_check = verify_cdi(&global_ctx, &ip_info, &cdi);
+    assert_ne!(cdi_check, Ok(()));
 }
