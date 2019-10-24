@@ -261,19 +261,34 @@ showNumBits nNumbers p =
 
 main :: IO ()
 main = do
-  let p1 = fromIntegral (10::Int) :: MPFR.Precision
+  -- let p1 = fromIntegral (10::Int) :: MPFR.Precision
   let p2 = fromIntegral (10::Int)^(2::Int) :: MPFR.Precision
   let p3 = fromIntegral (10::Int)^(3::Int) :: MPFR.Precision
   let p4 = fromIntegral (10::Int)^(4::Int) :: MPFR.Precision
-  let n2 = (10::Int)^(2::Int)
-  let n3 = (10::Int)^(3::Int)
-  let n4 = (10::Int)^(4::Int)
+  let p5 = fromIntegral (10::Int)^(5::Int) :: MPFR.Precision
+  -- let n2 = (10::Int)^(2::Int)
+  -- let n3 = (10::Int)^(3::Int)
+  -- let n4 = (10::Int)^(4::Int)
   let n5 = (10::Int)^(5::Int)
   let n6 = (10::Int)^(6::Int)
   let n7 = (10::Int)^(7::Int)
-  let n8 = (10::Int)^(8::Int)
-  let n9 = (10::Int)^(9::Int)
+  -- let n8 = (10::Int)^(8::Int)
+  -- let n9 = (10::Int)^(9::Int)
+
   -- successive parallel: nParallel nNumbers nOps precision
-  -- runSuccessiveRandomOpsParallel 4 n6 n5 p2
-  -- simpleSum n5 p2
-  runMixedMPFRIntegerParallel 4 n6 p3 -- with n7 memory is going beond limits; on first tests, the RAM consumption by the test seems to equal the showNumBits amount
+  runSuccessiveRandomOpsParallel 4 n5 n6 p2
+  runSuccessiveRandomOpsParallel 4 n6 n5 p2
+  runSuccessiveRandomOpsParallel 4 n6 n6 p2
+  runMixedMPFRIntegerParallel 4 n5 p3
+  runMixedMPFRIntegerParallel 4 n5 p4
+  runMixedMPFRIntegerParallel 4 n5 p5
+  runMixedMPFRIntegerParallel 4 n6 p2
+  simpleSum n5 p2
+  simpleSum n6 p2
+  simpleSum n7 p2
+  simpleSum n5 p3
+  simpleSum n6 p3
+  simpleSumRepeated n5 p2
+  simpleSumRepeated n6 p2
+  simpleSumRepeated n5 p3
+  simpleSumRepeated n6 p3
