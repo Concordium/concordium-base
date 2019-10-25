@@ -471,6 +471,7 @@ getCDIPartial = do
   cdvVerifyKey <- get
   cdvRegId <- get
   cdvIpId <- get
+  cdvThreshold <- get
   cdvArData <- get
   cdvPolicy <- getPolicy
   return CredentialDeploymentValues{..}
