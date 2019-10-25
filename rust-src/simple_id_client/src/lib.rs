@@ -294,7 +294,7 @@ pub fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute
         "idCredPub": json_base16_encode(&pio.id_cred_pub.curve_to_bytes()),
         "ipArData": json!(arr),
         "choiceArData":pio.choice_ar_parameters.0.iter().map(|&x| ArIdentity::to_json(x)).collect::<Vec<Value>>(),
-        "revokationThreshold":pio.choice_ar_parameters.1.to_json(),
+        "revocationThreshold":pio.choice_ar_parameters.1.to_json(),
         "attributeList": alist_to_json(&pio.alist),
         "pokSecCred": json_base16_encode(&pio.pok_sc.to_bytes()),
         "sndPokSecCred": json_base16_encode(&pio.snd_pok_sc.to_bytes()),
@@ -323,7 +323,7 @@ pub fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, E
         .iter()
         .map(ArIdentity::from_json)
         .collect::<Option<Vec<ArIdentity>>>()?;
-    let revokation_threshold: Threshold = Threshold::from_json(v.get("revokationThreshold")?)?;
+    let revocation_threshold: Threshold = Threshold::from_json(v.get("revocationThreshold")?)?;
     let alist = json_to_alist(v.get("attributeList")?)?;
     let pok_sc = com_eq::ComEqProof::from_bytes(&mut Cursor::new(&json_base16_decode(
         v.get("pokSecCred")?,
@@ -365,7 +365,7 @@ pub fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, E
         id_cred_pub_ip,
         id_cred_pub,
         ip_ar_data,
-        choice_ar_parameters: (choice_ar_data, revokation_threshold),
+        choice_ar_parameters: (choice_ar_data, revocation_threshold),
         alist,
         pok_sc,
         snd_pok_sc,

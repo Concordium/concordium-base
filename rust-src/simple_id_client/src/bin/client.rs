@@ -263,15 +263,15 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
         }
         None => panic!("Should not happen since the argument is mandatory."),
     };
-    let revokation_threshold = match v.as_object() {
+    let revocation_threshold = match v.as_object() {
         None => panic!("could not read credential object"),
-        Some(s) => match json_read_u64(s, "revokationThreshold") {
-            None => panic!("could not read revokation threshold"),
+        Some(s) => match json_read_u64(s, "revocationThreshold") {
+            None => panic!("could not read revocation threshold"),
             Some(r) => r,
         },
     };
-    // let revokation_threshold = json_read_u64(v.as_object(),
-    // "revokationThreshold")?;
+    // let revocation_threshold = json_read_u64(v.as_object(),
+    // "revocationThreshold")?;
     let ar_data = match v.get("arData").and_then(json_to_chain_ar_data) {
         Some(ar_data) => ar_data,
         None => {
@@ -298,30 +298,11 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
         }
     }
 
-    //   let v = match matches.value_of("ar-private").map(read_json_from_file) {
-    //       Some(Ok(v)) => v,
-    //       Some(Err(x)) => {
-    //           eprintln!(
-    //               "Could not read private anonymity revoker data because {}",
-    //               x
-    //           );
-    //           return;
-    //       }
-    //       None => panic!("Should not happen since the argument is mandatory."),
-    //   };
-    //   let (ar_info, private) = match json_to_private_ar_info(&v) {
-    //       Some(p) => p,
-    //       None => {
-    //           eprintln!("Could not decode the JSON object with private AR
-    // data.");           return;
-    //       }
-    //   };
-
     let number_of_ars = ars.len();
-    if (number_of_ars as u64) < revokation_threshold {
+    if (number_of_ars as u64) < revocation_threshold {
         eprintln!(
             "insufficient number of anonymity revokers {}, {}",
-            number_of_ars, revokation_threshold
+            number_of_ars, revocation_threshold
         );
         return;
     }

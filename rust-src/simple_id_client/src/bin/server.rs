@@ -13,7 +13,7 @@ use serde_json::{json, to_string_pretty, Value};
 
 use clap::{App, AppSettings, Arg};
 use secret_sharing::secret_sharing::Threshold;
-use std::io::Cursor;
+use std::{cmp::max, io::Cursor};
 
 use std::collections::HashMap;
 
@@ -39,13 +39,19 @@ fn respond_global_params(_request: &rouille::Request, s: &ServerState) -> rouill
 }
 
 fn respond_ips(_request: &rouille::Request, s: &ServerState) -> rouille::Response {
-    let response: Vec<Value> = s.ip_infos.iter().map(|id| id.0.to_json()).collect();
+    let response: Vec<Value> = s.ip_infos.iter().map(|id| (id.1).0.to_json()).collect();
     rouille::Response::json(&json!(response))
 }
 
 fn parse_id_object_input_json(
     v: &Value,
-) -> Option<(IpIdentity, String, Vec<ArIdentity>, ExampleAttributeList)> {
+) -> Option<(
+    IpIdentity,
+    String,
+    Threshold,
+    Vec<ArIdentity>,
+    ExampleAttributeList,
+)> {
     let ip_id = IpIdentity::from_json(v.get("ipIdentity")?)?;
     let user_name = v.get("name")?.as_str()?.to_owned();
     let ar_values = v.get("anonymityRevokers")?.as_array()?;
@@ -53,16 +59,22 @@ fn parse_id_object_input_json(
         .iter()
         .map(ArIdentity::from_json)
         .collect::<Option<Vec<ArIdentity>>>()?;
+    // default threshold is one less than the amount of anonymity revokers
+    // if the field "threshold" is not present this is what we take.
+    let threshold = match v.get("threshold") {
+        None => Threshold(max(1, ars.len() - 1) as u32),
+        Some(v) => Threshold::from_json(v)?,
+    };
     let alist = json_to_alist(v.get("attributes")?)?;
-    Some((ip_id, user_name, ars.clone(), alist))
+    Some((ip_id, user_name, threshold, ars, alist))
 }
 
 fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Response {
     let v: Value = try_or_400!(rouille::input::json_input(request));
-    let (ip_info, name, ar_list, attributes) = {
-        if let Some((ip_id, name, ar_list, att)) = parse_id_object_input_json(&v) {
+    let (ip_info, name, threshold, ar_list, attributes) = {
+        if let Some((ip_id, name, threshold, ar_list, att)) = parse_id_object_input_json(&v) {
             match s.ip_infos.get(&ip_id) {
-                Some(ip_info) => (ip_info, name, ar_list, att),
+                Some(ip_info) => (ip_info, name, threshold, ar_list, att),
                 None => return rouille::Response::empty_400(),
             }
         } else {
@@ -92,8 +104,7 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
 
     let (ip_info, ip_sec_key) = ip_info;
 
-    // FIXME: Why is there a hard-coded threshold of 1?
-    let context = make_context_from_ip_info(ip_info.clone(), (ar_list, Threshold(1)));
+    let context = make_context_from_ip_info(ip_info.clone(), (ar_list, threshold));
     let (pio, randomness) = generate_pio(&context, &aci);
 
     let vf = verify_credentials(&pio, &ip_info, &ip_sec_key);
@@ -199,6 +210,7 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
         "verifyKey": json_base16_encode(&values.acc_pub_key.to_bytes()),
         "regId": json_base16_encode(&values.reg_id.curve_to_bytes()),
         "ipIdentity": values.ip_identity.to_json(),
+        "revocationThreshold": values.threshold.to_json(),
         "arData": chain_ar_data_to_json(&values.ar_data),
         "policy": policy_to_json(&values.policy),
         // NOTE: Since proofs encode their own length we do not output those first 4 bytes
