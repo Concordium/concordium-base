@@ -49,7 +49,9 @@ A request is a JSON object which looks as
       "maxAccount": "30",
       "residenceCountryCode": "386",
       "variant": "0"
-    }
+    },
+    "anonymityRevokers": [0,1,2],
+    "threshold": 2
 }
 ```
 
