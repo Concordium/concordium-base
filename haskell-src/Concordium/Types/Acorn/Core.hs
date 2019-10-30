@@ -952,6 +952,7 @@ putConstraintRef (ImportedCR cname origin) = P.putWord8 1 >> putTyName cname >> 
 
 putModule :: P.Putter (Module annot)
 putModule Module{..} = do
+  P.putWord32be mVersion
   putLength mImports
   mapM_ (\Import{..} -> putModuleRef iModule >> putModuleName iAs) mImports
   putLength mDataTypes
@@ -962,7 +963,6 @@ putModule Module{..} = do
   mapM_ (\Definition{..} -> putName dName <> putVisibility dVis <> putType dType <> putExpr dExpr) mDefs
   putLength mContracts
   mapM_ putContract mContracts
-  P.putWord32be mVersion
 
 
 -- * Deserialization.
@@ -1172,6 +1172,7 @@ getContract = do
 
 getModule :: G.Get (Module annot)
 getModule = do
+  mVersion <- G.getWord32be
   lIm <- getLength
   mImports <- replicateM lIm getImport
   ldt <- getLength
@@ -1182,7 +1183,6 @@ getModule = do
   mDefs <- replicateM ldefs getDefinition
   lcont <- getLength
   mContracts <- replicateM lcont getContract
-  mVersion <- G.getWord32be
   return $ Module{..}
 
 -- * Deriving module reference from serialization
