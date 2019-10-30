@@ -386,11 +386,14 @@ deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Co
 -- messages the contract can receive is inferred from the type of the receive
 -- method. Moreover, the contract can "implement" or be an instance of a number
 -- of constraints (by name).
-data Contract annot a = Contract {
+data Contract annot origin = Contract {
   cName :: !TyName
-  , cInit :: !(Expr annot a)
-  , cReceive :: !(Expr annot a)
-  , cInstances :: ![ConstraintImpl annot a]
+  , cParamTy :: !(Type annot origin)
+  , cReceiveTy :: !(Type annot origin)
+  , cModelTy :: !(Type annot origin)
+  , cInit :: !(Expr annot origin)
+  , cReceive :: !(Expr annot origin)
+  , cInstances :: ![ConstraintImpl annot origin]
   }
   deriving(Generic)
 
@@ -933,6 +936,9 @@ putConstraintDecl ConstraintDecl{..} = do
 putContract :: P.Putter (Contract annot ModuleName)
 putContract Contract{..} = do
   putTyName cName
+  putType cParamTy
+  putType cReceiveTy
+  putType cModelTy
   putExpr cInit
   putExpr cReceive
   putLength cInstances
@@ -1164,6 +1170,9 @@ getDefinition = do
 getContract :: G.Get (Contract annot ModuleName)
 getContract = do
   cName <- getTyName
+  cParamTy <- getType
+  cReceiveTy <- getType
+  cModelTy <- getType
   cInit <- getExpr
   cReceive <- getExpr
   l <- getLength
