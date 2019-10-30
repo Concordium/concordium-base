@@ -171,18 +171,6 @@ data TypingError annot =
                  | RedefinitionOfContract Core.TyName
                  -- |Attempting to declare a data type (with the given name) without constructors.
                  | DataTypeWithoutConstructors Core.TyName
-                 -- |The init method of a contract is not of the correct shape.
-                 -- This is thrown when attempting to extract the parameter type
-                 -- from the init method but the init method is not of the shape
-                 -- @Core.Lambda paramTy _@.
-                 -- The argument is the name of the contract this error refers to.
-                 | ContractInitMethodHasIncorrectShape Core.TyName
-                 -- |The receive method of a contract is not of the correct shape.
-                 -- This is thrown when attempting to extract the model and message type
-                 -- from the receive method but the receive mthod is not of the shape
-                 -- @Core.Lambda _ (Core.Lambda modelTy (Core.Lambda _ (Core.Lambda _ (Core.Lambda (Core.TApp _ [msgTy]) _))))@.
-                 -- The argument is the name of the contract this error refers to.
-                 | ContractReceiveMethodHasIncorrectShape Core.TyName
                  -- |The contract's message type as specified by the receive
                  -- method is not a storable type. The first argument is the
                  -- name of the contract this error refers to, the second the
