@@ -11,6 +11,7 @@ import Data.ByteString as BS
 import Data.ByteString.Short as BSS
 
 import Concordium.Types
+import qualified Concordium.Crypto.BlockSignature as BlockSig
 import Concordium.Crypto.SignatureScheme(VerifyKey(..))
 import Concordium.Types.Execution
 import Concordium.Types(Amount(..), Address(..))
@@ -99,7 +100,7 @@ genPayload = oneof [genDeployModule,
 
         genAddBaker = do
           abElectionVerifyKey <- VRF.publicKey <$> arbitrary
-          abSignatureVerifyKey <- VerifyKey . BSS.pack <$> (vector =<< choose (30,80))
+          abSignatureVerifyKey <- BlockSig.verifyKey <$> BlockSig.genKeyPair
           abAccount <- genAddress
           abProofSig <- genDlogProof
           abProofElection <- genDlogProof
@@ -121,7 +122,7 @@ genPayload = oneof [genDeployModule,
 
         genUpdateBakerSignKey = do
           ubsId <- genBakerId
-          ubsKey <- VerifyKey . BSS.pack <$> (vector =<< choose (30,80))
+          ubsKey <- BlockSig.verifyKey <$> BlockSig.genKeyPair
           ubsProof <- genDlogProof
           return UpdateBakerSignKey{..}
 
