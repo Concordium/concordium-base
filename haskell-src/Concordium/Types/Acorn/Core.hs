@@ -112,7 +112,7 @@ newtype BoundVar = BV Word32
     deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num, Typeable, Data)
 
 newtype BoundTyVar = BTV Word32
-    deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num, Typeable, Data, S.Serialize)
+    deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num, Typeable, Data)
 
 data Variable boundvar name origin =
   -- |Variables bound by lambda abstractions.
@@ -198,15 +198,11 @@ deriving instance (AnnotContext Show annot, Show origin) => Show (Pattern annot 
 deriving instance (AnnotContext Typeable annot, Data origin) => Typeable (Pattern annot origin)
 deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Pattern annot origin)
 
-instance (AnnotContext S.Serialize annot, S.Serialize origin) => S.Serialize (Pattern annot origin)
-
 data CTorName origin = LocalCTor {ctorName :: !Name}
                      | ImportedCTor {ctorName :: !Name
                                     ,ctorOrigin :: !origin
                                     }
   deriving (Eq, Show, Generic, Functor, Foldable, Traversable, Typeable, Data)
-
-instance (S.Serialize origin) => S.Serialize (CTorName origin)
 
 instance Hashable origin => Hashable (CTorName origin)
 
@@ -721,6 +717,18 @@ instance S.Serialize BoundVar where
   get = getBoundVar
   put = putBoundVar
 
+instance S.Serialize BoundTyVar where
+  get = getBoundTyVar
+  put = putBoundTyVar
+
+instance (S.Serialize origin) => S.Serialize (Pattern annot origin) where
+    get = getPat
+    put = putPat
+
+instance (S.Serialize origin) => S.Serialize (CTorName origin) where
+    get = S.getWord8 >>= getCTorNameUntagged
+    put = putCTorName
+
 instance S.Serialize origin => S.Serialize (Expr a origin) where
     get = getExpr
     put = putExpr
@@ -804,18 +812,19 @@ putExpr (TypeApp a tys) =
   putLength tys <>
   mapM_ putType tys
 
-putPat :: S.Serialize origin => P.Putter (Pattern annot origin)
-putPat PVar = P.putWord8 0
-putPat (PCtor ctor tys) =
-  let hd = case ctor of
-             LocalCTor cname ->
-                 P.putWord8 1 <>
-                 putName cname
-             ImportedCTor cname origin ->
+putCTorName :: S.Serialize origin => P.Putter (CTorName origin)
+putCTorName (LocalCTor cname) =
+               P.putWord8 1 <>
+               putName cname
+putCTorName (ImportedCTor cname origin) =
                P.putWord8 2 <>
                putName cname <>
                S.put origin
-  in hd <> putLength tys <> mapM_ putType tys
+
+putPat :: S.Serialize origin => P.Putter (Pattern annot origin)
+putPat PVar = P.putWord8 0
+putPat (PCtor ctor tys) =
+  putCTorName ctor <> putLength tys <> mapM_ putType tys
 
 putPat (PLiteral lit) = do
   P.putWord8 3
@@ -1030,13 +1039,17 @@ getCAddress = S.get
 getAAddress :: G.Get AccountAddress
 getAAddress = S.get
 
+getCTorNameUntagged :: S.Serialize origin => Word8 -> G.Get (CTorName origin)
+getCTorNameUntagged 1 = LocalCTor <$> getName
+getCTorNameUntagged 2 = ImportedCTor <$> getName <*> S.get
+getCTorNameUntagged _ = fail "Not a valid constructor."
 
 getPat :: S.Serialize origin => G.Get (Pattern annot origin)
 getPat = do h <- G.getWord8
             case h of
               0 -> return $ PVar
-              1 -> PCtor . LocalCTor <$> getName <*> (getLength >>= flip replicateM getType)
-              2 -> PCtor <$> liftM2 ImportedCTor getName S.get <*> (getLength >>= flip replicateM getType)
+              1 -> PCtor <$> getCTorNameUntagged 1 <*> (getLength >>= flip replicateM getType)
+              2 -> PCtor <$> getCTorNameUntagged 2 <*> (getLength >>= flip replicateM getType)
               3 -> PLiteral <$> getLit
               _ -> fail "Not a valid pattern."
 
