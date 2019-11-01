@@ -1,52 +1,61 @@
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 -- abstraction layer for block signatures
-
 module Concordium.Crypto.BlockSignature where
 
 import qualified Concordium.Crypto.Ed25519Signature as Ed25519
-import           Concordium.Crypto.Ed25519Signature (ed25519)
-import qualified Concordium.Crypto.SignatureScheme as SCH
 import           System.Random
 import           Data.ByteString
+import qualified Data.ByteString.Short as BSS
 import Test.QuickCheck
+import Concordium.Crypto.ByteStringHelpers
+import Data.Serialize
+import Data.Aeson
 
-type SignKey = SCH.SignKey
-type VerifyKey = SCH.VerifyKey
-type KeyPair = SCH.KeyPair
+type SignKey = Ed25519.SignKey
+type VerifyKey = Ed25519.VerifyKey
+data KeyPair = KeyPair {
+  signKey :: !SignKey,
+  verifyKey :: !VerifyKey
+  } deriving(Eq, Show)
 
-type Signature = SCH.Signature
+instance Serialize KeyPair where
+  put KeyPair{..} = put signKey <> put verifyKey
+  get = do
+    signKey <- get
+    verifyKey <- get
+    return KeyPair{..}
 
-verifyKey :: KeyPair -> VerifyKey
-verifyKey = SCH.verifyKey
+newtype Signature = Signature BSS.ShortByteString
+    deriving (Eq, Ord)
+    deriving Show via ByteStringHex
+    deriving FromJSON via Short65K
+    deriving ToJSON via Short65K
 
-signKey :: KeyPair -> SignKey
-signKey = SCH.signKey
+-- NB: Serialize instance does not record its own length
+instance Serialize Signature where
+  put (Signature s) = putShortByteString s
+  get = Signature <$> getShortByteString Ed25519.signatureSize
 
+signatureLength :: Int
+signatureLength = Ed25519.signatureSize
 
 sign :: KeyPair -> ByteString -> Signature
-sign = SCH.sign ed25519
+sign KeyPair{..} = Signature . Ed25519.sign signKey verifyKey 
 
 verify :: VerifyKey -> ByteString -> Signature -> Bool 
-verify = SCH.verify ed25519
+verify vfKey bs (Signature s) = Ed25519.verify vfKey bs s
 
-newPrivateKey:: IO SignKey
-newPrivateKey = SCH.newPrivateKey ed25519
+newKeyPair :: IO KeyPair
+newKeyPair = uncurry KeyPair <$> Ed25519.newKeyPair
 
-publicKey :: SignKey -> VerifyKey
-publicKey = SCH.publicKey ed25519
+{-# WARNING randomKeyPair "Not cryptographically secure. DO NOT USE IN PRODUCTION." #-}
+randomKeyPair :: RandomGen g => g -> (KeyPair, g)
+randomKeyPair g = let ((signKey, verifyKey), g') = Ed25519.randomKeyPair g
+                  in (KeyPair{..}, g')
 
-schemeId :: SCH.SchemeId
-schemeId = SCH.schemeId ed25519
-
-
-
-
-newKeyPair :: IO SCH.KeyPair
-newKeyPair = do sk <- newPrivateKey
-                let pk = publicKey sk in 
-                    return (SCH.KeyPair sk pk)
-
-randomKeyPair :: RandomGen g => g -> (SCH.KeyPair, g)
-randomKeyPair = Ed25519.randomKeyPair
-
+{-# WARNING genKeyPair "Not cryptographically secure. DO NOT USE IN PRODUCTION." #-}
 genKeyPair :: Gen KeyPair
 genKeyPair = fst . randomKeyPair . mkStdGen <$> arbitrary

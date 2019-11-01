@@ -8,6 +8,8 @@ module Concordium.Crypto.VRF(
     SecretKey,
     newPrivKey,
     pubKey,
+    withPublicKey,
+    withSecretKey,
     KeyPair(..),
     Hash,
     Proof,
@@ -178,8 +180,8 @@ instance Eq SecretKey where
 
 -- |A VRF key pair.
 data KeyPair = KeyPair {
-    privateKey :: SecretKey,
-    publicKey :: PublicKey
+    privateKey :: !SecretKey,
+    publicKey :: !PublicKey
 } deriving (Eq, Show)
 
 instance Serialize KeyPair where

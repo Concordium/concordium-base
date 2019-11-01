@@ -1,7 +1,7 @@
 module ConcordiumTests.Crypto.Ed25519DlogProofs where
 
 import           Concordium.Crypto.Ed25519Signature
-import           Concordium.Crypto.SignatureScheme (KeyPair(..)) 
+import           Concordium.Crypto.SignatureScheme (KeyPair(..), VerifyKey(..)) 
 import qualified Concordium.Crypto.VRF as VRF
 import Concordium.Crypto.Proofs
 import qualified Data.ByteString as BS
@@ -11,7 +11,7 @@ import Test.QuickCheck.Monadic
 import Test.Hspec
 
 forallKP :: Testable prop => (KeyPair -> prop) -> Property
-forallKP = forAll genKeyPair
+forallKP = forAll (uncurry KeyPairEd25519 <$> genKeyPair)
 
 forallKPVRF :: Testable prop => (VRF.KeyPair -> prop) -> Property
 forallKPVRF = forAll arbitrary
@@ -24,7 +24,7 @@ testProveVerifyEd25519 = forallKP $ ck
         ck kp challenge' = monadicIO $ do
           let challenge = BS.pack challenge'
           Just proof <- run (proveDlog25519KP challenge kp)
-          return (checkDlog25519ProofSig challenge (verifyKey kp) proof === True)
+          return (checkDlog25519ProofSig challenge (VerifyKeyEd25519 (verifyKey kp)) proof === True)
 
 testProveVerifyWrongChallengeEd25519 :: Property
 testProveVerifyWrongChallengeEd25519 = forallKP $ ck
@@ -34,7 +34,7 @@ testProveVerifyWrongChallengeEd25519 = forallKP $ ck
           let challenge = BS.pack challenge'
           let challenge1 = BS.pack challenge1'
           Just proof <- run (proveDlog25519KP challenge kp)
-          return (challenge /= challenge1 ==> not (checkDlog25519ProofSig challenge1 (verifyKey kp) proof))
+          return (challenge /= challenge1 ==> not (checkDlog25519ProofSig challenge1 (VerifyKeyEd25519 (verifyKey kp)) proof))
 
 
 testProveVerifyEd25519VRF :: Property

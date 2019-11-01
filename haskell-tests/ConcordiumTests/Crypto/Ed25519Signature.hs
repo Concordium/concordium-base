@@ -1,7 +1,7 @@
 module ConcordiumTests.Crypto.Ed25519Signature where
 
-import           Concordium.Crypto.Ed25519Signature
-import           Concordium.Crypto.SignatureScheme (KeyPair(..)) 
+import qualified Concordium.Crypto.Ed25519Signature as SigEd25519
+import           Concordium.Crypto.SignatureScheme
 import Data.Serialize
 import qualified Data.ByteString as BS
 import Data.Word
@@ -9,7 +9,7 @@ import Test.QuickCheck
 import Test.Hspec
 
 forallKP :: Testable prop => (KeyPair -> prop) -> Property
-forallKP = forAll genKeyPair
+forallKP = forAll (uncurry KeyPairEd25519 <$> SigEd25519.genKeyPair)
 
 testSerializeSignKeyEd25519 :: Property
 testSerializeSignKeyEd25519 = forallKP $ ck
@@ -34,7 +34,7 @@ testSerializeSignatureEd25519 = forallKP $ ck
     where
         ck :: KeyPair -> [Word8] -> Property
         ck kp doc0 = let doc = BS.pack doc0 in
-                        let sig = sign   kp doc in
+                        let sig = sign kp doc in
                             Right sig === runGet get (runPut $ put sig)
 
 testNoDocCollisionEd25519 :: Property
@@ -52,7 +52,7 @@ testSignVerifyEd25519 = forallKP $ ck
     where
         ck :: KeyPair -> [Word8] -> Bool
         ck kp doc0 = let doc = BS.pack doc0 in
-                        verify  (verifyKey kp) doc (sign  kp doc)
+                        verify (VerifyKeyEd25519 (verifyKey kp)) doc (sign  kp doc)
 
 
 testSignVerifyEd25519DocumentCollision :: Property
@@ -64,7 +64,7 @@ testSignVerifyEd25519DocumentCollision = forallKP $ ck
                           -- if doc0 == doc1
           let doc = BS.pack doc0
               sig = sign kp doc
-          in doc0 /= doc1 ==> not (verify (verifyKey kp) (BS.pack doc1) sig)
+          in doc0 /= doc1 ==> not (verify (VerifyKeyEd25519 (verifyKey kp)) (BS.pack doc1) sig)
 
 
 tests :: Spec

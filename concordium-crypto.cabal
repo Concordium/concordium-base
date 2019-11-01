@@ -30,7 +30,6 @@ Library
                    Concordium.Crypto.BlsSignature
                    Concordium.Crypto.BlockSignature
                    Concordium.Crypto.SignatureScheme
-                   Concordium.Crypto.AccountSignatureSchemes
                    Concordium.Crypto.VRF
                    Data.FixedByteString
                    Data.Base58Encoding
@@ -64,6 +63,8 @@ Library
                 , text >= 1.2.3.1
                 , primitive == 0.6.*
                 , deepseq >= 1.4
+                , ghc-prim >= 0.5.3
+                , constraints >= 0.10
 
   extra-libraries: ec_vrf_ed25519
                    sha_2,

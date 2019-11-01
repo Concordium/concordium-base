@@ -16,28 +16,80 @@ pub fn generate_keypair() -> Keypair {
 // foreign function interfacee
 
 #[no_mangle]
-pub extern "C" fn eddsa_priv_key(secret_key_bytes: &mut [u8; SECRET_KEY_LENGTH]) -> i32 {
+pub extern "C" fn eddsa_priv_key() -> *const SecretKey {
     let mut csprng = thread_rng();
     let sk = SecretKey::generate(&mut csprng);
-    secret_key_bytes.copy_from_slice(&sk.to_bytes());
-    1
+    Box::into_raw(Box::new(sk))
 }
 
 // error encodeing
 //-1 bad input
 #[no_mangle]
-pub extern "C" fn eddsa_pub_key(
-    secret_key_bytes: &[u8; 32],
-    public_key_bytes: &mut [u8; 32],
-) -> i32 {
-    let res_sk = SecretKey::from_bytes(secret_key_bytes);
-    if res_sk.is_err() {
-        return -1;
-    };
-    let sk = res_sk.unwrap();
-    let pk = PublicKey::from(&sk);
-    public_key_bytes.copy_from_slice(&pk.to_bytes());
-    1
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn eddsa_pub_key(sk_ptr: *const SecretKey) -> *const PublicKey {
+    let sk = from_ptr!(sk_ptr);
+    Box::into_raw(Box::new(PublicKey::from(sk)))
+}
+
+macro_free_ffi!(eddsa_sign_free, SecretKey);
+macro_free_ffi!(eddsa_public_free, PublicKey);
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn eddsa_sign_to_bytes(
+    input_ptr: *mut SecretKey,
+    output_len: *mut size_t,
+) -> *const u8 {
+    let input = from_ptr!(input_ptr);
+    let bytes = input.to_bytes().to_vec();
+    unsafe { *output_len = bytes.len() as size_t }
+    let ret_ptr = bytes.as_ptr();
+    ::std::mem::forget(bytes);
+    ret_ptr
+}
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn eddsa_public_to_bytes(
+    input_ptr: *mut PublicKey,
+    output_len: *mut size_t,
+) -> *const u8 {
+    let input = from_ptr!(input_ptr);
+    let bytes = input.to_bytes().to_vec();
+    unsafe { *output_len = bytes.len() as size_t }
+    let ret_ptr = bytes.as_ptr();
+    ::std::mem::forget(bytes);
+    ret_ptr
+}
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn eddsa_public_from_bytes(
+    input_bytes: *mut u8,
+    input_len: size_t,
+) -> *const PublicKey {
+    let len = input_len as usize;
+    let bytes = slice_from_c_bytes!(input_bytes, len);
+    let e = PublicKey::from_bytes(bytes);
+    match e {
+        Ok(r) => Box::into_raw(Box::new(r)),
+        Err(_) => ::std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn eddsa_sign_from_bytes(
+    input_bytes: *mut u8,
+    input_len: size_t,
+) -> *const SecretKey {
+    let len = input_len as usize;
+    let bytes = slice_from_c_bytes!(input_bytes, len);
+    let e = SecretKey::from_bytes(bytes);
+    match e {
+        Ok(r) => Box::into_raw(Box::new(r)),
+        Err(_) => ::std::ptr::null(),
+    }
 }
 
 #[no_mangle]
@@ -45,19 +97,18 @@ pub extern "C" fn eddsa_pub_key(
 pub extern "C" fn eddsa_sign(
     message: *const u8,
     len: usize,
-    secret_key_bytes: &[u8; 32],
-    public_key_bytes: &[u8; 32],
+    sk_ptr: *const SecretKey,
+    pk_ptr: *const PublicKey,
     signature_bytes: &mut [u8; SIGNATURE_LENGTH],
 ) {
-    let sk = SecretKey::from_bytes(secret_key_bytes).expect("bad secret key bytes");
-    let pk = PublicKey::from_bytes(public_key_bytes).expect("bad public key bytes");
+    let sk = from_ptr!(sk_ptr);
+    let pk = from_ptr!(pk_ptr);
     let data: &[u8] = slice_from_c_bytes!(message, len);
-    let expanded_sk = ExpandedSecretKey::from(&sk);
+    let expanded_sk = ExpandedSecretKey::from(sk);
     let signature = expanded_sk.sign(data, &pk);
     signature_bytes.copy_from_slice(&signature.to_bytes());
 }
 // Error encoding
-//-2 bad public key
 //-1 badly formatted signature
 // 0 verification failed
 #[no_mangle]
@@ -65,20 +116,15 @@ pub extern "C" fn eddsa_sign(
 pub extern "C" fn eddsa_verify(
     message: *const u8,
     len: usize,
-    public_key_bytes: &[u8; 32],
+    pk_ptr: *const PublicKey,
     signature_bytes: &[u8; SIGNATURE_LENGTH],
 ) -> i32 {
-    let pk_res = PublicKey::from_bytes(public_key_bytes);
-    if pk_res.is_err() {
-        return -2;
-    };
     let sig_res = Signature::from_bytes(signature_bytes);
     if sig_res.is_err() {
         return -1;
     };
-
-    let pk = pk_res.unwrap();
     let sig = sig_res.unwrap();
+    let pk = from_ptr!(pk_ptr);
     let data: &[u8] = slice_from_c_bytes!(message, len);
     match pk.verify(data, &sig) {
         Ok(_) => 1,

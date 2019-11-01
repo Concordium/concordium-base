@@ -127,7 +127,6 @@ pub extern "C" fn verify_cdi_ffi(
     }
 
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
-
     match CredDeploymentInfo::<Bls12, G1, AttributeKind>::from_bytes(&mut Cursor::new(&cdi_bytes)) {
         None => -9,
         Some(cdi) => {

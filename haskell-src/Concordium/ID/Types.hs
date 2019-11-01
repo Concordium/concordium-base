@@ -118,12 +118,6 @@ instance ToJSON IdentityProviderIdentity where
 instance FromJSON IdentityProviderIdentity where
   parseJSON v = IP_ID <$> parseJSON v
 
--- Signing key for accounts (eddsa key)
-type AccountSigningKey = SignKey
-
--- Verification key for accounts (eddsa key)
-type AccountVerificationKey = VerifyKey
-
 -- Account signatures (eddsa key)
 type AccountSignature = Signature
 
@@ -344,11 +338,11 @@ instance Serialize ChainArData where
     put ardIdCredPubShareNumber
   get = ChainArData <$> get <*> get <*> get
 
+type AccountVerificationKey = VerifyKey
+
 data CredentialDeploymentValues = CredentialDeploymentValues {
-  -- |Signature scheme of the account to which this credential is deployed.
-  cdvSigScheme :: SchemeId,
   -- |The verification (public) key of the account to which this credential is
-  -- deployed.
+  -- deployed, it records its own signature scheme as well.
   cdvVerifyKey  :: AccountVerificationKey,
   -- |Registration id of __this__ credential.
   cdvRegId     :: CredentialRegistrationID,
@@ -365,20 +359,17 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
 
 instance ToJSON CredentialDeploymentValues where
   toJSON CredentialDeploymentValues{..} =
-    object [
-    "schemeId" .= cdvSigScheme,
-    "verifyKey" .= cdvVerifyKey,
+    object (verifyKeyToJSONPairs cdvVerifyKey ++ [
     "regId" .= cdvRegId,
     "ipIdentity" .= cdvIpId,
     "revocationThreshold" .= cdvThreshold,
     "arData" .= cdvArData,
     "policy" .= cdvPolicy
-    ]
+    ])
 
 instance FromJSON CredentialDeploymentValues where
   parseJSON = withObject "CredentialDeploymentValues" $ \v -> do
-    cdvSigScheme <- v .: "schemeId"
-    cdvVerifyKey <- v .: "verifyKey"
+    cdvVerifyKey <- parseJSON (Object v)
     cdvRegId <- v .: "regId"
     cdvIpId <- v .: "ipIdentity"
     cdvThreshold <- v.: "revocationThreshold"
@@ -415,7 +406,6 @@ putPolicyItem PolicyItem{..} =
 
 instance Serialize CredentialDeploymentValues where
   get = do
-    cdvSigScheme <- get
     cdvVerifyKey <- get
     cdvRegId <- get
     cdvIpId <- get
@@ -426,7 +416,6 @@ instance Serialize CredentialDeploymentValues where
     return CredentialDeploymentValues{..}
 
   put CredentialDeploymentValues{..} =
-    put cdvSigScheme <>
     put cdvVerifyKey <>
     put cdvRegId <>
     put cdvIpId <>
@@ -467,7 +456,6 @@ instance FromJSON CredentialDeploymentInformation where
 -- Designed to be used with 'runGetPartial'.
 getCDIPartial :: Get CredentialDeploymentValues
 getCDIPartial = do
-  cdvSigScheme <- get
   cdvVerifyKey <- get
   cdvRegId <- get
   cdvIpId <- get

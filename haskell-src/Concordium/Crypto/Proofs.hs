@@ -1,9 +1,18 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.Proofs
-  (Dlog25519Proof, checkDlog25519ProofSig, checkDlog25519ProofVRF, randomProof, proveDlog25519KP, proveDlog25519VRF)
+  (Dlog25519Proof,
+   checkDlog25519ProofSig,
+   checkDlog25519ProofVRF,
+   checkDlog25519ProofBlock,
+   randomProof,
+   proveDlog25519KP,
+   proveDlog25519VRF,
+   proveDlog25519Block
+  )
   where
 
 import Foreign.Ptr
@@ -17,7 +26,6 @@ import Data.Word
 import Data.Int
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Unsafe as BS
-import qualified Data.ByteString.Short as BSS
 
 import System.IO.Unsafe
 import System.Random
@@ -25,6 +33,7 @@ import System.Random
 import qualified Data.Aeson as AE
 import qualified Concordium.Crypto.VRF as VRF
 import qualified Concordium.Crypto.SignatureScheme as Sig
+import qualified Concordium.Crypto.BlockSignature as BlockSig
 
 data Dlog25519ProofLength
 
@@ -73,11 +82,12 @@ checkDlog25519Proof challenge publicKey (Dlog25519Proof proof) = unsafeDupablePe
        r <- verifyDlogFFI (castPtr c_ptr) (fromIntegral c_len) (castPtr pk_ptr) proof_ptr
        return (r == 1)
 
+-- |NB: This crucially relies on key serialization being consistent.
 checkDlog25519ProofSig :: BS.ByteString -- ^The challenge prefix to use
                        -> Sig.VerifyKey -- ^The VRF public key.
                        -> Dlog25519Proof -- ^Purported proof.
                        -> Bool
-checkDlog25519ProofSig challenge (Sig.VerifyKey vfkey) = checkDlog25519Proof challenge (BSS.fromShort vfkey)
+checkDlog25519ProofSig challenge (Sig.VerifyKeyEd25519 vfkey) = checkDlog25519Proof challenge (encode vfkey)
 
 
 checkDlog25519ProofVRF :: BS.ByteString -- ^The challenge prefix to use
@@ -85,6 +95,13 @@ checkDlog25519ProofVRF :: BS.ByteString -- ^The challenge prefix to use
                        -> Dlog25519Proof -- ^Purported proof.
                        -> Bool
 checkDlog25519ProofVRF challenge = checkDlog25519Proof challenge . encode
+
+-- |NB: This crucially relies on key serialization being consistent.
+checkDlog25519ProofBlock :: BS.ByteString -- ^The challenge prefix to use
+                         -> BlockSig.VerifyKey -- ^The VRF public key.
+                         -> Dlog25519Proof -- ^Purported proof.
+                         -> Bool
+checkDlog25519ProofBlock challenge vfkey = checkDlog25519Proof challenge (encode vfkey)
 
 proveDlog25519 :: BS.ByteString -> BS.ByteString -> BS.ByteString -> IO (Maybe Dlog25519Proof)
 proveDlog25519 challenge publicKey secretKey = 
@@ -98,10 +115,17 @@ proveDlog25519 challenge publicKey secretKey =
          if r == 0 then return (Just (Dlog25519Proof bs))
          else return Nothing
 
+-- |NB: Key serialization must not add length information.
 proveDlog25519KP :: BS.ByteString -> Sig.KeyPair -> IO (Maybe Dlog25519Proof)
-proveDlog25519KP challenge (Sig.KeyPair (Sig.SignKey sigKey) (Sig.VerifyKey vfKey)) =
-  proveDlog25519 challenge (BSS.fromShort vfKey) (BSS.fromShort sigKey)
+proveDlog25519KP challenge Sig.KeyPairEd25519{..} =
+  proveDlog25519 challenge (encode verifyKey) (encode signKey)
 
+-- |NB: Key serialization must not add length information.
+proveDlog25519Block :: BS.ByteString -> BlockSig.KeyPair -> IO (Maybe Dlog25519Proof)
+proveDlog25519Block challenge BlockSig.KeyPair{..} =
+  proveDlog25519 challenge (encode verifyKey) (encode signKey)
+
+-- |NB: Key serialization must not add length information.
 proveDlog25519VRF :: BS.ByteString -> VRF.KeyPair -> IO (Maybe Dlog25519Proof)
 proveDlog25519VRF challenge (VRF.KeyPair sigKey vfKey) =
   proveDlog25519 challenge (encode vfKey) (encode sigKey)

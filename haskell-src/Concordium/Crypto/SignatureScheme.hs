@@ -1,27 +1,17 @@
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia, OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia, OverloadedStrings, LambdaCase #-}
 module Concordium.Crypto.SignatureScheme where
 import Data.Word
 import Data.Serialize
 import Data.Aeson hiding (encode)
+import Data.Aeson.Types
 import Concordium.Crypto.ByteStringHelpers
 import Prelude hiding (drop)
+import Test.QuickCheck
 
+import qualified Concordium.Crypto.Ed25519Signature as Ed25519
 import Data.ByteString (ByteString)
 import Data.ByteString.Short (ShortByteString)
-
-newtype SignKey = SignKey ShortByteString
-    deriving (Eq)
-    deriving Show via ByteStringHex
-    deriving Serialize via Short65K
-    deriving FromJSON via Short65K
-    deriving ToJSON via Short65K
-
-newtype VerifyKey = VerifyKey ShortByteString
-    deriving (Eq, Ord)
-    deriving Show via ByteStringHex
-    deriving Serialize via Short65K
-    deriving FromJSON via Short65K
-    deriving ToJSON via Short65K
 
 newtype Signature = Signature ShortByteString
     deriving (Eq, Ord)
@@ -33,6 +23,46 @@ newtype Signature = Signature ShortByteString
 data SchemeId = Ed25519
     deriving (Eq, Show)
 
+-- |The reason for these enumerations is to support multiple different signature
+-- schemes in the future.
+data VerifyKey = VerifyKeyEd25519 !Ed25519.VerifyKey
+    deriving(Eq, Show)
+
+verifyKeyToJSONPairs :: VerifyKey -> [Pair]
+verifyKeyToJSONPairs (VerifyKeyEd25519 vfKey) =
+  ["schemeId" .= Ed25519
+  ,"verifyKey" .= vfKey]
+
+instance ToJSON VerifyKey where
+  toJSON = object . verifyKeyToJSONPairs
+
+instance FromJSON VerifyKey where
+  parseJSON (Object obj) = do
+    schemeId <- obj .: "schemeId"
+    case schemeId of
+      Ed25519 -> VerifyKeyEd25519 <$> obj .: "verifyKey"
+  parseJSON v@(String _) = VerifyKeyEd25519 <$> parseJSON v -- default Ed25519 signature scheme
+  parseJSON v = typeMismatch "Expecting either an object or base16 string encoding." v
+
+-- Serialize the key as well as the scheme
+instance Serialize VerifyKey where
+    put (VerifyKeyEd25519 vfKey) = put Ed25519 <> put vfKey
+    get = do
+      schemeId <- get
+      case schemeId of
+        Ed25519 -> VerifyKeyEd25519 <$> get
+
+-- |NB: The Eq instance should only be used for testing, it is not guaranteed to
+-- be side-channel resistant.
+data KeyPair = KeyPairEd25519 {
+  signKey :: !Ed25519.SignKey,
+  verifyKey :: !Ed25519.VerifyKey
+  }
+  deriving(Eq, Show)
+
+correspondingVerifyKey :: KeyPair -> VerifyKey
+correspondingVerifyKey KeyPairEd25519{..} = VerifyKeyEd25519 verifyKey
+
 instance ToJSON SchemeId where
   toJSON Ed25519 = String "Ed25519"
 
@@ -43,11 +73,6 @@ instance FromJSON SchemeId where
       "Ed25519" -> return Ed25519
       err -> fail $ "Unknown signature scheme '" ++ err ++ "'."
 
-data KeyPair = KeyPair {
-      signKey :: !SignKey,
-      verifyKey :: !VerifyKey
- } deriving (Eq, Show)
-
 instance Serialize SchemeId where
     put x = putWord8 (fromIntegral (fromEnum x))
     get = do e <- getWord8 
@@ -56,22 +81,55 @@ instance Serialize SchemeId where
                Nothing -> fail "Unknown signature scheme."
 
 instance Serialize KeyPair where
-    put (KeyPair sk vk) = put sk <> put vk
-    get = KeyPair <$> get <*> get
+    put KeyPairEd25519{..} = put Ed25519 <> put signKey <> put verifyKey
+    get = do
+      get >>= \case
+        Ed25519 -> do
+          signKey <- get
+          verifyKey <- get
+          return KeyPairEd25519{..}
+
+keyPairToJSONPairs :: KeyPair -> [Pair]
+keyPairToJSONPairs KeyPairEd25519{..} = [
+  "schemeId" .= Ed25519,
+  "signKey" .= signKey,
+  "verifyKey" .= verifyKey
+  ]
+
+instance ToJSON KeyPair where
+    toJSON = object . keyPairToJSONPairs
+
+instance FromJSON KeyPair where
+    parseJSON = withObject "KeyPair" $ \obj -> do
+      schemeId <- obj .:? "schemeId" .!= Ed25519
+      case schemeId of
+        Ed25519 -> do
+          signKey <- obj .: "signKey"
+          verifyKey <- obj .: "verifyKey"
+          return KeyPairEd25519{..}
 
 instance Enum SchemeId where 
     toEnum n = case toScheme (fromIntegral n) of 
                  Just x -> x
-                 Nothing -> errorWithoutStackTrace "SchemeId.toEnum: bad argument"
+                 Nothing -> error "SchemeId.toEnum: bad argument"
     fromEnum Ed25519 = 0
 
 toScheme :: Word8 -> Maybe SchemeId
 toScheme n | n == 0 = Just Ed25519
            | otherwise = Nothing
 
-data SignatureScheme = SigScheme {schemeId :: SchemeId,
-                                  sign :: KeyPair-> ByteString -> Signature ,
-                                  verify :: VerifyKey -> ByteString -> Signature -> Bool,
-                                  newPrivateKey :: IO SignKey,
-                                  publicKey :: SignKey -> VerifyKey
-                                 }
+sign :: KeyPair -> ByteString -> Signature
+sign KeyPairEd25519{..} = Signature . Ed25519.sign signKey verifyKey 
+
+verify :: VerifyKey -> ByteString -> Signature -> Bool
+verify (VerifyKeyEd25519 vfKey) bs (Signature s) = Ed25519.verify vfKey bs s
+
+newKeyPair :: SchemeId -> IO KeyPair
+newKeyPair Ed25519 = do
+  (signKey, verifyKey) <- Ed25519.newKeyPair
+  return KeyPairEd25519{..}
+
+
+{-# WARNING genKeyPair "Not crypographically secure, DO NOT USE IN PRODUCTION." #-}
+genKeyPair :: Gen KeyPair
+genKeyPair = uncurry KeyPairEd25519 <$> Ed25519.genKeyPair

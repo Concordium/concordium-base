@@ -10,6 +10,7 @@ import Concordium.Crypto.SignatureScheme
 import qualified Concordium.Crypto.SHA224 as SHA224
 import qualified Data.ByteString as BS
 import qualified Data.FixedByteString as FBS
+import Data.Serialize(encode)
 import System.IO.Unsafe
 import Foreign.Ptr
 import Foreign.C.Types
@@ -17,7 +18,6 @@ import Data.Int
 import Data.ByteString.Unsafe
 
 import Data.ByteString as BS
-import Data.ByteString.Short as BSS
 
 import Concordium.ID.Parameters
 import Concordium.ID.IdentityProvider
@@ -55,10 +55,9 @@ accountScheme (AccountAddress s) = toScheme (FBS.getByte s 0)
 --  * compute SHA-224 hash of the verification key
 --  * take the first 20 bytes of the resulting string
 --  * and prepend a one byte identifier of the signature scheme.
-accountAddress :: AccountVerificationKey -> SchemeId -> AccountAddress 
-accountAddress (VerifyKey x) y =  AccountAddress (FBS.fromByteString $ BS.cons sch (BS.take (accountAddressSize - 1) bs))
+accountAddress :: VerifyKey -> AccountAddress 
+accountAddress (VerifyKeyEd25519 vfKey) =  AccountAddress (FBS.fromByteString $ (encode Ed25519) <> (BS.take (accountAddressSize - 1) bs))
     where 
-        (SHA224.Hash r) = SHA224.hash (BSS.fromShort x)
-        bs = FBS.toByteString r
-        sch:: Word8
-        sch = fromIntegral $ fromEnum y
+      -- NB: It is quite important that encode does not put the length information up front for the key.
+      (SHA224.Hash r) = SHA224.hash (encode vfKey)
+      bs = FBS.toByteString r

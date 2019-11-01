@@ -590,9 +590,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
         let mut v = self.acc_scheme_id.to_bytes().to_vec();
         // NOTE: Serialize the public key with length to match what is in Haskell code
         // and in order to accept different signature schemes in the future.
-        let sig_bytes = self.acc_pub_key.to_bytes();
-        v.extend_from_slice(&(sig_bytes.len() as u16).to_be_bytes());
-        v.extend_from_slice(&sig_bytes);
+        v.extend_from_slice(&self.acc_pub_key.to_bytes());
         v.extend_from_slice(&self.reg_id.curve_to_bytes());
         v.extend_from_slice(&self.ip_identity.to_bytes());
         v.extend_from_slice(&self.threshold.to_bytes());
@@ -605,9 +603,14 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        // FIXME: Mirror the key structure as on Haskell side.
+        // That will make deserialization easier.
         let acc_scheme_id = SchemeId::from_bytes(cur)?;
-        let sig_length = cur.read_u16::<BigEndian>().ok()?;
-        let mut buf = vec![0; sig_length as usize];
+        // FIXME: Support additional signature schemes.
+        if acc_scheme_id != SchemeId::Ed25519 {
+            return None;
+        };
+        let mut buf = vec![0; acc_sig_scheme::PUBLIC_KEY_LENGTH as usize];
         cur.read_exact(&mut buf).ok()?;
         let acc_pub_key = acc_sig_scheme::PublicKey::from_bytes(&buf).ok()?;
         let reg_id = curve_serialization::read_curve::<C>(cur).ok()?;
