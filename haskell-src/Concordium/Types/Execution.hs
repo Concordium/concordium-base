@@ -302,11 +302,11 @@ data ValidResult =
 
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
-data RejectReason = ModuleNotWF !(TypingError Core.UA) -- ^Error raised when typechecking of the module has failed.
-                  | MissingImports !(TypingError Core.UA)  -- ^Error when there were missing imports (determined before typechecking).
+data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module has failed.
+                  | MissingImports  -- ^Error when there were missing imports (determined before typechecking).
                   | ModuleHashAlreadyExists !Core.ModuleRef  -- ^As the name says.
-                  | MessageTypeError !(TypingError Core.UA) -- ^Message to the receive method is of the wrong type.
-                  | ParamsTypeError !(TypingError Core.UA) -- ^Parameters of the init method are of the wrong type.
+                  | MessageTypeError -- ^Message to the receive method is of the wrong type.
+                  | ParamsTypeError -- ^Parameters of the init method are of the wrong type.
                   | InvalidAccountReference !AccountAddress -- ^Account does not exists.
                   | InvalidContractReference !Core.ModuleRef !Core.TyName -- ^Reference to a non-existing contract.
                   | InvalidModuleReference !Core.ModuleRef   -- ^Reference to a non-existing module.
