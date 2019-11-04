@@ -231,10 +231,8 @@ data Account = Account {
   -- if the key exists. Accounts start with no encryption key, and once the key
   -- is chosen it cannot be changed.
   ,_accountEncryptionKey :: !(Maybe AccountEncryptionKey)
-  -- |The key used to verify transaction signatures.
+  -- |The key used to verify transaction signatures, it records the signature scheme used as well.
   ,_accountVerificationKey :: !AccountVerificationKey
-  -- |Signature scheme of the account.
-  ,_accountSignatureScheme :: SchemeId
   -- |FIXME: Once it is clearer what policies are and how they affect execution
   -- we might expand credentials into a more efficient data structure allowing
   -- more efficient checking of credentials/policies, but until then we just
@@ -263,19 +261,18 @@ instance S.Serialize Account where
                     S.put _accountEncryptedAmount <>
                     S.put _accountEncryptionKey <>
                     S.put _accountVerificationKey <>
-                    S.put _accountSignatureScheme <>
                     S.put _accountCredentials <>
                     S.put _accountStakeDelegate <>
                     S.put (Set.toAscList _accountInstances)
-  get = Account <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> (Set.fromList <$> S.get)
+  get = Account <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> (Set.fromList <$> S.get)
 
 instance HashableTo Hash.Hash Account where
   getHash = Hash.hash . S.runPut . S.put
 
 -- |Create an empty account with the given public key.
-newAccount :: AccountVerificationKey -> SchemeId -> Account
-newAccount _accountVerificationKey _accountSignatureScheme = Account {
-        _accountAddress = AH.accountAddress _accountVerificationKey _accountSignatureScheme,
+newAccount :: AccountVerificationKey -> Account
+newAccount _accountVerificationKey = Account {
+        _accountAddress = AH.accountAddress _accountVerificationKey,
         _accountNonce = minNonce,
         _accountAmount = 0,
         _accountEncryptedAmount = [],

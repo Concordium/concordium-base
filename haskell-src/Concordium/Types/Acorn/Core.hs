@@ -389,11 +389,14 @@ deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Co
 -- messages the contract can receive is inferred from the type of the receive
 -- method. Moreover, the contract can "implement" or be an instance of a number
 -- of constraints (by name).
-data Contract annot a = Contract {
+data Contract annot origin = Contract {
   cName :: !TyName
-  , cInit :: !(Expr annot a)
-  , cReceive :: !(Expr annot a)
-  , cInstances :: ![ConstraintImpl annot a]
+  , cParamTy :: !(Type annot origin)
+  , cReceiveTy :: !(Type annot origin)
+  , cModelTy :: !(Type annot origin)
+  , cInit :: !(Expr annot origin)
+  , cReceive :: !(Expr annot origin)
+  , cInstances :: ![ConstraintImpl annot origin]
   }
   deriving(Generic)
 
@@ -949,6 +952,9 @@ putConstraintDecl ConstraintDecl{..} = do
 putContract :: P.Putter (Contract annot ModuleName)
 putContract Contract{..} = do
   putTyName cName
+  putType cParamTy
+  putType cReceiveTy
+  putType cModelTy
   putExpr cInit
   putExpr cReceive
   putLength cInstances
@@ -968,6 +974,7 @@ putConstraintRef (ImportedCR cname origin) = P.putWord8 1 >> putTyName cname >> 
 
 putModule :: P.Putter (Module annot)
 putModule Module{..} = do
+  P.putWord32be mVersion
   putLength mImports
   mapM_ (\Import{..} -> putModuleRef iModule >> putModuleName iAs) mImports
   putLength mDataTypes
@@ -978,7 +985,6 @@ putModule Module{..} = do
   mapM_ (\Definition{..} -> putName dName <> putVisibility dVis <> putType dType <> putExpr dExpr) mDefs
   putLength mContracts
   mapM_ putContract mContracts
-  P.putWord32be mVersion
 
 
 -- * Deserialization.
@@ -1184,6 +1190,9 @@ getDefinition = do
 getContract :: G.Get (Contract annot ModuleName)
 getContract = do
   cName <- getTyName
+  cParamTy <- getType
+  cReceiveTy <- getType
+  cModelTy <- getType
   cInit <- getExpr
   cReceive <- getExpr
   l <- getLength
@@ -1192,6 +1201,7 @@ getContract = do
 
 getModule :: G.Get (Module annot)
 getModule = do
+  mVersion <- G.getWord32be
   lIm <- getLength
   mImports <- replicateM lIm getImport
   ldt <- getLength
@@ -1202,7 +1212,6 @@ getModule = do
   mDefs <- replicateM ldefs getDefinition
   lcont <- getLength
   mContracts <- replicateM lcont getContract
-  mVersion <- G.getWord32be
   return $ Module{..}
 
 -- * Deriving module reference from serialization
