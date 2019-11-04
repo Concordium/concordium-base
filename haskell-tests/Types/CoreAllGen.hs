@@ -228,6 +228,9 @@ genContract :: Gen (Contract UA ModuleName)
 genContract = sized $ \n -> do
   cName <- genTyName
   cInit <- genExpr
+  cParamTy <- genType
+  cReceiveTy <- genType
+  cModelTy <- genType
   cReceive <- genExpr
   l <- choose(0, n)
   cInstances <- vectorOf l genConstraintImpl
