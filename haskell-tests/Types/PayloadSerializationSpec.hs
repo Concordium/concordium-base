@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-deprecations #-}
 module Types.PayloadSerializationSpec where
 
 import Test.Hspec
