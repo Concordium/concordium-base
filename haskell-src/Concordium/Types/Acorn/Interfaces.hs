@@ -96,13 +96,19 @@ emptyInterface mref = Interface mref 0 Map.empty Map.empty Map.empty Map.empty M
 
 type ModuleInterfaces annot = HashMap Core.ModuleRef (Interface annot)
 
--- |Errors which can occur during typechecking.
+data InternalizeError = ModuleNotImported !Core.ModuleName
+    deriving(Eq, Show)
+
+-- |Errors which can occur during typechecking. Used for local development only.
 data TypingError annot =
+                 -- |The module with the given name (referred to from an expression)
+                 -- is not imported (not part of the given interface's import map).
+                 InternalizeFailed !InternalizeError
                  -- |A declared datatype is instantiated with
                  -- a wrong number of arguments (too few or too many). The first
                  -- argument is the number of given parameters, the second the
                  -- expected number.
-                   IncorrectNumberOfTypeParameters Int Int
+                 | IncorrectNumberOfTypeParameters Int Int
                  -- |In an application for terms, the given term cannot be applied to
                  -- an argument because the term (atom) is not of a function type
                  -- but of the given type.
@@ -153,9 +159,6 @@ data TypingError annot =
                  -- |The data type with the given name is not defined in the
                  -- given module.
                  | UndefinedQualifiedDatatype Core.ModuleRef Core.TyName
-                 -- |The module with the given name (referred to from an expression)
-                 -- is not imported (not part of the given interface's import map).
-                 | ModuleNotImported Core.ModuleName
                  -- |The referenced local definition does not exist in the current module.
                  | LocalNameNotInScope Core.Name
                  -- |The referenced imported definition does not exist in the given module.
@@ -260,7 +263,10 @@ data TypingError annot =
 deriving instance Core.AnnotContext Eq annot => Eq (TypingError annot)
 deriving instance Core.AnnotContext Show annot => Show (TypingError annot)
 
-instance Core.AnnotContext S.Serialize annot => S.Serialize (TypingError annot)
+-- |Run a computation (i.e., typechecker), but in case of an error hide the
+-- actual error and only report that a failure occurred via a 'Maybe'.
+typeHidingErrors :: MaybeT m a -> m (Maybe a)
+typeHidingErrors c = runMaybeT c
 
 -- * Datatypes involved in execution of terms.
 
@@ -684,6 +690,10 @@ class Monad m => LinkerMonad annot m | m -> annot where
   putLinkedExpr :: Core.ModuleRef -> Core.Name -> LinkedExprWithDeps annot -> m ()
 
 class Monad m => TypecheckerMonad annot m | m -> annot where
+  typingError :: TypingError annot -> m a
+  default typingError :: MonadError (TypingError annot) m => TypingError annot -> m a
+  typingError = throwError
+
   getExportedTermType :: Core.ModuleRef -> Core.Name -> m (Maybe (Type annot Core.ModuleRef))
   getExportedType :: Core.ModuleRef -> Core.TyName -> m (Maybe (DataTypeInterface annot))
   getExportedConstraints :: Core.ModuleRef -> Core.TyName -> m (Maybe (Core.ConstraintDecl annot Core.ModuleRef))
@@ -750,4 +760,26 @@ instance (StaticEnvironmentMonad annot m, annot ~ Core.UA) => TypecheckerMonad a
   getExportedConstraints mref n = 
     getInterface mref >>=
       \case Nothing -> throwError $ ModuleNotExists mref
+            Just iface -> return $ Map.lookup n (exportedConstraints iface)
+
+instance (StaticEnvironmentMonad annot m, annot ~ Core.UA) => TypecheckerMonad annot (MaybeT m) where
+  {-# INLINE typingError #-}
+  typingError _ = mzero
+
+  {-# INLINE getExportedTermType #-}
+  getExportedTermType mref n =
+    getInterface mref >>=
+      \case Nothing -> mzero
+            Just iface -> return $ Map.lookup n (exportedTerms iface)
+
+  {-# INLINE getExportedType #-}
+  getExportedType mref n =
+    getInterface mref >>=
+      \case Nothing -> mzero
+            Just iface -> return $ Map.lookup n (exportedTypes iface)
+
+  {-# INLINE getExportedConstraints #-}
+  getExportedConstraints mref n =
+    getInterface mref >>=
+      \case Nothing -> mzero
             Just iface -> return $ Map.lookup n (exportedConstraints iface)
