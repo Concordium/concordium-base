@@ -252,6 +252,7 @@ proofToHash prf =  Hash (FBS.unsafeCreate $ \x ->
 -- NB: This is redundant if only functions in this module are used to construct
 -- public keys. Deserialization makes sure that the public key is always valid,
 -- and given a valid secret key the derived public key is always valid as well.
+{-# DEPRECATED verifyKey "This is no longer needed. Only valid keys can be constructed." #-}
 verifyKey :: PublicKey -> Bool
 verifyKey pk = unsafeDupablePerformIO $!
     withPublicKey pk rs_verify_key
