@@ -145,7 +145,7 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
         hasher2.input(&*tmp_u.curve_to_bytes());
         hash.copy_from_slice(hasher2.result().as_slice());
         match <P::G_2 as Curve>::bytes_to_scalar(&mut Cursor::new(&hash)) {
-            Err(_) => {}
+            Err(_) => {} // loop again
             Ok(x) => {
                 if !(x == <P::G_2 as Curve>::Scalar::zero()) {
                     challenge = x;
@@ -204,7 +204,6 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             .plus_point(&g.mul_by_scalar(&gxs_wit[i]))
             .plus_point(&h.mul_by_scalar(&pedersen_rands_wit[i]));
         if v_i != vxs[i] {
-            println!("v_{} false", i);
             return false;
         }
     }
