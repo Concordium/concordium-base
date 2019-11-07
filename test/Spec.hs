@@ -4,6 +4,7 @@ import qualified Types.PayloadSerializationSpec(tests)
 import qualified Types.SerializationSpec(testExpr, testModule, testContractAddress)
 import qualified Types.ArithmeticSpec(tests)
 import qualified Types.TypesSpec(tests)
+import qualified Types.TransactionSerializationSpec(tests)
 
 import Test.Hspec
 import Test.Hspec.QuickCheck
@@ -27,3 +28,5 @@ main = hspec $ parallel $ do
          Types.TypesSpec.tests
 
          Types.ArithmeticSpec.tests
+
+         Types.TransactionSerializationSpec.tests
