@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wno-deprecations #-}
 module ConcordiumTests.Crypto.VRF where
 
 import qualified Concordium.Crypto.VRF as VRF

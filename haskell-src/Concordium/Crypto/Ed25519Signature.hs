@@ -26,6 +26,7 @@ import           Foreign.C.Types
 import           Test.QuickCheck (Gen, Arbitrary(..))
 import           System.Random
 import Data.Int
+import Control.DeepSeq
 
 foreign import ccall unsafe "eddsa_priv_key" genPrivateKey :: IO (Ptr SignKey)
 foreign import ccall unsafe "eddsa_pub_key" derivePublicFFI :: Ptr SignKey -> IO (Ptr VerifyKey)
@@ -103,6 +104,12 @@ instance AE.ToJSON VerifyKey where
 
 instance AE.FromJSON VerifyKey where
   parseJSON = AE.withText "Verification key in base16" deserializeBase16
+
+-- Instances for benchmarking
+instance NFData SignKey where
+    rnf = (`seq` ())
+instance NFData VerifyKey where
+    rnf = (`seq` ())
 
 withSignKey :: SignKey -> (Ptr SignKey -> IO b) -> IO b
 withSignKey (SignKey sk) = withForeignPtr sk

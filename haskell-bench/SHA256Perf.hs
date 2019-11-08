@@ -5,11 +5,11 @@ import Criterion.Main
 import Criterion.Types
 
 import Data.ByteString.Char8 as BS
-import Data.ByteString.Lazy as BSL
+-- import Data.ByteString.Lazy as BSL
 
 import Concordium.Crypto.SHA256
 
-
+setup :: Int -> IO (BS.ByteString, BS.ByteString, BS.ByteString, BS.ByteString)
 setup n = do
   let header = BS.replicate 100 '0'
   let sig = BS.replicate 50 '1'
@@ -19,13 +19,13 @@ setup n = do
 
 hashAll :: Int -> Benchmark
 hashAll n =
-  env (setup n) $ \ ~(header, sig, body, full) ->
+  env (setup n) $ \ ~(_header, _sig, _body, full) ->
           bench "all" $ nf (\d -> hashToByteString (hash d)) full
 
 
 hashCompound :: Int -> Benchmark
 hashCompound n =
-  env (setup n) $ \ ~(header, sig, body, full) ->
+  env (setup n) $ \ ~(header, sig, body, _full) ->
           bench "compound" $ nf (\(h, s, b) -> hashToByteString (hash (hashToByteString (hash h) <> hashToByteString (hash s) <> hashToByteString (hash b)))) (header, sig, body)
 
 

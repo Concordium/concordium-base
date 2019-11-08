@@ -5,35 +5,35 @@ import Criterion.Main
 import Criterion.Types
 
 import qualified Data.ByteString.Char8 as BS
-import Data.ByteString.Short as BSS
+-- import Data.ByteString.Short as BSS
 
 import Concordium.Crypto.SignatureScheme
-import Concordium.Crypto.Ed25519Signature as S
+-- import Concordium.Crypto.Ed25519Signature as S
 
 -- setupEnv :: Int -> IO (SignKey, VerifyKey, ByteString)
-setupSignEnv :: Int -> IO (ShortByteString, ShortByteString, BS.ByteString)
+setupSignEnv :: Int -> IO (KeyPair, BS.ByteString)
 setupSignEnv n = do
   let doc = BS.replicate n '0'
-  (KeyPair (SignKey sk) (VerifyKey pk)) <- newKeyPair
-  return (sk, pk, doc)
+  kp <- newKeyPair Ed25519
+  return (kp, doc)
 
-setupVerifyEnv :: Int -> IO (ShortByteString, ShortByteString, BS.ByteString)
+setupVerifyEnv :: Int -> IO (VerifyKey, Signature, BS.ByteString)
 setupVerifyEnv n = do
   let doc = BS.replicate n '8'
-  kp@(KeyPair _ (VerifyKey pk)) <- newKeyPair
-  let Signature s = S.sign kp doc
-  return (pk, s, doc)
+  kp <- newKeyPair Ed25519
+  let s = sign kp doc
+  return (correspondingVerifyKey kp, s, doc)
 
 signN :: Int -> Benchmark
 signN n =
-    env (setupSignEnv n) $ \ ~(sk, pk, doc) ->
-          bench ("len = " ++ show n) $ nf (\x -> let Signature s = S.sign (KeyPair (SignKey sk) (VerifyKey pk)) x in s) doc
+    env (setupSignEnv n) $ \ ~(kp, doc) ->
+          bench ("len = " ++ show n) $ nf (\x -> let Signature s = sign kp x in s) doc
 
 
 verifyN :: Int -> Benchmark
 verifyN n =
-  env (setupVerifyEnv n) $ \ ~(pk, s, doc) ->
-          bench ("len = " ++ show n) $ nf (\d -> S.verify (VerifyKey pk) d (Signature s)) doc
+  env (setupVerifyEnv n) $ \ ~(vk, s, doc) ->
+          bench ("len = " ++ show n) $ nf (\d -> verify vk d s) doc
 
 main :: IO ()
 main = defaultMainWith (defaultConfig { timeLimit = 15 }) [

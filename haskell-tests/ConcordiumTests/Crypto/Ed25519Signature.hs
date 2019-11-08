@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-deprecations #-}
 module ConcordiumTests.Crypto.Ed25519Signature where
 
 import qualified Concordium.Crypto.Ed25519Signature as SigEd25519

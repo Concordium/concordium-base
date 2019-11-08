@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-deprecations #-}
 module ConcordiumTests.Crypto.Ed25519DlogProofs where
 
 import           Concordium.Crypto.Ed25519Signature

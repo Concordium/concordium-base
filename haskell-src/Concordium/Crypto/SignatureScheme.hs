@@ -1,5 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia, OverloadedStrings, LambdaCase #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia, OverloadedStrings, LambdaCase, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
+{-# OPTIONS_GHC -Wno-deprecations #-}
 module Concordium.Crypto.SignatureScheme where
 import Data.Word
 import Data.Serialize
@@ -8,6 +10,8 @@ import Data.Aeson.Types
 import Concordium.Crypto.ByteStringHelpers
 import Prelude hiding (drop)
 import Test.QuickCheck
+import Control.DeepSeq
+import GHC.Generics
 
 import qualified Concordium.Crypto.Ed25519Signature as Ed25519
 import Data.ByteString (ByteString)
@@ -15,6 +19,7 @@ import Data.ByteString.Short (ShortByteString)
 
 newtype Signature = Signature ShortByteString
     deriving (Eq, Ord)
+    deriving newtype NFData
     deriving Show via ByteStringHex
     deriving Serialize via Short65K
     deriving FromJSON via Short65K
@@ -26,7 +31,7 @@ data SchemeId = Ed25519
 -- |The reason for these enumerations is to support multiple different signature
 -- schemes in the future.
 data VerifyKey = VerifyKeyEd25519 !Ed25519.VerifyKey
-    deriving(Eq, Show)
+    deriving(Eq, Show, Generic, NFData)
 
 verifyKeyToJSONPairs :: VerifyKey -> [Pair]
 verifyKeyToJSONPairs (VerifyKeyEd25519 vfKey) =
@@ -58,7 +63,7 @@ data KeyPair = KeyPairEd25519 {
   signKey :: !Ed25519.SignKey,
   verifyKey :: !Ed25519.VerifyKey
   }
-  deriving(Eq, Show)
+  deriving(Eq, Show, Generic, NFData)
 
 correspondingVerifyKey :: KeyPair -> VerifyKey
 correspondingVerifyKey KeyPairEd25519{..} = VerifyKeyEd25519 verifyKey

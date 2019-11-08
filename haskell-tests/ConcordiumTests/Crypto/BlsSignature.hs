@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-deprecations #-}
 module ConcordiumTests.Crypto.BlsSignature where
 
 import Concordium.Crypto.BlsSignature
