@@ -32,8 +32,6 @@ import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Execution
 
-import Data.Int
-
 newtype TransactionSignature = TransactionSignature { tsSignature :: Signature }
   deriving (Eq, Show)
 
