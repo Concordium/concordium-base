@@ -7,44 +7,28 @@ import Criterion.Types
 
 import qualified Data.ByteString.Char8 as BS
 
-import Concordium.Crypto.FFIDataTypes
-import Concordium.ID.Types
 import Concordium.ID.Account
+import Concordium.ID.Parameters
+import Concordium.ID.IdentityProvider
 
 import Data.Serialize
 
 filePath :: FilePath
 filePath = "testdata/cdi-example.bin"
 
-type Keys = (ElgamalGen, PedersenKey, ElgamalGen, AnonymityRevokerPublicKey, IdentityProviderPublicKey)
+getData :: Get (GlobalContext, IpInfo)
+getData = getTwoOf get get
 
-getData :: Get Keys
-getData = do
-  dlogBase <- get
-  cmmKey <- get
-  arGen <- get
-  arPubKey <- get
-  ipVerifyKey <- get
-  return (dlogBase, cmmKey, arGen, arPubKey, ipVerifyKey)
-
-readData :: BS.ByteString -> Either String (Keys, BS.ByteString)
+readData :: BS.ByteString -> Either String ((GlobalContext, IpInfo), BS.ByteString)
 readData bs = loop (runGetPartial getData bs)
   where loop (Fail err _ ) = Left err
         loop (Partial k) = loop (k BS.empty)
         loop (Done r rest) = Right (r, rest)
 
-testVerify ::
-  Keys
-  -> CredentialDeploymentInformationBytes
-  -> Bool
-testVerify (a, b, c, d, e) bs = verifyCredential a b e c d bs
+testVerify :: (GlobalContext, IpInfo) -> CredentialDeploymentInformationBytes -> Bool
+testVerify = uncurry verifyCredential
 
-test :: BS.ByteString -> Either String Bool
-test bs = case readData bs of
-            Left err -> Left err
-            Right (tuple, rest) -> Right (testVerify tuple rest)
-
-setup :: IO (Keys, BS.ByteString)
+setup :: IO ((GlobalContext, IpInfo), BS.ByteString)
 setup = do
   bs <- BS.readFile filePath
   case readData bs of

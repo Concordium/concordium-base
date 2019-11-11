@@ -13,6 +13,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy as BSL
 import Data.Serialize
+import Control.DeepSeq
 
 import qualified Data.Aeson as AE
 
@@ -72,3 +73,7 @@ instance AE.ToJSON GlobalContext where
     case AE.decodeStrict (globalContextToJSON ipinfo) of
       Nothing -> error "Internal error: Rust serialization does not produce valid JSON."
       Just v -> v
+
+-- Instances for benchmarking
+instance NFData GlobalContext where
+    rnf = (`seq` ())

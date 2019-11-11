@@ -1,6 +1,7 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables, ForeignFunctionInterface, DeriveDataTypeable #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 module Data.FixedByteString where
 
 import Data.Data(Typeable, Data)

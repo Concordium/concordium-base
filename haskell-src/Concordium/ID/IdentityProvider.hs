@@ -16,6 +16,7 @@ import qualified Data.ByteString.Lazy as BSL
 import Concordium.ID.Types
 import Data.Serialize
 import System.IO.Unsafe
+import Control.DeepSeq
 
 import qualified Data.Aeson as AE
 
@@ -74,3 +75,7 @@ instance AE.ToJSON IpInfo where
     case AE.decodeStrict (ipInfoToJSON ipinfo) of
       Nothing -> error "Internal error: Rust serialization does not produce valid JSON."
       Just v -> v
+
+-- Instances for benchmarking
+instance NFData IpInfo where
+    rnf = (`seq` ())
