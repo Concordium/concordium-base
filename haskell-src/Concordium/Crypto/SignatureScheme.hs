@@ -43,7 +43,7 @@ instance ToJSON VerifyKey where
 
 instance FromJSON VerifyKey where
   parseJSON (Object obj) = do
-    schemeId <- obj .: "schemeId"
+    schemeId <- obj .:? "schemeId" .!= Ed25519
     case schemeId of
       Ed25519 -> VerifyKeyEd25519 <$> obj .: "verifyKey"
   parseJSON v@(String _) = VerifyKeyEd25519 <$> parseJSON v -- default Ed25519 signature scheme
