@@ -30,7 +30,6 @@ genAccountAddress = do
 
 genTransactionHeader :: Gen TransactionHeader
 genTransactionHeader = do
-  thSenderKey' <- correspondingVerifyKey <$> genKeyPair
   thSenderKey <- correspondingVerifyKey <$> genKeyPair
   thPayloadSize <- (`mod` 5000) <$> arbitrary
   thNonce <- Nonce <$> arbitrary
