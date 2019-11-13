@@ -8,7 +8,7 @@ stages:
   variables:
     LD_LIBRARY_PATH: "/usr/local/lib"
     GIT_SUBMODULE_STRATEGY: recursive
-    LD_LIBRARY_PATH: "${CI_PROJECT_DIR}/crypto/rust-src/target/release
+    LD_LIBRARY_PATH: "${CI_PROJECT_DIR}/crypto/rust-src/target/release"
   before_script:
     - rustc --version && cargo --version
     - stack exec -- ghc --print-libdir
