@@ -36,9 +36,8 @@ stages:
 "stack:test":
   extends: .generic-test
   stage: test
-  before_script:
-   - stack exec -- ghc --print-libdir
   script: 
+    - stack exec -- ghc --print-libdir
     - ( cd rust-src && cargo build --release )
     - stack test
 
