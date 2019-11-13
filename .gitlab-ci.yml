@@ -35,6 +35,11 @@ stages:
 "stack:test":
   extends: .generic-test
   stage: test
+  cache:
+    paths:
+      - .stack
+      - .stack-work
+      - target
   script: 
     - stack exec -- ghc --print-libdir
     - ( cd rust-src && cargo build --release )
