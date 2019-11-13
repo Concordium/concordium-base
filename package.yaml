@@ -75,5 +75,4 @@ tests:
     - QuickCheck >= 2.12
     - hspec-expectations >= 0.8
     - containers
-    - base58string == 0.10.*
     - random
