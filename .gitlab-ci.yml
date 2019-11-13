@@ -11,7 +11,6 @@ stages:
     LD_LIBRARY_PATH: "${CI_PROJECT_DIR}/crypto/rust-src/target/release"
   before_script:
     - rustc --version && cargo --version
-    - stack exec -- ghc --print-libdir
     - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/.insteadOf ssh://git@gitlab.com:22/
 
 .generic-lint:
@@ -37,6 +36,8 @@ stages:
 "stack:test":
   extends: .generic-test
   stage: test
+  before_script:
+   - stack exec -- ghc --print-libdir
   script: 
     - ( cd rust-src && cargo build --release )
     - stack test
