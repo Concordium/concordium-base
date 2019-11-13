@@ -43,7 +43,6 @@ stages:
       - .stack-work
       - target
   script: 
-    - stack exec -- ghc --print-libdir
     - ( cd rust-src && cargo build --release )
     - stack test
 
