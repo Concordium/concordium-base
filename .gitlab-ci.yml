@@ -7,7 +7,9 @@ stages:
 .generic:
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
-    LD_LIBRARY_PATH: "${CI_PROJECT_DIR}/crypto/rust-src/target/release:$LD_LIBRARY_PATH"
+    LD_LIBRARY_PATH: "${CI_PROJECT_DIR}/rust-src/target/release:$LD_LIBRARY_PATH"
+    STACK_ROOT: "${CI_PROJECT_DIR}/.stack"
+    RUSTFLAGS: -Dwarnings
   before_script:
     - rustc --version && cargo --version
     - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/.insteadOf ssh://git@gitlab.com:22/
