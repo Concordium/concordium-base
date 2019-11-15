@@ -798,7 +798,8 @@ fn handle_start_ip(matches: &ArgMatches) {
             .default(1)
             .interact()
         {
-            Threshold((threshold + 1) as u32) // +1 because the indexing of the selection starts at 1
+            Threshold((threshold + 1) as u32) // +1 because the indexing of the
+                                              // selection starts at 1
         } else {
             let d = max(1, num_ars - 1);
             println!(

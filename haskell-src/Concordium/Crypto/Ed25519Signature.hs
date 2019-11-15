@@ -1,9 +1,8 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# OPTIONS_HADDOCK not-home #-}
 -- |This module provides a prototype implementation of 
 -- EDDSA scheme of Curve Ed25519 
 --  IRTF RFC 8032
