@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveGeneric, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -40,8 +41,6 @@ instance S.Serialize TransactionSignature where
   put TransactionSignature{..} = S.put tsSignature
   get = TransactionSignature <$> S.get
 
-type PayloadSize = Word32
-
 type TransactionTime = Word64
 
 -- |Get time in seconds since the unix epoch.
@@ -53,9 +52,10 @@ utcTimeToTransactionTime = floor . utcTimeToPOSIXSeconds
 
 -- | Data common to all transaction types.
 --
---    * INVARIANT: @thSender = AH.accountAddress thSenderKey@.
---    * The last field is strictly redundant, but is here to avoid needless recomputation. In
+--  * INVARIANT: @thSender = 'AH.accountAddress' thSenderKey@.
+--  * The last field is strictly redundant, but is here to avoid needless recomputation. In
 --    serialization we do not output it, and when deserializing we compute it from other data.
+--  * @SPEC: <$DOCS/Transactions#transaction-header>
 data TransactionHeader = TransactionHeader {
     -- |Verification key of the sender.
     thSenderKey :: !IDTypes.AccountVerificationKey,
@@ -77,29 +77,37 @@ instance Eq TransactionHeader where
                thPayloadSize th1 == thPayloadSize th2
 
 -- |NB: Relies on the verify key serialization being defined as specified on the wiki.
+--
+-- * @SPEC: <$DOCS/Transactions#transaction-header-serialization>
+-- * @COMMENT: Address is not serialized since it is a derived field. At deserialization is it is computed.
 instance S.Serialize TransactionHeader where
   put TransactionHeader{..} =
       S.put thSenderKey <>
       S.put thNonce <>
       S.put thGasAmount <>
-      S.putWord32be thPayloadSize
+      S.put thPayloadSize
 
   get = do
     thSenderKey <- S.get
     thNonce <- S.get
     thGasAmount <- S.get
-    thPayloadSize <- S.getWord32be
+    thPayloadSize <- S.get
     return $ makeTransactionHeader thSenderKey thPayloadSize thNonce thGasAmount
 
 type TransactionHash = H.Hash
 
 -- |Transaction without the metadata.
+--
+-- * @SPEC: <$DOCS/Transactions#serialization-format-transactions>
 data BareTransaction = BareTransaction{
   btrSignature :: !TransactionSignature,
   btrHeader :: !TransactionHeader,
   btrPayload :: !EncodedPayload
   } deriving(Eq, Show)
 
+-- |Serialization of transactions
+--
+-- * @SPEC: <$DOCS/Transactions#serialization-format-transactions>
 instance S.Serialize BareTransaction where
   put BareTransaction{..} =
     S.put btrSignature <>
@@ -132,7 +140,7 @@ data Transaction = Transaction {
   } deriving(Show) -- show is needed in testing
 
 -- |NOTE: Eq and Ord instances based on hash comparison!
--- FIXME? Possibly we want to be defensive and check true equality in case hashes are equal.
+-- FIXME: Possibly we want to be defensive and check true equality in case hashes are equal.
 instance Eq Transaction where
   t1 == t2 = trHash t1 == trHash t2
 
@@ -141,6 +149,8 @@ instance Ord Transaction where
   compare t1 t2 = compare (trHash t1) (trHash t2)
 
 -- |Deserialize a transaction, checking its signature on the way.
+--
+-- * @SPEC: <$DOCS/Transactions#serialization-format-transactions>
 getVerifiedTransaction :: TransactionTime -> S.Get Transaction
 getVerifiedTransaction arTime = do
   t@Transaction{trBareTransaction=BareTransaction{..},..} <- getUnverifiedTransaction arTime
@@ -149,6 +159,8 @@ getVerifiedTransaction arTime = do
   return t
 
 -- |Deserialize a transaction, but don't check it's signature.
+--
+-- * @SPEC: <$DOCS/Transactions#serialization-format-transactions>
 getUnverifiedTransaction :: TransactionTime -> S.Get Transaction
 getUnverifiedTransaction trArrivalTime = do
   sigStart <- S.bytesRead
@@ -168,6 +180,7 @@ getUnverifiedTransaction trArrivalTime = do
   let trSize = bodySize + sigSize
   return Transaction{trBareTransaction=BareTransaction{..},..}
 
+-- |Compute the derived field from the minimal fields, and make a header.
 makeTransactionHeader ::
   IDTypes.AccountVerificationKey
   -> PayloadSize
@@ -178,6 +191,7 @@ makeTransactionHeader thSenderKey thPayloadSize thNonce thGasAmount =
   TransactionHeader{thSender = AH.accountAddress thSenderKey,..}
 
 -- |Make a transaction out of minimal data needed.
+-- This computes the derived fields, in particular the hash of the transaction.
 makeTransaction :: TransactionTime -> TransactionSignature -> TransactionHeader -> EncodedPayload -> Transaction
 makeTransaction trArrivalTime btrSignature btrHeader btrPayload =
     let txBodyBytes = S.runPut $ S.put btrHeader <> putPayload btrPayload
@@ -187,9 +201,9 @@ makeTransaction trArrivalTime btrSignature btrHeader btrPayload =
         trBareTransaction = BareTransaction{..}
     in Transaction{..}
 
--- |FIXME: This method is inefficient (it creates temporary bytestrings which are
--- probably not necessary if we had a more appropriate sign function.)
--- |Sign a transaction with the given header and body. Uses serialization as defined on the wiki.
+-- |Sign a transaction with the given header and body.
+--
+-- * @SPEC: <$DOCS/Transactions#transaction-signature>
 signTransaction :: KeyPair -> TransactionHeader -> EncodedPayload -> BareTransaction
 signTransaction keys btrHeader btrPayload =
   let body = S.runPut (S.put btrHeader <> putPayload btrPayload)
@@ -200,6 +214,8 @@ signTransaction keys btrHeader btrPayload =
   in BareTransaction{..}
 
 -- |Verify that the given transaction was signed by the sender's key.
+--
+-- * @SPEC: <$DOCS/Transactions#transaction-signature>
 verifyTransactionSignature :: TransactionData msg => msg -> Bool
 verifyTransactionSignature tx =
   let bodyHash = H.hashToByteString (transactionHash tx)
@@ -369,7 +385,7 @@ type instance Index TransactionOutcomes = TransactionHash
 type instance IxValue TransactionOutcomes = ValidResult
 
 instance Ixed TransactionOutcomes where
-  ix idx f outcomes@TransactionOutcomes{..} = -- result type is f TransactionOutcomes
+  ix idx f outcomes@TransactionOutcomes{..} =
     case outcomeIndex ^. at idx of
       Nothing -> pure outcomes
       Just i -> (\ov -> TransactionOutcomes{outcomeValues=ov,..}) <$> ix i f outcomeValues
