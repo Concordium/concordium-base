@@ -31,7 +31,7 @@ genAccountAddress = do
 genTransactionHeader :: Gen TransactionHeader
 genTransactionHeader = do
   thSenderKey <- correspondingVerifyKey <$> genKeyPair
-  thPayloadSize <- (`mod` 5000) <$> arbitrary
+  thPayloadSize <- PayloadSize . (`mod` 5000) <$> arbitrary
   thNonce <- Nonce <$> arbitrary
   thGasAmount <- Energy <$> arbitrary
   return $ makeTransactionHeader thSenderKey thPayloadSize thNonce thGasAmount

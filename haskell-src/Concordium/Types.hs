@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -138,7 +139,7 @@ getModuleRef :: G.Get ModuleRef
 getModuleRef = ModuleRef <$> S.get
 
 putModuleRef :: P.Putter ModuleRef
-putModuleRef (ModuleRef mref) = do
+putModuleRef (ModuleRef mref) =
   S.put mref
 
 -- |An address is either a contract or account.
@@ -283,6 +284,17 @@ newAccount _accountVerificationKey = Account {
         ..
     }
 
+-- |Size of the transaction payload.
+newtype PayloadSize = PayloadSize Word32
+    deriving (Eq, Show, Ord, Num, Real, Enum, Integral) via Word32
+
+-- |Serialization format as specified
+--
+-- * @SPEC: <$DOCS/Transactions#transaction-header>
+instance S.Serialize PayloadSize where
+  put (PayloadSize n) = S.putWord32be n
+  get = PayloadSize <$> S.getWord32be
+
 -- |Serialized payload of the transaction
 newtype EncodedPayload = EncodedPayload { _spayload :: BSS.ShortByteString }
     deriving(Eq, Show)
@@ -293,8 +305,8 @@ putPayload :: P.Putter EncodedPayload
 putPayload = P.putShortByteString . _spayload
 
 -- |Get payload with given length.
-getPayload :: Word32 -> G.Get EncodedPayload
-getPayload n = EncodedPayload <$> G.getShortByteString (fromIntegral n)
+getPayload :: PayloadSize -> G.Get EncodedPayload
+getPayload (PayloadSize n) = EncodedPayload <$> G.getShortByteString (fromIntegral n)
 
 payloadSize :: EncodedPayload -> Word32
 payloadSize = fromIntegral . BSS.length . _spayload

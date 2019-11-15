@@ -33,6 +33,9 @@ data InternalMessage annot = TSend !ContractAddress !Amount !(Value annot) | TSi
 type Proof = BS.ByteString
 
 -- |The transaction payload. Defines the supported kinds of transactions.
+--
+--  * @SPEC: <$DOCS/Transactions#transaction-body>
+--  * @COMMENT: Serialization format is defined separately, this only defines the datatype.
 data Payload = 
   -- |Put module on the chain.
   DeployModule {
@@ -142,6 +145,9 @@ data Payload =
   | UndelegateStake
   deriving(Eq, Show)
 
+-- |Payload serialization according to
+--
+--  * @SPEC: <$DOCS/Transactions#transaction-body>
 instance S.Serialize Payload where
   put DeployModule{..} =
     P.putWord8 0 <>
