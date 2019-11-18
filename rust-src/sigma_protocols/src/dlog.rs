@@ -64,7 +64,6 @@ pub fn prove_dlog<T: Curve, R: Rng>(
                     witness.add_assign(&rand_scalar);
                     suc = true;
                 } // else loop again
-
             }
         }
     }
