@@ -191,6 +191,7 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         return false;
     }
     let n = comm_vec.len();
+    // FIXME: These assertions should not be here. Intead, verification should fail.
     assert_eq!(gxs_wit.len(), n);
     assert_eq!(pedersen_rands_wit.len(), n);
     assert_eq!(vxs.len(), n);
