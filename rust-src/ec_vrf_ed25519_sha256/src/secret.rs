@@ -253,6 +253,7 @@ impl ExpandedSecretKey {
         message: &[u8],
         rng: &mut R,
     ) -> Proof {
+        // FIXME: This error should be handled gracefully if it can happen.
         let h: EdwardsPoint = public_key.hash_to_curve(message).expect("prove failed");
         // let x = self.mangle_scalar_bits_and_return_scalar(); //secret key
         let x = self.key;
