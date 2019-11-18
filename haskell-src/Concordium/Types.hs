@@ -17,6 +17,7 @@ import Data.Data(Typeable, Data)
 import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
+import qualified Concordium.Crypto.BlsSignature as Bls
 import Concordium.ID.Types
 import qualified Concordium.ID.Account as AH
 import Concordium.Crypto.SignatureScheme(SchemeId)
@@ -69,13 +70,17 @@ type BakerSignVerifyKey = Sig.VerifyKey
 type BakerSignPrivateKey = Sig.KeyPair
 type BakerElectionVerifyKey = VRF.PublicKey
 type BakerElectionPrivateKey = VRF.KeyPair
+type BakerAggregationVerifyKey = Bls.PublicKey
+type BakerAggregationPrivateKey = Bls.SecretKey
 type LotteryPower = Ratio Amount
 type ElectionDifficulty = Double
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
 type VoterVRFPublicKey = VRF.PublicKey
+type VoterAggregationVerifyKey = Bls.PublicKey
 type VoterSignKey = Sig.SignKey
+type VoterAggregationPrivateKey = Bls.SecretKey
 newtype VoterPower = VoterPower Int
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Show, Integral, S.Serialize)
 
