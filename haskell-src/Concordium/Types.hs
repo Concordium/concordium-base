@@ -313,7 +313,7 @@ putPayload = P.putShortByteString . _spayload
 getPayload :: PayloadSize -> G.Get EncodedPayload
 getPayload (PayloadSize n) = EncodedPayload <$> G.getShortByteString (fromIntegral n)
 
-payloadSize :: EncodedPayload -> Word32
+payloadSize :: EncodedPayload -> PayloadSize
 payloadSize = fromIntegral . BSS.length . _spayload
 
 -- *Types that are morally part of the consensus, but need to be exposed in
