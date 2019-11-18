@@ -31,7 +31,7 @@ data SchemeId = Ed25519
 -- |The reason for these enumerations is to support multiple different signature
 -- schemes in the future.
 data VerifyKey = VerifyKeyEd25519 !Ed25519.VerifyKey
-    deriving(Eq, Show, Generic, NFData)
+    deriving(Eq, Ord, Show, Generic, NFData)
 
 verifyKeyToJSONPairs :: VerifyKey -> [Pair]
 verifyKeyToJSONPairs (VerifyKeyEd25519 vfKey) =
