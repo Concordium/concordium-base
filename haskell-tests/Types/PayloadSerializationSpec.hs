@@ -13,6 +13,7 @@ import Data.ByteString.Short as BSS
 
 import Concordium.Types
 import qualified Concordium.Crypto.BlockSignature as BlockSig
+import qualified Concordium.Crypto.BlsSignature as Bls
 import Concordium.Types.Execution
 import Concordium.Types(Amount(..), Address(..))
 import Concordium.ID.Types
@@ -56,6 +57,9 @@ genPolicyItem = do
 genDlogProof :: Gen Dlog25519Proof
 genDlogProof = fst . randomProof . mkStdGen <$> arbitrary
 
+genAggregationVerifykey :: Gen BakerAggregationVerifyKey
+genAggregationVerifykey = Bls.derivePublicKey . fst . Bls.randomSecretKey . mkStdGen <$> arbitrary
+
 genPayload :: Gen Payload
 genPayload = oneof [genDeployModule,
                     genInit,
@@ -70,7 +74,7 @@ genPayload = oneof [genDeployModule,
                     genDelegateStake,
                     genUndelegateStake
                     ]
-  where 
+  where
 --        genCredential = DeployCredential <$> genCredentialDeploymentInformation
 
         genDeployModule = DeployModule <$> genModule
@@ -101,6 +105,7 @@ genPayload = oneof [genDeployModule,
         genAddBaker = do
           abElectionVerifyKey <- VRF.publicKey <$> arbitrary
           abSignatureVerifyKey <- BlockSig.verifyKey <$> BlockSig.genKeyPair
+          abAggregationVerifyKey <- genAggregationVerifykey
           abAccount <- genAddress
           abProofSig <- genDlogProof
           abProofElection <- genDlogProof
