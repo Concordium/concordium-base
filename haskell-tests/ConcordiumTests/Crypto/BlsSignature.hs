@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wno-deprecations #-}
+{-# LANGUAGE BangPatterns #-}
 module ConcordiumTests.Crypto.BlsSignature where
 
 import Concordium.Crypto.BlsSignature
@@ -7,18 +8,15 @@ import Test.QuickCheck
 import Test.Hspec
 import System.Random
 import Data.Serialize
+import Data.List as List
 import qualified Data.Aeson as AE
+import Control.Monad
 
 genSecretKey :: Gen SecretKey
-genSecretKey = fst . randomSecretKey . mkStdGen <$> arbitrary
+genSecretKey = secretKeyGen
 
 genKeyPair :: Gen (SecretKey, PublicKey)
-genKeyPair =
-  let gen = randomSecretKey . mkStdGen
-  in makePair . fst . gen <$> arbitrary
-    where
-      makePair :: SecretKey -> (SecretKey, PublicKey)
-      makePair sk = (sk, derivePublicKey sk)
+genKeyPair = fmap (\sk -> (sk, derivePublicKey sk)) genSecretKey
 
 forAllSK :: Testable prop => (SecretKey -> prop) -> Property
 forAllSK = forAll genSecretKey
