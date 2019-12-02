@@ -243,4 +243,4 @@ randomSecretKey gen = (sk, gen')
 generateSecretKeyFromSeed :: CSize -> SecretKey
 generateSecretKeyFromSeed seed = unsafeDupablePerformIO $ do
   ptr <- generateSecretKeyPtrFromSeed seed
-  (SecretKey <$> newForeignPtr freeSecretKey ptr)
+  SecretKey <$> newForeignPtr freeSecretKey ptr

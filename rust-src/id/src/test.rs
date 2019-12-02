@@ -1,5 +1,6 @@
 use crate::{
-    account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*, types::*,
+    account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*,
+    secret_sharing::Threshold, types::*,
 };
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
@@ -7,11 +8,11 @@ use eddsa_ed25519 as ed25519;
 use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::bls12_381::{Bls12, G1};
 use ps_sig;
-use secret_sharing::secret_sharing::Threshold;
+use std::collections::btree_map::BTreeMap;
 
 use rand::*;
 
-use pedersen_scheme::key as pedersen_key;
+use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
 
 use std::io::Cursor;
 
@@ -20,6 +21,8 @@ type ExampleCurve = G1;
 type ExampleAttribute = AttributeKind;
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
+
+// use std::{io::Write,fs::File};
 
 #[test]
 fn test_pipeline() {
@@ -30,7 +33,7 @@ fn test_pipeline() {
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_ah:   "ACCOUNT_HOLDER".to_owned(),
         id_cred: IdCredentials {
-            id_cred_sec: secret,
+            id_cred_sec: PedersenValue::new(secret),
             id_cred_pub: public,
         },
     };
@@ -122,7 +125,11 @@ fn test_pipeline() {
     let policy = Policy {
         variant,
         expiry: expiry_date,
-        policy_vec: vec![(1, AttributeKind::from(31))],
+        policy_vec: {
+            let mut tree = BTreeMap::new();
+            tree.insert(1u16, AttributeKind::from(31));
+            tree
+        },
         _phantom: Default::default(),
     };
 
@@ -190,8 +197,8 @@ fn test_pipeline() {
     // For now we just check that the last item in the proofs deserialized
     // correctly.
     assert_eq!(
-        des.unwrap().proofs.proof_policy,
-        cdi.proofs.proof_policy,
+        des.unwrap().proofs.proof_reg_id,
+        cdi.proofs.proof_reg_id,
         "It should deserialize back to what we started with."
     );
 

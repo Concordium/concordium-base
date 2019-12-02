@@ -69,7 +69,6 @@ Library
   extra-libraries: ec_vrf_ed25519
                    sha_2,
                    eddsa_ed25519,
-                   sigma_protocols,
                    ffi_helpers,
                    id,
                    aggregate_sig

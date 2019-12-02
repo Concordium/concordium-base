@@ -1,9 +1,4 @@
 // -*- mode: rust; -*-
-//
-// Authors:
-// - bm@concordium.com
-
-//! A known message
 
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
@@ -14,11 +9,49 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
-use crate::errors::{InternalError::CurveDecodingError, *};
+use crate::{
+    errors::{InternalError::CurveDecodingError, *},
+    unknown_message::SigRetrievalRandomness,
+};
 use curve_arithmetic::curve_arithmetic::*;
+use failure::Error;
 use rand::*;
 
-use std::io::Cursor;
+use std::{io::Cursor, ops::Deref};
+
+/// Randomness used to blind a signature.
+#[derive(Debug, Eq)]
+pub struct BlindingRandomness<P: Pairing>(pub P::ScalarField, pub P::ScalarField);
+
+/// Manual implementation to relax the requirements on `P`. The derived
+/// instance would have required P to have `PartialEq`.
+impl<P: Pairing> PartialEq for BlindingRandomness<P> {
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 && self.1 == other.1 }
+}
+
+#[repr(transparent)]
+#[derive(Debug, Eq, PartialEq)]
+/// Type wrapper around a signature, indicating that it is a blinded variant.
+pub struct BlindedSignature<P: Pairing> {
+    pub sig: Signature<P>,
+}
+
+/// This trait allows automatic conversion of &BlindedSignature<P> to
+/// &Signature<P>.
+impl<P: Pairing> Deref for BlindedSignature<P> {
+    type Target = Signature<P>;
+
+    fn deref(&self) -> &Signature<P> { &self.sig }
+}
+
+impl<C: Pairing> BlindedSignature<C> {
+    pub fn to_bytes(&self) -> Box<[u8]> { self.sig.to_bytes() }
+
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let sig = Signature::from_bytes(bytes)?;
+        Ok(BlindedSignature { sig })
+    }
+}
 
 /// A signature
 #[derive(Debug, Clone, Copy)]
@@ -54,6 +87,27 @@ impl<C: Pairing> Signature<C> {
     pub fn arbitrary<T: Rng>(csprng: &mut T) -> Signature<C> {
         // not a proper signature to be used for testing serialization
         Signature(C::G_1::generate(csprng), C::G_1::generate(csprng))
+    }
+
+    /// Retrieves a signature on the original message from the signature on the
+    /// commitment, and the randomness used in the commitment.
+    pub fn retrieve(&self, r: &SigRetrievalRandomness<C>) -> Self {
+        let h = self.0;
+        let hr = h.mul_by_scalar(&r);
+        let b = self.1;
+        Signature(h, b.minus_point(&hr))
+    }
+
+    /// Blind a signature.
+    pub fn blind<R: Rng>(&self, csprng: &mut R) -> (BlindedSignature<C>, BlindingRandomness<C>) {
+        let r = C::generate_non_zero_scalar(csprng);
+        let t = C::generate_non_zero_scalar(csprng);
+        let Signature(a, b) = self;
+        let a_hid = a.mul_by_scalar(&r);
+        let b_hid = b.plus_point(&a.mul_by_scalar(&t)).mul_by_scalar(&r);
+        let sig = Signature(a_hid, b_hid);
+        let randomness = BlindingRandomness(r, t);
+        (BlindedSignature { sig }, randomness)
     }
 }
 

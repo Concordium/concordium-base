@@ -2,19 +2,18 @@ use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use elgamal::cipher::Cipher;
 use hex::{decode, encode};
-use id::{ffi::*, types::*};
+use id::{ffi::*, secret_sharing::*, types::*};
 use pairing::bls12_381::Bls12;
 use ps_sig;
-use secret_sharing::secret_sharing::*;
 
 use chrono::NaiveDateTime;
 
 use serde_json::{json, to_string_pretty, Map, Value};
 
-use pedersen_scheme::{commitment::Commitment, key as pedersen_key};
+use pedersen_scheme::{commitment::Commitment, key as pedersen_key, Value as PedersenValue};
 
 use curve_arithmetic::curve_arithmetic::*;
-use sigma_protocols::{com_enc_eq::*, com_eq, com_eq_different_groups};
+use id::sigma_protocols::{com_enc_eq::*, com_eq, com_eq_different_groups};
 
 use std::{
     convert::TryFrom,
@@ -119,7 +118,9 @@ pub fn chi_to_json<C: Curve>(chi: &CredentialHolderInfo<C>) -> Value {
 
 pub fn json_to_chi<C: Curve>(js: &Value) -> Option<CredentialHolderInfo<C>> {
     let id_cred_pub = C::bytes_to_curve(m_json_decode!(js, "idCredPublic")).ok()?;
-    let id_cred_sec = C::bytes_to_scalar(m_json_decode!(js, "idCredSecret")).ok()?;
+    let id_cred_sec = PedersenValue {
+        value: C::bytes_to_scalar(m_json_decode!(js, "idCredSecret")).ok()?,
+    };
     let id_ah = js["name"].as_str()?;
     let info: CredentialHolderInfo<C> = CredentialHolderInfo {
         id_ah:   id_ah.to_owned(),

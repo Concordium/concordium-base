@@ -101,6 +101,8 @@ impl<C: Pairing> SecretKey<C> {
         Ok(Signature(h, h.mul_by_scalar(&z)))
     }
 
+    // FIXME: Should this not require also a AggregateDLog proof that the user knows
+    // the values being commited to?
     pub fn sign_unknown_message<T>(
         &self,
         message: &UnknownMessage<C>,
@@ -108,11 +110,13 @@ impl<C: Pairing> SecretKey<C> {
     ) -> Signature<C>
     where
         T: Rng, {
+        // FIXME: The one_point here should be part of the secret key, or instance.
+        // Now it appears here and also in deriving the public key, and this is likely
+        // to lead to errors.
         let sk = C::G_1::one_point().mul_by_scalar(&self.1);
-        let r = C::generate_scalar(csprng);
+        let r = C::generate_non_zero_scalar(csprng);
         let a = C::G_1::one_point().mul_by_scalar(&r);
-        let m = message.0;
-        let xmr = sk.plus_point(&m).mul_by_scalar(&r);
+        let xmr = sk.plus_point(&message).mul_by_scalar(&r);
         Signature(a, xmr)
     }
 }

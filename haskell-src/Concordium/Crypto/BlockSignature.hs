@@ -59,4 +59,4 @@ randomKeyPair g = let ((signKey, verifyKey), g') = Ed25519.randomKeyPair g
 
 {-# WARNING genKeyPair "Not cryptographically secure. DO NOT USE IN PRODUCTION." #-}
 genKeyPair :: Gen KeyPair
-genKeyPair = fst . randomKeyPair . mkStdGen <$> arbitrary
+genKeyPair = uncurry KeyPair <$> Ed25519.genKeyPair

@@ -1,7 +1,7 @@
 use crate::errors::{InternalError::CurveDecodingError, *};
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::{curve_arithmetic::*, serialization::*};
 use rand::*;
-use std::io::Cursor;
+use std::{io::Cursor, ops::Deref};
 
 #[derive(Debug)]
 pub struct UnknownMessage<C: Pairing>(pub C::G_1);
@@ -11,6 +11,36 @@ impl<C: Pairing> PartialEq for UnknownMessage<C> {
 }
 
 impl<C: Pairing> Eq for UnknownMessage<C> {}
+
+/// This trait allows automatic conversion of &Value<C> to &C::Scalar.
+impl<P: Pairing> Deref for UnknownMessage<P> {
+    type Target = P::G_1;
+
+    fn deref(&self) -> &P::G_1 { &self.0 }
+}
+
+/// Randomness used to retrieve signature on the message from signature on an
+/// unknown message.
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct SigRetrievalRandomness<P: Pairing> {
+    pub randomness: P::ScalarField,
+}
+
+impl<P: Pairing> Deref for SigRetrievalRandomness<P> {
+    type Target = P::ScalarField;
+
+    fn deref(&self) -> &P::ScalarField { &self.randomness }
+}
+
+impl<P: Pairing> SigRetrievalRandomness<P> {
+    pub fn to_bytes(&self) -> Box<[u8]> { P::G_1::scalar_to_bytes(&self.randomness) }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let scalar = read_curve_scalar::<P::G_1>(cur).ok()?;
+        Some(SigRetrievalRandomness { randomness: scalar })
+    }
+}
 
 impl<C: Pairing> UnknownMessage<C> {
     // turn commitment key into a byte aray

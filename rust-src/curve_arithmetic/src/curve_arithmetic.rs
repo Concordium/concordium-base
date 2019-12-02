@@ -61,6 +61,16 @@ pub trait Curve:
     fn bytes_to_curve_unchecked(b: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError>;
     fn generate<R: Rng>(rng: &mut R) -> Self;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar;
+    /// Generate a non-zero scalar. The default implementation does repeated
+    /// sampling until a non-zero scalar is reached.
+    fn generate_non_zero_scalar<R: Rng>(rng: &mut R) -> Self::Scalar {
+        loop {
+            let s = Self::generate_scalar(rng);
+            if s != Field::zero() {
+                return s;
+            }
+        }
+    }
     fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError>;
     fn hash_to_group(m: &[u8]) -> Self;
 }
@@ -76,7 +86,17 @@ pub trait Pairing: Sized + 'static + Clone {
     fn scalar_to_bytes(s: &Self::ScalarField) -> Box<[u8]>;
     fn bytes_to_scalar(b: &mut Cursor<&[u8]>) -> Result<Self::ScalarField, FieldDecodingError>;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::ScalarField;
-    //    fn target_field_to_bytes(f: &Self::TargetField) -> Box<[u8]>;
+    /// Generate non-zero scalar by repeated sampling. Can be overriden by a
+    /// more efficient implementation.
+    fn generate_non_zero_scalar<R: Rng>(rng: &mut R) -> Self::ScalarField {
+        loop {
+            let s = Self::generate_scalar(rng);
+            if s != Field::zero() {
+                return s;
+            }
+        }
+    }
+    fn target_field_to_bytes(f: &Self::TargetField) -> Box<[u8]>;
     //    fn bytes_to_target_field(b: &[u8]) -> Result<Self::TargetField,
     // FieldDecodingError>;
 }

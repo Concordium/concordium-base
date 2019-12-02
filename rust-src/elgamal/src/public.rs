@@ -31,26 +31,35 @@ use std::io::Cursor;
 
 /// Elgamal public key .
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub struct PublicKey<C: Curve>(pub C);
+pub struct PublicKey<C: Curve> {
+    pub generator: C,
+    pub key:       C,
+}
 
 impl<C: Curve> Debug for PublicKey<C> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        write!(f, "PublicKey({:?})", self.0)
+        write!(f, "PublicKey({:?}, {:?})", self.generator, self.key)
     }
 }
 
 impl<'a, C: Curve> From<&'a SecretKey<C>> for PublicKey<C> {
     /// Derive this public key from its corresponding `SecretKey`.
     fn from(secret_key: &SecretKey<C>) -> PublicKey<C> {
-        let g: C = PublicKey::generator();
-        PublicKey(g.mul_by_scalar(&secret_key.0))
+        let generator: C = PublicKey::generator();
+        let key = generator.mul_by_scalar(&secret_key.scalar);
+        PublicKey { generator, key }
     }
 }
 
 impl<C: Curve> PublicKey<C> {
     /// Convert this public key to a byte array.
     #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> { C::curve_to_bytes(&self.0) }
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut out = Vec::with_capacity(2 * C::GROUP_ELEMENT_LENGTH);
+        out.extend_from_slice(&C::curve_to_bytes(&self.generator));
+        out.extend_from_slice(&C::curve_to_bytes(&self.key));
+        out.into_boxed_slice()
+    }
 
     /// Construct a public key from a slice of bytes.
     ///
@@ -58,19 +67,20 @@ impl<C: Curve> PublicKey<C> {
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, ElgamalError> {
-        let h = C::bytes_to_curve(bytes)?;
-        Ok(PublicKey(h))
+        let generator = C::bytes_to_curve(bytes)?;
+        let key = C::bytes_to_curve(bytes)?;
+        Ok(PublicKey { generator, key })
     }
 
     #[inline]
     /// Encrypt and returned the randomness used. NB: Randomness must be kept
     /// private.
-    pub fn encrypt_rand<T>(&self, csprng: &mut T, m: &Message<C>) -> (Cipher<C>, C::Scalar)
+    pub fn encrypt_rand<T>(&self, csprng: &mut T, m: &Message<C>) -> (Cipher<C>, Randomness<C>)
     where
         T: Rng, {
-        let k = C::generate_scalar(csprng);
-        let g = PublicKey::<C>::generator().mul_by_scalar(&k);
-        let s = self.0.mul_by_scalar(&k).plus_point(&m.0);
+        let k = Randomness::generate(csprng);
+        let g = self.generator.mul_by_scalar(&k.randomness);
+        let s = self.key.mul_by_scalar(&k.randomness).plus_point(&m.value);
         (Cipher(g, s), k)
     }
 
@@ -99,17 +109,20 @@ impl<C: Curve> PublicKey<C> {
     // }
     // }
     pub fn hide(&self, k: &C::Scalar, message: &Message<C>) -> Cipher<C> {
-        let g: C = PublicKey::generator();
-        let t = g.mul_by_scalar(k);
-        let s = self.0.mul_by_scalar(&k).plus_point(&message.0);
+        let t = self.generator.mul_by_scalar(k);
+        let s = self.key.mul_by_scalar(&k).plus_point(&message.value);
         Cipher(t, s)
     }
 
     pub fn hide_binary_exp(&self, h: &C::Scalar, e: bool) -> Cipher<C> {
         if !e {
-            self.hide(h, &Message(C::zero_point()))
+            self.hide(h, &Message {
+                value: C::zero_point(),
+            })
         } else {
-            self.hide(h, &Message(C::one_point()))
+            self.hide(h, &Message {
+                value: C::one_point(),
+            })
         }
     }
 
@@ -118,11 +131,11 @@ impl<C: Curve> PublicKey<C> {
         &self,
         csprng: &mut T,
         e: &C::Scalar,
-    ) -> (Cipher<C>, C::Scalar)
+    ) -> (Cipher<C>, Randomness<C>)
     where
         T: Rng, {
-        let m = PublicKey::<C>::generator().mul_by_scalar(e);
-        self.encrypt_rand(csprng, &Message(m))
+        let value = self.generator.mul_by_scalar(e);
+        self.encrypt_rand(csprng, &Message { value })
     }
 
     pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &C::Scalar) -> Cipher<C>
@@ -141,7 +154,7 @@ impl<C: Curve> PublicKey<C> {
 
     /// TODO: This is a hack to get the prototype working. Abstraction layers
     /// need a rethink.
-    pub fn generator() -> C { C::one_point() }
+    fn generator() -> C { C::one_point() }
 }
 
 #[cfg(feature = "serde")]

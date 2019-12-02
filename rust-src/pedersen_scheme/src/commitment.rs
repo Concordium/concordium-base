@@ -20,6 +20,8 @@ use curve_arithmetic::curve_arithmetic::*;
 
 use std::io::Cursor;
 
+use std::ops::Deref;
+
 /// A Commitment is a group element .
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Commitment<C: Curve>(pub C);
@@ -40,6 +42,15 @@ impl<C: Curve> Commitment<C> {
             Err(_) => Err(CommitmentError(CurveDecodingError)),
         }
     }
+}
+
+/// This trait allows automatic conversion of &Commitment<C> to &C. In
+/// particular this means that we can simply write `c.mul_by_scalar`, for
+/// example.
+impl<C: Curve> Deref for Commitment<C> {
+    type Target = C;
+
+    fn deref(&self) -> &C { &self.0 }
 }
 
 #[cfg(test)]

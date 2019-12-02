@@ -6,7 +6,9 @@ use crate::curve_arithmetic::*;
 use byteorder::{BigEndian, ReadBytesExt};
 use ff::PrimeField;
 use pairing::{
-    bls12_381::{Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2},
+    bls12_381::{
+        Bls12, Fq, FqRepr, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2,
+    },
     CurveAffine, CurveProjective, EncodedPoint, Engine,
 };
 use rand::*;
@@ -593,6 +595,34 @@ impl Pairing for Bls12 {
             Ok(fr) => Ok(fr),
             Err(_) => Err(FieldDecodingError::NotFieldElement),
         }
+    }
+
+    /// This implementation is ad-hoc, using the fact that Fqk is defined
+    /// via that specific tower of extensions (of degrees) 2 -> 3 -> 2,
+    /// and the specific representation of those fields.
+    /// We use big-endian representation all the way down to the field Fq.
+    fn target_field_to_bytes(f: &Self::TargetField) -> Box<[u8]> {
+        // coefficients in the extension F_6
+        let c0_6 = f.c0;
+        let c1_6 = f.c1;
+
+        let coeffs = [
+            // coefficients of c1_6 in the extension F_2
+            c1_6.c2, c1_6.c1, c1_6.c0, // coefficients of c0_6 in the extension F_2
+            c0_6.c2, c0_6.c1, c0_6.c0,
+        ];
+        let mut out = Vec::with_capacity(12 * 48);
+        for p in coeffs.iter() {
+            let repr_c1 = FqRepr::from(p.c1);
+            let repr_c0 = FqRepr::from(p.c0);
+            for d in repr_c1.as_ref().iter() {
+                out.extend_from_slice(&d.to_be_bytes());
+            }
+            for d in repr_c0.as_ref().iter() {
+                out.extend_from_slice(&d.to_be_bytes());
+            }
+        }
+        out.into_boxed_slice()
     }
 }
 

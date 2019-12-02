@@ -16,6 +16,9 @@ libc = "0.2"
 [dependencies.ffi_helpers]
 path = "../ffi_helpers"
 version = "0"
+[dependencies.random_oracle]
+path = "../random_oracle"
+version = "0"
 
 [dev-dependencies]
 criterion = "0.2"

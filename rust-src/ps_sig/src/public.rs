@@ -24,13 +24,19 @@ use crate::secret::*;
 
 use curve_arithmetic::serialization::*;
 
-/// A message
+/// PS public key. The documentation of the fields
+/// assumes the secret key is $(x, y_1, ..., y_n)$ (see specification).
 #[derive(Debug, Clone)]
 pub struct PublicKey<C: Pairing>(
+    /// Generator of G_1
     pub C::G_1,
+    /// Generator of G_2
     pub C::G_2,
+    /// Generator $g_1$ raised to the powers $y_i$
     pub Vec<C::G_1>,
+    /// Generator $g_2$ raised to the powers $y_i$
     pub Vec<C::G_2>,
+    /// Generator $g_2$ raised to the power $x$.
     pub C::G_2,
 );
 
@@ -46,6 +52,7 @@ impl<C: Pairing> PartialEq for PublicKey<C> {
 
 impl<C: Pairing> Eq for PublicKey<C> {}
 
+#[allow(clippy::len_without_is_empty)]
 impl<C: Pairing> PublicKey<C> {
     // turn message vector into a byte aray
     #[inline]
@@ -67,6 +74,9 @@ impl<C: Pairing> PublicKey<C> {
         write_curve_element::<C::G_2>(s, &mut bytes);
         bytes.into_boxed_slice()
     }
+
+    /// Return the number of commitments that can be signed with this key.
+    pub fn len(&self) -> usize { self.2.len() }
 
     /// Construct a message vec from a slice of bytes.
     ///

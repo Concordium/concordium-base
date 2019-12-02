@@ -22,7 +22,7 @@ import qualified Data.ByteString.Unsafe as BS
 import qualified Data.ByteString.Short as BSS
 import           Data.ByteString (ByteString) 
 import           Foreign.C.Types
-import           Test.QuickCheck (Gen, Arbitrary(..))
+import           Test.QuickCheck (Gen, vector)
 import           System.Random
 import Data.Int
 import Control.DeepSeq
@@ -138,7 +138,7 @@ sign signKey verifyKey m = unsafeDupablePerformIO $
         return s
 
 verify :: VerifyKey -> ByteString -> BSS.ShortByteString -> Bool
-verify vf m sig = if BSS.length sig == signatureSize then suc > 0 else False
+verify vf m sig = (BSS.length sig == signatureSize) && (suc > 0)
    where
        suc = unsafeDupablePerformIO $!
                BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
@@ -146,10 +146,6 @@ verify vf m sig = if BSS.length sig == signatureSize then suc > 0 else False
                -- checks the length before dereferencing the data pointer
                withVerifyKey vf $ \verifyKeyPtr ->
                  withByteStringPtrLen sig (\sigPtr sigLen -> verifyFFI (castPtr m') (fromIntegral mlen) verifyKeyPtr sigPtr (fromIntegral sigLen))
-
-{-# WARNING genKeyPair "Not crypographically secure, DO NOT USE IN PRODUCTION." #-}
-genKeyPair :: Gen (SignKey, VerifyKey)
-genKeyPair = fst . randomKeyPair . mkStdGen <$> arbitrary
 
 {-# WARNING randomKeyPair "Not crypographically secure, DO NOT USE IN PRODUCTION." #-}
 randomKeyPair :: RandomGen g => g -> ((SignKey, VerifyKey), g)
@@ -161,3 +157,13 @@ randomKeyPair gen = ((signKey, deriveVerifyKey signKey), gen')
               case decode privKeyBytes of
                 Left _ -> error "Any sequence of bytes is a valid private key in this scheme."
                 Right sk -> sk
+
+
+{-# WARNING genKeyPair "Not crypographically secure, DO NOT USE IN PRODUCTION." #-}
+genKeyPair :: Gen (SignKey, VerifyKey)
+genKeyPair = do
+  privKeyBytes <- BS.pack <$> vector signKeySize
+  let signKey = case decode privKeyBytes of
+                  Left _ -> error "Any sequence of bytes is a valid private key in this scheme."
+                  Right sk -> sk
+  return (signKey, deriveVerifyKey signKey)

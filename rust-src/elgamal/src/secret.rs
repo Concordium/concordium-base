@@ -26,7 +26,10 @@ use std::io::Cursor;
 
 /// elgamal secret  key.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct SecretKey<C: Curve>(pub C::Scalar);
+#[repr(transparent)]
+pub struct SecretKey<C: Curve> {
+    pub scalar: C::Scalar,
+}
 
 // THIS IS COMMENTED FOR NOW FOR COMPATIBILITY WITH BLS CURVE IMPLEMENTATION
 // ONCE WE HAVE TAKEN OVER THE SOURCE OF THE CURVE THIS SHOULD BE IMPLEMENTED
@@ -41,7 +44,7 @@ pub struct SecretKey<C: Curve>(pub C::Scalar);
 impl<C: Curve> SecretKey<C> {
     /// Convert a secret key into bytes
     #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> { C::scalar_to_bytes(&self.0) }
+    pub fn to_bytes(&self) -> Box<[u8]> { C::scalar_to_bytes(&self.scalar) }
 
     /// Construct a `SecretKey` from a slice of bytes.
     ///
@@ -49,20 +52,20 @@ impl<C: Curve> SecretKey<C> {
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<SecretKey<C>, ElgamalError> {
-        let x = C::bytes_to_scalar(bytes)?;
-        Ok(SecretKey(x))
+        let scalar = C::bytes_to_scalar(bytes)?;
+        Ok(SecretKey { scalar })
     }
 
     pub fn decrypt(&self, c: &Cipher<C>) -> Message<C> {
         let x = c.0; // k * g
-        let kag = x.mul_by_scalar(&self.0); // k * a * g
+        let kag = x.mul_by_scalar(&self.scalar); // k * a * g
         let y = c.1; // m + k * a * g
-        let m = y.minus_point(&kag); // m
-        Message(m)
+        let value = y.minus_point(&kag); // m
+        Message { value }
     }
 
     pub fn decrypt_exponent(&self, c: &Cipher<C>) -> C::Scalar {
-        let Message(m) = self.decrypt(c);
+        let m = self.decrypt(c).value;
         let mut a = <C::Scalar as Field>::zero();
         let mut i = C::zero_point();
         let one = C::one_point();
@@ -82,7 +85,9 @@ impl<C: Curve> SecretKey<C> {
     pub fn generate<T>(csprng: &mut T) -> Self
     where
         T: Rng, {
-        SecretKey(C::generate_scalar(csprng))
+        SecretKey {
+            scalar: C::generate_scalar(csprng),
+        }
     }
 }
 

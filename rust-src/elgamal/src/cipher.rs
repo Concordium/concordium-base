@@ -21,10 +21,46 @@ use crate::errors::*;
 use curve_arithmetic::curve_arithmetic::*;
 
 use rand::*;
-use std::io::Cursor;
+use std::{io::Cursor, ops::Deref};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+/// Encrypted message.
 pub struct Cipher<C: Curve>(pub C, pub C);
+
+/// Randomness which was used to encrypt a message.
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[repr(transparent)]
+pub struct Randomness<C: Curve> {
+    pub randomness: C::Scalar,
+}
+
+/// This trait allows automatic conversion of &Randomness<C> to &C::Scalar.
+impl<C: Curve> Deref for Randomness<C> {
+    type Target = C::Scalar;
+
+    fn deref(&self) -> &C::Scalar { &self.randomness }
+}
+
+impl<C: Curve> Randomness<C> {
+    /// Generate a non-zero randomness. Used in encryption.
+    pub fn generate<T>(csprng: &mut T) -> Self
+    where
+        T: Rng, {
+        Randomness {
+            randomness: C::generate_non_zero_scalar(csprng),
+        }
+    }
+
+    /// Convert this message to a byte array.
+    #[inline]
+    pub fn to_bytes(&self) -> Box<[u8]> { C::scalar_to_bytes(&self.randomness) }
+
+    #[inline]
+    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, ElgamalError> {
+        let randomness = C::bytes_to_scalar(bytes)?;
+        Ok(Randomness { randomness })
+    }
+}
 
 impl<C: Curve> Cipher<C> {
     /// Convert this cipher key to a byte array.

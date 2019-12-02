@@ -25,19 +25,24 @@ use curve_arithmetic::Curve;
 use std::io::Cursor;
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Message<C: Curve>(pub C);
+#[repr(transparent)]
+pub struct Message<C: Curve> {
+    pub value: C,
+}
 
 impl<C: Curve> Message<C> {
     // generate random message (for testing)
     pub fn generate<T>(csprng: &mut T) -> Self
     where
         T: Rng, {
-        Message(C::generate(csprng))
+        Message {
+            value: C::generate(csprng),
+        }
     }
 
     /// Convert this message to a byte array.
     #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> { self.0.curve_to_bytes() }
+    pub fn to_bytes(&self) -> Box<[u8]> { self.value.curve_to_bytes() }
 
     /// Construct a message from a slice of bytes.
     ///
@@ -45,8 +50,8 @@ impl<C: Curve> Message<C> {
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, ElgamalError> {
-        let g = C::bytes_to_curve(bytes)?;
-        Ok(Message(g))
+        let value = C::bytes_to_curve(bytes)?;
+        Ok(Message { value })
     }
 }
 
