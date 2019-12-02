@@ -1,7 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.BlsSignature
   (PublicKey, SecretKey, Signature,
-  randomSecretKey, generateSecretKey, derivePublicKey, sign, verify, aggregate, verifyAggregate, emptySignature)
+  randomSecretKey, secretKeyGen, generateSecretKey, derivePublicKey, sign, verify, aggregate, verifyAggregate, emptySignature)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -19,7 +19,7 @@ import System.IO.Unsafe
 import Data.Serialize
 import System.Random
 import qualified Data.Aeson as AE
-
+import Test.QuickCheck
 
 newtype PublicKey = PublicKey (ForeignPtr PublicKey)
 newtype SecretKey = SecretKey (ForeignPtr SecretKey)
@@ -230,11 +230,18 @@ foreign import ccall unsafe "bls_generate_secretkey_from_seed" generateSecretKey
 -- ONLY USED FOR TESTING!!!
 -- provides deterministic key generation for testing purposes.
 {-# WARNING randomSecretKey "Not cryptographically secure." #-}
-randomSecretKey :: RandomGen g => g -> (SecretKey, g)
+randomSecretKey :: (RandomGen g, Show g) => g -> (SecretKey, g)
 randomSecretKey gen = (sk, gen')
   where
     (nextSeed, gen') = random gen
-    sk = generateSecretKeyFromSeed nextSeed
+    sk = generateSecretKeyFromSeed $ (fromIntegral::Int->CSize) nextSeed
+
+-- |DO NOT USE IN PRODUCTION CODE!!!
+-- ONLY USED FOR TESTING!!!
+-- provides deterministic key generation for testing purposes.
+{-# WARNING secretKeyGen "Not cryptographically secure." #-}
+secretKeyGen :: Gen SecretKey
+secretKeyGen = resize (2^30) $ do fst . randomSecretKey . mkStdGen <$> arbitrary
 
 -- |DO NOT USE IN PRODUCTION CODE!!!
 -- ONLY USED FOR TESTING!!!
