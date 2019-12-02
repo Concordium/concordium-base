@@ -20,7 +20,7 @@ foreign import ccall unsafe "free_array_len"
    rs_free_array_len :: Ptr Word8 -> CSize -> IO ()
 
 toBytesHelper ::  (Ptr a -> Ptr CSize -> IO (Ptr Word8)) -> ForeignPtr a -> ByteString
-toBytesHelper f m = unsafeDupablePerformIO $ do
+toBytesHelper f m = unsafeDupablePerformIO $
   withForeignPtr m $
       \m_ptr ->
         alloca $ \len_ptr -> do

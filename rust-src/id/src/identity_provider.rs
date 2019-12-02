@@ -1,12 +1,15 @@
-use crate::types::*;
+use crate::{
+    secret_sharing::{ShareNumber, Threshold},
+    sigma_protocols::{com_enc_eq::*, com_eq::*, com_eq_different_groups::*},
+    types::*,
+};
+use random_oracle::RandomOracle;
+
 use curve_arithmetic::curve_arithmetic::*;
-use elgamal::public::PublicKey;
 use ff::Field;
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use ps_sig;
 use rand::*;
-use secret_sharing::secret_sharing::{ShareNumber, Threshold};
-use sigma_protocols::{com_enc_eq::*, com_eq::*, com_eq_different_groups::*};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Declined(pub Reason);
@@ -62,12 +65,11 @@ pub fn verify_credentials<
     }
 
     let b_111 = verify_com_eq_diff_grps::<P::G_1, C>(
-        &[],
-        &(
-            (commitment_key_sc.0, commitment_key_sc.1),
-            (ar_ck.0, ar_ck.1),
-        ),
-        &(pre_id_obj.cmm_sc.0, pre_id_obj.snd_cmm_sc.0),
+        RandomOracle::empty(),
+        &pre_id_obj.cmm_sc,
+        &pre_id_obj.snd_cmm_sc,
+        &commitment_key_sc,
+        &ar_ck,
         &pre_id_obj.proof_com_eq_sc,
     );
     if !b_111 {
@@ -173,9 +175,14 @@ fn verify_knowledge_of_id_cred_sec<C: Curve>(
     commitment: &Commitment<C>,
     proof: &ComEqProof<C>,
 ) -> bool {
-    let Commitment(c) = commitment;
-    let CommitmentKey(h, g) = ck;
-    verify_com_eq(&[], &(vec![*c], *pk), &(*h, *g, vec![*base]), &proof)
+    verify_com_eq(
+        RandomOracle::empty(),
+        &[*commitment],
+        pk,
+        ck,
+        &[*base],
+        &proof,
+    )
 }
 
 fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
@@ -187,14 +194,14 @@ fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
     choice_ar_parameters: &[ArInfo<C2>],
     com_eq_diff_grps_proof: &ComEqDiffGrpsProof<C1, C2>,
 ) -> bool {
-    let CommitmentKey(g_1, h_1) = ip_commitment_key;
-    let CommitmentKey(g_2, h_2) = ar_commitment_key;
-    let Commitment(cmm_vrf_point) = cmm_vrf;
-    let Commitment(cmm_vrf_point_ar_group) = cmm_sharing_coeff[0];
+    // FIXME: Figure out the prefix that should be used (to make the proof
+    // non-copyable)
     let b_1 = verify_com_eq_diff_grps::<C1, C2>(
-        &[],
-        &((*g_1, *h_1), (*g_2, *h_2)),
-        &(*cmm_vrf_point, cmm_vrf_point_ar_group),
+        RandomOracle::empty(),
+        cmm_vrf,
+        &cmm_sharing_coeff[0],
+        ip_commitment_key,
+        ar_commitment_key,
         com_eq_diff_grps_proof,
     );
     if !b_1 {
@@ -211,11 +218,15 @@ fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
         {
             None => return false,
             Some(ar_info) => {
-                let (g, h) = (PublicKey::generator(), ar_info.ar_public_key.0);
-                let (e_1, e_2) = (ar.enc_prf_key_share.0, ar.enc_prf_key_share.1);
-                let coeff = (g, h, *g_2, *h_2);
-                let eval = (e_1, e_2, cmm_share.0);
-                if !verify_com_enc_eq(&[], &coeff, &eval, &ar.proof_com_enc_eq) {
+                // FIXME: Figure out the prefix that should be used.
+                if !verify_com_enc_eq(
+                    RandomOracle::empty(),
+                    &ar.enc_prf_key_share,
+                    &cmm_share,
+                    &ar_info.ar_public_key,
+                    ar_commitment_key,
+                    &ar.proof_com_enc_eq,
+                ) {
                     return false;
                 }
             }

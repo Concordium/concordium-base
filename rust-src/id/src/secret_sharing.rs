@@ -3,6 +3,7 @@ use ff::Field;
 use rand::*;
 
 use byteorder::{BigEndian, ReadBytesExt};
+use pedersen_scheme::Value as PedersenValue;
 use serde_json::{json, Value};
 use std::{convert::TryFrom, io::Cursor};
 
@@ -72,10 +73,10 @@ impl From<u32> for Threshold {
 
 pub struct SharingData<C: Curve> {
     /// The coefficients of the sharing polyomial, except the zeroth.
-    pub coefficients: Vec<C::Scalar>,
+    pub coefficients: Vec<PedersenValue<C>>,
     /// Shares, i.e., pairs (x, y) where x is the chosen point, and y is the
     /// evaluation of the polynomial at x. All share numbers must be distinct.
-    pub shares: Vec<(ShareNumber, C::Scalar)>,
+    pub shares: Vec<(ShareNumber, PedersenValue<C>)>,
 }
 
 /// Revealing Threshold must be at least 1.
@@ -98,9 +99,9 @@ pub fn share<C: Curve, R: Rng>(
     // the zeroth coefficient is the secret, we generate
     // other coefficients at random.
     // It is crucial that the random number generator is cryptographically secure.
-    let mut coefficients: Vec<C::Scalar> = Vec::with_capacity(deg as usize);
+    let mut coefficients: Vec<PedersenValue<C>> = Vec::with_capacity(deg as usize);
     for _ in 0..deg {
-        let r = C::generate_scalar(csprng);
+        let r = PedersenValue::generate(csprng);
         coefficients.push(r);
     }
 
@@ -121,7 +122,7 @@ pub fn share<C: Curve, R: Rng>(
         share.mul_assign(&xs);
         share.add_assign(secret);
 
-        shares.push((x, share))
+        shares.push((x, PedersenValue::new(share)))
     }
 
     SharingData {
@@ -148,7 +149,7 @@ fn lagrange<C: Curve>(kxs: &[ShareNumber], i: ShareNumber) -> C::Scalar {
 
 /// Given a list of length n of pairs (x_i, j_i), with all x_i distinct,
 /// interpolate a polynomial f of degree n and return f(0).
-pub fn reveal<C: Curve>(shares: &[(ShareNumber, C::Scalar)]) -> C::Scalar {
+pub fn reveal<C: Curve>(shares: &[(ShareNumber, PedersenValue<C>)]) -> C::Scalar {
     let kxs: Vec<ShareNumber> = shares.iter().map(|(fst, _)| *fst).collect();
     shares.iter().fold(C::Scalar::zero(), |accum, (i, v)| {
         let mut s = lagrange::<C>(&kxs, *i);
@@ -188,8 +189,8 @@ mod test {
                 Threshold::from(threshold),
                 &mut csprng,
             );
-            let sufficient_sample: Vec<(ShareNumber, <G1 as Curve>::Scalar)> =
-                sample_iter(&mut csprng, sharing_data.shares.clone(), threshold as usize)
+            let sufficient_sample: Vec<(ShareNumber, PedersenValue<G1>)> =
+                sample_iter(&mut csprng, sharing_data.shares, threshold as usize)
                     .expect("Threshold is <= number of shares.");
             let sufficient_sample_points = sufficient_sample
                 .iter()
@@ -199,7 +200,14 @@ mod test {
             assert_eq!(revealed_data, secret);
             let revealed_data_point: G1 = reveal_in_group::<G1>(&sufficient_sample_points);
             assert_eq!(revealed_data_point, secret_point);
-            let insufficient_sample: Vec<(ShareNumber, <G1 as Curve>::Scalar)> =
+
+            let sharing_data = share::<G1, ThreadRng>(
+                &secret,
+                ShareNumber::from(i),
+                Threshold::from(threshold),
+                &mut csprng,
+            );
+            let insufficient_sample: Vec<(ShareNumber, PedersenValue<G1>)> =
                 sample_iter(&mut csprng, sharing_data.shares, (threshold - 1) as usize)
                     .expect("Threshold - 1 is <= number of shares.");
             let insufficient_sample_points = insufficient_sample

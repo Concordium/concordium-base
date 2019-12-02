@@ -1,19 +1,19 @@
-use crate::types::*;
+use random_oracle::RandomOracle;
 
-use sha2::{Digest, Sha512};
-
+use crate::{
+    secret_sharing::{ShareNumber, Threshold},
+    types::*,
+};
 use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
-use elgamal::public::PublicKey;
 use ff::Field;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
 use ps_sig;
-use secret_sharing::secret_sharing::{ShareNumber, Threshold};
 
-use sigma_protocols::{com_enc_eq, com_eq_sig, com_mult};
+use crate::sigma_protocols::{com_enc_eq, com_eq_sig, com_mult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CDIVerificationError {
@@ -85,14 +85,14 @@ pub fn verify_cdi_worker<
     cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     // Compute the challenge prefix by hashing the values.
-    let mut hasher = Sha512::new();
-    hasher.input(&cdi.values.to_bytes());
-    let challenge_prefix = hasher.result();
+
+    // Compute the challenge prefix by hashing the values.
+    let ro = RandomOracle::domain("credential").append(&cdi.values.to_bytes());
 
     let commitments = &cdi.proofs.commitments;
     // verify id_cred sharing data
     let check_id_cred_pub = verify_id_cred_pub_sharing_data(
-        &challenge_prefix,
+        ro.split(),
         on_chain_commitment_key,
         choice_ar_parameters,
         &cdi.values.ar_data,
@@ -104,7 +104,7 @@ pub fn verify_cdi_worker<
     }
 
     let check_reg_id = verify_pok_reg_id(
-        &challenge_prefix,
+        ro.split(),
         on_chain_commitment_key,
         &commitments.cmm_prf,
         &commitments.cmm_cred_counter,
@@ -117,7 +117,7 @@ pub fn verify_cdi_worker<
     }
 
     let verify_dlog = eddsa_dlog::verify_dlog_ed25519(
-        &challenge_prefix,
+        ro.split(),
         &cdi.values.acc_pub_key,
         &cdi.proofs.proof_acc_sk,
     );
@@ -127,10 +127,11 @@ pub fn verify_cdi_worker<
     }
 
     let check_pok_sig = verify_pok_sig(
-        &challenge_prefix,
+        ro,
         on_chain_commitment_key,
         cdi.values.threshold,
         choice_ar_parameters,
+        &cdi.values.policy,
         &commitments,
         ip_verify_key,
         &cdi.proofs.sig,
@@ -141,12 +142,7 @@ pub fn verify_cdi_worker<
         return Err(CDIVerificationError::Signature);
     }
 
-    let check_policy = verify_policy(
-        on_chain_commitment_key,
-        &commitments,
-        &cdi.values.policy,
-        &cdi.proofs.proof_policy,
-    );
+    let check_policy = verify_policy(on_chain_commitment_key, &commitments, &cdi.values.policy);
 
     if !check_policy {
         return Err(CDIVerificationError::Policy);
@@ -155,15 +151,13 @@ pub fn verify_cdi_worker<
 }
 /// verify id_cred data
 fn verify_id_cred_pub_sharing_data<C: Curve>(
-    challenge_prefix: &[u8],
+    ro: RandomOracle,
     commitment_key: &CommitmentKey<C>,
     choice_ar_parameters: &[&ArInfo<C>],
     chain_ar_data: &[ChainArData<C>],
     cmm_sharing_coeff: &[Commitment<C>],
     proof_id_cred_pub: &[(ShareNumber, com_enc_eq::ComEncEqProof<C>)],
 ) -> bool {
-    let CommitmentKey(g_1, h_1) = commitment_key;
-    // let cmm_to_shares = Vec::new();
     for ar in chain_ar_data.iter() {
         let cmm_share = commitment_to_share(ar.id_cred_pub_share_number, cmm_sharing_coeff);
         // finding the correct AR data by share number
@@ -181,12 +175,15 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
             {
                 None => return false,
                 Some(ar_info) => {
-                    let (g, h) = (PublicKey::generator(), ar_info.ar_public_key.0);
-                    let (e_1, e_2) = (ar.enc_id_cred_pub_share.0, ar.enc_id_cred_pub_share.1);
-                    let coeff = (g, h, *g_1, *h_1);
-                    let eval = (e_1, e_2, cmm_share.0);
                     // verifying the proof
-                    if !com_enc_eq::verify_com_enc_eq(&challenge_prefix, &coeff, &eval, proof) {
+                    if !com_enc_eq::verify_com_enc_eq(
+                        ro.split(),
+                        &ar.enc_id_cred_pub_share,
+                        &cmm_share,
+                        &ar_info.ar_public_key,
+                        commitment_key,
+                        proof,
+                    ) {
                         return false;
                     }
                 }
@@ -211,135 +208,145 @@ pub fn commitment_to_share<C: Curve>(
     Commitment(cmm_share_point)
 }
 
+/// Verify a policy. This currently does not do anything since
+/// the only check that is done is that the commitments are opened correctly,
+/// and that check is part of the signature check.
 fn verify_policy<C: Curve, AttributeType: Attribute<C::Scalar>>(
-    commitment_key: &CommitmentKey<C>,
-    commitments: &CredDeploymentCommitments<C>,
-    policy: &Policy<C, AttributeType>,
-    policy_proof: &PolicyProof<C>,
+    _commitment_key: &CommitmentKey<C>,
+    _commitments: &CredDeploymentCommitments<C>,
+    _policy: &Policy<C, AttributeType>,
 ) -> bool {
-    let variant_scalar = C::scalar_from_u64(u64::from(policy.variant)).unwrap();
-    let expiry_scalar = C::scalar_from_u64(policy.expiry).unwrap();
+    // let variant_scalar = C::scalar_from_u64(u64::from(policy.variant)).unwrap();
+    // let expiry_scalar = C::scalar_from_u64(policy.expiry).unwrap();
 
-    let cmm_vec = &commitments.cmm_attributes;
+    // let cmm_vec = &commitments.cmm_attributes;
 
-    let b1 = commitment_key.open(
-        &Value(variant_scalar),
-        &Randomness(policy_proof.variant_rand),
-        &cmm_vec[0],
-    );
-    if !b1 {
-        return false;
-    }
-    let b2 = commitment_key.open(
-        &Value(expiry_scalar),
-        &Randomness(policy_proof.expiry_rand),
-        &cmm_vec[1],
-    );
-    if !b2 {
-        return false;
-    }
+    // let b1 = commitment_key.open(
+    //     &Value {
+    //         value: variant_scalar,
+    //     },
+    //     &policy_proof.variant_rand,
+    //     &cmm_vec[0],
+    // );
+    // if !b1 {
+    //     return false;
+    // }
+    // let b2 = commitment_key.open(
+    //     &Value {
+    //         value: expiry_scalar,
+    //     },
+    //     &policy_proof.expiry_rand,
+    //     &cmm_vec[1],
+    // );
+    // if !b2 {
+    //     return false;
+    // }
 
-    // NOTE: This is basic proof-of concept. The correct solution is to instead
-    // check that both lists come in increasing order of idx. Then the check
-    // will be linear in the number of items in the policy, as opposed to
-    // quadratic as it is now.
-    for (idx, v) in policy.policy_vec.iter() {
-        if usize::from(idx + 2) < cmm_vec.len() {
-            if let Some(pos) = policy_proof
-                .cmm_opening_map
-                .iter()
-                .position(|idx_1| *idx == idx_1.0)
-            {
-                // found a randomness, now check opening
-                if !commitment_key.open(
-                    &Value(v.to_field_element()),
-                    &Randomness(policy_proof.cmm_opening_map[pos].1),
-                    &cmm_vec[usize::from(idx + 2)],
-                ) {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        } else {
-            return false;
-        }
-    }
+    // // NOTE: This is basic proof-of concept. The correct solution is to instead
+    // // check that both lists come in increasing order of idx. Then the check
+    // // will be linear in the number of items in the policy, as opposed to
+    // // quadratic as it is now.
+    // for (idx, v) in policy.policy_vec.iter() {
+    //     if usize::from(idx + 2) < cmm_vec.len() {
+    //         if let Some(pos) = policy_proof
+    //             .cmm_opening_map
+    //             .iter()
+    //             .position(|idx_1| *idx == idx_1.0)
+    //         {
+    //             // found a randomness, now check opening
+    //             if !commitment_key.open(
+    //                 &Value {
+    //                     value: v.to_field_element(),
+    //                 },
+    //                 &policy_proof.cmm_opening_map[pos].1,
+    //                 &cmm_vec[usize::from(idx + 2)],
+    //             ) {
+    //                 return false;
+    //             }
+    //         } else {
+    //             return false;
+    //         }
+    //     } else {
+    //         return false;
+    //     }
+    // }
     true
 }
 
 #[allow(clippy::too_many_arguments)]
-fn verify_pok_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
-    challenge_prefix: &[u8],
+fn verify_pok_sig<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
+    ro: RandomOracle,
     commitment_key: &CommitmentKey<C>,
     threshold: Threshold,
     choice_ar_parameters: &[&ArInfo<C>],
+    policy: &Policy<C, AttributeType>,
     commitments: &CredDeploymentCommitments<C>,
     ip_pub_key: &ps_sig::PublicKey<P>,
-    blinded_sig: &ps_sig::Signature<P>,
+    blinded_sig: &ps_sig::BlindedSignature<P>,
     proof: &com_eq_sig::ComEqSigProof<P, C>,
 ) -> bool {
-    let ps_sig::Signature(a, b) = blinded_sig;
-    let (eval_pair, eval) = (b, P::G_2::one_point());
-    let (g_base, h_base) = (commitment_key.0, commitment_key.1);
-    let ps_sig::PublicKey(_gen1, _gen2, _, yxs, ip_pub_key_x) = ip_pub_key;
-
-    let (p_pair, p) = (a, ip_pub_key_x);
-
-    let (q_pair, q) = (a, P::G_2::one_point());
-
-    // number of commitments in the attribute list
-    // to these we add commitments to idcredsec and prf key K
-    let user_cmm_atts_len = commitments.cmm_attributes.len();
-
-    // commitments to anonymity revokers
-    let user_cmm_ars_len = choice_ar_parameters.len();
-
-    let gxs = yxs[..user_cmm_atts_len + user_cmm_ars_len + 3].to_vec();
-
-    let gxs_pair = a; // CHECK with Bassel
-
-    let mut comm_vec = Vec::with_capacity(gxs.len());
+    let mut comm_vec =
+        Vec::with_capacity(2 + 1 + choice_ar_parameters.len() + commitments.cmm_attributes.len());
     let cmm_id_cred_sec = commitments.cmm_id_cred_sec_sharing_coeff[0];
-    comm_vec.push(cmm_id_cred_sec.0);
-    comm_vec.push(commitments.cmm_prf.0);
+    comm_vec.push(cmm_id_cred_sec);
+    comm_vec.push(commitments.cmm_prf);
 
     // compute commitments with randomness 0
-    let zero = Randomness(C::Scalar::zero());
+    let zero = Randomness::zero();
     // add commitment to threshold with randomness 0
-    comm_vec.push(
-        commitment_key
-            .hide(&Value(threshold.to_scalar::<C>()), &zero)
-            .0,
-    );
+    comm_vec.push(commitment_key.hide(&Value::new(threshold.to_scalar::<C>()), &zero));
     // and all commitments to ARs with randomness 0
     for ar in choice_ar_parameters {
-        comm_vec.push(
-            commitment_key
-                .hide(&Value(ar.ar_identity.to_scalar::<C>()), &zero)
-                .0,
-        );
+        comm_vec.push(commitment_key.hide(&Value::new(ar.ar_identity.to_scalar::<C>()), &zero));
     }
 
-    for v in commitments.cmm_attributes.iter() {
-        comm_vec.push(v.0);
+    // add commitment with randomness 0 for variant and expiry of
+    // the attribute list
+    comm_vec.push(commitment_key.hide(
+        &Value::new(C::scalar_from_u64(u64::from(policy.variant)).unwrap()),
+        &zero,
+    ));
+    comm_vec.push(commitment_key.hide(
+        &Value::new(C::scalar_from_u64(policy.expiry).unwrap()),
+        &zero,
+    ));
+
+    // now, we go through the policy and remaining commitments and
+    // put them into the vector of commitments in order to check the signature.
+    // in case there are missing commitments or policy items we reject the signature
+    let number = policy.policy_vec.len() + commitments.cmm_attributes.len();
+    if number > ip_pub_key.len() {
+        return false;
+    }
+    for idx in 0..number {
+        match policy.policy_vec.get(&(idx as u16)) {
+            Some(v) => {
+                let value = Value::new(v.to_field_element());
+                comm_vec.push(commitment_key.hide(&value, &zero));
+            }
+            None => match commitments.cmm_attributes.get(&(idx as u16)) {
+                Some(v) => comm_vec.push(*v),
+                None => return false,
+            },
+        }
     }
 
     com_eq_sig::verify_com_eq_sig::<P, C>(
-        &challenge_prefix,
-        &((*eval_pair, eval), comm_vec),
-        &(
-            (*p_pair, *p),
-            (*q_pair, q),
-            (*gxs_pair, gxs),
-            (g_base, h_base),
-        ),
+        ro,
+        blinded_sig,
+        &comm_vec,
+        ip_pub_key,
+        commitment_key,
         proof,
     )
 }
 
 fn verify_pok_reg_id<C: Curve>(
-    challenge_prefix: &[u8],
+    ro: RandomOracle,
     on_chain_commitment_key: &CommitmentKey<C>,
     cmm_prf: &Commitment<C>,
     cmm_cred_counter: &Commitment<C>,
@@ -348,12 +355,17 @@ fn verify_pok_reg_id<C: Curve>(
 ) -> bool {
     // coefficients of the protocol derived from the pedersen key
     let g = on_chain_commitment_key.0;
-    let h = on_chain_commitment_key.1;
-
-    let coeff = [g, h];
 
     // commitments are the public values.
-    let public = [cmm_prf.0.plus_point(&cmm_cred_counter.0), reg_id, g];
+    // NOTE: In order for this to work the reg_id must be computed with the same
+    // generator as the first element of the on-chain commitment key
 
-    com_mult::verify_com_mult(&challenge_prefix, &coeff, &public, &proof)
+    com_mult::verify_com_mult(
+        ro,
+        &Commitment(cmm_prf.plus_point(&cmm_cred_counter.0)),
+        &Commitment(reg_id),
+        &Commitment(g),
+        on_chain_commitment_key,
+        &proof,
+    )
 }

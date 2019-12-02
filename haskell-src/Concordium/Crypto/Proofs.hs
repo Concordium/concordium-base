@@ -37,9 +37,8 @@ import qualified Concordium.Crypto.BlockSignature as BlockSig
 
 data Dlog25519ProofLength
 
--- FIXME: Once the ed25519 dlog proof is fixed, swap this to 64 bytes
 dlogProofSize :: Int
-dlogProofSize = 96
+dlogProofSize = 64
 
 instance FixedLength Dlog25519ProofLength where
   fixedLength _ = dlogProofSize

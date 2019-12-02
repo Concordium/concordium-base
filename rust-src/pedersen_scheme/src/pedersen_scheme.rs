@@ -1,2 +1,0 @@
-// Authors:
-// - bm@concordium.com

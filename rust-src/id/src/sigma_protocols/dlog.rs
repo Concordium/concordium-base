@@ -1,8 +1,12 @@
+//! This module provides the implementation of the discrete log sigma protocol
+//! which enables one to prove knowledge of the discrete logarithm without
+//! revealing it.
 use curve_arithmetic::curve_arithmetic::Curve;
 use failure::Error;
 use ff::Field;
 use rand::*;
-use sha2::{Digest, Sha256};
+use random_oracle::RandomOracle;
+
 use std::io::Cursor;
 
 use curve_arithmetic::serialization::*;
@@ -35,73 +39,66 @@ impl<T: Curve> DlogProof<T> {
 
 pub fn prove_dlog<T: Curve, R: Rng>(
     csprng: &mut R,
-    challenge_prefix: &[u8],
+    ro: RandomOracle,
     public: &T,
     secret: &T::Scalar,
     base: &T,
 ) -> DlogProof<T> {
-    let mut hasher = Sha256::new();
-    hasher.input(challenge_prefix);
-    hasher.input(&public.curve_to_bytes());
-    let mut suc = false;
-    let mut witness = T::Scalar::zero();
-    let mut challenge = T::Scalar::zero();
-    while !suc {
-        let mut hasher2 = hasher.clone();
-        let rand_scalar = T::generate_scalar(csprng);
+    let hasher = ro.append("dlog").append(&public.curve_to_bytes());
+
+    loop {
+        let rand_scalar = T::generate_non_zero_scalar(csprng);
         let randomised_point = base.mul_by_scalar(&rand_scalar);
-        hasher2.input(&randomised_point.curve_to_bytes());
-        let maybe_challenge_bytes = hasher2.result();
-        match T::bytes_to_scalar(&mut Cursor::new(&maybe_challenge_bytes)) {
-            Err(_) => {} // loop again
-            Ok(x) => {
-                // FIXME: Why is this check useful?
-                // We reveal the random scalar if it is, but why is that an issue?
-                if x != T::Scalar::zero() {
-                    challenge = x;
-                    witness = *secret;
+
+        let maybe_challenge = hasher
+            .append_fresh(&randomised_point.curve_to_bytes())
+            .result_to_scalar::<T>();
+        match maybe_challenge {
+            None => {} // loop again
+            Some(challenge) => {
+                // The proof is not going to be valid unless alpha (randomised
+                // point) is also zero in such a case.
+                // So we resample in such a case.
+                if challenge != T::Scalar::zero() {
+                    let mut witness = *secret;
                     witness.mul_assign(&challenge);
                     witness.add_assign(&rand_scalar);
-                    suc = true;
+
+                    let proof = DlogProof {
+                        challenge,
+                        witness,
+                        _phantom: Default::default(),
+                    };
+                    return proof;
                 } // else loop again
             }
         }
     }
-
-    DlogProof {
-        challenge,
-        witness,
-        _phantom: Default::default(),
-    }
 }
 
-pub fn verify_dlog<T: Curve>(
-    challenge_prefix: &[u8],
-    base: &T,
-    public: &T,
-    proof: &DlogProof<T>,
-) -> bool {
-    let mut hasher = Sha256::new();
-    hasher.input(challenge_prefix);
-    hasher.input(&public.curve_to_bytes());
+pub fn verify_dlog<T: Curve>(ro: RandomOracle, base: &T, public: &T, proof: &DlogProof<T>) -> bool {
+    let hasher = ro.append("dlog").append(&public.curve_to_bytes());
     let mut c = proof.challenge;
     c.negate();
     let randomised_point = public
         .mul_by_scalar(&c)
         .plus_point(&base.mul_by_scalar(&proof.witness));
 
-    hasher.input(&randomised_point.curve_to_bytes());
-    let challenge_bytes = hasher.result();
-    match T::bytes_to_scalar(&mut Cursor::new(&challenge_bytes)) {
-        Err(_) => false,
-        Ok(c) => c == proof.challenge,
+    // FIXME: Likely we should check here that alpha was chosen to be non-zero
+    // i.e., that randomised_point is not the group unit.
+    // Or we should not require it to be non-zero if this is never checked, unless
+    // it can be used to leak secrets.
+    let computed_challenge = hasher.finish_to_scalar::<T, _>(&randomised_point.curve_to_bytes());
+    match computed_challenge {
+        None => false,
+        Some(computed_challenge) => computed_challenge == proof.challenge,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::*;
+    use crate::sigma_protocols::common::*;
     use pairing::bls12_381::G1Affine;
     #[test]
     pub fn test_dlog() {
@@ -111,16 +108,17 @@ mod tests {
             let base = G1Affine::generate(&mut csprng);
             let public = &base.mul_by_scalar(&secret);
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let proof = prove_dlog::<G1Affine, ThreadRng>(
-                &mut csprng,
-                &challenge_prefix,
-                &public,
-                &secret,
-                &base,
-            );
-            assert!(verify_dlog(&challenge_prefix, &base, &public, &proof));
+            let ro = RandomOracle::domain(&challenge_prefix);
+            let proof =
+                prove_dlog::<G1Affine, ThreadRng>(&mut csprng, ro.split(), &public, &secret, &base);
+            assert!(verify_dlog(ro, &base, &public, &proof));
             let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
-            if verify_dlog(&challenge_prefix_1, &base, &public, &proof) {
+            if verify_dlog(
+                RandomOracle::domain(&challenge_prefix_1),
+                &base,
+                &public,
+                &proof,
+            ) {
                 assert_eq!(challenge_prefix, challenge_prefix_1);
             }
         }

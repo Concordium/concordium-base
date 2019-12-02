@@ -257,14 +257,14 @@ pub extern "C" fn elgamal_cipher_gen() -> *const elgamal::cipher::Cipher<G1> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{account_holder::*, identity_provider::*};
+    use crate::{account_holder::*, identity_provider::*, secret_sharing::Threshold};
     use dodis_yampolskiy_prf::secret as prf;
     use eddsa_ed25519 as ed25519;
     use elgamal::{public::PublicKey, secret::SecretKey};
     use pairing::bls12_381::Bls12;
-    use pedersen_scheme::key as pedersen_key;
+    use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
     use ps_sig;
-    use secret_sharing::secret_sharing::Threshold;
+    use std::collections::btree_map::BTreeMap;
 
     type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
     type ExampleCurve = G1;
@@ -277,7 +277,7 @@ mod test {
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
             id_ah:   "ACCOUNT_HOLDER".to_owned(),
             id_cred: IdCredentials {
-                id_cred_sec: secret,
+                id_cred_sec: PedersenValue { value: secret },
                 id_cred_pub: public,
             },
         };
@@ -368,14 +368,22 @@ mod test {
         let policy = Policy {
             variant,
             expiry: expiry_date,
-            policy_vec: vec![(0, AttributeKind::from(55))],
+            policy_vec: {
+                let mut tree = BTreeMap::new();
+                tree.insert(0u16, AttributeKind::from(55));
+                tree
+            },
             _phantom: Default::default(),
         };
 
         let wrong_policy = Policy {
             variant,
             expiry: expiry_date,
-            policy_vec: vec![(0, AttributeKind::from(5))],
+            policy_vec: {
+                let mut tree = BTreeMap::new();
+                tree.insert(0u16, AttributeKind::from(5));
+                tree
+            },
             _phantom: Default::default(),
         };
 

@@ -9,11 +9,10 @@ members=[
    "pedersen_scheme",
    "elgamal",
    "ps_sig",
-   "sigma_protocols",
    "id",
    "ffi_helpers",
    "simple_id_client",
-   "secret_sharing",
    "aggregate_sig",
    "common",
+   "random_oracle"
 ]

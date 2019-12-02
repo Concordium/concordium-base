@@ -2,13 +2,17 @@ use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519 as ed25519;
 use elgamal::{public::PublicKey, secret::SecretKey};
-use id::{account_holder::*, chain::*, ffi::*, identity_provider::*, types::*};
+use id::{
+    account_holder::*, chain::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*,
+};
+
 use pairing::bls12_381::{Bls12, G1};
 use ps_sig;
 
 use rand::*;
 
-use pedersen_scheme::key as pedersen_key;
+use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
+use std::collections::BTreeMap;
 
 use std::io::Cursor;
 
@@ -29,37 +33,66 @@ pub fn setup() -> (
 
     let secret = ExampleCurve::generate_scalar(&mut csprng);
     let public = ExampleCurve::one_point().mul_by_scalar(&secret);
-    let ah_info = CredentialHolderInfo::<ExampleCurve, ExampleCurve> {
+    let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_ah:   "ACCOUNT_HOLDER".to_owned(),
         id_cred: IdCredentials {
-            id_cred_sec:    secret,
-            id_cred_pub:    public,
-            id_cred_pub_ip: public,
+            id_cred_sec: PedersenValue { value: secret },
+            id_cred_pub: public,
         },
     };
 
-    let id_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
-    let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
+    let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
+    let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
-    let ar_secret_key = SecretKey::generate(&mut csprng);
-    let ar_public_key = PublicKey::from(&ar_secret_key);
-    let ar_info = ArInfo {
-        ar_name: "AR".to_owned(),
-        ar_public_key,
-        ar_elgamal_generator: PublicKey::generator(),
+    let ar1_secret_key = SecretKey::generate(&mut csprng);
+    let ar1_public_key = PublicKey::from(&ar1_secret_key);
+    let ar1_info = ArInfo::<G1> {
+        ar_identity:    ArIdentity(1),
+        ar_description: "A good AR".to_string(),
+        ar_public_key:  ar1_public_key,
     };
 
+    let ar2_secret_key = SecretKey::generate(&mut csprng);
+    let ar2_public_key = PublicKey::from(&ar2_secret_key);
+    let ar2_info = ArInfo::<G1> {
+        ar_identity:    ArIdentity(2),
+        ar_description: "A nice AR".to_string(),
+        ar_public_key:  ar2_public_key,
+    };
+
+    let ar3_secret_key = SecretKey::generate(&mut csprng);
+    let ar3_public_key = PublicKey::from(&ar3_secret_key);
+    let ar3_info = ArInfo::<G1> {
+        ar_identity:    ArIdentity(3),
+        ar_description: "Weird AR".to_string(),
+        ar_public_key:  ar3_public_key,
+    };
+
+    let ar4_secret_key = SecretKey::generate(&mut csprng);
+    let ar4_public_key = PublicKey::from(&ar4_secret_key);
+    let ar4_info = ArInfo::<G1> {
+        ar_identity:    ArIdentity(4),
+        ar_description: "Ok AR".to_string(),
+        ar_public_key:  ar4_public_key,
+    };
+
+    let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
+    let dlog_base = <G1 as Curve>::one_point();
+    // let dlog_base = <G1 as Curve>::generate(&mut csprng);
+
     let ip_info = IpInfo {
-        ip_identity: "ID".to_owned(),
-        ip_verify_key: id_public_key,
-        ar_info,
+        ip_identity: IpIdentity(88),
+        ip_description: "IP88".to_string(),
+        ip_verify_key: ip_public_key,
+        dlog_base,
+        ar_info: (vec![ar1_info, ar2_info, ar3_info, ar4_info], ar_ck),
     };
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
     let variant = 0;
     let expiry_date = 123123123;
-    let alist = vec![AttributeKind::U16(55), AttributeKind::U8(31)];
+    let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
     let aci = AccCredentialInfo {
         acc_holder_info: ah_info,
         prf_key,
@@ -71,10 +104,16 @@ pub fn setup() -> (
         },
     };
 
-    let context = make_context_from_ip_info(ip_info.clone());
+    let context = make_context_from_ip_info(
+        ip_info.clone(),
+        (
+            vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
+            Threshold(2),
+        ),
+    );
     let (pio, randomness) = generate_pio(&context, &aci);
 
-    let sig_ok = verify_credentials(&pio, context, &id_secret_key);
+    let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
 
     // First test, check that we have a valid signature.
     assert!(sig_ok.is_ok());
@@ -83,13 +122,17 @@ pub fn setup() -> (
 
     let global_ctx = GlobalContext {
         dlog_base_chain:         ExampleCurve::one_point(),
-        on_chain_commitment_key: pedersen_key::CommitmentKey::generate(1, &mut csprng),
+        on_chain_commitment_key: pedersen_key::CommitmentKey::generate(&mut csprng),
     };
 
     let policy = Policy {
         variant,
         expiry: expiry_date,
-        policy_vec: vec![(1, AttributeKind::U8(31))],
+        policy_vec: {
+            let mut tree = BTreeMap::new();
+            tree.insert(1u16, AttributeKind::from(31));
+            tree
+        },
         _phantom: Default::default(),
     };
 
@@ -111,6 +154,10 @@ pub fn setup() -> (
         &randomness,
     );
 
+    assert!(
+        verify_cdi(&global_ctx, &ip_info, &cdi).is_ok(),
+        "Make sure the credential is valid!"
+    );
     (global_ctx, ip_info, cdi)
 }
 

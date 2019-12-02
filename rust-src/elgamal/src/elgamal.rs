@@ -1,5 +1,4 @@
 // Authors:
-// - bm@concordium.com
 use crate::{cipher::*, message::*, public::*, secret::*};
 use bitvec::Bits;
 use libc::size_t;
@@ -193,8 +192,8 @@ macro_rules! macro_decrypt_u64_ffi {
                 match c {
                     Err(_) => return -1,
                     Ok(c) => {
-                        let Message(m) = sk.decrypt(&c);
-                        v.push(m)
+                        let m = sk.decrypt(&c);
+                        v.push(m.value)
                     }
                 }
             }
@@ -225,8 +224,8 @@ macro_rules! macro_decrypt_u64_unsafe_ffi {
             let mut v = Vec::with_capacity(64);
             for _ in 0..64 {
                 let c = Cipher::from_bytes_unchecked(&mut cur).unwrap();
-                let Message(m) = sk.decrypt(&c);
-                v.push(m)
+                let m = sk.decrypt(&c);
+                v.push(m.value)
             }
             group_bits_to_u64(v.iter())
         }
@@ -237,8 +236,8 @@ pub fn decrypt_u64_bitwise<C: Curve>(sk: &SecretKey<C>, v: &[Cipher<C>]) -> u64 
     let dr: Vec<C> = v
         .par_iter()
         .map(|x| {
-            let Message(m) = sk.decrypt(&x);
-            m
+            let m = sk.decrypt(&x);
+            m.value
         })
         .collect();
     group_bits_to_u64(dr.iter())

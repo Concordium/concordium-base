@@ -1,7 +1,9 @@
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
 use eddsa_ed25519 as ed25519_wrapper;
-use secret_sharing::secret_sharing::*;
+use id::secret_sharing::*;
+
+use std::collections::btree_map::BTreeMap;
 
 use curve_arithmetic::{Curve, Pairing};
 use dialoguer::{Checkboxes, Input, Select};
@@ -15,7 +17,7 @@ use ps_sig;
 use rand::*;
 use serde_json::{json, Value};
 
-use pedersen_scheme::key::CommitmentKey;
+use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
 
 use std::{
     cmp::max,
@@ -315,7 +317,7 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
                 return;
             }
             Some(single_ar_data) => {
-                let Message(m) = private.decrypt(&single_ar_data.enc_id_cred_pub_share);
+                let Message { value: m } = private.decrypt(&single_ar_data.enc_id_cred_pub_share);
                 shares.push((single_ar_data.id_cred_pub_share_number, m))
             }
         }
@@ -414,9 +416,9 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     };
 
     // from the above and the pre-identity object we make a policy
-    let mut revealed_attributes = Vec::with_capacity(atts.len());
+    let mut revealed_attributes = BTreeMap::new();
     for idx in atts {
-        revealed_attributes.push((idx as u16, alist[idx]))
+        revealed_attributes.insert(idx as u16, alist[idx]);
     }
     let policy = Policy {
         variant:    pio.alist.variant,
@@ -472,8 +474,9 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     let randomness = match private_value
         .get("randomness")
         .and_then(|x| json_base16_decode(&x))
-        .and_then(|bytes| SigRetrievalRandomness::<Bls12>::from_bytes(&mut Cursor::new(&bytes)))
-    {
+        .and_then(|bytes| {
+            ps_sig::SigRetrievalRandomness::<Bls12>::from_bytes(&mut Cursor::new(&bytes))
+        }) {
         Some(rand) => rand,
         None => {
             eprintln!("Could not read randomness used to generate pre-identity object.");
@@ -582,7 +585,7 @@ fn handle_create_chi(matches: &ArgMatches) {
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_ah:   name,
         id_cred: IdCredentials {
-            id_cred_sec: secret,
+            id_cred_sec: PedersenValue { value: secret },
             id_cred_pub: public,
         },
     };

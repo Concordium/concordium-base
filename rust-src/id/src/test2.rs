@@ -17,14 +17,14 @@ use pedersen_scheme::{
     value as pedersen,
     value::Value,
 };
-use secret_sharing::secret_sharing::*;
+use crate::secret_sharing::*;
 // use ps_sig;
 use account_holder::*;
 use curve_arithmetic::bls12_381_instance::*;
 use pairing::bls12_381::G1;
 use rand::{thread_rng, *};
-use secret_sharing::share;
-use sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult};
+use crate::share;
+use crate::sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult};
 
 fn generate_ar_info<C: Curve>(n: usize) -> Vec<(DecryptionKey<C>, ArInfo<C>)> {
     let mut v: Vec<(DecryptionKey<C>, ArInfo<C>)> = Vec::with_capacity(n);

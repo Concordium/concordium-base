@@ -4,6 +4,8 @@ use ps_sig as pssig;
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519 as ed25519_wrapper;
 use id::{account_holder::*, identity_provider::*, types::*};
+use ps_sig::SigRetrievalRandomness;
+use std::collections::btree_map::BTreeMap;
 
 use client_server_helpers::*;
 use curve_arithmetic::Curve;
@@ -12,7 +14,8 @@ use rand::*;
 use serde_json::{json, to_string_pretty, Value};
 
 use clap::{App, AppSettings, Arg};
-use secret_sharing::secret_sharing::Threshold;
+use id::secret_sharing::Threshold;
+use pedersen_scheme::Value as PedersenValue;
 use std::{cmp::max, io::Cursor};
 
 use std::collections::HashMap;
@@ -91,7 +94,7 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
     let chi = CredentialHolderInfo::<ExampleCurve> {
         id_ah:   name,
         id_cred: IdCredentials {
-            id_cred_sec: secret,
+            id_cred_sec: PedersenValue { value: secret },
             id_cred_pub: public,
         },
     };
@@ -131,7 +134,7 @@ type GenerateCredentialData = (
     pssig::Signature<Bls12>,
     SigRetrievalRandomness<Bls12>,
     AccCredentialInfo<ExampleCurve, ExampleAttribute>,
-    Vec<(u16, ExampleAttribute)>,
+    BTreeMap<u16, ExampleAttribute>,
     u8,
 );
 
@@ -150,7 +153,7 @@ fn parse_generate_credential_input_json(v: &Value) -> Option<GenerateCredentialD
         if let Some(items) = v.get("revealedItems") {
             read_revealed_items(pio.alist.variant, &pio.alist.alist, items)?
         } else {
-            vec![]
+            BTreeMap::new()
         }
     };
     let n_acc = json_read_u8(v.as_object()?, "accountNumber")?;
@@ -228,7 +231,7 @@ fn read_revealed_items(
     variant: u16,
     alist: &[ExampleAttribute],
     v: &Value,
-) -> Option<Vec<(u16, ExampleAttribute)>> {
+) -> Option<BTreeMap<u16, ExampleAttribute>> {
     let arr: &Vec<Value> = v.as_array()?;
     let result = arr.iter().flat_map(|v| {
         let s = v.as_str()?;

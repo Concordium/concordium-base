@@ -176,7 +176,7 @@ generateElgamalGen = do
 -- information up front.
 instance Serialize ElgamalPublicKey where
   get = do
-    bs <- getByteString elgamalGroupLen
+    bs <- getByteString (2 * elgamalGroupLen)
     case fromBytesHelper freeElgamalPublicKey fromBytesElgamalPublicKey bs of
       Nothing -> fail "Cannot decode cipher."
       Just x -> return $ ElgamalPublicKey x

@@ -66,8 +66,8 @@ impl<C: Curve> CommitmentKey<C> {
     pub fn hide(&self, s: &Value<C>, r: &Randomness<C>) -> Commitment<C> {
         let h = self.1;
         let g = self.0;
-        let message = s.0;
-        let r_scalar = r.0;
+        let message = s.value;
+        let r_scalar = r.randomness;
         let hr = h.mul_by_scalar(&r_scalar);
         let gm = g.mul_by_scalar(&message);
         Commitment(hr.plus_point(&gm))
@@ -84,17 +84,6 @@ impl<C: Curve> CommitmentKey<C> {
         let g = C::generate(csprng);
         CommitmentKey(g, h)
     }
-    // Generate a `CommitmentKey` for `n` values from a `csprng`.
-    // pub fn generate<T>(n: usize, csprng: &mut T) -> CommitmentKey<C>
-    // where
-    // T: Rng, {
-    // let mut gs: Vec<C> = Vec::with_capacity(n);
-    // for _i in 0..n {
-    // gs.push(C::generate(csprng));
-    // }
-    // let h = C::generate(csprng);
-    // CommitmentKey(gs, h)
-    // }
 }
 
 #[cfg(test)]
