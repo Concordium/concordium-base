@@ -93,7 +93,7 @@ fn read_attribute_list(variant: u16) -> io::Result<Vec<ExampleAttribute>> {
 
 fn main() {
     let app = App::new("Prototype client showcasing ID layer interactions.")
-        .version("0. 0.36787944117")
+        .version("0.36787944117")
         .author("Concordium")
         .setting(AppSettings::ArgRequiredElseHelp)
         .global_setting(AppSettings::ColoredHelp)
@@ -637,18 +637,6 @@ fn handle_act_as_ip(matches: &ArgMatches) {
             return;
         }
     };
-    // we also read the global context from another json file (called
-    // global.context) This has some parameters for encryption.
-    // let global_ctx = {
-    //     if let Some(gc) = read_global_context() {
-    //         gc
-    //     } else {
-    //         eprintln!("Cannot read global context information database.
-    // Terminating.");         return;
-    //     }
-    // };
-    // FIXME: Clone should not be necessary. Refactor.
-    // let ctx = make_context_from_ip_info(ip_info.clone());
 
     let vf = verify_credentials(&pio, &ip_info, &ip_sec_key);
     match vf {
