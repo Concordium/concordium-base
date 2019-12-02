@@ -58,7 +58,7 @@ genDlogProof :: Gen Dlog25519Proof
 genDlogProof = fst . randomProof . mkStdGen <$> arbitrary
 
 genAggregationVerifykey :: Gen BakerAggregationVerifyKey
-genAggregationVerifykey = Bls.derivePublicKey . fst . Bls.randomSecretKey . mkStdGen <$> arbitrary
+genAggregationVerifykey = fmap Bls.derivePublicKey Bls.secretKeyGen
 
 genPayload :: Gen Payload
 genPayload = oneof [genDeployModule,
