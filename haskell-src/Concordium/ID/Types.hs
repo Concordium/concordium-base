@@ -236,11 +236,14 @@ instance FromJSON PolicyItem where
     piValue <- v .: "value"
     return PolicyItem{..}
 
+-- |Expiry time of a credential.
+type CredentialExpiryTime = Word64
+
 data Policy = Policy {
   -- |Variant of the attribute list this policy belongs to.
   pAttributeListVariant :: Word16,
   -- |Expiry date of this credential. In seconds since unix epoch.
-  pExpiry :: Word64,
+  pExpiry :: CredentialExpiryTime,
   -- |List of items in this attribute list.
   pItems :: [PolicyItem]
   } deriving(Eq, Show)
