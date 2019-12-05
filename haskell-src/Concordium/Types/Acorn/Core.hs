@@ -1,3 +1,5 @@
+{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE EmptyDataDeriving #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -20,7 +22,6 @@ where
 
 import GHC.Types(Constraint)
 import Data.Data(Typeable, Data)
-import Data.Void
 
 import Data.ByteString.Char8(ByteString)
 import qualified Data.ByteString.Char8 as BS
@@ -41,6 +42,7 @@ import Data.Int
 import Data.Bits
 import qualified Data.Vector as Vec
 import Data.Word
+import Data.Text.Prettyprint.Doc(Pretty, pretty)
 import qualified Concordium.Types.Acorn.NumericTypes as NumTys
 
 import qualified Concordium.Crypto.SHA256 as SHA256
@@ -50,12 +52,30 @@ type family ExprAnnot a
 type family PatternAnnot a
 type family TypeAnnot a
 
+-- |Equivalent of Data.Void, but we need additional instances that are defined
+-- here.
+data NoAnnot
+    deriving(Eq, Show, Generic)
+
+absurd :: NoAnnot -> a
+absurd x = case x of
+
+vacuous :: Functor f => f NoAnnot -> f a
+vacuous = fmap absurd
+
+instance Pretty NoAnnot where
+  pretty x = case x of
+
+instance S.Serialize NoAnnot where
+    put x = case x of
+    get = fail "NoAnnot type has no value"
+
 data UA -- used to express a term/pattern/type is unannotated
   deriving(Data, Typeable)
 
-type instance ExprAnnot UA = Void
-type instance TypeAnnot UA = Void
-type instance PatternAnnot UA = Void
+type instance ExprAnnot UA = NoAnnot
+type instance TypeAnnot UA = NoAnnot
+type instance PatternAnnot UA = NoAnnot
 
 type AnnotContext (c :: * -> Constraint) (a :: *) =
   (c (ExprAnnot a),
