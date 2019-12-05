@@ -1,3 +1,4 @@
+{-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -15,7 +16,6 @@ import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
-import Data.Void
 import GHC.Generics
 
 import qualified Concordium.Types.Acorn.Core as Core
@@ -23,8 +23,6 @@ import Concordium.Types
 import Concordium.Types.Acorn.Interfaces
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs
-
-type NoAnnot = Void
 
 -- |These are the messages that are generated as parts of contract execution.
 data InternalMessage annot = TSend !ContractAddress !Amount !(Value annot) | TSimpleTransfer !Address !Amount
@@ -291,7 +289,7 @@ instance S.Serialize Event
 
 -- |Used internally by the scheduler since internal messages are sent as values,
 -- and top-level messages are acorn expressions.
-data MessageFormat = ValueMessage !(Value NoAnnot) | ExprMessage !(LinkedExpr NoAnnot)
+data MessageFormat = ValueMessage !(Value Core.NoAnnot) | ExprMessage !(LinkedExpr Core.NoAnnot)
     deriving(Show, Generic)
 
 instance S.Serialize MessageFormat where
@@ -333,6 +331,10 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   | InvalidContractReference !Core.ModuleRef !Core.TyName -- ^Reference to a non-existing contract.
                   | InvalidModuleReference !Core.ModuleRef   -- ^Reference to a non-existing module.
                   | InvalidContractAddress !ContractAddress -- ^Contract instance does not exist.
+                  | ReceiverAccountNoCredential !AccountAddress
+                  -- ^The receiver account does not have a valid credential.
+                  | ReceiverContractNoCredential !ContractAddress
+                  -- ^The receiver contract does not have a valid credential.
                   | EvaluationError         -- ^Error during evalution. This is
                                             -- mostly for debugging purposes
                                             -- since this kind of an error should
@@ -365,11 +367,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   | NotAllowedToManipulateBakers !AccountAddress
     deriving (Show, Generic)
 
--- FIXME: This should almost certainly not go here.
-instance S.Serialize Void where
-    put _ = undefined
-    get = fail "Void type has no instance"
-
 instance S.Serialize RejectReason
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
@@ -379,6 +376,7 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
                                              -- is the expected nonce.
                  | UnknownAccount !AccountAddress -- ^Transaction is coming from an unknown sender.
                  | DepositInsufficient -- ^The dedicated gas amount was lower than the minimum allowed.
+                 | NoValidCredential -- ^No valid credential on the sender account.
       deriving(Show)
 
 data TxResult = TxValid ValidResult | TxInvalid FailureKind
