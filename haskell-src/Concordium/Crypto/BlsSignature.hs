@@ -241,7 +241,7 @@ randomSecretKey gen = (sk, gen')
 -- provides deterministic key generation for testing purposes.
 {-# WARNING secretKeyGen "Not cryptographically secure." #-}
 secretKeyGen :: Gen SecretKey
-secretKeyGen = resize (2^30) $ do fst . randomSecretKey . mkStdGen <$> arbitrary
+secretKeyGen = resize (2^(30 :: Int)) $ fst . randomSecretKey . mkStdGen <$> arbitrary
 
 -- |DO NOT USE IN PRODUCTION CODE!!!
 -- ONLY USED FOR TESTING!!!
