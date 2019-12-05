@@ -685,7 +685,7 @@ newtype ModuleName = ModuleName { moduleName :: Word32 }
 type Version = Word32
 
 -- |This is the unit that can be deployed on the chain. The module should not be
--- empty, so there should be either a non-empty list of constracts, constraints, or contracts.
+-- empty, so there should be either a non-empty list of datatypes, constraints, definitions, or contracts.
 data Module annot =
   Module { 
          mImports :: ![Import]
