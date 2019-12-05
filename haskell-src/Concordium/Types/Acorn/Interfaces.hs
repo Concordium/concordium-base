@@ -267,10 +267,15 @@ typeHidingErrors c = runMaybeT c
 
 -- * Datatypes involved in execution of terms.
 
--- | The type of values used by the interpreter. 
-data Value annot = 
-             VClosure !Int !(RTEnv annot) !(LinkedExpr annot) -- ^Functions evaluate to closures.
-             | VRecClosure !(RTEnv annot) !Int !(Vector (LinkedExpr annot)) -- ^Recursive functions evaluate to recursive closures.
+-- | The type of values used by the interpreter.
+data Value annot =
+             -- | Functions evaluate to closures with the number of arguments ('Lambda'
+             -- can have multiple arguments).
+             VClosure !Int !(RTEnv annot) !(LinkedExpr annot)
+             -- | Recursive functions evaluate to recursive closures. Each function of those defined
+             -- together in a 'LetRec' is represented by one such clousure which includes the body expressions of
+             -- all functions and the index of the current. Recursive functions always have exactly one argument.
+             | VRecClosure !(RTEnv annot) !Int !(Vector (LinkedExpr annot))
              | VLiteral !Core.Literal    -- ^Base literals.
              | VConstructor !Core.Name !(Seq.Seq (Value annot)) -- ^Constructors applied to arguments.
              -- FIXME: Should use sequence instead of list here as well since it is usually built by appending to the back.
@@ -601,7 +606,7 @@ instance (forall a. S.Serialize a => S.Serialize (linked a)) => S.Serialize (Con
 
 -- |A mapping of identifiers to values, e.g., definitions to values, and of contract identifiers to their
 -- respective initialization functions and receive functions.
--- A module evalutes to a value of this type.
+-- A module evaluates to a value of this type.
 data ValueInterface linked annot = ValueInterface {
   -- |Compiled top-level definitions.
   -- Private and public (since at runtime a public definition might depend on the private one).
