@@ -6,11 +6,8 @@ import Concordium.Crypto.BlsSignature
 import qualified Data.ByteString as BS
 import Test.QuickCheck
 import Test.Hspec
-import System.Random
 import Data.Serialize
-import Data.List as List
 import qualified Data.Aeson as AE
-import Control.Monad
 
 genSecretKey :: Gen SecretKey
 genSecretKey = secretKeyGen
