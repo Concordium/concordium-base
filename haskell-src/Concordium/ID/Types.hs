@@ -1,6 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings, LambdaCase #-}
 {-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia, DeriveDataTypeable #-}
-{-# LANGUAGE TemplateHaskell #-}
 module Concordium.ID.Types where
 
 import Data.Word
