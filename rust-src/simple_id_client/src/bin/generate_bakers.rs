@@ -134,7 +134,7 @@ fn main() {
         let secret = ExampleCurve::generate_scalar(&mut csprng);
         let public = ExampleCurve::one_point().mul_by_scalar(&secret);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
-            id_ah:   "ACCOUNT_HOLDER".to_owned(),
+            id_ah:   format!("Baker-{}-account", baker),
             id_cred: IdCredentials {
                 id_cred_sec: PedersenValue::new(secret),
                 id_cred_pub: public,
