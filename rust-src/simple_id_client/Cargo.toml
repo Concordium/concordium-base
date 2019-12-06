@@ -50,6 +50,11 @@ version = "0"
 path = "../eddsa_ed25519"
 version = "0"
 
+[dependencies.ec_vrf_ed25519_sha256]
+path = "../ec_vrf_ed25519_sha256"
+version = "0"
+
+
 [lib]
 name = "client_server_helpers"
 path = "src/lib.rs"

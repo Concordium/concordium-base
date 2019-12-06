@@ -116,7 +116,7 @@ decodeBytes' b =
           in go (fromIntegral m:acc) d
 
 decodeBytes :: Base58String -> BS.ByteString
-decodeBytes (Base58String b) = do
+decodeBytes (Base58String b) =
   case decodeBytes' b of
     Nothing -> error "Precondition violated, not a valid base58 string."
     Just x -> x

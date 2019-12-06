@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 ff = "0.4"
 sha3      = "0.8"
+sha2      = "0.8"
 failure       = "0.1"
 rand    = "0.4"
 rand_core = "0.5"
@@ -21,6 +22,9 @@ serde_json = "1.0"
 hex = "0.3"
 itertools = "0.8"
 rayon = "1.2"
+
+# only for printing account addresses
+base58check = "0.1"
 
 [dependencies.eddsa_ed25519]
 path = "../eddsa_ed25519"

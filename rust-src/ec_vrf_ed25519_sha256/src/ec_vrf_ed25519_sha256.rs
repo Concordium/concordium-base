@@ -39,6 +39,9 @@ pub struct Keypair {
     pub public: PublicKey,
 }
 
+/// Hack to get around different versions of the rand dependency.
+pub fn generate_keypair() -> Keypair { Keypair::generate(&mut thread_rng()) }
+
 impl Keypair {
     /// Convert this keypair to bytes.
     ///

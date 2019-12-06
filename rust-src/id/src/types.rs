@@ -29,6 +29,42 @@ use std::{
     io::{Cursor, Read},
 };
 
+// only for account addresses
+use base58check::*;
+use sha2::Digest;
+
+#[derive(Debug)]
+pub struct AccountAddress([u8; 21]);
+
+impl AccountAddress {
+    /// This is a simple implementation of to_json that prints the address in
+    /// base 58 check format, to match with the instance defined in
+    /// haskell-src/Concordium/ID/Types.hs
+    pub fn to_json(&self) -> Value {
+        let mut bytes = self.0;
+        bytes[0] = 1;
+        let mut body = bytes.to_base58check(1);
+        // FIXME: Once we support more signature schemes add support here.
+        match self.0[0] {
+            0 => {
+                // Ed25519
+                body.insert_str(0, "11");
+            }
+            _ => unimplemented!("Only a single signature scheme is supported."),
+        }
+        Value::String(body)
+    }
+
+    /// Construct a new address from a scheme and verification key.
+    pub fn new(scheme_id: SchemeId, vf_key: &acc_sig_scheme::PublicKey) -> Self {
+        let mut address = [scheme_id.to_bytes()[0]; 21];
+        let mut hasher = sha2::Sha224::new();
+        hasher.input(&vf_key.to_bytes());
+        address[1..].copy_from_slice(&hasher.result()[0..20]);
+        AccountAddress(address)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct IpIdentity(pub u32);
 
