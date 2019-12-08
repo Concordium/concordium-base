@@ -93,6 +93,8 @@ Test-Suite tests
                     , random >= 1.1
                     , aeson >= 1.4.2
   ghc-options: -threaded -with-rtsopts=-N -Wall -O2 -Wno-deprecations
+  ld-options: -static
+
   other-modules:
    ConcordiumTests.Data.Base58Encoding
    ConcordiumTests.Crypto.SHA256
@@ -110,6 +112,8 @@ benchmark perf
   type: exitcode-stdio-1.0
   main-is: Perf.hs
   hs-source-dirs: haskell-tests
+  ghc-options: -Wall -O2
+  ld-options: -static
   build-depends: base >= 4.7
                , concordium-crypto
                , bytestring >= 0.10
