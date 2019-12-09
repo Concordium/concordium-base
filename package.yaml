@@ -34,6 +34,8 @@ dependencies:
 - aeson >= 1.4.2
 - ghc-prim >= 0.5.3
 - vector >= 0.12
+- pqueue >= 1.4.1
+- prettyprinter >= 1.2
 
 library:
   source-dirs: src
@@ -45,6 +47,7 @@ library:
     - -Wredundant-constraints
     - -fno-ignore-asserts
 
+
 benchmarks:
   Perf-bench:
     main:            Perf.hs
@@ -54,6 +57,9 @@ benchmarks:
     - -with-rtsopts=-N
     - -Wall
     - -Wcompat
+
+    ld-options:
+    - -static
     
     dependencies:
     - globalstate-types
@@ -68,6 +74,10 @@ tests:
     - -threaded
     - -with-rtsopts=-N
     - -Wall
+
+    ld-options:
+    - -static
+
     dependencies:
     - globalstate-types
     - concordium-crypto
