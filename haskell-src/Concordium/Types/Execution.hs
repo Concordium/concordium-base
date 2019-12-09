@@ -369,7 +369,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
 
                   -- |Special beta outcomes.
                   | NotAllowedToManipulateBakers !AccountAddress
-    deriving (Show, Generic)
+    deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason
 
@@ -381,6 +381,6 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
                  | UnknownAccount !AccountAddress -- ^Transaction is coming from an unknown sender.
                  | DepositInsufficient -- ^The dedicated gas amount was lower than the minimum allowed.
                  | NoValidCredential -- ^No valid credential on the sender account.
-      deriving(Show)
+      deriving(Eq, Show)
 
 data TxResult = TxValid ValidResult | TxInvalid FailureKind
