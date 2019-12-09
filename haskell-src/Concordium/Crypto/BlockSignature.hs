@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -28,6 +29,12 @@ instance Serialize KeyPair where
     signKey <- get
     verifyKey <- get
     return KeyPair{..}
+
+instance FromJSON KeyPair where
+    parseJSON = withObject "Baker block signature key" $ \obj -> do
+      signKey <- obj .: "signatureSignKey"
+      verifyKey <- obj .: "signatureVerifyKey"
+      return KeyPair{..}
 
 newtype Signature = Signature BSS.ShortByteString
     deriving (Eq, Ord)

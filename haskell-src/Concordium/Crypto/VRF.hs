@@ -1,4 +1,5 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, ForeignFunctionInterface, DerivingVia #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, ForeignFunctionInterface,
+             DerivingVia, RecordWildCards, OverloadedStrings #-}
 -- | This module is a prototype implementantion of  verifiable random function.
 -- draft-irtf-cfrg-vrf-01
 
@@ -187,6 +188,12 @@ data KeyPair = KeyPair {
 instance Serialize KeyPair where
     put (KeyPair priv pub) = put priv <> put pub
     get = KeyPair <$> get <*> get
+
+instance AE.FromJSON KeyPair where
+    parseJSON = AE.withObject "Baker block signature key" $ \obj -> do
+      privateKey <- obj AE..: "electionPrivateKey"
+      publicKey <- obj AE..: "electionVerifyKey"
+      return KeyPair{..}
 
 -- |Generate a key pair using a given random generator.
 -- Useful for generating deterministic pseudo-random keys.
