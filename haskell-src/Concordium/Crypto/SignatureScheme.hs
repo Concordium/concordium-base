@@ -87,7 +87,7 @@ instance Serialize SchemeId where
 
 instance Serialize KeyPair where
     put KeyPairEd25519{..} = put Ed25519 <> put signKey <> put verifyKey
-    get = do
+    get =
       get >>= \case
         Ed25519 -> do
           signKey <- get
