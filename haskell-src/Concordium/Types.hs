@@ -35,6 +35,8 @@ import Data.Ratio
 import qualified Data.Set as Set
 import Data.Set(Set)
 
+import qualified Data.PQueue.Prio.Max as Queue
+
 import Data.Aeson as AE
 
 import qualified Data.Serialize as S
@@ -165,6 +167,12 @@ instance S.Serialize Address where
   put (AddressContract cnt) = P.putWord8 1 <> S.put cnt
 
 
+-- | Time in seconds since the epoch
+type Timestamp = Word64
+-- | Time duration in seconds
+type Duration = Word64
+
+
 -- |Type of GTU amounts.
 -- FIXME: This likely needs to be Word128.
 newtype Amount = Amount { _amount :: Word64 }
@@ -239,16 +247,12 @@ data Account = Account {
   ,_accountEncryptionKey :: !(Maybe AccountEncryptionKey)
   -- |The key used to verify transaction signatures, it records the signature scheme used as well.
   ,_accountVerificationKey :: !AccountVerificationKey
-  -- |FIXME: Once it is clearer what policies are and how they affect execution
-  -- we might expand credentials into a more efficient data structure allowing
-  -- more efficient checking of credentials/policies, but until then we just
-  -- keep the data that was sent as part of the transaction. Note that most of
-  -- the data is not needed on a regular basis. The only part relevant for
-  -- transaction execution is the policy. In particular the policy will always
-  -- have an expiration date. Once it is clear how this date is used it will be
-  -- lifted up so that we only ever check credentials which are not out of date.
-  -- We do not retain proofs in global state.
-  ,_accountCredentials :: ![CredentialDeploymentValues]
+  -- |For now the only operation we need with a credential is to check whether
+  -- there are any credentials that are valid, and validity only depends on expiry.
+  -- A Max priority queue allows us to efficiently check for existence of such credentials,
+  -- as well as listing of all valid credentials, and efficient insertion of new credentials.
+  -- The priority is the expiry time of the credential.
+  ,_accountCredentials :: !(Queue.MaxPQueue CredentialExpiryTime CredentialDeploymentValues)
   -- |The baker to which this account's stake is delegated (if any).
   ,_accountStakeDelegate :: !(Maybe BakerId)
   -- |The set of instances belonging to this account.
@@ -267,10 +271,21 @@ instance S.Serialize Account where
                     S.put _accountEncryptedAmount <>
                     S.put _accountEncryptionKey <>
                     S.put _accountVerificationKey <>
-                    S.put _accountCredentials <>
+                    S.put (Queue.elemsU _accountCredentials) <> -- we do not care whether the output is ordered or not
                     S.put _accountStakeDelegate <>
                     S.put (Set.toAscList _accountInstances)
-  get = Account <$> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> S.get <*> (Set.fromList <$> S.get)
+  get = do
+    _accountAddress <- S.get
+    _accountNonce <- S.get
+    _accountAmount <- S.get
+    _accountEncryptedAmount <- S.get
+    _accountEncryptionKey <- S.get
+    _accountVerificationKey <- S.get
+    preAccountCredentials <- Queue.fromList . map (\cdv -> (pExpiry (cdvPolicy cdv), cdv)) <$> S.get
+    let _accountCredentials = Queue.seqSpine preAccountCredentials preAccountCredentials
+    _accountStakeDelegate <- S.get
+    _accountInstances <- Set.fromList <$> S.get
+    return Account{..}
 
 instance HashableTo Hash.Hash Account where
   getHash = Hash.hash . S.runPut . S.put
@@ -283,7 +298,7 @@ newAccount _accountVerificationKey = Account {
         _accountAmount = 0,
         _accountEncryptedAmount = [],
         _accountEncryptionKey = Nothing,
-        _accountCredentials = [],
+        _accountCredentials = Queue.empty,
         _accountStakeDelegate = Nothing,
         _accountInstances = Set.empty,
         ..
@@ -341,6 +356,8 @@ data ChainMetadata =
                 -- current block might become finalized, so the distance
                 -- blockHeight - finalizedHeight is an upper bound only.
                 , finalizedHeight :: BlockHeight
+                -- |Time at the beginning of the slot.
+                , slotTime :: Timestamp
                 }
 
 

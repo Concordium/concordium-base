@@ -39,8 +39,6 @@ import qualified Data.Serialize as S
 import Concordium.Types
 import qualified Concordium.Types.Acorn.Core as Core
 
-import Data.Void(absurd)
-
 -- * Datatypes involved in typechecking, and any other operations involving types.
 
 type Type = Core.Type
@@ -705,13 +703,13 @@ class Monad m => TypecheckerMonad annot m | m -> annot where
 
   -- |Default instances for unannotated terms.
   default logExprAnnot :: annot ~ Core.UA => Core.ExprAnnot annot -> m ()
-  logExprAnnot = absurd
+  logExprAnnot = Core.absurd
   {-# INLINE logExprAnnot #-}
   default logPatternAnnot :: annot ~ Core.UA => Core.PatternAnnot annot -> m ()
-  logPatternAnnot = absurd
+  logPatternAnnot = Core.absurd
   {-# INLINE logPatternAnnot #-}
   default logTypeAnnot :: annot ~ Core.UA => Core.TypeAnnot annot -> m ()
-  logTypeAnnot = absurd
+  logTypeAnnot = Core.absurd
   {-# INLINE logTypeAnnot #-}
 
 -- |The ability to retrieve static information, static meaning no local state of
