@@ -5,7 +5,7 @@ authors = ["Concordium AG <info@concordium.com>"]
 edition = "2018"
 
 [dependencies]
-ed25519-dalek = "1.0.0-pre.1"
+ed25519-dalek = "=1.0.0-pre.1"
 curve25519-dalek = "1.2"
 rand          = "0.6"
 serde         = "1.0"
