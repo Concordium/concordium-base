@@ -276,8 +276,8 @@ fn main() {
                 "electionVerifyKey": json_base16_encode(&vrf_key.public.to_bytes()),
                 "signatureSignKey": json_base16_encode(&sign_key.secret.to_bytes()),
                 "signatureVerifyKey": json_base16_encode(&sign_key.public.to_bytes()),
-                "aggregateSignKey": json_base16_encode(&agg_sign_key.to_bytes()),
-                "aggregateVerifyKey": json_base16_encode(&agg_verify_key.to_bytes()),
+                "aggregationSignKey": json_base16_encode(&agg_sign_key.to_bytes()),
+                "aggregationVerifyKey": json_base16_encode(&agg_verify_key.to_bytes()),
             });
 
             if let Err(err) = write_json_to_file(
@@ -294,7 +294,7 @@ fn main() {
             let public_baker_data = json!({
                 "electionVerifyKey": json_base16_encode(&vrf_key.public.to_bytes()),
                 "signatureVerifyKey": json_base16_encode(&sign_key.public.to_bytes()),
-                "aggregateVerifyKey": json_base16_encode(&agg_verify_key.to_bytes()),
+                "aggregationVerifyKey": json_base16_encode(&agg_verify_key.to_bytes()),
                 "finalizer": baker < num_finalizers,
                 "account": json!({
                     "schemeId": "Ed25519",
