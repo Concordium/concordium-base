@@ -54,6 +54,10 @@ version = "0"
 path = "../ec_vrf_ed25519_sha256"
 version = "0"
 
+# To generate keys for bakers only
+[dependencies.aggregate_sig]
+path = "../aggregate_sig"
+version = "0"
 
 [lib]
 name = "client_server_helpers"

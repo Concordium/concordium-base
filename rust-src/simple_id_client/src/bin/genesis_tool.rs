@@ -17,6 +17,8 @@ use std::path::Path;
 
 use ec_vrf_ed25519 as vrf;
 
+use aggregate_sig as agg;
+
 type ExampleCurve = G1;
 
 type ExampleAttribute = AttributeKind;
@@ -128,8 +130,8 @@ fn main() {
     // Roughly one year
     let year = std::time::Duration::from_secs(365 * 24 * 60 * 60);
 
-    let mut generate_account = |user_name| {
-        let secret = ExampleCurve::generate_scalar(&mut csprng);
+    let generate_account = |csprng: &mut rand::ThreadRng, user_name: String| {
+        let secret = ExampleCurve::generate_scalar(csprng);
         let public = ExampleCurve::one_point().mul_by_scalar(&secret);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
             id_ah:   user_name,
@@ -140,7 +142,7 @@ fn main() {
         };
 
         // Choose prf key.
-        let prf_key = prf::SecretKey::generate(&mut csprng);
+        let prf_key = prf::SecretKey::generate(csprng);
 
         // Choose variant of the attribute list.
         // Baker accounts will have the maximum allowed variant.
@@ -250,7 +252,7 @@ fn main() {
         let mut bakers = Vec::with_capacity(num_bakers);
         for baker in 0..num_bakers {
             let (account_data_json, credential_json, address_json, verify_key_json) =
-                generate_account(format!("Baker-{}-account", baker));
+                generate_account(&mut csprng, format!("Baker-{}-account", baker));
             if let Err(err) =
                 write_json_to_file(&format!("baker-{}-account.json", baker), &account_data_json)
             {
@@ -265,12 +267,17 @@ fn main() {
             // signature keypair
             let sign_key = ed25519::generate_keypair();
 
+            let agg_sign_key = agg::SecretKey::<Bls12>::generate(&mut csprng);
+            let agg_verify_key = agg::PublicKey::from_secret(agg_sign_key);
+
             // Output baker vrf and election keys in a json file.
             let baker_data_json = json!({
                 "electionPrivateKey": json_base16_encode(&vrf_key.secret.to_bytes()),
                 "electionVerifyKey": json_base16_encode(&vrf_key.public.to_bytes()),
                 "signatureSignKey": json_base16_encode(&sign_key.secret.to_bytes()),
                 "signatureVerifyKey": json_base16_encode(&sign_key.public.to_bytes()),
+                "aggregateSignKey": json_base16_encode(&agg_sign_key.to_bytes()),
+                "aggregateVerifyKey": json_base16_encode(&agg_verify_key.to_bytes()),
             });
 
             if let Err(err) = write_json_to_file(
@@ -287,6 +294,7 @@ fn main() {
             let public_baker_data = json!({
                 "electionVerifyKey": json_base16_encode(&vrf_key.public.to_bytes()),
                 "signatureVerifyKey": json_base16_encode(&sign_key.public.to_bytes()),
+                "aggregateVerifyKey": json_base16_encode(&agg_verify_key.to_bytes()),
                 "finalizer": baker < num_finalizers,
                 "account": json!({
                     "schemeId": "Ed25519",
@@ -317,7 +325,7 @@ fn main() {
         let mut accounts = Vec::with_capacity(num_accounts);
         for acc_num in 0..num_accounts {
             let (account_data_json, credential_json, address_json, verify_key_json) =
-                generate_account(format!("Beta-{}-account", acc_num));
+                generate_account(&mut csprng, format!("Beta-{}-account", acc_num));
             let public_account_data = json!({
                   "schemeId": "Ed25519",
                   "address": address_json,
