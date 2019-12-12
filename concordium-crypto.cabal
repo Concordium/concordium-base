@@ -108,10 +108,10 @@ Test-Suite tests
    ConcordiumTests.ID.Types
    ConcordiumTests.Crypto.Ed25519DlogProofs
 
-benchmark perf
+benchmark ed25519-perf
   default-language: Haskell2010
   type: exitcode-stdio-1.0
-  main-is: Perf.hs
+  main-is: PerformanceTests/Ed25519Perf.hs
   hs-source-dirs: haskell-tests
   ghc-options: -Wall -O2
   if os(linux)
@@ -121,7 +121,31 @@ benchmark perf
                , bytestring >= 0.10
                , criterion >= 1.5.4
                , cereal >=0.5.7
-  other-modules:
-    PerformanceTests.Ed25519Perf
-    PerformanceTests.SHA256Perf
-    PerformanceTests.VerifyCredentialPerf
+
+benchmark sha256-perf
+  default-language: Haskell2010
+  type: exitcode-stdio-1.0
+  main-is: PerformanceTests/SHA256Perf.hs
+  hs-source-dirs: haskell-tests
+  ghc-options: -Wall -O2
+  if os(linux)
+     ld-options: -static
+  build-depends: base >= 4.7
+               , concordium-crypto
+               , bytestring >= 0.10
+               , criterion >= 1.5.4
+               , cereal >=0.5.7
+
+benchmark verify-credential-perf
+  default-language: Haskell2010
+  type: exitcode-stdio-1.0
+  main-is: PerformanceTests/VerifyCredentialPerf.hs
+  hs-source-dirs: haskell-tests
+  ghc-options: -Wall -O2
+  if os(linux)
+     ld-options: -static
+  build-depends: base >= 4.7
+               , concordium-crypto
+               , bytestring >= 0.10
+               , criterion >= 1.5.4
+               , cereal >=0.5.7

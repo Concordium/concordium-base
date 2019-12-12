@@ -1,4 +1,4 @@
-module PerformanceTests.Ed25519Perf where
+module Main where
 
 import Criterion
 import Criterion.Main

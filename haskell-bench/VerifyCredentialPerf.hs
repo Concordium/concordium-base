@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module PerformanceTests.VerifyCredentialPerf where
+module Main where
 
 import Criterion
 import Criterion.Main

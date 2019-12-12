@@ -1,4 +1,4 @@
-module PerformanceTests.SHA256Perf where
+module Main where
 
 import Criterion
 import Criterion.Main
