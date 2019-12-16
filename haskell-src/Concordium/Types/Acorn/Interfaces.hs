@@ -279,7 +279,7 @@ data Value annot =
              -- can have multiple arguments).
              VClosure !Int !(RTEnv annot) !(LinkedExpr annot)
              -- | Recursive functions evaluate to recursive closures. Each function of those defined
-             -- together in a 'LetRec' is represented by one such clousure which includes the body expressions of
+             -- together in a 'LetRec' is represented by one such closure which includes the body expressions of
              -- all functions and the index of the current. Recursive functions always have exactly one argument.
              | VRecClosure !(RTEnv annot) !Int !(Vector (LinkedExpr annot))
              | VLiteral !Core.Literal    -- ^Base literals.
