@@ -73,14 +73,20 @@ deriving instance Core.AnnotContext Show annot => Show (ContractInterface annot)
 --   * 'exportedTerms' includes the constructors of a datatype if and only if
 --     they are declared to be public in the corresponding 'DataTypeInterface'.
 data Interface annot = Interface
-    { uniqueName :: !Core.ModuleRef
+    { -- | The unique name of the module.
+      uniqueName :: !Core.ModuleRef
+      -- | The size of the module, used to compute the cost of deployment.
     , iSize :: Word64
+      -- The modules the module lists as imports, i.e., the modules where exported
+      -- types, terms, contracts and constraints can be used from in the module.
     , importedModules :: !(HashMap Core.ModuleName Core.ModuleRef)
-    -- | The datatypes the module exports.
+      -- | The datatypes the module exports.
     , exportedTypes :: !(HashMap Core.TyName (DataTypeInterface annot))
-    -- | The terms the module exports.
+      -- | The terms the module exports.
     , exportedTerms :: !(HashMap Core.Name (Type annot Core.ModuleRef))
+      -- | The contracts the module exports.
     , exportedContracts :: !(HashMap Core.TyName (ContractInterface annot))
+      -- | The contraints the module exports.
     , exportedConstraints :: !(HashMap Core.TyName (Core.ConstraintDecl annot Core.ModuleRef))
     }
   deriving (Generic)
