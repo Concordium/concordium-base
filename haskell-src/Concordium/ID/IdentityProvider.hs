@@ -44,6 +44,11 @@ instance Serialize IpInfo where
   put (IpInfo e) = let bs = toBytesHelper ipInfoToBytes e
                    in putWord32be (fromIntegral (BS.length bs)) <> putByteString bs
 
+instance Eq IpInfo where
+  (IpInfo e1) == (IpInfo e2) = tob e1 == tob e2
+    where
+      tob = toBytesHelper ipInfoToBytes
+
 -- Show instance uses the JSON instance to pretty print the structure.
 instance Show IpInfo where
   show = BS8.unpack . ipInfoToJSON

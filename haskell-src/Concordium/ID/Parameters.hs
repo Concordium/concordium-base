@@ -44,6 +44,11 @@ instance Serialize GlobalContext where
     let bs = toBytesHelper globalContextToBytes e
     in putWord32be (fromIntegral (BS.length bs)) <> putByteString bs
 
+instance Eq GlobalContext where
+  (GlobalContext e1) == (GlobalContext e2) = tob e1 == tob e2
+    where
+      tob = toBytesHelper globalContextToBytes
+
 -- Show instance uses the JSON instance to pretty print the structure.
 instance Show GlobalContext where
   show = BS8.unpack . globalContextToJSON
