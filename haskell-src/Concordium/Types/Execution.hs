@@ -283,14 +283,14 @@ data Event = ModuleDeployed !Core.ModuleRef
            | BakerKeyUpdated !BakerId !BakerSignVerifyKey
            | StakeDelegated !AccountAddress !BakerId
            | StakeUndelegated !AccountAddress
-  deriving (Show, Generic)
+  deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
 
 -- |Used internally by the scheduler since internal messages are sent as values,
 -- and top-level messages are acorn expressions.
 data MessageFormat = ValueMessage !(Value Core.NoAnnot) | ExprMessage !(LinkedExpr Core.NoAnnot)
-    deriving(Show, Generic)
+    deriving(Show, Generic, Eq)
 
 instance S.Serialize MessageFormat where
     put (ValueMessage v) = S.putWord8 0 >> putStorable v
@@ -316,7 +316,7 @@ data ValidResult =
     vrTransactionCost :: !Amount,
     vrEnergyCost :: !Energy
   }
-  deriving(Show, Generic)
+  deriving(Show, Generic, Eq)
 
 instance S.Serialize ValidResult
 
