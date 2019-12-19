@@ -345,7 +345,7 @@ reversePTT trs ptt0 = foldr reverse1 ptt0 trs
 -- |Record special transactions as well for logging purposes.
 data SpecialTransactionOutcome =
   BakingReward !AccountAddress !Amount
-  deriving(Show)
+  deriving(Show, Eq)
 
 instance S.Serialize SpecialTransactionOutcome where
     put (BakingReward addr amt) = S.put addr >> S.put amt
