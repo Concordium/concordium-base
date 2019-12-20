@@ -46,13 +46,21 @@ pub trait Curve:
     fn zero_point() -> Self;
     fn one_point() -> Self; // generator
     fn is_zero_point(&self) -> bool;
+    #[must_use]
     fn inverse_point(&self) -> Self;
+    #[must_use]
     fn double_point(&self) -> Self;
+    #[must_use]
     fn plus_point(&self, other: &Self) -> Self;
+    #[must_use]
     fn minus_point(&self, other: &Self) -> Self;
+    #[must_use]
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self;
+    #[must_use]
     fn compress(&self) -> Self::Compressed;
+    #[must_use]
     fn decompress(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
+    #[must_use]
     fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
     fn scalar_to_bytes(s: &Self::Scalar) -> Box<[u8]>;
     fn bytes_to_scalar(b: &mut Cursor<&[u8]>) -> Result<Self::Scalar, FieldDecodingError>;
@@ -66,7 +74,7 @@ pub trait Curve:
     fn generate_non_zero_scalar<R: Rng>(rng: &mut R) -> Self::Scalar {
         loop {
             let s = Self::generate_scalar(rng);
-            if s != Field::zero() {
+            if !s.is_zero() {
                 return s;
             }
         }
@@ -91,7 +99,7 @@ pub trait Pairing: Sized + 'static + Clone {
     fn generate_non_zero_scalar<R: Rng>(rng: &mut R) -> Self::ScalarField {
         loop {
             let s = Self::generate_scalar(rng);
-            if s != Field::zero() {
+            if !s.is_zero() {
                 return s;
             }
         }
