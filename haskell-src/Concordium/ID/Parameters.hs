@@ -38,12 +38,14 @@ instance Serialize GlobalContext where
     bs <- getByteString (fromIntegral v)
     case fromBytesHelper freeGlobalContext globalContextFromBytes bs of
       Nothing -> fail "Cannot decode GlobalContext."
-      Just x -> return $! (GlobalContext x)
+      Just x -> return (GlobalContext x)
 
   put (GlobalContext e) =
     let bs = toBytesHelper globalContextToBytes e
     in putWord32be (fromIntegral (BS.length bs)) <> putByteString bs
 
+-- NB: This instance should only be used for testing. It is not guaranteed to be
+-- semantically meaningful.
 instance Eq GlobalContext where
   (GlobalContext e1) == (GlobalContext e2) = tob e1 == tob e2
     where

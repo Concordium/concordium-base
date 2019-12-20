@@ -44,6 +44,8 @@ instance Serialize IpInfo where
   put (IpInfo e) = let bs = toBytesHelper ipInfoToBytes e
                    in putWord32be (fromIntegral (BS.length bs)) <> putByteString bs
 
+-- NB: This Eq instance should onoly be used for testing. It is not guaranteed
+-- to be semantically meaningful.
 instance Eq IpInfo where
   (IpInfo e1) == (IpInfo e2) = tob e1 == tob e2
     where
