@@ -362,9 +362,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   | NotFromBakerAccount { nfbaFromAccount :: !AccountAddress, -- ^Sender account of the transaction
                                           nfbaCurrentBakerAccount :: !AccountAddress -- ^Current baker account.
                                         }
-
-                  -- |Special beta outcomes.
-                  | NotAllowedToManipulateBakers !AccountAddress
     deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason
