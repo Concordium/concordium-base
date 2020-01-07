@@ -89,7 +89,8 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
         .append("com_mult")
         .append(&cmm_1.to_bytes())
         .append(&cmm_2.to_bytes())
-        .append(&cmm_3.to_bytes());
+        .append(&cmm_3.to_bytes())
+        .append(&cmm_key.to_bytes());
 
     loop {
         let alpha_1 = Value::generate_non_zero(csprng);
@@ -174,7 +175,8 @@ pub fn verify_com_mult<T: Curve>(
         .append("com_mult")
         .append(&cmm_1.to_bytes())
         .append(&cmm_2.to_bytes())
-        .append(&cmm_3.to_bytes());
+        .append(&cmm_3.to_bytes())
+        .append(&cmm_key.to_bytes());
 
     for (c_i, s_i, t_i) in izip!(
         [cmm_1, cmm_2, cmm_3].iter(),

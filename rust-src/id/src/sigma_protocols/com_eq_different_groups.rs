@@ -1,5 +1,5 @@
 //! The module provides the implementation of the `com_eq_diff_groups` sigma
-//! protocol. This protocol enables one to prove that the value commited to in
+//! protocol. This protocol enables one to prove that the value committed to in
 //! two commitments $C_1$ and $C_2$ in (potentially) two different groups (of
 //! the same order) is the same.
 use curve_arithmetic::{curve_arithmetic::Curve, serialization::*};
@@ -77,7 +77,9 @@ pub fn prove_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>, R: Rng>
     let hasher = ro
         .append("com_eq_different_groups")
         .append(&y.to_bytes())
-        .append(&cC.to_bytes());
+        .append(&cC.to_bytes())
+        .append(&cmm_key_1.to_bytes())
+        .append(&cmm_key_2.to_bytes());
 
     loop {
         let alpha_1 = Value::generate_non_zero(csprng);
@@ -157,6 +159,8 @@ pub fn verify_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
         .append("com_eq_different_groups")
         .append(&y.to_bytes())
         .append(&cC.to_bytes())
+        .append(&cmm_key_1.to_bytes())
+        .append(&cmm_key_2.to_bytes())
         .append(&u.curve_to_bytes())
         .finish_to_scalar::<C1, _>(&v.curve_to_bytes());
     match computed_challenge {

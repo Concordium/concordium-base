@@ -62,8 +62,10 @@ pub fn prove_aggregate_dlog<T: Curve, R: Rng>(
     // FIXME: Likely the return value should be an option type (or Result type).
     assert_eq!(coeff.len(), n);
 
-    let hasher = ro.append("aggregate_dlog").append(&public.curve_to_bytes());
-    // FIXME: Attach coefficients as well.
+    let hasher = ro
+        .append("aggregate_dlog")
+        .append(&public.curve_to_bytes())
+        .extend_from(coeff.iter().map(T::curve_to_bytes));
 
     // Only allocate the vector once and just reset it each iteration. The vector
     // can be big, and there is no reason to allocate a new one each iteration.
@@ -112,8 +114,10 @@ pub fn verify_aggregate_dlog<T: Curve>(
     coeff: &[T],
     proof: &AggregateDlogProof<T>,
 ) -> bool {
-    let hasher = ro.append("aggregate_dlog").append(&public.curve_to_bytes());
-    // FIXME: Attach coefficients as well.
+    let hasher = ro
+        .append("aggregate_dlog")
+        .append(&public.curve_to_bytes())
+        .extend_from(coeff.iter().map(T::curve_to_bytes));
 
     let mut point = public.mul_by_scalar(&proof.challenge);
     if proof.witness.len() != coeff.len() {
