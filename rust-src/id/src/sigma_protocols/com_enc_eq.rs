@@ -87,8 +87,9 @@ pub fn prove_com_enc_eq<T: Curve, R: Rng>(
     let hasher = ro
         .append("com_enc_eq")
         .append(cipher.to_bytes())
-        .append(commitment.to_bytes());
-    // FIXME: Add keys to hash as well.
+        .append(commitment.to_bytes())
+        .append(pub_key.to_bytes())
+        .append(cmm_key.to_bytes());
 
     loop {
         let beta = Value::generate_non_zero(csprng);
@@ -178,6 +179,8 @@ pub fn verify_com_enc_eq<T: Curve>(
         .append("com_enc_eq")
         .append(&cipher.to_bytes())
         .append(&commitment.to_bytes())
+        .append(pub_key.to_bytes())
+        .append(cmm_key.to_bytes())
         .append(&a_1.curve_to_bytes())
         .append(&a_2.curve_to_bytes())
         .append(&a_3.curve_to_bytes());

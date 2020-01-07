@@ -44,7 +44,10 @@ pub fn prove_dlog<T: Curve, R: Rng>(
     secret: &T::Scalar,
     base: &T,
 ) -> DlogProof<T> {
-    let hasher = ro.append("dlog").append(&public.curve_to_bytes());
+    let hasher = ro
+        .append("dlog")
+        .append(&public.curve_to_bytes())
+        .append(&base.curve_to_bytes());
 
     loop {
         let rand_scalar = T::generate_non_zero_scalar(csprng);
@@ -77,7 +80,10 @@ pub fn prove_dlog<T: Curve, R: Rng>(
 }
 
 pub fn verify_dlog<T: Curve>(ro: RandomOracle, base: &T, public: &T, proof: &DlogProof<T>) -> bool {
-    let hasher = ro.append("dlog").append(&public.curve_to_bytes());
+    let hasher = ro
+        .append("dlog")
+        .append(&public.curve_to_bytes())
+        .append(&base.curve_to_bytes());
     let mut c = proof.challenge;
     c.negate();
     let randomised_point = public

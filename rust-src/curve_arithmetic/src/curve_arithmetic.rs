@@ -58,9 +58,7 @@ pub trait Curve:
     fn mul_by_scalar(&self, scalar: &Self::Scalar) -> Self;
     #[must_use]
     fn compress(&self) -> Self::Compressed;
-    #[must_use]
     fn decompress(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
-    #[must_use]
     fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
     fn scalar_to_bytes(s: &Self::Scalar) -> Box<[u8]>;
     fn bytes_to_scalar(b: &mut Cursor<&[u8]>) -> Result<Self::Scalar, FieldDecodingError>;

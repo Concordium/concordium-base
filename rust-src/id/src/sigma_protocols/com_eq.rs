@@ -55,7 +55,6 @@ impl<T: Curve> ComEqProof<T> {
 }
 /// Construct a proof of knowledge of secret values. The arguments are as
 /// follows.
-/// Verify a proof of knowledge. The arguments are as follows.
 /// * `ro` - Random oracle used in the challenge computation. This can be used
 ///   to make sure that the proof is only valid in a certain context.
 /// * `commitments` - The list of commitments.
@@ -63,7 +62,6 @@ impl<T: Curve> ComEqProof<T> {
 /// * `cmm_key` - The commitment key with which all the commitments are
 ///   generated
 /// * `gxs` - The list of generators for discrete log proofs.
-/// * `proof` - Proposed proof.
 /// * `secret` - The list of pairs $(r_i, a_i)$ where $r_i$ is the commitment
 ///   randomness, and $a_i$ the commited to value.
 /// * `csprng` - A cryptographically secure random number generator.
@@ -87,8 +85,10 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
 
     let hasher = ro
         .append("com_eq")
-        .extend_from(commitments.iter().map(Commitment::to_bytes));
-    let hasher = hasher.append(&y.curve_to_bytes());
+        .extend_from(commitments.iter().map(Commitment::to_bytes))
+        .append(&y.curve_to_bytes())
+        .append(&cmm_key.to_bytes())
+        .extend_from(gxs.iter().map(Curve::curve_to_bytes));
 
     loop {
         // For each iteration of the loop we need to recompute the challenge,
@@ -178,8 +178,10 @@ pub fn verify_com_eq<T: Curve>(
     let mut hasher = ro
         .append("com_eq")
         .extend_from(commitments.iter().map(Commitment::to_bytes))
-        .append(&y.curve_to_bytes());
-    // FIXME: Add commitment key to hash.
+        .append(&y.curve_to_bytes())
+        .append(&cmm_key.to_bytes())
+        .extend_from(gxs.iter().map(Curve::curve_to_bytes));
+
     if commitments.len() != proof.witness.len() {
         return false;
     }
