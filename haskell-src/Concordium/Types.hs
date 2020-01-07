@@ -245,7 +245,7 @@ newtype Threshold = Threshold Word8
 data AccountKeys = AccountKeys {
   akKeys :: HM.HashMap KeyIndex VerifyKey,
   akThreshold :: Threshold
-  } deriving(Eq, Show)
+  } deriving(Eq, Show, Ord)
 
 instance S.Serialize AccountKeys where
   put AccountKeys{..} = do
