@@ -128,8 +128,9 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
     let hasher = ro
         .append("com_eq_sig")
         .append(blinded_sig.to_bytes())
-        .extend_from(commitments.iter().map(Commitment::to_bytes));
-    // TODO: Hash coefficients as well.
+        .extend_from(commitments.iter().map(Commitment::to_bytes))
+        .append(&ps_pub_key.to_bytes())
+        .append(&comm_key.to_bytes());
 
     // Random elements corresponding to the messages m_i, used as witnesses
     // for the aggregate log part of the proof, and the randomness R_i used
@@ -246,8 +247,9 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let mut hasher = ro
         .append("com_eq_sig")
         .append(blinded_sig.to_bytes())
-        .extend_from(commitments.iter().map(Commitment::to_bytes));
-    // TODO: Hash coefficients as well.
+        .extend_from(commitments.iter().map(Commitment::to_bytes))
+        .append(&ps_pub_key.to_bytes())
+        .append(&comm_key.to_bytes());
 
     let commitments = &commitments;
     if commitments.len() != proof.witness_commit.len() {
