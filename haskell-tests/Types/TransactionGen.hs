@@ -11,6 +11,7 @@ import Data.Time.Clock
 
 import Concordium.Types
 
+import Control.Monad
 import qualified Data.FixedByteString as FBS
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
@@ -30,18 +31,22 @@ genAccountAddress = do
 
 genTransactionHeader :: Gen TransactionHeader
 genTransactionHeader = do
-  thSenderKey <- correspondingVerifyKey <$> genKeyPair
+  (thSender, _) <- genAccountAddress
   thPayloadSize <- PayloadSize . (`mod` 5000) <$> arbitrary
   thNonce <- Nonce <$> arbitrary
-  thGasAmount <- Energy <$> arbitrary
-  return $ makeTransactionHeader thSenderKey thPayloadSize thNonce thGasAmount
+  thEnergyAmount <- Energy <$> arbitrary
+  return $ TransactionHeader{..}
 
 genBareTransaction :: Gen BareTransaction
 genBareTransaction = do
   btrHeader <- genTransactionHeader
   btrPayload <- EncodedPayload . BSS.pack <$> vector (fromIntegral (thPayloadSize btrHeader))
-  s <- choose (50,70)
-  btrSignature <- TransactionSignature . Signature . BSS.pack <$> vector s
+  numKeys <- choose (1, 255)
+  btrSignature <- TransactionSignature <$> replicateM numKeys (do
+    idx <- KeyIndex <$> arbitrary
+    sLen <- choose (50,70)
+    sig <- Signature . BSS.pack <$> vector sLen
+    return (idx, sig))
   return $! BareTransaction{..}
 
 baseTime :: UTCTime
@@ -55,11 +60,3 @@ genTransaction = do
   let trHash = hash body
   let trSize = BS.length body
   return $ Transaction{..}
-
-
-genSignedTransaction :: Gen BareTransaction
-genSignedTransaction = do
-  kp <- genKeyPair
-  btrHeader <- genTransactionHeader
-  btrPayload <- EncodedPayload . BSS.pack <$> vector (fromIntegral (thPayloadSize btrHeader))
-  return $! signTransaction kp (btrHeader {thSenderKey = correspondingVerifyKey kp}) btrPayload

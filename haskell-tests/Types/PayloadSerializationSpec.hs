@@ -14,7 +14,6 @@ import Data.ByteString.Short as BSS
 import Concordium.Types
 import qualified Concordium.Crypto.BlockSignature as BlockSig
 import Concordium.Types.Execution
-import Concordium.Types(Amount(..), Address(..))
 import Concordium.ID.Types
 import qualified Concordium.Crypto.VRF as VRF
 
