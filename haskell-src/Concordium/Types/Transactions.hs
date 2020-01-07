@@ -20,11 +20,10 @@ import qualified Data.Map.Strict as Map
 import Lens.Micro.Platform
 import Lens.Micro.Internal
 
+import Data.List
 import qualified Concordium.Crypto.SHA256 as H
 import Concordium.Crypto.SignatureScheme(Signature, KeyPair)
 import Concordium.Crypto.SignatureScheme as SigScheme
-import qualified Concordium.ID.Types as IDTypes
-import qualified Concordium.ID.Account as AH
 
 import qualified Data.Vector as Vec
 import Data.Word
@@ -33,13 +32,22 @@ import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Execution
 
-newtype TransactionSignature = TransactionSignature { tsSignature :: Signature }
+-- |A signature is an association list of index of the key, and the actual signature.
+-- The index is relative to the account address, and the indices should be distinct.
+-- The maximum length of the list is 255, and the minimum length is 1.
+newtype TransactionSignature = TransactionSignature { tsSignature :: [(KeyIndex, Signature)] }
   deriving (Eq, Show)
 
--- |NB: Relies on the scheme and signature serialization to be sensibly defined as specified on the wiki!
+-- |NB: Relies on the scheme and signature serialization to be sensibly defined
+-- as specified on the wiki!
 instance S.Serialize TransactionSignature where
-  put TransactionSignature{..} = S.put tsSignature
-  get = TransactionSignature <$> S.get
+  put TransactionSignature{..} = do
+    S.putWord8 (fromIntegral (length tsSignature))
+    forM_ tsSignature $ \(idx, sig) -> S.put idx <> S.put sig
+  get = do
+    len <- S.getWord8
+    when (len == 0) $ fail "Need at least one signature."
+    TransactionSignature <$> replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
 
 type TransactionTime = Word64
 
@@ -52,47 +60,40 @@ utcTimeToTransactionTime = floor . utcTimeToPOSIXSeconds
 
 -- | Data common to all transaction types.
 --
---  * INVARIANT: @thSender = 'AH.accountAddress' thSenderKey@.
---  * The last field is strictly redundant, but is here to avoid needless recomputation. In
---    serialization we do not output it, and when deserializing we compute it from other data.
 --  * @SPEC: <$DOCS/Transactions#transaction-header>
 data TransactionHeader = TransactionHeader {
-    -- |Verification key of the sender.
-    thSenderKey :: !IDTypes.AccountVerificationKey,
-    -- |Per account nonce, strictly increasing, no gaps.
+    -- |Sender account.
+    thSender :: AccountAddress,
+    -- |Account nonce.
     thNonce :: !Nonce,
-    -- |Amount of gas dedicated for the execution of this transaction.
-    thGasAmount :: !Energy,
+    -- |Amount of energy dedicated for the execution of this transaction.
+    thEnergyAmount :: !Energy,
     -- |Size of the payload in bytes.
-    thPayloadSize :: PayloadSize,
-    -- |Sender account. Derived from the sender key as specified.
-    thSender :: AccountAddress
+    thPayloadSize :: PayloadSize
     } deriving (Show)
 
 -- |Eq instance ignores derived fields.
 instance Eq TransactionHeader where
-  th1 == th2 = thSenderKey th1 == thSenderKey th2 &&
-               thNonce th1 == thNonce th2 &&
-               thGasAmount th1 == thGasAmount th2 &&
+  th1 == th2 = thNonce th1 == thNonce th2 &&
+               thEnergyAmount th1 == thEnergyAmount th2 &&
                thPayloadSize th1 == thPayloadSize th2
 
 -- |NB: Relies on the verify key serialization being defined as specified on the wiki.
 --
 -- * @SPEC: <$DOCS/Transactions#transaction-header-serialization>
--- * @COMMENT: Address is not serialized since it is a derived field. At deserialization is it is computed.
 instance S.Serialize TransactionHeader where
   put TransactionHeader{..} =
-      S.put thSenderKey <>
+      S.put thSender <>
       S.put thNonce <>
-      S.put thGasAmount <>
+      S.put thEnergyAmount <>
       S.put thPayloadSize
 
   get = do
-    thSenderKey <- S.get
+    thSender <- S.get
     thNonce <- S.get
-    thGasAmount <- S.get
+    thEnergyAmount <- S.get
     thPayloadSize <- S.get
-    return $ makeTransactionHeader thSenderKey thPayloadSize thNonce thGasAmount
+    return $! TransactionHeader{..}
 
 type TransactionHash = H.Hash
 
@@ -148,16 +149,6 @@ instance Eq Transaction where
 instance Ord Transaction where
   compare t1 t2 = compare (trHash t1) (trHash t2)
 
--- |Deserialize a transaction, checking its signature on the way.
---
--- * @SPEC: <$DOCS/Transactions#serialization-format-transactions>
-getVerifiedTransaction :: TransactionTime -> S.Get Transaction
-getVerifiedTransaction arTime = do
-  t@Transaction{trBareTransaction=BareTransaction{..},..} <- getUnverifiedTransaction arTime
-  unless (SigScheme.verify (thSenderKey btrHeader) (H.hashToByteString trHash) (tsSignature btrSignature)) $
-      fail "Incorrect signature."
-  return t
-
 -- |Deserialize a transaction, but don't check it's signature.
 --
 -- * @SPEC: <$DOCS/Transactions#serialization-format-transactions>
@@ -180,16 +171,6 @@ getUnverifiedTransaction trArrivalTime = do
   let trSize = bodySize + sigSize
   return Transaction{trBareTransaction=BareTransaction{..},..}
 
--- |Compute the derived field from the minimal fields, and make a header.
-makeTransactionHeader ::
-  IDTypes.AccountVerificationKey
-  -> PayloadSize
-  -> Nonce
-  -> Energy
-  -> TransactionHeader
-makeTransactionHeader thSenderKey thPayloadSize thNonce thGasAmount =
-  TransactionHeader{thSender = AH.accountAddress thSenderKey,..}
-
 -- |Make a transaction out of minimal data needed.
 -- This computes the derived fields, in particular the hash of the transaction.
 makeTransaction :: TransactionTime -> TransactionSignature -> TransactionHeader -> EncodedPayload -> Transaction
@@ -201,28 +182,38 @@ makeTransaction trArrivalTime btrSignature btrHeader btrPayload =
         trBareTransaction = BareTransaction{..}
     in Transaction{..}
 
--- |Sign a transaction with the given header and body.
+-- |Sign a transaction with the given header and body, using the given keypair.
+-- This assumes that there is only one key on the account, and that is with index 0.
 --
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
-signTransaction :: KeyPair -> TransactionHeader -> EncodedPayload -> BareTransaction
+signTransactionSingle :: KeyPair -> TransactionHeader -> EncodedPayload -> BareTransaction
+signTransactionSingle kp = signTransaction [(0, kp)]
+
+-- |Sign a transaction with the given header and body, using the given keypairs.
+-- The function does not sanity checking that the keys are valid, or that the
+-- indices are distint.
+--
+-- * @SPEC: <$DOCS/Transactions#transaction-signature>
+signTransaction :: [(KeyIndex, KeyPair)] -> TransactionHeader -> EncodedPayload -> BareTransaction
 signTransaction keys btrHeader btrPayload =
   let body = S.runPut (S.put btrHeader <> putPayload btrPayload)
       -- only sign the hash of the transaction
       bodyHash = H.hashToByteString (H.hash body)
-      tsSignature = SigScheme.sign keys bodyHash
+      tsSignature = map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) keys
       btrSignature = TransactionSignature{..}
   in BareTransaction{..}
 
--- |Verify that the given transaction was signed by the sender's key.
+-- |Verify that the given transaction was signed by the required number of keys.
 --
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
-verifyTransactionSignature :: TransactionData msg => msg -> Bool
-verifyTransactionSignature tx =
+verifyTransaction :: TransactionData msg => AccountKeys -> msg -> Bool
+verifyTransaction keys tx =
   let bodyHash = H.hashToByteString (transactionHash tx)
-      header = transactionHeader tx
-      vfkey = thSenderKey header
-      TransactionSignature sig = transactionSignature tx
-  in SigScheme.verify vfkey bodyHash sig
+      TransactionSignature sigs = transactionSignature tx
+      keysCheck = foldl' (\_ (idx, sig) -> maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getAccountKey idx keys)) True sigs
+      numSigs = length sigs
+      threshold = akThreshold keys
+  in numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck
 
 -- |The 'TransactionData' class abstracts away from the particular data
 -- structure. It makes it possible to unify operations on 'Transaction' as well
@@ -242,7 +233,7 @@ instance TransactionData BareTransaction where
     transactionHeader = btrHeader
     transactionSender = thSender . btrHeader
     transactionNonce = thNonce . btrHeader
-    transactionGasAmount = thGasAmount . btrHeader
+    transactionGasAmount = thEnergyAmount . btrHeader
     transactionPayload = btrPayload
     transactionSignature = btrSignature
     transactionHash t = H.hash (S.runPut $ S.put (btrHeader t) <> putPayload (btrPayload t))
@@ -253,7 +244,7 @@ instance TransactionData Transaction where
     transactionHeader = btrHeader . trBareTransaction
     transactionSender = thSender . btrHeader . trBareTransaction
     transactionNonce = thNonce . btrHeader . trBareTransaction
-    transactionGasAmount = thGasAmount . btrHeader . trBareTransaction
+    transactionGasAmount = thEnergyAmount . btrHeader . trBareTransaction
     transactionPayload = btrPayload . trBareTransaction
     transactionSignature = btrSignature . trBareTransaction
     transactionHash = getHash
