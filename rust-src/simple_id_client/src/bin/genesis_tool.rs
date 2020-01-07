@@ -65,6 +65,7 @@ fn main() {
                     .arg(
                         Arg::with_name("num_finalizers")
                             .long("num_finalizers")
+                            .value_name("F")
                             .help("The amount of finalizers to generate. Defaults to all bakers.")
                             .required(false),
                     ),
