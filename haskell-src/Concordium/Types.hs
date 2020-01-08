@@ -241,6 +241,16 @@ data AccountKeys = AccountKeys {
   akThreshold :: SignatureThreshold
   } deriving(Eq, Show, Ord)
 
+makeAccountKeys :: [VerifyKey] -> SignatureThreshold -> AccountKeys
+makeAccountKeys keys akThreshold =
+  AccountKeys{
+    akKeys = HM.fromList (zip [0..] keys),
+    ..
+    }
+
+makeSingletonAC :: VerifyKey -> AccountKeys
+makeSingletonAC key = makeAccountKeys [key] 1
+
 instance S.Serialize AccountKeys where
   put AccountKeys{..} = do
     S.putWord16be (fromIntegral (length akKeys))
@@ -253,6 +263,7 @@ instance S.Serialize AccountKeys where
     akThreshold <- S.get
     return AccountKeys{..}
 
+{-# INLINE getAccountKey #-}
 getAccountKey :: KeyIndex -> AccountKeys -> Maybe VerifyKey
 getAccountKey idx keys = HM.lookup idx (akKeys keys)
 
