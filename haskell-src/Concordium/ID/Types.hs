@@ -10,12 +10,9 @@ import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Base16 as BS16
-import qualified Data.FixedByteString as FBS
 import Concordium.Crypto.SignatureScheme
 import Data.Bits
-import Data.Serialize
-import qualified Data.Serialize.Put as Put
-import qualified Data.Serialize.Get as Get
+import Data.Serialize as S
 import GHC.Generics
 import Data.Hashable
 import qualified Data.Text.Read as Text
@@ -25,16 +22,19 @@ import Control.Monad
 import Control.Monad.Fail hiding(fail)
 import qualified Control.Monad.Fail as MF
 import qualified Data.Text as Text
-import Concordium.Crypto.ByteStringHelpers
-import Concordium.Crypto.FFIDataTypes
 import Control.DeepSeq
-
 import Data.Scientific
 
+
 import Data.Base58Encoding
+import qualified Data.FixedByteString as FBS
+import Concordium.Crypto.ByteStringHelpers
+import Concordium.Crypto.FFIDataTypes
+import qualified Concordium.Crypto.SHA256 as SHA256
+
 
 accountAddressSize :: Int
-accountAddressSize = 21
+accountAddressSize = 32
 data AccountAddressSize
    deriving(Data, Typeable)
 instance FBS.FixedLength AccountAddressSize where
@@ -49,7 +49,6 @@ instance Serialize AccountAddress where
 
 instance Hashable AccountAddress where
     hashWithSalt s (AccountAddress b) = hashWithSalt s (FBS.toShortByteString b)
-    -- |FIXME: The first byte of the address is mostly the same so this method is not the best.
     hash (AccountAddress b) = fromIntegral (FBS.unsafeReadWord64 b)
 
 -- |Show the address in base58check format.
@@ -69,33 +68,26 @@ addressFromText = addressFromBytes . Text.encodeUtf8
 -- |Convert an address to valid Base58 bytes.
 -- Uses version byte 1 for the base58check encoding.
 addressToBytes :: AccountAddress -> ByteString
-addressToBytes (AccountAddress v) = schemeId <> raw (base58CheckEncode (BS.cons 1 (BS.tail bs)))
+addressToBytes (AccountAddress v) = raw (base58CheckEncode (BS.cons 1 bs))
     where bs = FBS.toByteString v
-          schemeId = 
-            let bytes = encodePositiveInteger' (fromIntegral (BS.head bs))
-            in if BS.length bytes == 1 then BS8.cons '1' bytes
-               else bytes
 
 
 -- |Take bytes which are presumed valid base58 encoding, and try to deserialize
 -- an address.
 addressFromBytes :: MonadFail m => BS.ByteString -> m AccountAddress
 addressFromBytes bs =
-    if BS.length bs < 2 then
-      MF.fail "Address too short."
-    else
-      let (scheme, payload) = BS.splitAt 2 bs
-      in case decodePositiveInteger' scheme of
-           Nothing -> MF.fail "Could not decode scheme."
-           Just schemeId | schemeId >= 256 -> MF.fail "Scheme id not valid."
-                         | otherwise ->
-            case base58CheckDecode' payload of
-              Nothing -> MF.fail "Base 58 checksum invalid."
-              Just x | BS.length x == accountAddressSize ->
-                       let version = BS.head x
-                       in if version == 1 then return (AccountAddress (FBS.fromByteString (BS.cons (fromIntegral schemeId) (BS.tail x))))
-                          else fail "Unknown base58 check version byte."
-                     | otherwise -> MF.fail "Wrong address length."
+      case base58CheckDecode' bs of
+        Nothing -> MF.fail "Base 58 checksum invalid."
+        Just x | BS.length x == accountAddressSize + 1 ->
+                 let version = BS.head x
+                 in if version == 1 then return (AccountAddress (FBS.fromByteString (BS.tail x)))
+                    else fail "Unknown base58 check version byte."
+               | otherwise -> MF.fail "Wrong address length."
+
+
+addressFromRegId :: CredentialRegistrationID -> AccountAddress
+addressFromRegId (RegIdCred fbs) = AccountAddress (FBS.FixedByteString addr) -- NB: This only works because the sizes are the same
+  where SHA256.Hash (FBS.FixedByteString addr) = SHA256.hashShort (FBS.toShortByteString fbs)
 
 -- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32
@@ -103,9 +95,9 @@ newtype IdentityProviderIdentity  = IP_ID Word32
     deriving Show via Word32
 
 instance Serialize IdentityProviderIdentity where
-  put (IP_ID w) = Put.putWord32be w
+  put (IP_ID w) = S.putWord32be w
 
-  get = IP_ID <$> Get.getWord32be
+  get = IP_ID <$> S.getWord32be
 
 -- Public key of the Identity provider
 newtype IdentityProviderPublicKey = IP_PK PsSigKey
@@ -267,8 +259,8 @@ newtype ARName = ARName Word32
     deriving Show via Word32
 
 instance Serialize ARName where
-  put (ARName n) = Put.putWord32be n
-  get = ARName <$> Get.getWord32be
+  put (ARName n) = S.putWord32be n
+  get = ARName <$> S.getWord32be
 
 -- |Public key of an anonymity revoker.
 newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
@@ -296,16 +288,16 @@ newtype ShareNumber = ShareNumber Word32
     deriving (FromJSON, ToJSON) via Word32
 
 instance Serialize ShareNumber where
-  put (ShareNumber n) = Put.putWord32be n
-  get = ShareNumber <$> Get.getWord32be
+  put (ShareNumber n) = S.putWord32be n
+  get = ShareNumber <$> S.getWord32be
 
 newtype Threshold = Threshold Word32
     deriving (Eq, Show, Ord)
     deriving (FromJSON, ToJSON) via Word32
 
 instance Serialize Threshold where
-  put (Threshold n) = Put.putWord32be n
-  get = Threshold <$> Get.getWord32be
+  put (Threshold n) = S.putWord32be n
+  get = Threshold <$> S.getWord32be
 
 
 -- |Data needed on-chain to revoke anonymity of the account holder.
@@ -342,36 +334,96 @@ instance Serialize ChainArData where
 
 type AccountVerificationKey = VerifyKey
 
+-- |The number of keys required to sign the message.
+-- The value is at least 1 and at most 255.
+newtype SignatureThreshold = SignatureThreshold Word8
+    deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
+    deriving Serialize via Word8
+
+instance ToJSON SignatureThreshold where
+  toJSON (SignatureThreshold x) = toJSON x
+
+instance FromJSON SignatureThreshold where
+  parseJSON v = do
+    x <- parseJSON v
+    unless (x <= (255::Word) || x >= 1) $ fail "Signature threshold out of bounds."
+    return $! SignatureThreshold (fromIntegral x)
+
+-- |Data about which account this credential belongs to.
+data CredentialAccount =
+  ExistingAccount !AccountAddress
+  -- | Create a new account. The list of keys must be non-empty and no longer
+  -- than 255 elements.
+  | NewAccount ![AccountVerificationKey] !SignatureThreshold
+  deriving(Eq, Show)
+
+instance ToJSON CredentialAccount where
+  toJSON (ExistingAccount x) = toJSON x
+  toJSON (NewAccount keys threshold) = object [
+    "keys" .= keys,
+    "threshold" .= threshold
+    ]
+
+instance FromJSON CredentialAccount where
+  parseJSON (Object obj) = do
+    keys <- obj .: "keys"
+    when (null keys) $ fail "The list of keys must be non-empty."
+    let len = length keys
+    unless (len <= 255) $ fail "The list of keys must be no longer than 255 elements."
+    threshold <- obj .:? "threshold" .!= fromIntegral (length keys) -- default to all the keys as a threshold
+    return $! NewAccount keys threshold
+  parseJSON v = ExistingAccount <$> parseJSON v
+
+instance Serialize CredentialAccount where
+  put (ExistingAccount x) = S.putWord8 0 <> S.put x
+  put (NewAccount keys threshold) = S.putWord8 1 <> do
+      S.putWord16be (fromIntegral (length keys))
+      mapM_ S.put keys
+      S.put threshold
+
+  get =
+    S.getWord8 >>= \case
+      0 -> ExistingAccount <$> S.get
+      1 -> do
+        len <- S.getWord16be
+        unless (len >= 1 && len <= 255) $ fail "The list of keys must be non-empty and at most 255 elements long."
+        keys <- replicateM (fromIntegral len) S.get
+        threshold <- S.get
+        return $! NewAccount keys threshold
+      _ -> fail "Input must be either an existing account or a new account with a list of keys and threshold."
+
 data CredentialDeploymentValues = CredentialDeploymentValues {
-  -- |The verification (public) key of the account to which this credential is
-  -- deployed, it records its own signature scheme as well.
-  cdvVerifyKey  :: AccountVerificationKey,
+  -- |Either an address of an existing account, or the list of keys the newly
+  -- created account should have, together with a threshold for how many are needed
+  -- Its address is derived from the registration id of this credential.
+  cdvAccount :: !CredentialAccount,
   -- |Registration id of __this__ credential.
-  cdvRegId     :: CredentialRegistrationID,
+  cdvRegId     :: !CredentialRegistrationID,
   -- |Identity of the identity provider who signed the identity object from
   -- which this credential is derived.
-  cdvIpId      :: IdentityProviderIdentity,
+  cdvIpId      :: !IdentityProviderIdentity,
   -- |Revocation threshold. Any set of this many anonymity revokers can reveal IdCredPub.
-  cdvThreshold :: Threshold,
+  cdvThreshold :: !Threshold,
   -- |Anonymity revocation data associated with this credential.
-  cdvArData :: [ChainArData],
+  cdvArData :: ![ChainArData],
   -- |Policy. At the moment only opening of specific commitments.
-  cdvPolicy :: Policy
+  cdvPolicy :: !Policy
 } deriving(Eq, Show)
 
 instance ToJSON CredentialDeploymentValues where
   toJSON CredentialDeploymentValues{..} =
-    object (verifyKeyToJSONPairs cdvVerifyKey ++ [
+    object [
+    "account" .= cdvAccount,
     "regId" .= cdvRegId,
     "ipIdentity" .= cdvIpId,
     "revocationThreshold" .= cdvThreshold,
     "arData" .= cdvArData,
     "policy" .= cdvPolicy
-    ])
+    ]
 
 instance FromJSON CredentialDeploymentValues where
   parseJSON = withObject "CredentialDeploymentValues" $ \v -> do
-    cdvVerifyKey <- parseJSON (Object v)
+    cdvAccount <- v .: "account"
     cdvRegId <- v .: "regId"
     cdvIpId <- v .: "ipIdentity"
     cdvThreshold <- v.: "revocationThreshold"
@@ -408,21 +460,21 @@ putPolicyItem PolicyItem{..} =
 
 instance Serialize CredentialDeploymentValues where
   get = do
-    cdvVerifyKey <- get
+    cdvAccount <- get
     cdvRegId <- get
     cdvIpId <- get
     cdvThreshold <- get
-    l <- Get.getWord16be
+    l <- S.getWord16be
     cdvArData <- replicateM (fromIntegral l) get
     cdvPolicy <- getPolicy
     return CredentialDeploymentValues{..}
 
   put CredentialDeploymentValues{..} =
-    put cdvVerifyKey <>
+    put cdvAccount <>
     put cdvRegId <>
     put cdvIpId <>
     put cdvThreshold <>
-    Put.putWord16be (fromIntegral (length cdvArData)) <>
+    S.putWord16be (fromIntegral (length cdvArData)) <>
     mapM_ put cdvArData <>
     putPolicy cdvPolicy
 
@@ -453,21 +505,3 @@ instance FromJSON CredentialDeploymentInformation where
     proofsText <- v .: "proofs"
     return CredentialDeploymentInformation{cdiProofs = Proofs (BSS.toShort . fst . BS16.decode . Text.encodeUtf8 $ proofsText),
                                            ..}
-
--- |Partially deserialize the CDI, leaving the proofs as leftover.
--- Designed to be used with 'runGetPartial'.
-getCDIPartial :: Get CredentialDeploymentValues
-getCDIPartial = do
-  cdvVerifyKey <- get
-  cdvRegId <- get
-  cdvIpId <- get
-  cdvThreshold <- get
-  cdvArData <- get
-  cdvPolicy <- getPolicy
-  return CredentialDeploymentValues{..}
-
-deserializeCDIPartial :: ByteString -> Either String (CredentialDeploymentValues, ByteString)
-deserializeCDIPartial bs = loop (runGetPartial getCDIPartial bs)
-    where loop (Fail err _) = Left err
-          loop (Partial k) = loop (k BS.empty)
-          loop (Done r rest) = Right (r, rest)
