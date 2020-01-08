@@ -3,14 +3,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.ID.Account where
 
-import Concordium.ID.Types
 import GHC.Word
-import Data.ByteString.Random.MWC
-import Concordium.Crypto.SignatureScheme
-import qualified Concordium.Crypto.SHA224 as SHA224
-import qualified Data.ByteString as BS
-import qualified Data.FixedByteString as FBS
-import Data.Serialize(encode)
 import System.IO.Unsafe
 import Foreign.Ptr
 import Foreign.C.Types
@@ -42,22 +35,3 @@ verifyCredential gc ipInfo cdiBytes = unsafeDupablePerformIO $ do
            -- non-null
            verifyCDIFFI gcPtr ipInfoPtr (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
     return (res == 1)
-
-registrationId :: IO CredentialRegistrationID
-registrationId = (random 48) >>= (return . RegIdCred . FBS.fromByteString)
-
-accountScheme :: AccountAddress -> Maybe SchemeId
-accountScheme (AccountAddress s) = toScheme (FBS.getByte s 0)
-
--- |Compute the account address from account's (public) verification key and the signature scheme identifier.
--- The address is computed by the following algorithm
---
---  * compute SHA-224 hash of the verification key
---  * take the first 20 bytes of the resulting string
---  * and prepend a one byte identifier of the signature scheme.
-accountAddress :: VerifyKey -> AccountAddress 
-accountAddress (VerifyKeyEd25519 vfKey) =  AccountAddress (FBS.fromByteString $ (encode Ed25519) <> (BS.take (accountAddressSize - 1) bs))
-    where 
-      -- NB: It is quite important that encode does not put the length information up front for the key.
-      (SHA224.Hash r) = SHA224.hash (encode vfKey)
-      bs = FBS.toByteString r
