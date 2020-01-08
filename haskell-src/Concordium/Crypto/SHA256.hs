@@ -125,13 +125,6 @@ hashLazy b = Hash $ unsafeDupablePerformIO $
            where
              f ptr chunk = withForeignPtr ptr $ \ptr' -> hash_update chunk ptr'
 
-    
-hashTest ::FilePath ->  IO ()
-hashTest path = do b <- L.readFile path
-                   let (Hash b') = hashLazy b
-                   putStrLn(byteStringToHex $ FBS.toByteString b')
-
-
 -- |Convert a 'Hash' into a 'Double' value in the range [0,1].
 -- This implementation takes the first 64-bit word (big-endian) and uses it
 -- as the significand, with an exponent of -64.  Since the precision of a
