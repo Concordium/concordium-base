@@ -25,7 +25,6 @@ Library
   ghc-options: -Wall -O2
   hs-source-dirs: haskell-src
   Exposed-modules: Concordium.Crypto.SHA256
-                   Concordium.Crypto.SHA224
                    Concordium.Crypto.Ed25519Signature
                    Concordium.Crypto.BlsSignature
                    Concordium.Crypto.BlockSignature
@@ -53,10 +52,8 @@ Library
                 , cereal >=0.5.7
                 , hashable >= 1.0.1.1
                 , random >= 1.1
-                , stringbuilder >=0.5.0
                 , containers >= 0.5.11.0
                 , time       >= 1.7
-                , random-bytestring >= 0.1.3.0
                 , QuickCheck >= 2.10
                 , vector >= 0.12
                 , template-haskell >= 2.14
@@ -99,7 +96,6 @@ Test-Suite tests
   other-modules:
    ConcordiumTests.Data.Base58Encoding
    ConcordiumTests.Crypto.SHA256
-   ConcordiumTests.Crypto.SHA224
    ConcordiumTests.Crypto.Ed25519Signature
    ConcordiumTests.Crypto.VRF
    ConcordiumTests.Crypto.FFIDataTypes
