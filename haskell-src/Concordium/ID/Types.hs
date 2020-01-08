@@ -24,7 +24,7 @@ import qualified Control.Monad.Fail as MF
 import qualified Data.Text as Text
 import Control.DeepSeq
 import Data.Scientific
-
+import System.Random
 
 import Data.Base58Encoding
 import qualified Data.FixedByteString as FBS
@@ -42,6 +42,13 @@ instance FBS.FixedLength AccountAddressSize where
 
 newtype AccountAddress =  AccountAddress (FBS.FixedByteString AccountAddressSize)
     deriving(Eq, Ord, Generic, Data, Typeable)
+
+{-# WARNING randomAccountAddress "DO NOT USE IN PRODUCTION." #-}
+randomAccountAddress :: RandomGen g => g -> (AccountAddress, g)
+randomAccountAddress g =
+  let (g1, g2) = split g
+  in (AccountAddress (FBS.pack (take accountAddressSize (randoms g1))), g2)
+
 
 instance Serialize AccountAddress where
     put (AccountAddress h) = putByteString $ FBS.toByteString h
