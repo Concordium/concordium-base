@@ -410,6 +410,12 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
   cdvPolicy :: !Policy
 } deriving(Eq, Show)
 
+credentialAccountAddress :: CredentialDeploymentValues -> AccountAddress
+credentialAccountAddress cdv =
+  case cdvAccount cdv of
+    ExistingAccount addr -> addr
+    _ -> addressFromRegId (cdvRegId cdv)
+
 instance ToJSON CredentialDeploymentValues where
   toJSON CredentialDeploymentValues{..} =
     object [
