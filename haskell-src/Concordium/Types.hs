@@ -17,7 +17,7 @@ import Data.Data(Typeable, Data)
 import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
-import Concordium.ID.Types hiding (Threshold)
+import Concordium.ID.Types
 import Concordium.Crypto.SignatureScheme(SchemeId, VerifyKey)
 import Concordium.Types.HashableTo
 
@@ -236,15 +236,9 @@ newtype KeyIndex = KeyIndex Word8
     deriving S.Serialize via Word8
     deriving Hashable via Word8
 
--- |The number of keys required to sign the message.
--- The value is at least 1 and at most 255.
-newtype Threshold = Threshold Word8
-    deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
-    deriving S.Serialize via Word8
-
 data AccountKeys = AccountKeys {
   akKeys :: HM.HashMap KeyIndex VerifyKey,
-  akThreshold :: Threshold
+  akThreshold :: SignatureThreshold
   } deriving(Eq, Show, Ord)
 
 instance S.Serialize AccountKeys where
