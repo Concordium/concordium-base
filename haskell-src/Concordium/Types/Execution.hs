@@ -30,6 +30,25 @@ data InternalMessage annot = TSend !ContractAddress !Amount !(Value annot) | TSi
 
 type Proof = BS.ByteString
 
+-- |We assume that the list is non-empty and at most 255 elements long.
+newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
+    deriving(Eq, Show)
+
+-- |Helper for when an account has only one key with index 0.
+singletonAOP :: Dlog25519Proof -> AccountOwnershipProof
+singletonAOP proof = AccountOwnershipProof [(0, proof)]
+
+instance S.Serialize AccountOwnershipProof where
+  put (AccountOwnershipProof proofs) = do
+    S.putWord8 (fromIntegral (length proofs))
+    forM_ proofs (S.putTwoOf S.put S.put)
+
+  get = do
+    l <- S.getWord8
+    when (l == 0) $ fail "At least one proof must be provided."
+    AccountOwnershipProof <$> replicateM (fromIntegral l) (S.getTwoOf S.get S.get)
+
+
 -- |The transaction payload. Defines the supported kinds of transactions.
 --
 --  * @SPEC: <$DOCS/Transactions#transaction-body>
@@ -101,7 +120,7 @@ data Payload =
       -- create their own bakers.
       -- TODO: We could also alternatively just require a signature from one of the
       -- beta accounts on the public data.
-      abProofAccount :: !Dlog25519Proof
+      abProofAccount :: !AccountOwnershipProof
       -- FIXME: in the future also logic the baker is allowed to become a baker:
       -- THIS NEEDS SPEC
       }
@@ -122,7 +141,7 @@ data Payload =
       -- |Address of the new account. The account must exist.
       ubaAddress :: !AccountAddress,
       -- |Proof that the baker owns the new account.
-      ubaProof :: !Dlog25519Proof
+      ubaProof :: !AccountOwnershipProof
       }
   -- |Update the signature (verification) key of the baker.
   | UpdateBakerSignKey {
