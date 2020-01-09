@@ -152,7 +152,6 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
     }
 }
 
-
 /// Verify proof of knowledge of multiplicative relationship. The arguments are
 /// as follows.
 /// * `ro` - Random oracle used in the challenge computation. This can be used
@@ -187,7 +186,7 @@ pub fn verify_com_mult<T: Curve>(
             .plus_point(&cmm_key.hide(Value::view_scalar(s_i), Randomness::view_scalar(t_i)));
         hasher.add(&v_i.curve_to_bytes());
     }
-    
+
     let h = cmm_key.1;
     let s_2 = proof.ss[1];
     let cC_3 = cmm_3;
