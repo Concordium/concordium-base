@@ -8,7 +8,7 @@
 
 use rand::{thread_rng, CryptoRng, Rng, RngCore};
 
-use std::slice;
+use std::{slice, sync::Arc};
 
 #[cfg(feature = "serde")]
 use serde::de::Error as SerdeError;
@@ -163,30 +163,30 @@ impl<'d> Deserialize<'d> for Keypair {
 // foreign interface
 
 // Boilerplate serialization functions.
-macro_derive_from_bytes_no_cursor!(ec_vrf_proof_from_bytes, Proof, Proof::from_bytes);
+macro_derive_from_bytes_no_cursor!(Arc ec_vrf_proof_from_bytes, Proof, Proof::from_bytes);
 macro_derive_from_bytes_no_cursor!(
-    ec_vrf_public_key_from_bytes,
+    Box ec_vrf_public_key_from_bytes,
     PublicKey,
     PublicKey::from_bytes
 );
 macro_derive_from_bytes_no_cursor!(
-    ec_vrf_secret_key_from_bytes,
+    Box ec_vrf_secret_key_from_bytes,
     SecretKey,
     SecretKey::from_bytes
 );
-macro_derive_to_bytes!(ec_vrf_proof_to_bytes, Proof);
-macro_derive_to_bytes!(ec_vrf_public_key_to_bytes, PublicKey);
-macro_derive_to_bytes!(ec_vrf_secret_key_to_bytes, SecretKey);
+macro_derive_to_bytes!(Arc ec_vrf_proof_to_bytes, Proof);
+macro_derive_to_bytes!(Box ec_vrf_public_key_to_bytes, PublicKey);
+macro_derive_to_bytes!(Box ec_vrf_secret_key_to_bytes, SecretKey);
 // Cleanup of allocated structs.
-macro_free_ffi!(ec_vrf_proof_free, Proof);
-macro_free_ffi!(ec_vrf_public_key_free, PublicKey);
-macro_free_ffi!(ec_vrf_secret_key_free, SecretKey);
+macro_free_ffi!(Arc ec_vrf_proof_free, Proof);
+macro_free_ffi!(Box ec_vrf_public_key_free, PublicKey);
+macro_free_ffi!(Box ec_vrf_secret_key_free, SecretKey);
 
 // equality testing
-macro_derive_binary!(ec_vrf_proof_eq, Proof, Proof::eq);
-macro_derive_binary!(ec_vrf_public_key_eq, PublicKey, PublicKey::eq);
+macro_derive_binary!(Arc ec_vrf_proof_eq, Proof, Proof::eq);
+macro_derive_binary!(Box ec_vrf_public_key_eq, PublicKey, PublicKey::eq);
 // NB: Using constant time comparison.
-macro_derive_binary!(ec_vrf_secret_key_eq, SecretKey, |x, y| bool::from(
+macro_derive_binary!(Box ec_vrf_secret_key_eq, SecretKey, |x, y| bool::from(
     SecretKey::ct_eq(x, y)
 ));
 
@@ -198,8 +198,8 @@ macro_derive_binary!(ec_vrf_secret_key_eq, SecretKey, |x, y| bool::from(
 /// null-pointers and it always returns a non-null pointer.
 /// NB: This function is non-deterministic (i.e., uses randomness).
 pub extern "C" fn ec_vrf_prove(
-    public: *const PublicKey,
-    secret: *const SecretKey,
+    public: *mut PublicKey,
+    secret: *mut SecretKey,
     message: *const u8,
     len: size_t,
 ) -> *const Proof {
@@ -209,13 +209,13 @@ pub extern "C" fn ec_vrf_prove(
     let data: &[u8] = slice_from_c_bytes!(message, len);
     let mut csprng = thread_rng();
     let proof = sk.prove(&pk, data, &mut csprng);
-    Box::into_raw(Box::new(proof))
+    Arc::into_raw(Arc::new(proof))
 }
 
 #[no_mangle]
 /// Generate a new secret key using the system random number generator.
 /// The result is always a non-null pointer.
-pub extern "C" fn ec_vrf_priv_key() -> *const SecretKey {
+pub extern "C" fn ec_vrf_priv_key() -> *mut SecretKey {
     let mut csprng = thread_rng();
     let sk = SecretKey::generate(&mut csprng);
     Box::into_raw(Box::new(sk))
@@ -226,7 +226,7 @@ pub extern "C" fn ec_vrf_priv_key() -> *const SecretKey {
 /// We assume the secret key pointer is non-null.
 /// The result is always a non-null pointer.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn ec_vrf_pub_key(secret_key: *const SecretKey) -> *const PublicKey {
+pub extern "C" fn ec_vrf_pub_key(secret_key: *mut SecretKey) -> *mut PublicKey {
     let sk = from_ptr!(secret_key);
     let pk = PublicKey::from(sk);
     Box::into_raw(Box::new(pk))
@@ -244,7 +244,7 @@ pub extern "C" fn ec_vrf_proof_to_hash(hash_ptr: *mut u8, proof_ptr: *const Proo
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn ec_vrf_verify_key(key_ptr: *const PublicKey) -> i32 {
+pub extern "C" fn ec_vrf_verify_key(key_ptr: *mut PublicKey) -> i32 {
     let key = from_ptr!(key_ptr);
     if key.verify_key() {
         1
@@ -258,7 +258,7 @@ pub extern "C" fn ec_vrf_verify_key(key_ptr: *const PublicKey) -> i32 {
 /// Verify. Returns 1 if verification successful and 0 otherwise.
 /// We assume all pointers are non-null.
 pub extern "C" fn ec_vrf_verify(
-    public_key_ptr: *const PublicKey,
+    public_key_ptr: *mut PublicKey,
     proof_ptr: *const Proof,
     message_ptr: *const u8,
     len: size_t,
@@ -311,8 +311,8 @@ pub extern "C" fn ec_vrf_proof_cmp(proof_ptr_1: *const Proof, proof_ptr_2: *cons
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 // ord instance for public keys
 pub extern "C" fn ec_vrf_public_key_cmp(
-    public_key_ptr_1: *const PublicKey,
-    public_key_ptr_2: *const PublicKey,
+    public_key_ptr_1: *mut PublicKey,
+    public_key_ptr_2: *mut PublicKey,
 ) -> i32 {
     // optimistic check first.
     if public_key_ptr_1 == public_key_ptr_2 {

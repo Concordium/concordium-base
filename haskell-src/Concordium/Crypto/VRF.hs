@@ -18,6 +18,7 @@ module Concordium.Crypto.VRF(
     newKeyPair,
     prove,
     proofToHash,
+    withProof,
     verify,
     verifyKey,
     hashToDouble,
@@ -70,6 +71,10 @@ foreign import ccall "ec_vrf_proof_to_hash" rs_proof_to_hash :: Ptr Word8 -> Ptr
 foreign import ccall "ec_vrf_verify_key" rs_verify_key :: Ptr PublicKey -> IO Bool
 foreign import ccall "ec_vrf_verify" rs_verify :: Ptr PublicKey -> Ptr Proof -> Ptr Word8 -> CSize -> IO Int32
 
+-- |As a wrapper over `withForeignPtr` this allows temporary access
+-- to the underlying `ForeignPtr` inside a `Proof`. The internally
+-- exposed pointer must not be used outside of the call to the
+-- provided function.
 withProof :: Proof -> (Ptr Proof -> IO b) -> IO b
 withProof (Proof fp) = withForeignPtr fp
 
