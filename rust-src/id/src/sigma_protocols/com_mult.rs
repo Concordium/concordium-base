@@ -152,13 +152,12 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
     }
 }
 
-// FIXME: Why don't we hash cmm_key or other coefficients?
 
 /// Verify proof of knowledge of multiplicative relationship. The arguments are
 /// as follows.
 /// * `ro` - Random oracle used in the challenge computation. This can be used
 ///   to make sure that the proof is only valid in a certain context.
-/// * `public` - The triple of commitments (the product of the first two
+/// * `cmm_{1,2,3}` - The triple of commitments (the product of the first two
 ///   commited values should be equal to the last)
 /// * `cmm_key` - The commitment key with which all the commitments are
 ///   generated.
@@ -188,8 +187,7 @@ pub fn verify_com_mult<T: Curve>(
             .plus_point(&cmm_key.hide(Value::view_scalar(s_i), Randomness::view_scalar(t_i)));
         hasher.add(&v_i.curve_to_bytes());
     }
-    // public[2] is C_3 from the specification
-    // proof.ss[1] is s_2
+    
     let h = cmm_key.1;
     let s_2 = proof.ss[1];
     let cC_3 = cmm_3;

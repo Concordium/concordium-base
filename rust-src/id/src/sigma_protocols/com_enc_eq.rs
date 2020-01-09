@@ -174,7 +174,6 @@ pub fn verify_com_enc_eq<T: Curve>(
         .plus_point(&h.mul_by_scalar(&z_3))
         .plus_point(&cC.mul_by_scalar(&proof.challenge));
 
-    // FIXME: Add keys to hash as well.
     let hasher = ro
         .append("com_enc_eq")
         .append(&cipher.to_bytes())
