@@ -7,33 +7,52 @@ use std::{cmp::Ordering, io::Cursor, slice};
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn bls_generate_secretkey() -> *const SecretKey<Bls12> {
+pub extern "C" fn bls_generate_secretkey() -> *mut SecretKey<Bls12> {
     let mut csprng = thread_rng();
     Box::into_raw(Box::new(SecretKey::generate(&mut csprng)))
 }
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn bls_derive_publickey(sk_ptr: *const SecretKey<Bls12>) -> *const PublicKey<Bls12> {
+pub extern "C" fn bls_derive_publickey(sk_ptr: *mut SecretKey<Bls12>) -> *mut PublicKey<Bls12> {
     let sk = from_ptr!(sk_ptr);
     Box::into_raw(Box::new(PublicKey::from_secret(*sk)))
 }
 
-macro_derive_from_bytes!(bls_sk_from_bytes, SecretKey<Bls12>, SecretKey::from_bytes);
-macro_derive_from_bytes!(bls_pk_from_bytes, PublicKey<Bls12>, PublicKey::from_bytes);
-macro_derive_from_bytes!(bls_sig_from_bytes, Signature<Bls12>, Signature::from_bytes);
-macro_free_ffi!(bls_free_pk, PublicKey<Bls12>);
-macro_free_ffi!(bls_free_sk, SecretKey<Bls12>);
-macro_free_ffi!(bls_free_sig, Signature<Bls12>);
-macro_derive_to_bytes!(bls_pk_to_bytes, PublicKey<Bls12>);
-macro_derive_to_bytes!(bls_sk_to_bytes, SecretKey<Bls12>);
-macro_derive_to_bytes!(bls_sig_to_bytes, Signature<Bls12>);
-macro_derive_binary!(bls_sk_eq, SecretKey<Bls12>, SecretKey::eq);
-macro_derive_binary!(bls_pk_eq, PublicKey<Bls12>, PublicKey::eq);
-macro_derive_binary!(bls_sig_eq, Signature<Bls12>, Signature::eq);
+macro_derive_from_bytes!(Box bls_sk_from_bytes, SecretKey<Bls12>, SecretKey::from_bytes);
+macro_derive_from_bytes!(Box bls_pk_from_bytes, PublicKey<Bls12>, PublicKey::from_bytes);
+macro_derive_from_bytes!(Box bls_sig_from_bytes, Signature<Bls12>, Signature::from_bytes);
+macro_free_ffi!(Box bls_free_pk, PublicKey<Bls12>);
+macro_free_ffi!(Box bls_free_sk, SecretKey<Bls12>);
+macro_free_ffi!(Box bls_free_sig, Signature<Bls12>);
+macro_derive_to_bytes!(Box bls_pk_to_bytes, PublicKey<Bls12>);
+macro_derive_to_bytes!(Box bls_sk_to_bytes, SecretKey<Bls12>);
+macro_derive_to_bytes!(Box bls_sig_to_bytes, Signature<Bls12>);
+macro_derive_binary!(Box bls_sk_eq, SecretKey<Bls12>, SecretKey::eq);
+macro_derive_binary!(Box bls_pk_eq, PublicKey<Bls12>, PublicKey::eq);
+macro_derive_binary!(Box bls_sig_eq, Signature<Bls12>, Signature::eq);
 
 macro_rules! macro_cmp {
-    ($function_name:ident, $type:ty) => {
+    (Arc $function_name:ident, $type:ty) => {
+        #[no_mangle]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        // support ord instance needed in Haskell
+        pub extern "C" fn $function_name(ptr1: *mut $type, ptr2: *mut $type) -> i32 {
+            // optimistic check first.
+            if ptr1 == ptr2 {
+                return 0;
+            }
+
+            let p1 = from_ptr!(ptr1);
+            let p2 = from_ptr!(ptr2);
+            match p1.to_bytes().cmp(&p2.to_bytes()) {
+                Ordering::Less => return -1,
+                Ordering::Greater => return 1,
+                Ordering::Equal => 0,
+            }
+        }
+    };
+    (Box $function_name:ident, $type:ty) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         // support ord instance needed in Haskell
@@ -54,17 +73,17 @@ macro_rules! macro_cmp {
     };
 }
 
-macro_cmp!(bls_pk_cmp, PublicKey<Bls12>);
-macro_cmp!(bls_sk_cmp, SecretKey<Bls12>);
-macro_cmp!(bls_sig_cmp, Signature<Bls12>);
+macro_cmp!(Box bls_pk_cmp, PublicKey<Bls12>);
+macro_cmp!(Box bls_sk_cmp, SecretKey<Bls12>);
+macro_cmp!(Box bls_sig_cmp, Signature<Bls12>);
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn bls_sign(
     m_ptr: *const u8,
     m_len: size_t,
-    sk_ptr: *const SecretKey<Bls12>,
-) -> *const Signature<Bls12> {
+    sk_ptr: *mut SecretKey<Bls12>,
+) -> *mut Signature<Bls12> {
     let m_len = m_len as usize;
     let m_bytes = slice_from_c_bytes!(m_ptr, m_len);
     let sk = from_ptr!(sk_ptr);
@@ -76,8 +95,8 @@ pub extern "C" fn bls_sign(
 pub extern "C" fn bls_verify(
     m_ptr: *const u8,
     m_len: size_t,
-    pk_ptr: *const PublicKey<Bls12>,
-    sig_ptr: *const Signature<Bls12>,
+    pk_ptr: *mut PublicKey<Bls12>,
+    sig_ptr: *mut Signature<Bls12>,
 ) -> bool {
     let m_len = m_len as usize;
     let m_bytes = slice_from_c_bytes!(m_ptr, m_len);
@@ -89,9 +108,9 @@ pub extern "C" fn bls_verify(
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn bls_aggregate(
-    sig1_ptr: *const Signature<Bls12>,
-    sig2_ptr: *const Signature<Bls12>,
-) -> *const Signature<Bls12> {
+    sig1_ptr: *mut Signature<Bls12>,
+    sig2_ptr: *mut Signature<Bls12>,
+) -> *mut Signature<Bls12> {
     let sig1 = from_ptr!(sig1_ptr);
     let sig2 = from_ptr!(sig2_ptr);
     Box::into_raw(Box::new(sig1.aggregate(*sig2)))
@@ -102,14 +121,14 @@ pub extern "C" fn bls_aggregate(
 pub extern "C" fn bls_verify_aggregate(
     m_ptr: *const u8,
     m_len: size_t,
-    pks_ptr: *const *const PublicKey<Bls12>,
+    pks_ptr: *const *mut PublicKey<Bls12>,
     pks_len: size_t,
-    sig_ptr: *const Signature<Bls12>,
+    sig_ptr: *mut Signature<Bls12>,
 ) -> bool {
     let m_len = m_len as usize;
     let m_bytes = slice_from_c_bytes!(m_ptr, m_len);
 
-    let pks_: &[*const PublicKey<Bls12>] = if pks_len == 0 {
+    let pks_: &[*mut PublicKey<Bls12>] = if pks_len == 0 {
         &[]
     } else {
         unsafe { slice::from_raw_parts(pks_ptr, pks_len) }
@@ -125,7 +144,7 @@ pub extern "C" fn bls_verify_aggregate(
 // Only used for adding a dummy proof to the genesis block
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn bls_empty_sig() -> *const Signature<Bls12> {
+pub extern "C" fn bls_empty_sig() -> *mut Signature<Bls12> {
     Box::into_raw(Box::new(Signature::empty()))
 }
 
@@ -133,7 +152,7 @@ pub extern "C" fn bls_empty_sig() -> *const Signature<Bls12> {
 // from seed.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn bls_generate_secretkey_from_seed(seed: size_t) -> *const SecretKey<Bls12> {
+pub extern "C" fn bls_generate_secretkey_from_seed(seed: size_t) -> *mut SecretKey<Bls12> {
     let s: &[_] = &[seed];
     let mut rng: StdRng = SeedableRng::from_seed(s);
     Box::into_raw(Box::new(SecretKey::generate(&mut rng)))
