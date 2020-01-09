@@ -35,6 +35,6 @@ dummyTime :: TransactionTime
 dummyTime = 37
 
 tests :: Spec
-tests = parallel $ do
+tests = do
   specify "Transaction serialization with size = 100." $ withMaxSuccess 10000 $ testTransaction 100
   specify "Transaction serialization with size = 1000." $ withMaxSuccess 10000 $ testTransaction 1000
