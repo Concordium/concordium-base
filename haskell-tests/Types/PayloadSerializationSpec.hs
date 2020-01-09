@@ -10,6 +10,7 @@ import Test.QuickCheck
 import Data.ByteString.Lazy as BSL
 import Data.ByteString as BS
 import Data.ByteString.Short as BSS
+import Control.Monad
 
 import Concordium.Types
 import qualified Concordium.Crypto.BlockSignature as BlockSig
@@ -53,7 +54,15 @@ genPolicyItem = do
   return PolicyItem{..}
 
 genDlogProof :: Gen Dlog25519Proof
-genDlogProof = fst . randomProof . mkStdGen <$> arbitrary
+genDlogProof = fst . randomProof . mkStdGen <$> resize 100000 arbitrary
+
+genAccountOwnershipProof :: Gen AccountOwnershipProof
+genAccountOwnershipProof = do
+  n <- choose (1, 255)
+  AccountOwnershipProof <$> replicateM n (do
+     keyIndex <- KeyIndex <$> arbitrary
+     proof <- genDlogProof
+     return (keyIndex, proof))
 
 genPayload :: Gen Payload
 genPayload = oneof [genDeployModule,
@@ -79,13 +88,13 @@ genPayload = oneof [genDeployModule,
           mref <- genModuleRef
           name <- genTyName
           param <- genExpr
-          return $ InitContract amnt mref name param
+          return $! InitContract amnt mref name param
 
         genUpdate = do
           amnt <- Amount <$> arbitrary
           cref <- genCAddress
           msg <- genExpr
-          return $ Update amnt cref msg
+          return $! Update amnt cref msg
 
         genTransfer = do
           a <- oneof [AddressContract <$> genCAddress, AddressAccount <$> genAddress]
@@ -103,7 +112,7 @@ genPayload = oneof [genDeployModule,
           abAccount <- genAddress
           abProofSig <- genDlogProof
           abProofElection <- genDlogProof
-          abProofAccount <- genDlogProof
+          abProofAccount <- genAccountOwnershipProof
           return AddBaker{..}
 
         genProof = choose (50,200) >>= vector >>= return . BS.pack
@@ -116,7 +125,7 @@ genPayload = oneof [genDeployModule,
         genUpdateBakerAccount = do
           ubaId <- genBakerId
           ubaAddress <- genAddress
-          ubaProof <- genDlogProof
+          ubaProof <- genAccountOwnershipProof
           return UpdateBakerAccount{..}
 
         genUpdateBakerSignKey = do
