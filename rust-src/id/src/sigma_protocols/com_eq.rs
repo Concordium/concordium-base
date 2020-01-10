@@ -169,12 +169,17 @@ pub fn verify_com_eq<T: Curve>(
     gxs: &[T],
     proof: &ComEqProof<T>,
 ) -> bool {
+    if commitments.len() != proof.witness.len() {
+        return false;
+    }
+
     let challenge = &proof.challenge;
 
     let mut u = y.mul_by_scalar(challenge);
     for (g, (s_i, _)) in izip!(gxs, &proof.witness) {
         u = u.plus_point(&g.mul_by_scalar(&s_i));
     }
+
     let mut hasher = ro
         .append("com_eq")
         .extend_from(commitments.iter().map(Commitment::to_bytes))
@@ -182,9 +187,6 @@ pub fn verify_com_eq<T: Curve>(
         .append(&cmm_key.to_bytes())
         .extend_from(gxs.iter().map(Curve::curve_to_bytes));
 
-    if commitments.len() != proof.witness.len() {
-        return false;
-    }
     for (c, (s_i, t_i)) in izip!(commitments.iter(), &proof.witness) {
         let v = c
             .mul_by_scalar(challenge)
@@ -192,6 +194,7 @@ pub fn verify_com_eq<T: Curve>(
         hasher.add(&v.curve_to_bytes());
     }
     hasher.add(&u.curve_to_bytes());
+
     let computed_challenge = hasher.result_to_scalar::<T>();
     match computed_challenge {
         None => false,
@@ -218,7 +221,7 @@ mod test {
     use pairing::bls12_381::G1Affine;
 
     #[test]
-    pub fn prove_verify_com_eq() {
+    pub fn test_com_eq_correctness() {
         let mut csprng = thread_rng();
         let mut secret: Vec<(&Randomness<_>, &Value<_>)> = Vec::with_capacity(20);
         let mut cxs = Vec::with_capacity(20);
@@ -245,20 +248,95 @@ mod test {
             let proof = prove_com_eq(ro.split(), &cxs, &y, &comm_key, &gxs, &secret, &mut csprng);
             let res = verify_com_eq(ro, &cxs, &y, &comm_key, &gxs, &proof);
             assert!(res, "Verification of produced proof.");
-            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
-            if verify_com_eq(
-                RandomOracle::domain(&challenge_prefix_1),
-                &cxs,
+        }
+    }
+
+    #[test]
+    pub fn test_com_eq_soundness() {
+        let mut csprng = thread_rng();
+        let mut secret: Vec<(&Randomness<_>, &Value<_>)> = Vec::with_capacity(20);
+        let mut cxs = Vec::with_capacity(20);
+        let mut gxs = Vec::with_capacity(20);
+        for i in 1..20 {
+            // Generate proof
+            secret.clear();
+            cxs.clear();
+            gxs.clear();
+            let g = G1Affine::generate(&mut csprng);
+            let h = G1Affine::generate(&mut csprng);
+            let mut y = G1Affine::zero_point();
+            let comm_key = CommitmentKey(g, h);
+            for _ in 0..i {
+                let a = Value::generate_non_zero(&mut csprng);
+                let (c, randomness) = comm_key.commit(&a, &mut csprng);
+                let g_i = G1Affine::generate(&mut csprng);
+                y = y.plus_point(&g_i.mul_by_scalar(&a));
+                secret.push((Box::leak(Box::new(randomness)), Box::leak(Box::new(a))));
+                cxs.push(c);
+                gxs.push(g_i);
+            }
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let ro = RandomOracle::domain(&challenge_prefix);
+            let proof = prove_com_eq(ro.split(), &cxs, &y, &comm_key, &gxs, &secret, &mut csprng);
+
+            // Construct invalid parameters
+            let mut rng = thread_rng();
+            let index_wrong_cx: usize = rng.gen_range(0, i);
+            let index_wrong_gx: usize = rng.gen_range(0, i);
+
+            let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
+            let mut wrong_cxs = cxs.to_owned();
+            wrong_cxs[index_wrong_cx].0 = wrong_cxs[index_wrong_cx].0.double_point();
+            let wrong_y = y.double_point();
+            let mut wrong_comm_key_0 = comm_key;
+            wrong_comm_key_0.0 = wrong_comm_key_0.0.double_point();
+            let mut wrong_comm_key_1 = comm_key;
+            wrong_comm_key_1.1 = wrong_comm_key_1.1.double_point();
+            let mut wrong_gxs = gxs.to_owned();
+            wrong_gxs[index_wrong_gx] = wrong_gxs[index_wrong_gx].double_point();
+
+            // Verify failure for invalid parameters
+            assert!(!verify_com_eq(wrong_ro, &cxs, &y, &comm_key, &gxs, &proof));
+            assert!(!verify_com_eq(
+                ro.split(),
+                &wrong_cxs,
                 &y,
                 &comm_key,
                 &gxs,
-                &proof,
-            ) {
-                assert_eq!(
-                    challenge_prefix, challenge_prefix_1,
-                    "Verification with different challenge should fail."
-                );
-            }
+                &proof
+            ));
+            assert!(!verify_com_eq(
+                ro.split(),
+                &cxs,
+                &wrong_y,
+                &comm_key,
+                &gxs,
+                &proof
+            ));
+            assert!(!verify_com_eq(
+                ro.split(),
+                &cxs,
+                &y,
+                &wrong_comm_key_0,
+                &gxs,
+                &proof
+            ));
+            assert!(!verify_com_eq(
+                ro.split(),
+                &cxs,
+                &y,
+                &wrong_comm_key_1,
+                &gxs,
+                &proof
+            ));
+            assert!(!verify_com_eq(
+                ro.split(),
+                &cxs,
+                &y,
+                &comm_key,
+                &wrong_gxs,
+                &proof
+            ));
         }
     }
 

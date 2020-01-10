@@ -28,9 +28,9 @@ pub struct ComEncEqProof<T: Curve> {
     /// The computed challenge.
     challenge: T::Scalar,
     /// The values
-    /// * $\alpha + c R$
-    /// * $\beta + c x$
-    /// * $\gamma + c r$
+    /// * $\alpha - c R$
+    /// * $\beta - c x$
+    /// * $\gamma - c r$
     /// where
     /// * c is the challenge
     /// * R is the ElGamal randomness
@@ -199,7 +199,7 @@ mod tests {
     use pairing::bls12_381::G1Affine;
 
     #[test]
-    pub fn test_com_enc_eq() {
+    pub fn test_com_enc_eq_correctness() {
         let mut csprng = thread_rng();
         for _i in 0..100 {
             let sk = ElGamalSecretKey::generate(&mut csprng);
@@ -235,17 +235,122 @@ mod tests {
                 &comm_key,
                 &proof
             ));
-            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
-            if verify_com_enc_eq(
-                RandomOracle::domain(&challenge_prefix_1),
+        }
+    }
+
+    #[test]
+    pub fn test_com_enc_eq_soundness() {
+        let mut csprng = thread_rng();
+        for _i in 0..100 {
+            // Generate proof
+            let sk = ElGamalSecretKey::generate(&mut csprng);
+            let public_key = ElGamalPublicKey::from(&sk);
+            let comm_key = CommitmentKey::generate(&mut csprng);
+
+            let x: Value<G1Affine> = Value::generate_non_zero(&mut csprng);
+            let (cipher, elgamal_randomness) =
+                public_key.encrypt_exponent_rand(&mut csprng, &x.value);
+            let (commitment, randomness) = comm_key.commit(&x, &mut csprng);
+            let secret = ComEncEqSecret {
+                value:         &x,
+                elgamal_rand:  &elgamal_randomness,
+                pedersen_rand: &randomness,
+            };
+
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let ro = RandomOracle::domain(&challenge_prefix);
+            let proof = prove_com_enc_eq::<G1Affine, ThreadRng>(
+                ro.split(),
                 &cipher,
                 &commitment,
                 &public_key,
                 &comm_key,
-                &proof,
-            ) {
-                assert_eq!(challenge_prefix, challenge_prefix_1);
-            }
+                &secret,
+                &mut csprng,
+            );
+
+            // Construct invalid parameters
+            let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
+            let mut wrong_cipher_0 = cipher;
+            wrong_cipher_0.0 = wrong_cipher_0.0.double_point();
+            let mut wrong_cipher_1 = cipher;
+            wrong_cipher_1.1 = wrong_cipher_1.1.double_point();
+            let wrong_commitment =
+                pedersen_scheme::commitment::Commitment(commitment.double_point());
+            let mut wrong_public_key_g = public_key;
+            wrong_public_key_g.generator = wrong_public_key_g.generator.double_point();
+            let mut wrong_public_key_k = public_key;
+            wrong_public_key_k.key = wrong_public_key_k.key.double_point();
+            let mut wrong_comm_key_g = comm_key;
+            wrong_comm_key_g.0 = wrong_comm_key_g.0.double_point();
+            let mut wrong_comm_key_h = comm_key;
+            wrong_comm_key_h.1 = wrong_comm_key_h.1.double_point();
+
+            // Verify failure for invalid parameters
+            assert!(!verify_com_enc_eq(
+                wrong_ro,
+                &cipher,
+                &commitment,
+                &public_key,
+                &comm_key,
+                &proof
+            ));
+            assert!(!verify_com_enc_eq(
+                ro.split(),
+                &wrong_cipher_0,
+                &commitment,
+                &public_key,
+                &comm_key,
+                &proof
+            ));
+            assert!(!verify_com_enc_eq(
+                ro.split(),
+                &wrong_cipher_1,
+                &commitment,
+                &public_key,
+                &comm_key,
+                &proof
+            ));
+            assert!(!verify_com_enc_eq(
+                ro.split(),
+                &cipher,
+                &wrong_commitment,
+                &public_key,
+                &comm_key,
+                &proof
+            ));
+            assert!(!verify_com_enc_eq(
+                ro.split(),
+                &cipher,
+                &commitment,
+                &wrong_public_key_g,
+                &comm_key,
+                &proof
+            ));
+            assert!(!verify_com_enc_eq(
+                ro.split(),
+                &cipher,
+                &commitment,
+                &wrong_public_key_k,
+                &comm_key,
+                &proof
+            ));
+            assert!(!verify_com_enc_eq(
+                ro.split(),
+                &cipher,
+                &commitment,
+                &public_key,
+                &wrong_comm_key_g,
+                &proof
+            ));
+            assert!(!verify_com_enc_eq(
+                ro.split(),
+                &cipher,
+                &commitment,
+                &public_key,
+                &wrong_comm_key_h,
+                &proof
+            ));
         }
     }
 

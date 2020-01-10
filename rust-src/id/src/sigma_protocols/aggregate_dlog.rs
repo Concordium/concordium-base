@@ -140,7 +140,7 @@ mod tests {
     use pairing::bls12_381::G1Affine;
 
     #[test]
-    pub fn test_aggregate_dlog() {
+    pub fn test_aggregate_dlog_correctness() {
         let mut csprng = thread_rng();
         for i in 1..20 {
             let mut secret = Vec::with_capacity(i);
@@ -163,15 +163,57 @@ mod tests {
                 &mut csprng,
             );
             assert!(verify_aggregate_dlog(ro, &public, &coeff, &proof));
-            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
-            if verify_aggregate_dlog(
-                RandomOracle::domain(&challenge_prefix_1),
+        }
+    }
+
+    #[test]
+    pub fn test_aggregate_dlog_soundness() {
+        let mut csprng = thread_rng();
+        for i in 1..20 {
+            // Generate proof
+            let mut secret = Vec::with_capacity(i);
+            let mut coeff = Vec::with_capacity(i);
+            let mut public = <G1Affine as Curve>::zero_point();
+            for _ in 0..i {
+                let s = G1Affine::generate_scalar(&mut csprng);
+                let g = G1Affine::generate(&mut csprng);
+                public = public.plus_point(&g.mul_by_scalar(&s));
+                secret.push(s);
+                coeff.push(g);
+            }
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let ro = RandomOracle::domain(&challenge_prefix);
+            let proof = prove_aggregate_dlog::<G1Affine, ThreadRng>(
+                ro.split(),
                 &public,
                 &coeff,
-                &proof,
-            ) {
-                assert_eq!(challenge_prefix, challenge_prefix_1);
-            }
+                &secret,
+                &mut csprng,
+            );
+
+            // Construct invalid parameters
+            let mut rng = thread_rng();
+            let index_wrong_coeff: usize = rng.gen_range(0, i);
+
+            let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
+            let wrong_public = public.double_point();
+            let mut wrong_coeff = coeff.to_owned();
+            wrong_coeff[index_wrong_coeff] = wrong_coeff[index_wrong_coeff].double_point();
+
+            // Verify failure for invalid parameters
+            assert!(!verify_aggregate_dlog(wrong_ro, &public, &coeff, &proof));
+            assert!(!verify_aggregate_dlog(
+                ro.split(),
+                &wrong_public,
+                &coeff,
+                &proof
+            ));
+            assert!(!verify_aggregate_dlog(
+                ro.split(),
+                &public,
+                &wrong_coeff,
+                &proof
+            ));
         }
     }
 
