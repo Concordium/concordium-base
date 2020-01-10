@@ -172,17 +172,17 @@ mod test {
             let m = rng.gen::<[u8; 32]>();
             let sk1 = SecretKey::<Bls12>::generate(&mut rng);
             let sk2 = SecretKey::<Bls12>::generate(&mut rng);
-            let pk1 = PublicKey::<Bls12>::from_secret(sk1);
-            let pk2 = PublicKey::<Bls12>::from_secret(sk2);
+            let mut pk1 = PublicKey::<Bls12>::from_secret(sk1);
+            let mut pk2 = PublicKey::<Bls12>::from_secret(sk2);
             let mut sig = sk1.sign(&m);
             sig = sig.aggregate(sk2.sign(&m));
 
             let m_ptr: *const u8 = &m as *const _;
             let m_len: size_t = 32;
-            let pks_ptr: *const *const PublicKey<Bls12> =
-                &[&pk1 as *const _, &pk2 as *const _] as *const *const _;
+            let pks_ptr: *const *mut PublicKey<Bls12> =
+                &[&mut pk1 as *mut _, &mut pk2 as *mut _] as *const *mut _;
             let pks_len: size_t = 2;
-            let sig_ptr: *const Signature<Bls12> = &sig;
+            let sig_ptr: *mut Signature<Bls12> = &mut sig;
             assert!(bls_verify_aggregate(
                 m_ptr, m_len, pks_ptr, pks_len, sig_ptr
             ));
@@ -194,10 +194,10 @@ mod test {
         for _i in 0..10 {
             let seed: &[_] = &[1];
             let mut rng: StdRng = SeedableRng::from_seed(seed);
-            let sk1 = SecretKey::<Bls12>::generate(&mut rng);
-            let sk2 = SecretKey::<Bls12>::generate(&mut rng);
-            let sk1_ptr = &sk1 as *const _;
-            let sk2_ptr = &sk2 as *const _;
+            let mut sk1 = SecretKey::<Bls12>::generate(&mut rng);
+            let mut sk2 = SecretKey::<Bls12>::generate(&mut rng);
+            let sk1_ptr = &mut sk1 as *mut _;
+            let sk2_ptr = &mut sk2 as *mut _;
             let comparison = bls_sk_eq(sk1_ptr, sk2_ptr);
             assert!(comparison == 0)
         }
