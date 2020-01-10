@@ -210,7 +210,7 @@ mod tests {
     use pairing::bls12_381::G1;
 
     #[test]
-    pub fn test_com_mult() {
+    pub fn test_com_mult_correctness() {
         let mut csprng = thread_rng();
         for _ in 0..100 {
             let cmm_key = CommitmentKey::generate(&mut csprng);
@@ -242,23 +242,98 @@ mod tests {
                 &cmm_key,
                 &proof
             ));
-            // changing the prefix invalidates the proof
-            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
-            if verify_com_mult(
-                RandomOracle::domain(&challenge_prefix_1),
+        }
+    }
+
+    #[test]
+    pub fn test_com_mult_soundness() {
+        let mut csprng = thread_rng();
+        for _ in 0..100 {
+            // Generate proof
+            let cmm_key = CommitmentKey::generate(&mut csprng);
+            let a_1 = Value::<G1>::generate_non_zero(&mut csprng);
+            let a_2 = Value::<G1>::generate_non_zero(&mut csprng);
+            let mut a_3 = a_1.value;
+            a_3.mul_assign(&a_2);
+
+            let a_3 = Value::new(a_3);
+
+            let (c_1, r_1) = cmm_key.commit(&a_1, &mut csprng);
+            let (c_2, r_2) = cmm_key.commit(&a_2, &mut csprng);
+            let (c_3, r_3) = cmm_key.commit(&a_3, &mut csprng);
+
+            let secret = ComMultSecret {
+                values: &[a_1, a_2, a_3],
+                rands:  &[r_1, r_2, r_3],
+            };
+
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let ro = RandomOracle::domain(&challenge_prefix);
+            let proof =
+                prove_com_mult(ro.split(), &c_1, &c_2, &c_3, &cmm_key, &secret, &mut csprng);
+            assert!(verify_com_mult(
+                ro.split(),
                 &c_1,
                 &c_2,
                 &c_3,
                 &cmm_key,
-                &proof,
-            ) {
-                assert_eq!(challenge_prefix, challenge_prefix_1);
-            }
-            // changing the commitment key invalidates the proof
-            let cmm_key_alt = CommitmentKey::generate(&mut csprng);
-            if verify_com_mult(ro, &c_1, &c_2, &c_3, &cmm_key_alt, &proof) {
-                assert_eq!(cmm_key, cmm_key_alt);
-            }
+                &proof
+            ));
+
+            // Construct invalid parameters
+            let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
+            let wrong_c1 = pedersen_scheme::commitment::Commitment(c_1.double_point());
+            let wrong_c2 = pedersen_scheme::commitment::Commitment(c_2.double_point());
+            let wrong_c3 = pedersen_scheme::commitment::Commitment(c_3.double_point());
+            let mut wrong_cmm_key_0 = cmm_key;
+            wrong_cmm_key_0.0 = wrong_cmm_key_0.0.double_point();
+            let mut wrong_cmm_key_1 = cmm_key;
+            wrong_cmm_key_1.1 = wrong_cmm_key_1.1.double_point();
+
+            // Verify failure for invalid parameters
+            assert!(!verify_com_mult(
+                wrong_ro, &c_1, &c_2, &c_3, &cmm_key, &proof
+            ));
+            assert!(!verify_com_mult(
+                ro.split(),
+                &wrong_c1,
+                &c_2,
+                &c_3,
+                &cmm_key,
+                &proof
+            ));
+            assert!(!verify_com_mult(
+                ro.split(),
+                &c_1,
+                &wrong_c2,
+                &c_3,
+                &cmm_key,
+                &proof
+            ));
+            assert!(!verify_com_mult(
+                ro.split(),
+                &c_1,
+                &c_2,
+                &wrong_c3,
+                &cmm_key,
+                &proof
+            ));
+            assert!(!verify_com_mult(
+                ro.split(),
+                &c_1,
+                &c_2,
+                &c_3,
+                &wrong_cmm_key_0,
+                &proof
+            ));
+            assert!(!verify_com_mult(
+                ro.split(),
+                &c_1,
+                &c_2,
+                &c_3,
+                &wrong_cmm_key_1,
+                &proof
+            ));
         }
     }
 

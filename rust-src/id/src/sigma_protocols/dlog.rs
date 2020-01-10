@@ -106,8 +106,9 @@ mod tests {
     use super::*;
     use crate::sigma_protocols::common::*;
     use pairing::bls12_381::G1Affine;
+
     #[test]
-    pub fn test_dlog() {
+    pub fn test_dlog_correctness() {
         let mut csprng = thread_rng();
         for _ in 0..1000 {
             let secret = G1Affine::generate_scalar(&mut csprng);
@@ -118,15 +119,47 @@ mod tests {
             let proof =
                 prove_dlog::<G1Affine, ThreadRng>(&mut csprng, ro.split(), &public, &secret, &base);
             assert!(verify_dlog(ro, &base, &public, &proof));
-            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
-            if verify_dlog(
-                RandomOracle::domain(&challenge_prefix_1),
+        }
+    }
+
+    #[test]
+    pub fn test_dlog_soundness() {
+        let mut csprng = thread_rng();
+        for _ in 0..100 {
+            // Generate proof
+            let secret = G1Affine::generate_scalar(&mut csprng);
+            let base = G1Affine::generate(&mut csprng);
+            let public = &base.mul_by_scalar(&secret);
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let ro = RandomOracle::domain(&challenge_prefix);
+            let proof =
+                prove_dlog::<G1Affine, ThreadRng>(&mut csprng, ro.split(), &public, &secret, &base);
+
+            // Construct invalid parameters
+            let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
+            let wrong_base = base.double_point();
+            let wrong_public = public.double_point();
+            let mut wrong_proof_challenge = proof;
+            wrong_proof_challenge.challenge.add_assign(&secret);
+            let mut wrong_proof_witness = proof;
+            wrong_proof_witness.witness.add_assign(&secret);
+
+            // Verify failure for invalid parameters
+            assert!(!verify_dlog(wrong_ro, &base, &public, &proof));
+            assert!(!verify_dlog(ro.split(), &wrong_base, &public, &proof));
+            assert!(!verify_dlog(ro.split(), &base, &wrong_public, &proof));
+            assert!(!verify_dlog(
+                ro.split(),
                 &base,
                 &public,
-                &proof,
-            ) {
-                assert_eq!(challenge_prefix, challenge_prefix_1);
-            }
+                &wrong_proof_challenge
+            ));
+            assert!(!verify_dlog(
+                ro.split(),
+                &base,
+                &public,
+                &wrong_proof_witness
+            ));
         }
     }
 
