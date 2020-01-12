@@ -20,6 +20,7 @@ import GHC.Generics
 
 import qualified Concordium.Types.Acorn.Core as Core
 import Concordium.Types
+import Concordium.ID.Types
 import Concordium.Types.Acorn.Interfaces
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs

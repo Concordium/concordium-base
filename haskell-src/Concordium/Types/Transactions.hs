@@ -29,6 +29,7 @@ import qualified Data.Vector as Vec
 import Data.Word
 
 import Concordium.Types
+import Concordium.ID.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Execution
 
