@@ -16,7 +16,7 @@ use std::path::Path;
 
 use std::{fs::File, io::Write};
 
-use either::Either::Left;
+use either::Either::{Left, Right};
 
 type ExampleCurve = G1;
 
@@ -137,7 +137,7 @@ fn main() {
             existing: Left(SignatureThreshold(2)),
         };
 
-        let cdi = generate_cdi(
+        let cdi_1 = generate_cdi(
             &ip_info,
             &global_ctx,
             &aci,
@@ -149,6 +149,34 @@ fn main() {
             &randomness,
         );
 
+        // Generate the second credential for an existing account (the one
+        // created by the first credential)
+        let acc_data_2 = AccountData {
+            keys:     acc_data.keys,
+            existing: Right(AccountAddress::new(&cdi_1.values.reg_id)),
+        };
+
+        let cdi_2 = generate_cdi(
+            &ip_info,
+            &global_ctx,
+            &aci,
+            &pio,
+            53,
+            &ip_sig,
+            &policy,
+            &acc_data_2,
+            &randomness,
+        );
+
+        let acc_keys = AccountKeys {
+            keys:      acc_data_2
+                .keys
+                .iter()
+                .map(|(&idx, kp)| (idx, VerifyKey::from(kp.public)))
+                .collect(),
+            threshold: SignatureThreshold(2),
+        };
+
         let mut out = Vec::new();
         let gc_bytes = global_ctx.to_bytes();
         out.extend_from_slice(&(gc_bytes.len() as u32).to_be_bytes());
@@ -156,7 +184,39 @@ fn main() {
         let ip_info_bytes = ip_info.to_bytes();
         out.extend_from_slice(&(ip_info_bytes.len() as u32).to_be_bytes());
         out.extend_from_slice(&ip_info_bytes);
-        out.extend_from_slice(&cdi.to_bytes());
+        // output the first credential
+        let cdi1_bytes = cdi_1.to_bytes();
+        out.extend_from_slice(&(cdi1_bytes.len() as u32).to_be_bytes());
+        out.extend_from_slice(&cdi1_bytes);
+        // and account keys and then the second credential
+        out.extend_from_slice(&acc_keys.to_bytes());
+        let cdi2_bytes = cdi_2.to_bytes();
+        out.extend_from_slice(&(cdi2_bytes.len() as u32).to_be_bytes());
+        out.extend_from_slice(&cdi2_bytes);
+
+        // finally we add a completely new set of keys to have a simple negative test
+        let acc_keys_3 = {
+            let mut keys = BTreeMap::new();
+            keys.insert(
+                KeyIndex(0),
+                VerifyKey::from(ed25519::generate_keypair().public),
+            );
+            keys.insert(
+                KeyIndex(1),
+                VerifyKey::from(ed25519::generate_keypair().public),
+            );
+            keys.insert(
+                KeyIndex(2),
+                VerifyKey::from(ed25519::generate_keypair().public),
+            );
+
+            AccountKeys {
+                keys,
+                threshold: SignatureThreshold(2),
+            }
+        };
+        out.extend_from_slice(&acc_keys_3.to_bytes());
+
         let file = File::create("testdata.bin");
         if let Err(err) = file.unwrap().write_all(&out) {
             eprintln!(

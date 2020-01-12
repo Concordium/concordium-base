@@ -116,7 +116,8 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
 pub extern "C" fn verify_cdi_ffi(
     gc_ptr: *const GlobalContext<G1>,
     ip_info_ptr: *const IpInfo<Bls12, G1>,
-    acc_keys_ptr: *const AccountKeys,
+    acc_keys_ptr: *const u8,
+    acc_keys_len: size_t,
     cdi_ptr: *const u8,
     cdi_len: size_t,
 ) -> i32 {
@@ -130,7 +131,12 @@ pub extern "C" fn verify_cdi_ffi(
     let acc_keys = if acc_keys_ptr.is_null() {
         None
     } else {
-        Some(from_ptr!(acc_keys_ptr))
+        let acc_key_bytes = slice_from_c_bytes!(acc_keys_ptr, acc_keys_len as usize);
+        if let Some(acc_keys) = AccountKeys::from_bytes(&mut Cursor::new(&acc_key_bytes)) {
+            Some(acc_keys)
+        } else {
+            return -10;
+        }
     };
 
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
@@ -140,7 +146,7 @@ pub extern "C" fn verify_cdi_ffi(
             match chain::verify_cdi::<Bls12, G1, AttributeKind>(
                 from_ptr!(gc_ptr),
                 from_ptr!(ip_info_ptr),
-                acc_keys,
+                acc_keys.as_ref(),
                 &cdi,
             ) {
                 Ok(()) => 1, // verification succeeded
@@ -441,6 +447,7 @@ mod test {
             gc_ptr,
             ip_info_ptr,
             std::ptr::null(),
+            0,
             cdi_bytes.as_ptr(),
             cdi_bytes_len,
         );
@@ -451,6 +458,7 @@ mod test {
             gc_ptr,
             ip_info_ptr,
             std::ptr::null(),
+            0,
             wrong_cdi_bytes.as_ptr(),
             wrong_cdi_bytes_len,
         );

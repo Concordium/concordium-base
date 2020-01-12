@@ -732,6 +732,34 @@ pub struct AccountKeys {
 
 impl AccountKeys {
     pub fn get(&self, idx: KeyIndex) -> Option<&VerifyKey> { self.keys.get(&idx) }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let len = cur.read_u8().ok()?;
+        if len == 0 {
+            return None;
+        }
+        let mut keys = BTreeMap::new();
+        for _ in 0..len {
+            let idx = KeyIndex::from_bytes(cur)?;
+            let key = VerifyKey::from_bytes(cur)?;
+            if keys.insert(idx, key).is_some() {
+                return None;
+            }
+        }
+        let threshold = SignatureThreshold::from_bytes(cur)?;
+        Some(AccountKeys { keys, threshold })
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let len = self.keys.len() as u8;
+        let mut out = vec![len];
+        for (idx, k) in self.keys.iter() {
+            out.extend_from_slice(&idx.to_bytes());
+            out.extend_from_slice(&k.to_bytes());
+        }
+        out.extend_from_slice(&self.threshold.to_bytes());
+        out
+    }
 }
 
 /// Serialization of relevant types.

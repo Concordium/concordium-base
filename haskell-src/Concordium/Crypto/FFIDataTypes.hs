@@ -182,7 +182,7 @@ instance Serialize ElgamalPublicKey where
       Just x -> return $ ElgamalPublicKey x
 
   put (ElgamalPublicKey e) =
-    let bs = toBytesHelper toBytesElgamalPublicKey $ e
+    let bs = toBytesHelper toBytesElgamalPublicKey e
     in putByteString bs
 
 instance Show ElgamalPublicKey where
@@ -213,7 +213,7 @@ instance Serialize ElgamalCipher where
       Just x -> return $ ElgamalCipher x
 
   put (ElgamalCipher e) =
-    let bs = toBytesHelper toBytesElgamalCipher $ e
+    let bs = toBytesHelper toBytesElgamalCipher e
     in putByteString bs
 
 instance Show ElgamalCipher where
