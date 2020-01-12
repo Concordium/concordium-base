@@ -20,10 +20,12 @@ use crate::sigma_protocols::{
     com_eq_sig::ComEqSigProof, com_mult::ComMultProof,
 };
 
-use serde_json::{json, Value};
+use serde_json::{json, Number, Value};
 
 use byteorder::{BigEndian, ReadBytesExt};
+use either::Either;
 use std::{
+    cmp::Ordering,
     convert::TryFrom,
     fmt,
     io::{Cursor, Read},
@@ -31,41 +33,119 @@ use std::{
 
 // only for account addresses
 use base58check::*;
-use sha2::Digest;
 
-#[derive(Debug)]
-pub struct AccountAddress([u8; 21]);
+pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct AccountAddress([u8; ACCOUNT_ADDRESS_SIZE]);
 
 impl AccountAddress {
-    /// This is a simple implementation of to_json that prints the address in
-    /// base 58 check format, to match with the instance defined in
-    /// haskell-src/Concordium/ID/Types.hs
     pub fn to_json(&self) -> Value {
-        let mut bytes = self.0;
-        bytes[0] = 1;
-        let mut body = bytes.to_base58check(1);
-        // FIXME: Once we support more signature schemes add support here.
-        match self.0[0] {
-            0 => {
-                // Ed25519
-                body.insert_str(0, "11");
-            }
-            _ => unimplemented!("Only a single signature scheme is supported."),
-        }
+        let body = self.0.to_base58check(1);
         Value::String(body)
     }
 
-    /// Construct a new address from a scheme and verification key.
-    pub fn new(scheme_id: SchemeId, vf_key: &acc_sig_scheme::PublicKey) -> Self {
-        let mut address = [scheme_id.to_bytes()[0]; 21];
-        let mut hasher = sha2::Sha224::new();
-        hasher.input(&vf_key.to_bytes());
-        address[1..].copy_from_slice(&hasher.result()[0..20]);
-        AccountAddress(address)
+    pub fn to_bytes(&self) -> Box<[u8]> { self.0.to_vec().into_boxed_slice() }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let mut buf = [0; ACCOUNT_ADDRESS_SIZE];
+        cur.read_exact(&mut buf).ok()?;
+        Some(AccountAddress(buf))
+    }
+}
+
+/// Threshold for the number of signatures required.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+#[repr(transparent)]
+/// The values of this type must maintain the property that they are not 0.
+pub struct SignatureThreshold(pub u8);
+
+impl SignatureThreshold {
+    pub fn to_json(&self) -> Value { Value::Number(Number::from(self.0)) }
+
+    pub fn to_bytes(&self) -> Box<[u8]> { vec![self.0].into_boxed_slice() }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let x = cur.read_u8().ok()?;
+        if x != 0 {
+            Some(SignatureThreshold(x))
+        } else {
+            None
+        }
+    }
+}
+
+/// Threshold for the number of signatures required.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+#[repr(transparent)]
+/// The values of this type must maintain the property that they are not 0.
+pub struct KeyIndex(pub u8);
+
+impl KeyIndex {
+    /// This is a simple implementation of to_json that prints the address in
+    /// base 58 check format, to match with the instance defined in
+    /// haskell-src/Concordium/ID/Types.hs
+    pub fn to_json(&self) -> Value { Value::Number(Number::from(self.0)) }
+
+    pub fn to_bytes(&self) -> Box<[u8]> { vec![self.0].into_boxed_slice() }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let x = cur.read_u8().ok()?;
+        if x != 0 {
+            Some(KeyIndex(x))
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+/// List of pairs of index of key and proof.
+/// The list should be non-empty and at most 255 elements long, and have no
+/// duplicates. The current choice of data structure disallows duplicates by
+/// design.
+pub struct AccountOwnershipProof {
+    pub proofs: BTreeMap<KeyIndex, Ed25519DlogProof>,
+}
+
+impl AccountOwnershipProof {
+    /// Number of individual proofs in this proof.
+    /// NB: This method relies on the invariant that proofs should not
+    /// have more than 255 elements.
+    pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.proofs.len() as u8) }
+
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut out = Vec::new();
+        // relies on invariant about the length
+        let len = self.proofs.len() as u8;
+        out.push(len);
+        for (idx, proof) in self.proofs.iter() {
+            out.extend_from_slice(&idx.to_bytes());
+            out.extend_from_slice(&proof.to_bytes());
+        }
+        out.into_boxed_slice()
+    }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        let len = cur.read_u8().ok()?;
+        if len == 0 {
+            return None;
+        }
+        let mut proofs = BTreeMap::new();
+        for _ in 0..len {
+            let idx = KeyIndex::from_bytes(cur)?;
+            let proof = Ed25519DlogProof::from_bytes(cur).ok()?;
+            if let Some(_) = proofs.insert(idx, proof) {
+                // cannot have duplicates
+                return None;
+            }
+        }
+        Some(AccountOwnershipProof { proofs })
     }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+#[repr(transparent)]
 pub struct IpIdentity(pub u32);
 
 impl fmt::Display for IpIdentity {
@@ -257,6 +337,8 @@ pub struct CredDeploymentCommitments<C: Curve> {
     pub cmm_id_cred_sec_sharing_coeff: Vec<pedersen::Commitment<C>>,
 }
 
+// FIXME: The sig should be part of the values so that it is part of the
+// challenge computation.
 #[derive(Debug, PartialEq, Eq)]
 pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// (Blinded) Signature derived from the signature on the pre-identity
@@ -275,9 +357,13 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Proof that reg_id = prf_K(x). Also establishes that reg_id is computed
     /// from the prf key signed by the identity provider.
     pub proof_reg_id: ComMultProof<C>,
-    /// Proof of knowledge of acc secret key (signing key corresponding to the
-    /// verification key).
-    pub proof_acc_sk: Ed25519DlogProof,
+    /// Proof of knowledge of acc secret keys (signing keys corresponding to the
+    /// verification keys either on the account already, or the ones which are
+    /// part of this credential.
+    /// TODO: This proof can be replaced by a signature if we only allow
+    /// deploying proofs on own account.
+    /// We could consider replacing this proof by just a list of signatures.
+    pub proof_acc_sk: AccountOwnershipProof,
     /* Proof that the attribute list in commitments.cmm_attributes satisfy the
      * policy for now this is mainly achieved by opening the corresponding
      * commitments.
@@ -316,14 +402,114 @@ pub struct PolicyProof<C: Curve> {
     pub cmm_opening_map: Vec<(u16, PedersenRandomness<C>)>,
 }
 
+#[derive(Debug, Eq)]
+pub enum VerifyKey {
+    Ed25519VerifyKey(acc_sig_scheme::PublicKey),
+}
+
+/// Compare byte representation.
+impl Ord for VerifyKey {
+    fn cmp(&self, other: &VerifyKey) -> Ordering {
+        let VerifyKey::Ed25519VerifyKey(ref self_key) = self;
+        let VerifyKey::Ed25519VerifyKey(ref other_key) = other;
+        self_key.as_ref().cmp(other_key.as_ref())
+    }
+}
+
+impl PartialOrd for VerifyKey {
+    fn partial_cmp(&self, other: &VerifyKey) -> Option<Ordering> { Some(self.cmp(other)) }
+}
+
+impl PartialEq for VerifyKey {
+    fn eq(&self, other: &VerifyKey) -> bool { self.cmp(other) == Ordering::Equal }
+}
+
+impl VerifyKey {
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        use VerifyKey::*;
+        match self {
+            Ed25519VerifyKey(ref key) => {
+                let mut out = Vec::with_capacity(1 + acc_sig_scheme::PUBLIC_KEY_LENGTH);
+                out.extend_from_slice(&SchemeId::Ed25519.to_bytes());
+                out.extend_from_slice(key.as_bytes());
+                out.into_boxed_slice()
+            }
+        }
+    }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        use VerifyKey::*;
+        match SchemeId::from_bytes(cur)? {
+            SchemeId::Ed25519 => {
+                let mut buf = [0; acc_sig_scheme::PUBLIC_KEY_LENGTH];
+                cur.read_exact(&mut buf).ok()?;
+                let key = acc_sig_scheme::PublicKey::from_bytes(&buf).ok()?;
+                Some(Ed25519VerifyKey(key))
+            }
+        }
+    }
+}
+
+/// What account should this credential be deployed to, or the keys of the new
+/// account.
+#[derive(Debug, PartialEq, Eq)]
+pub enum CredentialAccount {
+    ExistingAccount(AccountAddress),
+    NewAccount(Vec<VerifyKey>, SignatureThreshold),
+}
+
+impl CredentialAccount {
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        use CredentialAccount::*;
+        match self {
+            ExistingAccount(ref addr) => {
+                let mut out = Vec::with_capacity(1 + ACCOUNT_ADDRESS_SIZE);
+                out.push(0);
+                out.extend_from_slice(&addr.to_bytes());
+                out.into_boxed_slice()
+            }
+            NewAccount(ref keys, threshold) => {
+                let mut out = Vec::with_capacity(3);
+                let len = keys.len() as u8;
+                out.push(1);
+                out.push(len);
+                for key in keys.iter() {
+                    out.extend_from_slice(&key.to_bytes());
+                }
+                out.extend_from_slice(&threshold.to_bytes());
+                out.into_boxed_slice()
+            }
+        }
+    }
+
+    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
+        use CredentialAccount::*;
+        let c = cur.read_u8().ok()?;
+        match c {
+            0 => Some(ExistingAccount(AccountAddress::from_bytes(cur)?)),
+            1 => {
+                let len = cur.read_u8().ok()?;
+                if len == 0 {
+                    return None;
+                }
+                let mut keys = Vec::with_capacity(len as usize);
+                for _ in 0..len {
+                    keys.push(VerifyKey::from_bytes(cur)?);
+                }
+                let threshold = SignatureThreshold::from_bytes(cur)?;
+                Some(NewAccount(keys, threshold))
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Values (as opposed to proofs) in credential deployment.
 #[derive(Debug, PartialEq, Eq)]
 pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Id of the signature scheme of the account. The verification key must
-    /// correspond to the
-    pub acc_scheme_id: SchemeId,
-    /// Chosen verification key of the account.
-    pub acc_pub_key: acc_sig_scheme::PublicKey,
+    /// Account this credential belongs to. Either an existing account, or keys
+    /// of a new account.
+    pub cred_account: CredentialAccount,
     /// Credential registration id of the credential.
     pub reg_id: C,
     /// Identity of the identity provider who signed the identity object from
@@ -391,7 +577,7 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     ip_info: IpInfo<P, C>,
     choice_ar_handles: (Vec<ArIdentity>, Threshold),
 ) -> Context<P, C> {
-    // TODO: Check with Bassel that these parameters are correct.
+    // FIXME: The commitment keys are likely wrong here.
     let dlog_base = ip_info.dlog_base;
     let commitment_key_sc = PedersenKey(ip_info.ip_verify_key.2[0], dlog_base);
     let commitment_key_prf = PedersenKey(ip_info.ip_verify_key.2[1], dlog_base);
@@ -404,7 +590,6 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         }
     }
 
-    // find ars from their handles
     Context {
         ip_info,
         commitment_key_sc,
@@ -414,12 +599,24 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 }
 
 /// Account data needed by the account holder to generate proofs to deploy the
-/// credential object.
+/// credential object. This contains all the keys on the account at the moment
+/// of credential deployment.
 pub struct AccountData {
-    /// Signature key of the account.
-    pub verify_key: ed25519::PublicKey,
-    /// And the corresponding verification key.
-    pub sign_key: ed25519::SecretKey,
+    pub keys: BTreeMap<KeyIndex, (ed25519::PublicKey, ed25519::SecretKey)>,
+    /// If it is an existing account, its address, otherwise the signature
+    /// threshold of the new account.
+    pub existing: Either<SignatureThreshold, AccountAddress>,
+}
+
+/// Public account keys currently on the account, together with the threshold
+/// needed for a valid signature on a transaction.
+pub struct AccountKeys {
+    pub keys:      BTreeMap<KeyIndex, VerifyKey>,
+    pub threshold: SignatureThreshold,
+}
+
+impl AccountKeys {
+    pub fn get(&self, idx: &KeyIndex) -> Option<&VerifyKey> { self.keys.get(idx) }
 }
 
 /// Serialization of relevant types.
@@ -567,7 +764,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
         }
         let proof_ip_sig = ComEqSigProof::from_bytes(cur).ok()?;
         let proof_reg_id = ComMultProof::from_bytes(cur).ok()?;
-        let proof_acc_sk = Ed25519DlogProof::from_bytes(cur).ok()?;
+        let proof_acc_sk = AccountOwnershipProof::from_bytes(cur)?;
         // let proof_policy = PolicyProof::from_bytes(cur)?;
         Some(CredDeploymentProofs {
             sig,
@@ -634,10 +831,7 @@ impl SchemeId {
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C, AttributeType> {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut v = self.acc_scheme_id.to_bytes().to_vec();
-        // NOTE: Serialize the public key with length to match what is in Haskell code
-        // and in order to accept different signature schemes in the future.
-        v.extend_from_slice(&self.acc_pub_key.to_bytes());
+        let mut v = self.cred_account.to_bytes().to_vec();
         v.extend_from_slice(&self.reg_id.curve_to_bytes());
         v.extend_from_slice(&self.ip_identity.to_bytes());
         v.extend_from_slice(&self.threshold.to_bytes());
@@ -650,16 +844,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        // FIXME: Mirror the key structure as on Haskell side.
-        // That will make deserialization easier.
-        let acc_scheme_id = SchemeId::from_bytes(cur)?;
-        // FIXME: Support additional signature schemes.
-        if acc_scheme_id != SchemeId::Ed25519 {
-            return None;
-        };
-        let mut buf = vec![0; acc_sig_scheme::PUBLIC_KEY_LENGTH as usize];
-        cur.read_exact(&mut buf).ok()?;
-        let acc_pub_key = acc_sig_scheme::PublicKey::from_bytes(&buf).ok()?;
+        let cred_account = CredentialAccount::from_bytes(cur)?;
         let reg_id = curve_serialization::read_curve::<C>(cur).ok()?;
         let ip_identity = IpIdentity::from_bytes(cur)?;
         let threshold = Threshold::from_bytes(cur)?;
@@ -670,8 +855,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
         }
         let policy = Policy::from_bytes(cur)?;
         Some(CredentialDeploymentValues {
-            acc_scheme_id,
-            acc_pub_key,
+            cred_account,
             reg_id,
             ip_identity,
             threshold,

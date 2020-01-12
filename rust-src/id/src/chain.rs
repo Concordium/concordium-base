@@ -12,6 +12,7 @@ use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
 use ps_sig;
+use std::collections::BTreeSet;
 
 use crate::sigma_protocols::{com_enc_eq, com_eq_sig, com_mult};
 
@@ -21,6 +22,7 @@ pub enum CDIVerificationError {
     IdCredPub,
     Signature,
     Dlog,
+    AccountOwnership,
     Policy,
     AR,
 }
@@ -32,6 +34,7 @@ impl Display for CDIVerificationError {
             CDIVerificationError::IdCredPub => write!(f, "IdCredPubVerificationError"),
             CDIVerificationError::Signature => write!(f, "SignatureVerificationError"),
             CDIVerificationError::Dlog => write!(f, "DlogVerificationError"),
+            CDIVerificationError::AccountOwnership => write!(f, "AccountOwnership"),
             CDIVerificationError::Policy => write!(f, "PolicyVerificationError"),
             CDIVerificationError::AR => write!(f, "AnonimityRevokerVerificationError"),
         }
@@ -45,6 +48,7 @@ pub fn verify_cdi<
 >(
     global_context: &GlobalContext<C>,
     ip_info: &IpInfo<P, C>,
+    acc_keys: Option<&AccountKeys>,
     cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     // anonimity revocation data
@@ -60,6 +64,8 @@ pub fn verify_cdi<
 
     // find ArInfo's corresponding to this credential in the
     // IpInfo.
+    // FIXME: This is quadratic due to the choice of data structures.
+    // We could likely have a map in IPInfo instead of a list.
     for &handle in ars.iter() {
         match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == handle) {
             None => return Err(CDIVerificationError::AR),
@@ -70,6 +76,7 @@ pub fn verify_cdi<
         &global_context.on_chain_commitment_key,
         &ip_info.ip_verify_key,
         &choice_ar_parameters,
+        acc_keys,
         cdi,
     )
 }
@@ -82,10 +89,9 @@ pub fn verify_cdi_worker<
     on_chain_commitment_key: &CommitmentKey<C>,
     ip_verify_key: &ps_sig::PublicKey<P>,
     choice_ar_parameters: &[&ArInfo<C>],
+    acc_keys: Option<&AccountKeys>,
     cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
-    // Compute the challenge prefix by hashing the values.
-
     // Compute the challenge prefix by hashing the values.
     let ro = RandomOracle::domain("credential").append(&cdi.values.to_bytes());
 
@@ -116,15 +122,69 @@ pub fn verify_cdi_worker<
         return Err(CDIVerificationError::RegId);
     }
 
-    let verify_dlog = eddsa_dlog::verify_dlog_ed25519(
-        ro.split(),
-        &cdi.values.acc_pub_key,
-        &cdi.proofs.proof_acc_sk,
-    );
+    let cdv = &cdi.values;
+    let proofs = &cdi.proofs;
 
-    if !verify_dlog {
-        return Err(CDIVerificationError::Dlog);
-    }
+    match cdv.cred_account {
+        CredentialAccount::ExistingAccount(_addr) => {
+            // in this case we must have been given the account keys.
+            if let Some(acc_keys) = acc_keys {
+                if proofs.proof_acc_sk.num_proofs() < acc_keys.threshold {
+                    return Err(CDIVerificationError::AccountOwnership);
+                }
+                // we at least have enough proofs now, if they are all valid and have valid
+                // indices
+                for (idx, proof) in proofs.proof_acc_sk.proofs.iter() {
+                    if let Some(key) = acc_keys.get(idx) {
+                        let VerifyKey::Ed25519VerifyKey(ref key) = key;
+                        let verify_dlog = eddsa_dlog::verify_dlog_ed25519(ro.split(), key, proof);
+                        if !verify_dlog {
+                            return Err(CDIVerificationError::AccountOwnership);
+                        }
+                    } else {
+                        return Err(CDIVerificationError::AccountOwnership);
+                    }
+                }
+            } else {
+                // in case of an existing account we must have been given account keys
+                return Err(CDIVerificationError::AccountOwnership);
+            }
+        }
+        CredentialAccount::NewAccount(ref keys, threshold) => {
+            // we check all the keys that were provided, and check enough were provided
+            // compared to the threshold
+            // We also make sure that no more than 255 keys are provided, as well as
+            // - all keys are distinct
+            // - at least one key is provided
+            // - there are the same number of proofs and keys
+            if proofs.proof_acc_sk.num_proofs() < threshold
+                || keys.len() > 255
+                || keys.is_empty()
+                || proofs.proof_acc_sk.num_proofs() != SignatureThreshold(keys.len() as u8)
+            {
+                return Err(CDIVerificationError::AccountOwnership);
+            }
+            // set of processed keys already
+            let mut processed = BTreeSet::new();
+            // the new keys get indices 0, 1, ..
+            for (idx, key) in (0u8..).zip(keys.iter()) {
+                let idx = KeyIndex(idx);
+                // insert returns true if key was __not__ present
+                if !processed.insert(key) {
+                    return Err(CDIVerificationError::AccountOwnership);
+                }
+                if let Some(proof) = proofs.proof_acc_sk.proofs.get(&idx) {
+                    let VerifyKey::Ed25519VerifyKey(ref key) = key;
+                    let verify_dlog = eddsa_dlog::verify_dlog_ed25519(ro.split(), key, proof);
+                    if !verify_dlog {
+                        return Err(CDIVerificationError::AccountOwnership);
+                    }
+                } else {
+                    return Err(CDIVerificationError::AccountOwnership);
+                }
+            }
+        }
+    };
 
     let check_pok_sig = verify_pok_sig(
         ro,
