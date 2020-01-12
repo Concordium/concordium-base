@@ -10,6 +10,7 @@ import Concordium.Crypto.SignatureScheme
 import Data.Time.Clock
 
 import Concordium.Types
+import Concordium.ID.Types
 
 import Control.Monad
 import qualified Data.FixedByteString as FBS

@@ -18,15 +18,12 @@ import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
 import Concordium.ID.Types
-import Concordium.Crypto.SignatureScheme(SchemeId, VerifyKey)
+import Concordium.Crypto.SignatureScheme(SchemeId)
 import Concordium.Types.HashableTo
 
-
 import Control.Exception(assert)
-import Control.Monad
 
 import Data.Hashable(Hashable)
-import qualified Data.HashMap.Strict as HM
 import Data.Word
 import Data.ByteString.Char8(ByteString)
 import qualified Data.ByteString.Short as BSS
@@ -228,44 +225,6 @@ newtype EncryptedAmount = EncryptedAmount ByteString
 
 instance Show EncryptedAmount where
   show (EncryptedAmount amnt) = BSL.unpack . toLazyByteString . byteStringHex $ amnt
-
--- |Index of the account key needed to determine what key the signature should
--- be checked with.
-newtype KeyIndex = KeyIndex Word8
-    deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
-    deriving S.Serialize via Word8
-    deriving Hashable via Word8
-
-data AccountKeys = AccountKeys {
-  akKeys :: HM.HashMap KeyIndex VerifyKey,
-  akThreshold :: SignatureThreshold
-  } deriving(Eq, Show, Ord)
-
-makeAccountKeys :: [VerifyKey] -> SignatureThreshold -> AccountKeys
-makeAccountKeys keys akThreshold =
-  AccountKeys{
-    akKeys = HM.fromList (zip [0..] keys),
-    ..
-    }
-
-makeSingletonAC :: VerifyKey -> AccountKeys
-makeSingletonAC key = makeAccountKeys [key] 1
-
-instance S.Serialize AccountKeys where
-  put AccountKeys{..} = do
-    S.putWord16be (fromIntegral (length akKeys))
-    forM_ (HM.toList akKeys) $ \(idx, key) -> S.put idx <> S.put key
-    S.put akThreshold
-  get = do
-    len <- S.getWord16be
-    when (len == 0 || len >= 256) $ fail "Number of keys out of bounds."
-    akKeys <- HM.fromList <$> replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
-    akThreshold <- S.get
-    return AccountKeys{..}
-
-{-# INLINE getAccountKey #-}
-getAccountKey :: KeyIndex -> AccountKeys -> Maybe VerifyKey
-getAccountKey idx keys = HM.lookup idx (akKeys keys)
 
 data Account = Account {
   -- |Address of the account.
