@@ -53,7 +53,7 @@ Library
                 , hashable >= 1.0.1.1
                 , random >= 1.1
                 , containers >= 0.5.11.0
-                , unordered-containers >= 0.2.10.0
+                , unordered-containers >= 0.2.9.0
                 , time       >= 1.7
                 , QuickCheck >= 2.10
                 , vector >= 0.12
