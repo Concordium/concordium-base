@@ -393,7 +393,7 @@ where
             acc_data
                 .keys
                 .values()
-                .map(|&(x, _)| VerifyKey::Ed25519VerifyKey(x))
+                .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
                 .collect::<Vec<_>>(),
             threshold,
         ),
@@ -490,7 +490,12 @@ where
         proofs: acc_data
             .keys
             .iter()
-            .map(|(&idx, (pk, sk))| (idx, eddsa_dlog::prove_dlog_ed25519(ro.split(), pk, sk)))
+            .map(|(&idx, kp)| {
+                (
+                    idx,
+                    eddsa_dlog::prove_dlog_ed25519(ro.split(), &kp.public, &kp.secret),
+                )
+            })
             .collect(),
     };
     let cdp = CredDeploymentProofs {

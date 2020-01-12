@@ -75,10 +75,9 @@ impl SignatureThreshold {
     }
 }
 
-/// Threshold for the number of signatures required.
+/// Index of an account key that is to be used.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 #[repr(transparent)]
-/// The values of this type must maintain the property that they are not 0.
 pub struct KeyIndex(pub u8);
 
 impl KeyIndex {
@@ -91,11 +90,7 @@ impl KeyIndex {
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let x = cur.read_u8().ok()?;
-        if x != 0 {
-            Some(KeyIndex(x))
-        } else {
-            None
-        }
+        Some(KeyIndex(x))
     }
 }
 
@@ -135,7 +130,8 @@ impl AccountOwnershipProof {
         for _ in 0..len {
             let idx = KeyIndex::from_bytes(cur)?;
             let proof = Ed25519DlogProof::from_bytes(cur).ok()?;
-            if let Some(_) = proofs.insert(idx, proof) {
+            // insert and check for duplicates at the same time
+            if proofs.insert(idx, proof).is_some() {
                 // cannot have duplicates
                 return None;
             }
@@ -407,6 +403,10 @@ pub enum VerifyKey {
     Ed25519VerifyKey(acc_sig_scheme::PublicKey),
 }
 
+impl From<acc_sig_scheme::PublicKey> for VerifyKey {
+    fn from(pk: acc_sig_scheme::PublicKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
+}
+
 /// Compare byte representation.
 impl Ord for VerifyKey {
     fn cmp(&self, other: &VerifyKey) -> Ordering {
@@ -602,7 +602,7 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 /// credential object. This contains all the keys on the account at the moment
 /// of credential deployment.
 pub struct AccountData {
-    pub keys: BTreeMap<KeyIndex, (ed25519::PublicKey, ed25519::SecretKey)>,
+    pub keys: BTreeMap<KeyIndex, ed25519::Keypair>,
     /// If it is an existing account, its address, otherwise the signature
     /// threshold of the new account.
     pub existing: Either<SignatureThreshold, AccountAddress>,

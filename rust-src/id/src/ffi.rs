@@ -269,6 +269,7 @@ mod test {
     use crate::{account_holder::*, identity_provider::*, secret_sharing::Threshold};
     use dodis_yampolskiy_prf::secret as prf;
     use eddsa_ed25519 as ed25519;
+    use either::Either::Left;
     use elgamal::{public::PublicKey, secret::SecretKey};
     use pairing::bls12_381::Bls12;
     use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
@@ -396,10 +397,14 @@ mod test {
             _phantom: Default::default(),
         };
 
-        let kp = ed25519::generate_keypair();
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), ed25519::generate_keypair());
+        keys.insert(KeyIndex(1), ed25519::generate_keypair());
+        keys.insert(KeyIndex(2), ed25519::generate_keypair());
+
         let acc_data = AccountData {
-            sign_key:   kp.secret,
-            verify_key: kp.public,
+            keys,
+            existing: Left(SignatureThreshold(2)),
         };
 
         let cdi = generate_cdi(
@@ -432,13 +437,20 @@ mod test {
         let gc_ptr = Box::into_raw(Box::new(global_ctx));
         let ip_info_ptr = Box::into_raw(Box::new(ip_info));
 
-        let cdi_check = verify_cdi_ffi(gc_ptr, ip_info_ptr, cdi_bytes.as_ptr(), cdi_bytes_len);
+        let cdi_check = verify_cdi_ffi(
+            gc_ptr,
+            ip_info_ptr,
+            std::ptr::null(),
+            cdi_bytes.as_ptr(),
+            cdi_bytes_len,
+        );
         assert_eq!(cdi_check, 1);
         let wrong_cdi_bytes = &*wrong_cdi.to_bytes();
         let wrong_cdi_bytes_len = wrong_cdi_bytes.len() as size_t;
         let wrong_cdi_check = verify_cdi_ffi(
             gc_ptr,
             ip_info_ptr,
+            std::ptr::null(),
             wrong_cdi_bytes.as_ptr(),
             wrong_cdi_bytes_len,
         );
