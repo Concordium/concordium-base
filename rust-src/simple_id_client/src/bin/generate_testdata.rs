@@ -12,10 +12,11 @@ use rand::*;
 
 use pedersen_scheme::Value as PedersenValue;
 
-use serde_json::json;
 use std::path::Path;
 
 use std::{fs::File, io::Write};
+
+use either::Either::Left;
 
 type ExampleCurve = G1;
 
@@ -126,11 +127,16 @@ fn main() {
     };
     {
         // output testdata.bin for basic verification checking.
-        let kp = ed25519::generate_keypair();
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), ed25519::generate_keypair());
+        keys.insert(KeyIndex(1), ed25519::generate_keypair());
+        keys.insert(KeyIndex(2), ed25519::generate_keypair());
+
         let acc_data = AccountData {
-            sign_key:   kp.secret,
-            verify_key: kp.public,
+            keys,
+            existing: Left(SignatureThreshold(2)),
         };
+
         let cdi = generate_cdi(
             &ip_info,
             &global_ctx,
@@ -167,10 +173,14 @@ fn main() {
         let acc_data = if let Some(acc_data) = maybe_acc_data {
             acc_data
         } else {
-            let kp = ed25519::generate_keypair();
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), ed25519::generate_keypair());
+            keys.insert(KeyIndex(1), ed25519::generate_keypair());
+            keys.insert(KeyIndex(2), ed25519::generate_keypair());
+
             AccountData {
-                sign_key:   kp.secret,
-                verify_key: kp.public,
+                keys,
+                existing: Left(SignatureThreshold(2)),
             }
         };
         let cdi = generate_cdi(
@@ -184,17 +194,8 @@ fn main() {
             &acc_data,
             &randomness,
         );
-        let js = json!({
-        "schemeId": if cdi.values.acc_scheme_id == SchemeId::Ed25519 {"Ed25519"} else {"CL"},
-        "verifyKey": json_base16_encode(&cdi.values.acc_pub_key.to_bytes()),
-        "regId": json_base16_encode(&cdi.values.reg_id.curve_to_bytes()),
-        "ipIdentity": cdi.values.ip_identity.to_json(),
-        "revocationThreshold": cdi.values.threshold.to_json(),
-        "arData": chain_ar_data_to_json(&cdi.values.ar_data),
-        "policy": policy_to_json(&cdi.values.policy),
-        // NOTE: Since proofs encode their own length we do not output those first 4 bytes
-        "proofs": json_base16_encode(&cdi.proofs.to_bytes()[4..]),
-        });
+        let js = cdi.to_json();
+
         if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &js) {
             eprintln!("Could not output credential = {}, because {}.", idx, err);
         } else {

@@ -1,6 +1,6 @@
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
-use eddsa_ed25519 as ed25519_wrapper;
+use eddsa_ed25519 as ed25519;
 use id::secret_sharing::*;
 
 use std::collections::btree_map::BTreeMap;
@@ -10,7 +10,7 @@ use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{message::Message, public::PublicKey, secret::SecretKey};
 use hex::encode;
-use id::{account_holder::*, chain::verify_cdi, ffi::*, identity_provider::*, types::*};
+use id::{account_holder::*, ffi::*, identity_provider::*, types::*};
 use pairing::bls12_381::Bls12;
 use ps_sig;
 
@@ -26,6 +26,8 @@ use std::{
     path::Path,
     str::FromStr,
 };
+
+use either::Either::Left;
 
 use client_server_helpers::*;
 
@@ -434,19 +436,24 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             known_acc = true;
             acc_data
         } else {
-            let kp = ed25519_wrapper::generate_keypair();
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), ed25519::generate_keypair());
+            keys.insert(KeyIndex(1), ed25519::generate_keypair());
+            keys.insert(KeyIndex(2), ed25519::generate_keypair());
+
             AccountData {
-                sign_key:   kp.secret,
-                verify_key: kp.public,
+                keys,
+                existing: Left(SignatureThreshold(2)),
             }
         }
     };
+
     if !known_acc {
         println!(
             "Generated fresh verification and signature key of the account to file \
              account_keys.json"
         );
-        write_json_to_file("account_keys.json", &account_data_to_json(&acc_data)).ok();
+        write_json_to_file("account_keys.json", &acc_data.to_json()).ok();
     }
 
     // finally we also read the credential holder information with secret keys
@@ -511,32 +518,20 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     );
 
     // Double check that the generated CDI is going to be successfully validated.
-    let checked = verify_cdi(&global_ctx, &ip_info, &cdi);
-    if let Err(e) = checked {
-        eprintln!(
-            "Something went terribly wrong and the generated CDI is not valid because {}",
-            e
-        );
-        return;
-    };
+    // let checked = verify_cdi(&global_ctx, &ip_info, &cdi);
+    // if let Err(e) = checked {
+    //     eprintln!(
+    //         "Something went terribly wrong and the generated CDI is not valid
+    // because {}",         e
+    //     );
+    //     return;
+    // };
 
     // Now simply output the credential object in the transaction format
     // accepted by the simple-client for sending transactions.
 
-    let values = &cdi.values;
-    let proofs = &cdi.proofs;
+    let js = cdi.to_json();
 
-    let js = json!({
-        "schemeId": if values.acc_scheme_id == SchemeId::Ed25519 {"Ed25519"} else {"CL"},
-        "verifyKey": json_base16_encode(&values.acc_pub_key.to_bytes()),
-        "regId": json_base16_encode(&values.reg_id.curve_to_bytes()),
-        "ipIdentity": values.ip_identity.to_json(),
-        "revocationThreshold": values.threshold.to_json(),
-        "arData": chain_ar_data_to_json(&values.ar_data),
-        "policy": policy_to_json(&values.policy),
-        // NOTE: Since proofs encode their own length we do not output those first 4 bytes
-        "proofs": json_base16_encode(&proofs.to_bytes()[4..]),
-    });
     if let Some(json_file) = matches.value_of("out") {
         match write_json_to_file(json_file, &js) {
             Ok(_) => println!("Wrote transaction payload to JSON file."),
@@ -565,7 +560,7 @@ fn read_account_data<P: AsRef<Path>>(path: P) -> Option<AccountData>
 where
     P: std::fmt::Debug, {
     let v = read_json_from_file(path).ok()?;
-    json_to_account_data(&v)
+    Some(AccountData::from_json(&v)?)
 }
 
 /// Create a new CHI object (essentially new idCredPub and idCredSec).
