@@ -91,7 +91,7 @@ impl AccountAddress {
 pub struct SignatureThreshold(pub u8);
 
 impl SignatureThreshold {
-    pub fn to_json(&self) -> Value { Value::Number(Number::from(self.0)) }
+    pub fn to_json(self) -> Value { Value::Number(Number::from(self.0)) }
 
     pub fn from_json(v: &Value) -> Option<Self> {
         let v = v.as_u64()?;
@@ -102,7 +102,7 @@ impl SignatureThreshold {
         }
     }
 
-    pub fn to_bytes(&self) -> Box<[u8]> { vec![self.0].into_boxed_slice() }
+    pub fn to_bytes(self) -> Box<[u8]> { vec![self.0].into_boxed_slice() }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let x = cur.read_u8().ok()?;
@@ -120,7 +120,7 @@ impl SignatureThreshold {
 pub struct KeyIndex(pub u8);
 
 impl KeyIndex {
-    pub fn to_json(&self) -> Value { Value::Number(Number::from(self.0)) }
+    pub fn to_json(self) -> Value { Value::Number(Number::from(self.0)) }
 
     pub fn from_json(v: &Value) -> Option<Self> {
         let v = v.as_u64()?;
@@ -131,7 +131,7 @@ impl KeyIndex {
         }
     }
 
-    pub fn to_bytes(&self) -> Box<[u8]> { vec![self.0].into_boxed_slice() }
+    pub fn to_bytes(self) -> Box<[u8]> { vec![self.0].into_boxed_slice() }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let x = cur.read_u8().ok()?;
@@ -731,7 +731,7 @@ pub struct AccountKeys {
 }
 
 impl AccountKeys {
-    pub fn get(&self, idx: &KeyIndex) -> Option<&VerifyKey> { self.keys.get(idx) }
+    pub fn get(&self, idx: KeyIndex) -> Option<&VerifyKey> { self.keys.get(&idx) }
 }
 
 /// Serialization of relevant types.

@@ -134,7 +134,7 @@ pub fn verify_cdi_worker<
                 }
                 // we at least have enough proofs now, if they are all valid and have valid
                 // indices
-                for (idx, proof) in proofs.proof_acc_sk.proofs.iter() {
+                for (&idx, proof) in proofs.proof_acc_sk.proofs.iter() {
                     if let Some(key) = acc_keys.get(idx) {
                         let VerifyKey::Ed25519VerifyKey(ref key) = key;
                         let verify_dlog = eddsa_dlog::verify_dlog_ed25519(ro.split(), key, proof);
