@@ -9,6 +9,7 @@ use crate::{
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
+use either::Either;
 use elgamal::cipher::Cipher;
 use ff::Field;
 use pedersen_scheme::{
@@ -385,16 +386,29 @@ where
         &mut csprng,
     );
 
+    let cred_account = match acc_data.existing {
+        // we are deploying on a new account
+        // take all the keys that
+        Either::Left(threshold) => CredentialAccount::NewAccount(
+            acc_data
+                .keys
+                .values()
+                .map(|&(x, _)| VerifyKey::Ed25519VerifyKey(x))
+                .collect::<Vec<_>>(),
+            threshold,
+        ),
+        Either::Right(addr) => CredentialAccount::ExistingAccount(addr),
+    };
+
     // We have all the values now.
     // FIXME: With more uniform infrastructure we can avoid all the cloning here.
     let cred_values = CredentialDeploymentValues {
-        acc_scheme_id: SchemeId::Ed25519,
         reg_id,
         threshold: prio.choice_ar_parameters.1,
         ar_data,
         ip_identity: ip_info.ip_identity,
         policy: policy.clone(),
-        acc_pub_key: acc_data.verify_key,
+        cred_account,
     };
 
     // Compute the challenge prefix by hashing the values.
@@ -468,9 +482,17 @@ where
         &mut csprng,
     );
 
-    // Proof of knowledge of the secret key corresponding to the public
-    // (verification) key.
-    let proof_acc_sk = eddsa_dlog::prove_dlog_ed25519(ro, &acc_data.verify_key, &acc_data.sign_key);
+    // Proof of knowledge of the secret keys of the account.
+    // TODO: This might be replaced by just signatures.
+    // What we do now is take all the keys in acc_data and provide a proof of
+    // knowledge of the key.
+    let proof_acc_sk = AccountOwnershipProof {
+        proofs: acc_data
+            .keys
+            .iter()
+            .map(|(&idx, (pk, sk))| (idx, eddsa_dlog::prove_dlog_ed25519(ro.split(), pk, sk)))
+            .collect(),
+    };
     let cdp = CredDeploymentProofs {
         sig: blinded_sig,
         commitments,

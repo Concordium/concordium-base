@@ -116,6 +116,7 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
 pub extern "C" fn verify_cdi_ffi(
     gc_ptr: *const GlobalContext<G1>,
     ip_info_ptr: *const IpInfo<Bls12, G1>,
+    acc_keys_ptr: *const AccountKeys,
     cdi_ptr: *const u8,
     cdi_len: size_t,
 ) -> i32 {
@@ -126,6 +127,12 @@ pub extern "C" fn verify_cdi_ffi(
         return -8;
     }
 
+    let acc_keys = if acc_keys_ptr.is_null() {
+        None
+    } else {
+        Some(from_ptr!(acc_keys_ptr))
+    };
+
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
     match CredDeploymentInfo::<Bls12, G1, AttributeKind>::from_bytes(&mut Cursor::new(&cdi_bytes)) {
         None => -9,
@@ -133,6 +140,7 @@ pub extern "C" fn verify_cdi_ffi(
             match chain::verify_cdi::<Bls12, G1, AttributeKind>(
                 from_ptr!(gc_ptr),
                 from_ptr!(ip_info_ptr),
+                acc_keys,
                 &cdi,
             ) {
                 Ok(()) => 1, // verification succeeded
@@ -142,6 +150,7 @@ pub extern "C" fn verify_cdi_ffi(
                 Err(CDIVerificationError::Dlog) => -4,
                 Err(CDIVerificationError::Policy) => -5,
                 Err(CDIVerificationError::AR) => -6,
+                Err(CDIVerificationError::AccountOwnership) => -7,
             }
         }
     }

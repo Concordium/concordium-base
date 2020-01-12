@@ -384,7 +384,7 @@ instance FromJSON CredentialAccount where
 instance Serialize CredentialAccount where
   put (ExistingAccount x) = S.putWord8 0 <> S.put x
   put (NewAccount keys threshold) = S.putWord8 1 <> do
-      S.putWord16be (fromIntegral (length keys))
+      S.putWord8 (fromIntegral (length keys))
       mapM_ S.put keys
       S.put threshold
 
@@ -392,8 +392,8 @@ instance Serialize CredentialAccount where
     S.getWord8 >>= \case
       0 -> ExistingAccount <$> S.get
       1 -> do
-        len <- S.getWord16be
-        unless (len >= 1 && len <= 255) $ fail "The list of keys must be non-empty and at most 255 elements long."
+        len <- S.getWord8
+        unless (len >= 1) $ fail "The list of keys must be non-empty and at most 255 elements long."
         keys <- replicateM (fromIntegral len) S.get
         threshold <- S.get
         return $! NewAccount keys threshold
