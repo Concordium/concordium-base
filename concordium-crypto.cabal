@@ -53,6 +53,7 @@ Library
                 , hashable >= 1.0.1.1
                 , random >= 1.1
                 , containers >= 0.5.11.0
+                , unordered-containers >= 0.2.10.0
                 , time       >= 1.7
                 , QuickCheck >= 2.10
                 , vector >= 0.12
@@ -89,6 +90,7 @@ Test-Suite tests
                     , cereal >=0.5.7
                     , random >= 1.1
                     , aeson >= 1.4.2
+                    , mtl >= 2.2
   ghc-options: -threaded -with-rtsopts=-N -Wall -O2 -Wno-deprecations
   if os(linux)
      ld-options: -static

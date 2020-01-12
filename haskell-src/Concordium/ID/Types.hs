@@ -25,6 +25,7 @@ import qualified Data.Text as Text
 import Control.DeepSeq
 import Data.Scientific
 import System.Random
+import qualified Data.HashMap.Strict as HM
 
 import Data.Base58Encoding
 import qualified Data.FixedByteString as FBS
@@ -95,6 +96,46 @@ addressFromBytes bs =
 addressFromRegId :: CredentialRegistrationID -> AccountAddress
 addressFromRegId (RegIdCred fbs) = AccountAddress (FBS.FixedByteString addr) -- NB: This only works because the sizes are the same
   where SHA256.Hash (FBS.FixedByteString addr) = SHA256.hashShort (FBS.toShortByteString fbs)
+
+
+
+-- |Index of the account key needed to determine what key the signature should
+-- be checked with.
+newtype KeyIndex = KeyIndex Word8
+    deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
+    deriving S.Serialize via Word8
+    deriving Hashable via Word8
+
+data AccountKeys = AccountKeys {
+  akKeys :: HM.HashMap KeyIndex VerifyKey,
+  akThreshold :: SignatureThreshold
+  } deriving(Eq, Show, Ord)
+
+makeAccountKeys :: [VerifyKey] -> SignatureThreshold -> AccountKeys
+makeAccountKeys keys akThreshold =
+  AccountKeys{
+    akKeys = HM.fromList (zip [0..] keys),
+    ..
+    }
+
+makeSingletonAC :: VerifyKey -> AccountKeys
+makeSingletonAC key = makeAccountKeys [key] 1
+
+instance S.Serialize AccountKeys where
+  put AccountKeys{..} = do
+    S.putWord8 (fromIntegral (length akKeys))
+    forM_ (HM.toList akKeys) $ \(idx, key) -> S.put idx <> S.put key
+    S.put akThreshold
+  get = do
+    len <- S.getWord8
+    when (len == 0) $ fail "Number of keys out of bounds."
+    akKeys <- HM.fromList <$> replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+    akThreshold <- S.get
+    return AccountKeys{..}
+
+{-# INLINE getAccountKey #-}
+getAccountKey :: KeyIndex -> AccountKeys -> Maybe VerifyKey
+getAccountKey idx keys = HM.lookup idx (akKeys keys)
 
 -- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32
