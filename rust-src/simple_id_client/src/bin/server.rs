@@ -2,7 +2,7 @@ use pairing::bls12_381::Bls12;
 use ps_sig as pssig;
 
 use dodis_yampolskiy_prf::secret as prf;
-use eddsa_ed25519 as ed25519_wrapper;
+use eddsa_ed25519 as ed25519;
 use id::{account_holder::*, identity_provider::*, types::*};
 use ps_sig::SigRetrievalRandomness;
 use std::collections::btree_map::BTreeMap;
@@ -18,6 +18,7 @@ use id::secret_sharing::Threshold;
 use pedersen_scheme::Value as PedersenValue;
 use std::{cmp::max, io::Cursor};
 
+use either::Either::Left;
 use std::collections::HashMap;
 
 // server imports
@@ -185,16 +186,21 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
     };
     // if account data is present then use it.
     let acc_data = {
-        if let Some(acc_data) = v.get("accountKeyPair").and_then(json_to_account_data) {
+        if let Some(acc_data) = v.get("accountKeyPair").and_then(AccountData::from_json) {
             acc_data
         } else {
-            let kp = ed25519_wrapper::generate_keypair();
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), ed25519::generate_keypair());
+            keys.insert(KeyIndex(1), ed25519::generate_keypair());
+            keys.insert(KeyIndex(2), ed25519::generate_keypair());
+
             AccountData {
-                sign_key:   kp.secret,
-                verify_key: kp.public,
+                keys,
+                existing: Left(SignatureThreshold(2)),
             }
         }
     };
+
     let cdi = generate_cdi(
         ip_info,
         &s.global_params,
@@ -206,23 +212,12 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
         &acc_data,
         &sig_randomness,
     );
-    // let checked = verify_cdi(&s.global_params, ip_info, &cdi);
-    let values = &cdi.values;
-    let cdi_json = json!({
-        "schemeId": if values.acc_scheme_id == SchemeId::Ed25519 {"Ed25519"} else {"CL"},
-        "verifyKey": json_base16_encode(&values.acc_pub_key.to_bytes()),
-        "regId": json_base16_encode(&values.reg_id.curve_to_bytes()),
-        "ipIdentity": values.ip_identity.to_json(),
-        "revocationThreshold": values.threshold.to_json(),
-        "arData": chain_ar_data_to_json(&values.ar_data),
-        "policy": policy_to_json(&values.policy),
-        // NOTE: Since proofs encode their own length we do not output those first 4 bytes
-        "proofs": json_base16_encode(&cdi.proofs.to_bytes()[4..]),
-    });
+
+    let cdi_json = cdi.to_json();
 
     let response = json!({
         "credential": cdi_json,
-        "accountKeyPair": account_data_to_json(&acc_data)
+        "accountKeyPair": acc_data.to_json()
     });
     rouille::Response::json(&response)
 }

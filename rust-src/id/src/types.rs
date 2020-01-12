@@ -23,13 +23,24 @@ use crate::sigma_protocols::{
 use serde_json::{json, Number, Value};
 
 use byteorder::{BigEndian, ReadBytesExt};
-use either::Either;
+use either::{
+    Either,
+    Either::{Left, Right},
+};
 use std::{
     cmp::Ordering,
     convert::TryFrom,
     fmt,
     io::{Cursor, Read},
 };
+
+use sha2::{Digest, Sha256};
+
+macro_rules! m_json_decode {
+    ($val:expr, $key:expr) => {
+        &mut Cursor::new(&json_base16_decode($val.get($key)?)?)
+    };
+}
 
 // only for account addresses
 use base58check::*;
@@ -45,12 +56,31 @@ impl AccountAddress {
         Value::String(body)
     }
 
+    pub fn from_json(v: &Value) -> Option<Self> {
+        let (version, body) = v.as_str()?.from_base58check().ok()?;
+        if version == 1 && body.len() == ACCOUNT_ADDRESS_SIZE {
+            let mut addr = [0; ACCOUNT_ADDRESS_SIZE];
+            addr.copy_from_slice(&body);
+            Some(AccountAddress(addr))
+        } else {
+            None
+        }
+    }
+
     pub fn to_bytes(&self) -> Box<[u8]> { self.0.to_vec().into_boxed_slice() }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let mut buf = [0; ACCOUNT_ADDRESS_SIZE];
         cur.read_exact(&mut buf).ok()?;
         Some(AccountAddress(buf))
+    }
+
+    /// Construct account address from the registration id.
+    pub fn new<C: Curve>(reg_id: &C) -> Self {
+        let mut out = [0; ACCOUNT_ADDRESS_SIZE];
+        let hasher = Sha256::new().chain(&reg_id.curve_to_bytes());
+        out.copy_from_slice(&hasher.result());
+        AccountAddress(out)
     }
 }
 
@@ -62,6 +92,15 @@ pub struct SignatureThreshold(pub u8);
 
 impl SignatureThreshold {
     pub fn to_json(&self) -> Value { Value::Number(Number::from(self.0)) }
+
+    pub fn from_json(v: &Value) -> Option<Self> {
+        let v = v.as_u64()?;
+        if v < 256 && v > 0 {
+            Some(SignatureThreshold(v as u8))
+        } else {
+            None
+        }
+    }
 
     pub fn to_bytes(&self) -> Box<[u8]> { vec![self.0].into_boxed_slice() }
 
@@ -81,10 +120,16 @@ impl SignatureThreshold {
 pub struct KeyIndex(pub u8);
 
 impl KeyIndex {
-    /// This is a simple implementation of to_json that prints the address in
-    /// base 58 check format, to match with the instance defined in
-    /// haskell-src/Concordium/ID/Types.hs
     pub fn to_json(&self) -> Value { Value::Number(Number::from(self.0)) }
+
+    pub fn from_json(v: &Value) -> Option<Self> {
+        let v = v.as_u64()?;
+        if v < 256 {
+            Some(KeyIndex(v as u8))
+        } else {
+            None
+        }
+    }
 
     pub fn to_bytes(&self) -> Box<[u8]> { vec![self.0].into_boxed_slice() }
 
@@ -155,7 +200,7 @@ impl fmt::Display for ArIdentity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
-pub trait Attribute<F: Field>: Copy + Clone + Sized + Send + Sync {
+pub trait Attribute<F: Field>: Copy + Clone + Sized + Send + Sync + fmt::Display {
     // convert an attribute to a field element
     fn to_field_element(&self) -> F;
     fn to_bytes(&self) -> Box<[u8]>;
@@ -448,6 +493,11 @@ impl VerifyKey {
             }
         }
     }
+
+    pub fn to_json(&self) -> Value {
+        // ignore the first byte because it encodes the scheme.
+        json_base16_encode(&self.to_bytes()[1..])
+    }
 }
 
 /// What account should this credential be deployed to, or the keys of the new
@@ -459,6 +509,17 @@ pub enum CredentialAccount {
 }
 
 impl CredentialAccount {
+    pub fn to_json(&self) -> Value {
+        use CredentialAccount::*;
+        match self {
+            ExistingAccount(ref addr) => addr.to_json(),
+            NewAccount(ref keys, threshold) => json!({
+                "keys": keys.iter().map(VerifyKey::to_json).collect::<Vec<_>>(),
+                "threshold": threshold.to_json()
+            }),
+        }
+    }
+
     pub fn to_bytes(&self) -> Box<[u8]> {
         use CredentialAccount::*;
         match self {
@@ -608,6 +669,60 @@ pub struct AccountData {
     pub existing: Either<SignatureThreshold, AccountAddress>,
 }
 
+impl AccountData {
+    pub fn from_json(v: &Value) -> Option<AccountData> {
+        let mut keys = BTreeMap::new();
+        for obj in v.get("keys")?.as_array()?.iter() {
+            let obj = obj.as_object()?;
+            let idx = obj.get("index").and_then(KeyIndex::from_json)?;
+            let public =
+                ed25519::PublicKey::from_bytes(&v.get("verifyKey").and_then(json_base16_decode)?)
+                    .ok()?;
+            let secret =
+                ed25519::SecretKey::from_bytes(&v.get("signKey").and_then(json_base16_decode)?)
+                    .ok()?;
+            keys.insert(idx, ed25519::Keypair { public, secret });
+        }
+        // if threshold field is present we assume it is a new account
+        if let Some(thr) = v.get("threshold") {
+            let threshold = SignatureThreshold::from_json(thr)?;
+            Some(AccountData {
+                keys,
+                existing: Left(threshold),
+            })
+        } else if let Some(addr) = v.get("address") {
+            let address = AccountAddress::from_json(&addr)?;
+            Some(AccountData {
+                keys,
+                existing: Right(address),
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn to_json(&self) -> Value {
+        let mut out = Vec::with_capacity(self.keys.len());
+        for (idx, kp) in self.keys.iter() {
+            out.push(json!({
+                "index": idx.to_json(),
+                "verifyKey": json_base16_encode(kp.public.as_bytes()),
+                "signKey": json_base16_encode(kp.public.as_bytes()),
+            }));
+        }
+        match self.existing {
+            Left(thr) => json!({
+                "keys": out,
+                "threshold": thr.to_json()
+            }),
+            Right(addr) => json!({
+                "keys": out,
+                "address": addr.to_json()
+            }),
+        }
+    }
+}
+
 /// Public account keys currently on the account, together with the threshold
 /// needed for a valid signature on a transaction.
 pub struct AccountKeys {
@@ -674,6 +789,26 @@ impl<C: Curve> ChainArData<C> {
         let ar_identity = ArIdentity::from_bytes(cur)?;
         let enc_id_cred_pub_share = Cipher::from_bytes(cur).ok()?;
         let id_cred_pub_share_number = ShareNumber::from_bytes(cur)?;
+        Some(ChainArData {
+            ar_identity,
+            enc_id_cred_pub_share,
+            id_cred_pub_share_number,
+        })
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({
+            "arIdentity": self.ar_identity.to_json(),
+            "encIdCredPubShare": json_base16_encode(&self.enc_id_cred_pub_share.to_bytes()),
+            "idCredPubShareNumber": self.id_cred_pub_share_number.to_json()
+        })
+    }
+
+    pub fn from_json(v: &Value) -> Option<ChainArData<C>> {
+        let ar_identity = ArIdentity::from_json(v.get("arIdentity")?)?;
+        let enc_id_cred_pub_share =
+            Cipher::from_bytes(m_json_decode!(v, "encIdCredPubShare")).ok()?;
+        let id_cred_pub_share_number = ShareNumber::from_json(v.get("idCredPubShareNumber")?)?;
         Some(ChainArData {
             ar_identity,
             enc_id_cred_pub_share,
@@ -812,6 +947,19 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Policy<C, AttributeType> {
             _phantom: Default::default(),
         })
     }
+
+    pub fn to_json(&self) -> Value {
+        let revealed: Vec<Value> = self
+            .policy_vec
+            .iter()
+            .map(|(idx, value)| json!({"index": idx, "value": format!("{}", value)}))
+            .collect();
+        json!({
+            "variant": self.variant,
+            "expiry": self.expiry,
+            "revealedItems": revealed
+        })
+    }
 }
 
 impl SchemeId {
@@ -884,6 +1032,19 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             proofs: proofs?,
         })
     }
+
+    pub fn to_json(&self) -> Value {
+        json!({
+            "account": self.values.cred_account.to_json(),
+            "regId": json_base16_encode(&self.values.reg_id.curve_to_bytes()),
+            "ipIdentity": self.values.ip_identity.to_json(),
+            "revocationThreshold": self.values.threshold.to_json(),
+            "arData": self.values.ar_data.iter().map(ChainArData::to_json).collect::<Vec<_>>(),
+            "policy": self.values.policy.to_json(),
+            // NOTE: Since proofs encode their own length we do not output those first 4 bytes
+            "proofs": json_base16_encode(&self.proofs.to_bytes()[4..]),
+        })
+    }
 }
 
 impl<C: Curve> PolicyProof<C> {
@@ -915,12 +1076,6 @@ impl<C: Curve> PolicyProof<C> {
             cmm_opening_map,
         })
     }
-}
-
-macro_rules! m_json_decode {
-    ($val:expr, $key:expr) => {
-        &mut Cursor::new(&json_base16_decode($val.get($key)?)?)
-    };
 }
 
 impl IpIdentity {

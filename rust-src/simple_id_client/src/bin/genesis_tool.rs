@@ -19,6 +19,8 @@ use ec_vrf_ed25519 as vrf;
 
 use aggregate_sig as agg;
 
+use either::Either::Left;
+
 type ExampleCurve = G1;
 
 type ExampleAttribute = AttributeKind;
@@ -183,11 +185,17 @@ fn main() {
             policy_vec: BTreeMap::new(),
             _phantom: Default::default(),
         };
-        let account_kp = ed25519::generate_keypair();
+
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), ed25519::generate_keypair());
+        keys.insert(KeyIndex(1), ed25519::generate_keypair());
+        keys.insert(KeyIndex(2), ed25519::generate_keypair());
+
         let acc_data = AccountData {
-            sign_key:   account_kp.secret,
-            verify_key: account_kp.public,
+            keys,
+            existing: Left(SignatureThreshold(2)),
         };
+
         let cdi = generate_cdi(
             &ip_info,
             &global_ctx,
@@ -200,34 +208,16 @@ fn main() {
             &randomness,
         );
 
-        let credential_json = json!({
-            "schemeId": "Ed25519",
-            "verifyKey": json_base16_encode(&cdi.values.acc_pub_key.to_bytes()),
-            "regId": json_base16_encode(&cdi.values.reg_id.curve_to_bytes()),
-            "ipIdentity": cdi.values.ip_identity.to_json(),
-            "revocationThreshold": cdi.values.threshold.to_json(),
-            "arData": chain_ar_data_to_json(&cdi.values.ar_data),
-            "policy": policy_to_json(&cdi.values.policy),
-            // NOTE: Since proofs encode their own length we do not output those first 4 bytes
-            "proofs": json_base16_encode(&cdi.proofs.to_bytes()[4..]),
-        });
-        let address_json = AccountAddress::new(SchemeId::Ed25519, &acc_data.verify_key).to_json();
+        let credential_json = cdi.to_json();
+
+        let address_json = AccountAddress::new(&cdi.values.reg_id).to_json();
         // output private account data
         let account_data_json = json!({
-            "schemeId": "Ed25519",
-            "address": address_json.clone(),
-            "signKey": json_base16_encode(&acc_data.sign_key.to_bytes()),
-            "verifyKey": json_base16_encode(&acc_data.verify_key.to_bytes()),
+            "accountData": acc_data.to_json(),
             "credential": credential_json,
             "aci": aci_to_json(&aci),
         });
-        let verify_key_json = json_base16_encode(&account_kp.public.to_bytes());
-        (
-            account_data_json,
-            credential_json,
-            address_json,
-            verify_key_json,
-        )
+        (account_data_json, credential_json, address_json)
     };
 
     if let Some(matches) = matches.subcommand_matches("create-bakers") {
@@ -252,7 +242,7 @@ fn main() {
 
         let mut bakers = Vec::with_capacity(num_bakers);
         for baker in 0..num_bakers {
-            let (account_data_json, credential_json, address_json, verify_key_json) =
+            let (account_data_json, credential_json, address_json) =
                 generate_account(&mut csprng, format!("Baker-{}-account", baker));
             if let Err(err) =
                 write_json_to_file(&format!("baker-{}-account.json", baker), &account_data_json)
@@ -298,9 +288,7 @@ fn main() {
                 "aggregationVerifyKey": json_base16_encode(&agg_verify_key.to_bytes()),
                 "finalizer": baker < num_finalizers,
                 "account": json!({
-                    "schemeId": "Ed25519",
                     "address": address_json,
-                    "verifyKey": verify_key_json,
                     "balance": 1_000_000_000_000u64,
                     "credential": credential_json
                 })
@@ -325,12 +313,11 @@ fn main() {
         };
         let mut accounts = Vec::with_capacity(num_accounts);
         for acc_num in 0..num_accounts {
-            let (account_data_json, credential_json, address_json, verify_key_json) =
+            let (account_data_json, credential_json, address_json) =
                 generate_account(&mut csprng, format!("Beta-{}-account", acc_num));
             let public_account_data = json!({
                   "schemeId": "Ed25519",
                   "address": address_json,
-                  "verifyKey": verify_key_json,
                   "balance": 1_000_000_000_000u64,
                   "credential": credential_json
             });
