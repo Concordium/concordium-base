@@ -1,32 +1,40 @@
 #[macro_export]
 macro_rules! macro_derive_binary {
-    ($function_name:ident, $type:ty, $f:expr) => {
+    (Arc $function_name:ident, $type:ty, $f:expr) => {
+        macro_derive_binary!($function_name, $type, $f, const);
+    };
+    (Box $function_name:ident, $type:ty, $f:expr) => {
+        macro_derive_binary!($function_name, $type, $f, mut);
+    };
+    ($function_name:ident, $type:ty, $f:expr, $mod:tt) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(one_ptr: *const $type, two_ptr: *const $type) -> u8 {
+        pub extern "C" fn $function_name(one_ptr: *$mod $type, two_ptr: *$mod $type) -> u8 {
             let one = from_ptr!(one_ptr);
             let two = from_ptr!(two_ptr);
             u8::from($f(one, two))
         }
     };
-    ($function_name:ident, $type:ty, $f:expr, $codtype:ty) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(one_ptr: *const $type, two_ptr: *const $type) -> $codtype {
-            let one = from_ptr!(one_ptr);
-            let two = from_ptr!(two_ptr);
-            $f(one, two)
-        }
-    };
 }
 
+/// Macro to create byte arrays from objects.
+///
+/// If the value was created through a `Box`, this macro should be called
+/// starting with the keyword `Box`. If it was created through an `Arc`, this
+/// macro should be called starting with the keyword `Arc`.
 #[macro_export]
 macro_rules! macro_derive_to_bytes {
-    ($function_name:ident, $type:ty) => {
+    (Arc $function_name:ident, $type:ty) => {
+        macro_derive_to_bytes!($function_name, $type, const);
+    };
+    (Box $function_name:ident, $type:ty) => {
+        macro_derive_to_bytes!($function_name, $type, mut);
+    };
+    ($function_name:ident, $type:ty, $mod:tt) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn $function_name(
-            input_ptr: *mut $type,
+            input_ptr: *$mod $type,
             output_len: *mut size_t,
         ) -> *const u8 {
             let input = from_ptr!(input_ptr);
@@ -37,11 +45,17 @@ macro_rules! macro_derive_to_bytes {
             ret_ptr
         }
     };
-    ($function_name:ident, $type:ty, $f:expr) => {
+    (Arc $function_name:ident, $type:ty, $f:expr) => {
+        macro_derive_to_bytes!($function_name, $type, $f, mut);
+    };
+    (Box $function_name:ident, $type:ty, $f:expr) => {
+        macro_derive_to_bytes!($function_name, $type, $f, mut);
+    };
+    ($function_name:ident, $type:ty, $f:expr, $mod:tt) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn $function_name(
-            input_ptr: *mut $type,
+            input_ptr: *$mod $type,
             output_len: *mut size_t,
         ) -> *const u8 {
             let input = from_ptr!(input_ptr);
@@ -54,35 +68,64 @@ macro_rules! macro_derive_to_bytes {
     };
 }
 
+/// Macro to create rust objects from bytes.
+///
+/// If the value will be created through a `Box`, this macro should be called
+/// starting with the keyword `Box`. If it will be created through an `Arc`,
+/// this macro should be called starting with the keyword `Arc`.
 #[macro_export]
 macro_rules! macro_derive_from_bytes {
-    ($function_name:ident, $type:ty, $from:expr) => {
+    (Arc $function_name:ident, $type:ty, $from:expr) => {
+        macro_derive_from_bytes!($function_name, $type, $from, const, std::ptr::null(), |x| {
+            Arc::into_raw(Arc::new(x))
+        });
+    };
+    (Box $function_name:ident, $type:ty, $from:expr) => {
+        macro_derive_from_bytes!($function_name, $type, $from, mut, std::ptr::null_mut(), |x| {
+            Box::into_raw(Box::new(x))
+        });
+    };
+    ($function_name:ident, $type:ty, $from:expr, $mod:tt, $val:expr, $fr:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(input_bytes: *mut u8, input_len: size_t) -> *const $type {
+        pub extern "C" fn $function_name(input_bytes: *const u8, input_len: size_t) -> *$mod $type {
             let len = input_len as usize;
             let bytes = slice_from_c_bytes!(input_bytes, len);
             let e = $from(&mut Cursor::new(&bytes));
             match e {
-                Ok(r) => Box::into_raw(Box::new(r)),
-                Err(_) => ::std::ptr::null(),
+                Ok(r) => $fr(r),
+                Err(_) => $val,
             }
         }
     };
 }
 
+/// Macro to create rust objects from bytes.
+///
+/// If the value will be created through a `Box`, this macro should be called
+/// starting with the keyword `Box`. If it will be created through an `Arc`,
+/// this macro should be called starting with the keyword `Arc`.
 #[macro_export]
 macro_rules! macro_derive_from_bytes_no_cursor {
-    ($function_name:ident, $type:ty, $from:expr) => {
+    (Arc $function_name:ident, $type:ty, $from:expr) => {
+        macro_derive_from_bytes_no_cursor!($function_name, $type, $from, const, std::ptr::null(), |x| {
+            Arc::into_raw(Arc::new(x))
+        });};
+    (Box $function_name:ident, $type:ty, $from:expr) => {
+        macro_derive_from_bytes_no_cursor!($function_name, $type, $from, mut, std::ptr::null_mut(), |x| {
+            Box::into_raw(Box::new(x))
+        });
+    };
+    ($function_name:ident, $type:ty, $from:expr, $mod:tt, $val:expr, $fr:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(input_bytes: *mut u8, input_len: size_t) -> *const $type {
+        pub extern "C" fn $function_name(input_bytes: *const u8, input_len: size_t) -> *$mod $type {
             let len = input_len as usize;
             let bytes = slice_from_c_bytes!(input_bytes, len);
             let e = $from(&bytes);
             match e {
-                Ok(r) => Box::into_raw(Box::new(r)),
-                Err(_) => ::std::ptr::null(),
+                Ok(r) => $fr(r),
+                Err(_) => $val,
             }
         }
     };
@@ -93,24 +136,35 @@ macro_rules! macro_generate_commitment_key {
     ($function_name:ident, $type:ty, $generator:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(n: size_t) -> *const $type {
+        pub extern "C" fn $function_name(n: size_t) -> *mut $type {
             let mut csprng = thread_rng();
             Box::into_raw(Box::new($generator(n, &mut csprng)))
         }
     };
 }
 
+/// Macro to deallocate rust pointers.
+///
+/// If the value was created through a `Box`, this macro should be called
+/// starting with the keyword `Box`. If it was created through an `Arc`, this
+/// macro should be called starting with the keyword `Arc`.
 #[macro_export]
 macro_rules! macro_free_ffi {
-    ($function_name:ident, $type:ty) => {
+    (Arc $function_name:ident, $t:ty) => {
+        macro_free_ffi!($function_name, $t, const, Arc::from_raw);
+    };
+    (Box $function_name:ident, $t:ty) => {
+        macro_free_ffi!($function_name, $t, mut, Box::from_raw);
+    };
+    ($function_name:ident, $t:ty, $mod:tt, $fr:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(ptr: *mut $type) {
+        pub extern "C" fn $function_name(ptr: *$mod $t) {
             if ptr.is_null() {
                 return;
             }
             unsafe {
-                Box::from_raw(ptr);
+                $fr(ptr);
             }
         }
     };
