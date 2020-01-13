@@ -172,6 +172,9 @@ pub fn verify_com_eq<T: Curve>(
     if commitments.len() != proof.witness.len() {
         return false;
     }
+    if gxs.len() != proof.witness.len() {
+        return false;
+    }
 
     let challenge = &proof.challenge;
 
@@ -280,9 +283,8 @@ mod test {
             let proof = prove_com_eq(ro.split(), &cxs, &y, &comm_key, &gxs, &secret, &mut csprng);
 
             // Construct invalid parameters
-            let mut rng = thread_rng();
-            let index_wrong_cx: usize = rng.gen_range(0, i);
-            let index_wrong_gx: usize = rng.gen_range(0, i);
+            let index_wrong_cx: usize = csprng.gen_range(0, i);
+            let index_wrong_gx: usize = csprng.gen_range(0, i);
 
             let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
             let mut wrong_cxs = cxs.to_owned();
