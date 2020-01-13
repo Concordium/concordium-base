@@ -1,6 +1,5 @@
 //! This module provides the random oracle replacement function needed in the
 //! sigma protocols, and any other constructions needing it.
-//! FIXME: We should be using SHA3 as the random oracle replacement function.
 use curve_arithmetic::curve_arithmetic::Curve;
 use sha3::{Digest, Sha3_256};
 use std::io::Cursor;
