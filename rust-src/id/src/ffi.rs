@@ -148,27 +148,29 @@ pub extern "C" fn verify_cdi_ffi(
 }
 
 macro_derive_from_bytes!(
+    Box
     pedersen_key_from_bytes,
     PedersenKey<G1>,
     PedersenKey::from_bytes
 );
-macro_derive_to_bytes!(pedersen_key_to_bytes, PedersenKey<G1>);
-macro_free_ffi!(pedersen_key_free, PedersenKey<G1>);
+macro_derive_to_bytes!(Box pedersen_key_to_bytes, PedersenKey<G1>);
+macro_free_ffi!(Box pedersen_key_free, PedersenKey<G1>);
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn pedersen_key_gen() -> *const PedersenKey<G1> {
+pub extern "C" fn pedersen_key_gen() -> *mut PedersenKey<G1> {
     let mut csprng = thread_rng();
     Box::into_raw(Box::new(PedersenKey::generate(&mut csprng)))
 }
 
 macro_derive_from_bytes!(
+    Box
     ps_sig_key_from_bytes,
     ps_sig::PublicKey<Bls12>,
     ps_sig::PublicKey::from_bytes
 );
-macro_derive_to_bytes!(ps_sig_key_to_bytes, ps_sig::PublicKey<Bls12>);
-macro_free_ffi!(ps_sig_key_free, ps_sig::PublicKey<Bls12>);
+macro_derive_to_bytes!(Box ps_sig_key_to_bytes, ps_sig::PublicKey<Bls12>);
+macro_free_ffi!(Box ps_sig_key_free, ps_sig::PublicKey<Bls12>);
 macro_generate_commitment_key!(
     ps_sig_key_gen,
     ps_sig::PublicKey<Bls12>,
@@ -176,9 +178,9 @@ macro_generate_commitment_key!(
 );
 
 // derive conversion methods for IpInfo to be used in Haskell.
-macro_free_ffi!(ip_info_free, IpInfo<Bls12, G1>);
-macro_derive_from_bytes!(ip_info_from_bytes, IpInfo<Bls12, G1>, |x| IpInfo::from_bytes(x).ok_or(()));
-macro_derive_to_bytes!(ip_info_to_bytes, IpInfo<Bls12, G1>);
+macro_free_ffi!(Box ip_info_free, IpInfo<Bls12, G1>);
+macro_derive_from_bytes!(Box ip_info_from_bytes, IpInfo<Bls12, G1>, |x| IpInfo::from_bytes(x).ok_or(()));
+macro_derive_to_bytes!(Box ip_info_to_bytes, IpInfo<Bls12, G1>);
 macro_derive_from_json!(ip_info_from_json, IpInfo<Bls12, G1>, IpInfo::from_json);
 macro_derive_to_json!(ip_info_to_json, IpInfo<Bls12, G1>);
 
@@ -190,11 +192,11 @@ pub extern "C" fn ip_info_ip_identity(ip_info_ptr: *const IpInfo<Bls12, G1>) -> 
 }
 
 // derive conversion methods for GlobalContext to be used in Haskell
-macro_free_ffi!(global_context_free, GlobalContext<G1>);
-macro_derive_from_bytes!(global_context_from_bytes, GlobalContext<G1>, |x| {
+macro_free_ffi!(Box global_context_free, GlobalContext<G1>);
+macro_derive_from_bytes!(Box global_context_from_bytes, GlobalContext<G1>, |x| {
     GlobalContext::from_bytes(x).ok_or(())
 });
-macro_derive_to_bytes!(global_context_to_bytes, GlobalContext<G1>);
+macro_derive_to_bytes!(Box global_context_to_bytes, GlobalContext<G1>);
 macro_derive_from_json!(
     global_context_from_json,
     GlobalContext<G1>,
@@ -216,40 +218,40 @@ impl ElgamalGenerator {
 }
 
 macro_derive_from_bytes!(
-    elgamal_gen_from_bytes,
+    Box elgamal_gen_from_bytes,
     ElgamalGenerator,
     ElgamalGenerator::from_bytes
 );
-macro_derive_to_bytes!(elgamal_gen_to_bytes, ElgamalGenerator);
-macro_free_ffi!(elgamal_gen_free, ElgamalGenerator);
+macro_derive_to_bytes!(Box elgamal_gen_to_bytes, ElgamalGenerator);
+macro_free_ffi!(Box elgamal_gen_free, ElgamalGenerator);
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn elgamal_gen_gen() -> *const ElgamalGenerator {
+pub extern "C" fn elgamal_gen_gen() -> *mut ElgamalGenerator {
     Box::into_raw(Box::new(ElgamalGenerator::generate()))
 }
 
 macro_derive_from_bytes!(
-    elgamal_pub_key_from_bytes,
+    Box elgamal_pub_key_from_bytes,
     elgamal::PublicKey<G1>,
     elgamal::PublicKey::from_bytes
 );
-macro_derive_to_bytes!(elgamal_pub_key_to_bytes, elgamal::PublicKey<G1>);
-macro_free_ffi!(elgamal_pub_key_free, elgamal::PublicKey<G1>);
+macro_derive_to_bytes!(Box elgamal_pub_key_to_bytes, elgamal::PublicKey<G1>);
+macro_free_ffi!(Box elgamal_pub_key_free, elgamal::PublicKey<G1>);
 #[no_mangle]
-pub extern "C" fn elgamal_pub_key_gen() -> *const elgamal::PublicKey<G1> {
+pub extern "C" fn elgamal_pub_key_gen() -> *mut elgamal::PublicKey<G1> {
     let sk = elgamal::secret::SecretKey::generate(&mut thread_rng());
     Box::into_raw(Box::new(elgamal::PublicKey::from(&sk)))
 }
 
 macro_derive_from_bytes!(
-    elgamal_cipher_from_bytes,
+    Box elgamal_cipher_from_bytes,
     elgamal::cipher::Cipher<G1>,
     elgamal::cipher::Cipher::from_bytes
 );
-macro_derive_to_bytes!(elgamal_cipher_to_bytes, elgamal::cipher::Cipher<G1>);
-macro_free_ffi!(elgamal_cipher_free, elgamal::cipher::Cipher<G1>);
+macro_derive_to_bytes!(Box elgamal_cipher_to_bytes, elgamal::cipher::Cipher<G1>);
+macro_free_ffi!(Box elgamal_cipher_free, elgamal::cipher::Cipher<G1>);
 #[no_mangle]
-pub extern "C" fn elgamal_cipher_gen() -> *const elgamal::cipher::Cipher<G1> {
+pub extern "C" fn elgamal_cipher_gen() -> *mut elgamal::cipher::Cipher<G1> {
     let mut csprng = thread_rng();
     Box::into_raw(Box::new(elgamal::cipher::Cipher::generate(&mut csprng)))
 }

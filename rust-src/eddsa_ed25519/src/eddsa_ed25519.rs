@@ -18,7 +18,7 @@ pub fn generate_keypair() -> Keypair {
 // foreign function interfacee
 
 #[no_mangle]
-pub extern "C" fn eddsa_priv_key() -> *const SecretKey {
+pub extern "C" fn eddsa_priv_key() -> *mut SecretKey {
     let mut csprng = thread_rng();
     let sk = SecretKey::generate(&mut csprng);
     Box::into_raw(Box::new(sk))
@@ -28,13 +28,13 @@ pub extern "C" fn eddsa_priv_key() -> *const SecretKey {
 //-1 bad input
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn eddsa_pub_key(sk_ptr: *const SecretKey) -> *const PublicKey {
+pub extern "C" fn eddsa_pub_key(sk_ptr: *mut SecretKey) -> *mut PublicKey {
     let sk = from_ptr!(sk_ptr);
     Box::into_raw(Box::new(PublicKey::from(sk)))
 }
 
-macro_free_ffi!(eddsa_sign_free, SecretKey);
-macro_free_ffi!(eddsa_public_free, PublicKey);
+macro_free_ffi!(Box eddsa_sign_free, SecretKey);
+macro_free_ffi!(Box eddsa_public_free, PublicKey);
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -69,28 +69,25 @@ pub extern "C" fn eddsa_public_to_bytes(
 pub extern "C" fn eddsa_public_from_bytes(
     input_bytes: *mut u8,
     input_len: size_t,
-) -> *const PublicKey {
+) -> *mut PublicKey {
     let len = input_len as usize;
     let bytes = slice_from_c_bytes!(input_bytes, len);
     let e = PublicKey::from_bytes(bytes);
     match e {
         Ok(r) => Box::into_raw(Box::new(r)),
-        Err(_) => ::std::ptr::null(),
+        Err(_) => ::std::ptr::null_mut(),
     }
 }
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn eddsa_sign_from_bytes(
-    input_bytes: *mut u8,
-    input_len: size_t,
-) -> *const SecretKey {
+pub extern "C" fn eddsa_sign_from_bytes(input_bytes: *mut u8, input_len: size_t) -> *mut SecretKey {
     let len = input_len as usize;
     let bytes = slice_from_c_bytes!(input_bytes, len);
     let e = SecretKey::from_bytes(bytes);
     match e {
         Ok(r) => Box::into_raw(Box::new(r)),
-        Err(_) => ::std::ptr::null(),
+        Err(_) => ::std::ptr::null_mut(),
     }
 }
 
@@ -99,8 +96,8 @@ pub extern "C" fn eddsa_sign_from_bytes(
 pub extern "C" fn eddsa_sign(
     message: *const u8,
     len: usize,
-    sk_ptr: *const SecretKey,
-    pk_ptr: *const PublicKey,
+    sk_ptr: *mut SecretKey,
+    pk_ptr: *mut PublicKey,
     signature_bytes: &mut [u8; SIGNATURE_LENGTH],
 ) {
     let sk = from_ptr!(sk_ptr);
@@ -118,7 +115,7 @@ pub extern "C" fn eddsa_sign(
 pub extern "C" fn eddsa_verify(
     message: *const u8,
     len: usize,
-    pk_ptr: *const PublicKey,
+    pk_ptr: *mut PublicKey,
     signature_bytes: &[u8; SIGNATURE_LENGTH],
 ) -> i32 {
     let sig_res = Signature::from_bytes(signature_bytes);
