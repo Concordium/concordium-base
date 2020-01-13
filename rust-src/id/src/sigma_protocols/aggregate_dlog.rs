@@ -192,8 +192,7 @@ mod tests {
             );
 
             // Construct invalid parameters
-            let mut rng = thread_rng();
-            let index_wrong_coeff: usize = rng.gen_range(0, i);
+            let index_wrong_coeff: usize = csprng.gen_range(0, i);
 
             let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
             let wrong_public = public.double_point();
