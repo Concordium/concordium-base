@@ -119,7 +119,7 @@ macro_rules! macro_derive_from_bytes_no_cursor {
     ($function_name:ident, $type:ty, $from:expr, $mod:tt, $val:expr, $fr:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(input_bytes: *mut u8, input_len: size_t) -> *$mod $type {
+        pub extern "C" fn $function_name(input_bytes: *const u8, input_len: size_t) -> *$mod $type {
             let len = input_len as usize;
             let bytes = slice_from_c_bytes!(input_bytes, len);
             let e = $from(&bytes);
