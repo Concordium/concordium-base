@@ -34,29 +34,16 @@ macro_derive_binary!(Box bls_sig_eq, Signature<Bls12>, Signature::eq);
 
 macro_rules! macro_cmp {
     (Arc $function_name:ident, $type:ty) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        // support ord instance needed in Haskell
-        pub extern "C" fn $function_name(ptr1: *mut $type, ptr2: *mut $type) -> i32 {
-            // optimistic check first.
-            if ptr1 == ptr2 {
-                return 0;
-            }
-
-            let p1 = from_ptr!(ptr1);
-            let p2 = from_ptr!(ptr2);
-            match p1.to_bytes().cmp(&p2.to_bytes()) {
-                Ordering::Less => return -1,
-                Ordering::Greater => return 1,
-                Ordering::Equal => 0,
-            }
-        }
+        macro_cmp!($function_name, $type, const);
     };
     (Box $function_name:ident, $type:ty) => {
+        macro_cmp!($function_name, $type, mut);
+    };
+    ($function_name:ident, $type:ty, $mod:tt) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         // support ord instance needed in Haskell
-        pub extern "C" fn $function_name(ptr1: *const $type, ptr2: *const $type) -> i32 {
+        pub extern "C" fn $function_name(ptr1: *$mod $type, ptr2: *$mod $type) -> i32 {
             // optimistic check first.
             if ptr1 == ptr2 {
                 return 0;
