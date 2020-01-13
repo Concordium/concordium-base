@@ -1,39 +1,18 @@
 #[macro_export]
 macro_rules! macro_derive_binary {
     (Arc $function_name:ident, $type:ty, $f:expr) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(one_ptr: *const $type, two_ptr: *const $type) -> u8 {
-            let one = from_ptr!(one_ptr);
-            let two = from_ptr!(two_ptr);
-            u8::from($f(one, two))
-        }
-    };
-    (Arc $function_name:ident, $type:ty, $f:expr, $codtype:ty) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(one_ptr: *const $type, two_ptr: *const $type) -> $codtype {
-            let one = from_ptr!(one_ptr);
-            let two = from_ptr!(two_ptr);
-            $f(one, two)
-        }
+        macro_derive_binary!($function_name, $type, $f, const);
     };
     (Box $function_name:ident, $type:ty, $f:expr) => {
+        macro_derive_binary!($function_name, $type, $f, mut);
+    };
+    ($function_name:ident, $type:ty, $f:expr, $mod:tt) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(one_ptr: *mut $type, two_ptr: *mut $type) -> u8 {
+        pub extern "C" fn $function_name(one_ptr: *$mod $type, two_ptr: *$mod $type) -> u8 {
             let one = from_ptr!(one_ptr);
             let two = from_ptr!(two_ptr);
             u8::from($f(one, two))
-        }
-    };
-    (Box $function_name:ident, $type:ty, $f:expr, $codtype:ty) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(one_ptr: *mut $type, two_ptr: *mut $type) -> $codtype {
-            let one = from_ptr!(one_ptr);
-            let two = from_ptr!(two_ptr);
-            $f(one, two)
         }
     };
 }
@@ -45,41 +24,17 @@ macro_rules! macro_derive_binary {
 /// macro should be called starting with the keyword `Arc`.
 #[macro_export]
 macro_rules! macro_derive_to_bytes {
-    (Box $function_name:ident, $type:ty) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(
-            input_ptr: *mut $type,
-            output_len: *mut size_t,
-        ) -> *const u8 {
-            let input = from_ptr!(input_ptr);
-            let bytes = input.to_bytes();
-            unsafe { *output_len = bytes.len() as size_t }
-            let ret_ptr = bytes.as_ptr();
-            ::std::mem::forget(bytes);
-            ret_ptr
-        }
-    };
-    (Box $function_name:ident, $type:ty, $f:expr) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(
-            input_ptr: *mut $type,
-            output_len: *mut size_t,
-        ) -> *const u8 {
-            let input = from_ptr!(input_ptr);
-            let bytes = $f(&input);
-            unsafe { *output_len = bytes.len() as size_t }
-            let ret_ptr = bytes.as_ptr();
-            ::std::mem::forget(bytes);
-            ret_ptr
-        }
-    };
     (Arc $function_name:ident, $type:ty) => {
+        macro_derive_to_bytes!($function_name, $type, const);
+    };
+    (Box $function_name:ident, $type:ty) => {
+        macro_derive_to_bytes!($function_name, $type, mut);
+    };
+    ($function_name:ident, $type:ty, $mod:tt) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn $function_name(
-            input_ptr: *const $type,
+            input_ptr: *$mod $type,
             output_len: *mut size_t,
         ) -> *const u8 {
             let input = from_ptr!(input_ptr);
@@ -91,10 +46,16 @@ macro_rules! macro_derive_to_bytes {
         }
     };
     (Arc $function_name:ident, $type:ty, $f:expr) => {
+        macro_derive_to_bytes!($function_name, $type, $f, mut);
+    };
+    (Box $function_name:ident, $type:ty, $f:expr) => {
+        macro_derive_to_bytes!($function_name, $type, $f, mut);
+    };
+    ($function_name:ident, $type:ty, $f:expr, $mod:tt) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn $function_name(
-            input_ptr: *const $type,
+            input_ptr: *$mod $type,
             output_len: *mut size_t,
         ) -> *const u8 {
             let input = from_ptr!(input_ptr);
@@ -115,28 +76,25 @@ macro_rules! macro_derive_to_bytes {
 #[macro_export]
 macro_rules! macro_derive_from_bytes {
     (Arc $function_name:ident, $type:ty, $from:expr) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(input_bytes: *mut u8, input_len: size_t) -> *const $type {
-            let len = input_len as usize;
-            let bytes = slice_from_c_bytes!(input_bytes, len);
-            let e = $from(&mut Cursor::new(&bytes));
-            match e {
-                Ok(r) => Arc::into_raw(Arc::new(r)),
-                Err(_) => ::std::ptr::null(),
-            }
-        }
+        macro_derive_from_bytes!($function_name, $type, $from, const, std::ptr::null(), |x| {
+            Arc::into_raw(Arc::new(x))
+        });
     };
     (Box $function_name:ident, $type:ty, $from:expr) => {
+        macro_derive_from_bytes!($function_name, $type, $from, mut, std::ptr::null_mut(), |x| {
+            Box::into_raw(Box::new(x))
+        });
+    };
+    ($function_name:ident, $type:ty, $from:expr, $mod:tt, $val:expr, $fr:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(input_bytes: *mut u8, input_len: size_t) -> *mut $type {
+        pub extern "C" fn $function_name(input_bytes: *const u8, input_len: size_t) -> *$mod $type {
             let len = input_len as usize;
             let bytes = slice_from_c_bytes!(input_bytes, len);
             let e = $from(&mut Cursor::new(&bytes));
             match e {
-                Ok(r) => Box::into_raw(Box::new(r)),
-                Err(_) => ::std::ptr::null_mut(),
+                Ok(r) => $fr(r),
+                Err(_) => $val,
             }
         }
     };
@@ -150,28 +108,24 @@ macro_rules! macro_derive_from_bytes {
 #[macro_export]
 macro_rules! macro_derive_from_bytes_no_cursor {
     (Arc $function_name:ident, $type:ty, $from:expr) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(input_bytes: *mut u8, input_len: size_t) -> *const $type {
-            let len = input_len as usize;
-            let bytes = slice_from_c_bytes!(input_bytes, len);
-            let e = $from(&bytes);
-            match e {
-                Ok(r) => Arc::into_raw(Arc::new(r)),
-                Err(_) => ::std::ptr::null(),
-            }
-        }
-    };
+        macro_derive_from_bytes_no_cursor!($function_name, $type, $from, const, std::ptr::null(), |x| {
+            Arc::into_raw(Arc::new(x))
+        });};
     (Box $function_name:ident, $type:ty, $from:expr) => {
+        macro_derive_from_bytes_no_cursor!($function_name, $type, $from, mut, std::ptr::null_mut(), |x| {
+            Box::into_raw(Box::new(x))
+        });
+    };
+    ($function_name:ident, $type:ty, $from:expr, $mod:tt, $val:expr, $fr:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(input_bytes: *mut u8, input_len: size_t) -> *mut $type {
+        pub extern "C" fn $function_name(input_bytes: *mut u8, input_len: size_t) -> *$mod $type {
             let len = input_len as usize;
             let bytes = slice_from_c_bytes!(input_bytes, len);
             let e = $from(&bytes);
             match e {
-                Ok(r) => Box::into_raw(Box::new(r)),
-                Err(_) => ::std::ptr::null_mut(),
+                Ok(r) => $fr(r),
+                Err(_) => $val,
             }
         }
     };
@@ -197,26 +151,20 @@ macro_rules! macro_generate_commitment_key {
 #[macro_export]
 macro_rules! macro_free_ffi {
     (Arc $function_name:ident, $t:ty) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(ptr: *const $t) {
-            if ptr.is_null() {
-                return;
-            }
-            unsafe {
-                Arc::from_raw(ptr);
-            }
-        }
+        macro_free_ffi!($function_name, $t, const, Arc::from_raw);
     };
     (Box $function_name:ident, $t:ty) => {
+        macro_free_ffi!($function_name, $t, mut, Box::from_raw);
+    };
+    ($function_name:ident, $t:ty, $mod:tt, $fr:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(ptr: *mut $t) {
+        pub extern "C" fn $function_name(ptr: *$mod $t) {
             if ptr.is_null() {
                 return;
             }
             unsafe {
-                Box::from_raw(ptr);
+                $fr(ptr);
             }
         }
     };
