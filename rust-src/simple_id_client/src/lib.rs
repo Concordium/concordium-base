@@ -1,5 +1,4 @@
 use dodis_yampolskiy_prf::secret as prf;
-use ed25519_dalek as ed25519;
 use elgamal::cipher::Cipher;
 use hex::{decode, encode};
 use id::{ffi::*, secret_sharing::*, types::*};
@@ -17,7 +16,6 @@ use id::sigma_protocols::{com_enc_eq::*, com_eq, com_eq_different_groups};
 
 use std::{
     convert::TryFrom,
-    fmt::Display,
     fs::File,
     io::{self, BufReader, Cursor, Error, ErrorKind, Write},
     path::Path,
@@ -132,25 +130,6 @@ pub fn json_to_chi<C: Curve>(js: &Value) -> Option<CredentialHolderInfo<C>> {
     Some(info)
 }
 
-pub fn json_to_account_data(v: &Value) -> Option<AccountData> {
-    let v = v.as_object()?;
-    let verify_key =
-        ed25519::PublicKey::from_bytes(&v.get("verifyKey").and_then(json_base16_decode)?).ok()?;
-    let sign_key =
-        ed25519::SecretKey::from_bytes(&v.get("signKey").and_then(json_base16_decode)?).ok()?;
-    Some(AccountData {
-        verify_key,
-        sign_key,
-    })
-}
-
-pub fn account_data_to_json(acc: &AccountData) -> Value {
-    json!({
-        "verifyKey": json_base16_encode(acc.verify_key.as_bytes()),
-        "signKey": json_base16_encode(acc.sign_key.as_bytes()),
-    })
-}
-
 pub fn aci_to_json(aci: &AccCredentialInfo<ExampleCurve, ExampleAttribute>) -> Value {
     let chi = chi_to_json(&aci.acc_holder_info);
     json!({
@@ -201,23 +180,6 @@ pub fn json_to_global_context(v: &Value) -> Option<GlobalContext<ExampleCurve>> 
     Some(gc)
 }
 
-pub fn policy_to_json<C: Curve, AttributeType: Attribute<C::Scalar>>(
-    policy: &Policy<C, AttributeType>,
-) -> Value
-where
-    AttributeType: Display, {
-    let revealed: Vec<Value> = policy
-        .policy_vec
-        .iter()
-        .map(|(idx, value)| json!({"index": idx, "value": format!("{}", value)}))
-        .collect();
-    json!({
-        "variant": policy.variant,
-        "expiry": policy.expiry,
-        "revealedItems": revealed
-    })
-}
-
 pub fn json_to_ip_infos(v: &Value) -> Option<Vec<IpInfo<Bls12, ExampleCurve>>> {
     let ips_arr = v.as_array()?;
     ips_arr.iter().map(IpInfo::from_json).collect()
@@ -253,35 +215,15 @@ pub fn json_to_ip_ar_data(v: &Value) -> Option<IpArData<ExampleCurve>> {
 }
 
 pub fn chain_ar_data_to_json<C: Curve>(ar_data: &[ChainArData<C>]) -> Value {
-    let arr: Vec<Value> = ar_data.iter().map(single_chain_ar_data_to_json).collect();
+    let arr: Vec<Value> = ar_data.iter().map(ChainArData::to_json).collect();
     json!(arr)
-}
-pub fn single_chain_ar_data_to_json<C: Curve>(ar_data: &ChainArData<C>) -> Value {
-    json!({
-        "arIdentity": ar_data.ar_identity.to_json(),
-        "encIdCredPubShare": json_base16_encode(&ar_data.enc_id_cred_pub_share.to_bytes()),
-        "idCredPubShareNumber": ar_data.id_cred_pub_share_number.to_json()
-    })
-}
-
-pub fn json_to_chain_single_ar_data(v: &Value) -> Option<ChainArData<ExampleCurve>> {
-    let ar_identity = ArIdentity::from_json(v.get("arIdentity")?)?;
-    let enc_id_cred_pub_share = Cipher::from_bytes(m_json_decode!(v, "encIdCredPubShare")).ok()?;
-    let id_cred_pub_share_number = ShareNumber::from_json(v.get("idCredPubShareNumber")?)?;
-    Some(ChainArData {
-        ar_identity,
-        enc_id_cred_pub_share,
-        id_cred_pub_share_number,
-    })
 }
 
 pub fn json_to_chain_ar_data(v: &Value) -> Option<Vec<ChainArData<ExampleCurve>>> {
     let ar_data_arr = v.as_array()?;
-    ar_data_arr
-        .iter()
-        .map(json_to_chain_single_ar_data)
-        .collect()
+    ar_data_arr.iter().map(ChainArData::from_json).collect()
 }
+
 pub fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>) -> Value {
     let arr: Vec<Value> = pio.ip_ar_data.iter().map(ip_ar_data_to_json).collect();
     let prf_arr: Vec<Value> = pio

@@ -53,4 +53,4 @@ stages:
   stage: test
   cache: {}
   script:
-    - ( cd rust-src && cargo test --all --verbose --color=always)
+    - ( cd rust-src && cargo test --all --verbose --release --color=always)

@@ -12,10 +12,11 @@ use rand::*;
 
 use pedersen_scheme::Value as PedersenValue;
 
-use serde_json::json;
 use std::path::Path;
 
 use std::{fs::File, io::Write};
+
+use either::Either::{Left, Right};
 
 type ExampleCurve = G1;
 
@@ -126,12 +127,17 @@ fn main() {
     };
     {
         // output testdata.bin for basic verification checking.
-        let kp = ed25519::generate_keypair();
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), ed25519::generate_keypair());
+        keys.insert(KeyIndex(1), ed25519::generate_keypair());
+        keys.insert(KeyIndex(2), ed25519::generate_keypair());
+
         let acc_data = AccountData {
-            sign_key:   kp.secret,
-            verify_key: kp.public,
+            keys,
+            existing: Left(SignatureThreshold(2)),
         };
-        let cdi = generate_cdi(
+
+        let cdi_1 = generate_cdi(
             &ip_info,
             &global_ctx,
             &aci,
@@ -143,6 +149,34 @@ fn main() {
             &randomness,
         );
 
+        // Generate the second credential for an existing account (the one
+        // created by the first credential)
+        let acc_data_2 = AccountData {
+            keys:     acc_data.keys,
+            existing: Right(AccountAddress::new(&cdi_1.values.reg_id)),
+        };
+
+        let cdi_2 = generate_cdi(
+            &ip_info,
+            &global_ctx,
+            &aci,
+            &pio,
+            53,
+            &ip_sig,
+            &policy,
+            &acc_data_2,
+            &randomness,
+        );
+
+        let acc_keys = AccountKeys {
+            keys:      acc_data_2
+                .keys
+                .iter()
+                .map(|(&idx, kp)| (idx, VerifyKey::from(kp.public)))
+                .collect(),
+            threshold: SignatureThreshold(2),
+        };
+
         let mut out = Vec::new();
         let gc_bytes = global_ctx.to_bytes();
         out.extend_from_slice(&(gc_bytes.len() as u32).to_be_bytes());
@@ -150,7 +184,39 @@ fn main() {
         let ip_info_bytes = ip_info.to_bytes();
         out.extend_from_slice(&(ip_info_bytes.len() as u32).to_be_bytes());
         out.extend_from_slice(&ip_info_bytes);
-        out.extend_from_slice(&cdi.to_bytes());
+        // output the first credential
+        let cdi1_bytes = cdi_1.to_bytes();
+        out.extend_from_slice(&(cdi1_bytes.len() as u32).to_be_bytes());
+        out.extend_from_slice(&cdi1_bytes);
+        // and account keys and then the second credential
+        out.extend_from_slice(&acc_keys.to_bytes());
+        let cdi2_bytes = cdi_2.to_bytes();
+        out.extend_from_slice(&(cdi2_bytes.len() as u32).to_be_bytes());
+        out.extend_from_slice(&cdi2_bytes);
+
+        // finally we add a completely new set of keys to have a simple negative test
+        let acc_keys_3 = {
+            let mut keys = BTreeMap::new();
+            keys.insert(
+                KeyIndex(0),
+                VerifyKey::from(ed25519::generate_keypair().public),
+            );
+            keys.insert(
+                KeyIndex(1),
+                VerifyKey::from(ed25519::generate_keypair().public),
+            );
+            keys.insert(
+                KeyIndex(2),
+                VerifyKey::from(ed25519::generate_keypair().public),
+            );
+
+            AccountKeys {
+                keys,
+                threshold: SignatureThreshold(2),
+            }
+        };
+        out.extend_from_slice(&acc_keys_3.to_bytes());
+
         let file = File::create("testdata.bin");
         if let Err(err) = file.unwrap().write_all(&out) {
             eprintln!(
@@ -167,10 +233,14 @@ fn main() {
         let acc_data = if let Some(acc_data) = maybe_acc_data {
             acc_data
         } else {
-            let kp = ed25519::generate_keypair();
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), ed25519::generate_keypair());
+            keys.insert(KeyIndex(1), ed25519::generate_keypair());
+            keys.insert(KeyIndex(2), ed25519::generate_keypair());
+
             AccountData {
-                sign_key:   kp.secret,
-                verify_key: kp.public,
+                keys,
+                existing: Left(SignatureThreshold(2)),
             }
         };
         let cdi = generate_cdi(
@@ -184,23 +254,19 @@ fn main() {
             &acc_data,
             &randomness,
         );
-        let js = json!({
-        "schemeId": if cdi.values.acc_scheme_id == SchemeId::Ed25519 {"Ed25519"} else {"CL"},
-        "verifyKey": json_base16_encode(&cdi.values.acc_pub_key.to_bytes()),
-        "regId": json_base16_encode(&cdi.values.reg_id.curve_to_bytes()),
-        "ipIdentity": cdi.values.ip_identity.to_json(),
-        "revocationThreshold": cdi.values.threshold.to_json(),
-        "arData": chain_ar_data_to_json(&cdi.values.ar_data),
-        "policy": policy_to_json(&cdi.values.policy),
-        // NOTE: Since proofs encode their own length we do not output those first 4 bytes
-        "proofs": json_base16_encode(&cdi.proofs.to_bytes()[4..]),
-        });
+        let js = cdi.to_json();
+
         if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &js) {
             eprintln!("Could not output credential = {}, because {}.", idx, err);
         } else {
             println!("Output credential {}.", idx);
         }
-        acc_data
+        // return the account data that can be used to deploy more credentials
+        // to the same account.
+        AccountData {
+            existing: Right(AccountAddress::new(&cdi.values.reg_id)),
+            ..acc_data
+        }
     };
 
     let _ = generate(None, 0, 1);
