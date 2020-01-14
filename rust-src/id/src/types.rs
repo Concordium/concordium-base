@@ -443,12 +443,12 @@ pub fn bytes_to_short_string(cur: &mut Cursor<&[u8]>) -> Option<String> {
 }
 
 impl<C: Curve> IpArData<C> {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
         let mut out = Vec::from(self.ar_identity.to_bytes());
         out.extend_from_slice(&self.enc_prf_key_share.to_bytes());
         out.extend_from_slice(&self.prf_key_share_number.to_bytes());
         out.extend_from_slice(&self.proof_com_enc_eq.to_bytes());
-        out
+        out.into_boxed_slice()
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
@@ -466,11 +466,11 @@ impl<C: Curve> IpArData<C> {
 }
 
 impl<C: Curve> ChainArData<C> {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
         let mut out = Vec::from(self.ar_identity.to_bytes());
         out.extend_from_slice(&self.enc_id_cred_pub_share.to_bytes());
         out.extend_from_slice(&self.id_cred_pub_share_number.to_bytes());
-        out
+        out.into_boxed_slice()
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
@@ -486,7 +486,7 @@ impl<C: Curve> ChainArData<C> {
 }
 
 impl<C: Curve> CredDeploymentCommitments<C> {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
         let mut out = Vec::from(self.cmm_prf.to_bytes());
         out.extend_from_slice(&self.cmm_cred_counter.to_bytes());
         let atts = &self.cmm_attributes;
@@ -502,7 +502,7 @@ impl<C: Curve> CredDeploymentCommitments<C> {
         for cmm in cmm_id_cred_sec_sharing_coeff.iter() {
             out.extend_from_slice(&cmm.to_bytes());
         }
-        out
+        out.into_boxed_slice()
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
@@ -530,7 +530,7 @@ impl<C: Curve> CredDeploymentCommitments<C> {
 }
 
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
         // we use the first 4 bytes to encode the final length of the serialization.
         // This is unnecessary because proofs are structured and subparts have their
         // length, but having the extra 4 bytes (which is negligible compared to
@@ -550,7 +550,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
         // out.extend_from_slice(&self.proof_policy.to_bytes());
         let len = (out.len() - 4) as u32;
         out[0..4].copy_from_slice(&len.to_be_bytes());
-        out
+        out.into_boxed_slice()
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
@@ -582,7 +582,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> CredDeploymentProofs<P, C> {
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Policy<C, AttributeType> {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
         let mut vec = Vec::from(&self.variant.to_be_bytes()[..]);
         // vec.extend_from_slice(&self.variant.to_be_bytes());
         vec.extend_from_slice(&self.expiry.to_be_bytes());
@@ -593,7 +593,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Policy<C, AttributeType> {
             vec.extend_from_slice(&idx.to_be_bytes());
             vec.extend_from_slice(&v.to_bytes());
         }
-        vec
+        vec.into_boxed_slice()
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
@@ -633,7 +633,7 @@ impl SchemeId {
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C, AttributeType> {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Box<[u8]> {
         let mut v = self.acc_scheme_id.to_bytes().to_vec();
         // NOTE: Serialize the public key with length to match what is in Haskell code
         // and in order to accept different signature schemes in the future.
@@ -646,7 +646,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
             v.extend_from_slice(&ar.to_bytes());
         }
         v.extend_from_slice(&self.policy.to_bytes());
-        v
+        v.into_boxed_slice()
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
@@ -684,11 +684,11 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> CredentialDeploymentValues<C
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
     CredDeploymentInfo<P, C, AttributeType>
 {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut v = self.values.to_bytes();
-        let proof_bytes = self.proofs.to_bytes();
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut v = self.values.to_bytes().to_vec();
+        let proof_bytes = self.proofs.to_bytes().to_vec();
         v.extend_from_slice(&proof_bytes);
-        v
+        v.into_boxed_slice()
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
