@@ -452,6 +452,11 @@ impl From<acc_sig_scheme::PublicKey> for VerifyKey {
     fn from(pk: acc_sig_scheme::PublicKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
 }
 
+impl From<&ed25519::Keypair> for VerifyKey {
+    fn from(kp: &ed25519::Keypair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
+}
+
+
 /// Compare byte representation.
 impl Ord for VerifyKey {
     fn cmp(&self, other: &VerifyKey) -> Ordering {
@@ -759,6 +764,16 @@ impl AccountKeys {
         }
         out.extend_from_slice(&self.threshold.to_bytes());
         out
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({
+            "threshold": self.threshold.to_json(),
+            "keys": self.keys.iter().map(|(idx, v)| json!({
+                "index": idx.to_json(),
+                "verifyKey": v.to_json(),
+            })).collect::<Vec<_>>()
+        })
     }
 }
 

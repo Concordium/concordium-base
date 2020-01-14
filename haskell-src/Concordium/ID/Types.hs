@@ -104,6 +104,8 @@ addressFromRegId (RegIdCred fbs) = AccountAddress (FBS.FixedByteString addr) -- 
 newtype KeyIndex = KeyIndex Word8
     deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
     deriving S.Serialize via Word8
+    deriving FromJSON via Word8
+    deriving ToJSON via Word8
     deriving Hashable via Word8
 
 data AccountKeys = AccountKeys {
@@ -132,6 +134,19 @@ instance S.Serialize AccountKeys where
     akKeys <- HM.fromList <$> replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
     akThreshold <- S.get
     return AccountKeys{..}
+
+instance FromJSON AccountKeys where
+  parseJSON = withObject "AccountKeys" $ \v -> do
+    akThreshold <- v .: "threshold"
+    keys <- v .: "keys"
+    parsedKeys <- forM keys $ withObject "Account key with index" $ \obj -> do
+      index <- obj .: "index"
+      key <- obj .: "verifyKey"
+      return (index, key)
+    return AccountKeys{
+      akKeys = HM.fromList parsedKeys,
+      ..
+      }
 
 {-# INLINE getAccountKey #-}
 getAccountKey :: KeyIndex -> AccountKeys -> Maybe VerifyKey
