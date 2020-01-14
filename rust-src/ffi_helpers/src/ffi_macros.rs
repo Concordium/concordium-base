@@ -36,13 +36,11 @@ macro_rules! macro_derive_to_bytes {
         pub extern "C" fn $function_name(
             input_ptr: *$mod $type,
             output_len: *mut size_t,
-        ) -> *const u8 {
+        ) -> *mut [u8] {
             let input = from_ptr!(input_ptr);
             let bytes = input.to_bytes();
             unsafe { *output_len = bytes.len() as size_t }
-            let ret_ptr = bytes.as_ptr();
-            ::std::mem::forget(bytes);
-            ret_ptr
+            Box::into_raw(bytes)
         }
     };
     (Arc $function_name:ident, $type:ty, $f:expr) => {
@@ -61,9 +59,7 @@ macro_rules! macro_derive_to_bytes {
             let input = from_ptr!(input_ptr);
             let bytes = $f(&input);
             unsafe { *output_len = bytes.len() as size_t }
-            let ret_ptr = bytes.as_ptr();
-            ::std::mem::forget(bytes);
-            ret_ptr
+            Box::into_raw(bytes)
         }
     };
 }
@@ -230,14 +226,14 @@ macro_rules! macro_derive_to_json {
         pub extern "C" fn $function_name(
             input_ptr: *mut $type,
             output_len: *mut size_t,
-        ) -> *const u8 {
+        ) -> *const [u8] {
             let input = from_ptr!(input_ptr);
             // unwrap is OK here since we construct well-formed json.
-            let bytes = serde_json::to_vec(&input.to_json()).unwrap();
+            let bytes = serde_json::to_vec(&input.to_json())
+                .unwrap()
+                .into_boxed_slice();
             unsafe { *output_len = bytes.len() as size_t }
-            let ret_ptr = bytes.as_ptr();
-            ::std::mem::forget(bytes);
-            ret_ptr
+            Box::into_raw(bytes)
         }
     };
     ($function_name:ident, $type:ty, $f:expr) => {
@@ -251,9 +247,7 @@ macro_rules! macro_derive_to_json {
             // unwrap is OK here since we construct well-formed json.
             let bytes = serde_json::to_vec(&($f(&input))).unwrap();
             unsafe { *output_len = bytes.len() as size_t }
-            let ret_ptr = bytes.as_ptr();
-            ::std::mem::forget(bytes);
-            ret_ptr
+            Box::into_raw(bytes)
         }
     };
 }
