@@ -298,24 +298,6 @@ mod tests {
         }
     }
 
-    //         // check that changing the prefix invalidates the proof
-    //         let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
-    //         if verify_com_eq_diff_grps(
-    //             RandomOracle::domain(&challenge_prefix_1),
-    //             &u,
-    //             &v,
-    //             &cmm_key_1,
-    //             &cmm_key_2,
-    //             &proof,
-    //         ) {
-    //             assert_eq!(challenge_prefix, challenge_prefix_1);
-    //         }
-
-    //         // check that changing the first commitment key invalidates the proof
-    //         let cmm_key_1_alt = CommitmentKey::<G1Affine>::generate(&mut csprng);
-    //         if verify_com_eq_diff_grps(ro, &u, &v, &cmm_key_1_alt, &cmm_key_2,
-    // &proof) {             assert_eq!(cmm_key_1_alt, cmm_key_1);
-    //         }
     #[test]
     pub fn test_com_eq_diff_grps_proof_serialization() {
         let mut csprng = thread_rng();
