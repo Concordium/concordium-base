@@ -226,10 +226,12 @@ macro_rules! macro_derive_to_json {
         pub extern "C" fn $function_name(
             input_ptr: *mut $type,
             output_len: *mut size_t,
-        ) -> *const u8 {
+        ) -> *const [u8] {
             let input = from_ptr!(input_ptr);
             // unwrap is OK here since we construct well-formed json.
-            let bytes = serde_json::to_vec(&input.to_json()).unwrap();
+            let bytes = serde_json::to_vec(&input.to_json())
+                .unwrap()
+                .into_boxed_slice();
             unsafe { *output_len = bytes.len() as size_t }
             Box::into_raw(bytes)
         }
