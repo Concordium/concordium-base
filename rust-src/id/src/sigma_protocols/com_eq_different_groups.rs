@@ -176,7 +176,7 @@ mod tests {
     use pairing::bls12_381::{G1Affine, G2Affine};
 
     #[test]
-    pub fn test_com_eq_diff_grps() {
+    pub fn test_com_eq_diff_grps_correctness() {
         let mut csprng = thread_rng();
         for _i in 0..100 {
             let a_1 = Value::<G2Affine>::generate_non_zero(&mut csprng);
@@ -211,27 +211,119 @@ mod tests {
                 &cmm_key_2,
                 &proof
             ));
-            // check that changing the prefix invalidates the proof
-            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
-            if verify_com_eq_diff_grps(
-                RandomOracle::domain(&challenge_prefix_1),
+        }
+    }
+
+    #[test]
+    pub fn test_com_eq_diff_grps_soundness() {
+        let mut csprng = thread_rng();
+        for _i in 0..100 {
+            // Generate proof
+            let a_1 = Value::<G2Affine>::generate_non_zero(&mut csprng);
+            let cmm_key_1 = CommitmentKey::<G1Affine>::generate(&mut csprng);
+            let cmm_key_2 = CommitmentKey::<G2Affine>::generate(&mut csprng);
+
+            let (u, a_2) = cmm_key_1.commit((&a_1).view(), &mut csprng);
+            let (v, r) = cmm_key_2.commit(&a_1, &mut csprng);
+
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let ro = RandomOracle::domain(&challenge_prefix);
+
+            let secret = ComEqDiffGrpsSecret {
+                value:      &a_1,
+                rand_cmm_1: &a_2,
+                rand_cmm_2: &r,
+            };
+            let proof = prove_com_eq_diff_grps::<G1Affine, G2Affine, ThreadRng>(
+                ro.split(),
                 &u,
                 &v,
                 &cmm_key_1,
                 &cmm_key_2,
-                &proof,
-            ) {
-                assert_eq!(challenge_prefix, challenge_prefix_1);
-            }
+                &secret,
+                &mut csprng,
+            );
 
-            // check that changing the first commitment key invalidates the proof
-            let cmm_key_1_alt = CommitmentKey::<G1Affine>::generate(&mut csprng);
-            if verify_com_eq_diff_grps(ro, &u, &v, &cmm_key_1_alt, &cmm_key_2, &proof) {
-                assert_eq!(cmm_key_1_alt, cmm_key_1);
-            }
+
+            // Construct invalid parameters
+            let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
+            let wrong_cmm_key_1 = CommitmentKey::<G1Affine>::generate(&mut csprng);
+            let wrong_cmm_key_2 = CommitmentKey::<G2Affine>::generate(&mut csprng);
+            let (wrong_u, _) = wrong_cmm_key_1.commit((&a_1).view(), &mut csprng);
+            let (wrong_v, _) = wrong_cmm_key_2.commit(&a_1, &mut csprng);
+
+
+            // Verify failure for invalid parameters
+            assert!(verify_com_eq_diff_grps(
+                ro.split(),
+                &u,
+                &v,
+                &cmm_key_1,
+                &cmm_key_2,
+                &proof
+            ));
+            assert!(!verify_com_eq_diff_grps(
+                wrong_ro,
+                &u,
+                &v,
+                &cmm_key_1,
+                &cmm_key_2,
+                &proof
+            ));
+            assert!(!verify_com_eq_diff_grps(
+                ro.split(),
+                &wrong_u,
+                &v,
+                &cmm_key_1,
+                &cmm_key_2,
+                &proof
+            ));
+            assert!(!verify_com_eq_diff_grps(
+                ro.split(),
+                &u,
+                &wrong_v,
+                &cmm_key_1,
+                &cmm_key_2,
+                &proof
+            ));
+            assert!(!verify_com_eq_diff_grps(
+                ro.split(),
+                &u,
+                &v,
+                &wrong_cmm_key_1,
+                &cmm_key_2,
+                &proof
+            ));
+            assert!(!verify_com_eq_diff_grps(
+                ro.split(),
+                &u,
+                &v,
+                &cmm_key_1,
+                &wrong_cmm_key_2,
+                &proof
+            ));
         }
     }
 
+    
+    //         // check that changing the prefix invalidates the proof
+    //         let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
+    //         if verify_com_eq_diff_grps(
+    //             RandomOracle::domain(&challenge_prefix_1),
+    //             &u,
+    //             &v,
+    //             &cmm_key_1,
+    //             &cmm_key_2,
+    //             &proof,
+    //         ) {
+    //             assert_eq!(challenge_prefix, challenge_prefix_1);
+    //         }
+
+    //         // check that changing the first commitment key invalidates the proof
+    //         let cmm_key_1_alt = CommitmentKey::<G1Affine>::generate(&mut csprng);
+    //         if verify_com_eq_diff_grps(ro, &u, &v, &cmm_key_1_alt, &cmm_key_2, &proof) {
+    //             assert_eq!(cmm_key_1_alt, cmm_key_1);
+    //         }
     #[test]
     pub fn test_com_eq_diff_grps_proof_serialization() {
         let mut csprng = thread_rng();
