@@ -456,7 +456,6 @@ impl From<&ed25519::Keypair> for VerifyKey {
     fn from(kp: &ed25519::Keypair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
 }
 
-
 /// Compare byte representation.
 impl Ord for VerifyKey {
     fn cmp(&self, other: &VerifyKey) -> Ordering {
