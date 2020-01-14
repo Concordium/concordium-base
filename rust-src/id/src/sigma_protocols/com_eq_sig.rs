@@ -400,7 +400,6 @@ mod tests {
                 &mut csprng,
             );
 
-
             // Construct invalid parameters
             let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
 

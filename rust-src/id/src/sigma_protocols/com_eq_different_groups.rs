@@ -244,14 +244,12 @@ mod tests {
                 &mut csprng,
             );
 
-
             // Construct invalid parameters
             let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
             let wrong_cmm_key_1 = CommitmentKey::<G1Affine>::generate(&mut csprng);
             let wrong_cmm_key_2 = CommitmentKey::<G2Affine>::generate(&mut csprng);
             let (wrong_u, _) = wrong_cmm_key_1.commit((&a_1).view(), &mut csprng);
             let (wrong_v, _) = wrong_cmm_key_2.commit(&a_1, &mut csprng);
-
 
             // Verify failure for invalid parameters
             assert!(verify_com_eq_diff_grps(
@@ -263,12 +261,7 @@ mod tests {
                 &proof
             ));
             assert!(!verify_com_eq_diff_grps(
-                wrong_ro,
-                &u,
-                &v,
-                &cmm_key_1,
-                &cmm_key_2,
-                &proof
+                wrong_ro, &u, &v, &cmm_key_1, &cmm_key_2, &proof
             ));
             assert!(!verify_com_eq_diff_grps(
                 ro.split(),
@@ -305,7 +298,6 @@ mod tests {
         }
     }
 
-    
     //         // check that changing the prefix invalidates the proof
     //         let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
     //         if verify_com_eq_diff_grps(
@@ -321,8 +313,8 @@ mod tests {
 
     //         // check that changing the first commitment key invalidates the proof
     //         let cmm_key_1_alt = CommitmentKey::<G1Affine>::generate(&mut csprng);
-    //         if verify_com_eq_diff_grps(ro, &u, &v, &cmm_key_1_alt, &cmm_key_2, &proof) {
-    //             assert_eq!(cmm_key_1_alt, cmm_key_1);
+    //         if verify_com_eq_diff_grps(ro, &u, &v, &cmm_key_1_alt, &cmm_key_2,
+    // &proof) {             assert_eq!(cmm_key_1_alt, cmm_key_1);
     //         }
     #[test]
     pub fn test_com_eq_diff_grps_proof_serialization() {
