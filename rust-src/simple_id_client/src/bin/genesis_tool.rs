@@ -211,13 +211,30 @@ fn main() {
         let credential_json = cdi.to_json();
 
         let address_json = AccountAddress::new(&cdi.values.reg_id).to_json();
+
+        let acc_keys = AccountKeys {
+            keys:      acc_data
+                .keys
+                .iter()
+                .map(|(&idx, kp)| (idx, VerifyKey::from(kp)))
+                .collect(),
+            threshold: SignatureThreshold(2),
+        };
+
+        let acc_keys_json = acc_keys.to_json();
+
         // output private account data
         let account_data_json = json!({
             "accountData": acc_data.to_json(),
             "credential": credential_json,
             "aci": aci_to_json(&aci),
         });
-        (account_data_json, credential_json, address_json)
+        (
+            account_data_json,
+            credential_json,
+            acc_keys_json,
+            address_json,
+        )
     };
 
     if let Some(matches) = matches.subcommand_matches("create-bakers") {
@@ -242,7 +259,7 @@ fn main() {
 
         let mut bakers = Vec::with_capacity(num_bakers);
         for baker in 0..num_bakers {
-            let (account_data_json, credential_json, address_json) =
+            let (account_data_json, credential_json, account_keys, address_json) =
                 generate_account(&mut csprng, format!("Baker-{}-account", baker));
             if let Err(err) =
                 write_json_to_file(&format!("baker-{}-account.json", baker), &account_data_json)
@@ -289,6 +306,7 @@ fn main() {
                 "finalizer": baker < num_finalizers,
                 "account": json!({
                     "address": address_json,
+                    "accountKeys": account_keys,
                     "balance": 1_000_000_000_000u64,
                     "credential": credential_json
                 })
@@ -313,13 +331,14 @@ fn main() {
         };
         let mut accounts = Vec::with_capacity(num_accounts);
         for acc_num in 0..num_accounts {
-            let (account_data_json, credential_json, address_json) =
+            let (account_data_json, credential_json, account_keys, address_json) =
                 generate_account(&mut csprng, format!("Beta-{}-account", acc_num));
             let public_account_data = json!({
-                  "schemeId": "Ed25519",
-                  "address": address_json,
-                  "balance": 1_000_000_000_000u64,
-                  "credential": credential_json
+                "schemeId": "Ed25519",
+                "accountKeys": account_keys,
+                "address": address_json,
+                "balance": 1_000_000_000_000u64,
+                "credential": credential_json
             });
             accounts.push(public_account_data);
 
