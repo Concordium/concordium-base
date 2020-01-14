@@ -116,6 +116,8 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
 pub extern "C" fn verify_cdi_ffi(
     gc_ptr: *const GlobalContext<G1>,
     ip_info_ptr: *const IpInfo<Bls12, G1>,
+    acc_keys_ptr: *const u8,
+    acc_keys_len: size_t,
     cdi_ptr: *const u8,
     cdi_len: size_t,
 ) -> i32 {
@@ -126,6 +128,17 @@ pub extern "C" fn verify_cdi_ffi(
         return -8;
     }
 
+    let acc_keys = if acc_keys_ptr.is_null() {
+        None
+    } else {
+        let acc_key_bytes = slice_from_c_bytes!(acc_keys_ptr, acc_keys_len as usize);
+        if let Some(acc_keys) = AccountKeys::from_bytes(&mut Cursor::new(&acc_key_bytes)) {
+            Some(acc_keys)
+        } else {
+            return -10;
+        }
+    };
+
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
     match CredDeploymentInfo::<Bls12, G1, AttributeKind>::from_bytes(&mut Cursor::new(&cdi_bytes)) {
         None => -9,
@@ -133,6 +146,7 @@ pub extern "C" fn verify_cdi_ffi(
             match chain::verify_cdi::<Bls12, G1, AttributeKind>(
                 from_ptr!(gc_ptr),
                 from_ptr!(ip_info_ptr),
+                acc_keys.as_ref(),
                 &cdi,
             ) {
                 Ok(()) => 1, // verification succeeded
@@ -142,6 +156,7 @@ pub extern "C" fn verify_cdi_ffi(
                 Err(CDIVerificationError::Dlog) => -4,
                 Err(CDIVerificationError::Policy) => -5,
                 Err(CDIVerificationError::AR) => -6,
+                Err(CDIVerificationError::AccountOwnership) => -7,
             }
         }
     }
@@ -262,6 +277,7 @@ mod test {
     use crate::{account_holder::*, identity_provider::*, secret_sharing::Threshold};
     use dodis_yampolskiy_prf::secret as prf;
     use eddsa_ed25519 as ed25519;
+    use either::Either::Left;
     use elgamal::{public::PublicKey, secret::SecretKey};
     use pairing::bls12_381::Bls12;
     use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
@@ -389,10 +405,14 @@ mod test {
             _phantom: Default::default(),
         };
 
-        let kp = ed25519::generate_keypair();
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), ed25519::generate_keypair());
+        keys.insert(KeyIndex(1), ed25519::generate_keypair());
+        keys.insert(KeyIndex(2), ed25519::generate_keypair());
+
         let acc_data = AccountData {
-            sign_key:   kp.secret,
-            verify_key: kp.public,
+            keys,
+            existing: Left(SignatureThreshold(2)),
         };
 
         let cdi = generate_cdi(
@@ -425,13 +445,22 @@ mod test {
         let gc_ptr = Box::into_raw(Box::new(global_ctx));
         let ip_info_ptr = Box::into_raw(Box::new(ip_info));
 
-        let cdi_check = verify_cdi_ffi(gc_ptr, ip_info_ptr, cdi_bytes.as_ptr(), cdi_bytes_len);
+        let cdi_check = verify_cdi_ffi(
+            gc_ptr,
+            ip_info_ptr,
+            std::ptr::null(),
+            0,
+            cdi_bytes.as_ptr(),
+            cdi_bytes_len,
+        );
         assert_eq!(cdi_check, 1);
         let wrong_cdi_bytes = &*wrong_cdi.to_bytes();
         let wrong_cdi_bytes_len = wrong_cdi_bytes.len() as size_t;
         let wrong_cdi_check = verify_cdi_ffi(
             gc_ptr,
             ip_info_ptr,
+            std::ptr::null(),
+            0,
             wrong_cdi_bytes.as_ptr(),
             wrong_cdi_bytes_len,
         );

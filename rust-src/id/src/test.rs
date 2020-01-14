@@ -16,6 +16,8 @@ use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
 
 use std::io::Cursor;
 
+use either::Left;
+
 type ExampleCurve = G1;
 
 type ExampleAttribute = AttributeKind;
@@ -133,10 +135,14 @@ fn test_pipeline() {
         _phantom: Default::default(),
     };
 
-    let kp = ed25519::generate_keypair();
+    let mut keys = BTreeMap::new();
+    keys.insert(KeyIndex(0), ed25519::generate_keypair());
+    keys.insert(KeyIndex(1), ed25519::generate_keypair());
+    keys.insert(KeyIndex(2), ed25519::generate_keypair());
+
     let acc_data = AccountData {
-        sign_key:   kp.secret,
-        verify_key: kp.public,
+        keys,
+        existing: Left(SignatureThreshold(2)),
     };
 
     let cdi = generate_cdi(
@@ -184,7 +190,7 @@ fn test_pipeline() {
         CredDeploymentProofs::<Bls12, ExampleCurve>::from_bytes(&mut Cursor::new(&proofs_bytes));
     assert!(
         cdi_proofs.is_some(),
-        "Proofs Deserialization must be successful."
+        "Proof deserialization must be successful."
     );
 
     let bytes = cdi.to_bytes();
@@ -204,7 +210,7 @@ fn test_pipeline() {
 
     // assert_eq!(4, cdi.commitments.cmm_attributes.len(), "Attribute list length
     // check."); now check that the generated credentials are indeed valid.
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, &cdi);
+    let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
     assert_eq!(cdi_check, Ok(()));
 
     // revoking anonymity
@@ -249,6 +255,6 @@ fn test_pipeline() {
         &randomness,
     );
     cdi.values.ar_data.rotate_left(1);
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, &cdi);
+    let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
     assert_ne!(cdi_check, Ok(()));
 }
