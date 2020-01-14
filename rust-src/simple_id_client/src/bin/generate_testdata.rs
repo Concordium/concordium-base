@@ -261,7 +261,12 @@ fn main() {
         } else {
             println!("Output credential {}.", idx);
         }
-        acc_data
+        // return the account data that can be used to deploy more credentials
+        // to the same account.
+        AccountData {
+            existing: Right(AccountAddress::new(&cdi.values.reg_id)),
+            ..acc_data
+        }
     };
 
     let _ = generate(None, 0, 1);
