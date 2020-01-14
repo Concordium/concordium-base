@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     #[allow(non_snake_case)]
-    pub fn prove_verify_com_eq_sig() {
+    pub fn test_com_eq_sig_correctness() {
         let mut csprng = thread_rng();
         for i in 1..20 {
             let ps_sk: PsSigSecretKey<Bls12> = PsSigSecretKey::generate(i, &mut csprng);
@@ -353,26 +353,109 @@ mod tests {
                 &cmm_key,
                 &proof
             ));
-            let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
-            if verify_com_eq_sig(
-                RandomOracle::domain(&challenge_prefix_1),
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    pub fn test_com_eq_sig_soundness() {
+        let mut csprng = thread_rng();
+        for i in 1..20 {
+            // Generate proof
+            let ps_sk: PsSigSecretKey<Bls12> = PsSigSecretKey::generate(i, &mut csprng);
+            let ps_pk: PsSigPublicKey<Bls12> = PsSigPublicKey::from(&ps_sk);
+            let cmm_key = CommitmentKey::generate(&mut csprng);
+
+            let mut secrets = Vec::with_capacity(i);
+            let mask = <Bls12 as Pairing>::generate_non_zero_scalar(&mut csprng);
+            let mut comm_to_signer: G1 = ps_pk.0.mul_by_scalar(&mask);
+            let mut commitments = Vec::with_capacity(i);
+            for cY_j in ps_pk.2.iter() {
+                let v_j = Value::generate(&mut csprng);
+                let (c_j, r_j) = cmm_key.commit(&v_j, &mut csprng);
+                comm_to_signer = comm_to_signer.plus_point(&cY_j.mul_by_scalar(&v_j));
+                secrets.push((v_j, Box::leak(Box::new(r_j)) as &_));
+                commitments.push(c_j);
+            }
+            let unknown_message = UnknownMessage(comm_to_signer);
+            let sig = ps_sk
+                .sign_unknown_message(&unknown_message, &mut csprng)
+                .retrieve(&SigRetrievalRandomness::<Bls12> { randomness: mask });
+            let (blinded_sig, blind_rand) = sig.blind(&mut csprng);
+
+            let challenge_prefix = generate_challenge_prefix(&mut csprng);
+            let ro = RandomOracle::domain(&challenge_prefix);
+
+            let secret = ComEqSigSecret {
+                blind_rand:       &blind_rand,
+                values_and_rands: &secrets,
+            };
+            let proof = prove_com_eq_sig::<Bls12, <Bls12 as Pairing>::G_1, _>(
+                ro.split(),
                 &blinded_sig,
                 &commitments,
                 &ps_pk,
                 &cmm_key,
-                &proof,
-            ) {
-                assert_eq!(challenge_prefix, challenge_prefix_1);
-            }
+                &secret,
+                &mut csprng,
+            );
 
-            // generate new blinded signature, and see whether verification fails
-            let (blinded_sig_1, blinding_rand_1) = sig.blind(&mut csprng);
-            if verify_com_eq_sig(ro, &blinded_sig_1, &commitments, &ps_pk, &cmm_key, &proof) {
-                assert_eq!(
-                    blinding_rand_1, *secret.blind_rand,
-                    "Blinding randomness should be the same."
-                );
-            }
+
+            // Construct invalid parameters
+            let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
+
+            let (wrong_blinded_sig, _) = sig.blind(&mut csprng);
+
+            let (wrong_comm, _) = cmm_key.commit(&Value::generate(&mut csprng), &mut csprng);
+            let mut wrong_commitments = commitments.to_owned();
+            wrong_commitments[0] = wrong_comm;
+
+            let wrong_ps_sk: PsSigSecretKey<Bls12> = PsSigSecretKey::generate(i, &mut csprng);
+            let wrong_ps_pk: PsSigPublicKey<Bls12> = PsSigPublicKey::from(&wrong_ps_sk);
+
+            let wrong_cmm_key = CommitmentKey::generate(&mut csprng);
+
+            // Verify failure for invalid parameters
+            assert!(!verify_com_eq_sig(
+                wrong_ro,
+                &blinded_sig,
+                &commitments,
+                &ps_pk,
+                &cmm_key,
+                &proof
+            ));
+            assert!(!verify_com_eq_sig(
+                ro.split(),
+                &wrong_blinded_sig,
+                &commitments,
+                &ps_pk,
+                &cmm_key,
+                &proof
+            ));
+            assert!(!verify_com_eq_sig(
+                ro.split(),
+                &blinded_sig,
+                &wrong_commitments,
+                &ps_pk,
+                &cmm_key,
+                &proof
+            ));
+            assert!(!verify_com_eq_sig(
+                ro.split(),
+                &blinded_sig,
+                &commitments,
+                &wrong_ps_pk,
+                &cmm_key,
+                &proof
+            ));
+            assert!(!verify_com_eq_sig(
+                ro.split(),
+                &blinded_sig,
+                &commitments,
+                &ps_pk,
+                &wrong_cmm_key,
+                &proof
+            ));
         }
     }
 }
