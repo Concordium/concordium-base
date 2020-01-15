@@ -368,7 +368,8 @@ mod test {
 
         for _ in 0..TEST_ITERATIONS {
             // 33 is a dummy value since has_duplicates expects pairs.
-            let mut ms: Vec<[u8; std::mem::size_of::<usize>()]> = (0..SIGNERS).map(|x| x.to_le_bytes()).collect();
+            let mut ms: Vec<[u8; std::mem::size_of::<usize>()]> =
+                (0..SIGNERS).map(|x| x.to_le_bytes()).collect();
 
             // Make a duplication in the messages
             let random_idx1: usize = rng.gen_range(0, SIGNERS);
