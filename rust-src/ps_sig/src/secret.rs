@@ -1,7 +1,4 @@
 // -*- mode: rust; -*-
-//
-// Authors:
-// - bm@concordium.com
 
 //! A secret key
 

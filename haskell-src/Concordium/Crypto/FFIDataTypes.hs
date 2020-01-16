@@ -106,8 +106,6 @@ generatePedersenKey n = do
   ptr <- generatePedersenKeyPtr (fromIntegral n)
   PedersenKey <$> newForeignPtr freePedersenKey ptr
 
-
-
 -- |NOTE: This instance is different than the rust one. We add explicit length
 -- information up front.
 instance Serialize PsSigKey where
@@ -172,8 +170,6 @@ generateElgamalGen = do
   ptr <- generateElgamalGenPtr
   ElgamalGen <$> newForeignPtr freeElgamalGen ptr
 
--- |NOTE: This instance is different than the rust one. We add explicit length
--- information up front.
 instance Serialize ElgamalPublicKey where
   get = do
     bs <- getByteString (2 * elgamalGroupLen)
@@ -203,8 +199,6 @@ generateElgamalPublicKey = do
   ptr <- generateElgamalPublicKeyPtr
   ElgamalPublicKey <$> newForeignPtr freeElgamalPublicKey ptr
 
--- |NOTE: This instance is different than the rust one. We add explicit length
--- information up front.
 instance Serialize ElgamalCipher where
   get = do
     bs <- getByteString (2 * elgamalGroupLen)
