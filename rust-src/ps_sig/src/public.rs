@@ -111,7 +111,7 @@ impl<C: Pairing> PublicKey<C> {
             });
         let hx = h.plus_point(&x);
         let p1 = C::pair(sig.0, hx);
-        let p2 = C::pair(sig.1, C::G_2::one_point());
+        let p2 = C::pair(sig.1, self.g_tilda);
         p1 == p2
     }
 
