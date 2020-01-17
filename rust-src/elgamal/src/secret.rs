@@ -101,7 +101,7 @@ mod tests {
             pub fn $function_name() {
                 let mut csprng = thread_rng();
                 for _i in 1..100 {
-                    let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
+                    let sk: SecretKey<$curve_type> = SecretKey::generate_all(&mut csprng);
                     let r = sk.to_bytes();
                     let res_sk2 = SecretKey::from_bytes(&mut Cursor::new(&r));
                     assert!(res_sk2.is_ok());

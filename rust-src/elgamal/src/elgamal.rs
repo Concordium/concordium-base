@@ -71,13 +71,12 @@ pub fn encrypt_u64_bitwise<C: Curve>(pk: PublicKey<C>, e: u64) -> Vec<Cipher<C>>
 }
 
 // take an array of zero's and ones and returns a u64
-pub fn group_bits_to_u64<'a, C, I>(v: I) -> u64
+pub fn group_bits_to_u64<'a, C, I>(one: &C, v: I) -> u64
 where
     C: Curve,
     I: Iterator<Item = &'a C>, {
     let mut r = 0u64;
-    let one = C::one_point();
-    for (i, &e) in v.enumerate() {
+    for (i, e) in v.enumerate() {
         r.set(i as u8, e == one);
     }
     r
@@ -91,12 +90,15 @@ pub fn decrypt_u64_bitwise<C: Curve>(sk: &SecretKey<C>, v: &[Cipher<C>]) -> u64 
             m.value
         })
         .collect();
-    group_bits_to_u64(dr.iter())
+    group_bits_to_u64(&sk.generator, dr.iter())
 }
 
 #[cfg(test)]
 mod tests {
     use rand::Rng;
+
+    use crate::message::*;
+    use pairing::bls12_381::{G1, G2};
 
     use super::*;
     use ff::Field;
@@ -129,7 +131,7 @@ mod tests {
             #[test]
             pub fn $function_name() {
                 let mut csprng = thread_rng();
-                let sk: SecretKey<$curve_type> = SecretKey::generate_all(&generator, &mut csprng);
+                let sk: SecretKey<$curve_type> = SecretKey::generate_all(&mut csprng);
                 let pk = PublicKey::from(&sk);
                 for _i in 1..10 {
                     let n = csprng.gen_range(0, 1000);
@@ -154,7 +156,7 @@ mod tests {
             #[test]
             pub fn $function_name() {
                 let mut csprng = thread_rng();
-                let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
+                let sk: SecretKey<$curve_type> = SecretKey::generate_all(&mut csprng);
                 let pk = PublicKey::from(&sk);
                 for _i in 1..10 {
                     let n = u64::rand(&mut csprng);
@@ -168,96 +170,6 @@ mod tests {
 
     macro_test_encrypt_decrypt_bitwise_vec_success!(encrypt_decrypt_bitwise_vec_success_g1, G1);
     macro_test_encrypt_decrypt_bitwise_vec_success!(encrypt_decrypt_bitwise_vec_success_g2, G2);
-
-    macro_rules! macro_test_encrypt_decrypt_u64_ffi {
-        (
-            $function_name:ident,
-            $new_secret_key_name:ident,
-            $derive_public_name:ident,
-            $encrypt_name:ident,
-            $decrypt_name:ident,
-            $size:expr
-        ) => {
-            #[test]
-            pub fn $function_name() {
-                let byte_size = $size * 2 * 64;
-                let sk = $new_secret_key_name();
-                let pk = $derive_public_name(sk);
-                let mut xs = vec![0 as u8; byte_size];
-                let mut csprng = thread_rng();
-                for _i in 1..10 {
-                    let n = u64::rand(&mut csprng);
-                    $encrypt_name(pk, n, xs.as_mut_ptr());
-                    let result_ptr = Box::into_raw(Box::new(0));
-                    let m = $decrypt_name(sk, xs.as_ptr(), result_ptr);
-                    assert_eq!(m, 0);
-                    assert_eq!(unsafe { *result_ptr }, n);
-                }
-            }
-        };
-    }
-
-    macro_test_encrypt_decrypt_u64_ffi! {
-        encrypt_decrypt_u64_g1_ffi,
-        new_secret_key_g1,
-        derive_public_key_g1,
-        encrypt_u64_g1,
-        decrypt_u64_g1,
-        <G1 as Curve>::GROUP_ELEMENT_LENGTH
-    }
-
-    macro_test_encrypt_decrypt_u64_ffi! {
-        encrypt_decrypt_u64_g2_ffi,
-        new_secret_key_g2,
-        derive_public_key_g2,
-        encrypt_u64_g2,
-        decrypt_u64_g2,
-        <G2 as Curve>::GROUP_ELEMENT_LENGTH
-    }
-
-    macro_rules! macro_test_encrypt_decrypt_u64_unchecked_ffi {
-        (
-            $function_name:ident,
-            $new_secret_key_name:ident,
-            $derive_public_name:ident,
-            $encrypt_name:ident,
-            $decrypt_name:ident,
-            $size:expr
-        ) => {
-            #[test]
-            pub fn $function_name() {
-                let byte_size = $size * 2 * 64;
-                let sk = $new_secret_key_name();
-                let pk = $derive_public_name(sk);
-                let mut xs = vec![0; byte_size];
-                let mut csprng = thread_rng();
-                for _i in 1..10 {
-                    let n = u64::rand(&mut csprng);
-                    $encrypt_name(pk, n, xs.as_mut_ptr());
-                    let m = $decrypt_name(sk, xs.as_ptr());
-                    assert_eq!(m, n);
-                }
-            }
-        };
-    }
-
-    macro_test_encrypt_decrypt_u64_unchecked_ffi! {
-        encrypt_decrypt_u64_g1_ffi_unsafe,
-        new_secret_key_g1,
-        derive_public_key_g1,
-        encrypt_u64_g1,
-        decrypt_u64_unsafe_g1,
-        <G1 as Curve>::GROUP_ELEMENT_LENGTH
-    }
-
-    macro_test_encrypt_decrypt_u64_unchecked_ffi! {
-        encrypt_decrypt_u64_g2_ffi_unsafe,
-        new_secret_key_g2,
-        derive_public_key_g2,
-        encrypt_u64_g2,
-        decrypt_u64_unsafe_g2,
-        <G2 as Curve>::GROUP_ELEMENT_LENGTH
-    }
 
     macro_rules! macro_test_chunking {
         ($function_name:ident, $curve_type:path) => {
@@ -290,7 +202,7 @@ mod tests {
             #[test]
             pub fn $function_name() {
                 let mut csprng = thread_rng();
-                let sk = SecretKey::<$curve_type>::generate(&mut csprng);
+                let sk = SecretKey::<$curve_type>::generate_all(&mut csprng);
                 let pk = PublicKey::<$curve_type>::from(&sk);
                 // let possible_chunk_sizes = [1, 2, 4];
                 let possible_chunk_sizes = [2];
