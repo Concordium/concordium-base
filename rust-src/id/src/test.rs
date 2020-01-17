@@ -33,19 +33,17 @@ fn test_pipeline() {
     let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
-    let dlog_base = ip_public_key.g;
-
     let secret = ExampleCurve::generate_scalar(&mut csprng);
-    let public = dlog_base.mul_by_scalar(&secret);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_ah:   "ACCOUNT_HOLDER".to_owned(),
         id_cred: IdCredentials {
             id_cred_sec: PedersenValue::new(secret),
-            id_cred_pub: public,
         },
     };
 
-    let ar1_secret_key = SecretKey::generate(&mut csprng);
+    let ar_base = ExampleCurve::generate(&mut csprng);
+
+    let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar1_public_key = PublicKey::from(&ar1_secret_key);
     let ar1_info = ArInfo::<G1> {
         ar_identity:    ArIdentity(1),
@@ -53,7 +51,7 @@ fn test_pipeline() {
         ar_public_key:  ar1_public_key,
     };
 
-    let ar2_secret_key = SecretKey::generate(&mut csprng);
+    let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar2_public_key = PublicKey::from(&ar2_secret_key);
     let ar2_info = ArInfo::<G1> {
         ar_identity:    ArIdentity(2),
@@ -61,7 +59,7 @@ fn test_pipeline() {
         ar_public_key:  ar2_public_key,
     };
 
-    let ar3_secret_key = SecretKey::generate(&mut csprng);
+    let ar3_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar3_public_key = PublicKey::from(&ar3_secret_key);
     let ar3_info = ArInfo::<G1> {
         ar_identity:    ArIdentity(3),
@@ -69,7 +67,7 @@ fn test_pipeline() {
         ar_public_key:  ar3_public_key,
     };
 
-    let ar4_secret_key = SecretKey::generate(&mut csprng);
+    let ar4_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar4_public_key = PublicKey::from(&ar4_secret_key);
     let ar4_info = ArInfo::<G1> {
         ar_identity:    ArIdentity(4),
@@ -83,8 +81,8 @@ fn test_pipeline() {
         ip_identity: IpIdentity(88),
         ip_description: "IP88".to_string(),
         ip_verify_key: ip_public_key,
-        dlog_base,
         ar_info: (vec![ar1_info, ar2_info, ar3_info, ar4_info], ar_ck),
+        ar_base,
     };
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -120,7 +118,6 @@ fn test_pipeline() {
     let ip_sig = sig_ok.unwrap();
 
     let global_ctx = GlobalContext {
-        dlog_base_chain:         ExampleCurve::one_point(),
         on_chain_commitment_key: pedersen_key::CommitmentKey::generate(&mut csprng),
     };
 
@@ -237,7 +234,9 @@ fn test_pipeline() {
     let revealed_id_cred_pub = reveal_id_cred_pub(&vec![decrypted_share_ar2, decrypted_share_ar4]);
     assert_eq!(
         revealed_id_cred_pub,
-        aci.acc_holder_info.id_cred.id_cred_pub
+        ip_info
+            .ar_base
+            .mul_by_scalar(&aci.acc_holder_info.id_cred.id_cred_sec)
     );
 
     // generate a new cdi from a modified pre-identity object in which we swapped

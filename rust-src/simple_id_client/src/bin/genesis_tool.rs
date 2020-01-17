@@ -135,12 +135,10 @@ fn main() {
 
     let generate_account = |csprng: &mut rand::ThreadRng, user_name: String| {
         let secret = ExampleCurve::generate_scalar(csprng);
-        let public = ExampleCurve::one_point().mul_by_scalar(&secret);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
             id_ah:   user_name,
             id_cred: IdCredentials {
                 id_cred_sec: PedersenValue::new(secret),
-                id_cred_pub: public,
             },
         };
 

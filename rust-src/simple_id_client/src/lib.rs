@@ -109,23 +109,18 @@ pub fn json_base16_decode(v: &Value) -> Option<Vec<u8>> { decode(v.as_str()?).ok
 pub fn chi_to_json<C: Curve>(chi: &CredentialHolderInfo<C>) -> Value {
     json!({
         "name": chi.id_ah,
-        "idCredPublic": encode(chi.id_cred.id_cred_pub.curve_to_bytes()),
         "idCredSecret": encode(C::scalar_to_bytes(&chi.id_cred.id_cred_sec)),
     })
 }
 
 pub fn json_to_chi<C: Curve>(js: &Value) -> Option<CredentialHolderInfo<C>> {
-    let id_cred_pub = C::bytes_to_curve(m_json_decode!(js, "idCredPublic")).ok()?;
     let id_cred_sec = PedersenValue {
         value: C::bytes_to_scalar(m_json_decode!(js, "idCredSecret")).ok()?,
     };
     let id_ah = js["name"].as_str()?;
     let info: CredentialHolderInfo<C> = CredentialHolderInfo {
         id_ah:   id_ah.to_owned(),
-        id_cred: IdCredentials {
-            id_cred_sec,
-            id_cred_pub,
-        },
+        id_cred: IdCredentials { id_cred_sec },
     };
     Some(info)
 }
@@ -165,16 +160,11 @@ pub fn json_read_u8(v: &Map<String, Value>, key: &str) -> Option<u8> {
 
 pub fn json_to_global_context(v: &Value) -> Option<GlobalContext<ExampleCurve>> {
     let obj = v.as_object()?;
-    let dlog_base_bytes = obj.get("dLogBaseChain").and_then(json_base16_decode)?;
-    let dlog_base_chain =
-        <<Bls12 as Pairing>::G_1 as Curve>::bytes_to_curve(&mut Cursor::new(&dlog_base_bytes))
-            .ok()?;
     let cmk_bytes = obj
         .get("onChainCommitmentKey")
         .and_then(json_base16_decode)?;
     let cmk = pedersen_key::CommitmentKey::from_bytes(&mut Cursor::new(&cmk_bytes)).ok()?;
     let gc = GlobalContext {
-        dlog_base_chain,
         on_chain_commitment_key: cmk,
     };
     Some(gc)

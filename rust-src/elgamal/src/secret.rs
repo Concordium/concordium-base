@@ -1,21 +1,6 @@
 // -*- mode: rust; -*-
-//
-// Authors:
-// - bm@concordium.com
 
 //! Elgamal secret key types
-
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
-#[cfg(feature = "serde")]
-use std::marker::PhantomData;
-
 use crate::{cipher::*, errors::*, message::*};
 use rand::*;
 
@@ -24,10 +9,12 @@ use ff::Field;
 
 use std::io::Cursor;
 
-/// elgamal secret  key.
+/// Elgamal secret key packed together with a chosen generator.
 #[derive(Debug, PartialEq, Eq, Clone)]
-#[repr(transparent)]
 pub struct SecretKey<C: Curve> {
+    /// Generator of the group, not secret but convenient to have here.
+    pub generator: C,
+    /// Secret key.
     pub scalar: C::Scalar,
 }
 
@@ -44,7 +31,11 @@ pub struct SecretKey<C: Curve> {
 impl<C: Curve> SecretKey<C> {
     /// Convert a secret key into bytes
     #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> { C::scalar_to_bytes(&self.scalar) }
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut out = self.generator.curve_to_bytes().into_vec();
+        out.extend_from_slice(&C::scalar_to_bytes(&self.scalar));
+        out.into_boxed_slice()
+    }
 
     /// Construct a `SecretKey` from a slice of bytes.
     ///
@@ -52,8 +43,9 @@ impl<C: Curve> SecretKey<C> {
     /// is an `ElgamalError` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<SecretKey<C>, ElgamalError> {
+        let generator = C::bytes_to_curve(bytes)?;
         let scalar = C::bytes_to_scalar(bytes)?;
-        Ok(SecretKey { scalar })
+        Ok(SecretKey { generator, scalar })
     }
 
     pub fn decrypt(&self, c: &Cipher<C>) -> Message<C> {
@@ -68,10 +60,9 @@ impl<C: Curve> SecretKey<C> {
         let m = self.decrypt(c).value;
         let mut a = <C::Scalar as Field>::zero();
         let mut i = C::zero_point();
-        let one = C::one_point();
         let field_one = <C::Scalar as Field>::one();
         while m != i {
-            i = i.plus_point(&one);
+            i = i.plus_point(&self.generator);
             a.add_assign(&field_one);
         }
         a
@@ -82,45 +73,20 @@ impl<C: Curve> SecretKey<C> {
     }
 
     /// Generate a `SecretKey` from a `csprng`.
-    pub fn generate<T>(csprng: &mut T) -> Self
-    where
-        T: Rng, {
+    pub fn generate<T: Rng>(generator: &C, csprng: &mut T) -> Self {
         SecretKey {
-            scalar: C::generate_scalar(csprng),
+            generator: *generator,
+            scalar:    C::generate_scalar(csprng),
         }
     }
-}
 
-#[cfg(feature = "serde")]
-impl<C: Curve> Serialize for SecretKey<C> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer, {
-        serializer.serialize_bytes(&self.to_bytes())
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'d, C: Curve> Deserialize<'d> for SecretKey<C> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'d>, {
-        struct SecretKeyVisitor<C: Curve>(PhantomData<C>);
-
-        impl<'d, C: Curve> Visitor<'d> for SecretKeyVisitor<C> {
-            type Value = SecretKey<C>;
-
-            fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                formatter.write_str("An Elgamal  secret key as 32 bytes")
-            }
-
-            fn visit_bytes<E>(self, bytes: &[u8]) -> Result<SecretKey<C>, E>
-            where
-                E: SerdeError, {
-                SecretKey::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
-            }
+    /// Generate a `SecretKey` as well as a generator.
+    pub fn generate_all<T: Rng>(csprng: &mut T) -> Self {
+        let x = C::generate_non_zero_scalar(csprng);
+        SecretKey {
+            generator: C::one_point().mul_by_scalar(&x),
+            scalar:    C::generate_scalar(csprng),
         }
-        deserializer.deserialize_bytes(SecretKeyVisitor(PhantomData))
     }
 }
 
