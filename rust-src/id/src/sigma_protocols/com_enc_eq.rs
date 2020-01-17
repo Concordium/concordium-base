@@ -202,7 +202,7 @@ mod tests {
     pub fn test_com_enc_eq_correctness() {
         let mut csprng = thread_rng();
         for _i in 0..100 {
-            let sk = ElGamalSecretKey::generate(&mut csprng);
+            let sk = ElGamalSecretKey::generate_all(&mut csprng);
             let public_key = ElGamalPublicKey::from(&sk);
             let comm_key = CommitmentKey::generate(&mut csprng);
 
@@ -243,7 +243,7 @@ mod tests {
         let mut csprng = thread_rng();
         for _i in 0..100 {
             // Generate proof
-            let sk = ElGamalSecretKey::generate(&mut csprng);
+            let sk = ElGamalSecretKey::generate_all(&mut csprng);
             let public_key = ElGamalPublicKey::from(&sk);
             let comm_key = CommitmentKey::generate(&mut csprng);
 

@@ -180,8 +180,10 @@ mod test {
     pub fn test_secret_sharing() {
         let mut csprng = thread_rng();
         for i in 1u32..10 {
+            let generator = G1::one_point()
+                .mul_by_scalar(&<G1 as Curve>::generate_non_zero_scalar(&mut csprng));
             let secret = <G1 as Curve>::generate_scalar(&mut csprng);
-            let secret_point = <G1 as Curve>::one_point().mul_by_scalar(&secret);
+            let secret_point = generator.mul_by_scalar(&secret);
             let threshold = csprng.gen_range(1, i + 1);
             let sharing_data = share::<G1, ThreadRng>(
                 &secret,
@@ -194,7 +196,7 @@ mod test {
                     .expect("Threshold is <= number of shares.");
             let sufficient_sample_points = sufficient_sample
                 .iter()
-                .map(|(n, s)| (*n, G1::one_point().mul_by_scalar(&s)))
+                .map(|(n, s)| (*n, generator.mul_by_scalar(&s)))
                 .collect::<Vec<(ShareNumber, G1)>>();
             let revealed_data: Fr = reveal::<G1>(&sufficient_sample);
             assert_eq!(revealed_data, secret);
@@ -212,7 +214,7 @@ mod test {
                     .expect("Threshold - 1 is <= number of shares.");
             let insufficient_sample_points = insufficient_sample
                 .iter()
-                .map(|(n, s)| (*n, G1::one_point().mul_by_scalar(&s)))
+                .map(|(n, s)| (*n, generator.mul_by_scalar(&s)))
                 .collect::<Vec<(ShareNumber, G1)>>();
             let revealed_data: Fr = reveal::<G1>(&insufficient_sample);
             assert_ne!(revealed_data, secret);

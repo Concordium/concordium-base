@@ -1,75 +1,11 @@
-// Authors:
-use crate::{cipher::*, message::*, public::*, secret::*};
+use crate::{cipher::*, public::*, secret::*};
 use bitvec::Bits;
-use libc::size_t;
 use rand::*;
 use rayon::prelude::*;
-use std::slice;
 
-// #[cfg(test)]
-// use pairing::bls12_381::FrRepr;
-// #[cfg(test)]
-// use pairing::PrimeField;
 use curve_arithmetic::curve_arithmetic::Curve;
-use pairing::bls12_381::{G1, G2};
 
-use ffi_helpers::*;
 use std::io::Cursor;
-
-macro_rules! macro_encrypt_ffi {
-    ($function_name:ident, $curve_type:path) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(
-            pb_key_ptr: *mut PublicKey<$curve_type>,
-            message_ptr: *mut Message<$curve_type>,
-        ) -> *mut Cipher<$curve_type> {
-            let pb_key = from_ptr!(pb_key_ptr);
-            let message = from_ptr!(message_ptr);
-            let mut csprng = thread_rng();
-            Box::into_raw(Box::new(pb_key.encrypt(&mut csprng, &message)))
-        }
-    };
-}
-
-macro_rules! macro_decrypt_ffi {
-    ($function_name:ident, $curve_type:path) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(
-            sk_key_ptr: *mut SecretKey<$curve_type>,
-            cipher_ptr: *mut Cipher<$curve_type>,
-        ) -> *mut Message<$curve_type> {
-            let sk_key = from_ptr!(sk_key_ptr);
-            let cipher = from_ptr!(cipher_ptr);
-            Box::into_raw(Box::new(sk_key.decrypt(&cipher)))
-        }
-    };
-}
-
-macro_rules! macro_new_secret_key_ffi {
-    ($function_name:ident, $curve_type:path) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name() -> *mut SecretKey<$curve_type> {
-            let mut csprng = thread_rng();
-            Box::into_raw(Box::new(SecretKey::generate(&mut csprng)))
-        }
-    };
-}
-
-macro_rules! macro_derive_public_key_ffi {
-    ($function_name:ident, $curve_type:path) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(
-            ptr: *mut SecretKey<$curve_type>,
-        ) -> *mut PublicKey<$curve_type> {
-            let sk: &SecretKey<$curve_type> = from_ptr!(ptr);
-            Box::into_raw(Box::new(PublicKey::from(sk)))
-        }
-    };
-}
 
 // endianness sensetive
 pub fn value_to_chunks<C: Curve>(val: &C::Scalar, chunk_size: usize) -> Vec<C::Scalar> {
@@ -130,28 +66,6 @@ pub fn encrypt_u64_bitwise_iter<C: Curve>(
     })
 }
 
-/// Generate code to encrypt a single 64 bit integer bitwise.
-macro_rules! macro_encrypt_u64_ffi {
-    ($function_name:ident, $curve_type:path) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(ptr: *mut PublicKey<$curve_type>, e: u64, out: *mut u8) {
-            let pk: &PublicKey<$curve_type> = unsafe {
-                assert!(!ptr.is_null());
-                &*ptr
-            };
-            let elen = 2 * 64 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH;
-            let out_bytes = mut_slice_from_c_bytes!(out, elen);
-            out_bytes.par_chunks_mut(2 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH) // each ciphertext is of this length
-                                        .zip(encrypt_u64_bitwise_iter(*pk, e))
-                                        .for_each(|(out_chunk, cipher)| {
-                                            let mut cipher_bytes = Cipher::to_bytes(&cipher);
-                                            out_chunk.swap_with_slice(&mut cipher_bytes);
-                                        })
-        }
-    };
-}
-
 pub fn encrypt_u64_bitwise<C: Curve>(pk: PublicKey<C>, e: u64) -> Vec<Cipher<C>> {
     encrypt_u64_bitwise_iter(pk, e).collect()
 }
@@ -169,69 +83,6 @@ where
     r
 }
 
-/// Generate code to decrypt a single 64 bit integer bitwise.
-macro_rules! macro_decrypt_u64_ffi {
-    ($function_name:ident, $curve_type:path) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(
-            ptr: *mut SecretKey<$curve_type>,
-            cipher_bytes: *const u8,
-            result_ptr: *mut u64,
-        ) -> i32 {
-            assert!(!result_ptr.is_null());
-            assert!(!ptr.is_null());
-            let cipher_len = 2 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH;
-            let clen = 64 * cipher_len;
-            let cipher = slice_from_c_bytes!(cipher_bytes, clen);
-            let mut cur = Cursor::new(cipher);
-            let sk: &SecretKey<$curve_type> = unsafe { &*ptr };
-            let mut v = Vec::with_capacity(64);
-            for _ in 0..64 {
-                let c = Cipher::from_bytes(&mut cur);
-                match c {
-                    Err(_) => return -1,
-                    Ok(c) => {
-                        let m = sk.decrypt(&c);
-                        v.push(m.value)
-                    }
-                }
-            }
-            let result = group_bits_to_u64(v.iter());
-            unsafe { *result_ptr = result }
-            0
-        }
-    };
-}
-
-/// Generate code to decrypt a single 64 bit integer bitwise. This function
-/// not check that the cipher is valid. It uses the unchecked conversion
-/// bytes to group elements. It will panic if the ciphertext is invalid.
-macro_rules! macro_decrypt_u64_unsafe_ffi {
-    ($function_name:ident, $curve_type:path) => {
-        #[no_mangle]
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(
-            ptr: *mut SecretKey<$curve_type>,
-            cipher_bytes: *const u8,
-        ) -> u64 {
-            assert!(!ptr.is_null());
-            let cipher_len = 2 * <$curve_type as Curve>::GROUP_ELEMENT_LENGTH;
-            let clen = 64 * cipher_len;
-            let cipher = slice_from_c_bytes!(cipher_bytes, clen);
-            let mut cur = Cursor::new(cipher);
-            let sk: &SecretKey<$curve_type> = unsafe { &*ptr };
-            let mut v = Vec::with_capacity(64);
-            for _ in 0..64 {
-                let c = Cipher::from_bytes_unchecked(&mut cur).unwrap();
-                let m = sk.decrypt(&c);
-                v.push(m.value)
-            }
-            group_bits_to_u64(v.iter())
-        }
-    };
-}
-
 pub fn decrypt_u64_bitwise<C: Curve>(sk: &SecretKey<C>, v: &[Cipher<C>]) -> u64 {
     let dr: Vec<C> = v
         .par_iter()
@@ -242,46 +93,6 @@ pub fn decrypt_u64_bitwise<C: Curve>(sk: &SecretKey<C>, v: &[Cipher<C>]) -> u64 
         .collect();
     group_bits_to_u64(dr.iter())
 }
-
-macro_new_secret_key_ffi!(new_secret_key_g1, G1);
-macro_derive_public_key_ffi!(derive_public_key_g1, G1);
-macro_encrypt_ffi!(encrypt_g1, G1);
-macro_decrypt_ffi!(decrypt_g1, G1);
-macro_encrypt_u64_ffi!(encrypt_u64_g1, G1);
-macro_decrypt_u64_ffi!(decrypt_u64_g1, G1);
-macro_decrypt_u64_unsafe_ffi!(decrypt_u64_unsafe_g1, G1);
-macro_free_ffi!(Box free_secret_key_g1, SecretKey<G1>);
-macro_free_ffi!(Box free_public_key_g1, PublicKey<G1>);
-macro_free_ffi!(Box free_message_g1, Message<G1>);
-macro_free_ffi!(Box free_cipher_g1, Cipher<G1>);
-macro_derive_from_bytes!(Box bytes_to_message_g1, Message<G1>, Message::from_bytes);
-macro_derive_from_bytes!(Box bytes_to_cipher_g1, Cipher<G1>, Cipher::from_bytes);
-macro_derive_from_bytes!(Box bytes_to_secret_key_g1, SecretKey<G1>, SecretKey::from_bytes);
-macro_derive_from_bytes!(Box bytes_to_public_key_g1, PublicKey<G1>, PublicKey::from_bytes);
-macro_derive_to_bytes!(Box message_to_bytes_g1, Message<G1>);
-macro_derive_to_bytes!(Box public_key_to_bytes_g1, PublicKey<G1>);
-macro_derive_to_bytes!(Box secret_key_to_bytes_g1, SecretKey<G1>);
-macro_derive_to_bytes!(Box cipher_to_bytes_g1, Cipher<G1>);
-
-macro_new_secret_key_ffi!(new_secret_key_g2, G2);
-macro_derive_public_key_ffi!(derive_public_key_g2, G2);
-macro_encrypt_ffi!(encrypt_g2, G2);
-macro_decrypt_ffi!(decrypt_g2, G2);
-macro_encrypt_u64_ffi!(encrypt_u64_g2, G2);
-macro_decrypt_u64_ffi!(decrypt_u64_g2, G2);
-macro_decrypt_u64_unsafe_ffi!(decrypt_u64_unsafe_g2, G2);
-macro_free_ffi!(Box free_secret_key_g2, SecretKey<G2>);
-macro_free_ffi!(Box free_public_key_g2, PublicKey<G2>);
-macro_free_ffi!(Box free_message_g2, Message<G2>);
-macro_free_ffi!(Box free_cipher_g2, Cipher<G2>);
-macro_derive_from_bytes!(Box bytes_to_message_g2, Message<G2>, Message::from_bytes);
-macro_derive_from_bytes!(Box bytes_to_cipher_g2, Cipher<G2>, Cipher::from_bytes);
-macro_derive_from_bytes!(Box bytes_to_secret_key_g2, SecretKey<G2>, SecretKey::from_bytes);
-macro_derive_from_bytes!(Box bytes_to_public_key_g2, PublicKey<G2>, PublicKey::from_bytes);
-macro_derive_to_bytes!(Box message_to_bytes_g2, Message<G2>);
-macro_derive_to_bytes!(Box public_key_to_bytes_g2, PublicKey<G2>);
-macro_derive_to_bytes!(Box secret_key_to_bytes_g2, SecretKey<G2>);
-macro_derive_to_bytes!(Box cipher_to_bytes_g2, Cipher<G2>);
 
 #[cfg(test)]
 mod tests {
@@ -295,7 +106,7 @@ mod tests {
             pub fn $function_name() {
                 let mut csprng = thread_rng();
                 for _i in 1..10 {
-                    let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
+                    let sk: SecretKey<$curve_type> = SecretKey::generate_all(&mut csprng);
                     let pk = PublicKey::from(&sk);
                     let m = Message::generate(&mut csprng);
                     let c = pk.encrypt(&mut csprng, &m);
@@ -318,7 +129,7 @@ mod tests {
             #[test]
             pub fn $function_name() {
                 let mut csprng = thread_rng();
-                let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
+                let sk: SecretKey<$curve_type> = SecretKey::generate_all(&generator, &mut csprng);
                 let pk = PublicKey::from(&sk);
                 for _i in 1..10 {
                     let n = csprng.gen_range(0, 1000);

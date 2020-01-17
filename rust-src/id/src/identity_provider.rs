@@ -37,13 +37,11 @@ pub fn verify_credentials<
     ip_info: &IpInfo<P, C>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Declined> {
-    let dlog_base = ip_info.dlog_base;
-    // FIXME: This is probably wrong. Should not use dlog_base here.
     let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.ys[0], ip_info.ip_verify_key.g);
     let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.ys[1], ip_info.ip_verify_key.g);
 
     let b_1 = verify_knowledge_of_id_cred_sec::<P::G_1>(
-        &dlog_base,
+        &ip_info.ip_verify_key.g,
         &commitment_key_sc,
         &pre_id_obj.id_cred_pub_ip,
         &pre_id_obj.cmm_sc,
@@ -55,7 +53,7 @@ pub fn verify_credentials<
 
     let ar_ck = ip_info.ar_info.1;
     let b_11 = verify_knowledge_of_id_cred_sec::<C>(
-        &C::one_point(),
+        &ip_info.ar_base,
         &ar_ck,
         &pre_id_obj.id_cred_pub,
         &pre_id_obj.snd_cmm_sc,

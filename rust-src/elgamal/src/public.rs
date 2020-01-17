@@ -45,7 +45,7 @@ impl<C: Curve> Debug for PublicKey<C> {
 impl<'a, C: Curve> From<&'a SecretKey<C>> for PublicKey<C> {
     /// Derive this public key from its corresponding `SecretKey`.
     fn from(secret_key: &SecretKey<C>) -> PublicKey<C> {
-        let generator: C = PublicKey::generator();
+        let generator: C = secret_key.generator;
         let key = generator.mul_by_scalar(&secret_key.scalar);
         PublicKey { generator, key }
     }
@@ -91,23 +91,6 @@ impl<C: Curve> PublicKey<C> {
         self.encrypt_rand(csprng, m).0
     }
 
-    // pub fn encrypt_bin_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher<C>
-    // where T:Rng{
-    // if !e {
-    // self.encrypt(csprng, &Message(G1::zero()))
-    // } else{
-    // self.encrypt(csprng, &Message(G1::one()))
-    // }
-    // }
-    // pub fn encrypt_binary_exp<T>(&self, csprng: &mut T, e: &bool) -> Cipher<C>
-    // where T:Rng {
-    // let mut csprng = thread_rng();
-    // if !e {
-    // self.encrypt(&mut csprng, &Message(G1::zero()))
-    // } else{
-    // self.encrypt(&mut csprng, &Message(G1::one()))
-    // }
-    // }
     pub fn hide(&self, k: &C::Scalar, message: &Message<C>) -> Cipher<C> {
         let t = self.generator.mul_by_scalar(k);
         let s = self.key.mul_by_scalar(&k).plus_point(&message.value);
@@ -121,7 +104,7 @@ impl<C: Curve> PublicKey<C> {
             })
         } else {
             self.hide(h, &Message {
-                value: C::one_point(),
+                value: self.generator,
             })
         }
     }
@@ -151,10 +134,6 @@ impl<C: Curve> PublicKey<C> {
             .map(|x| self.encrypt_exponent(csprng, &x))
             .collect()
     }
-
-    /// TODO: This is a hack to get the prototype working. Abstraction layers
-    /// need a rethink.
-    fn generator() -> C { C::one_point() }
 }
 
 #[cfg(feature = "serde")]

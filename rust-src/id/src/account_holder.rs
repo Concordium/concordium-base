@@ -40,9 +40,13 @@ where
     let id_ah = aci.acc_holder_info.id_ah.clone();
     let id_cred_pub_ip = context
         .ip_info
-        .dlog_base
-        .mul_by_scalar(&aci.acc_holder_info.id_cred.id_cred_sec); // aci.acc_holder_info.id_cred.id_cred_pub_ip;
-    let id_cred_pub = aci.acc_holder_info.id_cred.id_cred_pub;
+        .ip_verify_key
+        .g
+        .mul_by_scalar(&aci.acc_holder_info.id_cred.id_cred_sec);
+    let id_cred_pub = context
+        .ip_info
+        .ar_base
+        .mul_by_scalar(&aci.acc_holder_info.id_cred.id_cred_sec);
     // PRF related computation
     let prf::SecretKey(prf_key_scalar) = aci.prf_key;
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
@@ -90,7 +94,10 @@ where
 
     // id_cred_sec stuff
     let id_cred_sec = &aci.acc_holder_info.id_cred.id_cred_sec;
-    let sc_ck = &context.commitment_key_sc;
+    let sc_ck = PedersenKey(
+        context.ip_info.ip_verify_key.ys[0],
+        context.ip_info.ip_verify_key.g,
+    );
     // commit to id_cred_sec
     let (cmm_sc, cmm_sc_rand) = sc_ck.commit(id_cred_sec.view(), &mut csprng);
     // proof of knowledge of id_cred_sec
@@ -101,8 +108,8 @@ where
             RandomOracle::empty(),
             &cmm_sc,
             &id_cred_pub_ip,
-            sc_ck,
-            &context.ip_info.dlog_base,
+            &sc_ck,
+            &context.ip_info.ip_verify_key.g,
             (&cmm_sc_rand, id_cred_sec.view()),
             &mut csprng,
         )
@@ -112,13 +119,12 @@ where
     let (snd_cmm_sc, snd_cmm_sc_rand) = ar_ck.commit(id_cred_sec.view(), &mut csprng);
     let snd_pok_sc = {
         // FIXME: prefix needs to be all the data sent to id provider or some such.
-        // FIXME: Also the one_point needs to be addressed and parametrized.
         com_eq::prove_com_eq(
             RandomOracle::empty(),
             &[snd_cmm_sc],
             &id_cred_pub,
             &ar_ck,
-            &[C::one_point()],
+            &[context.ip_info.ar_base],
             &[(&snd_cmm_sc_rand, id_cred_sec.view())],
             &mut csprng,
         )
@@ -135,7 +141,7 @@ where
             RandomOracle::empty(),
             &cmm_sc,
             &snd_cmm_sc,
-            sc_ck,
+            &sc_ck,
             &ar_ck,
             &secret,
             &mut csprng,
@@ -143,9 +149,12 @@ where
     };
 
     // commitment to the prf key in the group of the IP
-    let (cmm_prf, rand_cmm_prf) = context
-        .commitment_key_prf
-        .commit(&pedersen::Value::view_scalar(&prf_key_scalar), &mut csprng);
+    let commitment_key_prf = PedersenKey(
+        context.ip_info.ip_verify_key.ys[1],
+        context.ip_info.ip_verify_key.g,
+    );
+    let (cmm_prf, rand_cmm_prf) =
+        commitment_key_prf.commit(&pedersen::Value::view_scalar(&prf_key_scalar), &mut csprng);
     // commitment to the prf key in the group of the AR
     let snd_cmm_prf = &cmm_prf_sharing_coeff[0];
     let rand_snd_cmm_prf = &cmm_coeff_randomness[0];
@@ -162,7 +171,7 @@ where
             RandomOracle::empty(),
             &cmm_prf,
             snd_cmm_prf,
-            &context.commitment_key_prf,
+            &commitment_key_prf,
             &context.ip_info.ar_info.1,
             &secret,
             &mut csprng,

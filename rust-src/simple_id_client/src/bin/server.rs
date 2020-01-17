@@ -91,12 +91,10 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
     let secret = ExampleCurve::generate_scalar(&mut csprng);
-    let public = ExampleCurve::one_point().mul_by_scalar(&secret);
     let chi = CredentialHolderInfo::<ExampleCurve> {
         id_ah:   name,
         id_cred: IdCredentials {
             id_cred_sec: PedersenValue { value: secret },
-            id_cred_pub: public,
         },
     };
 
