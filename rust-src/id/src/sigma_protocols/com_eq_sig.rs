@@ -103,11 +103,11 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
     secret: &ComEqSigSecret<P, C>,
     csprng: &mut R,
 ) -> ComEqSigProof<P, C> {
-    let g_tilda = ps_pub_key.1;
+    let g_tilda = ps_pub_key.g_tilda;
     let a_hat = blinded_sig.sig.0;
     let _b_hat = blinded_sig.sig.1;
-    let _cX_tilda = ps_pub_key.4;
-    let cY_tilda = |i| ps_pub_key.3[i];
+    let _cX_tilda = ps_pub_key.x_tilda;
+    let cY_tilda = |i| ps_pub_key.y_tildas[i];
     let cmm_key = comm_key;
 
     let r_prime = secret.blind_rand.1;
@@ -121,7 +121,7 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
         "List of commitments must be the same length as the list of messages."
     );
     assert!(
-        n <= (ps_pub_key).3.len(),
+        n <= (ps_pub_key).y_tildas.len(),
         "The PS key must be at least das long as the list of commitments."
     );
 
@@ -237,11 +237,11 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     comm_key: &CommitmentKey<C>,
     proof: &ComEqSigProof<P, C>,
 ) -> bool {
-    let g_tilda = ps_pub_key.1;
+    let g_tilda = ps_pub_key.g_tilda;
     let a_hat = blinded_sig.sig.0;
     let b_hat = blinded_sig.sig.1;
-    let cX_tilda = ps_pub_key.4;
-    let cY_tildas = &ps_pub_key.3;
+    let cX_tilda = ps_pub_key.x_tilda;
+    let cY_tildas = &ps_pub_key.y_tildas;
     let cmm_key = comm_key;
 
     let mut hasher = ro
@@ -314,9 +314,9 @@ mod tests {
             // commitment to the signer.
             // the randomness used to mask the actual values.
             let mask = <Bls12 as Pairing>::generate_non_zero_scalar(&mut csprng);
-            let mut comm_to_signer: G1 = ps_pk.0.mul_by_scalar(&mask);
+            let mut comm_to_signer: G1 = ps_pk.g.mul_by_scalar(&mask);
             let mut commitments = Vec::with_capacity(i);
-            for cY_j in ps_pk.2.iter() {
+            for cY_j in ps_pk.ys.iter() {
                 let v_j = Value::generate(&mut csprng);
                 let (c_j, r_j) = cmm_key.commit(&v_j, &mut csprng);
                 comm_to_signer = comm_to_signer.plus_point(&cY_j.mul_by_scalar(&v_j));
@@ -368,9 +368,9 @@ mod tests {
 
             let mut secrets = Vec::with_capacity(i);
             let mask = <Bls12 as Pairing>::generate_non_zero_scalar(&mut csprng);
-            let mut comm_to_signer: G1 = ps_pk.0.mul_by_scalar(&mask);
+            let mut comm_to_signer: G1 = ps_pk.g.mul_by_scalar(&mask);
             let mut commitments = Vec::with_capacity(i);
-            for cY_j in ps_pk.2.iter() {
+            for cY_j in ps_pk.ys.iter() {
                 let v_j = Value::generate(&mut csprng);
                 let (c_j, r_j) = cmm_key.commit(&v_j, &mut csprng);
                 comm_to_signer = comm_to_signer.plus_point(&cY_j.mul_by_scalar(&v_j));
