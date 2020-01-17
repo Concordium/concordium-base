@@ -290,8 +290,13 @@ mod test {
     fn test_pipeline() {
         let mut csprng = thread_rng();
 
+        let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
+        let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+
+        let dlog_base = ip_public_key.g;
+
         let secret = ExampleCurve::generate_scalar(&mut csprng);
-        let public = ExampleCurve::one_point().mul_by_scalar(&secret);
+        let public = dlog_base.mul_by_scalar(&secret);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
             id_ah:   "ACCOUNT_HOLDER".to_owned(),
             id_cred: IdCredentials {
@@ -299,9 +304,6 @@ mod test {
                 id_cred_pub: public,
             },
         };
-
-        let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
-        let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
         let ar1_secret_key = SecretKey::generate(&mut csprng);
         let ar1_public_key = PublicKey::from(&ar1_secret_key);
@@ -336,7 +338,6 @@ mod test {
         };
 
         let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
-        let dlog_base = <G1 as Curve>::one_point();
 
         let ip_info = IpInfo {
             ip_identity: IpIdentity(88),

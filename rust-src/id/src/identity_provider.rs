@@ -38,8 +38,9 @@ pub fn verify_credentials<
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Declined> {
     let dlog_base = ip_info.dlog_base;
-    let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.2[0], dlog_base);
-    let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.2[1], dlog_base);
+    // FIXME: This is probably wrong. Should not use dlog_base here.
+    let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.ys[0], ip_info.ip_verify_key.g);
+    let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.ys[1], ip_info.ip_verify_key.g);
 
     let b_1 = verify_knowledge_of_id_cred_sec::<P::G_1>(
         &dlog_base,
@@ -146,7 +147,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     let att_vec = &att_list.alist;
     let m = ar_list.len();
     let n = att_vec.len();
-    let key_vec = &ps_public_key.2;
+    let key_vec = &ps_public_key.ys;
 
     // FIXME: Handle error gracefully, do not panic.
     assert!(key_vec.len() >= n + m + 3 + 2);

@@ -544,9 +544,9 @@ fn compute_pok_sig<
                                  // so the total number of commitments is as follows
     let num_total_commitments = num_total_attributes + num_ars + 1;
 
-    let ps_sig::PublicKey(_gen1, _gen2, _, yxs, _ip_pub_key_x) = ip_pub_key;
+    let y_tildas = &ip_pub_key.y_tildas;
     // FIXME: Handle errors more gracefully, or explicitly state precondition.
-    assert!(yxs.len() >= num_total_attributes);
+    assert!(y_tildas.len() >= num_total_attributes);
 
     let mut gxs = Vec::with_capacity(num_total_commitments);
 
@@ -558,7 +558,7 @@ fn compute_pok_sig<
         },
         commitment_rands.id_cred_sec_rand,
     ));
-    gxs.push(yxs[0]);
+    gxs.push(y_tildas[0]);
     let prf_key_scalar = prf_key.0;
     secrets.push((
         Value {
@@ -567,15 +567,15 @@ fn compute_pok_sig<
         },
         &commitment_rands.prf_rand,
     ));
-    gxs.push(yxs[1]);
+    gxs.push(y_tildas[1]);
     // commitment randomness (0) for the threshold
     let zero = PedersenRandomness::zero();
     secrets.push((Value::new(threshold.to_scalar::<C>()), &zero));
-    gxs.push(yxs[2]);
+    gxs.push(y_tildas[2]);
     for i in 3..num_ars + 3 {
         // all id revoker ids are commited with randomness 0
         secrets.push((Value::new(ar_list[i - 3].to_scalar::<C>()), &zero));
-        gxs.push(yxs[i]);
+        gxs.push(y_tildas[i]);
     }
 
     let att_rands = &commitment_rands.attributes_rand;
@@ -587,13 +587,13 @@ fn compute_pok_sig<
     let expiry_cmm = commitment_key.hide(&expiry_val, &zero);
 
     secrets.push((variant_val, &zero));
-    gxs.push(yxs[num_ars + 3]);
+    gxs.push(y_tildas[num_ars + 3]);
     secrets.push((expiry_val, &zero));
-    gxs.push(yxs[num_ars + 4]);
+    gxs.push(y_tildas[num_ars + 4]);
 
-    // FIXME: Likely we need to make sure there are enough yxs first and fail
+    // FIXME: Likely we need to make sure there are enough y_tildas first and fail
     // gracefully otherwise.
-    for (idx, &g) in yxs.iter().enumerate().take(att_vec.len()) {
+    for (idx, &g) in y_tildas.iter().enumerate().take(att_vec.len()) {
         secrets.push((
             Value {
                 value: att_vec[idx].to_field_element(),

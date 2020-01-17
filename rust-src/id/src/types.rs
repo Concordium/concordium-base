@@ -644,8 +644,8 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 ) -> Context<P, C> {
     // FIXME: The commitment keys are likely wrong here.
     let dlog_base = ip_info.dlog_base;
-    let commitment_key_sc = PedersenKey(ip_info.ip_verify_key.2[0], dlog_base);
-    let commitment_key_prf = PedersenKey(ip_info.ip_verify_key.2[1], dlog_base);
+    let commitment_key_sc = PedersenKey(ip_info.ip_verify_key.ys[0], dlog_base);
+    let commitment_key_prf = PedersenKey(ip_info.ip_verify_key.ys[1], dlog_base);
     let mut choice_ars = Vec::with_capacity(choice_ar_handles.0.len());
     let ip_ar_parameters = &ip_info.ar_info.0.clone();
     for ar in choice_ar_handles.0.into_iter() {

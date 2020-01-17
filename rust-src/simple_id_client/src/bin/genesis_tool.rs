@@ -149,7 +149,7 @@ fn main() {
 
         // Choose variant of the attribute list.
         // Baker accounts will have the maximum allowed variant.
-        let variant = 1 << 15;
+        let variant = !0;
 
         // Expire in 1 year from now.
         let year_from_now = std::time::SystemTime::now()
