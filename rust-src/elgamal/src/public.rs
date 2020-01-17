@@ -180,7 +180,7 @@ mod tests {
             pub fn $function_name() {
                 let mut csprng = thread_rng();
                 for _i in 1..100 {
-                    let sk: SecretKey<$curve_type> = SecretKey::generate(&mut csprng);
+                    let sk: SecretKey<$curve_type> = SecretKey::generate_all(&mut csprng);
                     let pk = PublicKey::from(&sk);
                     let r = pk.to_bytes();
                     let res_pk2 = PublicKey::from_bytes(&mut Cursor::new(&r));
