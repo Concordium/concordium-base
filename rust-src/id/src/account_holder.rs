@@ -4,7 +4,7 @@ use random_oracle::RandomOracle;
 
 use crate::{
     secret_sharing::*,
-    sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult},
+    sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, dlog},
 };
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
@@ -38,11 +38,6 @@ where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
     let id_ah = aci.acc_holder_info.id_ah.clone();
-    let id_cred_pub_ip = context
-        .ip_info
-        .ip_verify_key
-        .g
-        .mul_by_scalar(&aci.acc_holder_info.id_cred.id_cred_sec);
     let id_cred_pub = context
         .ip_info
         .ar_base
@@ -102,18 +97,14 @@ where
     let (cmm_sc, cmm_sc_rand) = sc_ck.commit(id_cred_sec.view(), &mut csprng);
     // proof of knowledge of id_cred_sec
     // w.r.t. the commitment
-    let pok_sc = {
+    let pok_sc =
         // FIXME: prefix needs to be all the data sent to id provider or some such.
-        com_eq::prove_com_eq_single(
-            RandomOracle::empty(),
-            &cmm_sc,
-            &id_cred_pub_ip,
-            &sc_ck,
-            &context.ip_info.ip_verify_key.g,
-            (&cmm_sc_rand, id_cred_sec.view()),
-            &mut csprng,
-        )
-    };
+        dlog::prove_dlog(&mut csprng,
+                         RandomOracle::empty(),
+                         &id_cred_pub,
+                         id_cred_sec,
+                         &context.ip_info.ar_base
+        );
 
     let ar_ck = context.ip_info.ar_info.1;
     let (snd_cmm_sc, snd_cmm_sc_rand) = ar_ck.commit(id_cred_sec.view(), &mut csprng);
@@ -131,19 +122,14 @@ where
     };
 
     let proof_com_eq_sc = {
-        let secret = com_eq_different_groups::ComEqDiffGrpsSecret {
-            value:      &id_cred_sec,
-            rand_cmm_1: &cmm_sc_rand,
-            rand_cmm_2: &snd_cmm_sc_rand,
-        };
         // FIXME: prefix needs to be all the data sent to the id provider.
-        com_eq_different_groups::prove_com_eq_diff_grps(
+        com_eq::prove_com_eq_single(
             RandomOracle::empty(),
             &cmm_sc,
-            &snd_cmm_sc,
+            &id_cred_pub,
             &sc_ck,
-            &ar_ck,
-            &secret,
+            &context.ip_info.ar_base,
+            (&cmm_sc_rand, Value::<P::G_1>::view_scalar(&id_cred_sec)),
             &mut csprng,
         )
     };
@@ -189,10 +175,8 @@ where
     let alist = aci.attributes.clone();
     let prio = PreIdentityObject {
         id_ah,
-        id_cred_pub_ip,
         id_cred_pub,
         snd_pok_sc,
-        snd_cmm_sc,
         proof_com_eq_sc,
         ip_ar_data,
         choice_ar_parameters: (ar_handles, revocation_threshold),

@@ -17,7 +17,7 @@ use std::collections::btree_map::BTreeMap;
 
 use crate::sigma_protocols::{
     com_enc_eq::ComEncEqProof, com_eq::ComEqProof, com_eq_different_groups::ComEqDiffGrpsProof,
-    com_eq_sig::ComEqSigProof, com_mult::ComMultProof,
+    com_eq_sig::ComEqSigProof, com_mult::ComMultProof, dlog::DlogProof,
 };
 
 use serde_json::{json, Number, Value};
@@ -248,6 +248,7 @@ pub struct AccCredentialInfo<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Chosen attribute list.
     pub attributes: AttributeList<C::Scalar, AttributeType>,
 }
+
 /// The data relating to a single anonymity revoker
 /// sent by the account holder to the identity provider
 /// typically the account holder will send a vector of these
@@ -265,6 +266,7 @@ pub struct IpArData<C: Curve> {
     /// the commitments to the sharing coefficients
     pub proof_com_enc_eq: ComEncEqProof<C>,
 }
+
 /// Data relating to a single anonymity revoker sent by the account holder to
 /// the chain.
 /// Typically a vector of these will be sent to the chain.
@@ -286,8 +288,8 @@ pub struct PreIdentityObject<
 > {
     /// Name of the account holder.
     pub id_ah: String,
-    /// Public credential of the account holder only.
-    pub id_cred_pub_ip: P::G_1,
+    /// Public credential of the account holder in the anonymity revoker's
+    /// group.
     pub id_cred_pub: C,
     /// Anonymity revocation data for the chosen anonymity revokers.
     pub ip_ar_data: Vec<IpArData<C>>,
@@ -299,17 +301,16 @@ pub struct PreIdentityObject<
     pub choice_ar_parameters: (Vec<ArIdentity>, Threshold),
     /// Chosen attribute list.
     pub alist: AttributeList<C::Scalar, AttributeType>,
-    /// Proof of knowledge of secret credentials corresponding to id_cred_pub_ip
-    /// matching the commitment cmm_sc
-    pub pok_sc: ComEqProof<P::G_1>,
+    /// Proof of knowledge of secret credentials corresponding to id_cred_pub
+    pub pok_sc: DlogProof<C>,
     /// proof of knowledge of secret credential corresponding to snd_cmm_sc
     pub snd_pok_sc: ComEqProof<C>,
-    /// commitment to id cred sec
+    /// Commitment to id cred sec using the commitment key of IP derived from
+    /// the PS public key. This is used to compute the message that the IP
+    /// signs.
     pub cmm_sc: pedersen::Commitment<P::G_1>,
-    /// commitment to id cred sec in C
-    pub snd_cmm_sc: pedersen::Commitment<C>,
-    /// proof that cmm_sc and snd_cmm_sc are hiding the same thing
-    pub proof_com_eq_sc: ComEqDiffGrpsProof<P::G_1, C>,
+    /// Proof that cmm_sc and id_cred_pub are hiding the same value.
+    pub proof_com_eq_sc: ComEqProof<P::G_1>,
     /// Commitment to the prf key in group G_1.
     pub cmm_prf: pedersen::Commitment<P::G_1>,
     /// commitments to the coefficients of the polynomial
