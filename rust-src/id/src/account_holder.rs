@@ -318,10 +318,6 @@ where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
 
-    // First part of the commitment key. The reg_id must be computed with this
-    // in order for the easy proof of multiplicative relationship to work.
-    let commitment_base = global_context.on_chain_commitment_key.0;
-
     let alist = &prio.alist;
     let prf_key = aci.prf_key;
     let id_cred_sec = &aci.acc_holder_info.id_cred.id_cred_sec;
@@ -330,7 +326,15 @@ where
         Err(err) => unimplemented!("Handle the (very unlikely) case where K + x = 0, {}", err),
     };
 
-    let reg_id = commitment_base.mul_by_scalar(&reg_id_exponent);
+    // RegId as well as Prf key commitments must be computed
+    // with the same generators as in the commitment key.
+    let reg_id = global_context
+        .on_chain_commitment_key
+        .hide(
+            &Value::view_scalar(&reg_id_exponent),
+            &PedersenRandomness::zero(),
+        )
+        .0;
     // adding the chosen ar list to the credential deployment info
     let ar_list = prio.choice_ar_parameters.0.clone();
     let mut choice_ars = Vec::with_capacity(ar_list.len());
@@ -721,15 +725,20 @@ fn compute_pok_reg_id<C: Curve, R: Rng>(
     reg_id: C,
     csprng: &mut R,
 ) -> com_mult::ComMultProof<C> {
+    // Commitment to 1 with randomness 0, to serve as the right-hand side in
+    // com_mult proof.
     // NOTE: In order for this to work the reg_id must be computed
     // with the same base as the first element of the commitment key.
-    let g = on_chain_commitment_key.0;
+    let cmm_one = on_chain_commitment_key.hide(
+        &Value::view_scalar(&C::Scalar::one()),
+        &PedersenRandomness::zero(),
+    );
 
-    // commitments are the public values.
+    // commitments are the public values. They all have to
     let public = [
-        Commitment(cmm_prf.0.plus_point(&cmm_cred_counter.0)),
+        cmm_prf.combine(&cmm_cred_counter),
         Commitment(reg_id),
-        Commitment(g),
+        cmm_one,
     ];
     // finally the secret keys are derived from actual commited values
     // and the randomness.
