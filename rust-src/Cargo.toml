@@ -13,6 +13,6 @@ members=[
    "ffi_helpers",
    "simple_id_client",
    "aggregate_sig",
-   "common",
+   "crypto_common",
    "random_oracle"
 ]

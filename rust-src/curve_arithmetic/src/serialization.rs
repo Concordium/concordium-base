@@ -4,7 +4,7 @@ use std::io::Cursor;
 use crate::curve_arithmetic::{Curve, Pairing};
 use byteorder::{BigEndian, ReadBytesExt};
 
-use common;
+use crypto_common;
 
 pub fn read_curve_scalar<C: Curve>(cur: &mut Cursor<&[u8]>) -> Result<C::Scalar, Error> {
     let s = C::bytes_to_scalar(cur)?;
@@ -27,7 +27,7 @@ pub fn read_curve_scalars_length<C: Curve>(
     cur: &mut Cursor<&[u8]>,
     len: usize,
 ) -> Result<Vec<C::Scalar>, Error> {
-    let mut res = common::safe_with_capacity(len);
+    let mut res = crypto_common::safe_with_capacity(len);
     for _ in 0..len {
         res.push(read_curve_scalar::<C>(cur)?);
     }
@@ -45,7 +45,7 @@ pub fn read_pairing_scalars<P: Pairing>(
     cur: &mut Cursor<&[u8]>,
 ) -> Result<Vec<P::ScalarField>, Error> {
     let len = cur.read_u32::<BigEndian>()?;
-    let mut res = common::safe_with_capacity(len as usize);
+    let mut res = crypto_common::safe_with_capacity(len as usize);
     for _ in 0..len {
         res.push(P::bytes_to_scalar(cur)?);
     }
@@ -60,7 +60,7 @@ pub fn read_pairing_scalar<P: Pairing>(cur: &mut Cursor<&[u8]>) -> Result<P::Sca
 
 pub fn read_curve_elements<C: Curve>(cur: &mut Cursor<&[u8]>) -> Result<Vec<C>, Error> {
     let len = cur.read_u32::<BigEndian>()?;
-    let mut res = common::safe_with_capacity(len as usize);
+    let mut res = crypto_common::safe_with_capacity(len as usize);
     for _ in 0..len {
         res.push(read_curve::<C>(cur)?);
     }

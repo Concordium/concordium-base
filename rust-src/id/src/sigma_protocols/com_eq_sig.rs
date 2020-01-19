@@ -60,7 +60,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> ComEqSigProof<P, C> {
         let challenge = read_curve_scalar::<P::G_2>(bytes)?;
         let witness_rho = read_curve_scalar::<P::G_2>(bytes)?;
         let len = read_length(bytes)?;
-        let mut witness_commit = common::safe_with_capacity(len);
+        let mut witness_commit = crypto_common::safe_with_capacity(len);
         for _ in 0..len {
             let m = read_curve_scalar::<P::G_1>(bytes)?;
             let r = read_curve_scalar::<C>(bytes)?;
