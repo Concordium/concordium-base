@@ -1,6 +1,6 @@
 use crate::{
     secret_sharing::{ShareNumber, Threshold},
-    sigma_protocols::{com_enc_eq::*, com_eq::*, com_eq_different_groups::*},
+    sigma_protocols::{com_enc_eq::*, com_eq::*, com_eq_different_groups::*, dlog::*},
     types::*,
 };
 use random_oracle::RandomOracle;
@@ -17,6 +17,7 @@ pub struct Declined(pub Reason);
 #[derive(Debug, Clone, Copy)]
 pub enum Reason {
     FailedToVerifyKnowledgeOfIdCredSec,
+    FailedToVerifyIdCredSecEquality,
     FailedToVerifyPrfData,
     WrongArParameters,
 }
@@ -40,39 +41,27 @@ pub fn verify_credentials<
     let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.ys[0], ip_info.ip_verify_key.g);
     let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.ys[1], ip_info.ip_verify_key.g);
 
-    let b_1 = verify_knowledge_of_id_cred_sec::<P::G_1>(
-        &ip_info.ip_verify_key.g,
-        &commitment_key_sc,
-        &pre_id_obj.id_cred_pub_ip,
-        &pre_id_obj.cmm_sc,
+    let b_1 = verify_dlog(
+        RandomOracle::empty(),
+        &ip_info.ar_base,
+        &pre_id_obj.id_cred_pub,
         &pre_id_obj.pok_sc,
     );
     if !b_1 {
         return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
     }
 
-    let ar_ck = ip_info.ar_info.1;
-    let b_11 = verify_knowledge_of_id_cred_sec::<C>(
-        &ip_info.ar_base,
-        &ar_ck,
-        &pre_id_obj.id_cred_pub,
-        &pre_id_obj.snd_cmm_sc,
-        &pre_id_obj.snd_pok_sc,
-    );
-    if !b_11 {
-        return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
-    }
-
-    let b_111 = verify_com_eq_diff_grps::<P::G_1, C>(
+    let b_11 = verify_com_eq_single::<P::G_1, C>(
         RandomOracle::empty(),
         &pre_id_obj.cmm_sc,
-        &pre_id_obj.snd_cmm_sc,
+        &pre_id_obj.id_cred_pub,
         &commitment_key_sc,
-        &ar_ck,
+        &ip_info.ar_base,
         &pre_id_obj.proof_com_eq_sc,
     );
-    if !b_111 {
-        return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
+
+    if !b_11 {
+        return Err(Declined(Reason::FailedToVerifyIdCredSecEquality));
     }
 
     let choice_ar_handles = pre_id_obj.choice_ar_parameters.0.clone();
@@ -94,7 +83,7 @@ pub fn verify_credentials<
     }
     // ar commitment key
     let ar_ck = ip_info.ar_info.1;
-    let b_2 = verify_vrf_key_data(
+    let b_2 = verify_prf_key_data(
         &commitment_key_prf,
         &pre_id_obj.cmm_prf,
         &ar_ck,
@@ -167,24 +156,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     ps_sig::UnknownMessage(message)
 }
 
-fn verify_knowledge_of_id_cred_sec<C: Curve>(
-    base: &C,
-    ck: &CommitmentKey<C>,
-    pk: &C,
-    commitment: &Commitment<C>,
-    proof: &ComEqProof<C>,
-) -> bool {
-    verify_com_eq(
-        RandomOracle::empty(),
-        &[*commitment],
-        pk,
-        ck,
-        &[*base],
-        &proof,
-    )
-}
-
-fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
+fn verify_prf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
     ip_commitment_key: &CommitmentKey<C1>,
     cmm_vrf: &Commitment<C1>,
     ar_commitment_key: &CommitmentKey<C2>,
@@ -206,11 +178,10 @@ fn verify_vrf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
     if !b_1 {
         return false;
     }
-    // let cmm_to_shares = Vec::new();
+
     for ar in ip_ar_data.iter() {
         let cmm_share = commitment_to_share(ar.prf_key_share_number, cmm_sharing_coeff);
         // finding the right encryption key
-
         match choice_ar_parameters
             .iter()
             .find(|&x| x.ar_identity == ar.ar_identity)
