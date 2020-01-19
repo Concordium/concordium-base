@@ -4,7 +4,7 @@ use random_oracle::RandomOracle;
 
 use crate::{
     secret_sharing::*,
-    sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult},
+    sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, dlog},
 };
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
@@ -38,11 +38,10 @@ where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
     let id_ah = aci.acc_holder_info.id_ah.clone();
-    let id_cred_pub_ip = context
+    let id_cred_pub = context
         .ip_info
-        .dlog_base
-        .mul_by_scalar(&aci.acc_holder_info.id_cred.id_cred_sec); // aci.acc_holder_info.id_cred.id_cred_pub_ip;
-    let id_cred_pub = aci.acc_holder_info.id_cred.id_cred_pub;
+        .ar_base
+        .mul_by_scalar(&aci.acc_holder_info.id_cred.id_cred_sec);
     // PRF related computation
     let prf::SecretKey(prf_key_scalar) = aci.prf_key;
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
@@ -90,62 +89,58 @@ where
 
     // id_cred_sec stuff
     let id_cred_sec = &aci.acc_holder_info.id_cred.id_cred_sec;
-    let sc_ck = &context.commitment_key_sc;
+    let sc_ck = PedersenKey(
+        context.ip_info.ip_verify_key.ys[0],
+        context.ip_info.ip_verify_key.g,
+    );
     // commit to id_cred_sec
     let (cmm_sc, cmm_sc_rand) = sc_ck.commit(id_cred_sec.view(), &mut csprng);
     // proof of knowledge of id_cred_sec
     // w.r.t. the commitment
-    let pok_sc = {
+    let pok_sc =
         // FIXME: prefix needs to be all the data sent to id provider or some such.
-        com_eq::prove_com_eq_single(
-            RandomOracle::empty(),
-            &cmm_sc,
-            &id_cred_pub_ip,
-            sc_ck,
-            &context.ip_info.dlog_base,
-            (&cmm_sc_rand, id_cred_sec.view()),
-            &mut csprng,
-        )
-    };
+        dlog::prove_dlog(&mut csprng,
+                         RandomOracle::empty(),
+                         &id_cred_pub,
+                         id_cred_sec,
+                         &context.ip_info.ar_base
+        );
 
     let ar_ck = context.ip_info.ar_info.1;
     let (snd_cmm_sc, snd_cmm_sc_rand) = ar_ck.commit(id_cred_sec.view(), &mut csprng);
     let snd_pok_sc = {
         // FIXME: prefix needs to be all the data sent to id provider or some such.
-        // FIXME: Also the one_point needs to be addressed and parametrized.
         com_eq::prove_com_eq(
             RandomOracle::empty(),
             &[snd_cmm_sc],
             &id_cred_pub,
             &ar_ck,
-            &[C::one_point()],
+            &[context.ip_info.ar_base],
             &[(&snd_cmm_sc_rand, id_cred_sec.view())],
             &mut csprng,
         )
     };
 
     let proof_com_eq_sc = {
-        let secret = com_eq_different_groups::ComEqDiffGrpsSecret {
-            value:      &id_cred_sec,
-            rand_cmm_1: &cmm_sc_rand,
-            rand_cmm_2: &snd_cmm_sc_rand,
-        };
         // FIXME: prefix needs to be all the data sent to the id provider.
-        com_eq_different_groups::prove_com_eq_diff_grps(
+        com_eq::prove_com_eq_single(
             RandomOracle::empty(),
             &cmm_sc,
-            &snd_cmm_sc,
-            sc_ck,
-            &ar_ck,
-            &secret,
+            &id_cred_pub,
+            &sc_ck,
+            &context.ip_info.ar_base,
+            (&cmm_sc_rand, Value::<P::G_1>::view_scalar(&id_cred_sec)),
             &mut csprng,
         )
     };
 
     // commitment to the prf key in the group of the IP
-    let (cmm_prf, rand_cmm_prf) = context
-        .commitment_key_prf
-        .commit(&pedersen::Value::view_scalar(&prf_key_scalar), &mut csprng);
+    let commitment_key_prf = PedersenKey(
+        context.ip_info.ip_verify_key.ys[1],
+        context.ip_info.ip_verify_key.g,
+    );
+    let (cmm_prf, rand_cmm_prf) =
+        commitment_key_prf.commit(&pedersen::Value::view_scalar(&prf_key_scalar), &mut csprng);
     // commitment to the prf key in the group of the AR
     let snd_cmm_prf = &cmm_prf_sharing_coeff[0];
     let rand_snd_cmm_prf = &cmm_coeff_randomness[0];
@@ -162,7 +157,7 @@ where
             RandomOracle::empty(),
             &cmm_prf,
             snd_cmm_prf,
-            &context.commitment_key_prf,
+            &commitment_key_prf,
             &context.ip_info.ar_info.1,
             &secret,
             &mut csprng,
@@ -180,10 +175,8 @@ where
     let alist = aci.attributes.clone();
     let prio = PreIdentityObject {
         id_ah,
-        id_cred_pub_ip,
         id_cred_pub,
         snd_pok_sc,
-        snd_cmm_sc,
         proof_com_eq_sc,
         ip_ar_data,
         choice_ar_parameters: (ar_handles, revocation_threshold),
@@ -325,8 +318,6 @@ where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
 
-    let commitment_base = global_context.on_chain_commitment_key.0;
-
     let alist = &prio.alist;
     let prf_key = aci.prf_key;
     let id_cred_sec = &aci.acc_holder_info.id_cred.id_cred_sec;
@@ -335,7 +326,15 @@ where
         Err(err) => unimplemented!("Handle the (very unlikely) case where K + x = 0, {}", err),
     };
 
-    let reg_id = commitment_base.mul_by_scalar(&reg_id_exponent);
+    // RegId as well as Prf key commitments must be computed
+    // with the same generators as in the commitment key.
+    let reg_id = global_context
+        .on_chain_commitment_key
+        .hide(
+            &Value::view_scalar(&reg_id_exponent),
+            &PedersenRandomness::zero(),
+        )
+        .0;
     // adding the chosen ar list to the credential deployment info
     let ar_list = prio.choice_ar_parameters.0.clone();
     let mut choice_ars = Vec::with_capacity(ar_list.len());
@@ -544,9 +543,9 @@ fn compute_pok_sig<
                                  // so the total number of commitments is as follows
     let num_total_commitments = num_total_attributes + num_ars + 1;
 
-    let ps_sig::PublicKey(_gen1, _gen2, _, yxs, _ip_pub_key_x) = ip_pub_key;
+    let y_tildas = &ip_pub_key.y_tildas;
     // FIXME: Handle errors more gracefully, or explicitly state precondition.
-    assert!(yxs.len() >= num_total_attributes);
+    assert!(y_tildas.len() >= num_total_attributes);
 
     let mut gxs = Vec::with_capacity(num_total_commitments);
 
@@ -558,7 +557,7 @@ fn compute_pok_sig<
         },
         commitment_rands.id_cred_sec_rand,
     ));
-    gxs.push(yxs[0]);
+    gxs.push(y_tildas[0]);
     let prf_key_scalar = prf_key.0;
     secrets.push((
         Value {
@@ -567,15 +566,15 @@ fn compute_pok_sig<
         },
         &commitment_rands.prf_rand,
     ));
-    gxs.push(yxs[1]);
+    gxs.push(y_tildas[1]);
     // commitment randomness (0) for the threshold
     let zero = PedersenRandomness::zero();
     secrets.push((Value::new(threshold.to_scalar::<C>()), &zero));
-    gxs.push(yxs[2]);
+    gxs.push(y_tildas[2]);
     for i in 3..num_ars + 3 {
         // all id revoker ids are commited with randomness 0
         secrets.push((Value::new(ar_list[i - 3].to_scalar::<C>()), &zero));
-        gxs.push(yxs[i]);
+        gxs.push(y_tildas[i]);
     }
 
     let att_rands = &commitment_rands.attributes_rand;
@@ -587,13 +586,13 @@ fn compute_pok_sig<
     let expiry_cmm = commitment_key.hide(&expiry_val, &zero);
 
     secrets.push((variant_val, &zero));
-    gxs.push(yxs[num_ars + 3]);
+    gxs.push(y_tildas[num_ars + 3]);
     secrets.push((expiry_val, &zero));
-    gxs.push(yxs[num_ars + 4]);
+    gxs.push(y_tildas[num_ars + 4]);
 
-    // FIXME: Likely we need to make sure there are enough yxs first and fail
+    // FIXME: Likely we need to make sure there are enough y_tildas first and fail
     // gracefully otherwise.
-    for (idx, &g) in yxs.iter().enumerate().take(att_vec.len()) {
+    for (idx, &g) in y_tildas.iter().enumerate().take(att_vec.len()) {
         secrets.push((
             Value {
                 value: att_vec[idx].to_field_element(),
@@ -726,15 +725,20 @@ fn compute_pok_reg_id<C: Curve, R: Rng>(
     reg_id: C,
     csprng: &mut R,
 ) -> com_mult::ComMultProof<C> {
+    // Commitment to 1 with randomness 0, to serve as the right-hand side in
+    // com_mult proof.
     // NOTE: In order for this to work the reg_id must be computed
     // with the same base as the first element of the commitment key.
-    let g = on_chain_commitment_key.0;
+    let cmm_one = on_chain_commitment_key.hide(
+        &Value::view_scalar(&C::Scalar::one()),
+        &PedersenRandomness::zero(),
+    );
 
-    // commitments are the public values.
+    // commitments are the public values. They all have to
     let public = [
-        Commitment(cmm_prf.0.plus_point(&cmm_cred_counter.0)),
+        cmm_prf.combine(&cmm_cred_counter),
         Commitment(reg_id),
-        Commitment(g),
+        cmm_one,
     ];
     // finally the secret keys are derived from actual commited values
     // and the randomness.

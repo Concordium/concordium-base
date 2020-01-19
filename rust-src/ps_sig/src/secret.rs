@@ -2,15 +2,6 @@
 
 //! A secret key
 
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
-
 use crate::{
     errors::{InternalError::SecretKeyLengthError, *},
     known_message::*,
@@ -26,10 +17,19 @@ use rand::*;
 
 /// A secret key
 #[derive(Debug)]
-pub struct SecretKey<C: Pairing>(pub(crate) Vec<C::ScalarField>, pub(crate) C::ScalarField);
+pub struct SecretKey<C: Pairing> {
+    /// Generator of the first pairing group. Not secret, but needed for various
+    /// operations.
+    pub g: C::G_1,
+    /// Generator of the second pairing group. Not secret, but needed for
+    /// various operations.
+    pub g_tilda: C::G_2,
+    pub(crate) ys: Vec<C::ScalarField>,
+    pub(crate) x: C::ScalarField,
+}
 
 impl<C: Pairing> PartialEq for SecretKey<C> {
-    fn eq(&self, other: &Self) -> bool { self.0 == other.0 && self.1 == other.1 }
+    fn eq(&self, other: &Self) -> bool { self.ys == other.ys && self.x == other.x }
 }
 
 impl<C: Pairing> Eq for SecretKey<C> {}
@@ -38,9 +38,11 @@ impl<C: Pairing> SecretKey<C> {
     // turn secret key vector into a byte array
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
-        let mut bytes: Vec<u8> = Vec::with_capacity(4 + (self.0.len() + 1) * C::SCALAR_LENGTH);
-        write_pairing_scalars::<C>(&self.0, &mut bytes);
-        write_pairing_scalar::<C>(&self.1, &mut bytes);
+        let mut bytes: Vec<u8> = Vec::with_capacity(4 + (self.ys.len() + 1) * C::SCALAR_LENGTH);
+        write_curve_element(&self.g, &mut bytes);
+        write_curve_element(&self.g_tilda, &mut bytes);
+        write_pairing_scalars::<C>(&self.ys, &mut bytes);
+        write_pairing_scalar::<C>(&self.x, &mut bytes);
         bytes.into_boxed_slice()
     }
 
@@ -53,21 +55,29 @@ impl<C: Pairing> SecretKey<C> {
     /// is an `SignatureError` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<SecretKey<C>, Error> {
-        let vs = read_pairing_scalars::<C>(bytes)?;
-        let fr = read_pairing_scalar::<C>(bytes)?;
-        Ok(SecretKey(vs, fr))
+        let g = read_curve::<C::G_1>(bytes)?;
+        let g_tilda = read_curve::<C::G_2>(bytes)?;
+        let ys = read_pairing_scalars::<C>(bytes)?;
+        let x = read_pairing_scalar::<C>(bytes)?;
+        Ok(SecretKey { g, g_tilda, ys, x })
     }
 
-    /// Generate a secret key  from a `csprng`.
+    /// Generate a secret key from a `csprng`. NB: This fixes the generators to
+    /// be those defined by the library.
     pub fn generate<T>(n: usize, csprng: &mut T) -> SecretKey<C>
     where
         T: Rng, {
-        let mut vs: Vec<C::ScalarField> = Vec::with_capacity(n);
+        let mut ys: Vec<C::ScalarField> = Vec::with_capacity(n);
         for _i in 0..n {
-            vs.push(C::generate_scalar(csprng));
+            ys.push(C::generate_scalar(csprng));
         }
 
-        SecretKey(vs, C::generate_scalar(csprng))
+        SecretKey {
+            g: C::G_1::one_point(),
+            g_tilda: C::G_2::one_point(),
+            ys,
+            x: C::generate_scalar(csprng),
+        }
     }
 
     pub fn sign_known_message<T>(
@@ -77,7 +87,7 @@ impl<C: Pairing> SecretKey<C> {
     ) -> Result<Signature<C>, SignatureError>
     where
         T: Rng, {
-        let ys = &self.0;
+        let ys = &self.ys;
         let ms = &message.0;
         if ms.len() > ys.len() {
             return Err(SignatureError(SecretKeyLengthError));
@@ -92,8 +102,8 @@ impl<C: Pairing> SecretKey<C> {
                     acc.add_assign(&r);
                     acc
                 });
-        z.add_assign(&self.1);
-        let h = C::G_1::one_point().mul_by_scalar(&C::generate_scalar(csprng));
+        z.add_assign(&self.x);
+        let h = self.g.mul_by_scalar(&C::generate_scalar(csprng));
 
         Ok(Signature(h, h.mul_by_scalar(&z)))
     }
@@ -107,12 +117,9 @@ impl<C: Pairing> SecretKey<C> {
     ) -> Signature<C>
     where
         T: Rng, {
-        // FIXME: The one_point here should be part of the secret key, or instance.
-        // Now it appears here and also in deriving the public key, and this is likely
-        // to lead to errors.
-        let sk = C::G_1::one_point().mul_by_scalar(&self.1);
+        let sk = self.g.mul_by_scalar(&self.x);
         let r = C::generate_non_zero_scalar(csprng);
-        let a = C::G_1::one_point().mul_by_scalar(&r);
+        let a = self.g.mul_by_scalar(&r);
         let xmr = sk.plus_point(&message).mul_by_scalar(&r);
         Signature(a, xmr)
     }

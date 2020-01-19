@@ -2,6 +2,10 @@
 //! This protocol enables one to prove knowledge of discrete logarithms $a_1 ...
 //! a_n$ together with randomnesses $r_1 ... r_n$ corresponding to public values
 //! $ y = \prod G_i^{a_i} $ and commitments $C_i = commit(a_i, r_i)$.
+//! The product y and commitments can be in different groups, but they have to
+//! be of the same prime order, and for the implementation the field of scalars
+//! must be the same type for both groups.
+
 use curve_arithmetic::curve_arithmetic::Curve;
 use ff::Field;
 use rand::*;
@@ -66,15 +70,15 @@ impl<T: Curve> ComEqProof<T> {
 ///   randomness, and $a_i$ the commited to value.
 /// * `csprng` - A cryptographically secure random number generator.
 #[allow(non_snake_case)]
-pub fn prove_com_eq<T: Curve, R: Rng>(
+pub fn prove_com_eq<C: Curve, T: Curve<Scalar = C::Scalar>, R: Rng>(
     ro: RandomOracle,
-    commitments: &[Commitment<T>],
+    commitments: &[Commitment<C>],
     y: &T,
-    cmm_key: &CommitmentKey<T>,
+    cmm_key: &CommitmentKey<C>,
     gxs: &[T],
-    secret: &[(&Randomness<T>, &Value<T>)],
+    secret: &[(&Randomness<C>, &Value<C>)],
     csprng: &mut R,
-) -> ComEqProof<T> {
+) -> ComEqProof<C> {
     let n = commitments.len();
     // FIXME: This should be handled better by returning an Option(Proof).
     // Or at the very least stating the precondition.
@@ -99,7 +103,7 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
         // Doing it this way avoids reallocating a whole new vector on each iteration.
         rands.clear();
         for g in gxs {
-            let alpha_i = Value::<T>::generate_non_zero(csprng);
+            let alpha_i = Value::<C>::generate_non_zero(csprng);
             // This cR_i is R_i from the specification.
             let (v_i, cR_i) = cmm_key.commit(&alpha_i, csprng);
             tmp_u = tmp_u.plus_point(&g.mul_by_scalar(&alpha_i));
@@ -124,7 +128,7 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
                         s_i.negate();
                         s_i.add_assign(alpha_i);
                         // compute R_i - r_i * c
-                        let mut t_i = challenge;
+                        let mut t_i: C::Scalar = challenge;
                         t_i.mul_assign(r_i);
                         t_i.negate();
                         t_i.add_assign(cR_i);
@@ -139,15 +143,15 @@ pub fn prove_com_eq<T: Curve, R: Rng>(
 }
 
 /// Specialization of the above for when we only have a single commitment.
-pub fn prove_com_eq_single<T: Curve, R: Rng>(
+pub fn prove_com_eq_single<C: Curve, T: Curve<Scalar = C::Scalar>, R: Rng>(
     ro: RandomOracle,
-    commitment: &Commitment<T>,
+    commitment: &Commitment<C>,
     y: &T,
-    cmm_key: &CommitmentKey<T>,
+    cmm_key: &CommitmentKey<C>,
     gx: &T,
-    secret: (&Randomness<T>, &Value<T>),
+    secret: (&Randomness<C>, &Value<C>),
     csprng: &mut R,
-) -> ComEqProof<T> {
+) -> ComEqProof<C> {
     prove_com_eq(ro, &[*commitment], y, cmm_key, &[*gx], &[secret], csprng)
 }
 
@@ -161,13 +165,13 @@ pub fn prove_com_eq_single<T: Curve, R: Rng>(
 ///   generated
 /// * `gxs` - The list of generators for discrete log proofs.
 /// * `proof` - Proposed proof.
-pub fn verify_com_eq<T: Curve>(
+pub fn verify_com_eq<C: Curve, T: Curve<Scalar = C::Scalar>>(
     ro: RandomOracle,
-    commitments: &[Commitment<T>],
+    commitments: &[Commitment<C>],
     y: &T,
-    cmm_key: &CommitmentKey<T>,
+    cmm_key: &CommitmentKey<C>,
     gxs: &[T],
-    proof: &ComEqProof<T>,
+    proof: &ComEqProof<C>,
 ) -> bool {
     if commitments.len() != proof.witness.len() {
         return false;
@@ -206,13 +210,13 @@ pub fn verify_com_eq<T: Curve>(
 }
 
 /// Specialization of the above when only a single commitment is given.
-pub fn verify_com_eq_single<T: Curve>(
+pub fn verify_com_eq_single<C: Curve, T: Curve<Scalar = C::Scalar>>(
     ro: RandomOracle,
-    commitment: &Commitment<T>,
+    commitment: &Commitment<C>,
     y: &T,
-    cmm_key: &CommitmentKey<T>,
+    cmm_key: &CommitmentKey<C>,
     gx: &T,
-    proof: &ComEqProof<T>,
+    proof: &ComEqProof<C>,
 ) -> bool {
     verify_com_eq(ro, &[*commitment], y, cmm_key, &[*gx], proof)
 }

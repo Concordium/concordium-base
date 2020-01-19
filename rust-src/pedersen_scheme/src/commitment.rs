@@ -1,7 +1,4 @@
 // -*- mode: rust; -*-
-//
-// Authors:
-// - bm@concordium.com
 
 //! Commitment type
 
@@ -41,6 +38,16 @@ impl<C: Curve> Commitment<C> {
             Ok(point) => Ok(Commitment(point)),
             Err(_) => Err(CommitmentError(CurveDecodingError)),
         }
+    }
+
+    /// Combine two commitments. If the first is a commitment to v_1 with
+    /// randomness r_1 and the second is a commitment to v_2 with randomness
+    /// r_2, the resulting commitment is a commitment to v_1 + v_2 with
+    /// randomness r_1 + r_2. NB: The commitments must be with the same
+    /// commitment key, otherwise the above property does not hold.
+    #[inline]
+    pub fn combine(&self, other: &Commitment<C>) -> Commitment<C> {
+        Commitment(self.0.plus_point(&other.0))
     }
 }
 

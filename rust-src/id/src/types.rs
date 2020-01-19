@@ -17,7 +17,7 @@ use std::collections::btree_map::BTreeMap;
 
 use crate::sigma_protocols::{
     com_enc_eq::ComEncEqProof, com_eq::ComEqProof, com_eq_different_groups::ComEqDiffGrpsProof,
-    com_eq_sig::ComEqSigProof, com_mult::ComMultProof,
+    com_eq_sig::ComEqSigProof, com_mult::ComMultProof, dlog::DlogProof,
 };
 
 use serde_json::{json, Number, Value};
@@ -216,18 +216,13 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
 }
 
 #[derive(Debug)]
-/// In our case C: will be G_1 and T will be G_1 for now
-/// A secret credential is a scalar
-/// raising a generator to this scalar
-/// gives a public credentials
-/// if two groups have the same scalar field
-/// we can have two different public credentials from the same secret
-/// credentials
+/// In our case C: will be G_1 and T will be G_1 for now A secret credential is
+/// a scalar raising a generator to this scalar gives a public credentials. If
+/// two groups have the same scalar field we can have two different public
+/// credentials from the same secret credentials.
 pub struct IdCredentials<C: Curve> {
     /// secret id credentials
     pub id_cred_sec: PedersenValue<C>,
-    /// public id credential in the curve C
-    pub id_cred_pub: C,
 }
 
 /// Private credential holder information. A user maintaints these
@@ -253,6 +248,7 @@ pub struct AccCredentialInfo<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Chosen attribute list.
     pub attributes: AttributeList<C::Scalar, AttributeType>,
 }
+
 /// The data relating to a single anonymity revoker
 /// sent by the account holder to the identity provider
 /// typically the account holder will send a vector of these
@@ -270,6 +266,7 @@ pub struct IpArData<C: Curve> {
     /// the commitments to the sharing coefficients
     pub proof_com_enc_eq: ComEncEqProof<C>,
 }
+
 /// Data relating to a single anonymity revoker sent by the account holder to
 /// the chain.
 /// Typically a vector of these will be sent to the chain.
@@ -291,8 +288,8 @@ pub struct PreIdentityObject<
 > {
     /// Name of the account holder.
     pub id_ah: String,
-    /// Public credential of the account holder only.
-    pub id_cred_pub_ip: P::G_1,
+    /// Public credential of the account holder in the anonymity revoker's
+    /// group.
     pub id_cred_pub: C,
     /// Anonymity revocation data for the chosen anonymity revokers.
     pub ip_ar_data: Vec<IpArData<C>>,
@@ -304,17 +301,16 @@ pub struct PreIdentityObject<
     pub choice_ar_parameters: (Vec<ArIdentity>, Threshold),
     /// Chosen attribute list.
     pub alist: AttributeList<C::Scalar, AttributeType>,
-    /// Proof of knowledge of secret credentials corresponding to id_cred_pub_ip
-    /// matching the commitment cmm_sc
-    pub pok_sc: ComEqProof<P::G_1>,
+    /// Proof of knowledge of secret credentials corresponding to id_cred_pub
+    pub pok_sc: DlogProof<C>,
     /// proof of knowledge of secret credential corresponding to snd_cmm_sc
     pub snd_pok_sc: ComEqProof<C>,
-    /// commitment to id cred sec
+    /// Commitment to id cred sec using the commitment key of IP derived from
+    /// the PS public key. This is used to compute the message that the IP
+    /// signs.
     pub cmm_sc: pedersen::Commitment<P::G_1>,
-    /// commitment to id cred sec in C
-    pub snd_cmm_sc: pedersen::Commitment<C>,
-    /// proof that cmm_sc and snd_cmm_sc are hiding the same thing
-    pub proof_com_eq_sc: ComEqDiffGrpsProof<P::G_1, C>,
+    /// Proof that cmm_sc and id_cred_pub are hiding the same value.
+    pub proof_com_eq_sc: ComEqProof<P::G_1>,
     /// Commitment to the prf key in group G_1.
     pub cmm_prf: pedersen::Commitment<P::G_1>,
     /// commitments to the coefficients of the polynomial
@@ -337,13 +333,12 @@ pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub ip_description: String,
     /// PS publice signature key of the IP
     pub ip_verify_key: pssig::PublicKey<P>,
-    /// The dlog base of the IP.
-    /// Used by account holder to prove knowledge of id cred sec
-    pub dlog_base: P::G_1,
     /// list of approved anonymity revokers along with
     /// a shared commitment key
     /// TODO: How is this shared commitment key generated??
     pub ar_info: (Vec<ArInfo<C>>, PedersenKey<C>),
+    /// Chosen generator of the group used by the anonymity revokers.
+    pub ar_base: C,
 }
 
 /// Information on a single anonymity reovker held by the IP
@@ -605,26 +600,19 @@ pub struct CredDeploymentInfo<
 /// This context is derived from the public information of the identity
 /// provider, as well as some other global parameters which can be found in the
 /// struct 'GlobalContext'.
+/// FIXME: This is a remnant from how things were at some point, and probably
+/// needs to be updated.
 pub struct Context<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider and anonymity
     /// revoker(s).
     pub ip_info: IpInfo<P, C>,
-    /// Commitment key shared by the identity provider and the account holder.
-    /// It is used to generate commitments to the id cred sec key.
-    pub commitment_key_sc: PedersenKey<P::G_1>,
-    /// Commitment key shared by the identity provider and the account holder.
-    /// It is used to generate commitments to the prf key.
-    pub commitment_key_prf: PedersenKey<P::G_1>,
     /// choice of anonyimity revocation parameters
     /// that is a choice of subset of anonymity revokers
-    /// threshold  parameter
+    /// and a threshold parameter.
     pub choice_ar_parameters: (Vec<ArInfo<C>>, Threshold),
 }
 
 pub struct GlobalContext<C: Curve> {
-    /// Base of dlog proofs with chain.
-    pub dlog_base_chain: C,
-
     /// A shared commitment key known to the chain and the account holder (and
     /// therefore it is public). The account holder uses this commitment key to
     /// generate commitments to values in the attribute list.
@@ -642,10 +630,6 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     ip_info: IpInfo<P, C>,
     choice_ar_handles: (Vec<ArIdentity>, Threshold),
 ) -> Context<P, C> {
-    // FIXME: The commitment keys are likely wrong here.
-    let dlog_base = ip_info.dlog_base;
-    let commitment_key_sc = PedersenKey(ip_info.ip_verify_key.2[0], dlog_base);
-    let commitment_key_prf = PedersenKey(ip_info.ip_verify_key.2[1], dlog_base);
     let mut choice_ars = Vec::with_capacity(choice_ar_handles.0.len());
     let ip_ar_parameters = &ip_info.ar_info.0.clone();
     for ar in choice_ar_handles.0.into_iter() {
@@ -657,8 +641,6 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     Context {
         ip_info,
-        commitment_key_sc,
-        commitment_key_prf,
         choice_ar_parameters: (choice_ars, choice_ar_handles.1),
     }
 }
@@ -1203,13 +1185,13 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
         r.extend_from_slice(&self.ip_identity.to_bytes());
         r.extend_from_slice(&short_string_to_bytes(&self.ip_description));
         r.extend_from_slice(&self.ip_verify_key.to_bytes());
-        r.extend_from_slice(&self.dlog_base.curve_to_bytes());
         let l = self.ar_info.0.len();
         r.extend_from_slice(&(l as u16).to_be_bytes());
         for item in &self.ar_info.0 {
             r.extend_from_slice(&item.to_bytes());
         }
         r.extend_from_slice(&self.ar_info.1.to_bytes());
+        r.extend_from_slice(&self.ar_base.curve_to_bytes());
         r.into_boxed_slice()
     }
 
@@ -1217,19 +1199,19 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
         let ip_identity = IpIdentity::from_bytes(cur)?;
         let ip_description = bytes_to_short_string(cur)?;
         let ip_verify_key = pssig::PublicKey::from_bytes(cur).ok()?;
-        let dlog_base = P::G_1::bytes_to_curve(cur).ok()?;
         let l = cur.read_u16::<BigEndian>().ok()?;
         let mut ar_list = Vec::with_capacity(l as usize);
         for _ in 0..l {
             ar_list.push(ArInfo::from_bytes(cur)?);
         }
         let ar_info = (ar_list, PedersenKey::from_bytes(cur).ok()?);
+        let ar_base = C::bytes_to_curve(cur).ok()?;
         Some(IpInfo {
             ip_identity,
             ip_description,
             ip_verify_key,
-            dlog_base,
             ar_info,
+            ar_base,
         })
     }
 
@@ -1241,9 +1223,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
             ip_val.get("ipVerifyKey")?,
         )?))
         .ok()?;
-        let dlog_base_bytes = ip_val.get("dLogBase").and_then(json_base16_decode)?;
-        let dlog_base =
-            <P::G_1 as Curve>::bytes_to_curve(&mut Cursor::new(&dlog_base_bytes)).ok()?;
         let ck_bytes = ip_val.get("arCommitmentKey").and_then(json_base16_decode)?;
         let ck = PedersenKey::from_bytes(&mut Cursor::new(&ck_bytes)).ok()?;
 
@@ -1251,12 +1230,16 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
         let m_ar_arry: Option<Vec<ArInfo<C>>> =
             ar_arr_items.iter().map(ArInfo::from_json).collect();
         let ar_arry = m_ar_arry?;
+        let ar_base = C::bytes_to_curve(&mut Cursor::new(
+            &ip_val.get("arBase").and_then(json_base16_decode)?,
+        ))
+        .ok()?;
         Some(IpInfo {
             ip_identity,
             ip_description: ip_description.to_owned(),
             ip_verify_key,
-            dlog_base,
             ar_info: (ar_arry, ck),
+            ar_base,
         })
     }
 
@@ -1265,10 +1248,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
         json!({
             "ipIdentity": self.ip_identity.to_json(),
             "ipDescription": self.ip_description,
-            "dLogBase" : json_base16_encode(&self.dlog_base.curve_to_bytes()),
             "ipVerifyKey": json_base16_encode(&self.ip_verify_key.to_bytes()),
             "arCommitmentKey": json_base16_encode(&self.ar_info.1.to_bytes()),
-            "anonymityRevokers": json!(ars),
+            "anonymityRevokers": ars,
+            "arBase": json_base16_encode(&self.ar_base.curve_to_bytes()),
         })
     }
 }
@@ -1277,8 +1260,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Context<P, C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut r = vec![];
         r.extend_from_slice(&self.ip_info.to_bytes());
-        r.extend_from_slice(&self.commitment_key_sc.to_bytes());
-        r.extend_from_slice(&self.commitment_key_prf.to_bytes());
         let l: u32 = self.choice_ar_parameters.0.len() as u32; // no more than u32 parameters supported.
         r.extend_from_slice(&l.to_be_bytes());
         for item in &self.choice_ar_parameters.0 {
@@ -1290,18 +1271,14 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Context<P, C> {
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let ip_info = IpInfo::from_bytes(cur)?;
-        let commitment_key_sc = PedersenKey::from_bytes(cur).ok()?;
-        let commitment_key_prf = PedersenKey::from_bytes(cur).ok()?;
         let l = cur.read_u32::<BigEndian>().ok()?;
-        let mut ar_list = Vec::with_capacity(l as usize);
+        let mut ar_list = common::safe_with_capacity(l as usize);
         for _ in 0..l {
             ar_list.push(ArInfo::from_bytes(cur)?);
         }
         let choice_ar_parameters = (ar_list, Threshold::from_bytes(cur)?);
         Some(Context {
             ip_info,
-            commitment_key_sc,
-            commitment_key_prf,
             choice_ar_parameters,
         })
     }
@@ -1314,37 +1291,31 @@ fn json_base16_decode(v: &Value) -> Option<Vec<u8>> { decode(v.as_str()?).ok() }
 impl<C: Curve> GlobalContext<C> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut r = vec![];
-        r.extend_from_slice(&self.dlog_base_chain.curve_to_bytes());
         r.extend_from_slice(&self.on_chain_commitment_key.to_bytes());
         r.into_boxed_slice()
     }
 
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let dlog_base_chain = C::bytes_to_curve(cur).ok()?;
         let on_chain_commitment_key = PedersenKey::from_bytes(cur).ok()?;
         Some(GlobalContext {
-            dlog_base_chain,
             on_chain_commitment_key,
         })
     }
 
     pub fn from_json(v: &Value) -> Option<Self> {
         let obj = v.as_object()?;
-        let dlog_base_bytes = obj.get("dLogBaseChain").and_then(json_base16_decode)?;
-        let dlog_base_chain = C::bytes_to_curve(&mut Cursor::new(&dlog_base_bytes)).ok()?;
         let cmk_bytes = obj
             .get("onChainCommitmentKey")
             .and_then(json_base16_decode)?;
         let cmk = PedersenKey::from_bytes(&mut Cursor::new(&cmk_bytes)).ok()?;
         let gc = GlobalContext {
-            dlog_base_chain,
             on_chain_commitment_key: cmk,
         };
         Some(gc)
     }
 
     pub fn to_json(&self) -> Value {
-        json!({"dLogBaseChain": json_base16_encode(&self.dlog_base_chain.curve_to_bytes()),
+        json!({
                "onChainCommitmentKey": json_base16_encode(&self.on_chain_commitment_key.to_bytes()),
         })
     }
