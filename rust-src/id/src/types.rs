@@ -1,5 +1,5 @@
 use crate::secret_sharing::{ShareNumber, Threshold};
-use common;
+use crypto_common;
 use curve_arithmetic::{curve_arithmetic::*, serialization as curve_serialization};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as acc_sig_scheme;
@@ -765,7 +765,7 @@ pub fn short_string_to_bytes(s: &str) -> Vec<u8> {
     let bytes = s.as_bytes();
     let l = bytes.len();
     assert!(l < 65536);
-    let mut out = common::safe_with_capacity(l + 2);
+    let mut out = crypto_common::safe_with_capacity(l + 2);
     out.extend_from_slice(&(l as u16).to_be_bytes());
     out.extend_from_slice(bytes);
     out
@@ -1088,7 +1088,7 @@ impl<C: Curve> PolicyProof<C> {
         let variant_rand = PedersenRandomness::from_bytes(cur).ok()?;
         let expiry_rand = PedersenRandomness::from_bytes(cur).ok()?;
         let l = cur.read_u16::<BigEndian>().ok()?;
-        let mut cmm_opening_map = common::safe_with_capacity(l as usize);
+        let mut cmm_opening_map = crypto_common::safe_with_capacity(l as usize);
         for _ in 0..l {
             let idx = cur.read_u16::<BigEndian>().ok()?;
             let scalar = PedersenRandomness::from_bytes(cur).ok()?;
@@ -1272,7 +1272,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Context<P, C> {
     pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
         let ip_info = IpInfo::from_bytes(cur)?;
         let l = cur.read_u32::<BigEndian>().ok()?;
-        let mut ar_list = common::safe_with_capacity(l as usize);
+        let mut ar_list = crypto_common::safe_with_capacity(l as usize);
         for _ in 0..l {
             ar_list.push(ArInfo::from_bytes(cur)?);
         }

@@ -48,7 +48,7 @@ impl<T: Curve> ComEqProof<T> {
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let challenge = read_curve_scalar::<T>(bytes)?;
         let len = read_length(bytes)?;
-        let mut witness = common::safe_with_capacity(len);
+        let mut witness = crypto_common::safe_with_capacity(len);
         for _ in 0..len {
             let w1 = read_curve_scalar::<T>(bytes)?;
             let w2 = read_curve_scalar::<T>(bytes)?;
