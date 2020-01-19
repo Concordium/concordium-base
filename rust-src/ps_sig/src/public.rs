@@ -1,7 +1,4 @@
 // -*- mode: rust; -*-
-//
-// Authors:
-// - bm@concordium.com
 
 //! A known message
 
@@ -27,26 +24,26 @@ use curve_arithmetic::serialization::*;
 /// PS public key. The documentation of the fields
 /// assumes the secret key is $(x, y_1, ..., y_n)$ (see specification).
 #[derive(Debug, Clone)]
-pub struct PublicKey<C: Pairing>(
+pub struct PublicKey<C: Pairing> {
     /// Generator of G_1
-    pub C::G_1,
+    pub g: C::G_1,
     /// Generator of G_2
-    pub C::G_2,
+    pub g_tilda: C::G_2,
     /// Generator $g_1$ raised to the powers $y_i$
-    pub Vec<C::G_1>,
+    pub ys: Vec<C::G_1>,
     /// Generator $g_2$ raised to the powers $y_i$
-    pub Vec<C::G_2>,
+    pub y_tildas: Vec<C::G_2>,
     /// Generator $g_2$ raised to the power $x$.
-    pub C::G_2,
-);
+    pub x_tilda: C::G_2,
+}
 
 impl<C: Pairing> PartialEq for PublicKey<C> {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-            && self.1 == other.1
-            && self.2 == other.2
-            && self.3 == other.3
-            && self.4 == other.4
+        self.g == other.g
+            && self.g_tilda == other.g_tilda
+            && self.ys == other.ys
+            && self.y_tildas == other.y_tildas
+            && self.x_tilda == other.x_tilda
     }
 }
 
@@ -57,11 +54,11 @@ impl<C: Pairing> PublicKey<C> {
     // turn message vector into a byte aray
     #[inline]
     pub fn to_bytes(&self) -> Box<[u8]> {
-        let gen1 = &self.0;
-        let gen2 = &self.1;
-        let vs = &self.2;
-        let us = &self.3;
-        let s = &self.4;
+        let gen1 = &self.g;
+        let gen2 = &self.g_tilda;
+        let vs = &self.ys;
+        let us = &self.y_tildas;
+        let s = &self.x_tilda;
         let mut bytes: Vec<u8> = Vec::with_capacity(
             4 + 4
                 + (vs.len() + 1) * C::G_1::GROUP_ELEMENT_LENGTH
@@ -76,7 +73,7 @@ impl<C: Pairing> PublicKey<C> {
     }
 
     /// Return the number of commitments that can be signed with this key.
-    pub fn len(&self) -> usize { self.2.len() }
+    pub fn len(&self) -> usize { self.ys.len() }
 
     /// Construct a message vec from a slice of bytes.
     ///
@@ -84,17 +81,23 @@ impl<C: Pairing> PublicKey<C> {
     /// is an `Error` wrapping the internal error that occurred.
     #[inline]
     pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<PublicKey<C>, Error> {
-        let gen1 = read_curve::<C::G_1>(bytes)?;
-        let gen2 = read_curve::<C::G_2>(bytes)?;
-        let vs = read_curve_elements::<C::G_1>(bytes)?;
-        let us = read_curve_elements::<C::G_2>(bytes)?;
-        let fr = read_curve::<C::G_2>(bytes)?;
-        Ok(PublicKey(gen1, gen2, vs, us, fr))
+        let g = read_curve::<C::G_1>(bytes)?;
+        let g_tilda = read_curve::<C::G_2>(bytes)?;
+        let ys = read_curve_elements::<C::G_1>(bytes)?;
+        let y_tildas = read_curve_elements::<C::G_2>(bytes)?;
+        let x_tilda = read_curve::<C::G_2>(bytes)?;
+        Ok(PublicKey {
+            g,
+            g_tilda,
+            ys,
+            y_tildas,
+            x_tilda,
+        })
     }
 
     pub fn verify(&self, sig: &Signature<C>, message: &KnownMessage<C>) -> bool {
-        let ys = &self.3;
-        let x = self.4;
+        let ys = &self.y_tildas;
+        let x = self.x_tilda;
         let ms = &message.0;
         if ms.len() > ys.len() {
             return false;
@@ -108,7 +111,7 @@ impl<C: Pairing> PublicKey<C> {
             });
         let hx = h.plus_point(&x);
         let p1 = C::pair(sig.0, hx);
-        let p2 = C::pair(sig.1, C::G_2::one_point());
+        let p2 = C::pair(sig.1, self.g_tilda);
         p1 == p2
     }
 
@@ -116,40 +119,39 @@ impl<C: Pairing> PublicKey<C> {
     pub fn arbitrary<T>(n: usize, csprng: &mut T) -> PublicKey<C>
     where
         T: Rng, {
-        let mut vs: Vec<C::G_1> = Vec::with_capacity(n);
+        let mut ys: Vec<C::G_1> = Vec::with_capacity(n);
         for _i in 0..n {
-            vs.push(C::G_1::generate(csprng));
+            ys.push(C::G_1::generate(csprng));
         }
 
-        let mut us: Vec<C::G_2> = Vec::with_capacity(n);
+        let mut y_tildas: Vec<C::G_2> = Vec::with_capacity(n);
         for _i in 0..n {
-            us.push(C::G_2::generate(csprng));
+            y_tildas.push(C::G_2::generate(csprng));
         }
 
-        PublicKey(
-            C::G_1::one_point(),
-            C::G_2::one_point(),
-            vs,
-            us,
-            C::G_2::generate(csprng),
-        )
+        PublicKey {
+            g: C::G_1::one_point(),
+            g_tilda: C::G_2::one_point(),
+            ys,
+            y_tildas,
+            x_tilda: C::G_2::generate(csprng),
+        }
     }
 }
 
 impl<'a, C: Pairing> From<&'a SecretKey<C>> for PublicKey<C> {
     /// Derive this public key from its corresponding `SecretKey`.
     fn from(sk: &SecretKey<C>) -> PublicKey<C> {
-        let (vs, x) = (&sk.0, &sk.1);
-        let rs = vs
-            .iter()
-            .map(|r| C::G_1::one_point().mul_by_scalar(&r))
-            .collect();
-        let ts = vs
-            .iter()
-            .map(|r| C::G_2::one_point().mul_by_scalar(&r))
-            .collect();
-        let h = C::G_2::one_point().mul_by_scalar(&x);
-        PublicKey(C::G_1::one_point(), C::G_2::one_point(), rs, ts, h)
+        let ys = sk.ys.iter().map(|r| sk.g.mul_by_scalar(&r)).collect();
+        let y_tildas = sk.ys.iter().map(|r| sk.g_tilda.mul_by_scalar(&r)).collect();
+        let x_tilda = sk.g_tilda.mul_by_scalar(&sk.x);
+        PublicKey {
+            g: sk.g,
+            g_tilda: sk.g_tilda,
+            ys,
+            y_tildas,
+            x_tilda,
+        }
     }
 }
 

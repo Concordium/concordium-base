@@ -422,7 +422,7 @@ fn verify_pok_reg_id<C: Curve>(
 
     com_mult::verify_com_mult(
         ro,
-        &Commitment(cmm_prf.plus_point(&cmm_cred_counter.0)),
+        &cmm_prf.combine(&cmm_cred_counter),
         &Commitment(reg_id),
         &Commitment(g),
         on_chain_commitment_key,

@@ -576,12 +576,10 @@ fn handle_create_chi(matches: &ArgMatches) {
 
     let mut csprng = thread_rng();
     let secret = ExampleCurve::generate_scalar(&mut csprng);
-    let public = ExampleCurve::one_point().mul_by_scalar(&secret);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_ah:   name,
         id_cred: IdCredentials {
             id_cred_sec: PedersenValue { value: secret },
-            id_cred_pub: public,
         },
     };
 
@@ -882,7 +880,9 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let id_secret_key = ps_sig::secret::SecretKey::generate(20, &mut csprng);
         let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
 
-        let ar0_secret_key = SecretKey::generate(&mut csprng);
+        let ar_base = ExampleCurve::generate(&mut csprng);
+
+        let ar0_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar0_public_key = PublicKey::from(&ar0_secret_key);
         let ar0_info = ArInfo {
             ar_identity:    ArIdentity(0u32),
@@ -896,7 +896,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
             "publicArInfo": js0
         });
 
-        let ar1_secret_key = SecretKey::generate(&mut csprng);
+        let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar1_public_key = PublicKey::from(&ar1_secret_key);
         let ar1_info = ArInfo {
             ar_identity:    ArIdentity(1u32),
@@ -911,7 +911,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
             "publicArInfo": js1
         });
 
-        let ar2_secret_key = SecretKey::<ExampleCurve>::generate(&mut csprng);
+        let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar2_public_key = PublicKey::from(&ar2_secret_key);
         let ar2_info = ArInfo {
             ar_identity:    ArIdentity(2u32),
@@ -930,17 +930,15 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         write_json_to_file(&ar1_fname, &private_js1).ok()?;
         write_json_to_file(&ar2_fname, &private_js2).ok()?;
 
-        let dlog_base = <Bls12 as Pairing>::G_1::one_point();
-
         let ip_info = IpInfo {
             ip_identity: IpIdentity(id as u32),
             ip_description: mk_ip_name(id),
             ip_verify_key: id_public_key,
-            dlog_base,
             ar_info: (
                 vec![ar0_info, ar1_info, ar2_info],
                 CommitmentKey::<ExampleCurve>::generate(&mut csprng),
             ),
+            ar_base,
         };
         let js = ip_info.to_json();
         let private_js = json!({
@@ -959,8 +957,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
 /// Generate the global context.
 fn handle_generate_global(_matches: &ArgMatches) -> Option<()> {
     let mut csprng = thread_rng();
-    let gc = GlobalContext {
-        dlog_base_chain: ExampleCurve::one_point(),
+    let gc = GlobalContext::<ExampleCurve> {
         // we generate the commitment key for 1 value only.
         // Since the scheme supports general vectors of values this is inefficient
         // but is OK for now.

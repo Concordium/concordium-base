@@ -13,11 +13,10 @@ import Data.ByteString.Unsafe
 
 import System.IO.Unsafe
 
--- |Utility function shared by all instantations. Free an array of pointers of
--- given length. If the lenght does not correspond to the number of bytes
--- pointed to by the pointer the behaviour is undefined.
+-- |Utility function shared by all instantations. Free an array that was allocated
+-- via Box::into_raw on the rust side.
 foreign import ccall unsafe "free_array_len"
-   rs_free_array_len :: Ptr Word8 -> CSize -> IO ()
+   rs_free_array_len :: Ptr Word8 -> IO ()
 
 toBytesHelper ::  (Ptr a -> Ptr CSize -> IO (Ptr Word8)) -> ForeignPtr a -> ByteString
 toBytesHelper f m = unsafeDupablePerformIO $
@@ -26,7 +25,7 @@ toBytesHelper f m = unsafeDupablePerformIO $
         alloca $ \len_ptr -> do
         bytes_ptr <- f m_ptr len_ptr
         len <- peek len_ptr
-        unsafePackCStringFinalizer bytes_ptr (fromIntegral len) (rs_free_array_len bytes_ptr len)
+        unsafePackCStringFinalizer bytes_ptr (fromIntegral len) (rs_free_array_len bytes_ptr)
 
 -- |NB: The passed function must handle the case of CSize == 0 gracefully without dereferencing the pointer.
 -- since the pointer can be a null-pointer or otherwise a dangling pointer.
