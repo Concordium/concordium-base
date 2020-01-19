@@ -318,6 +318,8 @@ where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
 
+    // First part of the commitment key. The reg_id must be computed with this
+    // in order for the easy proof of multiplicative relationship to work.
     let commitment_base = global_context.on_chain_commitment_key.0;
 
     let alist = &prio.alist;

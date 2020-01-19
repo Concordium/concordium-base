@@ -600,13 +600,15 @@ pub struct CredDeploymentInfo<
 /// This context is derived from the public information of the identity
 /// provider, as well as some other global parameters which can be found in the
 /// struct 'GlobalContext'.
+/// FIXME: This is a remnant from how things were at some point, and probably
+/// needs to be updated.
 pub struct Context<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider and anonymity
     /// revoker(s).
     pub ip_info: IpInfo<P, C>,
     /// choice of anonyimity revocation parameters
     /// that is a choice of subset of anonymity revokers
-    /// threshold  parameter
+    /// and a threshold parameter.
     pub choice_ar_parameters: (Vec<ArInfo<C>>, Threshold),
 }
 
