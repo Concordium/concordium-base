@@ -58,6 +58,14 @@ impl<T, S: Get<T> + Get<u64>> Get<Vec<T>> for S {
     }
 }
 
+impl<T, U, S: Get<T> + Get<U>> Get<(T, U)> for S {
+    fn get(&mut self) -> Fallible<(T, U)> {
+        let x = self.get()?;
+        let y = self.get()?;
+        Ok((x, y))
+    }
+}
+
 pub fn get_string<R: ReadBytesExt>(reader: &mut R, l: usize) -> Fallible<String> {
     let mut svec = vec![0; l];
     reader.read_exact(&mut svec)?;
@@ -168,5 +176,12 @@ impl<T, S: Put<T> + Put<u64>> Put<Vec<T>> for S {
 pub fn put_vector_no_length<T, B: Put<T>>(buf: &mut B, xs: &[T]) {
     for x in xs.iter() {
         buf.put(x);
+    }
+}
+
+impl<T, U, S: Put<T> + Put<U>> Put<(T, U)> for S {
+    fn put(&mut self, pair: &(T, U)) {
+        self.put(&pair.0);
+        self.put(&pair.1);
     }
 }
