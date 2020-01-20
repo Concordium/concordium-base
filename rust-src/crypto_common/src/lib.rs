@@ -5,6 +5,7 @@ use std::convert::TryFrom;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use failure::Fallible;
 
+#[macro_use]
 extern crate crypto_common_derive;
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
