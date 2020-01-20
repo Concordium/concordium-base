@@ -1,6 +1,4 @@
 // Authors:
-// - bm@concordium.com
-//
 
 use failure::Fail;
 use ff::{Field, PrimeField, PrimeFieldDecodingError};
@@ -9,19 +7,6 @@ use std::{
     fmt::{Debug, Display, Formatter},
     io::Cursor,
 };
-
-#[derive(Debug)]
-pub enum FieldDecodingError {
-    NotFieldElement,
-}
-
-impl From<PrimeFieldDecodingError> for FieldDecodingError {
-    fn from(_err: PrimeFieldDecodingError) -> Self { FieldDecodingError::NotFieldElement }
-}
-
-impl Display for FieldDecodingError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result { write!(f, "Not a field element.") }
-}
 
 impl Fail for FieldDecodingError {}
 

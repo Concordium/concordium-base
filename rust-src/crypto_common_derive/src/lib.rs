@@ -8,10 +8,10 @@ use proc_macro::TokenStream;
 
 use proc_macro2;
 
-#[proc_macro_derive(Get, attributes(size_length))]
-pub fn get_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Deserial, attributes(size_length))]
+pub fn deserial_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
-    impl_get(&ast)
+    impl_deserial(&ast)
 }
 
 fn find_length_attribute(l: &[syn::Attribute]) -> Option<u32> {
@@ -38,40 +38,32 @@ fn find_length_attribute(l: &[syn::Attribute]) -> Option<u32> {
     return None;
 }
 
-fn impl_get(ast: &syn::DeriveInput) -> TokenStream {
+fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
     let span = ast.span();
 
-    let ident = format_ident!("GenericType", span = span);
+    let ident = format_ident!("GenericReaderType", span = span);
 
-    let r = syn::parse::<syn::TypeParam>((quote!(#ident: ReadBytesExt)).into()).unwrap();
-
-    let mut params = ast.generics.params.clone();
-    params.push(syn::GenericParam::Type(r));
-
-    let constraints = syn::Generics {
-        params,
-        ..ast.generics.clone()
-    };
-
-    let (_, ty_generics, where_clauses) = ast.generics.split_for_impl();
+    let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
 
     if let syn::Data::Struct(ref data) = ast.data {
         let mut tokens = proc_macro2::TokenStream::new();
         let mut names = proc_macro2::TokenStream::new();
+        let source = format_ident!("source");
         let mut pusher = |f: &syn::Field, ident| {
             if let Some(l) = find_length_attribute(&f.attrs) {
                 let id = format_ident!("u{}", 2u64.pow(l));
                 tokens.extend(quote! {
                     let #ident = {
-                        let len: #id = self.get()?;
-                        get_vector_no_length(self, usize::try_from(len)?)?
+                        let len: #id = #id::deserial(#source)?;
+                        deserial_vector_no_length(#source, usize::try_from(len)?)?
                     };
                 });
             } else {
+                let ty = &f.ty;
                 tokens.extend(quote! {
-                    let #ident = self.get()?;
+                    let #ident = <#ty as Deserial>::deserial(#source)?;
                 });
             }
             names.extend(quote!(#ident,))
@@ -83,8 +75,8 @@ fn impl_get(ast: &syn::DeriveInput) -> TokenStream {
                     pusher(f, ident);
                 }
                 quote! {
-                    impl #constraints Get<#name #ty_generics #where_clauses> for #ident {
-                        fn get(&mut self) -> Fallible<#name #ty_generics> {
+                    impl #impl_generics Deserial for #name #ty_generics #where_clauses {
+                        fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> Fallible<Self> {
                             #tokens
                             Ok(#name{#names})
                         }
@@ -97,70 +89,60 @@ fn impl_get(ast: &syn::DeriveInput) -> TokenStream {
                     pusher(f, ident);
                 }
                 quote! {
-                    impl #constraints Get<#name #ty_generics #where_clauses> for #ident {
-                        fn get(&mut self) -> Fallible<#name #ty_generics> {
+                    impl #impl_generics Deserial for #name #ty_generics #where_clauses {
+                        fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> Fallible<Self> {
                             #tokens
                             Ok(#name(#names))
                         }
                     }
                 }
             }
-            _ => panic!("#[derive(Get)] not implemented for empty structs."),
+            _ => panic!("#[derive(Deserial)] not implemented for empty structs."),
         };
         gen.into()
     } else {
-        panic!("#[derive(Get)] only implemented for structs.")
+        panic!("#[derive(Deserial)] only implemented for structs.")
     }
 }
 
-#[proc_macro_derive(Put, attributes(size_length))]
-pub fn put_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Serial, attributes(size_length))]
+pub fn serial_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
-    impl_put(&ast)
+    impl_serial(&ast)
 }
 
-fn impl_put(ast: &syn::DeriveInput) -> TokenStream {
+fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
     let span = ast.span();
 
-    let ident = format_ident!("GenericType", span = span);
+    let ident = format_ident!("GenericBufferType", span = span);
 
-    let r = syn::parse::<syn::TypeParam>((quote!(#ident: Buffer)).into()).unwrap();
+    let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
 
-    let mut params = ast.generics.params.clone();
-    params.push(syn::GenericParam::Type(r));
-
-    let constraints = syn::Generics {
-        params,
-        ..ast.generics.clone()
-    };
-
-    let (_, ty_generics, where_clauses) = ast.generics.split_for_impl();
-
+    let out = format_ident!("out");
     if let syn::Data::Struct(ref data) = ast.data {
         let gen = match data.fields {
             syn::Fields::Named(_) => {
                 let mut body = proc_macro2::TokenStream::new();
-                let arg_name = format_ident!("arg");
                 for f in data.fields.iter() {
                     let ident = f.ident.clone().unwrap(); // safe since named fields.
                     if let Some(l) = find_length_attribute(&f.attrs) {
                         let id = format_ident!("u{}", 2u64.pow(l));
                         body.extend(quote! {
-                            let len: #id = #arg_name.#ident.len() as #id;
-                            self.put(&len);
-                            put_vector_no_length(self, &#arg_name.#ident)
+                            let len: #id = self.#ident.len() as #id;
+                            len.serial(#out);
+                            serial_vector_no_length(&self.#ident, #out)
                         });
                     } else {
                         body.extend(quote! {
-                            self.put(&#arg_name.#ident);
+                            self.#ident.serial(#out);
                         });
                     }
                 }
                 quote! {
-                    impl #constraints Put<#name #ty_generics #where_clauses> for #ident {
-                        fn put(&mut self, #arg_name: &#name #ty_generics) {
+                    impl #impl_generics Serial for #name #ty_generics #where_clauses {
+                        fn serial<#ident: Buffer>(&self, #out: &mut #ident) {
                             #body
                         }
                     }
@@ -168,7 +150,6 @@ fn impl_put(ast: &syn::DeriveInput) -> TokenStream {
             }
 
             syn::Fields::Unnamed(_) => {
-                let arg_name = format_ident!("arg");
                 // this is a hack because I don't know how to generate tuple access expressions
                 // easily
                 let mut names = proc_macro2::TokenStream::new();
@@ -181,35 +162,35 @@ fn impl_put(ast: &syn::DeriveInput) -> TokenStream {
                         let len_ident = format_ident!("len_{}", i);
                         body.extend(quote! {
                             let #len_ident: #id = #ident.len() as #id;
-                            self.put(&#len_ident);
-                            put_vector_no_length(self, &#ident);
+                            #len_ident.serial(#out);
+                            serial_vector_no_length(#ident, #out);
                         });
                     } else {
-                        body.extend(quote!(self.put(#ident);));
+                        body.extend(quote!(#ident.serial(#out);));
                     }
                     names.extend(quote!(ref #ident,))
                 }
                 quote! {
-                    impl #constraints Put<#name #ty_generics #where_clauses> for #ident {
-                        fn put(&mut self, #arg_name: &#name #ty_generics) {
-                            let #name( #names ) = #arg_name;
+                    impl #impl_generics Serial for #name #ty_generics #where_clauses {
+                        fn serial<#ident: Buffer>(&self, #out: &mut #ident) {
+                            let #name( #names ) = self;
                             #body
                         }
                     }
                 }
             }
-            _ => panic!("#[derive(Get)] not implemented for empty structs."),
+            _ => panic!("#[derive(Deserial)] not implemented for empty structs."),
         };
         gen.into()
     } else {
-        panic!("#[derive(Get)] only implemented for structs.")
+        panic!("#[derive(Deserial)] only implemented for structs.")
     }
 }
 
-#[proc_macro_derive(Serialize, attributes(size_length))]
-pub fn serialize_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Deserialize, attributes(size_length))]
+pub fn deserialize_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
-    let mut tokens = impl_get(&ast);
-    tokens.extend(impl_put(&ast));
+    let mut tokens = impl_deserial(&ast);
+    tokens.extend(impl_serial(&ast));
     tokens
 }
