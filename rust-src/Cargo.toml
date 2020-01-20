@@ -14,5 +14,6 @@ members=[
    "simple_id_client",
    "aggregate_sig",
    "crypto_common",
+   "crypto_common_derive",
    "random_oracle"
 ]

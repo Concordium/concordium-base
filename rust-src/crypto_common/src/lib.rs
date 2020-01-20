@@ -5,6 +5,8 @@ use std::convert::TryFrom;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use failure::Fallible;
 
+extern crate crypto_common_derive;
+
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
 /// As Vec::with_capacity, but only allocate maximum MAX_PREALLOCATED_CAPACITY
@@ -185,3 +187,7 @@ impl<T, U, S: Put<T> + Put<U>> Put<(T, U)> for S {
         self.put(&pair.1);
     }
 }
+
+pub trait Serialize<A>: Put<A> + Get<A> {}
+
+impl<A, S: Get<A> + Put<A>> Serialize<A> for S {}
