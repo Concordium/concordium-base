@@ -1,6 +1,4 @@
 // Authors:
-// - bm@concordium.com
-//
 
 use crate::curve_arithmetic::*;
 use byteorder::{BigEndian, ReadBytesExt};
