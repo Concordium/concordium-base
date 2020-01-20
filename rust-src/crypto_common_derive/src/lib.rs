@@ -35,7 +35,7 @@ fn find_length_attribute(l: &[syn::Attribute]) -> Option<u32> {
             }
         }
     }
-    return None;
+    None
 }
 
 fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
