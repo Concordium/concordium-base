@@ -77,6 +77,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 quote! {
                     impl #impl_generics Deserial for #name #ty_generics #where_clauses {
                         fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> Fallible<Self> {
+                            use std::convert::TryFrom;
                             #tokens
                             Ok(#name{#names})
                         }
@@ -91,6 +92,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 quote! {
                     impl #impl_generics Deserial for #name #ty_generics #where_clauses {
                         fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> Fallible<Self> {
+                            use std::convert::TryFrom;
                             #tokens
                             Ok(#name(#names))
                         }
@@ -132,7 +134,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            serial_vector_no_length(&self.#ident, #out)
+                            serial_vector_no_length(&self.#ident, #out);
                         });
                     } else {
                         body.extend(quote! {
@@ -187,8 +189,8 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
     }
 }
 
-#[proc_macro_derive(Deserialize, attributes(size_length))]
-pub fn deserialize_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Serialize, attributes(size_length))]
+pub fn serialize_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     let mut tokens = impl_deserial(&ast);
     tokens.extend(impl_serial(&ast));

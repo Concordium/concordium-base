@@ -3,26 +3,29 @@ use bitvec::Bits;
 use rand::*;
 use rayon::prelude::*;
 
+use crypto_common::*;
 use curve_arithmetic::curve_arithmetic::Curve;
 
 use std::io::Cursor;
 
+// FIXME: This is a bad implementation. There is no need to involve serialization.
 // endianness sensetive
 pub fn value_to_chunks<C: Curve>(val: &C::Scalar, chunk_size: usize) -> Vec<C::Scalar> {
     assert!(chunk_size <= C::SCALAR_LENGTH);
     assert_eq!(C::SCALAR_LENGTH % chunk_size, 0);
     let n = C::SCALAR_LENGTH / chunk_size;
-    let scalar_bytes = &*C::scalar_to_bytes(&val);
+    let scalar_bytes = to_bytes(val);
     let mut scalar_chunks = Vec::with_capacity(n);
     for i in (0..scalar_bytes.len()).step_by(chunk_size) {
         let mut buf = vec![0u8; C::SCALAR_LENGTH - chunk_size];
         buf.extend_from_slice(&scalar_bytes[i..(i + chunk_size)]);
-        let scalar = C::bytes_to_scalar(&mut Cursor::new(&buf)).unwrap();
+        let scalar = (&mut Cursor::new(&mut buf)).get().unwrap();
         scalar_chunks.push(scalar);
     }
     scalar_chunks
 }
 
+// FIXME: This is a bad implementation. There is no need to involve serialization.
 pub fn chunks_to_value<C: Curve>(chunks: Vec<C::Scalar>) -> C::Scalar {
     let number_of_chunks = chunks.len();
     assert!(number_of_chunks <= C::SCALAR_LENGTH);
@@ -31,14 +34,14 @@ pub fn chunks_to_value<C: Curve>(chunks: Vec<C::Scalar>) -> C::Scalar {
     let assertion_vec = vec![0u8; C::SCALAR_LENGTH - chunk_size];
     let mut scalar_bytes: Vec<u8> = Vec::with_capacity(C::SCALAR_LENGTH);
     for chunk in chunks.iter() {
-        let chunk_bytes = &*C::scalar_to_bytes(&chunk);
+        let chunk_bytes = to_bytes(chunk);
         assert_eq!(
             &chunk_bytes[..C::SCALAR_LENGTH - chunk_size],
             assertion_vec.as_slice()
         );
         scalar_bytes.extend_from_slice(&chunk_bytes[C::SCALAR_LENGTH - chunk_size..]);
     }
-    C::bytes_to_scalar(&mut Cursor::new(&scalar_bytes)).unwrap()
+    (&mut Cursor::new(&mut scalar_bytes)).get().unwrap()
 }
 
 pub fn encrypt_in_chunks<C: Curve, R: Rng>(

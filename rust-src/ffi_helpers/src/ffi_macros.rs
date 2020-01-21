@@ -38,7 +38,7 @@ macro_rules! macro_derive_to_bytes {
             output_len: *mut size_t,
         ) -> *mut u8 {
             let input = from_ptr!(input_ptr);
-            let mut bytes = input.to_bytes();
+            let mut bytes = to_bytes(input);
             unsafe { *output_len = bytes.len() as size_t }
             let ptr = bytes.as_mut_ptr();
             std::mem::forget(bytes);
@@ -75,23 +75,23 @@ macro_rules! macro_derive_to_bytes {
 /// this macro should be called starting with the keyword `Arc`.
 #[macro_export]
 macro_rules! macro_derive_from_bytes {
-    (Arc $function_name:ident, $type:ty, $from:expr) => {
-        macro_derive_from_bytes!($function_name, $type, $from, const, std::ptr::null(), |x| {
+    (Arc $function_name:ident, $type:ty) => {
+        macro_derive_from_bytes!($function_name, $type, const, std::ptr::null(), |x| {
             Arc::into_raw(Arc::new(x))
         });
     };
-    (Box $function_name:ident, $type:ty, $from:expr) => {
-        macro_derive_from_bytes!($function_name, $type, $from, mut, std::ptr::null_mut(), |x| {
+    (Box $function_name:ident, $type:ty) => {
+        macro_derive_from_bytes!($function_name, $type, mut, std::ptr::null_mut(), |x| {
             Box::into_raw(Box::new(x))
         });
     };
-    ($function_name:ident, $type:ty, $from:expr, $mod:tt, $val:expr, $fr:expr) => {
+    ($function_name:ident, $type:ty, $mod:tt, $val:expr, $fr:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn $function_name(input_bytes: *const u8, input_len: size_t) -> *$mod $type {
             let len = input_len as usize;
             let bytes = slice_from_c_bytes!(input_bytes, len);
-            let e = $from(&mut Cursor::new(&bytes));
+            let e = from_bytes::<$type,_>(&mut Cursor::new(&bytes));
             match e {
                 Ok(r) => $fr(r),
                 Err(_) => $val,
