@@ -105,7 +105,9 @@ newtype KeyIndex = KeyIndex Word8
     deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
     deriving S.Serialize via Word8
     deriving FromJSON via Word8
+    deriving FromJSONKey via Word8
     deriving ToJSON via Word8
+    deriving ToJSONKey via Word8
     deriving Hashable via Word8
 
 data AccountKeys = AccountKeys {
