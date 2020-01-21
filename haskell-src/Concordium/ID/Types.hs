@@ -140,15 +140,8 @@ instance S.Serialize AccountKeys where
 instance FromJSON AccountKeys where
   parseJSON = withObject "AccountKeys" $ \v -> do
     akThreshold <- v .: "threshold"
-    keys <- v .: "keys"
-    parsedKeys <- forM keys $ withObject "Account key with index" $ \obj -> do
-      index <- obj .: "index"
-      key <- obj .: "verifyKey"
-      return (index, key)
-    return AccountKeys{
-      akKeys = HM.fromList parsedKeys,
-      ..
-      }
+    akKeys <- v .: "keys"
+    return AccountKeys{..}
 
 {-# INLINE getAccountKey #-}
 getAccountKey :: KeyIndex -> AccountKeys -> Maybe VerifyKey
