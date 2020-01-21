@@ -20,6 +20,7 @@ import GHC.Generics
 
 import qualified Concordium.Types.Acorn.Core as Core
 import Concordium.Types
+import Concordium.ID.Types
 import Concordium.Types.Acorn.Interfaces
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs
@@ -29,6 +30,25 @@ data InternalMessage annot = TSend !ContractAddress !Amount !(Value annot) | TSi
     deriving(Show)
 
 type Proof = BS.ByteString
+
+-- |We assume that the list is non-empty and at most 255 elements long.
+newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
+    deriving(Eq, Show)
+
+-- |Helper for when an account has only one key with index 0.
+singletonAOP :: Dlog25519Proof -> AccountOwnershipProof
+singletonAOP proof = AccountOwnershipProof [(0, proof)]
+
+instance S.Serialize AccountOwnershipProof where
+  put (AccountOwnershipProof proofs) = do
+    S.putWord8 (fromIntegral (length proofs))
+    forM_ proofs (S.putTwoOf S.put S.put)
+
+  get = do
+    l <- S.getWord8
+    when (l == 0) $ fail "At least one proof must be provided."
+    AccountOwnershipProof <$> replicateM (fromIntegral l) (S.getTwoOf S.get S.get)
+
 
 -- |The transaction payload. Defines the supported kinds of transactions.
 --
@@ -103,7 +123,7 @@ data Payload =
       -- create their own bakers.
       -- TODO: We could also alternatively just require a signature from one of the
       -- beta accounts on the public data.
-      abProofAccount :: !Dlog25519Proof
+      abProofAccount :: !AccountOwnershipProof
       -- FIXME: in the future also logic the baker is allowed to become a baker:
       -- THIS NEEDS SPEC
       }
@@ -124,7 +144,7 @@ data Payload =
       -- |Address of the new account. The account must exist.
       ubaAddress :: !AccountAddress,
       -- |Proof that the baker owns the new account.
-      ubaProof :: !Dlog25519Proof
+      ubaProof :: !AccountOwnershipProof
       }
   -- |Update the signature (verification) key of the baker.
   | UpdateBakerSignKey {
@@ -287,14 +307,14 @@ data Event = ModuleDeployed !Core.ModuleRef
            | BakerKeyUpdated !BakerId !BakerSignVerifyKey
            | StakeDelegated !AccountAddress !BakerId
            | StakeUndelegated !AccountAddress
-  deriving (Show, Generic)
+  deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
 
 -- |Used internally by the scheduler since internal messages are sent as values,
 -- and top-level messages are acorn expressions.
 data MessageFormat = ValueMessage !(Value Core.NoAnnot) | ExprMessage !(LinkedExpr Core.NoAnnot)
-    deriving(Show, Generic)
+    deriving(Show, Generic, Eq)
 
 instance S.Serialize MessageFormat where
     put (ValueMessage v) = S.putWord8 0 >> putStorable v
@@ -320,7 +340,7 @@ data ValidResult =
     vrTransactionCost :: !Amount,
     vrEnergyCost :: !Energy
   }
-  deriving(Show, Generic)
+  deriving(Show, Generic, Eq)
 
 instance S.Serialize ValidResult
 
@@ -366,9 +386,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   | NotFromBakerAccount { nfbaFromAccount :: !AccountAddress, -- ^Sender account of the transaction
                                           nfbaCurrentBakerAccount :: !AccountAddress -- ^Current baker account.
                                         }
-
-                  -- |Special beta outcomes.
-                  | NotAllowedToManipulateBakers !AccountAddress
     deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason

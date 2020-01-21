@@ -68,20 +68,25 @@ deriving instance Core.AnnotContext Show annot => Show (ContractInterface annot)
 
 
 -- |Interface derived from a module. This is used in typechecking other modules.
--- Lists public functions which can be called, and types of methods.
 -- The following invariants are assumed:
 --   * All 'Type's are well-formed in the context of imported modules.
 --   * 'exportedTerms' includes the constructors of a datatype if and only if
 --     they are declared to be public in the corresponding 'DataTypeInterface'.
 data Interface annot = Interface
-    { uniqueName :: !Core.ModuleRef
+    { -- | The unique name of the module.
+      uniqueName :: !Core.ModuleRef
+      -- | The size of the module, used to compute the cost of deployment.
     , iSize :: Word64
+      -- The modules the module lists as imports, i.e., the modules where exported
+      -- types, terms, contracts and constraints can be used from in the module.
     , importedModules :: !(HashMap Core.ModuleName Core.ModuleRef)
-    -- | The datatypes the module exports.
+      -- | The datatypes the module exports.
     , exportedTypes :: !(HashMap Core.TyName (DataTypeInterface annot))
-    -- | The terms the module exports.
+      -- | The terms the module exports.
     , exportedTerms :: !(HashMap Core.Name (Type annot Core.ModuleRef))
+      -- | The contracts the module exports.
     , exportedContracts :: !(HashMap Core.TyName (ContractInterface annot))
+      -- | The contraints the module exports.
     , exportedConstraints :: !(HashMap Core.TyName (Core.ConstraintDecl annot Core.ModuleRef))
     }
   deriving (Generic)
@@ -268,10 +273,15 @@ typeHidingErrors c = runMaybeT c
 
 -- * Datatypes involved in execution of terms.
 
--- | The type of values used by the interpreter. 
-data Value annot = 
-             VClosure !Int !(RTEnv annot) !(LinkedExpr annot) -- ^Functions evaluate to closures.
-             | VRecClosure !(RTEnv annot) !Int !(Vector (LinkedExpr annot)) -- ^Recursive functions evaluate to recursive closures.
+-- | The type of values used by the interpreter.
+data Value annot =
+             -- | Functions evaluate to closures with the number of arguments ('Lambda'
+             -- can have multiple arguments).
+             VClosure !Int !(RTEnv annot) !(LinkedExpr annot)
+             -- | Recursive functions evaluate to recursive closures. Each function of those defined
+             -- together in a 'LetRec' is represented by one such closure which includes the body expressions of
+             -- all functions and the index of the current. Recursive functions always have exactly one argument.
+             | VRecClosure !(RTEnv annot) !Int !(Vector (LinkedExpr annot))
              | VLiteral !Core.Literal    -- ^Base literals.
              | VConstructor !Core.Name !(Seq.Seq (Value annot)) -- ^Constructors applied to arguments.
              -- FIXME: Should use sequence instead of list here as well since it is usually built by appending to the back.
@@ -602,7 +612,7 @@ instance (forall a. S.Serialize a => S.Serialize (linked a)) => S.Serialize (Con
 
 -- |A mapping of identifiers to values, e.g., definitions to values, and of contract identifiers to their
 -- respective initialization functions and receive functions.
--- A module evalutes to a value of this type.
+-- A module evaluates to a value of this type.
 data ValueInterface linked annot = ValueInterface {
   -- |Compiled top-level definitions.
   -- Private and public (since at runtime a public definition might depend on the private one).
