@@ -368,13 +368,7 @@ mod test {
         let mut rng: StdRng = SeedableRng::from_seed(seed);
 
         for _ in 0..TEST_ITERATIONS {
-<<<<<<< HEAD
             let mut ms: Vec<[u8; 8]> = (0..SIGNERS).map(|x| x.to_le_bytes()).collect();
-=======
-            // 33 is a dummy value since has_duplicates expects pairs.
-            let mut ms: Vec<[u8; std::mem::size_of::<usize>()]> =
-                (0..SIGNERS).map(|x| x.to_le_bytes()).collect();
->>>>>>> b8fa65c533947f1b34549b15e82e882227045715
 
             // Make a duplication in the messages
             let random_idx1: usize = rng.gen_range(0, SIGNERS) as usize;
