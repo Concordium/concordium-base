@@ -23,6 +23,9 @@ path = "../ffi_helpers"
 [dependencies.crypto_common]
 path = "../crypto_common"
 
+[dependencies.crypto_common_derive]
+path = "../crypto_common_derive"
+
 [lib]
 name = "curve_arithmetic"
 crate-type = ["rlib", "staticlib", "cdylib"]

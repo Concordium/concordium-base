@@ -1,60 +1,18 @@
-// -*- mode: rust; -*-
-//
-// Authors:
-// - bm@concordium.com
-
 //! Commitment key type
 
 use crate::{commitment::*, randomness::*, value::*};
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
 
-use curve_arithmetic::{curve_arithmetic::*, serialization::*};
+use curve_arithmetic::{curve_arithmetic::*};
 
-use failure::Error;
 use rand::*;
-use std::io::Cursor;
+use crypto_common::*;
 
 /// A commitment  key.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
 pub struct CommitmentKey<C: Curve>(pub C, pub C);
 
-// impl Drop for SecretKey {
-// fn drop(&mut self) {
-// (self.0).into_repr().0.clear();
-// }
-// }
-
 impl<C: Curve> CommitmentKey<C> {
-    // turn commitment key into a byte aray
-    #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let g = &self.0;
-        let h = &self.1;
-        let mut bytes: Vec<u8> = Vec::with_capacity(2 * C::GROUP_ELEMENT_LENGTH);
-        write_curve_element(g, &mut bytes);
-        write_curve_element(h, &mut bytes);
-        bytes.into_boxed_slice()
-    }
-
     pub fn new(v: C, r: C) -> Self { CommitmentKey(v, r) }
-
-    /// Construct a commitmentkey from a slice of bytes.
-    ///
-    /// A `Result` whose okay value is an commitment key or whose error value
-    /// is an `CommitmentError` wrapping the internal error that occurred.
-    #[inline]
-    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<CommitmentKey<C>, Error> {
-        let g = read_curve(cur)?;
-        let h = read_curve(cur)?;
-        Ok(CommitmentKey(g, h))
-    }
 
     pub fn commit<T>(&self, s: &Value<C>, csprng: &mut T) -> (Commitment<C>, Randomness<C>)
     where
@@ -98,8 +56,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _i in 1..100 {
                     let sk = CommitmentKey::<$curve_type>::generate(&mut csprng);
-                    let res_sk2 =
-                        CommitmentKey::<$curve_type>::from_bytes(&mut Cursor::new(&sk.to_bytes()));
+                    let res_sk2 = serialize_deserialize(&sk);
                     assert!(res_sk2.is_ok());
                     let sk2 = res_sk2.unwrap();
                     assert_eq!(sk2, sk);

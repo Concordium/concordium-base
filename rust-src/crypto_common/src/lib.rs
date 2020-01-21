@@ -1,7 +1,9 @@
 pub mod impls;
 pub mod serialize;
+pub mod helpers;
 
-#[macro_use]
-extern crate crypto_common_derive;
+pub use crate::{impls::*, serialize::*, helpers::*};
 
-pub use crate::{impls::*, serialize::*};
+// Reexport for ease of use.
+pub use failure::Fallible;
+pub use byteorder::{ReadBytesExt, WriteBytesExt};

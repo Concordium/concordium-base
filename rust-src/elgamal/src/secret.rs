@@ -1,16 +1,16 @@
 // -*- mode: rust; -*-
 
 //! Elgamal secret key types
-use crate::{cipher::*, errors::*, message::*};
+use crate::{cipher::*, message::*};
 use rand::*;
 
 use curve_arithmetic::Curve;
+use crypto_common::*;
+
 use ff::Field;
 
-use std::io::Cursor;
-
 /// Elgamal secret key packed together with a chosen generator.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct SecretKey<C: Curve> {
     /// Generator of the group, not secret but convenient to have here.
     pub generator: C,
@@ -29,25 +29,6 @@ pub struct SecretKey<C: Curve> {
 // }
 
 impl<C: Curve> SecretKey<C> {
-    /// Convert a secret key into bytes
-    #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let mut out = self.generator.curve_to_bytes().into_vec();
-        out.extend_from_slice(&C::scalar_to_bytes(&self.scalar));
-        out.into_boxed_slice()
-    }
-
-    /// Construct a `SecretKey` from a slice of bytes.
-    ///
-    /// A `Result` whose okay value is a secret key or whose error value
-    /// is an `ElgamalError` wrapping the internal error that occurred.
-    #[inline]
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<SecretKey<C>, ElgamalError> {
-        let generator = C::bytes_to_curve(bytes)?;
-        let scalar = C::bytes_to_scalar(bytes)?;
-        Ok(SecretKey { generator, scalar })
-    }
-
     pub fn decrypt(&self, c: &Cipher<C>) -> Message<C> {
         let x = c.0; // k * g
         let kag = x.mul_by_scalar(&self.scalar); // k * a * g
@@ -102,8 +83,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _i in 1..100 {
                     let sk: SecretKey<$curve_type> = SecretKey::generate_all(&mut csprng);
-                    let r = sk.to_bytes();
-                    let res_sk2 = SecretKey::from_bytes(&mut Cursor::new(&r));
+                    let res_sk2 = serialize_deserialize(&sk);
                     assert!(res_sk2.is_ok());
                     let sk2 = res_sk2.unwrap();
                     assert_eq!(sk2, sk);

@@ -1,11 +1,11 @@
-use crate::errors::AggregateSigError;
 use curve_arithmetic::{Curve, Pairing};
 use ff::Field;
 use generic_array::GenericArray;
 use rand::Rng;
 use rayon::{iter::*, join};
 use sha2::{Digest, Sha512};
-use std::io::Cursor;
+
+use crypto_common::*;
 
 pub const PUBLIC_KEY_SIZE: usize = 96;
 pub const SECRET_KEY_SIZE: usize = 32;
@@ -15,22 +15,15 @@ pub const SIGNATURE_SIZE: usize = 48;
 //
 // EQUALITY IS NOT CONSTANT TIME!!! Do not use in production
 // the trait is implemented only for testing purposes
-#[derive(Debug, Eq)]
+#[derive(Debug, Eq, Serialize)]
 pub struct SecretKey<P: Pairing>(P::ScalarField);
 
 impl<P: Pairing> SecretKey<P> {
     pub fn generate<R: Rng>(rng: &mut R) -> SecretKey<P> { SecretKey(P::generate_scalar(rng)) }
 
-    pub fn from_bytes(b: &mut Cursor<&[u8]>) -> Result<SecretKey<P>, AggregateSigError> {
-        let s = P::bytes_to_scalar(b)?;
-        Ok(SecretKey(s))
-    }
-
-    pub fn to_bytes(&self) -> Box<[u8]> { P::scalar_to_bytes(&self.0) }
-
     // Sign a message using the SecretKey
     pub fn sign(&self, m: &[u8]) -> Signature<P> {
-        let g1_hash = P::G_1::hash_to_group(m);
+        let g1_hash = P::G1::hash_to_group(m);
         let signature = g1_hash.mul_by_scalar(&self.0);
         Signature(signature)
     }
@@ -49,8 +42,8 @@ impl<P: Pairing> PartialEq for SecretKey<P> {
 }
 
 // A Public Key is a point on the second curve of the pairing
-#[derive(Debug, Eq)]
-pub struct PublicKey<P: Pairing>(P::G_2);
+#[derive(Debug, Eq, Serialize)]
+pub struct PublicKey<P: Pairing>(P::G2);
 
 impl<P: Pairing> PublicKey<P> {
     // Derived from a secret key sk by exponentiating the generator of G2 with sk.
@@ -58,7 +51,7 @@ impl<P: Pairing> PublicKey<P> {
     // For now, the generator used is the default generator of the underlying
     // library however, this should be parametrized in the future
     pub fn from_secret(sk: SecretKey<P>) -> PublicKey<P> {
-        PublicKey(P::G_2::one_point().mul_by_scalar(&sk.0))
+        PublicKey(P::G2::one_point().mul_by_scalar(&sk.0))
     }
 
     // Verifies a single message and signature pair using this PublicKey by checking
@@ -68,21 +61,14 @@ impl<P: Pairing> PublicKey<P> {
     // For now, the generator used is the default generator of the underlying
     // library however, this should be parametrized in the future
     pub fn verify(&self, m: &[u8], signature: Signature<P>) -> bool {
-        let g1_hash = P::G_1::hash_to_group(m);
+        let g1_hash = P::G1::hash_to_group(m);
         // compute pairings in parallel
         let (pair1, pair2): (P::TargetField, P::TargetField) = join(
-            || P::pair(signature.0, P::G_2::one_point()),
+            || P::pair(signature.0, P::G2::one_point()),
             || P::pair(g1_hash, self.0),
         );
         pair1 == pair2
     }
-
-    pub fn from_bytes(b: &mut Cursor<&[u8]>) -> Result<PublicKey<P>, AggregateSigError> {
-        let point = P::G_2::bytes_to_curve(b)?;
-        Ok(PublicKey(point))
-    }
-
-    pub fn to_bytes(&self) -> Box<[u8]> { P::G_2::curve_to_bytes(&self.0) }
 }
 
 impl<P: Pairing> Clone for PublicKey<P> {
@@ -95,8 +81,8 @@ impl<P: Pairing> PartialEq for PublicKey<P> {
     fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
-#[derive(Debug, Eq)]
-pub struct Signature<P: Pairing>(P::G_1);
+#[derive(Debug, Eq, Serialize)]
+pub struct Signature<P: Pairing>(P::G1);
 
 impl<P: Pairing> Signature<P> {
     // Aggregates this signatures with the given signature.
@@ -104,15 +90,8 @@ impl<P: Pairing> Signature<P> {
         Signature(self.0.plus_point(&to_aggregate.0))
     }
 
-    pub fn from_bytes(b: &mut Cursor<&[u8]>) -> Result<Signature<P>, AggregateSigError> {
-        let point = P::G_1::bytes_to_curve(b)?;
-        Ok(Signature(point))
-    }
-
     // Only used for creating a dummy signature for the genesis block
-    pub(crate) fn empty() -> Self { Signature(P::G_1::one_point()) }
-
-    pub fn to_bytes(&self) -> Box<[u8]> { P::G_1::curve_to_bytes(&self.0) }
+    pub(crate) fn empty() -> Self { Signature(P::G1::one_point()) }
 }
 
 impl<P: Pairing> Clone for Signature<P> {
@@ -148,7 +127,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
     let product = m_pk_pairs
         .par_iter()
         .fold(<P::TargetField as Field>::one, |prod, (m, pk)| {
-            let g1_hash = P::G_1::hash_to_group(m);
+            let g1_hash = P::G1::hash_to_group(m);
             let paired = P::pair(g1_hash, pk.0);
             let mut p = prod;
             p.mul_assign(&paired);
@@ -160,7 +139,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
             p
         });
 
-    P::pair(signature.0, P::G_2::one_point()) == product
+    P::pair(signature.0, P::G2::one_point()) == product
 }
 
 // Verifies an aggregate signature on the same message m under keys PK_i for
@@ -181,13 +160,13 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
 
     let sum = pks
         .par_iter()
-        .fold(P::G_2::zero_point, |sum, x| sum.plus_point(&x.0))
-        .reduce(P::G_2::zero_point, |sum, x| sum.plus_point(&x));
+        .fold(P::G2::zero_point, |sum, x| sum.plus_point(&x.0))
+        .reduce(P::G2::zero_point, |sum, x| sum.plus_point(&x));
 
     // compute pairings in parallel
     let (pair1, pair2): (P::TargetField, P::TargetField) = join(
-        || P::pair(signature.0, P::G_2::one_point()),
-        || P::pair(P::G_1::hash_to_group(m), sum),
+        || P::pair(signature.0, P::G2::one_point()),
+        || P::pair(P::G1::hash_to_group(m), sum),
     );
     pair1 == pair2
 }
@@ -342,7 +321,7 @@ mod test {
             pks_alt.pop();
             assert!(!verify_aggregate_sig_trusted_keys(&m, &pks_alt, agg_sig));
 
-            let agg_sig_alt = Signature(<Bls12 as Pairing>::G_1::generate(&mut rng));
+            let agg_sig_alt = Signature(<Bls12 as Pairing>::G1::generate(&mut rng));
             assert!(!verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig_alt));
         }
     }
@@ -394,21 +373,20 @@ mod test {
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
             let sig = sk.sign(&m);
-            let sk_bytes = sk.to_bytes();
-            let pk_bytes = pk.to_bytes();
-            let sig_bytes = sig.to_bytes();
-            let sk_from_bytes =
-                SecretKey::<Bls12>::from_bytes(&mut Cursor::new(&sk_bytes)).unwrap();
-            let pk_from_bytes =
-                PublicKey::<Bls12>::from_bytes(&mut Cursor::new(&pk_bytes)).unwrap();
-            let sig_from_bytes =
-                Signature::<Bls12>::from_bytes(&mut Cursor::new(&sig_bytes)).unwrap();
+            let sk_from_bytes = serialize_deserialize(&sk);
+            let pk_from_bytes = serialize_deserialize(&pk);
+            let sig_from_bytes = serialize_deserialize(&sig);
+
+            let sk_from_bytes = sk_from_bytes.expect("Serialization OK.");
+            let pk_from_bytes = pk_from_bytes.expect("Serialization OK.");
+            let sig_from_bytes = sig_from_bytes.expect("Serialization OK.");
+
 
             assert_eq!(sig.0, sig_from_bytes.0);
             assert_eq!(sk.0, sk_from_bytes.0);
             assert_eq!(pk.0, pk_from_bytes.0);
             assert!(pk.verify(&m, sig_from_bytes));
-            assert!(pk_from_bytes.verify(&m, sig_from_bytes));
+            assert!(pk_from_bytes.verify(&m, sig));
         }
     }
 
@@ -423,9 +401,9 @@ mod test {
             let pk = PublicKey::<Bls12>::from_secret(sk);
             let sig = sk.sign(&m);
 
-            let sk_bytes = sk.to_bytes();
-            let pk_bytes = pk.to_bytes();
-            let sig_bytes = sig.to_bytes();
+            let sk_bytes = to_bytes(&sk);
+            let pk_bytes = to_bytes(&pk);
+            let sig_bytes = to_bytes(&sig);
 
             assert_eq!(sk_bytes.len(), 32);
             assert_eq!(pk_bytes.len(), 96);

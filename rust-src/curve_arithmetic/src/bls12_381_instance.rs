@@ -1,16 +1,16 @@
 // Authors:
 
 use crate::curve_arithmetic::*;
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{ReadBytesExt};
 use ff::PrimeField;
 use pairing::{
     bls12_381::{
-        Bls12, Fq, FqRepr, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2,
+        Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2,
     },
     CurveAffine, CurveProjective, EncodedPoint, Engine,
 };
 use rand::*;
-use std::io::{Cursor, Read};
+use failure::Fallible;
 
 impl Curve for G2 {
     type Base = Fq;
@@ -73,70 +73,14 @@ impl Curve for G2 {
         }
     }
 
-    fn scalar_to_bytes(e: &Self::Scalar) -> Box<[u8]> {
-        let frpr = &e.into_repr();
-        let mut bytes = [0u8; Self::SCALAR_LENGTH];
-        let mut i = 0;
-        for a in frpr.as_ref().iter().rev() {
-            bytes[i..(i + 8)].copy_from_slice(&a.to_be_bytes());
-            i += 8;
-        }
-        Box::new(bytes)
+    fn scalar_from_u64(n: u64) -> Self::Scalar {
+        Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
 
-    fn bytes_to_scalar(bytes: &mut Cursor<&[u8]>) -> Result<Self::Scalar, FieldDecodingError> {
-        let mut frrepr: FrRepr = FrRepr([0u64; 4]);
-        let mut i = true;
-        for digit in frrepr.as_mut().iter_mut().rev() {
-            *digit = bytes
-                .read_u64::<BigEndian>()
-                .map_err(|_| FieldDecodingError::NotFieldElement)?;
-            if i {
-                *digit &= !(1 << 63);
-                i = false;
-            }
-        }
-        match Fr::from_repr(frrepr) {
-            Ok(fr) => Ok(fr),
-            Err(_) => Err(FieldDecodingError::NotFieldElement),
-        }
-    }
-
-    fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError> {
-        match Fr::from_repr(FrRepr::from(n)) {
-            Ok(sc) => Ok(sc),
-            Err(_) => Err(FieldDecodingError::NotFieldElement),
-        }
-    }
-
-    fn curve_to_bytes(&self) -> Box<[u8]> {
-        let g = self.into_affine().into_compressed();
-        let g_bytes = g.as_ref();
-        let mut bytes = [0u8; Self::GROUP_ELEMENT_LENGTH];
-        bytes.copy_from_slice(&g_bytes);
-        Box::new(bytes)
-    }
-
-    fn bytes_to_curve(bytes: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError> {
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
         let mut g = G2Compressed::empty();
-        bytes
-            .read_exact(g.as_mut())
-            .map_err(|_| CurveDecodingError::NotOnCurve)?;
-        match g.into_affine() {
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-            Ok(g_affine) => Ok(g_affine.into_projective()),
-        }
-    }
-
-    fn bytes_to_curve_unchecked(bytes: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError> {
-        let mut g = G2Compressed::empty();
-        bytes
-            .read_exact(g.as_mut())
-            .map_err(|_| CurveDecodingError::NotOnCurve)?;
-        match g.into_affine_unchecked() {
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-            Ok(g_affine) => Ok(g_affine.into_projective()),
-        }
+        bytes.read_exact(g.as_mut())?;
+        Ok(g.into_affine_unchecked()?.into_projective())
     }
 
     fn generate<T: Rng>(csprng: &mut T) -> Self { G2::rand(csprng) }
@@ -209,71 +153,14 @@ impl Curve for G1 {
         }
     }
 
-    fn scalar_to_bytes(e: &Self::Scalar) -> Box<[u8]> {
-        let frpr = &e.into_repr();
-        let mut bytes = [0u8; Self::SCALAR_LENGTH];
-        let mut i = 0;
-        for a in frpr.as_ref().iter().rev() {
-            bytes[i..(i + 8)].copy_from_slice(&a.to_be_bytes());
-            i += 8;
-        }
-        Box::new(bytes)
+    fn scalar_from_u64(n: u64) -> Self::Scalar {
+        Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
 
-    fn bytes_to_scalar(bytes: &mut Cursor<&[u8]>) -> Result<Self::Scalar, FieldDecodingError> {
-        let mut frrepr: FrRepr = FrRepr([0u64; 4]);
-        let mut i = true;
-        for digit in frrepr.as_mut().iter_mut().rev() {
-            *digit = bytes
-                .read_u64::<BigEndian>()
-                .map_err(|_| FieldDecodingError::NotFieldElement)?;
-            if i {
-                *digit &= !(1 << 63);
-                i = false;
-            }
-        }
-        match Fr::from_repr(frrepr) {
-            Ok(fr) => Ok(fr),
-            Err(_) => Err(FieldDecodingError::NotFieldElement),
-        }
-    }
-
-    fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError> {
-        match Fr::from_repr(FrRepr::from(n)) {
-            Ok(sc) => Ok(sc),
-
-            Err(_) => Err(FieldDecodingError::NotFieldElement),
-        }
-    }
-
-    fn curve_to_bytes(&self) -> Box<[u8]> {
-        let g = self.into_affine().into_compressed();
-        let g_bytes = g.as_ref();
-        let mut bytes = [0u8; Self::GROUP_ELEMENT_LENGTH];
-        bytes.copy_from_slice(&g_bytes);
-        Box::new(bytes)
-    }
-
-    fn bytes_to_curve(bytes: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError> {
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
         let mut g = G1Compressed::empty();
-        bytes
-            .read_exact(g.as_mut())
-            .map_err(|_| CurveDecodingError::NotOnCurve)?;
-        match g.into_affine() {
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-            Ok(g_affine) => Ok(g_affine.into_projective()),
-        }
-    }
-
-    fn bytes_to_curve_unchecked(bytes: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError> {
-        let mut g = G1Compressed::empty();
-        bytes
-            .read_exact(g.as_mut())
-            .map_err(|_| CurveDecodingError::NotOnCurve)?;
-        match g.into_affine_unchecked() {
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-            Ok(g_affine) => Ok(g_affine.into_projective()),
-        }
+        bytes.read_exact(g.as_mut())?;
+        Ok(g.into_affine_unchecked()?.into_projective())
     }
 
     fn generate<T: Rng>(csprng: &mut T) -> Self { G1::rand(csprng) }
@@ -342,70 +229,14 @@ impl Curve for G1Affine {
         }
     }
 
-    fn scalar_to_bytes(e: &Self::Scalar) -> Box<[u8]> {
-        let frpr = &e.into_repr();
-        let mut bytes = [0u8; Self::SCALAR_LENGTH];
-        let mut i = 0;
-        for a in frpr.as_ref().iter().rev() {
-            bytes[i..(i + 8)].copy_from_slice(&a.to_be_bytes());
-            i += 8;
-        }
-        Box::new(bytes)
+    fn scalar_from_u64(n: u64) -> Self::Scalar {
+        Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
 
-    fn bytes_to_scalar(bytes: &mut Cursor<&[u8]>) -> Result<Self::Scalar, FieldDecodingError> {
-        let mut frrepr: FrRepr = FrRepr([0u64; 4]);
-        let mut i = true;
-        for digit in frrepr.as_mut().iter_mut().rev() {
-            *digit = bytes
-                .read_u64::<BigEndian>()
-                .map_err(|_| FieldDecodingError::NotFieldElement)?;
-            if i {
-                *digit &= !(1 << 63);
-                i = false;
-            }
-        }
-        match Fr::from_repr(frrepr) {
-            Ok(fr) => Ok(fr),
-            Err(_) => Err(FieldDecodingError::NotFieldElement),
-        }
-    }
-
-    fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError> {
-        match Fr::from_repr(FrRepr::from(n)) {
-            Ok(sc) => Ok(sc),
-            Err(_) => Err(FieldDecodingError::NotFieldElement),
-        }
-    }
-
-    fn curve_to_bytes(&self) -> Box<[u8]> {
-        let g = self.into_compressed();
-        let g_bytes = g.as_ref();
-        let mut bytes = [0u8; Self::GROUP_ELEMENT_LENGTH];
-        bytes.copy_from_slice(&g_bytes);
-        Box::new(bytes)
-    }
-
-    fn bytes_to_curve(bytes: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError> {
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
         let mut g = G1Compressed::empty();
-        bytes
-            .read_exact(g.as_mut())
-            .map_err(|_| CurveDecodingError::NotOnCurve)?;
-        match g.into_affine() {
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-            Ok(g_affine) => Ok(g_affine),
-        }
-    }
-
-    fn bytes_to_curve_unchecked(bytes: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError> {
-        let mut g = G1Compressed::empty();
-        bytes
-            .read_exact(g.as_mut())
-            .map_err(|_| CurveDecodingError::NotOnCurve)?;
-        match g.into_affine_unchecked() {
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-            Ok(g_affine) => Ok(g_affine),
-        }
+        bytes.read_exact(g.as_mut())?;
+        Ok(g.into_affine_unchecked()?)
     }
 
     fn generate<T: Rng>(csprng: &mut T) -> Self { G1::rand(csprng).into_affine() }
@@ -476,70 +307,14 @@ impl Curve for G2Affine {
         }
     }
 
-    fn scalar_to_bytes(e: &Self::Scalar) -> Box<[u8]> {
-        let frpr = &e.into_repr();
-        let mut bytes = [0u8; Self::SCALAR_LENGTH];
-        let mut i = 0;
-        for a in frpr.as_ref().iter().rev() {
-            bytes[i..(i + 8)].copy_from_slice(&a.to_be_bytes());
-            i += 8;
-        }
-        Box::new(bytes)
+    fn scalar_from_u64(n: u64) -> Self::Scalar {
+        Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
 
-    fn bytes_to_scalar(bytes: &mut Cursor<&[u8]>) -> Result<Self::Scalar, FieldDecodingError> {
-        let mut frrepr: FrRepr = FrRepr([0u64; 4]);
-        let mut i = true;
-        for digit in frrepr.as_mut().iter_mut().rev() {
-            *digit = bytes
-                .read_u64::<BigEndian>()
-                .map_err(|_| FieldDecodingError::NotFieldElement)?;
-            if i {
-                *digit &= !(1 << 63);
-                i = false;
-            }
-        }
-        match Fr::from_repr(frrepr) {
-            Ok(fr) => Ok(fr),
-            Err(_) => Err(FieldDecodingError::NotFieldElement),
-        }
-    }
-
-    fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError> {
-        match Fr::from_repr(FrRepr::from(n)) {
-            Ok(sc) => Ok(sc),
-            Err(_) => Err(FieldDecodingError::NotFieldElement),
-        }
-    }
-
-    fn curve_to_bytes(&self) -> Box<[u8]> {
-        let g = self.into_compressed();
-        let g_bytes = g.as_ref();
-        let mut bytes = [0u8; Self::GROUP_ELEMENT_LENGTH];
-        bytes.copy_from_slice(&g_bytes);
-        Box::new(bytes)
-    }
-
-    fn bytes_to_curve(bytes: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError> {
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
         let mut g = G2Compressed::empty();
-        bytes
-            .read_exact(g.as_mut())
-            .map_err(|_| CurveDecodingError::NotOnCurve)?;
-        match g.into_affine() {
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-            Ok(g_affine) => Ok(g_affine),
-        }
-    }
-
-    fn bytes_to_curve_unchecked(bytes: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError> {
-        let mut g = G2Compressed::empty();
-        bytes
-            .read_exact(g.as_mut())
-            .map_err(|_| CurveDecodingError::NotOnCurve)?;
-        match g.into_affine_unchecked() {
-            Err(_) => Err(CurveDecodingError::NotOnCurve),
-            Ok(g_affine) => Ok(g_affine),
-        }
+        bytes.read_exact(g.as_mut())?;
+        Ok(g.into_affine_unchecked()?)
     }
 
     fn generate<T: Rng>(csprng: &mut T) -> Self { G2::rand(csprng).into_affine() }
@@ -553,8 +328,8 @@ impl Curve for G2Affine {
 
 impl Pairing for Bls12 {
     type BaseField = <Bls12 as Engine>::Fq;
-    type G_1 = <Bls12 as Engine>::G1;
-    type G_2 = <Bls12 as Engine>::G2;
+    type G1 = <Bls12 as Engine>::G1;
+    type G2 = <Bls12 as Engine>::G2;
     type ScalarField = Fr;
     type TargetField = <Bls12 as Engine>::Fqk;
 
@@ -564,69 +339,14 @@ impl Pairing for Bls12 {
         <Bls12 as Engine>::pairing(p.into_affine(), q.into_affine())
     }
 
-    fn scalar_to_bytes(e: &Self::ScalarField) -> Box<[u8]> {
-        let frpr = &e.into_repr();
-        let mut bytes = [0u8; Self::SCALAR_LENGTH];
-        let mut i = 0;
-        for a in frpr.as_ref().iter().rev() {
-            bytes[i..(i + 8)].copy_from_slice(&a.to_be_bytes());
-            i += 8;
-        }
-        Box::new(bytes)
-    }
-
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::ScalarField { Fr::rand(csprng) }
-
-    fn bytes_to_scalar(bytes: &mut Cursor<&[u8]>) -> Result<Self::ScalarField, FieldDecodingError> {
-        let mut frrepr: FrRepr = FrRepr([0u64; 4]);
-        let mut i = true;
-        for digit in frrepr.as_mut().iter_mut().rev() {
-            *digit = bytes
-                .read_u64::<BigEndian>()
-                .map_err(|_| FieldDecodingError::NotFieldElement)?;
-            if i {
-                *digit &= !(1 << 63);
-                i = false;
-            }
-        }
-        match Fr::from_repr(frrepr) {
-            Ok(fr) => Ok(fr),
-            Err(_) => Err(FieldDecodingError::NotFieldElement),
-        }
-    }
-
-    /// This implementation is ad-hoc, using the fact that Fqk is defined
-    /// via that specific tower of extensions (of degrees) 2 -> 3 -> 2,
-    /// and the specific representation of those fields.
-    /// We use big-endian representation all the way down to the field Fq.
-    fn target_field_to_bytes(f: &Self::TargetField) -> Box<[u8]> {
-        // coefficients in the extension F_6
-        let c0_6 = f.c0;
-        let c1_6 = f.c1;
-
-        let coeffs = [
-            // coefficients of c1_6 in the extension F_2
-            c1_6.c2, c1_6.c1, c1_6.c0, // coefficients of c0_6 in the extension F_2
-            c0_6.c2, c0_6.c1, c0_6.c0,
-        ];
-        let mut out = Vec::with_capacity(12 * 48);
-        for p in coeffs.iter() {
-            let repr_c1 = FqRepr::from(p.c1);
-            let repr_c0 = FqRepr::from(p.c0);
-            for d in repr_c1.as_ref().iter() {
-                out.extend_from_slice(&d.to_be_bytes());
-            }
-            for d in repr_c0.as_ref().iter() {
-                out.extend_from_slice(&d.to_be_bytes());
-            }
-        }
-        out.into_boxed_slice()
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crypto_common::*;
+    use std::io::Cursor;
 
     // For development only, delete later
     #[test]
@@ -634,7 +354,7 @@ mod tests {
         let mut rng = thread_rng();
         for _i in 0..10000 {
             let bytes = rng.gen::<[u8; 32]>();
-            let _ = <Bls12 as Pairing>::G_1::hash_to_group(&bytes);
+            let _ = <Bls12 as Pairing>::G1::hash_to_group(&bytes);
         }
     }
 
@@ -645,8 +365,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _ in 0..1000 {
                     let scalar = <$p>::generate_scalar(&mut csprng);
-                    let bytes = <$p>::scalar_to_bytes(&scalar);
-                    let scalar_res = <$p>::bytes_to_scalar(&mut Cursor::new(&bytes));
+                    let scalar_res = serialize_deserialize(&scalar);
                     assert!(scalar_res.is_ok());
                     assert_eq!(scalar, scalar_res.unwrap());
                 }
@@ -661,8 +380,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _ in 0..1000 {
                     let curve = <$p>::generate(&mut csprng);
-                    let bytes = <$p>::curve_to_bytes(&curve);
-                    let curve_res = <$p>::bytes_to_curve(&mut Cursor::new(&bytes));
+                    let curve_res = serialize_deserialize(&curve);
                     assert!(curve_res.is_ok());
                     assert_eq!(curve, curve_res.unwrap());
                 }
@@ -677,7 +395,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _ in 0..1000 {
                     let curve = <$p>::generate(&mut csprng);
-                    let bytes = <$p>::curve_to_bytes(&curve);
+                    let bytes = to_bytes(&curve);
                     let curve_res = <$p>::bytes_to_curve_unchecked(&mut Cursor::new(&bytes));
                     assert!(curve_res.is_ok());
                     assert_eq!(curve, curve_res.unwrap());

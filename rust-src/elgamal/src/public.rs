@@ -1,36 +1,15 @@
-// -*- mode: rust; -*-
-//
-// This file is part of concordium_crypto
-// Copyright (c) 2019 -
-// See LICENSE for licensing information.
-//
-// Authors:
-// - bm@concordium.com
-
 //! Elgamal  public keys.
 
 use core::fmt::Debug;
 use rand::*;
 
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
-#[cfg(feature = "serde")]
-use std::marker::PhantomData;
-
-use crate::{cipher::*, errors::*, message::*, secret::*};
+use crate::{cipher::*, message::*, secret::*};
 
 use curve_arithmetic::Curve;
-
-use std::io::Cursor;
+use crypto_common::*;
 
 /// Elgamal public key .
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Serialize)]
 pub struct PublicKey<C: Curve> {
     pub generator: C,
     pub key:       C,
@@ -52,26 +31,6 @@ impl<'a, C: Curve> From<&'a SecretKey<C>> for PublicKey<C> {
 }
 
 impl<C: Curve> PublicKey<C> {
-    /// Convert this public key to a byte array.
-    #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let mut out = Vec::with_capacity(2 * C::GROUP_ELEMENT_LENGTH);
-        out.extend_from_slice(&C::curve_to_bytes(&self.generator));
-        out.extend_from_slice(&C::curve_to_bytes(&self.key));
-        out.into_boxed_slice()
-    }
-
-    /// Construct a public key from a slice of bytes.
-    ///
-    /// A `Result` whose okay value is a public key or whose error value
-    /// is an `ElgamalError` wrapping the internal error that occurred.
-    #[inline]
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, ElgamalError> {
-        let generator = C::bytes_to_curve(bytes)?;
-        let key = C::bytes_to_curve(bytes)?;
-        Ok(PublicKey { generator, key })
-    }
-
     #[inline]
     /// Encrypt and returned the randomness used. NB: Randomness must be kept
     /// private.
@@ -136,39 +95,6 @@ impl<C: Curve> PublicKey<C> {
     }
 }
 
-#[cfg(feature = "serde")]
-impl<C: Curve> Serialize for PublicKey<C> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer, {
-        serializer.serialize_bytes(&self.to_bytes())
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'d, C: Curve> Deserialize<'d> for PublicKey<C> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'d>, {
-        struct PublicKeyVisitor<C: Curve>(PhantomData<C>);
-
-        impl<'d, C: Curve> Visitor<'d> for PublicKeyVisitor<C> {
-            type Value = PublicKey<C>;
-
-            fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                formatter.write_str("An Elgamal public key as a 48-bytes")
-            }
-
-            fn visit_bytes<E>(self, bytes: &[u8]) -> Result<PublicKey<C>, E>
-            where
-                E: SerdeError, {
-                PublicKey::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
-            }
-        }
-        deserializer.deserialize_bytes(PublicKeyVisitor(PhantomData))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,8 +108,7 @@ mod tests {
                 for _i in 1..100 {
                     let sk: SecretKey<$curve_type> = SecretKey::generate_all(&mut csprng);
                     let pk = PublicKey::from(&sk);
-                    let r = pk.to_bytes();
-                    let res_pk2 = PublicKey::from_bytes(&mut Cursor::new(&r));
+                    let res_pk2 = serialize_deserialize(&pk);
                     assert!(res_pk2.is_ok());
                     let pk2 = res_pk2.unwrap();
                     assert_eq!(pk2, pk);

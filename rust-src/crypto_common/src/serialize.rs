@@ -243,3 +243,18 @@ pub trait Serialize: Serial + Deserial {}
 /// Generic instance deriving Deserialize for any type that implements
 /// both put and get.
 impl<A: Deserial + Serial> Serialize for A {}
+
+
+/// Directly serialize to a vector of bytes.
+#[inline]
+pub fn to_bytes<A: Serial>(x: &A) -> Vec<u8> {
+    let mut buf = Vec::new();
+    buf.put(x);
+    buf
+}
+
+/// Directly serialize to a vector of bytes.
+#[inline]
+pub fn from_bytes<A: Deserial, R: ReadBytesExt>(source: &mut R) -> Fallible<A> {
+    A::deserial(source)
+}

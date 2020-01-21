@@ -8,6 +8,7 @@ edition = "2018"
 failure = "^0.1.5"
 byteorder = "1.3"
 ff = "0.4"
+rand    = "=0.4"
 
 [dependencies.crypto_common_derive]
 path = "../crypto_common_derive"
