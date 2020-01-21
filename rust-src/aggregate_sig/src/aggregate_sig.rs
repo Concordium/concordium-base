@@ -220,13 +220,13 @@ mod test {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, StdRng};
 
-    const SIGNERS: usize = 500;
-    const TEST_ITERATIONS: usize = 10;
+    const SIGNERS: u64 = 500;
+    const TEST_ITERATIONS: u64 = 10;
 
     // returns a pair of lists (sks, pks), such that sks[i] and pks[i] are
     // corresponding secret and public key
     fn get_sks_pks<P: Pairing>(
-        amt: usize,
+        amt: u64,
         rng: &mut StdRng,
     ) -> (Vec<SecretKey<P>>, Vec<PublicKey<P>>) {
         let sks: Vec<SecretKey<P>> = (0..amt).map(|_| SecretKey::<P>::generate(rng)).collect();
@@ -239,7 +239,7 @@ mod test {
     }
 
     // returns a list of random bytes (of length 32)
-    fn get_random_messages<R: Rng>(amt: usize, rng: &mut R) -> Vec<[u8; 32]> {
+    fn get_random_messages<R: Rng>(amt: u64, rng: &mut R) -> Vec<[u8; 32]> {
         (0..amt).map(|_| rng.gen::<[u8; 32]>()).collect()
     }
 
@@ -289,7 +289,8 @@ mod test {
 
             let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
             for i in 0..SIGNERS {
-                m_pk_pairs.push((&ms[i], pks[i].clone()));
+                let idx = i as usize;
+                m_pk_pairs.push((&ms[idx], pks[idx].clone()));
             }
 
             // signature should verify
@@ -367,14 +368,13 @@ mod test {
         let mut rng: StdRng = SeedableRng::from_seed(seed);
 
         for _ in 0..TEST_ITERATIONS {
-            // 33 is a dummy value since has_duplicates expects pairs.
             let mut ms: Vec<[u8; 8]> = (0..SIGNERS).map(|x| x.to_le_bytes()).collect();
 
             // Make a duplication in the messages
-            let random_idx1: usize = rng.gen_range(0, SIGNERS);
-            let mut random_idx2: usize = rng.gen_range(0, SIGNERS);
+            let random_idx1: usize = rng.gen_range(0, SIGNERS) as usize;
+            let mut random_idx2: usize = rng.gen_range(0, SIGNERS) as usize;
             while random_idx1 == random_idx2 {
-                random_idx2 = rng.gen_range(0, SIGNERS)
+                random_idx2 = rng.gen_range(0, SIGNERS) as usize
             }
             ms[random_idx1] = ms[random_idx2];
             let vs: Vec<(&[u8], ())> = ms.iter().map(|x| (&x[..], ())).collect();
