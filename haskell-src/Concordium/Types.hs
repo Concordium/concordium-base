@@ -19,9 +19,9 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
 import qualified Concordium.Crypto.BlsSignature as Bls
 import Concordium.ID.Types
-import qualified Concordium.ID.Account as AH
 import Concordium.Crypto.SignatureScheme(SchemeId)
 import Concordium.Types.HashableTo
+
 import Control.Exception(assert)
 
 import Data.Hashable(Hashable)
@@ -246,7 +246,7 @@ data Account = Account {
   -- is chosen it cannot be changed.
   ,_accountEncryptionKey :: !(Maybe AccountEncryptionKey)
   -- |The key used to verify transaction signatures, it records the signature scheme used as well.
-  ,_accountVerificationKey :: !AccountVerificationKey
+  ,_accountVerificationKeys :: !AccountKeys
   -- |For now the only operation we need with a credential is to check whether
   -- there are any credentials that are valid, and validity only depends on expiry.
   -- A Max priority queue allows us to efficiently check for existence of such credentials,
@@ -270,7 +270,7 @@ instance S.Serialize Account where
                     S.put _accountAmount <>
                     S.put _accountEncryptedAmount <>
                     S.put _accountEncryptionKey <>
-                    S.put _accountVerificationKey <>
+                    S.put _accountVerificationKeys <>
                     S.put (Queue.elemsU _accountCredentials) <> -- we do not care whether the output is ordered or not
                     S.put _accountStakeDelegate <>
                     S.put (Set.toAscList _accountInstances)
@@ -280,7 +280,7 @@ instance S.Serialize Account where
     _accountAmount <- S.get
     _accountEncryptedAmount <- S.get
     _accountEncryptionKey <- S.get
-    _accountVerificationKey <- S.get
+    _accountVerificationKeys <- S.get
     preAccountCredentials <- Queue.fromList . map (\cdv -> (pExpiry (cdvPolicy cdv), cdv)) <$> S.get
     let _accountCredentials = Queue.seqSpine preAccountCredentials preAccountCredentials
     _accountStakeDelegate <- S.get
@@ -291,9 +291,8 @@ instance HashableTo Hash.Hash Account where
   getHash = Hash.hash . S.runPut . S.put
 
 -- |Create an empty account with the given public key.
-newAccount :: AccountVerificationKey -> Account
-newAccount _accountVerificationKey = Account {
-        _accountAddress = AH.accountAddress _accountVerificationKey,
+newAccount :: AccountKeys -> AccountAddress -> Account
+newAccount _accountVerificationKeys _accountAddress = Account {
         _accountNonce = minNonce,
         _accountAmount = 0,
         _accountEncryptedAmount = [],

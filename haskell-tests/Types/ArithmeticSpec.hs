@@ -119,19 +119,19 @@ arithmeticSpecsInt smallNumGen =
   let bigNumGen = makeBigNumGen smallNumGen
       bigNegNumGen = makeBigNegNumGen smallNumGen
   in do
-    parallel . describe "Int-specific corner cases regarding two's complement representation for unchecked operations" $ modifyMaxSuccess (const 50000) $ do
+    describe "Int-specific corner cases regarding two's complement representation for unchecked operations" $ modifyMaxSuccess (const 50000) $ do
       specify "-maxBound" $ (0 :: a) - maxBound `shouldBe` -maxBound
       specify "2*maxBound" $ (2 :: a) * maxBound `shouldBe` -2
       specify "4*maxBound" $ (4 :: a) * maxBound `shouldBe` -4
       specify "minBound `divD` (-1)" $ (minBound :: a) `divD` (-1) `shouldBe` 0 -- unchecked operation should default to 0 on this overflow
       specify "abs -1" $ abs (-1 :: a) `shouldBe` 1
-    parallel . describe "Int-specific failure of checked operations" $ modifyMaxSuccess (const 50000) $ do
+    describe "Int-specific failure of checked operations" $ modifyMaxSuccess (const 50000) $ do
       specify "-minBound" $ (0 :: a) `subC` minBound `shouldBe` Nothing
       specify "minBound `divC` (-1)" $ (minBound :: a) `divC` (-1) `shouldBe` Nothing -- unchecked operation should default to 0 on this exception
       specify "add overflow" $ (property $ checkFail addC bigNegNumGen bigNegNumGen)
       specify "mul overflow" $ (property $ checkFail mulC bigNegNumGen bigNumGen)
       specify "pow with negative exponent" $ (property $ checkFail powC arbitrary (negNumGen :: Gen a))
-    parallel . describe "Int-specific defaulting of operations" $ modifyMaxSuccess (const 50000) $ do
+    describe "Int-specific defaulting of operations" $ modifyMaxSuccess (const 50000) $ do
       specify "pow with negative exponent" (forAll smallNumGen (\x -> forAll (negNumGen :: Gen a) (\y -> powD x y === 0)))
 
 
@@ -140,10 +140,10 @@ arithmeticSpecsWord :: forall a . (Bounded a, Integral a, Show a) => Gen a -> Sp
 arithmeticSpecsWord smallNumGen =
   let bigNumGen = makeBigNumGen smallNumGen
   in do
-    parallel . describe "Word-specific corner cases regarding two's complement representation for unchecked operations" $ modifyMaxSuccess (const 50000) $ do
+    describe "Word-specific corner cases regarding two's complement representation for unchecked operations" $ modifyMaxSuccess (const 50000) $ do
       specify "-maxBound" $ (0 :: a) - maxBound `shouldBe` 1
       specify "3*maxBound (equation)" $ (3 :: a) * maxBound `shouldBe` minBound + maxBound - 2
-    parallel . describe "Word-specific failure of checked operations" $ modifyMaxSuccess (const 50000) $ do
+    describe "Word-specific failure of checked operations" $ modifyMaxSuccess (const 50000) $ do
       specify "sub overflow" $ (property $ checkFail subC smallNumGen bigNumGen)
 
 arithmeticSpecs :: forall a . (Bounded a, Integral a, Arbitrary a, Show a) => Gen a -> SpecWith ()
@@ -162,7 +162,7 @@ arithmeticSpecs smallNumGen =
       powC' = powC :: a -> a -> Maybe a
       bigNumGen = makeBigNumGen smallNumGen
   in do
-    parallel . describe "General corner cases regarding two's complement representation for unchecked operations" $ modifyMaxSuccess (const 50000) $ do
+    describe "General corner cases regarding two's complement representation for unchecked operations" $ modifyMaxSuccess (const 50000) $ do
       -- Corner case tests for Int and Word are based on the following rules which exist in two's complement representation:
       -- maxBound + 1 = minBound
       -- minBound - 1 = maxBound
@@ -198,14 +198,14 @@ arithmeticSpecs smallNumGen =
       specify "fromInteger maxBound+1" $ fromInteger ((toInteger (maxBound :: a)) + 1) `shouldBe` (minBound :: a)
       specify "fromInteger minBound-1" $ fromInteger ((toInteger (minBound :: a)) - 1) `shouldBe` (maxBound :: a)
 
-    parallel . describe "Ring and commutativity properties" $ modifyMaxSuccess (const 50000) $ do
+    describe "Ring and commutativity properties" $ modifyMaxSuccess (const 50000) $ do
       specify "add associativity" (property $ assoc add)
       specify "mul associativity" (property $ assoc mul)
       specify "add/mul distributivity" (property $ distribute mul add)
       specify "add commutativity" (property $ commut add)
       specify "mul commutativity" (property $ commut mul)
 
-    parallel . describe "Failure of checked operations" $ modifyMaxSuccess (const 50000) $ do
+    describe "Failure of checked operations" $ modifyMaxSuccess (const 50000) $ do
       specify "1 `divC` 0" $ (1 :: a) `divC` (0) `shouldBe` Nothing
       specify "minBound `divC` 0" $ (minBound :: a) `divC` (0) `shouldBe` Nothing
       specify "1 `modC` 0" $ (1 :: a) `modC` (0) `shouldBe` Nothing
@@ -214,7 +214,7 @@ arithmeticSpecs smallNumGen =
       specify "mul overflow" $ (property $ checkFail mulC' bigNumGen bigNumGen)
       specify "pow overflow" $ (property $ checkFail powC' bigNumGen (elements [2..7]))
 
-    parallel . describe "Success of checked operations (must yield same result as unchecked)" $ modifyMaxSuccess (const 50000) $ do
+    describe "Success of checked operations (must yield same result as unchecked)" $ modifyMaxSuccess (const 50000) $ do
       specify "compare checked add" (property $ compareChecked addC add)
       specify "compare checked sub" (property $ compareChecked subC sub)
       specify "compare checked mul" (forAll smallNumGen (\x -> forAll smallNumGen (compareChecked mulC mul x)))
@@ -222,7 +222,7 @@ arithmeticSpecs smallNumGen =
       specify "compare checked mod" (property $ compareChecked modC' modD')
       specify "compare checked pow" (forAll smallNumGen (\x -> forAll (elements [0..10]) (compareChecked powC' powD' x)))
 
-    parallel . describe "Div/mod relation" $ modifyMaxSuccess (const 50000) $ do
+    describe "Div/mod relation" $ modifyMaxSuccess (const 50000) $ do
       specify "checked div/mod" (property $ compareChecked2 (\_ y q r -> q * y + r) (\x _ _ _ -> x) divC' modC) -- NOTE: compareChecked2 is for comparing checked vs. unchecked, but here it is just the checked operation
     describe "Representation conversion within same type" $ modifyMaxSuccess (const 50000) $ do
       specify "Involution on same type" $ forAll arbitrary (\x -> ((toIntegralNormalizing x) :: a) === x)

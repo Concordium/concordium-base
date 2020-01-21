@@ -47,25 +47,6 @@ library:
     - -Wredundant-constraints
     - -fno-ignore-asserts
 
-
-benchmarks:
-  Perf-bench:
-    main:            Perf.hs
-    source-dirs:     perf
-    ghc-options:
-    - -threaded
-    - -with-rtsopts=-N
-    - -Wall
-    - -Wcompat
-
-    ld-options:
-    - -static
-    
-    dependencies:
-    - globalstate-types
-    - criterion >= 1.5.4
-
-
 tests:
   types-test:
     main:                Spec.hs
