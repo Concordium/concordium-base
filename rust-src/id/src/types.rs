@@ -20,7 +20,7 @@ use crate::sigma_protocols::{
     com_eq_sig::ComEqSigProof, com_mult::ComMultProof, dlog::DlogProof,
 };
 
-use serde_json::{json, Number, Value};
+use serde_json::{json, Map, Number, Value};
 
 use byteorder::{BigEndian, ReadBytesExt};
 use either::{
@@ -688,21 +688,23 @@ impl AccountData {
     }
 
     pub fn to_json(&self) -> Value {
-        let mut out = Vec::with_capacity(self.keys.len());
+        let mut out = Map::with_capacity(self.keys.len());
         for (idx, kp) in self.keys.iter() {
-            out.push(json!({
-                "index": idx.to_json(),
-                "verifyKey": json_base16_encode(kp.public.as_bytes()),
-                "signKey": json_base16_encode(kp.public.as_bytes()),
-            }));
+            out.insert(
+                format!("{}", idx.0).to_owned(),
+                json!({
+                    "verifyKey": json_base16_encode(kp.public.as_bytes()),
+                    "signKey": json_base16_encode(kp.secret.as_bytes()),
+                }),
+            );
         }
         match self.existing {
             Left(thr) => json!({
-                "keys": out,
+                "keys": Value::Object(out),
                 "threshold": thr.to_json()
             }),
             Right(addr) => json!({
-                "keys": out,
+                "keys": Value::Object(out),
                 "address": addr.to_json()
             }),
         }
@@ -748,12 +750,13 @@ impl AccountKeys {
     }
 
     pub fn to_json(&self) -> Value {
+        let mut out = Map::with_capacity(self.keys.len());
+        for (idx, v) in self.keys.iter() {
+            out.insert(format!("{}", idx.0).to_owned(), v.to_json());
+        }
         json!({
             "threshold": self.threshold.to_json(),
-            "keys": self.keys.iter().map(|(idx, v)| json!({
-                "index": idx.to_json(),
-                "verifyKey": v.to_json(),
-            })).collect::<Vec<_>>()
+            "keys": Value::Object(out)
         })
     }
 }
