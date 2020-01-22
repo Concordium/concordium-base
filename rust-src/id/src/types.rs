@@ -133,12 +133,13 @@ pub struct AccountOwnershipProof {
     pub proofs: BTreeMap<KeyIndex, Ed25519DlogProof>,
 }
 
-// Manual implementation to be able to encode length as 1.
+// Manual implementation to be able to encode length as 1, as well as to
+// make sure there is at least one proof.
 impl Serial for AccountOwnershipProof {
     fn serial<B: Buffer>(&self, out: &mut B) {
         let len = self.proofs.len() as u8;
         out.put(&len);
-        serial_map_no_length(self.proofs.iter(), out)
+        serial_map_no_length(&self.proofs, out)
     }
 }
 
@@ -452,7 +453,7 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, Attribu
         out.put(&self.variant);
         out.put(&self.expiry);
         out.put(&(self.policy_vec.len() as u16));
-        serial_map_no_length(self.policy_vec.iter(), out)
+        serial_map_no_length(&self.policy_vec, out)
     }
 }
 
@@ -714,7 +715,7 @@ impl Serial for AccountData {
     fn serial<B: Buffer>(&self, out: &mut B) {
         let len = self.keys.len() as u8;
         out.put(&len);
-        serial_map_no_length(self.keys.iter(), out);
+        serial_map_no_length(&self.keys, out);
         out.put(&self.existing);
     }
 }
@@ -795,7 +796,7 @@ impl Serial for AccountKeys {
     fn serial<B: Buffer>(&self, out: &mut B) {
         let len = self.keys.len() as u8;
         out.put(&len);
-        serial_map_no_length(self.keys.iter(), out);
+        serial_map_no_length(&self.keys, out);
         out.put(&self.threshold);
     }
 }

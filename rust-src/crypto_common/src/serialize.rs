@@ -227,34 +227,41 @@ pub fn serial_vector_no_length<B: Buffer, T: Serial>(xs: &[T], out: &mut B) {
 
 // Serialize anything that is an iterator over keypairs, which is in practice a
 // map.
-pub fn serial_map_no_length<
-    'a,
-    B: Buffer,
-    K: Serial + 'a,
-    V: Serial + 'a,
-    I: Iterator<Item = (&'a K, &'a V)>,
->(
-    map: I,
+pub fn serial_map_no_length<'a, B: Buffer, K: Serial + 'a, V: Serial + 'a>(
+    map: &BTreeMap<K, V>,
     out: &mut B,
 ) {
-    for (k, v) in map {
+    for (k, v) in map.iter() {
+        // iterator over ordered pairs.
         out.put(k);
         out.put(v);
     }
 }
 
 /// NB: This ensures there are no duplicates, hence the specialized type.
-pub fn deserial_map_no_length<R: ReadBytesExt, K: Deserial + Ord, V: Deserial>(
+/// Moreover this will only succeed if keys are listed in order.
+pub fn deserial_map_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy, V: Deserial>(
     source: &mut R,
     len: usize,
 ) -> Fallible<BTreeMap<K, V>> {
     let mut out = BTreeMap::new();
+    let mut x = None;
     for _ in 0..len {
         let k = source.get()?;
         let v = source.get()?;
-        if out.insert(k, v).is_some() {
-            bail!("Duplicate key.")
+        match x {
+            None => {
+                out.insert(k, v);
+            }
+            Some(kk) => {
+                if k > kk {
+                    out.insert(k, v);
+                } else {
+                    bail!("Keys not in order.")
+                }
+            }
         }
+        x = Some(k);
     }
     Ok(out)
 }
