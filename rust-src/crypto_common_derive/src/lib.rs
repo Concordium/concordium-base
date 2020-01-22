@@ -157,7 +157,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
-                            serial_map_no_length(self.#ident.iter(), #out);
+                            serial_map_no_length(&self.#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
                         let id = format_ident!("u{}", 8 * l);
@@ -203,7 +203,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         body.extend(quote! {
                             let #len_ident: #id = #ident.len() as #id;
                             #len_ident.serial(#out);
-                            serial_map_no_length(self.#ident.iter(), #out);
+                            serial_map_no_length(&self.#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
                         let id = format_ident!("u{}", 8 * l);
