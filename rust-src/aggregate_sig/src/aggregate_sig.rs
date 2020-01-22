@@ -342,12 +342,15 @@ mod test {
 
     #[test]
     fn test_has_duplicates() {
+        use std::convert::TryFrom;
+
         let seed: &[_] = &[1];
         let mut rng: StdRng = SeedableRng::from_seed(seed);
 
         for _ in 0..TEST_ITERATIONS {
-            // 33 is a dummy value since has_duplicates expects pairs.
-            let mut ms: Vec<[u8; 8]> = (0..SIGNERS).map(|x| x.to_le_bytes()).collect();
+            let signers: u64 = u64::try_from(SIGNERS)
+                .expect("The number of signers should be convertible to u64.");
+            let mut ms: Vec<[u8; 8]> = (0..signers).map(|x| x.to_le_bytes()).collect();
 
             // Make a duplication in the messages
             let random_idx1: usize = rng.gen_range(0, SIGNERS);
