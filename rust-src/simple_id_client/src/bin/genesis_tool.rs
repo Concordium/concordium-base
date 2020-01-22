@@ -223,6 +223,7 @@ fn main() {
 
         // output private account data
         let account_data_json = json!({
+            "address": address_json.clone(),
             "accountData": acc_data.to_json(),
             "credential": credential_json,
             "aci": aci_to_json(&aci),
