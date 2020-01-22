@@ -289,7 +289,7 @@ mod test {
 
             let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
             for i in 0..SIGNERS {
-                let idx = i as usize;
+                let idx = i;
                 m_pk_pairs.push((&ms[idx], pks[idx].clone()));
             }
 
@@ -378,7 +378,7 @@ mod test {
             let random_idx1: usize = rng.gen_range(0, SIGNERS);
             let mut random_idx2: usize = rng.gen_range(0, SIGNERS);
             while random_idx1 == random_idx2 {
-                random_idx2 = rng.gen_range(0, SIGNERS) as usize
+                random_idx2 = rng.gen_range(0, SIGNERS)
             }
             ms[random_idx1] = ms[random_idx2];
             let vs: Vec<(&[u8], ())> = ms.iter().map(|x| (&x[..], ())).collect();
