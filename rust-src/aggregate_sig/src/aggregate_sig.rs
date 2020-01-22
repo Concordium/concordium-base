@@ -289,8 +289,7 @@ mod test {
 
             let mut m_pk_pairs: Vec<(&[u8], PublicKey<Bls12>)> = Vec::new();
             for i in 0..SIGNERS {
-                let idx = i;
-                m_pk_pairs.push((&ms[idx], pks[idx].clone()));
+                m_pk_pairs.push((&ms[i], pks[i].clone()));
             }
 
             // signature should verify
