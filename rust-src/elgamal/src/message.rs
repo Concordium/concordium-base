@@ -2,8 +2,8 @@
 
 use rand::*;
 
-use curve_arithmetic::Curve;
 use crypto_common::*;
+use curve_arithmetic::Curve;
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 #[repr(transparent)]

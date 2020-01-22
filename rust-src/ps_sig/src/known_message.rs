@@ -2,12 +2,12 @@
 
 use rand::*;
 
-use curve_arithmetic::{curve_arithmetic::*};
 use crypto_common::*;
+use curve_arithmetic::curve_arithmetic::*;
 
 /// A message
 #[derive(Debug, Serialize)]
-pub struct KnownMessage<C: Pairing>(#[size_length=4] pub Vec<C::ScalarField>);
+pub struct KnownMessage<C: Pairing>(#[size_length = 4] pub Vec<C::ScalarField>);
 
 impl<C: Pairing> PartialEq for KnownMessage<C> {
     fn eq(&self, other: &Self) -> bool { self.0 == other.0 }

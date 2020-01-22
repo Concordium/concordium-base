@@ -5,8 +5,8 @@
 use rand::*;
 
 use crate::{known_message::*, signature::*};
-use curve_arithmetic::curve_arithmetic::*;
 use crypto_common::*;
+use curve_arithmetic::curve_arithmetic::*;
 
 use crate::secret::*;
 
@@ -19,10 +19,10 @@ pub struct PublicKey<C: Pairing> {
     /// Generator of G2
     pub g_tilda: C::G2,
     /// Generator $g_1$ raised to the powers $y_i$
-    #[size_length=4]
+    #[size_length = 4]
     pub ys: Vec<C::G1>,
     /// Generator $g_2$ raised to the powers $y_i$
-    #[size_length=4]
+    #[size_length = 4]
     pub y_tildas: Vec<C::G2>,
     /// Generator $g_2$ raised to the power $x$.
     pub x_tilda: C::G2,

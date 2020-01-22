@@ -1,9 +1,9 @@
-use curve_arithmetic::{curve_arithmetic::*};
 use crypto_common::*;
+use curve_arithmetic::curve_arithmetic::*;
 use pedersen_scheme::Commitment;
 
 use rand::*;
-use std::{ops::Deref};
+use std::ops::Deref;
 
 #[derive(Debug, Serialize)]
 pub struct UnknownMessage<C: Pairing>(pub C::G1);
@@ -21,10 +21,8 @@ impl<P: Pairing> Deref for UnknownMessage<P> {
     fn deref(&self) -> &P::G1 { &self.0 }
 }
 
-impl <P: Pairing>From<Commitment<P::G1>> for UnknownMessage<P> {
-    fn from(cmm: Commitment<P::G1>) -> Self {
-        UnknownMessage(cmm.0)
-    }
+impl<P: Pairing> From<Commitment<P::G1>> for UnknownMessage<P> {
+    fn from(cmm: Commitment<P::G1>) -> Self { UnknownMessage(cmm.0) }
 }
 
 /// Randomness used to retrieve signature on the message from signature on an

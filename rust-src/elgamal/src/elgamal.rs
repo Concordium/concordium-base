@@ -8,8 +8,8 @@ use curve_arithmetic::curve_arithmetic::Curve;
 
 use std::io::Cursor;
 
-// FIXME: This is a bad implementation. There is no need to involve serialization.
-// endianness sensetive
+// FIXME: This is a bad implementation. There is no need to involve
+// serialization. endianness sensetive
 pub fn value_to_chunks<C: Curve>(val: &C::Scalar, chunk_size: usize) -> Vec<C::Scalar> {
     assert!(chunk_size <= C::SCALAR_LENGTH);
     assert_eq!(C::SCALAR_LENGTH % chunk_size, 0);
@@ -25,7 +25,8 @@ pub fn value_to_chunks<C: Curve>(val: &C::Scalar, chunk_size: usize) -> Vec<C::S
     scalar_chunks
 }
 
-// FIXME: This is a bad implementation. There is no need to involve serialization.
+// FIXME: This is a bad implementation. There is no need to involve
+// serialization.
 pub fn chunks_to_value<C: Curve>(chunks: Vec<C::Scalar>) -> C::Scalar {
     let number_of_chunks = chunks.len();
     assert!(number_of_chunks <= C::SCALAR_LENGTH);

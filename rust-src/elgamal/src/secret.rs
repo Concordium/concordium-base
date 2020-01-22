@@ -4,8 +4,8 @@
 use crate::{cipher::*, message::*};
 use rand::*;
 
-use curve_arithmetic::Curve;
 use crypto_common::*;
+use curve_arithmetic::Curve;
 
 use ff::Field;
 

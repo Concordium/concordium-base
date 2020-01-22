@@ -381,7 +381,6 @@ mod test {
             let pk_from_bytes = pk_from_bytes.expect("Serialization OK.");
             let sig_from_bytes = sig_from_bytes.expect("Serialization OK.");
 
-
             assert_eq!(sig.0, sig_from_bytes.0);
             assert_eq!(sk.0, sk_from_bytes.0);
             assert_eq!(pk.0, pk_from_bytes.0);

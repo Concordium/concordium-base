@@ -1,10 +1,10 @@
 //! Elgamal cipher  types
 
-use curve_arithmetic::curve_arithmetic::*;
 use crypto_common::*;
+use curve_arithmetic::curve_arithmetic::*;
 
 use rand::*;
-use std::{ops::Deref};
+use std::ops::Deref;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize)]
 /// Encrypted message.

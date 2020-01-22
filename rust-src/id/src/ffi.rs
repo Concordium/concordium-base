@@ -2,13 +2,14 @@ use crate::{
     chain::{self, CDIVerificationError},
     types::*,
 };
+use crypto_common::*;
 use curve_arithmetic::curve_arithmetic::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
+
 use std::{error::Error as StdError, fmt, io::Cursor, slice, str::FromStr};
 
 use byteorder::ReadBytesExt;
-use failure::Error;
 use ffi_helpers::*;
 use libc::size_t;
 use num::bigint::{BigUint, ParseBigIntError};
@@ -19,6 +20,21 @@ use serde_json;
 #[derive(Copy, Clone, PartialEq, Eq)]
 // represented as big-endian bytes.
 pub struct AttributeKind([u8; 31]);
+
+impl Deserial for AttributeKind {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut buf = [0u8; 31];
+        source.read_exact(&mut buf)?;
+        Ok(AttributeKind(buf))
+    }
+}
+
+impl Serial for AttributeKind {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_all(&self.0)
+            .expect("Writing to buffer should succeed.");
+    }
+}
 
 #[derive(Debug)]
 pub enum ParseAttributeError {
@@ -85,29 +101,8 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
         let AttributeKind(x) = self;
         let mut buf = [0u8; 32];
         buf[1..].copy_from_slice(x);
-        <G1 as Curve>::bytes_to_scalar(&mut Cursor::new(&buf)).unwrap()
-    }
-
-    fn to_bytes(&self) -> Box<[u8]> {
-        let AttributeKind(x) = self;
-        let bytes = (BigUint::from_bytes_be(x)).to_bytes_be();
-        let l = bytes.len();
-        let mut buf = vec![l as u8; l + 1];
-        buf[1..].copy_from_slice(&bytes);
-        buf.into_boxed_slice()
-    }
-
-    fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let l = cur.read_u8().ok()?;
-        if l <= 31 {
-            let mut r = [0u8; 31];
-            for i in (31 - l)..31 {
-                r[i as usize] = cur.read_u8().ok()?;
-            }
-            Some(AttributeKind(r))
-        } else {
-            None
-        }
+        <<G1 as Curve>::Scalar as Deserial>::deserial(&mut Cursor::new(&buf))
+            .expect("31 bytes fits into a scalar.")
     }
 }
 
@@ -132,7 +127,7 @@ pub extern "C" fn verify_cdi_ffi(
         None
     } else {
         let acc_key_bytes = slice_from_c_bytes!(acc_keys_ptr, acc_keys_len as usize);
-        if let Some(acc_keys) = AccountKeys::from_bytes(&mut Cursor::new(&acc_key_bytes)) {
+        if let Ok(acc_keys) = AccountKeys::deserial(&mut Cursor::new(&acc_key_bytes)) {
             Some(acc_keys)
         } else {
             return -10;
@@ -140,9 +135,9 @@ pub extern "C" fn verify_cdi_ffi(
     };
 
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
-    match CredDeploymentInfo::<Bls12, G1, AttributeKind>::from_bytes(&mut Cursor::new(&cdi_bytes)) {
-        None => -9,
-        Some(cdi) => {
+    match CredDeploymentInfo::<Bls12, G1, AttributeKind>::deserial(&mut Cursor::new(&cdi_bytes)) {
+        Err(_) => -9,
+        Ok(cdi) => {
             match chain::verify_cdi::<Bls12, G1, AttributeKind>(
                 from_ptr!(gc_ptr),
                 from_ptr!(ip_info_ptr),
@@ -165,8 +160,7 @@ pub extern "C" fn verify_cdi_ffi(
 macro_derive_from_bytes!(
     Box
     pedersen_key_from_bytes,
-    PedersenKey<G1>,
-    PedersenKey::from_bytes
+    PedersenKey<G1>
 );
 macro_derive_to_bytes!(Box pedersen_key_to_bytes, PedersenKey<G1>);
 macro_free_ffi!(Box pedersen_key_free, PedersenKey<G1>);
@@ -181,8 +175,7 @@ pub extern "C" fn pedersen_key_gen() -> *mut PedersenKey<G1> {
 macro_derive_from_bytes!(
     Box
     ps_sig_key_from_bytes,
-    ps_sig::PublicKey<Bls12>,
-    ps_sig::PublicKey::from_bytes
+    ps_sig::PublicKey<Bls12>
 );
 macro_derive_to_bytes!(Box ps_sig_key_to_bytes, ps_sig::PublicKey<Bls12>);
 macro_free_ffi!(Box ps_sig_key_free, ps_sig::PublicKey<Bls12>);
@@ -194,7 +187,7 @@ macro_generate_commitment_key!(
 
 // derive conversion methods for IpInfo to be used in Haskell.
 macro_free_ffi!(Box ip_info_free, IpInfo<Bls12, G1>);
-macro_derive_from_bytes!(Box ip_info_from_bytes, IpInfo<Bls12, G1>, |x| IpInfo::from_bytes(x).ok_or(()));
+macro_derive_from_bytes!(Box ip_info_from_bytes, IpInfo<Bls12, G1>);
 macro_derive_to_bytes!(Box ip_info_to_bytes, IpInfo<Bls12, G1>);
 macro_derive_from_json!(ip_info_from_json, IpInfo<Bls12, G1>, IpInfo::from_json);
 macro_derive_to_json!(ip_info_to_json, IpInfo<Bls12, G1>);
@@ -208,9 +201,7 @@ pub extern "C" fn ip_info_ip_identity(ip_info_ptr: *const IpInfo<Bls12, G1>) -> 
 
 // derive conversion methods for GlobalContext to be used in Haskell
 macro_free_ffi!(Box global_context_free, GlobalContext<G1>);
-macro_derive_from_bytes!(Box global_context_from_bytes, GlobalContext<G1>, |x| {
-    GlobalContext::from_bytes(x).ok_or(())
-});
+macro_derive_from_bytes!(Box global_context_from_bytes, GlobalContext<G1>);
 macro_derive_to_bytes!(Box global_context_to_bytes, GlobalContext<G1>);
 macro_derive_from_json!(
     global_context_from_json,
@@ -219,23 +210,16 @@ macro_derive_from_json!(
 );
 macro_derive_to_json!(global_context_to_json, GlobalContext<G1>);
 
+#[derive(Serialize)]
 pub struct ElgamalGenerator(G1);
 
 impl ElgamalGenerator {
-    pub fn to_bytes(&self) -> Box<[u8]> { self.0.curve_to_bytes() }
-
-    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let r = G1::bytes_to_curve(cur)?;
-        Ok(ElgamalGenerator(r))
-    }
-
     pub fn generate() -> Self { ElgamalGenerator(G1::generate(&mut thread_rng())) }
 }
 
 macro_derive_from_bytes!(
     Box elgamal_gen_from_bytes,
-    ElgamalGenerator,
-    ElgamalGenerator::from_bytes
+    ElgamalGenerator
 );
 macro_derive_to_bytes!(Box elgamal_gen_to_bytes, ElgamalGenerator);
 macro_free_ffi!(Box elgamal_gen_free, ElgamalGenerator);
@@ -247,8 +231,7 @@ pub extern "C" fn elgamal_gen_gen() -> *mut ElgamalGenerator {
 
 macro_derive_from_bytes!(
     Box elgamal_pub_key_from_bytes,
-    elgamal::PublicKey<G1>,
-    elgamal::PublicKey::from_bytes
+    elgamal::PublicKey<G1>
 );
 macro_derive_to_bytes!(Box elgamal_pub_key_to_bytes, elgamal::PublicKey<G1>);
 macro_free_ffi!(Box elgamal_pub_key_free, elgamal::PublicKey<G1>);
@@ -260,8 +243,7 @@ pub extern "C" fn elgamal_pub_key_gen() -> *mut elgamal::PublicKey<G1> {
 
 macro_derive_from_bytes!(
     Box elgamal_cipher_from_bytes,
-    elgamal::cipher::Cipher<G1>,
-    elgamal::cipher::Cipher::from_bytes
+    elgamal::cipher::Cipher<G1>
 );
 macro_derive_to_bytes!(Box elgamal_cipher_to_bytes, elgamal::cipher::Cipher<G1>);
 macro_free_ffi!(Box elgamal_cipher_free, elgamal::cipher::Cipher<G1>);
@@ -437,7 +419,7 @@ mod test {
             &randomness,
         );
 
-        let cdi_bytes = cdi.to_bytes();
+        let cdi_bytes = to_bytes(&cdi);
         let cdi_bytes_len = cdi_bytes.len() as size_t;
 
         let gc_ptr = Box::into_raw(Box::new(global_ctx));
@@ -452,7 +434,7 @@ mod test {
             cdi_bytes_len,
         );
         assert_eq!(cdi_check, 1);
-        let wrong_cdi_bytes = &*wrong_cdi.to_bytes();
+        let wrong_cdi_bytes = to_bytes(&wrong_cdi);
         let wrong_cdi_bytes_len = wrong_cdi_bytes.len() as size_t;
         let wrong_cdi_check = verify_cdi_ffi(
             gc_ptr,

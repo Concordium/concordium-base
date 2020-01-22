@@ -51,7 +51,7 @@ pub fn verify_credentials<
         return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
     }
 
-    let b_11 = verify_com_eq_single::<P::G_1, C>(
+    let b_11 = verify_com_eq_single::<P::G1, C>(
         RandomOracle::empty(),
         &pre_id_obj.cmm_sc,
         &pre_id_obj.id_cred_pub,
@@ -109,16 +109,16 @@ pub fn verify_credentials<
 }
 
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
-    cmm_prf: &Commitment<P::G_1>,
-    cmm_sc: &Commitment<P::G_1>,
+    cmm_prf: &Commitment<P::G1>,
+    cmm_sc: &Commitment<P::G1>,
     threshold: Threshold,
     ar_list: &[ArIdentity],
     att_list: &AttributeList<P::ScalarField, AttributeType>,
     ps_public_key: &ps_sig::PublicKey<P>,
 ) -> ps_sig::UnknownMessage<P> {
     // TODO: handle the errors
-    let variant = P::G_1::scalar_from_u64(u64::from(att_list.variant)).unwrap();
-    let expiry = P::G_1::scalar_from_u64(att_list.expiry).unwrap();
+    let variant = P::G1::scalar_from_u64(u64::from(att_list.variant));
+    let expiry = P::G1::scalar_from_u64(att_list.expiry);
 
     // the list to be signed consists of (in that order)
     // - commitment to idcredsec
@@ -140,10 +140,10 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     assert!(key_vec.len() >= n + m + 3 + 2);
 
     // add threshold to the message
-    message = message.plus_point(&key_vec[2].mul_by_scalar(&threshold.to_scalar::<P::G_1>()));
+    message = message.plus_point(&key_vec[2].mul_by_scalar(&threshold.to_scalar::<P::G1>()));
     // and add all anonymity revocation
     for i in 3..(m + 3) {
-        let ar_handle = ar_list[i - 3].to_scalar::<P::G_1>();
+        let ar_handle = ar_list[i - 3].to_scalar::<P::G1>();
         message = message.plus_point(&key_vec[i].mul_by_scalar(&ar_handle));
     }
 

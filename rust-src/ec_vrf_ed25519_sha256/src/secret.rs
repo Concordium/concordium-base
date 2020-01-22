@@ -1,8 +1,3 @@
-// -*- mode: rust; -*-
-//
-// Authors:
-// - bm@concordium.com
-
 //! ed25519 secret key types.
 
 use core::fmt::Debug;
@@ -17,16 +12,8 @@ use sha2::Sha512;
 
 use subtle::{Choice, ConstantTimeEq};
 
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
-
 use crate::{constants::*, errors::*, public::*};
+use crypto_common::*;
 
 /// An EdDSA secret key.
 #[derive(Default)] // we derive Default in order to use the clear() method in Drop
@@ -34,6 +21,26 @@ pub struct SecretKey(pub(crate) [u8; SECRET_KEY_LENGTH]);
 
 impl ConstantTimeEq for SecretKey {
     fn ct_eq(&self, other: &Self) -> Choice { self.0.ct_eq(&other.0) }
+}
+
+impl Serial for SecretKey {
+    #[inline]
+    fn serial<B: Buffer>(&self, x: &mut B) {
+        x.write_all(&self.0)
+            .expect("Writing to buffer should succeed.")
+    }
+}
+
+/// Construct a `PublicKey` from a slice of bytes. This function always
+/// results in a valid public key, in particular the curve point is not of
+/// small order (and hence also not a point at infinity).
+impl Deserial for SecretKey {
+    #[inline]
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut buf = [0u8; SECRET_KEY_LENGTH];
+        source.read_exact(&mut buf)?;
+        Ok(SecretKey(buf))
+    }
 }
 
 impl Debug for SecretKey {

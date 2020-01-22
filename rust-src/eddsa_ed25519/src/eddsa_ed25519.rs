@@ -2,6 +2,7 @@ use ed25519_dalek::*;
 use rand::*;
 
 use crate::dlog_ed25519::*;
+use crypto_common::*;
 use ffi_helpers::*;
 use libc::size_t;
 use std::{io::Cursor, slice};
@@ -149,7 +150,7 @@ pub extern "C" fn eddsa_verify_dlog_ed25519(
     };
     let proof = {
         let proof_bytes = slice_from_c_bytes!(proof_bytes, PROOF_LENGTH);
-        match Ed25519DlogProof::from_bytes(&mut Cursor::new(proof_bytes)) {
+        match Ed25519DlogProof::deserial(&mut Cursor::new(proof_bytes)) {
             Err(_) => return -2,
             Ok(proof) => proof,
         }
@@ -189,6 +190,6 @@ pub extern "C" fn eddsa_prove_dlog_ed25519(
     let proof_bytes = mut_slice_from_c_bytes!(proof_ptr, PROOF_LENGTH);
     let ro = RandomOracle::domain(&challenge);
     let proof = prove_dlog_ed25519(ro, &public_key, &secret_key);
-    proof_bytes.copy_from_slice(&proof.to_bytes());
+    proof_bytes.copy_from_slice(&to_bytes(&proof));
     0
 }
