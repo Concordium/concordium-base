@@ -276,7 +276,7 @@ instance S.Serialize Payload where
               return UpdateBakerSignKey{..}
             10 -> DelegateStake <$> S.get
             11 -> return UndelegateStake
-            _ -> fail "Unsupported transaction type."
+            n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 {-# INLINE encodePayload #-}
 encodePayload :: Payload -> EncodedPayload
