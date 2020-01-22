@@ -555,10 +555,10 @@ fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingEr
         let mut g_cursor = Cursor::new(g.as_mut());
 
         for digit in p_x.into_repr().as_ref().iter().rev() {
-            g_cursor.write(&digit.to_be_bytes());
+            g_cursor.write(&digit.to_be_bytes()).map_err(|_| CurveDecodingError::NotOnCurve)?;
         }
         for digit in p_y.into_repr().as_ref().iter().rev() {
-            g_cursor.write(&digit.to_be_bytes());
+            g_cursor.write(&digit.to_be_bytes()).map_err(|_| CurveDecodingError::NotOnCurve)?;
         }
 
         match g.into_affine_unchecked() {
@@ -807,7 +807,7 @@ enum Sign {
 mod tests {
     use super::*;
     use rand::{Rand, SeedableRng, StdRng};
-    use ff::{SqrtField, PrimeFieldDecodingError};
+    use ff::SqrtField;
 
     // testing from_coordinates_unchecked for point at infinity
     #[test]
@@ -833,7 +833,7 @@ mod tests {
         let mut rng: StdRng = SeedableRng::from_seed(seed);
 
         let mut i = 0;
-        while (i <= 10000) {
+        while i <= 10000 {
             let x = Fq::rand(&mut rng);
             let mut y = x;
             y.square();
