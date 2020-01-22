@@ -3,6 +3,7 @@
 //
 
 use crate::curve_arithmetic::*;
+use crate::bls12_381_g1hash::*;
 use byteorder::{BigEndian, ReadBytesExt};
 use ff::PrimeField;
 use pairing::{
@@ -282,7 +283,7 @@ impl Curve for G1 {
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
 
-    fn hash_to_group(bytes: &[u8]) -> Self { Self::hash_to_group_element(bytes) }
+    fn hash_to_group(bytes: &[u8]) -> Self { hash_to_g1(bytes) }
 }
 
 impl Curve for G1Affine {
@@ -414,8 +415,8 @@ impl Curve for G1Affine {
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
 
-    fn hash_to_group(_b: &[u8]) -> Self {
-        unimplemented!("hash_to_group_element for G1Affine of Bls12_381 is not implemented")
+    fn hash_to_group(b: &[u8]) -> Self {
+        hash_to_g1(b).into_affine()
     }
 }
 
