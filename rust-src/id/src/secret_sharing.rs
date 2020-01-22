@@ -2,26 +2,19 @@ use curve_arithmetic::curve_arithmetic::*;
 use ff::Field;
 use rand::*;
 
-use byteorder::{BigEndian, ReadBytesExt};
+use crypto_common::*;
 use pedersen_scheme::Value as PedersenValue;
 use serde_json::{json, Value};
-use std::{convert::TryFrom, io::Cursor};
+use std::convert::TryFrom;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize)]
 /// A point at which the polynomial is evaluated to obtain the shares.
 pub struct ShareNumber(pub u32);
 
 impl ShareNumber {
     /// Curve scalars must be big enough to accommodate all 32 bit unsigned
     /// integers.
-    pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)).unwrap() }
-
-    pub fn to_bytes(self) -> Box<[u8]> { Box::from(self.0.to_be_bytes()) }
-
-    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let r = cur.read_u32::<BigEndian>().ok()?;
-        Some(ShareNumber(r))
-    }
+    pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)) }
 
     pub fn to_json(self) -> Value { json!(self.0) }
 
@@ -39,21 +32,14 @@ impl From<u32> for ShareNumber {
     fn from(n: u32) -> Self { ShareNumber(n) }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize)]
 /// Revealing threshold, i.e., degree of the polynomial + 1.
 pub struct Threshold(pub u32);
 
 impl Threshold {
     /// Curve scalars must be big enough to accommodate all 32 bit unsigned
     /// integers.
-    pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)).unwrap() }
-
-    pub fn to_bytes(self) -> Box<[u8]> { Box::from(self.0.to_be_bytes()) }
-
-    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Option<Self> {
-        let r = cur.read_u32::<BigEndian>().ok()?;
-        Some(Threshold(r))
-    }
+    pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)) }
 
     pub fn to_json(self) -> Value { json!(self.0) }
 

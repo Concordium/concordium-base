@@ -1,26 +1,13 @@
-// -*- mode: rust; -*-
-
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
-
-use crate::{
-    errors::{InternalError::CurveDecodingError, *},
-    unknown_message::SigRetrievalRandomness,
-};
+use crate::unknown_message::SigRetrievalRandomness;
 use curve_arithmetic::curve_arithmetic::*;
-use failure::Error;
 use rand::*;
 
-use std::{io::Cursor, ops::Deref};
+use crypto_common::*;
+
+use std::ops::Deref;
 
 /// Randomness used to blind a signature.
-#[derive(Debug, Eq)]
+#[derive(Debug, Eq, Serialize)]
 pub struct BlindingRandomness<P: Pairing>(pub P::ScalarField, pub P::ScalarField);
 
 /// Manual implementation to relax the requirements on `P`. The derived
@@ -30,7 +17,7 @@ impl<P: Pairing> PartialEq for BlindingRandomness<P> {
 }
 
 #[repr(transparent)]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Serialize)]
 /// Type wrapper around a signature, indicating that it is a blinded variant.
 pub struct BlindedSignature<P: Pairing> {
     pub sig: Signature<P>,
@@ -44,18 +31,9 @@ impl<P: Pairing> Deref for BlindedSignature<P> {
     fn deref(&self) -> &Signature<P> { &self.sig }
 }
 
-impl<C: Pairing> BlindedSignature<C> {
-    pub fn to_bytes(&self) -> Box<[u8]> { self.sig.to_bytes() }
-
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let sig = Signature::from_bytes(bytes)?;
-        Ok(BlindedSignature { sig })
-    }
-}
-
 /// A signature
-#[derive(Debug, Clone, Copy)]
-pub struct Signature<C: Pairing>(pub C::G_1, pub C::G_1);
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct Signature<C: Pairing>(pub C::G1, pub C::G1);
 
 impl<C: Pairing> PartialEq for Signature<C> {
     fn eq(&self, other: &Self) -> bool { self.0 == other.0 && self.1 == other.1 }
@@ -64,29 +42,12 @@ impl<C: Pairing> PartialEq for Signature<C> {
 impl<C: Pairing> Eq for Signature<C> {}
 
 impl<C: Pairing> Signature<C> {
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let mut bytes: Vec<u8> = Vec::with_capacity(2 * C::G_1::GROUP_ELEMENT_LENGTH);
-        bytes.extend_from_slice(&*self.0.curve_to_bytes());
-        bytes.extend_from_slice(&*self.1.curve_to_bytes());
-        bytes.into_boxed_slice()
-    }
-
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Signature<C>, SignatureError> {
-        match C::G_1::bytes_to_curve(bytes) {
-            Err(_) => Err(SignatureError(CurveDecodingError)),
-            Ok(g) => match C::G_1::bytes_to_curve(bytes) {
-                Err(_) => Err(SignatureError(CurveDecodingError)),
-                Ok(h) => Ok(Signature(g, h)),
-            },
-        }
-    }
-
     /// Generate a valid (in the sense of representation) but otherwise
     /// arbitrary signature. Exposed because it is useful for testing protocols
     /// on top of the signature scheme.
     pub fn arbitrary<T: Rng>(csprng: &mut T) -> Signature<C> {
         // not a proper signature to be used for testing serialization
-        Signature(C::G_1::generate(csprng), C::G_1::generate(csprng))
+        Signature(C::G1::generate(csprng), C::G1::generate(csprng))
     }
 
     /// Retrieves a signature on the original message from the signature on the
@@ -123,7 +84,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _i in 0..20 {
                     let x = Signature::<$pairing_type>::arbitrary(&mut csprng);
-                    let y = Signature::<$pairing_type>::from_bytes(&mut Cursor::new(&x.to_bytes()));
+                    let y = serialize_deserialize(&x);
                     assert!(y.is_ok());
                     assert_eq!(x, y.unwrap());
                 }

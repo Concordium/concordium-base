@@ -223,6 +223,7 @@ fn main() {
 
         // output private account data
         let account_data_json = json!({
+            "address": address_json.clone(),
             "accountData": acc_data.to_json(),
             "credential": credential_json,
             "aci": aci_to_json(&aci),
@@ -278,12 +279,12 @@ fn main() {
 
             // Output baker vrf and election keys in a json file.
             let baker_data_json = json!({
-                "electionPrivateKey": json_base16_encode(&vrf_key.secret.to_bytes()),
-                "electionVerifyKey": json_base16_encode(&vrf_key.public.to_bytes()),
-                "signatureSignKey": json_base16_encode(&sign_key.secret.to_bytes()),
-                "signatureVerifyKey": json_base16_encode(&sign_key.public.to_bytes()),
-                "aggregationSignKey": json_base16_encode(&agg_sign_key.to_bytes()),
-                "aggregationVerifyKey": json_base16_encode(&agg_verify_key.to_bytes()),
+                "electionPrivateKey": json_base16_encode(&vrf_key.secret),
+                "electionVerifyKey": json_base16_encode(&vrf_key.public),
+                "signatureSignKey": json_base16_encode(&sign_key.secret),
+                "signatureVerifyKey": json_base16_encode(&sign_key.public),
+                "aggregationSignKey": json_base16_encode(&agg_sign_key),
+                "aggregationVerifyKey": json_base16_encode(&agg_verify_key),
             });
 
             if let Err(err) = write_json_to_file(
@@ -298,9 +299,9 @@ fn main() {
 
             // Finally store a json value storing public data for this baker.
             let public_baker_data = json!({
-                "electionVerifyKey": json_base16_encode(&vrf_key.public.to_bytes()),
-                "signatureVerifyKey": json_base16_encode(&sign_key.public.to_bytes()),
-                "aggregationVerifyKey": json_base16_encode(&agg_verify_key.to_bytes()),
+                "electionVerifyKey": json_base16_encode(&vrf_key.public),
+                "signatureVerifyKey": json_base16_encode(&sign_key.public),
+                "aggregationVerifyKey": json_base16_encode(&agg_verify_key),
                 "finalizer": baker < num_finalizers,
                 "account": json!({
                     "address": address_json,

@@ -1,3 +1,4 @@
+use crypto_common::*;
 use curve25519_dalek::{
     constants,
     edwards::{CompressedEdwardsY, EdwardsPoint},
@@ -6,17 +7,43 @@ use curve25519_dalek::{
 use random_oracle::RandomOracle;
 
 use ed25519_dalek::*;
+use failure::Fallible;
 use rand::*;
 use sha2::{Digest, Sha512};
-use std::io::{Cursor, Read};
 
-use failure::{Error, Fail};
+use failure::Fail;
 use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ed25519DlogProof {
     challenge: Scalar,
     witness:   Scalar,
+}
+
+impl Serial for Ed25519DlogProof {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_all(self.challenge.as_bytes())
+            .expect("Writing to buffer should succeed.");
+        out.write_all(self.witness.as_bytes())
+            .expect("Writing to buffer should succeed.");
+    }
+}
+
+impl Deserial for Ed25519DlogProof {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut buf = [0; 32];
+        source.read_exact(&mut buf)?;
+        if let Some(challenge) = Scalar::from_canonical_bytes(buf) {
+            source.read_exact(&mut buf)?;
+            if let Some(witness) = Scalar::from_canonical_bytes(buf) {
+                Ok(Ed25519DlogProof { challenge, witness })
+            } else {
+                bail!("Not a valid witness.")
+            }
+        } else {
+            bail!("Not a valid scalar.")
+        }
+    }
 }
 
 pub static PROOF_LENGTH: usize = 2 * 32;
@@ -37,24 +64,6 @@ impl Display for PointDecodingError {
 }
 
 impl Fail for PointDecodingError {}
-
-impl Ed25519DlogProof {
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let mut bytes = Vec::with_capacity(3 * 32);
-        bytes.extend_from_slice(self.challenge.as_bytes());
-        bytes.extend_from_slice(self.witness.as_bytes());
-        bytes.into_boxed_slice()
-    }
-
-    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let mut buf = [0; 32];
-        cur.read_exact(&mut buf)?;
-        let challenge = Scalar::from_canonical_bytes(buf).ok_or(PointDecodingError::NotAScalar)?;
-        cur.read_exact(&mut buf)?;
-        let witness = Scalar::from_canonical_bytes(buf).ok_or(PointDecodingError::NotAScalar)?;
-        Ok(Ed25519DlogProof { challenge, witness })
-    }
-}
 
 /// FIXME: This is a temporary hack due to library incompatibilites
 /// (dependencies on rand require two different versions.
@@ -93,13 +102,14 @@ pub fn prove_dlog_ed25519(
 ) -> Ed25519DlogProof {
     let secret = scalar_from_secret_key(&secret_key);
     // FIXME: Add base to the proof.
-    let hasher = ro.append("dlog_ed25519").append(&public.to_bytes());
+    let hasher = ro.append_bytes("dlog_ed25519").append(public);
     loop {
         // FIXME non_zero scalar should be generated
         let rand_scalar = generate_rand_scalar();
         let randomised_point = &rand_scalar * &constants::ED25519_BASEPOINT_TABLE;
         let challenge_bytes = hasher
-            .append_fresh(&randomised_point.compress().to_bytes())
+            .split()
+            .append_bytes(&randomised_point.compress().to_bytes())
             .result();
         let mut array = [0u8; 32];
         array.copy_from_slice(&challenge_bytes.as_ref()[..32]);
@@ -130,9 +140,9 @@ pub fn verify_dlog_ed25519(
             let randomised_point =
                 public * proof.challenge + &proof.witness * &constants::ED25519_BASEPOINT_TABLE;
             let hasher = ro
-                .append("dlog_ed25519")
-                .append(&public_key.to_bytes())
-                .append(&randomised_point.compress().to_bytes());
+                .append_bytes("dlog_ed25519")
+                .append(public_key)
+                .append_bytes(&randomised_point.compress().to_bytes());
             // FIXME: Should do the same as for normal dlog.
             let challenge_bytes = hasher.result();
             let mut array = [0u8; 32];
@@ -176,8 +186,7 @@ mod tests {
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
             let ro = RandomOracle::domain(&challenge_prefix);
             let proof = prove_dlog_ed25519(ro, &public, &secret);
-            let bytes = proof.to_bytes();
-            let proof_des = Ed25519DlogProof::from_bytes(&mut Cursor::new(&bytes));
+            let proof_des = serialize_deserialize(&proof);
             assert_eq!(proof, proof_des.expect("Proof did not deserialize."));
         }
     }

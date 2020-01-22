@@ -2,16 +2,16 @@
 
 //! A thin wrapper around a scalar to indicate that it is a secret value.
 
-use crate::{curve_arithmetic::*, serialization::*};
+use crate::curve_arithmetic::*;
+use crypto_common::*;
 
-use failure::Error;
 use rand::*;
-use std::{io::Cursor, ops::Deref};
+use std::ops::Deref;
 
 /// A value that will be commited to.
 /// NB: For the view function it is important that we have #[repr(transparent)].
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct Value<C: Curve> {
     pub value: C::Scalar,
 }
@@ -32,25 +32,6 @@ impl<C: Curve> Deref for Value<C> {
 
 impl<C: Curve> Value<C> {
     pub fn new(value: C::Scalar) -> Self { Value { value } }
-
-    // turn value vector into a byte aray
-    #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let v = &self.value;
-        let mut bytes: Vec<u8> = Vec::with_capacity(C::SCALAR_LENGTH);
-        write_curve_scalar::<C>(v, &mut bytes);
-        bytes.into_boxed_slice()
-    }
-
-    /// Construct a value  from a slice of bytes.
-    ///
-    /// A `Result` whose okay value is a Value vec  or whose error value
-    /// is an `CommitmentError` wrapping the internal error that occurred.
-    #[inline]
-    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<Value<C>, Error> {
-        let value = read_curve_scalar::<C>(cur)?;
-        Ok(Value { value })
-    }
 
     /// Generate a single `Value` from a `csprng`.
     pub fn generate<T>(csprng: &mut T) -> Value<C>
@@ -100,8 +81,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _i in 1..20 {
                     let val = Value::<$curve_type>::generate(&mut csprng);
-                    let res_val2 =
-                        Value::<$curve_type>::from_bytes(&mut Cursor::new(&val.to_bytes()));
+                    let res_val2 = serialize_deserialize(&val);
                     assert!(res_val2.is_ok());
                     let val2 = res_val2.unwrap();
                     assert_eq!(val2, val);
