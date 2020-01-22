@@ -816,12 +816,13 @@ impl AccountKeys {
     pub fn get(&self, idx: KeyIndex) -> Option<&VerifyKey> { self.keys.get(&idx) }
 
     pub fn to_json(&self) -> Value {
+        let mut out = Map::with_capacity(self.keys.len());
+        for (idx, v) in self.keys.iter() {
+            out.insert(format!("{}", idx.0).to_owned(), v.to_json());
+        }
         json!({
             "threshold": self.threshold.to_json(),
-            "keys": self.keys.iter().map(|(idx, v)| json!({
-                "index": idx.to_json(),
-                "verifyKey": v.to_json(),
-            })).collect::<Vec<_>>()
+            "keys": Value::Object(out)
         })
     }
 }
