@@ -220,13 +220,13 @@ mod test {
     use pairing::bls12_381::Bls12;
     use rand::{Rng, SeedableRng, StdRng};
 
-    const SIGNERS: u64 = 500;
-    const TEST_ITERATIONS: u64 = 10;
+    const SIGNERS: usize = 500;
+    const TEST_ITERATIONS: usize = 10;
 
     // returns a pair of lists (sks, pks), such that sks[i] and pks[i] are
     // corresponding secret and public key
     fn get_sks_pks<P: Pairing>(
-        amt: u64,
+        amt: usize,
         rng: &mut StdRng,
     ) -> (Vec<SecretKey<P>>, Vec<PublicKey<P>>) {
         let sks: Vec<SecretKey<P>> = (0..amt).map(|_| SecretKey::<P>::generate(rng)).collect();
@@ -239,7 +239,7 @@ mod test {
     }
 
     // returns a list of random bytes (of length 32)
-    fn get_random_messages<R: Rng>(amt: u64, rng: &mut R) -> Vec<[u8; 32]> {
+    fn get_random_messages<R: Rng>(amt: usize, rng: &mut R) -> Vec<[u8; 32]> {
         (0..amt).map(|_| rng.gen::<[u8; 32]>()).collect()
     }
 
@@ -364,15 +364,19 @@ mod test {
 
     #[test]
     fn test_has_duplicates() {
+        use std::convert::TryFrom;
+
         let seed: &[_] = &[1];
         let mut rng: StdRng = SeedableRng::from_seed(seed);
 
         for _ in 0..TEST_ITERATIONS {
-            let mut ms: Vec<[u8; 8]> = (0..SIGNERS).map(|x| x.to_le_bytes()).collect();
+            let signers: u64 = u64::try_from(SIGNERS)
+                .expect("The number of signers should be convertible to u64.");
+            let mut ms: Vec<[u8; 8]> = (0..signers).map(|x| x.to_le_bytes()).collect();
 
             // Make a duplication in the messages
-            let random_idx1: usize = rng.gen_range(0, SIGNERS) as usize;
-            let mut random_idx2: usize = rng.gen_range(0, SIGNERS) as usize;
+            let random_idx1: usize = rng.gen_range(0, SIGNERS);
+            let mut random_idx2: usize = rng.gen_range(0, SIGNERS);
             while random_idx1 == random_idx2 {
                 random_idx2 = rng.gen_range(0, SIGNERS) as usize
             }
