@@ -25,7 +25,7 @@ import qualified Data.Text as Text
 import Control.DeepSeq
 import Data.Scientific
 import System.Random
-import qualified Data.HashMap.Strict as HM
+import qualified Data.Map.Strict as Map
 
 import Data.Base58Encoding
 import qualified Data.FixedByteString as FBS
@@ -111,29 +111,38 @@ newtype KeyIndex = KeyIndex Word8
     deriving Hashable via Word8
 
 data AccountKeys = AccountKeys {
-  akKeys :: HM.HashMap KeyIndex VerifyKey,
+  akKeys :: Map.Map KeyIndex VerifyKey,
   akThreshold :: SignatureThreshold
   } deriving(Eq, Show, Ord)
 
 makeAccountKeys :: [VerifyKey] -> SignatureThreshold -> AccountKeys
 makeAccountKeys keys akThreshold =
   AccountKeys{
-    akKeys = HM.fromList (zip [0..] keys),
+    akKeys = Map.fromAscList (zip [0..] keys), -- NB: fromAscList does not check preconditions
     ..
     }
 
 makeSingletonAC :: VerifyKey -> AccountKeys
 makeSingletonAC key = makeAccountKeys [key] 1
 
+-- Build a map from an ascending list.
+safeFromAscList :: (MonadFail m, Ord k) => [(k,v)] -> m (Map.Map k v)
+safeFromAscList = go Map.empty Nothing
+    where go mp _ [] = return mp
+          go mp Nothing ((k,v):rest) = go (Map.insert k v mp) (Just k) rest
+          go mp (Just k') ((k,v):rest)
+              | k' < k = go (Map.insert k v mp) (Just k) rest
+              | otherwise = fail "Keys not in ascending order, or duplicate keys."
+
 instance S.Serialize AccountKeys where
   put AccountKeys{..} = do
     S.putWord8 (fromIntegral (length akKeys))
-    forM_ (HM.toList akKeys) $ \(idx, key) -> S.put idx <> S.put key
+    forM_ (Map.toAscList akKeys) $ \(idx, key) -> S.put idx <> S.put key
     S.put akThreshold
   get = do
     len <- S.getWord8
     when (len == 0) $ fail "Number of keys out of bounds."
-    akKeys <- HM.fromList <$> replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+    akKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
     akThreshold <- S.get
     return AccountKeys{..}
 
@@ -145,7 +154,7 @@ instance FromJSON AccountKeys where
 
 {-# INLINE getAccountKey #-}
 getAccountKey :: KeyIndex -> AccountKeys -> Maybe VerifyKey
-getAccountKey idx keys = HM.lookup idx (akKeys keys)
+getAccountKey idx keys = Map.lookup idx (akKeys keys)
 
 -- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32
