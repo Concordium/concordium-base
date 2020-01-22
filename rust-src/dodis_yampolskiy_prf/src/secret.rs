@@ -1,63 +1,24 @@
-// -*- mode: rust; -*-
-//
-// Authors:
-// - bm@concordium.com
-
 //! PRF Key type
 
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
-
-use crate::errors::{
-    InternalError::{DecodingError, DivisionByZero},
-    *,
-};
+use crate::errors::{InternalError::DivisionByZero, *};
+use crypto_common::*;
 use curve_arithmetic::curve_arithmetic::Curve;
+
 use ff::Field;
 use rand::*;
 
-use std::io::Cursor;
-
 /// A PRF  key.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct SecretKey<C: Curve>(pub C::Scalar);
 
 impl<C: Curve> SecretKey<C> {
-    #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> { C::scalar_to_bytes(&self.0) }
-
-    /// Construct a `SecretKey` from a slice of bytes.
-    ///
-    /// A `Result` whose okay value is an PRF key or whose error value
-    /// is an `PRFError` wrapping the internal error that occurred.
-    #[inline]
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<SecretKey<C>, PrfError> {
-        match C::bytes_to_scalar(bytes) {
-            Ok(scalar) => Ok(SecretKey(scalar)),
-            Err(x) => Err(PrfError(DecodingError(x))),
-        }
-    }
-
-    // NOTE: I have removed the negation since I don't think it is needed.
-    // At least it does not appear in the white paper.
-    // CHECK!
     pub fn prf_exponent(&self, n: u8) -> Result<C::Scalar, PrfError> {
-        match C::scalar_from_u64(u64::from(n)) {
-            Ok(x) => {
-                let mut k = self.0;
-                k.add_assign(&x);
-                match k.inverse() {
-                    None => Err(PrfError(DivisionByZero)),
-                    Some(y) => Ok(y),
-                }
-            }
-            Err(e) => Err(PrfError(DecodingError(e))),
+        let x = C::scalar_from_u64(u64::from(n));
+        let mut k = self.0;
+        k.add_assign(&x);
+        match k.inverse() {
+            None => Err(PrfError(DivisionByZero)),
+            Some(y) => Ok(y),
         }
     }
 
@@ -83,8 +44,7 @@ mod tests {
         let mut csprng = thread_rng();
         for _ in 1..100 {
             let sk = SecretKey::<G1>::generate(&mut csprng);
-            let r = sk.to_bytes();
-            let res_sk2 = SecretKey::<G1>::from_bytes(&mut Cursor::new(&r));
+            let res_sk2 = serialize_deserialize(&sk);
             assert!(res_sk2.is_ok());
             let sk2 = res_sk2.unwrap();
             assert_eq!(sk2, sk);

@@ -3,13 +3,10 @@
 //! ElGamal) is the same as the value commited to via the Pedersen commitment.
 
 use curve_arithmetic::curve_arithmetic::Curve;
-use failure::Error;
 use ff::Field;
 use rand::*;
 
-use std::io::Cursor;
-
-use curve_arithmetic::serialization::*;
+use crypto_common::*;
 use elgamal::{
     Cipher as ElGamalCipher, PublicKey as ElGamalPublicKey, Randomness as ElgamalRandomness,
 };
@@ -23,7 +20,7 @@ pub struct ComEncEqSecret<'a, T: Curve> {
     pub pedersen_rand: &'a Randomness<T>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ComEncEqProof<T: Curve> {
     /// The computed challenge.
     challenge: T::Scalar,
@@ -37,27 +34,6 @@ pub struct ComEncEqProof<T: Curve> {
     /// * r is the Pedersen randomness
     /// * x is the encrypted/commited value
     witness: (T::Scalar, T::Scalar, T::Scalar),
-}
-
-impl<T: Curve> ComEncEqProof<T> {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let bytes_len = T::SCALAR_LENGTH + 3 * T::GROUP_ELEMENT_LENGTH + 3 * T::SCALAR_LENGTH;
-        let mut bytes = Vec::with_capacity(bytes_len);
-        write_curve_scalar::<T>(&self.challenge, &mut bytes);
-        write_curve_scalar::<T>(&self.witness.0, &mut bytes);
-        write_curve_scalar::<T>(&self.witness.1, &mut bytes);
-        write_curve_scalar::<T>(&self.witness.2, &mut bytes);
-        bytes
-    }
-
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let challenge = read_curve_scalar::<T>(bytes)?;
-        let w1 = read_curve_scalar::<T>(bytes)?;
-        let w2 = read_curve_scalar::<T>(bytes)?;
-        let w3 = read_curve_scalar::<T>(bytes)?;
-        let witness = (w1, w2, w3);
-        Ok(ComEncEqProof { challenge, witness })
-    }
 }
 
 /// Construct a proof of knowledge.
@@ -85,11 +61,11 @@ pub fn prove_com_enc_eq<T: Curve, R: Rng>(
     // NOTE: This relies on the details of serialization of public and commitment
     // keys. This is fine, but we should be mindful of when specifying.
     let hasher = ro
-        .append("com_enc_eq")
-        .append(cipher.to_bytes())
-        .append(commitment.to_bytes())
-        .append(pub_key.to_bytes())
-        .append(cmm_key.to_bytes());
+        .append_bytes("com_enc_eq")
+        .append(cipher)
+        .append(commitment)
+        .append(pub_key)
+        .append(cmm_key);
 
     loop {
         let beta = Value::generate_non_zero(csprng);
@@ -97,8 +73,8 @@ pub fn prove_com_enc_eq<T: Curve, R: Rng>(
         let (rand_cmm, gamma) = cmm_key.commit(&beta, csprng);
 
         let maybe_challenge = hasher
-            .append_fresh(&rand_cipher.to_bytes())
-            .append(&rand_cmm.to_bytes())
+            .append_fresh(&rand_cipher)
+            .append(&rand_cmm)
             .result_to_scalar::<T>();
         match maybe_challenge {
             None => {} // loop again
@@ -175,14 +151,14 @@ pub fn verify_com_enc_eq<T: Curve>(
         .plus_point(&cC.mul_by_scalar(&proof.challenge));
 
     let hasher = ro
-        .append("com_enc_eq")
-        .append(&cipher.to_bytes())
-        .append(&commitment.to_bytes())
-        .append(pub_key.to_bytes())
-        .append(cmm_key.to_bytes())
-        .append(&a_1.curve_to_bytes())
-        .append(&a_2.curve_to_bytes())
-        .append(&a_3.curve_to_bytes());
+        .append_bytes("com_enc_eq")
+        .append(cipher)
+        .append(commitment)
+        .append(pub_key)
+        .append(cmm_key)
+        .append(&a_1)
+        .append(&a_2)
+        .append(&a_3);
 
     let computed_challenge = hasher.result_to_scalar::<T>();
     match computed_challenge {
@@ -365,8 +341,7 @@ mod tests {
                 G1Affine::generate_scalar(&mut csprng),
             );
             let ap = ComEncEqProof::<G1Affine> { challenge, witness };
-            let bytes = ap.to_bytes();
-            let app = ComEncEqProof::from_bytes(&mut Cursor::new(&bytes));
+            let app = serialize_deserialize(&ap);
             assert!(app.is_ok());
             assert_eq!(ap, app.unwrap());
         }

@@ -3,7 +3,9 @@ use ffi_helpers::*;
 use libc::size_t;
 use pairing::bls12_381::Bls12;
 use rand::{thread_rng, SeedableRng, StdRng};
-use std::{cmp::Ordering, io::Cursor, slice};
+use std::{cmp::Ordering, slice};
+
+use crypto_common::*;
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -19,9 +21,9 @@ pub extern "C" fn bls_derive_publickey(sk_ptr: *mut SecretKey<Bls12>) -> *mut Pu
     Box::into_raw(Box::new(PublicKey::from_secret(*sk)))
 }
 
-macro_derive_from_bytes!(Box bls_sk_from_bytes, SecretKey<Bls12>, SecretKey::from_bytes);
-macro_derive_from_bytes!(Box bls_pk_from_bytes, PublicKey<Bls12>, PublicKey::from_bytes);
-macro_derive_from_bytes!(Box bls_sig_from_bytes, Signature<Bls12>, Signature::from_bytes);
+macro_derive_from_bytes!(Box bls_sk_from_bytes, SecretKey<Bls12>);
+macro_derive_from_bytes!(Box bls_pk_from_bytes, PublicKey<Bls12>);
+macro_derive_from_bytes!(Box bls_sig_from_bytes, Signature<Bls12>);
 macro_free_ffi!(Box bls_free_pk, PublicKey<Bls12>);
 macro_free_ffi!(Box bls_free_sk, SecretKey<Bls12>);
 macro_free_ffi!(Box bls_free_sig, Signature<Bls12>);
@@ -51,7 +53,7 @@ macro_rules! macro_cmp {
 
             let p1 = from_ptr!(ptr1);
             let p2 = from_ptr!(ptr2);
-            match p1.to_bytes().cmp(&p2.to_bytes()) {
+            match to_bytes(p1).cmp(&to_bytes(p2)) {
                 Ordering::Less => return -1,
                 Ordering::Greater => return 1,
                 Ordering::Equal => 0,

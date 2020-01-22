@@ -6,20 +6,16 @@ use curve_arithmetic::curve_arithmetic::Curve;
 use ff::Field;
 use rand::*;
 
-use failure::Error;
-use std::io::Cursor;
-
-use curve_arithmetic::serialization::*;
+use crypto_common::*;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::RandomOracle;
 
-#[derive(Debug)]
 pub struct ComMultSecret<'a, T: Curve> {
     pub values: &'a [Value<T>; 3],
     pub rands:  &'a [Randomness<T>; 3],
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ComMultProof<T: Curve> {
     /// Computed challenge.
     challenge: T::Scalar,
@@ -27,41 +23,6 @@ pub struct ComMultProof<T: Curve> {
     ss: [T::Scalar; 3],
     ts: [T::Scalar; 3],
     t: T::Scalar,
-}
-
-impl<T: Curve> ComMultProof<T> {
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let out_len = T::SCALAR_LENGTH + 7 * T::SCALAR_LENGTH;
-        let mut bytes = Vec::with_capacity(out_len);
-        write_curve_scalar::<T>(&self.challenge, &mut bytes);
-        for s in self.ss.iter() {
-            write_curve_scalar::<T>(s, &mut bytes);
-        }
-        for t in self.ts.iter() {
-            write_curve_scalar::<T>(t, &mut bytes);
-        }
-        write_curve_scalar::<T>(&self.t, &mut bytes);
-        bytes.into_boxed_slice()
-    }
-
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let challenge = read_curve_scalar::<T>(bytes)?;
-        let s_1 = read_curve_scalar::<T>(bytes)?;
-        let s_2 = read_curve_scalar::<T>(bytes)?;
-        let s_3 = read_curve_scalar::<T>(bytes)?;
-        let t_1 = read_curve_scalar::<T>(bytes)?;
-        let t_2 = read_curve_scalar::<T>(bytes)?;
-        let t_3 = read_curve_scalar::<T>(bytes)?;
-        let t = read_curve_scalar::<T>(bytes)?;
-        let ss = [s_1, s_2, s_3];
-        let ts = [t_1, t_2, t_3];
-        Ok(ComMultProof {
-            challenge,
-            ss,
-            ts,
-            t,
-        })
-    }
 }
 
 /// Construct a proof of knowledge of multiplicative relationship. The arguments
@@ -86,11 +47,11 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
     csprng: &mut R,
 ) -> ComMultProof<T> {
     let hasher = ro
-        .append("com_mult")
-        .append(&cmm_1.to_bytes())
-        .append(&cmm_2.to_bytes())
-        .append(&cmm_3.to_bytes())
-        .append(&cmm_key.to_bytes());
+        .append_bytes("com_mult")
+        .append(cmm_1)
+        .append(cmm_2)
+        .append(cmm_3)
+        .append(cmm_key);
 
     loop {
         let alpha_1 = Value::generate_non_zero(csprng);
@@ -105,10 +66,10 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
         let (v, cR) = cmm_key_1.commit(&alpha_2, csprng);
 
         let maybe_challenge = hasher
-            .append_fresh(v_1.to_bytes())
-            .append(v_2.to_bytes())
-            .append(v_3.to_bytes())
-            .finish_to_scalar::<T, _>(v.to_bytes());
+            .append_fresh(&v_1)
+            .append(&v_2)
+            .append(&v_3)
+            .finish_to_scalar::<T, _>(&v);
         match maybe_challenge {
             None => {} // loop again
             Some(challenge) => {
@@ -170,11 +131,11 @@ pub fn verify_com_mult<T: Curve>(
     proof: &ComMultProof<T>,
 ) -> bool {
     let mut hasher = ro
-        .append("com_mult")
-        .append(&cmm_1.to_bytes())
-        .append(&cmm_2.to_bytes())
-        .append(&cmm_3.to_bytes())
-        .append(&cmm_key.to_bytes());
+        .append_bytes("com_mult")
+        .append(cmm_1)
+        .append(cmm_2)
+        .append(cmm_3)
+        .append(cmm_key);
 
     for (c_i, s_i, t_i) in izip!(
         [cmm_1, cmm_2, cmm_3].iter(),
@@ -184,7 +145,7 @@ pub fn verify_com_mult<T: Curve>(
         let v_i = c_i
             .mul_by_scalar(&proof.challenge)
             .plus_point(&cmm_key.hide(Value::view_scalar(s_i), Randomness::view_scalar(t_i)));
-        hasher.add(&v_i.curve_to_bytes());
+        hasher.add(&v_i);
     }
 
     let h = cmm_key.1;
@@ -196,7 +157,7 @@ pub fn verify_com_mult<T: Curve>(
         .plus_point(&cC_1.mul_by_scalar(&s_2))
         .plus_point(&h.mul_by_scalar(&proof.t));
 
-    let computed_challenge = hasher.finish_to_scalar::<T, _>(&v.curve_to_bytes());
+    let computed_challenge = hasher.finish_to_scalar::<T, _>(&v);
     match computed_challenge {
         None => false,
         Some(computed_challenge) => computed_challenge == proof.challenge,
@@ -358,8 +319,7 @@ mod tests {
             ts,
             t,
         };
-        let bytes = cp.to_bytes();
-        let cpp = ComMultProof::from_bytes(&mut Cursor::new(&bytes));
+        let cpp = serialize_deserialize(&cp);
         assert!(cpp.is_ok());
         assert_eq!(cp, cpp.unwrap());
     }

@@ -16,6 +16,14 @@ serde = "1.0"
 path = "../curve_arithmetic"
 version="0"
 
+[dependencies.crypto_common]
+path = "../crypto_common"
+version="0"
+
+[dependencies.crypto_common_derive]
+path = "../crypto_common_derive"
+version="0"
+
 [dependencies.pairing]
 git = "ssh://git@gitlab.com:22/Concordium/rust/external/pairing.git"
 branch = "master"

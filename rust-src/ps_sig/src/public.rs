@@ -3,38 +3,29 @@
 //! A known message
 
 use rand::*;
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
 
 use crate::{known_message::*, signature::*};
+use crypto_common::*;
 use curve_arithmetic::curve_arithmetic::*;
-use failure::Error;
-use std::io::Cursor;
 
 use crate::secret::*;
 
-use curve_arithmetic::serialization::*;
-
 /// PS public key. The documentation of the fields
 /// assumes the secret key is $(x, y_1, ..., y_n)$ (see specification).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PublicKey<C: Pairing> {
-    /// Generator of G_1
-    pub g: C::G_1,
-    /// Generator of G_2
-    pub g_tilda: C::G_2,
+    /// Generator of G1
+    pub g: C::G1,
+    /// Generator of G2
+    pub g_tilda: C::G2,
     /// Generator $g_1$ raised to the powers $y_i$
-    pub ys: Vec<C::G_1>,
+    #[size_length = 4]
+    pub ys: Vec<C::G1>,
     /// Generator $g_2$ raised to the powers $y_i$
-    pub y_tildas: Vec<C::G_2>,
+    #[size_length = 4]
+    pub y_tildas: Vec<C::G2>,
     /// Generator $g_2$ raised to the power $x$.
-    pub x_tilda: C::G_2,
+    pub x_tilda: C::G2,
 }
 
 impl<C: Pairing> PartialEq for PublicKey<C> {
@@ -51,49 +42,8 @@ impl<C: Pairing> Eq for PublicKey<C> {}
 
 #[allow(clippy::len_without_is_empty)]
 impl<C: Pairing> PublicKey<C> {
-    // turn message vector into a byte aray
-    #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let gen1 = &self.g;
-        let gen2 = &self.g_tilda;
-        let vs = &self.ys;
-        let us = &self.y_tildas;
-        let s = &self.x_tilda;
-        let mut bytes: Vec<u8> = Vec::with_capacity(
-            4 + 4
-                + (vs.len() + 1) * C::G_1::GROUP_ELEMENT_LENGTH
-                + (us.len() + 2) * C::G_2::GROUP_ELEMENT_LENGTH,
-        );
-        write_curve_element::<C::G_1>(gen1, &mut bytes);
-        write_curve_element::<C::G_2>(gen2, &mut bytes);
-        write_curve_elements::<C::G_1>(vs, &mut bytes);
-        write_curve_elements::<C::G_2>(us, &mut bytes);
-        write_curve_element::<C::G_2>(s, &mut bytes);
-        bytes.into_boxed_slice()
-    }
-
     /// Return the number of commitments that can be signed with this key.
     pub fn len(&self) -> usize { self.ys.len() }
-
-    /// Construct a message vec from a slice of bytes.
-    ///
-    /// A `Result` whose okay value is a message vec  or whose error value
-    /// is an `Error` wrapping the internal error that occurred.
-    #[inline]
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<PublicKey<C>, Error> {
-        let g = read_curve::<C::G_1>(bytes)?;
-        let g_tilda = read_curve::<C::G_2>(bytes)?;
-        let ys = read_curve_elements::<C::G_1>(bytes)?;
-        let y_tildas = read_curve_elements::<C::G_2>(bytes)?;
-        let x_tilda = read_curve::<C::G_2>(bytes)?;
-        Ok(PublicKey {
-            g,
-            g_tilda,
-            ys,
-            y_tildas,
-            x_tilda,
-        })
-    }
 
     pub fn verify(&self, sig: &Signature<C>, message: &KnownMessage<C>) -> bool {
         let ys = &self.y_tildas;
@@ -105,7 +55,7 @@ impl<C: Pairing> PublicKey<C> {
         let h = ys
             .iter()
             .zip(ms.iter())
-            .fold(C::G_2::zero_point(), |acc, (y, m)| {
+            .fold(C::G2::zero_point(), |acc, (y, m)| {
                 let ym = y.mul_by_scalar(&m);
                 acc.plus_point(&ym)
             });
@@ -119,22 +69,22 @@ impl<C: Pairing> PublicKey<C> {
     pub fn arbitrary<T>(n: usize, csprng: &mut T) -> PublicKey<C>
     where
         T: Rng, {
-        let mut ys: Vec<C::G_1> = Vec::with_capacity(n);
+        let mut ys: Vec<C::G1> = Vec::with_capacity(n);
         for _i in 0..n {
-            ys.push(C::G_1::generate(csprng));
+            ys.push(C::G1::generate(csprng));
         }
 
-        let mut y_tildas: Vec<C::G_2> = Vec::with_capacity(n);
+        let mut y_tildas: Vec<C::G2> = Vec::with_capacity(n);
         for _i in 0..n {
-            y_tildas.push(C::G_2::generate(csprng));
+            y_tildas.push(C::G2::generate(csprng));
         }
 
         PublicKey {
-            g: C::G_1::one_point(),
-            g_tilda: C::G_2::one_point(),
+            g: C::G1::one_point(),
+            g_tilda: C::G2::one_point(),
             ys,
             y_tildas,
-            x_tilda: C::G_2::generate(csprng),
+            x_tilda: C::G2::generate(csprng),
         }
     }
 }
@@ -167,8 +117,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for i in 1..20 {
                     let val = PublicKey::<$pairing_type>::arbitrary(i, &mut csprng);
-                    let res_val2 =
-                        PublicKey::<$pairing_type>::from_bytes(&mut Cursor::new(&*val.to_bytes()));
+                    let res_val2 = serialize_deserialize(&val);
                     assert!(res_val2.is_ok());
                     let val2 = res_val2.unwrap();
                     assert_eq!(val2, val);
