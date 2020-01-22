@@ -2,10 +2,10 @@
 
 use crate::{commitment::*, randomness::*, value::*};
 
-use curve_arithmetic::{curve_arithmetic::*};
+use curve_arithmetic::curve_arithmetic::*;
 
-use rand::*;
 use crypto_common::*;
+use rand::*;
 
 /// A commitment  key.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]

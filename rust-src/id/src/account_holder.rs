@@ -129,7 +129,7 @@ where
             &id_cred_pub,
             &sc_ck,
             &context.ip_info.ar_base,
-            (&cmm_sc_rand, Value::<P::G_1>::view_scalar(&id_cred_sec)),
+            (&cmm_sc_rand, Value::<P::G1>::view_scalar(&id_cred_sec)),
             &mut csprng,
         )
     };
@@ -411,7 +411,7 @@ where
     };
 
     // Compute the challenge prefix by hashing the values.
-    let ro = RandomOracle::domain("credential").append(&cred_values.to_bytes());
+    let ro = RandomOracle::domain("credential").append(&cred_values);
 
     let mut pok_id_cred_pub = Vec::with_capacity(number_of_ars);
     for item in id_cred_data.iter() {
@@ -579,10 +579,10 @@ fn compute_pok_sig<
 
     let att_rands = &commitment_rands.attributes_rand;
 
-    let variant_val = Value::new(C::scalar_from_u64(u64::from(alist.variant)).unwrap());
+    let variant_val = Value::new(C::scalar_from_u64(u64::from(alist.variant)));
     let variant_cmm = commitment_key.hide(&variant_val, &zero);
 
-    let expiry_val = Value::new(C::scalar_from_u64(alist.expiry).unwrap());
+    let expiry_val = Value::new(C::scalar_from_u64(alist.expiry));
     let expiry_cmm = commitment_key.hide(&expiry_val, &zero);
 
     secrets.push((variant_val, &zero));
@@ -674,7 +674,7 @@ fn compute_commitments<'a, C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
     let prf::SecretKey(prf_scalar) = prf_key;
     let (cmm_prf, prf_rand) = commitment_key.commit(Value::view_scalar(prf_scalar), csprng);
 
-    let cred_counter_scalar = C::scalar_from_u64(u64::from(cred_counter)).unwrap();
+    let cred_counter_scalar = C::scalar_from_u64(u64::from(cred_counter));
     let (cmm_cred_counter, cred_counter_rand) =
         commitment_key.commit(&Value::view_scalar(&cred_counter_scalar), csprng);
     let att_vec = &alist.alist;
@@ -746,7 +746,7 @@ fn compute_pok_reg_id<C: Curve, R: Rng>(
     let mut k = prf_key.0;
     // FIXME: Handle the error case (which cannot happen for the current curve, but
     // in general ...)
-    k.add_assign(&C::scalar_from_u64(u64::from(cred_counter)).unwrap());
+    k.add_assign(&C::scalar_from_u64(u64::from(cred_counter)));
     let mut rand_1 = prf_rand.randomness;
     rand_1.add_assign(&cred_counter_rand);
     // reg_id is the commitment to reg_id_exponent with randomness 0

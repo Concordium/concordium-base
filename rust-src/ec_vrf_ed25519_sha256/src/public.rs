@@ -1,12 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of concordium_crypto
-// Copyright (c) 2019 -
-// See LICENSE for licensing information.
-//
-// Authors:
-// - bm@concordium.com
-
 //! ed25519 public keys.
 
 use core::fmt::Debug;
@@ -20,14 +11,7 @@ use curve25519_dalek::{
 
 pub use sha2::{Sha256, Sha512};
 
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
+use crypto_common::*;
 
 use crate::{constants::*, errors::*, proof::*, secret::*};
 /// An ed25519 public key.
@@ -37,6 +21,37 @@ pub struct PublicKey(pub(crate) CompressedEdwardsY, pub(crate) EdwardsPoint);
 impl Debug for PublicKey {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         write!(f, "PublicKey({:?}), {:?})", self.0, self.1)
+    }
+}
+
+impl Serial for PublicKey {
+    #[inline]
+    fn serial<B: Buffer>(&self, x: &mut B) {
+        x.write_all(&self.0.to_bytes())
+            .expect("Writing to buffer should succeed.")
+    }
+}
+
+/// Construct a `PublicKey` from a slice of bytes. This function always
+/// results in a valid public key, in particular the curve point is not of
+/// small order (and hence also not a point at infinity).
+impl Deserial for PublicKey {
+    #[inline]
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut buf = [0u8; PUBLIC_KEY_LENGTH];
+        source.read_exact(&mut buf)?;
+
+        let compressed = CompressedEdwardsY(buf);
+        let point = compressed
+            .decompress()
+            .ok_or(ProofError(InternalError::PointDecompression))?;
+        // Verify the public key is valid, c.f. verify_key below.
+        // In particular check that the point is not the point at infinity.
+        if !point.is_small_order() {
+            Ok(PublicKey(compressed, point))
+        } else {
+            Err(ProofError(InternalError::Verify).into())
+        }
     }
 }
 
@@ -70,40 +85,9 @@ impl<'a> From<&'a ExpandedSecretKey> for PublicKey {
 }
 
 impl PublicKey {
-    /// Convert this public key to a byte array.
-    #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> { Box::new(self.0.to_bytes()) }
-
     /// View this public key as a byte array.
     #[inline]
     pub fn as_bytes(&self) -> &'_ [u8; PUBLIC_KEY_LENGTH] { &(self.0).0 }
-
-    /// Construct a `PublicKey` from a slice of bytes. This function always
-    /// results in a valid public key, in particular the curve point is not of
-    /// small order (and hence also not a point at infinity).
-    #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Result<PublicKey, ProofError> {
-        if bytes.len() != PUBLIC_KEY_LENGTH {
-            return Err(ProofError(InternalError::BytesLength {
-                name:   "PublicKey",
-                length: PUBLIC_KEY_LENGTH,
-            }));
-        }
-        let mut bits: [u8; 32] = [0u8; 32];
-        bits.copy_from_slice(&bytes[..32]);
-
-        let compressed = CompressedEdwardsY(bits);
-        let point = compressed
-            .decompress()
-            .ok_or(ProofError(InternalError::PointDecompression))?;
-        // Verify the public key is valid, c.f. verify_key below.
-        // In particular check that the point is not the point at infinity.
-        if !point.is_small_order() {
-            Ok(PublicKey(compressed, point))
-        } else {
-            Err(ProofError(InternalError::Verify))
-        }
-    }
 
     /// Internal utility function for mangling the bits of a (formerly
     /// mathematically well-defined) "scalar" and multiplying it to produce a
@@ -171,40 +155,5 @@ impl PublicKey {
                 *c == derivable_c
             }
         }
-    }
-}
-
-#[cfg(feature = "serde")]
-impl Serialize for PublicKey {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer, {
-        serializer.serialize_bytes(self.as_bytes())
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'d> Deserialize<'d> for PublicKey {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'d>, {
-        struct PublicKeyVisitor;
-
-        impl<'d> Visitor<'d> for PublicKeyVisitor {
-            type Value = PublicKey;
-
-            fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                formatter.write_str(
-                    "An ed25519 public key as a 32-byte compressed point, as specified in RFC8032",
-                )
-            }
-
-            fn visit_bytes<E>(self, bytes: &[u8]) -> Result<PublicKey, E>
-            where
-                E: SerdeError, {
-                PublicKey::from_bytes(bytes).or(Err(SerdeError::invalid_length(bytes.len(), &self)))
-            }
-        }
-        deserializer.deserialize_bytes(PublicKeyVisitor)
     }
 }

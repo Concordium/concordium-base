@@ -2,12 +2,11 @@
 //! protocol. This protocol enables one to prove that the value committed to in
 //! two commitments $C_1$ and $C_2$ in (potentially) two different groups (of
 //! the same order) is the same.
-use curve_arithmetic::{curve_arithmetic::Curve, serialization::*};
-use failure::Error;
+use curve_arithmetic::curve_arithmetic::Curve;
 use ff::Field;
 use rand::*;
-use std::io::Cursor;
 
+use crypto_common::*;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::RandomOracle;
 
@@ -18,35 +17,10 @@ pub struct ComEqDiffGrpsSecret<'a, C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
     pub rand_cmm_2: &'a Randomness<C2>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Copy)]
+#[derive(Clone, Debug, Eq, PartialEq, Copy, Serialize)]
 pub struct ComEqDiffGrpsProof<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
     challenge: C1::Scalar,
     witness:   (C1::Scalar, C1::Scalar, C2::Scalar),
-}
-
-impl<C1, C2> ComEqDiffGrpsProof<C1, C2>
-where
-    C1: Curve,
-    C2: Curve<Scalar = C1::Scalar>,
-{
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let bytes_len = C1::SCALAR_LENGTH + 3 * C1::SCALAR_LENGTH;
-        let mut bytes = Vec::with_capacity(bytes_len);
-        write_curve_scalar::<C1>(&self.challenge, &mut bytes);
-        write_curve_scalar::<C1>(&self.witness.0, &mut bytes);
-        write_curve_scalar::<C1>(&self.witness.1, &mut bytes);
-        write_curve_scalar::<C1>(&self.witness.2, &mut bytes);
-        bytes
-    }
-
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let challenge = read_curve_scalar::<C1>(bytes)?;
-        let w1 = read_curve_scalar::<C1>(bytes)?;
-        let w2 = read_curve_scalar::<C1>(bytes)?;
-        let w3 = read_curve_scalar::<C1>(bytes)?;
-        let witness = (w1, w2, w3);
-        Ok(ComEqDiffGrpsProof { challenge, witness })
-    }
 }
 
 /// Construct a proof of knowledge from public and secret values.
@@ -75,20 +49,18 @@ pub fn prove_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>, R: Rng>
     let cC = commitment_2;
 
     let hasher = ro
-        .append("com_eq_different_groups")
-        .append(&y.to_bytes())
-        .append(&cC.to_bytes())
-        .append(&cmm_key_1.to_bytes())
-        .append(&cmm_key_2.to_bytes());
+        .append_bytes("com_eq_different_groups")
+        .append(y)
+        .append(cC)
+        .append(cmm_key_1)
+        .append(cmm_key_2);
 
     loop {
         let alpha_1 = Value::generate_non_zero(csprng);
         let (u, alpha_2) = cmm_key_1.commit(&alpha_1, csprng);
         let (v, cR) = cmm_key_2.commit(alpha_1.view(), csprng);
 
-        let maybe_challenge = hasher
-            .append_fresh(&u.to_bytes())
-            .finish_to_scalar::<C1, _>(&v.to_bytes());
+        let maybe_challenge = hasher.append_fresh(&u).finish_to_scalar::<C1, _>(&v);
         match maybe_challenge {
             None => {} // loop again
             Some(challenge) => {
@@ -141,28 +113,28 @@ pub fn verify_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
     let y = commitment_1;
     let cC = commitment_2;
 
-    let CommitmentKey(cG_1, cG_2) = cmm_key_1;
+    let CommitmentKey(cG1, cG2) = cmm_key_1;
     let CommitmentKey(g, h) = cmm_key_2;
 
     let (s_1, s_2, t) = proof.witness;
 
     let u = y
         .mul_by_scalar(&proof.challenge)
-        .plus_point(&cG_1.mul_by_scalar(&s_1))
-        .plus_point(&cG_2.mul_by_scalar(&s_2));
+        .plus_point(&cG1.mul_by_scalar(&s_1))
+        .plus_point(&cG2.mul_by_scalar(&s_2));
     let v = cC
         .mul_by_scalar(&proof.challenge)
         .plus_point(&g.mul_by_scalar(&s_1))
         .plus_point(&h.mul_by_scalar(&t));
 
     let computed_challenge = ro
-        .append("com_eq_different_groups")
-        .append(&y.to_bytes())
-        .append(&cC.to_bytes())
-        .append(&cmm_key_1.to_bytes())
-        .append(&cmm_key_2.to_bytes())
-        .append(&u.curve_to_bytes())
-        .finish_to_scalar::<C1, _>(&v.curve_to_bytes());
+        .append_bytes("com_eq_different_groups")
+        .append(y)
+        .append(cC)
+        .append(cmm_key_1)
+        .append(cmm_key_2)
+        .append(&u)
+        .finish_to_scalar::<C1, _>(&v);
     match computed_challenge {
         None => false,
         Some(computed_challenge) => computed_challenge == proof.challenge,
@@ -309,8 +281,7 @@ mod tests {
                 G1Affine::generate_scalar(&mut csprng),
             );
             let ap = ComEqDiffGrpsProof::<G1Affine, G2Affine> { challenge, witness };
-            let bytes = ap.to_bytes();
-            let app = ComEqDiffGrpsProof::from_bytes(&mut Cursor::new(&bytes));
+            let app = serialize_deserialize(&ap);
             assert!(app.is_ok());
             assert_eq!(ap, app.unwrap());
         }

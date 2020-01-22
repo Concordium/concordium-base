@@ -3,6 +3,8 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use eddsa_ed25519 as ed25519;
 use id::secret_sharing::*;
 
+use crypto_common::*;
+
 use std::collections::btree_map::BTreeMap;
 
 use curve_arithmetic::{Curve, Pairing};
@@ -22,7 +24,7 @@ use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
 use std::{
     cmp::max,
     fs::File,
-    io::{self, Cursor, Error, ErrorKind, Write},
+    io::{self, Error, ErrorKind, Write},
     path::Path,
     str::FromStr,
 };
@@ -30,12 +32,6 @@ use std::{
 use either::Either::Left;
 
 use client_server_helpers::*;
-
-macro_rules! m_json_decode {
-    ($val:expr, $key:expr) => {
-        &mut Cursor::new(&json_base16_decode($val.get($key)?)?)
-    };
-}
 
 static IP_PREFIX: &str = "database/identity_provider-";
 static IP_NAME_PREFIX: &str = "identity_provider-";
@@ -327,7 +323,7 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
     let id_cred_pub = reveal_in_group(&shares);
     println!(
         "IdCredPub of the credential owner is {}",
-        encode(&id_cred_pub.curve_to_bytes())
+        encode(&to_bytes(&id_cred_pub))
     );
     println!(
         "Contact the identity provider with this information to get the real-life identity of the \
@@ -356,7 +352,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
                     eprintln!("failed to parse signature");
                     return;
                 }
-                Some(sig_bytes) => match v.get("preIdentityObject").and_then(json_to_pio) {
+                Some(sig) => match v.get("preIdentityObject").and_then(json_to_pio) {
                     None => {
                         eprintln!("failed to parse pio");
                         return;
@@ -366,16 +362,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
                             eprintln!("failed to parse ip info");
                             return;
                         }
-                        Some(ip_info) => {
-                            if let Ok(ip_sig) =
-                                ps_sig::Signature::from_bytes(&mut Cursor::new(&sig_bytes))
-                            {
-                                (ip_sig, pio, ip_info)
-                            } else {
-                                eprintln!("Malformed Signature");
-                                return;
-                            }
-                        }
+                        Some(ip_info) => (sig, pio, ip_info),
                     },
                 },
             }
@@ -478,12 +465,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             return;
         }
     };
-    let randomness = match private_value
-        .get("randomness")
-        .and_then(|x| json_base16_decode(&x))
-        .and_then(|bytes| {
-            ps_sig::SigRetrievalRandomness::<Bls12>::from_bytes(&mut Cursor::new(&bytes))
-        }) {
+    let randomness = match private_value.get("randomness").and_then(json_base16_decode) {
         Some(rand) => rand,
         None => {
             eprintln!("Could not read randomness used to generate pre-identity object.");
@@ -543,7 +525,8 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     }
     if let Some(bin_file) = matches.value_of("bin-out") {
         match File::create(&bin_file) {
-            Ok(mut file) => match file.write_all(&cdi.to_bytes()) {
+            // This is a bit stupid, we should write directly to the sink.
+            Ok(mut file) => match file.write_all(&to_bytes(&cdi)) {
                 Ok(_) => println!("Wrote binary data to provided file."),
                 Err(e) => {
                     eprintln!("Could not write binary to file because {}", e);
@@ -635,11 +618,10 @@ fn handle_act_as_ip(matches: &ArgMatches) {
     match vf {
         Ok(sig) => {
             println!("Successfully checked pre-identity data.");
-            let sig_bytes = &sig.to_bytes();
             if let Some(signed_out_path) = matches.value_of("out") {
                 let js = json!({
                     "preIdentityObject": pio_to_json(&pio),
-                    "signature": json_base16_encode(sig_bytes),
+                    "signature": json_base16_encode(&sig),
                     "ipInfo": IpInfo::to_json(&ip_info)
                 });
                 if write_json_to_file(signed_out_path, &js).is_ok() {
@@ -647,11 +629,11 @@ fn handle_act_as_ip(matches: &ArgMatches) {
                 } else {
                     println!(
                         "Could not write Identity object to file. The signature is: {}",
-                        encode(sig_bytes)
+                        json_base16_encode(&sig)
                     );
                 }
             } else {
-                println!("The signature is: {}", encode(sig_bytes));
+                println!("The signature is: {}", json_base16_encode(&sig));
             }
         }
         Err(r) => eprintln!("Could not verify pre-identity object {:?}", r),
@@ -805,7 +787,7 @@ fn handle_start_ip(matches: &ArgMatches) {
     let aci_js = aci_to_json(&aci);
     let js = json!({
         "aci": aci_js,
-        "randomness": json_base16_encode(&randomness.to_bytes())
+        "randomness": json_base16_encode(&randomness)
     });
     if let Some(aci_out_path) = matches.value_of("private") {
         if write_json_to_file(aci_out_path, &js).is_ok() {
@@ -835,7 +817,7 @@ fn ar_info_to_json<C: Curve>(ar_info: &ArInfo<C>) -> Value {
     json!({
         "arIdentity": ar_info.ar_identity.to_json(),
         "arDescription": ar_info.ar_description.clone(),
-        "arPublicKey": json_base16_encode(&ar_info.ar_public_key.to_bytes()),
+        "arPublicKey": json_base16_encode(&ar_info.ar_public_key),
         //"arElgamalGenerator": json_base16_encode(&ar_info.ar_elgamal_generator.curve_to_bytes())
     })
 }
@@ -845,8 +827,8 @@ fn json_to_private_ar_info<C: Curve>(v: &Value) -> Option<(ArInfo<C>, SecretKey<
     let public = v.get("publicArInfo")?;
     let ar_identity = ArIdentity::from_json(public.get("arIdentity")?)?;
     let ar_description = public.get("arDescription")?.as_str()?.to_owned();
-    let ar_public_key = PublicKey::<C>::from_bytes(m_json_decode!(public, "arPublicKey")).ok()?;
-    let private = SecretKey::from_bytes(m_json_decode!(v, "arPrivateKey")).ok()?;
+    let ar_public_key = public.get("arPublicKey").and_then(json_base16_decode)?;
+    let private = v.get("arPrivateKey").and_then(json_base16_decode)?;
     Some((
         ArInfo {
             ar_identity,
@@ -892,7 +874,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
 
         let js0 = ar_info_to_json(&ar0_info);
         let private_js0 = json!({
-            "arPrivateKey": json_base16_encode(&ar0_secret_key.to_bytes()),
+            "arPrivateKey": json_base16_encode(&ar0_secret_key),
             "publicArInfo": js0
         });
 
@@ -907,7 +889,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
 
         let js1 = ar_info_to_json(&ar1_info);
         let private_js1 = json!({
-            "arPrivateKey": json_base16_encode(&ar1_secret_key.to_bytes()),
+            "arPrivateKey": json_base16_encode(&ar1_secret_key),
             "publicArInfo": js1
         });
 
@@ -922,7 +904,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
 
         let js2 = ar_info_to_json(&ar2_info);
         let private_js2 = json!({
-              "arPrivateKey": json_base16_encode(&ar2_secret_key.to_bytes()),
+              "arPrivateKey": json_base16_encode(&ar2_secret_key),
               "publicArInfo": js2
         });
 
@@ -942,7 +924,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         };
         let js = ip_info.to_json();
         let private_js = json!({
-            "idPrivateKey": json_base16_encode(&id_secret_key.to_bytes()),
+            "idPrivateKey": json_base16_encode(&id_secret_key),
             "publicIdInfo": js
         });
         println!("writing ip_{} in file {}", id, ip_fname);

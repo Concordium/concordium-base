@@ -2,11 +2,11 @@
 
 //! A thin wrapper around a scalar to indicate that it is a secret value.
 
-use crate::{curve_arithmetic::*};
+use crate::curve_arithmetic::*;
 use crypto_common::*;
 
 use rand::*;
-use std::{ops::Deref};
+use std::ops::Deref;
 
 /// A value that will be commited to.
 /// NB: For the view function it is important that we have #[repr(transparent)].

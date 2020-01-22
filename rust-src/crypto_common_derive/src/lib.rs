@@ -8,14 +8,14 @@ use proc_macro::TokenStream;
 
 use proc_macro2;
 
-#[proc_macro_derive(Deserial, attributes(size_length))]
+#[proc_macro_derive(Deserial, attributes(size_length, map_size_length, string_size_length))]
 pub fn deserial_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     impl_deserial(&ast)
 }
 
-fn find_length_attribute(l: &[syn::Attribute]) -> Option<u32> {
-    let length = format_ident!("size_length");
+fn find_length_attribute(l: &[syn::Attribute], attr: &str) -> Option<u32> {
+    let length = format_ident!("{}", attr);
     for attr in l.iter() {
         if let Ok(syn::Meta::NameValue(mn)) = attr.parse_meta() {
             if mn.path.is_ident(&length) {
@@ -52,12 +52,28 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
         let mut names = proc_macro2::TokenStream::new();
         let source = format_ident!("source");
         let mut pusher = |f: &syn::Field, ident| {
-            if let Some(l) = find_length_attribute(&f.attrs) {
-                let id = format_ident!("u{}", 2u64.pow(l));
+            if let Some(l) = find_length_attribute(&f.attrs, "size_length") {
+                let id = format_ident!("u{}", 8 * l);
                 tokens.extend(quote! {
                     let #ident = {
                         let len: #id = #id::deserial(#source)?;
                         deserial_vector_no_length(#source, usize::try_from(len)?)?
+                    };
+                });
+            } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
+                let id = format_ident!("u{}", 8 * l);
+                tokens.extend(quote! {
+                    let #ident = {
+                        let len: #id = #id::deserial(#source)?;
+                        deserial_map_no_length(#source, usize::try_from(len)?)?
+                    };
+                });
+            } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
+                let id = format_ident!("u{}", 8 * l);
+                tokens.extend(quote! {
+                    let #ident = {
+                        let len: #id = #id::deserial(#source)?;
+                        deserial_string(#source, usize::try_from(len)?)?
                     };
                 });
             } else {
@@ -107,7 +123,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
     }
 }
 
-#[proc_macro_derive(Serial, attributes(size_length))]
+#[proc_macro_derive(Serial, attributes(size_length, map_size_length, string_size_length))]
 pub fn serial_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     impl_serial(&ast)
@@ -129,13 +145,27 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                 let mut body = proc_macro2::TokenStream::new();
                 for f in data.fields.iter() {
                     let ident = f.ident.clone().unwrap(); // safe since named fields.
-                    if let Some(l) = find_length_attribute(&f.attrs) {
-                        let id = format_ident!("u{}", 2u64.pow(l));
+                    if let Some(l) = find_length_attribute(&f.attrs, "size_length") {
+                        let id = format_ident!("u{}", 8 * l);
                         body.extend(quote! {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
                             serial_vector_no_length(&self.#ident, #out);
                         });
+                    } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
+                        let id = format_ident!("u{}", 8 * l);
+                        body.extend(quote! {
+                            let len: #id = self.#ident.len() as #id;
+                            len.serial(#out);
+                            serial_map_no_length(self.#ident.iter(), #out);
+                        })
+                    } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
+                        let id = format_ident!("u{}", 8 * l);
+                        body.extend(quote! {
+                            let len: #id = self.#ident.len() as #id;
+                            len.serial(#out);
+                            serial_string(self.#ident.as_str(), #out);
+                        })
                     } else {
                         body.extend(quote! {
                             self.#ident.serial(#out);
@@ -159,14 +189,30 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                 for (i, f) in data.fields.iter().enumerate() {
                     let ident = format_ident!("x_{}", i);
 
-                    if let Some(l) = find_length_attribute(&f.attrs) {
-                        let id = format_ident!("u{}", 2u64.pow(l));
+                    if let Some(l) = find_length_attribute(&f.attrs, "size_length") {
+                        let id = format_ident!("u{}", 8 * l);
                         let len_ident = format_ident!("len_{}", i);
                         body.extend(quote! {
                             let #len_ident: #id = #ident.len() as #id;
                             #len_ident.serial(#out);
                             serial_vector_no_length(#ident, #out);
                         });
+                    } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
+                        let id = format_ident!("u{}", 8 * l);
+                        let len_ident = format_ident!("len_{}", i);
+                        body.extend(quote! {
+                            let #len_ident: #id = #ident.len() as #id;
+                            #len_ident.serial(#out);
+                            serial_map_no_length(self.#ident.iter(), #out);
+                        })
+                    } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
+                        let id = format_ident!("u{}", 8 * l);
+                        let len_ident = format_ident!("len_{}", i);
+                        body.extend(quote! {
+                            let #len_ident: #id = #ident.len() as #id;
+                            #len_ident.serial(#out);
+                            serial_string(self.#ident.as_str(), #out);
+                        })
                     } else {
                         body.extend(quote!(#ident.serial(#out);));
                     }
@@ -189,7 +235,10 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
     }
 }
 
-#[proc_macro_derive(Serialize, attributes(size_length))]
+#[proc_macro_derive(
+    Serialize,
+    attributes(size_length, map_size_length, string_size_length)
+)]
 pub fn serialize_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     let mut tokens = impl_deserial(&ast);

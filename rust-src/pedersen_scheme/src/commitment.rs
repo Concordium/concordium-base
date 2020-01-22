@@ -2,8 +2,8 @@
 
 //! Commitment type
 
-use curve_arithmetic::curve_arithmetic::*;
 use crypto_common::*;
+use curve_arithmetic::curve_arithmetic::*;
 
 use std::ops::Deref;
 
@@ -55,13 +55,7 @@ mod tests {
             }
         };
     }
-    macro_test_commitment_to_byte_conversion!(
-        commitment_to_byte_conversion_bls12_381_g1,
-        G1
-    );
+    macro_test_commitment_to_byte_conversion!(commitment_to_byte_conversion_bls12_381_g1, G1);
 
-    macro_test_commitment_to_byte_conversion!(
-        commitment_to_byte_conversion_bls12_381_g2,
-        G2
-    );
+    macro_test_commitment_to_byte_conversion!(commitment_to_byte_conversion_bls12_381_g2, G2);
 }

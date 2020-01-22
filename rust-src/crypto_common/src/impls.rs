@@ -148,3 +148,83 @@ impl Serial for Fq12 {
         }
     }
 }
+
+// Implementations for the dalek curve.
+
+use ed25519_dalek::*;
+
+impl Deserial for PublicKey {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut buf = [0u8; PUBLIC_KEY_LENGTH];
+        source.read_exact(&mut buf)?;
+        Ok(PublicKey::from_bytes(&buf)?)
+    }
+}
+
+impl Serial for PublicKey {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_all(self.as_bytes())
+            .expect("Writing to buffer should succeed.");
+    }
+}
+
+impl Deserial for SecretKey {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut buf = [0u8; SECRET_KEY_LENGTH];
+        source.read_exact(&mut buf)?;
+        Ok(SecretKey::from_bytes(&buf)?)
+    }
+}
+
+impl Serial for SecretKey {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_all(self.as_bytes())
+            .expect("Writing to buffer should succeed.");
+    }
+}
+
+impl Deserial for Keypair {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut buf = [0u8; KEYPAIR_LENGTH];
+        source.read_exact(&mut buf)?;
+        Ok(Keypair::from_bytes(&buf)?)
+    }
+}
+
+impl Serial for Keypair {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_all(&self.to_bytes())
+            .expect("Writing to buffer should succeed.");
+    }
+}
+
+// implementations for the Either type
+use either::*;
+
+impl<L: Deserial, R: Deserial> Deserial for Either<L, R> {
+    fn deserial<X: ReadBytesExt>(source: &mut X) -> Fallible<Self> {
+        let l: u8 = source.get()?;
+        if l == 0 {
+            Ok(Either::Left(source.get()?))
+        } else if l == 1 {
+            Ok(Either::Right(source.get()?))
+        } else {
+            bail!("Unknown variant {}", l)
+        }
+    }
+}
+
+impl<L: Serial, R: Serial> Serial for Either<L, R> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        match self {
+            Either::Left(ref left) => {
+                out.put(&0u8);
+                out.put(left);
+            }
+            Either::Right(ref right) => {
+                out.put(&1u8);
+                out.put(right);
+            }
+        }
+    }
+}

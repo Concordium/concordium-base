@@ -1,12 +1,10 @@
-use crate::{
-    unknown_message::SigRetrievalRandomness,
-};
+use crate::unknown_message::SigRetrievalRandomness;
 use curve_arithmetic::curve_arithmetic::*;
 use rand::*;
 
 use crypto_common::*;
 
-use std::{ops::Deref};
+use std::ops::Deref;
 
 /// Randomness used to blind a signature.
 #[derive(Debug, Eq, Serialize)]

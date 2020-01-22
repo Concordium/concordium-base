@@ -1,8 +1,3 @@
-// -*- mode: rust; -*-
-//
-// Authors:
-// - bm@concordium.com
-
 //! An VRF Proof.
 
 use core::fmt::Debug;
@@ -12,20 +7,11 @@ use curve25519_dalek::{
     scalar::Scalar,
 };
 
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Unexpected::Bytes;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
-
-use crate::{constants::*, errors::*};
+use crate::errors::*;
 
 use sha2::*;
+
+use crypto_common::*;
 
 pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
     let mut hash: Sha256 = Sha256::new();
@@ -41,11 +27,45 @@ pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Proof(pub EdwardsPoint, pub Scalar, pub Scalar);
 
-// impl Clone for Proof {
-//    fn clone(&self) -> Self {
-//        *self
-//    }
-//}
+impl Serial for Proof {
+    #[inline]
+    fn serial<B: Buffer>(&self, x: &mut B) {
+        let c = &self.1.reduce().to_bytes();
+        // assert c is within range
+        assert_eq!(c[16..32], [0u8; 16]);
+        x.write_all(&self.0.compress().to_bytes()[..])
+            .expect("Writing to buffer should succeed.");
+        x.write_all(&c[..16])
+            .expect("Writing to buffer should succeed.");
+        x.write_all(&self.2.reduce().to_bytes()[..])
+            .expect("Writing to buffer should succeed.");
+    }
+}
+
+/// Construct a `Proof` from a slice of bytes. This function always
+/// results in a valid proof object.
+impl Deserial for Proof {
+    #[inline]
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut point_bytes: [u8; 32] = [0u8; 32];
+        source.read_exact(&mut point_bytes)?;
+        let mut scalar_bytes1: [u8; 32] = [0u8; 32];
+        source.read_exact(&mut scalar_bytes1[0..16])?;
+        let mut scalar_bytes2: [u8; 32] = [0u8; 32];
+        source.read_exact(&mut scalar_bytes2)?;
+        let compressed_point = CompressedEdwardsY(point_bytes);
+        match compressed_point.decompress() {
+            None => Err(ProofError(InternalError::PointDecompression).into()),
+            Some(p) => match Scalar::from_canonical_bytes(scalar_bytes1) {
+                None => Err(ProofError(InternalError::ScalarFormat).into()),
+                Some(s1) => match Scalar::from_canonical_bytes(scalar_bytes2) {
+                    None => Err(ProofError(InternalError::ScalarFormat).into()),
+                    Some(s2) => Ok(Proof(p, s1, s2)),
+                },
+            },
+        }
+    }
+}
 
 impl Debug for Proof {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
@@ -54,45 +74,6 @@ impl Debug for Proof {
 }
 
 impl Proof {
-    /// Convert this `Proof` to a byte array.
-    #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let c = &self.1.reduce().to_bytes();
-        // assert c is within range
-        assert_eq!(c[16..32], [0u8; 16]);
-        let mut proof_bytes = vec![0u8; PROOF_LENGTH];
-        proof_bytes[..32].copy_from_slice(&self.0.compress().to_bytes()[..]);
-        proof_bytes[32..48].copy_from_slice(&c[..16]);
-        proof_bytes[48..].copy_from_slice(&self.2.reduce().to_bytes()[..]);
-        proof_bytes.into_boxed_slice()
-    }
-
-    pub fn from_bytes(proof_bytes: &[u8]) -> Result<Self, ProofError> {
-        if proof_bytes.len() != PROOF_LENGTH {
-            return Err(ProofError(InternalError::BytesLength {
-                name:   "Proof::from_bytes",
-                length: proof_bytes.len(),
-            }));
-        }
-        let mut point_bytes: [u8; 32] = [0u8; 32];
-        point_bytes.copy_from_slice(&proof_bytes[..32]);
-        let mut scalar_bytes1: [u8; 32] = [0u8; 32];
-        scalar_bytes1[0..16].copy_from_slice(&proof_bytes[32..48]);
-        let mut scalar_bytes2: [u8; 32] = [0u8; 32];
-        scalar_bytes2.copy_from_slice(&proof_bytes[48..PROOF_LENGTH]);
-        let compressed_point = CompressedEdwardsY(point_bytes);
-        match compressed_point.decompress() {
-            None => Err(ProofError(InternalError::PointDecompression)),
-            Some(p) => match Scalar::from_canonical_bytes(scalar_bytes1) {
-                None => Err(ProofError(InternalError::ScalarFormat)),
-                Some(s1) => match Scalar::from_canonical_bytes(scalar_bytes2) {
-                    None => Err(ProofError(InternalError::ScalarFormat)),
-                    Some(s2) => Ok(Proof(p, s1, s2)),
-                },
-            },
-        }
-    }
-
     pub fn to_hash(&self) -> [u8; 32] {
         let p = self.0.mul_by_cofactor();
         let mut hash: Sha256 = Sha256::new();

@@ -1,16 +1,14 @@
 // Authors:
 
 use crate::curve_arithmetic::*;
-use byteorder::{ReadBytesExt};
+use byteorder::ReadBytesExt;
+use failure::Fallible;
 use ff::PrimeField;
 use pairing::{
-    bls12_381::{
-        Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2,
-    },
+    bls12_381::{Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2},
     CurveAffine, CurveProjective, EncodedPoint, Engine,
 };
 use rand::*;
-use failure::Fallible;
 
 impl Curve for G2 {
     type Base = Fq;

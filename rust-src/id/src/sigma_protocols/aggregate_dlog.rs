@@ -4,16 +4,13 @@
 //! This is a specialization of `com_eq` protocol where we do not require
 //! commitments.
 use curve_arithmetic::curve_arithmetic::Curve;
-use failure::Error;
 use ff::Field;
 use rand::*;
 
-use std::io::Cursor;
-
-use curve_arithmetic::serialization::*;
+use crypto_common::*;
 use random_oracle::RandomOracle;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct AggregateDlogProof<T: Curve> {
     /// The challenge computed by the prover.
     challenge: T::Scalar,
@@ -21,26 +18,10 @@ pub struct AggregateDlogProof<T: Curve> {
     /// * $s_i = \alpha_i - c a_i$
     /// where $c$ is the challenge and $\alpha_i$ are prover chosen
     /// random scalars, and $a_i$ are the secret values.
+    #[size_length = 4]
     witness: Vec<T::Scalar>,
 }
 
-impl<T: Curve> AggregateDlogProof<T> {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let bytes_len =
-            // + 4 is for the length of the list
-            T::SCALAR_LENGTH + 4 + self.witness.len() * T::SCALAR_LENGTH;
-        let mut bytes = Vec::with_capacity(bytes_len);
-        write_curve_scalar::<T>(&self.challenge, &mut bytes);
-        write_curve_scalars::<T>(&self.witness, &mut bytes);
-        bytes
-    }
-
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let challenge = read_curve_scalar::<T>(bytes)?;
-        let witness = read_curve_scalars::<T>(bytes)?;
-        Ok(AggregateDlogProof { challenge, witness })
-    }
-}
 /// Construct a proof of knowledge of secret values. The arguments are as
 /// follows.
 /// * `ro` - Random oracle used in the challenge computation. This can be used
@@ -63,9 +44,9 @@ pub fn prove_aggregate_dlog<T: Curve, R: Rng>(
     assert_eq!(coeff.len(), n);
 
     let hasher = ro
-        .append("aggregate_dlog")
-        .append(&public.curve_to_bytes())
-        .extend_from(coeff.iter().map(T::curve_to_bytes));
+        .append_bytes("aggregate_dlog")
+        .append(public)
+        .extend_from(coeff.iter());
 
     // Only allocate the vector once and just reset it each iteration. The vector
     // can be big, and there is no reason to allocate a new one each iteration.
@@ -79,9 +60,7 @@ pub fn prove_aggregate_dlog<T: Curve, R: Rng>(
             point = point.plus_point(&g.mul_by_scalar(&rand));
             rands.push(rand);
         }
-        let maybe_challenge = hasher
-            .append_fresh(&point.curve_to_bytes())
-            .result_to_scalar::<T>();
+        let maybe_challenge = hasher.append_fresh(&point).result_to_scalar::<T>();
         match maybe_challenge {
             None => {} // loop again
             Some(challenge) => {
@@ -115,9 +94,9 @@ pub fn verify_aggregate_dlog<T: Curve>(
     proof: &AggregateDlogProof<T>,
 ) -> bool {
     let hasher = ro
-        .append("aggregate_dlog")
-        .append(&public.curve_to_bytes())
-        .extend_from(coeff.iter().map(T::curve_to_bytes));
+        .append_bytes("aggregate_dlog")
+        .append(public)
+        .extend_from(coeff.iter());
 
     let mut point = public.mul_by_scalar(&proof.challenge);
     if proof.witness.len() != coeff.len() {
@@ -126,7 +105,7 @@ pub fn verify_aggregate_dlog<T: Curve>(
     for (ref w, ref g) in izip!(&proof.witness, coeff) {
         point = point.plus_point(&g.mul_by_scalar(w));
     }
-    let computed_challenge = hasher.finish_to_scalar::<T, _>(&point.curve_to_bytes());
+    let computed_challenge = hasher.finish_to_scalar::<T, _>(&point);
     match computed_challenge {
         None => false,
         Some(computed_challenge) => proof.challenge == computed_challenge,
@@ -226,8 +205,7 @@ mod tests {
                 witness[j] = G1Affine::generate_scalar(&mut csprng);
             }
             let ap = AggregateDlogProof::<G1Affine> { challenge, witness };
-            let bytes = ap.to_bytes();
-            let app = AggregateDlogProof::from_bytes(&mut Cursor::new(&bytes));
+            let app = serialize_deserialize(&ap);
             assert!(app.is_ok());
             assert_eq!(ap, app.unwrap());
         }

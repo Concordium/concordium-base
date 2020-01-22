@@ -17,17 +17,17 @@ use core::fmt::{self, Display};
 #[derive(Debug)]
 #[allow(dead_code)]
 pub(crate) enum InternalError {
-    PublicKeyLength,
-    MessageLength,
-    CipherLength,
+    PublicKey,
+    Message,
+    Cipher,
 }
 
 impl Display for InternalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            InternalError::PublicKeyLength => write!(f, "Wrong PublicKey length"),
-            InternalError::MessageLength => write!(f, "Wrong message length"),
-            InternalError::CipherLength => write!(f, "Wrong cipher length"),
+            InternalError::PublicKey => write!(f, "Wrong PublicKey length"),
+            InternalError::Message => write!(f, "Wrong message length"),
+            InternalError::Cipher => write!(f, "Wrong cipher length"),
         }
     }
 }

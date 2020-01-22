@@ -6,6 +6,7 @@ use std::{convert::TryFrom, marker::PhantomData};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use failure::Fallible;
+use std::collections::btree_map::BTreeMap;
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
@@ -81,10 +82,25 @@ impl<T: Deserial, U: Deserial> Deserial for (T, U) {
     }
 }
 
+impl<T: Deserial, S: Deserial, U: Deserial> Deserial for (T, S, U) {
+    #[inline]
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let x = T::deserial(source)?;
+        let y = S::deserial(source)?;
+        let z = U::deserial(source)?;
+        Ok((x, y, z))
+    }
+}
+
 pub fn deserial_string<R: ReadBytesExt>(reader: &mut R, l: usize) -> Fallible<String> {
     let mut svec = vec![0; l];
     reader.read_exact(&mut svec)?;
     Ok(String::from_utf8(svec)?)
+}
+
+pub fn serial_string<R: Buffer>(s: &str, out: &mut R) {
+    out.write_all(s.as_bytes())
+        .expect("Writing to buffer should succeed.")
 }
 
 pub fn deserial_vector_no_length<R: ReadBytesExt, T: Deserial>(
@@ -197,11 +213,50 @@ impl<T: Serial> Serial for Vec<T> {
     }
 }
 
-/// Write an array without including length information.
-pub fn serial_vector_no_length<B: Buffer, T: Serial>(xs: &[T], out: &mut B) {
-    for x in xs.iter() {
+/// Serialize all of the elements in the iterator.
+pub fn serial_iter<'a, B: Buffer, T: Serial + 'a, I: Iterator<Item = &'a T>>(xs: I, out: &mut B) {
+    for x in xs {
         x.serial(out);
     }
+}
+
+/// Write an array without including length information.
+pub fn serial_vector_no_length<B: Buffer, T: Serial>(xs: &[T], out: &mut B) {
+    serial_iter(xs.iter(), out)
+}
+
+// Serialize anything that is an iterator over keypairs, which is in practice a
+// map.
+pub fn serial_map_no_length<
+    'a,
+    B: Buffer,
+    K: Serial + 'a,
+    V: Serial + 'a,
+    I: Iterator<Item = (&'a K, &'a V)>,
+>(
+    map: I,
+    out: &mut B,
+) {
+    for (k, v) in map {
+        out.put(k);
+        out.put(v);
+    }
+}
+
+/// NB: This ensures there are no duplicates, hence the specialized type.
+pub fn deserial_map_no_length<R: ReadBytesExt, K: Deserial + Ord, V: Deserial>(
+    source: &mut R,
+    len: usize,
+) -> Fallible<BTreeMap<K, V>> {
+    let mut out = BTreeMap::new();
+    for _ in 0..len {
+        let k = source.get()?;
+        let v = source.get()?;
+        if out.insert(k, v).is_some() {
+            bail!("Duplicate key.")
+        }
+    }
+    Ok(out)
 }
 
 impl<T: Serial, S: Serial> Serial for (T, S) {
@@ -212,9 +267,25 @@ impl<T: Serial, S: Serial> Serial for (T, S) {
     }
 }
 
+impl<T: Serial, S: Serial, U: Serial> Serial for (T, S, U) {
+    #[inline]
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        self.0.serial(out);
+        self.1.serial(out);
+        self.2.serial(out);
+    }
+}
+
 impl<T> Serial for PhantomData<T> {
     #[inline]
     fn serial<B: Buffer>(&self, _out: &mut B) {}
+}
+
+impl Serial for [u8] {
+    #[inline]
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.write_all(&self).expect("Writing to buffer is safe.");
+    }
 }
 
 /// Conventient wrappers.
@@ -244,7 +315,6 @@ pub trait Serialize: Serial + Deserial {}
 /// both put and get.
 impl<A: Deserial + Serial> Serialize for A {}
 
-
 /// Directly serialize to a vector of bytes.
 #[inline]
 pub fn to_bytes<A: Serial>(x: &A) -> Vec<u8> {
@@ -253,8 +323,30 @@ pub fn to_bytes<A: Serial>(x: &A) -> Vec<u8> {
     buf
 }
 
-/// Directly serialize to a vector of bytes.
 #[inline]
 pub fn from_bytes<A: Deserial, R: ReadBytesExt>(source: &mut R) -> Fallible<A> {
     A::deserial(source)
+}
+
+// Some more generic implementations
+impl<T: Serial> Serial for [T; 3] {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        for x in self.iter() {
+            x.serial(out);
+        }
+    }
+}
+
+// Some more generic implementations
+impl<T: Deserial> Deserial for [T; 3] {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        // This is a bit stupid, but I can't figure out how to avoid a
+        // Default constraint otherwise (if I allow it, we can preallocate
+        // with let mut out: [T; 3] = Default::default();
+        // and then iterate over it
+        let x_1 = T::deserial(source)?;
+        let x_2 = T::deserial(source)?;
+        let x_3 = T::deserial(source)?;
+        Ok([x_1, x_2, x_3])
+    }
 }

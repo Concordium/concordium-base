@@ -93,7 +93,7 @@ pub fn verify_cdi_worker<
     cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     // Compute the challenge prefix by hashing the values.
-    let ro = RandomOracle::domain("credential").append(&cdi.values.to_bytes());
+    let ro = RandomOracle::domain("credential").append(&cdi.values);
 
     let commitments = &cdi.proofs.commitments;
     // verify id_cred sharing data
@@ -367,13 +367,10 @@ fn verify_pok_sig<
     // add commitment with randomness 0 for variant and expiry of
     // the attribute list
     comm_vec.push(commitment_key.hide(
-        &Value::new(C::scalar_from_u64(u64::from(policy.variant)).unwrap()),
+        &Value::new(C::scalar_from_u64(u64::from(policy.variant))),
         &zero,
     ));
-    comm_vec.push(commitment_key.hide(
-        &Value::new(C::scalar_from_u64(policy.expiry).unwrap()),
-        &zero,
-    ));
+    comm_vec.push(commitment_key.hide(&Value::new(C::scalar_from_u64(policy.expiry)), &zero));
 
     // now, we go through the policy and remaining commitments and
     // put them into the vector of commitments in order to check the signature.

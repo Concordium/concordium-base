@@ -89,6 +89,7 @@ macro_rules! macro_derive_from_bytes {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn $function_name(input_bytes: *const u8, input_len: size_t) -> *$mod $type {
+            use std::io::Cursor;
             let len = input_len as usize;
             let bytes = slice_from_c_bytes!(input_bytes, len);
             let e = from_bytes::<$type,_>(&mut Cursor::new(&bytes));

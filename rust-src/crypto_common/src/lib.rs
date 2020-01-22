@@ -1,9 +1,12 @@
+pub mod helpers;
 pub mod impls;
 pub mod serialize;
-pub mod helpers;
 
-pub use crate::{impls::*, serialize::*, helpers::*};
+pub use crate::{helpers::*, impls::*, serialize::*};
 
 // Reexport for ease of use.
-pub use failure::Fallible;
 pub use byteorder::{ReadBytesExt, WriteBytesExt};
+pub use failure::Fallible;
+
+#[macro_use]
+extern crate failure;

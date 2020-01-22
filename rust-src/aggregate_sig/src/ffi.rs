@@ -3,7 +3,7 @@ use ffi_helpers::*;
 use libc::size_t;
 use pairing::bls12_381::Bls12;
 use rand::{thread_rng, SeedableRng, StdRng};
-use std::{cmp::Ordering, io::Cursor, slice};
+use std::{cmp::Ordering, slice};
 
 use crypto_common::*;
 

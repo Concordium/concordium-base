@@ -2,6 +2,7 @@ use crate::{
     account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*,
     secret_sharing::Threshold, types::*,
 };
+use crypto_common::*;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519 as ed25519;
@@ -13,8 +14,6 @@ use std::collections::btree_map::BTreeMap;
 use rand::*;
 
 use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
-
-use std::io::Cursor;
 
 use either::Left;
 
@@ -165,36 +164,26 @@ fn test_pipeline() {
     // let file = File::create("foo.bin");
     // file.unwrap().write_all(&out);
 
-    let value_bytes = cdi.values.to_bytes();
-    let cdi_values = CredentialDeploymentValues::<ExampleCurve, ExampleAttribute>::from_bytes(
-        &mut Cursor::new(&value_bytes),
-    );
+    let cdi_values = serialize_deserialize(&cdi.values);
     assert!(
-        cdi_values.is_some(),
+        cdi_values.is_ok(),
         "VALUES Deserialization must be successful."
     );
 
-    let cmm_bytes = cdi.proofs.commitments.to_bytes();
-    let cdi_commitments =
-        CredDeploymentCommitments::<ExampleCurve>::from_bytes(&mut Cursor::new(&cmm_bytes));
+    let cdi_commitments = serialize_deserialize(&cdi.proofs.commitments);
     assert!(
-        cdi_commitments.is_some(),
+        cdi_commitments.is_ok(),
         "commitments Deserialization must be successful."
     );
 
-    let proofs_bytes = cdi.proofs.to_bytes();
-    let cdi_proofs =
-        CredDeploymentProofs::<Bls12, ExampleCurve>::from_bytes(&mut Cursor::new(&proofs_bytes));
+    let cdi_proofs = serialize_deserialize(&cdi.proofs);
     assert!(
-        cdi_proofs.is_some(),
+        cdi_proofs.is_ok(),
         "Proof deserialization must be successful."
     );
 
-    let bytes = cdi.to_bytes();
-    let des = CredDeploymentInfo::<Bls12, ExampleCurve, ExampleAttribute>::from_bytes(
-        &mut Cursor::new(&bytes),
-    );
-    assert!(des.is_some(), "Deserialization must be successful.");
+    let des = serialize_deserialize(&cdi);
+    assert!(des.is_ok(), "Deserialization must be successful.");
     // FIXME: Have better equality instances for CDI that do not place needless
     // restrictions on the pairing (such as having PartialEq instnace).
     // For now we just check that the last item in the proofs deserialized

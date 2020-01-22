@@ -1,12 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of concordium_crypto
-// Copyright (c) 2019 -
-// See LICENSE for licensing information.
-//
-// Authors:
-// - bm@concordium.com
-
 //! Errors which may occur when parsing keys and/or proofs to or from wire
 //! formats.
 
