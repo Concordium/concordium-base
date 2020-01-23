@@ -47,11 +47,8 @@ import Concordium.Crypto.Proofs
 --   let cdiValues = CredentialDeploymentValues{..}
 --   return CredentialDeploymentInformation{..}
 
-genPolicyItem :: Gen PolicyItem
-genPolicyItem = do
-  piIndex <- arbitrary
-  piValue <- AttributeValue . (\x -> abs x `mod` 2^(248 :: Int)) <$> arbitrary
-  return PolicyItem{..}
+genAttributeValue :: Gen AttributeValue
+genAttributeValue = AttributeValue . (\x -> abs x `mod` 2^(248 :: Int)) <$> arbitrary
 
 genDlogProof :: Gen Dlog25519Proof
 genDlogProof = fst . randomProof . mkStdGen <$> resize 100000 arbitrary
