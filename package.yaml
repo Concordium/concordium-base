@@ -21,8 +21,8 @@ description:         See README
 flags:
   static:
     description: Use static linking.
-    manual: true
-    default: false
+    manual: True
+    default: False
 
 
 dependencies:
