@@ -253,7 +253,6 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
 }
 // computing the commitment to a single share from the commitments to the
 // coefficients
-#[inline(always)]
 pub fn commitment_to_share<C: Curve>(
     share_number: ShareNumber,
     coeff_commitments: &[Commitment<C>],
@@ -261,6 +260,8 @@ pub fn commitment_to_share<C: Curve>(
     let mut cmm_share_point: C = C::zero_point();
     let share_scalar = share_number.to_scalar::<C>();
     // Essentially Horner's scheme in the exponent.
+    // Likely this would be better done with multiexponentiation,
+    // although this is not clear.
     for cmm in coeff_commitments.iter().rev() {
         cmm_share_point = cmm_share_point.mul_by_scalar(&share_scalar);
         cmm_share_point = cmm_share_point.plus_point(&cmm);
