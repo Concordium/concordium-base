@@ -226,6 +226,22 @@ fn main() {
         } else {
             println!("Output binary file testdata.bin.");
         }
+
+        // We also output the cdi in JSON and binary, to test compatiblity with
+        // the haskell serialization
+
+        if let Err(err) = write_json_to_file("cdi.json", &cdi_1.to_json()) {
+            eprintln!("Could not output JSON file cdi., because {}.", err);
+        } else {
+            println!("Output cdi.json.");
+        }
+
+        let cdi_file = File::create("cdi.bin");
+        if let Err(err) = cdi_file.unwrap().write_all(&to_bytes(&cdi_1)) {
+            eprintln!("Could not output binary file cdi.bin, because {}.", err);
+        } else {
+            println!("Output binary file cdi.bin.");
+        }
     }
 
     // generate account credentials, parametrized

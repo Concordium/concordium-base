@@ -634,6 +634,7 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     /// identity. NB: The order is important since it is the same order as that
     /// signed by the identity provider, and permuting the list will invalidate
     /// the signature from the identity provider.
+    #[size_length = 2]
     pub ar_data: Vec<ChainArData<C>>,
     /// Policy of this credential object.
     pub policy: Policy<C, AttributeType>,
@@ -871,15 +872,15 @@ impl<C: Curve> ChainArData<C> {
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Policy<C, AttributeType> {
     pub fn to_json(&self) -> Value {
-        let revealed: Vec<Value> = self
+        let revealed: Map<_, _> = self
             .policy_vec
             .iter()
-            .map(|(idx, value)| json!({"index": idx, "value": format!("{}", value)}))
+            .map(|(idx, value)| (idx.to_string(), Value::String(format!("{}", value))))
             .collect();
         json!({
             "variant": self.variant,
             "expiry": self.expiry,
-            "revealedItems": revealed
+            "revealedItems": Value::Object(revealed)
         })
     }
 }
@@ -913,7 +914,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::
             "arData": self.values.ar_data.iter().map(ChainArData::to_json).collect::<Vec<_>>(),
             "policy": self.values.policy.to_json(),
             // NOTE: Since proofs encode their own length we do not output those first 4 bytes
-            "proofs": encode(&to_bytes(&self.proofs)),
+            "proofs": encode(&to_bytes(&self.proofs)[4..]),
         })
     }
 }
