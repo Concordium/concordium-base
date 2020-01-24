@@ -129,7 +129,7 @@ where
             &id_cred_pub,
             &sc_ck,
             &context.ip_info.ar_base,
-            (&cmm_sc_rand, Value::<P::G_1>::view_scalar(&id_cred_sec)),
+            (&cmm_sc_rand, Value::<P::G1>::view_scalar(&id_cred_sec)),
             &mut csprng,
         )
     };
@@ -211,7 +211,8 @@ pub struct SingleArData<C: Curve> {
 
 type SharingData<C> = (
     Vec<SingleArData<C>>,
-    Vec<Commitment<C>>,
+    Vec<Commitment<C>>, /* Commitments to the coefficients of sharing polynomial S + b1 X + b2
+                         * X^2... */
     Vec<PedersenRandomness<C>>,
 );
 
@@ -273,22 +274,24 @@ pub fn compute_sharing_data<'a, C: Curve>(
 
 /// computing the commitment to single share from the commitments to
 /// the coefficients of the polynomial
-#[inline(always)]
 pub fn commitment_to_share<C: Curve>(
     share_number: ShareNumber,
     coeff_commitments: &[Commitment<C>],
     coeff_randomness: &[PedersenRandomness<C>],
 ) -> (Commitment<C>, PedersenRandomness<C>) {
-    let deg = coeff_commitments.len() - 1;
-    let mut cmm_share_point: C = (coeff_commitments[0]).0;
-    let mut cmm_share_randomness_scalar: C::Scalar = coeff_randomness[0].randomness;
-    for i in 1..=deg {
-        let j_pow_i: C::Scalar = share_number.to_scalar::<C>().pow([i as u64]);
-        let a = coeff_commitments[i].mul_by_scalar(&j_pow_i);
-        cmm_share_point = cmm_share_point.plus_point(&a);
-        let mut r = j_pow_i;
-        r.mul_assign(&coeff_randomness[i]);
-        cmm_share_randomness_scalar.add_assign(&r);
+    assert_eq!(coeff_commitments.len(), coeff_randomness.len());
+    let mut cmm_share_point: C = C::zero_point();
+    let mut cmm_share_randomness_scalar: C::Scalar = Field::zero();
+    let share_scalar = share_number.to_scalar::<C>();
+    // Horner's scheme in the exponent
+    for cmm in coeff_commitments.iter().rev() {
+        cmm_share_point = cmm_share_point.mul_by_scalar(&share_scalar);
+        cmm_share_point = cmm_share_point.plus_point(cmm);
+    }
+    // Horner's scheme
+    for rand in coeff_randomness.iter().rev() {
+        cmm_share_randomness_scalar.mul_assign(&share_scalar);
+        cmm_share_randomness_scalar.add_assign(rand);
     }
     let cmm = Commitment(cmm_share_point);
     let rnd = PedersenRandomness {
@@ -411,7 +414,7 @@ where
     };
 
     // Compute the challenge prefix by hashing the values.
-    let ro = RandomOracle::domain("credential").append(&cred_values.to_bytes());
+    let ro = RandomOracle::domain("credential").append(&cred_values);
 
     let mut pok_id_cred_pub = Vec::with_capacity(number_of_ars);
     for item in id_cred_data.iter() {
@@ -579,10 +582,10 @@ fn compute_pok_sig<
 
     let att_rands = &commitment_rands.attributes_rand;
 
-    let variant_val = Value::new(C::scalar_from_u64(u64::from(alist.variant)).unwrap());
+    let variant_val = Value::new(C::scalar_from_u64(u64::from(alist.variant)));
     let variant_cmm = commitment_key.hide(&variant_val, &zero);
 
-    let expiry_val = Value::new(C::scalar_from_u64(alist.expiry).unwrap());
+    let expiry_val = Value::new(C::scalar_from_u64(alist.expiry));
     let expiry_cmm = commitment_key.hide(&expiry_val, &zero);
 
     secrets.push((variant_val, &zero));
@@ -674,7 +677,7 @@ fn compute_commitments<'a, C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
     let prf::SecretKey(prf_scalar) = prf_key;
     let (cmm_prf, prf_rand) = commitment_key.commit(Value::view_scalar(prf_scalar), csprng);
 
-    let cred_counter_scalar = C::scalar_from_u64(u64::from(cred_counter)).unwrap();
+    let cred_counter_scalar = C::scalar_from_u64(u64::from(cred_counter));
     let (cmm_cred_counter, cred_counter_rand) =
         commitment_key.commit(&Value::view_scalar(&cred_counter_scalar), csprng);
     let att_vec = &alist.alist;
@@ -746,7 +749,7 @@ fn compute_pok_reg_id<C: Curve, R: Rng>(
     let mut k = prf_key.0;
     // FIXME: Handle the error case (which cannot happen for the current curve, but
     // in general ...)
-    k.add_assign(&C::scalar_from_u64(u64::from(cred_counter)).unwrap());
+    k.add_assign(&C::scalar_from_u64(u64::from(cred_counter)));
     let mut rand_1 = prf_rand.randomness;
     rand_1.add_assign(&cred_counter_rand);
     // reg_id is the commitment to reg_id_exponent with randomness 0

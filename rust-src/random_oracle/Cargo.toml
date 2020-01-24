@@ -16,6 +16,10 @@ rand_core = "0.5"
 path = "../curve_arithmetic"
 version = "0"
 
+[dependencies.crypto_common]
+path = "../crypto_common"
+version = "0"
+
 [lib]
 name = "random_oracle"
 crate-type = ["rlib", "staticlib", "cdylib" ]

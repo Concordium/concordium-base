@@ -8,6 +8,8 @@ use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Thresh
 use pairing::bls12_381::{Bls12, G1};
 use std::collections::btree_map::BTreeMap;
 
+use crypto_common::*;
+
 use rand::*;
 
 use pedersen_scheme::Value as PedersenValue;
@@ -176,21 +178,21 @@ fn main() {
         };
 
         let mut out = Vec::new();
-        let gc_bytes = global_ctx.to_bytes();
-        out.extend_from_slice(&(gc_bytes.len() as u32).to_be_bytes());
-        out.extend_from_slice(&gc_bytes);
-        let ip_info_bytes = ip_info.to_bytes();
-        out.extend_from_slice(&(ip_info_bytes.len() as u32).to_be_bytes());
-        out.extend_from_slice(&ip_info_bytes);
+        let gc_bytes = to_bytes(&global_ctx);
+        out.put(&(gc_bytes.len() as u32));
+        out.write_all(&gc_bytes).unwrap();
+        let ip_info_bytes = to_bytes(&ip_info);
+        out.put(&(ip_info_bytes.len() as u32));
+        out.write_all(&ip_info_bytes).unwrap();
         // output the first credential
-        let cdi1_bytes = cdi_1.to_bytes();
-        out.extend_from_slice(&(cdi1_bytes.len() as u32).to_be_bytes());
-        out.extend_from_slice(&cdi1_bytes);
+        let cdi1_bytes = to_bytes(&cdi_1);
+        out.put(&(cdi1_bytes.len() as u32));
+        out.write_all(&cdi1_bytes).unwrap();
         // and account keys and then the second credential
-        out.extend_from_slice(&acc_keys.to_bytes());
-        let cdi2_bytes = cdi_2.to_bytes();
-        out.extend_from_slice(&(cdi2_bytes.len() as u32).to_be_bytes());
-        out.extend_from_slice(&cdi2_bytes);
+        out.put(&acc_keys);
+        let cdi2_bytes = to_bytes(&cdi_2);
+        out.put(&(cdi2_bytes.len() as u32));
+        out.write_all(&cdi2_bytes).unwrap();
 
         // finally we add a completely new set of keys to have a simple negative test
         let acc_keys_3 = {
@@ -213,7 +215,7 @@ fn main() {
                 threshold: SignatureThreshold(2),
             }
         };
-        out.extend_from_slice(&acc_keys_3.to_bytes());
+        out.put(&acc_keys_3);
 
         let file = File::create("testdata.bin");
         if let Err(err) = file.unwrap().write_all(&out) {
@@ -223,6 +225,22 @@ fn main() {
             );
         } else {
             println!("Output binary file testdata.bin.");
+        }
+
+        // We also output the cdi in JSON and binary, to test compatiblity with
+        // the haskell serialization
+
+        if let Err(err) = write_json_to_file("cdi.json", &cdi_1.to_json()) {
+            eprintln!("Could not output JSON file cdi., because {}.", err);
+        } else {
+            println!("Output cdi.json.");
+        }
+
+        let cdi_file = File::create("cdi.bin");
+        if let Err(err) = cdi_file.unwrap().write_all(&to_bytes(&cdi_1)) {
+            eprintln!("Could not output binary file cdi.bin, because {}.", err);
+        } else {
+            println!("Output binary file cdi.bin.");
         }
     }
 

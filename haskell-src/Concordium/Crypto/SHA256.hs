@@ -77,8 +77,11 @@ instance Read Hash where
     readListPrec = readListPrecDefault
 
 instance Hashable Hash where
-    hashWithSalt s (Hash b) = hashWithSalt s (FBS.toShortByteString b)
-    hash (Hash b) = fromIntegral (FBS.unsafeReadWord64 b)
+    {-# INLINE hashWithSalt #-}
+    hashWithSalt s (Hash b) = hashWithSalt s (FBS.unsafeReadWord64 b)
+    {-# INLINE hash #-}
+    -- hash on word64 is the identity function (on representations), i.e., fromIntegral
+    hash (Hash b) = Data.Hashable.hash (FBS.unsafeReadWord64 b)
 
 hash :: ByteString -> Hash
 hash b = Hash $ unsafeDupablePerformIO $

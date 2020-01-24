@@ -2,39 +2,17 @@
 //! which enables one to prove knowledge of the discrete logarithm without
 //! revealing it.
 use curve_arithmetic::curve_arithmetic::Curve;
-use failure::Error;
 use ff::Field;
 use rand::*;
 use random_oracle::RandomOracle;
 
-use std::io::Cursor;
+use crypto_common::*;
 
-use curve_arithmetic::serialization::*;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub struct DlogProof<T: Curve> {
     challenge: T::Scalar,
     witness:   T::Scalar,
     _phantom:  std::marker::PhantomData<T>,
-}
-
-impl<T: Curve> DlogProof<T> {
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let mut bytes = Vec::with_capacity(2 * T::SCALAR_LENGTH);
-        write_curve_scalar::<T>(&self.challenge, &mut bytes);
-        write_curve_scalar::<T>(&self.witness, &mut bytes);
-        bytes.into_boxed_slice()
-    }
-
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let challenge = read_curve_scalar::<T>(bytes)?;
-        let witness = read_curve_scalar::<T>(bytes)?;
-        Ok(DlogProof {
-            challenge,
-            witness,
-            _phantom: Default::default(),
-        })
-    }
 }
 
 pub fn prove_dlog<T: Curve, R: Rng>(
@@ -44,17 +22,14 @@ pub fn prove_dlog<T: Curve, R: Rng>(
     secret: &T::Scalar,
     base: &T,
 ) -> DlogProof<T> {
-    let hasher = ro
-        .append("dlog")
-        .append(&public.curve_to_bytes())
-        .append(&base.curve_to_bytes());
+    let hasher = ro.append_bytes("dlog").append(public).append(base);
 
     loop {
         let rand_scalar = T::generate_non_zero_scalar(csprng);
         let randomised_point = base.mul_by_scalar(&rand_scalar);
 
         let maybe_challenge = hasher
-            .append_fresh(&randomised_point.curve_to_bytes())
+            .append_fresh(&randomised_point)
             .result_to_scalar::<T>();
         match maybe_challenge {
             None => {} // loop again
@@ -80,10 +55,7 @@ pub fn prove_dlog<T: Curve, R: Rng>(
 }
 
 pub fn verify_dlog<T: Curve>(ro: RandomOracle, base: &T, public: &T, proof: &DlogProof<T>) -> bool {
-    let hasher = ro
-        .append("dlog")
-        .append(&public.curve_to_bytes())
-        .append(&base.curve_to_bytes());
+    let hasher = ro.append_bytes("dlog").append(public).append(base);
     let mut c = proof.challenge;
     c.negate();
     let randomised_point = public
@@ -94,7 +66,7 @@ pub fn verify_dlog<T: Curve>(ro: RandomOracle, base: &T, public: &T, proof: &Dlo
     // i.e., that randomised_point is not the group unit.
     // Or we should not require it to be non-zero if this is never checked, unless
     // it can be used to leak secrets.
-    let computed_challenge = hasher.finish_to_scalar::<T, _>(&randomised_point.curve_to_bytes());
+    let computed_challenge = hasher.finish_to_scalar::<T, _>(&randomised_point);
     match computed_challenge {
         None => false,
         Some(computed_challenge) => computed_challenge == proof.challenge,
@@ -175,8 +147,7 @@ mod tests {
                 witness,
                 _phantom: Default::default(),
             };
-            let bytes = dp.to_bytes();
-            let dpp = DlogProof::from_bytes(&mut Cursor::new(&bytes));
+            let dpp = serialize_deserialize(&dp);
             assert!(dpp.is_ok());
             assert_eq!(dp, dpp.unwrap());
         }

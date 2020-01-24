@@ -1,12 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of concordium_crypto
-// Copyright (c) 2019 -
-// See LICENSE for licensing information.
-//
-// Authors:
-// - bm@concordium.com
-
 //! Common constants such as buffer sizes for keypairs and proofs.
 
 /// The length of a VRF `Proof`, in bytes.

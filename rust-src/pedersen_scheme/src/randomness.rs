@@ -3,27 +3,18 @@
 //! Randomness
 //! The randomness used in commitment
 
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
+use crypto_common::*;
+use curve_arithmetic::curve_arithmetic::*;
 
-// use crate::errors::{InternalError::FieldDecodingError};
-use curve_arithmetic::{curve_arithmetic::*, serialization::*};
 use ff::Field;
 
-use failure::Error;
 use rand::*;
-use std::{io::Cursor, ops::Deref};
+use std::ops::Deref;
 
 /// Randomness used in the commitment.
 /// Secret by default.
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct Randomness<C: Curve> {
     pub randomness: C::Scalar,
 }
@@ -36,25 +27,6 @@ impl<C: Curve> Deref for Randomness<C> {
 }
 
 impl<C: Curve> Randomness<C> {
-    // turn value vector into a byte aray
-    #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let v = &self.randomness;
-        let mut bytes: Vec<u8> = Vec::with_capacity(C::SCALAR_LENGTH);
-        write_curve_scalar::<C>(v, &mut bytes);
-        bytes.into_boxed_slice()
-    }
-
-    /// Construct a value  from a slice of bytes.
-    ///
-    /// A `Result` whose okay value is a Value vec  or whose error value
-    /// is an `CommitmentError` wrapping the internal error that occurred.
-    #[inline]
-    pub fn from_bytes(cur: &mut Cursor<&[u8]>) -> Result<Randomness<C>, Error> {
-        let randomness = read_curve_scalar::<C>(cur)?;
-        Ok(Randomness { randomness })
-    }
-
     /// Zero randomness.
     #[inline]
     pub fn zero() -> Self {
@@ -99,8 +71,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for _i in 1..20 {
                     let val = Randomness::<$curve_type>::generate(&mut csprng);
-                    let res_val2 =
-                        Randomness::<$curve_type>::from_bytes(&mut Cursor::new(&val.to_bytes()));
+                    let res_val2 = serialize_deserialize(&val);
                     assert!(res_val2.is_ok());
                     let val2 = res_val2.unwrap();
                     assert_eq!(val2, val);

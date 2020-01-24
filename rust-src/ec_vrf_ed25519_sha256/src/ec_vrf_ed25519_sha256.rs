@@ -1,23 +1,8 @@
-// -*- mode: rust; -*-
-//
-// Authors:
-// - bm@concordium.com
-//
-
 //! ed25519 VRF
 
 use rand::{thread_rng, CryptoRng, Rng, RngCore};
 
 use std::{slice, sync::Arc};
-
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeError;
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "serde")]
-use serde::{Deserializer, Serializer};
 
 use ffi_helpers::*;
 use libc::size_t;
@@ -28,10 +13,13 @@ pub use sha2::Sha512;
 
 pub use curve25519_dalek::digest::Digest;
 
-pub use crate::{constants::*, errors::*, proof::*, public::*, secret::*};
+pub use crate::{errors::*, proof::*, public::*, secret::*};
+
+use crypto_common::*;
 
 /// An ed25519 keypair.
-#[derive(Debug, Default)] // we derive Default in order to use the clear() method in Drop
+// we derive Default in order to use the clear() method in Drop
+#[derive(Debug, Default, Serialize)]
 pub struct Keypair {
     /// The secret half of this keypair.
     pub secret: SecretKey,
@@ -43,55 +31,6 @@ pub struct Keypair {
 pub fn generate_keypair() -> Keypair { Keypair::generate(&mut thread_rng()) }
 
 impl Keypair {
-    /// Convert this keypair to bytes.
-    ///
-    /// # Returns
-    ///
-    /// An array of bytes, `[u8; KEYPAIR_LENGTH]`.  The first
-    /// `SECRET_KEY_LENGTH` of bytes is the `SecretKey`, and the next
-    /// `PUBLIC_KEY_LENGTH` bytes is the `PublicKey` (the same as other
-    /// libraries, such as [Adam Langley's ed25519 Golang
-    /// implementation](https://github.com/agl/ed25519/)).
-    pub fn to_bytes(&self) -> [u8; KEYPAIR_LENGTH] {
-        let mut bytes: [u8; KEYPAIR_LENGTH] = [0u8; KEYPAIR_LENGTH];
-
-        bytes[..SECRET_KEY_LENGTH].copy_from_slice(self.secret.as_bytes());
-        bytes[SECRET_KEY_LENGTH..].copy_from_slice(self.public.as_bytes());
-        bytes
-    }
-
-    /// Construct a `Keypair` from the bytes of a `PublicKey` and `SecretKey`.
-    ///
-    /// # Inputs
-    ///
-    /// * `bytes`: an `&[u8]` representing the scalar for the secret key, and a
-    ///   compressed Edwards-Y coordinate of a point on curve25519, both as
-    ///   bytes. (As obtained from `Keypair::to_bytes()`.)
-    ///
-    /// # Warning
-    ///
-    /// Absolutely no validation is done on the key.  If you give this function
-    /// bytes which do not represent a valid point, or which do not represent
-    /// corresponding parts of the key, then your `Keypair` will be broken and
-    /// it will be your fault.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` whose okay value is an EdDSA `Keypair` or whose error value
-    /// is an `ProofError` describing the error that occurred.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Keypair, ProofError> {
-        if bytes.len() != KEYPAIR_LENGTH {
-            return Err(ProofError(InternalError::BytesLength {
-                name:   "Keypair",
-                length: KEYPAIR_LENGTH,
-            }));
-        }
-        let secret = SecretKey::from_bytes(&bytes[..SECRET_KEY_LENGTH])?;
-        let public = PublicKey::from_bytes(&bytes[SECRET_KEY_LENGTH..])?;
-
-        Ok(Keypair { secret, public })
-    }
-
     /// Generate an ed25519 keypair.
     pub fn generate<R>(csprng: &mut R) -> Keypair
     where
@@ -163,11 +102,10 @@ impl<'d> Deserialize<'d> for Keypair {
 // foreign interface
 
 // Boilerplate serialization functions.
-macro_derive_from_bytes_no_cursor!(Arc ec_vrf_proof_from_bytes, Proof, Proof::from_bytes);
-macro_derive_from_bytes_no_cursor!(
+macro_derive_from_bytes!(Arc ec_vrf_proof_from_bytes, Proof);
+macro_derive_from_bytes!(
     Box ec_vrf_public_key_from_bytes,
-    PublicKey,
-    PublicKey::from_bytes
+    PublicKey
 );
 macro_derive_from_bytes_no_cursor!(
     Box ec_vrf_secret_key_from_bytes,
