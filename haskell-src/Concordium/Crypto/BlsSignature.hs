@@ -1,7 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.BlsSignature
   (PublicKey, SecretKey, Signature,
-  randomSecretKey, secretKeyGen, generateSecretKey, derivePublicKey, sign, verify, aggregate, verifyAggregate, emptySignature)
+  randomSecretKey, secretKeyGen, generateSecretKey, derivePublicKey, sign, verify, aggregate, aggregateMany, verifyAggregate, emptySignature)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -221,6 +221,18 @@ verifyAggregate m pks sig = unsafeDupablePerformIO $ do
     where
       withKeyArray ps [] f = withArrayLen ps f
       withKeyArray ps (pk:pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk':ps) pks_ f
+
+instance Semigroup Signature where
+    (<>) = aggregate
+
+instance Monoid Signature where
+    mempty = emptySignature
+
+-- |Aggregate a list of signatures.
+aggregateMany :: [Signature] -> Signature
+aggregateMany [s] = s
+aggregateMany (s:sigs) = aggregate s (aggregateMany sigs)
+aggregateMany [] = emptySignature
 
 -- The following functions are only for testing purposes
 -- Provides deterministic key generation from seed.
