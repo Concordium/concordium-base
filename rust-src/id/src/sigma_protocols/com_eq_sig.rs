@@ -4,18 +4,17 @@
 //! the blinded version of the signature, and commitments to the values that
 //! were signed.
 
-use curve_arithmetic::{curve_arithmetic::*, serialization::*};
+use curve_arithmetic::curve_arithmetic::*;
 use ff::Field;
 use rand::*;
 use rayon;
 
-use failure::Error;
+use crypto_common::*;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use ps_sig::{BlindedSignature, BlindingRandomness, PublicKey as PsSigPublicKey};
 use random_oracle::RandomOracle;
-use std::io::Cursor;
 
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Debug, Eq, Serialize)]
 pub struct ComEqSigProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// The challenge computed by the prover.
     challenge: P::ScalarField,
@@ -24,6 +23,7 @@ pub struct ComEqSigProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// List of witnesses $(w_i, R_i)$ that the user knows the messages m_i and
     /// randomness R_i that combine to commitments and the public randomized
     /// signature.
+    #[size_length = 4]
     witness_commit: Vec<(P::ScalarField, C::Scalar)>,
 }
 
@@ -38,40 +38,6 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> PartialEq for ComEqSigProof<
 pub struct ComEqSigSecret<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub blind_rand:       &'a BlindingRandomness<P>,
     pub values_and_rands: &'a [(Value<C>, &'a Randomness<C>)],
-}
-
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> ComEqSigProof<P, C> {
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let witness_len = self.witness_commit.len();
-        // the + 4 is for the length of the witness vector
-        let bytes_len = P::SCALAR_LENGTH + (1 + 2 * witness_len) * P::SCALAR_LENGTH + 4;
-        let mut bytes = Vec::with_capacity(bytes_len);
-        write_curve_scalar::<P::G_2>(&self.challenge, &mut bytes);
-        write_curve_scalar::<P::G_2>(&self.witness_rho, &mut bytes);
-        write_length(&self.witness_commit, &mut bytes);
-        for (m, r) in self.witness_commit.iter() {
-            write_curve_scalar::<P::G_1>(m, &mut bytes);
-            write_curve_scalar::<C>(r, &mut bytes);
-        }
-        bytes.into_boxed_slice()
-    }
-
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let challenge = read_curve_scalar::<P::G_2>(bytes)?;
-        let witness_rho = read_curve_scalar::<P::G_2>(bytes)?;
-        let len = read_length(bytes)?;
-        let mut witness_commit = common::safe_with_capacity(len);
-        for _ in 0..len {
-            let m = read_curve_scalar::<P::G_1>(bytes)?;
-            let r = read_curve_scalar::<C>(bytes)?;
-            witness_commit.push((m, r));
-        }
-        Ok(ComEqSigProof {
-            challenge,
-            witness_commit,
-            witness_rho,
-        })
-    }
 }
 
 #[allow(clippy::many_single_char_names)]
@@ -126,11 +92,11 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
     );
 
     let hasher = ro
-        .append("com_eq_sig")
-        .append(blinded_sig.to_bytes())
-        .extend_from(commitments.iter().map(Commitment::to_bytes))
-        .append(&ps_pub_key.to_bytes())
-        .append(&comm_key.to_bytes());
+        .append_bytes("com_eq_sig")
+        .append(blinded_sig)
+        .extend_from(commitments.iter())
+        .append(ps_pub_key)
+        .append(comm_key);
 
     // Random elements corresponding to the messages m_i, used as witnesses
     // for the aggregate log part of the proof, and the randomness R_i used
@@ -143,7 +109,7 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
         let mut hasher2 = hasher.split();
 
         // randomness corresponding to the r_prime (r').
-        let rho_prime = <P::G_2 as Curve>::generate_non_zero_scalar(csprng);
+        let rho_prime = <P::G2 as Curve>::generate_non_zero_scalar(csprng);
 
         // The auxiliary point which we are going to pair with a_hat to obtain the final
         // challenge. This is using the bilinearity property of pairings and differs
@@ -155,7 +121,7 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
             // Random value.
             let mu_i = Value::generate_non_zero(csprng);
 
-            // And a point in G_2 computed from it.
+            // And a point in G2 computed from it.
             let cU_i = cY_tilda(i).mul_by_scalar(&mu_i);
             // A commitment to the value v_i, and a randomness
             let (c_i, cR_i) = cmm_key.commit(&mu_i, csprng);
@@ -164,7 +130,7 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
             mus_cRs.push((mu_i, cR_i));
 
             // And add the commitment c_i directly to the hash
-            hasher2.add(&c_i.curve_to_bytes());
+            hasher2.add(&c_i);
             // And the other point to the running total (since we have to hash the result of
             // the pairing)
             point = point.plus_point(&cU_i);
@@ -176,14 +142,14 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
         // TODO: here we could assert and check that v_2_pair = pair(b_hat, g_tilda)
         // This should be the case if the input is valid.
 
-        let maybe_challenge = hasher2.finish_to_scalar::<C, _>(&P::target_field_to_bytes(&paired));
+        let maybe_challenge = hasher2.finish_to_scalar::<C, _>(&paired);
         match maybe_challenge {
             None => {} // loop again
             Some(challenge) => {
                 // if challange = 0 the proof is not going to be valid.
                 // Hence we resample (this is an extremely unlikely case though, not to
                 // occur in practice.
-                if challenge != <P::G_2 as Curve>::Scalar::zero() {
+                if challenge != <P::G2 as Curve>::Scalar::zero() {
                     let mut wit_r_prime: P::ScalarField = challenge;
                     wit_r_prime.mul_assign(&r_prime);
                     wit_r_prime.negate();
@@ -245,11 +211,11 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let cmm_key = comm_key;
 
     let mut hasher = ro
-        .append("com_eq_sig")
-        .append(blinded_sig.to_bytes())
-        .extend_from(commitments.iter().map(Commitment::to_bytes))
-        .append(&ps_pub_key.to_bytes())
-        .append(&comm_key.to_bytes());
+        .append_bytes("com_eq_sig")
+        .append(blinded_sig)
+        .extend_from(commitments.iter())
+        .append(ps_pub_key)
+        .append(comm_key);
 
     let commitments = &commitments;
     if commitments.len() != proof.witness_commit.len() {
@@ -267,7 +233,7 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         let cP = cC_i
             .mul_by_scalar(&proof.challenge)
             .plus_point(&cmm_key.hide(Value::view_scalar(wit_m), Randomness::view_scalar(wit_r)));
-        hasher.add(cP.curve_to_bytes());
+        hasher.add(&cP);
 
         point = point.plus_point(&cY_tilda.mul_by_scalar(&wit_m));
     }
@@ -287,7 +253,7 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     );
     paired.mul_assign(&other);
 
-    let computed_challenge = hasher.finish_to_scalar::<C, _>(&P::target_field_to_bytes(&paired));
+    let computed_challenge = hasher.finish_to_scalar::<C, _>(&paired);
     match computed_challenge {
         None => false,
         Some(computed_challenge) => computed_challenge == proof.challenge,
@@ -336,7 +302,7 @@ mod tests {
                 blind_rand:       &blind_rand,
                 values_and_rands: &secrets,
             };
-            let proof = prove_com_eq_sig::<Bls12, <Bls12 as Pairing>::G_1, _>(
+            let proof = prove_com_eq_sig::<Bls12, <Bls12 as Pairing>::G1, _>(
                 ro.split(),
                 &blinded_sig,
                 &commitments,
@@ -390,7 +356,7 @@ mod tests {
                 blind_rand:       &blind_rand,
                 values_and_rands: &secrets,
             };
-            let proof = prove_com_eq_sig::<Bls12, <Bls12 as Pairing>::G_1, _>(
+            let proof = prove_com_eq_sig::<Bls12, <Bls12 as Pairing>::G1, _>(
                 ro.split(),
                 &blinded_sig,
                 &commitments,

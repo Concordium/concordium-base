@@ -25,7 +25,7 @@ import qualified Data.Text as Text
 import Control.DeepSeq
 import Data.Scientific
 import System.Random
-import qualified Data.HashMap.Strict as HM
+import qualified Data.Map.Strict as Map
 
 import Data.Base58Encoding
 import qualified Data.FixedByteString as FBS
@@ -111,29 +111,38 @@ newtype KeyIndex = KeyIndex Word8
     deriving Hashable via Word8
 
 data AccountKeys = AccountKeys {
-  akKeys :: HM.HashMap KeyIndex VerifyKey,
+  akKeys :: Map.Map KeyIndex VerifyKey,
   akThreshold :: SignatureThreshold
   } deriving(Eq, Show, Ord)
 
 makeAccountKeys :: [VerifyKey] -> SignatureThreshold -> AccountKeys
 makeAccountKeys keys akThreshold =
   AccountKeys{
-    akKeys = HM.fromList (zip [0..] keys),
+    akKeys = Map.fromAscList (zip [0..] keys), -- NB: fromAscList does not check preconditions
     ..
     }
 
 makeSingletonAC :: VerifyKey -> AccountKeys
 makeSingletonAC key = makeAccountKeys [key] 1
 
+-- Build a map from an ascending list.
+safeFromAscList :: (MonadFail m, Ord k) => [(k,v)] -> m (Map.Map k v)
+safeFromAscList = go Map.empty Nothing
+    where go mp _ [] = return mp
+          go mp Nothing ((k,v):rest) = go (Map.insert k v mp) (Just k) rest
+          go mp (Just k') ((k,v):rest)
+              | k' < k = go (Map.insert k v mp) (Just k) rest
+              | otherwise = fail "Keys not in ascending order, or duplicate keys."
+
 instance S.Serialize AccountKeys where
   put AccountKeys{..} = do
     S.putWord8 (fromIntegral (length akKeys))
-    forM_ (HM.toList akKeys) $ \(idx, key) -> S.put idx <> S.put key
+    forM_ (Map.toAscList akKeys) $ \(idx, key) -> S.put idx <> S.put key
     S.put akThreshold
   get = do
     len <- S.getWord8
     when (len == 0) $ fail "Number of keys out of bounds."
-    akKeys <- HM.fromList <$> replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+    akKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
     akThreshold <- S.get
     return AccountKeys{..}
 
@@ -145,7 +154,7 @@ instance FromJSON AccountKeys where
 
 {-# INLINE getAccountKey #-}
 getAccountKey :: KeyIndex -> AccountKeys -> Maybe VerifyKey
-getAccountKey idx keys = HM.lookup idx (akKeys keys)
+getAccountKey idx keys = Map.lookup idx (akKeys keys)
 
 -- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32
@@ -263,28 +272,6 @@ instance FromJSON AttributeValue where
 
   parseJSON _ = fail "Attribute value must be either a string or an int."
 
--- |For the moment the policies we support are simply opening of specific commitments.
-data PolicyItem = PolicyItem {
-  -- |What index in the attribute list this belongs to.
-  -- NB: Maximum length of attribute list is 2^16
-  piIndex :: Word16,
-  -- |Value (i.e., opening of the commitment).
-  piValue :: AttributeValue
-  } deriving(Eq, Show)
-
-instance ToJSON PolicyItem where
-  toJSON PolicyItem{..} =
-    object [
-    "index" .= piIndex,
-    "piValue" .= piValue
-    ]
-
-instance FromJSON PolicyItem where
-  parseJSON = withObject "PolicyItem" $ \v -> do
-    piIndex <- v .: "index"
-    piValue <- v .: "value"
-    return PolicyItem{..}
-
 -- |Expiry time of a credential.
 type CredentialExpiryTime = Word64
 
@@ -294,7 +281,7 @@ data Policy = Policy {
   -- |Expiry date of this credential. In seconds since unix epoch.
   pExpiry :: CredentialExpiryTime,
   -- |List of items in this attribute list.
-  pItems :: [PolicyItem]
+  pItems :: Map.Map Word16 AttributeValue
   } deriving(Eq, Show)
 
 instance ToJSON Policy where
@@ -500,14 +487,8 @@ getPolicy = do
   pAttributeListVariant <- getWord16be
   pExpiry <- getWord64be
   l <- fromIntegral <$> getWord16be
-  pItems <- replicateM l getPolicyItem
+  pItems <- safeFromAscList =<< replicateM l (getTwoOf getWord16be get)
   return Policy{..}
-
-getPolicyItem :: Get PolicyItem
-getPolicyItem = do
-  piIndex <- getWord16be
-  piValue <- get
-  return PolicyItem{..}
 
 putPolicy :: Putter Policy
 putPolicy Policy{..} =
@@ -515,12 +496,7 @@ putPolicy Policy{..} =
   in putWord16be pAttributeListVariant <>
      putWord64be pExpiry <>
      putWord16be (fromIntegral l) <>
-     mapM_ putPolicyItem pItems
-
-putPolicyItem :: Putter PolicyItem
-putPolicyItem PolicyItem{..} =
-   putWord16be piIndex <>
-   put piValue
+     mapM_ (putTwoOf putWord16be put) (Map.toAscList pItems)
 
 instance Serialize CredentialDeploymentValues where
   get = do

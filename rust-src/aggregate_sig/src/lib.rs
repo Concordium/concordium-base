@@ -1,5 +1,7 @@
 pub mod aggregate_sig;
-mod errors;
 pub mod ffi;
 
 pub use crate::aggregate_sig::*;
+
+#[macro_use]
+extern crate crypto_common_derive;

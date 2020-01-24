@@ -1,18 +1,17 @@
-use dodis_yampolskiy_prf::secret as prf;
-use elgamal::cipher::Cipher;
 use hex::{decode, encode};
 use id::{ffi::*, secret_sharing::*, types::*};
 use pairing::bls12_381::Bls12;
 use ps_sig;
 
+use crypto_common::*;
+
 use chrono::NaiveDateTime;
 
 use serde_json::{json, to_string_pretty, Map, Value};
 
-use pedersen_scheme::{commitment::Commitment, key as pedersen_key, Value as PedersenValue};
+use pedersen_scheme::Value as PedersenValue;
 
 use curve_arithmetic::curve_arithmetic::*;
-use id::sigma_protocols::{com_enc_eq::*, com_eq, com_eq_different_groups, dlog};
 
 use std::{
     convert::TryFrom,
@@ -22,17 +21,11 @@ use std::{
     str::FromStr,
 };
 
-pub type ExampleCurve = <Bls12 as Pairing>::G_1;
+pub type ExampleCurve = <Bls12 as Pairing>::G1;
 
 pub type ExampleAttribute = AttributeKind;
 
 pub type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
-
-macro_rules! m_json_decode {
-    ($val:expr, $key:expr) => {
-        &mut Cursor::new(&json_base16_decode($val.get($key)?)?)
-    };
-}
 
 pub static GLOBAL_CONTEXT: &str = "database/global.json";
 pub static IDENTITY_PROVIDERS: &str = "database/identity_providers.json";
@@ -48,7 +41,7 @@ pub fn read_global_context(filename: &str) -> Option<GlobalContext<ExampleCurve>
     }
 }
 
-pub fn read_identity_providers() -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>::G_1>>> {
+pub fn read_identity_providers() -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>::G1>>> {
     if let Ok(Some(ips)) = read_json_from_file(IDENTITY_PROVIDERS)
         .as_ref()
         .map(json_to_ip_infos)
@@ -102,20 +95,22 @@ where
     Ok(u)
 }
 
-pub fn json_base16_encode(v: &[u8]) -> Value { json!(encode(v)) }
+pub fn json_base16_encode<V: Serial>(v: &V) -> Value { json!(encode(&to_bytes(v))) }
 
-pub fn json_base16_decode(v: &Value) -> Option<Vec<u8>> { decode(v.as_str()?).ok() }
+pub fn json_base16_decode<V: Deserial>(v: &Value) -> Option<V> {
+    V::deserial(&mut Cursor::new(decode(v.as_str()?).ok()?)).ok()
+}
 
 pub fn chi_to_json<C: Curve>(chi: &CredentialHolderInfo<C>) -> Value {
     json!({
         "name": chi.id_ah,
-        "idCredSecret": encode(C::scalar_to_bytes(&chi.id_cred.id_cred_sec)),
+        "idCredSecret": json_base16_encode(&chi.id_cred.id_cred_sec),
     })
 }
 
 pub fn json_to_chi<C: Curve>(js: &Value) -> Option<CredentialHolderInfo<C>> {
     let id_cred_sec = PedersenValue {
-        value: C::bytes_to_scalar(m_json_decode!(js, "idCredSecret")).ok()?,
+        value: js.get("idCredSecret").and_then(json_base16_decode)?,
     };
     let id_ah = js["name"].as_str()?;
     let info: CredentialHolderInfo<C> = CredentialHolderInfo {
@@ -129,17 +124,17 @@ pub fn aci_to_json(aci: &AccCredentialInfo<ExampleCurve, ExampleAttribute>) -> V
     let chi = chi_to_json(&aci.acc_holder_info);
     json!({
         "credentialHolderInformation": chi,
-        "prfKey": json_base16_encode(&aci.prf_key.to_bytes()),
+        "prfKey": json_base16_encode(&aci.prf_key),
         "attributes": alist_to_json(&aci.attributes),
     })
 }
 
 pub fn json_to_aci(
     v: &Value,
-) -> Option<AccCredentialInfo<<Bls12 as Pairing>::G_1, ExampleAttribute>> {
+) -> Option<AccCredentialInfo<<Bls12 as Pairing>::G1, ExampleAttribute>> {
     let obj = v.as_object()?;
     let chi = json_to_chi(obj.get("credentialHolderInformation")?)?;
-    let prf_key = prf::SecretKey::from_bytes(m_json_decode!(obj, "prfKey")).ok()?;
+    let prf_key = obj.get("prfKey").and_then(json_base16_decode)?;
     let attributes = json_to_alist(obj.get("attributes")?)?;
     Some(AccCredentialInfo {
         acc_holder_info: chi,
@@ -160,10 +155,9 @@ pub fn json_read_u8(v: &Map<String, Value>, key: &str) -> Option<u8> {
 
 pub fn json_to_global_context(v: &Value) -> Option<GlobalContext<ExampleCurve>> {
     let obj = v.as_object()?;
-    let cmk_bytes = obj
+    let cmk = obj
         .get("onChainCommitmentKey")
         .and_then(json_base16_decode)?;
-    let cmk = pedersen_key::CommitmentKey::from_bytes(&mut Cursor::new(&cmk_bytes)).ok()?;
     let gc = GlobalContext {
         on_chain_commitment_key: cmk,
     };
@@ -175,7 +169,7 @@ pub fn json_to_ip_infos(v: &Value) -> Option<Vec<IpInfo<Bls12, ExampleCurve>>> {
     ips_arr.iter().map(IpInfo::from_json).collect()
 }
 
-pub fn ip_infos_to_json(ipinfos: &[IpInfo<Bls12, <Bls12 as Pairing>::G_1>]) -> Value {
+pub fn ip_infos_to_json(ipinfos: &[IpInfo<Bls12, <Bls12 as Pairing>::G1>]) -> Value {
     let arr: Vec<Value> = ipinfos.iter().map(IpInfo::to_json).collect();
     json!(arr)
 }
@@ -183,18 +177,18 @@ pub fn ip_infos_to_json(ipinfos: &[IpInfo<Bls12, <Bls12 as Pairing>::G_1>]) -> V
 pub fn ip_ar_data_to_json<C: Curve>(ar_data: &IpArData<C>) -> Value {
     json!({
         "arIdentity": ar_data.ar_identity.to_json(),
-        "encPrfKeyShare": json_base16_encode(&ar_data.enc_prf_key_share.to_bytes()),
+        "encPrfKeyShare": json_base16_encode(&ar_data.enc_prf_key_share),
         "prfKeyShareNumber": ar_data.prf_key_share_number.to_json(),
-        "proofComEncEq" : json_base16_encode(&ar_data.proof_com_enc_eq.to_bytes()),
+        "proofComEncEq" : json_base16_encode(&ar_data.proof_com_enc_eq),
     })
 }
 
 pub fn json_to_ip_ar_data(v: &Value) -> Option<IpArData<ExampleCurve>> {
     let ar_identity = ArIdentity::from_json(v.get("arIdentity")?)?;
     // let ar_description = v.as_object()?.get("arDescription")?.as_str()?;
-    let enc_prf_key_share = Cipher::from_bytes(m_json_decode!(v, "encPrfKeyShare")).ok()?;
+    let enc_prf_key_share = v.get("encPrfKeyShare").and_then(json_base16_decode)?;
     let prf_key_share_number = ShareNumber::from_json(v.get("prfKeyShareNumber")?)?;
-    let proof_com_enc_eq = ComEncEqProof::from_bytes(m_json_decode!(v, "proofComEncEq")).ok()?;
+    let proof_com_enc_eq = v.get("proofComEncEq").and_then(json_base16_decode)?;
 
     Some(IpArData {
         ar_identity,
@@ -219,28 +213,28 @@ pub fn pio_to_json(pio: &PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute
     let prf_arr: Vec<Value> = pio
         .cmm_prf_sharing_coeff
         .iter()
-        .map(|x| json_base16_encode(&x.to_bytes()))
+        .map(json_base16_encode)
         .collect();
     json!({
         "accountHolderName": pio.id_ah,
-        "idCredPub": json_base16_encode(&pio.id_cred_pub.curve_to_bytes()),
+        "idCredPub": json_base16_encode(&pio.id_cred_pub),
         "ipArData": json!(arr),
         "choiceArData":pio.choice_ar_parameters.0.iter().map(|&x| ArIdentity::to_json(x)).collect::<Vec<Value>>(),
         "revocationThreshold":pio.choice_ar_parameters.1.to_json(),
         "attributeList": alist_to_json(&pio.alist),
-        "pokSecCred": json_base16_encode(&pio.pok_sc.to_bytes()),
-        "sndPokSecCred": json_base16_encode(&pio.snd_pok_sc.to_bytes()),
-        "idCredSecCommitment": json_base16_encode(&pio.cmm_sc.to_bytes()),
-        "proofCommitmentsToIdCredSecSame": json_base16_encode(&pio.proof_com_eq_sc.to_bytes()),
-        "prfKeyCommitmentWithID": json_base16_encode(&pio.cmm_prf.to_bytes()),
+        "pokSecCred": json_base16_encode(&pio.pok_sc),
+        "sndPokSecCred": json_base16_encode(&pio.snd_pok_sc),
+        "idCredSecCommitment": json_base16_encode(&pio.cmm_sc),
+        "proofCommitmentsToIdCredSecSame": json_base16_encode(&pio.proof_com_eq_sc),
+        "prfKeyCommitmentWithID": json_base16_encode(&pio.cmm_prf),
         "prfKeySharingCoeffCommitments": json!(prf_arr),
-        "proofCommitmentsSame": json_base16_encode(&pio.proof_com_eq.to_bytes()),
+        "proofCommitmentsSame": json_base16_encode(&pio.proof_com_eq),
     })
 }
 
 pub fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>> {
     let id_ah = v.get("accountHolderName")?.as_str()?.to_owned();
-    let id_cred_pub = ExampleCurve::bytes_to_curve(m_json_decode!(v, "idCredPub")).ok()?;
+    let id_cred_pub = v.get("idCredPub").and_then(json_base16_decode)?;
     let ip_ar_data_arr: &Vec<Value> = v.get("ipArData")?.as_array()?;
     let ip_ar_data: Vec<IpArData<ExampleCurve>> = ip_ar_data_arr
         .iter()
@@ -255,32 +249,22 @@ pub fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, E
         .collect::<Option<Vec<ArIdentity>>>()?;
     let revocation_threshold: Threshold = Threshold::from_json(v.get("revocationThreshold")?)?;
     let alist = json_to_alist(v.get("attributeList")?)?;
-    let pok_sc =
-        dlog::DlogProof::from_bytes(&mut Cursor::new(&json_base16_decode(v.get("pokSecCred")?)?))
-            .ok()?;
-    let snd_pok_sc = com_eq::ComEqProof::from_bytes(&mut Cursor::new(&json_base16_decode(
-        v.get("sndPokSecCred")?,
-    )?))
-    .ok()?;
-    let cmm_sc = Commitment::from_bytes(m_json_decode!(v, "idCredSecCommitment")).ok()?;
-    let proof_com_eq_sc = com_eq::ComEqProof::from_bytes(&mut Cursor::new(&json_base16_decode(
-        v.get("proofCommitmentsToIdCredSecSame")?,
-    )?))
-    .ok()?;
-    let cmm_prf = Commitment::from_bytes(m_json_decode!(v, "prfKeyCommitmentWithID")).ok()?;
+    let pok_sc = v.get("pokSecCred").and_then(json_base16_decode)?;
+    let snd_pok_sc = v.get("sndPokSecCred").and_then(json_base16_decode)?;
+    let cmm_sc = v.get("idCredSecCommitment").and_then(json_base16_decode)?;
+    let proof_com_eq_sc = v
+        .get("proofCommitmentsToIdCredSecSame")
+        .and_then(json_base16_decode)?;
+    let cmm_prf = v
+        .get("prfKeyCommitmentWithID")
+        .and_then(json_base16_decode)?;
     let cmm_prf_values: Vec<Value> = v.get("prfKeySharingCoeffCommitments")?.as_array()?.clone();
     let mut cmm_prf_sharing_coeff = vec![];
     for item in cmm_prf_values.iter() {
-        match Commitment::from_bytes(&mut Cursor::new(json_base16_decode(item)?.as_slice())) {
-            Err(_) => return None,
-            Ok(x) => cmm_prf_sharing_coeff.push(x),
-        }
+        cmm_prf_sharing_coeff.push(json_base16_decode(item)?);
     }
 
-    let proof_com_eq = com_eq_different_groups::ComEqDiffGrpsProof::from_bytes(&mut Cursor::new(
-        &json_base16_decode(v.get("proofCommitmentsSame")?)?,
-    ))
-    .ok()?;
+    let proof_com_eq = v.get("proofCommitmentsSame").and_then(json_base16_decode)?;
     Some(PreIdentityObject {
         id_ah,
         id_cred_pub,
@@ -301,17 +285,14 @@ pub fn json_to_pio(v: &Value) -> Option<PreIdentityObject<Bls12, ExampleCurve, E
 pub type IpData = (IpInfo<Bls12, ExampleCurve>, ps_sig::SecretKey<Bls12>);
 
 pub fn json_to_ip_data(v: &Value) -> Option<IpData> {
-    let id_cred_sec = ps_sig::SecretKey::from_bytes(&mut Cursor::new(&json_base16_decode(
-        v.get("idPrivateKey")?,
-    )?))
-    .ok()?;
+    let id_cred_sec = v.get("idPrivateKey").and_then(json_base16_decode)?;
     let ip_info = IpInfo::from_json(v.get("publicIdInfo")?)?;
     Some((ip_info, id_cred_sec))
 }
 
 pub fn ip_data_to_json(v: &IpData) -> Value {
     json!({
-        "idPrivateKey": json_base16_encode(&v.1.to_bytes()),
+        "idPrivateKey": json_base16_encode(&v.1),
         "publicIdInfo": v.0.to_json()
     })
 }

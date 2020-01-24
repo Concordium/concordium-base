@@ -12,29 +12,22 @@
 #![allow(non_snake_case)]
 
 use core::fmt::{self, Display};
-
-use curve_arithmetic::curve_arithmetic as carith;
-
 /// Internal errors.  
 
 #[derive(Debug)]
 #[allow(dead_code)]
 pub(crate) enum InternalError {
-    FieldDecoding(carith::FieldDecodingError),
-    GroupDecoding(carith::CurveDecodingError),
-    PublicKeyLength,
-    MessageLength,
-    CipherLength,
+    PublicKey,
+    Message,
+    Cipher,
 }
 
 impl Display for InternalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            InternalError::GroupDecoding(ref e) => write!(f, "Group decoding error {:?}", e),
-            InternalError::FieldDecoding(ref e) => write!(f, "Field decoding error {:?}", e),
-            InternalError::PublicKeyLength => write!(f, "Wrong PublicKey length"),
-            InternalError::MessageLength => write!(f, "Wrong message length"),
-            InternalError::CipherLength => write!(f, "Wrong cipher length"),
+            InternalError::PublicKey => write!(f, "Wrong PublicKey length"),
+            InternalError::Message => write!(f, "Wrong message length"),
+            InternalError::Cipher => write!(f, "Wrong cipher length"),
         }
     }
 }
@@ -53,18 +46,6 @@ impl ::failure::Fail for InternalError {}
 
 #[derive(Debug)]
 pub struct ElgamalError(pub(crate) InternalError);
-
-impl From<carith::FieldDecodingError> for ElgamalError {
-    fn from(err: carith::FieldDecodingError) -> Self {
-        ElgamalError(InternalError::FieldDecoding(err))
-    }
-}
-
-impl From<carith::CurveDecodingError> for ElgamalError {
-    fn from(err: carith::CurveDecodingError) -> Self {
-        ElgamalError(InternalError::GroupDecoding(err))
-    }
-}
 
 impl Display for ElgamalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }

@@ -8,22 +8,23 @@ use crate::{
     signature::*,
     unknown_message::*,
 };
-use curve_arithmetic::{curve_arithmetic::*, serialization::*};
-use failure::Error;
+use crypto_common::*;
+use curve_arithmetic::curve_arithmetic::*;
+
 use ff::Field;
-use std::io::Cursor;
 
 use rand::*;
 
 /// A secret key
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct SecretKey<C: Pairing> {
     /// Generator of the first pairing group. Not secret, but needed for various
     /// operations.
-    pub g: C::G_1,
+    pub g: C::G1,
     /// Generator of the second pairing group. Not secret, but needed for
     /// various operations.
-    pub g_tilda: C::G_2,
+    pub g_tilda: C::G2,
+    #[size_length = 4]
     pub(crate) ys: Vec<C::ScalarField>,
     pub(crate) x: C::ScalarField,
 }
@@ -35,33 +36,6 @@ impl<C: Pairing> PartialEq for SecretKey<C> {
 impl<C: Pairing> Eq for SecretKey<C> {}
 
 impl<C: Pairing> SecretKey<C> {
-    // turn secret key vector into a byte array
-    #[inline]
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let mut bytes: Vec<u8> = Vec::with_capacity(4 + (self.ys.len() + 1) * C::SCALAR_LENGTH);
-        write_curve_element(&self.g, &mut bytes);
-        write_curve_element(&self.g_tilda, &mut bytes);
-        write_pairing_scalars::<C>(&self.ys, &mut bytes);
-        write_pairing_scalar::<C>(&self.x, &mut bytes);
-        bytes.into_boxed_slice()
-    }
-
-    #[inline]
-    pub fn value_to_bytes(scalar: &C::ScalarField) -> Box<[u8]> { C::scalar_to_bytes(scalar) }
-
-    /// Construct a secret key vec from a slice of bytes.
-    ///
-    /// A `Result` whose okay value is a secret key vec  or whose error value
-    /// is an `SignatureError` wrapping the internal error that occurred.
-    #[inline]
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<SecretKey<C>, Error> {
-        let g = read_curve::<C::G_1>(bytes)?;
-        let g_tilda = read_curve::<C::G_2>(bytes)?;
-        let ys = read_pairing_scalars::<C>(bytes)?;
-        let x = read_pairing_scalar::<C>(bytes)?;
-        Ok(SecretKey { g, g_tilda, ys, x })
-    }
-
     /// Generate a secret key from a `csprng`. NB: This fixes the generators to
     /// be those defined by the library.
     pub fn generate<T>(n: usize, csprng: &mut T) -> SecretKey<C>
@@ -73,8 +47,8 @@ impl<C: Pairing> SecretKey<C> {
         }
 
         SecretKey {
-            g: C::G_1::one_point(),
-            g_tilda: C::G_2::one_point(),
+            g: C::G1::one_point(),
+            g_tilda: C::G2::one_point(),
             ys,
             x: C::generate_scalar(csprng),
         }
@@ -137,8 +111,7 @@ mod tests {
                 let mut csprng = thread_rng();
                 for i in 0..20 {
                     let val = SecretKey::<$pairing_type>::generate(i, &mut csprng);
-                    let res_val2 =
-                        SecretKey::<$pairing_type>::from_bytes(&mut Cursor::new(&*val.to_bytes()));
+                    let res_val2 = serialize_deserialize(&val);
                     assert!(res_val2.is_ok());
                     let val2 = res_val2.unwrap();
                     assert_eq!(val2, val);

@@ -20,8 +20,11 @@ branch = "master"
 [dependencies.ffi_helpers]
 path = "../ffi_helpers"
 
-[dependencies.common]
-path = "../common"
+[dependencies.crypto_common]
+path = "../crypto_common"
+
+[dependencies.crypto_common_derive]
+path = "../crypto_common_derive"
 
 [lib]
 name = "curve_arithmetic"

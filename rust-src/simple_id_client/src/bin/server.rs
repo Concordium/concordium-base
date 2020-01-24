@@ -16,7 +16,7 @@ use serde_json::{json, to_string_pretty, Value};
 use clap::{App, AppSettings, Arg};
 use id::secret_sharing::Threshold;
 use pedersen_scheme::Value as PedersenValue;
-use std::{cmp::max, io::Cursor};
+use std::cmp::max;
 
 use either::Either::Left;
 use std::collections::HashMap;
@@ -114,11 +114,11 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
         Ok(sig) => {
             let response = json!({
                 "preIdentityObject": pio_to_json(&pio),
-                "signature": json_base16_encode(&sig.to_bytes()),
+                "signature": json_base16_encode(&sig),
                 "ipIdentity": ip_info.ip_identity.to_json(),
                 "privateData": json!({
                     "aci": aci_to_json(&aci),
-                    "pioRandomness": json_base16_encode(&randomness.to_bytes())
+                    "pioRandomness": json_base16_encode(&randomness)
                 })
             });
             rouille::Response::json(&response)
@@ -139,14 +139,10 @@ type GenerateCredentialData = (
 
 fn parse_generate_credential_input_json(v: &Value) -> Option<GenerateCredentialData> {
     let ip_id = IpIdentity::from_json(v.get("ipIdentity")?)?;
-    let sig =
-        pssig::Signature::from_bytes(&mut Cursor::new(&json_base16_decode(v.get("signature")?)?))
-            .ok()?;
+    let sig = v.get("signature").and_then(json_base16_decode)?;
     let pio = json_to_pio(v.get("preIdentityObject")?)?;
     let private = v.get("privateData")?;
-    let randomness = SigRetrievalRandomness::from_bytes(&mut Cursor::new(&json_base16_decode(
-        private.get("pioRandomness")?,
-    )?))?;
+    let randomness = private.get("pioRandomness").and_then(json_base16_decode)?;
     let aci = json_to_aci(private.get("aci")?)?;
     let policy_items = {
         if let Some(items) = v.get("revealedItems") {

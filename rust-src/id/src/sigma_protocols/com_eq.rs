@@ -10,15 +10,12 @@ use curve_arithmetic::curve_arithmetic::Curve;
 use ff::Field;
 use rand::*;
 
-use failure::Error;
 use random_oracle::RandomOracle;
-use std::io::Cursor;
 
+use crypto_common::*;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 
-use curve_arithmetic::serialization::*;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ComEqProof<T: Curve> {
     /// The challenge computed by the prover.
     challenge: T::Scalar,
@@ -27,36 +24,10 @@ pub struct ComEqProof<T: Curve> {
     /// * $t_i = R_i - c r_i$
     /// where $c$ is the challenge and $\alpha_i$ and $R_i$ are prover chosen
     /// random scalars.
+    #[size_length = 4]
     witness: Vec<(T::Scalar, T::Scalar)>,
 }
 
-impl<T: Curve> ComEqProof<T> {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let witness_len = self.witness.len();
-        // the +4 is for the length information of the witness vector
-        let bytes_len = 4 + T::SCALAR_LENGTH + (2 * witness_len) * T::SCALAR_LENGTH;
-        let mut bytes = Vec::with_capacity(bytes_len);
-        write_curve_scalar::<T>(&self.challenge, &mut bytes);
-        write_length(&self.witness, &mut bytes);
-        for (x, y) in self.witness.iter() {
-            write_curve_scalar::<T>(x, &mut bytes);
-            write_curve_scalar::<T>(y, &mut bytes);
-        }
-        bytes
-    }
-
-    pub fn from_bytes(bytes: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let challenge = read_curve_scalar::<T>(bytes)?;
-        let len = read_length(bytes)?;
-        let mut witness = common::safe_with_capacity(len);
-        for _ in 0..len {
-            let w1 = read_curve_scalar::<T>(bytes)?;
-            let w2 = read_curve_scalar::<T>(bytes)?;
-            witness.push((w1, w2));
-        }
-        Ok(ComEqProof { challenge, witness })
-    }
-}
 /// Construct a proof of knowledge of secret values. The arguments are as
 /// follows.
 /// * `ro` - Random oracle used in the challenge computation. This can be used
@@ -88,11 +59,11 @@ pub fn prove_com_eq<C: Curve, T: Curve<Scalar = C::Scalar>, R: Rng>(
     let mut rands = Vec::with_capacity(n);
 
     let hasher = ro
-        .append("com_eq")
-        .extend_from(commitments.iter().map(Commitment::to_bytes))
-        .append(&y.curve_to_bytes())
-        .append(&cmm_key.to_bytes())
-        .extend_from(gxs.iter().map(Curve::curve_to_bytes));
+        .append_bytes("com_eq")
+        .extend_from(commitments.iter())
+        .append(y)
+        .append(cmm_key)
+        .extend_from(gxs.iter());
 
     loop {
         // For each iteration of the loop we need to recompute the challenge,
@@ -107,10 +78,10 @@ pub fn prove_com_eq<C: Curve, T: Curve<Scalar = C::Scalar>, R: Rng>(
             // This cR_i is R_i from the specification.
             let (v_i, cR_i) = cmm_key.commit(&alpha_i, csprng);
             tmp_u = tmp_u.plus_point(&g.mul_by_scalar(&alpha_i));
-            hasher2.add(&v_i.curve_to_bytes());
+            hasher2.add(&v_i);
             rands.push((alpha_i, cR_i));
         }
-        hasher2.add(tmp_u.curve_to_bytes());
+        hasher2.add(&tmp_u);
         let challenge = hasher2.result_to_scalar::<T>();
         match challenge {
             None => {} // loop again
@@ -188,19 +159,19 @@ pub fn verify_com_eq<C: Curve, T: Curve<Scalar = C::Scalar>>(
     }
 
     let mut hasher = ro
-        .append("com_eq")
-        .extend_from(commitments.iter().map(Commitment::to_bytes))
-        .append(&y.curve_to_bytes())
-        .append(&cmm_key.to_bytes())
-        .extend_from(gxs.iter().map(Curve::curve_to_bytes));
+        .append_bytes("com_eq")
+        .extend_from(commitments.iter())
+        .append(y)
+        .append(cmm_key)
+        .extend_from(gxs.iter());
 
     for (c, (s_i, t_i)) in izip!(commitments.iter(), &proof.witness) {
         let v = c
             .mul_by_scalar(challenge)
             .plus_point(&cmm_key.hide(Value::view_scalar(s_i), Randomness::view_scalar(t_i)));
-        hasher.add(&v.curve_to_bytes());
+        hasher.add(&v);
     }
-    hasher.add(&u.curve_to_bytes());
+    hasher.add(&u);
 
     let computed_challenge = hasher.result_to_scalar::<T>();
     match computed_challenge {
@@ -364,8 +335,7 @@ mod test {
                 witness.push((a, b));
             }
             let cep = ComEqProof::<G1Affine> { challenge, witness };
-            let bytes = cep.to_bytes();
-            let cepp = ComEqProof::from_bytes(&mut Cursor::new(&bytes));
+            let cepp = serialize_deserialize(&cep);
             assert!(cepp.is_ok());
             assert_eq!(cep, cepp.unwrap());
         }

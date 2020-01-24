@@ -1,29 +1,11 @@
-// Authors:
-// - bm@concordium.com
-//
-
-use failure::Fail;
-use ff::{Field, PrimeField, PrimeFieldDecodingError};
+use failure::{Fail, Fallible};
+use ff::{Field, PrimeField};
 use rand::*;
-use std::{
-    fmt::{Debug, Display, Formatter},
-    io::Cursor,
-};
+use std::fmt::{Debug, Display, Formatter};
 
-#[derive(Debug)]
-pub enum FieldDecodingError {
-    NotFieldElement,
-}
+use byteorder::ReadBytesExt;
 
-impl From<PrimeFieldDecodingError> for FieldDecodingError {
-    fn from(_err: PrimeFieldDecodingError) -> Self { FieldDecodingError::NotFieldElement }
-}
-
-impl Display for FieldDecodingError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result { write!(f, "Not a field element.") }
-}
-
-impl Fail for FieldDecodingError {}
+use crypto_common::{Serial, Serialize};
 
 #[derive(Debug)]
 pub enum CurveDecodingError {
@@ -37,8 +19,8 @@ impl Display for CurveDecodingError {
 impl Fail for CurveDecodingError {}
 
 pub trait Curve:
-    Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static {
-    type Scalar: Field;
+    Serialize + Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static {
+    type Scalar: Field + Serialize;
     type Base: Field;
     type Compressed;
     const SCALAR_LENGTH: usize;
@@ -60,11 +42,7 @@ pub trait Curve:
     fn compress(&self) -> Self::Compressed;
     fn decompress(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
     fn decompress_unchecked(c: &Self::Compressed) -> Result<Self, CurveDecodingError>;
-    fn scalar_to_bytes(s: &Self::Scalar) -> Box<[u8]>;
-    fn bytes_to_scalar(b: &mut Cursor<&[u8]>) -> Result<Self::Scalar, FieldDecodingError>;
-    fn curve_to_bytes(&self) -> Box<[u8]>;
-    fn bytes_to_curve(b: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError>;
-    fn bytes_to_curve_unchecked(b: &mut Cursor<&[u8]>) -> Result<Self, CurveDecodingError>;
+    fn bytes_to_curve_unchecked<R: ReadBytesExt>(b: &mut R) -> Fallible<Self>;
     fn generate<R: Rng>(rng: &mut R) -> Self;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::Scalar;
     /// Generate a non-zero scalar. The default implementation does repeated
@@ -77,20 +55,18 @@ pub trait Curve:
             }
         }
     }
-    fn scalar_from_u64(n: u64) -> Result<Self::Scalar, FieldDecodingError>;
+    fn scalar_from_u64(n: u64) -> Self::Scalar;
     fn hash_to_group(m: &[u8]) -> Self;
 }
 
 pub trait Pairing: Sized + 'static + Clone {
-    type ScalarField: PrimeField;
-    type G_1: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
-    type G_2: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
+    type ScalarField: PrimeField + Serialize;
+    type G1: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
+    type G2: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
     type BaseField: PrimeField;
-    type TargetField: Field;
-    fn pair(p: Self::G_1, q: Self::G_2) -> Self::TargetField;
+    type TargetField: Field + Serial;
+    fn pair(p: Self::G1, q: Self::G2) -> Self::TargetField;
     const SCALAR_LENGTH: usize;
-    fn scalar_to_bytes(s: &Self::ScalarField) -> Box<[u8]>;
-    fn bytes_to_scalar(b: &mut Cursor<&[u8]>) -> Result<Self::ScalarField, FieldDecodingError>;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::ScalarField;
     /// Generate non-zero scalar by repeated sampling. Can be overriden by a
     /// more efficient implementation.
@@ -102,7 +78,4 @@ pub trait Pairing: Sized + 'static + Clone {
             }
         }
     }
-    fn target_field_to_bytes(f: &Self::TargetField) -> Box<[u8]>;
-    //    fn bytes_to_target_field(b: &[u8]) -> Result<Self::TargetField,
-    // FieldDecodingError>;
 }
