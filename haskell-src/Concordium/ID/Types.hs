@@ -272,28 +272,6 @@ instance FromJSON AttributeValue where
 
   parseJSON _ = fail "Attribute value must be either a string or an int."
 
--- |For the moment the policies we support are simply opening of specific commitments.
-data PolicyItem = PolicyItem {
-  -- |What index in the attribute list this belongs to.
-  -- NB: Maximum length of attribute list is 2^16
-  piIndex :: Word16,
-  -- |Value (i.e., opening of the commitment).
-  piValue :: AttributeValue
-  } deriving(Eq, Show)
-
-instance ToJSON PolicyItem where
-  toJSON PolicyItem{..} =
-    object [
-    "index" .= piIndex,
-    "piValue" .= piValue
-    ]
-
-instance FromJSON PolicyItem where
-  parseJSON = withObject "PolicyItem" $ \v -> do
-    piIndex <- v .: "index"
-    piValue <- v .: "value"
-    return PolicyItem{..}
-
 -- |Expiry time of a credential.
 type CredentialExpiryTime = Word64
 
@@ -303,7 +281,7 @@ data Policy = Policy {
   -- |Expiry date of this credential. In seconds since unix epoch.
   pExpiry :: CredentialExpiryTime,
   -- |List of items in this attribute list.
-  pItems :: [PolicyItem]
+  pItems :: Map.Map Word16 AttributeValue
   } deriving(Eq, Show)
 
 instance ToJSON Policy where
@@ -509,14 +487,8 @@ getPolicy = do
   pAttributeListVariant <- getWord16be
   pExpiry <- getWord64be
   l <- fromIntegral <$> getWord16be
-  pItems <- replicateM l getPolicyItem
+  pItems <- safeFromAscList =<< replicateM l (getTwoOf getWord16be get)
   return Policy{..}
-
-getPolicyItem :: Get PolicyItem
-getPolicyItem = do
-  piIndex <- getWord16be
-  piValue <- get
-  return PolicyItem{..}
 
 putPolicy :: Putter Policy
 putPolicy Policy{..} =
@@ -524,12 +496,7 @@ putPolicy Policy{..} =
   in putWord16be pAttributeListVariant <>
      putWord64be pExpiry <>
      putWord16be (fromIntegral l) <>
-     mapM_ putPolicyItem pItems
-
-putPolicyItem :: Putter PolicyItem
-putPolicyItem PolicyItem{..} =
-   putWord16be piIndex <>
-   put piValue
+     mapM_ (putTwoOf putWord16be put) (Map.toAscList pItems)
 
 instance Serialize CredentialDeploymentValues where
   get = do

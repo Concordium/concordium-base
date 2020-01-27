@@ -7,7 +7,6 @@ use crate::{
 use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
-use ff::Field;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
@@ -254,16 +253,18 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
 }
 // computing the commitment to a single share from the commitments to the
 // coefficients
-#[inline(always)]
 pub fn commitment_to_share<C: Curve>(
     share_number: ShareNumber,
     coeff_commitments: &[Commitment<C>],
 ) -> Commitment<C> {
-    let mut cmm_share_point: C = coeff_commitments[0].0;
-    for (i, Commitment(cmm_point)) in coeff_commitments.iter().enumerate().skip(1) {
-        let j_pow_i: C::Scalar = share_number.to_scalar::<C>().pow([i as u64]);
-        let a = cmm_point.mul_by_scalar(&j_pow_i);
-        cmm_share_point = cmm_share_point.plus_point(&a);
+    let mut cmm_share_point: C = C::zero_point();
+    let share_scalar = share_number.to_scalar::<C>();
+    // Essentially Horner's scheme in the exponent.
+    // Likely this would be better done with multiexponentiation,
+    // although this is not clear.
+    for cmm in coeff_commitments.iter().rev() {
+        cmm_share_point = cmm_share_point.mul_by_scalar(&share_scalar);
+        cmm_share_point = cmm_share_point.plus_point(&cmm);
     }
     Commitment(cmm_share_point)
 }

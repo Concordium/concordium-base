@@ -23,15 +23,28 @@ pub struct AttributeKind([u8; 31]);
 
 impl Deserial for AttributeKind {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
-        let mut buf = [0u8; 31];
-        source.read_exact(&mut buf)?;
-        Ok(AttributeKind(buf))
+        let len: u8 = source.get()?;
+        if len <= 31 {
+            let mut buf = [0u8; 31];
+            source.read_exact(&mut buf[(31 - len as usize)..31])?;
+            Ok(AttributeKind(buf))
+        } else {
+            bail!("Attributes can be at most 31 bytes.")
+        }
     }
 }
 
 impl Serial for AttributeKind {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        out.write_all(&self.0)
+        let mut l: u8 = 0;
+        for &x in self.0.iter() {
+            if x != 0u8 {
+                break;
+            }
+            l += 1;
+        }
+        out.put(&(31 - l));
+        out.write_all(&self.0[l as usize..])
             .expect("Writing to buffer should succeed.");
     }
 }
@@ -136,7 +149,10 @@ pub extern "C" fn verify_cdi_ffi(
 
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
     match CredDeploymentInfo::<Bls12, G1, AttributeKind>::deserial(&mut Cursor::new(&cdi_bytes)) {
-        Err(_) => -9,
+        Err(err) => {
+            eprintln!("{}", err);
+            -9
+        }
         Ok(cdi) => {
             match chain::verify_cdi::<Bls12, G1, AttributeKind>(
                 from_ptr!(gc_ptr),
