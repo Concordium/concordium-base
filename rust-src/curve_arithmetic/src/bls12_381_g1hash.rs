@@ -2,12 +2,11 @@ use crate::curve_arithmetic::CurveDecodingError;
 use byteorder::{BigEndian, ReadBytesExt}; // TODO: maybe delete
 use bytes::{BufMut, IntoBuf};
 use ff::{Field, PrimeField, PrimeFieldDecodingError};
-use pairing::{
-    bls12_381::{Fq, FqRepr, G1Uncompressed, G1},
-    CurveProjective, EncodedPoint,
-};
+use pairing::bls12_381::{Fq, FqRepr, G1Uncompressed, G1};
+use group::{EncodedPoint, CurveProjective};
 use sha2::{Digest, Sha512};
 use std::io::{Cursor, Write};
+use rand::*;
 
 // (p-3)/4 where p is the prime characteristic of the field Fq (p=q)
 #[allow(clippy::unreadable_literal)]
@@ -497,7 +496,7 @@ pub(crate) const K4: [[u64; 6]; 16] = [
     [0x1, 0x0, 0x0, 0x0, 0x0, 0x0],
 ];
 
-pub fn hash_to_g1(bytes: &[u8]) -> G1 {
+pub(crate) fn hash_to_g1(bytes: &[u8]) -> G1 {
     // Concatenate the message with 0u8 and 1u8 respectively
     // The paper suggests concatenating a single bit - but since the point is to
     // get two unrelated field elements, concatenating with 0u8 and 1u8 is ok
@@ -821,19 +820,18 @@ enum Sign {
 mod tests {
     use super::*;
     use ff::SqrtField;
-    use rand::{Rand, SeedableRng, StdRng};
+    use rand::{SeedableRng, rngs::StdRng};
 
     // testing from_coordinates_unchecked for point at infinity
     #[test]
     fn test_from_coordinates_point_at_infinity() {
-        let seed: &[_] = &[42];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
 
         let expected = G1::zero();
         let z = Fq::zero();
         for _ in 0..1000 {
-            let x = Fq::rand(&mut rng);
-            let y = Fq::rand(&mut rng);
+            let x = Fq::random(&mut rng);
+            let y = Fq::random(&mut rng);
             let paf = from_coordinates_unchecked(x, y, z).unwrap();
 
             assert!(paf == expected);
@@ -843,12 +841,11 @@ mod tests {
     // testing from_coordinates_unchecked for random points
     #[test]
     fn test_from_coordinates() {
-        let seed: &[_] = &[42];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
 
         let mut i = 0;
         while i <= 10000 {
-            let x = Fq::rand(&mut rng);
+            let x = Fq::random(&mut rng);
             let mut y = x;
             y.square();
             y.mul_assign(&x);

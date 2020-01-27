@@ -173,6 +173,7 @@ mod tests {
     use crate::sigma_protocols::common::*;
     use elgamal::SecretKey as ElGamalSecretKey;
     use pairing::bls12_381::G1Affine;
+    use rand::rngs::ThreadRng;
 
     #[test]
     pub fn test_com_enc_eq_correctness() {
