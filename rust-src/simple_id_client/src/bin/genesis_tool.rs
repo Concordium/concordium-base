@@ -8,8 +8,7 @@ use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Thresh
 use pairing::bls12_381::{Bls12, G1};
 use std::collections::btree_map::BTreeMap;
 
-use rand::*;
-use rand::rngs::ThreadRng;
+use rand::{rngs::ThreadRng, *};
 
 use pedersen_scheme::Value as PedersenValue;
 

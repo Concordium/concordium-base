@@ -198,10 +198,8 @@ fn hash_message(m: &[u8]) -> GenericArray<u8, <Sha512 as Digest>::OutputSize> {
 mod test {
     use super::*;
     use pairing::bls12_381::Bls12;
-    use rand::{thread_rng, Rng, SeedableRng, rngs::
-        StdRng};
+    use rand::{rngs::StdRng, thread_rng, Rng, SeedableRng};
     use std::convert::TryFrom;
-
 
     const SIGNERS: usize = 500;
     const TEST_ITERATIONS: usize = 10;

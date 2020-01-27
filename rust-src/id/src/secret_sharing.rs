@@ -160,8 +160,7 @@ pub fn reveal_in_group<C: Curve>(shares: &[(ShareNumber, C)]) -> C {
 mod test {
     use super::*;
     use pairing::bls12_381::{Fr, G1};
-    use rand::seq::SliceRandom;
-    use rand::rngs::ThreadRng;
+    use rand::{rngs::ThreadRng, seq::SliceRandom};
 
     #[test]
     pub fn test_secret_sharing() {

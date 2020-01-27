@@ -2,8 +2,10 @@ use byteorder::ReadBytesExt;
 use failure::Fallible;
 
 use ff::PrimeField;
-use pairing::bls12_381::{Fq12, FqRepr, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2};
 use group::{CurveAffine, CurveProjective, EncodedPoint};
+use pairing::bls12_381::{
+    Fq12, FqRepr, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2,
+};
 
 use crate::serialize::*;
 
