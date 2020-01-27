@@ -99,7 +99,7 @@ pub fn decrypt_u64_bitwise<C: Curve>(sk: &SecretKey<C>, v: &[Cipher<C>]) -> u64 
 
 #[cfg(test)]
 mod tests {
-    use rand::{Rng, rngs::ThreadRng};
+    use rand::{rngs::ThreadRng, Rng};
 
     use crate::message::*;
     use pairing::bls12_381::{G1, G2};

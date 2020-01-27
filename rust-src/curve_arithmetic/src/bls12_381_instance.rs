@@ -4,11 +4,11 @@ use crate::{bls12_381_g1hash::*, curve_arithmetic::*};
 use byteorder::ReadBytesExt;
 use failure::Fallible;
 use ff::{Field, PrimeField};
+use group::{CurveAffine, CurveProjective, EncodedPoint};
 use pairing::{
     bls12_381::{Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2},
     Engine,
 };
-use group::{CurveAffine, CurveProjective, EncodedPoint};
 use rand::*;
 
 impl Curve for G2 {

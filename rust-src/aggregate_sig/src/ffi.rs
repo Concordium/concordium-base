@@ -2,7 +2,7 @@ use crate::aggregate_sig::*;
 use ffi_helpers::*;
 use libc::size_t;
 use pairing::bls12_381::Bls12;
-use rand::{thread_rng, SeedableRng, rngs::StdRng};
+use rand::{rngs::StdRng, thread_rng, SeedableRng};
 use std::{cmp::Ordering, slice};
 
 use crypto_common::*;
@@ -144,10 +144,8 @@ pub extern "C" fn bls_empty_sig() -> *mut Signature<Bls12> {
 pub extern "C" fn bls_generate_secretkey_from_seed(seed: size_t) -> *mut SecretKey<Bls12> {
     let s: usize = seed;
     let mut seed_ = [0u8; 32];
-    let mut i = 0;
-    for byte in s.to_le_bytes().iter() {
-        seed_[31-i] = *byte;
-        i += 1;
+    for (i, byte) in s.to_le_bytes().iter().enumerate() {
+        seed_[31 - i] = *byte;
     }
     let mut rng: StdRng = SeedableRng::from_seed(seed_);
     Box::into_raw(Box::new(SecretKey::generate(&mut rng)))
@@ -156,7 +154,7 @@ pub extern "C" fn bls_generate_secretkey_from_seed(seed: size_t) -> *mut SecretK
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand::{Rng, SeedableRng, rngs::StdRng};
+    use rand::{rngs::StdRng, Rng, SeedableRng};
 
     #[test]
     fn test_verify_aggregate_ffi() {
