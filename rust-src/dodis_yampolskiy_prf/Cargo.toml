@@ -6,9 +6,10 @@ edition = "2018"
 
 [dependencies]
 failure       = "0.1"
-ff = "0.4"
-rand    = "0.4"
-rand_core = "0.5"
+pairing = "0.15"
+ff = "0.5"
+rand    = "=0.7"
+rand_core = "=0.5"
 clear_on_drop = "0.2"
 serde = "1.0"
 
@@ -24,9 +25,6 @@ version="0"
 path = "../crypto_common_derive"
 version="0"
 
-[dependencies.pairing]
-git = "ssh://git@gitlab.com:22/Concordium/rust/external/pairing.git"
-branch = "master"
 
 [lib]
 name = "dodis_yampolskiy_prf"

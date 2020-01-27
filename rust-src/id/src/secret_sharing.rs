@@ -160,7 +160,8 @@ pub fn reveal_in_group<C: Curve>(shares: &[(ShareNumber, C)]) -> C {
 mod test {
     use super::*;
     use pairing::bls12_381::{Fr, G1};
-    use rand::seq::sample_iter;
+    use rand::seq::SliceRandom;
+    use rand::rngs::ThreadRng;
 
     #[test]
     pub fn test_secret_sharing() {
@@ -177,9 +178,9 @@ mod test {
                 Threshold::from(threshold),
                 &mut csprng,
             );
-            let sufficient_sample: Vec<(ShareNumber, PedersenValue<G1>)> =
-                sample_iter(&mut csprng, sharing_data.shares, threshold as usize)
-                    .expect("Threshold is <= number of shares.");
+            let mut shares = sharing_data.shares;
+            shares.shuffle(&mut csprng);
+            let sufficient_sample = &shares[0..(threshold as usize)];
             let sufficient_sample_points = sufficient_sample
                 .iter()
                 .map(|(n, s)| (*n, generator.mul_by_scalar(&s)))
@@ -195,9 +196,9 @@ mod test {
                 Threshold::from(threshold),
                 &mut csprng,
             );
-            let insufficient_sample: Vec<(ShareNumber, PedersenValue<G1>)> =
-                sample_iter(&mut csprng, sharing_data.shares, (threshold - 1) as usize)
-                    .expect("Threshold - 1 is <= number of shares.");
+            let mut insufficient_shares = sharing_data.shares;
+            insufficient_shares.shuffle(&mut csprng);
+            let insufficient_sample = &insufficient_shares[0..((threshold - 1) as usize)];
             let insufficient_sample_points = insufficient_sample
                 .iter()
                 .map(|(n, s)| (*n, generator.mul_by_scalar(&s)))
