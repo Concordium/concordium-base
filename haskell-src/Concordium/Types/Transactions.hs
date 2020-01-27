@@ -73,7 +73,7 @@ data TransactionHeader = TransactionHeader {
     -- |Size of the payload in bytes.
     thPayloadSize :: PayloadSize,
     -- |Absolute expiration time after which transaction will not be executed
-    -- but added to a block and charged NRG
+    -- TODO In the future, transaction will not be executed but added to a block and charged NRG
     thExpiry :: TransactionExpiryTime
     } deriving (Show)
 
