@@ -18,6 +18,13 @@ extra-source-files:
 # common to point users to the README.md file.
 description:         See README
 
+flags:
+  static:
+    description: Use static linking.
+    manual: True
+    default: False
+
+
 dependencies:
 - base >= 4.7 && < 5
 - bytestring >= 0.10
@@ -56,8 +63,10 @@ tests:
     - -with-rtsopts=-N
     - -Wall
 
-    ld-options:
-    - -static
+    when:
+      condition: flag(static)
+      ld-options:
+      - -static
 
     dependencies:
     - globalstate-types
