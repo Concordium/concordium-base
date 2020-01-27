@@ -171,6 +171,8 @@ instance S.Serialize Address where
 type Timestamp = Word64
 -- | Time duration in seconds
 type Duration = Word64
+-- | Expiry time of a transaction.
+type TransactionExpiryTime = Word64
 
 
 -- |Type of GTU amounts.

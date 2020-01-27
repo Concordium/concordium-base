@@ -62,6 +62,7 @@ utcTimeToTransactionTime = floor . utcTimeToPOSIXSeconds
 -- | Data common to all transaction types.
 --
 --  * @SPEC: <$DOCS/Transactions#transaction-header>
+-- todo (MR) update documentation
 data TransactionHeader = TransactionHeader {
     -- |Sender account.
     thSender :: AccountAddress,
@@ -70,14 +71,18 @@ data TransactionHeader = TransactionHeader {
     -- |Amount of energy dedicated for the execution of this transaction.
     thEnergyAmount :: !Energy,
     -- |Size of the payload in bytes.
-    thPayloadSize :: PayloadSize
+    thPayloadSize :: PayloadSize,
+    -- |Absolute expiration time after which transaction will not be executed
+    -- but added to a block and charged NRG
+    thExpiry :: TransactionExpiryTime
     } deriving (Show)
 
 -- |Eq instance ignores derived fields.
 instance Eq TransactionHeader where
   th1 == th2 = thNonce th1 == thNonce th2 &&
                thEnergyAmount th1 == thEnergyAmount th2 &&
-               thPayloadSize th1 == thPayloadSize th2
+               thPayloadSize th1 == thPayloadSize th2 &&
+               thExpiry th1 == thExpiry th2
 
 -- |NB: Relies on the verify key serialization being defined as specified on the wiki.
 --
@@ -87,13 +92,15 @@ instance S.Serialize TransactionHeader where
       S.put thSender <>
       S.put thNonce <>
       S.put thEnergyAmount <>
-      S.put thPayloadSize
+      S.put thPayloadSize <>
+      S.put thExpiry
 
   get = do
     thSender <- S.get
     thNonce <- S.get
     thEnergyAmount <- S.get
     thPayloadSize <- S.get
+    thExpiry <- S.get
     return $! TransactionHeader{..}
 
 type TransactionHash = H.Hash
