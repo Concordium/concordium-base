@@ -1,16 +1,16 @@
 use crate::curve_arithmetic::CurveDecodingError;
 use byteorder::{BigEndian, ReadBytesExt}; // TODO: maybe delete
+use bytes::{BufMut, IntoBuf};
 use ff::{Field, PrimeField, PrimeFieldDecodingError};
 use pairing::{
-    bls12_381::{
-        Fq, FqRepr, G1Uncompressed, G1
-    }, CurveProjective, EncodedPoint
+    bls12_381::{Fq, FqRepr, G1Uncompressed, G1},
+    CurveProjective, EncodedPoint,
 };
-use std::io::{Cursor, Write};
 use sha2::{Digest, Sha512};
-use bytes::{BufMut, IntoBuf};
+use std::io::{Cursor, Write};
 
 // (p-3)/4 where p is the prime characteristic of the field Fq (p=q)
+#[allow(clippy::unreadable_literal)]
 pub(crate) const P_MINUS_3_DIV_4: [u64; 6] = [
     0xee7fbfffffffeaaa,
     0x07aaffffac54ffff,
@@ -21,6 +21,7 @@ pub(crate) const P_MINUS_3_DIV_4: [u64; 6] = [
 ];
 
 // (p-1)/2 where p is the prime characteristic of the field Fq (p=q)
+#[allow(clippy::unreadable_literal)]
 pub(crate) const P_MINUS_1_DIV_2: [u64; 6] = [
     0xdcff7fffffffd555,
     0x0f55ffff58a9ffff,
@@ -31,6 +32,7 @@ pub(crate) const P_MINUS_1_DIV_2: [u64; 6] = [
 ];
 
 // The a-coefficient of the 11-isogenous curve to G1
+#[allow(clippy::unreadable_literal)]
 pub(crate) const E11_B: [u64; 6] = [
     0xd1cc48e98e172be0,
     0x5a23215a316ceaa5,
@@ -41,6 +43,7 @@ pub(crate) const E11_B: [u64; 6] = [
 ];
 
 // The b-coefficient of the 11-isogenous curve to G1
+#[allow(clippy::unreadable_literal)]
 pub(crate) const E11_A: [u64; 6] = [
     0x5cf428082d584c1d,
     0x98936f8da0e0f97f,
@@ -52,6 +55,7 @@ pub(crate) const E11_A: [u64; 6] = [
 
 // Coefficients of the 11-isogeny rational maps,
 // See https://eprint.iacr.org/2019/403.pdf section 4
+#[allow(clippy::unreadable_literal)]
 pub(crate) const K1: [[u64; 6]; 12] = [
     [
         0xaeac1662734649b7,
@@ -151,6 +155,7 @@ pub(crate) const K1: [[u64; 6]; 12] = [
     ],
 ];
 
+#[allow(clippy::unreadable_literal)]
 pub(crate) const K2: [[u64; 6]; 11] = [
     [
         0x993cf9fa40d21b1c,
@@ -235,6 +240,7 @@ pub(crate) const K2: [[u64; 6]; 11] = [
     [0x1, 0x0, 0x0, 0x0, 0x0, 0x0],
 ];
 
+#[allow(clippy::unreadable_literal)]
 pub(crate) const K3: [[u64; 6]; 16] = [
     [
         0xbe9845719707bb33,
@@ -366,6 +372,7 @@ pub(crate) const K3: [[u64; 6]; 16] = [
     ],
 ];
 
+#[allow(clippy::unreadable_literal)]
 pub(crate) const K4: [[u64; 6]; 16] = [
     [
         0x01479253b03663c1,
@@ -490,8 +497,7 @@ pub(crate) const K4: [[u64; 6]; 16] = [
     [0x1, 0x0, 0x0, 0x0, 0x0, 0x0],
 ];
 
-
-pub(crate) fn hash_to_g1(bytes: &[u8]) -> G1 {
+pub fn hash_to_g1(bytes: &[u8]) -> G1 {
     // Concatenate the message with 0u8 and 1u8 respectively
     // The paper suggests concatenating a single bit - but since the point is to
     // get two unrelated field elements, concatenating with 0u8 and 1u8 is ok
@@ -530,14 +536,16 @@ pub(crate) fn hash_to_g1(bytes: &[u8]) -> G1 {
     // add the two points on E1: y^2 = x^3 + 4
     p0.add_assign(&p1);
 
-    // Clear cofactors (ensuring that the point is in the correct order subgroup of the curve)
-    p0.mul_assign(1 + 15132376222941642752);
+    // Clear cofactors (ensuring that the point is in the correct order subgroup of
+    // the curve)
+    p0.mul_assign(1 + 15_132_376_222_941_642_752);
     p0
 }
 
 // Returns a point on E1 with coordinates x,y,z.
 // CAREFUL! This point is NOT guaranteed to be in the correct order subgroup
-// To get the point into the correct order subgroup, multiply by 1 + 15132376222941642752
+// To get the point into the correct order subgroup, multiply by 1 +
+// 15132376222941642752
 fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingError> {
     if z.is_zero() {
         Ok(G1::zero())
@@ -551,29 +559,33 @@ fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingEr
         p_y.mul_assign(&z_inv);
         p_y.mul_assign(&z_inv2);
 
-        let mut g = G1Uncompressed::empty();
-        let mut g_cursor = Cursor::new(g.as_mut());
+        let mut uncompress_point = G1Uncompressed::empty();
+        let mut cursor = Cursor::new(uncompress_point.as_mut());
 
         for digit in p_x.into_repr().as_ref().iter().rev() {
-            g_cursor.write(&digit.to_be_bytes()).map_err(|_| CurveDecodingError::NotOnCurve)?;
+            cursor
+                .write(&digit.to_be_bytes())
+                .map_err(|_| CurveDecodingError::NotOnCurve)?;
         }
         for digit in p_y.into_repr().as_ref().iter().rev() {
-            g_cursor.write(&digit.to_be_bytes()).map_err(|_| CurveDecodingError::NotOnCurve)?;
+            cursor
+                .write(&digit.to_be_bytes())
+                .map_err(|_| CurveDecodingError::NotOnCurve)?;
         }
 
-        match g.into_affine_unchecked() {
+        match uncompress_point.into_affine_unchecked() {
             Ok(p) => Ok(G1::from(p)),
-            Err(_) => Err(CurveDecodingError::NotOnCurve)
+            Err(_) => Err(CurveDecodingError::NotOnCurve),
         }
     }
 }
 
 // Hash to Fq by hashing using Sha512 and decode the first 48 bytes as an uint
 // in big endian. If this number is larger than q, retry.
-fn hash_bytes_to_fq(b: &[u8]) -> Fq {
+pub fn hash_bytes_to_fq(bytes: &[u8]) -> Fq {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
-    h.input(b);
+    h.input(bytes);
     hash.copy_from_slice(h.result().as_slice());
     let mut buffer = hash.into_buf();
 
@@ -603,9 +615,11 @@ fn decode_hash_to_fq(bytes: &mut Cursor<&[u8]>) -> Result<Fq, PrimeFieldDecoding
 }
 
 // Implements section 4 of https://eprint.iacr.org/2019/403.pdf
+#[allow(clippy::many_single_char_names, clippy::unreadable_literal)]
 fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
     // this check can be potentially be made faster by replacing the constructions
-    // of one amd zero with constants, as done with B_COEFF in Fq of the pairing crate
+    // of one amd zero with constants, as done with B_COEFF in Fq of the pairing
+    // crate
     let one = Fq::from_repr(FqRepr::from(1)).unwrap();
     let zero = Fq::from_repr(FqRepr::from(0)).unwrap();
     let minus_one = Fq::from_repr(FqRepr([
@@ -806,8 +820,8 @@ enum Sign {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::{Rand, SeedableRng, StdRng};
     use ff::SqrtField;
+    use rand::{Rand, SeedableRng, StdRng};
 
     // testing from_coordinates_unchecked for point at infinity
     #[test]
@@ -866,7 +880,7 @@ mod tests {
                     assert!(actual_y == sqrt);
 
                     i += 1;
-                },
+                }
                 None => (),
             };
         }

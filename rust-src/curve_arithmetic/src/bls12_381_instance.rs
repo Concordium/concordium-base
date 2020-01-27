@@ -1,7 +1,6 @@
 // Authors:
 
-use crate::curve_arithmetic::*;
-use crate::bls12_381_g1hash::*;
+use crate::{bls12_381_g1hash::*, curve_arithmetic::*};
 use byteorder::ReadBytesExt;
 use failure::Fallible;
 use ff::PrimeField;
@@ -242,9 +241,7 @@ impl Curve for G1Affine {
 
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
 
-    fn hash_to_group(b: &[u8]) -> Self {
-        hash_to_g1(b).into_affine()
-    }
+    fn hash_to_group(b: &[u8]) -> Self { hash_to_g1(b).into_affine() }
 }
 
 impl Curve for G2Affine {
