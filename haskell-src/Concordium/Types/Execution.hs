@@ -61,7 +61,7 @@ instance AE.ToJSON AccountOwnershipProof where
 --
 --  * @SPEC: <$DOCS/Transactions#transaction-body>
 --  * @COMMENT: Serialization format is defined separately, this only defines the datatype.
-data Payload = 
+data Payload =
   -- |Put module on the chain.
   DeployModule {
     -- |Module source.
@@ -114,6 +114,8 @@ data Payload =
       abElectionVerifyKey :: !BakerElectionVerifyKey,
       -- |Public key to verify block signatures signed by the baker.
       abSignatureVerifyKey :: !BakerSignVerifyKey,
+      -- |Public key to verify aggregate signatures in which the baker participates
+      abAggregationVerifyKey :: !BakerAggregationVerifyKey,
       -- |Address of the account the baker wants to be rewarded to.
       abAccount :: !AccountAddress,
       -- |Proof that the baker owns the private key corresponding to the
@@ -202,6 +204,7 @@ instance S.Serialize Payload where
     P.putWord8 6 <>
     S.put abElectionVerifyKey <>
     S.put abSignatureVerifyKey <>
+    S.put abAggregationVerifyKey <>
     S.put abAccount <>
     S.put abProofSig <>
     S.put abProofElection <>
@@ -255,6 +258,7 @@ instance S.Serialize Payload where
             6 -> do
               abElectionVerifyKey <- S.get
               abSignatureVerifyKey <- S.get
+              abAggregationVerifyKey <- S.get
               abAccount <- S.get
               abProofSig <- S.get
               abProofElection <- S.get
