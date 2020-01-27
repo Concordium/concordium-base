@@ -587,13 +587,13 @@ pub fn hash_bytes_to_fq(bytes: &[u8]) -> Fq {
     let mut hash: [u8; 64] = [0u8; 64];
     h.input(bytes);
     loop {
+        hash.copy_from_slice(h.result().as_slice());
         // keep trying to hash, until we hit an element in Fq
         if let Ok(fq) = decode_hash_to_fq(&mut Cursor::new(&hash)) {
             return fq;
         }
         h = Sha512::new();
         h.input(hash.as_ref());
-        hash.copy_from_slice(h.result().as_slice());
     }
 }
 
