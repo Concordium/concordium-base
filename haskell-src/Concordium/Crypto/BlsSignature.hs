@@ -230,8 +230,7 @@ instance Monoid Signature where
 
 -- |Aggregate a list of signatures.
 aggregateMany :: [Signature] -> Signature
-aggregateMany [s] = s
-aggregateMany (s:sigs) = aggregate s (aggregateMany sigs)
+aggregateMany (s:sigs) = foldl' aggregate s sigs
 aggregateMany [] = emptySignature
 
 -- The following functions are only for testing purposes
