@@ -14,6 +14,7 @@ import Control.Monad
 
 import Concordium.Types
 import qualified Concordium.Crypto.BlockSignature as BlockSig
+import qualified Concordium.Crypto.BlsSignature as Bls
 import Concordium.Types.Execution
 import Concordium.ID.Types
 import qualified Concordium.Crypto.VRF as VRF
@@ -61,6 +62,9 @@ genAccountOwnershipProof = do
      proof <- genDlogProof
      return (keyIndex, proof))
 
+genAggregationVerifykey :: Gen BakerAggregationVerifyKey
+genAggregationVerifykey = fmap Bls.derivePublicKey Bls.secretKeyGen
+
 genPayload :: Gen Payload
 genPayload = oneof [genDeployModule,
                     genInit,
@@ -75,7 +79,7 @@ genPayload = oneof [genDeployModule,
                     genDelegateStake,
                     genUndelegateStake
                     ]
-  where 
+  where
 --        genCredential = DeployCredential <$> genCredentialDeploymentInformation
 
         genDeployModule = DeployModule <$> genModule
@@ -106,6 +110,7 @@ genPayload = oneof [genDeployModule,
         genAddBaker = do
           abElectionVerifyKey <- VRF.publicKey <$> arbitrary
           abSignatureVerifyKey <- BlockSig.verifyKey <$> BlockSig.genKeyPair
+          abAggregationVerifyKey <- genAggregationVerifykey
           abAccount <- genAddress
           abProofSig <- genDlogProof
           abProofElection <- genDlogProof
