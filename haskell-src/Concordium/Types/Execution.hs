@@ -11,6 +11,8 @@ import Prelude hiding(fail)
 
 import Control.Monad.Reader
 
+import qualified Data.Aeson as AE
+import qualified Data.HashMap.Strict as Map
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
@@ -49,6 +51,11 @@ instance S.Serialize AccountOwnershipProof where
     when (l == 0) $ fail "At least one proof must be provided."
     AccountOwnershipProof <$> replicateM (fromIntegral l) (S.getTwoOf S.get S.get)
 
+instance AE.FromJSON AccountOwnershipProof where
+  parseJSON v = (AccountOwnershipProof . Map.toList) <$> AE.parseJSON v
+
+instance AE.ToJSON AccountOwnershipProof where
+  toJSON (AccountOwnershipProof proofs) = AE.toJSON $ Map.fromList proofs
 
 -- |The transaction payload. Defines the supported kinds of transactions.
 --
@@ -273,7 +280,7 @@ instance S.Serialize Payload where
               return UpdateBakerSignKey{..}
             10 -> DelegateStake <$> S.get
             11 -> return UndelegateStake
-            _ -> fail "Unsupported transaction type."
+            n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 {-# INLINE encodePayload #-}
 encodePayload :: Payload -> EncodedPayload
