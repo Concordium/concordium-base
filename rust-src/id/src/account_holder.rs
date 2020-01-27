@@ -211,7 +211,8 @@ pub struct SingleArData<C: Curve> {
 
 type SharingData<C> = (
     Vec<SingleArData<C>>,
-    Vec<Commitment<C>>,
+    Vec<Commitment<C>>, /* Commitments to the coefficients of sharing polynomial S + b1 X + b2
+                         * X^2... */
     Vec<PedersenRandomness<C>>,
 );
 
@@ -273,22 +274,24 @@ pub fn compute_sharing_data<'a, C: Curve>(
 
 /// computing the commitment to single share from the commitments to
 /// the coefficients of the polynomial
-#[inline(always)]
 pub fn commitment_to_share<C: Curve>(
     share_number: ShareNumber,
     coeff_commitments: &[Commitment<C>],
     coeff_randomness: &[PedersenRandomness<C>],
 ) -> (Commitment<C>, PedersenRandomness<C>) {
-    let deg = coeff_commitments.len() - 1;
-    let mut cmm_share_point: C = (coeff_commitments[0]).0;
-    let mut cmm_share_randomness_scalar: C::Scalar = coeff_randomness[0].randomness;
-    for i in 1..=deg {
-        let j_pow_i: C::Scalar = share_number.to_scalar::<C>().pow([i as u64]);
-        let a = coeff_commitments[i].mul_by_scalar(&j_pow_i);
-        cmm_share_point = cmm_share_point.plus_point(&a);
-        let mut r = j_pow_i;
-        r.mul_assign(&coeff_randomness[i]);
-        cmm_share_randomness_scalar.add_assign(&r);
+    assert_eq!(coeff_commitments.len(), coeff_randomness.len());
+    let mut cmm_share_point: C = C::zero_point();
+    let mut cmm_share_randomness_scalar: C::Scalar = Field::zero();
+    let share_scalar = share_number.to_scalar::<C>();
+    // Horner's scheme in the exponent
+    for cmm in coeff_commitments.iter().rev() {
+        cmm_share_point = cmm_share_point.mul_by_scalar(&share_scalar);
+        cmm_share_point = cmm_share_point.plus_point(cmm);
+    }
+    // Horner's scheme
+    for rand in coeff_randomness.iter().rev() {
+        cmm_share_randomness_scalar.mul_assign(&share_scalar);
+        cmm_share_randomness_scalar.add_assign(rand);
     }
     let cmm = Commitment(cmm_share_point);
     let rnd = PedersenRandomness {

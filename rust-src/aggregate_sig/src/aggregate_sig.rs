@@ -90,8 +90,9 @@ impl<P: Pairing> Signature<P> {
         Signature(self.0.plus_point(&to_aggregate.0))
     }
 
-    // Only used for creating a dummy signature for the genesis block
-    pub(crate) fn empty() -> Self { Signature(P::G1::one_point()) }
+    // The empty signature is the unit with respect to aggregation,
+    // and can be used as a dummy signature.
+    pub(crate) fn empty() -> Self { Signature(P::G1::zero_point()) }
 }
 
 impl<P: Pairing> Clone for Signature<P> {

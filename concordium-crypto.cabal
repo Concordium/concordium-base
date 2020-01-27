@@ -84,6 +84,7 @@ Test-Suite tests
   build-depends:    hspec >= 2.5
                     , QuickCheck >= 2.10
                     , hspec-expectations >= 0.8
+                    , HUnit >= 1.6
                     , base >= 4.7
                     , concordium-crypto
                     , bytestring >=0.10
