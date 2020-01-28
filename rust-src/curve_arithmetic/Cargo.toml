@@ -29,3 +29,10 @@ path = "../crypto_common_derive"
 [lib]
 name = "curve_arithmetic"
 crate-type = ["rlib", "staticlib", "cdylib"]
+
+[dev-dependencies]
+criterion = "0.2"
+
+[[bench]]
+name = "hash_bench"
+harness = false
