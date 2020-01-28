@@ -60,9 +60,7 @@ impl<C: Pairing> PublicKey<C> {
                 acc.plus_point(&ym)
             });
         let hx = h.plus_point(&x);
-        let p1 = C::pair(sig.0, hx);
-        let p2 = C::pair(sig.1, self.g_tilda);
-        p1 == p2
+        C::check_pairing_eq(&sig.0, &hx, &sig.1, &self.g_tilda)
     }
 
     /// Generate a public key  from a `csprng`.

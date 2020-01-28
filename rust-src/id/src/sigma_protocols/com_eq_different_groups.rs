@@ -146,6 +146,7 @@ mod tests {
     use super::*;
     use crate::sigma_protocols::common::*;
     use pairing::bls12_381::{G1Affine, G2Affine};
+    use rand::rngs::ThreadRng;
 
     #[test]
     pub fn test_com_eq_diff_grps_correctness() {

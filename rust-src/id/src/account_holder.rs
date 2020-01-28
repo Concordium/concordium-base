@@ -17,7 +17,7 @@ use pedersen_scheme::{
     randomness::Randomness as PedersenRandomness, value as pedersen, value::Value,
 };
 use ps_sig;
-use rand::*;
+use rand::{rngs::ThreadRng, *};
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap};
 
 /// Generate PreIdentityObject out of the account holder information,

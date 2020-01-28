@@ -3,10 +3,14 @@
 use crate::{bls12_381_g1hash::*, curve_arithmetic::*};
 use byteorder::ReadBytesExt;
 use failure::Fallible;
-use ff::PrimeField;
+use ff::{Field, PrimeField};
+use group::{CurveAffine, CurveProjective, EncodedPoint};
 use pairing::{
-    bls12_381::{Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2},
-    CurveAffine, CurveProjective, EncodedPoint, Engine,
+    bls12_381::{
+        Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G1Prepared, G2Affine, G2Compressed,
+        G2Prepared, G1, G2,
+    },
+    Engine, PairingCurveAffine,
 };
 use rand::*;
 
@@ -81,9 +85,9 @@ impl Curve for G2 {
         Ok(g.into_affine_unchecked()?.into_projective())
     }
 
-    fn generate<T: Rng>(csprng: &mut T) -> Self { G2::rand(csprng) }
+    fn generate<T: Rng>(csprng: &mut T) -> Self { G2::random(csprng) }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
     fn hash_to_group(_b: &[u8]) -> Self {
         unimplemented!("hash_to_group_element for G2 of Bls12_381 is not implemented")
@@ -161,9 +165,9 @@ impl Curve for G1 {
         Ok(g.into_affine_unchecked()?.into_projective())
     }
 
-    fn generate<T: Rng>(csprng: &mut T) -> Self { G1::rand(csprng) }
+    fn generate<T: Rng>(csprng: &mut T) -> Self { G1::random(csprng) }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
     fn hash_to_group(bytes: &[u8]) -> Self { hash_to_g1(bytes) }
 }
@@ -237,9 +241,9 @@ impl Curve for G1Affine {
         Ok(g.into_affine_unchecked()?)
     }
 
-    fn generate<T: Rng>(csprng: &mut T) -> Self { G1::rand(csprng).into_affine() }
+    fn generate<T: Rng>(csprng: &mut T) -> Self { G1::random(csprng).into_affine() }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
     fn hash_to_group(b: &[u8]) -> Self { hash_to_g1(b).into_affine() }
 }
@@ -313,9 +317,9 @@ impl Curve for G2Affine {
         Ok(g.into_affine_unchecked()?)
     }
 
-    fn generate<T: Rng>(csprng: &mut T) -> Self { G2::rand(csprng).into_affine() }
+    fn generate<T: Rng>(csprng: &mut T) -> Self { G2::random(csprng).into_affine() }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::rand(csprng) }
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::Scalar { Fr::random(csprng) }
 
     fn hash_to_group(_b: &[u8]) -> Self {
         unimplemented!("hash_to_group_element for G2Affine of Bls12_381 is not implemented")
@@ -325,17 +329,34 @@ impl Curve for G2Affine {
 impl Pairing for Bls12 {
     type BaseField = <Bls12 as Engine>::Fq;
     type G1 = <Bls12 as Engine>::G1;
+    type G1Prepared = G1Prepared;
     type G2 = <Bls12 as Engine>::G2;
+    type G2Prepared = G2Prepared;
     type ScalarField = Fr;
     type TargetField = <Bls12 as Engine>::Fqk;
 
     const SCALAR_LENGTH: usize = 32;
 
-    fn pair(p: <Bls12 as Engine>::G1, q: <Bls12 as Engine>::G2) -> Self::TargetField {
-        <Bls12 as Engine>::pairing(p.into_affine(), q.into_affine())
+    #[inline(always)]
+    fn g1_prepare(g: &Self::G1) -> Self::G1Prepared { g.into_affine().prepare() }
+
+    #[inline(always)]
+    fn g2_prepare(g: &Self::G2) -> Self::G2Prepared { g.into_affine().prepare() }
+
+    #[inline(always)]
+    fn miller_loop<'a, I>(i: I) -> Self::TargetField
+    where
+        I: IntoIterator<Item = &'a (&'a Self::G1Prepared, &'a Self::G2Prepared)>, {
+        <Bls12 as Engine>::miller_loop(i)
     }
 
-    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::ScalarField { Fr::rand(csprng) }
+    #[inline(always)]
+    fn final_exponentiation(x: &Self::TargetField) -> Option<Self::TargetField> {
+        <Bls12 as Engine>::final_exponentiation(x)
+    }
+
+    #[inline(always)]
+    fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::ScalarField { Fr::random(csprng) }
 }
 
 #[cfg(test)]

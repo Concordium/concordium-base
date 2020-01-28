@@ -99,7 +99,7 @@ pub fn decrypt_u64_bitwise<C: Curve>(sk: &SecretKey<C>, v: &[Cipher<C>]) -> u64 
 
 #[cfg(test)]
 mod tests {
-    use rand::Rng;
+    use rand::{rngs::ThreadRng, Rng};
 
     use crate::message::*;
     use pairing::bls12_381::{G1, G2};
@@ -163,7 +163,7 @@ mod tests {
                 let sk: SecretKey<$curve_type> = SecretKey::generate_all(&mut csprng);
                 let pk = PublicKey::from(&sk);
                 for _i in 1..10 {
-                    let n = u64::rand(&mut csprng);
+                    let n: u64 = csprng.gen();
                     let c = encrypt_u64_bitwise(pk, n);
                     let n2 = decrypt_u64_bitwise(&sk, &c);
                     assert_eq!(n, n2);

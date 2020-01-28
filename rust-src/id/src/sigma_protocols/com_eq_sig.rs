@@ -7,7 +7,6 @@
 use curve_arithmetic::curve_arithmetic::*;
 use ff::Field;
 use rand::*;
-use rayon;
 
 use crypto_common::*;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
@@ -138,7 +137,7 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
         // // add X_tilda (corresponds to multiplying by v_3)
         // let v_2_pre_pair = cX_tilda.plus_point(&point);
         // let v_2_pair = P::pair(a_hat, v_2_pre_pair);
-        let paired = P::pair(a_hat, point);
+        let paired = P::pair(&a_hat, &point);
         // TODO: here we could assert and check that v_2_pair = pair(b_hat, g_tilda)
         // This should be the case if the input is valid.
 
@@ -246,17 +245,22 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // v_2^c * v^3{-c} * ...
     // where * is the multiplication in the target field (of which the G_T is a multiplicative subgroup).
 
-    // Since pairing computation is slow we compute them in parallel.
-    let (mut paired, other) = rayon::join(
-        || P::pair(b_hat, g_tilda.mul_by_scalar(&proof.challenge)),
-        || P::pair(a_hat, point),
+    // Combine the pairing computations to compute the product.
+    let paired = P::pairing_product(
+        &b_hat,
+        &g_tilda.mul_by_scalar(&proof.challenge),
+        &a_hat,
+        &point,
     );
-    paired.mul_assign(&other);
 
-    let computed_challenge = hasher.finish_to_scalar::<C, _>(&paired);
-    match computed_challenge {
-        None => false,
-        Some(computed_challenge) => computed_challenge == proof.challenge,
+    if let Some(paired) = paired {
+        let computed_challenge = hasher.finish_to_scalar::<C, _>(&paired);
+        match computed_challenge {
+            None => false,
+            Some(computed_challenge) => computed_challenge == proof.challenge,
+        }
+    } else {
+        false
     }
 }
 

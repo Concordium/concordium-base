@@ -8,7 +8,7 @@ use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Thresh
 use pairing::bls12_381::{Bls12, G1};
 use std::collections::btree_map::BTreeMap;
 
-use rand::*;
+use rand::{rngs::ThreadRng, *};
 
 use pedersen_scheme::Value as PedersenValue;
 
@@ -133,7 +133,7 @@ fn main() {
     // Roughly one year
     let year = std::time::Duration::from_secs(365 * 24 * 60 * 60);
 
-    let generate_account = |csprng: &mut rand::ThreadRng, user_name: String| {
+    let generate_account = |csprng: &mut ThreadRng, user_name: String| {
         let secret = ExampleCurve::generate_scalar(csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
             id_ah:   user_name,
