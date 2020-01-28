@@ -2,7 +2,7 @@ use curve_arithmetic::{Curve, Pairing};
 use ff::Field;
 use generic_array::GenericArray;
 use rand::Rng;
-use rayon::{iter::*};
+use rayon::iter::*;
 use sha2::{Digest, Sha512};
 
 use crypto_common::*;
@@ -161,7 +161,12 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
         .reduce(P::G2::zero_point, |sum, x| sum.plus_point(&x));
 
     // compute pairings in parallel
-    P::check_pairing_eq(&signature.0, &P::G2::one_point(), &P::G1::hash_to_group(m), &sum)
+    P::check_pairing_eq(
+        &signature.0,
+        &P::G2::one_point(),
+        &P::G1::hash_to_group(m),
+        &sum,
+    )
 }
 
 // Checks for duplicates in a list of messages
