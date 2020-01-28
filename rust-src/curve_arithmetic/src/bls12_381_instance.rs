@@ -6,7 +6,8 @@ use failure::Fallible;
 use ff::{Field, PrimeField};
 use group::{CurveAffine, CurveProjective, EncodedPoint};
 use pairing::{
-    bls12_381::{Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2},
+    bls12_381::{Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2, G1Prepared, G2Prepared},
+    PairingCurveAffine,
     Engine,
 };
 use rand::*;
@@ -327,15 +328,38 @@ impl Pairing for Bls12 {
     type BaseField = <Bls12 as Engine>::Fq;
     type G1 = <Bls12 as Engine>::G1;
     type G2 = <Bls12 as Engine>::G2;
+
+    type G1Prepared = G1Prepared;
+    type G2Prepared = G2Prepared;
+
     type ScalarField = Fr;
     type TargetField = <Bls12 as Engine>::Fqk;
 
     const SCALAR_LENGTH: usize = 32;
 
-    fn pair(p: <Bls12 as Engine>::G1, q: <Bls12 as Engine>::G2) -> Self::TargetField {
-        <Bls12 as Engine>::pairing(p.into_affine(), q.into_affine())
+    #[inline(always)]
+    fn g1_prepare(g: &Self::G1) -> Self::G1Prepared {
+        g.into_affine().prepare()
     }
 
+    #[inline(always)]
+    fn g2_prepare(g: &Self::G2) -> Self::G2Prepared {
+        g.into_affine().prepare()
+    }
+
+    #[inline(always)]
+    fn miller_loop<'a, I>(i: I) -> Self::TargetField
+    where 
+          I: IntoIterator<Item = &'a (&'a Self::G1Prepared, &'a Self::G2Prepared)> {
+        <Bls12 as Engine>::miller_loop(i)
+    }
+
+    #[inline(always)]
+    fn final_exponentiation(x: &Self::TargetField) -> Option<Self::TargetField> {
+        <Bls12 as Engine>::final_exponentiation(x)
+    }
+
+    #[inline(always)]
     fn generate_scalar<T: Rng>(csprng: &mut T) -> Self::ScalarField { Fr::random(csprng) }
 }
 

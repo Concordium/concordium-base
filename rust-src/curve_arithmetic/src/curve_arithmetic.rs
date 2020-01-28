@@ -63,9 +63,44 @@ pub trait Pairing: Sized + 'static + Clone {
     type ScalarField: PrimeField + Serialize;
     type G1: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
     type G2: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
+    type G1Prepared;
+    type G2Prepared;
     type BaseField: PrimeField;
     type TargetField: Field + Serial;
-    fn pair(p: Self::G1, q: Self::G2) -> Self::TargetField;
+    
+    fn miller_loop<'a, I>(i: I) -> Self::TargetField
+    where 
+          I: IntoIterator<Item = &'a (&'a Self::G1Prepared, &'a Self::G2Prepared)>;
+
+    /// Check whether the pairing equation holds.
+    fn check_pairing_eq(g1x: &Self::G1, g2x: &Self::G2, g1y: &Self::G1, g2y: &Self::G2) -> bool {
+        let pairs = [(&Self::g1_prepare(g1x), &Self::g2_prepare(g2x)),
+                     (&Self::g1_prepare(&g1y.inverse_point()), &Self::g2_prepare(g2y))];
+        let res = Self::miller_loop(pairs.iter());
+        if let Some(mut y) = Self::final_exponentiation(&res) {
+            y.sub_assign(&Self::TargetField::one());
+            y.is_zero()
+        } else {
+            false
+        }
+    }
+
+    fn final_exponentiation(_: &Self::TargetField) -> Option<Self::TargetField>;
+
+    fn g1_prepare(_: &Self::G1) -> Self::G1Prepared;
+    fn g2_prepare(_: &Self::G2) -> Self::G2Prepared;
+
+    fn pair(p: &Self::G1, q: &Self::G2) -> Self::TargetField {
+        let g1p = Self::g1_prepare(p);
+        let g2p = Self::g2_prepare(q);
+        let x = Self::miller_loop([(&g1p, &g2p)].iter());
+        if x.is_zero() {
+            panic!("Cannot perform final exponentiation on 0.")
+        } else{
+            Self::final_exponentiation(&x).unwrap()
+        }
+    }
+
     const SCALAR_LENGTH: usize;
     fn generate_scalar<R: Rng>(rng: &mut R) -> Self::ScalarField;
     /// Generate non-zero scalar by repeated sampling. Can be overriden by a
