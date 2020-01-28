@@ -1,3 +1,4 @@
+pub(crate) mod bls12_381_g1hash;
 pub mod bls12_381_instance;
 pub mod curve_arithmetic;
 
