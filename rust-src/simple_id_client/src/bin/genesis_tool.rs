@@ -250,7 +250,7 @@ fn main() {
             Some(arg) => match arg.parse() {
                 Ok(n) => n,
                 Err(err) => {
-                    eprintln!("Could not parse the number of bakers: {}", err);
+                    eprintln!("Could not parse the number of finalizers: {}", err);
                     return;
                 }
             },
