@@ -91,7 +91,7 @@ pub trait Pairing: Sized + 'static + Clone {
         }
     }
 
-    // Compute the product of the pairings, but more efficiently.
+    /// Compute the product of the pairings, but more efficiently.
     fn pairing_product(
         g1x: &Self::G1,
         g2x: &Self::G2,
