@@ -67,15 +67,21 @@ pub trait Pairing: Sized + 'static + Clone {
     type G2Prepared;
     type BaseField: PrimeField;
     type TargetField: Field + Serial;
-    
-    fn miller_loop<'a, I>(i: I) -> Self::TargetField
-    where 
-          I: IntoIterator<Item = &'a (&'a Self::G1Prepared, &'a Self::G2Prepared)>;
 
-    /// Check whether the pairing equation holds.
+    fn miller_loop<'a, I>(i: I) -> Self::TargetField
+    where
+        I: IntoIterator<Item = &'a (&'a Self::G1Prepared, &'a Self::G2Prepared)>;
+
+    /// Check whether the pairing equation holds given the left and right-hand
+    /// sides.
     fn check_pairing_eq(g1x: &Self::G1, g2x: &Self::G2, g1y: &Self::G1, g2y: &Self::G2) -> bool {
-        let pairs = [(&Self::g1_prepare(g1x), &Self::g2_prepare(g2x)),
-                     (&Self::g1_prepare(&g1y.inverse_point()), &Self::g2_prepare(g2y))];
+        let pairs = [
+            (&Self::g1_prepare(g1x), &Self::g2_prepare(g2x)),
+            (
+                &Self::g1_prepare(&g1y.inverse_point()),
+                &Self::g2_prepare(g2y),
+            ),
+        ];
         let res = Self::miller_loop(pairs.iter());
         if let Some(mut y) = Self::final_exponentiation(&res) {
             y.sub_assign(&Self::TargetField::one());
@@ -83,6 +89,21 @@ pub trait Pairing: Sized + 'static + Clone {
         } else {
             false
         }
+    }
+
+    // Compute the product of the pairings, but more efficiently.
+    fn pairing_product(
+        g1x: &Self::G1,
+        g2x: &Self::G2,
+        g1y: &Self::G1,
+        g2y: &Self::G2,
+    ) -> Option<Self::TargetField> {
+        let pairs = [
+            (&Self::g1_prepare(g1x), &Self::g2_prepare(g2x)),
+            (&Self::g1_prepare(g1y), &Self::g2_prepare(g2y)),
+        ];
+        let res = Self::miller_loop(pairs.iter());
+        Self::final_exponentiation(&res)
     }
 
     fn final_exponentiation(_: &Self::TargetField) -> Option<Self::TargetField>;
@@ -96,7 +117,7 @@ pub trait Pairing: Sized + 'static + Clone {
         let x = Self::miller_loop([(&g1p, &g2p)].iter());
         if x.is_zero() {
             panic!("Cannot perform final exponentiation on 0.")
-        } else{
+        } else {
             Self::final_exponentiation(&x).unwrap()
         }
     }
