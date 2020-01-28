@@ -20,6 +20,7 @@ import Data.Serialize
 import System.Random
 import qualified Data.Aeson as AE
 import Test.QuickCheck
+import qualified Data.List as List
 
 newtype PublicKey = PublicKey (ForeignPtr PublicKey)
 newtype SecretKey = SecretKey (ForeignPtr SecretKey)
@@ -230,8 +231,7 @@ instance Monoid Signature where
 
 -- |Aggregate a list of signatures.
 aggregateMany :: [Signature] -> Signature
-aggregateMany [s] = s
-aggregateMany (s:sigs) = aggregate s (aggregateMany sigs)
+aggregateMany (s:sigs) = List.foldl' aggregate s sigs
 aggregateMany [] = emptySignature
 
 -- The following functions are only for testing purposes
