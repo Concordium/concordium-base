@@ -2,7 +2,7 @@ use curve_arithmetic::{Curve, Pairing};
 use ff::Field;
 use generic_array::GenericArray;
 use rand::Rng;
-use rayon::{iter::*, join};
+use rayon::{iter::*};
 use sha2::{Digest, Sha512};
 
 use crypto_common::*;
@@ -63,11 +63,7 @@ impl<P: Pairing> PublicKey<P> {
     pub fn verify(&self, m: &[u8], signature: Signature<P>) -> bool {
         let g1_hash = P::G1::hash_to_group(m);
         // compute pairings in parallel
-        let (pair1, pair2): (P::TargetField, P::TargetField) = join(
-            || P::pair(signature.0, P::G2::one_point()),
-            || P::pair(g1_hash, self.0),
-        );
-        pair1 == pair2
+        P::check_pairing_eq(&signature.0, &P::G2::one_point(), &g1_hash, &self.0)
     }
 }
 
@@ -129,7 +125,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
         .par_iter()
         .fold(<P::TargetField as Field>::one, |prod, (m, pk)| {
             let g1_hash = P::G1::hash_to_group(m);
-            let paired = P::pair(g1_hash, pk.0);
+            let paired = P::pair(&g1_hash, &pk.0);
             let mut p = prod;
             p.mul_assign(&paired);
             p
@@ -140,7 +136,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
             p
         });
 
-    P::pair(signature.0, P::G2::one_point()) == product
+    P::pair(&signature.0, &P::G2::one_point()) == product
 }
 
 // Verifies an aggregate signature on the same message m under keys PK_i for
@@ -165,11 +161,7 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
         .reduce(P::G2::zero_point, |sum, x| sum.plus_point(&x));
 
     // compute pairings in parallel
-    let (pair1, pair2): (P::TargetField, P::TargetField) = join(
-        || P::pair(signature.0, P::G2::one_point()),
-        || P::pair(P::G1::hash_to_group(m), sum),
-    );
-    pair1 == pair2
+    P::check_pairing_eq(&signature.0, &P::G2::one_point(), &P::G1::hash_to_group(m), &sum)
 }
 
 // Checks for duplicates in a list of messages
