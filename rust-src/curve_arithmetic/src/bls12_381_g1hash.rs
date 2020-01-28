@@ -1,6 +1,6 @@
 use crate::curve_arithmetic::CurveDecodingError;
 use byteorder::{BigEndian, ReadBytesExt}; // TODO: maybe delete
-use bytes::{BufMut, IntoBuf};
+use bytes::BufMut;
 use ff::{Field, PrimeField, PrimeFieldDecodingError};
 use group::{CurveProjective, EncodedPoint};
 use pairing::bls12_381::{Fq, FqRepr, G1Uncompressed, G1};
@@ -495,7 +495,7 @@ pub(crate) const K4: [[u64; 6]; 16] = [
     [0x1, 0x0, 0x0, 0x0, 0x0, 0x0],
 ];
 
-pub(crate) fn hash_to_g1(bytes: &[u8]) -> G1 {
+pub fn hash_to_g1(bytes: &[u8]) -> G1 {
     // Concatenate the message with 0u8 and 1u8 respectively
     // The paper suggests concatenating a single bit - but since the point is to
     // get two unrelated field elements, concatenating with 0u8 and 1u8 is ok
@@ -522,14 +522,8 @@ pub(crate) fn hash_to_g1(bytes: &[u8]) -> G1 {
     let (x1, y1, z1) = iso_11(x1, y1, z1);
 
     // convert into points on the curve
-    let mut p0 = match from_coordinates_unchecked(x0, y0, z0) {
-        Ok(x) => x,
-        _ => panic!("should not happen"),
-    };
-    let p1 = match from_coordinates_unchecked(x1, y1, z1) {
-        Ok(x) => x,
-        _ => panic!("should not happen"),
-    };
+    let mut p0 = from_coordinates_unchecked(x0, y0, z0).expect("should not happen");
+    let p1 = from_coordinates_unchecked(x1, y1, z1).expect("should not happen");
 
     // add the two points on E1: y^2 = x^3 + 4
     p0.add_assign(&p1);
@@ -584,13 +578,13 @@ pub fn hash_bytes_to_fq(bytes: &[u8]) -> Fq {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
     h.input(bytes);
-    hash.copy_from_slice(h.result().as_slice());
-    let mut buffer = hash.into_buf();
-
-    // keep trying to hash, until we hit an element in Fq
-    match decode_hash_to_fq(&mut buffer) {
-        Ok(fq) => fq,
-        Err(_) => hash_bytes_to_fq(&hash),
+    loop {
+        hash.copy_from_slice(h.result_reset().as_slice());
+        // keep trying to hash, until we hit an element in Fq
+        if let Ok(fq) = decode_hash_to_fq(&mut Cursor::new(&hash)) {
+            return fq;
+        }
+        h.input(hash.as_ref());
     }
 }
 
@@ -618,17 +612,11 @@ fn simplified_swu(t: Fq) -> (Fq, Fq, Fq) {
     // this check can be potentially be made faster by replacing the constructions
     // of one amd zero with constants, as done with B_COEFF in Fq of the pairing
     // crate
-    let one = Fq::from_repr(FqRepr::from(1)).unwrap();
-    let zero = Fq::from_repr(FqRepr::from(0)).unwrap();
-    let minus_one = Fq::from_repr(FqRepr([
-        0xb9feffffffffaaaa,
-        0x1eabfffeb153ffff,
-        0x6730d2a0f6b0f624,
-        0x64774b84f38512bf,
-        0x4b1ba7b6434bacd7,
-        0x1a0111ea397fe69a,
-    ]))
-    .unwrap();
+
+    let one = Fq::one();
+    let zero = Fq::zero();
+    let mut minus_one = Fq::one();
+    minus_one.negate();
     if t == one || t == zero || t == minus_one {
         return (zero, one, zero);
     }
@@ -752,37 +740,17 @@ fn iso_11(x: Fq, y: Fq, z: Fq) -> (Fq, Fq, Fq) {
         z_pow_2i[8 + i] = z_;
     }
 
-    // Macro for evaluating polynomials using Horner's rule
-    // Donald E. Knuth. Seminumerical Algorithms, volume 2 of The Art of Computer
-    // Programming, chapter 4.6.4. Addison-Wesley, 3rd edition, 1997
-    macro_rules! horner {
-        ($init:expr, $ks:expr, $var:expr) => {
-            {
-                for i in 0..($ks.len() - 1) {
-                    $init.mul_assign(&$var);
-                    let mut c = Fq::from_repr(FqRepr($ks[($ks.len() - 2)-i])).unwrap(); // unwrapping the Ki constants never fails
-                    c.mul_assign(&z_pow_2i[i]);
-                    $init.add_assign(&c);
-                }
-            }
-        }
-    }
+    let x_num = horner(&K1, &z_pow_2i, &x);
 
-    let mut x_num = Fq::from_repr(FqRepr(K1[11])).unwrap(); // unwrapping the Ki constants never fails
-    horner!(x_num, K1, x);
-
-    let mut x_den_ = Fq::from_repr(FqRepr(K2[10])).unwrap(); // unwrapping the Ki constants never fails
-    horner!(x_den_, K2, x);
+    let x_den_ = horner(&K2, &z_pow_2i, &x);
     let mut x_den = z_pow_2i[0];
     x_den.mul_assign(&x_den_);
 
-    let mut y_num_ = Fq::from_repr(FqRepr(K3[15])).unwrap(); // unwrapping the Ki constants never fails
-    horner!(y_num_, K3, x);
+    let y_num_ = horner(&K3, &z_pow_2i, &x);
     let mut y_num = y;
     y_num.mul_assign(&y_num_);
 
-    let mut y_den_ = Fq::from_repr(FqRepr(K4[15])).unwrap(); // unwrapping the Ki constants never fails
-    horner!(y_den_, K4, x);
+    let y_den_ = horner(&K4, &z_pow_2i, &x);
     let mut y_den = z_pow_2i[0];
     y_den.mul_assign(&z);
     y_den.mul_assign(&y_den_);
@@ -801,6 +769,30 @@ fn iso_11(x: Fq, y: Fq, z: Fq) -> (Fq, Fq, Fq) {
     (x_jac, y_jac, z_jac)
 }
 
+// Macro for evaluating polynomials using Horner's rule
+// Donald E. Knuth. Seminumerical Algorithms, volume 2 of The Art of Computer
+// Programming, chapter 4.6.4. Addison-Wesley, 3rd edition, 1997
+//
+// Evaluates the polynomial with the given coefficients where the i'th
+// coefficient has been multiplied by z^(degree - i) where degree is the degree
+// of the polynomial.
+// z_powers is an array of the even powers of z, ordered [z^2, z^4, ...] The
+// polynomial is evaluated in 'variable'. Note: It's a prerequisite that
+// Fq::from_repr(FqRepr(coefficient[i])) doesn't produce an error!!!
+fn horner(coefficients: &[[u64; 6]], z_powers: &[Fq], variable: &Fq) -> Fq {
+    let clen = coefficients.len();
+    // unwrapping the Ki constants never fails
+    let mut res = Fq::from_repr(FqRepr(coefficients[clen - 1])).unwrap();
+    // skip the last coefficient since we already used it
+    for (coeff, pow) in coefficients.iter().rev().skip(1).zip(z_powers.iter()) {
+        res.mul_assign(variable);
+        let mut coeff = Fq::from_repr(FqRepr(*coeff)).unwrap(); // unwrapping the Ki constants never fails
+        coeff.mul_assign(pow);
+        res.add_assign(&coeff);
+    }
+    res
+}
+
 fn sign(a: Fq) -> Sign {
     if a.into_repr() > FqRepr(P_MINUS_1_DIV_2) {
         Sign::Minus
@@ -809,7 +801,7 @@ fn sign(a: Fq) -> Sign {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum Sign {
     Minus,
     Plus,
@@ -1074,28 +1066,27 @@ mod tests {
 
     #[test]
     fn test_sign() {
-        match sign(Fq::from_repr(FqRepr::from(1)).unwrap()) {
-            Sign::Plus => (),
-            Sign::Minus => panic!("Sign should be Plus"),
-        };
-        match sign(Fq::from_repr(FqRepr(P_MINUS_1_DIV_2)).unwrap()) {
-            Sign::Plus => (),
-            Sign::Minus => panic!("Sign should be Plus"),
-        };
-        match sign(
-            Fq::from_repr(FqRepr([
-                0xdcff7fffffffd556,
-                0x0f55ffff58a9ffff,
-                0xb39869507b587b12,
-                0xb23ba5c279c2895f,
-                0x258dd3db21a5d66b,
-                0xd0088f51cbff34d,
-            ]))
-            .unwrap(),
-        ) {
-            Sign::Minus => (),
-            Sign::Plus => panic!("Sign should be Minus"),
-        };
+        assert_eq!(sign(Fq::from_repr(FqRepr::from(1)).unwrap()), Sign::Plus);
+        assert_eq!(
+            sign(Fq::from_repr(FqRepr(P_MINUS_1_DIV_2)).unwrap()),
+            Sign::Plus
+        );
+
+        assert_eq!(
+            sign(
+                Fq::from_repr(FqRepr([
+                    0xdcff7fffffffd556,
+                    0x0f55ffff58a9ffff,
+                    0xb39869507b587b12,
+                    0xb23ba5c279c2895f,
+                    0x258dd3db21a5d66b,
+                    0xd0088f51cbff34d,
+                ]))
+                .unwrap()
+            ),
+            Sign::Minus,
+            "Sign should be Minus"
+        );
     }
 
     macro_rules! test_isogeny_constants {
