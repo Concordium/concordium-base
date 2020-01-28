@@ -231,7 +231,7 @@ fn main() {
         // the haskell serialization
 
         if let Err(err) = write_json_to_file("cdi.json", &cdi_1.to_json()) {
-            eprintln!("Could not output JSON file cdi., because {}.", err);
+            eprintln!("Could not output JSON file cdi.json, because {}.", err);
         } else {
             println!("Output cdi.json.");
         }
