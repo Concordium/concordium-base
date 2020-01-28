@@ -2,7 +2,7 @@ use curve_arithmetic::{Curve, Pairing};
 use ff::Field;
 use generic_array::GenericArray;
 use rand::Rng;
-use rayon::{iter::*, join};
+use rayon::iter::*;
 use sha2::{Digest, Sha512};
 
 use crypto_common::*;
@@ -63,11 +63,7 @@ impl<P: Pairing> PublicKey<P> {
     pub fn verify(&self, m: &[u8], signature: Signature<P>) -> bool {
         let g1_hash = P::G1::hash_to_group(m);
         // compute pairings in parallel
-        let (pair1, pair2): (P::TargetField, P::TargetField) = join(
-            || P::pair(signature.0, P::G2::one_point()),
-            || P::pair(g1_hash, self.0),
-        );
-        pair1 == pair2
+        P::check_pairing_eq(&signature.0, &P::G2::one_point(), &g1_hash, &self.0)
     }
 }
 
@@ -129,7 +125,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
         .par_iter()
         .fold(<P::TargetField as Field>::one, |prod, (m, pk)| {
             let g1_hash = P::G1::hash_to_group(m);
-            let paired = P::pair(g1_hash, pk.0);
+            let paired = P::pair(&g1_hash, &pk.0);
             let mut p = prod;
             p.mul_assign(&paired);
             p
@@ -140,7 +136,7 @@ pub fn verify_aggregate_sig<P: Pairing>(
             p
         });
 
-    P::pair(signature.0, P::G2::one_point()) == product
+    P::pair(&signature.0, &P::G2::one_point()) == product
 }
 
 // Verifies an aggregate signature on the same message m under keys PK_i for
@@ -165,11 +161,12 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
         .reduce(P::G2::zero_point, |sum, x| sum.plus_point(&x));
 
     // compute pairings in parallel
-    let (pair1, pair2): (P::TargetField, P::TargetField) = join(
-        || P::pair(signature.0, P::G2::one_point()),
-        || P::pair(P::G1::hash_to_group(m), sum),
-    );
-    pair1 == pair2
+    P::check_pairing_eq(
+        &signature.0,
+        &P::G2::one_point(),
+        &P::G1::hash_to_group(m),
+        &sum,
+    )
 }
 
 // Checks for duplicates in a list of messages
@@ -198,7 +195,8 @@ fn hash_message(m: &[u8]) -> GenericArray<u8, <Sha512 as Digest>::OutputSize> {
 mod test {
     use super::*;
     use pairing::bls12_381::Bls12;
-    use rand::{Rng, SeedableRng, StdRng};
+    use rand::{rngs::StdRng, thread_rng, Rng, SeedableRng};
+    use std::convert::TryFrom;
 
     const SIGNERS: usize = 500;
     const TEST_ITERATIONS: usize = 10;
@@ -225,8 +223,7 @@ mod test {
 
     #[test]
     fn test_sign_and_verify() {
-        let seed: &[_] = &[1];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
 
         for _ in 0..TEST_ITERATIONS {
             let sk = SecretKey::<Bls12>::generate(&mut rng);
@@ -258,8 +255,7 @@ mod test {
 
     #[test]
     fn test_verify_aggregate_sig() {
-        let seed: &[_] = &[1];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
 
         let (sks, pks) = get_sks_pks(SIGNERS, &mut rng);
 
@@ -293,8 +289,7 @@ mod test {
 
     #[test]
     fn test_verify_aggregate_sig_trusted_keys() {
-        let seed: &[_] = &[1];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
         for _ in 0..TEST_ITERATIONS {
             let (sks, pks) = get_sks_pks(SIGNERS, &mut rng);
             let m: [u8; 32] = rng.gen::<[u8; 32]>();
@@ -329,8 +324,7 @@ mod test {
 
     #[test]
     fn test_verification_empty_signers() {
-        let seed: &[_] = &[1];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
         for _ in 0..TEST_ITERATIONS {
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let m: [u8; 32] = rng.gen::<[u8; 32]>();
@@ -343,10 +337,7 @@ mod test {
 
     #[test]
     fn test_has_duplicates() {
-        use std::convert::TryFrom;
-
-        let seed: &[_] = &[1];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
 
         for _ in 0..TEST_ITERATIONS {
             let signers: u64 = u64::try_from(SIGNERS)
@@ -369,8 +360,7 @@ mod test {
 
     #[test]
     fn test_to_from_bytes_identity() {
-        let seed: &[_] = &[1];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
 
         for _ in 0..1000 {
             let m = rng.gen::<[u8; 32]>();
@@ -395,8 +385,7 @@ mod test {
 
     #[test]
     fn test_to_bytes_correct_length() {
-        let seed: &[_] = &[1];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
 
         for _ in 0..1000 {
             let m = rng.gen::<[u8; 32]>();

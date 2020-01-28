@@ -2,7 +2,7 @@ use crate::aggregate_sig::*;
 use ffi_helpers::*;
 use libc::size_t;
 use pairing::bls12_381::Bls12;
-use rand::{thread_rng, SeedableRng, StdRng};
+use rand::{rngs::StdRng, thread_rng, SeedableRng};
 use std::{cmp::Ordering, slice};
 
 use crypto_common::*;
@@ -142,20 +142,23 @@ pub extern "C" fn bls_empty_sig() -> *mut Signature<Bls12> {
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn bls_generate_secretkey_from_seed(seed: size_t) -> *mut SecretKey<Bls12> {
-    let s: &[_] = &[seed];
-    let mut rng: StdRng = SeedableRng::from_seed(s);
+    let s: usize = seed;
+    let mut seed_ = [0u8; 32];
+    for (i, byte) in s.to_le_bytes().iter().enumerate() {
+        seed_[31 - i] = *byte;
+    }
+    let mut rng: StdRng = SeedableRng::from_seed(seed_);
     Box::into_raw(Box::new(SecretKey::generate(&mut rng)))
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand::{Rng, SeedableRng, StdRng};
+    use rand::{rngs::StdRng, Rng, SeedableRng};
 
     #[test]
     fn test_verify_aggregate_ffi() {
-        let seed: &[_] = &[1];
-        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
 
         for _ in 0..100 {
             let m = rng.gen::<[u8; 32]>();
@@ -181,8 +184,8 @@ mod test {
     #[test]
     fn test_eq() {
         for _i in 0..10 {
-            let seed: &[_] = &[1];
-            let mut rng: StdRng = SeedableRng::from_seed(seed);
+            let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
+
             let mut sk1 = SecretKey::<Bls12>::generate(&mut rng);
             let mut sk2 = SecretKey::<Bls12>::generate(&mut rng);
             let sk1_ptr = &mut sk1 as *mut _;

@@ -78,6 +78,7 @@ mod tests {
     use super::*;
     use crate::sigma_protocols::common::*;
     use pairing::bls12_381::G1Affine;
+    use rand::rngs::ThreadRng;
 
     #[test]
     pub fn test_dlog_correctness() {
