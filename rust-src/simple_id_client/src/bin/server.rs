@@ -18,7 +18,7 @@ use id::secret_sharing::Threshold;
 use pedersen_scheme::Value as PedersenValue;
 use std::cmp::max;
 
-use either::Either::Left;
+use either::Either::{Left, Right};
 use std::collections::HashMap;
 
 // server imports
@@ -180,7 +180,7 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
     };
     // if account data is present then use it.
     let acc_data = {
-        if let Some(acc_data) = v.get("accountKeyPair").and_then(AccountData::from_json) {
+        if let Some(acc_data) = v.get("accountData").and_then(AccountData::from_json) {
             acc_data
         } else {
             let mut keys = BTreeMap::new();
@@ -209,9 +209,15 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
 
     let cdi_json = cdi.to_json();
 
+    let address = match acc_data.existing {
+        Left(_) => AccountAddress::new(&cdi.values.reg_id),
+        Right(addr) => addr,
+    };
+
     let response = json!({
         "credential": cdi_json,
-        "accountKeyPair": acc_data.to_json()
+        "accountData": acc_data.to_json(),
+        "accountAddress": address.to_json(),
     });
     rouille::Response::json(&response)
 }
