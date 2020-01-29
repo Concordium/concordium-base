@@ -5,7 +5,7 @@ use crate::{
 use crypto_common::*;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use eddsa_ed25519 as ed25519;
+use ed25519_dalek as ed25519;
 use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::bls12_381::{Bls12, G1};
 use ps_sig;
