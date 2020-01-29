@@ -3,7 +3,7 @@ use clap::{App, AppSettings, Arg};
 use client_server_helpers::*;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use eddsa_ed25519 as ed25519;
+use ed25519_dalek as ed25519;
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
 use std::collections::btree_map::BTreeMap;
@@ -128,9 +128,9 @@ fn main() {
     {
         // output testdata.bin for basic verification checking.
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), ed25519::generate_keypair());
-        keys.insert(KeyIndex(1), ed25519::generate_keypair());
-        keys.insert(KeyIndex(2), ed25519::generate_keypair());
+        keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+        keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+        keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
 
         let acc_data = AccountData {
             keys,
@@ -199,15 +199,15 @@ fn main() {
             let mut keys = BTreeMap::new();
             keys.insert(
                 KeyIndex(0),
-                VerifyKey::from(ed25519::generate_keypair().public),
+                VerifyKey::from(ed25519::Keypair::generate(&mut csprng).public),
             );
             keys.insert(
                 KeyIndex(1),
-                VerifyKey::from(ed25519::generate_keypair().public),
+                VerifyKey::from(ed25519::Keypair::generate(&mut csprng).public),
             );
             keys.insert(
                 KeyIndex(2),
-                VerifyKey::from(ed25519::generate_keypair().public),
+                VerifyKey::from(ed25519::Keypair::generate(&mut csprng).public),
             );
 
             AccountKeys {
@@ -245,14 +245,14 @@ fn main() {
     }
 
     // generate account credentials, parametrized
-    let generate = |maybe_acc_data, acc_num, idx| {
+    let mut generate = |maybe_acc_data, acc_num, idx| {
         let acc_data = if let Some(acc_data) = maybe_acc_data {
             acc_data
         } else {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), ed25519::generate_keypair());
-            keys.insert(KeyIndex(1), ed25519::generate_keypair());
-            keys.insert(KeyIndex(2), ed25519::generate_keypair());
+            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
 
             AccountData {
                 keys,

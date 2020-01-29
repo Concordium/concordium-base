@@ -27,9 +27,6 @@ pub struct Keypair {
     pub public: PublicKey,
 }
 
-/// Hack to get around different versions of the rand dependency.
-pub fn generate_keypair() -> Keypair { Keypair::generate(&mut thread_rng()) }
-
 impl Keypair {
     /// Generate an ed25519 keypair.
     pub fn generate<R>(csprng: &mut R) -> Keypair
@@ -49,53 +46,6 @@ impl Keypair {
         let expanded: ExpandedSecretKey = (&self.secret).into();
 
         expanded.prove(&self.public, &message, rng)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl Serialize for Keypair {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer, {
-        serializer.serialize_bytes(&self.to_bytes()[..])
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'d> Deserialize<'d> for Keypair {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'d>, {
-        struct KeypairVisitor;
-
-        impl<'d> Visitor<'d> for KeypairVisitor {
-            type Value = Keypair;
-
-            fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                formatter.write_str(
-                    "An ed25519 keypair, 64 bytes in total where the secret key is the first 32 \
-                     bytes and is in unexpanded form, and the second 32 bytes is a compressed \
-                     point for a public key.",
-                )
-            }
-
-            fn visit_bytes<E>(self, bytes: &[u8]) -> Result<Keypair, E>
-            where
-                E: SerdeError, {
-                let secret_key = SecretKey::from_bytes(&bytes[..SECRET_KEY_LENGTH]);
-                let public_key = PublicKey::from_bytes(&bytes[SECRET_KEY_LENGTH..]);
-
-                if secret_key.is_ok() && public_key.is_ok() {
-                    Ok(Keypair {
-                        secret: secret_key.unwrap(),
-                        public: public_key.unwrap(),
-                    })
-                } else {
-                    Err(SerdeError::invalid_length(bytes.len(), &self))
-                }
-            }
-        }
-        deserializer.deserialize_bytes(KeypairVisitor)
     }
 }
 
