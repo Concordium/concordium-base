@@ -62,7 +62,6 @@ utcTimeToTransactionTime = floor . utcTimeToPOSIXSeconds
 -- | Data common to all transaction types.
 --
 --  * @SPEC: <$DOCS/Transactions#transaction-header>
--- todo (MR) update documentation
 data TransactionHeader = TransactionHeader {
     -- |Sender account.
     thSender :: AccountAddress,
