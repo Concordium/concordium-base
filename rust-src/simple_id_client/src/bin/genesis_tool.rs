@@ -3,7 +3,7 @@ use clap::{App, AppSettings, Arg, SubCommand};
 use client_server_helpers::*;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use eddsa_ed25519 as ed25519;
+use ed25519_dalek as ed25519;
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
 use std::collections::btree_map::BTreeMap;
@@ -185,9 +185,9 @@ fn main() {
         };
 
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), ed25519::generate_keypair());
-        keys.insert(KeyIndex(1), ed25519::generate_keypair());
-        keys.insert(KeyIndex(2), ed25519::generate_keypair());
+        keys.insert(KeyIndex(0), ed25519::Keypair::generate(csprng));
+        keys.insert(KeyIndex(1), ed25519::Keypair::generate(csprng));
+        keys.insert(KeyIndex(2), ed25519::Keypair::generate(csprng));
 
         let acc_data = AccountData {
             keys,
@@ -270,9 +270,9 @@ fn main() {
             }
 
             // vrf keypair
-            let vrf_key = vrf::generate_keypair();
+            let vrf_key = vrf::Keypair::generate(&mut csprng);
             // signature keypair
-            let sign_key = ed25519::generate_keypair();
+            let sign_key = ed25519::Keypair::generate(&mut csprng);
 
             let agg_sign_key = agg::SecretKey::<Bls12>::generate(&mut csprng);
             let agg_verify_key = agg::PublicKey::from_secret(agg_sign_key);

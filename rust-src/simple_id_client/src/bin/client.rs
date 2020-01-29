@@ -1,6 +1,6 @@
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
-use eddsa_ed25519 as ed25519;
+use ed25519_dalek as ed25519;
 use id::secret_sharing::*;
 
 use crypto_common::*;
@@ -423,10 +423,11 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             known_acc = true;
             acc_data
         } else {
+            let mut csprng = thread_rng();
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), ed25519::generate_keypair());
-            keys.insert(KeyIndex(1), ed25519::generate_keypair());
-            keys.insert(KeyIndex(2), ed25519::generate_keypair());
+            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
 
             AccountData {
                 keys,

@@ -136,7 +136,7 @@ pub fn setup() -> (
         _phantom: Default::default(),
     };
 
-    let kp = ed25519::generate_keypair();
+    let kp = ed25519::Keypair::generate(&mut csprng);
     let acc_data = AccountData {
         sign_key:   kp.secret,
         verify_key: kp.public,
