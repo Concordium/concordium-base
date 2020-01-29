@@ -36,7 +36,7 @@ genTransactionHeader = do
   thPayloadSize <- PayloadSize . (`mod` 5000) <$> arbitrary
   thNonce <- Nonce <$> arbitrary
   thEnergyAmount <- Energy <$> arbitrary
-  thExpiry <- arbitrary
+  thExpiry <- TransactionExpiryTime <$> arbitrary
   return $ TransactionHeader{..}
 
 genBareTransaction :: Gen BareTransaction

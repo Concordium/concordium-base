@@ -171,9 +171,17 @@ instance S.Serialize Address where
 type Timestamp = Word64
 -- | Time duration in seconds
 type Duration = Word64
--- | Expiry time of a transaction
-type TransactionExpiryTime = Timestamp
 
+-- | Expiry time of a transaction
+newtype TransactionExpiryTime = TransactionExpiryTime { expiry :: Timestamp }
+    deriving(Eq, Num, Ord, Show)
+
+instance S.Serialize TransactionExpiryTime where
+  put = P.putWord64be . expiry
+  get = TransactionExpiryTime <$> G.getWord64be
+
+transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
+transactionExpired = (<) . expiry
 
 -- |Type of GTU amounts.
 -- FIXME: This likely needs to be Word128.
