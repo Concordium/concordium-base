@@ -283,8 +283,8 @@ data Value annot =
              -- all functions and the index of the current. Recursive functions always have exactly one argument.
              | VRecClosure !(RTEnv annot) !Int !(Vector (LinkedExpr annot))
              | VLiteral !Core.Literal    -- ^Base literals.
-             | VConstructor !Core.Name !(Seq.Seq (Value annot)) -- ^Constructors applied to arguments.
-             -- FIXME: Should use sequence instead of list here as well since it is usually built by appending to the back.
+             -- | Constructors applied to arguments (can be partially applied). Used in application and pattern matching.
+             | VConstructor !Core.Name !(Seq.Seq (Value annot))
              | VInstance { vinstance_ls :: !(Value annot) -- ^Local state of the instance.
                          , vinstance_caddr :: !ContractAddress -- ^Address of the instance.
                          , vinstance_implements :: !(LinkedImplementsValue annot) -- ^All constraints this instance implements.
@@ -342,8 +342,9 @@ pushToStackForeign :: RTEnv annot -> Value annot -> RTEnv annot
 pushToStackForeign env !v = env { foreignStack = v Seq.<| foreignStack env }
 
 {-# INLINE pushAllToStack #-}
+-- Note that this reverses the order of 'vs' as required.
 pushAllToStack :: RTEnv annot -> Seq.Seq (Value annot) -> RTEnv annot
-pushAllToStack env v = foldl pushToStack env v
+pushAllToStack env vs = foldl pushToStack env vs
 
 emptyStack :: RTEnv annot
 emptyStack = RTEnv Seq.empty Seq.empty
@@ -453,6 +454,7 @@ data Expr linked annot =
   -- multiple variables at the same time which avoids allocation of intermediate
   -- closures.
   | Lambda !Int !(Expr linked annot)
+  -- |An application of the referred function from local or foreign stack to the given atoms.
   | App !Reference !(Vector Atom)
   | Let !(Expr linked annot) !(Expr linked annot)
   -- |Binding of a top-level definition. Does not have to capture context since
@@ -470,8 +472,8 @@ data Expr linked annot =
   | Cast !(Core.ModuleRef, Core.TyName)
   -- |Extract an address from the instance.
   | UnCast
-  -- |A primitive function. The first argument is the identifier (index in the
-  -- @primitives@ table), the second is the arity of the function.
+  -- |A primitive function. The argument is the identifier (index in the
+  -- @primitives@ table).
   | PrimFun !Int64
   -- |We need to tag constructors as special terms.
   | Constructor !Core.Name

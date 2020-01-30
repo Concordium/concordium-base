@@ -162,7 +162,7 @@ data Expr annot origin
   -- that type and term variables are different classes, so going under a type
   -- binder only increases De-Bruijn level of type variables.
   | TLambda !(Expr annot origin)
-  -- |Application of an expression to a list of atoms.
+  -- |Application of an atom to a list of atoms.
   -- We use a list to be able to reduce the number of intermediate annotations needed.
   | App !(Atom origin) ![Atom origin]
   -- |Local let binding, non-recursive (Let e e') is let e in e' (we use
