@@ -29,8 +29,10 @@ import qualified Data.Sequence as Seq
 import Data.Int
 import Data.Word
 import Data.Maybe(fromJust)
+import Data.Foldable
 import Control.Monad.Trans.Maybe
 import Control.Monad.Except
+
 
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
@@ -344,7 +346,7 @@ pushToStackForeign env !v = env { foreignStack = v Seq.<| foreignStack env }
 {-# INLINE pushAllToStack #-}
 -- Note that this reverses the order of 'vs' as required.
 pushAllToStack :: RTEnv annot -> Seq.Seq (Value annot) -> RTEnv annot
-pushAllToStack env vs = foldl pushToStack env vs
+pushAllToStack env vs = foldl' pushToStack env vs
 
 emptyStack :: RTEnv annot
 emptyStack = RTEnv Seq.empty Seq.empty
