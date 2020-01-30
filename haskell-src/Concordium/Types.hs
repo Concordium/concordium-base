@@ -172,6 +172,19 @@ type Timestamp = Word64
 -- | Time duration in seconds
 type Duration = Word64
 
+-- | Expiry time of a transaction
+newtype TransactionExpiryTime = TransactionExpiryTime { expiry :: Timestamp }
+    deriving(Eq, Num, Ord, Show)
+
+instance S.Serialize TransactionExpiryTime where
+  put = P.putWord64be . expiry
+  get = TransactionExpiryTime <$> G.getWord64be
+
+instance FromJSON TransactionExpiryTime where
+  parseJSON v = TransactionExpiryTime <$> parseJSON v
+
+transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
+transactionExpired = (<) . expiry
 
 -- |Type of GTU amounts.
 -- FIXME: This likely needs to be Word128.
@@ -184,6 +197,9 @@ instance Show Amount where
 instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
   put (Amount v) = P.putWord64be v
+
+instance FromJSON Amount where
+  parseJSON v = Amount <$> parseJSON v
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
@@ -215,12 +231,18 @@ instance S.Serialize Energy where
   get = Energy <$> G.getWord64be
   put (Energy v) = P.putWord64be v
 
+instance FromJSON Energy where
+  parseJSON v = Energy <$> parseJSON v
+
 newtype Nonce = Nonce Word64
     deriving(Eq, Show, Ord, Num, Enum)
 
 instance S.Serialize Nonce where
   put (Nonce w) = P.putWord64be w
   get = Nonce <$> G.getWord64be
+
+instance FromJSON Nonce where
+  parseJSON v = Nonce <$> parseJSON v
 
 minNonce :: Nonce
 minNonce = 1

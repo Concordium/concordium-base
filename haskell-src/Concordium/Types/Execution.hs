@@ -405,6 +405,7 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
                  | UnknownAccount !AccountAddress -- ^Transaction is coming from an unknown sender.
                  | DepositInsufficient -- ^The dedicated gas amount was lower than the minimum allowed.
                  | NoValidCredential -- ^No valid credential on the sender account.
+                 | ExpiredTransaction -- ^The transaction has expired.
       deriving(Eq, Show)
 
 data TxResult = TxValid ValidResult | TxInvalid FailureKind
