@@ -357,3 +357,102 @@ impl<T: Deserial> Deserial for [T; 3] {
         Ok([x_1, x_2, x_3])
     }
 }
+
+// Some more std implementations
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+
+impl Serial for Ipv4Addr {
+    fn serial<W: WriteBytesExt>(&self, target: &mut W) {
+        target.write_u8(4).expect("Writing to buffer is safe.");
+        target
+            .write_all(&self.octets())
+            .expect("Writing to buffer is safe.");
+    }
+}
+
+impl Deserial for Ipv4Addr {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut octects = [0u8; 4];
+        source.read_exact(&mut octects)?;
+        Ok(Ipv4Addr::from(octects))
+    }
+}
+
+impl Serial for Ipv6Addr {
+    fn serial<W: WriteBytesExt>(&self, target: &mut W) {
+        target.write_u8(6).expect("Writing to buffer is safe.");
+        target
+            .write_all(&self.octets())
+            .expect("Writing to buffer is safe.");
+    }
+}
+
+impl Deserial for Ipv6Addr {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut octets = [0u8; 16];
+        source.read_exact(&mut octets)?;
+        Ok(Ipv6Addr::from(octets))
+    }
+}
+
+impl Serial for IpAddr {
+    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) {
+        match self {
+            IpAddr::V4(ip4) => ip4.serial(target),
+            IpAddr::V6(ip6) => ip6.serial(target),
+        }
+    }
+}
+
+impl Deserial for IpAddr {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        match source.read_u8()? {
+            4 => Ok(IpAddr::V4(Ipv4Addr::deserial(source)?)),
+            6 => Ok(IpAddr::V6(Ipv6Addr::deserial(source)?)),
+            x => bail!("Can't deserialize an IpAddr (unknown type: {})", x),
+        }
+    }
+}
+
+impl Serial for SocketAddr {
+    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) {
+        self.ip().serial(target);
+        self.port().serial(target);
+    }
+}
+
+impl Deserial for SocketAddr {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        Ok(SocketAddr::new(
+            IpAddr::deserial(source)?,
+            u16::deserial(source)?,
+        ))
+    }
+}
+
+use std::{
+    collections::HashSet,
+    hash::{BuildHasher, Hash},
+};
+
+impl<T: Serial + Eq + Hash, S: BuildHasher + Default> Serial for HashSet<T, S> {
+    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) {
+        (self.len() as u32).serial(target);
+        self.iter().for_each(|ref item| item.serial(target));
+    }
+}
+
+impl<T: Deserial + Eq + Hash, S: BuildHasher + Default> Deserial for HashSet<T, S> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let len = u32::deserial(source)?;
+        let mut out = HashSet::with_capacity_and_hasher(
+            std::cmp::min(len as usize, MAX_PREALLOCATED_CAPACITY),
+            Default::default(),
+        );
+
+        for _i in 0..len {
+            out.insert(T::deserial(source)?);
+        }
+        Ok(out)
+    }
+}
