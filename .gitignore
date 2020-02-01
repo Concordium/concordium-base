@@ -7,6 +7,9 @@ Concordium.cabal
 *.exe
 *.a
 *.pdf
+*.csv
+*.svg
+*.html
 
 # CMake build folder
 build/
