@@ -40,6 +40,7 @@ where
     let id_ah = aci.cred_holder_info.id_ah.clone();
     let id_cred_pub = context
         .ip_info
+        .ip_ars
         .ar_base
         .mul_by_scalar(&aci.cred_holder_info.id_cred.id_cred_sec);
     // PRF related computation
@@ -53,11 +54,11 @@ where
     let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data(
         &prf_value,
         &context.choice_ar_parameters,
-        &context.ip_info.ar_info.1,
+        &context.ip_info.ip_ars.ar_cmm_key,
     );
     let number_of_ars = context.choice_ar_parameters.0.len();
     let mut ip_ar_data: Vec<IpArData<C>> = Vec::with_capacity(number_of_ars);
-    let ar_commitment_key = context.ip_info.ar_info.1;
+    let ar_commitment_key = context.ip_info.ip_ars.ar_cmm_key;
     // filling IpArData
     // to shares
     for item in prf_key_data.iter() {
@@ -103,10 +104,10 @@ where
                          RandomOracle::empty(),
                          &id_cred_pub,
                          id_cred_sec,
-                         &context.ip_info.ar_base
+                         &context.ip_info.ip_ars.ar_base
         );
 
-    let ar_ck = context.ip_info.ar_info.1;
+    let ar_ck = context.ip_info.ip_ars.ar_cmm_key;
     let (snd_cmm_sc, snd_cmm_sc_rand) = ar_ck.commit(id_cred_sec.view(), &mut csprng);
     let snd_pok_sc = {
         // FIXME: prefix needs to be all the data sent to id provider or some such.
@@ -115,7 +116,7 @@ where
             &[snd_cmm_sc],
             &id_cred_pub,
             &ar_ck,
-            &[context.ip_info.ar_base],
+            &[context.ip_info.ip_ars.ar_base],
             &[(&snd_cmm_sc_rand, id_cred_sec.view())],
             &mut csprng,
         )
@@ -128,7 +129,7 @@ where
             &cmm_sc,
             &id_cred_pub,
             &sc_ck,
-            &context.ip_info.ar_base,
+            &context.ip_info.ip_ars.ar_base,
             (&cmm_sc_rand, Value::<P::G1>::view_scalar(&id_cred_sec)),
             &mut csprng,
         )
@@ -158,7 +159,7 @@ where
             &cmm_prf,
             snd_cmm_prf,
             &commitment_key_prf,
-            &context.ip_info.ar_info.1,
+            &context.ip_info.ip_ars.ar_cmm_key,
             &secret,
             &mut csprng,
         )
@@ -341,7 +342,7 @@ where
     // adding the chosen ar list to the credential deployment info
     let ar_list = prio.choice_ar_parameters.0.clone();
     let mut choice_ars = Vec::with_capacity(ar_list.len());
-    let ip_ar_parameters = &ip_info.ar_info.0.clone();
+    let ip_ar_parameters = &ip_info.ip_ars.ars.clone();
     for ar in ar_list.iter() {
         match ip_ar_parameters.iter().find(|&x| x.ar_identity == *ar) {
             None => panic!("AR handle not in the IP list"),

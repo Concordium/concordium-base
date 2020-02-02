@@ -66,7 +66,7 @@ pub fn verify_cdi<
     // FIXME: This is quadratic due to the choice of data structures.
     // We could likely have a map in IPInfo instead of a list.
     for &handle in ars.iter() {
-        match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == handle) {
+        match ip_info.ip_ars.ars.iter().find(|&x| x.ar_identity == handle) {
             None => return Err(CDIVerificationError::AR),
             Some(ar_info) => choice_ar_parameters.push(ar_info),
         }

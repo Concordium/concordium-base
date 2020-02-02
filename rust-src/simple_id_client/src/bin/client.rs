@@ -17,12 +17,12 @@ use pairing::bls12_381::Bls12;
 use ps_sig;
 
 use rand::*;
-use serde_json::{json, Value};
 
 use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
 
 use std::{
     cmp::max,
+    convert::TryFrom,
     fs::File,
     io::{self, Error, ErrorKind, Write},
     path::Path,
@@ -41,6 +41,13 @@ fn mk_ip_filename(n: usize) -> String {
     let mut s = IP_PREFIX.to_string();
     s.push_str(&n.to_string());
     s.push_str(".json");
+    s
+}
+
+fn mk_ip_filename_pub(n: usize) -> String {
+    let mut s = IP_PREFIX.to_string();
+    s.push_str(&n.to_string());
+    s.push_str(".pub.json");
     s
 }
 
@@ -187,6 +194,15 @@ fn main() {
                         .help("File with the JSON encoded identity object."),
                 )
                 .arg(
+                    Arg::with_name("ip-info")
+                        .long("ip-info")
+                        .value_name("FILE")
+                        .required(true)
+                        .help(
+                            "File with the JSON encoded information about the identity provider.",
+                        ),
+                )
+                .arg(
                     Arg::with_name("private")
                         .long("private")
                         .short("c")
@@ -255,67 +271,60 @@ If not present a fresh key-pair will be generated.",
 
 /// Revoke the anonymity of the credential.
 fn handle_revoke_anonymity(matches: &ArgMatches) {
-    let v: Value = match matches.value_of("credential").map(read_json_from_file) {
-        Some(Ok(r)) => r,
-        Some(Err(x)) => {
-            eprintln!("Could not read credential because {}", x);
-            return;
-        }
-        None => panic!("Should not happen since the argument is mandatory."),
-    };
-    let revocation_threshold = match v.as_object() {
-        None => panic!("could not read credential object"),
-        Some(s) => match json_read_u64(s, "revocationThreshold") {
-            None => panic!("could not read revocation threshold"),
-            Some(r) => r,
-        },
-    };
-    // let revocation_threshold = json_read_u64(v.as_object(),
-    // "revocationThreshold")?;
-    let ar_data = match v.get("arData").and_then(json_to_chain_ar_data) {
-        Some(ar_data) => ar_data,
-        None => {
-            eprintln!("Could not parse anonymity revocation data.");
-            return;
-        }
-    };
+    let credential: CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute> =
+        match matches.value_of("credential").map(read_json_from_file) {
+            Some(Ok(r)) => r,
+            Some(Err(x)) => {
+                eprintln!("Could not read credential because {}", x);
+                return;
+            }
+            None => panic!("Should not happen since the argument is mandatory."),
+        };
+    let revocation_threshold = credential.values.threshold;
 
+    let ar_data = credential.values.ar_data;
+
+    // A list of filenames with private info from anonymity revokers.
     let ar_values: Vec<_> = match matches.values_of("ar-private") {
         Some(v) => v.collect(),
         None => panic!("Could not read ar-private"),
     };
-    let mut ars = vec![];
+    let mut ars: Vec<ArData<ExampleCurve>> = Vec::with_capacity(ar_values.len());
     for ar_value in ar_values.iter() {
         match read_json_from_file(ar_value) {
-            Err(y) => panic!("Could not read from ar file {} {}", ar_value, y),
-            Ok(val) => match json_to_private_ar_info(&val) {
-                Some(p) => ars.push(p),
-                None => {
-                    eprintln!("Could not decode the JSON object with private AR data.");
-                    return;
-                }
-            },
+            Err(y) => {
+                eprintln!("Could not read from ar file {} {}", ar_value, y);
+                return;
+            }
+            Ok(val) => ars.push(val),
         }
     }
 
     let number_of_ars = ars.len();
-    if (number_of_ars as u64) < revocation_threshold {
+    let number_of_ars = u32::try_from(number_of_ars)
+        .expect("Number of anonymity revokers should not exceed 2^32-1");
+    if number_of_ars < revocation_threshold.into() {
         eprintln!(
-            "insufficient number of anonymity revokers {}, {}",
+            "insufficient number of anonymity revokers {}, {:?}",
             number_of_ars, revocation_threshold
         );
         return;
     }
     let mut shares = Vec::with_capacity(ars.len());
 
-    for (ar, private) in ars.into_iter() {
-        match ar_data.iter().find(|&x| x.ar_identity == ar.ar_identity) {
+    for ar in ars.into_iter() {
+        match ar_data
+            .iter()
+            .find(|&x| x.ar_identity == ar.public_ar_info.ar_identity)
+        {
             None => {
                 eprintln!("AR is not part of the credential");
                 return;
             }
             Some(single_ar_data) => {
-                let Message { value: m } = private.decrypt(&single_ar_data.enc_id_cred_pub_share);
+                let Message { value: m } = ar
+                    .ar_private_key
+                    .decrypt(&single_ar_data.enc_id_cred_pub_share);
                 shares.push((single_ar_data.id_cred_pub_share_number, m))
             }
         }
@@ -336,40 +345,25 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
 fn handle_deploy_credential(matches: &ArgMatches) {
     // we read the signed identity object
     // signature of the identity object and the pre-identity object itself.
-    let v = match matches.value_of("id-object").map(read_json_from_file) {
-        Some(Ok(v)) => v,
+    let (ip_sig, pio) = match matches
+        .value_of("id-object")
+        .map(read_json_from_file::<_, IdentityObject<Bls12, ExampleCurve, ExampleAttribute>>)
+    {
+        Some(Ok(v)) => (v.signature, v.pre_identity_object),
         Some(Err(x)) => {
             eprintln!("Could not read identity object because {}", x);
             return;
         }
-        None => panic!("Should not happen since the argument is mandatory."),
+        None => unreachable!("Should not happen since the argument is mandatory."),
     };
-    // we first read the signed pre-identity object
-    let (ip_sig, pio, ip_info): (ps_sig::Signature<Bls12>, _, _) = {
-        if let Some(v) = v.as_object() {
-            match v.get("signature").and_then(json_base16_decode) {
-                None => {
-                    eprintln!("failed to parse signature");
-                    return;
-                }
-                Some(sig) => match v.get("preIdentityObject").and_then(json_to_pio) {
-                    None => {
-                        eprintln!("failed to parse pio");
-                        return;
-                    }
-                    Some(pio) => match v.get("ipInfo").and_then(IpInfo::from_json) {
-                        None => {
-                            eprintln!("failed to parse ip info");
-                            return;
-                        }
-                        Some(ip_info) => (sig, pio, ip_info),
-                    },
-                },
-            }
-        } else {
-            eprintln!("Could not parse JSON.");
+
+    let ip_info = match matches.value_of("ip-info").map(read_json_from_file) {
+        Some(Ok(v)) => v,
+        Some(Err(x)) => {
+            eprintln!("Could not read identity provider info because {}", x);
             return;
         }
+        None => unreachable!("Mandatory argument."),
     };
 
     // we also read the global context from another json file (called
@@ -419,9 +413,20 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // We now generate or read account verification/signature key pair.
     let mut known_acc = false;
     let acc_data = {
-        if let Some(acc_data) = matches.value_of("account").and_then(read_account_data) {
-            known_acc = true;
-            acc_data
+        if let Some(acc_data_file) = matches.value_of("account") {
+            match read_json_from_file(acc_data_file) {
+                Ok(acc_data) => {
+                    known_acc = true;
+                    acc_data
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Could not read account data from provided file because {}",
+                        e
+                    );
+                    return;
+                }
+            }
         } else {
             let mut csprng = thread_rng();
             let mut keys = BTreeMap::new();
@@ -441,38 +446,26 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             "Generated fresh verification and signature key of the account to file \
              account_keys.json"
         );
-        write_json_to_file("account_keys.json", &acc_data.to_json()).ok();
+        write_json_to_file("account_keys.json", &acc_data).ok();
     }
 
     // finally we also read the credential holder information with secret keys
     // which we need to generate CDI.
     // This file should also contain the public keys of the identity provider who
     // signed the object.
-    let private_value = match read_json_from_file(
-        matches
-            .value_of("private")
-            .expect("Should not happen because argument is mandatory."),
-    ) {
-        Ok(v) => v,
-        Err(x) => {
-            eprintln!("Could not read CHI object because {}", x);
-            return;
-        }
-    };
-    let aci = match private_value.get("aci").and_then(json_to_aci) {
-        Some(aci) => aci,
-        None => {
-            eprintln!("Could not read ACI.");
-            return;
-        }
-    };
-    let randomness = match private_value.get("randomness").and_then(json_base16_decode) {
-        Some(rand) => rand,
-        None => {
-            eprintln!("Could not read randomness used to generate pre-identity object.");
-            return;
-        }
-    };
+    let id_use_data: IdObjectUseData<Bls12, ExampleCurve, ExampleAttribute> =
+        match read_json_from_file(
+            matches
+                .value_of("private")
+                .expect("Should not happen because argument is mandatory."),
+        ) {
+            Ok(v) => v,
+            Err(x) => {
+                eprintln!("Could not read CHI object because {}", x);
+                return;
+            }
+        };
+
     // We ask what regid index they would like to use.
     let x = match Input::new().with_prompt("Index").interact() {
         Ok(x) => x,
@@ -491,13 +484,13 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     let cdi = generate_cdi(
         &ip_info,
         &global_ctx,
-        &aci,
+        &id_use_data.aci,
         &pio,
         x,
         &ip_sig,
         &policy,
         &acc_data,
-        &randomness,
+        &id_use_data.randomness,
     );
 
     // Double check that the generated CDI is going to be successfully validated.
@@ -513,14 +506,12 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // Now simply output the credential object in the transaction format
     // accepted by the simple-client for sending transactions.
 
-    let js = cdi.to_json();
-
     if let Some(json_file) = matches.value_of("out") {
-        match write_json_to_file(json_file, &js) {
+        match write_json_to_file(json_file, &cdi) {
             Ok(_) => println!("Wrote transaction payload to JSON file."),
             Err(e) => {
                 eprintln!("Could not JSON write to file because {}", e);
-                output_json(&js);
+                output_json(&cdi);
             }
         }
     }
@@ -538,13 +529,6 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             }
         }
     }
-}
-
-fn read_account_data<P: AsRef<Path>>(path: P) -> Option<AccountData>
-where
-    P: std::fmt::Debug, {
-    let v = read_json_from_file(path).ok()?;
-    Some(AccountData::from_json(&v)?)
 }
 
 /// Create a new CHI object (essentially new idCredPub and idCredSec).
@@ -567,18 +551,17 @@ fn handle_create_chi(matches: &ArgMatches) {
         },
     };
 
-    let js = ah_info.to_json();
     if let Some(filepath) = matches.value_of("out") {
-        match write_json_to_file(filepath, &js) {
+        match write_json_to_file(filepath, &ah_info) {
             Ok(()) => println!("Wrote CHI to file."),
             Err(_) => {
                 eprintln!("Could not write to file. The generated information is");
-                output_json(&js);
+                output_json(&ah_info);
             }
         }
     } else {
         println!("Generated account holder information.");
-        output_json(&js)
+        output_json(&ah_info)
     }
 }
 
@@ -588,53 +571,45 @@ fn handle_create_chi(matches: &ArgMatches) {
 /// account holder.
 fn handle_act_as_ip(matches: &ArgMatches) {
     let pio_path = Path::new(matches.value_of("pio").unwrap());
-    let pio = match read_json_from_file(&pio_path).as_ref().map(json_to_pio) {
-        Ok(Some(pio)) => pio,
-        Ok(None) => {
-            eprintln!("Could not parse PIO JSON.");
-            return;
-        }
+    let pio = match read_json_from_file::<_, PreIdentityObject<_, _, ExampleAttribute>>(&pio_path) {
+        Ok(pio) => pio,
         Err(e) => {
             eprintln!("Could not read file because {}", e);
             return;
         }
     };
     let ip_data_path = Path::new(matches.value_of("ip-data").unwrap());
-    let (ip_info, ip_sec_key) = match read_json_from_file(&ip_data_path)
-        .as_ref()
-        .map(json_to_ip_data)
-    {
-        Ok(Some((ip_info, ip_sec_key))) => (ip_info, ip_sec_key),
-        Ok(None) => {
-            eprintln!("Could not parse identity issuer JSON.");
-            return;
-        }
-        Err(x) => {
-            eprintln!("Could not read identity issuer information because {}", x);
-            return;
-        }
-    };
+    let (ip_info, ip_sec_key) =
+        match read_json_from_file::<_, IpData<Bls12, ExampleCurve>>(&ip_data_path) {
+            Ok(ip_data) => (ip_data.public_ip_info, ip_data.ip_private_key),
+            Err(x) => {
+                eprintln!("Could not read identity issuer information because {}", x);
+                return;
+            }
+        };
 
     let vf = verify_credentials(&pio, &ip_info, &ip_sec_key);
     match vf {
-        Ok(sig) => {
+        Ok(signature) => {
+            let id_object = IdentityObject {
+                pre_identity_object: pio,
+                signature,
+            };
             println!("Successfully checked pre-identity data.");
             if let Some(signed_out_path) = matches.value_of("out") {
-                let js = json!({
-                    "preIdentityObject": pio_to_json(&pio),
-                    "signature": json_base16_encode(&sig),
-                    "ipInfo": IpInfo::to_json(&ip_info)
-                });
-                if write_json_to_file(signed_out_path, &js).is_ok() {
+                if write_json_to_file(signed_out_path, &id_object).is_ok() {
                     println!("Wrote signed identity object to file.");
                 } else {
                     println!(
                         "Could not write Identity object to file. The signature is: {}",
-                        json_base16_encode(&sig)
+                        base16_encode_string(&id_object.signature)
                     );
                 }
             } else {
-                println!("The signature is: {}", json_base16_encode(&sig));
+                println!(
+                    "The signature is: {}",
+                    base16_encode_string(&id_object.signature)
+                );
             }
         }
         Err(r) => eprintln!("Could not verify pre-identity object {:?}", r),
@@ -644,10 +619,7 @@ fn handle_act_as_ip(matches: &ArgMatches) {
 fn handle_start_ip(matches: &ArgMatches) {
     let path = Path::new(matches.value_of("chi").unwrap());
     let chi = {
-        if let Ok(Some(chi)) = read_json_from_file(&path)
-            .as_ref()
-            .map(CredentialHolderInfo::from_json)
-        {
+        if let Ok(chi) = read_json_from_file(&path) {
             chi
         } else {
             eprintln!("Could not read credential holder information.");
@@ -736,7 +708,8 @@ fn handle_start_ip(matches: &ArgMatches) {
         }
     };
 
-    let ar_handles = ip_info.ar_info.0.clone();
+    // FIXME: THis clone is unnecessary.
+    let ar_handles = ip_info.ip_ars.ars.clone();
     let mrs: Vec<&str> = ar_handles
         .iter()
         .map(|x| x.ar_description.as_str())
@@ -785,60 +758,28 @@ fn handle_start_ip(matches: &ArgMatches) {
 
     // the only thing left is to output all the information
 
-    let aci_js = aci_to_json(&aci);
-    let js = json!({
-        "aci": aci_js,
-        "randomness": json_base16_encode(&randomness)
-    });
+    let id_use_data = IdObjectUseData { aci, randomness };
     if let Some(aci_out_path) = matches.value_of("private") {
-        if write_json_to_file(aci_out_path, &js).is_ok() {
+        if write_json_to_file(aci_out_path, &id_use_data).is_ok() {
             println!("Wrote ACI and randomness to file.");
         } else {
             println!("Could not write ACI data to file. Outputting to standard output.");
-            output_json(&js);
+            output_json(&id_use_data);
         }
     } else {
-        output_json(&js);
+        output_json(&id_use_data);
     }
 
-    let js = pio_to_json(&pio);
     if let Some(pio_out_path) = matches.value_of("public") {
-        if write_json_to_file(pio_out_path, &js).is_ok() {
+        if write_json_to_file(pio_out_path, &pio).is_ok() {
             println!("Wrote PIO data to file.");
         } else {
             println!("Could not write PIO data to file. Outputting to standard output.");
-            output_json(&js);
+            output_json(&pio);
         }
     } else {
-        output_json(&js);
+        output_json(&pio);
     }
-}
-
-fn ar_info_to_json<C: Curve>(ar_info: &ArInfo<C>) -> Value {
-    json!({
-        "arIdentity": ar_info.ar_identity.to_json(),
-        "arDescription": ar_info.ar_description.clone(),
-        "arPublicKey": json_base16_encode(&ar_info.ar_public_key),
-        //"arElgamalGenerator": json_base16_encode(&ar_info.ar_elgamal_generator.curve_to_bytes())
-    })
-}
-
-fn json_to_private_ar_info<C: Curve>(v: &Value) -> Option<(ArInfo<C>, SecretKey<C>)> {
-    let v = v.as_object()?;
-    let public = v.get("publicArInfo")?;
-    let ar_identity = ArIdentity::from_json(public.get("arIdentity")?)?;
-    let ar_description = public.get("arDescription")?.as_str()?.to_owned();
-    let ar_public_key = public.get("arPublicKey").and_then(json_base16_decode)?;
-    let private = v.get("arPrivateKey").and_then(json_base16_decode)?;
-    Some((
-        ArInfo {
-            ar_identity,
-            ar_description,
-            ar_public_key,
-            // ar_elgamal_generator,
-        },
-        private,
-    ))
 }
 
 /// Generate identity providers with public and private information as well as
@@ -854,13 +795,14 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         // generate an identity provider and for each
         // identity provider three anonymity revokers
         let ip_fname = mk_ip_filename(id);
+        let ip_fname_pub = mk_ip_filename_pub(id);
         let ar0_fname = mk_ar_filename(id, 0);
         let ar1_fname = mk_ar_filename(id, 1);
         let ar2_fname = mk_ar_filename(id, 2);
 
         // TODO: hard-coded length of the key for now, but should be changed
         // based on the maximum length of the attribute list
-        let id_secret_key = ps_sig::secret::SecretKey::generate(20, &mut csprng);
+        let id_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(20, &mut csprng);
         let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
 
         let ar_base = ExampleCurve::generate(&mut csprng);
@@ -873,11 +815,10 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
             ar_public_key:  ar0_public_key,
         };
 
-        let js0 = ar_info_to_json(&ar0_info);
-        let private_js0 = json!({
-            "arPrivateKey": json_base16_encode(&ar0_secret_key),
-            "publicArInfo": js0
-        });
+        let private_js0 = ArData {
+            public_ar_info: ar0_info,
+            ar_private_key: ar0_secret_key,
+        };
 
         let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar1_public_key = PublicKey::from(&ar1_secret_key);
@@ -888,11 +829,10 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
             // ar_elgamal_generator: PublicKey::generator(),
         };
 
-        let js1 = ar_info_to_json(&ar1_info);
-        let private_js1 = json!({
-            "arPrivateKey": json_base16_encode(&ar1_secret_key),
-            "publicArInfo": js1
-        });
+        let private_js1 = ArData {
+            public_ar_info: ar1_info,
+            ar_private_key: ar1_secret_key,
+        };
 
         let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar2_public_key = PublicKey::from(&ar2_secret_key);
@@ -903,37 +843,41 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
             // ar_elgamal_generator: PublicKey::generator(),
         };
 
-        let js2 = ar_info_to_json(&ar2_info);
-        let private_js2 = json!({
-              "arPrivateKey": json_base16_encode(&ar2_secret_key),
-              "publicArInfo": js2
-        });
+        let private_js2 = ArData {
+            public_ar_info: ar2_info,
+            ar_private_key: ar2_secret_key,
+        };
 
         write_json_to_file(&ar0_fname, &private_js0).ok()?;
         write_json_to_file(&ar1_fname, &private_js1).ok()?;
         write_json_to_file(&ar2_fname, &private_js2).ok()?;
 
         let ip_info = IpInfo {
-            ip_identity: IpIdentity(id as u32),
+            ip_identity:    IpIdentity(id as u32),
             ip_description: mk_ip_name(id),
-            ip_verify_key: id_public_key,
-            ar_info: (
-                vec![ar0_info, ar1_info, ar2_info],
-                CommitmentKey::<ExampleCurve>::generate(&mut csprng),
-            ),
-            ar_base,
+            ip_verify_key:  id_public_key,
+            ip_ars:         IpAnonymityRevokers {
+                ars: vec![
+                    private_js0.public_ar_info,
+                    private_js1.public_ar_info,
+                    private_js2.public_ar_info,
+                ],
+                ar_cmm_key: CommitmentKey::<ExampleCurve>::generate(&mut csprng),
+                ar_base,
+            },
         };
-        let js = ip_info.to_json();
-        let private_js = json!({
-            "idPrivateKey": json_base16_encode(&id_secret_key),
-            "publicIdInfo": js
-        });
+        let full_info = IpData {
+            ip_private_key: id_secret_key,
+            public_ip_info: ip_info,
+        };
         println!("writing ip_{} in file {}", id, ip_fname);
-        write_json_to_file(&ip_fname, &private_js).ok()?;
+        write_json_to_file(&ip_fname, &full_info).ok()?;
+        println!("writing ip_{} public data in file {}", id, ip_fname_pub);
+        write_json_to_file(&ip_fname_pub, &full_info.public_ip_info).ok()?;
 
-        res.push(ip_info);
+        res.push(full_info.public_ip_info);
     }
-    write_json_to_file(IDENTITY_PROVIDERS, &ip_infos_to_json(&res)).ok()?;
+    write_json_to_file(IDENTITY_PROVIDERS, &res).ok()?;
     Some(())
 }
 
@@ -948,5 +892,5 @@ fn handle_generate_global(_matches: &ArgMatches) -> Option<()> {
         // in the attribute list. This is so that we can reveal items individually.
         on_chain_commitment_key: CommitmentKey::generate(&mut csprng),
     };
-    write_json_to_file(GLOBAL_CONTEXT, &gc.to_json()).ok()
+    write_json_to_file(GLOBAL_CONTEXT, &gc).ok()
 }

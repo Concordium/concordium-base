@@ -456,3 +456,40 @@ impl<T: Deserial + Eq + Hash, S: BuildHasher + Default> Deserial for HashSet<T, 
         Ok(out)
     }
 }
+
+// Helpers for json serialization
+
+use hex::{decode, encode};
+use serde::{de, de::Visitor, Deserializer, Serializer};
+use std::{fmt, io::Cursor};
+
+struct Base16Visitor<D>(std::marker::PhantomData<D>);
+
+pub fn base16_encode<S: Serializer, T: Serial>(v: &T, ser: S) -> Result<S::Ok, S::Error> {
+    let b16_str = encode(&to_bytes(v));
+    ser.serialize_str(&b16_str)
+}
+
+pub fn base16_decode<'de, D: Deserializer<'de>, T: Deserial>(des: D) -> Result<T, D::Error> {
+    des.deserialize_str(Base16Visitor(Default::default()))
+}
+
+pub fn base16_encode_string<S: Serial>(x: &S) -> String { encode(&to_bytes(x)) }
+
+pub fn base16_decode_string<S: Deserial>(x: &str) -> Fallible<S> {
+    let d = decode(x)?;
+    from_bytes(&mut Cursor::new(&d))
+}
+
+impl<'de, D: Deserial> Visitor<'de> for Base16Visitor<D> {
+    type Value = D;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "A base58 string, version 1.")
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        let bytes = decode(v).map_err(de::Error::custom)?;
+        D::deserial(&mut Cursor::new(&bytes)).map_err(de::Error::custom)
+    }
+}

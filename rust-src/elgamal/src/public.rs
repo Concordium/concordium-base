@@ -6,10 +6,11 @@ use rand::*;
 use crate::{cipher::*, message::*, secret::*};
 
 use crypto_common::*;
+use crypto_common_derive::*;
 use curve_arithmetic::Curve;
 
 /// Elgamal public key .
-#[derive(Copy, Clone, Eq, PartialEq, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
 pub struct PublicKey<C: Curve> {
     pub generator: C,
     pub key:       C,

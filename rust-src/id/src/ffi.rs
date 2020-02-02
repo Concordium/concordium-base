@@ -12,14 +12,65 @@ use std::{error::Error as StdError, fmt, io::Cursor, slice, str::FromStr};
 use byteorder::ReadBytesExt;
 use ffi_helpers::*;
 use libc::size_t;
-use num::bigint::{BigUint, ParseBigIntError};
+use num::{
+    bigint::{BigUint, ParseBigIntError},
+    Num,
+};
 use rand::thread_rng;
+use serde::{
+    de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
+    Serializer,
+};
 use serde_json;
 
 /// Concrete attribute kinds
 #[derive(Copy, Clone, PartialEq, Eq)]
 // represented as big-endian bytes.
 pub struct AttributeKind([u8; 31]);
+
+impl SerdeSerialize for AttributeKind {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        ser.serialize_str(&BigUint::from_bytes_be(&self.0).to_str_radix(10))
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for AttributeKind {
+    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        des.deserialize_str(AttributeKindVisitor)
+    }
+}
+
+pub struct AttributeKindVisitor;
+
+impl<'de> Visitor<'de> for AttributeKindVisitor {
+    type Value = AttributeKind;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            formatter,
+            "An integer, or a string representing an integer."
+        )
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        let n = BigUint::from_str_radix(v, 10).map_err(de::Error::custom)?;
+        let bytes = n.to_bytes_be();
+        if bytes.len() > 31 {
+            Err(de::Error::custom("Value too big."))
+        } else {
+            let mut slice = [0u8; 31];
+            slice[31 - bytes.len()..].copy_from_slice(&bytes);
+            Ok(AttributeKind(slice))
+        }
+    }
+
+    fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+        let bytes = v.to_be_bytes();
+        let mut slice = [0u8; 31];
+        slice[31 - 8..].copy_from_slice(&bytes);
+        Ok(AttributeKind(slice))
+    }
+}
 
 impl Deserial for AttributeKind {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
@@ -205,7 +256,7 @@ macro_generate_commitment_key!(
 macro_free_ffi!(Box ip_info_free, IpInfo<Bls12, G1>);
 macro_derive_from_bytes!(Box ip_info_from_bytes, IpInfo<Bls12, G1>);
 macro_derive_to_bytes!(Box ip_info_to_bytes, IpInfo<Bls12, G1>);
-macro_derive_from_json!(ip_info_from_json, IpInfo<Bls12, G1>, IpInfo::from_json);
+macro_derive_from_json!(ip_info_from_json, IpInfo<Bls12, G1>);
 macro_derive_to_json!(ip_info_to_json, IpInfo<Bls12, G1>);
 
 #[no_mangle]
@@ -219,11 +270,7 @@ pub extern "C" fn ip_info_ip_identity(ip_info_ptr: *const IpInfo<Bls12, G1>) -> 
 macro_free_ffi!(Box global_context_free, GlobalContext<G1>);
 macro_derive_from_bytes!(Box global_context_from_bytes, GlobalContext<G1>);
 macro_derive_to_bytes!(Box global_context_to_bytes, GlobalContext<G1>);
-macro_derive_from_json!(
-    global_context_from_json,
-    GlobalContext<G1>,
-    GlobalContext::from_json
-);
+macro_derive_from_json!(global_context_from_json, GlobalContext<G1>);
 macro_derive_to_json!(global_context_to_json, GlobalContext<G1>);
 
 #[derive(Serialize)]
@@ -336,11 +383,14 @@ mod test {
         let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
 
         let ip_info = IpInfo {
-            ip_identity: IpIdentity(88),
+            ip_identity:    IpIdentity(88),
             ip_description: "IP88".to_string(),
-            ip_verify_key: ip_public_key,
-            ar_info: (vec![ar1_info, ar2_info, ar3_info, ar4_info], ar_ck),
-            ar_base,
+            ip_verify_key:  ip_public_key,
+            ip_ars:         IpAnonymityRevokers {
+                ars: vec![ar1_info, ar2_info, ar3_info, ar4_info],
+                ar_cmm_key: ar_ck,
+                ar_base,
+            },
         };
 
         let prf_key = prf::SecretKey::generate(&mut csprng);

@@ -5,10 +5,11 @@ use crate::{commitment::*, randomness::*, value::*};
 use curve_arithmetic::curve_arithmetic::*;
 
 use crypto_common::*;
+use crypto_common_derive::*;
 use rand::*;
 
 /// A commitment  key.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
 pub struct CommitmentKey<C: Curve>(pub C, pub C);
 
 impl<C: Curve> CommitmentKey<C> {

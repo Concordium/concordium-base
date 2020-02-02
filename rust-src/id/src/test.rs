@@ -77,11 +77,14 @@ fn test_pipeline() {
     let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
 
     let ip_info = IpInfo {
-        ip_identity: IpIdentity(88),
+        ip_identity:    IpIdentity(88),
         ip_description: "IP88".to_string(),
-        ip_verify_key: ip_public_key,
-        ar_info: (vec![ar1_info, ar2_info, ar3_info, ar4_info], ar_ck),
-        ar_base,
+        ip_verify_key:  ip_public_key,
+        ip_ars:         IpAnonymityRevokers {
+            ars: vec![ar1_info, ar2_info, ar3_info, ar4_info],
+            ar_cmm_key: ar_ck,
+            ar_base,
+        },
     };
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -224,6 +227,7 @@ fn test_pipeline() {
     assert_eq!(
         revealed_id_cred_pub,
         ip_info
+            .ip_ars
             .ar_base
             .mul_by_scalar(&aci.cred_holder_info.id_cred.id_cred_sec)
     );
