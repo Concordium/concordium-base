@@ -11,7 +11,7 @@ use client_server_helpers::*;
 use curve_arithmetic::Curve;
 
 use rand::*;
-use serde_json::{json, to_string_pretty, Value};
+use serde_json::{from_value as from_json, json, to_string_pretty, Value};
 
 use clap::{App, AppSettings, Arg};
 use id::secret_sharing::Threshold;
@@ -26,7 +26,7 @@ use std::collections::HashMap;
 extern crate rouille;
 
 /// Public and **private** data about identity providers.
-type IpInfos = HashMap<IpIdentity, IpData>;
+type IpInfos = HashMap<IpIdentity, IpData<Bls12, ExampleCurve>>;
 
 struct ServerState {
     /// Public and private information about the identity providers.
@@ -38,13 +38,17 @@ struct ServerState {
 }
 
 fn respond_global_params(_request: &rouille::Request, s: &ServerState) -> rouille::Response {
-    let response = to_string_pretty(&s.global_params.to_json()).unwrap();
+    let response = to_string_pretty(&s.global_params).unwrap();
     rouille::Response::text(response)
 }
 
 fn respond_ips(_request: &rouille::Request, s: &ServerState) -> rouille::Response {
-    let response: Vec<Value> = s.ip_infos.iter().map(|id| (id.1).0.to_json()).collect();
-    rouille::Response::json(&json!(response))
+    let response: Vec<IpInfo<_, _>> = s
+        .ip_infos
+        .iter()
+        .map(|id| (id.1).public_ip_info.clone())
+        .collect();
+    rouille::Response::json(&response)
 }
 
 fn parse_id_object_input_json(
@@ -56,20 +60,23 @@ fn parse_id_object_input_json(
     Vec<ArIdentity>,
     ExampleAttributeList,
 )> {
-    let ip_id = IpIdentity::from_json(v.get("ipIdentity")?)?;
+    let ip_id = from_json(v.get("ipIdentity")?.clone()).ok()?;
     let user_name = v.get("name")?.as_str()?.to_owned();
     let ar_values = v.get("anonymityRevokers")?.as_array()?;
     let ars: Vec<ArIdentity> = ar_values
         .iter()
-        .map(ArIdentity::from_json)
+        .cloned()
+        .map(|x| from_json(x).ok())
         .collect::<Option<Vec<ArIdentity>>>()?;
     // default threshold is one less than the amount of anonymity revokers
     // if the field "threshold" is not present this is what we take.
     let threshold = match v.get("threshold") {
         None => Threshold(max(1, ars.len() - 1) as u32),
-        Some(v) => Threshold::from_json(v)?,
+        Some(v) => from_json(v.clone()).ok()?,
     };
-    let alist = json_to_alist(v.get("attributes")?)?;
+    let alist = v
+        .get("attributes")
+        .and_then(|x| from_json(x.clone()).ok())?;
     Some((ip_id, user_name, threshold, ars, alist))
 }
 
@@ -104,7 +111,10 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
         attributes,
     };
 
-    let (ip_info, ip_sec_key) = ip_info;
+    let IpData {
+        public_ip_info: ip_info,
+        ip_private_key: ip_sec_key,
+    } = ip_info;
 
     let context = make_context_from_ip_info(ip_info.clone(), (ar_list, threshold));
     let (pio, randomness) = generate_pio(&context, &aci);
@@ -112,14 +122,15 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
     let vf = verify_credentials(&pio, &ip_info, &ip_sec_key);
     match vf {
         Ok(sig) => {
+            let id_use_data = IdObjectUseData { aci, randomness };
+            let id_object = IdentityObject {
+                pre_identity_object: pio,
+                signature:           sig,
+            };
             let response = json!({
-                "preIdentityObject": pio_to_json(&pio),
-                "signature": json_base16_encode(&sig),
-                "ipIdentity": ip_info.ip_identity.to_json(),
-                "privateData": json!({
-                    "aci": aci_to_json(&aci),
-                    "pioRandomness": json_base16_encode(&randomness)
-                })
+                "identityObject": id_object,
+                "ipIdentity": ip_info.ip_identity,
+                "idUseData": id_use_data,
             });
             rouille::Response::json(&response)
         }
@@ -138,21 +149,37 @@ type GenerateCredentialData = (
 );
 
 fn parse_generate_credential_input_json(v: &Value) -> Option<GenerateCredentialData> {
-    let ip_id = IpIdentity::from_json(v.get("ipIdentity")?)?;
-    let sig = v.get("signature").and_then(json_base16_decode)?;
-    let pio = json_to_pio(v.get("preIdentityObject")?)?;
-    let private = v.get("privateData")?;
-    let randomness = private.get("pioRandomness").and_then(json_base16_decode)?;
-    let aci = json_to_aci(private.get("aci")?)?;
+    let ip_id = from_json(v.get("ipIdentity")?.clone()).ok()?;
+    let id_object: IdentityObject<Bls12, ExampleCurve, ExampleAttribute> = v
+        .get("identityObject")
+        .and_then(|x| from_json(x.clone()).ok())?;
+    let private: IdObjectUseData<Bls12, ExampleCurve, ExampleAttribute> =
+        v.get("idUseData").and_then(|x| from_json(x.clone()).ok())?;
     let policy_items = {
         if let Some(items) = v.get("revealedItems") {
-            read_revealed_items(pio.alist.variant, &pio.alist.alist, items)?
+            read_revealed_items(
+                id_object.pre_identity_object.alist.variant,
+                &id_object.pre_identity_object.alist.alist,
+                items,
+            )?
         } else {
             BTreeMap::new()
         }
     };
-    let n_acc = json_read_u8(v.as_object()?, "accountNumber")?;
-    Some((ip_id, pio, sig, randomness, aci, policy_items, n_acc))
+    let n_acc = v.get("accountNumber").and_then(Value::as_u64)?;
+    if n_acc > 255 {
+        return None;
+    }
+    let n_acc = n_acc as u8;
+    Some((
+        ip_id,
+        id_object.pre_identity_object,
+        id_object.signature,
+        private.randomness,
+        private.aci,
+        policy_items,
+        n_acc,
+    ))
 }
 
 fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> rouille::Response {
@@ -170,7 +197,15 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
                         policy_vec: items,
                         _phantom:   Default::default(),
                     };
-                    (&ip_info.0, pio, sig, sig_randomness, aci, policy, n_acc)
+                    (
+                        &ip_info.public_ip_info,
+                        pio,
+                        sig,
+                        sig_randomness,
+                        aci,
+                        policy,
+                        n_acc,
+                    )
                 }
                 None => return rouille::Response::empty_400(),
             }
@@ -180,8 +215,11 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
     };
     // if account data is present then use it.
     let acc_data = {
-        if let Some(acc_data) = v.get("accountData").and_then(AccountData::from_json) {
-            acc_data
+        if let Some(acc_data) = v.get("accountData") {
+            match from_json(acc_data.clone()) {
+                Ok(acc_data) => acc_data,
+                Err(_) => return rouille::Response::empty_400(),
+            }
         } else {
             let mut keys = BTreeMap::new();
             let mut csprng = thread_rng();
@@ -208,17 +246,15 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
         &sig_randomness,
     );
 
-    let cdi_json = cdi.to_json();
-
     let address = match acc_data.existing {
         Left(_) => AccountAddress::new(&cdi.values.reg_id),
         Right(addr) => addr,
     };
 
     let response = json!({
-        "credential": cdi_json,
-        "accountData": acc_data.to_json(),
-        "accountAddress": address.to_json(),
+        "credential": cdi,
+        "accountData": acc_data,
+        "accountAddress": address,
     });
     rouille::Response::json(&response)
 }
@@ -242,16 +278,7 @@ fn read_revealed_items(
 }
 
 // TODO: Pass filename as parameter
-fn read_ip_infos(filename: &str) -> Option<IpInfos> {
-    let v = read_json_from_file(filename).ok()?;
-    let v = v.as_array()?;
-    let mut r = HashMap::with_capacity(v.len());
-    for js in v.iter() {
-        let data = json_to_ip_data(js)?;
-        r.insert(data.0.ip_identity, data);
-    }
-    Some(r)
-}
+fn read_ip_infos(filename: &str) -> Option<IpInfos> { read_json_from_file(filename).ok() }
 
 pub fn main() {
     let app = App::new("Server exposing creation of identity objects and credentials")

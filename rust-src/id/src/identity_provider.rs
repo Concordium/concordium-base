@@ -43,7 +43,7 @@ pub fn verify_credentials<
 
     let b_1 = verify_dlog(
         RandomOracle::empty(),
-        &ip_info.ar_base,
+        &ip_info.ip_ars.ar_base,
         &pre_id_obj.id_cred_pub,
         &pre_id_obj.pok_sc,
     );
@@ -56,7 +56,7 @@ pub fn verify_credentials<
         &pre_id_obj.cmm_sc,
         &pre_id_obj.id_cred_pub,
         &commitment_key_sc,
-        &ip_info.ar_base,
+        &ip_info.ip_ars.ar_base,
         &pre_id_obj.proof_com_eq_sc,
     );
 
@@ -70,7 +70,7 @@ pub fn verify_credentials<
     let number_of_ars = choice_ar_handles.len();
     let mut choice_ars = Vec::with_capacity(number_of_ars);
     for ar in choice_ar_handles.iter() {
-        match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == *ar) {
+        match ip_info.ip_ars.ars.iter().find(|&x| x.ar_identity == *ar) {
             None => return Err(Declined(Reason::WrongArParameters)),
             Some(ar_info) => choice_ars.push(ar_info.clone()),
         }
@@ -78,11 +78,11 @@ pub fn verify_credentials<
 
     // VRF
     let choice_ar_parameters = (choice_ars, revocation_threshold);
-    if !check_ar_parameters(&choice_ar_parameters, &ip_info.ar_info.0) {
+    if !check_ar_parameters(&choice_ar_parameters, &ip_info.ip_ars.ars) {
         return Err(Declined(Reason::WrongArParameters));
     }
     // ar commitment key
-    let ar_ck = ip_info.ar_info.1;
+    let ar_ck = ip_info.ip_ars.ar_cmm_key;
     let b_2 = verify_prf_key_data(
         &commitment_key_prf,
         &pre_id_obj.cmm_prf,

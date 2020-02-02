@@ -8,7 +8,7 @@ use ff::Field;
 use rand::*;
 
 /// A PRF  key.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
 pub struct SecretKey<C: Curve>(pub C::Scalar);
 
 impl<C: Curve> SecretKey<C> {

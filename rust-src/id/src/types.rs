@@ -5,14 +5,14 @@ use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
 use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
-use elgamal::cipher::Cipher;
+use elgamal::{cipher::Cipher, secret::SecretKey as ElgamalSecretKey};
 use ff::Field;
 use hex::{decode, encode};
 use pedersen_scheme::{
     commitment as pedersen, key::CommitmentKey as PedersenKey, Randomness as PedersenRandomness,
     Value as PedersenValue,
 };
-use ps_sig::{public as pssig, signature::*};
+use ps_sig::{public as pssig, signature::*, unknown_message::SigRetrievalRandomness};
 use std::collections::btree_map::BTreeMap;
 
 use crate::sigma_protocols::{
@@ -20,16 +20,15 @@ use crate::sigma_protocols::{
     com_eq_sig::ComEqSigProof, com_mult::ComMultProof, dlog::DlogProof,
 };
 
-use serde_json::{json, Map, Number, Value};
+use serde::{
+    de, de::Visitor, ser::SerializeMap, Deserialize as SerdeDeserialize, Deserializer,
+    Serialize as SerdeSerialize, Serializer,
+};
 
 use byteorder::{BigEndian, ReadBytesExt};
-use either::{
-    Either,
-    Either::{Left, Right},
-};
+use either::Either;
 use std::{
     cmp::Ordering,
-    convert::TryFrom,
     fmt,
     io::{Cursor, Read},
 };
@@ -41,8 +40,47 @@ use base58check::*;
 
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub struct AccountAddress([u8; ACCOUNT_ADDRESS_SIZE]);
+#[derive(Debug, PartialEq, Eq, Copy, Clone, SerdeSerialize, SerdeDeserialize)]
+#[serde(transparent)]
+pub struct AccountAddress(
+    #[serde(serialize_with = "base58_encode")]
+    #[serde(deserialize_with = "base58_decode")]
+    [u8; ACCOUNT_ADDRESS_SIZE],
+);
+
+fn base58_encode<S: Serializer>(v: &[u8; ACCOUNT_ADDRESS_SIZE], ser: S) -> Result<S::Ok, S::Error> {
+    let b58_str = v.to_base58check(1);
+    ser.serialize_str(&b58_str)
+}
+
+fn base58_decode<'de, D: Deserializer<'de>>(
+    des: D,
+) -> Result<[u8; ACCOUNT_ADDRESS_SIZE], D::Error> {
+    des.deserialize_str(Base58Visitor)
+}
+
+struct Base58Visitor;
+
+impl<'de> Visitor<'de> for Base58Visitor {
+    type Value = [u8; ACCOUNT_ADDRESS_SIZE];
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "A base58 string, version 1.")
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        let (version, body) = v
+            .from_base58check()
+            .map_err(|err| de::Error::custom(format!("{:?}", err)))?;
+        if version == 1 && body.len() == ACCOUNT_ADDRESS_SIZE {
+            let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
+            buf.copy_from_slice(&body);
+            Ok(buf)
+        } else {
+            Err(de::Error::custom("Wrong Base58 version."))
+        }
+    }
+}
 
 impl Serial for AccountAddress {
     #[inline]
@@ -62,22 +100,6 @@ impl Deserial for AccountAddress {
 }
 
 impl AccountAddress {
-    pub fn to_json(&self) -> Value {
-        let body = self.0.to_base58check(1);
-        Value::String(body)
-    }
-
-    pub fn from_json(v: &Value) -> Option<Self> {
-        let (version, body) = v.as_str()?.from_base58check().ok()?;
-        if version == 1 && body.len() == ACCOUNT_ADDRESS_SIZE {
-            let mut addr = [0; ACCOUNT_ADDRESS_SIZE];
-            addr.copy_from_slice(&body);
-            Some(AccountAddress(addr))
-        } else {
-            None
-        }
-    }
-
     /// Construct account address from the registration id.
     pub fn new<C: Curve>(reg_id: &C) -> Self {
         let mut out = [0; ACCOUNT_ADDRESS_SIZE];
@@ -91,17 +113,36 @@ impl AccountAddress {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
 #[repr(transparent)]
 /// The values of this type must maintain the property that they are not 0.
+#[serde(transparent)]
+#[derive(SerdeSerialize)]
 pub struct SignatureThreshold(pub u8);
 
-impl SignatureThreshold {
-    pub fn to_json(self) -> Value { Value::Number(Number::from(self.0)) }
+// Need to manually implement deserialize to maintain the property that it is
+// non-zero.
+impl<'de> SerdeDeserialize<'de> for SignatureThreshold {
+    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        // expect a map, but also handle string
+        des.deserialize_u8(SignatureThresholdVisitor)
+    }
+}
 
-    pub fn from_json(v: &Value) -> Option<Self> {
-        let v = v.as_u64()?;
-        if v < 256 && v > 0 {
-            Some(SignatureThreshold(v as u8))
+pub struct SignatureThresholdVisitor;
+
+impl<'de> Visitor<'de> for SignatureThresholdVisitor {
+    type Value = SignatureThreshold;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "A non-zero u8.")
+    }
+
+    fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+        if v > 0 && v <= 255 {
+            Ok(SignatureThreshold(v as u8))
         } else {
-            None
+            Err(de::Error::custom(format!(
+                "Signature threshold out of range {}",
+                v
+            )))
         }
     }
 }
@@ -109,26 +150,17 @@ impl SignatureThreshold {
 /// Index of an account key that is to be used.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
 #[repr(transparent)]
+#[serde(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct KeyIndex(pub u8);
-
-impl KeyIndex {
-    pub fn to_json(self) -> Value { Value::Number(Number::from(self.0)) }
-
-    pub fn from_json(v: &Value) -> Option<Self> {
-        let v = v.as_u64()?;
-        if v < 256 {
-            Some(KeyIndex(v as u8))
-        } else {
-            None
-        }
-    }
-}
 
 #[derive(Debug, PartialEq, Eq)]
 /// List of pairs of index of key and proof.
 /// The list should be non-empty and at most 255 elements long, and have no
 /// duplicates. The current choice of data structure disallows duplicates by
 /// design.
+#[serde(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct AccountOwnershipProof {
     pub proofs: BTreeMap<KeyIndex, Ed25519DlogProof>,
 }
@@ -163,6 +195,8 @@ impl AccountOwnershipProof {
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
 #[repr(transparent)]
+#[serde(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct IpIdentity(pub u32);
 
 impl fmt::Display for IpIdentity {
@@ -170,6 +204,8 @@ impl fmt::Display for IpIdentity {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
+#[serde(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct ArIdentity(pub u32);
 
 impl fmt::Display for ArIdentity {
@@ -182,11 +218,19 @@ pub trait Attribute<F: Field>:
     fn to_field_element(&self) -> F;
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "F: Field, AttributeType: Attribute<F> + SerdeSerialize",
+    deserialize = "F: Field, AttributeType: Attribute<F> + SerdeDeserialize<'de>"
+))]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
-    pub variant:  u16,
-    pub expiry:   u64,
-    pub alist:    Vec<AttributeType>,
+    #[serde(rename = "variant")]
+    pub variant: u16,
+    #[serde(rename = "expiryDate")]
+    pub expiry: u64,
+    #[serde(rename = "alist")]
+    pub alist: Vec<AttributeType>,
+    #[serde(skip)]
     pub _phantom: std::marker::PhantomData<F>,
 }
 
@@ -195,6 +239,9 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
 /// a scalar raising a generator to this scalar gives a public credentials. If
 /// two groups have the same scalar field we can have two different public
 /// credentials from the same secret credentials.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(transparent)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IdCredentials<C: Curve> {
     /// secret id credentials
     pub id_cred_sec: PedersenValue<C>,
@@ -203,83 +250,87 @@ pub struct IdCredentials<C: Curve> {
 /// Private credential holder information. A user maintaints these
 /// through many different interactions with the identity provider and
 /// the chain.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct CredentialHolderInfo<C: Curve> {
     /// Name of the credential holder.
     #[string_size_length = 4] // only use four bytes for encoding length.
+    #[serde(rename = "name")]
     pub id_ah: String,
     /// Public and private keys of the credential holder. NB: These are distinct
     /// from the public/private keys of the account holders.
+    #[serde(rename = "idCredSecret")]
     pub id_cred: IdCredentials<C>,
-}
-
-impl<C: Curve> CredentialHolderInfo<C> {
-    pub fn to_json(&self) -> Value {
-        json!({
-            "name": self.id_ah,
-            "idCredSecret": json_base16_encode(&self.id_cred.id_cred_sec),
-        })
-    }
-
-    pub fn from_json(js: &Value) -> Option<Self> {
-        let id_cred_sec = PedersenValue {
-            value: js.get("idCredSecret").and_then(json_base16_decode)?,
-        };
-        let id_ah = js["name"].as_str()?;
-        let info: CredentialHolderInfo<C> = CredentialHolderInfo {
-            id_ah:   id_ah.to_owned(),
-            id_cred: IdCredentials { id_cred_sec },
-        };
-        Some(info)
-    }
 }
 
 /// Private and public data chosen by the credential holder before the
 /// interaction with the identity provider. The credential holder chooses a prf
 /// key and an attribute list.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
 pub struct AccCredentialInfo<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    #[serde(rename = "credentialHolderInformation")]
     pub cred_holder_info: CredentialHolderInfo<C>,
     /// Chosen prf key of the credential holder.
+    #[serde(rename = "prfKey")]
     pub prf_key: prf::SecretKey<C>,
     /// Chosen attribute list.
+    #[serde(rename = "attributes")]
     pub attributes: AttributeList<C::Scalar, AttributeType>,
 }
 
 /// The data relating to a single anonymity revoker
 /// sent by the account holder to the identity provider
 /// typically the account holder will send a vector of these
-#[derive(Serialize)]
+#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
     /// identity of the anonymity revoker (for now this needs to be unique per
     /// IP) if stored in the chain it needs to be unique in general
+    #[serde(rename = "arIdentity")]
     pub ar_identity: ArIdentity,
-    /// encrypted share of the prf key
+    #[serde(rename = "encPrfKeyShare")]
     pub enc_prf_key_share: Cipher<C>,
     /// the number of the share
+    #[serde(rename = "prfKeyShareNumber")]
     pub prf_key_share_number: ShareNumber,
     /// proof that the computed commitment to the share
     /// contains the same value as the encryption
     /// the commitment to the share is not sent but computed from
     /// the commitments to the sharing coefficients
+    #[serde(rename = "proofComEncEq")]
     pub proof_com_enc_eq: ComEncEqProof<C>,
 }
 
 /// Data relating to a single anonymity revoker sent by the account holder to
 /// the chain.
 /// Typically a vector of these will be sent to the chain.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct ChainArData<C: Curve> {
     /// identity of the anonymity revoker
+    #[serde(rename = "arIdentity")]
     pub ar_identity: ArIdentity,
     /// encrypted share of id cred pub
+    /// encrypted share of the prf key
+    #[serde(rename = "encIdCredPubShare")]
     pub enc_id_cred_pub_share: Cipher<C>,
     /// the number of the share
+    #[serde(rename = "idCredPubShareNumber")]
     pub id_cred_pub_share_number: ShareNumber,
 }
 
 /// Information sent from the account holder to the identity provider.
-#[derive(Serialize)]
+#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar> \
+                 + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: \
+                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
 pub struct PreIdentityObject<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
@@ -287,71 +338,135 @@ pub struct PreIdentityObject<
 > {
     /// Name of the account holder.
     #[string_size_length = 2] // only use two bytes for encoding length.
+    #[serde(rename = "accountHolderName")]
     pub id_ah: String,
     /// Public credential of the account holder in the anonymity revoker's
     /// group.
+    #[serde(
+        rename = "idCredPub",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
     pub id_cred_pub: C,
     /// Anonymity revocation data for the chosen anonymity revokers.
+    #[serde(rename = "ipArData")]
     pub ip_ar_data: Vec<IpArData<C>>,
     /// choice of anonyimity revocation parameters
     /// the vec is a vector of ar identities
     /// the second element of the pair is the threshold for revocation.
     /// must be less than or equal the length of the vector.
     /// NB:IP needs to check this
+    #[serde(rename = "choiceArData")]
     pub choice_ar_parameters: (Vec<ArIdentity>, Threshold),
     /// Chosen attribute list.
+    #[serde(rename = "attributeList")]
     pub alist: AttributeList<C::Scalar, AttributeType>,
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub
+    #[serde(rename = "pokSecCred")]
     pub pok_sc: DlogProof<C>,
     /// proof of knowledge of secret credential corresponding to snd_cmm_sc
+    #[serde(rename = "sndPokSecCred")]
     pub snd_pok_sc: ComEqProof<C>,
     /// Commitment to id cred sec using the commitment key of IP derived from
     /// the PS public key. This is used to compute the message that the IP
     /// signs.
+    #[serde(rename = "idCredSecCommitment")]
     pub cmm_sc: pedersen::Commitment<P::G1>,
     /// Proof that cmm_sc and id_cred_pub are hiding the same value.
+    #[serde(rename = "proofCommitmentsToIdCredSecSame")]
     pub proof_com_eq_sc: ComEqProof<P::G1>,
     /// Commitment to the prf key in group G1.
+    #[serde(rename = "prfKeyCommitmentWithIP")]
     pub cmm_prf: pedersen::Commitment<P::G1>,
     /// commitments to the coefficients of the polynomial
     /// used to share the prf key
     /// K + b1 X + b2 X^2...
     /// where K is the prf key
+    #[serde(rename = "prfKeySharingCoeffCommitments")]
     pub cmm_prf_sharing_coeff: Vec<pedersen::Commitment<C>>,
     /// Proof that the first and snd commitments to the prf are hiding the same
     /// value. The first commitment is cmm_prf and the second is the first in
     /// the vec cmm_prf_sharing_coeff
+    #[serde(rename = "proofCommitmentsSame")]
     pub proof_com_eq: ComEqDiffGrpsProof<P::G1, C>,
 }
 
-/// Public information about an identity provider.
-#[derive(Debug, Clone, Serialize)]
-pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    /// Unique identifier of the identity provider.
-    pub ip_identity: IpIdentity,
-    /// Free form description, e.g., how to contact them off-chain
-    #[string_size_length = 4]
-    pub ip_description: String,
-    /// PS publice signature key of the IP
-    pub ip_verify_key: pssig::PublicKey<P>,
+/// The data we get back from the identity provider.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar> \
+                 + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: \
+                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub struct IdentityObject<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    #[serde(rename = "preIdentityObject")]
+    pub pre_identity_object: PreIdentityObject<P, C, AttributeType>,
+    #[serde(
+        rename = "signature",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub signature: Signature<P>,
+}
+
+/// Anonymity revokers associated with a single identity provider
+#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct IpAnonymityRevokers<C: Curve> {
+    #[serde(rename = "anonymityRevokers")]
+    pub ars: Vec<ArInfo<C>>,
     /// list of approved anonymity revokers along with
     /// a shared commitment key
     /// TODO: How is this shared commitment key generated??
-    pub ar_info: (Vec<ArInfo<C>>, PedersenKey<C>),
+    #[serde(rename = "arCommitmentKey")]
+    pub ar_cmm_key: PedersenKey<C>,
     /// Chosen generator of the group used by the anonymity revokers.
+    #[serde(serialize_with = "base16_encode")]
+    #[serde(deserialize_with = "base16_decode")]
+    #[serde(rename = "arBase")]
     pub ar_base: C,
+}
+
+/// Public information about an identity provider.
+#[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>"
+))]
+pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Unique identifier of the identity provider.
+    #[serde(rename = "ipIdentity")]
+    pub ip_identity: IpIdentity,
+    /// Free form description, e.g., how to contact them off-chain
+    #[string_size_length = 4]
+    #[serde(rename = "ipDescription")]
+    pub ip_description: String,
+    /// PS publice signature key of the IP
+    #[serde(rename = "ipVerifyKey")]
+    pub ip_verify_key: pssig::PublicKey<P>,
+    #[serde(rename = "ipAnonymityRevokers")]
+    pub ip_ars: IpAnonymityRevokers<C>,
 }
 
 /// Information on a single anonymity reovker held by the IP
 /// typically an IP will hold a more than one.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct ArInfo<C: Curve> {
     /// unique identifier of the anonymity revoker
+    #[serde(rename = "arIdentity")]
     pub ar_identity: ArIdentity,
     /// description of the anonymity revoker (e.g. name, contact number)
     #[string_size_length = 4]
+    #[serde(rename = "arDescription")]
     pub ar_description: String,
     /// elgamal encryption key of the anonymity revoker
+    #[serde(rename = "arPublicKey")]
     pub ar_public_key: elgamal::PublicKey<C>,
 }
 
@@ -378,7 +493,7 @@ pub struct CredDeploymentCommitments<C: Curve> {
 
 // FIXME: The sig should be part of the values so that it is part of the
 // challenge computation.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, SerdeBase16Serialize)]
 pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// (Blinded) Signature derived from the signature on the pre-identity
     /// object by the IP
@@ -412,7 +527,6 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 // This is an unfortunate situation, but we need to manually write a
 // serialization instance for the proofs so that we can insert the length of the
 // whole proof upfront. This is needed for easier interoperability with Haskell.
-// It means
 impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for CredDeploymentProofs<P, C> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         let mut tmp_out = Vec::new();
@@ -454,10 +568,16 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
 pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    #[serde(rename = "variant")]
     pub variant: u16,
     /// Expiry time, in seconds since the unix epoch, ignoring leap seconds.
+    #[serde(rename = "expiry")]
     pub expiry: u64,
     /// Revealed attributes, index in the attribute list together with the
     /// value. The proof part of the credential contains the proof that
@@ -465,7 +585,9 @@ pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// identity provider.
     /// INVARIANT: The indices must all have to be less than size
     /// of the attribute list this policy applies to.
+    #[serde(rename = "revealedItems")]
     pub policy_vec: BTreeMap<u16, AttributeType>,
+    #[serde(skip)]
     pub _phantom: std::marker::PhantomData<C>,
 }
 
@@ -513,6 +635,74 @@ pub struct PolicyProof<C: Curve> {
 #[derive(Debug, Eq)]
 pub enum VerifyKey {
     Ed25519VerifyKey(acc_sig_scheme::PublicKey),
+}
+
+impl SerdeSerialize for VerifyKey {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let mut map = ser.serialize_map(Some(1))?;
+        match self {
+            VerifyKey::Ed25519VerifyKey(ref key) => {
+                map.serialize_entry("schemeId", "Ed25519")?;
+                map.serialize_entry("verifyKey", &encode(&to_bytes(key)))?;
+            }
+        }
+        map.end()
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for VerifyKey {
+    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        // expect a map, but also handle string
+        des.deserialize_map(VerifyKeyVisitor)
+    }
+}
+
+pub struct VerifyKeyVisitor;
+
+impl<'de> Visitor<'de> for VerifyKeyVisitor {
+    type Value = VerifyKey;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "Either a string or a map with verification key.")
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        let bytes = decode(v).map_err(de::Error::custom)?;
+        let key = from_bytes(&mut Cursor::new(&bytes)).map_err(de::Error::custom)?;
+        Ok(VerifyKey::Ed25519VerifyKey(key))
+    }
+
+    fn visit_map<A: de::MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+        let mut map = map;
+        let mut tmp_map: BTreeMap<&str, &str> = BTreeMap::new();
+        while tmp_map.len() < 2 {
+            if let Some((k, v)) = map.next_entry()? {
+                if k == "schemeId" {
+                    if v != "Ed25519" {
+                        return Err(de::Error::custom(format!(
+                            "Unknown signature scheme type {}",
+                            v
+                        )));
+                    }
+                    if tmp_map.insert(k, v).is_some() {
+                        return Err(de::Error::custom("Duplicate schemeId."));
+                    }
+                } else if k == "verifyKey" {
+                    tmp_map.insert(k, v);
+                }
+            } else {
+                return Err(de::Error::custom(
+                    "At least the two keys 'schemeId' and 'verifyKey' are expected.",
+                ));
+            }
+        }
+        let vf_key_str = tmp_map
+            .get("verifyKey")
+            .ok_or_else(|| de::Error::custom("Could not find verifyKey, should not happen."))?;
+        let bytes = decode(vf_key_str).map_err(de::Error::custom)?;
+        let key = from_bytes(&mut Cursor::new(&bytes)).map_err(de::Error::custom)?;
+        Ok(key)
+    }
 }
 
 impl From<acc_sig_scheme::PublicKey> for VerifyKey {
@@ -564,21 +754,84 @@ impl Deserial for VerifyKey {
     }
 }
 
-impl VerifyKey {
-    pub fn to_json(&self) -> Value {
-        // ignore the scheme for the Ed, since it is default
-        match self {
-            VerifyKey::Ed25519VerifyKey(ref key) => json_base16_encode(key),
-        }
-    }
-}
-
 /// What account should this credential be deployed to, or the keys of the new
 /// account.
 #[derive(Debug, PartialEq, Eq)]
 pub enum CredentialAccount {
     ExistingAccount(AccountAddress),
     NewAccount(Vec<VerifyKey>, SignatureThreshold),
+}
+
+impl SerdeSerialize for CredentialAccount {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        use CredentialAccount::*;
+        match self {
+            ExistingAccount(addr) => addr.serialize(ser),
+            NewAccount(ref keys, threshold) => {
+                let mut map = ser.serialize_map(Some(2))?;
+                map.serialize_entry("keys", keys)?;
+                map.serialize_entry("threshold", threshold)?;
+                map.end()
+            }
+        }
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for CredentialAccount {
+    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        // expect a map, but also handle string
+        des.deserialize_map(CredentialAccountVisitor)
+    }
+}
+
+pub struct CredentialAccountVisitor;
+
+impl<'de> Visitor<'de> for CredentialAccountVisitor {
+    type Value = CredentialAccount;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            formatter,
+            "Either a string with account address or a map with keys and threshold."
+        )
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        let bytes = decode(v).map_err(de::Error::custom)?;
+        let addr = from_bytes(&mut Cursor::new(&bytes)).map_err(de::Error::custom)?;
+        Ok(CredentialAccount::ExistingAccount(addr))
+    }
+
+    fn visit_map<A: de::MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+        let mut map = map;
+        let mut keys = None;
+        let mut threshold = None;
+        while keys.is_none() || threshold.is_none() {
+            if let Some(k) = map.next_key::<&str>()? {
+                if k == "keys" {
+                    if keys.is_none() {
+                        keys = Some(map.next_value()?);
+                    } else {
+                        return Err(de::Error::custom("Duplicate key 'keys'."));
+                    }
+                } else if k == "threshold" {
+                    if threshold.is_none() {
+                        threshold = Some(map.next_value()?)
+                    } else {
+                        return Err(de::Error::custom("Duplicate key 'threshold'."));
+                    }
+                }
+            } else {
+                return Err(de::Error::custom(
+                    "At least the two keys 'keys' and 'threshold' are expected.",
+                ));
+            }
+        }
+        Ok(CredentialAccount::NewAccount(
+            keys.unwrap(),
+            threshold.unwrap(),
+        ))
+    }
 }
 
 impl Serial for CredentialAccount {
@@ -625,49 +878,58 @@ impl Deserial for CredentialAccount {
     }
 }
 
-impl CredentialAccount {
-    pub fn to_json(&self) -> Value {
-        use CredentialAccount::*;
-        match self {
-            ExistingAccount(ref addr) => addr.to_json(),
-            NewAccount(ref keys, threshold) => json!({
-                "keys": keys.iter().map(VerifyKey::to_json).collect::<Vec<_>>(),
-                "threshold": threshold.to_json()
-            }),
-        }
-    }
-}
-
 /// Values (as opposed to proofs) in credential deployment.
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
 pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Account this credential belongs to. Either an existing account, or keys
     /// of a new account.
+    #[serde(rename = "account")]
     pub cred_account: CredentialAccount,
     /// Credential registration id of the credential.
+    #[serde(
+        rename = "regId",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
     pub reg_id: C,
     /// Identity of the identity provider who signed the identity object from
     /// which this credential is derived.
+    #[serde(rename = "ipIdentity")]
     pub ip_identity: IpIdentity,
     /// Anonymity revocation threshold. Must be <= length of ar_data.
+    #[serde(rename = "revocationThreshold")]
     pub threshold: Threshold,
     /// Anonymity revocation data. List of anonymity revokers which can revoke
     /// identity. NB: The order is important since it is the same order as that
     /// signed by the identity provider, and permuting the list will invalidate
     /// the signature from the identity provider.
     #[size_length = 2]
+    #[serde(rename = "arData")]
     pub ar_data: Vec<ChainArData<C>>,
     /// Policy of this credential object.
+    #[serde(rename = "policy")]
     pub policy: Policy<C, AttributeType>,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+                 Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
 pub struct CredDeploymentInfo<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 > {
+    #[serde(flatten)]
     pub values: CredentialDeploymentValues<C, AttributeType>,
+    #[serde(rename = "proofs")] // FIXME: This should remove the first 4 bytes
     pub proofs: CredDeploymentProofs<P, C>,
 }
 
@@ -688,7 +950,8 @@ pub struct Context<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub choice_ar_parameters: (Vec<ArInfo<C>>, Threshold),
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct GlobalContext<C: Curve> {
     /// A shared commitment key known to the chain and the account holder (and
     /// therefore it is public). The account holder uses this commitment key to
@@ -697,6 +960,7 @@ pub struct GlobalContext<C: Curve> {
     /// multi-party computation since none of the parties should know anything
     /// special about it (so that commitment is binding, and that the commitment
     /// cannot be broken).
+    #[serde(rename = "onChainCommitmentKey")]
     pub on_chain_commitment_key: PedersenKey<C>,
 }
 
@@ -708,11 +972,11 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     choice_ar_handles: (Vec<ArIdentity>, Threshold),
 ) -> Context<P, C> {
     let mut choice_ars = Vec::with_capacity(choice_ar_handles.0.len());
-    let ip_ar_parameters = &ip_info.ar_info.0.clone();
+    let ip_ar_parameters = &ip_info.ip_ars.ars.clone();
     for ar in choice_ar_handles.0.into_iter() {
         match ip_ar_parameters.iter().find(|&x| x.ar_identity == ar) {
             None => panic!("AR handle not in the IP list"),
-            Some(ar_info) => choice_ars.push(ar_info.clone()),
+            Some(ip_ars) => choice_ars.push(ip_ars.clone()),
         }
     }
 
@@ -730,6 +994,96 @@ pub struct AccountData {
     /// If it is an existing account, its address, otherwise the signature
     /// threshold of the new account.
     pub existing: Either<SignatureThreshold, AccountAddress>,
+}
+
+impl SerdeSerialize for AccountData {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let mut map = ser.serialize_map(Some(2))?;
+        match self.existing {
+            Either::Left(ref threshold) => map.serialize_entry("threshold", threshold)?,
+            Either::Right(ref address) => map.serialize_entry("address", address)?,
+        };
+
+        let mut key_map = BTreeMap::new();
+        for (idx, kp) in self.keys.iter() {
+            let mut kp_map: BTreeMap<&str, String> = BTreeMap::new();
+            kp_map.insert("verifyKey", base16_encode_string(&kp.public));
+            kp_map.insert("signKey", base16_encode_string(&kp.secret));
+            key_map.insert(idx, kp_map);
+        }
+        map.serialize_entry("keys", &key_map)?;
+        map.end()
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for AccountData {
+    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        des.deserialize_map(AccountDataVisitor)
+    }
+}
+
+pub struct AccountDataVisitor;
+
+impl<'de> Visitor<'de> for AccountDataVisitor {
+    type Value = AccountData;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "Account data structure.")
+    }
+
+    fn visit_map<A: de::MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+        let mut map = map;
+        let mut keys: Option<BTreeMap<KeyIndex, BTreeMap<&str, &str>>> = None;
+        let mut existing = None;
+        while keys.is_none() || existing.is_none() {
+            if let Some(k) = map.next_key::<&str>()? {
+                if k == "keys" {
+                    if keys.is_none() {
+                        keys = Some(map.next_value()?);
+                    } else {
+                        return Err(de::Error::custom("Duplicate key 'keys'."));
+                    }
+                } else if k == "threshold" {
+                    if existing.is_none() {
+                        existing = Some(Either::Left(map.next_value()?))
+                    } else {
+                        return Err(de::Error::custom("Duplicate key 'threshold'."));
+                    }
+                } else if k == "address" {
+                    if existing.is_none() {
+                        existing = Some(Either::Right(map.next_value()?))
+                    } else {
+                        return Err(de::Error::custom("Duplicate key 'address'."));
+                    }
+                }
+            } else {
+                return Err(de::Error::custom(
+                    "At least the two keys 'keys' and 'threshold'/'address' are expected.",
+                ));
+            }
+        }
+        let mut out_keys = BTreeMap::new();
+        for (&idx, kp) in keys.unwrap().iter() {
+            let vf_key = kp
+                .get("verifyKey")
+                .ok_or_else(|| de::Error::custom("verifyKey not present."))?;
+            let public = base16_decode_string(vf_key).map_err(de::Error::custom)?;
+            let sign_key = kp
+                .get("signKey")
+                .ok_or_else(|| de::Error::custom("signKey not present."))?;
+            let secret = base16_decode_string(sign_key).map_err(de::Error::custom)?;
+            if out_keys
+                .insert(idx, ed25519::Keypair { secret, public })
+                .is_some()
+            {
+                return Err(de::Error::custom("duplicate key index."));
+            }
+        }
+        Ok(AccountData {
+            keys:     out_keys,
+            existing: existing.unwrap(),
+        })
+    }
 }
 
 // Manual implementation to be able to encode length as 1.
@@ -754,63 +1108,13 @@ impl Deserial for AccountData {
     }
 }
 
-impl AccountData {
-    pub fn from_json(v: &Value) -> Option<AccountData> {
-        let mut keys = BTreeMap::new();
-        let obj = v.get("keys")?.as_object()?;
-        for (k, v) in obj.iter() {
-            if let Ok(k) = k.parse::<u8>() {
-                let public = v.get("verifyKey").and_then(json_base16_decode)?;
-                let secret = v.get("signKey").and_then(json_base16_decode)?;
-                keys.insert(KeyIndex(k), ed25519::Keypair { public, secret });
-            }
-        }
-        // if threshold field is present we assume it is a new account
-        if let Some(thr) = v.get("threshold") {
-            let threshold = SignatureThreshold::from_json(thr)?;
-            Some(AccountData {
-                keys,
-                existing: Left(threshold),
-            })
-        } else if let Some(addr) = v.get("address") {
-            let address = AccountAddress::from_json(&addr)?;
-            Some(AccountData {
-                keys,
-                existing: Right(address),
-            })
-        } else {
-            None
-        }
-    }
-
-    pub fn to_json(&self) -> Value {
-        let mut out = Map::with_capacity(self.keys.len());
-        for (idx, kp) in self.keys.iter() {
-            out.insert(
-                format!("{}", idx.0),
-                json!({
-                    "verifyKey": json_base16_encode(&kp.public),
-                    "signKey": json_base16_encode(&kp.secret),
-                }),
-            );
-        }
-        match self.existing {
-            Left(thr) => json!({
-                "keys": Value::Object(out),
-                "threshold": thr.to_json()
-            }),
-            Right(addr) => json!({
-                "keys": Value::Object(out),
-                "address": addr.to_json()
-            }),
-        }
-    }
-}
-
 /// Public account keys currently on the account, together with the threshold
 /// needed for a valid signature on a transaction.
+#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct AccountKeys {
-    pub keys:      BTreeMap<KeyIndex, VerifyKey>,
+    #[serde(rename = "keys")]
+    pub keys: BTreeMap<KeyIndex, VerifyKey>,
+    #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
 }
 
@@ -837,17 +1141,6 @@ impl Deserial for AccountKeys {
 
 impl AccountKeys {
     pub fn get(&self, idx: KeyIndex) -> Option<&VerifyKey> { self.keys.get(&idx) }
-
-    pub fn to_json(&self) -> Value {
-        let mut out = Map::with_capacity(self.keys.len());
-        for (idx, v) in self.keys.iter() {
-            out.insert(format!("{}", idx.0).to_owned(), v.to_json());
-        }
-        json!({
-            "threshold": self.threshold.to_json(),
-            "keys": Value::Object(out)
-        })
-    }
 }
 
 /// Serialization of relevant types.
@@ -870,42 +1163,6 @@ pub fn bytes_to_short_string(cur: &mut Cursor<&[u8]>) -> Option<String> {
     String::from_utf8(svec).ok()
 }
 
-impl<C: Curve> ChainArData<C> {
-    pub fn to_json(&self) -> Value {
-        json!({
-            "arIdentity": self.ar_identity.to_json(),
-            "encIdCredPubShare": json_base16_encode(&self.enc_id_cred_pub_share),
-            "idCredPubShareNumber": self.id_cred_pub_share_number.to_json()
-        })
-    }
-
-    pub fn from_json(v: &Value) -> Option<ChainArData<C>> {
-        let ar_identity = ArIdentity::from_json(v.get("arIdentity")?)?;
-        let enc_id_cred_pub_share = v.get("encIdCredPubShare").and_then(json_base16_decode)?;
-        let id_cred_pub_share_number = ShareNumber::from_json(v.get("idCredPubShareNumber")?)?;
-        Some(ChainArData {
-            ar_identity,
-            enc_id_cred_pub_share,
-            id_cred_pub_share_number,
-        })
-    }
-}
-
-impl<C: Curve, AttributeType: Attribute<C::Scalar>> Policy<C, AttributeType> {
-    pub fn to_json(&self) -> Value {
-        let revealed: Map<_, _> = self
-            .policy_vec
-            .iter()
-            .map(|(idx, value)| (idx.to_string(), Value::String(format!("{}", value))))
-            .collect();
-        json!({
-            "variant": self.variant,
-            "expiry": self.expiry,
-            "revealedItems": Value::Object(revealed)
-        })
-    }
-}
-
 impl Serial for SchemeId {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
@@ -923,123 +1180,63 @@ impl Deserial for SchemeId {
     }
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: Attribute<C::Scalar>>
-    CredDeploymentInfo<P, C, AttributeType>
-{
-    pub fn to_json(&self) -> Value {
-        json!({
-            "account": self.values.cred_account.to_json(),
-            "regId": json_base16_encode(&self.values.reg_id),
-            "ipIdentity": self.values.ip_identity.to_json(),
-            "revocationThreshold": self.values.threshold.to_json(),
-            "arData": self.values.ar_data.iter().map(ChainArData::to_json).collect::<Vec<_>>(),
-            "policy": self.values.policy.to_json(),
-            // NOTE: Since proofs encode their own length we do not output those first 4 bytes
-            "proofs": encode(&to_bytes(&self.proofs)[4..]),
-        })
-    }
-}
-
-impl IpIdentity {
-    pub fn to_json(self) -> Value { json!(self.0) }
-
-    pub fn from_json(v: &Value) -> Option<Self> {
-        let v = u32::try_from(v.as_u64()?).ok()?;
-        Some(IpIdentity(v))
-    }
-}
-
 impl ArIdentity {
     /// Curve scalars must be big enough to accommodate all 32 bit unsigned
     /// integers.
     pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)) }
-
-    pub fn to_json(self) -> Value { json!(self.0) }
-
-    pub fn from_json(v: &Value) -> Option<Self> {
-        let v = u32::try_from(v.as_u64()?).ok()?;
-        Some(ArIdentity(v))
-    }
 }
 
-impl<C: Curve> ArInfo<C> {
-    pub fn from_json(ar_val: &Value) -> Option<Self> {
-        let ar_val = ar_val.as_object()?;
-        let ar_identity = ArIdentity::from_json(ar_val.get("arIdentity")?)?;
-        let ar_description = ar_val.get("arDescription")?.as_str()?;
-        let ar_public_key = ar_val.get("arPublicKey").and_then(json_base16_decode)?;
-        Some(ArInfo {
-            ar_identity,
-            ar_description: ar_description.to_owned(),
-            ar_public_key,
-        })
-    }
-
-    pub fn to_json(&self) -> Value {
-        json!({
-            "arIdentity": self.ar_identity.to_json(),
-            "arDescription": self.ar_description,
-            "arPublicKey": json_base16_encode(&self.ar_public_key),
-        })
-    }
+/// Private and public data on an identity provider.
+#[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>"
+))]
+pub struct IpData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    #[serde(rename = "publicIpInfo")]
+    pub public_ip_info: IpInfo<P, C>,
+    #[serde(
+        rename = "ipPrivateKey",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub ip_private_key: ps_sig::SecretKey<P>,
 }
 
-impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> IpInfo<P, C> {
-    pub fn from_json(ip_val: &Value) -> Option<Self> {
-        let ip_val = ip_val.as_object()?;
-        let ip_identity = IpIdentity::from_json(ip_val.get("ipIdentity")?)?;
-        let ip_description = ip_val.get("ipDescription")?.as_str()?;
-        let ip_verify_key = ip_val.get("ipVerifyKey").and_then(json_base16_decode)?;
-        let ck = ip_val.get("arCommitmentKey").and_then(json_base16_decode)?;
-
-        let ar_arr_items: &Vec<Value> = ip_val.get("anonymityRevokers")?.as_array()?;
-        let m_ar_arry: Option<Vec<ArInfo<C>>> =
-            ar_arr_items.iter().map(ArInfo::from_json).collect();
-        let ar_arry = m_ar_arry?;
-        let ar_base = ip_val.get("arBase").and_then(json_base16_decode)?;
-        Some(IpInfo {
-            ip_identity,
-            ip_description: ip_description.to_owned(),
-            ip_verify_key,
-            ar_info: (ar_arry, ck),
-            ar_base,
-        })
-    }
-
-    pub fn to_json(&self) -> Value {
-        let ars: Vec<Value> = self.ar_info.0.iter().map(ArInfo::to_json).collect();
-        json!({
-            "ipIdentity": self.ip_identity.to_json(),
-            "ipDescription": self.ip_description,
-            "ipVerifyKey": json_base16_encode(&self.ip_verify_key),
-            "arCommitmentKey": json_base16_encode(&self.ar_info.1),
-            "anonymityRevokers": ars,
-            "arBase": json_base16_encode(&self.ar_base),
-        })
-    }
+/// Private and public data on an anonymity revoker.
+#[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct ArData<C: Curve> {
+    #[serde(rename = "publicArInfo")]
+    pub public_ar_info: ArInfo<C>,
+    #[serde(
+        rename = "arPrivateKey",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub ar_private_key: ElgamalSecretKey<C>,
 }
 
-fn json_base16_encode<V: Serial>(v: &V) -> Value { json!(encode(&to_bytes(v))) }
-
-fn json_base16_decode<V: Deserial>(v: &Value) -> Option<V> {
-    V::deserial(&mut Cursor::new(decode(v.as_str()?).ok()?)).ok()
-}
-
-impl<C: Curve> GlobalContext<C> {
-    pub fn from_json(v: &Value) -> Option<Self> {
-        let obj = v.as_object()?;
-        let cmk = obj
-            .get("onChainCommitmentKey")
-            .and_then(json_base16_decode)?;
-        let gc = GlobalContext {
-            on_chain_commitment_key: cmk,
-        };
-        Some(gc)
-    }
-
-    pub fn to_json(&self) -> Value {
-        json!({
-               "onChainCommitmentKey": json_base16_encode(&self.on_chain_commitment_key),
-        })
-    }
+/// Data needed to use the retrieved identity object to generate credentials.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar> \
+                 + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: \
+                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub struct IdObjectUseData<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    #[serde(rename = "aci")]
+    pub aci: AccCredentialInfo<C, AttributeType>,
+    /// Randomness needed to retrieve the signature on the attribute list.
+    #[serde(
+        rename = "randomness",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub randomness: SigRetrievalRandomness<P>,
 }

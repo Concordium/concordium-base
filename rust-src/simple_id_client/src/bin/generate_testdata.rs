@@ -54,20 +54,17 @@ fn main() {
 
     // Load identity provider and anonymity revokers.
     let ip_data_path = Path::new(matches.value_of("ip-data").unwrap());
-    let (ip_info, ip_secret_key) = match read_json_from_file(&ip_data_path)
-        .as_ref()
-        .map(json_to_ip_data)
-    {
-        Ok(Some((ip_info, ip_sec_key))) => (ip_info, ip_sec_key),
-        Ok(None) => {
-            eprintln!("Could not parse identity issuer JSON.");
-            return;
-        }
-        Err(x) => {
-            eprintln!("Could not read identity issuer information because {}", x);
-            return;
-        }
-    };
+    let (ip_info, ip_secret_key) =
+        match read_json_from_file::<_, IpData<Bls12, ExampleCurve>>(&ip_data_path) {
+            Ok(IpData {
+                ip_private_key,
+                public_ip_info,
+            }) => (public_ip_info, ip_private_key),
+            Err(x) => {
+                eprintln!("Could not read identity issuer information because {}", x);
+                return;
+            }
+        };
 
     // Choose prf key.
     let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -90,9 +87,9 @@ fn main() {
     let context = make_context_from_ip_info(
         ip_info.clone(),
         (
-            ip_info.ar_info.0.iter().map(|ar| ar.ar_identity).collect(), /* use all anonymity
-                                                                          * revokers. */
-            Threshold((ip_info.ar_info.0.len() - 1) as _), // all but one threshold
+            ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(), /* use all anonymity
+                                                                           * revokers. */
+            Threshold((ip_info.ip_ars.ars.len() - 1) as _), // all but one threshold
         ),
     );
     let (pio, randomness) = generate_pio(&context, &aci);
@@ -230,7 +227,7 @@ fn main() {
         // We also output the cdi in JSON and binary, to test compatiblity with
         // the haskell serialization
 
-        if let Err(err) = write_json_to_file("cdi.json", &cdi_1.to_json()) {
+        if let Err(err) = write_json_to_file("cdi.json", &cdi_1) {
             eprintln!("Could not output JSON file cdi.json, because {}.", err);
         } else {
             println!("Output cdi.json.");
@@ -270,9 +267,8 @@ fn main() {
             &acc_data,
             &randomness,
         );
-        let js = cdi.to_json();
 
-        if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &js) {
+        if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &cdi) {
             eprintln!("Could not output credential = {}, because {}.", idx, err);
         } else {
             println!("Output credential {}.", idx);

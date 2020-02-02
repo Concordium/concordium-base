@@ -1,4 +1,5 @@
 use crypto_common::*;
+use crypto_common_derive::*;
 use curve25519_dalek::{
     constants,
     edwards::{CompressedEdwardsY, EdwardsPoint},
@@ -14,7 +15,7 @@ use sha2::{Digest, Sha512};
 use failure::Fail;
 use std::fmt::{Display, Formatter};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, SerdeBase16Serialize)]
 pub struct Ed25519DlogProof {
     challenge: Scalar,
     witness:   Scalar,
