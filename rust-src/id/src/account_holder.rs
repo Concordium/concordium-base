@@ -37,11 +37,11 @@ pub fn generate_pio<
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
-    let id_ah = aci.acc_holder_info.id_ah.clone();
+    let id_ah = aci.cred_holder_info.id_ah.clone();
     let id_cred_pub = context
         .ip_info
         .ar_base
-        .mul_by_scalar(&aci.acc_holder_info.id_cred.id_cred_sec);
+        .mul_by_scalar(&aci.cred_holder_info.id_cred.id_cred_sec);
     // PRF related computation
     let prf::SecretKey(prf_key_scalar) = aci.prf_key;
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
@@ -88,7 +88,7 @@ where
     }
 
     // id_cred_sec stuff
-    let id_cred_sec = &aci.acc_holder_info.id_cred.id_cred_sec;
+    let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
     let sc_ck = PedersenKey(
         context.ip_info.ip_verify_key.ys[0],
         context.ip_info.ip_verify_key.g,
@@ -323,7 +323,7 @@ where
 
     let alist = &prio.alist;
     let prf_key = aci.prf_key;
-    let id_cred_sec = &aci.acc_holder_info.id_cred.id_cred_sec;
+    let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
     let reg_id_exponent = match aci.prf_key.prf_exponent(cred_counter) {
         Ok(exp) => exp,
         Err(err) => unimplemented!("Handle the (very unlikely) case where K + x = 0, {}", err),

@@ -161,7 +161,7 @@ fn main() {
         // no credentials
         let alist = Vec::new();
         let aci = AccCredentialInfo {
-            acc_holder_info: ah_info,
+            cred_holder_info: ah_info,
             prf_key,
             attributes: ExampleAttributeList {
                 variant,

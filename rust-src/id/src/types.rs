@@ -213,12 +213,33 @@ pub struct CredentialHolderInfo<C: Curve> {
     pub id_cred: IdCredentials<C>,
 }
 
+impl<C: Curve> CredentialHolderInfo<C> {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "name": self.id_ah,
+            "idCredSecret": json_base16_encode(&self.id_cred.id_cred_sec),
+        })
+    }
+
+    pub fn from_json(js: &Value) -> Option<Self> {
+        let id_cred_sec = PedersenValue {
+            value: js.get("idCredSecret").and_then(json_base16_decode)?,
+        };
+        let id_ah = js["name"].as_str()?;
+        let info: CredentialHolderInfo<C> = CredentialHolderInfo {
+            id_ah:   id_ah.to_owned(),
+            id_cred: IdCredentials { id_cred_sec },
+        };
+        Some(info)
+    }
+}
+
 /// Private and public data chosen by the credential holder before the
 /// interaction with the identity provider. The credential holder chooses a prf
 /// key and an attribute list.
 #[derive(Debug, Serialize)]
 pub struct AccCredentialInfo<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub acc_holder_info: CredentialHolderInfo<C>,
+    pub cred_holder_info: CredentialHolderInfo<C>,
     /// Chosen prf key of the credential holder.
     pub prf_key: prf::SecretKey<C>,
     /// Chosen attribute list.

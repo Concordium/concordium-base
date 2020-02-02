@@ -77,7 +77,7 @@ fn main() {
     let expiry_date = 123_123_123; //
     let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
     let aci = AccCredentialInfo {
-        acc_holder_info: ah_info,
+        cred_holder_info: ah_info,
         prf_key,
         attributes: ExampleAttributeList {
             variant,

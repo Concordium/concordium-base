@@ -350,7 +350,7 @@ mod test {
         let alist = vec![AttributeKind::from(55), AttributeKind::from(313123333)];
 
         let aci = AccCredentialInfo {
-            acc_holder_info: ah_info,
+            cred_holder_info: ah_info,
             prf_key,
             attributes: ExampleAttributeList {
                 variant,
