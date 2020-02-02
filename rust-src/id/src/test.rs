@@ -90,7 +90,7 @@ fn test_pipeline() {
     let expiry_date = 123123123;
     let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
     let aci = AccCredentialInfo {
-        acc_holder_info: ah_info,
+        cred_holder_info: ah_info,
         prf_key,
         attributes: ExampleAttributeList {
             variant,
@@ -225,7 +225,7 @@ fn test_pipeline() {
         revealed_id_cred_pub,
         ip_info
             .ar_base
-            .mul_by_scalar(&aci.acc_holder_info.id_cred.id_cred_sec)
+            .mul_by_scalar(&aci.cred_holder_info.id_cred.id_cred_sec)
     );
 
     // generate a new cdi from a modified pre-identity object in which we swapped

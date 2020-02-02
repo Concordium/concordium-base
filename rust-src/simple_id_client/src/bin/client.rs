@@ -567,7 +567,7 @@ fn handle_create_chi(matches: &ArgMatches) {
         },
     };
 
-    let js = chi_to_json(&ah_info);
+    let js = ah_info.to_json();
     if let Some(filepath) = matches.value_of("out") {
         match write_json_to_file(filepath, &js) {
             Ok(()) => println!("Wrote CHI to file."),
@@ -646,7 +646,7 @@ fn handle_start_ip(matches: &ArgMatches) {
     let chi = {
         if let Ok(Some(chi)) = read_json_from_file(&path)
             .as_ref()
-            .map(json_to_chi::<ExampleCurve>)
+            .map(CredentialHolderInfo::from_json)
         {
             chi
         } else {
@@ -692,7 +692,7 @@ fn handle_start_ip(matches: &ArgMatches) {
     };
     // the chosen account credential information
     let aci = AccCredentialInfo {
-        acc_holder_info: chi,
+        cred_holder_info: chi,
         prf_key,
         attributes: AttributeList::<<Bls12 as Pairing>::ScalarField, ExampleAttribute> {
             variant: alist_type as u16,

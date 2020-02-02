@@ -99,7 +99,7 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
     };
 
     let aci = AccCredentialInfo {
-        acc_holder_info: chi,
+        cred_holder_info: chi,
         prf_key,
         attributes,
     };

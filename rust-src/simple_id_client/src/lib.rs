@@ -9,8 +9,6 @@ use chrono::NaiveDateTime;
 
 use serde_json::{json, to_string_pretty, Map, Value};
 
-use pedersen_scheme::Value as PedersenValue;
-
 use curve_arithmetic::curve_arithmetic::*;
 
 use std::{
@@ -101,48 +99,6 @@ pub fn json_base16_decode<V: Deserial>(v: &Value) -> Option<V> {
     V::deserial(&mut Cursor::new(decode(v.as_str()?).ok()?)).ok()
 }
 
-pub fn chi_to_json<C: Curve>(chi: &CredentialHolderInfo<C>) -> Value {
-    json!({
-        "name": chi.id_ah,
-        "idCredSecret": json_base16_encode(&chi.id_cred.id_cred_sec),
-    })
-}
-
-pub fn json_to_chi<C: Curve>(js: &Value) -> Option<CredentialHolderInfo<C>> {
-    let id_cred_sec = PedersenValue {
-        value: js.get("idCredSecret").and_then(json_base16_decode)?,
-    };
-    let id_ah = js["name"].as_str()?;
-    let info: CredentialHolderInfo<C> = CredentialHolderInfo {
-        id_ah:   id_ah.to_owned(),
-        id_cred: IdCredentials { id_cred_sec },
-    };
-    Some(info)
-}
-
-pub fn aci_to_json(aci: &AccCredentialInfo<ExampleCurve, ExampleAttribute>) -> Value {
-    let chi = chi_to_json(&aci.acc_holder_info);
-    json!({
-        "credentialHolderInformation": chi,
-        "prfKey": json_base16_encode(&aci.prf_key),
-        "attributes": alist_to_json(&aci.attributes),
-    })
-}
-
-pub fn json_to_aci(
-    v: &Value,
-) -> Option<AccCredentialInfo<<Bls12 as Pairing>::G1, ExampleAttribute>> {
-    let obj = v.as_object()?;
-    let chi = json_to_chi(obj.get("credentialHolderInformation")?)?;
-    let prf_key = obj.get("prfKey").and_then(json_base16_decode)?;
-    let attributes = json_to_alist(obj.get("attributes")?)?;
-    Some(AccCredentialInfo {
-        acc_holder_info: chi,
-        prf_key,
-        attributes,
-    })
-}
-
 pub fn json_read_u32(v: &Map<String, Value>, key: &str) -> Option<u32> {
     u32::try_from(v.get(key)?.as_u64()?).ok()
 }
@@ -162,6 +118,28 @@ pub fn json_to_global_context(v: &Value) -> Option<GlobalContext<ExampleCurve>> 
         on_chain_commitment_key: cmk,
     };
     Some(gc)
+}
+
+pub fn aci_to_json(aci: &AccCredentialInfo<<Bls12 as Pairing>::G1, ExampleAttribute>) -> Value {
+    json!({
+        "credentialHolderInformation": aci.cred_holder_info.to_json(),
+        "prfKey": json_base16_encode(&aci.prf_key),
+        "attributes": alist_to_json(&aci.attributes),
+    })
+}
+
+pub fn json_to_aci(
+    v: &Value,
+) -> Option<AccCredentialInfo<<Bls12 as Pairing>::G1, ExampleAttribute>> {
+    let obj = v.as_object()?;
+    let chi = CredentialHolderInfo::from_json(obj.get("credentialHolderInformation")?)?;
+    let prf_key = obj.get("prfKey").and_then(json_base16_decode)?;
+    let attributes = json_to_alist(obj.get("attributes")?)?;
+    Some(AccCredentialInfo {
+        cred_holder_info: chi,
+        prf_key,
+        attributes,
+    })
 }
 
 pub fn json_to_ip_infos(v: &Value) -> Option<Vec<IpInfo<Bls12, ExampleCurve>>> {
