@@ -41,7 +41,8 @@ pub fn show_attribute_format(variant: u16) -> &'static str {
     }
 }
 
-pub fn show_attribute(variant: u16, idx: usize, att: &ExampleAttribute) -> String {
+pub fn show_attribute(variant: u16, idx: AttributeIndex, att: &ExampleAttribute) -> String {
+    let idx: usize = idx.into();
     format!("{}: {}", ATTRIBUTE_LISTS[variant as usize][idx], att)
 }
 
@@ -164,8 +165,13 @@ pub fn alist_to_json(alist: &ExampleAttributeList) -> Value {
         && alist.alist.len() == ATTRIBUTE_LISTS[alist.variant as usize].len()
     {
         let keys = ATTRIBUTE_LISTS[alist.variant as usize];
-        for (i, v) in alist.alist.iter().enumerate() {
-            mp.insert(keys[i].to_string(), Value::from(v.to_string()));
+        for (&i, v) in alist.alist.iter() {
+            let i: usize = i.into();
+            if i < keys.len() {
+                mp.insert(keys[i].to_owned(), Value::from(v.to_string()));
+            } else {
+                return Value::Null;
+            }
         }
         Value::Object(mp)
     } else {

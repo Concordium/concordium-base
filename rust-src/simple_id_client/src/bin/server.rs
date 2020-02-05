@@ -144,7 +144,7 @@ type GenerateCredentialData = (
     pssig::Signature<Bls12>,
     SigRetrievalRandomness<Bls12>,
     AccCredentialInfo<ExampleCurve, ExampleAttribute>,
-    BTreeMap<u16, ExampleAttribute>,
+    BTreeMap<AttributeIndex, ExampleAttribute>,
     u8,
 );
 
@@ -246,6 +246,11 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
         &sig_randomness,
     );
 
+    let cdi = match cdi {
+        Ok(cdi) => cdi,
+        Err(_) => return rouille::Response::empty_400(),
+    };
+
     let address = match acc_data.existing {
         Left(_) => AccountAddress::new(&cdi.values.reg_id),
         Right(addr) => addr,
@@ -261,15 +266,15 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
 
 fn read_revealed_items(
     variant: u16,
-    alist: &[ExampleAttribute],
+    alist: &BTreeMap<AttributeIndex, ExampleAttribute>,
     v: &Value,
-) -> Option<BTreeMap<u16, ExampleAttribute>> {
+) -> Option<BTreeMap<AttributeIndex, ExampleAttribute>> {
     let arr: &Vec<Value> = v.as_array()?;
     let result = arr.iter().flat_map(|v| {
         let s = v.as_str()?;
         let idx = attribute_index(variant, s)?;
-        if (idx as usize) < alist.len() {
-            Some((idx, alist[idx as usize]))
+        if let Some((idx, attr)) = get_attribute_at(usize::from(idx), &alist) {
+            Some((idx, *attr))
         } else {
             None
         }

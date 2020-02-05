@@ -156,8 +156,8 @@ fn main() {
             .expect("Duration in a year should be valid.")
             .as_secs();
 
-        // no credentials
-        let alist = Vec::new();
+        // no attributes
+        let alist = BTreeMap::new();
         let aci = AccCredentialInfo {
             cred_holder_info: ah_info,
             prf_key,
@@ -202,7 +202,8 @@ fn main() {
             &policy,
             &acc_data,
             &randomness,
-        );
+        )
+        .expect("We should have constructed valid data.");
 
         let address = AccountAddress::new(&cdi.values.reg_id);
 
