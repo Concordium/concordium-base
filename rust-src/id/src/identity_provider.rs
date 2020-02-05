@@ -147,12 +147,12 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
 
     message = message.plus_point(&key_vec[m + 3].mul_by_scalar(&variant));
     message = message.plus_point(&key_vec[m + 3 + 1].mul_by_scalar(&expiry));
-    for i in (m + 3 + 2)..(m + 3 + 2 + n) {
-        match get_attribute_at(i - m - 3 - 2, &att_vec) {
-            None => return Err(Reason::MissingAttribute(i - m + 3 + 2)),
+    for (i, k) in key_vec.iter().skip(m + 3 + 2).enumerate() {
+        match get_attribute_at(i, &att_vec) {
+            None => return Err(Reason::MissingAttribute(i)),
             Some((_, v)) => {
                 let att = v.to_field_element();
-                message = message.plus_point(&key_vec[i].mul_by_scalar(&att));
+                message = message.plus_point(&k.mul_by_scalar(&att));
             }
         }
     }
