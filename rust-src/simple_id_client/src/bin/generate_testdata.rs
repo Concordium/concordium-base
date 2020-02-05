@@ -94,7 +94,8 @@ fn main() {
                                                                           * revokers. */
             Threshold((ip_info.ar_info.0.len() - 1) as _), // all but one threshold
         ),
-    );
+    )
+    .expect("Could not make context from IP info, this should never happen. Terminating.");
     let (pio, randomness) = generate_pio(&context, &aci);
 
     let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
