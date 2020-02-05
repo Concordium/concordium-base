@@ -152,7 +152,7 @@ putModuleRef (ModuleRef mref) =
 -- |An address is either a contract or account.
 data Address = AddressAccount !AccountAddress
              | AddressContract !ContractAddress
-            deriving(Show, Eq)
+             deriving (Show, Eq)
 
 instance S.Serialize Address where
   get = do
@@ -174,7 +174,7 @@ type Duration = Word64
 
 -- | Expiry time of a transaction
 newtype TransactionExpiryTime = TransactionExpiryTime { expiry :: Timestamp }
-    deriving(Eq, Num, Ord, Show)
+    deriving (Show, Read, Eq, Num, Ord) via Word64
 
 instance S.Serialize TransactionExpiryTime where
   put = P.putWord64be . expiry
@@ -189,10 +189,7 @@ transactionExpired = (<) . expiry
 -- |Type of GTU amounts.
 -- FIXME: This likely needs to be Word128.
 newtype Amount = Amount { _amount :: Word64 }
-    deriving(Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable)
-
-instance Show Amount where
-  show = show . _amount
+    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable) via Word64
 
 instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
@@ -222,10 +219,7 @@ applyAmountDelta del amt =
 -- |The type used to count exact execution cost. This cost is then converted to
 -- amounts in some way.
 newtype Energy = Energy { _energy :: Word64 }
-    deriving(Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded)
-
-instance Show Energy where
-  show = show . _energy
+    deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded) via Word64
 
 instance S.Serialize Energy where
   get = Energy <$> G.getWord64be
@@ -235,7 +229,7 @@ instance FromJSON Energy where
   parseJSON v = Energy <$> parseJSON v
 
 newtype Nonce = Nonce Word64
-    deriving(Eq, Show, Ord, Num, Enum)
+    deriving (Show, Read, Eq, Ord, Num, Enum) via Word64
 
 instance S.Serialize Nonce where
   put (Nonce w) = P.putWord64be w
