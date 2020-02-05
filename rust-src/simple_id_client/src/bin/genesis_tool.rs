@@ -113,7 +113,8 @@ fn main() {
             // all but one threshold
             Threshold((ip_info.ar_info.0.len() - 1) as _),
         ),
-    );
+    )
+    .expect("Could not make context from IP info, this should never happen. Terminating.");
 
     // we also read the global context from another json file (called
     // global.context). We need commitment keys and other data in there.

@@ -106,7 +106,8 @@ fn test_pipeline() {
             vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
             Threshold(2),
         ),
-    );
+    )
+    .expect("Could not make context from identity provider info.");
     let (pio, randomness) = generate_pio(&context, &aci);
 
     let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
