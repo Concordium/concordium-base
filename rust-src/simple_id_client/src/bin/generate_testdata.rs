@@ -72,7 +72,16 @@ fn main() {
     // Choose variant of the attribute list. Should not matter for this use case.
     let variant = 13;
     let expiry_date = 123_123_123; //
-    let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
+    let alist = {
+        let mut alist = BTreeMap::new();
+        alist
+            .insert(AttributeIndex::from(0u16), AttributeKind::from(55))
+            .unwrap();
+        alist
+            .insert(AttributeIndex::from(0u16), AttributeKind::from(31))
+            .unwrap();
+        alist
+    };
     let aci = AccCredentialInfo {
         cred_holder_info: ah_info,
         prf_key,
@@ -117,7 +126,7 @@ fn main() {
         expiry: expiry_date,
         policy_vec: {
             let mut tree = BTreeMap::new();
-            tree.insert(1u16, AttributeKind::from(31));
+            tree.insert(AttributeIndex::from(1u16), AttributeKind::from(31));
             tree
         },
         _phantom: Default::default(),
@@ -144,7 +153,8 @@ fn main() {
             &policy,
             &acc_data,
             &randomness,
-        );
+        )
+        .expect("We should have generated valid data.");
 
         // Generate the second credential for an existing account (the one
         // created by the first credential)
@@ -163,7 +173,8 @@ fn main() {
             &policy,
             &acc_data_2,
             &randomness,
-        );
+        )
+        .expect("We should have generated valid data.");
 
         let acc_keys = AccountKeys {
             keys:      acc_data_2
@@ -266,7 +277,8 @@ fn main() {
             &policy,
             &acc_data,
             &randomness,
-        );
+        )
+        .expect("We should have generated valid data.");
 
         if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &cdi) {
             eprintln!("Could not output credential = {}, because {}.", idx, err);

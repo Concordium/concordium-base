@@ -218,6 +218,20 @@ pub trait Attribute<F: Field>:
     fn to_field_element(&self) -> F;
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
+#[repr(transparent)]
+#[serde(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
+pub struct AttributeIndex(pub u16);
+
+impl Into<usize> for AttributeIndex {
+    fn into(self) -> usize { self.0.into() }
+}
+
+impl From<u16> for AttributeIndex {
+    fn from(x: u16) -> Self { AttributeIndex(x) }
+}
+
 #[derive(Clone, Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "F: Field, AttributeType: Attribute<F> + SerdeSerialize",
@@ -228,8 +242,12 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
     pub variant: u16,
     #[serde(rename = "expiryDate")]
     pub expiry: u64,
+    /// The attributes. The indices should be sequential
+    /// From 0..length of the attribute list when the identity provider decides
+    /// to sign the list.
     #[serde(rename = "alist")]
-    pub alist: Vec<AttributeType>,
+    #[map_size_length = 2]
+    pub alist: BTreeMap<AttributeIndex, AttributeType>,
     #[serde(skip)]
     pub _phantom: std::marker::PhantomData<F>,
 }
@@ -483,7 +501,7 @@ pub struct CredDeploymentCommitments<C: Curve> {
     /// that are revealed as part of the policy are going to be computed by the
     /// verifier.
     #[map_size_length = 2]
-    pub cmm_attributes: BTreeMap<u16, pedersen::Commitment<C>>,
+    pub cmm_attributes: BTreeMap<AttributeIndex, pedersen::Commitment<C>>,
     /// commitments to the coefficients of the polynomial
     /// used to share id_cred_sec
     /// S + b1 X + b2 X^2...
@@ -586,9 +604,19 @@ pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// INVARIANT: The indices must all have to be less than size
     /// of the attribute list this policy applies to.
     #[serde(rename = "revealedItems")]
-    pub policy_vec: BTreeMap<u16, AttributeType>,
+    pub policy_vec: BTreeMap<AttributeIndex, AttributeType>,
     #[serde(skip)]
     pub _phantom: std::marker::PhantomData<C>,
+}
+
+pub fn get_attribute_at<T>(
+    idx: usize,
+    map: &BTreeMap<AttributeIndex, T>,
+) -> Option<(AttributeIndex, &T)> {
+    use std::convert::TryFrom;
+    let idx = AttributeIndex(u16::try_from(idx).ok()?);
+    let res = map.get(&idx)?;
+    Some((idx, res))
 }
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, AttributeType> {

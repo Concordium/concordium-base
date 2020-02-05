@@ -1,5 +1,7 @@
 use crate::types::*;
 
+use failure::Fallible;
+
 use random_oracle::RandomOracle;
 
 use crate::{
@@ -317,7 +319,7 @@ pub fn generate_cdi<
     policy: &Policy<C, AttributeType>,
     acc_data: &AccountData,
     sig_retrieval_rand: &ps_sig::SigRetrievalRandomness<P>,
-) -> CredDeploymentInfo<P, C, AttributeType>
+) -> Fallible<CredDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
@@ -483,7 +485,7 @@ where
         &blinded_sig,
         &blind_rand,
         &mut csprng,
-    );
+    )?;
 
     // Proof of knowledge of the secret keys of the account.
     // TODO: This might be replaced by just signatures.
@@ -510,10 +512,11 @@ where
         proof_acc_sk,
     };
 
-    CredDeploymentInfo {
+    let info = CredDeploymentInfo {
         values: cred_values,
         proofs: cdp,
-    }
+    };
+    Ok(info)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -536,7 +539,7 @@ fn compute_pok_sig<
     blinded_sig: &ps_sig::BlindedSignature<P>,
     blind_rand: &ps_sig::BlindingRandomness<P>,
     csprng: &mut R,
-) -> com_eq_sig::ComEqSigProof<P, C> {
+) -> Fallible<com_eq_sig::ComEqSigProof<P, C>> {
     let att_vec = &alist.alist;
     // number of user chosen attributes (+2 is for variant and expiry)
     let num_user_attributes = att_vec.len() + 2;
@@ -549,7 +552,10 @@ fn compute_pok_sig<
 
     let y_tildas = &ip_pub_key.y_tildas;
     // FIXME: Handle errors more gracefully, or explicitly state precondition.
-    assert!(y_tildas.len() >= num_total_attributes);
+    ensure!(
+        y_tildas.len() >= num_total_attributes,
+        "Too many attributes."
+    );
 
     let mut gxs = Vec::with_capacity(num_total_commitments);
 
@@ -597,16 +603,21 @@ fn compute_pok_sig<
     // FIXME: Likely we need to make sure there are enough y_tildas first and fail
     // gracefully otherwise.
     for (idx, &g) in y_tildas.iter().enumerate().take(att_vec.len()) {
-        secrets.push((
-            Value {
-                value: att_vec[idx].to_field_element(),
-            },
-            // if we commited with non-zero randomness get it.
-            // otherwise we must have commited with zero randomness
-            // which we should use
-            &att_rands.get(&idx).unwrap_or(&zero),
-        ));
-        gxs.push(g);
+        match get_attribute_at(idx, att_vec) {
+            None => bail!("Attribute at index {} not available.", idx),
+            Some((idx, v)) => {
+                secrets.push((
+                    Value {
+                        value: v.to_field_element(),
+                    },
+                    // if we commited with non-zero randomness get it.
+                    // otherwise we must have commited with zero randomness
+                    // which we should use
+                    &att_rands.get(&idx).unwrap_or(&zero),
+                ));
+                gxs.push(g);
+            }
+        }
     }
 
     let mut comm_vec = Vec::with_capacity(num_total_commitments);
@@ -625,8 +636,8 @@ fn compute_pok_sig<
     comm_vec.push(variant_cmm);
     comm_vec.push(expiry_cmm);
 
-    for (idx, v) in alist.alist.iter().enumerate() {
-        match commitments.cmm_attributes.get(&(idx as u16)) {
+    for (idx, v) in alist.alist.iter() {
+        match commitments.cmm_attributes.get(idx) {
             None => {
                 // need to commit with randomness 0
                 let value = Value::new(v.to_field_element());
@@ -641,7 +652,7 @@ fn compute_pok_sig<
         blind_rand,
         values_and_rands: &secrets,
     };
-    com_eq_sig::prove_com_eq_sig::<P, C, R>(
+    let proof = com_eq_sig::prove_com_eq_sig::<P, C, R>(
         ro,
         blinded_sig,
         &comm_vec,
@@ -649,14 +660,15 @@ fn compute_pok_sig<
         commitment_key,
         &secret,
         csprng,
-    )
+    );
+    Ok(proof)
 }
 
 pub struct CommitmentsRandomness<'a, C: Curve> {
     id_cred_sec_rand:  &'a PedersenRandomness<C>,
     prf_rand:          PedersenRandomness<C>,
     cred_counter_rand: PedersenRandomness<C>,
-    attributes_rand:   HashMap<usize, PedersenRandomness<C>>,
+    attributes_rand:   HashMap<AttributeIndex, PedersenRandomness<C>>,
 }
 
 /// Computing the commitments for the credential deployment info. We only
@@ -688,13 +700,13 @@ fn compute_commitments<'a, C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
     let cmm_len = n - policy.policy_vec.len();
     let mut cmm_attributes = BTreeMap::new();
     let mut attributes_rand = HashMap::with_capacity(cmm_len);
-    for (i, val) in att_vec.iter().enumerate() {
+    for (&i, val) in att_vec.iter() {
         // in case the value is openened there is no need to hide it.
         // We can just commit with randomness 0.
-        if !policy.policy_vec.contains_key(&(i as u16)) {
+        if !policy.policy_vec.contains_key(&i) {
             let value = Value::new(val.to_field_element());
             let (cmm, rand) = commitment_key.commit(&value, csprng);
-            cmm_attributes.insert(i as u16, cmm);
+            cmm_attributes.insert(i, cmm);
             attributes_rand.insert(i, rand);
         }
     }

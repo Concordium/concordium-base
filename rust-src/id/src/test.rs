@@ -91,7 +91,12 @@ fn test_pipeline() {
 
     let variant = 0;
     let expiry_date = 123123123;
-    let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
+    let alist = {
+        let mut alist = BTreeMap::new();
+        alist.insert(AttributeIndex::from(0u16), AttributeKind::from(55));
+        alist.insert(AttributeIndex::from(1u16), AttributeKind::from(31));
+        alist
+    };
     let aci = AccCredentialInfo {
         cred_holder_info: ah_info,
         prf_key,
@@ -128,7 +133,7 @@ fn test_pipeline() {
         expiry: expiry_date,
         policy_vec: {
             let mut tree = BTreeMap::new();
-            tree.insert(1u16, AttributeKind::from(31));
+            tree.insert(AttributeIndex::from(1u16), AttributeKind::from(31));
             tree
         },
         _phantom: Default::default(),
@@ -154,7 +159,8 @@ fn test_pipeline() {
         &policy,
         &acc_data,
         &randomness,
-    );
+    )
+    .expect("Should generate the credential successfully.");
 
     // let mut out = Vec::new();
     // let gc_bytes = global_ctx.to_bytes();
@@ -245,7 +251,8 @@ fn test_pipeline() {
         &policy,
         &acc_data,
         &randomness,
-    );
+    )
+    .expect("Should generate the credential successfully.");
     cdi.values.ar_data.rotate_left(1);
     let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
     assert_ne!(cdi_check, Ok(()));

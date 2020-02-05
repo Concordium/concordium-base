@@ -397,7 +397,12 @@ mod test {
 
         let variant = 0;
         let expiry_date = 123123123;
-        let alist = vec![AttributeKind::from(55), AttributeKind::from(313123333)];
+        let alist = {
+            let mut alist = BTreeMap::new();
+            alist.insert(AttributeIndex::from(0u16), AttributeKind::from(55));
+            alist.insert(AttributeIndex::from(1u16), AttributeKind::from(313123333));
+            alist
+        };
 
         let aci = AccCredentialInfo {
             cred_holder_info: ah_info,
@@ -434,7 +439,7 @@ mod test {
             expiry: expiry_date,
             policy_vec: {
                 let mut tree = BTreeMap::new();
-                tree.insert(0u16, AttributeKind::from(55));
+                tree.insert(AttributeIndex::from(0u16), AttributeKind::from(55));
                 tree
             },
             _phantom: Default::default(),
@@ -445,7 +450,7 @@ mod test {
             expiry: expiry_date,
             policy_vec: {
                 let mut tree = BTreeMap::new();
-                tree.insert(0u16, AttributeKind::from(5));
+                tree.insert(AttributeIndex::from(0u16), AttributeKind::from(5));
                 tree
             },
             _phantom: Default::default(),
@@ -471,7 +476,8 @@ mod test {
             &policy,
             &acc_data,
             &randomness,
-        );
+        )
+        .expect("Should generate the credential successfully.");
 
         let wrong_cdi = generate_cdi(
             &ip_info,
@@ -483,7 +489,8 @@ mod test {
             &wrong_policy,
             &acc_data,
             &randomness,
-        );
+        )
+        .expect("Should generate the credential successfully.");
 
         let cdi_bytes = to_bytes(&cdi);
         let cdi_bytes_len = cdi_bytes.len() as size_t;

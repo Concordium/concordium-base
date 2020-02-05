@@ -83,13 +83,14 @@ fn read_expiry_date() -> io::Result<u64> {
 
 /// Given the chosen variant of the attribute list read off the fields from user
 /// input. Fails if the user input is not well-formed.
-fn read_attribute_list(variant: u16) -> io::Result<Vec<ExampleAttribute>> {
-    let mut res = Vec::with_capacity(ATTRIBUTE_LISTS[variant as usize].len());
-    for key in ATTRIBUTE_LISTS[variant as usize] {
+fn read_attribute_list(variant: u16) -> io::Result<BTreeMap<AttributeIndex, ExampleAttribute>> {
+    let mut res = BTreeMap::new();
+    for (idx, key) in ATTRIBUTE_LISTS[variant as usize].iter().enumerate() {
         let input: String = Input::new().with_prompt(key).interact()?;
         // NB: The index of an attribute must be the same as the one returned in
         // attribute_index. Otherwise there will be strange issues, very likely.
-        res.push(
+        res.insert(
+            AttributeIndex::from(idx as u16),
             AttributeKind::from_str(&input).map_err(|e| Error::new(ErrorKind::InvalidData, e))?,
         );
     }
@@ -381,7 +382,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // we first ask the user to select which credentials they wish to reveal
     let alist = &pio.alist.alist;
     let mut alist_str: Vec<String> = Vec::with_capacity(alist.len());
-    for (idx, a) in alist.iter().enumerate() {
+    for (&idx, a) in alist.iter() {
         alist_str.push(show_attribute(pio.alist.variant, idx, a));
     }
     // the interface of checkboxes is less than ideal.
@@ -399,9 +400,21 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     };
 
     // from the above and the pre-identity object we make a policy
-    let mut revealed_attributes = BTreeMap::new();
+    let mut revealed_attributes: BTreeMap<AttributeIndex, ExampleAttribute> = BTreeMap::new();
     for idx in atts {
-        revealed_attributes.insert(idx as u16, alist[idx]);
+        let elem = get_attribute_at(idx, &alist);
+        match elem {
+            Some((idx, elem)) => {
+                if revealed_attributes.insert(idx, *elem).is_some() {
+                    eprintln!("Duplicate attribute idx.");
+                    return;
+                }
+            }
+            None => {
+                eprintln!("Selected an attribute which does not exist. Aborting.");
+                return;
+            }
+        }
     }
     let policy = Policy {
         variant:    pio.alist.variant,
@@ -492,6 +505,14 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         &acc_data,
         &id_use_data.randomness,
     );
+
+    let cdi = match cdi {
+        Ok(cdi) => cdi,
+        Err(x) => {
+            eprintln!("Could not generate the credential because {}", x);
+            return;
+        }
+    };
 
     // Double check that the generated CDI is going to be successfully validated.
     // let checked = verify_cdi(&global_ctx, &ip_info, &cdi);

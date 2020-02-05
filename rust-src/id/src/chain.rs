@@ -381,13 +381,13 @@ fn verify_pok_sig<
         return false;
     }
     for idx in 0..number {
-        match policy.policy_vec.get(&(idx as u16)) {
-            Some(v) => {
+        match get_attribute_at(idx, &policy.policy_vec) {
+            Some((_, v)) => {
                 let value = Value::new(v.to_field_element());
                 comm_vec.push(commitment_key.hide(&value, &zero));
             }
-            None => match commitments.cmm_attributes.get(&(idx as u16)) {
-                Some(v) => comm_vec.push(*v),
+            None => match get_attribute_at(idx, &commitments.cmm_attributes) {
+                Some((_, v)) => comm_vec.push(*v),
                 None => return false,
             },
         }

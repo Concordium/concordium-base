@@ -12,14 +12,12 @@ use ps_sig;
 use rand::*;
 
 #[derive(Debug, Clone, Copy)]
-pub struct Declined(pub Reason);
-
-#[derive(Debug, Clone, Copy)]
 pub enum Reason {
     FailedToVerifyKnowledgeOfIdCredSec,
     FailedToVerifyIdCredSecEquality,
     FailedToVerifyPrfData,
     WrongArParameters,
+    MissingAttribute(usize),
 }
 
 fn check_ar_parameters<C: Curve>(
@@ -37,7 +35,7 @@ pub fn verify_credentials<
     pre_id_obj: &PreIdentityObject<P, C, AttributeType>,
     ip_info: &IpInfo<P, C>,
     ip_secret_key: &ps_sig::SecretKey<P>,
-) -> Result<ps_sig::Signature<P>, Declined> {
+) -> Result<ps_sig::Signature<P>, Reason> {
     let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.ys[0], ip_info.ip_verify_key.g);
     let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.ys[1], ip_info.ip_verify_key.g);
 
@@ -48,7 +46,7 @@ pub fn verify_credentials<
         &pre_id_obj.pok_sc,
     );
     if !b_1 {
-        return Err(Declined(Reason::FailedToVerifyKnowledgeOfIdCredSec));
+        return Err(Reason::FailedToVerifyKnowledgeOfIdCredSec);
     }
 
     let b_11 = verify_com_eq_single::<P::G1, C>(
@@ -61,7 +59,7 @@ pub fn verify_credentials<
     );
 
     if !b_11 {
-        return Err(Declined(Reason::FailedToVerifyIdCredSecEquality));
+        return Err(Reason::FailedToVerifyIdCredSecEquality);
     }
 
     let choice_ar_handles = pre_id_obj.choice_ar_parameters.0.clone();
@@ -71,7 +69,7 @@ pub fn verify_credentials<
     let mut choice_ars = Vec::with_capacity(number_of_ars);
     for ar in choice_ar_handles.iter() {
         match ip_info.ip_ars.ars.iter().find(|&x| x.ar_identity == *ar) {
-            None => return Err(Declined(Reason::WrongArParameters)),
+            None => return Err(Reason::WrongArParameters),
             Some(ar_info) => choice_ars.push(ar_info.clone()),
         }
     }
@@ -79,7 +77,7 @@ pub fn verify_credentials<
     // VRF
     let choice_ar_parameters = (choice_ars, revocation_threshold);
     if !check_ar_parameters(&choice_ar_parameters, &ip_info.ip_ars.ars) {
-        return Err(Declined(Reason::WrongArParameters));
+        return Err(Reason::WrongArParameters);
     }
     // ar commitment key
     let ar_ck = ip_info.ip_ars.ar_cmm_key;
@@ -94,7 +92,7 @@ pub fn verify_credentials<
     );
 
     if !b_2 {
-        return Err(Declined(Reason::FailedToVerifyPrfData));
+        return Err(Reason::FailedToVerifyPrfData);
     }
     let message: ps_sig::UnknownMessage<P> = compute_message(
         &pre_id_obj.cmm_prf,
@@ -103,7 +101,7 @@ pub fn verify_credentials<
         &choice_ar_handles,
         &pre_id_obj.alist,
         &ip_info.ip_verify_key,
-    );
+    )?;
     let mut csprng = thread_rng();
     Ok(ip_secret_key.sign_unknown_message(&message, &mut csprng))
 }
@@ -115,7 +113,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     ar_list: &[ArIdentity],
     att_list: &AttributeList<P::ScalarField, AttributeType>,
     ps_public_key: &ps_sig::PublicKey<P>,
-) -> ps_sig::UnknownMessage<P> {
+) -> Result<ps_sig::UnknownMessage<P>, Reason> {
     // TODO: handle the errors
     let variant = P::G1::scalar_from_u64(u64::from(att_list.variant));
     let expiry = P::G1::scalar_from_u64(att_list.expiry);
@@ -150,10 +148,16 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     message = message.plus_point(&key_vec[m + 3].mul_by_scalar(&variant));
     message = message.plus_point(&key_vec[m + 3 + 1].mul_by_scalar(&expiry));
     for i in (m + 3 + 2)..(m + 3 + 2 + n) {
-        let att = att_vec[i - m - 3 - 2].to_field_element();
-        message = message.plus_point(&key_vec[i].mul_by_scalar(&att))
+        match get_attribute_at(i - m - 3 - 2, &att_vec) {
+            None => return Err(Reason::MissingAttribute(i - m + 3 + 2)),
+            Some((_, v)) => {
+                let att = v.to_field_element();
+                message = message.plus_point(&key_vec[i].mul_by_scalar(&att));
+            }
+        }
     }
-    ps_sig::UnknownMessage(message)
+    let msg = ps_sig::UnknownMessage(message);
+    Ok(msg)
 }
 
 fn verify_prf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
