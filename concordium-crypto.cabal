@@ -63,6 +63,7 @@ Library
                 , deepseq >= 1.4
                 , ghc-prim >= 0.5.3
                 , constraints >= 0.10
+                , mtl >= 2.2.2
 
   extra-libraries: ec_vrf_ed25519
                    sha_2,
