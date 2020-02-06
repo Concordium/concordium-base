@@ -36,9 +36,12 @@ Library
                    Concordium.ID.Account
                    Concordium.ID.Parameters
                    Concordium.ID.IdentityProvider
+                   Concordium.ID.DummyData
                    Concordium.Crypto.FFIDataTypes
                    Concordium.Crypto.ByteStringHelpers
                    Concordium.Crypto.Proofs
+                   Concordium.Crypto.DummyData
+
 
   Other-modules:  Concordium.Crypto.FFIHelpers
                   Data.Base58Encoding.TH
@@ -64,6 +67,7 @@ Library
                 , ghc-prim >= 0.5.3
                 , constraints >= 0.10
                 , mtl >= 2.2.2
+                , aeson >= 1.4
 
   extra-libraries: ec_vrf_ed25519
                    sha_2,

@@ -8,10 +8,8 @@
 module Concordium.Crypto.BlockSignature where
 
 import qualified Concordium.Crypto.Ed25519Signature as Ed25519
-import           System.Random
 import           Data.ByteString
 import qualified Data.ByteString.Short as BSS
-import Test.QuickCheck
 import Concordium.Crypto.ByteStringHelpers
 import Data.Serialize
 import Data.Aeson
@@ -51,19 +49,10 @@ signatureLength :: Int
 signatureLength = Ed25519.signatureSize
 
 sign :: KeyPair -> ByteString -> Signature
-sign KeyPair{..} = Signature . Ed25519.sign signKey verifyKey 
+sign KeyPair{..} = Signature . Ed25519.sign signKey verifyKey
 
-verify :: VerifyKey -> ByteString -> Signature -> Bool 
+verify :: VerifyKey -> ByteString -> Signature -> Bool
 verify vfKey bs (Signature s) = Ed25519.verify vfKey bs s
 
 newKeyPair :: IO KeyPair
 newKeyPair = uncurry KeyPair <$> Ed25519.newKeyPair
-
-{-# WARNING randomKeyPair "Not cryptographically secure. DO NOT USE IN PRODUCTION." #-}
-randomKeyPair :: RandomGen g => g -> (KeyPair, g)
-randomKeyPair g = let ((signKey, verifyKey), g') = Ed25519.randomKeyPair g
-                  in (KeyPair{..}, g')
-
-{-# WARNING genKeyPair "Not cryptographically secure. DO NOT USE IN PRODUCTION." #-}
-genKeyPair :: Gen KeyPair
-genKeyPair = uncurry KeyPair <$> Ed25519.genKeyPair

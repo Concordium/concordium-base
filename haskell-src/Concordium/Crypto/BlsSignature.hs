@@ -1,7 +1,8 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.BlsSignature
-  (PublicKey, SecretKey, Signature,
-  randomSecretKey, secretKeyGen, generateSecretKey, derivePublicKey, sign, verify, aggregate, aggregateMany, verifyAggregate, emptySignature)
+  (PublicKey, SecretKey(..), Signature,
+  generateSecretKey, derivePublicKey, sign, verify, aggregate, aggregateMany, verifyAggregate, emptySignature,
+  freeSecretKey)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -17,9 +18,7 @@ import Data.ByteString
 import Data.ByteString.Unsafe as BS
 import System.IO.Unsafe
 import Data.Serialize
-import System.Random
 import qualified Data.Aeson as AE
-import Test.QuickCheck
 import qualified Data.List as List
 
 newtype PublicKey = PublicKey (ForeignPtr PublicKey)
@@ -233,33 +232,3 @@ instance Monoid Signature where
 aggregateMany :: [Signature] -> Signature
 aggregateMany (s:sigs) = List.foldl' aggregate s sigs
 aggregateMany [] = emptySignature
-
--- The following functions are only for testing purposes
--- Provides deterministic key generation from seed.
-foreign import ccall unsafe "bls_generate_secretkey_from_seed" generateSecretKeyPtrFromSeed :: CSize -> IO (Ptr SecretKey)
-
--- |DO NOT USE IN PRODUCTION CODE!!!
--- ONLY USED FOR TESTING!!!
--- provides deterministic key generation for testing purposes.
-{-# WARNING randomSecretKey "Not cryptographically secure." #-}
-randomSecretKey :: (RandomGen g) => g -> (SecretKey, g)
-randomSecretKey gen = (sk, gen')
-  where
-    (nextSeed, gen') = random gen
-    sk = generateSecretKeyFromSeed $ (fromIntegral::Int->CSize) nextSeed
-
--- |DO NOT USE IN PRODUCTION CODE!!!
--- ONLY USED FOR TESTING!!!
--- provides deterministic key generation for testing purposes.
-{-# WARNING secretKeyGen "Not cryptographically secure." #-}
-secretKeyGen :: Gen SecretKey
-secretKeyGen = resize (2^(30 :: Int)) $ fst . randomSecretKey . mkStdGen <$> arbitrary
-
--- |DO NOT USE IN PRODUCTION CODE!!!
--- ONLY USED FOR TESTING!!!
--- provides deterministic key generation for testing purposes.
-{-# WARNING generateSecretKeyFromSeed "Not cryptographically secure." #-}
-generateSecretKeyFromSeed :: CSize -> SecretKey
-generateSecretKeyFromSeed seed = unsafeDupablePerformIO $ do
-  ptr <- generateSecretKeyPtrFromSeed seed
-  SecretKey <$> newForeignPtr freeSecretKey ptr
