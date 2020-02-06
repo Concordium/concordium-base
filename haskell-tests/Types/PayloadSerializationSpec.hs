@@ -27,6 +27,8 @@ import Data.Int
 import System.Random
 import Concordium.Crypto.Proofs
 
+import Concordium.Crypto.DummyData
+
 -- genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
 -- genCredentialDeploymentInformation = do
 --   cdvVerifyKey <- VerifyKey . BS.pack <$> vector 37
@@ -63,7 +65,7 @@ genAccountOwnershipProof = do
      return (keyIndex, proof))
 
 genAggregationVerifykey :: Gen BakerAggregationVerifyKey
-genAggregationVerifykey = fmap Bls.derivePublicKey Bls.secretKeyGen
+genAggregationVerifykey = fmap Bls.derivePublicKey secretBlsKeyGen
 
 genPayload :: Gen Payload
 genPayload = oneof [genDeployModule,
@@ -109,7 +111,7 @@ genPayload = oneof [genDeployModule,
 
         genAddBaker = do
           abElectionVerifyKey <- VRF.publicKey <$> arbitrary
-          abSignatureVerifyKey <- BlockSig.verifyKey <$> BlockSig.genKeyPair
+          abSignatureVerifyKey <- BlockSig.verifyKey <$> genBlockKeyPair
           abAggregationVerifyKey <- genAggregationVerifykey
           abAccount <- genAddress
           abProofSig <- genDlogProof
@@ -132,7 +134,7 @@ genPayload = oneof [genDeployModule,
 
         genUpdateBakerSignKey = do
           ubsId <- genBakerId
-          ubsKey <- BlockSig.verifyKey <$> BlockSig.genKeyPair
+          ubsKey <- BlockSig.verifyKey <$> genBlockKeyPair
           ubsProof <- genDlogProof
           return UpdateBakerSignKey{..}
 
