@@ -9,7 +9,6 @@ import Data.Aeson hiding (encode)
 import Data.Aeson.Types
 import Concordium.Crypto.ByteStringHelpers
 import Prelude hiding (drop)
-import Test.QuickCheck
 import Control.DeepSeq
 import GHC.Generics
 
@@ -80,7 +79,7 @@ instance FromJSON SchemeId where
 
 instance Serialize SchemeId where
     put x = putWord8 (fromIntegral (fromEnum x))
-    get = do e <- getWord8 
+    get = do e <- getWord8
              case toScheme e of
                Just s -> return s
                Nothing -> fail "Unknown signature scheme."
@@ -113,8 +112,8 @@ instance FromJSON KeyPair where
           verifyKey <- obj .: "verifyKey"
           return KeyPairEd25519{..}
 
-instance Enum SchemeId where 
-    toEnum n = case toScheme (fromIntegral n) of 
+instance Enum SchemeId where
+    toEnum n = case toScheme (fromIntegral n) of
                  Just x -> x
                  Nothing -> error "SchemeId.toEnum: bad argument"
     fromEnum Ed25519 = 0
@@ -124,7 +123,7 @@ toScheme n | n == 0 = Just Ed25519
            | otherwise = Nothing
 
 sign :: KeyPair -> ByteString -> Signature
-sign KeyPairEd25519{..} = Signature . Ed25519.sign signKey verifyKey 
+sign KeyPairEd25519{..} = Signature . Ed25519.sign signKey verifyKey
 
 verify :: VerifyKey -> ByteString -> Signature -> Bool
 verify (VerifyKeyEd25519 vfKey) bs (Signature s) = Ed25519.verify vfKey bs s
@@ -133,8 +132,3 @@ newKeyPair :: SchemeId -> IO KeyPair
 newKeyPair Ed25519 = do
   (signKey, verifyKey) <- Ed25519.newKeyPair
   return KeyPairEd25519{..}
-
-
-{-# WARNING genKeyPair "Not crypographically secure, DO NOT USE IN PRODUCTION." #-}
-genKeyPair :: Gen KeyPair
-genKeyPair = uncurry KeyPairEd25519 <$> Ed25519.genKeyPair

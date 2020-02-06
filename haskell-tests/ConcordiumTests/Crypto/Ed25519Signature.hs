@@ -1,8 +1,8 @@
 {-# OPTIONS_GHC -Wno-deprecations #-}
 module ConcordiumTests.Crypto.Ed25519Signature where
 
-import qualified Concordium.Crypto.Ed25519Signature as SigEd25519
 import           Concordium.Crypto.SignatureScheme
+import Concordium.Crypto.DummyData
 import Data.Serialize
 import qualified Data.ByteString as BS
 import Data.Word
@@ -10,7 +10,7 @@ import Test.QuickCheck
 import Test.Hspec
 
 forallKP :: Testable prop => (KeyPair -> prop) -> Property
-forallKP = forAll (uncurry KeyPairEd25519 <$> SigEd25519.genKeyPair)
+forallKP = forAll (uncurry KeyPairEd25519 <$> genEd25519KeyPair)
 
 testSerializeSignKeyEd25519 :: Property
 testSerializeSignKeyEd25519 = forallKP $ ck
@@ -71,9 +71,9 @@ testSignVerifyEd25519DocumentCollision = forallKP $ ck
 tests :: Spec
 tests = describe "Concordium.Crypto.Ed25519Signature" $ do
             describe "serialization" $ do
-                it "sign key" $ testSerializeSignKeyEd25519 
-                it "verify key" $ testSerializeVerifyKeyEd25519 
-                it "key pair" $ testSerializeKeyPairEd25519 
+                it "sign key" $ testSerializeSignKeyEd25519
+                it "verify key" $ testSerializeVerifyKeyEd25519
+                it "key pair" $ testSerializeKeyPairEd25519
                 it "signature" $ testSerializeSignatureEd25519
             it "verify signature" $ withMaxSuccess 10000 $ testSignVerifyEd25519
             it "verify fails when checking different document" $ withMaxSuccess 10000 $ testSignVerifyEd25519DocumentCollision
