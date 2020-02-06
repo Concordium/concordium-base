@@ -68,7 +68,7 @@ generateBlsSecretKeyFromSeed seed = unsafeDupablePerformIO $ do
   ptr <- generateSecretKeyPtrFromSeed seed
   Bls.SecretKey <$> newForeignPtr freeSecretKey ptr
 
-{-# WARNING randomEd25519KeyPair "Not crypographically secure, DO NOT USE IN PRODUCTION." #-}
+{-# WARNING randomEd25519KeyPair "Not cryptographically secure, DO NOT USE IN PRODUCTION." #-}
 randomEd25519KeyPair :: RandomGen g => g -> ((Ed25519.SignKey, Ed25519.VerifyKey), g)
 randomEd25519KeyPair gen = ((signKey, deriveVerifyKey signKey), gen')
         where
@@ -80,7 +80,7 @@ randomEd25519KeyPair gen = ((signKey, deriveVerifyKey signKey), gen')
                 Right sk -> sk
 
 
-{-# WARNING genEd25519KeyPair "Not crypographically secure, DO NOT USE IN PRODUCTION." #-}
+{-# WARNING genEd25519KeyPair "Not cryptographically secure, DO NOT USE IN PRODUCTION." #-}
 genEd25519KeyPair :: Gen (Ed25519.SignKey, Ed25519.VerifyKey)
 genEd25519KeyPair = do
   privKeyBytes <- BS.pack <$> vector signKeySize
@@ -89,7 +89,7 @@ genEd25519KeyPair = do
                   Right sk -> sk
   return (signKey, deriveVerifyKey signKey)
 
-{-# WARNING genSigSchemeKeyPair "Not crypographically secure, DO NOT USE IN PRODUCTION." #-}
+{-# WARNING genSigSchemeKeyPair "Not cryptographically secure, DO NOT USE IN PRODUCTION." #-}
 genSigSchemeKeyPair :: Gen SigScheme.KeyPair
 genSigSchemeKeyPair = uncurry SigScheme.KeyPairEd25519 <$> genEd25519KeyPair
 
