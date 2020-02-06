@@ -15,5 +15,6 @@ members=[
    "aggregate_sig",
    "crypto_common",
    "crypto_common_derive",
-   "random_oracle"
+   "random_oracle",
+   "wallet_api"
 ]

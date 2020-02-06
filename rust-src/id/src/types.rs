@@ -464,7 +464,7 @@ pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     #[string_size_length = 4]
     #[serde(rename = "ipDescription")]
     pub ip_description: String,
-    /// PS publice signature key of the IP
+    /// PS public key of the IP
     #[serde(rename = "ipVerifyKey")]
     pub ip_verify_key: pssig::PublicKey<P>,
     #[serde(rename = "ipAnonymityRevokers")]
