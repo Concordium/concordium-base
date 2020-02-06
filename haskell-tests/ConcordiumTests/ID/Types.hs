@@ -24,8 +24,8 @@ testFromBytes :: Property
 testFromBytes = forAll genAddress ck
   where ck :: AccountAddress -> Property
         ck addr = case addressFromBytes (BS8.pack (show addr)) of
-                   Nothing -> counterexample ("Problem = " ++ show addr) False
-                   Just x -> x === addr
+                   Left _ -> counterexample ("Problem = " ++ show addr) False
+                   Right x -> x === addr
 
 genAddress :: Gen AccountAddress
 genAddress = do

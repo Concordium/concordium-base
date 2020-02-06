@@ -20,7 +20,7 @@ import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
 import Control.Monad
 import Control.Monad.Fail hiding(fail)
-import qualified Control.Monad.Fail as MF
+import Control.Monad.Except
 import qualified Data.Text as Text
 import Control.DeepSeq
 import Data.Scientific
@@ -32,7 +32,6 @@ import qualified Data.FixedByteString as FBS
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Crypto.FFIDataTypes
 import qualified Concordium.Crypto.SHA256 as SHA256
-
 
 accountAddressSize :: Int
 accountAddressSize = 32
@@ -65,12 +64,16 @@ instance Show AccountAddress where
 
 -- |FIXME: Probably make sure the input size is not too big before doing base58check.
 instance FromJSON AccountAddress where
-  parseJSON v = addressFromText =<< parseJSON v
+  parseJSON v = do
+    r <- addressFromText <$> parseJSON v
+    case r of
+      Left err -> fail err
+      Right a -> return a
 
 instance ToJSON AccountAddress where
   toJSON a = String (Text.decodeUtf8 (addressToBytes a))
 
-addressFromText :: MonadFail m => Text.Text -> m AccountAddress
+addressFromText :: MonadError String m => Text.Text -> m AccountAddress
 addressFromText = addressFromBytes . Text.encodeUtf8
 
 -- |Convert an address to valid Base58 bytes.
@@ -82,15 +85,15 @@ addressToBytes (AccountAddress v) = raw (base58CheckEncode (BS.cons 1 bs))
 
 -- |Take bytes which are presumed valid base58 encoding, and try to deserialize
 -- an address.
-addressFromBytes :: MonadFail m => BS.ByteString -> m AccountAddress
+addressFromBytes :: MonadError String m => BS.ByteString -> m AccountAddress
 addressFromBytes bs =
       case base58CheckDecode' bs of
-        Nothing -> MF.fail "Base 58 checksum invalid."
+        Nothing -> throwError "Base 58 checksum invalid."
         Just x | BS.length x == accountAddressSize + 1 ->
                  let version = BS.head x
                  in if version == 1 then return (AccountAddress (FBS.fromByteString (BS.tail x)))
-                    else fail "Unknown base58 check version byte."
-               | otherwise -> MF.fail "Wrong address length."
+                    else throwError "Unknown base58 check version byte."
+               | otherwise -> throwError "Wrong address length."
 
 
 addressFromRegId :: CredentialRegistrationID -> AccountAddress
