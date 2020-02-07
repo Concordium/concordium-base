@@ -170,7 +170,7 @@ mod test {
 
     #[test]
     pub fn test_lagrange() {
-        // For any kxs, the 0'th Lagrange polynomial is 1 at x=0 
+        // For any kxs, the 0'th Lagrange polynomial is 1 at x=0
         let mut kxs = Vec::new();
         kxs.push(ShareNumber::from(1));
         kxs.push(ShareNumber::from(2));
@@ -245,14 +245,26 @@ mod test {
             );
             let sufficient_sample = &sharing_data.shares[0..(threshold as usize)];
             let err_pos = (csprng.next_u32() as usize) % sufficient_sample.len();
-            let sufficient_sample_err: Vec<(ShareNumber, curve_arithmetic::secret_value::Value<G1>)> = sufficient_sample.iter().enumerate().map(|(idx, (no, val))| {
-                if idx == err_pos {
-                    (*no, curve_arithmetic::secret_value::Value::generate(&mut csprng))
-                }
-                else {
-                    (*no, curve_arithmetic::secret_value::Value::from_scalar(val.value))
-                }
-            }).collect();
+            let sufficient_sample_err: Vec<(
+                ShareNumber,
+                curve_arithmetic::secret_value::Value<G1>,
+            )> = sufficient_sample
+                .iter()
+                .enumerate()
+                .map(|(idx, (no, val))| {
+                    if idx == err_pos {
+                        (
+                            *no,
+                            curve_arithmetic::secret_value::Value::generate(&mut csprng),
+                        )
+                    } else {
+                        (
+                            *no,
+                            curve_arithmetic::secret_value::Value::from_scalar(val.value),
+                        )
+                    }
+                })
+                .collect();
 
             let revealed_data: Fr = reveal::<G1>(&sufficient_sample_err);
             assert_ne!(revealed_data, secret);
@@ -262,7 +274,6 @@ mod test {
                 .collect::<Vec<(ShareNumber, G1)>>();
             let revealed_data_point: G1 = reveal_in_group::<G1>(&sufficient_points_err);
             assert_ne!(revealed_data_point, secret_point);
-
 
             // Sample less points than needed and reconstruct with failure
             let sharing_data = share::<G1, ThreadRng>(
