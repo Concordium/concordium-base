@@ -402,6 +402,8 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
                  | NonSequentialNonce !Nonce -- ^The transaction nonce is not
                                              -- next in sequence. The argument
                                              -- is the expected nonce.
+                 | SuccessorOfInvalidTransaction -- ^A transaction from the same account was rejected, so
+                                                 -- we reject the following transactions from the same account 
                  | UnknownAccount !AccountAddress -- ^Transaction is coming from an unknown sender.
                  | DepositInsufficient -- ^The dedicated gas amount was lower than the minimum allowed.
                  | NoValidCredential -- ^No valid credential on the sender account.
