@@ -218,3 +218,35 @@ pub fn commitment_to_share<C: Curve>(
     }
     Commitment(cmm_share_point)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::G1Affine;
+    use pedersen_scheme::{key::CommitmentKey, value::Value};
+
+    #[test]
+    fn test_commit_to_share() {
+        let mut csprng = thread_rng();
+        let ck = CommitmentKey::<G1Affine>::generate(&mut csprng);
+
+        // Make degree-d polynomial
+        let d = 5;
+        let mut coeffs = Vec::new();
+        let mut rands = Vec::new();
+        let mut values = Vec::new();
+        for _i in 0..=d {
+            // Make commitments to coefficients
+            let a = csprng.next_u64();
+            let v = Value::from_scalar(G1Affine::scalar_from_u64(a));
+            let (c, r) = ck.commit(&v, &mut csprng);
+            coeffs.push(c);
+            rands.push(r);
+            values.push(a);
+        }
+
+        // Test commitment on x=0 is equal to zero'th coefficient commitment
+        let p0 = commitment_to_share(ShareNumber::from(0), &coeffs);
+        assert_eq!(coeffs[0], p0);
+    }
+}
