@@ -296,20 +296,20 @@ pub const ATTRIBUTE_NAMES: [&str; 11] = [
     "PassportNumber",
 ];
 
-pub const UNKNOWN_TAG: AttributeStringTag<'static> = AttributeStringTag("UNKNOWN");
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(transparent)]
-pub struct AttributeStringTag<'a>(pub &'a str);
+pub struct AttributeStringTag(String);
 
-impl<'a> fmt::Display for AttributeStringTag<'a> {
+impl<'a> fmt::Display for AttributeStringTag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 // NB: This requires that the length of ATTRIBUTE_NAMES is no more than 256.
-impl<'a> TryFrom<AttributeStringTag<'a>> for AttributeTag {
+// FIXME: This method's complexity is linear in the size of the set of
+// attributes.
+impl<'a> TryFrom<AttributeStringTag> for AttributeTag {
     type Error = failure::Error;
 
     fn try_from(v: AttributeStringTag) -> Result<Self, Self::Error> {
@@ -321,13 +321,13 @@ impl<'a> TryFrom<AttributeStringTag<'a>> for AttributeTag {
     }
 }
 
-impl<'a> std::convert::From<AttributeTag> for AttributeStringTag<'a> {
+impl<'a> std::convert::From<AttributeTag> for AttributeStringTag {
     fn from(v: AttributeTag) -> Self {
         let v_usize: usize = v.into();
         if v_usize < ATTRIBUTE_NAMES.len() {
-            AttributeStringTag(ATTRIBUTE_NAMES[v_usize])
+            AttributeStringTag(ATTRIBUTE_NAMES[v_usize].to_owned())
         } else {
-            UNKNOWN_TAG
+            AttributeStringTag("UNKNOWN".to_owned())
         }
     }
 }
@@ -348,7 +348,11 @@ impl std::str::FromStr for AttributeTag {
     type Err = failure::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        AttributeTag::try_from(AttributeStringTag(s))
+        if let Some(idx) = ATTRIBUTE_NAMES.iter().position(|&x| x == s) {
+            Ok(AttributeTag(idx as u8))
+        } else {
+            Err(format_err!("{} tag unknown.", s))
+        }
     }
 }
 
