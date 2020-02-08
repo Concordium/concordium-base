@@ -20,7 +20,6 @@ import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
 import Data.Aeson.Types(toJSONKeyText)
 import Data.Maybe(fromMaybe)
-import qualified Data.Aeson
 import Control.Monad
 import Control.Monad.Fail hiding(fail)
 import qualified Control.Monad.Fail as MF

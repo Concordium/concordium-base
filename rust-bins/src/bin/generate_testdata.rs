@@ -88,14 +88,12 @@ fn main() {
         },
     };
 
-    let context = make_context_from_ip_info(
-        ip_info.clone(),
-        (
-            ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(), /* use all anonymity
-                                                                           * revokers. */
-            Threshold((ip_info.ip_ars.ars.len() - 1) as _), // all but one threshold
-        ),
-    );
+    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+        // use all anonymity revokers.
+        ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
+        // all but one threshold
+        threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
+    });
     let (pio, randomness) = generate_pio(&context, &aci);
 
     let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);

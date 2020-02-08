@@ -103,15 +103,12 @@ fn main() {
             }
         };
 
-    let context = make_context_from_ip_info(
-        ip_info.clone(),
-        (
-            // use all anonymity revokers.
-            ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
-            // all but one threshold
-            Threshold((ip_info.ip_ars.ars.len() - 1) as _),
-        ),
-    );
+    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+        // use all anonymity revokers.
+        ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
+        // all but one threshold
+        threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
+    });
 
     // we also read the global context from another json file (called
     // global.context). We need commitment keys and other data in there.

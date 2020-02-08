@@ -62,8 +62,8 @@ pub fn verify_credentials<
         return Err(Reason::FailedToVerifyIdCredSecEquality);
     }
 
-    let choice_ar_handles = pre_id_obj.choice_ar_parameters.0.clone();
-    let revocation_threshold = pre_id_obj.choice_ar_parameters.1;
+    let choice_ar_handles = pre_id_obj.choice_ar_parameters.ar_identities.clone();
+    let revocation_threshold = pre_id_obj.choice_ar_parameters.threshold;
 
     let number_of_ars = choice_ar_handles.len();
     let mut choice_ars = Vec::with_capacity(number_of_ars);
@@ -97,7 +97,7 @@ pub fn verify_credentials<
     let message: ps_sig::UnknownMessage<P> = compute_message(
         &pre_id_obj.cmm_prf,
         &pre_id_obj.cmm_sc,
-        pre_id_obj.choice_ar_parameters.1,
+        pre_id_obj.choice_ar_parameters.threshold,
         &choice_ar_handles,
         &pre_id_obj.alist,
         &ip_info.ip_verify_key,

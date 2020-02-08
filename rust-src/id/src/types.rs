@@ -475,6 +475,16 @@ pub struct ChainArData<C: Curve> {
     pub id_cred_pub_share_number: ShareNumber,
 }
 
+/// Choice of anonymity revocation parameters
+#[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
+pub struct ChoiceArParameters {
+    #[serde(rename = "arIdentities")]
+    #[size_length = 4]
+    pub ar_identities: Vec<ArIdentity>,
+    #[serde(rename = "threshold")]
+    pub threshold: Threshold,
+}
+
 /// Information sent from the account holder to the identity provider.
 #[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
@@ -509,7 +519,7 @@ pub struct PreIdentityObject<
     /// must be less than or equal the length of the vector.
     /// NB:IP needs to check this
     #[serde(rename = "choiceArData")]
-    pub choice_ar_parameters: (Vec<ArIdentity>, Threshold),
+    pub choice_ar_parameters: ChoiceArParameters,
     /// Chosen attribute list.
     #[serde(rename = "attributeList")]
     pub alist: AttributeList<C::Scalar, AttributeType>,
@@ -1111,11 +1121,11 @@ pub struct GlobalContext<C: Curve> {
 /// of parameters, e.g., dlog-proof base point.
 pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     ip_info: IpInfo<P, C>,
-    choice_ar_handles: (Vec<ArIdentity>, Threshold),
+    choice_ar_handles: ChoiceArParameters,
 ) -> Context<P, C> {
-    let mut choice_ars = Vec::with_capacity(choice_ar_handles.0.len());
+    let mut choice_ars = Vec::with_capacity(choice_ar_handles.ar_identities.len());
     let ip_ar_parameters = &ip_info.ip_ars.ars.clone();
-    for ar in choice_ar_handles.0.into_iter() {
+    for ar in choice_ar_handles.ar_identities.into_iter() {
         match ip_ar_parameters.iter().find(|&x| x.ar_identity == ar) {
             None => panic!("AR handle not in the IP list"),
             Some(ip_ars) => choice_ars.push(ip_ars.clone()),
@@ -1124,7 +1134,7 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     Context {
         ip_info,
-        choice_ar_parameters: (choice_ars, choice_ar_handles.1),
+        choice_ar_parameters: (choice_ars, choice_ar_handles.threshold),
     }
 }
 
