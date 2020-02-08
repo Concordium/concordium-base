@@ -641,7 +641,7 @@ pub struct CredDeploymentCommitments<C: Curve> {
 
 // FIXME: The sig should be part of the values so that it is part of the
 // challenge computation.
-#[derive(Debug, PartialEq, Eq, SerdeBase16Serialize)]
+#[derive(Debug, PartialEq, Eq, SerdeBase16IgnoreLengthSerialize)]
 pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// (Blinded) Signature derived from the signature on the pre-identity
     /// object by the IP

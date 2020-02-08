@@ -42,6 +42,40 @@ pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
     gen.into()
 }
 
+#[proc_macro_derive(SerdeBase16IgnoreLengthSerialize)]
+pub fn serde_base16_ignore_length_serialize_derive(input: TokenStream) -> TokenStream {
+    let mut ast: syn::DeriveInput = syn::parse(input).expect("Cannot parse input.");
+    let name = &ast.ident;
+    let span = ast.span();
+    let ast_cloned = ast.clone();
+    let (_, ty_generics, where_clauses) = ast_cloned.generics.split_for_impl();
+
+    let lifetime = syn::LifetimeDef::new(syn::Lifetime::new("'de", span));
+    ast.generics
+        .params
+        .push(syn::GenericParam::Lifetime(lifetime.clone()));
+    let (impl_generics, _, _) = ast.generics.split_for_impl();
+
+    let ident = format_ident!("GenericSerializerType", span = span);
+    let ident_serializer = format_ident!("serializer", span = span);
+    let ident_deserializer = format_ident!("deserializer", span = span);
+    let gen = quote! {
+        use serde;
+        impl #impl_generics SerdeSerialize for #name #ty_generics #where_clauses {
+            fn serialize<#ident: serde::Serializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
+                base16_ignore_length_encode(self, #ident_serializer)
+            }
+        }
+
+        impl #impl_generics SerdeDeserialize<#lifetime> for #name #ty_generics #where_clauses {
+            fn deserialize<#ident: serde::Deserializer<#lifetime>>(#ident_deserializer: #ident) -> Result<Self, #ident::Error> {
+                base16_ignore_length_decode::<#lifetime, #ident, #name #ty_generics>(#ident_deserializer)
+            }
+        }
+    };
+    gen.into()
+}
+
 #[proc_macro_derive(Deserial, attributes(size_length, map_size_length, string_size_length))]
 pub fn deserial_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
