@@ -541,7 +541,7 @@ fn compute_pok_sig<
     csprng: &mut R,
 ) -> Fallible<com_eq_sig::ComEqSigProof<P, C>> {
     let att_vec = &alist.alist;
-    // number of user chosen attributes (+2 is for variant and expiry)
+    // number of user chosen attributes (+2 is for tags and expiry)
     let num_user_attributes = att_vec.len() + 2;
     // To these there are always two attributes (idCredSec and prf key) added.
     let num_total_attributes = num_user_attributes + 2;
@@ -589,35 +589,36 @@ fn compute_pok_sig<
 
     let att_rands = &commitment_rands.attributes_rand;
 
-    let variant_val = Value::new(C::scalar_from_u64(u64::from(alist.variant)));
-    let variant_cmm = commitment_key.hide(&variant_val, &zero);
+    let tags_val = Value::new(encode_tags(alist.alist.keys())?);
+    let tags_cmm = commitment_key.hide(&tags_val, &zero);
 
     let expiry_val = Value::new(C::scalar_from_u64(alist.expiry));
     let expiry_cmm = commitment_key.hide(&expiry_val, &zero);
 
-    secrets.push((variant_val, &zero));
+    secrets.push((tags_val, &zero));
     gxs.push(y_tildas[num_ars + 3]);
     secrets.push((expiry_val, &zero));
     gxs.push(y_tildas[num_ars + 4]);
 
     // FIXME: Likely we need to make sure there are enough y_tildas first and fail
     // gracefully otherwise.
-    for (idx, &g) in y_tildas.iter().enumerate().take(att_vec.len()) {
-        match get_attribute_at(idx, att_vec) {
-            None => bail!("Attribute at index {} not available.", idx),
-            Some((idx, v)) => {
-                secrets.push((
-                    Value {
-                        value: v.to_field_element(),
-                    },
-                    // if we commited with non-zero randomness get it.
-                    // otherwise we must have commited with zero randomness
-                    // which we should use
-                    &att_rands.get(&idx).unwrap_or(&zero),
-                ));
-                gxs.push(g);
-            }
-        }
+    // NB: It is crucial here that we use a btreemap. This guarantees that
+    // the att_vec.iter() iterator is ordered by keys.
+    ensure!(
+        y_tildas.len() > att_vec.len() + num_ars + 4,
+        "The PS key must be long enough to accommodate all the attributes"
+    );
+    for (&g, (tag, v)) in y_tildas.iter().skip(num_ars + 4 + 1).zip(att_vec.iter()) {
+        secrets.push((
+            Value {
+                value: v.to_field_element(),
+            },
+            // if we commited with non-zero randomness get it.
+            // otherwise we must have commited with zero randomness
+            // which we should use
+            &att_rands.get(tag).unwrap_or(&zero),
+        ));
+        gxs.push(g);
     }
 
     let mut comm_vec = Vec::with_capacity(num_total_commitments);
@@ -633,7 +634,7 @@ fn compute_pok_sig<
         comm_vec.push(commitment_key.hide(&Value::new(ar.to_scalar::<C>()), &zero));
     }
 
-    comm_vec.push(variant_cmm);
+    comm_vec.push(tags_cmm);
     comm_vec.push(expiry_cmm);
 
     for (idx, v) in alist.alist.iter() {
@@ -668,7 +669,7 @@ pub struct CommitmentsRandomness<'a, C: Curve> {
     id_cred_sec_rand:  &'a PedersenRandomness<C>,
     prf_rand:          PedersenRandomness<C>,
     cred_counter_rand: PedersenRandomness<C>,
-    attributes_rand:   HashMap<AttributeIndex, PedersenRandomness<C>>,
+    attributes_rand:   HashMap<AttributeTag, PedersenRandomness<C>>,
 }
 
 /// Computing the commitments for the credential deployment info. We only

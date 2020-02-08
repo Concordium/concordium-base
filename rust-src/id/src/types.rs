@@ -6,7 +6,7 @@ use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
 use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
 use elgamal::{cipher::Cipher, secret::SecretKey as ElgamalSecretKey};
-use ff::Field;
+use ff::{Field, PrimeField};
 use hex::{decode, encode};
 use pedersen_scheme::{
     commitment as pedersen, key::CommitmentKey as PedersenKey, Randomness as PedersenRandomness,
@@ -29,9 +29,12 @@ use byteorder::{BigEndian, ReadBytesExt};
 use either::Either;
 use std::{
     cmp::Ordering,
+    convert::TryFrom,
     fmt,
     io::{Cursor, Read},
 };
+
+use failure;
 
 use sha2::{Digest, Sha256};
 
@@ -212,24 +215,155 @@ impl fmt::Display for ArIdentity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
+#[repr(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(try_from = "AttributeStringTag", into = "AttributeStringTag")]
+pub struct AttributeTag(pub u8);
+
+/// Encode attribute tags into a big-integer bits. The tags are encoded from
+/// least significant bit up, i.e., LSB of the result is set IFF tag0 is in the
+/// list. This function will fail if
+/// - there are repeated attributes in the list
+/// - there are tags in the list which do not fit into the field capacity
+pub fn encode_tags<'a, F: PrimeField, I: std::iter::IntoIterator<Item = &'a AttributeTag>>(
+    i: I,
+) -> Fallible<F> {
+    // Since F is supposed to be a field, its capacity must be at least 1, hence the
+    // next line is safe. Maximum tag that can be stored.
+    let max_tag = F::CAPACITY - 1;
+    let mut f = F::zero().into_repr();
+    let limbs = f.as_mut(); // this is an array of 64 bit limbs, with least significant digit first
+    for &AttributeTag(tag) in i.into_iter() {
+        let idx = tag / 64;
+        let place = tag % 64;
+        if u32::from(tag) > max_tag || usize::from(idx) > limbs.len() {
+            bail!("Tag out of range: {}", tag)
+        }
+        let mask: u64 = 1 << place;
+        if limbs[usize::from(idx)] & mask != 0 {
+            bail!("Duplicate tag {}", tag)
+        } else {
+            limbs[usize::from(idx)] |= mask;
+        }
+    }
+    // This should not fail (since we check capacity), but in case it does we just
+    // propagate the error.
+    Ok(F::from_repr(f)?)
+}
+
+/// Given two ordered iterators call the corresponding functions in the
+/// increasing order of keys. That is, essentially merge the two iterators into
+/// an ordered iterator and then map, but this is all done inline.
+pub fn merge_iter<'a, K: Ord + 'a, V1: 'a, V2: 'a, I1, I2, F>(i1: I1, i2: I2, mut f: F)
+where
+    I1: std::iter::IntoIterator<Item = (&'a K, &'a V1)>,
+    I2: std::iter::IntoIterator<Item = (&'a K, &'a V2)>,
+    F: FnMut(Either<&'a V1, &'a V2>), {
+    let mut iter_1 = i1.into_iter().peekable();
+    let mut iter_2 = i2.into_iter().peekable();
+    while let (Some(&(tag_1, v_1)), Some(&(tag_2, v_2))) = (iter_1.peek(), iter_2.peek()) {
+        if tag_1 < tag_2 {
+            f(Either::Left(v_1));
+            // advance the first iterator
+            let _ = iter_1.next().is_none();
+        } else {
+            f(Either::Right(v_2));
+            // advance the second iterator
+            let _ = iter_2.next();
+        }
+    }
+    for (_, v) in iter_1 {
+        f(Either::Left(v))
+    }
+    for (_, v) in iter_2 {
+        f(Either::Right(v))
+    }
+}
+
+/// NB: The length of this list must be less than 256.
+pub const ATTRIBUTE_NAMES: [&str; 11] = [
+    "MaxAccount",
+    "CreationTime",
+    "ExpiryTime",
+    "PreName",
+    "LastName",
+    "Sex",
+    "DateOfBirth",
+    "CountryOfResidence",
+    "CountryOfNationality",
+    "MaritalStatus",
+    "PassportNumber",
+];
+
+pub const UNKNOWN_TAG: AttributeStringTag<'static> = AttributeStringTag("UNKNOWN");
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(transparent)]
+pub struct AttributeStringTag<'a>(pub &'a str);
+
+impl<'a> fmt::Display for AttributeStringTag<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+}
+
+// NB: This requires that the length of ATTRIBUTE_NAMES is no more than 256.
+impl<'a> TryFrom<AttributeStringTag<'a>> for AttributeTag {
+    type Error = failure::Error;
+
+    fn try_from(v: AttributeStringTag) -> Result<Self, Self::Error> {
+        if let Some(idx) = ATTRIBUTE_NAMES.iter().position(|&x| x == v.0) {
+            Ok(AttributeTag(idx as u8))
+        } else {
+            Err(format_err!("{} tag unknown.", v.0))
+        }
+    }
+}
+
+impl<'a> std::convert::From<AttributeTag> for AttributeStringTag<'a> {
+    fn from(v: AttributeTag) -> Self {
+        let v_usize: usize = v.into();
+        if v_usize < ATTRIBUTE_NAMES.len() {
+            AttributeStringTag(ATTRIBUTE_NAMES[v_usize])
+        } else {
+            UNKNOWN_TAG
+        }
+    }
+}
+
+impl fmt::Display for AttributeTag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        assert!(self.0 > 0);
+        let l: usize = (*self).into();
+        if l > 0 && l <= ATTRIBUTE_NAMES.len() {
+            write!(f, "{}", ATTRIBUTE_NAMES[l - 1])
+        } else {
+            Err(fmt::Error)
+        }
+    }
+}
+
+impl std::str::FromStr for AttributeTag {
+    type Err = failure::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        AttributeTag::try_from(AttributeStringTag(s))
+    }
+}
+
+impl Into<usize> for AttributeTag {
+    fn into(self) -> usize { self.0.into() }
+}
+
+impl From<u8> for AttributeTag {
+    fn from(x: u8) -> Self { AttributeTag(x) }
+}
+
 pub trait Attribute<F: Field>:
     Copy + Clone + Sized + Send + Sync + fmt::Display + Serialize {
     // convert an attribute to a field element
     fn to_field_element(&self) -> F;
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
-#[repr(transparent)]
-#[serde(transparent)]
-#[derive(SerdeSerialize, SerdeDeserialize)]
-pub struct AttributeIndex(pub u16);
-
-impl Into<usize> for AttributeIndex {
-    fn into(self) -> usize { self.0.into() }
-}
-
-impl From<u16> for AttributeIndex {
-    fn from(x: u16) -> Self { AttributeIndex(x) }
 }
 
 #[derive(Clone, Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
@@ -238,16 +372,13 @@ impl From<u16> for AttributeIndex {
     deserialize = "F: Field, AttributeType: Attribute<F> + SerdeDeserialize<'de>"
 ))]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
-    #[serde(rename = "variant")]
-    pub variant: u16,
     #[serde(rename = "expiryDate")]
     pub expiry: u64,
-    /// The attributes. The indices should be sequential
-    /// From 0..length of the attribute list when the identity provider decides
-    /// to sign the list.
-    #[serde(rename = "alist")]
+    /// The attributes map. The map size can be at most k where k is the number
+    /// of bits that fit into a field element.
+    #[serde(rename = "chosenAttributes")]
     #[map_size_length = 2]
-    pub alist: BTreeMap<AttributeIndex, AttributeType>,
+    pub alist: BTreeMap<AttributeTag, AttributeType>,
     #[serde(skip)]
     pub _phantom: std::marker::PhantomData<F>,
 }
@@ -438,8 +569,7 @@ pub struct IdentityObject<
 pub struct IpAnonymityRevokers<C: Curve> {
     #[serde(rename = "anonymityRevokers")]
     pub ars: Vec<ArInfo<C>>,
-    /// list of approved anonymity revokers along with
-    /// a shared commitment key
+    /// List of approved anonymity revokers along with a shared commitment key.
     /// TODO: How is this shared commitment key generated??
     #[serde(rename = "arCommitmentKey")]
     pub ar_cmm_key: PedersenKey<C>,
@@ -501,7 +631,7 @@ pub struct CredDeploymentCommitments<C: Curve> {
     /// that are revealed as part of the policy are going to be computed by the
     /// verifier.
     #[map_size_length = 2]
-    pub cmm_attributes: BTreeMap<AttributeIndex, pedersen::Commitment<C>>,
+    pub cmm_attributes: BTreeMap<AttributeTag, pedersen::Commitment<C>>,
     /// commitments to the coefficients of the polynomial
     /// used to share id_cred_sec
     /// S + b1 X + b2 X^2...
@@ -592,36 +722,19 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    #[serde(rename = "variant")]
-    pub variant: u16,
     /// Expiry time, in seconds since the unix epoch, ignoring leap seconds.
     #[serde(rename = "expiry")]
     pub expiry: u64,
-    /// Revealed attributes, index in the attribute list together with the
-    /// value. The proof part of the credential contains the proof that
-    /// the revealed value is the same as that commited to and signed by the
-    /// identity provider.
-    /// INVARIANT: The indices must all have to be less than size
-    /// of the attribute list this policy applies to.
-    #[serde(rename = "revealedItems")]
-    pub policy_vec: BTreeMap<AttributeIndex, AttributeType>,
+    /// Revealed attributes for now. In the future we might have
+    /// additional items with (Tag, Property, Proof).
+    #[serde(rename = "revealedAttributes")]
+    pub policy_vec: BTreeMap<AttributeTag, AttributeType>,
     #[serde(skip)]
     pub _phantom: std::marker::PhantomData<C>,
 }
 
-pub fn get_attribute_at<T>(
-    idx: usize,
-    map: &BTreeMap<AttributeIndex, T>,
-) -> Option<(AttributeIndex, &T)> {
-    use std::convert::TryFrom;
-    let idx = AttributeIndex(u16::try_from(idx).ok()?);
-    let res = map.get(&idx)?;
-    Some((idx, res))
-}
-
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, AttributeType> {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        out.put(&self.variant);
         out.put(&self.expiry);
         out.put(&(self.policy_vec.len() as u16));
         serial_map_no_length(&self.policy_vec, out)
@@ -630,12 +743,10 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, Attribu
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, AttributeType> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
-        let variant = source.get()?;
         let expiry = source.get()?;
         let len: u16 = source.get()?;
         let policy_vec = deserial_map_no_length(source, usize::from(len))?;
         Ok(Policy {
-            variant,
             expiry,
             policy_vec,
             _phantom: Default::default(),

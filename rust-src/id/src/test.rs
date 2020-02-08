@@ -89,19 +89,17 @@ fn test_pipeline() {
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
-    let variant = 0;
     let expiry_date = 123123123;
     let alist = {
         let mut alist = BTreeMap::new();
-        alist.insert(AttributeIndex::from(0u16), AttributeKind::from(55));
-        alist.insert(AttributeIndex::from(1u16), AttributeKind::from(31));
+        alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
+        alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
         alist
     };
     let aci = AccCredentialInfo {
         cred_holder_info: ah_info,
         prf_key,
         attributes: ExampleAttributeList {
-            variant,
             expiry: expiry_date,
             alist,
             _phantom: Default::default(),
@@ -129,14 +127,13 @@ fn test_pipeline() {
     };
 
     let policy = Policy {
-        variant,
-        expiry: expiry_date,
+        expiry:     expiry_date,
         policy_vec: {
             let mut tree = BTreeMap::new();
-            tree.insert(AttributeIndex::from(1u16), AttributeKind::from(31));
+            tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
             tree
         },
-        _phantom: Default::default(),
+        _phantom:   Default::default(),
     };
 
     let mut keys = BTreeMap::new();

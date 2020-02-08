@@ -395,12 +395,11 @@ mod test {
 
         let prf_key = prf::SecretKey::generate(&mut csprng);
 
-        let variant = 0;
         let expiry_date = 123123123;
         let alist = {
             let mut alist = BTreeMap::new();
-            alist.insert(AttributeIndex::from(0u16), AttributeKind::from(55));
-            alist.insert(AttributeIndex::from(1u16), AttributeKind::from(313123333));
+            alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
+            alist.insert(AttributeTag::from(1u8), AttributeKind::from(313123333));
             alist
         };
 
@@ -408,7 +407,6 @@ mod test {
             cred_holder_info: ah_info,
             prf_key,
             attributes: ExampleAttributeList {
-                variant,
                 expiry: expiry_date,
                 alist,
                 _phantom: Default::default(),
@@ -435,25 +433,23 @@ mod test {
         };
 
         let policy = Policy {
-            variant,
-            expiry: expiry_date,
+            expiry:     expiry_date,
             policy_vec: {
                 let mut tree = BTreeMap::new();
-                tree.insert(AttributeIndex::from(0u16), AttributeKind::from(55));
+                tree.insert(AttributeTag::from(0u8), AttributeKind::from(55));
                 tree
             },
-            _phantom: Default::default(),
+            _phantom:   Default::default(),
         };
 
         let wrong_policy = Policy {
-            variant,
-            expiry: expiry_date,
+            expiry:     expiry_date,
             policy_vec: {
                 let mut tree = BTreeMap::new();
-                tree.insert(AttributeIndex::from(0u16), AttributeKind::from(5));
+                tree.insert(AttributeTag::from(0u8), AttributeKind::from(5));
                 tree
             },
-            _phantom: Default::default(),
+            _phantom:   Default::default(),
         };
 
         let mut keys = BTreeMap::new();

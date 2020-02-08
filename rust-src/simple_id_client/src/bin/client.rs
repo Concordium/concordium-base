@@ -12,7 +12,7 @@ use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{message::Message, public::PublicKey, secret::SecretKey};
 use hex::encode;
-use id::{account_holder::*, ffi::*, identity_provider::*, types::*};
+use id::{account_holder::*, identity_provider::*, types::*};
 use pairing::bls12_381::Bls12;
 use ps_sig;
 
@@ -24,9 +24,8 @@ use std::{
     cmp::max,
     convert::TryFrom,
     fs::File,
-    io::{self, Error, ErrorKind, Write},
+    io::{self, Write},
     path::Path,
-    str::FromStr,
 };
 
 use either::Either::Left;
@@ -79,22 +78,6 @@ fn mk_ar_name(n: usize) -> String {
 fn read_expiry_date() -> io::Result<u64> {
     let input: String = Input::new().with_prompt("Expiry date").interact()?;
     parse_expiry_date(&input)
-}
-
-/// Given the chosen variant of the attribute list read off the fields from user
-/// input. Fails if the user input is not well-formed.
-fn read_attribute_list(variant: u16) -> io::Result<BTreeMap<AttributeIndex, ExampleAttribute>> {
-    let mut res = BTreeMap::new();
-    for (idx, key) in ATTRIBUTE_LISTS[variant as usize].iter().enumerate() {
-        let input: String = Input::new().with_prompt(key).interact()?;
-        // NB: The index of an attribute must be the same as the one returned in
-        // attribute_index. Otherwise there will be strange issues, very likely.
-        res.insert(
-            AttributeIndex::from(idx as u16),
-            AttributeKind::from_str(&input).map_err(|e| Error::new(ErrorKind::InvalidData, e))?,
-        );
-    }
-    Ok(res)
 }
 
 fn main() {
@@ -379,14 +362,13 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     };
 
     // now we have all the data ready.
-    // we first ask the user to select which credentials they wish to reveal
+    // we first ask the user to select which attributes they wish to reveal
     let alist = &pio.alist.alist;
-    let mut alist_str: Vec<String> = Vec::with_capacity(alist.len());
-    for (&idx, a) in alist.iter() {
-        alist_str.push(show_attribute(pio.alist.variant, idx, a));
-    }
-    // the interface of checkboxes is less than ideal.
-    let alist_items: Vec<&str> = alist_str.iter().map(String::as_str).collect();
+
+    let alist_items = alist
+        .keys()
+        .map(|&x| AttributeStringTag::from(x))
+        .collect::<Vec<_>>();
     let atts: Vec<usize> = match Checkboxes::new()
         .with_prompt("Select which attributes you wish to reveal")
         .items(&alist_items)
@@ -400,11 +382,11 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     };
 
     // from the above and the pre-identity object we make a policy
-    let mut revealed_attributes: BTreeMap<AttributeIndex, ExampleAttribute> = BTreeMap::new();
+    let mut revealed_attributes: BTreeMap<AttributeTag, ExampleAttribute> = BTreeMap::new();
     for idx in atts {
-        let elem = get_attribute_at(idx, &alist);
-        match elem {
-            Some((idx, elem)) => {
+        let idx = AttributeTag(idx as u8);
+        match alist.get(&idx) {
+            Some(elem) => {
                 if revealed_attributes.insert(idx, *elem).is_some() {
                     eprintln!("Duplicate attribute idx.");
                     return;
@@ -417,7 +399,6 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         }
     }
     let policy = Policy {
-        variant:    pio.alist.variant,
         expiry:     pio.alist.expiry,
         policy_vec: revealed_attributes,
         _phantom:   Default::default(),
@@ -649,20 +630,15 @@ fn handle_start_ip(matches: &ArgMatches) {
     };
     let mut csprng = thread_rng();
     let prf_key = prf::SecretKey::generate(&mut csprng);
-    let alists: Vec<String> = ATTRIBUTE_LISTS
-        .iter()
-        .map(|alist| alist.join(", "))
-        .collect();
-    let alist_type = {
-        match Select::new()
-            .with_prompt("Select attribute list type:")
-            .items(&alists)
-            .default(0)
+    let tags = {
+        match Checkboxes::new()
+            .with_prompt("Select attributes:")
+            .items(&ATTRIBUTE_NAMES)
             .interact()
         {
-            Ok(alist_type) => alist_type,
+            Ok(idxs) => idxs,
             Err(x) => {
-                eprintln!("You have to choose an attribute list. Terminating. {}", x);
+                eprintln!("You have to choose some attributes. Terminating. {}", x);
                 return;
             }
         }
@@ -675,20 +651,25 @@ fn handle_start_ip(matches: &ArgMatches) {
         }
     };
     let alist = {
-        match read_attribute_list(alist_type as u16) {
-            Ok(alist) => alist,
-            Err(x) => {
-                eprintln!("Could not read the attribute list because of: {}", x);
-                return;
+        let mut alist = BTreeMap::new();
+        for idx in tags {
+            match Input::new().with_prompt(ATTRIBUTE_NAMES[idx]).interact() {
+                Err(e) => {
+                    eprintln!("You need to provide integer input: {}", e);
+                    return;
+                }
+                Ok(s) => {
+                    let _ = alist.insert(AttributeTag(idx as u8), s);
+                }
             }
         }
+        alist
     };
     // the chosen account credential information
     let aci = AccCredentialInfo {
         cred_holder_info: chi,
         prf_key,
         attributes: AttributeList::<<Bls12 as Pairing>::ScalarField, ExampleAttribute> {
-            variant: alist_type as u16,
             expiry: expiry_date,
             alist,
             _phantom: Default::default(),
