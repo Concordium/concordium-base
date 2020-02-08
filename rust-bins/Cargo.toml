@@ -1,13 +1,12 @@
 [package]
-name = "wallet_api"
+name = "simple_id_client"
 version = "0.1.0"
-authors = ["Concordium AG <info@concordium.com>"]
+authors = ["Concordium"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 clap = "2.33"
+dialoguer = "0.5"
 pairing = "0.15"
 ff = "0.5"
 rand = "=0.7"
@@ -20,45 +19,53 @@ ed25519-dalek = "=1.0.0-pre.3"
 byteorder = "1.3"
 either = "1.5"
 rouille = "3.0"
-libc = "0.2"
+
 
 [dependencies.crypto_common]
-path = "../crypto_common"
+path = "../rust-src/crypto_common"
 version = "0"
 
 [dependencies.curve_arithmetic]
-path = "../curve_arithmetic"
+path = "../rust-src/curve_arithmetic"
 version = "0"
 
 [dependencies.elgamal]
-path = "../elgamal"
+path = "../rust-src/elgamal"
 version = "0"
 
 [dependencies.dodis_yampolskiy_prf]
-path = "../dodis_yampolskiy_prf"
+path = "../rust-src/dodis_yampolskiy_prf"
 version = "0"
 
 [dependencies.id]
-path = "../id"
+path = "../rust-src/id"
 version = "0"
 
 [dependencies.pedersen_scheme]
-path = "../pedersen_scheme"
+path = "../rust-src/pedersen_scheme"
 version = "0"
 
 [dependencies.ps_sig]
-path = "../ps_sig"
+path = "../rust-src/ps_sig"
 version = "0"
 
 [dependencies.eddsa_ed25519]
-path = "../eddsa_ed25519"
+path = "../rust-src/eddsa_ed25519"
 version = "0"
 
-[dependencies.ffi_helpers]
-path = "../ffi_helpers"
+[dependencies.ec_vrf_ed25519_sha256]
+path = "../rust-src/ec_vrf_ed25519_sha256"
+version = "0"
+
+[dependencies.wallet]
+path = "../rust-src/wallet"
+version = "0"
+
+# To generate keys for bakers only
+[dependencies.aggregate_sig]
+path = "../rust-src/aggregate_sig"
 version = "0"
 
 [lib]
-name = "wallet"
-crate-type = ["rlib", "cdylib", "staticlib"]
+name = "client_server_helpers"
 path = "src/lib.rs"
