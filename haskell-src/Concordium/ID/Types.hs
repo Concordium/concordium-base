@@ -18,6 +18,9 @@ import Data.Hashable
 import qualified Data.Text.Read as Text
 import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
+import Data.Aeson.Types(toJSONKeyText)
+import Data.Maybe(fromMaybe)
+import qualified Data.Aeson
 import Control.Monad
 import Control.Monad.Fail hiding(fail)
 import qualified Control.Monad.Fail as MF
@@ -275,23 +278,64 @@ instance FromJSON AttributeValue where
 -- |Expiry time of a credential.
 type CredentialExpiryTime = Word64
 
+newtype AttributeTag = AttributeTag Word8
+ deriving (Eq, Show, Serialize, Ord, Enum, Num) via Word8
+
+-- *NB: This mapping must be kept consistent with the mapping in id/types.rs.
+attributeNames :: [Text.Text]
+attributeNames = ["MaxAccount",
+                   "CreationTime",
+                   "ExpiryTime",
+                   "PreName",
+                   "LastName",
+                   "Sex",
+                   "DateOfBirth",
+                   "CountryOfResidence",
+                   "CountryOfNationality",
+                   "MaritalStatus",
+                   "PassportNumber"
+                   ]
+
+mapping :: Map.Map Text.Text AttributeTag
+mapping = Map.fromList $ zip attributeNames [0..] 
+
+invMapping :: Map.Map AttributeTag Text.Text
+invMapping = Map.fromList $ zip [0..] attributeNames
+
+instance FromJSONKey AttributeTag where
+  -- parse values with this key as objects (the default instance uses
+  -- association list encoding
+  fromJSONKey = FromJSONKeyTextParser (parseJSON . String)
+
+instance ToJSONKey AttributeTag where
+  toJSONKey = toJSONKeyText $ (\tag -> fromMaybe "UNKNOWN" $ Map.lookup tag invMapping)
+
+instance FromJSON AttributeTag where
+  parseJSON = withText "Attribute name" $ \text ->do
+        case Map.lookup text mapping of
+          Just x -> return x
+          Nothing -> fail $ "Attribute " ++ Text.unpack text ++ " does not exist."
+
+instance ToJSON AttributeTag where
+  toJSON tag = maybe "UNKNOWN" toJSON $ Map.lookup tag invMapping
+
 data Policy = Policy {
   -- |Expiry date of this credential. In seconds since unix epoch.
   pExpiry :: CredentialExpiryTime,
   -- |List of items in this attribute list.
-  pItems :: Map.Map Word16 AttributeValue
+  pItems :: Map.Map AttributeTag AttributeValue
   } deriving(Eq, Show)
 
 instance ToJSON Policy where
   toJSON Policy{..} = object [
     "expiry" .= pExpiry,
-    "revealedItems" .= pItems
+    "revealedAttributes" .= pItems
     ]
 
 instance FromJSON Policy where
   parseJSON = withObject "Policy" $ \v -> do
     pExpiry <- v .: "expiry"
-    pItems <- v .: "revealedItems"
+    pItems <- v .: "revealedAttributes"
     return Policy{..}
 
 -- |Unique identifier of the anonymity revoker.
@@ -482,7 +526,7 @@ getPolicy :: Get Policy
 getPolicy = do
   pExpiry <- getWord64be
   l <- fromIntegral <$> getWord16be
-  pItems <- safeFromAscList =<< replicateM l (getTwoOf getWord16be get)
+  pItems <- safeFromAscList =<< replicateM l (getTwoOf get get)
   return Policy{..}
 
 putPolicy :: Putter Policy
@@ -490,7 +534,7 @@ putPolicy Policy{..} =
   let l = length pItems
   in putWord64be pExpiry <>
      putWord16be (fromIntegral l) <>
-     mapM_ (putTwoOf putWord16be put) (Map.toAscList pItems)
+     mapM_ (putTwoOf put put) (Map.toAscList pItems)
 
 instance Serialize CredentialDeploymentValues where
   get = do
