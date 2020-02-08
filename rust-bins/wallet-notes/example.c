@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 char* create_id_request_and_private_data(char*, uint8_t* );
+void free_response_string(char*);
 
 int main() {
   char *buffer = 0;
@@ -31,6 +32,7 @@ int main() {
       fprintf(stderr, "Failure.");
       fprintf(stderr, "%s\n", out);
     }
+    free_response_string(out);
   }
   return 0;
 }
