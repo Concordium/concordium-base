@@ -328,13 +328,13 @@ data Policy = Policy {
 
 instance ToJSON Policy where
   toJSON Policy{..} = object [
-    "expiry" .= pExpiry,
+    "expiryDate" .= pExpiry,
     "revealedAttributes" .= pItems
     ]
 
 instance FromJSON Policy where
   parseJSON = withObject "Policy" $ \v -> do
-    pExpiry <- v .: "expiry"
+    pExpiry <- v .: "expiryDate"
     pItems <- v .: "revealedAttributes"
     return Policy{..}
 

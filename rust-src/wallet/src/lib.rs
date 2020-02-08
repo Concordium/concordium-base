@@ -50,8 +50,6 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
         }
     };
 
-    eprintln!("THREE");
-
     // FIXME: IP defined threshold
     let threshold = {
         let l = ip_info.ip_ars.ars.len();

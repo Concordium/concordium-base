@@ -282,10 +282,9 @@ where
 }
 
 /// NB: The length of this list must be less than 256.
-pub const ATTRIBUTE_NAMES: [&str; 11] = [
+pub const ATTRIBUTE_NAMES: [&str; 10] = [
     "MaxAccount",
     "CreationTime",
-    "ExpiryTime",
     "PreName",
     "LastName",
     "Sex",
@@ -727,7 +726,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
 ))]
 pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
     /// Expiry time, in seconds since the unix epoch, ignoring leap seconds.
-    #[serde(rename = "expiry")]
+    #[serde(rename = "expiryDate")]
     pub expiry: u64,
     /// Revealed attributes for now. In the future we might have
     /// additional items with (Tag, Property, Proof).

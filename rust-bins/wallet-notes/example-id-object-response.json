@@ -1,0 +1,60 @@
+{
+    "preIdentityObject": {
+        "accountHolderName": "Ales",
+        "attributeList": {
+            "chosenAttributes": {
+                "CountryOfNationality": "17",
+                "CountryOfResidence": "16",
+                "CreationTime": "11",
+                "DateOfBirth": "15",
+                "LastName": "13",
+                "MaritalStatus": "18",
+                "MaxAccount": "88",
+                "PassportNumber": "19",
+                "PreName": "123232",
+                "Sex": "14"
+            },
+            "expiryDate": 1231241155
+        },
+        "choiceArData": [
+            [
+                0,
+                1,
+                2
+            ],
+            2
+        ],
+        "idCredPub": "8ff739cf494f84070bb99e2ad052ca2eb6dad76f51a160a0d4889a1df6fcff8b89f1adcf6be07d9d2336b33226337440",
+        "idCredSecCommitment": "9593880a4f3f511dbb862cf9927eaf45fdd781bfb79f7f4b3287eaa6f9cd40604e88bbecca758ae7bc93a243ba32fbd2",
+        "ipArData": [
+            {
+                "arIdentity": 0,
+                "encPrfKeyShare": "8fed88663228de658029d769230a481ad4379101783072c2d688dd5d15bec4bf240d797b5b3ac6cc47bc8e8f885e60c4a8cb3161e4eaae0a6bb9cf0c0ae849c262b63779b761ef8103eef2a757cf7c10f0f04de01b94dcf07d78e11ae60de66d",
+                "prfKeyShareNumber": 1,
+                "proofComEncEq": "295404a3ff3d270102e8d7091b0f61f69472891a47d431efc07dc7d91c48faea613125595f5b903a5c0747cf802dc9aba08daa6e5a1ee1f72fc2e4ae0e69abec320a6b95ce11b117453a7a70f87d7b11fe2f384fe24d52ad7f104671e3ecba7f4324b40e8d56321e312ea0178891c803abacb6a913b364a473c2a45ed1680af4"
+            },
+            {
+                "arIdentity": 1,
+                "encPrfKeyShare": "8dec4c90825c636bd9dd6b0dcdc63412eaf830eb0a736438e233cd3b8b072fa4667e6da2fe7bcdecab40fe9f1f948b34885adb46a82e8f98037d62008b22a60b4b41e1cf4ecca7adbeaddaff3a2a200a6d13946305d92e27fb3eeb896401dad5",
+                "prfKeyShareNumber": 2,
+                "proofComEncEq": "04f27c4a26e19e05262a89fe88632a7a95efcad0c5a9044e0ce9040a5f3795be10acce72f3e187fe855686f17a3f8261ec708b084525419b35928172c086dae00fd4a9fb89ca149aea5501b2bb2130f4fc39353658393f3f09ce33a047c5c99d6c4cc45e26610a0f3ca39263a93c1bba0dd662697dd3c7427ad5efdb28fc0f69"
+            },
+            {
+                "arIdentity": 2,
+                "encPrfKeyShare": "963ab3d2919072399f282f42cba295436add38955fb82318bb7584ac13680f700c0b9d00045b582c6d63551f8ab1614795b0e56a685c539e05bbeedc97738a75eb8ee1b0512764b55960567f4983830675b47c12b8ba7a289f989a6a52135385",
+                "prfKeyShareNumber": 3,
+                "proofComEncEq": "617e4b69ac049ff5ce78405bfaa66a584c011165e618ebdb6b9563d2cbeb52b816f699228b06c3b088984548193d459ff9b927d6e421b916aec4cbefde78e78640c156f28b0c8b6b94de3b279e02a9b86874e553f0e20b4a8230213c07424f1162ed552b50434a01ad49033ca962b163af28013d854e441ed2d46a5d7758ede3"
+            }
+        ],
+        "pokSecCred": "393ed251d6071feb62516c925f095b459860103f79dd269811ff640510296699213346b5cae6c6c92d89fdbb72af23d40cfa047b3cc025ad23f8667446dc713a",
+        "prfKeyCommitmentWithIP": "a75837ebb6896b0c2c9ecd14fc99b8c9af9b6465f2dbd7878d89737532a1ff3b1a246726ecc84cca4aa786cf05e00257",
+        "prfKeySharingCoeffCommitments": [
+            "8c8e8f72a2e5b46e2b2f47b1d88b13458f81ab3fcf56f2cdbae272a0683c94a8cadaae4f148ca7ac8d68679debe1f5ba",
+            "86f502f3d18d74f32e860f25744686d028c3d9df3676962ea0a91cb3654e470ebf53e3d5eb4877a35736ecc0b41f9933"
+        ],
+        "proofCommitmentsSame": "5d2518458fe145505f39f479affc47b445c2243f23e51c447c5ab08abcfaf1ed5689f2ba3ee133e69bdf0af32889e78187f47ae8ca5eba9127bd9fe8bb32dba44f49cb7e01d589e7c0290098582114bdb8d2f5613c5e47548b1cf6fea57c4ed80ec227653c1e95e97536c1914f679e1c4f4ebdb6b3838361236545ea983f4e37",
+        "proofCommitmentsToIdCredSecSame": "602b9db8e8ed78b5a1a6b4976e3dfb10294e6b718eece6ed84cb8e8b138ed209000000016c89f8a1e682383932701a46020148423bfffacbf4c20282582254fbcf22fced63e1a7ba4848f68127b25208e9ea72932699ea5debd1a88e1689c7b9edc8d94f",
+        "sndPokSecCred": "20a6047d3c3c6ffc5fe5e1896c93dc7ded29699da5ce8f1363b6a6a8b662b6820000000125f9a30f65d9af542c0b3a3de4399a656c89b204652e49fee3e302607d2b89575d78e33bc503d171b0ea6f5c2fe16954fa91083fded4241abf818410337a0d8c"
+    },
+    "signature": "80f186acd61fccc0d5fc006b86567329868f8c527e92a78ac1d54c8107474cfaefca8bf78190fd48e60619266eea7f52a3d9c153e0273344b3f1e6547ec0844f4b99494374b6f45b70fd89e3747c074cbf545d0bfb96740a02b0339eefffe007"
+}
