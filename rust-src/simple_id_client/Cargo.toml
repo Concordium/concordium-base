@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 clap = "2.33"
-dialoguer = "0.4"
+dialoguer = "0.5"
 pairing = "0.15"
 ff = "0.5"
 rand = "=0.7"

@@ -17,7 +17,7 @@ pub enum Reason {
     FailedToVerifyIdCredSecEquality,
     FailedToVerifyPrfData,
     WrongArParameters,
-    MissingAttribute(usize),
+    IllegalAttributeRequirements,
 }
 
 fn check_ar_parameters<C: Curve>(
@@ -115,15 +115,21 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     ps_public_key: &ps_sig::PublicKey<P>,
 ) -> Result<ps_sig::UnknownMessage<P>, Reason> {
     // TODO: handle the errors
-    let variant = P::G1::scalar_from_u64(u64::from(att_list.variant));
     let expiry = P::G1::scalar_from_u64(att_list.expiry);
+
+    let tags = {
+        match encode_tags(att_list.alist.keys()) {
+            Ok(f) => f,
+            Err(_) => return Err(Reason::IllegalAttributeRequirements),
+        }
+    };
 
     // the list to be signed consists of (in that order)
     // - commitment to idcredsec
     // - commitment to prf key
     // - anonymity revocation threshold
     // - list of anonymity revokers
-    // - variant of the attribute list
+    // - tags of the attribute list
     // - expiry date of the attribute list
     // - attribute list elements
 
@@ -145,16 +151,13 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
         message = message.plus_point(&key_vec[i].mul_by_scalar(&ar_handle));
     }
 
-    message = message.plus_point(&key_vec[m + 3].mul_by_scalar(&variant));
+    message = message.plus_point(&key_vec[m + 3].mul_by_scalar(&tags));
     message = message.plus_point(&key_vec[m + 3 + 1].mul_by_scalar(&expiry));
-    for (i, k) in key_vec.iter().skip(m + 3 + 2).enumerate().take(n) {
-        match get_attribute_at(i, &att_vec) {
-            None => return Err(Reason::MissingAttribute(i)),
-            Some((_, v)) => {
-                let att = v.to_field_element();
-                message = message.plus_point(&k.mul_by_scalar(&att));
-            }
-        }
+    // NB: It is crucial that att_vec is an ordered map and that .values iterator
+    // returns messages in order of tags.
+    for (k, v) in key_vec.iter().skip(m + 3 + 2).zip(att_vec.values()) {
+        let att = v.to_field_element();
+        message = message.plus_point(&k.mul_by_scalar(&att));
     }
     let msg = ps_sig::UnknownMessage(message);
     Ok(msg)

@@ -143,10 +143,6 @@ fn main() {
         // Choose prf key.
         let prf_key = prf::SecretKey::generate(csprng);
 
-        // Choose variant of the attribute list.
-        // Baker accounts will have the maximum allowed variant.
-        let variant = !0;
-
         // Expire in 1 year from now.
         let year_from_now = std::time::SystemTime::now()
             .checked_add(year)
@@ -162,7 +158,6 @@ fn main() {
             cred_holder_info: ah_info,
             prf_key,
             attributes: ExampleAttributeList {
-                variant,
                 expiry: expiry_date,
                 alist,
                 _phantom: Default::default(),
@@ -176,10 +171,9 @@ fn main() {
         let ip_sig = sig_ok.expect("There is an error in signing");
 
         let policy = Policy {
-            variant,
-            expiry: expiry_date,
+            expiry:     expiry_date,
             policy_vec: BTreeMap::new(),
-            _phantom: Default::default(),
+            _phantom:   Default::default(),
         };
 
         let mut keys = BTreeMap::new();

@@ -101,12 +101,12 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
 // Add data to the attribute list if needed. This is just to simulate the fact
 // that not all attributes are needed.
-fn process_alist(attributes: &mut ExampleAttributeList) {
+fn dummy_process_alist(attributes: &mut ExampleAttributeList) {
     let alist = &mut attributes.alist;
-    let len = alist.len();
+    let len = ATTRIBUTE_NAMES.len();
     // fill in the missing pieces with dummy values.
     for i in 0..len {
-        let idx = AttributeIndex::from(i as u16);
+        let idx = AttributeTag::from(i as u8);
         if alist.get(&idx).is_none() {
             let _ = alist.insert(idx, AttributeKind::from((i + 10) as u64));
         }
@@ -127,7 +127,7 @@ pub fn sign_id_object(ip_data: &IpData<Bls12, ExampleCurve>, v: &str) -> Fallibl
     let mut request: PreIdentityObject<Bls12, ExampleCurve, AttributeKind> =
         from_value(id_obj_value)?;
     // We need to potentially add to the attribute list, which we abstract
-    process_alist(&mut request.alist);
+    dummy_process_alist(&mut request.alist);
     let vf = verify_credentials(&request, &ip_data.public_ip_info, &ip_data.ip_private_key);
     match vf {
         Ok(signature) => {

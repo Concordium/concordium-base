@@ -144,7 +144,7 @@ type GenerateCredentialData = (
     pssig::Signature<Bls12>,
     SigRetrievalRandomness<Bls12>,
     AccCredentialInfo<ExampleCurve, ExampleAttribute>,
-    BTreeMap<AttributeIndex, ExampleAttribute>,
+    BTreeMap<AttributeTag, ExampleAttribute>,
     u8,
 );
 
@@ -156,12 +156,8 @@ fn parse_generate_credential_input_json(v: &Value) -> Option<GenerateCredentialD
     let private: IdObjectUseData<Bls12, ExampleCurve, ExampleAttribute> =
         v.get("idUseData").and_then(|x| from_json(x.clone()).ok())?;
     let policy_items = {
-        if let Some(items) = v.get("revealedItems") {
-            read_revealed_items(
-                id_object.pre_identity_object.alist.variant,
-                &id_object.pre_identity_object.alist.alist,
-                items,
-            )?
+        if let Some(items) = v.get("revealedAttributes") {
+            from_json(items.clone()).ok()?
         } else {
             BTreeMap::new()
         }
@@ -192,7 +188,6 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
             match s.ip_infos.get(&ip_id) {
                 Some(ref ip_info) => {
                     let policy: Policy<ExampleCurve, ExampleAttribute> = Policy {
-                        variant:    pio.alist.variant,
                         expiry:     pio.alist.expiry,
                         policy_vec: items,
                         _phantom:   Default::default(),
@@ -262,24 +257,6 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
         "accountAddress": address,
     });
     rouille::Response::json(&response)
-}
-
-fn read_revealed_items(
-    variant: u16,
-    alist: &BTreeMap<AttributeIndex, ExampleAttribute>,
-    v: &Value,
-) -> Option<BTreeMap<AttributeIndex, ExampleAttribute>> {
-    let arr: &Vec<Value> = v.as_array()?;
-    let result = arr.iter().flat_map(|v| {
-        let s = v.as_str()?;
-        let idx = attribute_index(variant, s)?;
-        if let Some((idx, attr)) = get_attribute_at(usize::from(idx), &alist) {
-            Some((idx, *attr))
-        } else {
-            None
-        }
-    });
-    Some(result.collect())
 }
 
 // TODO: Pass filename as parameter

@@ -3,7 +3,7 @@ use pairing::bls12_381::Bls12;
 
 use chrono::NaiveDateTime;
 
-use serde_json::{to_string_pretty, to_writer_pretty, Map, Value};
+use serde_json::{to_string_pretty, to_writer_pretty};
 
 use curve_arithmetic::curve_arithmetic::*;
 
@@ -30,20 +30,6 @@ pub fn read_global_context(filename: &str) -> Option<GlobalContext<ExampleCurve>
 
 pub fn read_identity_providers() -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>::G1>>> {
     read_json_from_file(IDENTITY_PROVIDERS).ok()
-}
-
-/// Show fields of the type of fields of the given attribute list.
-pub fn show_attribute_format(variant: u16) -> &'static str {
-    match variant {
-        0 => "[ExpiryDate, MaxAccount, Age]",
-        1 => "[ExpiryDate, MaxAccount, Age, Citizenship, Business]",
-        _ => unimplemented!("Only two formats of attribute lists supported."),
-    }
-}
-
-pub fn show_attribute(variant: u16, idx: AttributeIndex, att: &ExampleAttribute) -> String {
-    let idx: usize = idx.into();
-    format!("{}: {}", ATTRIBUTE_LISTS[variant as usize][idx], att)
 }
 
 pub fn parse_expiry_date(input: &str) -> io::Result<u64> {
@@ -73,108 +59,4 @@ where
     let reader = BufReader::new(file);
     let u = serde_json::from_reader(reader)?;
     Ok(u)
-}
-
-static ALIST_BASIC_PERSON: &[&str] = &[
-    "maxAccount",
-    "creationTime",
-    "birthYear",
-    "residenceCountryCode",
-];
-
-static ALIST_ACCREDITED_INVESTOR: &[&str] = &[
-    "maxAccount",
-    "creationTime",
-    "residenceCountryCode",
-    "assetsOwnedLB",
-];
-
-static ALIST_DRIVER: &[&str] = &[
-    "maxAccount",
-    "creationTime",
-    "birthYear",
-    "residenceCountryCode",
-    "drivingLicenseCountryCode",
-    "drivingLicenseIssueDate",
-    "drivingLicenseExpiry",
-    "drivingLicenseCategories",
-];
-
-static ALIST_BASIC_COMPANY: &[&str] = &[
-    "maxAccount",
-    "creationTime",
-    "registrationCountryCode",
-    "isEUVAT",
-    "VATNumber",
-];
-
-static ALIST_BASIC_VEHICLE: &[&str] = &[
-    "maxAccount",
-    "creationTime",
-    "brandId",
-    "registrationCountryCode",
-    "vehicleClass",
-    "numPassengerSeats",
-    "modelYear",
-    "productionYear",
-    "modelId",
-    "engineType",
-    "engineSize",
-    "VIN",
-];
-
-static ALIST_BASIC_IOT: &[&str] = &[
-    "maxAccount",
-    "creationTime",
-    "deviceType",
-    "deviceManufacturer",
-    "deviceSerial",
-    "deviceSpecific1",
-    "deviceSpecific2",
-    "deviceSpecific3",
-];
-
-pub static ATTRIBUTE_LISTS: &[&[&str]] = &[
-    ALIST_BASIC_PERSON,
-    ALIST_ACCREDITED_INVESTOR,
-    ALIST_DRIVER,
-    ALIST_BASIC_COMPANY,
-    ALIST_BASIC_VEHICLE,
-    ALIST_BASIC_IOT,
-];
-
-// index of the attribute in the list, if such a thing exists
-pub fn attribute_index(variant: u16, s: &str) -> Option<u16> {
-    let variant = variant as usize;
-    if variant < ATTRIBUTE_LISTS.len() {
-        let i = ATTRIBUTE_LISTS[variant].iter().position(|x| *x == s)?;
-        Some(i as u16)
-    } else {
-        None
-    }
-}
-
-pub fn alist_to_json(alist: &ExampleAttributeList) -> Value {
-    let mut mp = Map::with_capacity(2);
-    mp.insert("variant".to_owned(), Value::from(alist.variant.to_string()));
-    mp.insert(
-        "expiryDate".to_owned(),
-        Value::from(alist.expiry.to_string()),
-    );
-    if (alist.variant as usize) < ATTRIBUTE_LISTS.len()
-        && alist.alist.len() == ATTRIBUTE_LISTS[alist.variant as usize].len()
-    {
-        let keys = ATTRIBUTE_LISTS[alist.variant as usize];
-        for (&i, v) in alist.alist.iter() {
-            let i: usize = i.into();
-            if i < keys.len() {
-                mp.insert(keys[i].to_owned(), Value::from(v.to_string()));
-            } else {
-                return Value::Null;
-            }
-        }
-        Value::Object(mp)
-    } else {
-        Value::Null
-    }
 }

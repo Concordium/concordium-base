@@ -276,8 +276,6 @@ instance FromJSON AttributeValue where
 type CredentialExpiryTime = Word64
 
 data Policy = Policy {
-  -- |Variant of the attribute list this policy belongs to.
-  pAttributeListVariant :: Word16,
   -- |Expiry date of this credential. In seconds since unix epoch.
   pExpiry :: CredentialExpiryTime,
   -- |List of items in this attribute list.
@@ -286,14 +284,12 @@ data Policy = Policy {
 
 instance ToJSON Policy where
   toJSON Policy{..} = object [
-    "variant" .= pAttributeListVariant,
     "expiry" .= pExpiry,
     "revealedItems" .= pItems
     ]
 
 instance FromJSON Policy where
   parseJSON = withObject "Policy" $ \v -> do
-    pAttributeListVariant <- v .: "variant"
     pExpiry <- v .: "expiry"
     pItems <- v .: "revealedItems"
     return Policy{..}
@@ -484,7 +480,6 @@ instance FromJSON CredentialDeploymentValues where
 
 getPolicy :: Get Policy
 getPolicy = do
-  pAttributeListVariant <- getWord16be
   pExpiry <- getWord64be
   l <- fromIntegral <$> getWord16be
   pItems <- safeFromAscList =<< replicateM l (getTwoOf getWord16be get)
@@ -493,8 +488,7 @@ getPolicy = do
 putPolicy :: Putter Policy
 putPolicy Policy{..} =
   let l = length pItems
-  in putWord16be pAttributeListVariant <>
-     putWord64be pExpiry <>
+  in putWord64be pExpiry <>
      putWord16be (fromIntegral l) <>
      mapM_ (putTwoOf putWord16be put) (Map.toAscList pItems)
 
