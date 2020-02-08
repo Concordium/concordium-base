@@ -82,7 +82,7 @@ fn parse_id_object_input_json(
 
 fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Response {
     let v: Value = try_or_400!(rouille::input::json_input(request));
-    let (ip_info, name, threshold, ar_list, attributes) = {
+    let (ip_info, name, threshold, ar_identities, attributes) = {
         if let Some((ip_id, name, threshold, ar_list, att)) = parse_id_object_input_json(&v) {
             match s.ip_infos.get(&ip_id) {
                 Some(ip_info) => (ip_info, name, threshold, ar_list, att),
@@ -116,7 +116,10 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
         ip_private_key: ip_sec_key,
     } = ip_info;
 
-    let context = make_context_from_ip_info(ip_info.clone(), (ar_list, threshold));
+    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+        ar_identities,
+        threshold,
+    });
     let (pio, randomness) = generate_pio(&context, &aci);
 
     let vf = verify_credentials(&pio, &ip_info, &ip_sec_key);

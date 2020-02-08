@@ -167,13 +167,14 @@ where
         )
     };
     // identities of the chosen AR's
-    let ar_handles = context
+    let ar_identities = context
         .choice_ar_parameters
         .0
         .iter()
         .map(|x| x.ar_identity)
         .collect();
-    let revocation_threshold = context.choice_ar_parameters.1;
+
+    let threshold = context.choice_ar_parameters.1;
     // attribute list
     let alist = aci.attributes.clone();
     let prio = PreIdentityObject {
@@ -182,7 +183,10 @@ where
         snd_pok_sc,
         proof_com_eq_sc,
         ip_ar_data,
-        choice_ar_parameters: (ar_handles, revocation_threshold),
+        choice_ar_parameters: ChoiceArParameters {
+            ar_identities,
+            threshold,
+        },
         alist,
         cmm_sc,
         pok_sc,
@@ -342,7 +346,7 @@ where
         )
         .0;
     // adding the chosen ar list to the credential deployment info
-    let ar_list = prio.choice_ar_parameters.0.clone();
+    let ar_list = &prio.choice_ar_parameters.ar_identities;
     let mut choice_ars = Vec::with_capacity(ar_list.len());
     let ip_ar_parameters = &ip_info.ip_ars.ars.clone();
     for ar in ar_list.iter() {
@@ -351,14 +355,14 @@ where
             Some(ar_info) => choice_ars.push(ar_info.clone()),
         }
     }
-    let choice_ar_parameters = (choice_ars, prio.choice_ar_parameters.1);
+    let choice_ar_parameters = (choice_ars, prio.choice_ar_parameters.threshold);
     // sharing data for id cred sec
     let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data(
         id_cred_sec.view(),
         &choice_ar_parameters,
         &global_context.on_chain_commitment_key,
     );
-    let number_of_ars = prio.choice_ar_parameters.0.len();
+    let number_of_ars = prio.choice_ar_parameters.ar_identities.len();
     // filling ar data
     let mut ar_data: Vec<ChainArData<C>> = Vec::with_capacity(number_of_ars);
     for item in id_cred_data.iter() {
@@ -409,7 +413,7 @@ where
     // FIXME: With more uniform infrastructure we can avoid all the cloning here.
     let cred_values = CredentialDeploymentValues {
         reg_id,
-        threshold: prio.choice_ar_parameters.1,
+        threshold: prio.choice_ar_parameters.threshold,
         ar_data,
         ip_identity: ip_info.ip_identity,
         policy: policy.clone(),
