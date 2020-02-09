@@ -309,16 +309,12 @@ pub unsafe extern "C" fn create_id_request_and_private_data(
 
 #[no_mangle]
 /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
-/// UTF8-encoded string. The input string should contain the JSON payload of an
-/// attribute list, name of id object, and the identity provider public
-/// information. The return value contains a JSON object with two values, one is
-/// the request for the identity object that is public, and the other is the
-/// private keys and other secret values that must be kept by the user.
-/// These secret values will be needed later to use the identity object.
+/// UTF8-encoded string. The returned string must be freed by the caller by
+/// calling the function 'free_response_string'. In case of failure the function
+/// returns an error message as the response, and sets the 'success' flag to 0.
 ///
-/// The returned string must be freed by the caller by calling the function
-/// 'free_response_string'. In case of failure the function returns an error
-/// message as the response, and sets the 'success' flag to 0.
+/// See rust-bins/wallet-notes/README.md for the description of input and output
+/// formats.
 ///
 /// # Safety
 /// The input pointer must point to a null-terminated buffer, otherwise this
