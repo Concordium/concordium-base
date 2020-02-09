@@ -32,8 +32,9 @@ pub fn verify_credentials<
     AttributeType: Attribute<P::ScalarField>,
     C: Curve<Scalar = P::ScalarField>,
 >(
-    pre_id_obj: &PreIdentityObject<P, C, AttributeType>,
+    pre_id_obj: &PreIdentityObject<P, C>,
     ip_info: &IpInfo<P, C>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Reason> {
     let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.ys[0], ip_info.ip_verify_key.g);
@@ -99,7 +100,7 @@ pub fn verify_credentials<
         &pre_id_obj.cmm_sc,
         pre_id_obj.choice_ar_parameters.threshold,
         &choice_ar_handles,
-        &pre_id_obj.alist,
+        &alist,
         &ip_info.ip_verify_key,
     )?;
     let mut csprng = thread_rng();

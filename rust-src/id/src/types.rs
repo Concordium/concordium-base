@@ -419,19 +419,13 @@ pub struct CredentialHolderInfo<C: Curve> {
 /// interaction with the identity provider. The credential holder chooses a prf
 /// key and an attribute list.
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(
-    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
-    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
-))]
-pub struct AccCredentialInfo<C: Curve, AttributeType: Attribute<C::Scalar>> {
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct AccCredentialInfo<C: Curve> {
     #[serde(rename = "credentialHolderInformation")]
     pub cred_holder_info: CredentialHolderInfo<C>,
     /// Chosen prf key of the credential holder.
     #[serde(rename = "prfKey")]
     pub prf_key: prf::SecretKey<C>,
-    /// Chosen attribute list.
-    #[serde(rename = "attributes")]
-    pub attributes: AttributeList<C::Scalar, AttributeType>,
 }
 
 /// The data relating to a single anonymity revoker
@@ -486,18 +480,14 @@ pub struct ChoiceArParameters {
 }
 
 /// Information sent from the account holder to the identity provider.
+/// This includes only the cryptographic parts, the attribute list is
+/// in a different object below.
 #[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
-    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar> \
-                 + SerdeSerialize",
-    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: \
-                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
+    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
+    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
 ))]
-pub struct PreIdentityObject<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-> {
+pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Name of the account holder.
     #[string_size_length = 2] // only use two bytes for encoding length.
     #[serde(rename = "accountHolderName")]
@@ -520,9 +510,6 @@ pub struct PreIdentityObject<
     /// NB:IP needs to check this
     #[serde(rename = "choiceArData")]
     pub choice_ar_parameters: ChoiceArParameters,
-    /// Chosen attribute list.
-    #[serde(rename = "attributeList")]
-    pub alist: AttributeList<C::Scalar, AttributeType>,
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub
     #[serde(rename = "pokSecCred")]
     pub pok_sc: DlogProof<C>,
@@ -567,7 +554,10 @@ pub struct IdentityObject<
     AttributeType: Attribute<C::Scalar>,
 > {
     #[serde(rename = "preIdentityObject")]
-    pub pre_identity_object: PreIdentityObject<P, C, AttributeType>,
+    pub pre_identity_object: PreIdentityObject<P, C>,
+    /// Chosen attribute list.
+    #[serde(rename = "attributeList")]
+    pub alist: AttributeList<C::Scalar, AttributeType>,
     #[serde(
         rename = "signature",
         serialize_with = "base16_encode",
@@ -1372,18 +1362,12 @@ pub struct ArData<C: Curve> {
 /// Data needed to use the retrieved identity object to generate credentials.
 #[derive(SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
-    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: Attribute<C::Scalar> \
-                 + SerdeSerialize",
-    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>, AttributeType: \
-                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
+    serialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>",
+    deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
 ))]
-pub struct IdObjectUseData<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-> {
+pub struct IdObjectUseData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     #[serde(rename = "aci")]
-    pub aci: AccCredentialInfo<C, AttributeType>,
+    pub aci: AccCredentialInfo<C>,
     /// Randomness needed to retrieve the signature on the attribute list.
     #[serde(
         rename = "randomness",

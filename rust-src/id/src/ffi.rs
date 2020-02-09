@@ -406,11 +406,12 @@ mod test {
         let aci = AccCredentialInfo {
             cred_holder_info: ah_info,
             prf_key,
-            attributes: ExampleAttributeList {
-                expiry: expiry_date,
-                alist,
-                _phantom: Default::default(),
-            },
+        };
+
+        let alist = ExampleAttributeList {
+            expiry: expiry_date,
+            alist,
+            _phantom: Default::default(),
         };
 
         let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
@@ -419,7 +420,7 @@ mod test {
         });
         let (pio, randomness) = generate_pio(&context, &aci);
 
-        let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
 
         // First test, check that we have a valid signature.
         assert!(sig_ok.is_ok());
@@ -459,29 +460,33 @@ mod test {
             existing: Left(SignatureThreshold(2)),
         };
 
+        let id_use_data = IdObjectUseData { aci, randomness };
+
+        let id_object = IdentityObject {
+            pre_identity_object: pio,
+            alist,
+            signature: ip_sig,
+        };
+
         let cdi = generate_cdi(
             &ip_info,
             &global_ctx,
-            &aci,
-            &pio,
+            &id_object,
+            &id_use_data,
             0,
-            &ip_sig,
             &policy,
             &acc_data,
-            &randomness,
         )
         .expect("Should generate the credential successfully.");
 
         let wrong_cdi = generate_cdi(
             &ip_info,
             &global_ctx,
-            &aci,
-            &pio,
+            &id_object,
+            &id_use_data,
             0,
-            &ip_sig,
             &wrong_policy,
             &acc_data,
-            &randomness,
         )
         .expect("Should generate the credential successfully.");
 

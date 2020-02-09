@@ -154,16 +154,17 @@ fn main() {
         let aci = AccCredentialInfo {
             cred_holder_info: ah_info,
             prf_key,
-            attributes: ExampleAttributeList {
-                expiry: expiry_date,
-                alist,
-                _phantom: Default::default(),
-            },
+        };
+
+        let attributes = ExampleAttributeList {
+            expiry: expiry_date,
+            alist,
+            _phantom: Default::default(),
         };
 
         let (pio, randomness) = generate_pio(&context, &aci);
 
-        let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, &ip_info, &attributes, &ip_secret_key);
 
         let ip_sig = sig_ok.expect("There is an error in signing");
 
@@ -183,16 +184,22 @@ fn main() {
             existing: Left(SignatureThreshold(2)),
         };
 
+        let id_object = IdentityObject {
+            pre_identity_object: pio,
+            alist:               attributes,
+            signature:           ip_sig,
+        };
+
+        let id_object_use_data = IdObjectUseData { aci, randomness };
+
         let cdi = generate_cdi(
             &ip_info,
             &global_ctx,
-            &aci,
-            &pio,
+            &id_object,
+            &id_object_use_data,
             53,
-            &ip_sig,
             &policy,
             &acc_data,
-            &randomness,
         )
         .expect("We should have constructed valid data.");
 
@@ -212,7 +219,7 @@ fn main() {
             "address": address,
             "accountData": acc_data,
             "credential": cdi,
-            "aci": aci,
+            "aci": id_object_use_data.aci,
         });
         (account_data_json, cdi, acc_keys, address)
     };
