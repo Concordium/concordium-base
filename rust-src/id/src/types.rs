@@ -282,6 +282,8 @@ where
 }
 
 /// NB: The length of this list must be less than 256.
+/// This must be consistent with the value of attributeNames in
+/// haskell-src/Concordium/ID/Types.hs
 pub const ATTRIBUTE_NAMES: [&str; 10] = [
     "MaxAccount",
     "CreationTime",

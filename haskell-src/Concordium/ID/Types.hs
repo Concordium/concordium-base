@@ -287,7 +287,6 @@ newtype AttributeTag = AttributeTag Word8
 attributeNames :: [Text.Text]
 attributeNames = ["MaxAccount",
                    "CreationTime",
-                   "ExpiryTime",
                    "PreName",
                    "LastName",
                    "Sex",
