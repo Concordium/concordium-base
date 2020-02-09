@@ -1,10 +1,8 @@
 use pairing::bls12_381::Bls12;
-use ps_sig as pssig;
 
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use id::{account_holder::*, identity_provider::*, types::*};
-use ps_sig::SigRetrievalRandomness;
 use std::collections::btree_map::BTreeMap;
 
 use client_server_helpers::*;
@@ -108,7 +106,6 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
     let aci = AccCredentialInfo {
         cred_holder_info: chi,
         prf_key,
-        attributes,
     };
 
     let IpData {
@@ -122,13 +119,14 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
     });
     let (pio, randomness) = generate_pio(&context, &aci);
 
-    let vf = verify_credentials(&pio, &ip_info, &ip_sec_key);
+    let vf = verify_credentials(&pio, &ip_info, &attributes, &ip_sec_key);
     match vf {
         Ok(sig) => {
             let id_use_data = IdObjectUseData { aci, randomness };
             let id_object = IdentityObject {
                 pre_identity_object: pio,
                 signature:           sig,
+                alist:               attributes,
             };
             let response = json!({
                 "identityObject": id_object,
@@ -143,11 +141,9 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
 
 type GenerateCredentialData = (
     IpIdentity,
-    PreIdentityObject<Bls12, ExampleCurve, ExampleAttribute>,
-    pssig::Signature<Bls12>,
-    SigRetrievalRandomness<Bls12>,
-    AccCredentialInfo<ExampleCurve, ExampleAttribute>,
-    BTreeMap<AttributeTag, ExampleAttribute>,
+    IdentityObject<Bls12, ExampleCurve, ExampleAttribute>,
+    IdObjectUseData<Bls12, ExampleCurve>,
+    BTreeMap<AttributeTag, ExampleAttribute>, // revealed attributes
     u8,
 );
 
@@ -156,7 +152,7 @@ fn parse_generate_credential_input_json(v: &Value) -> Option<GenerateCredentialD
     let id_object: IdentityObject<Bls12, ExampleCurve, ExampleAttribute> = v
         .get("identityObject")
         .and_then(|x| from_json(x.clone()).ok())?;
-    let private: IdObjectUseData<Bls12, ExampleCurve, ExampleAttribute> =
+    let private: IdObjectUseData<Bls12, ExampleCurve> =
         v.get("idUseData").and_then(|x| from_json(x.clone()).ok())?;
     let policy_items = {
         if let Some(items) = v.get("revealedAttributes") {
@@ -170,37 +166,27 @@ fn parse_generate_credential_input_json(v: &Value) -> Option<GenerateCredentialD
         return None;
     }
     let n_acc = n_acc as u8;
-    Some((
-        ip_id,
-        id_object.pre_identity_object,
-        id_object.signature,
-        private.randomness,
-        private.aci,
-        policy_items,
-        n_acc,
-    ))
+    Some((ip_id, id_object, private, policy_items, n_acc))
 }
 
 fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> rouille::Response {
     let v: Value = try_or_400!(rouille::input::json_input(request));
 
-    let (ip_info, pio, sig, sig_randomness, aci, policy, n_acc) = {
-        if let Some((ip_id, pio, sig, sig_randomness, aci, items, n_acc)) =
+    let (ip_info, id_object, id_use_data, policy, n_acc) = {
+        if let Some((ip_id, id_object, id_use_data, items, n_acc)) =
             parse_generate_credential_input_json(&v)
         {
             match s.ip_infos.get(&ip_id) {
                 Some(ref ip_info) => {
                     let policy: Policy<ExampleCurve, ExampleAttribute> = Policy {
-                        expiry:     pio.alist.expiry,
+                        expiry:     id_object.alist.expiry,
                         policy_vec: items,
                         _phantom:   Default::default(),
                     };
                     (
                         &ip_info.public_ip_info,
-                        pio,
-                        sig,
-                        sig_randomness,
-                        aci,
+                        id_object,
+                        id_use_data,
                         policy,
                         n_acc,
                     )
@@ -235,13 +221,11 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
     let cdi = generate_cdi(
         ip_info,
         &s.global_params,
-        &aci,
-        &pio,
+        &id_object,
+        &id_use_data,
         n_acc,
-        &sig,
         &policy,
         &acc_data,
-        &sig_randomness,
     );
 
     let cdi = match cdi {

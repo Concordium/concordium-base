@@ -99,11 +99,12 @@ fn test_pipeline() {
     let aci = AccCredentialInfo {
         cred_holder_info: ah_info,
         prf_key,
-        attributes: ExampleAttributeList {
-            expiry: expiry_date,
-            alist,
-            _phantom: Default::default(),
-        },
+    };
+
+    let alist = ExampleAttributeList {
+        expiry: expiry_date,
+        alist,
+        _phantom: Default::default(),
     };
 
     let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
@@ -112,7 +113,7 @@ fn test_pipeline() {
     });
     let (pio, randomness) = generate_pio(&context, &aci);
 
-    let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+    let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
 
     // First test, check that we have a valid signature.
     assert!(sig_ok.is_ok());
@@ -143,16 +144,22 @@ fn test_pipeline() {
         existing: Left(SignatureThreshold(2)),
     };
 
+    let id_use_data = IdObjectUseData { aci, randomness };
+
+    let id_object = IdentityObject {
+        pre_identity_object: pio,
+        alist,
+        signature: ip_sig,
+    };
+
     let cdi = generate_cdi(
         &ip_info,
         &global_ctx,
-        &aci,
-        &pio,
+        &id_object,
+        &id_use_data,
         0,
-        &ip_sig,
         &policy,
         &acc_data,
-        &randomness,
     )
     .expect("Should generate the credential successfully.");
 
@@ -229,7 +236,7 @@ fn test_pipeline() {
         ip_info
             .ip_ars
             .ar_base
-            .mul_by_scalar(&aci.cred_holder_info.id_cred.id_cred_sec)
+            .mul_by_scalar(&id_use_data.aci.cred_holder_info.id_cred.id_cred_sec)
     );
 
     // generate a new cdi from a modified pre-identity object in which we swapped
@@ -238,13 +245,11 @@ fn test_pipeline() {
     let mut cdi = generate_cdi(
         &ip_info,
         &global_ctx,
-        &aci,
-        &pio,
+        &id_object,
+        &id_use_data,
         0,
-        &ip_sig,
         &policy,
         &acc_data,
-        &randomness,
     )
     .expect("Should generate the credential successfully.");
     cdi.values.ar_data.rotate_left(1);

@@ -33,16 +33,6 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
         }
     };
 
-    let attributes: ExampleAttributeList = {
-        match v.get("attributes") {
-            Some(v) => match from_value(v.clone()) {
-                Ok(v) => v,
-                Err(e) => bail!("Could not decode attributes: {}", e),
-            },
-            None => bail!("Field 'attributes' not present, but should be."),
-        }
-    };
-
     let ip_info: IpInfo<Bls12, ExampleCurve> = {
         match v.get("ipInfo") {
             Some(v) => from_value(v.clone())?,
@@ -74,7 +64,6 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let aci = AccCredentialInfo {
         cred_holder_info: chi,
         prf_key,
-        attributes,
     };
 
     // Choice of anonymity revokers, all of them in this implementation.
@@ -102,8 +91,13 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
 // Add data to the attribute list if needed. This is just to simulate the fact
 // that not all attributes are needed.
-fn dummy_process_alist(attributes: &mut ExampleAttributeList) {
-    let alist = &mut attributes.alist;
+fn dummy_alist() -> ExampleAttributeList {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let expiry = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|x| x.as_secs() + 31_556_926) // one year from now as expiry
+        .unwrap_or(0);
+    let mut alist = std::collections::BTreeMap::new();
     let len = ATTRIBUTE_NAMES.len();
     // fill in the missing pieces with dummy values.
     for i in 0..len {
@@ -111,6 +105,11 @@ fn dummy_process_alist(attributes: &mut ExampleAttributeList) {
         if alist.get(&idx).is_none() {
             let _ = alist.insert(idx, AttributeKind::from((i + 10) as u64));
         }
+    }
+    AttributeList {
+        expiry,
+        alist,
+        _phantom: Default::default(),
     }
 }
 
@@ -125,15 +124,23 @@ pub fn sign_id_object(ip_data: &IpData<Bls12, ExampleCurve>, v: &str) -> Fallibl
             None => bail!("Field 'idObjectRequest' not present but should be."),
         }
     };
-    let mut request: PreIdentityObject<Bls12, ExampleCurve, AttributeKind> =
-        from_value(id_obj_value)?;
-    // We need to potentially add to the attribute list, which we abstract
-    dummy_process_alist(&mut request.alist);
-    let vf = verify_credentials(&request, &ip_data.public_ip_info, &ip_data.ip_private_key);
+    let request: PreIdentityObject<Bls12, ExampleCurve> = from_value(id_obj_value)?;
+
+    // We create a dummy attribute list to simulate the workflow.
+    // FIXME: This is temporary, of course, and should be replaced by business
+    // logic.
+    let alist = dummy_alist();
+    let vf = verify_credentials(
+        &request,
+        &ip_data.public_ip_info,
+        &alist,
+        &ip_data.ip_private_key,
+    );
     match vf {
         Ok(signature) => {
             let id_object = IdentityObject {
                 pre_identity_object: request,
+                alist,
                 signature,
             };
             Ok(to_value(&id_object)?)

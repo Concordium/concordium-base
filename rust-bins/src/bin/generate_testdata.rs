@@ -81,11 +81,12 @@ fn main() {
     let aci = AccCredentialInfo {
         cred_holder_info: ah_info,
         prf_key,
-        attributes: ExampleAttributeList {
-            expiry: expiry_date,
-            alist,
-            _phantom: Default::default(),
-        },
+    };
+
+    let attributes = ExampleAttributeList {
+        expiry: expiry_date,
+        alist,
+        _phantom: Default::default(),
     };
 
     let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
@@ -96,7 +97,7 @@ fn main() {
     });
     let (pio, randomness) = generate_pio(&context, &aci);
 
-    let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+    let sig_ok = verify_credentials(&pio, &ip_info, &attributes, &ip_secret_key);
 
     // First test, check that we have a valid signature.
     assert!(sig_ok.is_ok());
@@ -113,6 +114,13 @@ fn main() {
             return;
         }
     };
+
+    let id_object = IdentityObject {
+        pre_identity_object: pio,
+        alist:               attributes,
+        signature:           ip_sig,
+    };
+    let id_object_use_data = IdObjectUseData { aci, randomness };
 
     let policy = Policy {
         expiry:     expiry_date,
@@ -138,13 +146,11 @@ fn main() {
         let cdi_1 = generate_cdi(
             &ip_info,
             &global_ctx,
-            &aci,
-            &pio,
+            &id_object,
+            &id_object_use_data,
             53,
-            &ip_sig,
             &policy,
             &acc_data,
-            &randomness,
         )
         .expect("We should have generated valid data.");
 
@@ -158,13 +164,11 @@ fn main() {
         let cdi_2 = generate_cdi(
             &ip_info,
             &global_ctx,
-            &aci,
-            &pio,
+            &id_object,
+            &id_object_use_data,
             53,
-            &ip_sig,
             &policy,
             &acc_data_2,
-            &randomness,
         )
         .expect("We should have generated valid data.");
 
@@ -259,16 +263,15 @@ fn main() {
                 existing: Left(SignatureThreshold(2)),
             }
         };
+
         let cdi = generate_cdi(
             &ip_info,
             &global_ctx,
-            &aci,
-            &pio,
+            &id_object,
+            &id_object_use_data,
             acc_num,
-            &ip_sig,
             &policy,
             &acc_data,
-            &randomness,
         )
         .expect("We should have generated valid data.");
 

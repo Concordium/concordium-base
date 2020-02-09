@@ -7,7 +7,7 @@ use crypto_common::*;
 
 use std::collections::btree_map::BTreeMap;
 
-use curve_arithmetic::{Curve, Pairing};
+use curve_arithmetic::Curve;
 use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use elgamal::{message::Message, public::PublicKey, secret::SecretKey};
@@ -327,18 +327,18 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
 /// Read the identity object, select attributes to reveal and create a
 /// transaction.
 fn handle_deploy_credential(matches: &ArgMatches) {
-    // we read the signed identity object
-    // signature of the identity object and the pre-identity object itself.
-    let (ip_sig, pio) = match matches
-        .value_of("id-object")
-        .map(read_json_from_file::<_, IdentityObject<Bls12, ExampleCurve, ExampleAttribute>>)
-    {
-        Some(Ok(v)) => (v.signature, v.pre_identity_object),
-        Some(Err(x)) => {
-            eprintln!("Could not read identity object because {}", x);
-            return;
+    let id_object = {
+        let file = matches
+            .value_of("id-object")
+            .expect("id-object parameter mandatory.");
+        match read_json_from_file::<_, IdentityObject<Bls12, ExampleCurve, ExampleAttribute>>(file)
+        {
+            Ok(v) => v,
+            Err(x) => {
+                eprintln!("Could not read identity object because {}", x);
+                return;
+            }
         }
-        None => unreachable!("Should not happen since the argument is mandatory."),
     };
 
     let ip_info = match matches.value_of("ip-info").map(read_json_from_file) {
@@ -363,7 +363,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
 
     // now we have all the data ready.
     // we first ask the user to select which attributes they wish to reveal
-    let alist = &pio.alist.alist;
+    let alist = &id_object.alist.alist;
 
     let alist_items = alist
         .keys()
@@ -399,7 +399,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         }
     }
     let policy = Policy {
-        expiry:     pio.alist.expiry,
+        expiry:     id_object.alist.expiry,
         policy_vec: revealed_attributes,
         _phantom:   Default::default(),
     };
@@ -447,18 +447,17 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // which we need to generate CDI.
     // This file should also contain the public keys of the identity provider who
     // signed the object.
-    let id_use_data: IdObjectUseData<Bls12, ExampleCurve, ExampleAttribute> =
-        match read_json_from_file(
-            matches
-                .value_of("private")
-                .expect("Should not happen because argument is mandatory."),
-        ) {
-            Ok(v) => v,
-            Err(x) => {
-                eprintln!("Could not read CHI object because {}", x);
-                return;
-            }
-        };
+    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = match read_json_from_file(
+        matches
+            .value_of("private")
+            .expect("Should not happen because argument is mandatory."),
+    ) {
+        Ok(v) => v,
+        Err(x) => {
+            eprintln!("Could not read CHI object because {}", x);
+            return;
+        }
+    };
 
     // We ask what regid index they would like to use.
     let x = match Input::new().with_prompt("Index").interact() {
@@ -478,13 +477,11 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     let cdi = generate_cdi(
         &ip_info,
         &global_ctx,
-        &id_use_data.aci,
-        &pio,
+        &id_object,
+        &id_use_data,
         x,
-        &ip_sig,
         &policy,
         &acc_data,
-        &id_use_data.randomness,
     );
 
     let cdi = match cdi {
@@ -573,7 +570,7 @@ fn handle_create_chi(matches: &ArgMatches) {
 /// account holder.
 fn handle_act_as_ip(matches: &ArgMatches) {
     let pio_path = Path::new(matches.value_of("pio").unwrap());
-    let pio = match read_json_from_file::<_, PreIdentityObject<_, _, ExampleAttribute>>(&pio_path) {
+    let pio = match read_json_from_file::<_, PreIdentityObject<_, _>>(&pio_path) {
         Ok(pio) => pio,
         Err(e) => {
             eprintln!("Could not read file because {}", e);
@@ -590,11 +587,56 @@ fn handle_act_as_ip(matches: &ArgMatches) {
             }
         };
 
-    let vf = verify_credentials(&pio, &ip_info, &ip_sec_key);
+    let expiry_date = match read_expiry_date() {
+        Ok(expiry_date) => expiry_date,
+        Err(e) => {
+            eprintln!("Could not read credential expiry date because {}", e);
+            return;
+        }
+    };
+
+    let tags = {
+        match Checkboxes::new()
+            .with_prompt("Select attributes:")
+            .items(&ATTRIBUTE_NAMES)
+            .interact()
+        {
+            Ok(idxs) => idxs,
+            Err(x) => {
+                eprintln!("You have to choose some attributes. Terminating. {}", x);
+                return;
+            }
+        }
+    };
+
+    let alist = {
+        let mut alist: BTreeMap<AttributeTag, ExampleAttribute> = BTreeMap::new();
+        for idx in tags {
+            match Input::new().with_prompt(ATTRIBUTE_NAMES[idx]).interact() {
+                Err(e) => {
+                    eprintln!("You need to provide integer input: {}", e);
+                    return;
+                }
+                Ok(s) => {
+                    let _ = alist.insert(AttributeTag(idx as u8), s);
+                }
+            }
+        }
+        alist
+    };
+
+    let attributes = AttributeList {
+        expiry: expiry_date,
+        alist,
+        _phantom: Default::default(),
+    };
+    let vf = verify_credentials(&pio, &ip_info, &attributes, &ip_sec_key);
+
     match vf {
         Ok(signature) => {
             let id_object = IdentityObject {
                 pre_identity_object: pio,
+                alist: attributes,
                 signature,
             };
             println!("Successfully checked pre-identity data.");
@@ -630,50 +672,11 @@ fn handle_start_ip(matches: &ArgMatches) {
     };
     let mut csprng = thread_rng();
     let prf_key = prf::SecretKey::generate(&mut csprng);
-    let tags = {
-        match Checkboxes::new()
-            .with_prompt("Select attributes:")
-            .items(&ATTRIBUTE_NAMES)
-            .interact()
-        {
-            Ok(idxs) => idxs,
-            Err(x) => {
-                eprintln!("You have to choose some attributes. Terminating. {}", x);
-                return;
-            }
-        }
-    };
-    let expiry_date = match read_expiry_date() {
-        Ok(expiry_date) => expiry_date,
-        Err(e) => {
-            eprintln!("Could not read credential expiry date because {}", e);
-            return;
-        }
-    };
-    let alist = {
-        let mut alist = BTreeMap::new();
-        for idx in tags {
-            match Input::new().with_prompt(ATTRIBUTE_NAMES[idx]).interact() {
-                Err(e) => {
-                    eprintln!("You need to provide integer input: {}", e);
-                    return;
-                }
-                Ok(s) => {
-                    let _ = alist.insert(AttributeTag(idx as u8), s);
-                }
-            }
-        }
-        alist
-    };
+
     // the chosen account credential information
     let aci = AccCredentialInfo {
         cred_holder_info: chi,
         prf_key,
-        attributes: AttributeList::<<Bls12 as Pairing>::ScalarField, ExampleAttribute> {
-            expiry: expiry_date,
-            alist,
-            _phantom: Default::default(),
-        },
     };
 
     // now choose an identity provider.

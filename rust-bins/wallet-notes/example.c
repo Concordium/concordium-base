@@ -13,10 +13,9 @@ int main() {
     long length = ftell(f);
     fseek (f, 0, SEEK_SET);
     buffer = malloc(length);
-    if (buffer)
-      {
-        fread(buffer, 1, length, f);
-      }
+    if (buffer) {
+      fread(buffer, 1, length, f);
+    }
     fclose (f);
   } else {
     fprintf(stderr, "Could not read input file.\n");
@@ -32,7 +31,6 @@ int main() {
       fprintf(stderr, "Failure.");
       fprintf(stderr, "%s\n", out);
     }
-    free_response_string(out);
   }
   return 0;
 }

@@ -25,19 +25,10 @@ use std::collections::{btree_map::BTreeMap, hash_map::HashMap};
 /// Generate PreIdentityObject out of the account holder information,
 /// the chosen anonymity revoker information, and the necessary contextual
 /// information (group generators, shared commitment keys, etc).
-pub fn generate_pio<
-    P: Pairing,
-    AttributeType: Attribute<C::Scalar>,
-    C: Curve<Scalar = P::ScalarField>,
->(
+pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: &Context<P, C>,
-    aci: &AccCredentialInfo<C, AttributeType>,
-) -> (
-    PreIdentityObject<P, C, AttributeType>,
-    ps_sig::SigRetrievalRandomness<P>,
-)
-where
-    AttributeType: Clone, {
+    aci: &AccCredentialInfo<C>,
+) -> (PreIdentityObject<P, C>, ps_sig::SigRetrievalRandomness<P>) {
     let mut csprng = thread_rng();
     let id_ah = aci.cred_holder_info.id_ah.clone();
     let id_cred_pub = context
@@ -176,7 +167,6 @@ where
 
     let threshold = context.choice_ar_parameters.1;
     // attribute list
-    let alist = aci.attributes.clone();
     let prio = PreIdentityObject {
         id_ah,
         id_cred_pub,
@@ -187,7 +177,6 @@ where
             ar_identities,
             threshold,
         },
-        alist,
         cmm_sc,
         pok_sc,
         cmm_prf,
@@ -316,19 +305,22 @@ pub fn generate_cdi<
 >(
     ip_info: &IpInfo<P, C>,
     global_context: &GlobalContext<C>,
-    aci: &AccCredentialInfo<C, AttributeType>,
-    prio: &PreIdentityObject<P, C, AttributeType>,
+    id_object: &IdentityObject<P, C, AttributeType>,
+    id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
-    ip_sig: &ps_sig::Signature<P>,
     policy: &Policy<C, AttributeType>,
     acc_data: &AccountData,
-    sig_retrieval_rand: &ps_sig::SigRetrievalRandomness<P>,
 ) -> Fallible<CredDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
 
-    let alist = &prio.alist;
+    let ip_sig = &id_object.signature;
+    let sig_retrieval_rand = &id_object_use_data.randomness;
+    let aci = &id_object_use_data.aci;
+    let prio = &id_object.pre_identity_object;
+    let alist = &id_object.alist;
+
     let prf_key = aci.prf_key;
     let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
     let reg_id_exponent = match aci.prf_key.prf_exponent(cred_counter) {
