@@ -3,6 +3,7 @@
 module ConcordiumTests.Crypto.BlsSignature where
 
 import Concordium.Crypto.BlsSignature
+import Concordium.Crypto.DummyData
 import qualified Data.ByteString as BS
 import Test.QuickCheck
 import Test.Hspec
@@ -10,7 +11,7 @@ import Data.Serialize
 import qualified Data.Aeson as AE
 
 genSecretKey :: Gen SecretKey
-genSecretKey = secretKeyGen
+genSecretKey = secretBlsKeyGen
 
 genKeyPair :: Gen (SecretKey, PublicKey)
 genKeyPair = fmap (\sk -> (sk, derivePublicKey sk)) genSecretKey

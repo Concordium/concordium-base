@@ -1,8 +1,8 @@
 {-# OPTIONS_GHC -Wno-deprecations #-}
 module ConcordiumTests.Crypto.Ed25519DlogProofs where
 
-import           Concordium.Crypto.Ed25519Signature
-import           Concordium.Crypto.SignatureScheme (KeyPair(..), VerifyKey(..)) 
+import           Concordium.Crypto.SignatureScheme (KeyPair(..), VerifyKey(..))
+import Concordium.Crypto.DummyData
 import qualified Concordium.Crypto.VRF as VRF
 import Concordium.Crypto.Proofs
 import qualified Data.ByteString as BS
@@ -12,7 +12,7 @@ import Test.QuickCheck.Monadic
 import Test.Hspec
 
 forallKP :: Testable prop => (KeyPair -> prop) -> Property
-forallKP = forAll (uncurry KeyPairEd25519 <$> genKeyPair)
+forallKP = forAll (uncurry KeyPairEd25519 <$> genEd25519KeyPair)
 
 forallKPVRF :: Testable prop => (VRF.KeyPair -> prop) -> Property
 forallKPVRF = forAll arbitrary
