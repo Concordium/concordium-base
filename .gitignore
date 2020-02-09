@@ -23,3 +23,5 @@ rust-src/target/
 *.json
 /.dir-locals.el
 *.bin
+rust-bins/target
+/rust-bins/wallet-notes/example

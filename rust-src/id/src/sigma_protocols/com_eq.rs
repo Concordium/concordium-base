@@ -13,9 +13,10 @@ use rand::*;
 use random_oracle::RandomOracle;
 
 use crypto_common::*;
+use crypto_common_derive::*;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
 pub struct ComEqProof<T: Curve> {
     /// The challenge computed by the prover.
     challenge: T::Scalar,

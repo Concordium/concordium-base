@@ -10,3 +10,5 @@ pub use failure::Fallible;
 
 #[macro_use]
 extern crate failure;
+
+pub use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};

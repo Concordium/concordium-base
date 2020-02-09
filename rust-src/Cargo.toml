@@ -11,9 +11,9 @@ members=[
    "ps_sig",
    "id",
    "ffi_helpers",
-   "simple_id_client",
    "aggregate_sig",
    "crypto_common",
    "crypto_common_derive",
-   "random_oracle"
+   "random_oracle",
+   "wallet"
 ]

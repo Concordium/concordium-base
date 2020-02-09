@@ -77,40 +77,44 @@ fn test_pipeline() {
     let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
 
     let ip_info = IpInfo {
-        ip_identity: IpIdentity(88),
+        ip_identity:    IpIdentity(88),
         ip_description: "IP88".to_string(),
-        ip_verify_key: ip_public_key,
-        ar_info: (vec![ar1_info, ar2_info, ar3_info, ar4_info], ar_ck),
-        ar_base,
+        ip_verify_key:  ip_public_key,
+        ip_ars:         IpAnonymityRevokers {
+            ars: vec![ar1_info, ar2_info, ar3_info, ar4_info],
+            ar_cmm_key: ar_ck,
+            ar_base,
+        },
     };
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
-    let variant = 0;
     let expiry_date = 123123123;
-    let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
+    let alist = {
+        let mut alist = BTreeMap::new();
+        alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
+        alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+        alist
+    };
     let aci = AccCredentialInfo {
         cred_holder_info: ah_info,
         prf_key,
-        attributes: ExampleAttributeList {
-            variant,
-            expiry: expiry_date,
-            alist,
-            _phantom: Default::default(),
-        },
     };
 
-    let context = make_context_from_ip_info(
-        ip_info.clone(),
-        (
-            vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
-            Threshold(2),
-        ),
-    )
-    .expect("Could not make context from identity provider info.");
+    let alist = ExampleAttributeList {
+        expiry: expiry_date,
+        alist,
+        _phantom: Default::default(),
+    };
+
+    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+        ar_identities: vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
+        threshold:     Threshold(2),
+    })
+    .expect("The constructed ARs are valid.");
     let (pio, randomness) = generate_pio(&context, &aci);
 
-    let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+    let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
 
     // First test, check that we have a valid signature.
     assert!(sig_ok.is_ok());
@@ -122,14 +126,13 @@ fn test_pipeline() {
     };
 
     let policy = Policy {
-        variant,
-        expiry: expiry_date,
+        expiry:     expiry_date,
         policy_vec: {
             let mut tree = BTreeMap::new();
-            tree.insert(1u16, AttributeKind::from(31));
+            tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
             tree
         },
-        _phantom: Default::default(),
+        _phantom:   Default::default(),
     };
 
     let mut keys = BTreeMap::new();
@@ -142,17 +145,24 @@ fn test_pipeline() {
         existing: Left(SignatureThreshold(2)),
     };
 
+    let id_use_data = IdObjectUseData { aci, randomness };
+
+    let id_object = IdentityObject {
+        pre_identity_object: pio,
+        alist,
+        signature: ip_sig,
+    };
+
     let cdi = generate_cdi(
         &ip_info,
         &global_ctx,
-        &aci,
-        &pio,
+        &id_object,
+        &id_use_data,
         0,
-        &ip_sig,
         &policy,
         &acc_data,
-        &randomness,
-    );
+    )
+    .expect("Should generate the credential successfully.");
 
     // let mut out = Vec::new();
     // let gc_bytes = global_ctx.to_bytes();
@@ -225,8 +235,9 @@ fn test_pipeline() {
     assert_eq!(
         revealed_id_cred_pub,
         ip_info
+            .ip_ars
             .ar_base
-            .mul_by_scalar(&aci.cred_holder_info.id_cred.id_cred_sec)
+            .mul_by_scalar(&id_use_data.aci.cred_holder_info.id_cred.id_cred_sec)
     );
 
     // generate a new cdi from a modified pre-identity object in which we swapped
@@ -235,14 +246,13 @@ fn test_pipeline() {
     let mut cdi = generate_cdi(
         &ip_info,
         &global_ctx,
-        &aci,
-        &pio,
+        &id_object,
+        &id_use_data,
         0,
-        &ip_sig,
         &policy,
         &acc_data,
-        &randomness,
-    );
+    )
+    .expect("Should generate the credential successfully.");
     cdi.values.ar_data.rotate_left(1);
     let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
     assert_ne!(cdi_check, Ok(()));

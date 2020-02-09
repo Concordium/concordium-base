@@ -12,6 +12,7 @@ use rand::{rngs::ThreadRng, *};
 
 use pedersen_scheme::Value as PedersenValue;
 
+use crypto_common::base16_encode_string;
 use serde_json::json;
 use std::path::Path;
 
@@ -90,31 +91,25 @@ fn main() {
 
     // Load identity provider and anonymity revokers.
     let ip_data_path = Path::new(matches.value_of("ip-data").unwrap());
-    let (ip_info, ip_secret_key) = match read_json_from_file(&ip_data_path)
-        .as_ref()
-        .map(json_to_ip_data)
-    {
-        Ok(Some((ip_info, ip_sec_key))) => (ip_info, ip_sec_key),
-        Ok(None) => {
-            eprintln!("Could not parse identity issuer JSON.");
-            return;
-        }
-        Err(x) => {
-            eprintln!("Could not read identity issuer information because {}", x);
-            return;
-        }
-    };
+    let (ip_info, ip_secret_key) =
+        match read_json_from_file::<_, IpData<Bls12, ExampleCurve>>(&ip_data_path) {
+            Ok(IpData {
+                public_ip_info,
+                ip_private_key,
+            }) => (public_ip_info, ip_private_key),
+            Err(e) => {
+                eprintln!("Could not parse identity issuer JSON because: {}", e);
+                return;
+            }
+        };
 
-    let context = make_context_from_ip_info(
-        ip_info.clone(),
-        (
-            // use all anonymity revokers.
-            ip_info.ar_info.0.iter().map(|ar| ar.ar_identity).collect(),
-            // all but one threshold
-            Threshold((ip_info.ar_info.0.len() - 1) as _),
-        ),
-    )
-    .expect("Could not make context from IP info, this should never happen. Terminating.");
+    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+        // use all anonymity revokers.
+        ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
+        // all but one threshold
+        threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
+    })
+    .expect("Constructed AR data is valid.");
 
     // we also read the global context from another json file (called
     // global.context). We need commitment keys and other data in there.
@@ -146,10 +141,6 @@ fn main() {
         // Choose prf key.
         let prf_key = prf::SecretKey::generate(csprng);
 
-        // Choose variant of the attribute list.
-        // Baker accounts will have the maximum allowed variant.
-        let variant = !0;
-
         // Expire in 1 year from now.
         let year_from_now = std::time::SystemTime::now()
             .checked_add(year)
@@ -159,30 +150,29 @@ fn main() {
             .expect("Duration in a year should be valid.")
             .as_secs();
 
-        // no credentials
-        let alist = Vec::new();
+        // no attributes
+        let alist = BTreeMap::new();
         let aci = AccCredentialInfo {
             cred_holder_info: ah_info,
             prf_key,
-            attributes: ExampleAttributeList {
-                variant,
-                expiry: expiry_date,
-                alist,
-                _phantom: Default::default(),
-            },
+        };
+
+        let attributes = ExampleAttributeList {
+            expiry: expiry_date,
+            alist,
+            _phantom: Default::default(),
         };
 
         let (pio, randomness) = generate_pio(&context, &aci);
 
-        let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, &ip_info, &attributes, &ip_secret_key);
 
         let ip_sig = sig_ok.expect("There is an error in signing");
 
         let policy = Policy {
-            variant,
-            expiry: expiry_date,
+            expiry:     expiry_date,
             policy_vec: BTreeMap::new(),
-            _phantom: Default::default(),
+            _phantom:   Default::default(),
         };
 
         let mut keys = BTreeMap::new();
@@ -195,21 +185,26 @@ fn main() {
             existing: Left(SignatureThreshold(2)),
         };
 
+        let id_object = IdentityObject {
+            pre_identity_object: pio,
+            alist:               attributes,
+            signature:           ip_sig,
+        };
+
+        let id_object_use_data = IdObjectUseData { aci, randomness };
+
         let cdi = generate_cdi(
             &ip_info,
             &global_ctx,
-            &aci,
-            &pio,
+            &id_object,
+            &id_object_use_data,
             53,
-            &ip_sig,
             &policy,
             &acc_data,
-            &randomness,
-        );
+        )
+        .expect("We should have constructed valid data.");
 
-        let credential_json = cdi.to_json();
-
-        let address_json = AccountAddress::new(&cdi.values.reg_id).to_json();
+        let address = AccountAddress::new(&cdi.values.reg_id);
 
         let acc_keys = AccountKeys {
             keys:      acc_data
@@ -220,21 +215,14 @@ fn main() {
             threshold: SignatureThreshold(2),
         };
 
-        let acc_keys_json = acc_keys.to_json();
-
         // output private account data
         let account_data_json = json!({
-            "address": address_json.clone(),
-            "accountData": acc_data.to_json(),
-            "credential": credential_json,
-            "aci": aci_to_json(&aci),
+            "address": address,
+            "accountData": acc_data,
+            "credential": cdi,
+            "aci": id_object_use_data.aci,
         });
-        (
-            account_data_json,
-            credential_json,
-            acc_keys_json,
-            address_json,
-        )
+        (account_data_json, cdi, acc_keys, address)
     };
 
     if let Some(matches) = matches.subcommand_matches("create-bakers") {
@@ -280,12 +268,12 @@ fn main() {
 
             // Output baker vrf and election keys in a json file.
             let baker_data_json = json!({
-                "electionPrivateKey": json_base16_encode(&vrf_key.secret),
-                "electionVerifyKey": json_base16_encode(&vrf_key.public),
-                "signatureSignKey": json_base16_encode(&sign_key.secret),
-                "signatureVerifyKey": json_base16_encode(&sign_key.public),
-                "aggregationSignKey": json_base16_encode(&agg_sign_key),
-                "aggregationVerifyKey": json_base16_encode(&agg_verify_key),
+                "electionPrivateKey": base16_encode_string(&vrf_key.secret),
+                "electionVerifyKey": base16_encode_string(&vrf_key.public),
+                "signatureSignKey": base16_encode_string(&sign_key.secret),
+                "signatureVerifyKey": base16_encode_string(&sign_key.public),
+                "aggregationSignKey": base16_encode_string(&agg_sign_key),
+                "aggregationVerifyKey": base16_encode_string(&agg_verify_key),
             });
 
             if let Err(err) = write_json_to_file(
@@ -300,9 +288,9 @@ fn main() {
 
             // Finally store a json value storing public data for this baker.
             let public_baker_data = json!({
-                "electionVerifyKey": json_base16_encode(&vrf_key.public),
-                "signatureVerifyKey": json_base16_encode(&sign_key.public),
-                "aggregationVerifyKey": json_base16_encode(&agg_verify_key),
+                "electionVerifyKey": base16_encode_string(&vrf_key.public),
+                "signatureVerifyKey": base16_encode_string(&sign_key.public),
+                "aggregationVerifyKey": base16_encode_string(&agg_verify_key),
                 "finalizer": baker < num_finalizers,
                 "account": json!({
                     "address": address_json,

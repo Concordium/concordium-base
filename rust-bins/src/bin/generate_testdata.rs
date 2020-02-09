@@ -54,51 +54,51 @@ fn main() {
 
     // Load identity provider and anonymity revokers.
     let ip_data_path = Path::new(matches.value_of("ip-data").unwrap());
-    let (ip_info, ip_secret_key) = match read_json_from_file(&ip_data_path)
-        .as_ref()
-        .map(json_to_ip_data)
-    {
-        Ok(Some((ip_info, ip_sec_key))) => (ip_info, ip_sec_key),
-        Ok(None) => {
-            eprintln!("Could not parse identity issuer JSON.");
-            return;
-        }
-        Err(x) => {
-            eprintln!("Could not read identity issuer information because {}", x);
-            return;
-        }
-    };
+    let (ip_info, ip_secret_key) =
+        match read_json_from_file::<_, IpData<Bls12, ExampleCurve>>(&ip_data_path) {
+            Ok(IpData {
+                ip_private_key,
+                public_ip_info,
+            }) => (public_ip_info, ip_private_key),
+            Err(x) => {
+                eprintln!("Could not read identity issuer information because {}", x);
+                return;
+            }
+        };
 
     // Choose prf key.
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
     // Choose variant of the attribute list. Should not matter for this use case.
-    let variant = 13;
     let expiry_date = 123_123_123; //
-    let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
+    let alist = {
+        let mut alist = BTreeMap::new();
+        let _ = alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
+        let _ = alist.insert(AttributeTag::from(1u8), AttributeKind::from(31));
+        alist
+    };
+
     let aci = AccCredentialInfo {
         cred_holder_info: ah_info,
         prf_key,
-        attributes: ExampleAttributeList {
-            variant,
-            expiry: expiry_date,
-            alist,
-            _phantom: Default::default(),
-        },
     };
 
-    let context = make_context_from_ip_info(
-        ip_info.clone(),
-        (
-            ip_info.ar_info.0.iter().map(|ar| ar.ar_identity).collect(), /* use all anonymity
-                                                                          * revokers. */
-            Threshold((ip_info.ar_info.0.len() - 1) as _), // all but one threshold
-        ),
-    )
-    .expect("Could not make context from IP info, this should never happen. Terminating.");
+    let attributes = ExampleAttributeList {
+        expiry: expiry_date,
+        alist,
+        _phantom: Default::default(),
+    };
+
+    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+        // use all anonymity revokers.
+        ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
+        // all but one threshold
+        threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
+    })
+    .expect("Constructed AR data is valid.");
     let (pio, randomness) = generate_pio(&context, &aci);
 
-    let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+    let sig_ok = verify_credentials(&pio, &ip_info, &attributes, &ip_secret_key);
 
     // First test, check that we have a valid signature.
     assert!(sig_ok.is_ok());
@@ -116,15 +116,21 @@ fn main() {
         }
     };
 
+    let id_object = IdentityObject {
+        pre_identity_object: pio,
+        alist:               attributes,
+        signature:           ip_sig,
+    };
+    let id_object_use_data = IdObjectUseData { aci, randomness };
+
     let policy = Policy {
-        variant,
-        expiry: expiry_date,
+        expiry:     expiry_date,
         policy_vec: {
             let mut tree = BTreeMap::new();
-            tree.insert(1u16, AttributeKind::from(31));
+            tree.insert(AttributeTag::from(1u8), AttributeKind::from(31));
             tree
         },
-        _phantom: Default::default(),
+        _phantom:   Default::default(),
     };
     {
         // output testdata.bin for basic verification checking.
@@ -141,14 +147,13 @@ fn main() {
         let cdi_1 = generate_cdi(
             &ip_info,
             &global_ctx,
-            &aci,
-            &pio,
+            &id_object,
+            &id_object_use_data,
             53,
-            &ip_sig,
             &policy,
             &acc_data,
-            &randomness,
-        );
+        )
+        .expect("We should have generated valid data.");
 
         // Generate the second credential for an existing account (the one
         // created by the first credential)
@@ -160,14 +165,13 @@ fn main() {
         let cdi_2 = generate_cdi(
             &ip_info,
             &global_ctx,
-            &aci,
-            &pio,
+            &id_object,
+            &id_object_use_data,
             53,
-            &ip_sig,
             &policy,
             &acc_data_2,
-            &randomness,
-        );
+        )
+        .expect("We should have generated valid data.");
 
         let acc_keys = AccountKeys {
             keys:      acc_data_2
@@ -231,7 +235,7 @@ fn main() {
         // We also output the cdi in JSON and binary, to test compatiblity with
         // the haskell serialization
 
-        if let Err(err) = write_json_to_file("cdi.json", &cdi_1.to_json()) {
+        if let Err(err) = write_json_to_file("cdi.json", &cdi_1) {
             eprintln!("Could not output JSON file cdi.json, because {}.", err);
         } else {
             println!("Output cdi.json.");
@@ -260,20 +264,19 @@ fn main() {
                 existing: Left(SignatureThreshold(2)),
             }
         };
+
         let cdi = generate_cdi(
             &ip_info,
             &global_ctx,
-            &aci,
-            &pio,
+            &id_object,
+            &id_object_use_data,
             acc_num,
-            &ip_sig,
             &policy,
             &acc_data,
-            &randomness,
-        );
-        let js = cdi.to_json();
+        )
+        .expect("We should have generated valid data.");
 
-        if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &js) {
+        if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &cdi) {
             eprintln!("Could not output credential = {}, because {}.", idx, err);
         } else {
             println!("Output credential {}.", idx);

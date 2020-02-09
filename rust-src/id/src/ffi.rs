@@ -12,14 +12,65 @@ use std::{error::Error as StdError, fmt, io::Cursor, slice, str::FromStr};
 use byteorder::ReadBytesExt;
 use ffi_helpers::*;
 use libc::size_t;
-use num::bigint::{BigUint, ParseBigIntError};
+use num::{
+    bigint::{BigUint, ParseBigIntError},
+    Num,
+};
 use rand::thread_rng;
+use serde::{
+    de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
+    Serializer,
+};
 use serde_json;
 
 /// Concrete attribute kinds
 #[derive(Copy, Clone, PartialEq, Eq)]
 // represented as big-endian bytes.
 pub struct AttributeKind([u8; 31]);
+
+impl SerdeSerialize for AttributeKind {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        ser.serialize_str(&BigUint::from_bytes_be(&self.0).to_str_radix(10))
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for AttributeKind {
+    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        des.deserialize_str(AttributeKindVisitor)
+    }
+}
+
+pub struct AttributeKindVisitor;
+
+impl<'de> Visitor<'de> for AttributeKindVisitor {
+    type Value = AttributeKind;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            formatter,
+            "An integer, or a string representing an integer."
+        )
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        let n = BigUint::from_str_radix(v, 10).map_err(de::Error::custom)?;
+        let bytes = n.to_bytes_be();
+        if bytes.len() > 31 {
+            Err(de::Error::custom("Value too big."))
+        } else {
+            let mut slice = [0u8; 31];
+            slice[31 - bytes.len()..].copy_from_slice(&bytes);
+            Ok(AttributeKind(slice))
+        }
+    }
+
+    fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+        let bytes = v.to_be_bytes();
+        let mut slice = [0u8; 31];
+        slice[31 - 8..].copy_from_slice(&bytes);
+        Ok(AttributeKind(slice))
+    }
+}
 
 impl Deserial for AttributeKind {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
@@ -205,7 +256,7 @@ macro_generate_commitment_key!(
 macro_free_ffi!(Box ip_info_free, IpInfo<Bls12, G1>);
 macro_derive_from_bytes!(Box ip_info_from_bytes, IpInfo<Bls12, G1>);
 macro_derive_to_bytes!(Box ip_info_to_bytes, IpInfo<Bls12, G1>);
-macro_derive_from_json!(ip_info_from_json, IpInfo<Bls12, G1>, IpInfo::from_json);
+macro_derive_from_json!(ip_info_from_json, IpInfo<Bls12, G1>);
 macro_derive_to_json!(ip_info_to_json, IpInfo<Bls12, G1>);
 
 #[no_mangle]
@@ -219,11 +270,7 @@ pub extern "C" fn ip_info_ip_identity(ip_info_ptr: *const IpInfo<Bls12, G1>) -> 
 macro_free_ffi!(Box global_context_free, GlobalContext<G1>);
 macro_derive_from_bytes!(Box global_context_from_bytes, GlobalContext<G1>);
 macro_derive_to_bytes!(Box global_context_to_bytes, GlobalContext<G1>);
-macro_derive_from_json!(
-    global_context_from_json,
-    GlobalContext<G1>,
-    GlobalContext::from_json
-);
+macro_derive_from_json!(global_context_from_json, GlobalContext<G1>);
 macro_derive_to_json!(global_context_to_json, GlobalContext<G1>);
 
 #[derive(Serialize)]
@@ -336,41 +383,45 @@ mod test {
         let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
 
         let ip_info = IpInfo {
-            ip_identity: IpIdentity(88),
+            ip_identity:    IpIdentity(88),
             ip_description: "IP88".to_string(),
-            ip_verify_key: ip_public_key,
-            ar_info: (vec![ar1_info, ar2_info, ar3_info, ar4_info], ar_ck),
-            ar_base,
+            ip_verify_key:  ip_public_key,
+            ip_ars:         IpAnonymityRevokers {
+                ars: vec![ar1_info, ar2_info, ar3_info, ar4_info],
+                ar_cmm_key: ar_ck,
+                ar_base,
+            },
         };
 
         let prf_key = prf::SecretKey::generate(&mut csprng);
 
-        let variant = 0;
         let expiry_date = 123123123;
-        let alist = vec![AttributeKind::from(55), AttributeKind::from(313123333)];
+        let alist = {
+            let mut alist = BTreeMap::new();
+            alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
+            alist.insert(AttributeTag::from(1u8), AttributeKind::from(313123333));
+            alist
+        };
 
         let aci = AccCredentialInfo {
             cred_holder_info: ah_info,
             prf_key,
-            attributes: ExampleAttributeList {
-                variant,
-                expiry: expiry_date,
-                alist,
-                _phantom: Default::default(),
-            },
         };
 
-        let context = make_context_from_ip_info(
-            ip_info.clone(),
-            (
-                vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
-                Threshold(2),
-            ),
-        )
-        .expect("Could not make context from identity provider info.");
+        let alist = ExampleAttributeList {
+            expiry: expiry_date,
+            alist,
+            _phantom: Default::default(),
+        };
+
+        let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+            ar_identities: vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
+            threshold:     Threshold(2),
+        })
+        .expect("The constructed ARs are valid.");
         let (pio, randomness) = generate_pio(&context, &aci);
 
-        let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
 
         // First test, check that we have a valid signature.
         assert!(sig_ok.is_ok());
@@ -381,25 +432,23 @@ mod test {
         };
 
         let policy = Policy {
-            variant,
-            expiry: expiry_date,
+            expiry:     expiry_date,
             policy_vec: {
                 let mut tree = BTreeMap::new();
-                tree.insert(0u16, AttributeKind::from(55));
+                tree.insert(AttributeTag::from(0u8), AttributeKind::from(55));
                 tree
             },
-            _phantom: Default::default(),
+            _phantom:   Default::default(),
         };
 
         let wrong_policy = Policy {
-            variant,
-            expiry: expiry_date,
+            expiry:     expiry_date,
             policy_vec: {
                 let mut tree = BTreeMap::new();
-                tree.insert(0u16, AttributeKind::from(5));
+                tree.insert(AttributeTag::from(0u8), AttributeKind::from(5));
                 tree
             },
-            _phantom: Default::default(),
+            _phantom:   Default::default(),
         };
 
         let mut keys = BTreeMap::new();
@@ -412,29 +461,35 @@ mod test {
             existing: Left(SignatureThreshold(2)),
         };
 
+        let id_use_data = IdObjectUseData { aci, randomness };
+
+        let id_object = IdentityObject {
+            pre_identity_object: pio,
+            alist,
+            signature: ip_sig,
+        };
+
         let cdi = generate_cdi(
             &ip_info,
             &global_ctx,
-            &aci,
-            &pio,
+            &id_object,
+            &id_use_data,
             0,
-            &ip_sig,
             &policy,
             &acc_data,
-            &randomness,
-        );
+        )
+        .expect("Should generate the credential successfully.");
 
         let wrong_cdi = generate_cdi(
             &ip_info,
             &global_ctx,
-            &aci,
-            &pio,
+            &id_object,
+            &id_use_data,
             0,
-            &ip_sig,
             &wrong_policy,
             &acc_data,
-            &randomness,
-        );
+        )
+        .expect("Should generate the credential successfully.");
 
         let cdi_bytes = to_bytes(&cdi);
         let cdi_bytes_len = cdi_bytes.len() as size_t;

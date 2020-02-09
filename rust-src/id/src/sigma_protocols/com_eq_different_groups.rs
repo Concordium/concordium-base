@@ -7,6 +7,7 @@ use ff::Field;
 use rand::*;
 
 use crypto_common::*;
+use crypto_common_derive::*;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::RandomOracle;
 
@@ -17,7 +18,7 @@ pub struct ComEqDiffGrpsSecret<'a, C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
     pub rand_cmm_2: &'a Randomness<C2>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Copy, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Copy, Serialize, SerdeBase16Serialize)]
 pub struct ComEqDiffGrpsProof<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
     challenge: C1::Scalar,
     witness:   (C1::Scalar, C1::Scalar, C2::Scalar),

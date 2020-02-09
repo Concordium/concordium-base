@@ -9,6 +9,9 @@ use std::convert::TryFrom;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize)]
 /// A point at which the polynomial is evaluated to obtain the shares.
+#[repr(transparent)]
+#[serde(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct ShareNumber(pub u32);
 
 impl ShareNumber {
@@ -34,6 +37,8 @@ impl From<u32> for ShareNumber {
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize)]
 /// Revealing threshold, i.e., degree of the polynomial + 1.
+#[serde(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct Threshold(pub u32);
 
 impl Threshold {

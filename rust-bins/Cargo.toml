@@ -6,11 +6,12 @@ edition = "2018"
 
 [dependencies]
 clap = "2.33"
-dialoguer = "0.4"
+dialoguer = "0.5"
 pairing = "0.15"
 ff = "0.5"
 rand = "=0.7"
 hex = "0.3"
+serde = "1.0"
 serde_json = "1.0"
 failure = "0.1"
 chrono = "0.4"
@@ -21,44 +22,48 @@ rouille = "3.0"
 
 
 [dependencies.crypto_common]
-path = "../crypto_common"
+path = "../rust-src/crypto_common"
 version = "0"
 
 [dependencies.curve_arithmetic]
-path = "../curve_arithmetic"
+path = "../rust-src/curve_arithmetic"
 version = "0"
 
 [dependencies.elgamal]
-path = "../elgamal"
+path = "../rust-src/elgamal"
 version = "0"
 
 [dependencies.dodis_yampolskiy_prf]
-path = "../dodis_yampolskiy_prf"
+path = "../rust-src/dodis_yampolskiy_prf"
 version = "0"
 
 [dependencies.id]
-path = "../id"
+path = "../rust-src/id"
 version = "0"
 
 [dependencies.pedersen_scheme]
-path = "../pedersen_scheme"
+path = "../rust-src/pedersen_scheme"
 version = "0"
 
 [dependencies.ps_sig]
-path = "../ps_sig"
+path = "../rust-src/ps_sig"
 version = "0"
 
 [dependencies.eddsa_ed25519]
-path = "../eddsa_ed25519"
+path = "../rust-src/eddsa_ed25519"
 version = "0"
 
 [dependencies.ec_vrf_ed25519_sha256]
-path = "../ec_vrf_ed25519_sha256"
+path = "../rust-src/ec_vrf_ed25519_sha256"
+version = "0"
+
+[dependencies.wallet]
+path = "../rust-src/wallet"
 version = "0"
 
 # To generate keys for bakers only
 [dependencies.aggregate_sig]
-path = "../aggregate_sig"
+path = "../rust-src/aggregate_sig"
 version = "0"
 
 [lib]

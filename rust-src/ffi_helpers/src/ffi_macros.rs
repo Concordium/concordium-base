@@ -234,9 +234,7 @@ macro_rules! macro_derive_to_json {
         ) -> *mut u8 {
             let input = from_ptr!(input_ptr);
             // unwrap is OK here since we construct well-formed json.
-            let mut bytes = serde_json::to_vec(&input.to_json())
-                .unwrap()
-                .into_boxed_slice();
+            let mut bytes = serde_json::to_vec(&input).unwrap().into_boxed_slice();
             unsafe { *output_len = bytes.len() as size_t }
             let ptr = bytes.as_mut_ptr();
             std::mem::forget(bytes);
@@ -263,20 +261,15 @@ macro_rules! macro_derive_to_json {
 
 #[macro_export]
 macro_rules! macro_derive_from_json {
-    ($function_name:ident, $type:ty, $from:expr) => {
+    ($function_name:ident, $type:ty) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub extern "C" fn $function_name(input_bytes: *mut u8, input_len: size_t) -> *const $type {
             let len = input_len as usize;
             let bytes = slice_from_c_bytes!(input_bytes, len);
-            let value = match serde_json::from_slice(&bytes) {
+            match serde_json::from_slice::<'_, $type>(&bytes) {
                 Err(_) => return ::std::ptr::null(),
-                Ok(v) => v,
-            };
-            let e = $from(&value);
-            match e {
-                Some(r) => Box::into_raw(Box::new(r)),
-                None => ::std::ptr::null(),
+                Ok(v) => Box::into_raw(Box::new(v)),
             }
         }
     };
