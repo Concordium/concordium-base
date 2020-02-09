@@ -13,6 +13,8 @@ use pedersen_scheme::{
 use ps_sig;
 use std::collections::BTreeSet;
 
+use either::Either;
+
 use crate::sigma_protocols::{com_enc_eq, com_eq_sig, com_mult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,7 +68,7 @@ pub fn verify_cdi<
     // FIXME: This is quadratic due to the choice of data structures.
     // We could likely have a map in IPInfo instead of a list.
     for &handle in ars.iter() {
-        match ip_info.ar_info.0.iter().find(|&x| x.ar_identity == handle) {
+        match ip_info.ip_ars.ars.iter().find(|&x| x.ar_identity == handle) {
             None => return Err(CDIVerificationError::AR),
             Some(ar_info) => choice_ar_parameters.push(ar_info),
         }
@@ -365,33 +367,44 @@ fn verify_pok_sig<
         comm_vec.push(commitment_key.hide(&Value::new(ar.ar_identity.to_scalar::<C>()), &zero));
     }
 
+    let tags = {
+        match encode_tags(
+            policy
+                .policy_vec
+                .keys()
+                .chain(commitments.cmm_attributes.keys()),
+        ) {
+            Ok(v) => v,
+            Err(_) => return false,
+        }
+    };
+
     // add commitment with randomness 0 for variant and expiry of
     // the attribute list
-    comm_vec.push(commitment_key.hide(
-        &Value::new(C::scalar_from_u64(u64::from(policy.variant))),
-        &zero,
-    ));
+    comm_vec.push(commitment_key.hide(&Value::new(tags), &zero));
     comm_vec.push(commitment_key.hide(&Value::new(C::scalar_from_u64(policy.expiry)), &zero));
 
     // now, we go through the policy and remaining commitments and
     // put them into the vector of commitments in order to check the signature.
-    // in case there are missing commitments or policy items we reject the signature
-    let number = policy.policy_vec.len() + commitments.cmm_attributes.len();
-    if number > ip_pub_key.len() {
-        return false;
-    }
-    for idx in 0..number {
-        match policy.policy_vec.get(&(idx as u16)) {
-            Some(v) => {
-                let value = Value::new(v.to_field_element());
-                comm_vec.push(commitment_key.hide(&value, &zero));
-            }
-            None => match commitments.cmm_attributes.get(&(idx as u16)) {
-                Some(v) => comm_vec.push(*v),
-                None => return false,
-            },
+    // NB: It is crucial that they are put into the vector ordered by tags, since
+    // otherwise the signature will not check out.
+    // At this point we know all tags are distinct.
+
+    let f = |v: Either<&AttributeType, &Commitment<_>>| match v {
+        Either::Left(v) => {
+            let value = Value::new(v.to_field_element());
+            comm_vec.push(commitment_key.hide(&value, &zero));
         }
-    }
+        Either::Right(v) => {
+            comm_vec.push(*v);
+        }
+    };
+
+    merge_iter(
+        policy.policy_vec.iter(),
+        commitments.cmm_attributes.iter(),
+        f,
+    );
 
     com_eq_sig::verify_com_eq_sig::<P, C>(
         ro,

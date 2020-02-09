@@ -1,5 +1,7 @@
 use crate::types::*;
 
+use failure::Fallible;
+
 use random_oracle::RandomOracle;
 
 use crate::{
@@ -23,23 +25,15 @@ use std::collections::{btree_map::BTreeMap, hash_map::HashMap};
 /// Generate PreIdentityObject out of the account holder information,
 /// the chosen anonymity revoker information, and the necessary contextual
 /// information (group generators, shared commitment keys, etc).
-pub fn generate_pio<
-    P: Pairing,
-    AttributeType: Attribute<C::Scalar>,
-    C: Curve<Scalar = P::ScalarField>,
->(
+pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: &Context<P, C>,
-    aci: &AccCredentialInfo<C, AttributeType>,
-) -> (
-    PreIdentityObject<P, C, AttributeType>,
-    ps_sig::SigRetrievalRandomness<P>,
-)
-where
-    AttributeType: Clone, {
+    aci: &AccCredentialInfo<C>,
+) -> (PreIdentityObject<P, C>, ps_sig::SigRetrievalRandomness<P>) {
     let mut csprng = thread_rng();
     let id_ah = aci.cred_holder_info.id_ah.clone();
     let id_cred_pub = context
         .ip_info
+        .ip_ars
         .ar_base
         .mul_by_scalar(&aci.cred_holder_info.id_cred.id_cred_sec);
     // PRF related computation
@@ -53,11 +47,11 @@ where
     let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data(
         &prf_value,
         &context.choice_ar_parameters,
-        &context.ip_info.ar_info.1,
+        &context.ip_info.ip_ars.ar_cmm_key,
     );
     let number_of_ars = context.choice_ar_parameters.0.len();
     let mut ip_ar_data: Vec<IpArData<C>> = Vec::with_capacity(number_of_ars);
-    let ar_commitment_key = context.ip_info.ar_info.1;
+    let ar_commitment_key = context.ip_info.ip_ars.ar_cmm_key;
     // filling IpArData
     // to shares
     for item in prf_key_data.iter() {
@@ -103,10 +97,10 @@ where
                          RandomOracle::empty(),
                          &id_cred_pub,
                          id_cred_sec,
-                         &context.ip_info.ar_base
+                         &context.ip_info.ip_ars.ar_base
         );
 
-    let ar_ck = context.ip_info.ar_info.1;
+    let ar_ck = context.ip_info.ip_ars.ar_cmm_key;
     let (snd_cmm_sc, snd_cmm_sc_rand) = ar_ck.commit(id_cred_sec.view(), &mut csprng);
     let snd_pok_sc = {
         // FIXME: prefix needs to be all the data sent to id provider or some such.
@@ -115,7 +109,7 @@ where
             &[snd_cmm_sc],
             &id_cred_pub,
             &ar_ck,
-            &[context.ip_info.ar_base],
+            &[context.ip_info.ip_ars.ar_base],
             &[(&snd_cmm_sc_rand, id_cred_sec.view())],
             &mut csprng,
         )
@@ -128,7 +122,7 @@ where
             &cmm_sc,
             &id_cred_pub,
             &sc_ck,
-            &context.ip_info.ar_base,
+            &context.ip_info.ip_ars.ar_base,
             (&cmm_sc_rand, Value::<P::G1>::view_scalar(&id_cred_sec)),
             &mut csprng,
         )
@@ -158,29 +152,31 @@ where
             &cmm_prf,
             snd_cmm_prf,
             &commitment_key_prf,
-            &context.ip_info.ar_info.1,
+            &context.ip_info.ip_ars.ar_cmm_key,
             &secret,
             &mut csprng,
         )
     };
     // identities of the chosen AR's
-    let ar_handles = context
+    let ar_identities = context
         .choice_ar_parameters
         .0
         .iter()
         .map(|x| x.ar_identity)
         .collect();
-    let revocation_threshold = context.choice_ar_parameters.1;
+
+    let threshold = context.choice_ar_parameters.1;
     // attribute list
-    let alist = aci.attributes.clone();
     let prio = PreIdentityObject {
         id_ah,
         id_cred_pub,
         snd_pok_sc,
         proof_com_eq_sc,
         ip_ar_data,
-        choice_ar_parameters: (ar_handles, revocation_threshold),
-        alist,
+        choice_ar_parameters: ChoiceArParameters {
+            ar_identities,
+            threshold,
+        },
         cmm_sc,
         pok_sc,
         cmm_prf,
@@ -309,19 +305,22 @@ pub fn generate_cdi<
 >(
     ip_info: &IpInfo<P, C>,
     global_context: &GlobalContext<C>,
-    aci: &AccCredentialInfo<C, AttributeType>,
-    prio: &PreIdentityObject<P, C, AttributeType>,
+    id_object: &IdentityObject<P, C, AttributeType>,
+    id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
-    ip_sig: &ps_sig::Signature<P>,
     policy: &Policy<C, AttributeType>,
     acc_data: &AccountData,
-    sig_retrieval_rand: &ps_sig::SigRetrievalRandomness<P>,
-) -> CredDeploymentInfo<P, C, AttributeType>
+) -> Fallible<CredDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
 
-    let alist = &prio.alist;
+    let ip_sig = &id_object.signature;
+    let sig_retrieval_rand = &id_object_use_data.randomness;
+    let aci = &id_object_use_data.aci;
+    let prio = &id_object.pre_identity_object;
+    let alist = &id_object.alist;
+
     let prf_key = aci.prf_key;
     let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
     let reg_id_exponent = match aci.prf_key.prf_exponent(cred_counter) {
@@ -339,23 +338,23 @@ where
         )
         .0;
     // adding the chosen ar list to the credential deployment info
-    let ar_list = prio.choice_ar_parameters.0.clone();
+    let ar_list = &prio.choice_ar_parameters.ar_identities;
     let mut choice_ars = Vec::with_capacity(ar_list.len());
-    let ip_ar_parameters = &ip_info.ar_info.0.clone();
+    let ip_ar_parameters = &ip_info.ip_ars.ars.clone();
     for ar in ar_list.iter() {
         match ip_ar_parameters.iter().find(|&x| x.ar_identity == *ar) {
             None => panic!("AR handle not in the IP list"),
             Some(ar_info) => choice_ars.push(ar_info.clone()),
         }
     }
-    let choice_ar_parameters = (choice_ars, prio.choice_ar_parameters.1);
+    let choice_ar_parameters = (choice_ars, prio.choice_ar_parameters.threshold);
     // sharing data for id cred sec
     let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data(
         id_cred_sec.view(),
         &choice_ar_parameters,
         &global_context.on_chain_commitment_key,
     );
-    let number_of_ars = prio.choice_ar_parameters.0.len();
+    let number_of_ars = prio.choice_ar_parameters.ar_identities.len();
     // filling ar data
     let mut ar_data: Vec<ChainArData<C>> = Vec::with_capacity(number_of_ars);
     for item in id_cred_data.iter() {
@@ -406,7 +405,7 @@ where
     // FIXME: With more uniform infrastructure we can avoid all the cloning here.
     let cred_values = CredentialDeploymentValues {
         reg_id,
-        threshold: prio.choice_ar_parameters.1,
+        threshold: prio.choice_ar_parameters.threshold,
         ar_data,
         ip_identity: ip_info.ip_identity,
         policy: policy.clone(),
@@ -482,7 +481,7 @@ where
         &blinded_sig,
         &blind_rand,
         &mut csprng,
-    );
+    )?;
 
     // Proof of knowledge of the secret keys of the account.
     // TODO: This might be replaced by just signatures.
@@ -509,10 +508,11 @@ where
         proof_acc_sk,
     };
 
-    CredDeploymentInfo {
+    let info = CredDeploymentInfo {
         values: cred_values,
         proofs: cdp,
-    }
+    };
+    Ok(info)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -535,9 +535,9 @@ fn compute_pok_sig<
     blinded_sig: &ps_sig::BlindedSignature<P>,
     blind_rand: &ps_sig::BlindingRandomness<P>,
     csprng: &mut R,
-) -> com_eq_sig::ComEqSigProof<P, C> {
+) -> Fallible<com_eq_sig::ComEqSigProof<P, C>> {
     let att_vec = &alist.alist;
-    // number of user chosen attributes (+2 is for variant and expiry)
+    // number of user chosen attributes (+2 is for tags and expiry)
     let num_user_attributes = att_vec.len() + 2;
     // To these there are always two attributes (idCredSec and prf key) added.
     let num_total_attributes = num_user_attributes + 2;
@@ -548,7 +548,10 @@ fn compute_pok_sig<
 
     let y_tildas = &ip_pub_key.y_tildas;
     // FIXME: Handle errors more gracefully, or explicitly state precondition.
-    assert!(y_tildas.len() >= num_total_attributes);
+    ensure!(
+        y_tildas.len() >= num_total_attributes,
+        "Too many attributes."
+    );
 
     let mut gxs = Vec::with_capacity(num_total_commitments);
 
@@ -582,28 +585,34 @@ fn compute_pok_sig<
 
     let att_rands = &commitment_rands.attributes_rand;
 
-    let variant_val = Value::new(C::scalar_from_u64(u64::from(alist.variant)));
-    let variant_cmm = commitment_key.hide(&variant_val, &zero);
+    let tags_val = Value::new(encode_tags(alist.alist.keys())?);
+    let tags_cmm = commitment_key.hide(&tags_val, &zero);
 
     let expiry_val = Value::new(C::scalar_from_u64(alist.expiry));
     let expiry_cmm = commitment_key.hide(&expiry_val, &zero);
 
-    secrets.push((variant_val, &zero));
+    secrets.push((tags_val, &zero));
     gxs.push(y_tildas[num_ars + 3]);
     secrets.push((expiry_val, &zero));
     gxs.push(y_tildas[num_ars + 4]);
 
     // FIXME: Likely we need to make sure there are enough y_tildas first and fail
     // gracefully otherwise.
-    for (idx, &g) in y_tildas.iter().enumerate().take(att_vec.len()) {
+    // NB: It is crucial here that we use a btreemap. This guarantees that
+    // the att_vec.iter() iterator is ordered by keys.
+    ensure!(
+        y_tildas.len() > att_vec.len() + num_ars + 4,
+        "The PS key must be long enough to accommodate all the attributes"
+    );
+    for (&g, (tag, v)) in y_tildas.iter().skip(num_ars + 4 + 1).zip(att_vec.iter()) {
         secrets.push((
             Value {
-                value: att_vec[idx].to_field_element(),
+                value: v.to_field_element(),
             },
             // if we commited with non-zero randomness get it.
             // otherwise we must have commited with zero randomness
             // which we should use
-            &att_rands.get(&idx).unwrap_or(&zero),
+            &att_rands.get(tag).unwrap_or(&zero),
         ));
         gxs.push(g);
     }
@@ -621,11 +630,11 @@ fn compute_pok_sig<
         comm_vec.push(commitment_key.hide(&Value::new(ar.to_scalar::<C>()), &zero));
     }
 
-    comm_vec.push(variant_cmm);
+    comm_vec.push(tags_cmm);
     comm_vec.push(expiry_cmm);
 
-    for (idx, v) in alist.alist.iter().enumerate() {
-        match commitments.cmm_attributes.get(&(idx as u16)) {
+    for (idx, v) in alist.alist.iter() {
+        match commitments.cmm_attributes.get(idx) {
             None => {
                 // need to commit with randomness 0
                 let value = Value::new(v.to_field_element());
@@ -640,7 +649,7 @@ fn compute_pok_sig<
         blind_rand,
         values_and_rands: &secrets,
     };
-    com_eq_sig::prove_com_eq_sig::<P, C, R>(
+    let proof = com_eq_sig::prove_com_eq_sig::<P, C, R>(
         ro,
         blinded_sig,
         &comm_vec,
@@ -648,14 +657,15 @@ fn compute_pok_sig<
         commitment_key,
         &secret,
         csprng,
-    )
+    );
+    Ok(proof)
 }
 
 pub struct CommitmentsRandomness<'a, C: Curve> {
     id_cred_sec_rand:  &'a PedersenRandomness<C>,
     prf_rand:          PedersenRandomness<C>,
     cred_counter_rand: PedersenRandomness<C>,
-    attributes_rand:   HashMap<usize, PedersenRandomness<C>>,
+    attributes_rand:   HashMap<AttributeTag, PedersenRandomness<C>>,
 }
 
 /// Computing the commitments for the credential deployment info. We only
@@ -687,13 +697,13 @@ fn compute_commitments<'a, C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
     let cmm_len = n - policy.policy_vec.len();
     let mut cmm_attributes = BTreeMap::new();
     let mut attributes_rand = HashMap::with_capacity(cmm_len);
-    for (i, val) in att_vec.iter().enumerate() {
+    for (&i, val) in att_vec.iter() {
         // in case the value is openened there is no need to hide it.
         // We can just commit with randomness 0.
-        if !policy.policy_vec.contains_key(&(i as u16)) {
+        if !policy.policy_vec.contains_key(&i) {
             let value = Value::new(val.to_field_element());
             let (cmm, rand) = commitment_key.commit(&value, csprng);
-            cmm_attributes.insert(i as u16, cmm);
+            cmm_attributes.insert(i, cmm);
             attributes_rand.insert(i, rand);
         }
     }

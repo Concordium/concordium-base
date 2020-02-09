@@ -6,13 +6,14 @@ use rand::*;
 
 use crate::{known_message::*, signature::*};
 use crypto_common::*;
+use crypto_common_derive::*;
 use curve_arithmetic::curve_arithmetic::*;
 
 use crate::secret::*;
 
 /// PS public key. The documentation of the fields
 /// assumes the secret key is $(x, y_1, ..., y_n)$ (see specification).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, SerdeBase16Serialize)]
 pub struct PublicKey<C: Pairing> {
     /// Generator of G1
     pub g: C::G1,

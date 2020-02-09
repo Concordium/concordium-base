@@ -12,7 +12,11 @@ use std::ops::Deref;
 /// NB: For the view function it is important that we have #[repr(transparent)].
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct Value<C: Curve> {
+    #[serde(serialize_with = "base16_encode")]
+    #[serde(deserialize_with = "base16_decode")]
     pub value: C::Scalar,
 }
 

@@ -7,8 +7,9 @@ use rand::*;
 use random_oracle::RandomOracle;
 
 use crypto_common::*;
+use crypto_common_derive::*;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
 pub struct DlogProof<T: Curve> {
     challenge: T::Scalar,
     witness:   T::Scalar,

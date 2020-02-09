@@ -1,12 +1,13 @@
 //! Elgamal cipher  types
 
 use crypto_common::*;
+use crypto_common_derive::*;
 use curve_arithmetic::curve_arithmetic::*;
 
 use rand::*;
 use std::ops::Deref;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize, SerdeBase16Serialize)]
 /// Encrypted message.
 pub struct Cipher<C: Curve>(pub C, pub C);
 

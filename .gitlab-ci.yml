@@ -32,6 +32,7 @@ stages:
   cache: {}
   script:
     - ( cd rust-src && cargo fmt -- --color=always)
+    - ( cd rust-bins && cargo fmt -- --color=always)
     - test $(git ls-files --modified | grep -v ".dll$" | grep -v ".a$" | grep -v ".pc$" | grep -v ".def$" | wc -l) -eq 0 || (echo 'You have introduced some unformatted code:'; git ls-files --modified | grep -v ".dll$" | grep -v ".a$" | grep -v ".pc$" | grep -v ".def$" | sed 's/^/* /'; echo 'Please run `cargo fmt` and amend your MR.'; exit 1)
 
 "lint:clippy":
@@ -40,6 +41,7 @@ stages:
   cache: {}
   script:
     - ( cd rust-src && cargo clippy --color=always --all )
+    - ( cd rust-bins && cargo clippy --color=always --all )
 
 "stack:test":
   extends: .generic-test

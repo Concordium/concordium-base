@@ -3,12 +3,13 @@
 //! Commitment type
 
 use crypto_common::*;
+use crypto_common_derive::*;
 use curve_arithmetic::curve_arithmetic::*;
 
 use std::ops::Deref;
 
 /// A Commitment is a group element .
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
 pub struct Commitment<C: Curve>(pub C);
 
 impl<C: Curve> Commitment<C> {

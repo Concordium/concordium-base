@@ -7,6 +7,7 @@ use ff::Field;
 use rand::*;
 
 use crypto_common::*;
+use crypto_common_derive::*;
 use elgamal::{
     Cipher as ElGamalCipher, PublicKey as ElGamalPublicKey, Randomness as ElgamalRandomness,
 };
@@ -20,7 +21,7 @@ pub struct ComEncEqSecret<'a, T: Curve> {
     pub pedersen_rand: &'a Randomness<T>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
 pub struct ComEncEqProof<T: Curve> {
     /// The computed challenge.
     challenge: T::Scalar,
