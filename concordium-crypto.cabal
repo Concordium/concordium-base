@@ -36,9 +36,12 @@ Library
                    Concordium.ID.Account
                    Concordium.ID.Parameters
                    Concordium.ID.IdentityProvider
+                   Concordium.ID.DummyData
                    Concordium.Crypto.FFIDataTypes
                    Concordium.Crypto.ByteStringHelpers
                    Concordium.Crypto.Proofs
+                   Concordium.Crypto.DummyData
+
 
   Other-modules:  Concordium.Crypto.FFIHelpers
                   Data.Base58Encoding.TH
