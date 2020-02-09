@@ -1,5 +1,4 @@
--- |
-
+{-# OPTIONS_GHC -Wno-deprecations #-}
 module Concordium.Types.DummyData where
 
 import qualified Concordium.Crypto.SignatureScheme as SigScheme
