@@ -113,10 +113,13 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
         ip_private_key: ip_sec_key,
     } = ip_info;
 
-    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+    let context = match make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
         ar_identities,
         threshold,
-    });
+    }) {
+        Some(x) => x,
+        None => return rouille::Response::empty_400(),
+    };
     let (pio, randomness) = generate_pio(&context, &aci);
 
     let vf = verify_credentials(&pio, &ip_info, &attributes, &ip_sec_key);

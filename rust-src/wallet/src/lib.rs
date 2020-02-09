@@ -81,7 +81,8 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let context = make_context_from_ip_info(ip_info, ChoiceArParameters {
         ar_identities,
         threshold,
-    });
+    })
+    .ok_or_else(|| format_err!("Invalid choice of anonymity revokers. Should not happen."))?;
     let (pio, randomness) = generate_pio(&context, &aci);
 
     let id_use_data = IdObjectUseData { aci, randomness };

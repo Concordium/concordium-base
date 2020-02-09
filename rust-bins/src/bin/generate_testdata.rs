@@ -94,7 +94,8 @@ fn main() {
         ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
         // all but one threshold
         threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
-    });
+    })
+    .expect("Constructed AR data is valid.");
     let (pio, randomness) = generate_pio(&context, &aci);
 
     let sig_ok = verify_credentials(&pio, &ip_info, &attributes, &ip_secret_key);
