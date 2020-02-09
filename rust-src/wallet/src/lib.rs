@@ -5,9 +5,14 @@ extern crate serde_json;
 
 use curve_arithmetic::curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
+use ed25519_dalek as ed25519;
+use either::Either::{Left, Right};
 use id::{
-    account_holder::generate_pio, ffi::AttributeKind, identity_provider::verify_credentials,
-    secret_sharing::Threshold, types::*,
+    account_holder::{generate_cdi, generate_pio},
+    ffi::AttributeKind,
+    identity_provider::verify_credentials,
+    secret_sharing::Threshold,
+    types::*,
 };
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::Value as PedersenValue;
@@ -86,6 +91,102 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
         "privateIdObjectData": id_use_data,
     });
 
+    Ok(to_string(&response)?)
+}
+
+fn create_credential_aux(input: &str) -> Fallible<String> {
+    let v: Value = from_str(input)?;
+    let ip_info: IpInfo<Bls12, ExampleCurve> = {
+        match v.get("ipInfo") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'ipInfo' not present, but should be."),
+        }
+    };
+
+    let global: GlobalContext<ExampleCurve> = {
+        match v.get("global") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'global' not present, but should be."),
+        }
+    };
+
+    let id_object: IdentityObject<Bls12, ExampleCurve, AttributeKind> =
+        match v.get("identityObject") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'identityObject' not present, but should be."),
+        };
+
+    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = match v.get("privateIdObjectData") {
+        Some(v) => from_value(v.clone())?,
+        None => bail!("Field 'privateIdObjectData' not present, but should be."),
+    };
+
+    let tags: Vec<AttributeTag> = match v.get("revealedAttributes") {
+        Some(v) => from_value(v.clone())?,
+        None => vec![],
+    };
+
+    let acc_num: u8 = match v.get("accountNumber") {
+        Some(v) => from_value(v.clone())?,
+        None => bail!("Account number must be present."),
+    };
+
+    // if account data is present then use it, otherwise generate new.
+    let acc_data = {
+        if let Some(acc_data) = v.get("accountData") {
+            match from_value(acc_data.clone()) {
+                Ok(acc_data) => acc_data,
+                Err(e) => bail!("Cannot decode accountData {}", e),
+            }
+        } else {
+            let mut keys = std::collections::BTreeMap::new();
+            let mut csprng = thread_rng();
+            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+
+            AccountData {
+                keys,
+                existing: Left(SignatureThreshold(1)),
+            }
+        }
+    };
+
+    let mut policy_vec = std::collections::BTreeMap::new();
+    for tag in tags {
+        if let Some(att) = id_object.alist.alist.get(&tag) {
+            if policy_vec.insert(tag, *att).is_some() {
+                bail!("Cannot reveal an attribute more than once.")
+            }
+        } else {
+            bail!("Cannot reveal an attribute which is not part of the attribute list.")
+        }
+    }
+
+    let policy = Policy {
+        expiry: id_object.alist.expiry,
+        policy_vec,
+        _phantom: Default::default(),
+    };
+
+    let cdi = generate_cdi(
+        &ip_info,
+        &global,
+        &id_object,
+        &id_use_data,
+        acc_num,
+        &policy,
+        &acc_data,
+    )?;
+
+    let address = match acc_data.existing {
+        Left(_) => AccountAddress::new(&cdi.values.reg_id),
+        Right(addr) => addr,
+    };
+
+    let response = json!({
+        "credential": cdi,
+        "accountData": acc_data,
+        "accountAddress": address,
+    });
     Ok(to_string(&response)?)
 }
 
@@ -188,6 +289,53 @@ pub unsafe extern "C" fn create_id_request_and_private_data(
         }
     };
     let response = create_id_request_and_private_data_aux(input_str);
+    match response {
+        Ok(s) => {
+            let cstr: CString = {
+                match CString::new(s) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return signal_error(success, format!("Could not encode response: {}", e))
+                    }
+                }
+            };
+            *success = 1;
+            cstr.into_raw()
+        }
+        Err(e) => signal_error(success, format!("Could not produce response: {}", e)),
+    }
+}
+
+#[no_mangle]
+/// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+/// UTF8-encoded string. The input string should contain the JSON payload of an
+/// attribute list, name of id object, and the identity provider public
+/// information. The return value contains a JSON object with two values, one is
+/// the request for the identity object that is public, and the other is the
+/// private keys and other secret values that must be kept by the user.
+/// These secret values will be needed later to use the identity object.
+///
+/// The returned string must be freed by the caller by calling the function
+/// 'free_response_string'. In case of failure the function returns an error
+/// message as the response, and sets the 'success' flag to 0.
+///
+/// # Safety
+/// The input pointer must point to a null-terminated buffer, otherwise this
+/// function will fail in unspecified ways.
+pub unsafe extern "C" fn create_credential(
+    input_ptr: *const c_char,
+    success: *mut u8,
+) -> *mut c_char {
+    if input_ptr.is_null() {
+        return signal_error(success, "Null pointer input.".to_owned());
+    }
+    let input_str = {
+        match CStr::from_ptr(input_ptr).to_str() {
+            Ok(s) => s,
+            Err(e) => return signal_error(success, format!("Could not decode JSON: {}", e)),
+        }
+    };
+    let response = create_credential_aux(input_str);
     match response {
         Ok(s) => {
             let cstr: CString = {
