@@ -758,7 +758,8 @@ fn handle_start_ip(matches: &ArgMatches) {
     let context = make_context_from_ip_info(ip_info, ChoiceArParameters {
         ar_identities: choice_ars,
         threshold,
-    });
+    })
+    .expect("The user should not be able to select invalid ARs due to the input method.");
     // and finally generate the pre-identity object
     // we also retrieve the randomness which we must keep private.
     // This randomness must be used

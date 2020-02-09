@@ -1112,20 +1112,20 @@ pub struct GlobalContext<C: Curve> {
 pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     ip_info: IpInfo<P, C>,
     choice_ar_handles: ChoiceArParameters,
-) -> Context<P, C> {
+) -> Option<Context<P, C>> {
     let mut choice_ars = Vec::with_capacity(choice_ar_handles.ar_identities.len());
     let ip_ar_parameters = &ip_info.ip_ars.ars.clone();
     for ar in choice_ar_handles.ar_identities.into_iter() {
         match ip_ar_parameters.iter().find(|&x| x.ar_identity == ar) {
-            None => panic!("AR handle not in the IP list"),
-            Some(ip_ars) => choice_ars.push(ip_ars.clone()),
+            None => return None,
+            Some(ar_info) => choice_ars.push(ar_info.clone()),
         }
     }
 
-    Context {
+    Some(Context {
         ip_info,
         choice_ar_parameters: (choice_ars, choice_ar_handles.threshold),
-    }
+    })
 }
 
 /// Account data needed by the account holder to generate proofs to deploy the
