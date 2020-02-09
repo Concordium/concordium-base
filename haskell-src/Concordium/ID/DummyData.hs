@@ -33,7 +33,6 @@ dummyCredential address pExpiry  = ID.CredentialDeploymentValues
       cdvThreshold = ID.Threshold 2,
       cdvArData = [],
       cdvPolicy = ID.Policy {
-        pAttributeListVariant = 0,
         pItems = OrdMap.empty,
         ..
         },
