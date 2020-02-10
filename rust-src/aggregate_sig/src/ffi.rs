@@ -216,9 +216,10 @@ mod test {
                 &[&mut pk1 as *mut _, &mut pk2 as *mut _] as *const *mut _;
             let pks_len: size_t = 2;
             let sig_ptr: *mut Signature<Bls12> = &mut sig;
-            assert!(bls_verify_aggregate(
-                m_ptr, m_len, pks_ptr, pks_len, sig_ptr
-            ));
+            assert_eq!(
+                bls_verify_aggregate(m_ptr, m_len, pks_ptr, pks_len, sig_ptr),
+                1
+            );
         }
     }
 

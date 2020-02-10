@@ -425,7 +425,7 @@ mod test {
     #[test]
     fn test_proof_of_knowledge() {
         let mut csprng = thread_rng();
-        for i in 0..100000 {
+        for i in 0..1000 {
             let n = (i % 32) + 1;
             let mut c1: Vec<u8>;
             let mut c2: Vec<u8>;
@@ -451,14 +451,6 @@ mod test {
             let ro2 = RandomOracle::empty().append_bytes(c2.clone());
             let proof = sk.prove(&mut csprng, ro1);
             let proofcheck = pk.check_proof(ro2, &proof);
-
-            if proofcheck {
-                println!("sk: {:?}", sk);
-                println!("pk: {:?}", pk);
-                println!("c1: {:?}", c1);
-                println!("c2: {:?}", c2);
-                println!("proof: {:?}", proof);
-            }
             assert!(!proofcheck)
         }
     }
