@@ -1,11 +1,11 @@
 use curve_arithmetic::{Curve, Pairing};
 use ff::Field;
 use generic_array::GenericArray;
-use rand::{Rng};
+use id::sigma_protocols::dlog::*;
+use rand::Rng;
+use random_oracle::RandomOracle;
 use rayon::iter::*;
 use sha2::{Digest, Sha512};
-use random_oracle::RandomOracle;
-use id::sigma_protocols::dlog::*;
 
 use crypto_common::*;
 
@@ -36,7 +36,7 @@ impl<P: Pairing> SecretKey<P> {
             ro,
             &P::G2::one_point().mul_by_scalar(&self.0),
             &self.0,
-            &P::G2::one_point()
+            &P::G2::one_point(),
         )
     }
 }
@@ -119,7 +119,6 @@ impl<P: Pairing> PartialEq for Signature<P> {
 
 // A proof of knowledge of a secretkey
 pub type Proof<P> = DlogProof<<P as Pairing>::G2>;
-
 
 // Verifies an aggregate signature on pairs (messages m_i, PK_i) for i=1..n by
 // checking     pairing(sig, g_2) == product_{i=0}^n ( pairing(g1_hash(m_i),

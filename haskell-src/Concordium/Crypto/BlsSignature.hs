@@ -54,11 +54,11 @@ foreign import ccall unsafe "bls_proof_eq" equalsProof :: Ptr Proof -> Ptr Proof
 foreign import ccall unsafe "bls_proof_cmp" cmpProof :: Ptr Proof -> Ptr Proof -> IO Int32
 
 foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Signature)
-foreign import ccall unsafe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr PublicKey -> Ptr Signature -> IO Bool
+foreign import ccall unsafe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr PublicKey -> Ptr Signature -> IO Word8
 foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr Signature -> Ptr Signature -> IO (Ptr Signature)
-foreign import ccall unsafe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Bool
+foreign import ccall unsafe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Word8
 foreign import ccall unsafe "bls_prove" proveBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Proof)
-foreign import ccall unsafe "bls_check_proof" checkProofBls :: Ptr Word8 -> CSize -> Ptr Proof -> Ptr PublicKey -> IO Bool
+foreign import ccall unsafe "bls_check_proof" checkProofBls :: Ptr Word8 -> CSize -> Ptr Proof -> Ptr PublicKey -> IO Word8
 
 withSecretKey :: SecretKey -> (Ptr SecretKey -> IO b) -> IO b
 withSecretKey (SecretKey fp) = withForeignPtr fp
@@ -245,7 +245,7 @@ verify m pk sig = unsafeDupablePerformIO $ do
   -- unsafeUseAsCString is ok here, mlen == 0 is appropriately handled in rust
   BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
     withPublicKey pk $ \pk' ->
-    withSignature sig $ verifyBls (castPtr m') (fromIntegral mlen) pk'
+    withSignature sig $! (fmap (== 1) . verifyBls (castPtr m') (fromIntegral mlen) pk')
 
 -- |Aggregate two signatures together.
 aggregate :: Signature -> Signature -> Signature
@@ -263,7 +263,7 @@ verifyAggregate m pks sig = unsafeDupablePerformIO $ do
   BS.unsafeUseAsCStringLen m $ \(m', mlen) ->
     withSignature sig $ \sig' ->
     withKeyArray [] pks $ \arrlen -> \headptr ->
-      verifyBlsAggregate (castPtr m') (fromIntegral mlen) headptr (fromIntegral arrlen) sig'
+      (== 1) <$> verifyBlsAggregate (castPtr m') (fromIntegral mlen) headptr (fromIntegral arrlen) sig'
     where
       withKeyArray ps [] f = withArrayLen ps f
       withKeyArray ps (pk:pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk':ps) pks_ f
@@ -282,7 +282,7 @@ checkProof context proof pk = unsafeDupablePerformIO $ do
   BS.unsafeUseAsCStringLen context $ \(c, clen) ->
     withPublicKey pk $ \pk' ->
     withProof proof $ \proof' ->
-      checkProofBls (castPtr c) (fromIntegral clen) proof' pk'
+      (== 1) <$> checkProofBls (castPtr c) (fromIntegral clen) proof' pk'
 
 instance Semigroup Signature where
     (<>) = aggregate

@@ -10,8 +10,6 @@ import Test.Hspec
 import Data.Serialize
 import qualified Data.Aeson as AE
 
-import Debug.Trace
-
 genSecretKey :: Gen SecretKey
 genSecretKey = secretBlsKeyGen
 

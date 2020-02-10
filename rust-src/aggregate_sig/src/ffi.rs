@@ -1,12 +1,12 @@
 use crate::aggregate_sig::*;
+use crypto_common::*;
 use ffi_helpers::*;
+use id::sigma_protocols::dlog::DlogProof;
 use libc::size_t;
 use pairing::bls12_381::Bls12;
 use rand::{rngs::StdRng, thread_rng, SeedableRng};
-use std::{cmp::Ordering, slice};
 use random_oracle::RandomOracle;
-use crypto_common::*;
-use id::sigma_protocols::dlog::DlogProof;
+use std::{cmp::Ordering, slice};
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -92,12 +92,12 @@ pub extern "C" fn bls_verify(
     m_len: size_t,
     pk_ptr: *mut PublicKey<Bls12>,
     sig_ptr: *mut Signature<Bls12>,
-) -> bool {
+) -> u8 {
     let m_len = m_len as usize;
     let m_bytes = slice_from_c_bytes!(m_ptr, m_len);
     let pk = from_ptr!(pk_ptr);
     let sig = from_ptr!(sig_ptr);
-    pk.verify(m_bytes, *sig)
+    u8::from(pk.verify(m_bytes, *sig))
 }
 
 #[no_mangle]
@@ -119,7 +119,7 @@ pub extern "C" fn bls_verify_aggregate(
     pks_ptr: *const *mut PublicKey<Bls12>,
     pks_len: size_t,
     sig_ptr: *mut Signature<Bls12>,
-) -> bool {
+) -> u8 {
     let m_len = m_len as usize;
     let m_bytes = slice_from_c_bytes!(m_ptr, m_len);
 
@@ -133,7 +133,7 @@ pub extern "C" fn bls_verify_aggregate(
     // It might be desirable to make it take references instead.
     let pks: Vec<PublicKey<Bls12>> = pks_.iter().map(|pk| *from_ptr!(*pk)).collect();
     let sig = from_ptr!(sig_ptr);
-    verify_aggregate_sig_trusted_keys(&m_bytes, &pks, *sig)
+    u8::from(verify_aggregate_sig_trusted_keys(&m_bytes, &pks, *sig))
 }
 
 // Only used for adding a dummy proof to the genesis block
@@ -158,10 +158,11 @@ pub extern "C" fn bls_generate_secretkey_from_seed(seed: size_t) -> *mut SecretK
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn bls_prove(
     ro_ptr: *const u8,
     ro_len: size_t,
-    sk_ptr: *mut SecretKey<Bls12>
+    sk_ptr: *mut SecretKey<Bls12>,
 ) -> *mut Proof<Bls12> {
     let ro_len = ro_len as usize;
     let ro_bytes = slice_from_c_bytes!(ro_ptr, ro_len);
@@ -169,23 +170,26 @@ pub extern "C" fn bls_prove(
 
     let ro = RandomOracle::empty().append_bytes(ro_bytes);
     let mut csprng = thread_rng();
-    Box::into_raw(Box::new(sk.prove(&mut csprng, ro)))
+    let prf = sk.prove(&mut csprng, ro);
+    Box::into_raw(Box::new(prf))
 }
 
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn bls_check_proof(
     ro_ptr: *const u8,
     ro_len: size_t,
     proof_ptr: *mut Proof<Bls12>,
-    pk_ptr: *mut PublicKey<Bls12>
-) -> bool {
+    pk_ptr: *mut PublicKey<Bls12>,
+) -> u8 {
     let ro_len = ro_len as usize;
     let ro_bytes = slice_from_c_bytes!(ro_ptr, ro_len);
     let proof = from_ptr!(proof_ptr);
     let pk = from_ptr!(pk_ptr);
 
     let ro = RandomOracle::empty().append_bytes(ro_bytes);
-    pk.check_proof(ro, &proof)
+    let check = pk.check_proof(ro, &proof);
+    u8::from(check)
 }
 
 #[cfg(test)]
