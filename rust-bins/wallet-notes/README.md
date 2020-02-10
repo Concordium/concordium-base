@@ -143,3 +143,16 @@ and accepts `GET` requests. At the moment two requests are supported.
 
   The returned object is the Identity Object which the wallet must store
   securely, and back up.
+
+# Example JSON input/output files mapping.
+
+- [input.json](input.json) the input to the library call to create id request.
+- [example-id-object-data.json](example-id-object-data.json) response from the
+  library call to create id request.
+- [id-request.json](id-request.json) data to be sent to the identity provider to
+  request the identity object
+- [example-id-object-response.json](example-id-object-response.json) response
+  from the identity provider, the identity object.
+- [credential-input.json](credential-input.json) input to the creation of the
+  credential library call.
+- [credential-response.json](credential.json) the response from credential creation call.
