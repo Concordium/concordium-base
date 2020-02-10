@@ -1,9 +1,11 @@
 use curve_arithmetic::{Curve, Pairing};
 use ff::Field;
 use generic_array::GenericArray;
-use rand::Rng;
+use rand::{Rng};
 use rayon::iter::*;
 use sha2::{Digest, Sha512};
+use random_oracle::RandomOracle;
+use id::sigma_protocols::dlog::*;
 
 use crypto_common::*;
 
@@ -26,6 +28,16 @@ impl<P: Pairing> SecretKey<P> {
         let g1_hash = P::G1::hash_to_group(m);
         let signature = g1_hash.mul_by_scalar(&self.0);
         Signature(signature)
+    }
+
+    pub fn prove<R: Rng>(&self, csprng: &mut R, ro: RandomOracle) -> Proof<P> {
+        prove_dlog(
+            csprng,
+            ro,
+            &P::G2::one_point().mul_by_scalar(&self.0),
+            &self.0,
+            &P::G2::one_point()
+        )
     }
 }
 
@@ -65,6 +77,10 @@ impl<P: Pairing> PublicKey<P> {
         // compute pairings in parallel
         P::check_pairing_eq(&signature.0, &P::G2::one_point(), &g1_hash, &self.0)
     }
+
+    pub fn check_proof(&self, ro: RandomOracle, proof: &Proof<P>) -> bool {
+        verify_dlog(ro, &P::G2::one_point(), &self.0, proof)
+    }
 }
 
 impl<P: Pairing> Clone for PublicKey<P> {
@@ -100,6 +116,10 @@ impl<P: Pairing> Copy for Signature<P> {}
 impl<P: Pairing> PartialEq for Signature<P> {
     fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
+
+// A proof of knowledge of a secretkey
+pub type Proof<P> = DlogProof<<P as Pairing>::G2>;
+
 
 // Verifies an aggregate signature on pairs (messages m_i, PK_i) for i=1..n by
 // checking     pairing(sig, g_2) == product_{i=0}^n ( pairing(g1_hash(m_i),
@@ -195,7 +215,7 @@ fn hash_message(m: &[u8]) -> GenericArray<u8, <Sha512 as Digest>::OutputSize> {
 mod test {
     use super::*;
     use pairing::bls12_381::Bls12;
-    use rand::{rngs::StdRng, thread_rng, Rng, SeedableRng};
+    use rand::{rngs::StdRng, thread_rng, SeedableRng};
     use std::convert::TryFrom;
 
     const SIGNERS: usize = 500;
@@ -400,6 +420,47 @@ mod test {
             assert_eq!(sk_bytes.len(), 32);
             assert_eq!(pk_bytes.len(), 96);
             assert_eq!(sig_bytes.len(), 48);
+        }
+    }
+
+    #[test]
+    fn test_proof_of_knowledge() {
+        let mut csprng = thread_rng();
+        for i in 0..100000 {
+            let n = (i % 32) + 1;
+            let mut c1: Vec<u8>;
+            let mut c2: Vec<u8>;
+            loop {
+                c1 = Vec::new();
+                c2 = Vec::new();
+                for _ in 0..n {
+                    c1.push(csprng.gen::<u8>());
+                    c2.push(csprng.gen::<u8>());
+                }
+
+                if c1 != c2 {
+                    break;
+                }
+            }
+
+            // let c1: [u8; n] = csprng.gen::<[u8; n]>();
+            // let c2: [u8; n] = csprng.gen::<[u8; n]>();
+            let sk = SecretKey::<Bls12>::generate(&mut csprng);
+            let pk = PublicKey::<Bls12>::from_secret(sk);
+
+            let ro1 = RandomOracle::empty().append_bytes(c1.clone());
+            let ro2 = RandomOracle::empty().append_bytes(c2.clone());
+            let proof = sk.prove(&mut csprng, ro1);
+            let proofcheck = pk.check_proof(ro2, &proof);
+
+            if proofcheck {
+                println!("sk: {:?}", sk);
+                println!("pk: {:?}", pk);
+                println!("c1: {:?}", c1);
+                println!("c2: {:?}", c2);
+                println!("proof: {:?}", proof);
+            }
+            assert!(!proofcheck)
         }
     }
 }

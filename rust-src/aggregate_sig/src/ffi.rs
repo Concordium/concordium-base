@@ -4,8 +4,9 @@ use libc::size_t;
 use pairing::bls12_381::Bls12;
 use rand::{rngs::StdRng, thread_rng, SeedableRng};
 use std::{cmp::Ordering, slice};
-
+use random_oracle::RandomOracle;
 use crypto_common::*;
+use id::sigma_protocols::dlog::DlogProof;
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -24,15 +25,19 @@ pub extern "C" fn bls_derive_publickey(sk_ptr: *mut SecretKey<Bls12>) -> *mut Pu
 macro_derive_from_bytes!(Box bls_sk_from_bytes, SecretKey<Bls12>);
 macro_derive_from_bytes!(Box bls_pk_from_bytes, PublicKey<Bls12>);
 macro_derive_from_bytes!(Box bls_sig_from_bytes, Signature<Bls12>);
+macro_derive_from_bytes!(Box bls_proof_from_bytes, Proof<Bls12>);
 macro_free_ffi!(Box bls_free_pk, PublicKey<Bls12>);
 macro_free_ffi!(Box bls_free_sk, SecretKey<Bls12>);
 macro_free_ffi!(Box bls_free_sig, Signature<Bls12>);
+macro_free_ffi!(Box bls_free_proof, Proof<Bls12>);
 macro_derive_to_bytes!(Box bls_pk_to_bytes, PublicKey<Bls12>);
 macro_derive_to_bytes!(Box bls_sk_to_bytes, SecretKey<Bls12>);
 macro_derive_to_bytes!(Box bls_sig_to_bytes, Signature<Bls12>);
+macro_derive_to_bytes!(Box bls_proof_to_bytes, Proof<Bls12>);
 macro_derive_binary!(Box bls_sk_eq, SecretKey<Bls12>, SecretKey::eq);
 macro_derive_binary!(Box bls_pk_eq, PublicKey<Bls12>, PublicKey::eq);
 macro_derive_binary!(Box bls_sig_eq, Signature<Bls12>, Signature::eq);
+macro_derive_binary!(Box bls_proof_eq, Proof<Bls12>, DlogProof::eq);
 
 macro_rules! macro_cmp {
     (Arc $function_name:ident, $type:ty) => {
@@ -65,6 +70,7 @@ macro_rules! macro_cmp {
 macro_cmp!(Box bls_pk_cmp, PublicKey<Bls12>);
 macro_cmp!(Box bls_sk_cmp, SecretKey<Bls12>);
 macro_cmp!(Box bls_sig_cmp, Signature<Bls12>);
+macro_cmp!(Box bls_proof_cmp, Proof<Bls12>);
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -149,6 +155,37 @@ pub extern "C" fn bls_generate_secretkey_from_seed(seed: size_t) -> *mut SecretK
     }
     let mut rng: StdRng = SeedableRng::from_seed(seed_);
     Box::into_raw(Box::new(SecretKey::generate(&mut rng)))
+}
+
+#[no_mangle]
+pub extern "C" fn bls_prove(
+    ro_ptr: *const u8,
+    ro_len: size_t,
+    sk_ptr: *mut SecretKey<Bls12>
+) -> *mut Proof<Bls12> {
+    let ro_len = ro_len as usize;
+    let ro_bytes = slice_from_c_bytes!(ro_ptr, ro_len);
+    let sk = from_ptr!(sk_ptr);
+
+    let ro = RandomOracle::empty().append_bytes(ro_bytes);
+    let mut csprng = thread_rng();
+    Box::into_raw(Box::new(sk.prove(&mut csprng, ro)))
+}
+
+#[no_mangle]
+pub extern "C" fn bls_check_proof(
+    ro_ptr: *const u8,
+    ro_len: size_t,
+    proof_ptr: *mut Proof<Bls12>,
+    pk_ptr: *mut PublicKey<Bls12>
+) -> bool {
+    let ro_len = ro_len as usize;
+    let ro_bytes = slice_from_c_bytes!(ro_ptr, ro_len);
+    let proof = from_ptr!(proof_ptr);
+    let pk = from_ptr!(pk_ptr);
+
+    let ro = RandomOracle::empty().append_bytes(ro_bytes);
+    pk.check_proof(ro, &proof)
 }
 
 #[cfg(test)]
