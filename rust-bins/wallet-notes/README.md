@@ -156,3 +156,10 @@ and accepts `GET` requests. At the moment two requests are supported.
 - [credential-input.json](credential-input.json) input to the creation of the
   credential library call.
 - [credential-response.json](credential.json) the response from credential creation call.
+
+
+# How to run the server
+  From the current directory, the easiest way to run the server is to have
+  `cargo` installed and run
+
+  ```cargo run --release --bin wallet_server -- --ip-data database/identity_provider-0.json --global database/global.json```
