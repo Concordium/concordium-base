@@ -1,8 +1,8 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.BlsSignature
-  (PublicKey, SecretKey(..), Signature,
+  (PublicKey, SecretKey(..), Signature, Proof,
   generateSecretKey, derivePublicKey, sign, verify, aggregate, aggregateMany, verifyAggregate, emptySignature,
-  freeSecretKey)
+  freeSecretKey, prove, checkProof)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -24,6 +24,7 @@ import qualified Data.List as List
 newtype PublicKey = PublicKey (ForeignPtr PublicKey)
 newtype SecretKey = SecretKey (ForeignPtr SecretKey)
 newtype Signature = Signature (ForeignPtr Signature)
+newtype Proof = Proof (ForeignPtr Proof)
 
 foreign import ccall unsafe "&bls_free_sk" freeSecretKey :: FunPtr (Ptr SecretKey -> IO ())
 foreign import ccall unsafe "bls_generate_secretkey" generateSecretKeyPtr :: IO (Ptr SecretKey)
@@ -46,10 +47,18 @@ foreign import ccall unsafe "bls_empty_sig" emptyBlsSig :: IO (Ptr Signature)
 foreign import ccall unsafe "bls_sig_eq" equalsSignature :: Ptr Signature -> Ptr Signature -> IO Word8
 foreign import ccall unsafe "bls_sig_cmp" cmpSignature :: Ptr Signature -> Ptr Signature -> IO Int32
 
+foreign import ccall unsafe "&bls_free_proof" freeProof :: FunPtr (Ptr Proof -> IO ())
+foreign import ccall unsafe "bls_proof_to_bytes" toBytesProof :: Ptr Proof -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "bls_proof_from_bytes" fromBytesProof :: Ptr Word8 -> CSize -> IO (Ptr Proof)
+foreign import ccall unsafe "bls_proof_eq" equalsProof :: Ptr Proof -> Ptr Proof -> IO Word8
+foreign import ccall unsafe "bls_proof_cmp" cmpProof :: Ptr Proof -> Ptr Proof -> IO Int32
+
 foreign import ccall unsafe "bls_sign" signBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Signature)
 foreign import ccall unsafe "bls_verify" verifyBls :: Ptr Word8 -> CSize -> Ptr PublicKey -> Ptr Signature -> IO Bool
 foreign import ccall unsafe "bls_aggregate" aggregateBls :: Ptr Signature -> Ptr Signature -> IO (Ptr Signature)
 foreign import ccall unsafe "bls_verify_aggregate" verifyBlsAggregate :: Ptr Word8 -> CSize -> Ptr (Ptr PublicKey) -> CSize -> Ptr Signature -> IO Bool
+foreign import ccall unsafe "bls_prove" proveBls :: Ptr Word8 -> CSize -> Ptr SecretKey -> IO (Ptr Proof)
+foreign import ccall unsafe "bls_check_proof" checkProofBls :: Ptr Word8 -> CSize -> Ptr Proof -> Ptr PublicKey -> IO Bool
 
 withSecretKey :: SecretKey -> (Ptr SecretKey -> IO b) -> IO b
 withSecretKey (SecretKey fp) = withForeignPtr fp
@@ -60,6 +69,9 @@ withPublicKey (PublicKey fp) = withForeignPtr fp
 withSignature :: Signature -> (Ptr Signature -> IO b) -> IO b
 withSignature (Signature fp) = withForeignPtr fp
 
+withProof :: Proof -> (Ptr Proof -> IO b) -> IO b
+withProof (Proof fp) = withForeignPtr fp
+
 secretKeySize :: Int
 secretKeySize = 32
 
@@ -69,6 +81,8 @@ publicKeySize = 96
 signatureSize :: Int
 signatureSize = 48
 
+proofSize :: Int
+proofSize = 64
 
 -- SecretKey implementations
 
@@ -167,6 +181,38 @@ instance AE.ToJSON Signature where
   toJSON v = AE.String (serializeBase16 v)
 
 
+-- Proof implementations
+
+instance Serialize Proof where
+  get = do
+    bs <- getByteString proofSize
+    case fromBytesHelper freeProof fromBytesProof bs of
+      Nothing -> fail "Cannot decode Proof"
+      Just x -> return $ Proof x
+
+  put (Proof p) =
+    let bs = toBytesHelper toBytesProof p
+    in putByteString bs
+
+instance Show Proof where
+  show = byteStringToHex . encode
+
+-- Serializes to bytes and compares bytes
+instance Eq Proof where
+  Proof p1 == Proof p2 = eqHelper p1 p2 equalsProof
+
+-- Serializes to bytes and compares bytes
+instance Ord Proof where
+  compare (Proof p1) (Proof p2) =
+    cmpHelper p1 p2 cmpProof
+
+instance AE.FromJSON Proof where
+  parseJSON = AE.withText "Bls.Proof" deserializeBase16
+
+instance AE.ToJSON Proof where
+  toJSON p = AE.String (serializeBase16 p)
+
+
 -- Signature scheme implementation
 
 -- |Generate a secret key using a system random number generator.
@@ -221,6 +267,22 @@ verifyAggregate m pks sig = unsafeDupablePerformIO $ do
     where
       withKeyArray ps [] f = withArrayLen ps f
       withKeyArray ps (pk:pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk':ps) pks_ f
+
+-- |Create a proof of knowledge of your secret key
+prove :: ByteString -> SecretKey -> Proof
+prove context sk = Proof <$> unsafeDupablePerformIO $ do
+  proofPtr <- BS.unsafeUseAsCStringLen context $ \(c, clen) ->
+    withSecretKey sk $ \sk' ->
+    proveBls (castPtr c) (fromIntegral clen) sk'
+  newForeignPtr freeProof proofPtr
+
+-- |Check a proof of knowledge for a publickey
+checkProof :: ByteString -> Proof -> PublicKey -> Bool
+checkProof context proof pk = unsafeDupablePerformIO $ do
+  BS.unsafeUseAsCStringLen context $ \(c, clen) ->
+    withPublicKey pk $ \pk' ->
+    withProof proof $ \proof' ->
+      checkProofBls (castPtr c) (fromIntegral clen) proof' pk'
 
 instance Semigroup Signature where
     (<>) = aggregate
