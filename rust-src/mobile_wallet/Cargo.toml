@@ -1,0 +1,23 @@
+[package]
+name = "mobile_wallet"
+version = "0.1.0"
+authors = ["Martin Karlsen Jensen <mkj@concordium.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libc = "0.2"
+
+[dependencies.wallet]
+path = "../wallet"
+version = "0"
+
+# this dependency is only needed for Android.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "0.14.0", default-features = false }
+
+[lib]
+name = "mobile_wallet"
+crate-type = ["lib", "staticlib", "cdylib"]
+path = "src/lib.rs"
