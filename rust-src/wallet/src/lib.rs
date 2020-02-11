@@ -260,6 +260,40 @@ unsafe fn signal_error(flag: *mut u8, err_msg: String) -> *mut c_char {
         .into_raw()
 }
 
+/// # Safety
+/// The input pointer must point to a null-terminated buffer, otherwise this
+/// function will fail in unspecified ways.
+pub unsafe fn create_id_request_and_private_data_ext(
+    input_ptr: *const c_char,
+    success: *mut u8,
+) -> *mut c_char {
+    if input_ptr.is_null() {
+        return signal_error(success, "Null pointer input.".to_owned());
+    }
+    let input_str = {
+        match CStr::from_ptr(input_ptr).to_str() {
+            Ok(s) => s,
+            Err(e) => return signal_error(success, format!("Could not decode JSON: {}", e)),
+        }
+    };
+    let response = create_id_request_and_private_data_aux(input_str);
+    match response {
+        Ok(s) => {
+            let cstr: CString = {
+                match CString::new(s) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return signal_error(success, format!("Could not encode response: {}", e))
+                    }
+                }
+            };
+            *success = 1;
+            cstr.into_raw()
+        }
+        Err(e) => signal_error(success, format!("Could not produce response: {}", e)),
+    }
+}
+
 #[no_mangle]
 /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
 /// UTF8-encoded string. The input string should contain the JSON payload of an
@@ -280,6 +314,13 @@ pub unsafe extern "C" fn create_id_request_and_private_data(
     input_ptr: *const c_char,
     success: *mut u8,
 ) -> *mut c_char {
+    create_id_request_and_private_data_ext(input_ptr, success)
+}
+
+/// # Safety
+/// The input pointer must point to a null-terminated buffer, otherwise this
+/// function will fail in unspecified ways.
+pub unsafe fn create_credential_ext(input_ptr: *const c_char, success: *mut u8) -> *mut c_char {
     if input_ptr.is_null() {
         return signal_error(success, "Null pointer input.".to_owned());
     }
@@ -289,7 +330,7 @@ pub unsafe extern "C" fn create_id_request_and_private_data(
             Err(e) => return signal_error(success, format!("Could not decode JSON: {}", e)),
         }
     };
-    let response = create_id_request_and_private_data_aux(input_str);
+    let response = create_credential_aux(input_str);
     match response {
         Ok(s) => {
             let cstr: CString = {
@@ -323,31 +364,7 @@ pub unsafe extern "C" fn create_credential(
     input_ptr: *const c_char,
     success: *mut u8,
 ) -> *mut c_char {
-    if input_ptr.is_null() {
-        return signal_error(success, "Null pointer input.".to_owned());
-    }
-    let input_str = {
-        match CStr::from_ptr(input_ptr).to_str() {
-            Ok(s) => s,
-            Err(e) => return signal_error(success, format!("Could not decode JSON: {}", e)),
-        }
-    };
-    let response = create_credential_aux(input_str);
-    match response {
-        Ok(s) => {
-            let cstr: CString = {
-                match CString::new(s) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        return signal_error(success, format!("Could not encode response: {}", e))
-                    }
-                }
-            };
-            *success = 1;
-            cstr.into_raw()
-        }
-        Err(e) => signal_error(success, format!("Could not produce response: {}", e)),
-    }
+    create_credential_ext(input_ptr, success)
 }
 
 #[no_mangle]
