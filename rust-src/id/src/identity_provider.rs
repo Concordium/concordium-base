@@ -3,15 +3,19 @@ use crate::{
     sigma_protocols::{com_enc_eq::*, com_eq::*, com_eq_different_groups::*, dlog::*},
     types::*,
 };
+use curve_arithmetic::{Curve, Pairing};
+
 use random_oracle::RandomOracle;
 
-use curve_arithmetic::curve_arithmetic::*;
 use ff::Field;
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use ps_sig;
 use rand::*;
 
 #[derive(Debug, Clone, Copy)]
+pub struct Declined(pub Reason);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Reason {
     FailedToVerifyKnowledgeOfIdCredSec,
     FailedToVerifyIdCredSecEquality,
@@ -230,8 +234,19 @@ pub fn commitment_to_share<C: Curve>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pairing::bls12_381::G1Affine;
-    use pedersen_scheme::{key::CommitmentKey, value::Value};
+
+    use crate::{account_holder::generate_pio, ffi::*};
+
+    use dodis_yampolskiy_prf::secret as prf;
+    use elgamal::{public::PublicKey, secret::SecretKey};
+    use pairing::bls12_381::{Bls12, G1Affine, G1};
+    use pedersen_scheme::{key as PedersenKey, key::CommitmentKey, Value as PedersenValue};
+
+    type ExamplePairing = Bls12;
+    type ExampleCurve = G1;
+    type ExampleAttribute = AttributeKind;
+    type ExampleAttributeList =
+        AttributeList<<ExamplePairing as Pairing>::ScalarField, ExampleAttribute>;
 
     #[test]
     fn test_commit_to_share() {
@@ -246,7 +261,7 @@ mod tests {
         for _i in 0..=d {
             // Make commitments to coefficients
             let a = csprng.next_u64();
-            let v = Value::from_scalar(G1Affine::scalar_from_u64(a));
+            let v = PedersenValue::from_scalar(G1Affine::scalar_from_u64(a));
             let (c, r) = ck.commit(&v, &mut csprng);
             coeffs.push(c);
             rands.push(r);
@@ -256,5 +271,187 @@ mod tests {
         // Test commitment on x=0 is equal to zero'th coefficient commitment
         let p0 = commitment_to_share(ShareNumber::from(0), &coeffs);
         assert_eq!(coeffs[0], p0);
+    }
+
+    fn create_test_ip_info<T: Rng>(
+        csprng: &mut T,
+        num_ars: u32,
+    ) -> (
+        IpInfo<ExamplePairing, ExampleCurve>,
+        ps_sig::secret::SecretKey<ExamplePairing>,
+    ) {
+        // Create key for IP
+        let ip_secret_key = ps_sig::secret::SecretKey::<ExamplePairing>::generate(10, csprng);
+        let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+
+        // Create ARs
+        let ar_ck = PedersenKey::CommitmentKey::generate(csprng);
+        let ar_base = ExampleCurve::generate(csprng);
+        let mut ar_infos = Vec::new();
+        for i in 0..num_ars {
+            let ar_secret_key = SecretKey::generate(&ar_base, csprng);
+            let ar_public_key = PublicKey::from(&ar_secret_key);
+            let ar_info = ArInfo::<ExampleCurve> {
+                ar_identity: ArIdentity(i),
+                ar_description: format!("AnonymityRevoker{}", i),
+                ar_public_key,
+            };
+            ar_infos.push(ar_info);
+        }
+
+        // Return IP-info and secret-key
+        (
+            IpInfo {
+                ip_identity: IpIdentity(0),
+                ip_description: "IP0".to_string(),
+                ip_verify_key: ip_public_key,
+                ar_info: (ar_infos, ar_ck),
+                ar_base,
+            },
+            ip_secret_key,
+        )
+    }
+
+    fn create_test_pio<T: Rng>(
+        csprng: &mut T,
+        ip_info: &IpInfo<ExamplePairing, ExampleCurve>,
+        num_ars: u32,
+    ) -> (
+        Context<ExamplePairing, ExampleCurve>,
+        PreIdentityObject<ExamplePairing, ExampleCurve, ExampleAttribute>,
+        <G1 as Curve>::Scalar,
+    ) {
+        // Create account holder
+        let secret = ExampleCurve::generate_scalar(csprng);
+        let ah_info = CredentialHolderInfo::<ExampleCurve> {
+            id_ah:   "ACCOUNT_HOLDER".to_owned(),
+            id_cred: IdCredentials {
+                id_cred_sec: PedersenValue::new(secret),
+            },
+        };
+        let id_cred_sec = ah_info.id_cred.id_cred_sec.clone();
+
+        // Create credential information
+        let prf_key = prf::SecretKey::generate(csprng);
+        let variant = 0;
+        let expiry_date = 123123123;
+        let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
+        let aci = AccCredentialInfo {
+            cred_holder_info: ah_info,
+            prf_key,
+            attributes: ExampleAttributeList {
+                variant,
+                expiry: expiry_date,
+                alist,
+                _phantom: Default::default(),
+            },
+        };
+
+        // Select some ARsw
+        let threshold = num_ars - 1;
+        let mut ars = Vec::new();
+        for i in 0..threshold {
+            ars.push(ArIdentity(i));
+        }
+
+        // Create context
+        let context = make_context_from_ip_info(ip_info.clone(), (ars, Threshold(threshold)));
+
+        // Create and return PIO
+        let (pio, _) =
+            generate_pio::<ExamplePairing, ExampleAttribute, ExampleCurve>(&context, &aci);
+        (context, pio, id_cred_sec)
+    }
+
+    #[test]
+    fn test_verify_credentials_success() {
+        // Arrange
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
+        let (_, pio, _) = create_test_pio(&mut csprng, &ip_info, num_ars);
+
+        // Act
+        let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+
+        // Assert
+        assert!(sig_ok.is_ok());
+    }
+
+    #[test]
+    fn test_verify_credentials_fail_pok_idcredsec() {
+        // Arrange
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
+        let (_, mut pio, id_cred_sec) = create_test_pio(&mut csprng, &ip_info, num_ars);
+
+        // Act (make dlog proof using wrong id_cred_sec)
+        let mut wrong_id_cred_sec = id_cred_sec;
+        wrong_id_cred_sec.double();
+        pio.pok_sc = prove_dlog(
+            &mut csprng,
+            RandomOracle::empty(),
+            &pio.id_cred_pub,
+            &wrong_id_cred_sec,
+            &ip_info.ar_base,
+        );
+        let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+
+        // Assert
+        assert!(!sig_ok.is_ok());
+        if let Err(Declined(reason)) = sig_ok {
+            assert_eq!(reason, Reason::FailedToVerifyKnowledgeOfIdCredSec);
+        } else {
+            panic!("Could not extract declined reason.")
+        }
+    }
+
+    #[test]
+    fn test_verify_credentials_fail_idcredsec_equality() {
+        // Arrange
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
+        let (ctx, mut pio, id_cred_sec) = create_test_pio(&mut csprng, &ip_info, num_ars);
+
+        // Act (make cmm_sc be commitment of id_cred_sec but with fresh randomness)
+        let sc_ck = CommitmentKey(ctx.ip_info.ip_verify_key.ys[0], ctx.ip_info.ip_verify_key.g);
+        let val = curve_arithmetic::secret_value::Value::from_scalar(id_cred_sec);
+        let (cmm_sc, _) = sc_ck.commit(&val, &mut csprng);
+        pio.cmm_sc = cmm_sc;
+        let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+
+        // Assert
+        assert!(!sig_ok.is_ok());
+        if let Err(Declined(reason)) = sig_ok {
+            assert_eq!(reason, Reason::FailedToVerifyIdCredSecEquality);
+        } else {
+            panic!("Could not extract declined reason.")
+        }
+    }
+
+    #[test]
+    fn test_verify_credentials_fail_prf_data() {
+        // Arrange
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
+        let (_, mut pio, _) = create_test_pio(&mut csprng, &ip_info, num_ars);
+
+        // Act (make cmm_prf be a commitment to a wrong/random value)
+        let ck = ip_info.ar_info.1;
+        let val = curve_arithmetic::secret_value::Value::generate(&mut csprng);
+        let (cmm_prf, _) = ck.commit(&val, &mut csprng);
+        pio.cmm_prf = cmm_prf;
+        let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+
+        // Assert
+        assert!(!sig_ok.is_ok());
+        if let Err(Declined(reason)) = sig_ok {
+            assert_eq!(reason, Reason::FailedToVerifyPrfData);
+        } else {
+            panic!("Could not extract declined reason.")
+        }
     }
 }
