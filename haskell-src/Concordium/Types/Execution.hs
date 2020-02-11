@@ -299,6 +299,17 @@ payloadBodyBytes (EncodedPayload ss) =
   then BS.empty
   else BS.tail (BSS.fromShort ss)
 
+-- |Additional special events that affect the block state.
+data BlockEvents =
+  -- |Block reward
+  BlockReward !Amount !BakerId
+  -- |Delegation reward
+  | DelegationReward !Amount !BakerId
+  -- |Foundation tax transfer
+  | FoundationTax !Amount
+  -- |Reward to a finalizer.
+  | FinalizationReward !Amount !BakerId
+
 -- |Events which are generated during transaction execution.
 -- These are only used for commited transactions.
 data Event =
