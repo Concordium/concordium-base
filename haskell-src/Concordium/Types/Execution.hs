@@ -301,19 +301,94 @@ payloadBodyBytes (EncodedPayload ss) =
 
 -- |Events which are generated during transaction execution.
 -- These are only used for commited transactions.
-data Event = ModuleDeployed !Core.ModuleRef
-           | ContractInitialized !Core.ModuleRef !Core.TyName !ContractAddress
-           | Updated !Address !ContractAddress !Amount !MessageFormat
-           | Transferred !Address !Amount !Address
+data Event =
+           -- |Module with the given address was deployed.
+           ModuleDeployed !Core.ModuleRef
+           -- |The contract was deployed.
+           | ContractInitialized {
+               -- |Module in which the contract source resides.
+               ecRef :: !Core.ModuleRef,
+               -- |Name of the contract relative to the module.
+               ecName :: !Core.TyName,
+               -- |Reference to the contract as deployed.
+               ecAddress :: !ContractAddress,
+               -- |Initial amount transferred to the contract.
+               ecAmount :: !Amount
+               -- TODO: We could include initial state hash here.
+               -- Including the whole state is likely not a good idea.
+               }
+           -- |The given contract was updated.
+           | Updated {
+               -- |Address of the contract that was updated.
+               euAddress :: !ContractAddress,
+               -- |Address of the instigator of the update, an account or contract.
+               euInstigator :: !Address,
+               -- |Amount which was transferred to the contract.
+               euAmount :: !Amount,
+               -- |The message which was sent to the contract.
+               euMessage :: !MessageFormat
+               -- TODO: We could include input/output state hashes here
+               -- Including the whole state pre/post run is likely not a good idea.
+               }
+           -- |Tokens were transferred.
+           | Transferred {
+               -- |Source.
+               etFrom :: !Address,
+               -- |Amount.
+               etAmount :: !Amount,
+               -- |Target.
+               etTo :: !Address
+               }
+           -- |A new account was created.
            | AccountCreated !AccountAddress
-           | CredentialDeployed !IDTypes.CredentialDeploymentValues
-           | AccountEncryptionKeyDeployed AccountAddress IDTypes.AccountEncryptionKey
+           -- |A new credential was deployed onto a given account.
+           | CredentialDeployed {
+               -- |ID of the credential
+               ecdRegId :: !IDTypes.CredentialRegistrationID,
+               -- |Account to which it was deployed.
+               ecdAccount :: !AccountAddress
+               }
+           -- |A new encryption key was deployed onto an account.
+           | AccountEncryptionKeyDeployed {
+               -- |The encryption key.
+               eaekdKey :: !IDTypes.AccountEncryptionKey,
+               -- |Account to which it was deployed.
+               eaekdAccount :: !AccountAddress
+               }
            | BakerAdded !BakerId
            | BakerRemoved !BakerId
-           | BakerAccountUpdated !BakerId !AccountAddress
-           | BakerKeyUpdated !BakerId !BakerSignVerifyKey
-           | StakeDelegated !AccountAddress !BakerId
-           | StakeUndelegated !AccountAddress
+           | BakerAccountUpdated {
+               -- |The baker.
+               ebauBaker :: !BakerId,
+               -- |New account address
+               ebauNewAccount :: !AccountAddress
+               }
+           | BakerKeyUpdated {
+               -- |The baker.
+               ebkuBaker :: !BakerId,
+               -- |New key.
+               ebkuNewKey :: !BakerSignVerifyKey
+               }
+           | BakerElectionKeyUpdated {
+               -- |The baker.
+               ebekuBaker :: !BakerId,
+               -- |New key.
+               ebekuNewKey :: !BakerElectionVerifyKey
+               }
+           | StakeDelegated {
+               -- |Account which is delegating.
+               esdAccount :: !AccountAddress,
+               -- |To which baker.
+               esdBaker :: !BakerId
+               }
+           | StakeUndelegated {
+               -- |Account which undelegated the stake.
+               esuAccount :: !AccountAddress,
+               -- |The baker to which the account delegated before, if any.
+               -- It is OK for an account to try to undelegate stake even if they
+               -- are not delegating to anyone at the time.
+               esuBaker :: !(Maybe BakerId)
+               }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -366,19 +441,14 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   -- ^The receiver account does not have a valid credential.
                   | ReceiverContractNoCredential !ContractAddress
                   -- ^The receiver contract does not have a valid credential.
-                  | EvaluationError         -- ^Error during evalution. This is
-                                            -- mostly for debugging purposes
-                                            -- since this kind of an error should
-                                            -- not happen after successful
-                                            -- typechecking.
                   | AmountTooLarge !Address !Amount
                   -- ^When one wishes to transfer an amount from A to B but there
                   -- are not enough funds on account/contract A to make this
                   -- possible. The data are the from address and the amount to transfer.
-                  | SerializationFailure String -- ^Serialization of the body failed for the given reason.
+                  | SerializationFailure -- ^Serialization of the body failed.
                   | OutOfEnergy -- ^We ran of out energy to process this transaction.
                   | Rejected -- ^Rejected due to contract logic.
-                  | DuplicateAccountRegistrationID IDTypes.CredentialRegistrationID
+                  | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
                   | NonExistentIdentityProvider !IDTypes.IdentityProviderIdentity
                   | AccountCredentialInvalid
                   | AccountEncryptionKeyAlreadyExists AccountAddress IDTypes.AccountEncryptionKey
