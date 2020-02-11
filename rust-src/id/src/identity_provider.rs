@@ -249,7 +249,7 @@ mod tests {
         AttributeList<<ExamplePairing as Pairing>::ScalarField, ExampleAttribute>;
 
     #[test]
-    fn test_commit_to_share() {
+    fn test_commit_to_share_zero() {
         let mut csprng = thread_rng();
         let ck = CommitmentKey::<G1Affine>::generate(&mut csprng);
 
@@ -386,7 +386,7 @@ mod tests {
         let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
         let (_, mut pio, id_cred_sec) = create_test_pio(&mut csprng, &ip_info, num_ars);
 
-        // Act (make dlog proof using wrong id_cred_sec)
+        // Act (make dlog proof use wrong id_cred_sec)
         let mut wrong_id_cred_sec = id_cred_sec;
         wrong_id_cred_sec.double();
         pio.pok_sc = prove_dlog(
@@ -415,7 +415,7 @@ mod tests {
         let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
         let (ctx, mut pio, id_cred_sec) = create_test_pio(&mut csprng, &ip_info, num_ars);
 
-        // Act (make cmm_sc be commitment of id_cred_sec but with fresh randomness)
+        // Act (make cmm_sc be commitment of id_cred_sec but with wrong/fresh randomness)
         let sc_ck = CommitmentKey(ctx.ip_info.ip_verify_key.ys[0], ctx.ip_info.ip_verify_key.g);
         let val = curve_arithmetic::secret_value::Value::from_scalar(id_cred_sec);
         let (cmm_sc, _) = sc_ck.commit(&val, &mut csprng);
