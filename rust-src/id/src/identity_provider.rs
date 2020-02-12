@@ -241,6 +241,7 @@ mod tests {
     use elgamal::{public::PublicKey, secret::SecretKey};
     use pairing::bls12_381::{Bls12, G1Affine, G1};
     use pedersen_scheme::{key as PedersenKey, key::CommitmentKey, Value as PedersenValue};
+    use std::collections::btree_map::BTreeMap;
 
     type ExamplePairing = Bls12;
     type ExampleCurve = G1;
@@ -302,11 +303,14 @@ mod tests {
         // Return IP-info and secret-key
         (
             IpInfo {
-                ip_identity: IpIdentity(0),
+                ip_identity:    IpIdentity(0),
                 ip_description: "IP0".to_string(),
-                ip_verify_key: ip_public_key,
-                ar_info: (ar_infos, ar_ck),
-                ar_base,
+                ip_verify_key:  ip_public_key,
+                ip_ars:         IpAnonymityRevokers {
+                    ars: ar_infos,
+                    ar_cmm_key: ar_ck,
+                    ar_base,
+                },
             },
             ip_secret_key,
         )
@@ -318,7 +322,7 @@ mod tests {
         num_ars: u32,
     ) -> (
         Context<ExamplePairing, ExampleCurve>,
-        PreIdentityObject<ExamplePairing, ExampleCurve, ExampleAttribute>,
+        PreIdentityObject<ExamplePairing, ExampleCurve>,
         <G1 as Curve>::Scalar,
     ) {
         // Create account holder
@@ -334,20 +338,21 @@ mod tests {
         // Create credential information
         let prf_key = prf::SecretKey::generate(csprng);
         let variant = 0;
-        let expiry_date = 123123123;
-        let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
         let aci = AccCredentialInfo {
             cred_holder_info: ah_info,
             prf_key,
-            attributes: ExampleAttributeList {
-                variant,
-                expiry: expiry_date,
-                alist,
-                _phantom: Default::default(),
-            },
         };
 
-        // Select some ARsw
+        let mut alist = BTreeMap::new();
+        alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
+        alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+        let alist = ExampleAttributeList {
+            expiry: 123123123,
+            alist,
+            _phantom: Default::default(),
+        };
+
+        // Select some ARs
         let threshold = num_ars - 1;
         let mut ars = Vec::new();
         for i in 0..threshold {
@@ -355,12 +360,29 @@ mod tests {
         }
 
         // Create context
-        let context = make_context_from_ip_info(ip_info.clone(), (ars, Threshold(threshold)));
+        let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+            ar_identities: ars,
+            threshold:     Threshold(threshold),
+        })
+        .expect("The constructed ARs are invalid.");
 
         // Create and return PIO
-        let (pio, _) =
-            generate_pio::<ExamplePairing, ExampleAttribute, ExampleCurve>(&context, &aci);
+        let (pio, _randomness) = generate_pio::<ExamplePairing, ExampleCurve>(&context, &aci);
         (context, pio, id_cred_sec)
+    }
+
+    fn create_test_attributes() -> ExampleAttributeList {
+        let alist = {
+            let mut alist = BTreeMap::new();
+            alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
+            alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+            alist
+        };
+        ExampleAttributeList {
+            expiry: 123123123,
+            alist,
+            _phantom: Default::default(),
+        }
     }
 
     #[test]
@@ -370,9 +392,10 @@ mod tests {
         let mut csprng = thread_rng();
         let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
         let (_, pio, _) = create_test_pio(&mut csprng, &ip_info, num_ars);
+        let attrs = create_test_attributes();
 
         // Act
-        let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
 
         // Assert
         assert!(sig_ok.is_ok());
@@ -385,6 +408,7 @@ mod tests {
         let mut csprng = thread_rng();
         let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
         let (_, mut pio, id_cred_sec) = create_test_pio(&mut csprng, &ip_info, num_ars);
+        let attrs = create_test_attributes();
 
         // Act (make dlog proof use wrong id_cred_sec)
         let mut wrong_id_cred_sec = id_cred_sec;
@@ -394,13 +418,13 @@ mod tests {
             RandomOracle::empty(),
             &pio.id_cred_pub,
             &wrong_id_cred_sec,
-            &ip_info.ar_base,
+            &ip_info.ip_ars.ar_base,
         );
-        let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
 
         // Assert
         assert!(!sig_ok.is_ok());
-        if let Err(Declined(reason)) = sig_ok {
+        if let Err(reason) = sig_ok {
             assert_eq!(reason, Reason::FailedToVerifyKnowledgeOfIdCredSec);
         } else {
             panic!("Could not extract declined reason.")
@@ -414,17 +438,18 @@ mod tests {
         let mut csprng = thread_rng();
         let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
         let (ctx, mut pio, id_cred_sec) = create_test_pio(&mut csprng, &ip_info, num_ars);
+        let attrs = create_test_attributes();
 
         // Act (make cmm_sc be comm. of id_cred_sec but with wrong/fresh randomness)
         let sc_ck = CommitmentKey(ctx.ip_info.ip_verify_key.ys[0], ctx.ip_info.ip_verify_key.g);
         let val = curve_arithmetic::secret_value::Value::from_scalar(id_cred_sec);
         let (cmm_sc, _) = sc_ck.commit(&val, &mut csprng);
         pio.cmm_sc = cmm_sc;
-        let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
 
         // Assert
         assert!(!sig_ok.is_ok());
-        if let Err(Declined(reason)) = sig_ok {
+        if let Err(reason) = sig_ok {
             assert_eq!(reason, Reason::FailedToVerifyIdCredSecEquality);
         } else {
             panic!("Could not extract declined reason.")
@@ -438,17 +463,18 @@ mod tests {
         let mut csprng = thread_rng();
         let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
         let (_, mut pio, _) = create_test_pio(&mut csprng, &ip_info, num_ars);
+        let attrs = create_test_attributes();
 
         // Act (make cmm_prf be a commitment to a wrong/random value)
-        let ck = ip_info.ar_info.1;
+        let ck = ip_info.ip_ars.ar_cmm_key;
         let val = curve_arithmetic::secret_value::Value::generate(&mut csprng);
         let (cmm_prf, _) = ck.commit(&val, &mut csprng);
         pio.cmm_prf = cmm_prf;
-        let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
 
         // Assert
         assert!(!sig_ok.is_ok());
-        if let Err(Declined(reason)) = sig_ok {
+        if let Err(reason) = sig_ok {
             assert_eq!(reason, Reason::FailedToVerifyPrfData);
         } else {
             panic!("Could not extract declined reason.")

@@ -111,7 +111,7 @@ fn test_pipeline() {
         ar_identities: vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
         threshold:     Threshold(2),
     })
-    .expect("The constructed ARs are valid.");
+    .expect("The constructed ARs are invalid.");
     let (pio, randomness) = generate_pio(&context, &aci);
 
     let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
