@@ -337,19 +337,9 @@ mod tests {
 
         // Create credential information
         let prf_key = prf::SecretKey::generate(csprng);
-        let variant = 0;
         let aci = AccCredentialInfo {
             cred_holder_info: ah_info,
             prf_key,
-        };
-
-        let mut alist = BTreeMap::new();
-        alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
-        alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
-        let alist = ExampleAttributeList {
-            expiry: 123123123,
-            alist,
-            _phantom: Default::default(),
         };
 
         // Select some ARs
@@ -372,12 +362,10 @@ mod tests {
     }
 
     fn create_test_attributes() -> ExampleAttributeList {
-        let alist = {
-            let mut alist = BTreeMap::new();
-            alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
-            alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
-            alist
-        };
+        let mut alist = BTreeMap::new();
+        alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
+        alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+
         ExampleAttributeList {
             expiry: 123123123,
             alist,
