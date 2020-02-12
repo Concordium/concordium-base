@@ -16,83 +16,110 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
     _: JClass,
     input: JString,
 ) -> jobject {
-    let _str = env.get_string(input).expect("Could not create Java String");
-
-    let mut success = 127;
-
-    let res = unsafe {
-        CString::from_raw(create_id_request_and_private_data_ext(
-            _str.as_ptr(),
-            &mut success,
-        ))
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                127,
+                format!("Could not read java.lang.String given as input due to {:?}", e),
+            )
+        }
     };
-
-    let output = env
-        .new_string(res.to_str().unwrap())
-        .expect("Could not create a Java string!");
-
-    let cls_name = "com/concordium/mobile_wallet_lib/ReturnValue";
-
-    let cls = env.find_class(cls_name).unwrap();
-
-    let ctr_sig = "(ILjava/lang/String;)V";
-
-    let method_id = env.get_method_id(cls, "<init>", ctr_sig).unwrap();
-
-    env.new_object_unchecked(cls, method_id, &[
-        JValue::Int(success as jint),
-        JValue::Object(*output),
-    ])
-    .unwrap()
-    .into_inner()
+    let cstr_res = unsafe {
+        let unsafe_res_ptr =
+            create_id_request_and_private_data_ext(input_str.as_ptr(), &mut success);
+        if (unsafe_res_ptr.is_null()) {
+            return wrap_return_tuple(127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(success, str_ref),
+        Err(e) => {
+            wrap_return_tuple(127, &format!("Could not read CString from crypto library {:?}", e))
+        }
+    }
 }
 
 #[no_mangle]
-
 pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1credential(
     env: JNIEnv,
     _: JClass,
     input: JString,
 ) -> jobject {
-    let _str = env.get_string(input).expect("Could not create Java String");
-
-    let mut success: u8 = 127;
-
-    let res = unsafe {
-        let creds_ptr = create_credential_ext(_str.as_ptr(), &mut success);
-        CString::from_raw(creds_ptr)
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                127,
+                format!("Could not read java.lang.String given as input due to {:?}", e),
+            )
+        }
     };
-
-    let output = env
-        .new_string(res.to_str().unwrap())
-        .expect("Could not create a Java string!");
-
-    let cls_name = "com/concordium/mobile_wallet_lib/ReturnValue";
-
-    let cls = env.find_class(cls_name).unwrap();
-
-    let ctr_sig = "(ILjava/lang/String;)V";
-
-    let method_id = env.get_method_id(cls, "<init>", ctr_sig).unwrap();
-
-    env.new_object_unchecked(cls, method_id, &[
-        JValue::Int(success as jint),
-        JValue::Object(*output),
-    ])
-    .unwrap()
-    .into_inner()
+    let mut success: u8 = 127;
+    let cstr_res = unsafe {
+        let unsafe_res_ptr = create_credential_ext(input_str.as_ptr(), &mut success);
+        if (unsafe_res_ptr.is_null()) {
+            return wrap_return_tuple(127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(success, str_ref),
+        Err(e) => {
+            wrap_return_tuple(127, &format!("Could not read CString from crypto library {:?}", e))
+        }
+    }
 }
 
-#[no_mangle]
-
-pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_link_1check(
-    env: JNIEnv,
-    _: JClass,
-    input: JString,
-) -> jstring {
-    let input = env.get_string(input).unwrap();
-
-    env.new_string(&format!("Hello, World {}!", input.to_str().unwrap()))
-        .unwrap()
-        .into_inner()
+fn wrap_return_tuple(code: u8, message: &str) -> jobject {
+    let class_name = "com/concordium/mobile_wallet_lib/ReturnValue";
+    let class = match env.find_class(cls_name) {
+        Ok(clazz) => clazz,
+        Err(e) => {
+            return wrap_return_tuple(
+                127,
+                &format!("Can't find Java return tuple class {}", class_name),
+            )
+        }
+    };
+    let ctr_sig = "(ILjava/lang/String;)V";
+    let jstr_value = match env.new_string(message) {
+        Ok(new_str) => new_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                127,
+                &format!(
+                    "Can't wrap returned string from crypto library to a java.lang.String due to \
+                     {:?}",
+                    e
+                ),
+            )
+        }
+    };
+    let method_id = match env.get_method_id(cls, "<init>", ctr_sig) {
+        Ok(method_looked_up) => method_looked_up,
+        Err(e) => {
+            return wrap_return_tuple(
+                127,
+                &format!(
+                    "Can't find constructor of (java.lang.Integer,java.lang.String) for class {} \
+                     due to {:?}",
+                    class_name, e
+                ),
+            )
+        }
+    };
+    match env.new_object_unchecked(cls, method_id, &[
+        JValue::Int(success as jint),
+        JValue::Object(*output),
+    ]) {
+        Ok(res) => res.into_inner(),
+        Err(e) => {
+            return wrap_return_tuple(
+                127,
+                &format!("Can't create new instance of {} due to {:?}", class_name, e),
+            )
+        }
+    }
 }
