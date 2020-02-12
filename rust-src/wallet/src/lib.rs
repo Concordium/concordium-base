@@ -367,15 +367,20 @@ pub unsafe extern "C" fn create_credential(
     create_credential_ext(input_ptr, success)
 }
 
-#[no_mangle]
 /// # Safety
 /// This function is unsafe in the sense that if the argument pointer was not
 /// Constructed via CString::into_raw its behaviour is undefined.
-pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) {
+pub unsafe fn free_response_string_ext(ptr: *mut c_char) {
     if !ptr.is_null() {
         let _ = CString::from_raw(ptr);
     }
 }
+
+#[no_mangle]
+/// # Safety
+/// This function is unsafe in the sense that if the argument pointer was not
+/// Constructed via CString::into_raw its behaviour is undefined.
+pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) { free_response_string_ext(ptr) }
 
 #[cfg(test)]
 mod test {}

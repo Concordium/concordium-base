@@ -1,7 +1,6 @@
 use libc::c_char;
 use wallet::{
-    create_credential as cr, create_id_request_and_private_data as cirp,
-    free_response_string as free,
+    create_credential_ext, create_id_request_and_private_data_ext, free_response_string_ext,
 };
 
 #[cfg(target_os = "android")]
@@ -15,7 +14,7 @@ pub unsafe extern "C" fn create_id_request_and_private_data(
     input_ptr: *const c_char,
     success: *mut u8,
 ) -> *mut c_char {
-    cirp(input_ptr, success)
+    create_id_request_and_private_data_ext(input_ptr, success)
 }
 
 #[no_mangle]
@@ -26,11 +25,11 @@ pub unsafe extern "C" fn create_credential(
     input_ptr: *const c_char,
     success: *mut u8,
 ) -> *mut c_char {
-    cr(input_ptr, success)
+    create_credential_ext(input_ptr, success)
 }
 
 #[no_mangle]
 /// # Safety
 /// This function is unsafe in the sense that if the argument pointer was not
 /// Constructed via CString::into_raw its behaviour is undefined.
-pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) { free(ptr) }
+pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) { free_response_string_ext(ptr) }
