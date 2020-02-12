@@ -16,7 +16,6 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
     _: JClass,
     input: JString,
 ) -> jobject {
-    ndk_logger::init().unwrap();
     let _str = env.get_string(input).expect("Could not create Java String");
 
     let mut success = 127;

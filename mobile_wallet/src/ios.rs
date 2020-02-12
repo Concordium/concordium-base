@@ -1,10 +1,9 @@
+#![cfg(target_os = "ios")]
+
 use libc::c_char;
 use wallet::{
     create_credential_ext, create_id_request_and_private_data_ext, free_response_string_ext,
 };
-
-#[cfg(target_os = "android")]
-mod android;
 
 #[no_mangle]
 /// # Safety
