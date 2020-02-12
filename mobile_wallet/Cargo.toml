@@ -10,7 +10,7 @@ edition = "2018"
 libc = "0.2"
 
 [dependencies.wallet]
-path = "../wallet"
+path = "../rust-src/wallet"
 version = "0"
 
 # this dependency is only needed for Android.

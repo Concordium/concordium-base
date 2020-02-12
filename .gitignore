@@ -25,3 +25,4 @@ rust-src/target/
 *.bin
 rust-bins/target
 /rust-bins/wallet-notes/example
+mobile_wallet/target/
