@@ -12,9 +12,6 @@ use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use ps_sig;
 use rand::*;
 
-#[derive(Debug, Clone, Copy)]
-pub struct Declined(pub Reason);
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Reason {
     FailedToVerifyKnowledgeOfIdCredSec,
