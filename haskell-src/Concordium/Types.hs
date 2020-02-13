@@ -61,7 +61,7 @@ instance Ord (Hashed a) where
 
 -- * Types releated to bakers.
 newtype BakerId = BakerId Word64
-    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral) via Word64
 
 instance S.Serialize BakerId where
     get = BakerId <$> G.getWord64be
