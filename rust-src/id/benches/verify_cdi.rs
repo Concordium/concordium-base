@@ -1,9 +1,10 @@
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use eddsa_ed25519 as ed25519;
+use ed25519_dalek as ed25519;
 use elgamal::{public::PublicKey, secret::SecretKey};
 use id::{
-    account_holder::*, chain::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*,
+    account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*,
+    secret_sharing::Threshold, types::*,
 };
 
 use pairing::bls12_381::{Bls12, G1};
@@ -14,7 +15,7 @@ use rand::*;
 use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
 use std::collections::BTreeMap;
 
-use std::io::Cursor;
+use either::Left;
 
 use criterion::*;
 
@@ -24,27 +25,23 @@ type ExampleAttribute = AttributeKind;
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
 
-pub fn setup() -> (
-    GlobalContext<ExampleCurve>,
-    IpInfo<Bls12, ExampleCurve>,
-    CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute>,
-) {
+fn bench_parts(c: &mut Criterion) {
     let mut csprng = thread_rng();
-
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
-    let public = ExampleCurve::one_point().mul_by_scalar(&secret);
-    let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_ah:   "ACCOUNT_HOLDER".to_owned(),
-        id_cred: IdCredentials {
-            id_cred_sec: PedersenValue { value: secret },
-            id_cred_pub: public,
-        },
-    };
 
     let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
-    let ar1_secret_key = SecretKey::generate(&mut csprng);
+    let secret = ExampleCurve::generate_scalar(&mut csprng);
+    let ah_info = CredentialHolderInfo::<ExampleCurve> {
+        id_ah:   "ACCOUNT_HOLDER".to_owned(),
+        id_cred: IdCredentials {
+            id_cred_sec: PedersenValue::new(secret),
+        },
+    };
+
+    let ar_base = ExampleCurve::generate(&mut csprng);
+
+    let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar1_public_key = PublicKey::from(&ar1_secret_key);
     let ar1_info = ArInfo::<G1> {
         ar_identity:    ArIdentity(1),
@@ -52,7 +49,7 @@ pub fn setup() -> (
         ar_public_key:  ar1_public_key,
     };
 
-    let ar2_secret_key = SecretKey::generate(&mut csprng);
+    let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar2_public_key = PublicKey::from(&ar2_secret_key);
     let ar2_info = ArInfo::<G1> {
         ar_identity:    ArIdentity(2),
@@ -60,7 +57,7 @@ pub fn setup() -> (
         ar_public_key:  ar2_public_key,
     };
 
-    let ar3_secret_key = SecretKey::generate(&mut csprng);
+    let ar3_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar3_public_key = PublicKey::from(&ar3_secret_key);
     let ar3_info = ArInfo::<G1> {
         ar_identity:    ArIdentity(3),
@@ -68,7 +65,7 @@ pub fn setup() -> (
         ar_public_key:  ar3_public_key,
     };
 
-    let ar4_secret_key = SecretKey::generate(&mut csprng);
+    let ar4_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar4_public_key = PublicKey::from(&ar4_secret_key);
     let ar4_info = ArInfo::<G1> {
         ar_identity:    ArIdentity(4),
@@ -77,123 +74,168 @@ pub fn setup() -> (
     };
 
     let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
-    let dlog_base = <G1 as Curve>::one_point();
-    // let dlog_base = <G1 as Curve>::generate(&mut csprng);
 
     let ip_info = IpInfo {
-        ip_identity: IpIdentity(88),
+        ip_identity:    IpIdentity(88),
         ip_description: "IP88".to_string(),
-        ip_verify_key: ip_public_key,
-        dlog_base,
-        ar_info: (vec![ar1_info, ar2_info, ar3_info, ar4_info], ar_ck),
+        ip_verify_key:  ip_public_key,
+        ip_ars:         IpAnonymityRevokers {
+            ars: vec![ar1_info, ar2_info, ar3_info, ar4_info],
+            ar_cmm_key: ar_ck,
+            ar_base,
+        },
     };
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
-    let variant = 0;
     let expiry_date = 123123123;
-    let alist = vec![AttributeKind::from(55), AttributeKind::from(31)];
+    let alist = {
+        let mut alist = BTreeMap::new();
+        alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
+        alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+        alist
+    };
     let aci = AccCredentialInfo {
         cred_holder_info: ah_info,
         prf_key,
-        attributes: ExampleAttributeList {
-            variant,
-            expiry: expiry_date,
-            alist,
-            _phantom: Default::default(),
-        },
     };
 
-    let context = make_context_from_ip_info(
-        ip_info.clone(),
-        (
-            vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
-            Threshold(2),
-        ),
-    )
-    .expect("Could not make context from identity provider info.");
+    let alist = ExampleAttributeList {
+        expiry: expiry_date,
+        alist,
+        _phantom: Default::default(),
+    };
+
+    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+        ar_identities: vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
+        threshold:     Threshold(2),
+    })
+    .expect("The constructed ARs are valid.");
+
     let (pio, randomness) = generate_pio(&context, &aci);
-
-    let sig_ok = verify_credentials(&pio, &ip_info, &ip_secret_key);
-
-    // First test, check that we have a valid signature.
-    assert!(sig_ok.is_ok());
+    let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
 
     let ip_sig = sig_ok.unwrap();
 
     let global_ctx = GlobalContext {
-        dlog_base_chain:         ExampleCurve::one_point(),
         on_chain_commitment_key: pedersen_key::CommitmentKey::generate(&mut csprng),
     };
 
     let policy = Policy {
-        variant,
-        expiry: expiry_date,
+        expiry:     expiry_date,
         policy_vec: {
             let mut tree = BTreeMap::new();
-            tree.insert(1u16, AttributeKind::from(31));
+            tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
             tree
         },
-        _phantom: Default::default(),
+        _phantom:   Default::default(),
     };
 
-    let kp = ed25519::Keypair::generate(&mut csprng);
+    let mut keys = BTreeMap::new();
+    keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+    keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+    keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+
     let acc_data = AccountData {
-        sign_key:   kp.secret,
-        verify_key: kp.public,
+        keys,
+        existing: Left(SignatureThreshold(2)),
+    };
+
+    let id_use_data = IdObjectUseData { aci, randomness };
+
+    let id_object = IdentityObject {
+        pre_identity_object: pio,
+        alist,
+        signature: ip_sig,
     };
 
     let cdi = generate_cdi(
         &ip_info,
         &global_ctx,
-        &aci,
-        &pio,
+        &id_object,
+        &id_use_data,
         0,
-        &ip_sig,
         &policy,
         &acc_data,
-        &randomness,
+    )
+    .expect("Should generate the credential successfully.");
+
+    // revoking anonymity
+    let second_ar = cdi
+        .values
+        .ar_data
+        .iter()
+        .find(|&x| x.ar_identity == ArIdentity(2))
+        .unwrap();
+    let decrypted_share_ar2 = (
+        second_ar.id_cred_pub_share_number.into(),
+        ar2_secret_key.decrypt(&second_ar.enc_id_cred_pub_share),
+    );
+    let fourth_ar = cdi
+        .values
+        .ar_data
+        .iter()
+        .find(|&x| x.ar_identity == ArIdentity(4))
+        .unwrap();
+    let decrypted_share_ar4 = (
+        fourth_ar.id_cred_pub_share_number,
+        ar4_secret_key.decrypt(&fourth_ar.enc_id_cred_pub_share),
     );
 
-    assert!(
-        verify_cdi(&global_ctx, &ip_info, &cdi).is_ok(),
-        "Make sure the credential is valid!"
+    let bench_pio = move |b: &mut Bencher, x: &(_, _)| b.iter(|| generate_pio(x.0, x.1));
+    c.bench_with_input(
+        BenchmarkId::new("Generate ID request", ""),
+        &(&context, &id_use_data.aci),
+        bench_pio,
     );
-    (global_ctx, ip_info, cdi)
-}
 
-pub fn bench_verify_with_serialize(c: &mut Criterion) {
-    let (global_ctx, ip_info, cdi) = setup();
+    let bench_generate_cdi = move |b: &mut Bencher, x: &(_, _, _, _, _, _, _)| {
+        b.iter(|| generate_cdi(x.0, x.1, x.2, x.3, x.4, x.5, x.6).unwrap())
+    };
+    c.bench_with_input(
+        BenchmarkId::new("Generate CDI", ""),
+        &(
+            &ip_info,
+            &global_ctx,
+            &id_object,
+            &id_use_data,
+            0,
+            &policy,
+            &acc_data,
+        ),
+        bench_generate_cdi,
+    );
 
-    let bytes = cdi.to_bytes();
-
-    let bench_with_serialize = move |b: &mut Bencher| {
+    let bench_verify_cdi =
+        move |b: &mut Bencher, x: &(_, _, _)| b.iter(|| verify_cdi(x.0, x.1, None, x.2).unwrap());
+    c.bench_with_input(
+        BenchmarkId::new("Verify CDI", ""),
+        &(&global_ctx, &ip_info, &cdi),
+        bench_verify_cdi,
+    );
+    let share_vec = vec![decrypted_share_ar2, decrypted_share_ar4];
+    let bench_reveal_id_cred_pub = move |b: &mut Bencher| b.iter(|| reveal_id_cred_pub(&share_vec));
+    let bench_verify_ip = move |b: &mut Bencher| {
         b.iter(|| {
-            let des = CredDeploymentInfo::<Bls12, ExampleCurve, ExampleAttribute>::from_bytes(
-                &mut Cursor::new(&bytes),
+            verify_credentials(
+                &id_object.pre_identity_object,
+                &ip_info,
+                &id_object.alist,
+                &ip_secret_key,
             )
-            .unwrap();
-            verify_cdi(&global_ctx, &ip_info, &des)
+            .unwrap()
         })
     };
-    c.bench_function("Verify CDI with serialization", bench_with_serialize);
-}
 
-pub fn bench_verify_without_serialize(c: &mut Criterion) {
-    let (global_ctx, ip_info, cdi) = setup();
-
-    let bench_without_serialize =
-        move |b: &mut Bencher| b.iter(|| verify_cdi(&global_ctx, &ip_info, &cdi));
-
-    c.bench_function("Verify CDI without serialization", bench_without_serialize);
+    c.bench_function("IP verify credentials", bench_verify_ip);
+    c.bench_function("Reveal IdCredPub", bench_reveal_id_cred_pub);
 }
 
 criterion_group! {
-    name = verify_cdi_benches;
+    name = verify_id_interactions;
     config = Criterion::default();
     targets =
-        bench_verify_with_serialize,
-        bench_verify_without_serialize
+        bench_parts
 }
 
-criterion_main!(verify_cdi_benches);
+criterion_main!(verify_id_interactions);
