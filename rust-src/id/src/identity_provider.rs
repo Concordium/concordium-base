@@ -236,7 +236,7 @@ mod tests {
 
     use dodis_yampolskiy_prf::secret as prf;
     use elgamal::{public::PublicKey, secret::SecretKey};
-    use pairing::bls12_381::{Bls12, G1Affine, G1};
+    use pairing::bls12_381::{Bls12, G1};
     use pedersen_scheme::{key as PedersenKey, key::CommitmentKey, Value as PedersenValue};
     use std::collections::btree_map::BTreeMap;
 
@@ -246,10 +246,11 @@ mod tests {
     type ExampleAttributeList =
         AttributeList<<ExamplePairing as Pairing>::ScalarField, ExampleAttribute>;
 
+    /// Test commitment_to_share put the zero'th coefficient at x=0
     #[test]
     fn test_commit_to_share_zero() {
         let mut csprng = thread_rng();
-        let ck = CommitmentKey::<G1Affine>::generate(&mut csprng);
+        let ck = CommitmentKey::<G1>::generate(&mut csprng);
 
         // Make degree-d polynomial
         let d = 5;
@@ -259,7 +260,7 @@ mod tests {
         for _i in 0..=d {
             // Make commitments to coefficients
             let a = csprng.next_u64();
-            let v = PedersenValue::from_scalar(G1Affine::scalar_from_u64(a));
+            let v = PedersenValue::from_scalar(G1::scalar_from_u64(a));
             let (c, r) = ck.commit(&v, &mut csprng);
             coeffs.push(c);
             rands.push(r);
@@ -271,15 +272,18 @@ mod tests {
         assert_eq!(coeffs[0], p0);
     }
 
+    /// Create identity provider with #num_ars anonymity revokers to be used by tests
     fn create_test_ip_info<T: Rng>(
         csprng: &mut T,
         num_ars: u32,
+        max_attrs: u32,
     ) -> (
         IpInfo<ExamplePairing, ExampleCurve>,
         ps_sig::secret::SecretKey<ExamplePairing>,
     ) {
-        // Create key for IP
-        let ip_secret_key = ps_sig::secret::SecretKey::<ExamplePairing>::generate(10, csprng);
+        // Create key for IP of length 50
+        let ps_len = (5 + num_ars + max_attrs) as usize;
+        let ip_secret_key = ps_sig::secret::SecretKey::<ExamplePairing>::generate(ps_len, csprng);
         let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
         // Create ARs
@@ -313,6 +317,8 @@ mod tests {
         )
     }
 
+    /// Create PreIdentityObject for an account holder to be used by tests,
+    /// with the anonymity revocation having random threshold between 1 and num_ars
     fn create_test_pio<T: Rng>(
         csprng: &mut T,
         ip_info: &IpInfo<ExamplePairing, ExampleCurve>,
@@ -330,7 +336,6 @@ mod tests {
                 id_cred_sec: PedersenValue::new(secret),
             },
         };
-        let id_cred_sec = ah_info.id_cred.id_cred_sec.clone();
 
         // Create credential information
         let prf_key = prf::SecretKey::generate(csprng);
@@ -339,8 +344,8 @@ mod tests {
             prf_key,
         };
 
-        // Select some ARs
-        let threshold = num_ars - 1;
+        // Select some ARs, between one and all
+        let threshold = csprng.gen_range(1, num_ars);
         let mut ars = Vec::new();
         for i in 0..threshold {
             ars.push(ArIdentity(i));
@@ -355,29 +360,38 @@ mod tests {
 
         // Create and return PIO
         let (pio, _randomness) = generate_pio::<ExamplePairing, ExampleCurve>(&context, &aci);
-        (context, pio, id_cred_sec)
+        (context, pio, secret)
     }
 
-    fn create_test_attributes() -> ExampleAttributeList {
+    /// Create example attributes to be used by tests
+    fn create_test_attributes<R: Rng>(rng: &mut R, max_attrs: u32) -> ExampleAttributeList {
         let mut alist = BTreeMap::new();
-        alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
-        alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+        
+        let numattrs = rng.next_u32() % max_attrs;
+        for _i in 0..numattrs {
+            let tag = (rng.next_u32() % 255) as u8;
+            let kind = rng.next_u64();
+            alist.insert(AttributeTag::from(tag), AttributeKind::from(kind));
+        }
 
+        let expiry = rng.next_u64();
         ExampleAttributeList {
-            expiry: 123123123,
+            expiry,
             alist,
             _phantom: Default::default(),
         }
     }
 
+    /// Check IP's verify_credentials succeeds
     #[test]
     fn test_verify_credentials_success() {
-        // Arrange
+        // Arrange (create identity provider and PreIdentityObject, and verify validity)
+        let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
-        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
+        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars, max_attrs);
         let (_, pio, _) = create_test_pio(&mut csprng, &ip_info, num_ars);
-        let attrs = create_test_attributes();
+        let attrs = create_test_attributes(&mut csprng, max_attrs);
 
         // Act
         let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
@@ -386,18 +400,19 @@ mod tests {
         assert!(sig_ok.is_ok());
     }
 
+    /// Check IP's verify_credentials fail for wrong id_cred_sec proof-of-knowledge
     #[test]
     fn test_verify_credentials_fail_pok_idcredsec() {
         // Arrange
+        let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
-        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
+        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars, max_attrs);
         let (_, mut pio, id_cred_sec) = create_test_pio(&mut csprng, &ip_info, num_ars);
-        let attrs = create_test_attributes();
+        let attrs = create_test_attributes(&mut csprng, max_attrs);
 
         // Act (make dlog proof use wrong id_cred_sec)
-        let mut wrong_id_cred_sec = id_cred_sec;
-        wrong_id_cred_sec.double();
+        let wrong_id_cred_sec = ExampleCurve::generate_scalar(&mut csprng);
         pio.pok_sc = prove_dlog(
             &mut csprng,
             RandomOracle::empty(),
@@ -408,22 +423,22 @@ mod tests {
         let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
 
         // Assert
-        assert!(!sig_ok.is_ok());
-        if let Err(reason) = sig_ok {
-            assert_eq!(reason, Reason::FailedToVerifyKnowledgeOfIdCredSec);
-        } else {
-            panic!("Could not extract declined reason.")
+        if sig_ok.is_ok() {
+            assert_eq!(wrong_id_cred_sec, id_cred_sec);
         }
+        assert_eq!(sig_ok, Err(Reason::FailedToVerifyKnowledgeOfIdCredSec), "Verify_credentials did not fail on invalid IdCredSec PoK")
     }
 
+    /// Test IP's verify_credentials fail if discrete log of idcredpub and elgamal encryption are different
     #[test]
     fn test_verify_credentials_fail_idcredsec_equality() {
         // Arrange
+        let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
-        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
+        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars, max_attrs);
         let (ctx, mut pio, id_cred_sec) = create_test_pio(&mut csprng, &ip_info, num_ars);
-        let attrs = create_test_attributes();
+        let attrs = create_test_attributes(&mut csprng, max_attrs);
 
         // Act (make cmm_sc be comm. of id_cred_sec but with wrong/fresh randomness)
         let sc_ck = CommitmentKey(ctx.ip_info.ip_verify_key.ys[0], ctx.ip_info.ip_verify_key.g);
@@ -434,21 +449,19 @@ mod tests {
 
         // Assert
         assert!(!sig_ok.is_ok());
-        if let Err(reason) = sig_ok {
-            assert_eq!(reason, Reason::FailedToVerifyIdCredSecEquality);
-        } else {
-            panic!("Could not extract declined reason.")
-        }
+        assert_eq!(sig_ok, Err(Reason::FailedToVerifyIdCredSecEquality), "Verify_credentials did not fail with inconsistent idcredpub and elgamal");
     }
 
+    /// Test IP's verify_credentials fail if the PRF key check fail.
     #[test]
     fn test_verify_credentials_fail_prf_data() {
         // Arrange
+        let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
-        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars);
+        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars, max_attrs);
         let (_, mut pio, _) = create_test_pio(&mut csprng, &ip_info, num_ars);
-        let attrs = create_test_attributes();
+        let attrs = create_test_attributes(&mut csprng, max_attrs);
 
         // Act (make cmm_prf be a commitment to a wrong/random value)
         let ck = ip_info.ip_ars.ar_cmm_key;
@@ -459,10 +472,6 @@ mod tests {
 
         // Assert
         assert!(!sig_ok.is_ok());
-        if let Err(reason) = sig_ok {
-            assert_eq!(reason, Reason::FailedToVerifyPrfData);
-        } else {
-            panic!("Could not extract declined reason.")
-        }
+        assert_eq!(sig_ok, Err(Reason::FailedToVerifyPrfData), "Verify_credentials did not fail with invalid PRF commitment");
     }
 }
