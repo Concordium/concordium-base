@@ -88,11 +88,18 @@ pub fn share<C: Curve, R: Rng>(
     let deg = deg - 1; // the degree of polynomial
 
     // the zeroth coefficient is the secret, we generate
-    // other coefficients at random.
+    // other coefficients at random, except the highest coefficient
+    // which should be non-zero.
     // It is crucial that the random number generator is cryptographically secure.
     let mut coefficients: Vec<PedersenValue<C>> = Vec::with_capacity(deg as usize);
-    for _ in 0..deg {
+    for _ in 1..deg {
         let r = PedersenValue::generate(csprng);
+        coefficients.push(r);
+    }
+    // Add a non-zero coefficient if degree is at least 1 (otherwise we are
+    // generating a constant polynomial).
+    if deg > 0 {
+        let r = PedersenValue::generate_non_zero(csprng);
         coefficients.push(r);
     }
 
