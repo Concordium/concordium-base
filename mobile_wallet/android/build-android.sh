@@ -19,7 +19,11 @@ mkdir ${jniLibs}/x86
 mkdir ${jniLibs}/x86_64
 
 cp ../target/aarch64-linux-android/release/*.so ${jniLibs}/arm64-v8a/
+cp ../target/aarch64-linux-android/release/deps/*.so ${jniLibs}/arm64-v8a/
 cp ../target/armv7-linux-androideabi/release/*.so ${jniLibs}/armeabi-v7a/
+cp ../target/armv7-linux-androideabi/release/deps/*.so ${jniLibs}/armeabi-v7a/
 cp ../target/i686-linux-android/release/*.so ${jniLibs}/x86/
+cp ../target/i686-linux-android/release/deps/*.so ${jniLibs}/x86/
 cp ../target/x86_64-linux-android/release/*.so ${jniLibs}/x86_64/
+cp ../target/x86_64-linux-android/release/deps/*.so ${jniLibs}/x86_64/
 
