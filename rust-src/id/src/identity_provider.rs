@@ -12,7 +12,7 @@ use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use ps_sig;
 use rand::*;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reason {
     FailedToVerifyKnowledgeOfIdCredSec,
     FailedToVerifyIdCredSecEquality,
@@ -214,7 +214,11 @@ fn verify_prf_key_data<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
     true
 }
 
-#[inline(always)]
+/// Given a list of commitments g^{a_i}h^{r_i}
+/// and a point x (the share number), compute
+/// g^p(x)h^r(x) where
+/// p(x) = a_0 + a_1 x + ... + a_n x^n
+/// r(x) = r_0 + r_1 x + ... + r_n x^n
 pub fn commitment_to_share<C: Curve>(
     share_number: ShareNumber,
     coeff_commitments: &[Commitment<C>],
@@ -236,8 +240,12 @@ mod tests {
 
     use dodis_yampolskiy_prf::secret as prf;
     use elgamal::{public::PublicKey, secret::SecretKey};
+    use ff::PrimeField;
     use pairing::bls12_381::{Bls12, G1};
-    use pedersen_scheme::{key as PedersenKey, key::CommitmentKey, Value as PedersenValue};
+    use pedersen_scheme::{
+        key as PedersenKey, key::CommitmentKey, Randomness, Value as PedersenValue,
+    };
+    use rand::seq::SliceRandom;
     use std::collections::btree_map::BTreeMap;
 
     type ExamplePairing = Bls12;
@@ -246,30 +254,54 @@ mod tests {
     type ExampleAttributeList =
         AttributeList<<ExamplePairing as Pairing>::ScalarField, ExampleAttribute>;
 
-    /// Test commitment_to_share put the zero'th coefficient at x=0
+    // Eval a polynomial at point.
+    fn eval_poly<F: Field>(coeffs: &[F], x: &F) -> F {
+        let mut acc = F::zero();
+        for coeff in coeffs.iter().rev() {
+            acc.mul_assign(x);
+            acc.add_assign(coeff);
+        }
+        acc
+    }
+
+    /// Randomized test that commitment_to_share conforms to the specification.
     #[test]
-    fn test_commit_to_share_zero() {
+    fn test_commitment_to_share() {
         let mut csprng = thread_rng();
         let ck = CommitmentKey::<G1>::generate(&mut csprng);
 
         // Make degree-d polynomial
-        let d = 5;
+        let d = csprng.gen_range(1, 10);
         let mut coeffs = Vec::new();
         let mut rands = Vec::new();
         let mut values = Vec::new();
         for _i in 0..=d {
             // Make commitments to coefficients
-            let a = csprng.next_u64();
-            let v = PedersenValue::from_scalar(G1::scalar_from_u64(a));
+            let a = G1::generate_scalar(&mut csprng);
+            let v = PedersenValue::from_scalar(a);
             let (c, r) = ck.commit(&v, &mut csprng);
             coeffs.push(c);
-            rands.push(r);
+            rands.push(r.randomness);
             values.push(a);
         }
 
-        // Test commitment on x=0 is equal to zero'th coefficient commitment
-        let p0 = commitment_to_share(ShareNumber::from(0), &coeffs);
-        assert_eq!(coeffs[0], p0);
+        // Sample some random share numbers
+        for _ in 0..100 {
+            let sh = ShareNumber::from(csprng.next_u32());
+            // And evaluate the values and rands at sh.
+            let point = ExampleCurve::scalar_from_u64(u64::from(sh.0));
+            let pv = eval_poly(&values, &point);
+            let rv = eval_poly(&rands, &point);
+
+            let p0 = commitment_to_share(sh, &coeffs);
+            assert_eq!(
+                p0,
+                ck.hide(
+                    PedersenValue::view_scalar(&pv),
+                    Randomness::view_scalar(&rv)
+                )
+            );
+        }
     }
 
     /// Create identity provider with #num_ars anonymity revokers to be used by
@@ -282,7 +314,8 @@ mod tests {
         IpInfo<ExamplePairing, ExampleCurve>,
         ps_sig::secret::SecretKey<ExamplePairing>,
     ) {
-        // Create key for IP of length 50
+        // Create key for IP long enough to encode the attributes and anonymity
+        // revokers.
         let ps_len = (5 + num_ars + max_attrs) as usize;
         let ip_secret_key = ps_sig::secret::SecretKey::<ExamplePairing>::generate(ps_len, csprng);
         let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
@@ -347,11 +380,14 @@ mod tests {
         };
 
         // Select some ARs, between one and all
-        let threshold = csprng.gen_range(1, num_ars);
-        let mut ars = Vec::new();
-        for i in 0..threshold {
-            ars.push(ArIdentity(i));
-        }
+        let threshold = csprng.gen_range(1, num_ars + 1);
+
+        // select threshold number of anonymity revokers, in some order.
+        let ar_ids: Vec<ArIdentity> = (0..num_ars).map(ArIdentity).collect::<Vec<_>>();
+        let ars = ar_ids
+            .choose_multiple(csprng, threshold as usize)
+            .cloned()
+            .collect();
 
         // Create context
         let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
@@ -365,13 +401,19 @@ mod tests {
         (context, pio, secret)
     }
 
-    /// Create example attributes to be used by tests
+    /// Create example attributes to be used by tests.
+    /// The attributes are generated uniformly at random, and the number of
+    /// attributes is chosen uniformly at random in the range [0, max_attrs)
     fn create_test_attributes<R: Rng>(rng: &mut R, max_attrs: u32) -> ExampleAttributeList {
         let mut alist = BTreeMap::new();
 
-        let numattrs = rng.next_u32() % max_attrs;
+        let numattrs = rng.gen_range(0, max_attrs);
+        // capacity is the number of bits we can reliably store in a field
+        // element of a pairing.
+        let capacity = <ExamplePairing as Pairing>::ScalarField::CAPACITY;
         for _i in 0..numattrs {
-            let tag = (rng.next_u32() % 255) as u8;
+            // tags must be < capacity in order for the current encoding to work.
+            let tag = (rng.next_u32() % capacity) as u8;
             let kind = rng.next_u64();
             alist.insert(AttributeTag::from(tag), AttributeKind::from(kind));
         }
@@ -384,7 +426,7 @@ mod tests {
         }
     }
 
-    /// Check IP's verify_credentials succeeds
+    /// Check IP's verify_credentials succeeds for well-formed data.
     #[test]
     fn test_verify_credentials_success() {
         // Arrange (create identity provider and PreIdentityObject, and verify validity)
@@ -403,7 +445,7 @@ mod tests {
     }
 
     /// Check IP's verify_credentials fail for wrong id_cred_sec
-    /// proof-of-knowledge
+    /// proof-of-knowledge.
     #[test]
     fn test_verify_credentials_fail_pok_idcredsec() {
         // Arrange
@@ -456,7 +498,6 @@ mod tests {
         let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
 
         // Assert
-        assert!(!sig_ok.is_ok());
         assert_eq!(
             sig_ok,
             Err(Reason::FailedToVerifyIdCredSecEquality),
@@ -464,7 +505,7 @@ mod tests {
         );
     }
 
-    /// Test IP's verify_credentials fail if the PRF key check fail.
+    /// Test IP's verify_credentials fails if the PRF key check fail.
     #[test]
     fn test_verify_credentials_fail_prf_data() {
         // Arrange
@@ -483,7 +524,6 @@ mod tests {
         let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
 
         // Assert
-        assert!(!sig_ok.is_ok());
         assert_eq!(
             sig_ok,
             Err(Reason::FailedToVerifyPrfData),
