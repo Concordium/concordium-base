@@ -272,7 +272,8 @@ mod tests {
         assert_eq!(coeffs[0], p0);
     }
 
-    /// Create identity provider with #num_ars anonymity revokers to be used by tests
+    /// Create identity provider with #num_ars anonymity revokers to be used by
+    /// tests
     fn create_test_ip_info<T: Rng>(
         csprng: &mut T,
         num_ars: u32,
@@ -318,7 +319,8 @@ mod tests {
     }
 
     /// Create PreIdentityObject for an account holder to be used by tests,
-    /// with the anonymity revocation having random threshold between 1 and num_ars
+    /// with the anonymity revocation having random threshold between 1 and
+    /// num_ars
     fn create_test_pio<T: Rng>(
         csprng: &mut T,
         ip_info: &IpInfo<ExamplePairing, ExampleCurve>,
@@ -366,7 +368,7 @@ mod tests {
     /// Create example attributes to be used by tests
     fn create_test_attributes<R: Rng>(rng: &mut R, max_attrs: u32) -> ExampleAttributeList {
         let mut alist = BTreeMap::new();
-        
+
         let numattrs = rng.next_u32() % max_attrs;
         for _i in 0..numattrs {
             let tag = (rng.next_u32() % 255) as u8;
@@ -400,7 +402,8 @@ mod tests {
         assert!(sig_ok.is_ok());
     }
 
-    /// Check IP's verify_credentials fail for wrong id_cred_sec proof-of-knowledge
+    /// Check IP's verify_credentials fail for wrong id_cred_sec
+    /// proof-of-knowledge
     #[test]
     fn test_verify_credentials_fail_pok_idcredsec() {
         // Arrange
@@ -426,10 +429,15 @@ mod tests {
         if sig_ok.is_ok() {
             assert_eq!(wrong_id_cred_sec, id_cred_sec);
         }
-        assert_eq!(sig_ok, Err(Reason::FailedToVerifyKnowledgeOfIdCredSec), "Verify_credentials did not fail on invalid IdCredSec PoK")
+        assert_eq!(
+            sig_ok,
+            Err(Reason::FailedToVerifyKnowledgeOfIdCredSec),
+            "Verify_credentials did not fail on invalid IdCredSec PoK"
+        )
     }
 
-    /// Test IP's verify_credentials fail if discrete log of idcredpub and elgamal encryption are different
+    /// Test IP's verify_credentials fail if discrete log of idcredpub and
+    /// elgamal encryption are different
     #[test]
     fn test_verify_credentials_fail_idcredsec_equality() {
         // Arrange
@@ -449,7 +457,11 @@ mod tests {
 
         // Assert
         assert!(!sig_ok.is_ok());
-        assert_eq!(sig_ok, Err(Reason::FailedToVerifyIdCredSecEquality), "Verify_credentials did not fail with inconsistent idcredpub and elgamal");
+        assert_eq!(
+            sig_ok,
+            Err(Reason::FailedToVerifyIdCredSecEquality),
+            "Verify_credentials did not fail with inconsistent idcredpub and elgamal"
+        );
     }
 
     /// Test IP's verify_credentials fail if the PRF key check fail.
@@ -472,6 +484,10 @@ mod tests {
 
         // Assert
         assert!(!sig_ok.is_ok());
-        assert_eq!(sig_ok, Err(Reason::FailedToVerifyPrfData), "Verify_credentials did not fail with invalid PRF commitment");
+        assert_eq!(
+            sig_ok,
+            Err(Reason::FailedToVerifyPrfData),
+            "Verify_credentials did not fail with invalid PRF commitment"
+        );
     }
 }

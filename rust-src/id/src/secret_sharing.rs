@@ -190,7 +190,8 @@ mod test {
     }
 
     // Check sharing polynomial and coefficient length are correct. Namely for a
-    // (k,n)-RS-code, we have degree less than k and n points of evaluation (shares).
+    // (k,n)-RS-code, we have degree less than k and n points of evaluation
+    // (shares).
     #[test]
     pub fn test_share_output_length() {
         let mut csprng = thread_rng();
@@ -211,7 +212,8 @@ mod test {
 
     /// Test sharing and reconstruction:
     ///   - For enough shares, we can reconstruct with success
-    ///   - If one share has an error, we reconstruct something different from the secret
+    ///   - If one share has an error, we reconstruct something different from
+    ///     the secret
     ///   - If we try to reconstruct with too few points, we get an error
     #[test]
     pub fn test_secret_sharing() {
@@ -254,7 +256,10 @@ mod test {
             shares.shuffle(&mut csprng);
             shares.truncate(threshold as usize);
             let rand_elm = shares.choose_mut(&mut csprng).unwrap();
-            *rand_elm = (rand_elm.0, curve_arithmetic::secret_value::Value::generate(&mut csprng));
+            *rand_elm = (
+                rand_elm.0,
+                curve_arithmetic::secret_value::Value::generate(&mut csprng),
+            );
 
             let revealed_data: Fr = reveal::<G1>(&shares);
             assert_ne!(revealed_data, secret);
