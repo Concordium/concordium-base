@@ -1,5 +1,3 @@
-// Authors:
-// - bm@concordium.com
 use rand::*;
 
 #[macro_use]
@@ -9,10 +7,10 @@ use criterion::Criterion;
 
 use elgamal::{elgamal::*, public::*, secret::*};
 
-use curve_arithmetic::Curve;
 use pairing::bls12_381::G1;
 use rayon::iter::ParallelIterator;
 
+// Measure the time to enrypt a 64-bit integer bitwise.
 pub fn encrypt_bitwise_bench(c: &mut Criterion) {
     let mut csprng = thread_rng();
     let sk: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
@@ -23,6 +21,7 @@ pub fn encrypt_bitwise_bench(c: &mut Criterion) {
     });
 }
 
+// Measure the time to decrypt a 64-bit integer bitwise.
 pub fn decrypt_bitwise_bench(c: &mut Criterion) {
     let mut csprng = thread_rng();
     let sk: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
