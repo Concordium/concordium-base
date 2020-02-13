@@ -122,7 +122,7 @@ pub fn share<C: Curve, R: Rng>(
     }
 }
 
-/// Compute the Lagrange basis polynomial evaluated on zero.
+/// Compute the Lagrange basis polynomial evaluated at zero.
 fn lagrange<C: Curve>(kxs: &[ShareNumber], i: ShareNumber) -> C::Scalar {
     kxs.iter().fold(C::Scalar::one(), |accum, j| {
         let mut fe_j = j.to_scalar::<C>();
@@ -168,6 +168,7 @@ mod test {
     use pairing::bls12_381::{Fr, G1};
     use rand::{rngs::ThreadRng, seq::SliceRandom};
 
+    // Test Lagrange interpolation polynomials at x={0,1}
     #[test]
     pub fn test_lagrange() {
         // For any kxs, the 0'th Lagrange polynomial is 1 at x=0
@@ -188,6 +189,8 @@ mod test {
         assert_eq!(r, G1::scalar_from_u64(2));
     }
 
+    // Check sharing polynomial and coefficient length are correct. Namely for a
+    // (k,n)-RS-code, we have degree less than k and n points of evaluation (shares).
     #[test]
     pub fn test_share_output_length() {
         let mut csprng = thread_rng();
@@ -202,10 +205,14 @@ mod test {
             &mut csprng,
         );
 
-        assert_eq!(shared.coefficients.len(), (t - 1) as usize);
+        assert!(shared.coefficients.len() < t as usize);
         assert_eq!(shared.shares.len(), n as usize);
     }
 
+    /// Test sharing and reconstruction:
+    ///   - For enough shares, we can reconstruct with success
+    ///   - If one share has an error, we reconstruct something different from the secret
+    ///   - If we try to reconstruct with too few points, we get an error
     #[test]
     pub fn test_secret_sharing() {
         let mut csprng = thread_rng();
@@ -243,39 +250,22 @@ mod test {
                 Threshold::from(threshold),
                 &mut csprng,
             );
-            let sufficient_sample = &sharing_data.shares[0..(threshold as usize)];
-            let err_pos = (csprng.next_u32() as usize) % sufficient_sample.len();
-            let sufficient_sample_err: Vec<(
-                ShareNumber,
-                curve_arithmetic::secret_value::Value<G1>,
-            )> = sufficient_sample
-                .iter()
-                .enumerate()
-                .map(|(idx, (no, val))| {
-                    if idx == err_pos {
-                        (
-                            *no,
-                            curve_arithmetic::secret_value::Value::generate(&mut csprng),
-                        )
-                    } else {
-                        (
-                            *no,
-                            curve_arithmetic::secret_value::Value::from_scalar(val.value),
-                        )
-                    }
-                })
-                .collect();
+            let mut shares = sharing_data.shares;
+            shares.shuffle(&mut csprng);
+            shares.truncate(threshold as usize);
+            let rand_elm = shares.choose_mut(&mut csprng).unwrap();
+            *rand_elm = (rand_elm.0, curve_arithmetic::secret_value::Value::generate(&mut csprng));
 
-            let revealed_data: Fr = reveal::<G1>(&sufficient_sample_err);
+            let revealed_data: Fr = reveal::<G1>(&shares);
             assert_ne!(revealed_data, secret);
-            let sufficient_points_err = sufficient_sample_err
+            let sufficient_points_err = shares
                 .iter()
                 .map(|(n, s)| (*n, generator.mul_by_scalar(&s)))
                 .collect::<Vec<(ShareNumber, G1)>>();
             let revealed_data_point: G1 = reveal_in_group::<G1>(&sufficient_points_err);
             assert_ne!(revealed_data_point, secret_point);
 
-            // Sample less points than needed and reconstruct with failure
+            // Sample less points than required and reconstruct with failure
             let sharing_data = share::<G1, ThreadRng>(
                 &secret,
                 ShareNumber::from(i),
