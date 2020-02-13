@@ -1,4 +1,3 @@
-use crypto_common::*;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -26,7 +25,7 @@ type ExampleAttribute = AttributeKind;
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
 
-pub fn test_pipeline() {
+fn bench_parts(c: &mut Criterion) {
     let mut csprng = thread_rng();
 
     let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
@@ -112,12 +111,9 @@ pub fn test_pipeline() {
         threshold:     Threshold(2),
     })
     .expect("The constructed ARs are valid.");
+
     let (pio, randomness) = generate_pio(&context, &aci);
-
     let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
-
-    // First test, check that we have a valid signature.
-    assert!(sig_ok.is_ok());
 
     let ip_sig = sig_ok.unwrap();
 
@@ -164,52 +160,6 @@ pub fn test_pipeline() {
     )
     .expect("Should generate the credential successfully.");
 
-    // let mut out = Vec::new();
-    // let gc_bytes = global_ctx.to_bytes();
-    // out.extend_from_slice(&(gc_bytes.len() as u32).to_be_bytes());
-    // out.extend_from_slice(&gc_bytes);
-    // let ip_info_bytes = ip_info.to_bytes();
-    // out.extend_from_slice(&(ip_info_bytes.len() as u32).to_be_bytes());
-    // out.extend_from_slice(&ip_info_bytes);
-    // out.extend_from_slice(&cdi.to_bytes());
-    // let file = File::create("foo.bin");
-    // file.unwrap().write_all(&out);
-
-    let cdi_values = serialize_deserialize(&cdi.values);
-    assert!(
-        cdi_values.is_ok(),
-        "VALUES Deserialization must be successful."
-    );
-
-    let cdi_commitments = serialize_deserialize(&cdi.proofs.commitments);
-    assert!(
-        cdi_commitments.is_ok(),
-        "commitments Deserialization must be successful."
-    );
-
-    let cdi_proofs = serialize_deserialize(&cdi.proofs);
-    assert!(
-        cdi_proofs.is_ok(),
-        "Proof deserialization must be successful."
-    );
-
-    let des = serialize_deserialize(&cdi);
-    assert!(des.is_ok(), "Deserialization must be successful.");
-    // FIXME: Have better equality instances for CDI that do not place needless
-    // restrictions on the pairing (such as having PartialEq instnace).
-    // For now we just check that the last item in the proofs deserialized
-    // correctly.
-    assert_eq!(
-        des.unwrap().proofs.proof_reg_id,
-        cdi.proofs.proof_reg_id,
-        "It should deserialize back to what we started with."
-    );
-
-    // assert_eq!(4, cdi.commitments.cmm_attributes.len(), "Attribute list length
-    // check."); now check that the generated credentials are indeed valid.
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
-    assert_eq!(cdi_check, Ok(()));
-
     // revoking anonymity
     let second_ar = cdi
         .values
@@ -231,43 +181,61 @@ pub fn test_pipeline() {
         fourth_ar.id_cred_pub_share_number,
         ar4_secret_key.decrypt(&fourth_ar.enc_id_cred_pub_share),
     );
-    let revealed_id_cred_pub = reveal_id_cred_pub(&vec![decrypted_share_ar2, decrypted_share_ar4]);
-    assert_eq!(
-        revealed_id_cred_pub,
-        ip_info
-            .ip_ars
-            .ar_base
-            .mul_by_scalar(&id_use_data.aci.cred_holder_info.id_cred.id_cred_sec)
+
+    let bench_pio = move |b: &mut Bencher, x: &(_, _)| b.iter(|| generate_pio(x.0, x.1));
+    c.bench_with_input(
+        BenchmarkId::new("Generate ID request", ""),
+        &(&context, &id_use_data.aci),
+        bench_pio,
     );
 
-    // generate a new cdi from a modified pre-identity object in which we swapped
-    // two anonymity revokers. Verification of this credential should fail the
-    // signature at the very least.
-    let mut cdi = generate_cdi(
-        &ip_info,
-        &global_ctx,
-        &id_object,
-        &id_use_data,
-        0,
-        &policy,
-        &acc_data,
-    )
-    .expect("Should generate the credential successfully.");
-    cdi.values.ar_data.rotate_left(1);
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
-    assert_ne!(cdi_check, Ok(()));
-}
+    let bench_generate_cdi = move |b: &mut Bencher, x: &(_, _, _, _, _, _, _)| {
+        b.iter(|| generate_cdi(x.0, x.1, x.2, x.3, x.4, x.5, x.6).unwrap())
+    };
+    c.bench_with_input(
+        BenchmarkId::new("Generate CDI", ""),
+        &(
+            &ip_info,
+            &global_ctx,
+            &id_object,
+            &id_use_data,
+            0,
+            &policy,
+            &acc_data,
+        ),
+        bench_generate_cdi,
+    );
 
-pub fn bench_pipeline(c: &mut Criterion) {
-    let bench = move |b: &mut Bencher| b.iter(|| test_pipeline());
-    c.bench_function("CDI Pipeline", bench);
+    let bench_verify_cdi =
+        move |b: &mut Bencher, x: &(_, _, _)| b.iter(|| verify_cdi(x.0, x.1, None, x.2).unwrap());
+    c.bench_with_input(
+        BenchmarkId::new("Verify CDI", ""),
+        &(&global_ctx, &ip_info, &cdi),
+        bench_verify_cdi,
+    );
+    let share_vec = vec![decrypted_share_ar2, decrypted_share_ar4];
+    let bench_reveal_id_cred_pub = move |b: &mut Bencher| b.iter(|| reveal_id_cred_pub(&share_vec));
+    let bench_verify_ip = move |b: &mut Bencher| {
+        b.iter(|| {
+            verify_credentials(
+                &id_object.pre_identity_object,
+                &ip_info,
+                &id_object.alist,
+                &ip_secret_key,
+            )
+            .unwrap()
+        })
+    };
+
+    c.bench_function("IP verify credentials", bench_verify_ip);
+    c.bench_function("Reveal IdCredPub", bench_reveal_id_cred_pub);
 }
 
 criterion_group! {
-    name = verify_cdi_benches;
+    name = verify_id_interactions;
     config = Criterion::default();
     targets =
-        bench_pipeline
+        bench_parts
 }
 
-criterion_main!(verify_cdi_benches);
+criterion_main!(verify_id_interactions);
