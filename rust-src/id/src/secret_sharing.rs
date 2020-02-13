@@ -122,6 +122,7 @@ pub fn share<C: Curve, R: Rng>(
     }
 }
 
+/// Compute the Lagrange basis polynomial evaluated at zero.
 fn lagrange<C: Curve>(kxs: &[ShareNumber], i: ShareNumber) -> C::Scalar {
     kxs.iter().fold(C::Scalar::one(), |accum, j| {
         let mut fe_j = j.to_scalar::<C>();
@@ -139,7 +140,7 @@ fn lagrange<C: Curve>(kxs: &[ShareNumber], i: ShareNumber) -> C::Scalar {
 }
 
 /// Given a list of length n of pairs (x_i, j_i), with all x_i distinct,
-/// interpolate a polynomial f of degree n and return f(0).
+/// interpolate a polynomial f of max degree n-1 and return f(0).
 pub fn reveal<C: Curve>(shares: &[(ShareNumber, PedersenValue<C>)]) -> C::Scalar {
     let kxs: Vec<ShareNumber> = shares.iter().map(|(fst, _)| *fst).collect();
     shares.iter().fold(C::Scalar::zero(), |accum, (i, v)| {
@@ -167,15 +168,67 @@ mod test {
     use pairing::bls12_381::{Fr, G1};
     use rand::{rngs::ThreadRng, seq::SliceRandom};
 
+    // Test Lagrange interpolation polynomials at x={0,1}
+    #[test]
+    pub fn test_lagrange() {
+        // For any kxs, the 0'th Lagrange polynomial is 1 at x=0
+        let mut kxs = Vec::new();
+        kxs.push(ShareNumber::from(1));
+        kxs.push(ShareNumber::from(2));
+        kxs.push(ShareNumber::from(3));
+        let p = ShareNumber::from(0);
+        let r = lagrange::<G1>(&kxs, p);
+        assert_eq!(r, G1::scalar_from_u64(1));
+
+        // For kxs={1,2}, the 1'st Lagrange polynomial is 2 at x=1
+        let mut kxs = Vec::new();
+        kxs.push(ShareNumber::from(1));
+        kxs.push(ShareNumber::from(2));
+        let p = ShareNumber::from(1);
+        let r = lagrange::<G1>(&kxs, p);
+        assert_eq!(r, G1::scalar_from_u64(2));
+    }
+
+    /// Check sharing polynomial and coefficient length are correct; we have n
+    /// shares and the degree of the sharing polynomial is t (meaning there
+    /// are t-1 coefficients in SharingData) since the constant term is the
+    /// secret being shared.
+    #[test]
+    pub fn test_share_output_length() {
+        let mut csprng = thread_rng();
+        let secret = <G1 as Curve>::generate_scalar(&mut csprng);
+        let n = 1 + u32::from(csprng.gen::<u8>());
+        // select random threshold;
+        let t = csprng.gen_range(1, n + 1);
+
+        let shared = share::<G1, ThreadRng>(
+            &secret,
+            ShareNumber::from(n),
+            Threshold::from(t),
+            &mut csprng,
+        );
+
+        assert_eq!(shared.coefficients.len() + 1, t as usize);
+        assert_eq!(shared.shares.len(), n as usize);
+    }
+
+    /// Test sharing and reconstruction:
+    ///   - For enough shares, we can reconstruct with success
+    ///   - If one share has an error, we reconstruct something different from
+    ///     the secret
+    ///   - If we try to reconstruct with too few points, we get an error.
     #[test]
     pub fn test_secret_sharing() {
         let mut csprng = thread_rng();
         for i in 1u32..10 {
+            // Generate secret point and secret-share it
             let generator = G1::one_point()
                 .mul_by_scalar(&<G1 as Curve>::generate_non_zero_scalar(&mut csprng));
             let secret = <G1 as Curve>::generate_scalar(&mut csprng);
             let secret_point = generator.mul_by_scalar(&secret);
             let threshold = csprng.gen_range(1, i + 1);
+
+            // Sample enough random points and reconstruct with success
             let sharing_data = share::<G1, ThreadRng>(
                 &secret,
                 ShareNumber::from(i),
@@ -194,6 +247,29 @@ mod test {
             let revealed_data_point: G1 = reveal_in_group::<G1>(&sufficient_sample_points);
             assert_eq!(revealed_data_point, secret_point);
 
+            // Sample enough random points, add error to one, reconstruct with failure
+            let sharing_data = share::<G1, ThreadRng>(
+                &secret,
+                ShareNumber::from(i),
+                Threshold::from(threshold),
+                &mut csprng,
+            );
+            let mut shares = sharing_data.shares;
+            shares.shuffle(&mut csprng);
+            shares.truncate(threshold as usize);
+            let rand_elm = shares.choose_mut(&mut csprng).unwrap();
+            rand_elm.1 = curve_arithmetic::secret_value::Value::generate(&mut csprng);
+
+            let revealed_data: Fr = reveal::<G1>(&shares);
+            assert_ne!(revealed_data, secret);
+            let sufficient_points_err = shares
+                .iter()
+                .map(|(n, s)| (*n, generator.mul_by_scalar(&s)))
+                .collect::<Vec<(ShareNumber, G1)>>();
+            let revealed_data_point: G1 = reveal_in_group::<G1>(&sufficient_points_err);
+            assert_ne!(revealed_data_point, secret_point);
+
+            // Sample fewer points than required and reconstruct with failure
             let sharing_data = share::<G1, ThreadRng>(
                 &secret,
                 ShareNumber::from(i),
