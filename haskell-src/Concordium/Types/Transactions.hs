@@ -272,9 +272,21 @@ makeLenses ''AccountNonFinalizedTransactions
 emptyANFT :: AccountNonFinalizedTransactions
 emptyANFT = AccountNonFinalizedTransactions Map.empty minNonce
 
+-- |Result of a transaction is block dependent.
+newtype TransactionResults = TransactionResults {trResults :: HM.HashMap BlockHash ValidResult}
+
+{-# INLINE getTransactionResult #-}
+getTransactionResult :: BlockHash -> TransactionResults -> Maybe ValidResult
+getTransactionResult bh = HM.lookup bh . trResults
+
+emptyTransactionResults :: TransactionResults
+emptyTransactionResults = TransactionResults HM.empty
+
 data TransactionTable = TransactionTable {
-    -- |Map from transaction hashes to transactions.  Contains all transactions.
-    _ttHashMap :: HM.HashMap TransactionHash (Transaction, Slot),
+    -- |Map from transaction hashes to transactions, together with the largest slot 
+    -- of a block the transction is in, or 0 if the transaction is not yet in a block, and the result
+    -- of the transaction. Transaction results are organized per block.
+    _ttHashMap :: HM.HashMap TransactionHash (Transaction, Slot, TransactionResults),
     _ttNonFinalizedTransactions :: HM.HashMap AccountAddress AccountNonFinalizedTransactions
 }
 makeLenses ''TransactionTable
