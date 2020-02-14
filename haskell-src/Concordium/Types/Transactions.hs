@@ -1,12 +1,8 @@
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE DeriveGeneric, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE LambdaCase #-}
 module Concordium.Types.Transactions where
-
 
 import Data.Time.Clock
 import Data.Time.Clock.POSIX
@@ -273,20 +269,56 @@ emptyANFT :: AccountNonFinalizedTransactions
 emptyANFT = AccountNonFinalizedTransactions Map.empty minNonce
 
 -- |Result of a transaction is block dependent.
-newtype TransactionResults = TransactionResults {trResults :: HM.HashMap BlockHash ValidResult}
+data TransactionStatus =
+  -- |Transaction is received, but no outcomes from any blocks are known
+  -- although the transaction might be known to be in some blocks. The Slot is the
+  -- largest slot of a block the transaction is in.
+  Received { _tsSlot :: !Slot }
+  -- |Transaction is committed in a number of blocks.
+  | Committed {_tsSlot :: !Slot,
+               tsResults :: !(HM.HashMap BlockHash ValidResult)
+              }
+  -- |Transaction is finalized in a given block with a specific outcome.
+  -- NB: With the current implementation a transaction can appear in at most one finalized block.
+  -- When that part is reworked so that branches are not pruned we will likely rework this.
+  | Finalized {
+      _tsSlot :: !Slot,
+      tsBlockHash :: !BlockHash,
+      tsResult :: !ValidResult
+      }
 
-{-# INLINE getTransactionResult #-}
-getTransactionResult :: BlockHash -> TransactionResults -> Maybe ValidResult
-getTransactionResult bh = HM.lookup bh . trResults
+makeLenses ''TransactionStatus
 
-emptyTransactionResults :: TransactionResults
-emptyTransactionResults = TransactionResults HM.empty
+-- |Add a transaction result. This function assumes the transaction is not finalized yet.
+-- If the transaction is already finalized the function will return the original status.
+addResult :: BlockHash -> Slot -> ValidResult -> TransactionStatus -> TransactionStatus
+addResult bh slot vr = \case
+  Committed{_tsSlot=currentSlot, tsResults=currentResults} -> Committed{_tsSlot = max slot currentSlot, tsResults = HM.insert bh vr currentResults}
+  Received{_tsSlot=currentSlot} -> Committed{_tsSlot = max slot currentSlot, tsResults = HM.singleton bh vr}
+  s@Finalized{} -> s
+
+-- |Finalize a transaction status. If the transaction status is already 'Finalized' this function does nothing.
+-- Otherwise it tries to find the transaction outcome for the given block, and if unsuccessful returns 'Nothing'.
+finalizeTransactionStatus :: BlockHash -> TransactionStatus -> Maybe TransactionStatus
+finalizeTransactionStatus bh = \case
+  Committed{..} -> Finalized _tsSlot bh <$> HM.lookup bh tsResults
+  Received{} -> Nothing
+  s@Finalized{} -> Just s
+
+initialStatus :: Slot -> TransactionStatus
+initialStatus = Received
+
+{-# INLINE getTransactionOutcome #-}
+-- |Get the outcome of the transaction in a particular block, and whether it is finalized.
+getTransactionOutcome :: BlockHash -> TransactionStatus -> Maybe (Bool, ValidResult)
+getTransactionOutcome bh = \case
+  Committed{..} -> (False, ) <$> HM.lookup bh tsResults
+  Finalized{..} -> if bh == tsBlockHash then Just (True, tsResult) else Nothing
+  _ -> Nothing
 
 data TransactionTable = TransactionTable {
-    -- |Map from transaction hashes to transactions, together with the largest slot 
-    -- of a block the transction is in, or 0 if the transaction is not yet in a block, and the result
-    -- of the transaction. Transaction results are organized per block.
-    _ttHashMap :: HM.HashMap TransactionHash (Transaction, Slot, TransactionResults),
+    -- |Map from transaction hashes to transactions, together with their current status.
+    _ttHashMap :: HM.HashMap TransactionHash (Transaction, TransactionStatus),
     _ttNonFinalizedTransactions :: HM.HashMap AccountAddress AccountNonFinalizedTransactions
 }
 makeLenses ''TransactionTable
