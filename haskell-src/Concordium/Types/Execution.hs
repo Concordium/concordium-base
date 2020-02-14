@@ -490,6 +490,7 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
                  | NoValidCredential -- ^No valid credential on the sender account.
                  | ExpiredTransaction -- ^The transaction has expired.
                  | ExceedsMaxBlockEnergy -- ^The transaction's used energy size exceeds the maximum block energy limit
+                 | ExceedsMaxBlockSize -- ^The baker decided that this transaction is too big to put in a block.
       deriving(Eq, Show)
 
 data TxResult = TxValid ValidResult | TxInvalid FailureKind
