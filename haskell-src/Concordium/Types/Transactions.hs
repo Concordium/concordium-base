@@ -297,7 +297,7 @@ data TransactionStatus =
       tsBlockHash :: !BlockHash,
       tsResult :: !TransactionIndex
       }
-
+  deriving(Eq)
 makeLenses ''TransactionStatus
 
 -- |Add a transaction result. This function assumes the transaction is not finalized yet.

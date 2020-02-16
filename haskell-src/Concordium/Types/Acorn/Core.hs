@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingVia #-}
 {-# OPTIONS_GHC -Wall #-}
 module Concordium.Types.Acorn.Core(module Concordium.Types.Acorn.Core,
                                    ModuleRef(..))
@@ -33,6 +34,7 @@ import Data.Hashable(Hashable)
 
 import Control.Monad
 
+import Data.Aeson
 import Data.Int
 import Data.Bits
 import qualified Data.Vector as Vec
@@ -251,6 +253,7 @@ instance Hashable TBase
 -- |Equivalent to Name, but separated for sanity checking.
 newtype TyName = TyName Word32
     deriving(Show, Eq, Generic, Hashable, Real, Integral, Enum, Ord, Num, Typeable, Data)
+    deriving (FromJSON, ToJSON) via Word32
 
 data DataTyName origin = LocalDataTy {dataTyName :: !TyName}
                        | ImportedDataTy {dataTyName :: !TyName
@@ -675,6 +678,7 @@ deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (De
 -- |Name, but differentiated for sanity checking. But in practice there can never be a confusion between module names and term and type names.
 newtype ModuleName = ModuleName { moduleName :: Word32 }
     deriving(Show, Eq, Ord, Enum, Generic, Hashable, Num, Real, Integral, Typeable, Data)
+    deriving (FromJSON, ToJSON) via Word32
 
 -- Version of the environment the contract is valid for. Should probably be something more structured than a word.
 type Version = Word32

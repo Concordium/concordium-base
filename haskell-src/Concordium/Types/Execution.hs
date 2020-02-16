@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
@@ -11,7 +12,9 @@ import Prelude hiding(fail)
 
 import Control.Monad.Reader
 
+import Data.Char
 import qualified Data.Aeson as AE
+import Data.Aeson.TH
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
@@ -404,10 +407,17 @@ data Event =
 
 instance S.Serialize Event
 
+-- FIXME: These intances need to be made clearer.
+instance AE.ToJSON Event
+
 -- |Used internally by the scheduler since internal messages are sent as values,
 -- and top-level messages are acorn expressions.
 data MessageFormat = ValueMessage !(Value Core.NoAnnot) | ExprMessage !(LinkedExpr Core.NoAnnot)
     deriving(Show, Generic, Eq)
+
+-- FIXME: ToJSON instance based on a show instance.
+instance AE.ToJSON MessageFormat where
+  toJSON fmt = AE.toJSON (show fmt)
 
 instance S.Serialize MessageFormat where
     put (ValueMessage v) = S.putWord8 0 >> putStorable v
@@ -436,7 +446,6 @@ data ValidResult =
   deriving(Show, Generic, Eq)
 
 instance S.Serialize ValidResult
-
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
 data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module has failed.
@@ -477,6 +486,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
     deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason
+instance AE.ToJSON RejectReason
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
                  | IncorrectSignature  -- ^Signature check failed.
@@ -494,3 +504,13 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
       deriving(Eq, Show)
 
 data TxResult = TxValid ValidResult | TxInvalid FailureKind
+
+
+-- Derive JSON instance for transaction outcomes
+$(deriveToJSON AE.defaultOptions{AE.constructorTagModifier = map toLower . drop 2,
+                                 AE.sumEncoding = AE.TaggedObject{
+                                    AE.tagFieldName = "outcome",
+                                    AE.contentsFieldName = "details"
+                                    },
+                                 AE.fieldLabelModifier=map toLower . drop 2} ''ValidResult)
+
