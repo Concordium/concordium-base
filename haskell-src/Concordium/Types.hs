@@ -38,6 +38,7 @@ import Data.Set(Set)
 import qualified Data.PQueue.Prio.Max as Queue
 
 import Data.Aeson as AE
+import Data.Aeson.TH
 
 import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P
@@ -61,7 +62,7 @@ instance Ord (Hashed a) where
 
 -- * Types releated to bakers.
 newtype BakerId = BakerId Word64
-    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral, FromJSON, ToJSON) via Word64
 
 instance S.Serialize BakerId where
     get = BakerId <$> G.getWord64be
@@ -134,6 +135,7 @@ instance S.Serialize ContractAddress where
 -- |Unique module reference.
 newtype ModuleRef = ModuleRef {moduleRef :: Hash.Hash}
     deriving(Eq, Ord, Hashable, Typeable, Data)
+    deriving (FromJSON, ToJSON) via Hash.Hash
 
 instance Show ModuleRef where
   show (ModuleRef m) = show m
@@ -189,14 +191,11 @@ transactionExpired = (<) . expiry
 -- |Type of GTU amounts.
 -- FIXME: This likely needs to be Word128.
 newtype Amount = Amount { _amount :: Word64 }
-    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable) via Word64
+    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, FromJSON, ToJSON) via Word64
 
 instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
   put (Amount v) = P.putWord64be v
-
-instance FromJSON Amount where
-  parseJSON v = Amount <$> parseJSON v
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
@@ -219,14 +218,11 @@ applyAmountDelta del amt =
 -- |The type used to count exact execution cost. This cost is then converted to
 -- amounts in some way.
 newtype Energy = Energy { _energy :: Word64 }
-    deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded) via Word64
+    deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded, FromJSON, ToJSON) via Word64
 
 instance S.Serialize Energy where
   get = Energy <$> G.getWord64be
   put (Energy v) = P.putWord64be v
-
-instance FromJSON Energy where
-  parseJSON v = Energy <$> parseJSON v
 
 newtype Nonce = Nonce Word64
     deriving (Show, Read, Eq, Ord, Num, Enum) via Word64
@@ -349,7 +345,11 @@ payloadSize = fromIntegral . BSS.length . _spayload
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
 
-newtype Slot = Slot {theSlot :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
+newtype Slot = Slot {theSlot :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show) via Word64
+
+instance S.Serialize Slot where
+  put = S.putWord64be . theSlot
+  get = Slot <$> S.getWord64be
 
 -- |The slot number of the genesis block (0).
 genesisSlot :: Slot
@@ -357,7 +357,12 @@ genesisSlot = 0
 
 type EpochLength = Slot
 
-newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
+newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show) via Word64
+
+instance S.Serialize BlockHeight where
+  put = S.putWord64be . theBlockHeight
+  get = BlockHeight <$> S.getWord64be
+
 
 -- |Blockchain metadata as needed by contract execution.
 data ChainMetadata =
@@ -382,3 +387,7 @@ type BlockHash = Hash.Hash
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
+
+
+-- Template haskell derivations. At the end to get around staging restrictions.
+$(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
