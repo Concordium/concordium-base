@@ -268,15 +268,26 @@ makeLenses ''AccountNonFinalizedTransactions
 emptyANFT :: AccountNonFinalizedTransactions
 emptyANFT = AccountNonFinalizedTransactions Map.empty minNonce
 
+-- |Index of the transaction in a block, starting from 0.
+newtype TransactionIndex = TransactionIndex Word64
+    deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral) via Word64
+
 -- |Result of a transaction is block dependent.
 data TransactionStatus =
   -- |Transaction is received, but no outcomes from any blocks are known
   -- although the transaction might be known to be in some blocks. The Slot is the
   -- largest slot of a block the transaction is in.
   Received { _tsSlot :: !Slot }
-  -- |Transaction is committed in a number of blocks.
+  -- |Transaction is committed in a number of blocks. '_tsSlot' is the maximal slot.
+  -- 'tsResults' is always a non-empty map and global state must maintain the invariant
+  -- that if a block hash @bh@ is in the 'tsResults' map then
+  --
+  -- * @bh@ is a live block
+  -- * we have blockState for the block available
+  -- * if @tsResults(bh) = i@ then the transaction is the relevant transaction is the i-th transaction in the block
+  --   (where we start counting from 0)
   | Committed {_tsSlot :: !Slot,
-               tsResults :: !(HM.HashMap BlockHash ValidResult)
+               tsResults :: !(HM.HashMap BlockHash TransactionIndex)
               }
   -- |Transaction is finalized in a given block with a specific outcome.
   -- NB: With the current implementation a transaction can appear in at most one finalized block.
@@ -284,34 +295,37 @@ data TransactionStatus =
   | Finalized {
       _tsSlot :: !Slot,
       tsBlockHash :: !BlockHash,
-      tsResult :: !ValidResult
+      tsResult :: !TransactionIndex
       }
 
 makeLenses ''TransactionStatus
 
 -- |Add a transaction result. This function assumes the transaction is not finalized yet.
 -- If the transaction is already finalized the function will return the original status.
-addResult :: BlockHash -> Slot -> ValidResult -> TransactionStatus -> TransactionStatus
+addResult :: BlockHash -> Slot -> TransactionIndex -> TransactionStatus -> TransactionStatus
 addResult bh slot vr = \case
   Committed{_tsSlot=currentSlot, tsResults=currentResults} -> Committed{_tsSlot = max slot currentSlot, tsResults = HM.insert bh vr currentResults}
   Received{_tsSlot=currentSlot} -> Committed{_tsSlot = max slot currentSlot, tsResults = HM.singleton bh vr}
   s@Finalized{} -> s
 
--- |Finalize a transaction status. If the transaction status is already 'Finalized' this function does nothing.
--- Otherwise it tries to find the transaction outcome for the given block, and if unsuccessful returns 'Nothing'.
-finalizeTransactionStatus :: BlockHash -> TransactionStatus -> Maybe TransactionStatus
-finalizeTransactionStatus bh = \case
-  Committed{..} -> Finalized _tsSlot bh <$> HM.lookup bh tsResults
-  Received{} -> Nothing
-  s@Finalized{} -> Just s
+-- |Remove a transaction result for a given block. This can happen when a block
+-- is removed from the block tree because it is not a successor of the last
+-- finalized block.
+-- This function will only have effect if the transaction status is 'Committed' and
+-- the given block hash is in the table of outcomes.
+markDeadResult :: BlockHash -> TransactionStatus -> TransactionStatus
+markDeadResult bh Committed{..} =
+  let newResults = HM.delete bh tsResults
+  in if HM.null newResults then Received{..} else Committed{tsResults=newResults,..}
+markDeadResult _ ts = ts
 
 initialStatus :: Slot -> TransactionStatus
 initialStatus = Received
 
-{-# INLINE getTransactionOutcome #-}
+{-# INLINE getTransactionIndex #-}
 -- |Get the outcome of the transaction in a particular block, and whether it is finalized.
-getTransactionOutcome :: BlockHash -> TransactionStatus -> Maybe (Bool, ValidResult)
-getTransactionOutcome bh = \case
+getTransactionIndex :: BlockHash -> TransactionStatus -> Maybe (Bool, TransactionIndex)
+getTransactionIndex bh = \case
   Committed{..} -> (False, ) <$> HM.lookup bh tsResults
   Finalized{..} -> if bh == tsBlockHash then Just (True, tsResult) else Nothing
   _ -> Nothing
@@ -393,10 +407,9 @@ instance S.Serialize SpecialTransactionOutcome where
     put (BakingReward addr amt) = S.put addr >> S.put amt
     get = BakingReward <$> S.get <*> S.get
 
--- |Values of this datatype must satisfy the invariant that the values in the
--- map are exactly the indices in the vector.
+-- |Outcomes of transactions. The vector of outcomes must have the same size as the
+-- number of transactions in the block, and ordered in the same way.
 data TransactionOutcomes = TransactionOutcomes {
-    outcomeIndex :: !(HM.HashMap TransactionHash Int),
     outcomeValues :: !(Vec.Vector ValidResult),
     _outcomeSpecial :: ![SpecialTransactionOutcome]
 }
@@ -404,30 +417,29 @@ data TransactionOutcomes = TransactionOutcomes {
 makeLenses ''TransactionOutcomes
 
 instance Show TransactionOutcomes where
-    show (TransactionOutcomes _ v s) = "Normal transactions: " ++ show (Vec.toList v) ++ ", special transactions: " ++ show s
+    show (TransactionOutcomes v s) = "Normal transactions: " ++ show (Vec.toList v) ++ ", special transactions: " ++ show s
 
+-- FIXME: More consistent serialization.
 instance S.Serialize TransactionOutcomes where
     put TransactionOutcomes{..} = do
-        S.put (HM.toList outcomeIndex)
         S.put (Vec.toList outcomeValues)
         S.put _outcomeSpecial
-    get = TransactionOutcomes <$> (HM.fromList <$> S.get) <*> (Vec.fromList <$> S.get) <*> S.get
+    get = TransactionOutcomes <$> (Vec.fromList <$> S.get) <*> S.get
 
 emptyTransactionOutcomes :: TransactionOutcomes
-emptyTransactionOutcomes = TransactionOutcomes HM.empty Vec.empty []
+emptyTransactionOutcomes = TransactionOutcomes Vec.empty []
 
 transactionOutcomesFromList :: [(TransactionHash, ValidResult)] -> TransactionOutcomes
 transactionOutcomesFromList l =
   let outcomeValues = Vec.fromList (map snd l)
-      outcomeIndex = HM.fromList (zip (map fst l) [0..])
       _outcomeSpecial = []
   in TransactionOutcomes{..}
 
-type instance Index TransactionOutcomes = TransactionHash
+type instance Index TransactionOutcomes = TransactionIndex
 type instance IxValue TransactionOutcomes = ValidResult
 
 instance Ixed TransactionOutcomes where
   ix idx f outcomes@TransactionOutcomes{..} =
-    case outcomeIndex ^. at idx of
-      Nothing -> pure outcomes
-      Just i -> (\ov -> TransactionOutcomes{outcomeValues=ov,..}) <$> ix i f outcomeValues
+    let x = fromIntegral idx
+    in if length outcomeValues >= x then pure outcomes
+       else ix x f outcomeValues <&> (\ov -> TransactionOutcomes{outcomeValues=ov,..})
