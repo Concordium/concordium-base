@@ -458,8 +458,8 @@ mod test {
                     break;
                 }
             }
-            let ro1 = RandomOracle::empty().append_bytes(c1.clone());
-            let ro2 = RandomOracle::empty().append_bytes(c2.clone());
+            let ro1 = RandomOracle::empty().append_bytes(c1);
+            let ro2 = RandomOracle::empty().append_bytes(c2);
 
             let sk = SecretKey::<Bls12>::generate(&mut csprng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
