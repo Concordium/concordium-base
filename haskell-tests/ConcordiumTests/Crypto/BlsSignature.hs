@@ -58,11 +58,14 @@ testProofNoContextCollision = forAllKP $ \(sk, pk) c1 c2 ->
   b1 /= b2 ==>
     let proof = prove b1 sk in
     not $ checkProof b2 proof pk
-    -- if (checkProof b2 proof pk)
-    -- then
-    --   trace ("\nsk: " ++ show sk ++ "\npk: " ++ show pk ++ "\nb1: " ++ show b1 ++ "\nb2: " ++ show b2 ++ "\nproof: " ++ show proof) $ False
-    -- else True
 
+testProofWrongKey :: Property
+testProofWrongKey = forAllSK $ \sk1 ->
+  forAllKP $ \(sk2, pk2) c ->
+    sk1 /= sk2 ==>
+      let b = BS.pack c
+          proof = prove b sk1
+      in not $ checkProof b proof pk2
 
 testSerializeSecretKey :: Property
 testSerializeSecretKey = forAllSK $ \sk ->
@@ -116,3 +119,4 @@ tests = describe "Concordium.Crypto.BlsSignature" $ do
             it "bls_json_proof" $ withMaxSuccess 10000 $ testSerializeProofJSON
             it "bls_proof_sound" $ withMaxSuccess 10000 $ testProofSoundness
             it "bls_proof_no_context_collision" $ withMaxSuccess 10000 $ testProofNoContextCollision
+            it "bls_wrong_proof" $ withMaxSuccess 10000 $ testProofWrongKey
