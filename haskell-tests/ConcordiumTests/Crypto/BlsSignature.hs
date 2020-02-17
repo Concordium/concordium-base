@@ -49,23 +49,23 @@ testSignAndVerifyCollision = forAllKP $ \(sk, pk) m1 m2 ->
 testProofSoundness :: Property
 testProofSoundness = forAllKP $ \(sk, pk) c ->
   let b = BS.pack c in
-  checkProof b (prove b sk) pk
+  checkProofOfKnowledgeSK b (proveKnowledgeOfSK b sk) pk
 
 testProofNoContextCollision :: Property
 testProofNoContextCollision = forAllKP $ \(sk, pk) c1 c2 ->
   let b1 = BS.pack c1
       b2 = BS.pack c2 in
   b1 /= b2 ==>
-    let proof = prove b1 sk in
-    not $ checkProof b2 proof pk
+    let proof = proveKnowledgeOfSK b1 sk in
+    not $ checkProofOfKnowledgeSK b2 proof pk
 
 testProofWrongKey :: Property
 testProofWrongKey = forAllSK $ \sk1 ->
   forAllKP $ \(sk2, pk2) c ->
     sk1 /= sk2 ==>
       let b = BS.pack c
-          proof = prove b sk1
-      in not $ checkProof b proof pk2
+          proof = proveKnowledgeOfSK b sk1
+      in not $ checkProofOfKnowledgeSK b proof pk2
 
 testSerializeSecretKey :: Property
 testSerializeSecretKey = forAllSK $ \sk ->
@@ -82,7 +82,7 @@ testSerializeSignature = forAllSK $ \sk d ->
 
 testSerializeProof :: Property
 testSerializeProof = forAllSK $ \sk d ->
-  let proof = prove (BS.pack d) sk in
+  let proof = proveKnowledgeOfSK (BS.pack d) sk in
     Right proof === runGet get (runPut $ put proof)
 
 testSerializePublicKeyJSON :: Property
@@ -100,7 +100,7 @@ testSerializeSignatureJSON = forAllSK $ \sk d ->
 
 testSerializeProofJSON :: Property
 testSerializeProofJSON = forAllSK $ \sk d ->
-  let proof = prove (BS.pack d) sk in
+  let proof = proveKnowledgeOfSK (BS.pack d) sk in
   Just proof === AE.decode (AE.encode proof)
 
 tests :: Spec
