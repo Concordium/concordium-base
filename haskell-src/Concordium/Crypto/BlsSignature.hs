@@ -270,7 +270,7 @@ verifyAggregate m pks sig = unsafeDupablePerformIO $ do
 
 -- |Create a proof of knowledge of your secret key
 proveKnowledgeOfSK :: ByteString -> SecretKey -> Proof
-prove context sk = Proof <$> unsafeDupablePerformIO $ do
+proveKnowledgeOfSK context sk = Proof <$> unsafeDupablePerformIO $ do
   -- unsafeUseAsCString is ok here, clen == 0 is appropriately handled in rust
   proofPtr <- BS.unsafeUseAsCStringLen context $ \(c, clen) ->
     withSecretKey sk $ \sk' ->
@@ -279,7 +279,7 @@ prove context sk = Proof <$> unsafeDupablePerformIO $ do
 
 -- |Check a proof of knowledge for a publickey
 checkProofOfKnowledgeSK :: ByteString -> Proof -> PublicKey -> Bool
-checkProof context proof pk = unsafeDupablePerformIO $ do
+checkProofOfKnowledgeSK context proof pk = unsafeDupablePerformIO $ do
   -- unsafeUseAsCString is ok here, clen == 0 is appropriately handled in rust
   BS.unsafeUseAsCStringLen context $ \(c, clen) ->
     withPublicKey pk $ \pk' ->
