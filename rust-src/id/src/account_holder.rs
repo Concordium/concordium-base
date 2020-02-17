@@ -325,7 +325,10 @@ where
     let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
     let reg_id_exponent = match aci.prf_key.prf_exponent(cred_counter) {
         Ok(exp) => exp,
-        Err(err) => unimplemented!("Handle the (very unlikely) case where K + x = 0, {}", err),
+        Err(_) => bail!(
+            "Cannot create CDI with this account number because K + {} = 0.",
+            cred_counter
+        ),
     };
 
     // RegId as well as Prf key commitments must be computed
@@ -343,7 +346,7 @@ where
     let ip_ar_parameters = &ip_info.ip_ars.ars.clone();
     for ar in ar_list.iter() {
         match ip_ar_parameters.iter().find(|&x| x.ar_identity == *ar) {
-            None => panic!("AR handle not in the IP list"),
+            None => bail!("AR handle {} not supported by the identity provider.", *ar),
             Some(ar_info) => choice_ars.push(ar_info.clone()),
         }
     }
@@ -422,8 +425,7 @@ where
             .iter()
             .find(|&x| x.ar_identity == item.ar_identity)
         {
-            None => panic!("cannot find Ar"), // FIXME, should not panic here, handle errors
-            // gracefully
+            None => bail!("Cannot find AR {}", item.ar_identity),
             Some(ar_info) => {
                 let secret = com_enc_eq::ComEncEqSecret {
                     value:         &item.share,

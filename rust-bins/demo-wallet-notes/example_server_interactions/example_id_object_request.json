@@ -1,0 +1,14 @@
+{
+    "ipIdentity": 0,
+    "name": "Aleš",
+    "attributes": {
+        "chosenAttributes": {
+            "CountryOfNationality": "17",
+            "CountryOfResidence": "16",
+            "CreationTime": "11"
+        },
+        "expiryDate": 1612796169
+    },
+    "anonymityRevokers": [0,1,2],
+    "threshold": 2
+}

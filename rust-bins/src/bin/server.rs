@@ -78,16 +78,24 @@ fn parse_id_object_input_json(
     Some((ip_id, user_name, threshold, ars, alist))
 }
 
+macro_rules! respond_log {
+    ($req:expr, $msg:expr) => {{
+        rouille::log(&$req, ::std::io::stderr(), || {
+            rouille::Response::text($msg).with_status_code(400)
+        })
+    }};
+}
+
 fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Response {
     let v: Value = try_or_400!(rouille::input::json_input(request));
     let (ip_info, name, threshold, ar_identities, attributes) = {
         if let Some((ip_id, name, threshold, ar_list, att)) = parse_id_object_input_json(&v) {
             match s.ip_infos.get(&ip_id) {
                 Some(ip_info) => (ip_info, name, threshold, ar_list, att),
-                None => return rouille::Response::empty_400(),
+                None => return respond_log!(request, "Could not find identity provider."),
             }
         } else {
-            return rouille::Response::empty_400();
+            return respond_log!(request, "Could not parse ID request.");
         }
     };
 
@@ -118,7 +126,7 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
         threshold,
     }) {
         Some(x) => x,
-        None => return rouille::Response::empty_400(),
+        None => return respond_log!(request, "Could not make context"),
     };
     let (pio, randomness) = generate_pio(&context, &aci);
 
@@ -138,7 +146,7 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
             });
             rouille::Response::json(&response)
         }
-        Err(_) => rouille::Response::empty_400(),
+        Err(e) => respond_log!(request, format!("Could not generate credential: {:?}", e)),
     }
 }
 
@@ -205,7 +213,9 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
         if let Some(acc_data) = v.get("accountData") {
             match from_json(acc_data.clone()) {
                 Ok(acc_data) => acc_data,
-                Err(_) => return rouille::Response::empty_400(),
+                Err(e) => {
+                    return respond_log!(request, format!("Could not parse account data {}.", e))
+                }
             }
         } else {
             let mut keys = BTreeMap::new();
@@ -233,7 +243,7 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
 
     let cdi = match cdi {
         Ok(cdi) => cdi,
-        Err(_) => return rouille::Response::empty_400(),
+        Err(e) => return respond_log!(request, format!("Could not generate credential {}", e)),
     };
 
     let address = match acc_data.existing {
@@ -250,7 +260,14 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
 }
 
 // TODO: Pass filename as parameter
-fn read_ip_infos(filename: &str) -> Option<IpInfos> { read_json_from_file(filename).ok() }
+fn read_ip_infos(filename: &str) -> Option<IpInfos> {
+    let infos: Vec<IpData<_, _>> = read_json_from_file(filename).ok()?;
+    let mut map = HashMap::with_capacity(infos.len());
+    for info in infos {
+        let _ = map.insert(info.public_ip_info.ip_identity, info);
+    }
+    Some(map)
+}
 
 pub fn main() {
     let app = App::new("Server exposing creation of identity objects and credentials")
