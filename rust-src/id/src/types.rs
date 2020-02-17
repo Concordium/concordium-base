@@ -1177,10 +1177,10 @@ impl<'de> Visitor<'de> for AccountDataVisitor {
 
     fn visit_map<A: de::MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
         let mut map = map;
-        let mut keys: Option<BTreeMap<KeyIndex, BTreeMap<&str, &str>>> = None;
+        let mut keys: Option<BTreeMap<KeyIndex, BTreeMap<String, String>>> = None;
         let mut existing = None;
         while keys.is_none() || existing.is_none() {
-            if let Some(k) = map.next_key::<&str>()? {
+            if let Some(k) = map.next_key::<String>()? {
                 if k == "keys" {
                     if keys.is_none() {
                         keys = Some(map.next_value()?);

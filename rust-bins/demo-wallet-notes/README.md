@@ -43,12 +43,12 @@ A request is a JSON object which looks as
     "ipIdentity": 0,
     "name": "Aleš",
     "attributes": {
-      "birthYear": "2013",
-      "creationTime": "1341324324",
-      "expiryDate": "1910822399",
-      "maxAccount": "30",
-      "residenceCountryCode": "386",
-      "variant": "0"
+        "chosenAttributes": {
+            "CountryOfNationality": "17",
+            "CountryOfResidence": "16",
+            "CreationTime": "11"
+        },
+        "expiryDate": 1612796169
     },
     "anonymityRevokers": [0,1,2],
     "threshold": 2
@@ -66,9 +66,9 @@ $> curl -d "@example_credential_request.json" -H "Content-Type: application/json
 The input file ([example](example_server_interactions/example_credential_request.json)) takes the returned object from the previous interaction and requires three additional fields (some of which are optional)
 - `revealedItems` which is a JSON array of which attributes the user wishes to reveal. If this field is not present we assume no attributes are revealed (note that attribute list variant and expiry date are implicitly always revealed)
 - `accountNumber` this is a mandatory field and **must** be unique per identity-object, meaning that for each credential generated from this identity object a fresh number must be used. Should be a number between 0 and 255 (inclusive).
-- `accountKeyPair` is an optional field which contains the public and private key of the account this credential will be deployed on. If not present a fresh pair is generated and returned.
+- `accountData` is an optional field which contains the public and private key of the account this credential will be deployed on. If not present a fresh pair is generated and returned.
 
-A returned value from this interaction is a JSON object with two fields, `credential` and `accountKeyPair` ([example](example_server_interactions/example_credential_response.json)).
-The credential is what can be deployed on the chain, and the `accountKeyPair` should be stored because it is needed to sign transactions from the account containing this credential.
+A returned value from this interaction is a JSON object with two fields, `credential` and `accountData` ([example](example_server_interactions/example_credential_response.json)).
+The credential is what can be deployed on the chain, and the `accountData` should be stored because it is needed to sign transactions from the account containing this credential.
 
-If the request already contains the keys then the same ones are returned, see [example request](example_server_interactions/example_credential_request_existing.json) and [example response](example_server_interactions/example_credential_response_existing_account.json).
+If the request already contains the account data then the same is returned, see [example request](example_server_interactions/example_credential_request_existing.json) and [example response](example_server_interactions/example_credential_response_existing.json).
