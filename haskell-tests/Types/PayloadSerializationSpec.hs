@@ -64,8 +64,11 @@ genAccountOwnershipProof = do
      proof <- genDlogProof
      return (keyIndex, proof))
 
-genAggregationVerifykey :: Gen BakerAggregationVerifyKey
-genAggregationVerifykey = fmap Bls.derivePublicKey secretBlsKeyGen
+genAggregationVerifyKeyAndProof :: Gen (BakerAggregationVerifyKey, BakerAggregationProof)
+genAggregationVerifyKeyAndProof = do
+  c <- arbitrary
+  sk <- secretBlsKeyGen
+  return (Bls.derivePublicKey sk, Bls.proveKnowledgeOfSK (BS.pack c) sk)
 
 genPayload :: Gen Payload
 genPayload = oneof [genDeployModule,
@@ -112,7 +115,7 @@ genPayload = oneof [genDeployModule,
         genAddBaker = do
           abElectionVerifyKey <- VRF.publicKey <$> arbitrary
           abSignatureVerifyKey <- BlockSig.verifyKey <$> genBlockKeyPair
-          abAggregationVerifyKey <- genAggregationVerifykey
+          (abAggregationVerifyKey, abProofAggregation) <- genAggregationVerifyKeyAndProof
           abAccount <- genAddress
           abProofSig <- genDlogProof
           abProofElection <- genDlogProof
