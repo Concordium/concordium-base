@@ -2,7 +2,7 @@
 module Concordium.Crypto.BlsSignature
   (PublicKey, SecretKey(..), Signature, Proof,
   generateSecretKey, derivePublicKey, sign, verify, aggregate, aggregateMany, verifyAggregate, emptySignature,
-  freeSecretKey, prove, checkProof)
+  freeSecretKey, proveKnowledgeOfSK, checkProofOfKnowledgeSK)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -269,16 +269,18 @@ verifyAggregate m pks sig = unsafeDupablePerformIO $ do
       withKeyArray ps (pk:pks_) f = withPublicKey pk $ \pk' -> withKeyArray (pk':ps) pks_ f
 
 -- |Create a proof of knowledge of your secret key
-prove :: ByteString -> SecretKey -> Proof
+proveKnowledgeOfSK :: ByteString -> SecretKey -> Proof
 prove context sk = Proof <$> unsafeDupablePerformIO $ do
+  -- unsafeUseAsCString is ok here, clen == 0 is appropriately handled in rust
   proofPtr <- BS.unsafeUseAsCStringLen context $ \(c, clen) ->
     withSecretKey sk $ \sk' ->
     proveBls (castPtr c) (fromIntegral clen) sk'
   newForeignPtr freeProof proofPtr
 
 -- |Check a proof of knowledge for a publickey
-checkProof :: ByteString -> Proof -> PublicKey -> Bool
+checkProofOfKnowledgeSK :: ByteString -> Proof -> PublicKey -> Bool
 checkProof context proof pk = unsafeDupablePerformIO $ do
+  -- unsafeUseAsCString is ok here, clen == 0 is appropriately handled in rust
   BS.unsafeUseAsCStringLen context $ \(c, clen) ->
     withPublicKey pk $ \pk' ->
     withProof proof $ \proof' ->
