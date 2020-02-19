@@ -77,6 +77,7 @@ type BakerAggregationPrivateKey = Bls.SecretKey
 type LotteryPower = Ratio Amount
 type ElectionDifficulty = Double
 type StakeFraction = Double
+type FinalizationCommitteeSize = Int
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
@@ -84,7 +85,7 @@ type VoterVRFPublicKey = VRF.PublicKey
 type VoterAggregationVerifyKey = Bls.PublicKey
 type VoterSignKey = Sig.SignKey
 type VoterAggregationPrivateKey = Bls.SecretKey
-newtype VoterPower = VoterPower Int
+newtype VoterPower = VoterPower GTU
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Show, Integral, S.Serialize)
 
 -- * Blockchain specific types.
@@ -189,7 +190,8 @@ transactionExpired = (<) . expiry
 
 -- |Type of GTU amounts.
 -- FIXME: This likely needs to be Word128.
-newtype Amount = Amount { _amount :: Word64 }
+type GTU = Word64
+newtype Amount = Amount { _amount :: GTU }
     deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable) via Word64
 
 instance S.Serialize Amount where
