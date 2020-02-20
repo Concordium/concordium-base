@@ -85,7 +85,7 @@ divD :: (Integral a, Bounded a) => a -> a -> a
 divD x y = fromMaybe 0 $ divC x y
 
 modD :: (Integral a, Bounded a) => a -> a -> a
-modD x y = fromMaybe 0 $ divC x y
+modD x y = fromMaybe 0 $ modC x y
 
 -- | Note: Defaults on negative exponent, normalizes on overflow
 powD :: Integral a => a -> a -> a
