@@ -176,14 +176,11 @@ type Duration = Word64
 
 -- | Expiry time of a transaction
 newtype TransactionExpiryTime = TransactionExpiryTime { expiry :: Timestamp }
-    deriving (Show, Read, Eq, Num, Ord) via Word64
+    deriving (Show, Read, Eq, Num, Ord, FromJSON, ToJSON) via Timestamp
 
 instance S.Serialize TransactionExpiryTime where
   put = P.putWord64be . expiry
   get = TransactionExpiryTime <$> G.getWord64be
-
-instance FromJSON TransactionExpiryTime where
-  parseJSON v = TransactionExpiryTime <$> parseJSON v
 
 transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
 transactionExpired = (<) . expiry
@@ -225,14 +222,11 @@ instance S.Serialize Energy where
   put (Energy v) = P.putWord64be v
 
 newtype Nonce = Nonce Word64
-    deriving (Show, Read, Eq, Ord, Num, Enum) via Word64
+    deriving (Show, Read, Eq, Ord, Num, Enum, FromJSON, ToJSON) via Word64
 
 instance S.Serialize Nonce where
   put (Nonce w) = P.putWord64be w
   get = Nonce <$> G.getWord64be
-
-instance FromJSON Nonce where
-  parseJSON v = Nonce <$> parseJSON v
 
 minNonce :: Nonce
 minNonce = 1
@@ -317,7 +311,7 @@ newAccount _accountVerificationKeys _accountAddress = Account {
 
 -- |Size of the transaction payload.
 newtype PayloadSize = PayloadSize Word32
-    deriving (Eq, Show, Ord, Num, Real, Enum, Integral) via Word32
+    deriving (Eq, Show, Ord, Num, Real, Enum, Integral, FromJSON, ToJSON) via Word32
 
 -- |Serialization format as specified
 --
@@ -380,6 +374,8 @@ data ChainMetadata =
                 , slotTime :: Timestamp
                 }
 
+
+type TransactionHash = Hash.Hash
 
 -- * Types related to blocks
 

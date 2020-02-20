@@ -25,6 +25,7 @@ import GHC.Generics
 
 import qualified Concordium.Types.Acorn.Core as Core
 import Concordium.Types
+import Concordium.Types.Execution.TH
 import Concordium.ID.Types
 import Concordium.Types.Acorn.Interfaces
 import qualified Concordium.ID.Types as IDTypes
@@ -175,6 +176,10 @@ data Payload =
   | UndelegateStake
   deriving(Eq, Show)
 
+$(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
+
+instance S.Serialize TransactionType
+
 -- |Payload serialization according to
 --
 --  * @SPEC: <$DOCS/Transactions#transaction-body>
@@ -232,7 +237,7 @@ instance S.Serialize Payload where
   put UndelegateStake =
     P.putWord8 11
 
-  get = do
+  get =
     G.getWord8 >>=
       \case 0 -> do
               dmMod <- Core.getModule
@@ -429,23 +434,24 @@ instance S.Serialize MessageFormat where
             1 -> ExprMessage <$> S.get
             _ -> fail "Invalid MessageFormat tag"
 
--- |Result of a valid transaction is either a reject with a reason or a
+-- |Result of a valid transaction is a transaction summary.
+data TransactionSummary = TransactionSummary {
+  tsSender :: !AccountAddress,
+  tsHash :: !TransactionHash,
+  tsCost :: !Amount,
+  tsEnergyCost :: !Energy,
+  tsType :: !(Maybe TransactionType),
+  tsResult :: !ValidResult
+  } deriving(Eq, Show, Generic)
+
+-- |Outcomes of a valid transaction. Either a reject with a reason or a
 -- successful transaction with a list of events which occurred during execution.
 -- We also record the cost of the transaction.
-data ValidResult =
-  TxSuccess {
-    vrEvents :: ![Event],
-    vrTransactionCost :: !Amount,
-    vrEnergyCost :: !Energy
-  } |
-  TxReject {
-    vrRejectReason :: !RejectReason,
-    vrTransactionCost :: !Amount,
-    vrEnergyCost :: !Energy
-  }
+data ValidResult = TxSuccess { vrEvents :: ![Event] } | TxReject { vrRejectReason :: !RejectReason }
   deriving(Show, Generic, Eq)
 
 instance S.Serialize ValidResult
+instance S.Serialize TransactionSummary
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
 data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module has failed.
@@ -503,10 +509,11 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
                  | ExceedsMaxBlockSize -- ^The baker decided that this transaction is too big to put in a block.
       deriving(Eq, Show)
 
-data TxResult = TxValid ValidResult | TxInvalid FailureKind
+data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
 
 
 -- Derive JSON instance for transaction outcomes
+-- At the end of the file to avoid issues with staging restriction.
 $(deriveToJSON AE.defaultOptions{AE.constructorTagModifier = map toLower . drop 2,
                                  AE.sumEncoding = AE.TaggedObject{
                                     AE.tagFieldName = "outcome",
@@ -514,3 +521,6 @@ $(deriveToJSON AE.defaultOptions{AE.constructorTagModifier = map toLower . drop 
                                     },
                                  AE.fieldLabelModifier=map toLower . drop 2} ''ValidResult)
 
+$(deriveToJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionSummary)
+
+$(deriveToJSON defaultOptions{AE.constructorTagModifier = map toLower . drop 2} ''TransactionType)

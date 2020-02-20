@@ -54,6 +54,7 @@ dependencies:
 - pqueue >= 1.4.1
 - prettyprinter >= 1.2
 - random >= 1.1
+- template-haskell >= 2.14
 
 library:
   source-dirs: src
