@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
@@ -8,6 +9,8 @@ import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Control.Exception
 import Control.Monad
+import Data.Aeson.TH
+import Data.Char(toLower)
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
 import qualified Data.HashMap.Strict as HM
@@ -72,6 +75,8 @@ data TransactionHeader = TransactionHeader {
     thExpiry :: TransactionExpiryTime
     } deriving (Show)
 
+$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionHeader)
+
 -- |Eq instance ignores derived fields.
 instance Eq TransactionHeader where
   th1 == th2 = thNonce th1 == thNonce th2 &&
@@ -79,8 +84,6 @@ instance Eq TransactionHeader where
                thPayloadSize th1 == thPayloadSize th2 &&
                thExpiry th1 == thExpiry th2
 
--- |NB: Relies on the verify key serialization being defined as specified on the wiki.
---
 -- * @SPEC: <$DOCS/Transactions#transaction-header-serialization>
 instance S.Serialize TransactionHeader where
   put TransactionHeader{..} =
@@ -97,8 +100,6 @@ instance S.Serialize TransactionHeader where
     thPayloadSize <- S.get
     thExpiry <- S.get
     return $! TransactionHeader{..}
-
-type TransactionHash = H.Hash
 
 -- |Transaction without the metadata.
 --
@@ -295,7 +296,7 @@ data TransactionStatus =
   | Finalized {
       _tsSlot :: !Slot,
       tsBlockHash :: !BlockHash,
-      tsResult :: !TransactionIndex
+      tsFinResult :: !TransactionIndex
       }
   deriving(Eq)
 makeLenses ''TransactionStatus
@@ -327,7 +328,7 @@ initialStatus = Received
 getTransactionIndex :: BlockHash -> TransactionStatus -> Maybe (Bool, TransactionIndex)
 getTransactionIndex bh = \case
   Committed{..} -> (False, ) <$> HM.lookup bh tsResults
-  Finalized{..} -> if bh == tsBlockHash then Just (True, tsResult) else Nothing
+  Finalized{..} -> if bh == tsBlockHash then Just (True, tsFinResult) else Nothing
   _ -> Nothing
 
 data TransactionTable = TransactionTable {
@@ -410,7 +411,7 @@ instance S.Serialize SpecialTransactionOutcome where
 -- |Outcomes of transactions. The vector of outcomes must have the same size as the
 -- number of transactions in the block, and ordered in the same way.
 data TransactionOutcomes = TransactionOutcomes {
-    outcomeValues :: !(Vec.Vector ValidResult),
+    outcomeValues :: !(Vec.Vector TransactionSummary),
     _outcomeSpecial :: ![SpecialTransactionOutcome]
 }
 
@@ -429,14 +430,14 @@ instance S.Serialize TransactionOutcomes where
 emptyTransactionOutcomes :: TransactionOutcomes
 emptyTransactionOutcomes = TransactionOutcomes Vec.empty []
 
-transactionOutcomesFromList :: [(TransactionHash, ValidResult)] -> TransactionOutcomes
+transactionOutcomesFromList :: [TransactionSummary] -> TransactionOutcomes
 transactionOutcomesFromList l =
-  let outcomeValues = Vec.fromList (map snd l)
+  let outcomeValues = Vec.fromList l
       _outcomeSpecial = []
   in TransactionOutcomes{..}
 
 type instance Index TransactionOutcomes = TransactionIndex
-type instance IxValue TransactionOutcomes = ValidResult
+type instance IxValue TransactionOutcomes = TransactionSummary
 
 instance Ixed TransactionOutcomes where
   ix idx f outcomes@TransactionOutcomes{..} =
