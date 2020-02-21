@@ -412,9 +412,6 @@ data Event =
 
 instance S.Serialize Event
 
--- FIXME: These intances need to be made clearer.
-instance AE.ToJSON Event
-
 -- |Used internally by the scheduler since internal messages are sent as values,
 -- and top-level messages are acorn expressions.
 data MessageFormat = ValueMessage !(Value Core.NoAnnot) | ExprMessage !(LinkedExpr Core.NoAnnot)
@@ -511,6 +508,8 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
 
+-- FIXME: These intances need to be made clearer.
+$(deriveToJSON AE.defaultOptions{AE.fieldLabelModifier = map toLower . dropWhile isLower} ''Event)
 
 -- Derive JSON instance for transaction outcomes
 -- At the end of the file to avoid issues with staging restriction.
