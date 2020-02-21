@@ -1,7 +1,7 @@
 [package]
 name = "aggregate_sig"
 version = "0.1.0"
-authors = ["nfk93 <nfk1993@gmail.com>"]
+authors = ["Concordium AG <contact@concordium.com>"]
 edition = "2018"
 
 [dependencies]
