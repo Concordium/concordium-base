@@ -1,14 +1,13 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia, OverloadedStrings, LambdaCase, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
-{-# OPTIONS_GHC -Wno-deprecations #-}
 module Concordium.Crypto.SignatureScheme where
 import Data.Word
 import Data.Serialize
-import Data.Aeson hiding (encode)
+import Data.Aeson
 import Data.Aeson.Types
 import Concordium.Crypto.ByteStringHelpers
-import Prelude hiding (drop)
+import Prelude
 import Control.DeepSeq
 import GHC.Generics
 
