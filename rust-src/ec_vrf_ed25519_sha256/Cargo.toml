@@ -1,6 +1,6 @@
 [package]
 name="ec_vrf_ed25519_sha256"
-authors = ["Concordium AG <info@concordium.com>"]
+authors = ["Concordium AG <contact@concordium.com>"]
 version="0.0.1"
 edition = "2018"
 
