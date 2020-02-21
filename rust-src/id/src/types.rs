@@ -515,9 +515,6 @@ pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Proof of knowledge of secret credentials corresponding to id_cred_pub
     #[serde(rename = "pokSecCred")]
     pub pok_sc: DlogProof<C>,
-    /// proof of knowledge of secret credential corresponding to snd_cmm_sc
-    #[serde(rename = "sndPokSecCred")]
-    pub snd_pok_sc: ComEqProof<C>,
     /// Commitment to id cred sec using the commitment key of IP derived from
     /// the PS public key. This is used to compute the message that the IP
     /// signs.
