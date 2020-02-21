@@ -401,12 +401,18 @@ reversePTT trs ptt0 = foldr reverse1 ptt0 trs
 
 -- |Record special transactions as well for logging purposes.
 data SpecialTransactionOutcome =
-  BakingReward !AccountAddress !Amount
+  BakingReward {
+    stoBakerId :: !BakerId,
+    stoBakerAccount :: !AccountAddress,
+    stoRewardAmount :: !Amount
+    }
   deriving(Show, Eq)
 
+$(deriveToJSON defaultOptions{fieldLabelModifier = map toLower . drop 3} ''SpecialTransactionOutcome)
+
 instance S.Serialize SpecialTransactionOutcome where
-    put (BakingReward addr amt) = S.put addr >> S.put amt
-    get = BakingReward <$> S.get <*> S.get
+    put (BakingReward bid addr amt) = S.put bid <> S.put addr <> S.put amt
+    get = BakingReward <$> S.get <*> S.get <*> S.get
 
 -- |Outcomes of transactions. The vector of outcomes must have the same size as the
 -- number of transactions in the block, and ordered in the same way.
