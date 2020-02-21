@@ -1,7 +1,7 @@
 [package]
 name = "sha_2"
 version = "0.1.0"
-authors = ["Concordium AG <info@concordium.com>"]
+authors = ["Concordium AG <contact@concordium.com>"]
 edition = "2018"
 
 [dependencies]

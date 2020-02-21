@@ -97,8 +97,6 @@ Test-Suite tests
                     , aeson >= 1.4.2
                     , mtl >= 2.2
   ghc-options: -threaded -with-rtsopts=-N -Wall -O2 -Wno-deprecations
-  if os(linux)
-     ld-options: -static
 
   other-modules:
    ConcordiumTests.Data.Base58Encoding
