@@ -100,21 +100,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
                          &context.ip_info.ip_ars.ar_base
         );
 
-    let ar_ck = context.ip_info.ip_ars.ar_cmm_key;
-    let (snd_cmm_sc, snd_cmm_sc_rand) = ar_ck.commit(id_cred_sec.view(), &mut csprng);
-    let snd_pok_sc = {
-        // FIXME: prefix needs to be all the data sent to id provider or some such.
-        com_eq::prove_com_eq(
-            RandomOracle::empty(),
-            &[snd_cmm_sc],
-            &id_cred_pub,
-            &ar_ck,
-            &[context.ip_info.ip_ars.ar_base],
-            &[(&snd_cmm_sc_rand, id_cred_sec.view())],
-            &mut csprng,
-        )
-    };
-
     let proof_com_eq_sc = {
         // FIXME: prefix needs to be all the data sent to the id provider.
         com_eq::prove_com_eq_single(
@@ -170,7 +155,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let prio = PreIdentityObject {
         id_ah,
         id_cred_pub,
-        snd_pok_sc,
         proof_com_eq_sc,
         ip_ar_data,
         choice_ar_parameters: ChoiceArParameters {

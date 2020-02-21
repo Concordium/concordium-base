@@ -1,7 +1,9 @@
 use curve_arithmetic::{Curve, Pairing};
 use ff::Field;
 use generic_array::GenericArray;
+use id::sigma_protocols::dlog::*;
 use rand::Rng;
+use random_oracle::RandomOracle;
 use rayon::iter::*;
 use sha2::{Digest, Sha512};
 
@@ -26,6 +28,16 @@ impl<P: Pairing> SecretKey<P> {
         let g1_hash = P::G1::hash_to_group(m);
         let signature = g1_hash.mul_by_scalar(&self.0);
         Signature(signature)
+    }
+
+    pub fn prove<R: Rng>(&self, csprng: &mut R, ro: RandomOracle) -> Proof<P> {
+        prove_dlog(
+            csprng,
+            ro,
+            &P::G2::one_point().mul_by_scalar(&self.0),
+            &self.0,
+            &P::G2::one_point(),
+        )
     }
 }
 
@@ -65,6 +77,10 @@ impl<P: Pairing> PublicKey<P> {
         // compute pairings in parallel
         P::check_pairing_eq(&signature.0, &P::G2::one_point(), &g1_hash, &self.0)
     }
+
+    pub fn check_proof(&self, ro: RandomOracle, proof: &Proof<P>) -> bool {
+        verify_dlog(ro, &P::G2::one_point(), &self.0, proof)
+    }
 }
 
 impl<P: Pairing> Clone for PublicKey<P> {
@@ -100,6 +116,9 @@ impl<P: Pairing> Copy for Signature<P> {}
 impl<P: Pairing> PartialEq for Signature<P> {
     fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
+
+// A proof of knowledge of a secretkey
+pub type Proof<P> = DlogProof<<P as Pairing>::G2>;
 
 // Verifies an aggregate signature on pairs (messages m_i, PK_i) for i=1..n by
 // checking     pairing(sig, g_2) == product_{i=0}^n ( pairing(g1_hash(m_i),
@@ -195,7 +214,7 @@ fn hash_message(m: &[u8]) -> GenericArray<u8, <Sha512 as Digest>::OutputSize> {
 mod test {
     use super::*;
     use pairing::bls12_381::Bls12;
-    use rand::{rngs::StdRng, thread_rng, Rng, SeedableRng};
+    use rand::{rngs::StdRng, thread_rng, SeedableRng};
     use std::convert::TryFrom;
 
     const SIGNERS: usize = 500;
@@ -364,22 +383,32 @@ mod test {
 
         for _ in 0..1000 {
             let m = rng.gen::<[u8; 32]>();
+            let mut c = Vec::new();
+            c.push(rng.gen::<u8>());
+            let ro = RandomOracle::empty().append_bytes(&c);
+
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
             let sig = sk.sign(&m);
+            let proof = sk.prove(&mut rng, ro.split());
+
             let sk_from_bytes = serialize_deserialize(&sk);
             let pk_from_bytes = serialize_deserialize(&pk);
             let sig_from_bytes = serialize_deserialize(&sig);
+            let proof_from_bytes = serialize_deserialize(&proof);
 
-            let sk_from_bytes = sk_from_bytes.expect("Serialization OK.");
-            let pk_from_bytes = pk_from_bytes.expect("Serialization OK.");
-            let sig_from_bytes = sig_from_bytes.expect("Serialization OK.");
+            let sk_from_bytes = sk_from_bytes.expect("Serialization failed.");
+            let pk_from_bytes = pk_from_bytes.expect("Serialization failed.");
+            let sig_from_bytes = sig_from_bytes.expect("Serialization failed.");
+            let proof_from_bytes = proof_from_bytes.expect("Serialization failed.");
 
             assert_eq!(sig.0, sig_from_bytes.0);
             assert_eq!(sk.0, sk_from_bytes.0);
             assert_eq!(pk.0, pk_from_bytes.0);
+            assert_eq!(proof, proof_from_bytes);
             assert!(pk.verify(&m, sig_from_bytes));
             assert!(pk_from_bytes.verify(&m, sig));
+            assert!(pk.check_proof(ro, &proof))
         }
     }
 
@@ -389,17 +418,66 @@ mod test {
 
         for _ in 0..1000 {
             let m = rng.gen::<[u8; 32]>();
+            let mut c = Vec::new();
+            c.push(rng.gen::<u8>());
+            let ro = RandomOracle::empty().append_bytes(&c);
+
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
             let sig = sk.sign(&m);
+            let proof = sk.prove(&mut rng, ro);
 
             let sk_bytes = to_bytes(&sk);
             let pk_bytes = to_bytes(&pk);
             let sig_bytes = to_bytes(&sig);
+            let proof_bytes = to_bytes(&proof);
 
             assert_eq!(sk_bytes.len(), 32);
             assert_eq!(pk_bytes.len(), 96);
             assert_eq!(sig_bytes.len(), 48);
+            assert_eq!(proof_bytes.len(), 64);
+        }
+    }
+
+    #[test]
+    fn test_proof_of_knowledge() {
+        let mut csprng = thread_rng();
+        for i in 0..1000 {
+            let n = (i % 32) + 1;
+            let mut c1: Vec<u8>;
+            let mut c2: Vec<u8>;
+            loop {
+                c1 = Vec::new();
+                c2 = Vec::new();
+                for _ in 0..n {
+                    c1.push(csprng.gen::<u8>());
+                    c2.push(csprng.gen::<u8>());
+                }
+
+                if c1 != c2 {
+                    break;
+                }
+            }
+            let ro1 = RandomOracle::empty().append_bytes(c1);
+            let ro2 = RandomOracle::empty().append_bytes(c2);
+
+            let sk = SecretKey::<Bls12>::generate(&mut csprng);
+            let pk = PublicKey::<Bls12>::from_secret(sk);
+            let proof = sk.prove(&mut csprng, ro1.split());
+
+            assert!(pk.check_proof(ro1.split(), &proof));
+            // check that it doesn't verify a proof with the wrong context
+            assert!(!(pk.check_proof(ro2, &proof)));
+            // check that the proof doesn't work for a different key
+            let mut sk2: SecretKey<Bls12>;
+            loop {
+                sk2 = SecretKey::<Bls12>::generate(&mut csprng);
+                if sk != sk2 {
+                    break;
+                }
+            }
+            let pk2 = PublicKey::<Bls12>::from_secret(sk2);
+            assert!(!(pk2.check_proof(ro1, &proof)));
         }
     }
 }

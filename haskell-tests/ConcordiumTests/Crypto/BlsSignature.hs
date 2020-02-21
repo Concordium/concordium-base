@@ -46,6 +46,27 @@ testSignAndVerifyCollision = forAllKP $ \(sk, pk) m1 m2 ->
         sig2 = sign (BS.pack m2) sk
     in not (verify (BS.pack m1) pk sig2) && not (verify (BS.pack m2) pk sig1)
 
+testProofSoundness :: Property
+testProofSoundness = forAllKP $ \(sk, pk) c ->
+  let b = BS.pack c in
+  checkProofOfKnowledgeSK b (proveKnowledgeOfSK b sk) pk
+
+testProofNoContextCollision :: Property
+testProofNoContextCollision = forAllKP $ \(sk, pk) c1 c2 ->
+  let b1 = BS.pack c1
+      b2 = BS.pack c2 in
+  b1 /= b2 ==>
+    let proof = proveKnowledgeOfSK b1 sk in
+    not $ checkProofOfKnowledgeSK b2 proof pk
+
+testProofWrongKey :: Property
+testProofWrongKey = forAllSK $ \sk1 ->
+  forAllKP $ \(sk2, pk2) c ->
+    sk1 /= sk2 ==>
+      let b = BS.pack c
+          proof = proveKnowledgeOfSK b sk1
+      in not $ checkProofOfKnowledgeSK b proof pk2
+
 testSerializeSecretKey :: Property
 testSerializeSecretKey = forAllSK $ \sk ->
   Right sk === runGet get (runPut $ put sk)
@@ -58,6 +79,11 @@ testSerializeSignature :: Property
 testSerializeSignature = forAllSK $ \sk d ->
   let sig = sign (BS.pack d) sk in
   Right sig === runGet get (runPut $ put sig)
+
+testSerializeProof :: Property
+testSerializeProof = forAllSK $ \sk d ->
+  let proof = proveKnowledgeOfSK (BS.pack d) sk in
+    Right proof === runGet get (runPut $ put proof)
 
 testSerializePublicKeyJSON :: Property
 testSerializePublicKeyJSON = forAllSK $ \sk ->
@@ -72,6 +98,11 @@ testSerializeSignatureJSON = forAllSK $ \sk d ->
   let sig = sign (BS.pack d) sk in
   Just sig === AE.decode (AE.encode sig)
 
+testSerializeProofJSON :: Property
+testSerializeProofJSON = forAllSK $ \sk d ->
+  let proof = proveKnowledgeOfSK (BS.pack d) sk in
+  Just proof === AE.decode (AE.encode proof)
+
 tests :: Spec
 tests = describe "Concordium.Crypto.BlsSignature" $ do
             it "bls_key_collision" $ withMaxSuccess 10000 $ testKeyCollision
@@ -84,3 +115,8 @@ tests = describe "Concordium.Crypto.BlsSignature" $ do
             it "bls_json_pk" $ withMaxSuccess 10000 $ testSerializePublicKeyJSON
             it "bls_json_sk" $ withMaxSuccess 10000 $ testSerializeSecretKeyJSON
             it "bls_json_sig" $ withMaxSuccess 10000 $ testSerializeSignatureJSON
+            it "bls_serialize_proof" $ withMaxSuccess 10000 $ testSerializeProof
+            it "bls_json_proof" $ withMaxSuccess 10000 $ testSerializeProofJSON
+            it "bls_proof_sound" $ withMaxSuccess 10000 $ testProofSoundness
+            it "bls_proof_no_context_collision" $ withMaxSuccess 10000 $ testProofNoContextCollision
+            it "bls_wrong_proof" $ withMaxSuccess 10000 $ testProofWrongKey
