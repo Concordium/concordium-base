@@ -167,13 +167,15 @@ instance S.Serialize Address where
   put (AddressContract cnt) = P.putWord8 1 <> S.put cnt
 
 
--- | Time in seconds since the epoch
-type Timestamp = Word64
--- | Time duration in seconds
-type Duration = Word64
+-- | Time in milliseconds since the epoch
+newtype Timestamp = Timestamp { tsMillis :: Word64 }
+  deriving (Show, Read, Eq, Num, Ord, Real, Enum, Integral, S.Serialize, FromJSON) via Word64
+-- | Time duration in milliseconds
+newtype Duration = Duration { durationMillis :: Word64 }
+  deriving (Show, Read, Eq, Num, Ord, Real, Enum, Integral, S.Serialize, FromJSON) via Word64
 
--- | Expiry time of a transaction
-newtype TransactionExpiryTime = TransactionExpiryTime { expiry :: Timestamp }
+-- | Expiry time of a transaction in seconds since the epoch
+newtype TransactionExpiryTime = TransactionExpiryTime { expiry :: Word64 }
     deriving (Show, Read, Eq, Num, Ord) via Word64
 
 instance S.Serialize TransactionExpiryTime where
@@ -184,7 +186,7 @@ instance FromJSON TransactionExpiryTime where
   parseJSON v = TransactionExpiryTime <$> parseJSON v
 
 transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
-transactionExpired = (<) . expiry
+transactionExpired (TransactionExpiryTime x) (Timestamp t) = 1000*x < t
 
 -- |Type of GTU amounts.
 -- FIXME: This likely needs to be Word128.
