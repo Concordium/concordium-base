@@ -340,7 +340,6 @@ mod test {
 
         let secret = ExampleCurve::generate_scalar(&mut csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
-            id_ah:   "ACCOUNT_HOLDER".to_owned(),
             id_cred: IdCredentials {
                 id_cred_sec: PedersenValue { value: secret },
             },
@@ -352,7 +351,7 @@ mod test {
         let ar1_public_key = PublicKey::from(&ar1_secret_key);
         let ar1_info = ArInfo::<G1> {
             ar_identity:    ArIdentity(1),
-            ar_description: "A good AR".to_string(),
+            ar_description: mk_dummy_description("A good AR".to_string()),
             ar_public_key:  ar1_public_key,
         };
 
@@ -360,7 +359,7 @@ mod test {
         let ar2_public_key = PublicKey::from(&ar2_secret_key);
         let ar2_info = ArInfo::<G1> {
             ar_identity:    ArIdentity(2),
-            ar_description: "A nice AR".to_string(),
+            ar_description: mk_dummy_description("A nice AR".to_string()),
             ar_public_key:  ar2_public_key,
         };
 
@@ -368,7 +367,7 @@ mod test {
         let ar3_public_key = PublicKey::from(&ar3_secret_key);
         let ar3_info = ArInfo::<G1> {
             ar_identity:    ArIdentity(3),
-            ar_description: "Weird AR".to_string(),
+            ar_description: mk_dummy_description("Weird AR".to_string()),
             ar_public_key:  ar3_public_key,
         };
 
@@ -376,7 +375,7 @@ mod test {
         let ar4_public_key = PublicKey::from(&ar4_secret_key);
         let ar4_info = ArInfo::<G1> {
             ar_identity:    ArIdentity(4),
-            ar_description: "Ok AR".to_string(),
+            ar_description: mk_dummy_description("Ok AR".to_string()),
             ar_public_key:  ar4_public_key,
         };
 
@@ -384,7 +383,7 @@ mod test {
 
         let ip_info = IpInfo {
             ip_identity:    IpIdentity(88),
-            ip_description: "IP88".to_string(),
+            ip_description: mk_dummy_description("IP88".to_string()),
             ip_verify_key:  ip_public_key,
             ip_ars:         IpAnonymityRevokers {
                 ars: vec![ar1_info, ar2_info, ar3_info, ar4_info],

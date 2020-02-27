@@ -51,15 +51,8 @@ fn respond_ips(_request: &rouille::Request, s: &ServerState) -> rouille::Respons
 
 fn parse_id_object_input_json(
     v: &Value,
-) -> Option<(
-    IpIdentity,
-    String,
-    Threshold,
-    Vec<ArIdentity>,
-    ExampleAttributeList,
-)> {
+) -> Option<(IpIdentity, Threshold, Vec<ArIdentity>, ExampleAttributeList)> {
     let ip_id = from_json(v.get("ipIdentity")?.clone()).ok()?;
-    let user_name = v.get("name")?.as_str()?.to_owned();
     let ar_values = v.get("anonymityRevokers")?.as_array()?;
     let ars: Vec<ArIdentity> = ar_values
         .iter()
@@ -75,7 +68,7 @@ fn parse_id_object_input_json(
     let alist = v
         .get("attributes")
         .and_then(|x| from_json(x.clone()).ok())?;
-    Some((ip_id, user_name, threshold, ars, alist))
+    Some((ip_id, threshold, ars, alist))
 }
 
 macro_rules! respond_log {
@@ -88,10 +81,10 @@ macro_rules! respond_log {
 
 fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Response {
     let v: Value = try_or_400!(rouille::input::json_input(request));
-    let (ip_info, name, threshold, ar_identities, attributes) = {
-        if let Some((ip_id, name, threshold, ar_list, att)) = parse_id_object_input_json(&v) {
+    let (ip_info, threshold, ar_identities, attributes) = {
+        if let Some((ip_id, threshold, ar_list, att)) = parse_id_object_input_json(&v) {
             match s.ip_infos.get(&ip_id) {
-                Some(ip_info) => (ip_info, name, threshold, ar_list, att),
+                Some(ip_info) => (ip_info, threshold, ar_list, att),
                 None => return respond_log!(request, "Could not find identity provider."),
             }
         } else {
@@ -105,7 +98,6 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
 
     let secret = ExampleCurve::generate_scalar(&mut csprng);
     let chi = CredentialHolderInfo::<ExampleCurve> {
-        id_ah:   name,
         id_cred: IdCredentials {
             id_cred_sec: PedersenValue { value: secret },
         },
@@ -118,7 +110,8 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
 
     let IpData {
         public_ip_info: ip_info,
-        ip_private_key: ip_sec_key,
+        ip_secret_key: ip_sec_key,
+        ..
     } = ip_info;
 
     let context = match make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {

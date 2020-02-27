@@ -407,10 +407,6 @@ pub struct IdCredentials<C: Curve> {
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct CredentialHolderInfo<C: Curve> {
-    /// Name of the credential holder.
-    #[string_size_length = 4] // only use four bytes for encoding length.
-    #[serde(rename = "name")]
-    pub id_ah: String,
     /// Public and private keys of the credential holder. NB: These are distinct
     /// from the public/private keys of the account holders.
     #[serde(rename = "idCredSecret")]
@@ -490,10 +486,6 @@ pub struct ChoiceArParameters {
     deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
 ))]
 pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    /// Name of the account holder.
-    #[string_size_length = 2] // only use two bytes for encoding length.
-    #[serde(rename = "accountHolderName")]
-    pub id_ah: String,
     /// Public credential of the account holder in the anonymity revoker's
     /// group.
     #[serde(
@@ -582,6 +574,30 @@ pub struct IpAnonymityRevokers<C: Curve> {
     pub ar_base: C,
 }
 
+/// Description either of an anonymity revoker or identity provider.
+/// Metadata that should be visible on the chain.
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
+pub struct Description {
+    #[string_size_length = 4]
+    #[serde(rename = "name")]
+    pub name: String,
+    #[string_size_length = 4]
+    #[serde(rename = "url")]
+    pub url: String,
+    #[string_size_length = 4]
+    #[serde(rename = "description")]
+    pub description: String,
+}
+
+/// Make a dummy description with a given name.
+pub fn mk_dummy_description(name: String) -> Description {
+    Description {
+        name,
+        url: "".to_owned(),
+        description: "".to_owned(),
+    }
+}
+
 /// Public information about an identity provider.
 #[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
@@ -593,9 +609,8 @@ pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     #[serde(rename = "ipIdentity")]
     pub ip_identity: IpIdentity,
     /// Free form description, e.g., how to contact them off-chain
-    #[string_size_length = 4]
     #[serde(rename = "ipDescription")]
-    pub ip_description: String,
+    pub ip_description: Description,
     /// PS public key of the IP
     #[serde(rename = "ipVerifyKey")]
     pub ip_verify_key: pssig::PublicKey<P>,
@@ -612,9 +627,8 @@ pub struct ArInfo<C: Curve> {
     #[serde(rename = "arIdentity")]
     pub ar_identity: ArIdentity,
     /// description of the anonymity revoker (e.g. name, contact number)
-    #[string_size_length = 4]
     #[serde(rename = "arDescription")]
-    pub ar_description: String,
+    pub ar_description: Description,
     /// elgamal encryption key of the anonymity revoker
     #[serde(rename = "arPublicKey")]
     pub ar_public_key: elgamal::PublicKey<C>,
@@ -1327,6 +1341,18 @@ impl ArIdentity {
     pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)) }
 }
 
+/// Metadata that we need off-chain for various purposes, but should not go on
+/// the chain.
+#[derive(SerdeSerialize, SerdeDeserialize, Serialize, Default)]
+pub struct IpMetadata {
+    #[string_size_length = 4]
+    #[serde(rename = "issuanceStart")]
+    pub issuance_start: String,
+    #[string_size_length = 4]
+    #[serde(rename = "icon")]
+    pub icon: String,
+}
+
 /// Private and public data on an identity provider.
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(bound(
@@ -1334,28 +1360,31 @@ impl ArIdentity {
     deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>"
 ))]
 pub struct IpData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    #[serde(rename = "publicIpInfo")]
+    /// Off-chain metadata about the identity provider
+    #[serde(rename = "metadata")]
+    pub metadata: IpMetadata,
+    #[serde(rename = "ipInfo")]
     pub public_ip_info: IpInfo<P, C>,
     #[serde(
-        rename = "ipPrivateKey",
+        rename = "ipSecretKey",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub ip_private_key: ps_sig::SecretKey<P>,
+    pub ip_secret_key: ps_sig::SecretKey<P>,
 }
 
 /// Private and public data on an anonymity revoker.
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct ArData<C: Curve> {
-    #[serde(rename = "publicArInfo")]
+    #[serde(rename = "arInfo")]
     pub public_ar_info: ArInfo<C>,
     #[serde(
-        rename = "arPrivateKey",
+        rename = "arSecretKey",
         serialize_with = "base16_encode",
         deserialize_with = "base16_decode"
     )]
-    pub ar_private_key: ElgamalSecretKey<C>,
+    pub ar_secret_key: ElgamalSecretKey<C>,
 }
 
 /// Data needed to use the retrieved identity object to generate credentials.

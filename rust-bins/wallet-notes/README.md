@@ -29,9 +29,7 @@ UTF8-string, and the returned string is likewise a NUL-terminated UTF8-encoded s
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
 
-- "name" ... can be a string at most 16kB. It is only used to identify the
-  identity object which will be generated.
-- "ipInfo" ... is another JSON object that describes the identity provider. This 
+- "ipInfo" ... is a JSON object that describes the identity provider. This 
   data is the one obtained from the server by making a GET request to /ip_info,
   e.g.,
   

@@ -30,7 +30,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     aci: &AccCredentialInfo<C>,
 ) -> (PreIdentityObject<P, C>, ps_sig::SigRetrievalRandomness<P>) {
     let mut csprng = thread_rng();
-    let id_ah = aci.cred_holder_info.id_ah.clone();
     let id_cred_pub = context
         .ip_info
         .ip_ars
@@ -153,7 +152,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let threshold = context.choice_ar_parameters.1;
     // attribute list
     let prio = PreIdentityObject {
-        id_ah,
         id_cred_pub,
         proof_com_eq_sc,
         ip_ar_data,

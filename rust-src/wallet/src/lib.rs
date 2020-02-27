@@ -31,12 +31,6 @@ type ExampleCurve = G1;
 
 fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
-    let name = {
-        match v.get("name").and_then(Value::as_str) {
-            Some(v) => v.to_owned(),
-            None => bail!("Field 'name' must be present and be a string value."),
-        }
-    };
 
     let ip_info: IpInfo<Bls12, ExampleCurve> = {
         match v.get("ipInfo") {
@@ -60,7 +54,6 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
     let secret = ExampleCurve::generate_scalar(&mut csprng);
     let chi = CredentialHolderInfo::<ExampleCurve> {
-        id_ah:   name,
         id_cred: IdCredentials {
             id_cred_sec: PedersenValue { value: secret },
         },
@@ -236,7 +229,7 @@ pub fn sign_id_object(ip_data: &IpData<Bls12, ExampleCurve>, v: &str) -> Fallibl
         &request,
         &ip_data.public_ip_info,
         &alist,
-        &ip_data.ip_private_key,
+        &ip_data.ip_secret_key,
     );
     match vf {
         Ok(signature) => {

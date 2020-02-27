@@ -176,7 +176,7 @@ mod tests {
 
             let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
             let wrong_public = public.double_point();
-            let mut wrong_coeff = coeff.to_owned();
+            let mut wrong_coeff = coeff.clone();
             wrong_coeff[index_wrong_coeff] = wrong_coeff[index_wrong_coeff].double_point();
 
             // Verify failure for invalid parameters
