@@ -95,8 +95,9 @@ fn main() {
         match read_json_from_file::<_, IpData<Bls12, ExampleCurve>>(&ip_data_path) {
             Ok(IpData {
                 public_ip_info,
-                ip_private_key,
-            }) => (public_ip_info, ip_private_key),
+                ip_secret_key,
+                ..
+            }) => (public_ip_info, ip_secret_key),
             Err(e) => {
                 eprintln!("Could not parse identity issuer JSON because: {}", e);
                 return;
@@ -129,10 +130,9 @@ fn main() {
     // Roughly one year
     let year = std::time::Duration::from_secs(365 * 24 * 60 * 60);
 
-    let generate_account = |csprng: &mut ThreadRng, user_name: String| {
+    let generate_account = |csprng: &mut ThreadRng| {
         let secret = ExampleCurve::generate_scalar(csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
-            id_ah:   user_name,
             id_cred: IdCredentials {
                 id_cred_sec: PedersenValue::new(secret),
             },
@@ -248,7 +248,7 @@ fn main() {
         let mut bakers = Vec::with_capacity(num_bakers);
         for baker in 0..num_bakers {
             let (account_data_json, credential_json, account_keys, address_json) =
-                generate_account(&mut csprng, format!("Baker-{}-account", baker));
+                generate_account(&mut csprng);
             if let Err(err) =
                 write_json_to_file(&format!("baker-{}-account.json", baker), &account_data_json)
             {
@@ -320,7 +320,7 @@ fn main() {
         let mut accounts = Vec::with_capacity(num_accounts);
         for acc_num in 0..num_accounts {
             let (account_data_json, credential_json, account_keys, address_json) =
-                generate_account(&mut csprng, format!("Beta-{}-account", acc_num));
+                generate_account(&mut csprng);
             let public_account_data = json!({
                 "schemeId": "Ed25519",
                 "accountKeys": account_keys,

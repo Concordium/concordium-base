@@ -46,7 +46,6 @@ fn main() {
 
     let secret = ExampleCurve::generate_scalar(&mut csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_ah:   "ACCOUNT_HOLDER".to_owned(),
         id_cred: IdCredentials {
             id_cred_sec: PedersenValue::new(secret),
         },
@@ -57,9 +56,10 @@ fn main() {
     let (ip_info, ip_secret_key) =
         match read_json_from_file::<_, IpData<Bls12, ExampleCurve>>(&ip_data_path) {
             Ok(IpData {
-                ip_private_key,
+                ip_secret_key,
                 public_ip_info,
-            }) => (public_ip_info, ip_private_key),
+                ..
+            }) => (public_ip_info, ip_secret_key),
             Err(x) => {
                 eprintln!("Could not read identity issuer information because {}", x);
                 return;

@@ -50,10 +50,10 @@ fn mk_ip_filename_pub(n: usize) -> String {
     s
 }
 
-fn mk_ip_name(n: usize) -> String {
+fn mk_ip_description(n: usize) -> Description {
     let mut s = IP_NAME_PREFIX.to_string();
     s.push_str(&n.to_string());
-    s
+    mk_dummy_description(s)
 }
 
 fn mk_ar_filename(m: usize, n: usize) -> String {
@@ -67,10 +67,10 @@ fn mk_ar_filename(m: usize, n: usize) -> String {
     s
 }
 
-fn mk_ar_name(n: usize) -> String {
+fn mk_ar_description(n: usize) -> Description {
     let mut s = AR_NAME_PREFIX.to_string();
     s.push_str(&n.to_string());
-    s
+    mk_dummy_description(s)
 }
 
 /// Reads the expiry date. Only the day, the expiry time is set at the end of
@@ -307,7 +307,7 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
             }
             Some(single_ar_data) => {
                 let Message { value: m } = ar
-                    .ar_private_key
+                    .ar_secret_key
                     .decrypt(&single_ar_data.enc_id_cred_pub_share);
                 shares.push((single_ar_data.id_cred_pub_share_number, m))
             }
@@ -532,19 +532,9 @@ fn handle_deploy_credential(matches: &ArgMatches) {
 
 /// Create a new CHI object (essentially new idCredPub and idCredSec).
 fn handle_create_chi(matches: &ArgMatches) {
-    let name = {
-        if let Ok(name) = Input::new().with_prompt("Your name").interact() {
-            name
-        } else {
-            eprintln!("You need to provide a name. Terminating.");
-            return;
-        }
-    };
-
     let mut csprng = thread_rng();
     let secret = ExampleCurve::generate_scalar(&mut csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_ah:   name,
         id_cred: IdCredentials {
             id_cred_sec: PedersenValue { value: secret },
         },
@@ -580,7 +570,7 @@ fn handle_act_as_ip(matches: &ArgMatches) {
     let ip_data_path = Path::new(matches.value_of("ip-data").unwrap());
     let (ip_info, ip_sec_key) =
         match read_json_from_file::<_, IpData<Bls12, ExampleCurve>>(&ip_data_path) {
-            Ok(ip_data) => (ip_data.public_ip_info, ip_data.ip_private_key),
+            Ok(ip_data) => (ip_data.public_ip_info, ip_data.ip_secret_key),
             Err(x) => {
                 eprintln!("Could not read identity issuer information because {}", x);
                 return;
@@ -695,7 +685,7 @@ fn handle_start_ip(matches: &ArgMatches) {
     for x in ips.iter() {
         ips_names.push(format!(
             "Identity provider {}, {}",
-            &x.ip_identity, x.ip_description
+            &x.ip_identity, x.ip_description.name
         ))
     }
 
@@ -717,7 +707,7 @@ fn handle_start_ip(matches: &ArgMatches) {
     let ar_handles = ip_info.ip_ars.ars.clone();
     let mrs: Vec<&str> = ar_handles
         .iter()
-        .map(|x| x.ar_description.as_str())
+        .map(|x| x.ar_description.name.as_str())
         .collect();
 
     let mut choice_ars = vec![];
@@ -820,41 +810,41 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let ar0_public_key = PublicKey::from(&ar0_secret_key);
         let ar0_info = ArInfo {
             ar_identity:    ArIdentity(0u32),
-            ar_description: mk_ar_name(0),
+            ar_description: mk_ar_description(0),
             ar_public_key:  ar0_public_key,
         };
 
         let private_js0 = ArData {
             public_ar_info: ar0_info,
-            ar_private_key: ar0_secret_key,
+            ar_secret_key:  ar0_secret_key,
         };
 
         let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar1_public_key = PublicKey::from(&ar1_secret_key);
         let ar1_info = ArInfo {
             ar_identity:    ArIdentity(1u32),
-            ar_description: mk_ar_name(1),
+            ar_description: mk_ar_description(1),
             ar_public_key:  ar1_public_key,
             // ar_elgamal_generator: PublicKey::generator(),
         };
 
         let private_js1 = ArData {
             public_ar_info: ar1_info,
-            ar_private_key: ar1_secret_key,
+            ar_secret_key:  ar1_secret_key,
         };
 
         let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar2_public_key = PublicKey::from(&ar2_secret_key);
         let ar2_info = ArInfo {
             ar_identity:    ArIdentity(2u32),
-            ar_description: mk_ar_name(2),
+            ar_description: mk_ar_description(2),
             ar_public_key:  ar2_public_key,
             // ar_elgamal_generator: PublicKey::generator(),
         };
 
         let private_js2 = ArData {
             public_ar_info: ar2_info,
-            ar_private_key: ar2_secret_key,
+            ar_secret_key:  ar2_secret_key,
         };
 
         write_json_to_file(&ar0_fname, &private_js0).ok()?;
@@ -863,7 +853,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
 
         let ip_info = IpInfo {
             ip_identity:    IpIdentity(id as u32),
-            ip_description: mk_ip_name(id),
+            ip_description: mk_ip_description(id),
             ip_verify_key:  id_public_key,
             ip_ars:         IpAnonymityRevokers {
                 ars: vec![
@@ -876,7 +866,8 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
             },
         };
         let full_info = IpData {
-            ip_private_key: id_secret_key,
+            metadata:       Default::default(),
+            ip_secret_key:  id_secret_key,
             public_ip_info: ip_info,
         };
         println!("writing ip_{} in file {}", id, ip_fname);

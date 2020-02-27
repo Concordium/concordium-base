@@ -6,6 +6,8 @@ use clap::{App, AppSettings, Arg};
 
 use wallet;
 
+use serde_json::json;
+
 // server imports
 #[macro_use]
 extern crate rouille;
@@ -14,14 +16,19 @@ type ExampleCurve = G1;
 
 struct ServerState {
     /// Public and private information about the identity providers.
-    /// This also contains information about
+    /// This also contains information about anonymity revokers.
     ip_data: IpData<Bls12, ExampleCurve>,
     /// Global parameters needed for deployment of credentials.
     global_params: GlobalContext<ExampleCurve>,
 }
 
 fn respond_ips(_request: &rouille::Request, s: &ServerState) -> rouille::Response {
-    rouille::Response::json(&s.ip_data.public_ip_info)
+    // return an array to be consistent with future extensions
+    let response = vec![json!({
+        "metadata": s.ip_data.metadata,
+        "ipInfo": s.ip_data.public_ip_info
+    })];
+    rouille::Response::json(&response)
 }
 
 fn respond_global(_request: &rouille::Request, s: &ServerState) -> rouille::Response {

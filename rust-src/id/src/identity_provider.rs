@@ -329,7 +329,7 @@ mod tests {
             let ar_public_key = PublicKey::from(&ar_secret_key);
             let ar_info = ArInfo::<ExampleCurve> {
                 ar_identity: ArIdentity(i),
-                ar_description: format!("AnonymityRevoker{}", i),
+                ar_description: mk_dummy_description(format!("AnonymityRevoker{}", i)),
                 ar_public_key,
             };
             ar_infos.push(ar_info);
@@ -339,7 +339,7 @@ mod tests {
         (
             IpInfo {
                 ip_identity:    IpIdentity(0),
-                ip_description: "IP0".to_string(),
+                ip_description: mk_dummy_description("IP0".to_string()),
                 ip_verify_key:  ip_public_key,
                 ip_ars:         IpAnonymityRevokers {
                     ars: ar_infos,
@@ -366,7 +366,6 @@ mod tests {
         // Create account holder
         let secret = ExampleCurve::generate_scalar(csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
-            id_ah:   "ACCOUNT_HOLDER".to_owned(),
             id_cred: IdCredentials {
                 id_cred_sec: PedersenValue::new(secret),
             },
