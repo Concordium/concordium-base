@@ -50,7 +50,7 @@ foreign import ccall unsafe "bls_generate_secretkey_from_seed" generateSecretKey
 
 -- | Provides deterministic key generation for testing purposes.
 {-# WARNING randomBlsSecretKey "Not cryptographically secure. DO NOT USE IN PRODUCTION." #-}
-randomBlsSecretKey :: (RandomGen g, Show g) => g -> (Bls.SecretKey, g)
+randomBlsSecretKey :: (RandomGen g) => g -> (Bls.SecretKey, g)
 randomBlsSecretKey gen = (sk, gen')
   where
     (nextSeed, gen') = random gen
