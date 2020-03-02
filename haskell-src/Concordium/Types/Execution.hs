@@ -1,5 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -21,6 +22,7 @@ import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
+import Data.Word
 import GHC.Generics
 
 import qualified Concordium.Types.Acorn.Core as Core
@@ -431,6 +433,10 @@ instance S.Serialize MessageFormat where
             1 -> ExprMessage <$> S.get
             _ -> fail "Invalid MessageFormat tag"
 
+-- |Index of the transaction in a block, starting from 0.
+newtype TransactionIndex = TransactionIndex Word64
+    deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
+
 -- |Result of a valid transaction is a transaction summary.
 data TransactionSummary = TransactionSummary {
   tsSender :: !AccountAddress,
@@ -438,7 +444,8 @@ data TransactionSummary = TransactionSummary {
   tsCost :: !Amount,
   tsEnergyCost :: !Energy,
   tsType :: !(Maybe TransactionType),
-  tsResult :: !ValidResult
+  tsResult :: !ValidResult,
+  tsIndex :: !TransactionIndex
   } deriving(Eq, Show, Generic)
 
 -- |Outcomes of a valid transaction. Either a reject with a reason or a

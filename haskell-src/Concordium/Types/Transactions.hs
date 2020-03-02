@@ -269,10 +269,6 @@ makeLenses ''AccountNonFinalizedTransactions
 emptyANFT :: AccountNonFinalizedTransactions
 emptyANFT = AccountNonFinalizedTransactions Map.empty minNonce
 
--- |Index of the transaction in a block, starting from 0.
-newtype TransactionIndex = TransactionIndex Word64
-    deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral) via Word64
-
 -- |Result of a transaction is block dependent.
 data TransactionStatus =
   -- |Transaction is received, but no outcomes from any blocks are known
