@@ -191,9 +191,8 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
 /// * `ps_pub_key` - The Pointcheval-Sanders public key with which the signature
 ///   was generated
 /// * `comm_key` - A commitment key with which the commitments were generated.
-/// * `secret` - The pair of 'BlindingRandomness', and the vector of pairs
-///   $(m_i, r_i)$ of the commited to message $m_i$ and randomness $r_i$.
-/// * `csprng` - A cryptographically secure random number generator.
+/// * `proof` - A proof of knowledge of equality between commitments and
+///   signature message
 pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     ro: RandomOracle,
     blinded_sig: &BlindedSignature<P>,

@@ -37,7 +37,7 @@ impl Display for CDIVerificationError {
             CDIVerificationError::Dlog => write!(f, "DlogVerificationError"),
             CDIVerificationError::AccountOwnership => write!(f, "AccountOwnership"),
             CDIVerificationError::Policy => write!(f, "PolicyVerificationError"),
-            CDIVerificationError::AR => write!(f, "AnonimityRevokerVerificationError"),
+            CDIVerificationError::AR => write!(f, "AnonymityRevokerVerificationError"),
         }
     }
 }
