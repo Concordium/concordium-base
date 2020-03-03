@@ -190,7 +190,7 @@ newtype AccountEncryptionKey = EncKeyAcc ShortByteString
     deriving (Eq)
     deriving Show via Short65K
     deriving Serialize via Short65K
-    deriving(ToJSON) via ByteStringHex
+    deriving(FromJSON, ToJSON) via ByteStringHex
 
 data RegIdSize
 
