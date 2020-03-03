@@ -423,6 +423,10 @@ data MessageFormat = ValueMessage !(Value Core.NoAnnot) | ExprMessage !(LinkedEx
 instance AE.ToJSON MessageFormat where
   toJSON fmt = AE.toJSON (show fmt)
 
+-- FIXME: Contracts not supported.
+instance AE.FromJSON MessageFormat where
+  parseJSON _ = fail "FIXME: Unsupported."
+
 instance S.Serialize MessageFormat where
     put (ValueMessage v) = S.putWord8 0 >> putStorable v
     put (ExprMessage e) = S.putWord8 1 >> S.put e
@@ -497,6 +501,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
 
 instance S.Serialize RejectReason
 instance AE.ToJSON RejectReason
+instance AE.FromJSON RejectReason
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
                  | IncorrectSignature  -- ^Signature check failed.
@@ -516,17 +521,17 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
 
 -- FIXME: These intances need to be made clearer.
-$(deriveToJSON AE.defaultOptions{AE.fieldLabelModifier = map toLower . dropWhile isLower} ''Event)
+$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = map toLower . dropWhile isLower} ''Event)
 
 -- Derive JSON instance for transaction outcomes
 -- At the end of the file to avoid issues with staging restriction.
-$(deriveToJSON AE.defaultOptions{AE.constructorTagModifier = map toLower . drop 2,
+$(deriveJSON AE.defaultOptions{AE.constructorTagModifier = map toLower . drop 2,
                                  AE.sumEncoding = AE.TaggedObject{
                                     AE.tagFieldName = "outcome",
                                     AE.contentsFieldName = "details"
                                     },
                                  AE.fieldLabelModifier=map toLower . drop 2} ''ValidResult)
 
-$(deriveToJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionSummary)
+$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionSummary)
 
-$(deriveToJSON defaultOptions{AE.constructorTagModifier = map toLower . drop 2} ''TransactionType)
+$(deriveJSON defaultOptions{AE.constructorTagModifier = map toLower . drop 2} ''TransactionType)
