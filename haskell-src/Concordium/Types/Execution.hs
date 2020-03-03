@@ -130,7 +130,10 @@ data Payload =
       -- create their own bakers.
       -- TODO: We could also alternatively just require a signature from one of the
       -- beta accounts on the public data.
-      abProofAccount :: !AccountOwnershipProof
+      abProofAccount :: !AccountOwnershipProof,
+      -- |Proof that the baker owns the private key corresponding to the aggregation
+      -- key.
+      abProofAggregation :: !BakerAggregationProof
       -- FIXME: in the future also logic the baker is allowed to become a baker:
       -- THIS NEEDS SPEC
       }
@@ -208,7 +211,8 @@ instance S.Serialize Payload where
     S.put abAccount <>
     S.put abProofSig <>
     S.put abProofElection <>
-    S.put abProofAccount
+    S.put abProofAccount <>
+    S.put abProofAggregation
   put RemoveBaker{..} =
     P.putWord8 7 <>
     S.put rbId <>
@@ -263,6 +267,7 @@ instance S.Serialize Payload where
               abProofSig <- S.get
               abProofElection <- S.get
               abProofAccount <- S.get
+              abProofAggregation <- S.get
               return AddBaker{..}
             7 -> do
               rbId <- S.get
@@ -403,7 +408,7 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
                                              -- next in sequence. The argument
                                              -- is the expected nonce.
                  | SuccessorOfInvalidTransaction -- ^A transaction from the same account was rejected, so
-                                                 -- we reject the following transactions from the same account 
+                                                 -- we reject the following transactions from the same account
                  | UnknownAccount !AccountAddress -- ^Transaction is coming from an unknown sender.
                  | DepositInsufficient -- ^The dedicated gas amount was lower than the minimum allowed.
                  | NoValidCredential -- ^No valid credential on the sender account.

@@ -74,6 +74,7 @@ type BakerElectionVerifyKey = VRF.PublicKey
 type BakerElectionPrivateKey = VRF.KeyPair
 type BakerAggregationVerifyKey = Bls.PublicKey
 type BakerAggregationPrivateKey = Bls.SecretKey
+type BakerAggregationProof = Bls.Proof
 type LotteryPower = Ratio Amount
 type ElectionDifficulty = Double
 
