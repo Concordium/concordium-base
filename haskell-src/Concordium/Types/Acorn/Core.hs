@@ -207,7 +207,7 @@ data Pattern annot origin =
   PVar
   -- | Constructor pattern. Matches a fully instantiated constructor of the datatype
   -- given as discriminee. The given list of types has to be the referred-to
-  -- constructor's arity. Introcduces that many variables of the respective type.
+  -- constructor's arity. Introduces that many variables of the respective type.
   | PCtor !(CTorName origin) ![Type annot origin]
   -- | Literal pattern. Matches the given literal of the discriminee's type.
   -- Not all literal types are allowed for the discriminee (see typechecker).
