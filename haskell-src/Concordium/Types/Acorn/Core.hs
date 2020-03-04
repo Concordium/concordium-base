@@ -175,7 +175,8 @@ data Expr annot origin
   --     and indices 1 and 2 refer to the functions defined by @e2@ and @e1@ respectively
   --   * in expression @ebody@ DeBruijn index 0 refers to (the functions defined by) @e2@ and 1 to @e1@
   | LetRec ![(Type annot origin, Expr annot origin, Type annot origin)] !(Expr annot origin)
-  -- |Case expression, the list of alternatives should be non-empty. In bodies
+  -- |Case expression. The list of alternatives must be non-empty.
+  -- The types allowed for the discriminee are restricted (see typechecker). In bodies
   -- of branches we again use the De-Bruijn convention. The type is the result type of all the branches.
   | Case !(Atom origin) ![(Pattern annot origin, Expr annot origin)]
   -- |Type application (instantiation of universally qualified term) with a list of types.
@@ -195,17 +196,18 @@ deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Ex
 -- TODO: We could simply merge PCtor and PVar into one and just use variable for
 -- everything.
 
--- |We do not allow nested patterns since checking incompleteness is NP-hard,
+-- | A pattern to be matched in case expressions.
+-- We do not allow nested patterns since checking incompleteness is NP-hard,
 -- which we cannot allow for security reasons.
 data Pattern annot origin =
-  -- |We do not need to give it a name because we are using De-Bruijn convention for bound variables.
+  -- | Variable pattern. The variable is bound to the discriminee and referred to with its De-Bruijn index.
   PVar
-  -- |Fully instantiated constructor. Constructor can be either locally declared or imported.
+  -- | Constructor pattern. Matches a fully instantiated constructor of the datatype
+  -- given as discriminee. The given list of types has to be the referred-to
+  -- constructor's arity. Introduces that many variables of the respective type.
   | PCtor !(CTorName origin) ![Type annot origin]
-  -- |And finally we can match on literals.
-  -- NB:FIXME:This will probably need to be narrowed since matching 128-byte
-  -- strings is quite different than matching ints, and we probably do not want
-  -- to allow matching on all literals.
+  -- | Literal pattern. Matches the given literal of the discriminee's type.
+  -- Not all literal types are allowed for the discriminee (see typechecker).
   | PLiteral !Literal
   | PAnnot !(PatternAnnot annot) !(Pattern annot origin)
   deriving (Generic, Functor, Foldable, Traversable)
@@ -215,6 +217,7 @@ deriving instance (AnnotContext Show annot, Show origin) => Show (Pattern annot 
 deriving instance (AnnotContext Typeable annot, Data origin) => Typeable (Pattern annot origin)
 deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Pattern annot origin)
 
+-- | Reference to a locally declared or imported constructor.
 data CTorName origin = LocalCTor {ctorName :: !Name}
                      | ImportedCTor {ctorName :: !Name
                                     ,ctorOrigin :: !origin

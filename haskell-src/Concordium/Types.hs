@@ -75,6 +75,7 @@ type BakerElectionVerifyKey = VRF.PublicKey
 type BakerElectionPrivateKey = VRF.KeyPair
 type BakerAggregationVerifyKey = Bls.PublicKey
 type BakerAggregationPrivateKey = Bls.SecretKey
+type BakerAggregationProof = Bls.Proof
 type LotteryPower = Ratio Amount
 type ElectionDifficulty = Double
 
@@ -339,11 +340,7 @@ payloadSize = fromIntegral . BSS.length . _spayload
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
 
-newtype Slot = Slot {theSlot :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show) via Word64
-
-instance S.Serialize Slot where
-  put = S.putWord64be . theSlot
-  get = Slot <$> S.getWord64be
+newtype Slot = Slot {theSlot :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize) via Word64
 
 -- |The slot number of the genesis block (0).
 genesisSlot :: Slot
