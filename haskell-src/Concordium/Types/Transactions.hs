@@ -444,5 +444,5 @@ type instance IxValue TransactionOutcomes = TransactionSummary
 instance Ixed TransactionOutcomes where
   ix idx f outcomes@TransactionOutcomes{..} =
     let x = fromIntegral idx
-    in if length outcomeValues >= x then pure outcomes
+    in if x >= length outcomeValues then pure outcomes
        else ix x f outcomeValues <&> (\ov -> TransactionOutcomes{outcomeValues=ov,..})
