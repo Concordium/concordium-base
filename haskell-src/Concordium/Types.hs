@@ -76,7 +76,6 @@ type BakerAggregationVerifyKey = Bls.PublicKey
 type BakerAggregationPrivateKey = Bls.SecretKey
 type LotteryPower = Ratio Amount
 type ElectionDifficulty = Double
-type StakeFraction = Double
 type FinalizationCommitteeSize = Int
 
 type VoterId = Word64
