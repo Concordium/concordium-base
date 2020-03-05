@@ -404,7 +404,7 @@ data SpecialTransactionOutcome =
     }
   deriving(Show, Eq)
 
-$(deriveToJSON defaultOptions{fieldLabelModifier = map toLower . drop 3} ''SpecialTransactionOutcome)
+$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 3} ''SpecialTransactionOutcome)
 
 instance S.Serialize SpecialTransactionOutcome where
     put (BakingReward bid addr amt) = S.put bid <> S.put addr <> S.put amt
