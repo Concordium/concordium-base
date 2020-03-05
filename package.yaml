@@ -18,6 +18,16 @@ extra-source-files:
 # common to point users to the README.md file.
 description:         See README
 
+default-extensions:
+- RecordWildCards
+- LambdaCase
+- TupleSections
+- MultiParamTypeClasses
+- FlexibleContexts
+- FlexibleInstances
+- FunctionalDependencies
+- GeneralizedNewtypeDeriving
+
 flags:
   static:
     description: Use static linking.
@@ -44,6 +54,7 @@ dependencies:
 - pqueue >= 1.4.1
 - prettyprinter >= 1.2
 - random >= 1.1
+- template-haskell >= 2.14
 
 library:
   source-dirs: src
