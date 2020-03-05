@@ -217,7 +217,7 @@ verifyTransaction :: TransactionData msg => AccountKeys -> msg -> Bool
 verifyTransaction keys tx =
   let bodyHash = H.hashToByteString (transactionHash tx)
       TransactionSignature sigs = transactionSignature tx
-      keysCheck = foldl' (\_ (idx, sig) -> maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getAccountKey idx keys)) True sigs
+      keysCheck = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getAccountKey idx keys)) True sigs
       numSigs = length sigs
       threshold = akThreshold keys
   in numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck
