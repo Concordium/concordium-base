@@ -15,7 +15,7 @@ import Data.Serialize
 
 
 filePath :: FilePath
-filePath = "testdata/cdi-example.bin"
+filePath = "testdata/testdata.bin"
 
 getData :: Get (GlobalContext, IpInfo)
 getData = getTwoOf get get
