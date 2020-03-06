@@ -51,10 +51,10 @@ newtype SecretKey = SecretKey (ForeignPtr SecretKey)
 newtype Proof = Proof (ForeignPtr Proof)
 
 instance NFData PublicKey where
-  rnf (PublicKey _) = ()
+  rnf x = rwhnf x
 
 instance NFData SecretKey where
-  rnf (SecretKey _) = ()
+  rnf x = rwhnf x
 
 foreign import ccall unsafe "&ec_vrf_proof_free" freeProof :: FunPtr (Ptr Proof -> IO ())
 foreign import ccall unsafe "&ec_vrf_public_key_free" freePublicKey :: FunPtr (Ptr PublicKey -> IO ())

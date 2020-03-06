@@ -47,15 +47,16 @@ dlogProofSize = 64
 instance FixedLength Dlog25519ProofLength where
   fixedLength _ = dlogProofSize
 
-instance NFData Data.Primitive.ByteArray where
-  -- ByteArray# is an unlifted type and can thus not be an unevaluated thunk;
-  -- matching on the constructor is therefore sufficient
-  rnf (Data.Primitive.ByteArray _) = ()
+-- instance NFData Data.Primitive.ByteArray where
+--   -- ByteArray# is an unlifted type and can thus not be an unevaluated thunk;
+--   -- matching on the constructor is therefore sufficient
+--   rnf (Data.Primitive.ByteArray _) = ()
 
-deriving instance NFData (Data.FixedByteString.FixedByteString a) -- newtype
+instance NFData Dlog25519Proof where
+  rnf x = rwhnf x
 
 newtype Dlog25519Proof = Dlog25519Proof (FixedByteString Dlog25519ProofLength)
-    deriving(Eq, NFData)
+    deriving (Eq)
     deriving (Show, Serialize, AE.FromJSON, AE.ToJSON) via FBSHex Dlog25519ProofLength
 
 -- |Generate a random proof (could be completely invalid). Meant for testing.
