@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ForeignFunctionInterface,
              DerivingVia, RecordWildCards, OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
 -- | This module is a prototype implementantion of  verifiable random function.
 -- draft-irtf-cfrg-vrf-01
 
@@ -40,12 +41,20 @@ import           System.Random
 import           Test.QuickCheck (Arbitrary(..))
 import qualified Data.Aeson as AE
 import Data.Int
+import Control.DeepSeq
+import GHC.Generics
 import Foreign.ForeignPtr
 import Concordium.Crypto.FFIHelpers
 
 newtype PublicKey = PublicKey (ForeignPtr PublicKey)
 newtype SecretKey = SecretKey (ForeignPtr SecretKey)
 newtype Proof = Proof (ForeignPtr Proof)
+
+instance NFData PublicKey where
+  rnf x = rwhnf x
+
+instance NFData SecretKey where
+  rnf x = rwhnf x
 
 foreign import ccall unsafe "&ec_vrf_proof_free" freeProof :: FunPtr (Ptr Proof -> IO ())
 foreign import ccall unsafe "&ec_vrf_public_key_free" freePublicKey :: FunPtr (Ptr PublicKey -> IO ())
@@ -188,7 +197,7 @@ instance Eq SecretKey where
 data KeyPair = KeyPair {
     privateKey :: !SecretKey,
     publicKey :: !PublicKey
-} deriving (Eq, Show)
+} deriving (Eq, Show, Generic, NFData)
 
 instance Serialize KeyPair where
     put (KeyPair priv pub) = put priv <> put pub

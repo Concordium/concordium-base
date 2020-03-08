@@ -20,6 +20,7 @@ import Foreign.C.Types
 import Data.Serialize
 
 import Data.FixedByteString
+import qualified Data.Primitive
 import Concordium.Crypto.ByteStringHelpers
 
 import Data.Word
@@ -29,6 +30,8 @@ import qualified Data.ByteString.Unsafe as BS
 
 import System.IO.Unsafe
 import System.Random
+
+import Control.DeepSeq
 
 import qualified Data.Aeson as AE
 import qualified Concordium.Crypto.VRF as VRF
@@ -43,8 +46,11 @@ dlogProofSize = 64
 instance FixedLength Dlog25519ProofLength where
   fixedLength _ = dlogProofSize
 
+instance NFData Dlog25519Proof where
+  rnf x = rwhnf x
+
 newtype Dlog25519Proof = Dlog25519Proof (FixedByteString Dlog25519ProofLength)
-    deriving(Eq)
+    deriving (Eq)
     deriving (Show, Serialize, AE.FromJSON, AE.ToJSON) via FBSHex Dlog25519ProofLength
 
 -- |Generate a random proof (could be completely invalid). Meant for testing.
