@@ -6,6 +6,9 @@ import Criterion.Types
 
 import qualified Data.ByteString.Char8 as BS
 -- import Data.ByteString.Short as BSS
+import Data.Serialize
+
+import Control.Exception
 
 import Concordium.Crypto.SignatureScheme
 -- import Concordium.Crypto.Ed25519Signature as S
@@ -24,6 +27,11 @@ setupVerifyEnv n = do
   let s = sign kp doc
   return (correspondingVerifyKey kp, s, doc)
 
+setupVerifyEnvSer :: Int -> IO (BS.ByteString, BS.ByteString, BS.ByteString)
+setupVerifyEnvSer n = do
+  (vk, s, doc) <- setupVerifyEnv n
+  return (encode vk, encode s, doc)
+
 signN :: Int -> Benchmark
 signN n =
     env (setupSignEnv n) $ \ ~(kp, doc) ->
@@ -33,20 +41,36 @@ signN n =
 verifyN :: Int -> Benchmark
 verifyN n =
   env (setupVerifyEnv n) $ \ ~(vk, s, doc) ->
-          bench ("len = " ++ show n) $ nf (\d -> verify vk d s) doc
+          bench ("len = " ++ show n) $ nf (\d -> assert True $ verify vk d s) doc
+
+verifyNSer :: Int -> Benchmark
+verifyNSer n =
+  env (setupVerifyEnvSer n) $ \ ~(vk', s', doc) ->
+    bench ("len = " ++ show n) $ nf (\(vk,s) ->
+                                   case (decode vk, decode s) of
+                                     (Right verKey, Right sig) -> assert True $ verify verKey doc sig
+                                     (Left err, _) -> error $ "Decode error: " ++ err
+                                     (_, Left err) -> error $ "Decode error: " ++ err
+                                    ) (vk',s')
 
 main :: IO ()
-main = defaultMainWith (defaultConfig { timeLimit = 15 }) [
-  bgroup "sign"
-  [signN 100
-  ,signN 1000
-  ,signN 10000
-  ,signN 100000
-  ],
+main = defaultMainWith (defaultConfig { timeLimit = 60 }) [
+  -- bgroup "sign"
+  -- [signN 100
+  -- ,signN 1000
+  -- ,signN 10000
+  -- ,signN 100000
+  -- ],
   bgroup "verify"
-  [verifyN 100
-  ,verifyN 1000
-  ,verifyN 10000
-  ,verifyN 100000
+  [verifyN 5000
+  -- ,verifyN 1000
+  -- ,verifyN 10000
+  -- ,verifyN 100000
+  ],
+  bgroup "verifySer"
+  [verifyNSer 5000
+  -- ,verifyNSer 1000
+  -- ,verifyNSer 10000
+  -- ,verifyNSer 100000
   ]
   ]

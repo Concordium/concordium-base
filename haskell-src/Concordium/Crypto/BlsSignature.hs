@@ -17,6 +17,7 @@ import Data.Int
 import Data.ByteString
 import Data.ByteString.Unsafe as BS
 import System.IO.Unsafe
+import Control.DeepSeq
 import Data.Serialize
 import qualified Data.Aeson as AE
 import qualified Data.List as List
@@ -25,6 +26,15 @@ newtype PublicKey = PublicKey (ForeignPtr PublicKey)
 newtype SecretKey = SecretKey (ForeignPtr SecretKey)
 newtype Signature = Signature (ForeignPtr Signature)
 newtype Proof = Proof (ForeignPtr Proof)
+
+instance NFData PublicKey where
+  rnf x = rwhnf x
+
+instance NFData SecretKey where
+  rnf x = rwhnf x
+
+instance NFData Proof where
+  rnf x = rwhnf x
 
 foreign import ccall unsafe "&bls_free_sk" freeSecretKey :: FunPtr (Ptr SecretKey -> IO ())
 foreign import ccall unsafe "bls_generate_secretkey" generateSecretKeyPtr :: IO (Ptr SecretKey)
