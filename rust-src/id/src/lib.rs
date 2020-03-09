@@ -15,5 +15,5 @@ extern crate crypto_common_derive;
 #[macro_use]
 extern crate failure;
 
-#[cfg(test)]
-mod test;
+#[cfg(any(test, bench))]
+pub mod test;
