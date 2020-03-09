@@ -440,3 +440,82 @@ fn verify_pok_reg_id<C: Curve>(
         &proof,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::{account_holder::*, ffi::*, identity_provider::*, test::*};
+
+    use ed25519_dalek as ed25519;
+    use either::Left;
+    use pedersen_scheme::key as PedersenKey;
+    use rand::*;
+    use std::collections::btree_map::BTreeMap;
+
+    #[test]
+    fn test_verify_cdi() {
+        let mut csprng = thread_rng();
+
+        // Generate PIO
+        let max_attrs = 10;
+        let num_ars = 5;
+        let (
+            IpData {
+                public_ip_info: ip_info,
+                ip_secret_key,
+                metadata: _,
+            },
+            _,
+        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let aci = test_create_aci(&mut csprng);
+        let (_context, pio, randomness) = test_create_pio(&aci, &ip_info, num_ars);
+        let alist = test_create_attributes();
+        let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
+        assert!(sig_ok.is_ok());
+
+        // Generate CDI
+        let ip_sig = sig_ok.unwrap();
+        let global_ctx = GlobalContext {
+            on_chain_commitment_key: PedersenKey::CommitmentKey::generate(&mut csprng),
+        };
+        let id_object = IdentityObject {
+            pre_identity_object: pio,
+            alist,
+            signature: ip_sig,
+        };
+        let id_use_data = IdObjectUseData { aci, randomness };
+        let expiry_date = 123123123;
+        let policy = Policy {
+            expiry:     expiry_date,
+            policy_vec: {
+                let mut tree = BTreeMap::new();
+                tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+                tree
+            },
+            _phantom:   Default::default(),
+        };
+        let acc_data = AccountData {
+            keys:     {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+                keys
+            },
+            existing: Left(SignatureThreshold(2)),
+        };
+        let cdi = generate_cdi(
+            &ip_info,
+            &global_ctx,
+            &id_object,
+            &id_use_data,
+            0,
+            &policy,
+            &acc_data,
+        )
+        .expect("Should generate the credential successfully.");
+        let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
+        assert_eq!(cdi_check, Ok(()));
+    }
+}

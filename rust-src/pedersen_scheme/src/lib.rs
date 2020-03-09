@@ -1,7 +1,4 @@
-// Authors:
-
 pub mod commitment;
-mod constants;
 mod errors;
 pub mod key;
 pub mod randomness;

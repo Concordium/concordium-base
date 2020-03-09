@@ -35,6 +35,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         .ip_ars
         .ar_base
         .mul_by_scalar(&aci.cred_holder_info.id_cred.id_cred_sec);
+
     // PRF related computation
     let prf::SecretKey(prf_key_scalar) = aci.prf_key;
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
@@ -51,17 +52,18 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let number_of_ars = context.choice_ar_parameters.0.len();
     let mut ip_ar_data: Vec<IpArData<C>> = Vec::with_capacity(number_of_ars);
     let ar_commitment_key = context.ip_info.ip_ars.ar_cmm_key;
-    // filling IpArData
-    // to shares
+
+    // Fill IpArData with data for each anonymity revoker
+    //   - The AR id
+    //   - An encryption under AR publickey of his share of the PRF key
+    //   - The ARs share number (x-coordinate of polynomial)
+    //   - ZK-proof that the encryption has same value as corresponding commitment
     for item in prf_key_data.iter() {
         let secret = com_enc_eq::ComEncEqSecret {
             value:         &item.share,
             elgamal_rand:  &item.encryption_randomness,
             pedersen_rand: &item.randomness_cmm_to_share,
         };
-
-        // generating proofs that the encryptions of shares hides the same value as the
-        // commitments
         // FIXME: Need some context in the challenge computation.
         let proof = com_enc_eq::prove_com_enc_eq(
             RandomOracle::empty(),
@@ -80,24 +82,21 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         });
     }
 
-    // id_cred_sec stuff
+    // Commit and prove knowledge of id_cred_sec
     let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
     let sc_ck = PedersenKey(
         context.ip_info.ip_verify_key.ys[0],
         context.ip_info.ip_verify_key.g,
     );
-    // commit to id_cred_sec
     let (cmm_sc, cmm_sc_rand) = sc_ck.commit(id_cred_sec.view(), &mut csprng);
-    // proof of knowledge of id_cred_sec
-    // w.r.t. the commitment
-    let pok_sc =
-        // FIXME: prefix needs to be all the data sent to id provider or some such.
-        dlog::prove_dlog(&mut csprng,
-                         RandomOracle::empty(),
-                         &id_cred_pub,
-                         id_cred_sec,
-                         &context.ip_info.ip_ars.ar_base
-        );
+    // FIXME: prefix needs to be all the data sent to id provider or some such.
+    let pok_sc = dlog::prove_dlog(
+        &mut csprng,
+        RandomOracle::empty(),
+        &id_cred_pub,
+        id_cred_sec,
+        &context.ip_info.ip_ars.ar_base,
+    );
 
     let proof_com_eq_sc = {
         // FIXME: prefix needs to be all the data sent to the id provider.
@@ -112,19 +111,16 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         )
     };
 
-    // commitment to the prf key in the group of the IP
+    // Commit to the PRF key for the IP and prove equality for the secret-shared PRF
+    // key
     let commitment_key_prf = PedersenKey(
         context.ip_info.ip_verify_key.ys[1],
         context.ip_info.ip_verify_key.g,
     );
     let (cmm_prf, rand_cmm_prf) =
         commitment_key_prf.commit(&pedersen::Value::view_scalar(&prf_key_scalar), &mut csprng);
-    // commitment to the prf key in the group of the AR
     let snd_cmm_prf = &cmm_prf_sharing_coeff[0];
     let rand_snd_cmm_prf = &cmm_coeff_randomness[0];
-    // now generate the proof that the commitment hidden in snd_cmm_prf is to
-    // the same prf key as the one encrypted in id_ar_data via anonymity revokers
-    // public key.
     let proof_com_eq = {
         let secret = com_eq_different_groups::ComEqDiffGrpsSecret {
             value:      Value::view_scalar(&prf_key_scalar),
@@ -141,7 +137,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             &mut csprng,
         )
     };
-    // identities of the chosen AR's
+
+    // Extract identities of the chosen ARs for use in PIO
     let ar_identities = context
         .choice_ar_parameters
         .0
@@ -150,6 +147,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         .collect();
 
     let threshold = context.choice_ar_parameters.1;
+
     // attribute list
     let prio = PreIdentityObject {
         id_cred_pub,
@@ -175,7 +173,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     })
 }
 
-/// a convenient data structure to collect data related to a single AR
+/// Convenient data structure to collect data related to a single AR
 pub struct SingleArData<C: Curve> {
     ar_identity:             ArIdentity,
     share:                   Value<C>,
@@ -773,4 +771,244 @@ fn compute_pok_reg_id<C: Curve, R: Rng>(
         &secret,
         csprng,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::{ffi::*, identity_provider::*, secret_sharing::Threshold, test::*};
+
+    use curve_arithmetic::Curve;
+    use ed25519_dalek as ed25519;
+    use either::Left;
+
+    use pedersen_scheme::key::CommitmentKey as PedersenKey;
+
+    type ExampleCurve = pairing::bls12_381::G1;
+
+    /// Construct PIO, test various proofs are valid
+    #[test]
+    pub fn test_pio_correctness() {
+        let mut csprng = thread_rng();
+
+        // Create IP info
+        let max_attrs = 10;
+        let num_ars = 4;
+        let (
+            IpData {
+                public_ip_info: ip_info,
+                ip_secret_key: _,
+                metadata: _,
+            },
+            _,
+        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let aci = test_create_aci(&mut csprng);
+        let (context, pio, _) = test_create_pio(&aci, &ip_info, num_ars);
+
+        // Check id_cred_pub is correct
+        let id_cred_sec = aci.cred_holder_info.id_cred.id_cred_sec.value;
+        let id_cred_pub = ip_info.ip_ars.ar_base.mul_by_scalar(&id_cred_sec);
+        assert_eq!(pio.id_cred_pub, id_cred_pub);
+
+        // Check proof_com_eq_sc is valid
+        let sc_ck = PedersenKey(
+            context.ip_info.ip_verify_key.ys[0],
+            context.ip_info.ip_verify_key.g,
+        );
+        let proof_com_eq_sc_valid = com_eq::verify_com_eq_single(
+            RandomOracle::empty(),
+            &pio.cmm_sc,
+            &pio.id_cred_pub,
+            &sc_ck,
+            &ip_info.ip_ars.ar_base,
+            &pio.proof_com_eq_sc,
+        );
+        assert!(proof_com_eq_sc_valid, "proof_com_eq_sc is not valid");
+
+        // Check ip_ar_data is valid (could use more checks)
+        assert_eq!(
+            pio.ip_ar_data.len() as u8,
+            num_ars - 1,
+            "ip_ar_data has wrong length"
+        );
+
+        // Check pok_sc is valid
+        let pok_sc_valid = dlog::verify_dlog(
+            RandomOracle::empty(),
+            &ip_info.ip_ars.ar_base,
+            &id_cred_pub,
+            &pio.pok_sc,
+        );
+        assert!(pok_sc_valid, "proof_sc is not valid");
+
+        // Check proof_com_eq is valid
+        let commitment_key_prf = PedersenKey(
+            context.ip_info.ip_verify_key.ys[1],
+            context.ip_info.ip_verify_key.g,
+        );
+        let proof_com_eq_valid = com_eq_different_groups::verify_com_eq_diff_grps(
+            RandomOracle::empty(),
+            &pio.cmm_prf,
+            &pio.cmm_prf_sharing_coeff[0],
+            &commitment_key_prf,
+            &context.ip_info.ip_ars.ar_cmm_key,
+            &pio.proof_com_eq,
+        );
+        assert!(proof_com_eq_valid, "proof_com_eq is not valid");
+    }
+
+    #[test]
+    pub fn test_compute_sharing_data() {
+        use curve_arithmetic::secret_value::Value;
+
+        let mut csprng = thread_rng();
+
+        // Arrange
+        let num_ars = 4;
+        let threshold = 3;
+        let ar_base = ExampleCurve::generate(&mut csprng);
+        let (ar_infos, _ar_keys) = test_create_ars(&ar_base, num_ars, &mut csprng);
+        let ar_parameters = (ar_infos, Threshold(threshold));
+        let ck = PedersenKey::generate(&mut csprng);
+        let value = Value::<ExampleCurve>::generate(&mut csprng);
+
+        // Act
+        let (ar_datas, _comms, _rands) = compute_sharing_data(&value, &ar_parameters, &ck);
+
+        // Assert ArData's are good
+        for (i, data) in ar_datas.iter().enumerate() {
+            assert_eq!(
+                data.ar_identity,
+                (ar_parameters.0)[i].ar_identity,
+                "ArData ar_identity is invalid"
+            );
+            assert_eq!(
+                data.share_number,
+                ShareNumber(i as u32 + 1),
+                "ArData share_number is invalid"
+            );
+            // Add check of encrypted_share and encrypted_randomness
+            let cmm_ok = ck.open(
+                &data.share,
+                &data.randomness_cmm_to_share,
+                &data.cmm_to_share,
+            );
+            assert!(cmm_ok, "ArData cmm_to_share is not valid");
+            assert_eq!(
+                data.ar_public_key, data.ar_public_key,
+                "ArData ar_public_key is invalid"
+            );
+        }
+
+        // Add check of commitment to polynomial coefficients and randomness
+        // encodes value
+    }
+
+    /// This test generates a CDI and check values were set correct.
+    /// It does not yet test the proofs for correct-/soundness.
+    #[test]
+    pub fn test_generate_cdi() {
+        // Create IP info with threshold = num_ars - 1
+        let max_attrs = 10;
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let (
+            IpData {
+                public_ip_info: ip_info,
+                ip_secret_key,
+                metadata: _,
+            },
+            _,
+        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let aci = test_create_aci(&mut csprng);
+        let (_context, pio, randomness) = test_create_pio(&aci, &ip_info, num_ars);
+        let alist = test_create_attributes();
+        let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
+        let ip_sig = sig_ok.unwrap();
+
+        // Create CDI arguments
+        let global_ctx = GlobalContext {
+            on_chain_commitment_key: PedersenKey::generate(&mut csprng),
+        };
+        let id_object = IdentityObject {
+            pre_identity_object: pio,
+            alist,
+            signature: ip_sig,
+        };
+        let id_use_data = IdObjectUseData { aci, randomness };
+        let policy = Policy {
+            expiry:     42,
+            policy_vec: {
+                let mut tree = BTreeMap::new();
+                tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+                tree
+            },
+            _phantom:   Default::default(),
+        };
+        let mut keys = BTreeMap::new();
+        keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+        keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+        keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+        let sigthres = SignatureThreshold(2);
+        let acc_data = AccountData {
+            keys,
+            existing: Left(sigthres),
+        };
+
+        let cred_ctr = 42;
+        let cdi = generate_cdi(
+            &ip_info,
+            &global_ctx,
+            &id_object,
+            &id_use_data,
+            cred_ctr,
+            &policy,
+            &acc_data,
+        )
+        .expect("Could not generate CDI");
+
+        // Check cred_account
+        let cred_account_ok = match cdi.values.cred_account {
+            CredentialAccount::NewAccount(k, t) if k.len() == 3 && t == sigthres => true,
+            _ => false,
+        };
+        assert!(cred_account_ok, "CDI cred_account is invalid");
+
+        // Check reg_id
+        let reg_id_exponent = id_use_data.aci.prf_key.prf_exponent(cred_ctr).unwrap();
+        let reg_id = global_ctx
+            .on_chain_commitment_key
+            .hide(
+                &Value::view_scalar(&reg_id_exponent),
+                &PedersenRandomness::zero(),
+            )
+            .0;
+        assert_eq!(cdi.values.reg_id, reg_id, "CDI reg_id is invalid");
+
+        // Check ip_identity
+        assert_eq!(
+            cdi.values.ip_identity, ip_info.ip_identity,
+            "CDI ip_identity is invalid"
+        );
+
+        // Check threshold
+        assert_eq!(
+            cdi.values.threshold,
+            Threshold(num_ars as u32 - 1),
+            "CDI threshold is invalid"
+        );
+
+        // Check ar_data
+        assert_eq!(
+            cdi.values.ar_data.len() as u8,
+            num_ars - 1,
+            "CDI ar_data length is invalid"
+        );
+
+        // Check policy
+        assert_eq!(cdi.values.policy, policy, "CDI policy is invalid");
+
+        // Add checks for proofs
+    }
 }
