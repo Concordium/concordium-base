@@ -4,11 +4,11 @@ use crate::{
     types::*,
 };
 use curve_arithmetic::{Curve, Pairing};
+use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 
 use random_oracle::RandomOracle;
 
 use ff::Field;
-use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use ps_sig;
 use rand::*;
 
@@ -236,23 +236,12 @@ pub fn commitment_to_share<C: Curve>(
 mod tests {
     use super::*;
 
-    use crate::{account_holder::generate_pio, ffi::*};
+    use crate::test::*;
 
-    use dodis_yampolskiy_prf::secret as prf;
-    use elgamal::{public::PublicKey, secret::SecretKey};
-    use ff::PrimeField;
-    use pairing::bls12_381::{Bls12, G1};
-    use pedersen_scheme::{
-        key as PedersenKey, key::CommitmentKey, Randomness, Value as PedersenValue,
-    };
-    use rand::seq::SliceRandom;
-    use std::collections::btree_map::BTreeMap;
+    use pairing::bls12_381::G1;
+    use pedersen_scheme::{key::CommitmentKey, Randomness, Value as PedersenValue};
 
-    type ExamplePairing = Bls12;
     type ExampleCurve = G1;
-    type ExampleAttribute = AttributeKind;
-    type ExampleAttributeList =
-        AttributeList<<ExamplePairing as Pairing>::ScalarField, ExampleAttribute>;
 
     // Eval a polynomial at point.
     fn eval_poly<F: Field>(coeffs: &[F], x: &F) -> F {
@@ -304,127 +293,6 @@ mod tests {
         }
     }
 
-    /// Create identity provider with #num_ars anonymity revokers to be used by
-    /// tests
-    fn create_test_ip_info<T: Rng>(
-        csprng: &mut T,
-        num_ars: u32,
-        max_attrs: u32,
-    ) -> (
-        IpInfo<ExamplePairing, ExampleCurve>,
-        ps_sig::secret::SecretKey<ExamplePairing>,
-    ) {
-        // Create key for IP long enough to encode the attributes and anonymity
-        // revokers.
-        let ps_len = (5 + num_ars + max_attrs) as usize;
-        let ip_secret_key = ps_sig::secret::SecretKey::<ExamplePairing>::generate(ps_len, csprng);
-        let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
-
-        // Create ARs
-        let ar_ck = PedersenKey::CommitmentKey::generate(csprng);
-        let ar_base = ExampleCurve::generate(csprng);
-        let mut ar_infos = Vec::new();
-        for i in 0..num_ars {
-            let ar_secret_key = SecretKey::generate(&ar_base, csprng);
-            let ar_public_key = PublicKey::from(&ar_secret_key);
-            let ar_info = ArInfo::<ExampleCurve> {
-                ar_identity: ArIdentity(i),
-                ar_description: mk_dummy_description(format!("AnonymityRevoker{}", i)),
-                ar_public_key,
-            };
-            ar_infos.push(ar_info);
-        }
-
-        // Return IP-info and secret-key
-        (
-            IpInfo {
-                ip_identity:    IpIdentity(0),
-                ip_description: mk_dummy_description("IP0".to_string()),
-                ip_verify_key:  ip_public_key,
-                ip_ars:         IpAnonymityRevokers {
-                    ars: ar_infos,
-                    ar_cmm_key: ar_ck,
-                    ar_base,
-                },
-            },
-            ip_secret_key,
-        )
-    }
-
-    /// Create PreIdentityObject for an account holder to be used by tests,
-    /// with the anonymity revocation having random threshold between 1 and
-    /// num_ars
-    fn create_test_pio<T: Rng>(
-        csprng: &mut T,
-        ip_info: &IpInfo<ExamplePairing, ExampleCurve>,
-        num_ars: u32,
-    ) -> (
-        Context<ExamplePairing, ExampleCurve>,
-        PreIdentityObject<ExamplePairing, ExampleCurve>,
-        <G1 as Curve>::Scalar,
-    ) {
-        // Create account holder
-        let secret = ExampleCurve::generate_scalar(csprng);
-        let ah_info = CredentialHolderInfo::<ExampleCurve> {
-            id_cred: IdCredentials {
-                id_cred_sec: PedersenValue::new(secret),
-            },
-        };
-
-        // Create credential information
-        let prf_key = prf::SecretKey::generate(csprng);
-        let aci = AccCredentialInfo {
-            cred_holder_info: ah_info,
-            prf_key,
-        };
-
-        // Select some ARs, between one and all
-        let threshold = csprng.gen_range(1, num_ars + 1);
-
-        // select threshold number of anonymity revokers, in some order.
-        let ar_ids: Vec<ArIdentity> = (0..num_ars).map(ArIdentity).collect::<Vec<_>>();
-        let ars = ar_ids
-            .choose_multiple(csprng, threshold as usize)
-            .cloned()
-            .collect();
-
-        // Create context
-        let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-            ar_identities: ars,
-            threshold:     Threshold(threshold),
-        })
-        .expect("The constructed ARs are invalid.");
-
-        // Create and return PIO
-        let (pio, _randomness) = generate_pio::<ExamplePairing, ExampleCurve>(&context, &aci);
-        (context, pio, secret)
-    }
-
-    /// Create example attributes to be used by tests.
-    /// The attributes are generated uniformly at random, and the number of
-    /// attributes is chosen uniformly at random in the range [0, max_attrs)
-    fn create_test_attributes<R: Rng>(rng: &mut R, max_attrs: u32) -> ExampleAttributeList {
-        let mut alist = BTreeMap::new();
-
-        let numattrs = rng.gen_range(0, max_attrs);
-        // capacity is the number of bits we can reliably store in a field
-        // element of a pairing.
-        let capacity = <ExamplePairing as Pairing>::ScalarField::CAPACITY;
-        for _i in 0..numattrs {
-            // tags must be < capacity in order for the current encoding to work.
-            let tag = (rng.next_u32() % capacity) as u8;
-            let kind = rng.next_u64();
-            alist.insert(AttributeTag::from(tag), AttributeKind::from(kind));
-        }
-
-        let expiry = rng.next_u64();
-        ExampleAttributeList {
-            expiry,
-            alist,
-            _phantom: Default::default(),
-        }
-    }
-
     /// Check IP's verify_credentials succeeds for well-formed data.
     #[test]
     fn test_verify_credentials_success() {
@@ -432,9 +300,17 @@ mod tests {
         let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
-        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars, max_attrs);
-        let (_, pio, _) = create_test_pio(&mut csprng, &ip_info, num_ars);
-        let attrs = create_test_attributes(&mut csprng, max_attrs);
+        let (
+            IpData {
+                public_ip_info: ip_info,
+                ip_secret_key,
+                metadata: _,
+            },
+            _,
+        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let aci = test_create_aci(&mut csprng);
+        let (_, pio, _) = test_create_pio(&aci, &ip_info, num_ars);
+        let attrs = test_create_attributes();
 
         // Act
         let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
@@ -451,9 +327,17 @@ mod tests {
         let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
-        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars, max_attrs);
-        let (_, mut pio, id_cred_sec) = create_test_pio(&mut csprng, &ip_info, num_ars);
-        let attrs = create_test_attributes(&mut csprng, max_attrs);
+        let (
+            IpData {
+                public_ip_info: ip_info,
+                ip_secret_key,
+                metadata: _,
+            },
+            _,
+        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let aci = test_create_aci(&mut csprng);
+        let (_, mut pio, _) = test_create_pio(&aci, &ip_info, num_ars);
+        let attrs = test_create_attributes();
 
         // Act (make dlog proof use wrong id_cred_sec)
         let wrong_id_cred_sec = ExampleCurve::generate_scalar(&mut csprng);
@@ -468,7 +352,10 @@ mod tests {
 
         // Assert
         if sig_ok.is_ok() {
-            assert_eq!(wrong_id_cred_sec, id_cred_sec);
+            assert_eq!(
+                wrong_id_cred_sec,
+                aci.cred_holder_info.id_cred.id_cred_sec.value
+            );
         }
         assert_eq!(
             sig_ok,
@@ -485,12 +372,21 @@ mod tests {
         let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
-        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars, max_attrs);
-        let (ctx, mut pio, id_cred_sec) = create_test_pio(&mut csprng, &ip_info, num_ars);
-        let attrs = create_test_attributes(&mut csprng, max_attrs);
+        let (
+            IpData {
+                public_ip_info: ip_info,
+                ip_secret_key,
+                metadata: _,
+            },
+            _,
+        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let aci = test_create_aci(&mut csprng);
+        let (ctx, mut pio, _) = test_create_pio(&aci, &ip_info, num_ars);
+        let attrs = test_create_attributes();
 
         // Act (make cmm_sc be comm. of id_cred_sec but with wrong/fresh randomness)
         let sc_ck = CommitmentKey(ctx.ip_info.ip_verify_key.ys[0], ctx.ip_info.ip_verify_key.g);
+        let id_cred_sec = aci.cred_holder_info.id_cred.id_cred_sec.value;
         let val = curve_arithmetic::secret_value::Value::from_scalar(id_cred_sec);
         let (cmm_sc, _) = sc_ck.commit(&val, &mut csprng);
         pio.cmm_sc = cmm_sc;
@@ -511,9 +407,17 @@ mod tests {
         let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
-        let (ip_info, ip_secret_key) = create_test_ip_info(&mut csprng, num_ars, max_attrs);
-        let (_, mut pio, _) = create_test_pio(&mut csprng, &ip_info, num_ars);
-        let attrs = create_test_attributes(&mut csprng, max_attrs);
+        let (
+            IpData {
+                public_ip_info: ip_info,
+                ip_secret_key,
+                metadata: _,
+            },
+            _,
+        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let aci = test_create_aci(&mut csprng);
+        let (_, mut pio, _) = test_create_pio(&aci, &ip_info, num_ars);
+        let attrs = test_create_attributes();
 
         // Act (make cmm_prf be a commitment to a wrong/random value)
         let ck = ip_info.ip_ars.ar_cmm_key;
