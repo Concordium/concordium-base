@@ -6,8 +6,7 @@ use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
-use std::collections::btree_map::BTreeMap;
-use std::convert::TryFrom;
+use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
 use crypto_common::*;
 
@@ -84,7 +83,7 @@ fn main() {
     };
 
     let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-    let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2022
+    let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
     let attributes = ExampleAttributeList {
         expiry,
         creation_time,
@@ -134,7 +133,7 @@ fn main() {
             tree.insert(AttributeTag::from(1u8), AttributeKind::from(31));
             tree
         },
-        _phantom:   Default::default(),
+        _phantom: Default::default(),
     };
     {
         // output testdata.bin for basic verification checking.

@@ -183,10 +183,10 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
             match s.ip_infos.get(&ip_id) {
                 Some(ref ip_info) => {
                     let policy: Policy<ExampleCurve, ExampleAttribute> = Policy {
-                        expiry:     id_object.alist.expiry,
+                        expiry:        id_object.alist.expiry,
                         creation_time: id_object.alist.creation_time,
-                        policy_vec: items,
-                        _phantom:   Default::default(),
+                        policy_vec:    items,
+                        _phantom:      Default::default(),
                     };
                     (
                         &ip_info.public_ip_info,
