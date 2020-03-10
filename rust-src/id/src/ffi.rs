@@ -327,7 +327,7 @@ mod test {
     use pairing::bls12_381::Bls12;
     use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
     use ps_sig;
-    use std::collections::btree_map::BTreeMap;
+    use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
     type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
     type ExampleCurve = G1;
@@ -335,7 +335,7 @@ mod test {
     fn test_pipeline() {
         let mut csprng = thread_rng();
 
-        let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
+        let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(11, &mut csprng);
         let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
         let secret = ExampleCurve::generate_scalar(&mut csprng);
@@ -394,11 +394,10 @@ mod test {
 
         let prf_key = prf::SecretKey::generate(&mut csprng);
 
-        let expiry_date = 123123123;
         let alist = {
             let mut alist = BTreeMap::new();
             alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
-            alist.insert(AttributeTag::from(1u8), AttributeKind::from(313123333));
+            alist.insert(AttributeTag::from(1u8), AttributeKind::from(313_123_333));
             alist
         };
 
@@ -407,8 +406,11 @@ mod test {
             prf_key,
         };
 
+        let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+        let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2022
         let alist = ExampleAttributeList {
-            expiry: expiry_date,
+            expiry,
+            creation_time,
             alist,
             _phantom: Default::default(),
         };
@@ -431,23 +433,25 @@ mod test {
         };
 
         let policy = Policy {
-            expiry:     expiry_date,
+            expiry,
+            creation_time,
             policy_vec: {
                 let mut tree = BTreeMap::new();
                 tree.insert(AttributeTag::from(0u8), AttributeKind::from(55));
                 tree
             },
-            _phantom:   Default::default(),
+            _phantom: Default::default(),
         };
 
         let wrong_policy = Policy {
-            expiry:     expiry_date,
+            expiry,
+            creation_time,
             policy_vec: {
                 let mut tree = BTreeMap::new();
                 tree.insert(AttributeTag::from(0u8), AttributeKind::from(5));
                 tree
             },
-            _phantom:   Default::default(),
+            _phantom: Default::default(),
         };
 
         let mut keys = BTreeMap::new();

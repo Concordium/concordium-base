@@ -352,8 +352,10 @@ fn verify_pok_sig<
     blinded_sig: &ps_sig::BlindedSignature<P>,
     proof: &com_eq_sig::ComEqSigProof<P, C>,
 ) -> bool {
+    // Capacity for id_cred_sec, cmm_prf, threshold, tags, expiry, creation_time
+    // choice_ar_parameters and cmm_attributes
     let mut comm_vec =
-        Vec::with_capacity(2 + 1 + choice_ar_parameters.len() + commitments.cmm_attributes.len());
+        Vec::with_capacity(6 + choice_ar_parameters.len() + commitments.cmm_attributes.len());
     let cmm_id_cred_sec = commitments.cmm_id_cred_sec_sharing_coeff[0];
     comm_vec.push(cmm_id_cred_sec);
     comm_vec.push(commitments.cmm_prf);
@@ -382,7 +384,12 @@ fn verify_pok_sig<
     // add commitment with randomness 0 for variant and expiry of
     // the attribute list
     comm_vec.push(commitment_key.hide(&Value::new(tags), &zero));
-    comm_vec.push(commitment_key.hide(&Value::new(C::scalar_from_u64(policy.expiry)), &zero));
+    comm_vec
+        .push(commitment_key.hide(&Value::new(C::scalar_from_u64(policy.expiry.into())), &zero));
+    comm_vec.push(commitment_key.hide(
+        &Value::new(C::scalar_from_u64(policy.creation_time.into())),
+        &zero,
+    ));
 
     // now, we go through the policy and remaining commitments and
     // put them into the vector of commitments in order to check the signature.

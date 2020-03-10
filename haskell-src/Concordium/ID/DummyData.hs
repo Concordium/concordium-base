@@ -24,8 +24,8 @@ dummyRegId addr = ID.RegIdCred . FBS.pack $ bytes
 -- Should only be used when only the existence of a credential is needed in testing, but the credential
 -- will neither be serialized, nor inspected.
 {-# WARNING dummyCredential "Invalid credential, only for testing." #-}
-dummyCredential :: ID.AccountAddress -> ID.CredentialExpiryTime -> ID.CredentialDeploymentValues
-dummyCredential address pExpiry  = ID.CredentialDeploymentValues
+dummyCredential :: ID.AccountAddress -> ID.YearMonth -> ID.YearMonth -> ID.CredentialDeploymentValues
+dummyCredential address pExpiry pCreationTime = ID.CredentialDeploymentValues
     {
       cdvAccount = ID.ExistingAccount address,
       cdvRegId = dummyRegId address,
@@ -40,12 +40,12 @@ dummyCredential address pExpiry  = ID.CredentialDeploymentValues
     }
 
 {-# WARNING dummyMaxExpiryTime "Invalid expiry time, only for testing." #-}
-dummyMaxExpiryTime :: ID.CredentialExpiryTime
-dummyMaxExpiryTime = maxBound
+dummyMaxExpiryTime :: ID.YearMonth
+dummyMaxExpiryTime = YearMonth 2199 12
 
 {-# WARNING dummyLowExpiryTime "Do not use in production." #-}
-dummyLowExpiryTime :: ID.CredentialExpiryTime
-dummyLowExpiryTime = 1
+dummyLowExpiryTime :: ID.YearMonth
+dummyLowExpiryTime = YearMonth 1900 1
 
 {-# WARNING dummyEmptyIdentityProviders "Invalid identity providers, only for testing." #-}
 dummyEmptyIdentityProviders :: [IP.IpInfo]
