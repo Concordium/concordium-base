@@ -107,7 +107,9 @@ pub enum ParseAttributeError {
 }
 
 impl From<ParseBigIntError> for ParseAttributeError {
-    fn from(err: ParseBigIntError) -> Self { ParseAttributeError::IntDecodingFailed(err) }
+    fn from(err: ParseBigIntError) -> Self {
+        ParseAttributeError::IntDecodingFailed(err)
+    }
 }
 
 impl fmt::Display for ParseAttributeError {
@@ -268,7 +270,9 @@ macro_derive_to_json!(global_context_to_json, GlobalContext<G1>);
 pub struct ElgamalGenerator(G1);
 
 impl ElgamalGenerator {
-    pub fn generate() -> Self { ElgamalGenerator(G1::generate(&mut thread_rng())) }
+    pub fn generate() -> Self {
+        ElgamalGenerator(G1::generate(&mut thread_rng()))
+    }
 }
 
 macro_derive_from_bytes!(
@@ -316,7 +320,7 @@ mod test {
     use either::Either::Left;
     use pairing::bls12_381::Bls12;
     use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
-    use std::collections::btree_map::BTreeMap;
+    use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
     type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
     type ExampleCurve = G1;
@@ -346,11 +350,10 @@ mod test {
 
         let prf_key = prf::SecretKey::generate(&mut csprng);
 
-        let expiry_date = 123123123;
         let alist = {
             let mut alist = BTreeMap::new();
             alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
-            alist.insert(AttributeTag::from(1u8), AttributeKind::from(313123333));
+            alist.insert(AttributeTag::from(1u8), AttributeKind::from(313_123_333));
             alist
         };
 
@@ -359,16 +362,22 @@ mod test {
             prf_key,
         };
 
+        let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+        let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2022
         let alist = ExampleAttributeList {
-            expiry: expiry_date,
+            expiry,
+            creation_time,
             alist,
             _phantom: Default::default(),
         };
 
-        let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-            ar_identities: vec![ArIdentity(0), ArIdentity(1), ArIdentity(2)],
-            threshold:     Threshold(2),
-        })
+        let context = make_context_from_ip_info(
+            ip_info.clone(),
+            ChoiceArParameters {
+                ar_identities: vec![ArIdentity(0), ArIdentity(1), ArIdentity(2)],
+                threshold: Threshold(2),
+            },
+        )
         .expect("The constructed ARs are valid.");
         let (pio, randomness) = generate_pio(&context, &aci);
 
@@ -383,23 +392,25 @@ mod test {
         };
 
         let policy = Policy {
-            expiry:     expiry_date,
+            expiry,
+            creation_time,
             policy_vec: {
                 let mut tree = BTreeMap::new();
                 tree.insert(AttributeTag::from(0u8), AttributeKind::from(55));
                 tree
             },
-            _phantom:   Default::default(),
+            _phantom: Default::default(),
         };
 
         let wrong_policy = Policy {
-            expiry:     expiry_date,
+            expiry,
+            creation_time,
             policy_vec: {
                 let mut tree = BTreeMap::new();
                 tree.insert(AttributeTag::from(0u8), AttributeKind::from(5));
                 tree
             },
-            _phantom:   Default::default(),
+            _phantom: Default::default(),
         };
 
         let mut keys = BTreeMap::new();

@@ -28,6 +28,7 @@ use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, to_value, Value};
 
 use sha2::{Digest, Sha256};
+use std::convert::TryFrom;
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
 type ExampleCurve = G1;
@@ -180,10 +181,13 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
         .iter()
         .map(|x| x.ar_identity)
         .collect::<Vec<_>>();
-    let context = make_context_from_ip_info(ip_info, ChoiceArParameters {
-        ar_identities,
-        threshold,
-    })
+    let context = make_context_from_ip_info(
+        ip_info,
+        ChoiceArParameters {
+            ar_identities,
+            threshold,
+        },
+    )
     .ok_or_else(|| format_err!("Invalid choice of anonymity revokers. Should not happen."))?;
     let (pio, randomness) = generate_pio(&context, &aci);
 
@@ -266,6 +270,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 
     let policy = Policy {
         expiry: id_object.alist.expiry,
+        creation_time: id_object.alist.creation_time,
         policy_vec,
         _phantom: Default::default(),
     };
@@ -296,11 +301,8 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 // Add data to the attribute list if needed. This is just to simulate the fact
 // that not all attributes are needed.
 fn dummy_alist() -> ExampleAttributeList {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let expiry = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|x| x.as_secs() + 31_556_926) // one year from now as expiry
-        .unwrap_or(0);
+    let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+    let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
     let mut alist = std::collections::BTreeMap::new();
     let len = ATTRIBUTE_NAMES.len();
     // fill in the missing pieces with dummy values.
@@ -312,6 +314,7 @@ fn dummy_alist() -> ExampleAttributeList {
     }
     AttributeList {
         expiry,
+        creation_time,
         alist,
         _phantom: Default::default(),
     }
@@ -532,7 +535,9 @@ pub unsafe fn free_response_string_ext(ptr: *mut c_char) {
 /// # Safety
 /// This function is unsafe in the sense that if the argument pointer was not
 /// Constructed via CString::into_raw its behaviour is undefined.
-pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) { free_response_string_ext(ptr) }
+pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) {
+    free_response_string_ext(ptr)
+}
 
 #[cfg(test)]
 mod test {}

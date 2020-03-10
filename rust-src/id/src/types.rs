@@ -284,9 +284,8 @@ where
 /// NB: The length of this list must be less than 256.
 /// This must be consistent with the value of attributeNames in
 /// haskell-src/Concordium/ID/Types.hs
-pub const ATTRIBUTE_NAMES: [&str; 10] = [
+pub const ATTRIBUTE_NAMES: [&str; 9] = [
     "MaxAccount",
-    "CreationTime",
     "PreName",
     "LastName",
     "Sex",
@@ -371,14 +370,58 @@ pub trait Attribute<F: Field>:
     fn to_field_element(&self) -> F;
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
+pub struct YearMonth {
+    pub year:  u16,
+    pub month: u8,
+}
+
+impl YearMonth {
+    pub fn new(year: u16, month: u8) -> YearMonth { YearMonth { year, month } }
+
+    pub fn now() -> YearMonth {
+        use chrono::Datelike;
+        let now = chrono::Utc::now();
+        YearMonth {
+            year:  now.year() as u16,
+            month: now.month() as u8,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidYearMonthEncoding {}
+
+impl TryFrom<u64> for YearMonth {
+    // TryFrom -> Option
+    type Error = InvalidYearMonthEncoding;
+
+    /// Try to convert unsigned 64-bit integer to expiry (year and month).
+    /// Least significant byte is month, following two bytes are year
+    fn try_from(v: u64) -> Result<Self, Self::Error> {
+        let year = (v >> 8) as u16;
+        let month = (v & 0xFF) as u8;
+        if year < 1900 || year > 2200 || month < 1 || month > 12 {
+            return Err(InvalidYearMonthEncoding {});
+        }
+        Ok(YearMonth { year, month })
+    }
+}
+
+impl From<YearMonth> for u64 {
+    /// Convert expiry (year and month) to unsigned 64-bit integer.
+    /// Least significant byte is month, following two bytes are year
+    fn from(v: YearMonth) -> Self { ((v.year as u64) << 16) | (v.month as u64 & 0xFF) }
+}
+
 #[derive(Clone, Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "F: Field, AttributeType: Attribute<F> + SerdeSerialize",
     deserialize = "F: Field, AttributeType: Attribute<F> + SerdeDeserialize<'de>"
 ))]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
-    #[serde(rename = "expiryDate")]
-    pub expiry: u64,
+    pub expiry: YearMonth,
+    pub creation_time: YearMonth,
     /// The attributes map. The map size can be at most k where k is the number
     /// of bits that fit into a field element.
     #[serde(rename = "chosenAttributes")]
@@ -738,9 +781,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Expiry time, in seconds since the unix epoch, ignoring leap seconds.
-    #[serde(rename = "expiryDate")]
-    pub expiry: u64,
+    pub expiry: YearMonth,
+    #[serde(rename = "creationTime")]
+    pub creation_time: YearMonth,
     /// Revealed attributes for now. In the future we might have
     /// additional items with (Tag, Property, Proof).
     #[serde(rename = "revealedAttributes")]
@@ -752,6 +795,7 @@ pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, AttributeType> {
     fn serial<B: Buffer>(&self, out: &mut B) {
         out.put(&self.expiry);
+        out.put(&self.creation_time);
         out.put(&(self.policy_vec.len() as u16));
         serial_map_no_length(&self.policy_vec, out)
     }
@@ -760,10 +804,12 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, Attribu
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, AttributeType> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
         let expiry = source.get()?;
+        let creation_time = source.get()?;
         let len: u16 = source.get()?;
         let policy_vec = deserial_map_no_length(source, usize::from(len))?;
         Ok(Policy {
             expiry,
+            creation_time,
             policy_vec,
             _phantom: Default::default(),
         })
