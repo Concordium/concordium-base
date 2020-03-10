@@ -34,14 +34,15 @@ pub fn parse_expiry(input: &str) -> io::Result<YearMonth> {
     // Parse MM-YYYY as YearMonth
     let parts = input.split('-').collect::<Vec<&str>>();
     if parts.len() != 2 {
-        return Err(Error::new(ErrorKind::Other, input.to_string()))
+        return Err(Error::new(ErrorKind::Other, input.to_string()));
     }
-    let month = parts[0].parse::<u8>().map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
-    let year = parts[1].parse::<u16>().map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
-    Ok(YearMonth {
-        year,
-        month,
-    })
+    let month = parts[0]
+        .parse::<u8>()
+        .map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
+    let year = parts[1]
+        .parse::<u16>()
+        .map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
+    Ok(YearMonth { year, month })
 }
 
 pub fn write_json_to_file<T: SerdeSerialize>(filepath: &str, v: &T) -> io::Result<()> {

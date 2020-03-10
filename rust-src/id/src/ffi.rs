@@ -363,7 +363,7 @@ mod test {
         };
 
         let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-        let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2022
+        let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
         let alist = ExampleAttributeList {
             expiry,
             creation_time,
