@@ -75,7 +75,9 @@ fn mk_ar_description(n: usize) -> Description {
 
 /// Read expiry from stdin in format MM-YYYY and return YearMonth
 fn read_expiry() -> io::Result<YearMonth> {
-    let input: String = Input::new().with_prompt("Expiry month/year (e.g. 05-2025)").interact()?;
+    let input: String = Input::new()
+        .with_prompt("Expiry month/year (e.g. 05-2025)")
+        .interact()?;
     parse_expiry(&input)
 }
 
@@ -398,10 +400,10 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         }
     }
     let policy = Policy {
-        expiry:     id_object.alist.expiry,
+        expiry:        id_object.alist.expiry,
         creation_time: id_object.alist.creation_time,
-        policy_vec: revealed_attributes,
-        _phantom:   Default::default(),
+        policy_vec:    revealed_attributes,
+        _phantom:      Default::default(),
     };
 
     // We now generate or read account verification/signature key pair.
