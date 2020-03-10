@@ -14,6 +14,7 @@ import Data.Char(toLower)
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
 import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet as HS
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Lens.Micro.Platform
@@ -152,6 +153,82 @@ instance Eq Transaction where
 -- |The Ord instance does comparison only on hashes.
 instance Ord Transaction where
   compare t1 t2 = compare (trHash t1) (trHash t2)
+
+
+type CredentialArrivalTime = Word64
+
+data CredentialDeploymentWithMeta = CDWM {
+  -- |Credential deployment information to be deployed.
+  cdiwmCDI :: !CredentialDeploymentInformation,
+  -- |Size of the credential in bytes.
+  cdiwmSize :: !Int,
+  -- |Hash of the entire credential. We can't just reuse the RegId because
+  -- that could lead to dummy credentials (which are invalid) preventing
+  -- valid credentials being deployed.
+  cdiwmHash :: !H.Hash,
+  cdiwmArrivalTime :: CredentialArrivalTime
+  } deriving(Eq, Show)
+
+instance HashableTo H.Hash CredentialDeploymentWithMeta where
+    getHash CDWM{..} = cdiwmHash
+
+-- |Data that can go onto a block.
+data BlockItem' msg =
+  NormalTransaction {
+    biTransaction :: !msg
+  }
+  | CredentialDeployment {
+      biCred :: !CredentialDeploymentWithMeta
+  } deriving(Eq, Show)
+
+type BlockItem = BlockItem' Transaction
+
+instance HashableTo H.Hash BlockItem where
+    getHash (NormalTransaction tr) = trHash tr
+    getHash CredentialDeployment{..} = getHash biCred
+
+class IntoExecutable a msg where
+  intoExecutable :: a -> BlockItem' msg
+
+instance IntoExecutable msg msg where
+  {-# INLINE intoExecutable #-}
+  intoExecutable = NormalTransaction
+
+instance IntoExecutable BlockItem Transaction where
+  {-# INLINE intoExecutable #-}
+  intoExecutable = id
+
+getCDWM :: TransactionTime -> S.Get CredentialDeploymentWithMeta
+getCDWM time = do
+    start <- S.bytesRead
+    (cdiwmCDI, end) <- S.lookAhead $ do
+      cdi <- S.get
+      end <- S.bytesRead
+      return (cdi, end)
+    let cdiwmSize = end - start
+    bytes <- S.getByteString cdiwmSize
+    let cdiwmHash = H.hash bytes
+    return CDWM{cdiwmArrivalTime=time,..}
+
+getBlockItem :: Word64 -- ^Timestamp of when the item arrived.
+             -> S.Get BlockItem
+getBlockItem time =
+    S.getWord8 >>= \case
+      0 -> NormalTransaction <$> getUnverifiedTransaction time
+      1 -> CredentialDeployment <$> getCDWM time
+      _ -> fail "Block item must be either normal transaction or credential deployment."
+
+putBlockItem :: S.Putter BlockItem
+putBlockItem NormalTransaction{..} =
+    S.putWord8 0 <>
+    S.put (trBareTransaction biTransaction)
+putBlockItem CredentialDeployment{..} =
+    S.putWord8 1 <>
+    S.put (cdiwmCDI biCred)
+
+blockItemSize :: BlockItem -> Int
+blockItemSize NormalTransaction{..} = trSize biTransaction
+blockItemSize CredentialDeployment{..} = cdiwmSize biCred
 
 -- |Deserialize a transaction, but don't check it's signature.
 --
@@ -329,7 +406,7 @@ getTransactionIndex bh = \case
 
 data TransactionTable = TransactionTable {
     -- |Map from transaction hashes to transactions, together with their current status.
-    _ttHashMap :: HM.HashMap TransactionHash (Transaction, TransactionStatus),
+    _ttHashMap :: HM.HashMap TransactionHash (BlockItem, TransactionStatus),
     _ttNonFinalizedTransactions :: HM.HashMap AccountAddress AccountNonFinalizedTransactions
 }
 makeLenses ''TransactionTable
@@ -347,53 +424,71 @@ emptyTransactionTable = TransactionTable {
 -- and @highNonce@ is the highest nonce known for a transaction associated with that account.
 -- @highNonce@ should always be at least @nextNonce@ (otherwise, what transaction is pending?).
 -- If an account has no pending transactions, then it should not be in the map.
-type PendingTransactionTable = HM.HashMap AccountAddress (Nonce, Nonce)
+data PendingTransactionTable = PTT {
+  _pttWithSender :: HM.HashMap AccountAddress (Nonce, Nonce),
+  _pttDeployCredential :: HS.HashSet TransactionHash
+  } deriving(Eq, Show)
+
+makeLenses ''PendingTransactionTable
 
 emptyPendingTransactionTable :: PendingTransactionTable
-emptyPendingTransactionTable = HM.empty
+emptyPendingTransactionTable = PTT HM.empty HS.empty
 
 -- |Insert an additional element in the pending transaction table.
 -- If the account does not yet exist create it.
 -- NB: This only updates the pending table, and does not ensure that invariants elsewhere are maintained.
 -- PRECONDITION: the next nonce should be less than or equal to the transaction nonce.
 extendPendingTransactionTable :: TransactionData t => Nonce -> t -> PendingTransactionTable -> PendingTransactionTable
-extendPendingTransactionTable nextNonce tx pt = assert (nextNonce <= nonce) $
-  HM.alter (\case Nothing -> Just (nextNonce, nonce)
-                  Just (l, u) -> Just (l, max u nonce)) (transactionSender tx) pt
-  where nonce = transactionNonce tx
+extendPendingTransactionTable nextNonce tx pt = assert (nextNonce <= nonce) $ go
+  where go = pt & pttWithSender . at (transactionSender tx) %~ \case Nothing -> Just (nextNonce, nonce)
+                                                                     Just (l, u) -> Just (l, max u nonce)
+        nonce = transactionNonce tx
 
 -- |Insert an additional element in the pending transaction table.
 -- Does nothing if the next nonce is greater than the transaction nonce.
 -- If the account does not yet exist create it.
 -- NB: This only updates the pending table, and does not ensure that invariants elsewhere are maintained.
 checkedExtendPendingTransactionTable :: TransactionData t => Nonce -> t -> PendingTransactionTable -> PendingTransactionTable
-checkedExtendPendingTransactionTable nextNonce tx pt = if nextNonce > nonce then pt else
-  HM.alter (\case Nothing -> Just (nextNonce, nonce)
-                  Just (l, u) -> Just (l, max u nonce)) (transactionSender tx) pt
+checkedExtendPendingTransactionTable nextNonce tx pt =
+  if nextNonce > nonce then pt else
+    pt & pttWithSender . at (transactionSender tx) %~ \case Nothing -> Just (nextNonce, nonce)
+                                                            Just (l, u) -> Just (l, max u nonce)
   where nonce = transactionNonce tx
 
+-- |Extend the pending transaction table with a credential hash.
+extendPendingTransactionTable' :: TransactionHash -> PendingTransactionTable -> PendingTransactionTable
+extendPendingTransactionTable' hash pt =
+  pt & pttDeployCredential %~ HS.insert hash
 
-forwardPTT :: [Transaction] -> PendingTransactionTable -> PendingTransactionTable
+forwardPTT :: [BlockItem] -> PendingTransactionTable -> PendingTransactionTable
 forwardPTT trs ptt0 = foldl forward1 ptt0 trs
     where
-        forward1 :: PendingTransactionTable -> Transaction -> PendingTransactionTable
-        forward1 ptt tr = ptt & at (transactionSender tr) %~ upd
+        forward1 :: PendingTransactionTable -> BlockItem -> PendingTransactionTable
+        forward1 ptt (NormalTransaction tr) = ptt & pttWithSender . at (transactionSender tr) %~ upd
             where
                 upd Nothing = error "forwardPTT : forwarding transaction that is not pending"
                 upd (Just (low, high)) =
                     assert (low == transactionNonce tr) $ assert (low <= high) $
                         if low == high then Nothing else Just (low+1,high)
+        forward1 ptt CredentialDeployment{..} = ptt & pttDeployCredential %~ upd
+            where
+              upd ps = case HS.member (cdiwmHash biCred) ps of
+                         False -> error "forwardPTT: forwarding a block item that is not pending."
+                         True -> HS.delete (cdiwmHash biCred) ps
 
-reversePTT :: [Transaction] -> PendingTransactionTable -> PendingTransactionTable
+reversePTT :: [BlockItem] -> PendingTransactionTable -> PendingTransactionTable
 reversePTT trs ptt0 = foldr reverse1 ptt0 trs
     where
-        reverse1 :: Transaction -> PendingTransactionTable -> PendingTransactionTable
-        reverse1 tr = at (transactionSender tr) %~ upd
+        reverse1 :: BlockItem -> PendingTransactionTable -> PendingTransactionTable
+        reverse1 (NormalTransaction tr) = pttWithSender . at (transactionSender tr) %~ upd
             where
                 upd Nothing = Just (transactionNonce tr, transactionNonce tr)
                 upd (Just (low, high)) =
                         assert (low == transactionNonce tr + 1) $
                         Just (low-1,high)
+        reverse1 CredentialDeployment{..} = pttDeployCredential %~ upd
+            where
+              upd ps = assert (not (HS.member (cdiwmHash biCred) ps)) $ HS.insert (cdiwmHash biCred) ps
 
 -- |Record special transactions as well for logging purposes.
 data SpecialTransactionOutcome =
