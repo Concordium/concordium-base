@@ -100,11 +100,6 @@ data Payload =
       -- |Amount to transfer.
       tAmount :: !Amount
       }
-  -- |Deploy credentials, creating a new account if one does not yet exist.
-  | DeployCredential {
-      -- |The credentials to deploy.
-      dcCredential :: !IDTypes.CredentialDeploymentInformation
-      }
   -- |Deploy an encryption key to an existing account.
   | DeployEncryptionKey {
       -- |The encryption key to deploy.
@@ -207,14 +202,11 @@ instance S.Serialize Payload where
     P.putWord8 3 <>
     S.put tToAddress <>
     S.put tAmount
-  put DeployCredential{..} =
-    P.putWord8 4 <>
-    S.put dcCredential
   put DeployEncryptionKey{..} =
-    P.putWord8 5 <>
+    P.putWord8 4 <>
     S.put dekKey
   put AddBaker{..} =
-    P.putWord8 6 <>
+    P.putWord8 5 <>
     S.put abElectionVerifyKey <>
     S.put abSignatureVerifyKey <>
     S.put abAggregationVerifyKey <>
@@ -224,24 +216,24 @@ instance S.Serialize Payload where
     S.put abProofAccount <>
     S.put abProofAggregation
   put RemoveBaker{..} =
-    P.putWord8 7 <>
+    P.putWord8 6 <>
     S.put rbId <>
     S.put rbProof
   put UpdateBakerAccount{..} =
-    P.putWord8 8 <>
+    P.putWord8 7 <>
     S.put ubaId <>
     S.put ubaAddress <>
     S.put ubaProof
   put UpdateBakerSignKey{..} =
-    P.putWord8 9 <>
+    P.putWord8 8 <>
     S.put ubsId <>
     S.put ubsKey <>
     S.put ubsProof
   put DelegateStake{..} =
-    P.putWord8 10 <>
+    P.putWord8 9 <>
     S.put dsID
   put UndelegateStake =
-    P.putWord8 11
+    P.putWord8 10
 
   get =
     G.getWord8 >>=
@@ -264,12 +256,9 @@ instance S.Serialize Payload where
               tAmount <- S.get
               return Transfer{..}
             4 -> do
-              dcCredential <- S.get
-              return DeployCredential{..}
-            5 -> do
               dekKey <- S.get
               return DeployEncryptionKey{..}
-            6 -> do
+            5 -> do
               abElectionVerifyKey <- S.get
               abSignatureVerifyKey <- S.get
               abAggregationVerifyKey <- S.get
@@ -279,22 +268,22 @@ instance S.Serialize Payload where
               abProofAccount <- S.get
               abProofAggregation <- S.get
               return AddBaker{..}
-            7 -> do
+            6 -> do
               rbId <- S.get
               rbProof <- S.get
               return RemoveBaker{..}
-            8 -> do
+            7 -> do
               ubaId <- S.get
               ubaAddress <- S.get
               ubaProof <- S.get
               return UpdateBakerAccount{..}
-            9 -> do
+            8 -> do
               ubsId <- S.get
               ubsKey <- S.get
               ubsProof <- S.get
               return UpdateBakerSignKey{..}
-            10 -> DelegateStake <$> S.get
-            11 -> return UndelegateStake
+            9 -> DelegateStake <$> S.get
+            10 -> return UndelegateStake
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 {-# INLINE encodePayload #-}
@@ -448,7 +437,7 @@ newtype TransactionIndex = TransactionIndex Word64
 
 -- |Result of a valid transaction is a transaction summary.
 data TransactionSummary = TransactionSummary {
-  tsSender :: !AccountAddress,
+  tsSender :: !(Maybe AccountAddress),
   tsHash :: !TransactionHash,
   tsCost :: !Amount,
   tsEnergyCost :: !Energy,
@@ -487,9 +476,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   | SerializationFailure -- ^Serialization of the body failed.
                   | OutOfEnergy -- ^We ran of out energy to process this transaction.
                   | Rejected -- ^Rejected due to contract logic.
-                  | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
-                  | NonExistentIdentityProvider !IDTypes.IdentityProviderIdentity
-                  | AccountCredentialInvalid
                   | AccountEncryptionKeyAlreadyExists AccountAddress IDTypes.AccountEncryptionKey
                   | NonExistentRewardAccount !AccountAddress -- ^Reward account desired by the baker does not exist.
                   | InvalidProof -- ^Proof that the baker owns relevant private keys is not valid.
@@ -521,6 +507,10 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
                  | ExpiredTransaction -- ^The transaction has expired.
                  | ExceedsMaxBlockEnergy -- ^The transaction's used energy size exceeds the maximum block energy limit
                  | ExceedsMaxBlockSize -- ^The baker decided that this transaction is too big to put in a block.
+                 | NonExistentIdentityProvider !IDTypes.IdentityProviderIdentity
+                 | NonExistentAccount !AccountAddress -- ^Cannot deploy credential onto a non-existing account.
+                 | AccountCredentialInvalid
+                 | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
       deriving(Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
