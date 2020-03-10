@@ -171,6 +171,10 @@ instance Eq Transaction where
 instance Ord Transaction where
   compare t1 t2 = compare (trHash t1) (trHash t2)
 
+instance S.Serialize Transaction where
+  put = S.put . trBareTransaction
+  get = fail "use getUnverifiedTransaction instead"
+
 -- |Deserialize a transaction, but don't check it's signature.
 --
 -- * @SPEC: <$DOCS/Transactions#serialization-format-transactions>
@@ -275,16 +279,16 @@ instance TransactionData Transaction where
 instance HashableTo H.Hash Transaction where
     getHash = trHash
 
-data AccountNonFinalizedTransactions = AccountNonFinalizedTransactions {
+data AccountNonFinalizedTransactions t = AccountNonFinalizedTransactions {
     -- |Non-finalized transactions (for an account) indexed by nonce.
-    _anftMap :: Map.Map Nonce (Set.Set Transaction),
+    _anftMap :: Map.Map Nonce (Set.Set t),
     -- |The next available nonce at the last finalized block.
     -- 'anftMap' should only contain nonces that are at least 'anftNextNonce'.
     _anftNextNonce :: Nonce
-} deriving (Eq)
+} deriving (Eq, Show)
 makeLenses ''AccountNonFinalizedTransactions
 
-emptyANFT :: AccountNonFinalizedTransactions
+emptyANFT :: AccountNonFinalizedTransactions t
 emptyANFT = AccountNonFinalizedTransactions Map.empty minNonce
 
 -- |Result of a transaction is block dependent.
@@ -312,8 +316,46 @@ data TransactionStatus =
       tsBlockHash :: !BlockHash,
       tsFinResult :: !TransactionIndex
       }
-  deriving(Eq)
+  deriving(Eq, Show)
 makeLenses ''TransactionStatus
+
+instance S.Serialize TransactionStatus where
+  put (Received s) = do
+    S.put (0 :: Word8)
+    S.put s
+  put (Committed s res) = do
+    S.put (1 :: Word8)
+    S.put s
+    S.put $ HM.size res
+    mapM_ (\(h, i) -> do
+              S.put h
+              S.put i) (HM.toList res)
+  put (Finalized s bh res) = do
+    S.put (2 :: Word8)
+    S.put s
+    S.put bh
+    S.put res
+
+  get = do
+    tag <- S.getWord8
+    case tag of
+      0 -> do
+        slot <- S.get
+        return $ Received slot
+      1 -> do
+        slot <- S.get
+        len <- S.get
+        results <- HM.fromList <$> replicateM len (do
+                                           k <- S.get
+                                           v <- S.get
+                                           return (k, v))
+        return $ Committed slot results
+      2 -> do
+        slot <- S.get
+        bh <- S.get
+        res <- S.get
+        return $ Finalized slot bh res
+      _ -> fail $ "Unknown transaction status variant: " ++ show tag
 
 -- |Add a transaction result. This function assumes the transaction is not finalized yet.
 -- If the transaction is already finalized the function will return the original status.
@@ -344,19 +386,6 @@ getTransactionIndex bh = \case
   Committed{..} -> (False, ) <$> HM.lookup bh tsResults
   Finalized{..} -> if bh == tsBlockHash then Just (True, tsFinResult) else Nothing
   _ -> Nothing
-
-data TransactionTable = TransactionTable {
-    -- |Map from transaction hashes to transactions, together with their current status.
-    _ttHashMap :: HM.HashMap TransactionHash (Transaction, TransactionStatus),
-    _ttNonFinalizedTransactions :: HM.HashMap AccountAddress AccountNonFinalizedTransactions
-}
-makeLenses ''TransactionTable
-
-emptyTransactionTable :: TransactionTable
-emptyTransactionTable = TransactionTable {
-        _ttHashMap = HM.empty,
-        _ttNonFinalizedTransactions = HM.empty
-    }
 
 -- |A pending transaction table records whether transactions are pending after
 -- execution of a particular block.  For each account address, if there are
