@@ -17,6 +17,8 @@ use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
 
 use either::Left;
 
+use std::convert::TryFrom;
+
 type ExampleCurve = G1;
 
 type ExampleAttribute = AttributeKind;
@@ -29,7 +31,7 @@ type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, Examp
 fn test_pipeline() {
     let mut csprng = thread_rng();
 
-    let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
+    let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(11, &mut csprng);
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
     let secret = ExampleCurve::generate_scalar(&mut csprng);
@@ -88,7 +90,8 @@ fn test_pipeline() {
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
-    let expiry_date = 123123123;
+    let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+    let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
     let alist = {
         let mut alist = BTreeMap::new();
         alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
@@ -101,7 +104,8 @@ fn test_pipeline() {
     };
 
     let alist = ExampleAttributeList {
-        expiry: expiry_date,
+        expiry,
+        creation_time,
         alist,
         _phantom: Default::default(),
     };
@@ -125,13 +129,14 @@ fn test_pipeline() {
     };
 
     let policy = Policy {
-        expiry:     expiry_date,
+        expiry,
+        creation_time,
         policy_vec: {
             let mut tree = BTreeMap::new();
             tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
             tree
         },
-        _phantom:   Default::default(),
+        _phantom: Default::default(),
     };
 
     let mut keys = BTreeMap::new();

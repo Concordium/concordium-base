@@ -521,8 +521,8 @@ fn compute_pok_sig<
     csprng: &mut R,
 ) -> Fallible<com_eq_sig::ComEqSigProof<P, C>> {
     let att_vec = &alist.alist;
-    // number of user chosen attributes (+2 is for tags and expiry)
-    let num_user_attributes = att_vec.len() + 2;
+    // number of user chosen attributes (+3 is for tags, expiry and creation_time)
+    let num_user_attributes = att_vec.len() + 3;
     // To these there are always two attributes (idCredSec and prf key) added.
     let num_total_attributes = num_user_attributes + 2;
     let num_ars = ar_list.len(); // we commit to each anonymity revoker, with randomness 0
@@ -572,13 +572,18 @@ fn compute_pok_sig<
     let tags_val = Value::new(encode_tags(alist.alist.keys())?);
     let tags_cmm = commitment_key.hide(&tags_val, &zero);
 
-    let expiry_val = Value::new(C::scalar_from_u64(alist.expiry));
+    let expiry_val = Value::new(C::scalar_from_u64(alist.expiry.into()));
     let expiry_cmm = commitment_key.hide(&expiry_val, &zero);
+
+    let creation_time_val = Value::new(C::scalar_from_u64(alist.creation_time.into()));
+    let creation_time_cmm = commitment_key.hide(&creation_time_val, &zero);
 
     secrets.push((tags_val, &zero));
     gxs.push(y_tildas[num_ars + 3]);
     secrets.push((expiry_val, &zero));
     gxs.push(y_tildas[num_ars + 4]);
+    secrets.push((creation_time_val, &zero));
+    gxs.push(y_tildas[num_ars + 5]);
 
     // FIXME: Likely we need to make sure there are enough y_tildas first and fail
     // gracefully otherwise.
@@ -616,6 +621,7 @@ fn compute_pok_sig<
 
     comm_vec.push(tags_cmm);
     comm_vec.push(expiry_cmm);
+    comm_vec.push(creation_time_cmm);
 
     for (idx, v) in alist.alist.iter() {
         match commitments.cmm_attributes.get(idx) {

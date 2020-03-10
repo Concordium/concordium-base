@@ -128,8 +128,6 @@ fn main() {
     };
 
     // Roughly one year
-    let year = std::time::Duration::from_secs(365 * 24 * 60 * 60);
-
     let generate_account = |csprng: &mut ThreadRng| {
         let secret = ExampleCurve::generate_scalar(csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
@@ -142,13 +140,8 @@ fn main() {
         let prf_key = prf::SecretKey::generate(csprng);
 
         // Expire in 1 year from now.
-        let year_from_now = std::time::SystemTime::now()
-            .checked_add(year)
-            .expect("A year from now should not overflow.");
-        let expiry_date = year_from_now
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("Duration in a year should be valid.")
-            .as_secs();
+        let creation_time = YearMonth::now();
+        let expiry = { let mut now = YearMonth::now(); now.year += 1; now };
 
         // no attributes
         let alist = BTreeMap::new();
@@ -158,7 +151,8 @@ fn main() {
         };
 
         let attributes = ExampleAttributeList {
-            expiry: expiry_date,
+            expiry,
+            creation_time,
             alist,
             _phantom: Default::default(),
         };
@@ -170,7 +164,8 @@ fn main() {
         let ip_sig = sig_ok.expect("There is an error in signing");
 
         let policy = Policy {
-            expiry:     expiry_date,
+            expiry,
+            creation_time,
             policy_vec: BTreeMap::new(),
             _phantom:   Default::default(),
         };

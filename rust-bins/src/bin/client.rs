@@ -73,11 +73,10 @@ fn mk_ar_description(n: usize) -> Description {
     mk_dummy_description(s)
 }
 
-/// Reads the expiry date. Only the day, the expiry time is set at the end of
-/// that day.
-fn read_expiry_date() -> io::Result<u64> {
-    let input: String = Input::new().with_prompt("Expiry date").interact()?;
-    parse_expiry_date(&input)
+/// Read expiry from stdin in format MM-YYYY and return YearMonth
+fn read_expiry() -> io::Result<YearMonth> {
+    let input: String = Input::new().with_prompt("Expiry month/year (e.g. 05-2025)").interact()?;
+    parse_expiry(&input)
 }
 
 fn main() {
@@ -400,6 +399,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     }
     let policy = Policy {
         expiry:     id_object.alist.expiry,
+        creation_time: id_object.alist.creation_time,
         policy_vec: revealed_attributes,
         _phantom:   Default::default(),
     };
@@ -577,13 +577,15 @@ fn handle_act_as_ip(matches: &ArgMatches) {
             }
         };
 
-    let expiry_date = match read_expiry_date() {
-        Ok(expiry_date) => expiry_date,
+    let expiry = match read_expiry() {
+        Ok(expiry) => expiry,
         Err(e) => {
-            eprintln!("Could not read credential expiry date because {}", e);
+            eprintln!("Could not read credential expiry because {}", e);
             return;
         }
     };
+
+    let creation_time = YearMonth::now();
 
     let tags = {
         match Checkboxes::new()
@@ -616,7 +618,8 @@ fn handle_act_as_ip(matches: &ArgMatches) {
     };
 
     let attributes = AttributeList {
-        expiry: expiry_date,
+        expiry,
+        creation_time,
         alist,
         _phantom: Default::default(),
     };
