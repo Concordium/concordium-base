@@ -141,7 +141,11 @@ fn main() {
 
         // Expire in 1 year from now.
         let creation_time = YearMonth::now();
-        let expiry = { let mut now = YearMonth::now(); now.year += 1; now };
+        let expiry = {
+            let mut now = YearMonth::now();
+            now.year += 1;
+            now
+        };
 
         // no attributes
         let alist = BTreeMap::new();
@@ -167,7 +171,7 @@ fn main() {
             expiry,
             creation_time,
             policy_vec: BTreeMap::new(),
-            _phantom:   Default::default(),
+            _phantom: Default::default(),
         };
 
         let mut keys = BTreeMap::new();
