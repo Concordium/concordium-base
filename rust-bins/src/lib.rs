@@ -1,8 +1,6 @@
 use id::{ffi::*, types::*};
 use pairing::bls12_381::Bls12;
 
-use chrono::NaiveDateTime;
-
 use serde_json::{to_string_pretty, to_writer_pretty};
 
 use curve_arithmetic::curve_arithmetic::*;
@@ -32,12 +30,18 @@ pub fn read_identity_providers() -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>:
     read_json_from_file(IDENTITY_PROVIDERS).ok()
 }
 
-pub fn parse_expiry_date(input: &str) -> io::Result<u64> {
-    let mut input = input.to_owned();
-    input.push_str(" 23:59:59");
-    let dt = NaiveDateTime::parse_from_str(&input, "%d %B %Y %H:%M:%S")
-        .map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
-    Ok(dt.timestamp() as u64)
+pub fn parse_expiry(input: &str) -> io::Result<YearMonth> {
+    // Parse MM-YYYY as YearMonth
+    let parts = input.split('-').collect::<Vec<&str>>();
+    if parts.len() != 2 {
+        return Err(Error::new(ErrorKind::Other, input.to_string()))
+    }
+    let month = parts[0].parse::<u8>().map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
+    let year = parts[1].parse::<u16>().map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
+    Ok(YearMonth {
+        year,
+        month,
+    })
 }
 
 pub fn write_json_to_file<T: SerdeSerialize>(filepath: &str, v: &T) -> io::Result<()> {

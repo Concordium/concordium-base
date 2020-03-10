@@ -352,8 +352,10 @@ fn verify_pok_sig<
     blinded_sig: &ps_sig::BlindedSignature<P>,
     proof: &com_eq_sig::ComEqSigProof<P, C>,
 ) -> bool {
+    // Capacity for id_cred_sec, cmm_prf, threshold, tags, expiry, creation_time
+    // choice_ar_parameters and cmm_attributes
     let mut comm_vec =
-        Vec::with_capacity(2 + 1 + choice_ar_parameters.len() + commitments.cmm_attributes.len());
+        Vec::with_capacity(6 + choice_ar_parameters.len() + commitments.cmm_attributes.len());
     let cmm_id_cred_sec = commitments.cmm_id_cred_sec_sharing_coeff[0];
     comm_vec.push(cmm_id_cred_sec);
     comm_vec.push(commitments.cmm_prf);
@@ -382,7 +384,12 @@ fn verify_pok_sig<
     // add commitment with randomness 0 for variant and expiry of
     // the attribute list
     comm_vec.push(commitment_key.hide(&Value::new(tags), &zero));
-    comm_vec.push(commitment_key.hide(&Value::new(C::scalar_from_u64(policy.expiry)), &zero));
+    comm_vec
+        .push(commitment_key.hide(&Value::new(C::scalar_from_u64(policy.expiry.into())), &zero));
+    comm_vec.push(commitment_key.hide(
+        &Value::new(C::scalar_from_u64(policy.creation_time.into())),
+        &zero,
+    ));
 
     // now, we go through the policy and remaining commitments and
     // put them into the vector of commitments in order to check the signature.
@@ -452,6 +459,7 @@ mod tests {
     use pedersen_scheme::key as PedersenKey;
     use rand::*;
     use std::collections::btree_map::BTreeMap;
+    use std::convert::TryFrom;
 
     #[test]
     fn test_verify_cdi() {
@@ -485,18 +493,20 @@ mod tests {
             signature: ip_sig,
         };
         let id_use_data = IdObjectUseData { aci, randomness };
-        let expiry_date = 123123123;
+        let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+        let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
         let policy = Policy {
-            expiry:     expiry_date,
+            expiry,
+            creation_time,
             policy_vec: {
                 let mut tree = BTreeMap::new();
                 tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
                 tree
             },
-            _phantom:   Default::default(),
+            _phantom: Default::default(),
         };
         let acc_data = AccountData {
-            keys:     {
+            keys: {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
                 keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));

@@ -11,6 +11,7 @@ use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
 use ps_sig;
 use std::collections::btree_map::BTreeMap;
+use std::convert::TryFrom;
 
 use rand::*;
 
@@ -38,8 +39,8 @@ pub fn test_create_ars<T: Rng>(
         let ar_info = ArInfo::<ExampleCurve> {
             ar_identity: ArIdentity(i as u32),
             ar_description: Description {
-                name:        format!("AnonymityRevoker{}", i),
-                url:         format!("AnonymityRevoker{}.com", i),
+                name: format!("AnonymityRevoker{}", i),
+                url: format!("AnonymityRevoker{}.com", i),
                 description: format!("AnonymityRevoker{}", i),
             },
             ar_public_key,
@@ -74,14 +75,14 @@ pub fn test_create_ip_info<T: Rng>(
     (
         IpData {
             public_ip_info: IpInfo {
-                ip_identity:    IpIdentity(0),
+                ip_identity: IpIdentity(0),
                 ip_description: Description {
-                    name:        "IP0".to_owned(),
-                    url:         "IP0.com".to_owned(),
+                    name: "IP0".to_owned(),
+                    url: "IP0.com".to_owned(),
                     description: "IP0".to_owned(),
                 },
-                ip_verify_key:  ip_public_key,
-                ip_ars:         IpAnonymityRevokers {
+                ip_verify_key: ip_public_key,
+                ip_ars: IpAnonymityRevokers {
                     ars: ar_infos,
                     ar_cmm_key: ar_ck,
                     ar_base,
@@ -90,7 +91,7 @@ pub fn test_create_ip_info<T: Rng>(
             ip_secret_key,
             metadata: IpMetadata {
                 issuance_start: "URL.com".to_owned(),
-                icon:           "BeautifulIcon.ico".to_owned(),
+                icon: "BeautifulIcon.ico".to_owned(),
             },
         },
         ar_keys,
@@ -129,10 +130,13 @@ pub fn test_create_pio(
     let ars: Vec<ArIdentity> = (0..threshold).map(ArIdentity).collect::<Vec<_>>();
 
     // Create context
-    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        ar_identities: ars,
-        threshold:     Threshold(threshold),
-    })
+    let context = make_context_from_ip_info(
+        ip_info.clone(),
+        ChoiceArParameters {
+            ar_identities: ars,
+            threshold: Threshold(threshold),
+        },
+    )
     .expect("The constructed ARs are invalid.");
 
     // Create and return PIO
@@ -147,9 +151,11 @@ pub fn test_create_attributes() -> ExampleAttributeList {
     alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
     alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
 
-    let expiry = 123123123;
+    let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+    let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
     ExampleAttributeList {
         expiry,
+        creation_time,
         alist,
         _phantom: Default::default(),
     }
@@ -187,18 +193,20 @@ fn test_pipeline() {
         signature: ip_sig,
     };
     let id_use_data = IdObjectUseData { aci, randomness };
-    let expiry_date = 123123123;
+    let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+    let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
     let policy = Policy {
-        expiry:     expiry_date,
+        expiry,
+        creation_time,
         policy_vec: {
             let mut tree = BTreeMap::new();
             tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
             tree
         },
-        _phantom:   Default::default(),
+        _phantom: Default::default(),
     };
     let acc_data = AccountData {
-        keys:     {
+        keys: {
             let mut keys = BTreeMap::new();
             keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
             keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
