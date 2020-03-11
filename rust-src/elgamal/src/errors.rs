@@ -1,12 +1,3 @@
-// -*- mode: rust; -*-
-//
-// This file is part of concordium_crypto
-// Copyright (c) 2019 -
-// See LICENSE for licensing information.
-//
-// Authors:
-// - bm@concordium.com
-
 // rustc seems to think the typenames in match statements (e.g. in
 // Display) should be snake cased, for some reason.
 #![allow(non_snake_case)]

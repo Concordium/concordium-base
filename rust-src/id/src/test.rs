@@ -8,14 +8,15 @@ use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::bls12_381::{Bls12, G1};
+use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
 use ps_sig;
 use std::collections::btree_map::BTreeMap;
 
 use rand::*;
 
-use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
-
 use either::Left;
+
+type ExamplePairing = Bls12;
 
 type ExampleCurve = G1;
 
@@ -23,107 +24,170 @@ type ExampleAttribute = AttributeKind;
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
 
-// use std::{io::Write,fs::File};
+/// Create #num_ars anonymity revokers to be used by test
+pub fn test_create_ars<T: Rng>(
+    ar_base: &ExampleCurve,
+    num_ars: u8,
+    csprng: &mut T,
+) -> (Vec<ArInfo<ExampleCurve>>, Vec<SecretKey<ExampleCurve>>) {
+    let mut ar_infos = Vec::new();
+    let mut ar_keys = Vec::new();
+    for i in 0..num_ars {
+        let ar_secret_key = SecretKey::generate(ar_base, csprng);
+        let ar_public_key = PublicKey::from(&ar_secret_key);
+        let ar_info = ArInfo::<ExampleCurve> {
+            ar_identity: ArIdentity(i as u32),
+            ar_description: Description {
+                name:        format!("AnonymityRevoker{}", i),
+                url:         format!("AnonymityRevoker{}.com", i),
+                description: format!("AnonymityRevoker{}", i),
+            },
+            ar_public_key,
+        };
+        ar_infos.push(ar_info);
+        ar_keys.push(ar_secret_key);
+    }
+    (ar_infos, ar_keys)
+}
 
-#[test]
-fn test_pipeline() {
-    let mut csprng = thread_rng();
-
-    let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
+/// Create identity provider with #num_ars ARs to be used by tests
+pub fn test_create_ip_info<T: Rng>(
+    csprng: &mut T,
+    num_ars: u8,
+    max_attrs: u8,
+) -> (
+    IpData<ExamplePairing, ExampleCurve>,
+    Vec<SecretKey<ExampleCurve>>,
+) {
+    // Create key for IP long enough to encode the attributes and anonymity
+    // revokers.
+    let ps_len = (5 + num_ars + max_attrs) as usize;
+    let ip_secret_key = ps_sig::secret::SecretKey::<ExamplePairing>::generate(ps_len, csprng);
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
+    // Create ARs
+    let ar_ck = pedersen_key::CommitmentKey::generate(csprng);
+    let ar_base = ExampleCurve::generate(csprng);
+    let (ar_infos, ar_keys) = test_create_ars(&ar_base, num_ars, csprng);
+
+    // Return IpData with public info and private key
+    (
+        IpData {
+            public_ip_info: IpInfo {
+                ip_identity:    IpIdentity(0),
+                ip_description: Description {
+                    name:        "IP0".to_owned(),
+                    url:         "IP0.com".to_owned(),
+                    description: "IP0".to_owned(),
+                },
+                ip_verify_key:  ip_public_key,
+                ip_ars:         IpAnonymityRevokers {
+                    ars: ar_infos,
+                    ar_cmm_key: ar_ck,
+                    ar_base,
+                },
+            },
+            ip_secret_key,
+            metadata: IpMetadata {
+                issuance_start: "URL.com".to_owned(),
+                icon:           "BeautifulIcon.ico".to_owned(),
+            },
+        },
+        ar_keys,
+    )
+}
+
+/// Create random AccCredentialInfo (ACI) to be used by tests
+pub fn test_create_aci<T: Rng>(csprng: &mut T) -> AccCredentialInfo<ExampleCurve> {
+    let secret = ExampleCurve::generate_scalar(csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_cred: IdCredentials {
             id_cred_sec: PedersenValue::new(secret),
         },
     };
 
-    let ar_base = ExampleCurve::generate(&mut csprng);
-
-    let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
-    let ar1_public_key = PublicKey::from(&ar1_secret_key);
-    let ar1_info = ArInfo::<G1> {
-        ar_identity:    ArIdentity(1),
-        ar_description: mk_dummy_description("A good AR".to_string()),
-        ar_public_key:  ar1_public_key,
-    };
-
-    let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
-    let ar2_public_key = PublicKey::from(&ar2_secret_key);
-    let ar2_info = ArInfo::<G1> {
-        ar_identity:    ArIdentity(2),
-        ar_description: mk_dummy_description("A nice AR".to_string()),
-        ar_public_key:  ar2_public_key,
-    };
-
-    let ar3_secret_key = SecretKey::generate(&ar_base, &mut csprng);
-    let ar3_public_key = PublicKey::from(&ar3_secret_key);
-    let ar3_info = ArInfo::<G1> {
-        ar_identity:    ArIdentity(3),
-        ar_description: mk_dummy_description("Weird AR".to_string()),
-        ar_public_key:  ar3_public_key,
-    };
-
-    let ar4_secret_key = SecretKey::generate(&ar_base, &mut csprng);
-    let ar4_public_key = PublicKey::from(&ar4_secret_key);
-    let ar4_info = ArInfo::<G1> {
-        ar_identity:    ArIdentity(4),
-        ar_description: mk_dummy_description("Ok AR".to_string()),
-        ar_public_key:  ar4_public_key,
-    };
-
-    let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
-
-    let ip_info = IpInfo {
-        ip_identity:    IpIdentity(88),
-        ip_description: mk_dummy_description("IP88".to_string()),
-        ip_verify_key:  ip_public_key,
-        ip_ars:         IpAnonymityRevokers {
-            ars: vec![ar1_info, ar2_info, ar3_info, ar4_info],
-            ar_cmm_key: ar_ck,
-            ar_base,
-        },
-    };
-
-    let prf_key = prf::SecretKey::generate(&mut csprng);
-
-    let expiry_date = 123123123;
-    let alist = {
-        let mut alist = BTreeMap::new();
-        alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
-        alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
-        alist
-    };
-    let aci = AccCredentialInfo {
+    let prf_key = prf::SecretKey::generate(csprng);
+    AccCredentialInfo {
         cred_holder_info: ah_info,
         prf_key,
-    };
+    }
+}
 
-    let alist = ExampleAttributeList {
-        expiry: expiry_date,
+/// Create PreIdentityObject for an account holder to be used by tests,
+/// with the anonymity revocation using all but the last AR.
+pub fn test_create_pio(
+    aci: &AccCredentialInfo<ExampleCurve>,
+    ip_info: &IpInfo<ExamplePairing, ExampleCurve>,
+    num_ars: u8,
+) -> (
+    Context<ExamplePairing, ExampleCurve>,
+    PreIdentityObject<ExamplePairing, ExampleCurve>,
+    ps_sig::SigRetrievalRandomness<ExamplePairing>,
+) {
+    // Select all ARs except last one
+    let threshold = num_ars as u32 - 1;
+    let ars: Vec<ArIdentity> = (0..threshold).map(ArIdentity).collect::<Vec<_>>();
+
+    // Create context
+    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+        ar_identities: ars,
+        threshold:     Threshold(threshold),
+    })
+    .expect("The constructed ARs are invalid.");
+
+    // Create and return PIO
+    let (pio, randomness) = generate_pio(&context, &aci);
+    (context, pio, randomness)
+}
+
+/// Create example attributes to be used by tests.
+/// The attributes are hardcoded, one (8u8) being in the policy
+pub fn test_create_attributes() -> ExampleAttributeList {
+    let mut alist = BTreeMap::new();
+    alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
+    alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
+
+    let expiry = 123123123;
+    ExampleAttributeList {
+        expiry,
         alist,
         _phantom: Default::default(),
-    };
+    }
+}
 
-    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        ar_identities: vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
-        threshold:     Threshold(2),
-    })
-    .expect("The constructed ARs are valid.");
-    let (pio, randomness) = generate_pio(&context, &aci);
+#[test]
+fn test_pipeline() {
+    let mut csprng = thread_rng();
 
+    // Generate PIO
+    let max_attrs = 10;
+    let num_ars = 5;
+    let (
+        IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            metadata: _,
+        },
+        ar_keys,
+    ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+    let aci = test_create_aci(&mut csprng);
+    let (_context, pio, randomness) = test_create_pio(&aci, &ip_info, num_ars);
+    let alist = test_create_attributes();
     let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
-
-    // First test, check that we have a valid signature.
     assert!(sig_ok.is_ok());
 
+    // Generate CDI
     let ip_sig = sig_ok.unwrap();
-
     let global_ctx = GlobalContext {
         on_chain_commitment_key: pedersen_key::CommitmentKey::generate(&mut csprng),
     };
-
+    let id_object = IdentityObject {
+        pre_identity_object: pio,
+        alist,
+        signature: ip_sig,
+    };
+    let id_use_data = IdObjectUseData { aci, randomness };
+    let expiry_date = 123123123;
     let policy = Policy {
         expiry:     expiry_date,
         policy_vec: {
@@ -133,25 +197,16 @@ fn test_pipeline() {
         },
         _phantom:   Default::default(),
     };
-
-    let mut keys = BTreeMap::new();
-    keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-    keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-    keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
-
     let acc_data = AccountData {
-        keys,
+        keys:     {
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+            keys
+        },
         existing: Left(SignatureThreshold(2)),
     };
-
-    let id_use_data = IdObjectUseData { aci, randomness };
-
-    let id_object = IdentityObject {
-        pre_identity_object: pio,
-        alist,
-        signature: ip_sig,
-    };
-
     let cdi = generate_cdi(
         &ip_info,
         &global_ctx,
@@ -162,18 +217,10 @@ fn test_pipeline() {
         &acc_data,
     )
     .expect("Should generate the credential successfully.");
+    let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
+    assert_eq!(cdi_check, Ok(()));
 
-    // let mut out = Vec::new();
-    // let gc_bytes = global_ctx.to_bytes();
-    // out.extend_from_slice(&(gc_bytes.len() as u32).to_be_bytes());
-    // out.extend_from_slice(&gc_bytes);
-    // let ip_info_bytes = ip_info.to_bytes();
-    // out.extend_from_slice(&(ip_info_bytes.len() as u32).to_be_bytes());
-    // out.extend_from_slice(&ip_info_bytes);
-    // out.extend_from_slice(&cdi.to_bytes());
-    // let file = File::create("foo.bin");
-    // file.unwrap().write_all(&out);
-
+    // Verify serialization
     let cdi_values = serialize_deserialize(&cdi.values);
     assert!(
         cdi_values.is_ok(),
@@ -204,33 +251,22 @@ fn test_pipeline() {
         "It should deserialize back to what we started with."
     );
 
-    // assert_eq!(4, cdi.commitments.cmm_attributes.len(), "Attribute list length
-    // check."); now check that the generated credentials are indeed valid.
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
-    assert_eq!(cdi_check, Ok(()));
-
-    // revoking anonymity
-    let second_ar = cdi
-        .values
-        .ar_data
-        .iter()
-        .find(|&x| x.ar_identity == ArIdentity(2))
-        .unwrap();
-    let decrypted_share_ar2 = (
-        second_ar.id_cred_pub_share_number.into(),
-        ar2_secret_key.decrypt(&second_ar.enc_id_cred_pub_share),
-    );
-    let fourth_ar = cdi
-        .values
-        .ar_data
-        .iter()
-        .find(|&x| x.ar_identity == ArIdentity(4))
-        .unwrap();
-    let decrypted_share_ar4 = (
-        fourth_ar.id_cred_pub_share_number,
-        ar4_secret_key.decrypt(&fourth_ar.enc_id_cred_pub_share),
-    );
-    let revealed_id_cred_pub = reveal_id_cred_pub(&vec![decrypted_share_ar2, decrypted_share_ar4]);
+    // Revoking anonymity using all but one AR
+    let mut shares = Vec::new();
+    for i in 0..(num_ars - 1) {
+        let ar = cdi
+            .values
+            .ar_data
+            .iter()
+            .find(|&x| x.ar_identity == ArIdentity(i as u32))
+            .unwrap();
+        let decrypted_share = (
+            ar.id_cred_pub_share_number.into(),
+            ar_keys[i as usize].decrypt(&ar.enc_id_cred_pub_share),
+        );
+        shares.push(decrypted_share);
+    }
+    let revealed_id_cred_pub = reveal_id_cred_pub(&shares);
     assert_eq!(
         revealed_id_cred_pub,
         ip_info

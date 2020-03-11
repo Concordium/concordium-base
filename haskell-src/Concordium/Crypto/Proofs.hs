@@ -2,7 +2,6 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.Proofs
   (Dlog25519Proof,
@@ -46,11 +45,6 @@ dlogProofSize = 64
 
 instance FixedLength Dlog25519ProofLength where
   fixedLength _ = dlogProofSize
-
--- instance NFData Data.Primitive.ByteArray where
---   -- ByteArray# is an unlifted type and can thus not be an unevaluated thunk;
---   -- matching on the constructor is therefore sufficient
---   rnf (Data.Primitive.ByteArray _) = ()
 
 instance NFData Dlog25519Proof where
   rnf x = rwhnf x
