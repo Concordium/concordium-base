@@ -4,7 +4,7 @@ import Criterion
 import Criterion.Main
 import Criterion.Types
 
-import Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as BS
 -- import Data.ByteString.Lazy as BSL
 
 import Concordium.Crypto.SHA256
@@ -17,11 +17,18 @@ setup n = do
   let full = header <> sig <> body
   return (header, sig, body, full)
 
+setupSimple :: Int -> IO BS.ByteString
+setupSimple n = return $ BS.replicate n '0'
+
 hashAll :: Int -> Benchmark
 hashAll n =
   env (setup n) $ \ ~(_header, _sig, _body, full) ->
           bench "all" $ nf (\d -> hashToByteString (hash d)) full
 
+hashSimple :: Int -> Benchmark
+hashSimple n =
+  env (setupSimple n) $ \testString ->
+          bench ("n = " ++ show n) $ nf (\s -> hashToByteString (hash s)) testString
 
 hashCompound :: Int -> Benchmark
 hashCompound n =
