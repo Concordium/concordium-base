@@ -172,6 +172,13 @@ data CredentialDeploymentWithMeta = CDWM {
 instance HashableTo H.Hash CredentialDeploymentWithMeta where
     getHash CDWM{..} = cdiwmHash
 
+fromCDI :: CredentialArrivalTime -> CredentialDeploymentInformation -> CredentialDeploymentWithMeta
+fromCDI cdiwmArrivalTime cdiwmCDI =
+  let cdiBytes = S.encode cdiwmCDI
+      cdiwmSize = BS.length cdiBytes
+      cdiwmHash = H.hash cdiBytes
+  in CDWM{..}
+
 -- |Data that can go onto a block.
 data BlockItem' msg =
   NormalTransaction {
