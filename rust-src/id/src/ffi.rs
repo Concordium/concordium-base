@@ -24,7 +24,7 @@ use serde::{
 use serde_json;
 
 /// Concrete attribute kinds
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 // represented as big-endian bytes.
 pub struct AttributeKind([u8; 31]);
 
@@ -319,14 +319,12 @@ pub extern "C" fn elgamal_cipher_gen() -> *mut elgamal::cipher::Cipher<G1> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{account_holder::*, identity_provider::*, secret_sharing::Threshold};
+    use crate::{account_holder::*, identity_provider::*, secret_sharing::Threshold, test::*};
     use dodis_yampolskiy_prf::secret as prf;
     use ed25519_dalek as ed25519;
     use either::Either::Left;
-    use elgamal::{public::PublicKey, secret::SecretKey};
     use pairing::bls12_381::Bls12;
     use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
-    use ps_sig;
     use std::collections::btree_map::BTreeMap;
 
     type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
@@ -335,9 +333,6 @@ mod test {
     fn test_pipeline() {
         let mut csprng = thread_rng();
 
-        let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
-        let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
-
         let secret = ExampleCurve::generate_scalar(&mut csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
             id_cred: IdCredentials {
@@ -345,52 +340,18 @@ mod test {
             },
         };
 
-        let ar_base = ExampleCurve::generate(&mut csprng);
-
-        let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
-        let ar1_public_key = PublicKey::from(&ar1_secret_key);
-        let ar1_info = ArInfo::<G1> {
-            ar_identity:    ArIdentity(1),
-            ar_description: mk_dummy_description("A good AR".to_string()),
-            ar_public_key:  ar1_public_key,
-        };
-
-        let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
-        let ar2_public_key = PublicKey::from(&ar2_secret_key);
-        let ar2_info = ArInfo::<G1> {
-            ar_identity:    ArIdentity(2),
-            ar_description: mk_dummy_description("A nice AR".to_string()),
-            ar_public_key:  ar2_public_key,
-        };
-
-        let ar3_secret_key = SecretKey::generate(&ar_base, &mut csprng);
-        let ar3_public_key = PublicKey::from(&ar3_secret_key);
-        let ar3_info = ArInfo::<G1> {
-            ar_identity:    ArIdentity(3),
-            ar_description: mk_dummy_description("Weird AR".to_string()),
-            ar_public_key:  ar3_public_key,
-        };
-
-        let ar4_secret_key = SecretKey::generate(&ar_base, &mut csprng);
-        let ar4_public_key = PublicKey::from(&ar4_secret_key);
-        let ar4_info = ArInfo::<G1> {
-            ar_identity:    ArIdentity(4),
-            ar_description: mk_dummy_description("Ok AR".to_string()),
-            ar_public_key:  ar4_public_key,
-        };
-
-        let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
-
-        let ip_info = IpInfo {
-            ip_identity:    IpIdentity(88),
-            ip_description: mk_dummy_description("IP88".to_string()),
-            ip_verify_key:  ip_public_key,
-            ip_ars:         IpAnonymityRevokers {
-                ars: vec![ar1_info, ar2_info, ar3_info, ar4_info],
-                ar_cmm_key: ar_ck,
-                ar_base,
+        // Create IP
+        let max_attrs = 10;
+        let num_ars = 4;
+        let mut csprng = thread_rng();
+        let (
+            IpData {
+                public_ip_info: ip_info,
+                ip_secret_key,
+                metadata: _,
             },
-        };
+            _,
+        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
 
         let prf_key = prf::SecretKey::generate(&mut csprng);
 
@@ -414,7 +375,7 @@ mod test {
         };
 
         let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-            ar_identities: vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
+            ar_identities: vec![ArIdentity(0), ArIdentity(1), ArIdentity(2)],
             threshold:     Threshold(2),
         })
         .expect("The constructed ARs are valid.");
