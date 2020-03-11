@@ -38,6 +38,11 @@ import Concordium.Types.Execution
 newtype TransactionSignature = TransactionSignature { tsSignature :: [(KeyIndex, Signature)] }
   deriving (Eq, Show)
 
+-- |Get the number of actual signatures contained in a 'TransactionSignature'.
+getTransactionNumSigs :: TransactionSignature -> Int
+getTransactionNumSigs = length . tsSignature
+
+
 -- |NB: Relies on the scheme and signature serialization to be sensibly defined
 -- as specified on the wiki!
 instance S.Serialize TransactionSignature where
