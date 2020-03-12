@@ -107,8 +107,8 @@ addressFromRegId (RegIdCred fbs) = AccountAddress (FBS.FixedByteString addr) -- 
 -- |Index of the account key needed to determine what key the signature should
 -- be checked with.
 newtype KeyIndex = KeyIndex Word8
-    deriving (Eq, Ord, Show, Enum, Num, Real, Integral)
-    deriving (Hashable, Read, S.Serialize, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Word8
+    deriving (Eq, Ord, Enum, Num, Real, Integral)
+    deriving (Hashable, Show, Read, S.Serialize, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Word8
 
 data AccountKeys = AccountKeys {
   akKeys :: Map.Map KeyIndex VerifyKey,
