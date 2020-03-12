@@ -14,6 +14,7 @@ import GHC.Generics
 import qualified Concordium.Crypto.Ed25519Signature as Ed25519
 import Data.ByteString (ByteString)
 import Data.ByteString.Short (ShortByteString)
+import qualified Data.ByteString.Short as BSS
 
 newtype Signature = Signature ShortByteString
     deriving (Eq, Ord)
@@ -25,6 +26,9 @@ newtype Signature = Signature ShortByteString
 
 data SchemeId = Ed25519
     deriving (Eq, Show)
+
+signatureSerializedSize :: Signature -> Int
+signatureSerializedSize (Signature s) = 2 + BSS.length s
 
 -- |The reason for these enumerations is to support multiple different signature
 -- schemes in the future.

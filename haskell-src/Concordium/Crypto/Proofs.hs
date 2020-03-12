@@ -20,7 +20,6 @@ import Foreign.C.Types
 import Data.Serialize
 
 import Data.FixedByteString
-import qualified Data.Primitive
 import Concordium.Crypto.ByteStringHelpers
 
 import Data.Word
