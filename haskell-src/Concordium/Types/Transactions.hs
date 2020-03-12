@@ -12,6 +12,7 @@ import Control.Monad
 import Data.Aeson.TH
 import Data.Char(toLower)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Short as BSS
 import qualified Data.Serialize as S
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Set as Set
@@ -21,7 +22,7 @@ import Lens.Micro.Internal
 
 import Data.List
 import qualified Concordium.Crypto.SHA256 as H
-import Concordium.Crypto.SignatureScheme(Signature, KeyPair)
+import Concordium.Crypto.SignatureScheme(Signature, KeyPair, signatureSerializedSize)
 import Concordium.Crypto.SignatureScheme as SigScheme
 
 import qualified Data.Vector as Vec
@@ -42,7 +43,6 @@ newtype TransactionSignature = TransactionSignature { tsSignature :: [(KeyIndex,
 getTransactionNumSigs :: TransactionSignature -> Int
 getTransactionNumSigs = length . tsSignature
 
-
 -- |NB: Relies on the scheme and signature serialization to be sensibly defined
 -- as specified on the wiki!
 instance S.Serialize TransactionSignature where
@@ -53,6 +53,14 @@ instance S.Serialize TransactionSignature where
     len <- S.getWord8
     when (len == 0) $ fail "Need at least one signature."
     TransactionSignature <$> replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+
+-- |Size of the signature in bytes.
+-- Should be kept up to date with the serialize instance.
+signatureSize :: TransactionSignature -> Int
+signatureSize TransactionSignature{..} =
+    1 -- length
+    + length tsSignature -- key indices
+    + foldl' (\acc (_, sig) -> acc + signatureSerializedSize sig) 0 tsSignature -- signatures
 
 type TransactionTime = Word64
 
