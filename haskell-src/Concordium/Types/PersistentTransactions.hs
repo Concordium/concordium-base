@@ -38,17 +38,22 @@ data PersistentTransaction = PersistentTransaction {
   ptrArrivalTime :: !TransactionTime
   } deriving (Show)
 
+-- NB: This is based on hash comparison only.
 instance Eq PersistentTransaction where
   t1 == t2 = (pbtHash $ ptrBareTransaction t1) == (pbtHash $ ptrBareTransaction t2)
 
 instance Ord PersistentTransaction where
   compare t1 t2 = compare (pbtHash $ ptrBareTransaction t1) (pbtHash $ ptrBareTransaction t2)
 
-instance Serialize PersistentTransaction where
-  put t = do
-    put . (getHash :: PersistentTransaction -> TransactionHash) $ t
-    put $ ptrSize t
-  get = fail "Use getPersistentTransaction instead"
+instance ToPut PersistentTransaction where
+  {-# INLINE toPut #-}
+  toPut t = put (getHash t :: TransactionHash) <>
+            putInt64be (fromIntegral (ptrSize t))
+
+putPersistentTransaction :: Putter PersistentTransaction
+putPersistentTransaction t =
+    put (getHash t :: TransactionHash) <>
+    putInt64be (fromIntegral (ptrSize t))
 
 instance HashableTo TransactionHash PersistentTransaction where
   getHash = pbtHash . ptrBareTransaction
@@ -67,6 +72,6 @@ emptyWeak = do
 getPersistentTransaction :: TransactionTime -> Get PersistentTransaction
 getPersistentTransaction ar = do
   h <- get
-  s <- get
+  s <- fromIntegral <$> getInt64be
   let e = unsafePerformIO emptyWeak
   return $ PersistentTransaction (PersistentBareTransaction h e) s ar

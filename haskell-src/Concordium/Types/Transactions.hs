@@ -171,9 +171,13 @@ instance Eq Transaction where
 instance Ord Transaction where
   compare t1 t2 = compare (trHash t1) (trHash t2)
 
-instance S.Serialize Transaction where
-  put = S.put . trBareTransaction
-  get = fail "use getUnverifiedTransaction instead"
+-- |Class which is one part of serialize
+class ToPut a where
+  toPut :: a -> S.Put
+
+instance ToPut Transaction where
+  {-# INLINE toPut #-}
+  toPut = S.put . trBareTransaction
 
 -- |Deserialize a transaction, but don't check it's signature.
 --
@@ -320,41 +324,39 @@ data TransactionStatus =
 makeLenses ''TransactionStatus
 
 instance S.Serialize TransactionStatus where
-  put (Received s) = do
-    S.put (0 :: Word8)
-    S.put s
-  put (Committed s res) = do
-    S.put (1 :: Word8)
-    S.put s
-    S.put $ HM.size res
-    mapM_ (\(h, i) -> do
-              S.put h
-              S.put i) (HM.toList res)
-  put (Finalized s bh res) = do
-    S.put (2 :: Word8)
-    S.put s
-    S.put bh
-    S.put res
+  put Received{..} = do
+    S.putWord8 0
+    S.put _tsSlot
+  put Committed{..} = do
+    S.putWord8 1
+    S.put _tsSlot
+    S.putWord32be $ (fromIntegral (HM.size tsResults))
+    forM_ (HM.toList tsResults) $ \(h, i) -> S.put h <> S.put i
+  put Finalized{..} = do
+    S.putWord8 2
+    S.put _tsSlot
+    S.put tsBlockHash
+    S.put tsFinResult
 
   get = do
     tag <- S.getWord8
     case tag of
       0 -> do
-        slot <- S.get
-        return $ Received slot
+        _tsSlot <- S.get
+        return Received{..}
       1 -> do
-        slot <- S.get
-        len <- S.get
-        results <- HM.fromList <$> replicateM len (do
+        _tsSlot <- S.get
+        len <- S.getWord32be
+        tsResults <- HM.fromList <$> replicateM (fromIntegral len) (do
                                            k <- S.get
                                            v <- S.get
                                            return (k, v))
-        return $ Committed slot results
+        return $ Committed{..}
       2 -> do
-        slot <- S.get
-        bh <- S.get
-        res <- S.get
-        return $ Finalized slot bh res
+        _tsSlot <- S.get
+        tsBlockHash <- S.get
+        tsFinResult <- S.get
+        return $ Finalized{..}
       _ -> fail $ "Unknown transaction status variant: " ++ show tag
 
 -- |Add a transaction result. This function assumes the transaction is not finalized yet.
