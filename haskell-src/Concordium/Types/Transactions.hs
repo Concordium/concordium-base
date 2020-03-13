@@ -226,59 +226,19 @@ fromCDI wmdArrivalTime wmdData =
   in WithMetadata{..}
 
 -- |Data that can go onto a block.
-data BlockItem' msg =
+data BareBlockItem =
   NormalTransaction {
-    biTransaction :: !msg
+    biTransaction :: !BareTransaction
   }
   | CredentialDeployment {
-      biCred :: !CredentialDeploymentWithMeta
+      biCred :: !CredentialDeploymentInformation
   } deriving(Eq, Show)
 
-type BlockItem = BlockItem' Transaction
-
-type BareBlockItem = BlockItem' BareTransaction
-
-
--- Serialize instance which writes out everything including the metadata.
-instance S.Serialize value => S.Serialize (BlockItem' value) where
-  put NormalTransaction{..} = S.putWord8 0 <> S.put biTransaction
-  put CredentialDeployment{..} = S.putWord8 1<> S.put biCred
-
-  get =
-    S.getWord8 >>=
-      \case 0 -> NormalTransaction <$> S.get
-            1 -> CredentialDeployment <$> S.get
-            _ -> fail "Invalid block item type."
+type BlockItem = WithMetadata BareBlockItem
 
 -- |Size of the block item when full serialized (including metadata).
 blockItemSize :: BlockItem -> Int
 blockItemSize bi = metaDataSize + biSize bi
-
-instance BIMetadata (BlockItem' (WithMetadata value)) where
-  {-# INLINE biSize #-}
-  biSize NormalTransaction{..} = biSize biTransaction
-  biSize CredentialDeployment{..} = biSize biCred
-  {-# INLINE biHash #-}
-  biHash NormalTransaction{..} = biHash biTransaction
-  biHash CredentialDeployment{..} = biHash biCred
-  {-# INLINE biArrivalTime #-}
-  biArrivalTime NormalTransaction{..} = biArrivalTime biTransaction
-  biArrivalTime CredentialDeployment{..} = biArrivalTime biCred
-
-instance HashableTo H.Hash BlockItem where
-    getHash (NormalTransaction tr) = getHash tr
-    getHash CredentialDeployment{..} = getHash biCred
-
-class IntoExecutable a msg where
-  intoExecutable :: a -> BlockItem' msg
-
-instance IntoExecutable msg msg where
-  {-# INLINE intoExecutable #-}
-  intoExecutable = NormalTransaction
-
-instance IntoExecutable BlockItem Transaction where
-  {-# INLINE intoExecutable #-}
-  intoExecutable = id
 
 getCDWM :: TransactionTime -> S.Get CredentialDeploymentWithMeta
 getCDWM time = do
@@ -292,39 +252,28 @@ getCDWM time = do
     let wmdHash = H.hash bytes
     return WithMetadata{wmdArrivalTime=time,..}
 
+-- |Get reconstructing metadata.
 getBlockItem :: Word64 -- ^Timestamp of when the item arrived.
              -> S.Get BlockItem
 getBlockItem time =
     S.getWord8 >>= \case
-      0 -> NormalTransaction <$> getUnverifiedTransaction time
-      1 -> CredentialDeployment <$> getCDWM time
+      0 -> fmap NormalTransaction <$> getUnverifiedTransaction time
+      1 -> fmap CredentialDeployment <$> getCDWM time
       _ -> fail "Block item must be either normal transaction or credential deployment."
-
--- |Serialize without metadata.
-putBlockItem :: S.Putter BlockItem
-putBlockItem NormalTransaction{..} =
-    S.putWord8 0 <>
-    S.put (wmdData biTransaction)
-putBlockItem CredentialDeployment{..} =
-    S.putWord8 1 <>
-    S.put (wmdData biCred)
 
 -- |Class which is one part of serialize
 class ToPut a where
   toPut :: a -> S.Put
 
--- When writing to bytes ignore the metadata.
+-- |When writing to bytes ignore the metadata.
 instance ToPut value => ToPut (WithMetadata value) where
   {-# INLINE toPut #-}
   toPut = toPut . wmdData
 
+-- |Serialize without metadata.
 instance ToPut BareTransaction where
   {-# INLINE toPut #-}
   toPut = S.put
-
-instance ToPut BlockItem where
-  {-# INLINE toPut #-}
-  toPut = putBlockItem
 
 -- |Deserialize a transaction, but don't check it's signature.
 --
@@ -580,31 +529,31 @@ forwardPTT :: [BlockItem] -> PendingTransactionTable -> PendingTransactionTable
 forwardPTT trs ptt0 = foldl forward1 ptt0 trs
     where
         forward1 :: PendingTransactionTable -> BlockItem -> PendingTransactionTable
-        forward1 ptt (NormalTransaction tr) = ptt & pttWithSender . at (transactionSender tr) %~ upd
+        forward1 ptt WithMetadata{wmdData=NormalTransaction tr} = ptt & pttWithSender . at (transactionSender tr) %~ upd
             where
                 upd Nothing = error "forwardPTT : forwarding transaction that is not pending"
                 upd (Just (low, high)) =
                     assert (low == transactionNonce tr) $ assert (low <= high) $
                         if low == high then Nothing else Just (low+1,high)
-        forward1 ptt CredentialDeployment{..} = ptt & pttDeployCredential %~ upd
+        forward1 ptt WithMetadata{wmdData=CredentialDeployment{..},..} = ptt & pttDeployCredential %~ upd
             where
-              upd ps = case HS.member (wmdHash biCred) ps of
+              upd ps = case HS.member wmdHash ps of
                          False -> error "forwardPTT: forwarding a block item that is not pending."
-                         True -> HS.delete (wmdHash biCred) ps
+                         True -> HS.delete wmdHash ps
 
 reversePTT :: [BlockItem] -> PendingTransactionTable -> PendingTransactionTable
 reversePTT trs ptt0 = foldr reverse1 ptt0 trs
     where
         reverse1 :: BlockItem -> PendingTransactionTable -> PendingTransactionTable
-        reverse1 (NormalTransaction tr) = pttWithSender . at (transactionSender tr) %~ upd
+        reverse1 WithMetadata{wmdData=NormalTransaction tr} = pttWithSender . at (transactionSender tr) %~ upd
             where
                 upd Nothing = Just (transactionNonce tr, transactionNonce tr)
                 upd (Just (low, high)) =
                         assert (low == transactionNonce tr + 1) $
                         Just (low-1,high)
-        reverse1 CredentialDeployment{..} = pttDeployCredential %~ upd
+        reverse1 WithMetadata{wmdData=CredentialDeployment{..},..} = pttDeployCredential %~ upd
             where
-              upd ps = assert (not (HS.member (wmdHash biCred) ps)) $ HS.insert (wmdHash biCred) ps
+              upd ps = assert (not (HS.member wmdHash ps)) $ HS.insert wmdHash ps
 
 -- |Record special transactions as well for logging purposes.
 data SpecialTransactionOutcome =
