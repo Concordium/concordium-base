@@ -236,6 +236,20 @@ data BareBlockItem =
 
 type BlockItem = WithMetadata BareBlockItem
 
+instance S.Serialize BareBlockItem  where
+  put NormalTransaction{..} = S.putWord8 0 <> S.put biTransaction
+  put CredentialDeployment{..} = S.putWord8 1 <> S.put biCred
+
+  get =
+    S.getWord8 >>= \case
+    0 -> NormalTransaction <$> S.get
+    1 -> CredentialDeployment <$> S.get
+    _ -> fail "Unknown bare block item."
+
+instance ToPut BareBlockItem where
+  {-# INLINE toPut #-}
+  toPut = S.put
+
 -- |Size of the block item when full serialized (including metadata).
 blockItemSize :: BlockItem -> Int
 blockItemSize bi = metaDataSize + biSize bi
