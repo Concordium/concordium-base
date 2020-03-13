@@ -7,7 +7,7 @@ use curve_arithmetic::curve_arithmetic::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
 
-use std::{error::Error as StdError, fmt, io::Cursor, slice, str::FromStr};
+use std::{fmt, io::Cursor, slice, str::FromStr};
 
 use byteorder::ReadBytesExt;
 use ffi_helpers::*;
@@ -108,15 +108,6 @@ pub enum ParseAttributeError {
 
 impl From<ParseBigIntError> for ParseAttributeError {
     fn from(err: ParseBigIntError) -> Self { ParseAttributeError::IntDecodingFailed(err) }
-}
-
-impl StdError for ParseAttributeError {
-    fn description(&self) -> &str {
-        match self {
-            ParseAttributeError::IntDecodingFailed(ref x) => x.description(),
-            ParseAttributeError::ValueTooLarge => "Value out of range.",
-        }
-    }
 }
 
 impl fmt::Display for ParseAttributeError {
