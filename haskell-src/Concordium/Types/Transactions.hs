@@ -510,6 +510,8 @@ getTransactionIndex bh = \case
 -- If an account has no pending transactions, then it should not be in the map.
 data PendingTransactionTable = PTT {
   _pttWithSender :: HM.HashMap AccountAddress (Nonce, Nonce),
+  -- |Pending credentials. We only store the hash because updating the
+  -- pending table would otherwise be more costly with the current setup.
   _pttDeployCredential :: HS.HashSet TransactionHash
   } deriving(Eq, Show)
 
