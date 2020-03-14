@@ -386,6 +386,10 @@ markDeadResult bh Committed{..} =
   in if HM.null newResults then Received{..} else Committed{tsResults=newResults,..}
 markDeadResult _ ts = ts
 
+updateSlot :: Slot -> TransactionStatus -> TransactionStatus
+updateSlot _ ts@Finalized{} = ts
+updateSlot s ts = ts { _tsSlot = s}
+
 initialStatus :: Slot -> TransactionStatus
 initialStatus = Received
 
