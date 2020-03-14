@@ -23,7 +23,7 @@ import Lens.Micro.Internal
 
 import Data.List
 import qualified Concordium.Crypto.SHA256 as H
-import Concordium.Crypto.SignatureScheme(Signature, KeyPair, signatureSerializedSize)
+import Concordium.Crypto.SignatureScheme(Signature, KeyPair)
 import Concordium.Crypto.SignatureScheme as SigScheme
 
 import qualified Data.Vector as Vec
@@ -43,6 +43,7 @@ newtype TransactionSignature = TransactionSignature { tsSignature :: [(KeyIndex,
 -- |Get the number of actual signatures contained in a 'TransactionSignature'.
 getTransactionNumSigs :: TransactionSignature -> Int
 getTransactionNumSigs = length . tsSignature
+
 
 -- |NB: Relies on the scheme and signature serialization to be sensibly defined
 -- as specified on the wiki!
@@ -390,16 +391,16 @@ instance TransactionData Transaction where
     transactionHash = getHash
     transactionSize = wmdSize
 
-data AccountNonFinalizedTransactions t = AccountNonFinalizedTransactions {
+data AccountNonFinalizedTransactions = AccountNonFinalizedTransactions {
     -- |Non-finalized transactions (for an account) indexed by nonce.
-    _anftMap :: Map.Map Nonce (Set.Set t),
+    _anftMap :: Map.Map Nonce (Set.Set Transaction),
     -- |The next available nonce at the last finalized block.
     -- 'anftMap' should only contain nonces that are at least 'anftNextNonce'.
     _anftNextNonce :: Nonce
-} deriving (Eq, Show)
+} deriving (Eq)
 makeLenses ''AccountNonFinalizedTransactions
 
-emptyANFT :: AccountNonFinalizedTransactions t
+emptyANFT :: AccountNonFinalizedTransactions
 emptyANFT = AccountNonFinalizedTransactions Map.empty minNonce
 
 -- |Result of a transaction is block dependent.
@@ -484,6 +485,10 @@ markDeadResult bh Committed{..} =
   let newResults = HM.delete bh tsResults
   in if HM.null newResults then Received{..} else Committed{tsResults=newResults,..}
 markDeadResult _ ts = ts
+
+updateSlot :: Slot -> TransactionStatus -> TransactionStatus
+updateSlot _ ts@Finalized{} = ts
+updateSlot s ts = ts { _tsSlot = s}
 
 initialStatus :: Slot -> TransactionStatus
 initialStatus = Received
