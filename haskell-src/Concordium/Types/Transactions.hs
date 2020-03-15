@@ -235,6 +235,10 @@ data BareBlockItem =
       biCred :: !CredentialDeploymentInformation
   } deriving(Eq, Show)
 
+instance HashableTo H.Hash BareBlockItem where
+  getHash NormalTransaction{..} = transactionHash biTransaction
+  getHash CredentialDeployment{..} = H.hash (S.encode biCred)
+
 type BlockItem = WithMetadata BareBlockItem
 
 instance S.Serialize BareBlockItem  where
