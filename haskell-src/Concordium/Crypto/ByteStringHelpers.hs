@@ -75,12 +75,18 @@ instance FBS.FixedLength a => Serialize (FBSHex a) where
 instance FBS.FixedLength a => AE.ToJSON (FBSHex a) where
   toJSON = AE.String . serializeBase16
 
-instance FBS.FixedLength a => AE.FromJSON (FBSHex a) where
-  parseJSON = AE.withText "FixedByteStringHex" $ \t ->
-    let (bs, rest) = BS16.decode (Text.encodeUtf8 t)
+fbsHexFromText :: forall a . FBS.FixedLength a => Text.Text -> AE.Parser (FBSHex a)
+fbsHexFromText t =
+  let (bs, rest) = BS16.decode (Text.encodeUtf8 t)
     in if BS.null rest && BS.length bs == FBS.fixedLength (undefined :: a) then return (FBSHex (FBS.fromByteString bs))
        else if not (BS.null rest) then AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
             else AE.typeMismatch "Decoded string not of correct length" (AE.String t)
+
+instance FBS.FixedLength a => AE.FromJSON (FBSHex a) where
+  parseJSON = AE.withText "FixedByteStringHex" $ fbsHexFromText
+
+instance FBS.FixedLength a => AE.FromJSONKey (FBSHex a) where
+  fromJSONKey = AE.FromJSONKeyTextParser fbsHexFromText
 
 -- |Type whose only purpose is to enable derivation of serialization instances.
 newtype Short65K = Short65K ShortByteString
