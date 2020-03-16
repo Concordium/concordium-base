@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -516,7 +517,7 @@ getTransactionIndex bh = \case
 -- @highNonce@ should always be at least @nextNonce@ (otherwise, what transaction is pending?).
 -- If an account has no pending transactions, then it should not be in the map.
 data PendingTransactionTable = PTT {
-  _pttWithSender :: HM.HashMap AccountAddress (Nonce, Nonce),
+  _pttWithSender :: !(HM.HashMap AccountAddress (Nonce, Nonce)),
   -- |Pending credentials. We only store the hash because updating the
   -- pending table would otherwise be more costly with the current setup.
   _pttDeployCredential :: HS.HashSet TransactionHash
@@ -532,10 +533,12 @@ emptyPendingTransactionTable = PTT HM.empty HS.empty
 -- NB: This only updates the pending table, and does not ensure that invariants elsewhere are maintained.
 -- PRECONDITION: the next nonce should be less than or equal to the transaction nonce.
 extendPendingTransactionTable :: TransactionData t => Nonce -> t -> PendingTransactionTable -> PendingTransactionTable
-extendPendingTransactionTable nextNonce tx pt = assert (nextNonce <= nonce) $ go
-  where go = pt & pttWithSender . at (transactionSender tx) %~ \case Nothing -> Just (nextNonce, nonce)
-                                                                     Just (l, u) -> Just (l, max u nonce)
+extendPendingTransactionTable nextNonce tx PTT{..} = assert (nextNonce <= nonce) $ let v = HM.alter f sender _pttWithSender in PTT{_pttWithSender = v, ..}
+  where
+        f Nothing = Just (nextNonce, nonce)
+        f (Just (l, u)) = Just (l, max u nonce)
         nonce = transactionNonce tx
+        sender = transactionSender tx
 
 -- |Insert an additional element in the pending transaction table.
 -- Does nothing if the next nonce is greater than the transaction nonce.
