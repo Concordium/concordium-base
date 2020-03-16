@@ -47,6 +47,10 @@ dummyMaxExpiryTime = YearMonth 2199 12
 dummyLowExpiryTime :: ID.YearMonth
 dummyLowExpiryTime = YearMonth 1900 1
 
+{-# WARNING dummyCreationTime "Invalid creation time, only for testing." #-}
+dummyCreationTime :: ID.YearMonth
+dummyCreationTime = YearMonth 2020 3
+
 {-# WARNING dummyEmptyIdentityProviders "Invalid identity providers, only for testing." #-}
 dummyEmptyIdentityProviders :: [IP.IpInfo]
 dummyEmptyIdentityProviders = []
