@@ -11,6 +11,7 @@ import Data.Text.Encoding as Text
 
 import Control.Monad.Fail(MonadFail)
 import qualified Data.Aeson as AE
+import qualified Data.Aeson.Encoding as AE
 import qualified Data.Aeson.Types as AE
 import qualified Data.Text as Text
 import Prelude hiding (fail)
@@ -87,6 +88,9 @@ instance FBS.FixedLength a => AE.FromJSON (FBSHex a) where
 
 instance FBS.FixedLength a => AE.FromJSONKey (FBSHex a) where
   fromJSONKey = AE.FromJSONKeyTextParser fbsHexFromText
+
+instance FBS.FixedLength a => AE.ToJSONKey (FBSHex a) where
+  toJSONKey = AE.ToJSONKeyText serializeBase16 (AE.text . serializeBase16)
 
 -- |Type whose only purpose is to enable derivation of serialization instances.
 newtype Short65K = Short65K ShortByteString

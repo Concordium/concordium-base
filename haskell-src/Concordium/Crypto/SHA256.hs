@@ -60,7 +60,7 @@ newtype Hash = Hash (FBS.FixedByteString DigestSize)
   deriving (Eq, Ord, Bits, Bounded, Enum, Typeable, Data)
   deriving Serialize via FBSHex DigestSize
   deriving Show via FBSHex DigestSize
-  deriving (AE.ToJSON, AE.FromJSON) via FBSHex DigestSize
+  deriving (AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey) via FBSHex DigestSize
 
 instance Read Hash where
     readPrec = Hash . FBS.pack <$> mapM (const readHexByte) [1..digestSize]
