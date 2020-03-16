@@ -179,6 +179,12 @@ data Payload =
       }
   -- |Undelegate stake.
   | UndelegateStake
+  -- |Update the election difficulty birk parameter.
+  -- Will only be accepted if sent from one of the special beta accounts.
+  | UpdateElectionDifficulty {
+      -- |The new election difficulty. Must be between 0 and 1 (both inclusive).
+      uedDifficulty :: !ElectionDifficulty
+      }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -242,6 +248,9 @@ instance S.Serialize Payload where
     S.put dsID
   put UndelegateStake =
     P.putWord8 11
+  put UpdateElectionDifficulty{..} =
+    P.putWord8 12 <>
+    S.put uedDifficulty
 
   get =
     G.getWord8 >>=
@@ -295,6 +304,11 @@ instance S.Serialize Payload where
               return UpdateBakerSignKey{..}
             10 -> DelegateStake <$> S.get
             11 -> return UndelegateStake
+            12 -> do
+              uedDifficulty <- S.get
+              unless (isValidElectionDifficulty uedDifficulty) $
+                fail $ "Illegal election difficulty: " ++ show uedDifficulty
+              return UpdateElectionDifficulty{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 {-# INLINE encodePayload #-}
@@ -415,6 +429,10 @@ data Event =
                -- are not delegating to anyone at the time.
                esuBaker :: !(Maybe BakerId)
                }
+           | ElectionDifficultyUpdated {
+               -- |The new election difficulty.
+               eeduDifficulty :: !Double
+               }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -502,6 +520,9 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   | NotFromBakerAccount { nfbaFromAccount :: !AccountAddress, -- ^Sender account of the transaction
                                           nfbaCurrentBakerAccount :: !AccountAddress -- ^Current baker account.
                                         }
+                  -- |A transaction should be sent from a special beta account.
+                  -- The parameter is the account the transaction was sent from.
+                  | NotFromSpecialBetaAccount !AccountAddress
     deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason
