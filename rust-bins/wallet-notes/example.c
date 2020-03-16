@@ -5,6 +5,7 @@
 
 char* create_id_request_and_private_data(char*, uint8_t* );
 char* create_credential(char*, uint8_t* );
+char* create_transfer(char*, uint8_t* );
 void free_response_string(char*);
 
 int main(int argc, char *argv[]) {
@@ -34,6 +35,8 @@ int main(int argc, char *argv[]) {
     // if input is named credential-cdi.json try to get the credential
     if (strcmp(argv[1], "credential-input.json") == 0) {
       out = create_credential(buffer, &flag);
+    } else if (strcmp(argv[1], "transfer-input.json") == 0) {
+      out = create_transfer(buffer, &flag);
     } else {
       out = create_id_request_and_private_data(buffer, &flag);
     }

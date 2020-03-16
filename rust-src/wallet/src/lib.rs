@@ -3,6 +3,7 @@ extern crate failure;
 #[macro_use]
 extern crate serde_json;
 
+use crypto_common::{base16_decode_string, base16_encode_string, Put};
 use curve_arithmetic::curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -17,7 +18,7 @@ use id::{
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::Value as PedersenValue;
 
-use std::cmp::max;
+use std::{cmp::max, collections::BTreeMap};
 
 use libc::c_char;
 use std::ffi::{CStr, CString};
@@ -26,8 +27,116 @@ use failure::Fallible;
 use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, to_value, Value};
 
+use sha2::{Digest, Sha256};
+
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
 type ExampleCurve = G1;
+
+fn create_transfer_aux(input: &str) -> Fallible<String> {
+    let v: Value = from_str(input)?;
+
+    let from_address: AccountAddress = {
+        match v.get("from") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'from' not present, but should be."),
+        }
+    };
+
+    let to_address: AccountAddress = {
+        match v.get("to") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'to' not present, but should be."),
+        }
+    };
+
+    let amount: u64 = {
+        match v.get("amount") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'amount' not present, but should be."),
+        }
+    };
+
+    let expiry: u64 = {
+        match v.get("expiry") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'expiry' not present, but should be."),
+        }
+    };
+
+    let nonce: u64 = {
+        match v.get("nonce") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'nonce' not present, but should be."),
+        }
+    };
+
+    // NB: This needs to be consistent with scheduler assigned cost.
+    let energy = 10;
+
+    let (hash, body) = {
+        let mut payload = Vec::new();
+        payload.put(&3u8); // transaction type is transfer
+        payload.put(&0u8); // account address to send to
+        payload.put(&to_address);
+        payload.put(&amount);
+
+        let payload_size = payload.len() as u32;
+        assert_eq!(payload_size, 42);
+
+        let mut body = Vec::new();
+        // this needs to match with what is in Transactions.hs
+        body.put(&from_address);
+        body.put(&nonce);
+        body.put(&energy);
+        body.put(&payload_size);
+        body.put(&expiry);
+        body.extend_from_slice(&payload);
+
+        let hasher = Sha256::new().chain(&body);
+        (hasher.result(), body)
+    };
+
+    let signatures = {
+        let mut out = BTreeMap::new();
+        match v.get("keys").and_then(Value::as_object) {
+            Some(v) => {
+                for (key_index_str, value) in v.iter() {
+                    let key_index = key_index_str.parse::<u8>()?;
+                    match value.as_object() {
+                        None => bail!("Malformed keys."),
+                        Some(value) => {
+                            let public = match value.get("verifyKey").and_then(Value::as_str) {
+                                None => bail!("Malformed keys: missing verifyKey."),
+                                Some(x) => base16_decode_string(&x)?,
+                            };
+                            let secret = match value.get("signKey").and_then(Value::as_str) {
+                                None => bail!("Malformed keys: missing signKey."),
+                                Some(x) => base16_decode_string(&x)?,
+                            };
+                            out.insert(
+                                key_index,
+                                base16_encode_string(
+                                    &ed25519::Keypair { secret, public }.sign(&hash),
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
+            None => bail!("Field 'keys' not present or not an object, but should be."),
+        };
+        out
+    };
+
+    use hex::encode;
+
+    let response = json!({
+        "signatures": signatures,
+        "transaction": encode(&body)
+    });
+
+    Ok(to_string(&response)?)
+}
 
 fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
@@ -256,6 +365,37 @@ unsafe fn signal_error(flag: *mut u8, err_msg: String) -> *mut c_char {
 /// # Safety
 /// The input pointer must point to a null-terminated buffer, otherwise this
 /// function will fail in unspecified ways.
+pub unsafe fn create_transfer_ext(input_ptr: *const c_char, success: *mut u8) -> *mut c_char {
+    if input_ptr.is_null() {
+        return signal_error(success, "Null pointer input.".to_owned());
+    }
+    let input_str = {
+        match CStr::from_ptr(input_ptr).to_str() {
+            Ok(s) => s,
+            Err(e) => return signal_error(success, format!("Could not decode JSON: {}", e)),
+        }
+    };
+    let response = create_transfer_aux(input_str);
+    match response {
+        Ok(s) => {
+            let cstr: CString = {
+                match CString::new(s) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return signal_error(success, format!("Could not encode response: {}", e))
+                    }
+                }
+            };
+            *success = 1;
+            cstr.into_raw()
+        }
+        Err(e) => signal_error(success, format!("Could not produce response: {}", e)),
+    }
+}
+
+/// # Safety
+/// The input pointer must point to a null-terminated buffer, otherwise this
+/// function will fail in unspecified ways.
 pub unsafe fn create_id_request_and_private_data_ext(
     input_ptr: *const c_char,
     success: *mut u8,
@@ -358,6 +498,25 @@ pub unsafe extern "C" fn create_credential(
     success: *mut u8,
 ) -> *mut c_char {
     create_credential_ext(input_ptr, success)
+}
+
+#[no_mangle]
+/// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+/// UTF8-encoded string. The returned string must be freed by the caller by
+/// calling the function 'free_response_string'. In case of failure the function
+/// returns an error message as the response, and sets the 'success' flag to 0.
+///
+/// See rust-bins/wallet-notes/README.md for the description of input and output
+/// formats.
+///
+/// # Safety
+/// The input pointer must point to a null-terminated buffer, otherwise this
+/// function will fail in unspecified ways.
+pub unsafe extern "C" fn create_transfer(
+    input_ptr: *const c_char,
+    success: *mut u8,
+) -> *mut c_char {
+    create_transfer_ext(input_ptr, success)
 }
 
 /// # Safety
