@@ -11,6 +11,7 @@ import Data.Time.Clock.POSIX
 import Control.Exception
 import Control.Monad
 import Data.Aeson.TH
+import Data.Aeson(FromJSON, ToJSON)
 import Data.Char(toLower)
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
@@ -37,9 +38,9 @@ import Concordium.Types.Execution
 -- |A signature is an association list of index of the key, and the actual signature.
 -- The index is relative to the account address, and the indices should be distinct.
 -- The maximum length of the list is 255, and the minimum length is 1.
-newtype TransactionSignature = TransactionSignature { tsSignature :: [(KeyIndex, Signature)] }
+newtype TransactionSignature = TransactionSignature { tsSignature :: Map.Map KeyIndex Signature }
   deriving (Eq, Show)
-
+  deriving (ToJSON, FromJSON) via (Map.Map KeyIndex Signature)
 -- |Get the number of actual signatures contained in a 'TransactionSignature'.
 getTransactionNumSigs :: TransactionSignature -> Int
 getTransactionNumSigs = length . tsSignature
@@ -50,11 +51,13 @@ getTransactionNumSigs = length . tsSignature
 instance S.Serialize TransactionSignature where
   put TransactionSignature{..} = do
     S.putWord8 (fromIntegral (length tsSignature))
-    forM_ tsSignature $ \(idx, sig) -> S.put idx <> S.put sig
+    forM_ (Map.toList tsSignature) $ \(idx, sig) -> S.put idx <> S.put sig
   get = do
     len <- S.getWord8
     when (len == 0) $ fail "Need at least one signature."
-    TransactionSignature <$> replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+    -- it is fine to redefine signatures during serialization (if there are multiple with the same key index).
+    -- this cannot harm validity
+    TransactionSignature . Map.fromList <$> replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
 
 -- |Size of the signature in bytes.
 -- Should be kept up to date with the serialize instance.
@@ -62,7 +65,7 @@ signatureSize :: TransactionSignature -> Int
 signatureSize TransactionSignature{..} =
     1 -- length
     + length tsSignature -- key indices
-    + foldl' (\acc (_, sig) -> acc + signatureSerializedSize sig) 0 tsSignature -- signatures
+    + foldl' (\acc (_, sig) -> acc + signatureSerializedSize sig) 0 (Map.toList tsSignature) -- signatures
 
 type TransactionTime = Word64
 
@@ -344,7 +347,7 @@ signTransaction keys btrHeader btrPayload =
   let body = S.runPut (S.put btrHeader <> putPayload btrPayload)
       -- only sign the hash of the transaction
       bodyHash = H.hashToByteString (H.hash body)
-      tsSignature = map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) keys
+      tsSignature = Map.fromList $ map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) keys
       btrSignature = TransactionSignature{..}
   in BareTransaction{..}
 
@@ -355,7 +358,7 @@ verifyTransaction :: TransactionData msg => AccountKeys -> msg -> Bool
 verifyTransaction keys tx =
   let bodyHash = H.hashToByteString (transactionHash tx)
       TransactionSignature sigs = transactionSignature tx
-      keysCheck = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getAccountKey idx keys)) True sigs
+      keysCheck = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getAccountKey idx keys)) True (Map.toList sigs)
       numSigs = length sigs
       threshold = akThreshold keys
   in numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck
