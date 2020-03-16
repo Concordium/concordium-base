@@ -56,9 +56,9 @@ baseTime = read "2019-09-23 13:27:13.257285424 UTC"
 
 genTransaction :: Gen Transaction
 genTransaction = do
-  trBareTransaction <- genBareTransaction
-  trArrivalTime <- arbitrary
-  let body = encode trBareTransaction
-  let trHash = hash body
-  let trSize = BS.length body
-  return $ Transaction{..}
+  wmdData <- genBareTransaction
+  wmdArrivalTime <- arbitrary
+  let body = encode wmdData
+  let wmdHash = hash body
+  let wmdSize = BS.length body
+  return $ WithMetadata{..}
