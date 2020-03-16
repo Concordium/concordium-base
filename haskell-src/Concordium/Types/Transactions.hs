@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Concordium.Types.Transactions where
 
@@ -12,9 +13,9 @@ import Control.Monad
 import Data.Aeson.TH
 import Data.Char(toLower)
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Short as BSS
 import qualified Data.Serialize as S
 import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet as HS
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Lens.Micro.Platform
@@ -22,7 +23,7 @@ import Lens.Micro.Internal
 
 import Data.List
 import qualified Concordium.Crypto.SHA256 as H
-import Concordium.Crypto.SignatureScheme(Signature, KeyPair, signatureSerializedSize)
+import Concordium.Crypto.SignatureScheme(Signature, KeyPair)
 import Concordium.Crypto.SignatureScheme as SigScheme
 
 import qualified Data.Vector as Vec
@@ -42,6 +43,7 @@ newtype TransactionSignature = TransactionSignature { tsSignature :: [(KeyIndex,
 -- |Get the number of actual signatures contained in a 'TransactionSignature'.
 getTransactionNumSigs :: TransactionSignature -> Int
 getTransactionNumSigs = length . tsSignature
+
 
 -- |NB: Relies on the scheme and signature serialization to be sensibly defined
 -- as specified on the wiki!
@@ -152,46 +154,151 @@ instance S.Serialize BareTransaction where
     return $! BareTransaction{..}
 
 fromBareTransaction :: TransactionTime -> BareTransaction -> Transaction
-fromBareTransaction trArrivalTime trBareTransaction@BareTransaction{..} =
+fromBareTransaction wmdArrivalTime wmdData@BareTransaction{..} =
   let txBodyBytes = S.runPut (S.put btrHeader <> putPayload btrPayload)
-      trHash = H.hash txBodyBytes
-      trSize = BS.length txBodyBytes + BS.length (S.encode btrSignature)
-  in Transaction{..}
+      wmdHash = H.hash txBodyBytes
+      wmdSize = BS.length txBodyBytes + BS.length (S.encode btrSignature)
+  in WithMetadata{..}
 
--- |Transaction with all the metadata needed to avoid recomputation.
-data Transaction = Transaction {
-  -- |The actual transaction data.
-  trBareTransaction :: !BareTransaction,
+data WithMetadata value = WithMetadata {
+  wmdData :: !value,
+  -- |Size of the data in bytes, derived field.
+  wmdSize :: !Int,
+  -- |Hash of the transaction. Derived from the first field.
+  wmdHash :: !TransactionHash,
+  -- |Arrival time of the transaction.
+  wmdArrivalTime :: !TransactionTime
+  } deriving(Show, Functor)
 
-  -- |Size of the transaction in bytes, derived field.
-  trSize :: !Int,
-  -- |Hash of the transaction. Derived from the first three fields.
-  trHash :: !TransactionHash,
-  trArrivalTime :: !TransactionTime
-  } deriving(Show) -- show is needed in testing
+-- Serialize instance which writes out everything including the metadata.
+instance S.Serialize value => S.Serialize (WithMetadata value) where
+  put WithMetadata{..} =
+    S.put wmdData <>
+    S.putWord64be (fromIntegral wmdSize) <>
+    S.put wmdHash <>
+    S.put wmdArrivalTime
 
--- |NOTE: Eq and Ord instances based on hash comparison!
+  get = do
+    wmdData <- S.get
+    wmdSize <- fromIntegral <$> S.getWord64be
+    wmdHash <- S.get
+    wmdArrivalTime <- S.get
+    return WithMetadata{..}
+
+metaDataSize :: Int
+metaDataSize = H.digestSize + 8 + 8
+
+-- |Block item metadata.
+class BIMetadata a where
+  biSize :: a -> Int
+  biHash :: a -> TransactionHash
+  biArrivalTime :: a -> TransactionTime
+
+instance BIMetadata (WithMetadata value) where
+  {-# INLINE biSize #-}
+  biSize = wmdSize
+  {-# INLINE biHash #-}
+  biHash = wmdHash
+  {-# INLINE biArrivalTime #-}
+  biArrivalTime = wmdArrivalTime
+
+-- |Eq instance based on Hash comparison
 -- FIXME: Possibly we want to be defensive and check true equality in case hashes are equal.
-instance Eq Transaction where
-  t1 == t2 = trHash t1 == trHash t2
+instance Eq (WithMetadata value) where
+  {-# INLINE (==) #-}
+  x == y = wmdHash x == wmdHash y
 
 -- |The Ord instance does comparison only on hashes.
-instance Ord Transaction where
-  compare t1 t2 = compare (trHash t1) (trHash t2)
+instance Ord (WithMetadata value) where
+  compare t1 t2 = compare (wmdHash t1) (wmdHash t2)
+
+instance HashableTo H.Hash (WithMetadata value) where
+  {-# INLINE getHash #-}
+  getHash x = wmdHash x
+
+type Transaction = WithMetadata BareTransaction
+type CredentialDeploymentWithMeta = WithMetadata CredentialDeploymentInformation
+
+fromCDI :: TransactionTime -> CredentialDeploymentInformation -> CredentialDeploymentWithMeta
+fromCDI wmdArrivalTime wmdData =
+  let cdiBytes = S.encode wmdData
+      wmdSize = BS.length cdiBytes
+      wmdHash = H.hash cdiBytes
+  in WithMetadata{..}
+
+-- |Data that can go onto a block.
+data BareBlockItem =
+  NormalTransaction {
+    biTransaction :: !BareTransaction
+  }
+  | CredentialDeployment {
+      biCred :: !CredentialDeploymentInformation
+  } deriving(Eq, Show)
+
+instance HashableTo H.Hash BareBlockItem where
+  getHash NormalTransaction{..} = transactionHash biTransaction
+  getHash CredentialDeployment{..} = H.hash (S.encode biCred)
+
+type BlockItem = WithMetadata BareBlockItem
+
+instance S.Serialize BareBlockItem  where
+  put NormalTransaction{..} = S.putWord8 0 <> S.put biTransaction
+  put CredentialDeployment{..} = S.putWord8 1 <> S.put biCred
+
+  get =
+    S.getWord8 >>= \case
+    0 -> NormalTransaction <$> S.get
+    1 -> CredentialDeployment <$> S.get
+    _ -> fail "Unknown bare block item."
+
+instance ToPut BareBlockItem where
+  {-# INLINE toPut #-}
+  toPut = S.put
+
+-- |Size of the block item when full serialized (including metadata).
+blockItemSize :: BlockItem -> Int
+blockItemSize bi = metaDataSize + biSize bi
+
+getCDWM :: TransactionTime -> S.Get CredentialDeploymentWithMeta
+getCDWM time = do
+    start <- S.bytesRead
+    (wmdData, end) <- S.lookAhead $ do
+      cdi <- S.get
+      end <- S.bytesRead
+      return (cdi, end)
+    let wmdSize = end - start
+    bytes <- S.getByteString wmdSize
+    let wmdHash = H.hash bytes
+    return WithMetadata{wmdArrivalTime=time,..}
+
+-- |Get reconstructing metadata.
+getBlockItem :: Word64 -- ^Timestamp of when the item arrived.
+             -> S.Get BlockItem
+getBlockItem time =
+    S.getWord8 >>= \case
+      0 -> fmap NormalTransaction <$> getUnverifiedTransaction time
+      1 -> fmap CredentialDeployment <$> getCDWM time
+      _ -> fail "Block item must be either normal transaction or credential deployment."
 
 -- |Class which is one part of serialize
 class ToPut a where
   toPut :: a -> S.Put
 
-instance ToPut Transaction where
+-- |When writing to bytes ignore the metadata.
+instance ToPut value => ToPut (WithMetadata value) where
   {-# INLINE toPut #-}
-  toPut = S.put . trBareTransaction
+  toPut = toPut . wmdData
+
+-- |Serialize without metadata.
+instance ToPut BareTransaction where
+  {-# INLINE toPut #-}
+  toPut = S.put
 
 -- |Deserialize a transaction, but don't check it's signature.
 --
 -- * @SPEC: <$DOCS/Transactions#serialization-format-transactions>
 getUnverifiedTransaction :: TransactionTime -> S.Get Transaction
-getUnverifiedTransaction trArrivalTime = do
+getUnverifiedTransaction wmdArrivalTime = do
   sigStart <- S.bytesRead
   btrSignature <- S.get
   sigEnd <- S.bytesRead
@@ -204,21 +311,21 @@ getUnverifiedTransaction trArrivalTime = do
     end <- S.bytesRead
     return (trHeader, trPayload, end - start)
   txBytes <- S.getBytes bodySize
-  let trHash = H.hash txBytes
+  let wmdHash = H.hash txBytes
   let sigSize = sigEnd - sigStart
-  let trSize = bodySize + sigSize
-  return Transaction{trBareTransaction=BareTransaction{..},..}
+  let wmdSize = bodySize + sigSize
+  return WithMetadata{wmdData=BareTransaction{..},..}
 
 -- |Make a transaction out of minimal data needed.
 -- This computes the derived fields, in particular the hash of the transaction.
 makeTransaction :: TransactionTime -> TransactionSignature -> TransactionHeader -> EncodedPayload -> Transaction
-makeTransaction trArrivalTime btrSignature btrHeader btrPayload =
+makeTransaction wmdArrivalTime btrSignature btrHeader btrPayload =
     let txBodyBytes = S.runPut $ S.put btrHeader <> putPayload btrPayload
         -- transaction hash only refers to the body, not the signature of the transaction
-        trHash = H.hash txBodyBytes
-        trSize = BS.length txBodyBytes + BS.length (S.encode btrSignature)
-        trBareTransaction = BareTransaction{..}
-    in Transaction{..}
+        wmdHash = H.hash txBodyBytes
+        wmdSize = BS.length txBodyBytes + BS.length (S.encode btrSignature)
+        wmdData = BareTransaction{..}
+    in WithMetadata{..}
 
 -- |Sign a transaction with the given header and body, using the given keypair.
 -- This assumes that there is only one key on the account, and that is with index 0.
@@ -279,28 +386,25 @@ instance TransactionData BareTransaction where
       where serialized = S.encode t
 
 instance TransactionData Transaction where
-    transactionHeader = btrHeader . trBareTransaction
-    transactionSender = thSender . btrHeader . trBareTransaction
-    transactionNonce = thNonce . btrHeader . trBareTransaction
-    transactionGasAmount = thEnergyAmount . btrHeader . trBareTransaction
-    transactionPayload = btrPayload . trBareTransaction
-    transactionSignature = btrSignature . trBareTransaction
+    transactionHeader = btrHeader . wmdData
+    transactionSender = thSender . btrHeader . wmdData
+    transactionNonce = thNonce . btrHeader . wmdData
+    transactionGasAmount = thEnergyAmount . btrHeader . wmdData
+    transactionPayload = btrPayload . wmdData
+    transactionSignature = btrSignature . wmdData
     transactionHash = getHash
-    transactionSize = trSize
+    transactionSize = wmdSize
 
-instance HashableTo H.Hash Transaction where
-    getHash = trHash
-
-data AccountNonFinalizedTransactions t = AccountNonFinalizedTransactions {
+data AccountNonFinalizedTransactions = AccountNonFinalizedTransactions {
     -- |Non-finalized transactions (for an account) indexed by nonce.
-    _anftMap :: Map.Map Nonce (Set.Set t),
+    _anftMap :: Map.Map Nonce (Set.Set Transaction),
     -- |The next available nonce at the last finalized block.
     -- 'anftMap' should only contain nonces that are at least 'anftNextNonce'.
     _anftNextNonce :: Nonce
-} deriving (Eq, Show)
+} deriving (Eq)
 makeLenses ''AccountNonFinalizedTransactions
 
-emptyANFT :: AccountNonFinalizedTransactions t
+emptyANFT :: AccountNonFinalizedTransactions
 emptyANFT = AccountNonFinalizedTransactions Map.empty minNonce
 
 -- |Result of a transaction is block dependent.
@@ -386,6 +490,10 @@ markDeadResult bh Committed{..} =
   in if HM.null newResults then Received{..} else Committed{tsResults=newResults,..}
 markDeadResult _ ts = ts
 
+updateSlot :: Slot -> TransactionStatus -> TransactionStatus
+updateSlot _ ts@Finalized{} = ts
+updateSlot s ts = ts { _tsSlot = s}
+
 initialStatus :: Slot -> TransactionStatus
 initialStatus = Received
 
@@ -404,53 +512,73 @@ getTransactionIndex bh = \case
 -- and @highNonce@ is the highest nonce known for a transaction associated with that account.
 -- @highNonce@ should always be at least @nextNonce@ (otherwise, what transaction is pending?).
 -- If an account has no pending transactions, then it should not be in the map.
-type PendingTransactionTable = HM.HashMap AccountAddress (Nonce, Nonce)
+data PendingTransactionTable = PTT {
+  _pttWithSender :: HM.HashMap AccountAddress (Nonce, Nonce),
+  -- |Pending credentials. We only store the hash because updating the
+  -- pending table would otherwise be more costly with the current setup.
+  _pttDeployCredential :: HS.HashSet TransactionHash
+  } deriving(Eq, Show)
+
+makeLenses ''PendingTransactionTable
 
 emptyPendingTransactionTable :: PendingTransactionTable
-emptyPendingTransactionTable = HM.empty
+emptyPendingTransactionTable = PTT HM.empty HS.empty
 
 -- |Insert an additional element in the pending transaction table.
 -- If the account does not yet exist create it.
 -- NB: This only updates the pending table, and does not ensure that invariants elsewhere are maintained.
 -- PRECONDITION: the next nonce should be less than or equal to the transaction nonce.
 extendPendingTransactionTable :: TransactionData t => Nonce -> t -> PendingTransactionTable -> PendingTransactionTable
-extendPendingTransactionTable nextNonce tx pt = assert (nextNonce <= nonce) $
-  HM.alter (\case Nothing -> Just (nextNonce, nonce)
-                  Just (l, u) -> Just (l, max u nonce)) (transactionSender tx) pt
-  where nonce = transactionNonce tx
+extendPendingTransactionTable nextNonce tx pt = assert (nextNonce <= nonce) $ go
+  where go = pt & pttWithSender . at (transactionSender tx) %~ \case Nothing -> Just (nextNonce, nonce)
+                                                                     Just (l, u) -> Just (l, max u nonce)
+        nonce = transactionNonce tx
 
 -- |Insert an additional element in the pending transaction table.
 -- Does nothing if the next nonce is greater than the transaction nonce.
 -- If the account does not yet exist create it.
 -- NB: This only updates the pending table, and does not ensure that invariants elsewhere are maintained.
 checkedExtendPendingTransactionTable :: TransactionData t => Nonce -> t -> PendingTransactionTable -> PendingTransactionTable
-checkedExtendPendingTransactionTable nextNonce tx pt = if nextNonce > nonce then pt else
-  HM.alter (\case Nothing -> Just (nextNonce, nonce)
-                  Just (l, u) -> Just (l, max u nonce)) (transactionSender tx) pt
+checkedExtendPendingTransactionTable nextNonce tx pt =
+  if nextNonce > nonce then pt else
+    pt & pttWithSender . at (transactionSender tx) %~ \case Nothing -> Just (nextNonce, nonce)
+                                                            Just (l, u) -> Just (l, max u nonce)
   where nonce = transactionNonce tx
 
+-- |Extend the pending transaction table with a credential hash.
+extendPendingTransactionTable' :: TransactionHash -> PendingTransactionTable -> PendingTransactionTable
+extendPendingTransactionTable' hash pt =
+  pt & pttDeployCredential %~ HS.insert hash
 
-forwardPTT :: [Transaction] -> PendingTransactionTable -> PendingTransactionTable
+forwardPTT :: [BlockItem] -> PendingTransactionTable -> PendingTransactionTable
 forwardPTT trs ptt0 = foldl forward1 ptt0 trs
     where
-        forward1 :: PendingTransactionTable -> Transaction -> PendingTransactionTable
-        forward1 ptt tr = ptt & at (transactionSender tr) %~ upd
+        forward1 :: PendingTransactionTable -> BlockItem -> PendingTransactionTable
+        forward1 ptt WithMetadata{wmdData=NormalTransaction tr} = ptt & pttWithSender . at (transactionSender tr) %~ upd
             where
                 upd Nothing = error "forwardPTT : forwarding transaction that is not pending"
                 upd (Just (low, high)) =
                     assert (low == transactionNonce tr) $ assert (low <= high) $
                         if low == high then Nothing else Just (low+1,high)
+        forward1 ptt WithMetadata{wmdData=CredentialDeployment{..},..} = ptt & pttDeployCredential %~ upd
+            where
+              upd ps = case HS.member wmdHash ps of
+                         False -> error "forwardPTT: forwarding a block item that is not pending."
+                         True -> HS.delete wmdHash ps
 
-reversePTT :: [Transaction] -> PendingTransactionTable -> PendingTransactionTable
+reversePTT :: [BlockItem] -> PendingTransactionTable -> PendingTransactionTable
 reversePTT trs ptt0 = foldr reverse1 ptt0 trs
     where
-        reverse1 :: Transaction -> PendingTransactionTable -> PendingTransactionTable
-        reverse1 tr = at (transactionSender tr) %~ upd
+        reverse1 :: BlockItem -> PendingTransactionTable -> PendingTransactionTable
+        reverse1 WithMetadata{wmdData=NormalTransaction tr} = pttWithSender . at (transactionSender tr) %~ upd
             where
                 upd Nothing = Just (transactionNonce tr, transactionNonce tr)
                 upd (Just (low, high)) =
                         assert (low == transactionNonce tr + 1) $
                         Just (low-1,high)
+        reverse1 WithMetadata{wmdData=CredentialDeployment{..},..} = pttDeployCredential %~ upd
+            where
+              upd ps = assert (not (HS.member wmdHash ps)) $ HS.insert wmdHash ps
 
 -- |Record special transactions as well for logging purposes.
 data SpecialTransactionOutcome =
