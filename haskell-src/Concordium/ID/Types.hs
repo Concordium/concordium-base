@@ -274,6 +274,7 @@ instance FromJSON AttributeValue where
   parseJSON _ = fail "Attribute value must be either a string or an int."
 
 -- |YearMonth used store expiry and creation time
+--  note Ord derive is correct, as it compares fields sequentially
 data YearMonth = YearMonth {
   year :: Word16,
   month :: Word8
