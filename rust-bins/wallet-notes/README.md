@@ -154,6 +154,8 @@ and accepts `GET` requests. At the moment two requests are supported.
 - [credential-input.json](credential-input.json) input to the creation of the
   credential library call.
 - [credential-response.json](credential.json) the response from credential creation call.
+- [transfer-input.json](transfer-input.json) input to the create transfer call.
+- [transfer-output.json](transfer-output.json) the response from create transfer call.
 
 
 # How to run the server
