@@ -71,7 +71,7 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
     };
 
     // NB: This needs to be consistent with scheduler assigned cost.
-    let energy = 10;
+    let energy: u64 = 10;
 
     let (hash, body) = {
         let mut payload = Vec::new();
@@ -80,7 +80,7 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
         payload.put(&to_address);
         payload.put(&amount);
 
-        let payload_size = payload.len() as u32;
+        let payload_size: u32 = payload.len() as u32;
         assert_eq!(payload_size, 42);
 
         let mut body = Vec::new();
