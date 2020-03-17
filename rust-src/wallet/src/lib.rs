@@ -181,13 +181,10 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
         .iter()
         .map(|x| x.ar_identity)
         .collect::<Vec<_>>();
-    let context = make_context_from_ip_info(
-        ip_info,
-        ChoiceArParameters {
-            ar_identities,
-            threshold,
-        },
-    )
+    let context = make_context_from_ip_info(ip_info, ChoiceArParameters {
+        ar_identities,
+        threshold,
+    })
     .ok_or_else(|| format_err!("Invalid choice of anonymity revokers. Should not happen."))?;
     let (pio, randomness) = generate_pio(&context, &aci);
 
@@ -535,9 +532,7 @@ pub unsafe fn free_response_string_ext(ptr: *mut c_char) {
 /// # Safety
 /// This function is unsafe in the sense that if the argument pointer was not
 /// Constructed via CString::into_raw its behaviour is undefined.
-pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) {
-    free_response_string_ext(ptr)
-}
+pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) { free_response_string_ext(ptr) }
 
 #[cfg(test)]
 mod test {}

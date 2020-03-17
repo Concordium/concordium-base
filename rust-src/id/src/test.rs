@@ -10,18 +10,13 @@ use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
 use ps_sig;
-use std::collections::btree_map::BTreeMap;
-use std::convert::TryFrom;
+use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
 use rand::*;
 
 use either::Left;
 
-<<<<<<< HEAD
 type ExamplePairing = Bls12;
-=======
-use std::convert::TryFrom;
->>>>>>> 5dbdaed3a72bac8652f90c213c96438aea53f689
 
 type ExampleCurve = G1;
 
@@ -43,8 +38,8 @@ pub fn test_create_ars<T: Rng>(
         let ar_info = ArInfo::<ExampleCurve> {
             ar_identity: ArIdentity(i as u32),
             ar_description: Description {
-                name: format!("AnonymityRevoker{}", i),
-                url: format!("AnonymityRevoker{}.com", i),
+                name:        format!("AnonymityRevoker{}", i),
+                url:         format!("AnonymityRevoker{}.com", i),
                 description: format!("AnonymityRevoker{}", i),
             },
             ar_public_key,
@@ -55,7 +50,6 @@ pub fn test_create_ars<T: Rng>(
     (ar_infos, ar_keys)
 }
 
-<<<<<<< HEAD
 /// Create identity provider with #num_ars ARs to be used by tests
 pub fn test_create_ip_info<T: Rng>(
     csprng: &mut T,
@@ -69,9 +63,6 @@ pub fn test_create_ip_info<T: Rng>(
     // revokers.
     let ps_len = (5 + num_ars + max_attrs) as usize;
     let ip_secret_key = ps_sig::secret::SecretKey::<ExamplePairing>::generate(ps_len, csprng);
-=======
-    let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(11, &mut csprng);
->>>>>>> 5dbdaed3a72bac8652f90c213c96438aea53f689
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
     // Create ARs
@@ -83,14 +74,14 @@ pub fn test_create_ip_info<T: Rng>(
     (
         IpData {
             public_ip_info: IpInfo {
-                ip_identity: IpIdentity(0),
+                ip_identity:    IpIdentity(0),
                 ip_description: Description {
-                    name: "IP0".to_owned(),
-                    url: "IP0.com".to_owned(),
+                    name:        "IP0".to_owned(),
+                    url:         "IP0.com".to_owned(),
                     description: "IP0".to_owned(),
                 },
-                ip_verify_key: ip_public_key,
-                ip_ars: IpAnonymityRevokers {
+                ip_verify_key:  ip_public_key,
+                ip_ars:         IpAnonymityRevokers {
                     ars: ar_infos,
                     ar_cmm_key: ar_ck,
                     ar_base,
@@ -99,7 +90,7 @@ pub fn test_create_ip_info<T: Rng>(
             ip_secret_key,
             metadata: IpMetadata {
                 issuance_start: "URL.com".to_owned(),
-                icon: "BeautifulIcon.ico".to_owned(),
+                icon:           "BeautifulIcon.ico".to_owned(),
             },
         },
         ar_keys,
@@ -138,13 +129,10 @@ pub fn test_create_pio(
     let ars: Vec<ArIdentity> = (0..threshold).map(ArIdentity).collect::<Vec<_>>();
 
     // Create context
-    let context = make_context_from_ip_info(
-        ip_info.clone(),
-        ChoiceArParameters {
-            ar_identities: ars,
-            threshold: Threshold(threshold),
-        },
-    )
+    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+        ar_identities: ars,
+        threshold:     Threshold(threshold),
+    })
     .expect("The constructed ARs are invalid.");
 
     // Create and return PIO
@@ -214,7 +202,7 @@ fn test_pipeline() {
         _phantom: Default::default(),
     };
     let acc_data = AccountData {
-        keys: {
+        keys:     {
             let mut keys = BTreeMap::new();
             keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
             keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
