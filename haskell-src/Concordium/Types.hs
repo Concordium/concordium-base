@@ -77,8 +77,14 @@ type BakerAggregationVerifyKey = Bls.PublicKey
 type BakerAggregationPrivateKey = Bls.SecretKey
 type BakerAggregationProof = Bls.Proof
 type LotteryPower = Ratio Amount
+
+-- | The type of the birk parameter "election difficulty".
+-- The value must be in the range [0,1).
 type ElectionDifficulty = Double
 type FinalizationCommitteeSize = Word32
+
+isValidElectionDifficulty :: ElectionDifficulty -> Bool
+isValidElectionDifficulty d = d >= 0 && d < 1
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey

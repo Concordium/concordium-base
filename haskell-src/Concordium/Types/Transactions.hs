@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -11,6 +12,7 @@ import Data.Time.Clock.POSIX
 import Control.Exception
 import Control.Monad
 import Data.Aeson.TH
+import Data.Aeson(FromJSON, ToJSON)
 import Data.Char(toLower)
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
@@ -37,9 +39,9 @@ import Concordium.Types.Execution
 -- |A signature is an association list of index of the key, and the actual signature.
 -- The index is relative to the account address, and the indices should be distinct.
 -- The maximum length of the list is 255, and the minimum length is 1.
-newtype TransactionSignature = TransactionSignature { tsSignature :: [(KeyIndex, Signature)] }
+newtype TransactionSignature = TransactionSignature { tsSignature :: Map.Map KeyIndex Signature }
   deriving (Eq, Show)
-
+  deriving (ToJSON, FromJSON) via (Map.Map KeyIndex Signature)
 -- |Get the number of actual signatures contained in a 'TransactionSignature'.
 getTransactionNumSigs :: TransactionSignature -> Int
 getTransactionNumSigs = length . tsSignature
@@ -50,11 +52,13 @@ getTransactionNumSigs = length . tsSignature
 instance S.Serialize TransactionSignature where
   put TransactionSignature{..} = do
     S.putWord8 (fromIntegral (length tsSignature))
-    forM_ tsSignature $ \(idx, sig) -> S.put idx <> S.put sig
+    forM_ (Map.toList tsSignature) $ \(idx, sig) -> S.put idx <> S.put sig
   get = do
     len <- S.getWord8
     when (len == 0) $ fail "Need at least one signature."
-    TransactionSignature <$> replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+    -- it is fine to redefine signatures during serialization (if there are multiple with the same key index).
+    -- this cannot harm validity
+    TransactionSignature . Map.fromList <$> replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
 
 -- |Size of the signature in bytes.
 -- Should be kept up to date with the serialize instance.
@@ -62,7 +66,7 @@ signatureSize :: TransactionSignature -> Int
 signatureSize TransactionSignature{..} =
     1 -- length
     + length tsSignature -- key indices
-    + foldl' (\acc (_, sig) -> acc + signatureSerializedSize sig) 0 tsSignature -- signatures
+    + foldl' (\acc (_, sig) -> acc + signatureSerializedSize sig) 0 (Map.toList tsSignature) -- signatures
 
 type TransactionTime = Word64
 
@@ -344,7 +348,7 @@ signTransaction keys btrHeader btrPayload =
   let body = S.runPut (S.put btrHeader <> putPayload btrPayload)
       -- only sign the hash of the transaction
       bodyHash = H.hashToByteString (H.hash body)
-      tsSignature = map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) keys
+      tsSignature = Map.fromList $ map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) keys
       btrSignature = TransactionSignature{..}
   in BareTransaction{..}
 
@@ -355,7 +359,7 @@ verifyTransaction :: TransactionData msg => AccountKeys -> msg -> Bool
 verifyTransaction keys tx =
   let bodyHash = H.hashToByteString (transactionHash tx)
       TransactionSignature sigs = transactionSignature tx
-      keysCheck = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getAccountKey idx keys)) True sigs
+      keysCheck = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getAccountKey idx keys)) True (Map.toList sigs)
       numSigs = length sigs
       threshold = akThreshold keys
   in numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck
@@ -513,7 +517,7 @@ getTransactionIndex bh = \case
 -- @highNonce@ should always be at least @nextNonce@ (otherwise, what transaction is pending?).
 -- If an account has no pending transactions, then it should not be in the map.
 data PendingTransactionTable = PTT {
-  _pttWithSender :: HM.HashMap AccountAddress (Nonce, Nonce),
+  _pttWithSender :: !(HM.HashMap AccountAddress (Nonce, Nonce)),
   -- |Pending credentials. We only store the hash because updating the
   -- pending table would otherwise be more costly with the current setup.
   _pttDeployCredential :: HS.HashSet TransactionHash
@@ -529,10 +533,12 @@ emptyPendingTransactionTable = PTT HM.empty HS.empty
 -- NB: This only updates the pending table, and does not ensure that invariants elsewhere are maintained.
 -- PRECONDITION: the next nonce should be less than or equal to the transaction nonce.
 extendPendingTransactionTable :: TransactionData t => Nonce -> t -> PendingTransactionTable -> PendingTransactionTable
-extendPendingTransactionTable nextNonce tx pt = assert (nextNonce <= nonce) $ go
-  where go = pt & pttWithSender . at (transactionSender tx) %~ \case Nothing -> Just (nextNonce, nonce)
-                                                                     Just (l, u) -> Just (l, max u nonce)
+extendPendingTransactionTable nextNonce tx PTT{..} = assert (nextNonce <= nonce) $ let v = HM.alter f sender _pttWithSender in PTT{_pttWithSender = v, ..}
+  where
+        f Nothing = Just (nextNonce, nonce)
+        f (Just (l, u)) = Just (l, max u nonce)
         nonce = transactionNonce tx
+        sender = transactionSender tx
 
 -- |Insert an additional element in the pending transaction table.
 -- Does nothing if the next nonce is greater than the transaction nonce.
