@@ -107,9 +107,7 @@ pub enum ParseAttributeError {
 }
 
 impl From<ParseBigIntError> for ParseAttributeError {
-    fn from(err: ParseBigIntError) -> Self {
-        ParseAttributeError::IntDecodingFailed(err)
-    }
+    fn from(err: ParseBigIntError) -> Self { ParseAttributeError::IntDecodingFailed(err) }
 }
 
 impl fmt::Display for ParseAttributeError {
@@ -270,9 +268,7 @@ macro_derive_to_json!(global_context_to_json, GlobalContext<G1>);
 pub struct ElgamalGenerator(G1);
 
 impl ElgamalGenerator {
-    pub fn generate() -> Self {
-        ElgamalGenerator(G1::generate(&mut thread_rng()))
-    }
+    pub fn generate() -> Self { ElgamalGenerator(G1::generate(&mut thread_rng())) }
 }
 
 macro_derive_from_bytes!(
@@ -320,10 +316,6 @@ mod test {
     use either::Either::Left;
     use pairing::bls12_381::Bls12;
     use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
-<<<<<<< HEAD
-=======
-    use ps_sig;
->>>>>>> 5dbdaed3a72bac8652f90c213c96438aea53f689
     use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
     type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
@@ -332,12 +324,6 @@ mod test {
     fn test_pipeline() {
         let mut csprng = thread_rng();
 
-<<<<<<< HEAD
-=======
-        let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(11, &mut csprng);
-        let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
-
->>>>>>> 5dbdaed3a72bac8652f90c213c96438aea53f689
         let secret = ExampleCurve::generate_scalar(&mut csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
             id_cred: IdCredentials {
@@ -381,13 +367,10 @@ mod test {
             _phantom: Default::default(),
         };
 
-        let context = make_context_from_ip_info(
-            ip_info.clone(),
-            ChoiceArParameters {
-                ar_identities: vec![ArIdentity(0), ArIdentity(1), ArIdentity(2)],
-                threshold: Threshold(2),
-            },
-        )
+        let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+            ar_identities: vec![ArIdentity(0), ArIdentity(1), ArIdentity(2)],
+            threshold:     Threshold(2),
+        })
         .expect("The constructed ARs are valid.");
         let (pio, randomness) = generate_pio(&context, &aci);
 

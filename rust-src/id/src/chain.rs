@@ -458,8 +458,7 @@ mod tests {
     use either::Left;
     use pedersen_scheme::key as PedersenKey;
     use rand::*;
-    use std::collections::btree_map::BTreeMap;
-    use std::convert::TryFrom;
+    use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
     #[test]
     fn test_verify_cdi() {
@@ -506,7 +505,7 @@ mod tests {
             _phantom: Default::default(),
         };
         let acc_data = AccountData {
-            keys: {
+            keys:     {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
                 keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
