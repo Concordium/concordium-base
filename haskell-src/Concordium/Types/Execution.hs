@@ -177,7 +177,7 @@ data Payload =
   -- |Update the election difficulty birk parameter.
   -- Will only be accepted if sent from one of the special beta accounts.
   | UpdateElectionDifficulty {
-      -- |The new election difficulty. Must be between 0 and 1 (both inclusive).
+      -- |The new election difficulty. Must be in the range [0,1).
       uedDifficulty :: !ElectionDifficulty
       }
   deriving(Eq, Show)
