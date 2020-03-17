@@ -454,15 +454,17 @@ newtype TransactionIndex = TransactionIndex Word64
     deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
 
 -- |Result of a valid transaction is a transaction summary.
-data TransactionSummary = TransactionSummary {
+data TransactionSummary' a = TransactionSummary {
   tsSender :: !(Maybe AccountAddress),
   tsHash :: !TransactionHash,
   tsCost :: !Amount,
   tsEnergyCost :: !Energy,
   tsType :: !(Maybe TransactionType),
-  tsResult :: !ValidResult,
+  tsResult :: !a,
   tsIndex :: !TransactionIndex
   } deriving(Eq, Show, Generic)
+
+type TransactionSummary = TransactionSummary' ValidResult
 
 -- |Outcomes of a valid transaction. Either a reject with a reason or a
 -- successful transaction with a list of events which occurred during execution.
@@ -547,6 +549,6 @@ $(deriveJSON AE.defaultOptions{AE.constructorTagModifier = map toLower . drop 2,
                                     },
                                  AE.fieldLabelModifier=map toLower . drop 2} ''ValidResult)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionSummary)
+$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionSummary')
 
 $(deriveJSON defaultOptions{AE.constructorTagModifier = map toLower . drop 2} ''TransactionType)
