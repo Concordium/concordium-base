@@ -70,8 +70,13 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
         }
     };
 
+    let keys_object = match v.get("keys").and_then(Value::as_object) {
+        Some(v) => v,
+        None => bail!("Field 'keys' not present or not an object, but should be."),
+    };
+
     // NB: This needs to be consistent with scheduler assigned cost.
-    let energy: u64 = 10;
+    let energy: u64 = 6 + 53 * keys_object.len() as u64;
 
     let (hash, body) = {
         let mut payload = Vec::new();
@@ -98,33 +103,26 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
 
     let signatures = {
         let mut out = BTreeMap::new();
-        match v.get("keys").and_then(Value::as_object) {
-            Some(v) => {
-                for (key_index_str, value) in v.iter() {
-                    let key_index = key_index_str.parse::<u8>()?;
-                    match value.as_object() {
-                        None => bail!("Malformed keys."),
-                        Some(value) => {
-                            let public = match value.get("verifyKey").and_then(Value::as_str) {
-                                None => bail!("Malformed keys: missing verifyKey."),
-                                Some(x) => base16_decode_string(&x)?,
-                            };
-                            let secret = match value.get("signKey").and_then(Value::as_str) {
-                                None => bail!("Malformed keys: missing signKey."),
-                                Some(x) => base16_decode_string(&x)?,
-                            };
-                            out.insert(
-                                key_index,
-                                base16_encode_string(
-                                    &ed25519::Keypair { secret, public }.sign(&hash),
-                                ),
-                            );
-                        }
-                    }
+        for (key_index_str, value) in keys_object.iter() {
+            let key_index = key_index_str.parse::<u8>()?;
+            match value.as_object() {
+                None => bail!("Malformed keys."),
+                Some(value) => {
+                    let public = match value.get("verifyKey").and_then(Value::as_str) {
+                        None => bail!("Malformed keys: missing verifyKey."),
+                        Some(x) => base16_decode_string(&x)?,
+                    };
+                    let secret = match value.get("signKey").and_then(Value::as_str) {
+                        None => bail!("Malformed keys: missing signKey."),
+                        Some(x) => base16_decode_string(&x)?,
+                    };
+                    out.insert(
+                        key_index,
+                        base16_encode_string(&ed25519::Keypair { secret, public }.sign(&hash)),
+                    );
                 }
             }
-            None => bail!("Field 'keys' not present or not an object, but should be."),
-        };
+        }
         out
     };
 
