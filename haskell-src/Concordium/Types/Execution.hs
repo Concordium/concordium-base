@@ -174,6 +174,12 @@ data Payload =
       }
   -- |Undelegate stake.
   | UndelegateStake
+  -- |Update the election difficulty birk parameter.
+  -- Will only be accepted if sent from one of the special beta accounts.
+  | UpdateElectionDifficulty {
+      -- |The new election difficulty. Must be in the range [0,1).
+      uedDifficulty :: !ElectionDifficulty
+      }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -234,6 +240,9 @@ instance S.Serialize Payload where
     S.put dsID
   put UndelegateStake =
     P.putWord8 10
+  put UpdateElectionDifficulty{..} =
+    P.putWord8 11 <>
+    S.put uedDifficulty
 
   get =
     G.getWord8 >>=
@@ -284,6 +293,11 @@ instance S.Serialize Payload where
               return UpdateBakerSignKey{..}
             9 -> DelegateStake <$> S.get
             10 -> return UndelegateStake
+            11 -> do
+              uedDifficulty <- S.get
+              unless (isValidElectionDifficulty uedDifficulty) $
+                fail $ "Illegal election difficulty: " ++ show uedDifficulty
+              return UpdateElectionDifficulty{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 {-# INLINE encodePayload #-}
@@ -404,6 +418,10 @@ data Event =
                -- are not delegating to anyone at the time.
                esuBaker :: !(Maybe BakerId)
                }
+           | ElectionDifficultyUpdated {
+               -- |The new election difficulty.
+               eeduDifficulty :: !Double
+               }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -436,15 +454,17 @@ newtype TransactionIndex = TransactionIndex Word64
     deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
 
 -- |Result of a valid transaction is a transaction summary.
-data TransactionSummary = TransactionSummary {
+data TransactionSummary' a = TransactionSummary {
   tsSender :: !(Maybe AccountAddress),
   tsHash :: !TransactionHash,
   tsCost :: !Amount,
   tsEnergyCost :: !Energy,
   tsType :: !(Maybe TransactionType),
-  tsResult :: !ValidResult,
+  tsResult :: !a,
   tsIndex :: !TransactionIndex
   } deriving(Eq, Show, Generic)
+
+type TransactionSummary = TransactionSummary' ValidResult
 
 -- |Outcomes of a valid transaction. Either a reject with a reason or a
 -- successful transaction with a list of events which occurred during execution.
@@ -488,6 +508,8 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   | NotFromBakerAccount { nfbaFromAccount :: !AccountAddress, -- ^Sender account of the transaction
                                           nfbaCurrentBakerAccount :: !AccountAddress -- ^Current baker account.
                                         }
+                  -- |A transaction should be sent from a special account, but is not.
+                  | NotFromSpecialAccount
     deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason
@@ -527,6 +549,6 @@ $(deriveJSON AE.defaultOptions{AE.constructorTagModifier = map toLower . drop 2,
                                     },
                                  AE.fieldLabelModifier=map toLower . drop 2} ''ValidResult)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionSummary)
+$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionSummary')
 
 $(deriveJSON defaultOptions{AE.constructorTagModifier = map toLower . drop 2} ''TransactionType)
