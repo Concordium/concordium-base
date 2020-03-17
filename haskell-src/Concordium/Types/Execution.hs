@@ -1,4 +1,6 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -11,17 +13,21 @@ import Prelude hiding(fail)
 
 import Control.Monad.Reader
 
+import Data.Char
 import qualified Data.Aeson as AE
+import Data.Aeson.TH
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
+import Data.Word
 import GHC.Generics
 
 import qualified Concordium.Types.Acorn.Core as Core
 import Concordium.Types
+import Concordium.Types.Execution.TH
 import Concordium.ID.Types
 import Concordium.Types.Acorn.Interfaces
 import qualified Concordium.ID.Types as IDTypes
@@ -94,11 +100,6 @@ data Payload =
       -- |Amount to transfer.
       tAmount :: !Amount
       }
-  -- |Deploy credentials, creating a new account if one does not yet exist.
-  | DeployCredential {
-      -- |The credentials to deploy.
-      dcCredential :: !IDTypes.CredentialDeploymentInformation
-      }
   -- |Deploy an encryption key to an existing account.
   | DeployEncryptionKey {
       -- |The encryption key to deploy.
@@ -130,7 +131,10 @@ data Payload =
       -- create their own bakers.
       -- TODO: We could also alternatively just require a signature from one of the
       -- beta accounts on the public data.
-      abProofAccount :: !AccountOwnershipProof
+      abProofAccount :: !AccountOwnershipProof,
+      -- |Proof that the baker owns the private key corresponding to the aggregation
+      -- key.
+      abProofAggregation :: !BakerAggregationProof
       -- FIXME: in the future also logic the baker is allowed to become a baker:
       -- THIS NEEDS SPEC
       }
@@ -172,6 +176,10 @@ data Payload =
   | UndelegateStake
   deriving(Eq, Show)
 
+$(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
+
+instance S.Serialize TransactionType
+
 -- |Payload serialization according to
 --
 --  * @SPEC: <$DOCS/Transactions#transaction-body>
@@ -194,42 +202,40 @@ instance S.Serialize Payload where
     P.putWord8 3 <>
     S.put tToAddress <>
     S.put tAmount
-  put DeployCredential{..} =
-    P.putWord8 4 <>
-    S.put dcCredential
   put DeployEncryptionKey{..} =
-    P.putWord8 5 <>
+    P.putWord8 4 <>
     S.put dekKey
   put AddBaker{..} =
-    P.putWord8 6 <>
+    P.putWord8 5 <>
     S.put abElectionVerifyKey <>
     S.put abSignatureVerifyKey <>
     S.put abAggregationVerifyKey <>
     S.put abAccount <>
     S.put abProofSig <>
     S.put abProofElection <>
-    S.put abProofAccount
+    S.put abProofAccount <>
+    S.put abProofAggregation
   put RemoveBaker{..} =
-    P.putWord8 7 <>
+    P.putWord8 6 <>
     S.put rbId <>
     S.put rbProof
   put UpdateBakerAccount{..} =
-    P.putWord8 8 <>
+    P.putWord8 7 <>
     S.put ubaId <>
     S.put ubaAddress <>
     S.put ubaProof
   put UpdateBakerSignKey{..} =
-    P.putWord8 9 <>
+    P.putWord8 8 <>
     S.put ubsId <>
     S.put ubsKey <>
     S.put ubsProof
   put DelegateStake{..} =
-    P.putWord8 10 <>
+    P.putWord8 9 <>
     S.put dsID
   put UndelegateStake =
-    P.putWord8 11
+    P.putWord8 10
 
-  get = do
+  get =
     G.getWord8 >>=
       \case 0 -> do
               dmMod <- Core.getModule
@@ -250,12 +256,9 @@ instance S.Serialize Payload where
               tAmount <- S.get
               return Transfer{..}
             4 -> do
-              dcCredential <- S.get
-              return DeployCredential{..}
-            5 -> do
               dekKey <- S.get
               return DeployEncryptionKey{..}
-            6 -> do
+            5 -> do
               abElectionVerifyKey <- S.get
               abSignatureVerifyKey <- S.get
               abAggregationVerifyKey <- S.get
@@ -263,23 +266,24 @@ instance S.Serialize Payload where
               abProofSig <- S.get
               abProofElection <- S.get
               abProofAccount <- S.get
+              abProofAggregation <- S.get
               return AddBaker{..}
-            7 -> do
+            6 -> do
               rbId <- S.get
               rbProof <- S.get
               return RemoveBaker{..}
-            8 -> do
+            7 -> do
               ubaId <- S.get
               ubaAddress <- S.get
               ubaProof <- S.get
               return UpdateBakerAccount{..}
-            9 -> do
+            8 -> do
               ubsId <- S.get
               ubsKey <- S.get
               ubsProof <- S.get
               return UpdateBakerSignKey{..}
-            10 -> DelegateStake <$> S.get
-            11 -> return UndelegateStake
+            9 -> DelegateStake <$> S.get
+            10 -> return UndelegateStake
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 {-# INLINE encodePayload #-}
@@ -299,21 +303,107 @@ payloadBodyBytes (EncodedPayload ss) =
   then BS.empty
   else BS.tail (BSS.fromShort ss)
 
+-- |Additional special events that affect the block state.
+data BlockEvents =
+  -- |Block reward
+  BlockReward !Amount !BakerId
+  -- |Delegation reward
+  | DelegationReward !Amount !BakerId
+  -- |Foundation tax transfer
+  | FoundationTax !Amount
+  -- |Reward to a finalizer.
+  | FinalizationReward !Amount !BakerId
+
 -- |Events which are generated during transaction execution.
 -- These are only used for commited transactions.
-data Event = ModuleDeployed !Core.ModuleRef
-           | ContractInitialized !Core.ModuleRef !Core.TyName !ContractAddress
-           | Updated !Address !ContractAddress !Amount !MessageFormat
-           | Transferred !Address !Amount !Address
+data Event =
+           -- |Module with the given address was deployed.
+           ModuleDeployed !Core.ModuleRef
+           -- |The contract was deployed.
+           | ContractInitialized {
+               -- |Module in which the contract source resides.
+               ecRef :: !Core.ModuleRef,
+               -- |Name of the contract relative to the module.
+               ecName :: !Core.TyName,
+               -- |Reference to the contract as deployed.
+               ecAddress :: !ContractAddress,
+               -- |Initial amount transferred to the contract.
+               ecAmount :: !Amount
+               -- TODO: We could include initial state hash here.
+               -- Including the whole state is likely not a good idea.
+               }
+           -- |The given contract was updated.
+           | Updated {
+               -- |Address of the contract that was updated.
+               euAddress :: !ContractAddress,
+               -- |Address of the instigator of the update, an account or contract.
+               euInstigator :: !Address,
+               -- |Amount which was transferred to the contract.
+               euAmount :: !Amount,
+               -- |The message which was sent to the contract.
+               euMessage :: !MessageFormat
+               -- TODO: We could include input/output state hashes here
+               -- Including the whole state pre/post run is likely not a good idea.
+               }
+           -- |Tokens were transferred.
+           | Transferred {
+               -- |Source.
+               etFrom :: !Address,
+               -- |Amount.
+               etAmount :: !Amount,
+               -- |Target.
+               etTo :: !Address
+               }
+           -- |A new account was created.
            | AccountCreated !AccountAddress
-           | CredentialDeployed !IDTypes.CredentialDeploymentValues
-           | AccountEncryptionKeyDeployed AccountAddress IDTypes.AccountEncryptionKey
+           -- |A new credential was deployed onto a given account.
+           | CredentialDeployed {
+               -- |ID of the credential
+               ecdRegId :: !IDTypes.CredentialRegistrationID,
+               -- |Account to which it was deployed.
+               ecdAccount :: !AccountAddress
+               }
+           -- |A new encryption key was deployed onto an account.
+           | AccountEncryptionKeyDeployed {
+               -- |The encryption key.
+               eaekdKey :: !IDTypes.AccountEncryptionKey,
+               -- |Account to which it was deployed.
+               eaekdAccount :: !AccountAddress
+               }
            | BakerAdded !BakerId
            | BakerRemoved !BakerId
-           | BakerAccountUpdated !BakerId !AccountAddress
-           | BakerKeyUpdated !BakerId !BakerSignVerifyKey
-           | StakeDelegated !AccountAddress !BakerId
-           | StakeUndelegated !AccountAddress
+           | BakerAccountUpdated {
+               -- |The baker.
+               ebauBaker :: !BakerId,
+               -- |New account address
+               ebauNewAccount :: !AccountAddress
+               }
+           | BakerKeyUpdated {
+               -- |The baker.
+               ebkuBaker :: !BakerId,
+               -- |New key.
+               ebkuNewKey :: !BakerSignVerifyKey
+               }
+           | BakerElectionKeyUpdated {
+               -- |The baker.
+               ebekuBaker :: !BakerId,
+               -- |New key.
+               ebekuNewKey :: !BakerElectionVerifyKey
+               }
+           | StakeDelegated {
+               -- |Account which is delegating.
+               esdAccount :: !AccountAddress,
+               -- |To which baker.
+               esdBaker :: !BakerId
+               }
+           | StakeUndelegated {
+               -- |Account which undelegated the stake.
+               esuAccount :: !AccountAddress,
+               -- |The baker to which the account delegated before, if any.
+               -- It is OK for an account to try to undelegate stake even if they
+               -- are not delegating to anyone at the time.
+               esuBaker :: !(Maybe BakerId)
+               }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -322,6 +412,14 @@ instance S.Serialize Event
 -- and top-level messages are acorn expressions.
 data MessageFormat = ValueMessage !(Value Core.NoAnnot) | ExprMessage !(LinkedExpr Core.NoAnnot)
     deriving(Show, Generic, Eq)
+
+-- FIXME: ToJSON instance based on a show instance.
+instance AE.ToJSON MessageFormat where
+  toJSON fmt = AE.toJSON (show fmt)
+
+-- FIXME: Contracts not supported.
+instance AE.FromJSON MessageFormat where
+  parseJSON _ = fail "FIXME: Unsupported."
 
 instance S.Serialize MessageFormat where
     put (ValueMessage v) = S.putWord8 0 >> putStorable v
@@ -333,24 +431,29 @@ instance S.Serialize MessageFormat where
             1 -> ExprMessage <$> S.get
             _ -> fail "Invalid MessageFormat tag"
 
--- |Result of a valid transaction is either a reject with a reason or a
+-- |Index of the transaction in a block, starting from 0.
+newtype TransactionIndex = TransactionIndex Word64
+    deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
+
+-- |Result of a valid transaction is a transaction summary.
+data TransactionSummary = TransactionSummary {
+  tsSender :: !(Maybe AccountAddress),
+  tsHash :: !TransactionHash,
+  tsCost :: !Amount,
+  tsEnergyCost :: !Energy,
+  tsType :: !(Maybe TransactionType),
+  tsResult :: !ValidResult,
+  tsIndex :: !TransactionIndex
+  } deriving(Eq, Show, Generic)
+
+-- |Outcomes of a valid transaction. Either a reject with a reason or a
 -- successful transaction with a list of events which occurred during execution.
 -- We also record the cost of the transaction.
-data ValidResult =
-  TxSuccess {
-    vrEvents :: ![Event],
-    vrTransactionCost :: !Amount,
-    vrEnergyCost :: !Energy
-  } |
-  TxReject {
-    vrRejectReason :: !RejectReason,
-    vrTransactionCost :: !Amount,
-    vrEnergyCost :: !Energy
-  }
+data ValidResult = TxSuccess { vrEvents :: ![Event] } | TxReject { vrRejectReason :: !RejectReason }
   deriving(Show, Generic, Eq)
 
 instance S.Serialize ValidResult
-
+instance S.Serialize TransactionSummary
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
 data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module has failed.
@@ -366,21 +469,13 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   -- ^The receiver account does not have a valid credential.
                   | ReceiverContractNoCredential !ContractAddress
                   -- ^The receiver contract does not have a valid credential.
-                  | EvaluationError         -- ^Error during evalution. This is
-                                            -- mostly for debugging purposes
-                                            -- since this kind of an error should
-                                            -- not happen after successful
-                                            -- typechecking.
                   | AmountTooLarge !Address !Amount
                   -- ^When one wishes to transfer an amount from A to B but there
                   -- are not enough funds on account/contract A to make this
                   -- possible. The data are the from address and the amount to transfer.
-                  | SerializationFailure String -- ^Serialization of the body failed for the given reason.
+                  | SerializationFailure -- ^Serialization of the body failed.
                   | OutOfEnergy -- ^We ran of out energy to process this transaction.
                   | Rejected -- ^Rejected due to contract logic.
-                  | DuplicateAccountRegistrationID IDTypes.CredentialRegistrationID
-                  | NonExistentIdentityProvider !IDTypes.IdentityProviderIdentity
-                  | AccountCredentialInvalid
                   | AccountEncryptionKeyAlreadyExists AccountAddress IDTypes.AccountEncryptionKey
                   | NonExistentRewardAccount !AccountAddress -- ^Reward account desired by the baker does not exist.
                   | InvalidProof -- ^Proof that the baker owns relevant private keys is not valid.
@@ -396,6 +491,8 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
     deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason
+instance AE.ToJSON RejectReason
+instance AE.FromJSON RejectReason
 
 data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
                  | IncorrectSignature  -- ^Signature check failed.
@@ -403,12 +500,33 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
                                              -- next in sequence. The argument
                                              -- is the expected nonce.
                  | SuccessorOfInvalidTransaction -- ^A transaction from the same account was rejected, so
-                                                 -- we reject the following transactions from the same account 
+                                                 -- we reject the following transactions from the same account
                  | UnknownAccount !AccountAddress -- ^Transaction is coming from an unknown sender.
                  | DepositInsufficient -- ^The dedicated gas amount was lower than the minimum allowed.
                  | NoValidCredential -- ^No valid credential on the sender account.
                  | ExpiredTransaction -- ^The transaction has expired.
                  | ExceedsMaxBlockEnergy -- ^The transaction's used energy size exceeds the maximum block energy limit
+                 | ExceedsMaxBlockSize -- ^The baker decided that this transaction is too big to put in a block.
+                 | NonExistentIdentityProvider !IDTypes.IdentityProviderIdentity
+                 | NonExistentAccount !AccountAddress -- ^Cannot deploy credential onto a non-existing account.
+                 | AccountCredentialInvalid
+                 | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
       deriving(Eq, Show)
 
-data TxResult = TxValid ValidResult | TxInvalid FailureKind
+data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
+
+-- FIXME: These intances need to be made clearer.
+$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = map toLower . dropWhile isLower} ''Event)
+
+-- Derive JSON instance for transaction outcomes
+-- At the end of the file to avoid issues with staging restriction.
+$(deriveJSON AE.defaultOptions{AE.constructorTagModifier = map toLower . drop 2,
+                                 AE.sumEncoding = AE.TaggedObject{
+                                    AE.tagFieldName = "outcome",
+                                    AE.contentsFieldName = "details"
+                                    },
+                                 AE.fieldLabelModifier=map toLower . drop 2} ''ValidResult)
+
+$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionSummary)
+
+$(deriveJSON defaultOptions{AE.constructorTagModifier = map toLower . drop 2} ''TransactionType)
