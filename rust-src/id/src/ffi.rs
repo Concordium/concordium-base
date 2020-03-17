@@ -320,6 +320,10 @@ mod test {
     use either::Either::Left;
     use pairing::bls12_381::Bls12;
     use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
+<<<<<<< HEAD
+=======
+    use ps_sig;
+>>>>>>> 5dbdaed3a72bac8652f90c213c96438aea53f689
     use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
     type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
@@ -328,6 +332,12 @@ mod test {
     fn test_pipeline() {
         let mut csprng = thread_rng();
 
+<<<<<<< HEAD
+=======
+        let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(11, &mut csprng);
+        let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+
+>>>>>>> 5dbdaed3a72bac8652f90c213c96438aea53f689
         let secret = ExampleCurve::generate_scalar(&mut csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
             id_cred: IdCredentials {

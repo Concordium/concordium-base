@@ -17,7 +17,11 @@ use rand::*;
 
 use either::Left;
 
+<<<<<<< HEAD
 type ExamplePairing = Bls12;
+=======
+use std::convert::TryFrom;
+>>>>>>> 5dbdaed3a72bac8652f90c213c96438aea53f689
 
 type ExampleCurve = G1;
 
@@ -51,6 +55,7 @@ pub fn test_create_ars<T: Rng>(
     (ar_infos, ar_keys)
 }
 
+<<<<<<< HEAD
 /// Create identity provider with #num_ars ARs to be used by tests
 pub fn test_create_ip_info<T: Rng>(
     csprng: &mut T,
@@ -64,6 +69,9 @@ pub fn test_create_ip_info<T: Rng>(
     // revokers.
     let ps_len = (5 + num_ars + max_attrs) as usize;
     let ip_secret_key = ps_sig::secret::SecretKey::<ExamplePairing>::generate(ps_len, csprng);
+=======
+    let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(11, &mut csprng);
+>>>>>>> 5dbdaed3a72bac8652f90c213c96438aea53f689
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
     // Create ARs

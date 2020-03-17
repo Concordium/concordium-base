@@ -296,6 +296,136 @@ mod tests {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /// Create identity provider with #num_ars anonymity revokers to be used by
+    /// tests
+    fn create_test_ip_info<T: Rng>(
+        csprng: &mut T,
+        num_ars: u32,
+        max_attrs: u32,
+    ) -> (
+        IpInfo<ExamplePairing, ExampleCurve>,
+        ps_sig::secret::SecretKey<ExamplePairing>,
+    ) {
+        // Create key for IP long enough to encode the attributes and anonymity
+        // revokers.
+        let ps_len = (5 + num_ars + max_attrs) as usize;
+        let ip_secret_key = ps_sig::secret::SecretKey::<ExamplePairing>::generate(ps_len, csprng);
+        let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+
+        // Create ARs
+        let ar_ck = PedersenKey::CommitmentKey::generate(csprng);
+        let ar_base = ExampleCurve::generate(csprng);
+        let mut ar_infos = Vec::new();
+        for i in 0..num_ars {
+            let ar_secret_key = SecretKey::generate(&ar_base, csprng);
+            let ar_public_key = PublicKey::from(&ar_secret_key);
+            let ar_info = ArInfo::<ExampleCurve> {
+                ar_identity: ArIdentity(i),
+                ar_description: mk_dummy_description(format!("AnonymityRevoker{}", i)),
+                ar_public_key,
+            };
+            ar_infos.push(ar_info);
+        }
+
+        // Return IP-info and secret-key
+        (
+            IpInfo {
+                ip_identity:    IpIdentity(0),
+                ip_description: mk_dummy_description("IP0".to_string()),
+                ip_verify_key:  ip_public_key,
+                ip_ars:         IpAnonymityRevokers {
+                    ars: ar_infos,
+                    ar_cmm_key: ar_ck,
+                    ar_base,
+                },
+            },
+            ip_secret_key,
+        )
+    }
+
+    /// Create PreIdentityObject for an account holder to be used by tests,
+    /// with the anonymity revocation having random threshold between 1 and
+    /// num_ars
+    fn create_test_pio<T: Rng>(
+        csprng: &mut T,
+        ip_info: &IpInfo<ExamplePairing, ExampleCurve>,
+        num_ars: u32,
+    ) -> (
+        Context<ExamplePairing, ExampleCurve>,
+        PreIdentityObject<ExamplePairing, ExampleCurve>,
+        <G1 as Curve>::Scalar,
+    ) {
+        // Create account holder
+        let secret = ExampleCurve::generate_scalar(csprng);
+        let ah_info = CredentialHolderInfo::<ExampleCurve> {
+            id_cred: IdCredentials {
+                id_cred_sec: PedersenValue::new(secret),
+            },
+        };
+
+        // Create credential information
+        let prf_key = prf::SecretKey::generate(csprng);
+        let aci = AccCredentialInfo {
+            cred_holder_info: ah_info,
+            prf_key,
+        };
+
+        // Select some ARs, between one and all
+        let threshold = csprng.gen_range(1, num_ars + 1);
+
+        // select threshold number of anonymity revokers, in some order.
+        let ar_ids: Vec<ArIdentity> = (0..num_ars).map(ArIdentity).collect::<Vec<_>>();
+        let ars = ar_ids
+            .choose_multiple(csprng, threshold as usize)
+            .cloned()
+            .collect();
+
+        // Create context
+        let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+            ar_identities: ars,
+            threshold:     Threshold(threshold),
+        })
+        .expect("The constructed ARs are invalid.");
+
+        // Create and return PIO
+        let (pio, _randomness) = generate_pio::<ExamplePairing, ExampleCurve>(&context, &aci);
+        (context, pio, secret)
+    }
+
+    /// Create example attributes to be used by tests.
+    /// The attributes are generated uniformly at random, and the number of
+    /// attributes is chosen uniformly at random in the range [0, max_attrs)
+    fn create_test_attributes<R: Rng>(rng: &mut R, max_attrs: u32) -> ExampleAttributeList {
+        let mut alist = BTreeMap::new();
+
+        let numattrs = rng.gen_range(0, max_attrs);
+        // capacity is the number of bits we can reliably store in a field
+        // element of a pairing.
+        let capacity = <ExamplePairing as Pairing>::ScalarField::CAPACITY;
+        for _i in 0..numattrs {
+            // tags must be < capacity in order for the current encoding to work.
+            let tag = (rng.next_u32() % capacity) as u8;
+            let kind = rng.next_u64();
+            alist.insert(AttributeTag::from(tag), AttributeKind::from(kind));
+        }
+
+        let expiry_year = 2000 + (rng.next_u64() % 100);
+        let expiry_month = 1 + (rng.next_u64() % 12);
+        let expiry = YearMonth::try_from(expiry_year << 8 | expiry_month).unwrap();
+
+        let creation_year = expiry_year - 2;
+        let creation_time = YearMonth::try_from(creation_year << 8 | expiry_month).unwrap();
+        ExampleAttributeList {
+            expiry,
+            creation_time,
+            alist,
+            _phantom: Default::default(),
+        }
+    }
+
+>>>>>>> 5dbdaed3a72bac8652f90c213c96438aea53f689
     /// Check IP's verify_credentials succeeds for well-formed data.
     #[test]
     fn test_verify_credentials_success() {
