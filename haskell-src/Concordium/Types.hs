@@ -79,11 +79,11 @@ type BakerAggregationProof = Bls.Proof
 type LotteryPower = Ratio Amount
 
 -- | The type of the birk parameter "election difficulty".
--- The value must be within 0 and 1 (both inclusive).
+-- The value must be in the range [0,1).
 type ElectionDifficulty = Double
 
 isValidElectionDifficulty :: ElectionDifficulty -> Bool
-isValidElectionDifficulty = (&&) <$> (>= 0) <*> (<= 1)
+isValidElectionDifficulty d = d >= 0 && d < 1
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
