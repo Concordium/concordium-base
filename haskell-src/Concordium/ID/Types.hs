@@ -273,6 +273,12 @@ instance FromJSON AttributeValue where
 
   parseJSON _ = fail "Attribute value must be either a string or an int."
 
+-- |Expiry time of a credential.
+type CredentialExpiryTime = YearMonth
+
+-- |Creation time of a credential.
+type CredentialCreationTime = YearMonth
+
 -- |YearMonth used store expiry and creation time
 --  note Ord derive is correct, as it compares fields sequentially
 data YearMonth = YearMonth {
@@ -326,10 +332,10 @@ instance ToJSON AttributeTag where
   toJSON tag = maybe "UNKNOWN" toJSON $ Map.lookup tag invMapping
 
 data Policy = Policy {
-  -- |Expiry of this credential
-  pExpiry :: YearMonth,
+  -- |Expiry of this credential.
+  pExpiry :: CredentialExpiryTime,
   -- |Creation time of this credential
-  pCreationTime :: YearMonth,
+  pCreationTime :: CredentialCreationTime,
   -- |List of items in this attribute list.
   pItems :: Map.Map AttributeTag AttributeValue
   } deriving(Eq, Show)
