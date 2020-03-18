@@ -25,7 +25,7 @@ mkAccountNoCredentials key addr amnt = newAccount (makeSingletonAC key) addr & (
 {-# WARNING mkAccount "Do not use in production." #-}
 mkAccount :: SigScheme.VerifyKey -> AccountAddress -> Amount -> Account
 mkAccount key addr amnt = mkAccountNoCredentials key addr amnt &
-                           (accountCredentials .~ (Queue.singleton dummyLowExpiryTime (dummyCredential addr dummyLowExpiryTime)))
+                           (accountCredentials .~ (Queue.singleton dummyLowExpiryTime (dummyCredential addr dummyLowExpiryTime dummyCreationTime)))
 
 {-# WARNING makeFakeBakerAccount "Do not use in production." #-}
 makeFakeBakerAccount :: BakerId -> Account
@@ -35,7 +35,7 @@ makeFakeBakerAccount bid =
           _accountCredentials = credentialList}
   where
     vfKey = SigScheme.correspondingVerifyKey kp
-    credentialList = Queue.singleton dummyLowExpiryTime (dummyCredential address dummyLowExpiryTime)
+    credentialList = Queue.singleton dummyLowExpiryTime (dummyCredential address dummyLowExpiryTime dummyCreationTime)
     acct = newAccount (makeSingletonAC vfKey) address
     -- NB the negation makes it not conflict with other fake accounts we create elsewhere.
     seed = - (fromIntegral bid) - 1
