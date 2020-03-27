@@ -141,12 +141,13 @@ data Payload =
   -- |Remove an existing baker from the baker pool.
   | RemoveBaker {
       -- |Id of the baker to remove.
-      rbId :: !BakerId,
-      -- |Proof that we are allowed to remove the baker. One
-      -- mechanism would be that the baker would remove itself only
-      -- (the transaction must come from the baker's account) but
-      -- possibly we want other mechanisms.
-      rbProof :: !Proof
+      rbId :: !BakerId
+      -- TODO:
+      -- Proof that we are allowed to remove the baker. One
+      -- -- mechanism would be that the baker would remove itself only
+      -- -- (the transaction must come from the baker's account) but
+      -- -- possibly we want other mechanisms.
+      -- rbProof :: !Proof
       }
   -- |Update the account the baker receives their baking reward to.
   | UpdateBakerAccount {
@@ -223,8 +224,7 @@ instance S.Serialize Payload where
     S.put abProofAggregation
   put RemoveBaker{..} =
     P.putWord8 6 <>
-    S.put rbId <>
-    S.put rbProof
+    S.put rbId
   put UpdateBakerAccount{..} =
     P.putWord8 7 <>
     S.put ubaId <>
@@ -279,7 +279,6 @@ instance S.Serialize Payload where
               return AddBaker{..}
             6 -> do
               rbId <- S.get
-              rbProof <- S.get
               return RemoveBaker{..}
             7 -> do
               ubaId <- S.get
