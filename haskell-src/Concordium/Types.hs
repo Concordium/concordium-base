@@ -62,7 +62,7 @@ instance Ord (Hashed a) where
 
 -- * Types releated to bakers.
 newtype BakerId = BakerId Word64
-    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral, FromJSON, ToJSON) via Word64
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON) via Word64
 
 instance S.Serialize BakerId where
     get = BakerId <$> G.getWord64be
@@ -92,7 +92,7 @@ type VoterVRFPublicKey = VRF.PublicKey
 type VoterAggregationVerifyKey = Bls.PublicKey
 type VoterSignKey = Sig.SignKey
 type VoterAggregationPrivateKey = Bls.SecretKey
-newtype VoterPower = VoterPower GTU
+newtype VoterPower = VoterPower AmountUnit
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Show, Integral, S.Serialize)
 
 -- * Blockchain specific types.
@@ -193,11 +193,13 @@ instance S.Serialize TransactionExpiryTime where
 transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
 transactionExpired = (<) . expiry
 
--- |Type of GTU amounts.
+-- |Type representing the amount unit which is defined as the smallest
+-- meaningful amount of GTUs.
+-- Currently this unit is 10^-4 GTU and doesn't have a proper name.
 -- FIXME: This likely needs to be Word128.
-type GTU = Word64
-newtype Amount = Amount { _amount :: GTU }
-    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, FromJSON, ToJSON) via Word64
+type AmountUnit = Word64
+newtype Amount = Amount { _amount :: AmountUnit }
+    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, FromJSON, ToJSON) via AmountUnit
 
 instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
