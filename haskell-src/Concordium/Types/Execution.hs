@@ -25,6 +25,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Word
 import GHC.Generics
+import Language.Haskell.TH
 
 import qualified Concordium.Types.Acorn.Core as Core
 import Concordium.Types
@@ -304,9 +305,8 @@ instance S.Serialize Payload where
 encodePayload :: Payload -> EncodedPayload
 encodePayload = EncodedPayload . BSS.toShort . S.encode
 
-{-# INLINE decodePayload #-}
-decodePayload :: EncodedPayload -> Either String Payload
 #ifdef DISABLE_SMART_CONTRACTS
+$(reportWarning "Disabling smart contract related transactions." >> return [])
 decodePayload (EncodedPayload s) =
   let bs = BSS.fromShort s
   in case BS.uncons bs of
@@ -319,8 +319,11 @@ decodePayload (EncodedPayload s) =
            Left "Unsupported transaction type."
          else S.decode bs
 #else
+$(reportWarning "All transaction types allowed." >> return [])
 decodePayload (EncodedPayload s) = S.decode (BSS.fromShort s)
 #endif
+decodePayload :: EncodedPayload -> Either String Payload
+{-# INLINE decodePayload #-}
 
 {-# INLINE payloadBodyBytes #-}
 -- |Get the body of the payload as bytes. Essentially just remove the
