@@ -75,7 +75,7 @@ fn main() {
             )
             .subcommand(
                 SubCommand::with_name("create-accounts")
-                    .about("Create beta accounts.")
+                    .about("Create a given number of accounts. These do not delegate to any baker.")
                     .arg(
                         Arg::with_name("num")
                             .long("num")
