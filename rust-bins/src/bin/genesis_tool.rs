@@ -71,6 +71,13 @@ fn main() {
                             .value_name("F")
                             .help("The amount of finalizers to generate. Defaults to all bakers.")
                             .required(false),
+                    )
+                    .arg(
+                        Arg::with_name("balance")
+                            .long("balance")
+                            .value_name("AMOUNT")
+                            .help("Balance on each of the baker accounts.")
+                            .default_value("35000000000"),
                     ),
             )
             .subcommand(
@@ -82,6 +89,16 @@ fn main() {
                             .value_name("N")
                             .help("Number of accounts to generate.")
                             .required(true),
+                    )
+                    .arg(
+                        Arg::with_name("template")
+                            .long("template")
+                            .value_name("TEMPLATE")
+                            .help(
+                                "Template on how to name accounts; they will be name \
+                                 TEMPLATE-$N.json.",
+                            )
+                            .default_value("account"),
                     ),
             );
 
@@ -245,6 +262,14 @@ fn main() {
             },
         };
 
+        let balance = match matches.value_of("balance").unwrap().parse::<u64>() {
+            Ok(n) => n,
+            Err(err) => {
+                eprintln!("Could not parse balance: {}", err);
+                return;
+            }
+        };
+
         let mut bakers = Vec::with_capacity(num_bakers);
         for baker in 0..num_bakers {
             let (account_data_json, credential_json, account_keys, address_json) =
@@ -295,7 +320,7 @@ fn main() {
                 "account": json!({
                     "address": address_json,
                     "accountKeys": account_keys,
-                    "balance": 1_000_000_000_000u64,
+                    "balance": balance,
                     "credential": credential_json
                 })
             });
@@ -317,6 +342,9 @@ fn main() {
                 return;
             }
         };
+
+        let prefix = matches.value_of("template").unwrap(); // has default value, will be present.
+
         let mut accounts = Vec::with_capacity(num_accounts);
         for acc_num in 0..num_accounts {
             let (account_data_json, credential_json, account_keys, address_json) =
@@ -331,7 +359,7 @@ fn main() {
             accounts.push(public_account_data);
 
             if let Err(err) = write_json_to_file(
-                &format!("beta-account-{}.json", acc_num),
+                &format!("{}-{}.json", prefix, acc_num),
                 &json!(account_data_json),
             ) {
                 eprintln!(
@@ -342,7 +370,7 @@ fn main() {
         }
         // finally output all of the public account data in one file. This is used to
         // generate genesis.
-        if let Err(err) = write_json_to_file("beta-accounts.json", &json!(accounts)) {
+        if let Err(err) = write_json_to_file(&format!("{}s.json", prefix), &json!(accounts)) {
             eprintln!("Could not output beta-accounts.json file because {}.", err)
         }
     }
