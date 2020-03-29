@@ -33,7 +33,10 @@ flags:
     description: Use static linking.
     manual: True
     default: False
-
+  disable-smart-contracts:
+    description: Disable transactions related to smart contracts
+    manual: True
+    default: False
 
 dependencies:
 - base >= 4.7 && < 5
@@ -65,6 +68,10 @@ library:
     - -Werror=missing-methods
     - -Wredundant-constraints
     - -fno-ignore-asserts
+  when:
+      condition: flag(disable-smart-contracts)
+      cpp-options:
+        - -DDISABLE_SMART_CONTRACTS
 
 tests:
   types-test:

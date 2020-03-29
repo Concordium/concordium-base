@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE CPP #-}
 module Concordium.Types.Execution where
 
 import Prelude hiding(fail)
@@ -305,7 +306,21 @@ encodePayload = EncodedPayload . BSS.toShort . S.encode
 
 {-# INLINE decodePayload #-}
 decodePayload :: EncodedPayload -> Either String Payload
+#ifdef DISABLE_SMART_CONTRACTS
+decodePayload (EncodedPayload s) =
+  let bs = BSS.fromShort s
+  in case BS.uncons bs of
+       Nothing -> Left "Empty string not a valid payload."
+       Just (ttype, _) ->
+         if ttype == 0 ||  -- the numbers here must match the serialization of the payload above (Serialize instance)
+            ttype == 1 ||
+            ttype == 2 ||
+            ttype == 4 then
+           Left "Unsupported transaction type."
+         else S.decode bs
+#else
 decodePayload (EncodedPayload s) = S.decode (BSS.fromShort s)
+#endif
 
 {-# INLINE payloadBodyBytes #-}
 -- |Get the body of the payload as bytes. Essentially just remove the
