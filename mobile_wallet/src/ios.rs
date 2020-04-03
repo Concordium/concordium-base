@@ -2,7 +2,8 @@
 
 use libc::c_char;
 use wallet::{
-    create_credential_ext, create_id_request_and_private_data_ext, free_response_string_ext, create_transfer_ext
+    create_credential_ext, create_id_request_and_private_data_ext, create_transfer_ext,
+    free_response_string_ext,
 };
 
 #[no_mangle]
@@ -50,4 +51,6 @@ pub unsafe extern "C" fn create_transfer(
 /// # Safety
 /// This function is unsafe in the sense that if the argument pointer was not
 /// Constructed via CString::into_raw its behaviour is undefined.
-pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) { free_response_string_ext(ptr) }
+pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) {
+    free_response_string_ext(ptr)
+}

@@ -10,9 +10,13 @@ use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
 use ps_sig;
+use rand::*;
 use std::collections::btree_map::BTreeMap;
 
-use rand::*;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::*;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-browser-test"))]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 use either::Left;
 
@@ -155,8 +159,7 @@ pub fn test_create_attributes() -> ExampleAttributeList {
     }
 }
 
-#[test]
-fn test_pipeline() {
+pub fn test_pipeline() {
     let mut csprng = thread_rng();
 
     // Generate PIO
@@ -292,3 +295,10 @@ fn test_pipeline() {
     let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
     assert_ne!(cdi_check, Ok(()));
 }
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+pub fn run_pipeline_wasm() {}
+
+#[test]
+pub fn run_pipeline() { test_pipeline(); }

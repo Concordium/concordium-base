@@ -4,7 +4,6 @@ use rand::*;
 use crate::dlog_ed25519::*;
 use crypto_common::*;
 use ffi_helpers::*;
-use libc::size_t;
 use std::{io::Cursor, slice};
 
 use random_oracle::RandomOracle;
