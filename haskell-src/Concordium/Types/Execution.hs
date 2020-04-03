@@ -533,18 +533,21 @@ instance S.Serialize RejectReason
 instance AE.ToJSON RejectReason
 instance AE.FromJSON RejectReason
 
-data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
+-- | Reasons for the execution of a transaction to fail on the current block state.
+data FailureKind = InsufficientFunds -- ^The sender account's amount is not sufficient to cover the
+                                     -- amount corresponding to the deposited energy.
                  | IncorrectSignature  -- ^Signature check failed.
                  | NonSequentialNonce !Nonce -- ^The transaction nonce is not
                                              -- next in sequence. The argument
                                              -- is the expected nonce.
-                 | SuccessorOfInvalidTransaction -- ^A transaction from the same account was rejected, so
-                                                 -- we reject the following transactions from the same account
+                 | SuccessorOfInvalidTransaction -- ^In the context of processing multiple transactions
+                                                 -- from the same account, the transaction is a successor
+                                                 -- of (has the nonce following that of) an invalid transaction.
                  | UnknownAccount !AccountAddress -- ^Transaction is coming from an unknown sender.
                  | DepositInsufficient -- ^The dedicated gas amount was lower than the minimum allowed.
                  | NoValidCredential -- ^No valid credential on the sender account.
                  | ExpiredTransaction -- ^The transaction has expired.
-                 | ExceedsMaxBlockEnergy -- ^The transaction's used energy size exceeds the maximum block energy limit
+                 | ExceedsMaxBlockEnergy -- ^The transaction's deposited energy exceeds the maximum block energy limit.
                  | ExceedsMaxBlockSize -- ^The baker decided that this transaction is too big to put in a block.
                  | NonExistentIdentityProvider !IDTypes.IdentityProviderIdentity
                  | NonExistentAccount !AccountAddress -- ^Cannot deploy credential onto a non-existing account.
