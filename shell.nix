@@ -18,10 +18,16 @@ let
   });
   nixpkgs = import <nixpkgs> { overlays = [ pkgs_overlay moz_overlay ]; };
   rustStableChannel =
-    (nixpkgs.rustChannelOf { channel = "1.40.0"; }).rust.override {
+    (nixpkgs.rustChannelOf { channel = "1.42.0"; }).rust.override {
+      targets = [
+        "x86_64-unknown-linux-gnu"
+        "armv7-unknown-linux-gnueabihf"
+        "wasm32-unknown-unknown"
+      ];
       extensions =
         [ "rust-src" "rls-preview" "clippy-preview" "rustfmt-preview" ];
     };
+
 in with nixpkgs;
 stdenv.mkDerivation {
   name = "concordium_shell";
@@ -38,8 +44,7 @@ stdenv.mkDerivation {
     gnutar
     capnproto
     flatbuffers
+    wasm-pack
+    nodejs
   ];
-  shellHook = ''
-    scripts/download-static-libs.sh
-  '';
 }

@@ -10,8 +10,8 @@ use pedersen_scheme::key::CommitmentKey as PedersenKey;
 use std::{fmt, io::Cursor, slice, str::FromStr};
 
 use byteorder::ReadBytesExt;
+use crypto_common::size_t;
 use ffi_helpers::*;
-use libc::size_t;
 use num::{
     bigint::{BigUint, ParseBigIntError},
     Num,
