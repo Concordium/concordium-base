@@ -22,6 +22,7 @@ import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Lens.Micro.Platform
 import Lens.Micro.Internal
+import Concordium.Utils
 
 import Data.List
 import qualified Concordium.Crypto.SHA256 as H
@@ -547,8 +548,8 @@ extendPendingTransactionTable nextNonce tx PTT{..} = assert (nextNonce <= nonce)
 checkedExtendPendingTransactionTable :: TransactionData t => Nonce -> t -> PendingTransactionTable -> PendingTransactionTable
 checkedExtendPendingTransactionTable nextNonce tx pt =
   if nextNonce > nonce then pt else
-    pt & pttWithSender . at (transactionSender tx) %~ \case Nothing -> Just (nextNonce, nonce)
-                                                            Just (l, u) -> Just (l, max u nonce)
+    pt & pttWithSender . at' (transactionSender tx) %~ \case Nothing -> Just (nextNonce, nonce)
+                                                             Just (l, u) -> Just (l, max u nonce)
   where nonce = transactionNonce tx
 
 -- |Extend the pending transaction table with a credential hash.
@@ -560,7 +561,7 @@ forwardPTT :: [BlockItem] -> PendingTransactionTable -> PendingTransactionTable
 forwardPTT trs ptt0 = foldl forward1 ptt0 trs
     where
         forward1 :: PendingTransactionTable -> BlockItem -> PendingTransactionTable
-        forward1 ptt WithMetadata{wmdData=NormalTransaction tr} = ptt & pttWithSender . at (transactionSender tr) %~ upd
+        forward1 ptt WithMetadata{wmdData=NormalTransaction tr} = ptt & pttWithSender . at' (transactionSender tr) %~ upd
             where
                 upd Nothing = error "forwardPTT : forwarding transaction that is not pending"
                 upd (Just (low, high)) =
@@ -576,7 +577,7 @@ reversePTT :: [BlockItem] -> PendingTransactionTable -> PendingTransactionTable
 reversePTT trs ptt0 = foldr reverse1 ptt0 trs
     where
         reverse1 :: BlockItem -> PendingTransactionTable -> PendingTransactionTable
-        reverse1 WithMetadata{wmdData=NormalTransaction tr} = pttWithSender . at (transactionSender tr) %~ upd
+        reverse1 WithMetadata{wmdData=NormalTransaction tr} = pttWithSender . at' (transactionSender tr) %~ upd
             where
                 upd Nothing = Just (transactionNonce tr, transactionNonce tr)
                 upd (Just (low, high)) =
