@@ -26,3 +26,4 @@ rust-src/target/
 rust-bins/target
 /rust-bins/wallet-notes/example
 mobile_wallet/target/
+pkg

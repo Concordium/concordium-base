@@ -4,8 +4,8 @@ use rand::{thread_rng, CryptoRng, Rng, RngCore};
 
 use std::{slice, sync::Arc};
 
+use crypto_common::size_t;
 use ffi_helpers::*;
-use libc::size_t;
 use std::cmp::Ordering;
 use subtle::ConstantTimeEq;
 
@@ -93,7 +93,6 @@ pub extern "C" fn ec_vrf_prove(
 ) -> *const Proof {
     let sk = from_ptr!(secret);
     let pk = from_ptr!(public);
-
     let data: &[u8] = slice_from_c_bytes!(message, len);
     let mut csprng = thread_rng();
     let proof = sk.prove(&pk, data, &mut csprng);
