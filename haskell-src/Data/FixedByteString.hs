@@ -48,8 +48,8 @@ create f = snd <$> createWith f
 createWith :: forall a b . FixedLength a => (Ptr Word8 -> IO b) -> IO (b, FixedByteString a)
 createWith f = do
   mbarr <- newPinnedByteArray len
-  let !(Ptr ptr) = mutableByteArrayContents mbarr
-  r <- f (Ptr ptr)
+  let !mutable = mutableByteArrayContents mbarr
+  r <- f mutable
   touch mbarr  -- DO NOT REMOVE. GHC does strange things if you do leading to weird errors
                -- The issue probably that the dependency between mbarr and ptr is lost
                -- and so the optimizer sometimes seems to move the copy before the foreign
@@ -113,7 +113,7 @@ instance FixedLength a => Storable (FixedByteString a) where
     sizeOf _ = fixedLength (undefined :: a)
     alignment _ = 1
     peek ptr = create (\p' -> copyBytes p' (castPtr ptr) (fixedLength (undefined :: a)))
-    poke (Ptr ptr) (FixedByteString fbs) = copyByteArrayToAddr (Ptr ptr) fbs 0 (fixedLength (undefined :: a))
+    poke ptr (FixedByteString fbs) = copyByteArrayToAddr ptr fbs 0 (fixedLength (undefined :: a))
 
 -- |Convert an 'Integer' to a 'FixedByteString'.  The encoding is big endian and modulo @2 ^ (8 * fixedLength undefined)@.
 encodeInteger :: forall a. (FixedLength a) => Integer -> FixedByteString a
@@ -275,8 +275,8 @@ fromByteString = fromShortByteString . BSS.toShort
 -- If the IO action writes to the pointer the changes will not be reflected back.
 {-# NOINLINE withPtrReadOnly #-}
 withPtrReadOnly :: forall s a . FixedLength s => FixedByteString s -> (Ptr Word8 -> IO a) -> IO a
-withPtrReadOnly (FixedByteString ba) f = allocaBytes size $ \ptr@(Ptr addr) -> do
-  copyByteArrayToAddr (Ptr addr) ba 0 size
+withPtrReadOnly (FixedByteString ba) f = allocaBytes size $ \ptr -> do
+  copyByteArrayToAddr ptr ba 0 size
   f ptr
   where size = fixedLength (undefined :: s)
 
@@ -288,8 +288,8 @@ withPtrReadOnlyST (FixedByteString ba) f = runST comp
           comp = do
             mba <- newPinnedByteArray size
             copyByteArray mba 0 ba 0 size
-            let !(Ptr ptr) = mutableByteArrayContents mba
-            r <- f (Ptr ptr)
+            let !mutable = mutableByteArrayContents mba
+            r <- f mutable
             touch mba
             return r
           size = fixedLength (undefined :: s)
