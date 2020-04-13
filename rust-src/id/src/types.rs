@@ -459,7 +459,6 @@ pub struct ChainArData<C: Curve> {
     #[serde(rename = "arIdentity")]
     pub ar_identity: ArIdentity,
     /// encrypted share of id cred pub
-    /// encrypted share of the prf key
     #[serde(rename = "encIdCredPubShare")]
     pub enc_id_cred_pub_share: Cipher<C>,
     /// the number of the share

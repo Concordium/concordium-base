@@ -2,24 +2,25 @@
 
 The identity layer component is essentiall to all user-facing and
 user-interacting parts of the project. The API consists of functionality to
-support the following six operations.
+support the following operations.
 
--   request an identity object from the identity provider
--   identity provider verifies the request and issues an identity object
--   user verifies the received identity object and generates a number of
+1.  Request an identity object from the identity provider.
+2.  Identity provider verifies the request and issues an identity object.
+3.  User verifies the received identity object and generates a number of
     credentials from it. Credentials can be generated so that they create a new
     account, or deployed onto an existing account.
--   The bakers verify the credentials that are sent and recorded on the chain.
--   Given a credential as visible on the chain the anonymity revokers can
+4.  The bakers verify the credentials that are sent and recorded on the chain.
+5.  Given a credential as visible on the chain the anonymity revokers can
     decrypt IdCredPub which identifies the user to the relevant identity
     provider.
--   The identity provider stores encryption of the PRF key under IdCredPub which
+6.  The identity provider stores encryption of the PRF key under IdCredPub which
     the anonymity revokers can decrypt, and therefore find all accounts created
-    from the given identity object.
--   The baker expose an API where all credentials on a given account can be
+    from the given identity object. There should be a tool that generates all possible accounts from 
+    a given PRF key and credential/identity object request.
+7.  The baker expose an API where all credentials on a given account can be
     looked up. The most interesting part of this is the encryption of IdCredPub
     for anonymity revokers, and any publicly revealed attributes. Currently all
-    of the information is exposed as received in the credential.
+    of the information is exposed as received in the credential minus the proofs.
 
 ## Implementations
 
