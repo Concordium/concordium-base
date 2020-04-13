@@ -9,7 +9,6 @@ import Data.Serialize
 import qualified Data.ByteString.Base16 as BS16
 import Data.Text.Encoding as Text
 
-import Control.Monad.Fail(MonadFail)
 import qualified Data.Aeson as AE
 import qualified Data.Aeson.Encoding as AE
 import qualified Data.Aeson.Types as AE
@@ -129,7 +128,7 @@ instance AE.FromJSON ByteStringHex where
     in if BS.null rest then return (ByteStringHex (BSS.toShort bs))
        else AE.typeMismatch "Not a valid Base16 encoding." (AE.String t)
 
--- |Use the serialize instance of a type to deserialize 
+-- |Use the serialize instance of a type to deserialize
 deserializeBase16 :: (Serialize a, MonadFail m) => Text.Text -> m a
 deserializeBase16 t =
         if BS.null rest then
