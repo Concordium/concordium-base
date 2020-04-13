@@ -3,7 +3,6 @@ module Concordium.Types.DummyData where
 
 import qualified Concordium.Crypto.SignatureScheme as SigScheme
 import Concordium.Types
-import Concordium.ID.Types(randomAccountAddress, makeSingletonAC)
 import qualified Data.PQueue.Prio.Max as Queue
 import Concordium.Crypto.DummyData
 import Concordium.ID.DummyData
