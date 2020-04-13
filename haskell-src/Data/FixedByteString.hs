@@ -18,7 +18,6 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Short.Internal as BSS
 import Data.Primitive.ByteArray
-import Data.Primitive.Ptr
 
 import Control.Monad.Primitive(touch)
 
@@ -113,7 +112,7 @@ instance FixedLength a => Storable (FixedByteString a) where
     sizeOf _ = fixedLength (undefined :: a)
     alignment _ = 1
     peek ptr = create (\p' -> copyBytes p' (castPtr ptr) (fixedLength (undefined :: a)))
-    poke ptr (FixedByteString fbs) = copyByteArrayToAddr ptr fbs 0 (fixedLength (undefined :: a))
+    poke ptr (FixedByteString fbs) = copyByteArrayToAddr (castPtr ptr) fbs 0 (fixedLength (undefined :: a))
 
 -- |Convert an 'Integer' to a 'FixedByteString'.  The encoding is big endian and modulo @2 ^ (8 * fixedLength undefined)@.
 encodeInteger :: forall a. (FixedLength a) => Integer -> FixedByteString a
