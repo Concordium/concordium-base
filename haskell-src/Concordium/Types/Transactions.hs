@@ -13,7 +13,6 @@ import Control.Exception
 import Control.Monad
 import Data.Aeson.TH
 import Data.Aeson(FromJSON, ToJSON)
-import Data.Char(toLower)
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
 import qualified Data.HashMap.Strict as HM
@@ -33,6 +32,7 @@ import qualified Data.Vector as Vec
 import Data.Word
 
 import Concordium.Types
+import Concordium.Types.Utils
 import Concordium.ID.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Execution
@@ -108,7 +108,7 @@ transactionHeaderSize =
 getTransactionHeaderPayloadSize :: TransactionHeader -> Int
 getTransactionHeaderPayloadSize h = fromIntegral (thPayloadSize h) + transactionHeaderSize
 
-$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionHeader)
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionHeader)
 
 -- |Eq instance ignores derived fields.
 instance Eq TransactionHeader where
@@ -596,7 +596,7 @@ data SpecialTransactionOutcome =
     }
   deriving(Show, Eq)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 3} ''SpecialTransactionOutcome)
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''SpecialTransactionOutcome)
 
 instance S.Serialize SpecialTransactionOutcome where
     put (BakingReward bid addr amt) = S.put bid <> S.put addr <> S.put amt
