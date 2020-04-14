@@ -29,6 +29,7 @@ import Language.Haskell.TH
 
 import qualified Concordium.Types.Acorn.Core as Core
 import Concordium.Types
+import Concordium.Types.Utils
 import Concordium.Types.Execution.TH
 import Concordium.ID.Types
 import Concordium.Types.Acorn.Interfaces
@@ -558,17 +559,17 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
 
 -- FIXME: These intances need to be made clearer.
-$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = map toLower . dropWhile isLower} ''Event)
+$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . dropWhile isLower} ''Event)
 
 -- Derive JSON instance for transaction outcomes
 -- At the end of the file to avoid issues with staging restriction.
-$(deriveJSON AE.defaultOptions{AE.constructorTagModifier = map toLower . drop 2,
+$(deriveJSON AE.defaultOptions{AE.constructorTagModifier = firstLower . drop 2,
                                  AE.sumEncoding = AE.TaggedObject{
                                     AE.tagFieldName = "outcome",
                                     AE.contentsFieldName = "details"
                                     },
-                                 AE.fieldLabelModifier=map toLower . drop 2} ''ValidResult)
+                                 AE.fieldLabelModifier = firstLower . drop 2} ''ValidResult)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionSummary')
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummary')
 
-$(deriveJSON defaultOptions{AE.constructorTagModifier = map toLower . drop 2} ''TransactionType)
+$(deriveJSON defaultOptions{AE.constructorTagModifier = firstLower . drop 2} ''TransactionType)
