@@ -46,7 +46,7 @@ macro_rules! macro_derive_to_bytes {
         }
     };
     (Arc $function_name:ident, $type:ty, $f:expr) => {
-        macro_derive_to_bytes!($function_name, $type, $f, mut);
+        macro_derive_to_bytes!($function_name, $type, $f, const);
     };
     (Box $function_name:ident, $type:ty, $f:expr) => {
         macro_derive_to_bytes!($function_name, $type, $f, mut);
