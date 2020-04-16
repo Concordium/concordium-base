@@ -51,7 +51,7 @@ import Concordium.Crypto.DummyData
 --   return CredentialDeploymentInformation{..}
 
 genAttributeValue :: Gen AttributeValue
-genAttributeValue = AttributeValue . (\x -> abs x `mod` 2^(248 :: Int)) <$> arbitrary
+genAttributeValue = AttributeValue . BSS.pack <$> (vector =<< choose (0,31))
 
 genDlogProof :: Gen Dlog25519Proof
 genDlogProof = fst . randomProof . mkStdGen <$> resize 100000 arbitrary
