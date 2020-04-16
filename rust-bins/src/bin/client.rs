@@ -78,7 +78,10 @@ fn read_validto() -> io::Result<YearMonth> {
     let input: String = Input::new()
         .with_prompt("Enter valid to (YYYYMM)")
         .interact()?;
-    parse_yearmonth(&input)
+    match parse_yearmonth(&input) {
+        Some(ym) => Ok(ym),
+        None => panic!("Unable to parse YYYYMM"),
+    }
 }
 
 fn main() {
@@ -400,10 +403,10 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         }
     }
     let policy = Policy {
-        valid_to:   id_object.alist.valid_to,
+        valid_to: id_object.alist.valid_to,
         created_at: id_object.alist.created_at,
         policy_vec: revealed_attributes,
-        _phantom:   Default::default(),
+        _phantom: Default::default(),
     };
 
     // We now generate or read account verification/signature key pair.
@@ -750,10 +753,13 @@ fn handle_start_ip(matches: &ArgMatches) {
         }
     };
 
-    let context = make_context_from_ip_info(ip_info, ChoiceArParameters {
-        ar_identities: choice_ars,
-        threshold,
-    })
+    let context = make_context_from_ip_info(
+        ip_info,
+        ChoiceArParameters {
+            ar_identities: choice_ars,
+            threshold,
+        },
+    )
     .expect("The user should not be able to select invalid ARs due to the input method.");
     // and finally generate the pre-identity object
     // we also retrieve the randomness which we must keep private.
@@ -814,42 +820,42 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let ar0_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar0_public_key = PublicKey::from(&ar0_secret_key);
         let ar0_info = ArInfo {
-            ar_identity:    ArIdentity(0u32),
+            ar_identity: ArIdentity(0u32),
             ar_description: mk_ar_description(0),
-            ar_public_key:  ar0_public_key,
+            ar_public_key: ar0_public_key,
         };
 
         let private_js0 = ArData {
             public_ar_info: ar0_info,
-            ar_secret_key:  ar0_secret_key,
+            ar_secret_key: ar0_secret_key,
         };
 
         let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar1_public_key = PublicKey::from(&ar1_secret_key);
         let ar1_info = ArInfo {
-            ar_identity:    ArIdentity(1u32),
+            ar_identity: ArIdentity(1u32),
             ar_description: mk_ar_description(1),
-            ar_public_key:  ar1_public_key,
+            ar_public_key: ar1_public_key,
             // ar_elgamal_generator: PublicKey::generator(),
         };
 
         let private_js1 = ArData {
             public_ar_info: ar1_info,
-            ar_secret_key:  ar1_secret_key,
+            ar_secret_key: ar1_secret_key,
         };
 
         let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar2_public_key = PublicKey::from(&ar2_secret_key);
         let ar2_info = ArInfo {
-            ar_identity:    ArIdentity(2u32),
+            ar_identity: ArIdentity(2u32),
             ar_description: mk_ar_description(2),
-            ar_public_key:  ar2_public_key,
+            ar_public_key: ar2_public_key,
             // ar_elgamal_generator: PublicKey::generator(),
         };
 
         let private_js2 = ArData {
             public_ar_info: ar2_info,
-            ar_secret_key:  ar2_secret_key,
+            ar_secret_key: ar2_secret_key,
         };
 
         write_json_to_file(&ar0_fname, &private_js0).ok()?;
@@ -857,10 +863,10 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         write_json_to_file(&ar2_fname, &private_js2).ok()?;
 
         let ip_info = IpInfo {
-            ip_identity:    IpIdentity(id as u32),
+            ip_identity: IpIdentity(id as u32),
             ip_description: mk_ip_description(id),
-            ip_verify_key:  id_public_key,
-            ip_ars:         IpAnonymityRevokers {
+            ip_verify_key: id_public_key,
+            ip_ars: IpAnonymityRevokers {
                 ars: vec![
                     private_js0.public_ar_info,
                     private_js1.public_ar_info,
@@ -871,8 +877,8 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
             },
         };
         let full_info = IpData {
-            metadata:       Default::default(),
-            ip_secret_key:  id_secret_key,
+            metadata: Default::default(),
+            ip_secret_key: id_secret_key,
             public_ip_info: ip_info,
         };
         println!("writing ip_{} in file {}", id, ip_fname);
