@@ -43,42 +43,42 @@ fn bench_parts(c: &mut Criterion) {
     let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar1_public_key = PublicKey::from(&ar1_secret_key);
     let ar1_info = ArInfo::<G1> {
-        ar_identity:    ArIdentity(1),
+        ar_identity: ArIdentity(1),
         ar_description: mk_dummy_description("A good AR".to_string()),
-        ar_public_key:  ar1_public_key,
+        ar_public_key: ar1_public_key,
     };
 
     let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar2_public_key = PublicKey::from(&ar2_secret_key);
     let ar2_info = ArInfo::<G1> {
-        ar_identity:    ArIdentity(2),
+        ar_identity: ArIdentity(2),
         ar_description: mk_dummy_description("A nice AR".to_string()),
-        ar_public_key:  ar2_public_key,
+        ar_public_key: ar2_public_key,
     };
 
     let ar3_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar3_public_key = PublicKey::from(&ar3_secret_key);
     let ar3_info = ArInfo::<G1> {
-        ar_identity:    ArIdentity(3),
+        ar_identity: ArIdentity(3),
         ar_description: mk_dummy_description("Weird AR".to_string()),
-        ar_public_key:  ar3_public_key,
+        ar_public_key: ar3_public_key,
     };
 
     let ar4_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar4_public_key = PublicKey::from(&ar4_secret_key);
     let ar4_info = ArInfo::<G1> {
-        ar_identity:    ArIdentity(4),
+        ar_identity: ArIdentity(4),
         ar_description: mk_dummy_description("Ok AR".to_string()),
-        ar_public_key:  ar4_public_key,
+        ar_public_key: ar4_public_key,
     };
 
     let ar_ck = pedersen_key::CommitmentKey::generate(&mut csprng);
 
     let ip_info = IpInfo {
-        ip_identity:    IpIdentity(88),
+        ip_identity: IpIdentity(88),
         ip_description: mk_dummy_description("IP88".to_string()),
-        ip_verify_key:  ip_public_key,
-        ip_ars:         IpAnonymityRevokers {
+        ip_verify_key: ip_public_key,
+        ip_ars: IpAnonymityRevokers {
             ars: vec![ar1_info, ar2_info, ar3_info, ar4_info],
             ar_cmm_key: ar_ck,
             ar_base,
@@ -87,7 +87,8 @@ fn bench_parts(c: &mut Criterion) {
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
-    let expiry_date = 123123123;
+    let valid_to = 123123123;
+    let created_at = 123123120;
     let alist = {
         let mut alist = BTreeMap::new();
         alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
@@ -100,15 +101,19 @@ fn bench_parts(c: &mut Criterion) {
     };
 
     let alist = ExampleAttributeList {
-        expiry: expiry_date,
+        valid_to,
+        created_at,
         alist,
         _phantom: Default::default(),
     };
 
-    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        ar_identities: vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
-        threshold:     Threshold(2),
-    })
+    let context = make_context_from_ip_info(
+        ip_info.clone(),
+        ChoiceArParameters {
+            ar_identities: vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
+            threshold: Threshold(2),
+        },
+    )
     .expect("The constructed ARs are valid.");
 
     let (pio, randomness) = generate_pio(&context, &aci);
@@ -121,13 +126,14 @@ fn bench_parts(c: &mut Criterion) {
     };
 
     let policy = Policy {
-        expiry:     expiry_date,
+        valid_to,
+        created_at,
         policy_vec: {
             let mut tree = BTreeMap::new();
             tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
             tree
         },
-        _phantom:   Default::default(),
+        _phantom: Default::default(),
     };
 
     let mut keys = BTreeMap::new();

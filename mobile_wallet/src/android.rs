@@ -11,8 +11,8 @@ use std::ffi::CString;
 use wallet::{create_credential_ext, create_id_request_and_private_data_ext, create_transfer_ext};
 
 #[no_mangle]
-/// The JNI wrapper for the `create_id_request_and_private_data` method. 
-/// The `input` parameter must be a properly initalized `java.lang.String` that is non-null. 
+/// The JNI wrapper for the `create_id_request_and_private_data` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that is non-null.
 /// The input must be valid JSON according to specified format
 pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1id_1request_1and_1private_1data(
     env: JNIEnv,
@@ -25,11 +25,14 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
             return wrap_return_tuple(
                 &env,
                 127,
-                &format!("Could not read java.lang.String given as input due to {:?}", e),
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
             )
         }
     };
-    
+
     let mut success: u8 = 127;
 
     let cstr_res = unsafe {
@@ -43,15 +46,17 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
 
     match cstr_res.to_str() {
         Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
-        Err(e) => {
-            wrap_return_tuple(&env, 127, &format!("Could not read CString from crypto library {:?}", e))
-        }
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
     }
 }
 
 #[no_mangle]
-/// The JNI wrapper for the `create_credential` method. 
-/// The `input` parameter must be a properly initalized `java.lang.String` that is non-null. 
+/// The JNI wrapper for the `create_credential` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that is non-null.
 /// The input must be valid JSON according to specified format
 pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1credential(
     env: JNIEnv,
@@ -64,7 +69,10 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
             return wrap_return_tuple(
                 &env,
                 127,
-                &format!("Could not read java.lang.String given as input due to {:?}", e),
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
             )
         }
     };
@@ -80,15 +88,17 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
 
     match cstr_res.to_str() {
         Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
-        Err(e) => {
-            wrap_return_tuple(&env, 127, &format!("Could not read CString from crypto library {:?}", e))
-        }
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
     }
 }
 
 #[no_mangle]
-/// The JNI wrapper for the `create_transfer` method. 
-/// The `input` parameter must be a properly initalized `java.lang.String` that is non-null. 
+/// The JNI wrapper for the `create_transfer` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that is non-null.
 /// The input must be valid JSON according to specified format
 pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1transfer(
     env: JNIEnv,
@@ -101,7 +111,10 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
             return wrap_return_tuple(
                 &env,
                 127,
-                &format!("Could not read java.lang.String given as input due to {:?}", e),
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
             )
         }
     };
@@ -117,16 +130,18 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
 
     match cstr_res.to_str() {
         Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
-        Err(e) => {
-            wrap_return_tuple(&env, 127, &format!("Could not read CString from crypto library {:?}", e))
-        }
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
     }
 }
 
 /// Method for wrapping the return value to Java
 /// We use a class in Java land for returning data from Rust
 /// If everything succeeds, then the `result` field will be 1 and the `output` field will contain the JSON response
-/// If something fails, then the `result` field will be different from 1, and the `output` field will contain the error message as a string 
+/// If something fails, then the `result` field will be different from 1, and the `output` field will contain the error message as a string
 fn wrap_return_tuple(env: &JNIEnv, code: u8, message: &str) -> jobject {
     let class_name = "com/concordium/mobile_wallet_lib/ReturnValue";
     let class = match env.find_class(class_name) {
@@ -171,10 +186,11 @@ fn wrap_return_tuple(env: &JNIEnv, code: u8, message: &str) -> jobject {
         }
     };
 
-    match env.new_object_unchecked(class, method_id, &[
-        JValue::Int(code as jint),
-        JValue::Object(*jstr_value),
-    ]) {
+    match env.new_object_unchecked(
+        class,
+        method_id,
+        &[JValue::Int(code as jint), JValue::Object(*jstr_value)],
+    ) {
         Ok(res) => res.into_inner(),
         Err(e) => {
             return wrap_return_tuple(

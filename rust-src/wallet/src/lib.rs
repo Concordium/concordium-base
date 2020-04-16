@@ -3,7 +3,7 @@ extern crate failure;
 #[macro_use]
 extern crate serde_json;
 
-use crypto_common::{base16_decode_string, base16_encode_string, Put};
+use crypto_common::{base16_decode_string, base16_encode_string, c_char, Put};
 use curve_arithmetic::curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -17,10 +17,8 @@ use id::{
 };
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::Value as PedersenValue;
-
 use std::{cmp::max, collections::BTreeMap};
 
-use libc::c_char;
 use std::ffi::{CStr, CString};
 
 use failure::Fallible;
@@ -71,8 +69,13 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
         }
     };
 
+    let keys_object = match v.get("keys").and_then(Value::as_object) {
+        Some(v) => v,
+        None => bail!("Field 'keys' not present or not an object, but should be."),
+    };
+
     // NB: This needs to be consistent with scheduler assigned cost.
-    let energy: u64 = 10;
+    let energy: u64 = 6 + 53 * keys_object.len() as u64;
 
     let (hash, body) = {
         let mut payload = Vec::new();
@@ -99,33 +102,26 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
 
     let signatures = {
         let mut out = BTreeMap::new();
-        match v.get("keys").and_then(Value::as_object) {
-            Some(v) => {
-                for (key_index_str, value) in v.iter() {
-                    let key_index = key_index_str.parse::<u8>()?;
-                    match value.as_object() {
-                        None => bail!("Malformed keys."),
-                        Some(value) => {
-                            let public = match value.get("verifyKey").and_then(Value::as_str) {
-                                None => bail!("Malformed keys: missing verifyKey."),
-                                Some(x) => base16_decode_string(&x)?,
-                            };
-                            let secret = match value.get("signKey").and_then(Value::as_str) {
-                                None => bail!("Malformed keys: missing signKey."),
-                                Some(x) => base16_decode_string(&x)?,
-                            };
-                            out.insert(
-                                key_index,
-                                base16_encode_string(
-                                    &ed25519::Keypair { secret, public }.sign(&hash),
-                                ),
-                            );
-                        }
-                    }
+        for (key_index_str, value) in keys_object.iter() {
+            let key_index = key_index_str.parse::<u8>()?;
+            match value.as_object() {
+                None => bail!("Malformed keys."),
+                Some(value) => {
+                    let public = match value.get("verifyKey").and_then(Value::as_str) {
+                        None => bail!("Malformed keys: missing verifyKey."),
+                        Some(x) => base16_decode_string(&x)?,
+                    };
+                    let secret = match value.get("signKey").and_then(Value::as_str) {
+                        None => bail!("Malformed keys: missing signKey."),
+                        Some(x) => base16_decode_string(&x)?,
+                    };
+                    out.insert(
+                        key_index,
+                        base16_encode_string(&ed25519::Keypair { secret, public }.sign(&hash)),
+                    );
                 }
             }
-            None => bail!("Field 'keys' not present or not an object, but should be."),
-        };
+        }
         out
     };
 
@@ -181,10 +177,13 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
         .iter()
         .map(|x| x.ar_identity)
         .collect::<Vec<_>>();
-    let context = make_context_from_ip_info(ip_info, ChoiceArParameters {
-        ar_identities,
-        threshold,
-    })
+    let context = make_context_from_ip_info(
+        ip_info,
+        ChoiceArParameters {
+            ar_identities,
+            threshold,
+        },
+    )
     .ok_or_else(|| format_err!("Invalid choice of anonymity revokers. Should not happen."))?;
     let (pio, randomness) = generate_pio(&context, &aci);
 
@@ -266,8 +265,8 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     }
 
     let policy = Policy {
-        expiry: id_object.alist.expiry,
-        creation_time: id_object.alist.creation_time,
+        valid_to: id_object.alist.valid_to,
+        created_at: id_object.alist.created_at,
         policy_vec,
         _phantom: Default::default(),
     };
@@ -298,8 +297,8 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 // Add data to the attribute list if needed. This is just to simulate the fact
 // that not all attributes are needed.
 fn dummy_alist() -> ExampleAttributeList {
-    let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-    let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+    let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+    let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
     let mut alist = std::collections::BTreeMap::new();
     let len = ATTRIBUTE_NAMES.len();
     // fill in the missing pieces with dummy values.
@@ -310,8 +309,8 @@ fn dummy_alist() -> ExampleAttributeList {
         }
     }
     AttributeList {
-        expiry,
-        creation_time,
+        valid_to,
+        created_at,
         alist,
         _phantom: Default::default(),
     }
@@ -532,7 +531,9 @@ pub unsafe fn free_response_string_ext(ptr: *mut c_char) {
 /// # Safety
 /// This function is unsafe in the sense that if the argument pointer was not
 /// Constructed via CString::into_raw its behaviour is undefined.
-pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) { free_response_string_ext(ptr) }
+pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) {
+    free_response_string_ext(ptr)
+}
 
 #[cfg(test)]
 mod test {}

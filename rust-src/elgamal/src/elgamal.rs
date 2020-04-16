@@ -1,5 +1,4 @@
 use crate::{cipher::*, public::*, secret::*};
-use bitvec::Bits;
 use rand::*;
 use rayon::prelude::*;
 
@@ -64,9 +63,9 @@ pub fn encrypt_u64_bitwise_iter<C: Curve>(
     pk: PublicKey<C>,
     e: u64,
 ) -> impl IndexedParallelIterator<Item = Cipher<C>> {
-    (0..64).into_par_iter().map(move |i| {
+    (0u8..64).into_par_iter().map(move |i| {
         let mut csprng = thread_rng();
-        pk.hide_binary_exp(&C::generate_scalar(&mut csprng), e.get(i as u8))
+        pk.hide_binary_exp(&C::generate_scalar(&mut csprng), (e & (1 << i)) != 0)
     })
 }
 
@@ -81,7 +80,9 @@ where
     I: Iterator<Item = &'a C>, {
     let mut r = 0u64;
     for (i, e) in v.enumerate() {
-        r.set(i as u8, e == one);
+        if e == one {
+            r |= 1 << i;
+        }
     }
     r
 }

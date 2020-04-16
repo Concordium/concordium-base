@@ -117,8 +117,8 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     ps_public_key: &ps_sig::PublicKey<P>,
 ) -> Result<ps_sig::UnknownMessage<P>, Reason> {
     // TODO: handle the errors
-    let expiry = P::G1::scalar_from_u64(att_list.expiry.into());
-    let creation_time = P::G1::scalar_from_u64(att_list.creation_time.into());
+    let valid_to = P::G1::scalar_from_u64(att_list.valid_to.into());
+    let created_at = P::G1::scalar_from_u64(att_list.created_at.into());
 
     let tags = {
         match encode_tags(att_list.alist.keys()) {
@@ -133,8 +133,8 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     // - anonymity revocation threshold
     // - list of anonymity revokers
     // - tags of the attribute list
-    // - expiry date of the attribute list
-    // - creation time of the attribute list
+    // - valid_to date of the attribute list
+    // - created_at of the attribute list
     // - attribute list elements
 
     let mut message = cmm_sc.0;
@@ -156,8 +156,8 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     }
 
     message = message.plus_point(&key_vec[m + 3].mul_by_scalar(&tags));
-    message = message.plus_point(&key_vec[m + 3 + 1].mul_by_scalar(&expiry));
-    message = message.plus_point(&key_vec[m + 3 + 2].mul_by_scalar(&creation_time));
+    message = message.plus_point(&key_vec[m + 3 + 1].mul_by_scalar(&valid_to));
+    message = message.plus_point(&key_vec[m + 3 + 2].mul_by_scalar(&created_at));
     // NB: It is crucial that att_vec is an ordered map and that .values iterator
     // returns messages in order of tags.
     for (k, v) in key_vec.iter().skip(m + 3 + 3).zip(att_vec.values()) {

@@ -27,6 +27,7 @@ use serde::{
 
 use byteorder::{BigEndian, ReadBytesExt};
 use either::Either;
+use std::io::{Error, ErrorKind};
 use std::{
     cmp::Ordering,
     convert::TryFrom,
@@ -193,7 +194,9 @@ impl AccountOwnershipProof {
     /// Number of individual proofs in this proof.
     /// NB: This method relies on the invariant that proofs should not
     /// have more than 255 elements.
-    pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.proofs.len() as u8) }
+    pub fn num_proofs(&self) -> SignatureThreshold {
+        SignatureThreshold(self.proofs.len() as u8)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
@@ -203,7 +206,9 @@ impl AccountOwnershipProof {
 pub struct IpIdentity(pub u32);
 
 impl fmt::Display for IpIdentity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
@@ -212,7 +217,9 @@ impl fmt::Display for IpIdentity {
 pub struct ArIdentity(pub u32);
 
 impl fmt::Display for ArIdentity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
@@ -259,7 +266,8 @@ pub fn merge_iter<'a, K: Ord + 'a, V1: 'a, V2: 'a, I1, I2, F>(i1: I1, i2: I2, mu
 where
     I1: std::iter::IntoIterator<Item = (&'a K, &'a V1)>,
     I2: std::iter::IntoIterator<Item = (&'a K, &'a V2)>,
-    F: FnMut(Either<&'a V1, &'a V2>), {
+    F: FnMut(Either<&'a V1, &'a V2>),
+{
     let mut iter_1 = i1.into_iter().peekable();
     let mut iter_2 = i2.into_iter().peekable();
     while let (Some(&(tag_1, v_1)), Some(&(tag_2, v_2))) = (iter_1.peek(), iter_2.peek()) {
@@ -303,7 +311,9 @@ pub const ATTRIBUTE_NAMES: [&str; 9] = [
 pub struct AttributeStringTag(String);
 
 impl<'a> fmt::Display for AttributeStringTag {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 // NB: This requires that the length of ATTRIBUTE_NAMES is no more than 256.
@@ -357,33 +367,105 @@ impl std::str::FromStr for AttributeTag {
 }
 
 impl Into<usize> for AttributeTag {
-    fn into(self) -> usize { self.0.into() }
+    fn into(self) -> usize {
+        self.0.into()
+    }
 }
 
 impl From<u8> for AttributeTag {
-    fn from(x: u8) -> Self { AttributeTag(x) }
+    fn from(x: u8) -> Self {
+        AttributeTag(x)
+    }
 }
 
 pub trait Attribute<F: Field>:
-    Copy + Clone + Sized + Send + Sync + fmt::Display + Serialize {
+    Copy + Clone + Sized + Send + Sync + fmt::Display + Serialize
+{
     // convert an attribute to a field element
     fn to_field_element(&self) -> F;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct YearMonth {
-    pub year:  u16,
+    pub year: u16,
     pub month: u8,
 }
 
+impl SerdeSerialize for YearMonth {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = format!("{}{:0>2}", self.year, self.month);
+        serializer.serialize_str(&s)
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for YearMonth {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(YearMonthVisitor)
+    }
+}
+
+struct YearMonthVisitor;
+
+impl<'de> Visitor<'de> for YearMonthVisitor {
+    type Value = YearMonth;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a year and month in format YYYYMM")
+    }
+
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        YearMonth::from_str(s).map_err(de::Error::custom)
+    }
+}
+
+impl Serial for YearMonth {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.put(&self.year);
+        out.put(&self.month);
+    }
+}
+
+impl Deserial for YearMonth {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let year = source.get()?;
+        let month = source.get()?;
+        Ok(YearMonth { year, month })
+    }
+}
+
 impl YearMonth {
-    pub fn new(year: u16, month: u8) -> YearMonth { YearMonth { year, month } }
+    pub fn new(year: u16, month: u8) -> YearMonth {
+        YearMonth { year, month }
+    }
+
+    pub fn from_str(s: &str) -> Fallible<YearMonth> {
+        if s.len() != 6 {
+            bail!("Invalid length of YYYYMM");
+        }
+        let (s_year, s_month) = s.split_at(4);
+        let year = s_year
+            .parse::<u16>()
+            .map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
+        let month = s_month
+            .parse::<u8>()
+            .map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
+        Ok(YearMonth { year, month })
+    }
 
     pub fn now() -> YearMonth {
         use chrono::Datelike;
         let now = chrono::Utc::now();
         YearMonth {
-            year:  now.year() as u16,
+            year: now.year() as u16,
             month: now.month() as u8,
         }
     }
@@ -396,11 +478,14 @@ impl TryFrom<u64> for YearMonth {
     // TryFrom -> Option
     type Error = InvalidYearMonthEncoding;
 
-    /// Try to convert unsigned 64-bit integer to expiry (year and month).
-    /// Least significant byte is month, following two bytes are year
+    /// Try to convert unsigned 64-bit integer to year and month. Least significant
+    /// byte is month, following two bytes is year in big endian
     fn try_from(v: u64) -> Result<Self, Self::Error> {
-        let year = (v >> 8) as u16;
-        let month = (v & 0xFF) as u8;
+        let byte0 = (v & 0xFF) as u8;
+        let byte1 = ((v >> 8) & 0xFF) as u8;
+        let byte2 = ((v >> 16) & 0xFF) as u8;
+        let month = byte0;
+        let year = ((byte2 as u16) << 8) | byte1 as u16;
         if year < 1900 || year > 2200 || month < 1 || month > 12 {
             return Err(InvalidYearMonthEncoding {});
         }
@@ -411,7 +496,13 @@ impl TryFrom<u64> for YearMonth {
 impl From<YearMonth> for u64 {
     /// Convert expiry (year and month) to unsigned 64-bit integer.
     /// Least significant byte is month, following two bytes are year
-    fn from(v: YearMonth) -> Self { ((v.year as u64) << 16) | (v.month as u64 & 0xFF) }
+    fn from(v: YearMonth) -> Self {
+        let byte0 = (v.month & 0xFF) as u64;
+        let byte1 = (v.year & 0xFF) as u64;
+        let byte2 = ((v.year >> 8) & 0xFF) as u64;
+        let result: u64 = byte0 | (byte1 << 8) | (byte2 << 16);
+        result
+    }
 }
 
 #[derive(Clone, Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
@@ -420,8 +511,8 @@ impl From<YearMonth> for u64 {
     deserialize = "F: Field, AttributeType: Attribute<F> + SerdeDeserialize<'de>"
 ))]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
-    pub expiry: YearMonth,
-    pub creation_time: YearMonth,
+    pub valid_to: YearMonth,
+    pub created_at: YearMonth,
     /// The attributes map. The map size can be at most k where k is the number
     /// of bits that fit into a field element.
     #[serde(rename = "chosenAttributes")]
@@ -502,7 +593,6 @@ pub struct ChainArData<C: Curve> {
     #[serde(rename = "arIdentity")]
     pub ar_identity: ArIdentity,
     /// encrypted share of id cred pub
-    /// encrypted share of the prf key
     #[serde(rename = "encIdCredPubShare")]
     pub enc_id_cred_pub_share: Cipher<C>,
     /// the number of the share
@@ -781,9 +871,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    pub expiry: YearMonth,
-    #[serde(rename = "creationTime")]
-    pub creation_time: YearMonth,
+    #[serde(rename = "validTo")]
+    pub valid_to: YearMonth,
+    #[serde(rename = "createdAt")]
+    pub created_at: YearMonth,
     /// Revealed attributes for now. In the future we might have
     /// additional items with (Tag, Property, Proof).
     #[serde(rename = "revealedAttributes")]
@@ -794,8 +885,8 @@ pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, AttributeType> {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        out.put(&self.expiry);
-        out.put(&self.creation_time);
+        out.put(&self.valid_to);
+        out.put(&self.created_at);
         out.put(&(self.policy_vec.len() as u16));
         serial_map_no_length(&self.policy_vec, out)
     }
@@ -803,13 +894,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, Attribu
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, AttributeType> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
-        let expiry = source.get()?;
-        let creation_time = source.get()?;
+        let valid_to = source.get()?;
+        let created_at = source.get()?;
         let len: u16 = source.get()?;
         let policy_vec = deserial_map_no_length(source, usize::from(len))?;
         Ok(Policy {
-            expiry,
-            creation_time,
+            valid_to,
+            created_at,
             policy_vec,
             _phantom: Default::default(),
         })
@@ -907,11 +998,15 @@ impl<'de> Visitor<'de> for VerifyKeyVisitor {
 }
 
 impl From<acc_sig_scheme::PublicKey> for VerifyKey {
-    fn from(pk: acc_sig_scheme::PublicKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
+    fn from(pk: acc_sig_scheme::PublicKey) -> Self {
+        VerifyKey::Ed25519VerifyKey(pk)
+    }
 }
 
 impl From<&ed25519::Keypair> for VerifyKey {
-    fn from(kp: &ed25519::Keypair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
+    fn from(kp: &ed25519::Keypair) -> Self {
+        VerifyKey::Ed25519VerifyKey(kp.public)
+    }
 }
 
 /// Compare byte representation.
@@ -924,11 +1019,15 @@ impl Ord for VerifyKey {
 }
 
 impl PartialOrd for VerifyKey {
-    fn partial_cmp(&self, other: &VerifyKey) -> Option<Ordering> { Some(self.cmp(other)) }
+    fn partial_cmp(&self, other: &VerifyKey) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl PartialEq for VerifyKey {
-    fn eq(&self, other: &VerifyKey) -> bool { self.cmp(other) == Ordering::Equal }
+    fn eq(&self, other: &VerifyKey) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
 }
 
 impl Serial for VerifyKey {
@@ -1281,7 +1380,7 @@ impl<'de> Visitor<'de> for AccountDataVisitor {
             }
         }
         Ok(AccountData {
-            keys:     out_keys,
+            keys: out_keys,
             existing: existing.unwrap(),
         })
     }
@@ -1341,7 +1440,9 @@ impl Deserial for AccountKeys {
 }
 
 impl AccountKeys {
-    pub fn get(&self, idx: KeyIndex) -> Option<&VerifyKey> { self.keys.get(&idx) }
+    pub fn get(&self, idx: KeyIndex) -> Option<&VerifyKey> {
+        self.keys.get(&idx)
+    }
 }
 
 /// Serialization of relevant types.
@@ -1384,7 +1485,9 @@ impl Deserial for SchemeId {
 impl ArIdentity {
     /// Curve scalars must be big enough to accommodate all 32 bit unsigned
     /// integers.
-    pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)) }
+    pub fn to_scalar<C: Curve>(self) -> C::Scalar {
+        C::scalar_from_u64(u64::from(self.0))
+    }
 }
 
 /// Metadata that we need off-chain for various purposes, but should not go on
@@ -1449,4 +1552,37 @@ pub struct IdObjectUseData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         deserialize_with = "base16_decode"
     )]
     pub randomness: SigRetrievalRandomness<P>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_yearmonth_serialization() {
+        // Test equality
+        let ym1 = YearMonth::new(2020, 02);
+        let ym2 = YearMonth::new(2020, 02);
+        assert_eq!(ym1, ym2);
+
+        // Test serialization
+        let mut buf = Vec::new();
+        buf.put(&ym1);
+        let mut cursor = std::io::Cursor::new(buf);
+        let ym1_parsed = cursor.get().unwrap();
+        assert_eq!(ym1, ym1_parsed);
+
+        // Test JSON serialization
+        let json = serde_json::to_string(&ym1).unwrap();
+        assert_eq!("\"202002\"", json);
+        let ym1_parsed = serde_json::from_str(&json).unwrap();
+        assert_eq!(ym1, ym1_parsed);
+
+        // Test u64 serialization
+        // 202002 => hex: 00000111 11100100 00000010 = dec: 7 228 2 = u64: 517122
+        let num: u64 = u64::from(ym1);
+        assert_eq!(num, 517122);
+        let ym1_parsed = YearMonth::try_from(num).unwrap();
+        assert_eq!(ym1, ym1_parsed);
+    }
 }

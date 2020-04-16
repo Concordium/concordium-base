@@ -10,8 +10,8 @@ use pedersen_scheme::key::CommitmentKey as PedersenKey;
 use std::{fmt, io::Cursor, slice, str::FromStr};
 
 use byteorder::ReadBytesExt;
+use crypto_common::size_t;
 use ffi_helpers::*;
-use libc::size_t;
 use num::{
     bigint::{BigUint, ParseBigIntError},
     Num,
@@ -107,7 +107,9 @@ pub enum ParseAttributeError {
 }
 
 impl From<ParseBigIntError> for ParseAttributeError {
-    fn from(err: ParseBigIntError) -> Self { ParseAttributeError::IntDecodingFailed(err) }
+    fn from(err: ParseBigIntError) -> Self {
+        ParseAttributeError::IntDecodingFailed(err)
+    }
 }
 
 impl fmt::Display for ParseAttributeError {
@@ -268,7 +270,9 @@ macro_derive_to_json!(global_context_to_json, GlobalContext<G1>);
 pub struct ElgamalGenerator(G1);
 
 impl ElgamalGenerator {
-    pub fn generate() -> Self { ElgamalGenerator(G1::generate(&mut thread_rng())) }
+    pub fn generate() -> Self {
+        ElgamalGenerator(G1::generate(&mut thread_rng()))
+    }
 }
 
 macro_derive_from_bytes!(
@@ -358,19 +362,22 @@ mod test {
             prf_key,
         };
 
-        let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-        let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
         let alist = ExampleAttributeList {
-            expiry,
-            creation_time,
+            valid_to,
+            created_at,
             alist,
             _phantom: Default::default(),
         };
 
-        let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-            ar_identities: vec![ArIdentity(0), ArIdentity(1), ArIdentity(2)],
-            threshold:     Threshold(2),
-        })
+        let context = make_context_from_ip_info(
+            ip_info.clone(),
+            ChoiceArParameters {
+                ar_identities: vec![ArIdentity(0), ArIdentity(1), ArIdentity(2)],
+                threshold: Threshold(2),
+            },
+        )
         .expect("The constructed ARs are valid.");
         let (pio, randomness) = generate_pio(&context, &aci);
 
@@ -385,8 +392,8 @@ mod test {
         };
 
         let policy = Policy {
-            expiry,
-            creation_time,
+            valid_to,
+            created_at,
             policy_vec: {
                 let mut tree = BTreeMap::new();
                 tree.insert(AttributeTag::from(0u8), AttributeKind::from(55));
@@ -396,8 +403,8 @@ mod test {
         };
 
         let wrong_policy = Policy {
-            expiry,
-            creation_time,
+            valid_to,
+            created_at,
             policy_vec: {
                 let mut tree = BTreeMap::new();
                 tree.insert(AttributeTag::from(0u8), AttributeKind::from(5));

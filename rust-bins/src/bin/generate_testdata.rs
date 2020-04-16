@@ -82,21 +82,24 @@ fn main() {
         prf_key,
     };
 
-    let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-    let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+    let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+    let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
     let attributes = ExampleAttributeList {
-        expiry,
-        creation_time,
+        valid_to,
+        created_at,
         alist,
         _phantom: Default::default(),
     };
 
-    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        // use all anonymity revokers.
-        ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
-        // all but one threshold
-        threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
-    })
+    let context = make_context_from_ip_info(
+        ip_info.clone(),
+        ChoiceArParameters {
+            // use all anonymity revokers.
+            ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
+            // all but one threshold
+            threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
+        },
+    )
     .expect("Constructed AR data is valid.");
     let (pio, randomness) = generate_pio(&context, &aci);
 
@@ -120,14 +123,14 @@ fn main() {
 
     let id_object = IdentityObject {
         pre_identity_object: pio,
-        alist:               attributes,
-        signature:           ip_sig,
+        alist: attributes,
+        signature: ip_sig,
     };
     let id_object_use_data = IdObjectUseData { aci, randomness };
 
     let policy = Policy {
-        expiry,
-        creation_time,
+        valid_to,
+        created_at,
         policy_vec: {
             let mut tree = BTreeMap::new();
             tree.insert(AttributeTag::from(1u8), AttributeKind::from(31));
@@ -161,7 +164,7 @@ fn main() {
         // Generate the second credential for an existing account (the one
         // created by the first credential)
         let acc_data_2 = AccountData {
-            keys:     acc_data.keys,
+            keys: acc_data.keys,
             existing: Right(AccountAddress::new(&cdi_1.values.reg_id)),
         };
 
@@ -177,7 +180,7 @@ fn main() {
         .expect("We should have generated valid data.");
 
         let acc_keys = AccountKeys {
-            keys:      acc_data_2
+            keys: acc_data_2
                 .keys
                 .iter()
                 .map(|(&idx, kp)| (idx, VerifyKey::from(kp.public)))

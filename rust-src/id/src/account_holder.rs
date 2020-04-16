@@ -60,8 +60,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     //   - ZK-proof that the encryption has same value as corresponding commitment
     for item in prf_key_data.iter() {
         let secret = com_enc_eq::ComEncEqSecret {
-            value:         &item.share,
-            elgamal_rand:  &item.encryption_randomness,
+            value: &item.share,
+            elgamal_rand: &item.encryption_randomness,
             pedersen_rand: &item.randomness_cmm_to_share,
         };
         // FIXME: Need some context in the challenge computation.
@@ -75,10 +75,10 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             &mut csprng,
         );
         ip_ar_data.push(IpArData {
-            ar_identity:          item.ar_identity,
-            enc_prf_key_share:    item.encrypted_share,
+            ar_identity: item.ar_identity,
+            enc_prf_key_share: item.encrypted_share,
             prf_key_share_number: item.share_number,
-            proof_com_enc_eq:     proof,
+            proof_com_enc_eq: proof,
         });
     }
 
@@ -123,7 +123,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let rand_snd_cmm_prf = &cmm_coeff_randomness[0];
     let proof_com_eq = {
         let secret = com_eq_different_groups::ComEqDiffGrpsSecret {
-            value:      Value::view_scalar(&prf_key_scalar),
+            value: Value::view_scalar(&prf_key_scalar),
             rand_cmm_1: &rand_cmm_prf,
             rand_cmm_2: rand_snd_cmm_prf,
         };
@@ -168,21 +168,24 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // See specification of ps_sig and id layer for why this is so.
     let mut sig_retrieval_rand = cmm_sc_rand.randomness;
     sig_retrieval_rand.add_assign(&rand_cmm_prf);
-    (prio, ps_sig::SigRetrievalRandomness {
-        randomness: sig_retrieval_rand,
-    })
+    (
+        prio,
+        ps_sig::SigRetrievalRandomness {
+            randomness: sig_retrieval_rand,
+        },
+    )
 }
 
 /// Convenient data structure to collect data related to a single AR
 pub struct SingleArData<C: Curve> {
-    ar_identity:             ArIdentity,
-    share:                   Value<C>,
-    share_number:            ShareNumber,
-    encrypted_share:         Cipher<C>,
-    encryption_randomness:   elgamal::Randomness<C>,
-    cmm_to_share:            Commitment<C>,
+    ar_identity: ArIdentity,
+    share: Value<C>,
+    share_number: ShareNumber,
+    encrypted_share: Cipher<C>,
+    encryption_randomness: elgamal::Randomness<C>,
+    cmm_to_share: Commitment<C>,
     randomness_cmm_to_share: PedersenRandomness<C>,
-    ar_public_key:           elgamal::PublicKey<C>,
+    ar_public_key: elgamal::PublicKey<C>,
 }
 
 type SharingData<C> = (
@@ -292,7 +295,8 @@ pub fn generate_cdi<
     acc_data: &AccountData,
 ) -> Fallible<CredDeploymentInfo<P, C, AttributeType>>
 where
-    AttributeType: Clone, {
+    AttributeType: Clone,
+{
     let mut csprng = thread_rng();
 
     let ip_sig = &id_object.signature;
@@ -342,8 +346,8 @@ where
     let mut ar_data: Vec<ChainArData<C>> = Vec::with_capacity(number_of_ars);
     for item in id_cred_data.iter() {
         ar_data.push(ChainArData {
-            ar_identity:              item.ar_identity,
-            enc_id_cred_pub_share:    item.encrypted_share,
+            ar_identity: item.ar_identity,
+            enc_id_cred_pub_share: item.encrypted_share,
             id_cred_pub_share_number: item.share_number,
         });
     }
@@ -408,8 +412,8 @@ where
             None => bail!("Cannot find AR {}", item.ar_identity),
             Some(ar_info) => {
                 let secret = com_enc_eq::ComEncEqSecret {
-                    value:         &item.share,
-                    elgamal_rand:  &item.encryption_randomness,
+                    value: &item.share,
+                    elgamal_rand: &item.encryption_randomness,
                     pedersen_rand: &item.randomness_cmm_to_share,
                 };
 
@@ -519,7 +523,7 @@ fn compute_pok_sig<
     csprng: &mut R,
 ) -> Fallible<com_eq_sig::ComEqSigProof<P, C>> {
     let att_vec = &alist.alist;
-    // number of user chosen attributes (+3 is for tags, expiry and creation_time)
+    // number of user chosen attributes (+3 is for tags, valid_to and created_at)
     let num_user_attributes = att_vec.len() + 3;
     // To these there are always two attributes (idCredSec and prf key) added.
     let num_total_attributes = num_user_attributes + 2;
@@ -570,17 +574,17 @@ fn compute_pok_sig<
     let tags_val = Value::new(encode_tags(alist.alist.keys())?);
     let tags_cmm = commitment_key.hide(&tags_val, &zero);
 
-    let expiry_val = Value::new(C::scalar_from_u64(alist.expiry.into()));
-    let expiry_cmm = commitment_key.hide(&expiry_val, &zero);
+    let valid_to_val = Value::new(C::scalar_from_u64(alist.valid_to.into()));
+    let valid_to_cmm = commitment_key.hide(&valid_to_val, &zero);
 
-    let creation_time_val = Value::new(C::scalar_from_u64(alist.creation_time.into()));
-    let creation_time_cmm = commitment_key.hide(&creation_time_val, &zero);
+    let created_at_val = Value::new(C::scalar_from_u64(alist.created_at.into()));
+    let created_at_cmm = commitment_key.hide(&created_at_val, &zero);
 
     secrets.push((tags_val, &zero));
     gxs.push(y_tildas[num_ars + 3]);
-    secrets.push((expiry_val, &zero));
+    secrets.push((valid_to_val, &zero));
     gxs.push(y_tildas[num_ars + 4]);
-    secrets.push((creation_time_val, &zero));
+    secrets.push((created_at_val, &zero));
     gxs.push(y_tildas[num_ars + 5]);
 
     // FIXME: Likely we need to make sure there are enough y_tildas first and fail
@@ -618,8 +622,8 @@ fn compute_pok_sig<
     }
 
     comm_vec.push(tags_cmm);
-    comm_vec.push(expiry_cmm);
-    comm_vec.push(creation_time_cmm);
+    comm_vec.push(valid_to_cmm);
+    comm_vec.push(created_at_cmm);
 
     for (idx, v) in alist.alist.iter() {
         match commitments.cmm_attributes.get(idx) {
@@ -650,10 +654,10 @@ fn compute_pok_sig<
 }
 
 pub struct CommitmentsRandomness<'a, C: Curve> {
-    id_cred_sec_rand:  &'a PedersenRandomness<C>,
-    prf_rand:          PedersenRandomness<C>,
+    id_cred_sec_rand: &'a PedersenRandomness<C>,
+    prf_rand: PedersenRandomness<C>,
     cred_counter_rand: PedersenRandomness<C>,
-    attributes_rand:   HashMap<AttributeTag, PedersenRandomness<C>>,
+    attributes_rand: HashMap<AttributeTag, PedersenRandomness<C>>,
 }
 
 /// Computing the commitments for the credential deployment info. We only
@@ -765,7 +769,7 @@ fn compute_pok_reg_id<C: Curve, R: Rng>(
 
     let secret = com_mult::ComMultSecret {
         values: &values,
-        rands:  &rands,
+        rands: &rands,
     };
 
     com_mult::prove_com_mult(
@@ -944,11 +948,11 @@ mod tests {
             signature: ip_sig,
         };
         let id_use_data = IdObjectUseData { aci, randomness };
-        let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-        let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
         let policy = Policy {
-            expiry,
-            creation_time,
+            valid_to,
+            created_at,
             policy_vec: {
                 let mut tree = BTreeMap::new();
                 tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
