@@ -107,9 +107,7 @@ pub enum ParseAttributeError {
 }
 
 impl From<ParseBigIntError> for ParseAttributeError {
-    fn from(err: ParseBigIntError) -> Self {
-        ParseAttributeError::IntDecodingFailed(err)
-    }
+    fn from(err: ParseBigIntError) -> Self { ParseAttributeError::IntDecodingFailed(err) }
 }
 
 impl fmt::Display for ParseAttributeError {
@@ -270,9 +268,7 @@ macro_derive_to_json!(global_context_to_json, GlobalContext<G1>);
 pub struct ElgamalGenerator(G1);
 
 impl ElgamalGenerator {
-    pub fn generate() -> Self {
-        ElgamalGenerator(G1::generate(&mut thread_rng()))
-    }
+    pub fn generate() -> Self { ElgamalGenerator(G1::generate(&mut thread_rng())) }
 }
 
 macro_derive_from_bytes!(
@@ -371,13 +367,10 @@ mod test {
             _phantom: Default::default(),
         };
 
-        let context = make_context_from_ip_info(
-            ip_info.clone(),
-            ChoiceArParameters {
-                ar_identities: vec![ArIdentity(0), ArIdentity(1), ArIdentity(2)],
-                threshold: Threshold(2),
-            },
-        )
+        let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+            ar_identities: vec![ArIdentity(0), ArIdentity(1), ArIdentity(2)],
+            threshold:     Threshold(2),
+        })
         .expect("The constructed ARs are valid.");
         let (pio, randomness) = generate_pio(&context, &aci);
 

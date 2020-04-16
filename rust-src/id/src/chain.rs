@@ -506,7 +506,7 @@ mod tests {
             _phantom: Default::default(),
         };
         let acc_data = AccountData {
-            keys: {
+            keys:     {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
                 keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));

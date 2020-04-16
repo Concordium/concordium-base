@@ -42,8 +42,8 @@ pub fn test_create_ars<T: Rng>(
         let ar_info = ArInfo::<ExampleCurve> {
             ar_identity: ArIdentity(i as u32),
             ar_description: Description {
-                name: format!("AnonymityRevoker{}", i),
-                url: format!("AnonymityRevoker{}.com", i),
+                name:        format!("AnonymityRevoker{}", i),
+                url:         format!("AnonymityRevoker{}.com", i),
                 description: format!("AnonymityRevoker{}", i),
             },
             ar_public_key,
@@ -78,14 +78,14 @@ pub fn test_create_ip_info<T: Rng>(
     (
         IpData {
             public_ip_info: IpInfo {
-                ip_identity: IpIdentity(0),
+                ip_identity:    IpIdentity(0),
                 ip_description: Description {
-                    name: "IP0".to_owned(),
-                    url: "IP0.com".to_owned(),
+                    name:        "IP0".to_owned(),
+                    url:         "IP0.com".to_owned(),
                     description: "IP0".to_owned(),
                 },
-                ip_verify_key: ip_public_key,
-                ip_ars: IpAnonymityRevokers {
+                ip_verify_key:  ip_public_key,
+                ip_ars:         IpAnonymityRevokers {
                     ars: ar_infos,
                     ar_cmm_key: ar_ck,
                     ar_base,
@@ -94,7 +94,7 @@ pub fn test_create_ip_info<T: Rng>(
             ip_secret_key,
             metadata: IpMetadata {
                 issuance_start: "URL.com".to_owned(),
-                icon: "BeautifulIcon.ico".to_owned(),
+                icon:           "BeautifulIcon.ico".to_owned(),
             },
         },
         ar_keys,
@@ -133,13 +133,10 @@ pub fn test_create_pio(
     let ars: Vec<ArIdentity> = (0..threshold).map(ArIdentity).collect::<Vec<_>>();
 
     // Create context
-    let context = make_context_from_ip_info(
-        ip_info.clone(),
-        ChoiceArParameters {
-            ar_identities: ars,
-            threshold: Threshold(threshold),
-        },
-    )
+    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+        ar_identities: ars,
+        threshold:     Threshold(threshold),
+    })
     .expect("The constructed ARs are invalid.");
 
     // Create and return PIO
@@ -208,7 +205,7 @@ pub fn test_pipeline() {
         _phantom: Default::default(),
     };
     let acc_data = AccountData {
-        keys: {
+        keys:     {
             let mut keys = BTreeMap::new();
             keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
             keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
@@ -308,6 +305,4 @@ pub fn test_pipeline() {
 pub fn run_pipeline_wasm() {}
 
 #[test]
-pub fn run_pipeline() {
-    test_pipeline();
-}
+pub fn run_pipeline() { test_pipeline(); }
