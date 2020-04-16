@@ -391,6 +391,7 @@ fn verify_pok_sig<
         &Value::new(C::scalar_from_u64(policy.created_at.into())),
         &zero,
     ));
+    comm_vec.push(commitments.cmm_max_accounts);
 
     // now, we go through the policy and remaining commitments and
     // put them into the vector of commitments in order to check the signature.
@@ -459,7 +460,7 @@ mod tests {
     use either::Left;
     use pedersen_scheme::key as PedersenKey;
     use rand::*;
-    use std::{collections::btree_map::BTreeMap, convert::TryFrom};
+    use std::collections::btree_map::BTreeMap;
 
     #[test]
     fn test_verify_cdi() {
@@ -493,8 +494,8 @@ mod tests {
             signature: ip_sig,
         };
         let id_use_data = IdObjectUseData { aci, randomness };
-        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+        let valid_to = YearMonth::new(2022, 5).unwrap(); // May 2022
+        let created_at = YearMonth::new(2020, 5).unwrap(); // May 2020
         let policy = Policy {
             valid_to,
             created_at,

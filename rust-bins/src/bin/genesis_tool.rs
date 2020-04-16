@@ -174,6 +174,7 @@ fn main() {
         let attributes = ExampleAttributeList {
             valid_to,
             created_at,
+            max_accounts: 238,
             alist,
             _phantom: Default::default(),
         };

@@ -284,16 +284,20 @@ where
 /// NB: The length of this list must be less than 256.
 /// This must be consistent with the value of attributeNames in
 /// haskell-src/Concordium/ID/Types.hs
-pub const ATTRIBUTE_NAMES: [&str; 9] = [
-    "MaxAccount",
-    "PreName",
-    "LastName",
-    "Sex",
-    "DateOfBirth",
-    "CountryOfResidence",
-    "CountryOfNationality",
-    "MaritalStatus",
-    "PassportNumber",
+pub const ATTRIBUTE_NAMES: [&str; 13] = [
+    "firstName",
+    "lastName",
+    "sex",
+    "dob",
+    "countryOfResidence",
+    "nationality",
+    "idDocType",
+    "idDocNo",
+    "idDocIssuer",
+    "idDocIssuedAt",
+    "idDocExpiresAt",
+    "nationalIdNo",
+    "taxIdNo",
 ];
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -364,8 +368,7 @@ impl From<u8> for AttributeTag {
     fn from(x: u8) -> Self { AttributeTag(x) }
 }
 
-pub trait Attribute<F: Field>:
-    Copy + Clone + Sized + Send + Sync + fmt::Display + Serialize {
+pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Serialize {
     // convert an attribute to a field element
     fn to_field_element(&self) -> F;
 }
@@ -494,8 +497,14 @@ impl From<YearMonth> for u64 {
     deserialize = "F: Field, AttributeType: Attribute<F> + SerdeDeserialize<'de>"
 ))]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
+    #[serde(rename = "validTo")]
     pub valid_to: YearMonth,
+    #[serde(rename = "createdAt")]
     pub created_at: YearMonth,
+    /// Maximum number of accounts that can be created from the owning identity
+    /// object.
+    #[serde(rename = "maxAccounts")]
+    pub max_accounts: u8,
     /// The attributes map. The map size can be at most k where k is the number
     /// of bits that fit into a field element.
     #[serde(rename = "chosenAttributes")]
@@ -758,6 +767,8 @@ pub struct CredDeploymentCommitments<C: Curve> {
     pub cmm_prf: pedersen::Commitment<C>,
     /// commitment to credential counter
     pub cmm_cred_counter: pedersen::Commitment<C>,
+    /// commitment to the max account number.
+    pub cmm_max_accounts: pedersen::Commitment<C>,
     /// List of commitments to the attributes that are not revealed.
     /// For the purposes of checking signatures, the commitments to those
     /// that are revealed as part of the policy are going to be computed by the

@@ -26,7 +26,6 @@ use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, to_value, Value};
 
 use sha2::{Digest, Sha256};
-use std::convert::TryFrom;
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
 type ExampleCurve = G1;
@@ -253,7 +252,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     let mut policy_vec = std::collections::BTreeMap::new();
     for tag in tags {
         if let Some(att) = id_object.alist.alist.get(&tag) {
-            if policy_vec.insert(tag, *att).is_some() {
+            if policy_vec.insert(tag, att.clone()).is_some() {
                 bail!("Cannot reveal an attribute more than once.")
             }
         } else {
@@ -294,8 +293,11 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 // Add data to the attribute list if needed. This is just to simulate the fact
 // that not all attributes are needed.
 fn dummy_alist() -> ExampleAttributeList {
-    let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-    let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+    let created_at = YearMonth::now();
+    let valid_to = YearMonth {
+        year: created_at.year + 1,
+        ..created_at
+    }; // a year from now.
     let mut alist = std::collections::BTreeMap::new();
     let len = ATTRIBUTE_NAMES.len();
     // fill in the missing pieces with dummy values.
@@ -308,6 +310,7 @@ fn dummy_alist() -> ExampleAttributeList {
     AttributeList {
         valid_to,
         created_at,
+        max_accounts: 238,
         alist,
         _phantom: Default::default(),
     }

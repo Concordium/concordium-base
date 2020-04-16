@@ -625,6 +625,7 @@ fn handle_act_as_ip(matches: &ArgMatches) {
     let attributes = AttributeList {
         valid_to,
         created_at,
+        max_accounts: 238,
         alist,
         _phantom: Default::default(),
     };

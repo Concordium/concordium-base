@@ -11,7 +11,6 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Base16 as BS16
 import Concordium.Crypto.SignatureScheme
-import Data.Bits
 import Data.Serialize as S
 import GHC.Generics
 import Data.Hashable
@@ -25,7 +24,6 @@ import Control.Monad.Fail hiding(fail)
 import Control.Monad.Except
 import qualified Data.Text as Text
 import Control.DeepSeq
-import Data.Scientific
 import System.Random
 import qualified Data.Map.Strict as Map
 
@@ -227,51 +225,33 @@ instance Serialize Proofs where
     Proofs <$> getShortByteString l
 
 -- |We assume an non-negative integer.
-newtype AttributeValue = AttributeValue Integer
-  deriving(Show, Eq)
+newtype AttributeValue = AttributeValue ShortByteString
+  deriving(Eq)
 
--- |Unroll a positive integer into little-endian bytes.
-unroll :: Integer -> [Word8]
-unroll v | v < 0 = error "Negative integer, precondition violated."
-         | v == 0 = [0]
-         | otherwise = go v
-  where go 0 = []
-        go n = let (d, m) = divMod n 256
-               in fromIntegral m : go d
+instance Show AttributeValue where
+  show (AttributeValue bytes) = Text.unpack (Text.decodeUtf8 (BSS.fromShort bytes))
 
 instance Serialize AttributeValue where
-    put (AttributeValue i) =
-        let bytes = unroll i in
-          putWord8 (fromIntegral (length bytes)) <>
-          mapM_ putWord8 (reverse bytes)
+    put (AttributeValue bytes) =
+      putWord8 (fromIntegral (BSS.length bytes)) <>
+      putShortByteString bytes
 
     get = do
       l <- getWord8
       if l <= 31 then do
-        bytes <- replicateM (fromIntegral l) getWord8
-        return . AttributeValue $! foldl (\acc b -> acc `shiftL` 8 + fromIntegral b) 0 bytes
+        bytes <- getShortByteString (fromIntegral l)
+        return $! AttributeValue bytes
       else fail "Attribute malformed. Must fit into 31 bytes."
 
 instance ToJSON AttributeValue where
-  toJSON (AttributeValue v) = String (Text.pack (show v))
+  -- this is safe because the bytestring should contain 
+  toJSON (AttributeValue v) = String (Text.decodeUtf8 (BSS.fromShort v))
 
 instance FromJSON AttributeValue where
-  parseJSON (String s) =
-    case Text.decimal s of
-      Left err -> fail err
-      Right (i, rest)
-          | Text.null rest -> do
-              if i >= 0 && i < 2^(248 :: Word) then
-                return (AttributeValue i)
-              else fail "Input out of range."
-          | otherwise -> fail $ "Input malformed, remaining input: " ++ Text.unpack rest
-
-  parseJSON (Number n) = do
-    case toBoundedInteger n :: Maybe Word64 of
-      Just x -> return (AttributeValue (fromIntegral x))
-      Nothing -> fail "Not an integer in correct range."
-
-  parseJSON _ = fail "Attribute value must be either a string or an int."
+  parseJSON = withText "Attribute value"$ \v -> do
+    let s = Text.encodeUtf8 v
+    unless (BS.length s <= 31) $ fail "Attribute values must fit into 31 bytes."
+    return (AttributeValue (BSS.toShort s))
 
 -- |ValidTo of a credential.
 type CredentialValidTo = YearMonth
@@ -308,16 +288,20 @@ newtype AttributeTag = AttributeTag Word8
 
 -- *NB: This mapping must be kept consistent with the mapping in id/types.rs.
 attributeNames :: [Text.Text]
-attributeNames = ["MaxAccount",
-                   "PreName",
-                   "LastName",
-                   "Sex",
-                   "DateOfBirth",
-                   "CountryOfResidence",
-                   "CountryOfNationality",
-                   "MaritalStatus",
-                   "PassportNumber"
-                   ]
+attributeNames = ["firstName",
+                  "lastName",
+                  "sex",
+                  "dob",
+                  "countryOfResidence",
+                  "nationality",
+                  "idDocType",
+                  "idDocNo",
+                  "idDocIssuer",
+                  "idDocIssuedAt",
+                  "idDocExpiresAt",
+                  "nationalIdNo",
+                  "taxIdNo"
+                 ]
 
 mapping :: Map.Map Text.Text AttributeTag
 mapping = Map.fromList $ zip attributeNames [0..] 
