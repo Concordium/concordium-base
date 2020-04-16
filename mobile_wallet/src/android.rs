@@ -151,7 +151,11 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_check_1a
         Ok(res_str) => res_str,
         Err(e) => return 0,
     };
-    check_account_address_aux(&String::from(input_str))
+    if check_account_address_aux(&String::from(input_str)) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Method for wrapping the return value to Java

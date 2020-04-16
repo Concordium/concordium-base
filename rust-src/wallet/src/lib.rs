@@ -502,7 +502,8 @@ pub unsafe extern "C" fn create_credential(
 /// Take a pointer to a NUL-terminated UTF8-string and return whether this is
 /// a correct format for a concordium address.
 /// A non-zero return value signals success.
-/// #Safety
+///
+/// # Safety
 /// The input must be NUL-terminated.
 pub unsafe extern "C" fn check_account_address(input_ptr: *const c_char) -> u8 {
     let input_str = {
