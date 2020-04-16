@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE CPP #-}
 module Concordium.Types.Execution where
 
 import Prelude hiding(fail)
@@ -24,9 +25,11 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Word
 import GHC.Generics
+import Language.Haskell.TH
 
 import qualified Concordium.Types.Acorn.Core as Core
 import Concordium.Types
+import Concordium.Types.Utils
 import Concordium.Types.Execution.TH
 import Concordium.ID.Types
 import Concordium.Types.Acorn.Interfaces
@@ -141,12 +144,13 @@ data Payload =
   -- |Remove an existing baker from the baker pool.
   | RemoveBaker {
       -- |Id of the baker to remove.
-      rbId :: !BakerId,
-      -- |Proof that we are allowed to remove the baker. One
-      -- mechanism would be that the baker would remove itself only
-      -- (the transaction must come from the baker's account) but
-      -- possibly we want other mechanisms.
-      rbProof :: !Proof
+      rbId :: !BakerId
+      -- TODO:
+      -- Proof that we are allowed to remove the baker. One
+      -- -- mechanism would be that the baker would remove itself only
+      -- -- (the transaction must come from the baker's account) but
+      -- -- possibly we want other mechanisms.
+      -- rbProof :: !Proof
       }
   -- |Update the account the baker receives their baking reward to.
   | UpdateBakerAccount {
@@ -174,6 +178,12 @@ data Payload =
       }
   -- |Undelegate stake.
   | UndelegateStake
+  -- |Update the election difficulty birk parameter.
+  -- Will only be accepted if sent from one of the special beta accounts.
+  | UpdateElectionDifficulty {
+      -- |The new election difficulty. Must be in the range [0,1).
+      uedDifficulty :: !ElectionDifficulty
+      }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -217,8 +227,7 @@ instance S.Serialize Payload where
     S.put abProofAggregation
   put RemoveBaker{..} =
     P.putWord8 6 <>
-    S.put rbId <>
-    S.put rbProof
+    S.put rbId
   put UpdateBakerAccount{..} =
     P.putWord8 7 <>
     S.put ubaId <>
@@ -234,6 +243,9 @@ instance S.Serialize Payload where
     S.put dsID
   put UndelegateStake =
     P.putWord8 10
+  put UpdateElectionDifficulty{..} =
+    P.putWord8 11 <>
+    S.put uedDifficulty
 
   get =
     G.getWord8 >>=
@@ -270,7 +282,6 @@ instance S.Serialize Payload where
               return AddBaker{..}
             6 -> do
               rbId <- S.get
-              rbProof <- S.get
               return RemoveBaker{..}
             7 -> do
               ubaId <- S.get
@@ -284,15 +295,36 @@ instance S.Serialize Payload where
               return UpdateBakerSignKey{..}
             9 -> DelegateStake <$> S.get
             10 -> return UndelegateStake
+            11 -> do
+              uedDifficulty <- S.get
+              unless (isValidElectionDifficulty uedDifficulty) $
+                fail $ "Illegal election difficulty: " ++ show uedDifficulty
+              return UpdateElectionDifficulty{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 {-# INLINE encodePayload #-}
 encodePayload :: Payload -> EncodedPayload
 encodePayload = EncodedPayload . BSS.toShort . S.encode
 
-{-# INLINE decodePayload #-}
-decodePayload :: EncodedPayload -> Either String Payload
+#ifdef DISABLE_SMART_CONTRACTS
+$(reportWarning "Disabling smart contract related transactions." >> return [])
+decodePayload (EncodedPayload s) =
+  let bs = BSS.fromShort s
+  in case BS.uncons bs of
+       Nothing -> Left "Empty string not a valid payload."
+       Just (ttype, _) ->
+         if ttype == 0 ||  -- the numbers here must match the serialization of the payload above (Serialize instance)
+            ttype == 1 ||
+            ttype == 2 ||
+            ttype == 4 then
+           Left "Unsupported transaction type."
+         else S.decode bs
+#else
+$(reportWarning "All transaction types allowed." >> return [])
 decodePayload (EncodedPayload s) = S.decode (BSS.fromShort s)
+#endif
+decodePayload :: EncodedPayload -> Either String Payload
+{-# INLINE decodePayload #-}
 
 {-# INLINE payloadBodyBytes #-}
 -- |Get the body of the payload as bytes. Essentially just remove the
@@ -404,6 +436,10 @@ data Event =
                -- are not delegating to anyone at the time.
                esuBaker :: !(Maybe BakerId)
                }
+           | ElectionDifficultyUpdated {
+               -- |The new election difficulty.
+               eeduDifficulty :: !Double
+               }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -490,24 +526,29 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   | NotFromBakerAccount { nfbaFromAccount :: !AccountAddress, -- ^Sender account of the transaction
                                           nfbaCurrentBakerAccount :: !AccountAddress -- ^Current baker account.
                                         }
+                  -- |A transaction should be sent from a special account, but is not.
+                  | NotFromSpecialAccount
     deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason
 instance AE.ToJSON RejectReason
 instance AE.FromJSON RejectReason
 
-data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover the gas deposit.
+-- | Reasons for the execution of a transaction to fail on the current block state.
+data FailureKind = InsufficientFunds -- ^The sender account's amount is not sufficient to cover the
+                                     -- amount corresponding to the deposited energy.
                  | IncorrectSignature  -- ^Signature check failed.
                  | NonSequentialNonce !Nonce -- ^The transaction nonce is not
                                              -- next in sequence. The argument
                                              -- is the expected nonce.
-                 | SuccessorOfInvalidTransaction -- ^A transaction from the same account was rejected, so
-                                                 -- we reject the following transactions from the same account
+                 | SuccessorOfInvalidTransaction -- ^In the context of processing multiple transactions
+                                                 -- from the same account, the transaction is a successor
+                                                 -- of (has the nonce following that of) an invalid transaction.
                  | UnknownAccount !AccountAddress -- ^Transaction is coming from an unknown sender.
                  | DepositInsufficient -- ^The dedicated gas amount was lower than the minimum allowed.
                  | NoValidCredential -- ^No valid credential on the sender account.
                  | ExpiredTransaction -- ^The transaction has expired.
-                 | ExceedsMaxBlockEnergy -- ^The transaction's used energy size exceeds the maximum block energy limit
+                 | ExceedsMaxBlockEnergy -- ^The transaction's deposited energy exceeds the maximum block energy limit.
                  | ExceedsMaxBlockSize -- ^The baker decided that this transaction is too big to put in a block.
                  | NonExistentIdentityProvider !IDTypes.IdentityProviderIdentity
                  | NonExistentAccount !AccountAddress -- ^Cannot deploy credential onto a non-existing account.
@@ -518,17 +559,17 @@ data FailureKind = InsufficientFunds   -- ^The amount is not sufficient to cover
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
 
 -- FIXME: These intances need to be made clearer.
-$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = map toLower . dropWhile isLower} ''Event)
+$(deriveJSON AE.defaultOptions{AE.fieldLabelModifier = firstLower . dropWhile isLower} ''Event)
 
 -- Derive JSON instance for transaction outcomes
 -- At the end of the file to avoid issues with staging restriction.
-$(deriveJSON AE.defaultOptions{AE.constructorTagModifier = map toLower . drop 2,
+$(deriveJSON AE.defaultOptions{AE.constructorTagModifier = firstLower . drop 2,
                                  AE.sumEncoding = AE.TaggedObject{
                                     AE.tagFieldName = "outcome",
                                     AE.contentsFieldName = "details"
                                     },
-                                 AE.fieldLabelModifier=map toLower . drop 2} ''ValidResult)
+                                 AE.fieldLabelModifier = firstLower . drop 2} ''ValidResult)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionSummary')
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionSummary')
 
-$(deriveJSON defaultOptions{AE.constructorTagModifier = map toLower . drop 2} ''TransactionType)
+$(deriveJSON defaultOptions{AE.constructorTagModifier = firstLower . drop 2} ''TransactionType)

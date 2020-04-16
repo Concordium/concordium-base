@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -12,7 +13,6 @@ import Control.Exception
 import Control.Monad
 import Data.Aeson.TH
 import Data.Aeson(FromJSON, ToJSON)
-import Data.Char(toLower)
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
 import qualified Data.HashMap.Strict as HM
@@ -21,6 +21,7 @@ import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Lens.Micro.Platform
 import Lens.Micro.Internal
+import Concordium.Utils
 
 import Data.List
 import qualified Concordium.Crypto.SHA256 as H
@@ -31,6 +32,7 @@ import qualified Data.Vector as Vec
 import Data.Word
 
 import Concordium.Types
+import Concordium.Types.Utils
 import Concordium.ID.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Execution
@@ -106,7 +108,7 @@ transactionHeaderSize =
 getTransactionHeaderPayloadSize :: TransactionHeader -> Int
 getTransactionHeaderPayloadSize h = fromIntegral (thPayloadSize h) + transactionHeaderSize
 
-$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 2} ''TransactionHeader)
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionHeader)
 
 -- |Eq instance ignores derived fields.
 instance Eq TransactionHeader where
@@ -516,7 +518,7 @@ getTransactionIndex bh = \case
 -- @highNonce@ should always be at least @nextNonce@ (otherwise, what transaction is pending?).
 -- If an account has no pending transactions, then it should not be in the map.
 data PendingTransactionTable = PTT {
-  _pttWithSender :: HM.HashMap AccountAddress (Nonce, Nonce),
+  _pttWithSender :: !(HM.HashMap AccountAddress (Nonce, Nonce)),
   -- |Pending credentials. We only store the hash because updating the
   -- pending table would otherwise be more costly with the current setup.
   _pttDeployCredential :: HS.HashSet TransactionHash
@@ -532,10 +534,12 @@ emptyPendingTransactionTable = PTT HM.empty HS.empty
 -- NB: This only updates the pending table, and does not ensure that invariants elsewhere are maintained.
 -- PRECONDITION: the next nonce should be less than or equal to the transaction nonce.
 extendPendingTransactionTable :: TransactionData t => Nonce -> t -> PendingTransactionTable -> PendingTransactionTable
-extendPendingTransactionTable nextNonce tx pt = assert (nextNonce <= nonce) $ go
-  where go = pt & pttWithSender . at (transactionSender tx) %~ \case Nothing -> Just (nextNonce, nonce)
-                                                                     Just (l, u) -> Just (l, max u nonce)
+extendPendingTransactionTable nextNonce tx PTT{..} = assert (nextNonce <= nonce) $ let v = HM.alter f sender _pttWithSender in PTT{_pttWithSender = v, ..}
+  where
+        f Nothing = Just (nextNonce, nonce)
+        f (Just (l, u)) = Just (l, max u nonce)
         nonce = transactionNonce tx
+        sender = transactionSender tx
 
 -- |Insert an additional element in the pending transaction table.
 -- Does nothing if the next nonce is greater than the transaction nonce.
@@ -544,8 +548,8 @@ extendPendingTransactionTable nextNonce tx pt = assert (nextNonce <= nonce) $ go
 checkedExtendPendingTransactionTable :: TransactionData t => Nonce -> t -> PendingTransactionTable -> PendingTransactionTable
 checkedExtendPendingTransactionTable nextNonce tx pt =
   if nextNonce > nonce then pt else
-    pt & pttWithSender . at (transactionSender tx) %~ \case Nothing -> Just (nextNonce, nonce)
-                                                            Just (l, u) -> Just (l, max u nonce)
+    pt & pttWithSender . at' (transactionSender tx) %~ \case Nothing -> Just (nextNonce, nonce)
+                                                             Just (l, u) -> Just (l, max u nonce)
   where nonce = transactionNonce tx
 
 -- |Extend the pending transaction table with a credential hash.
@@ -557,7 +561,7 @@ forwardPTT :: [BlockItem] -> PendingTransactionTable -> PendingTransactionTable
 forwardPTT trs ptt0 = foldl forward1 ptt0 trs
     where
         forward1 :: PendingTransactionTable -> BlockItem -> PendingTransactionTable
-        forward1 ptt WithMetadata{wmdData=NormalTransaction tr} = ptt & pttWithSender . at (transactionSender tr) %~ upd
+        forward1 ptt WithMetadata{wmdData=NormalTransaction tr} = ptt & pttWithSender . at' (transactionSender tr) %~ upd
             where
                 upd Nothing = error "forwardPTT : forwarding transaction that is not pending"
                 upd (Just (low, high)) =
@@ -573,7 +577,7 @@ reversePTT :: [BlockItem] -> PendingTransactionTable -> PendingTransactionTable
 reversePTT trs ptt0 = foldr reverse1 ptt0 trs
     where
         reverse1 :: BlockItem -> PendingTransactionTable -> PendingTransactionTable
-        reverse1 WithMetadata{wmdData=NormalTransaction tr} = pttWithSender . at (transactionSender tr) %~ upd
+        reverse1 WithMetadata{wmdData=NormalTransaction tr} = pttWithSender . at' (transactionSender tr) %~ upd
             where
                 upd Nothing = Just (transactionNonce tr, transactionNonce tr)
                 upd (Just (low, high)) =
@@ -592,7 +596,7 @@ data SpecialTransactionOutcome =
     }
   deriving(Show, Eq)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . drop 3} ''SpecialTransactionOutcome)
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''SpecialTransactionOutcome)
 
 instance S.Serialize SpecialTransactionOutcome where
     put (BakingReward bid addr amt) = S.put bid <> S.put addr <> S.put amt

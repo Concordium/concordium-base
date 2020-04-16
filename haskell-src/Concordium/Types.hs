@@ -62,7 +62,7 @@ instance Ord (Hashed a) where
 
 -- * Types releated to bakers.
 newtype BakerId = BakerId Word64
-    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral, FromJSON, ToJSON) via Word64
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON) via Word64
 
 instance S.Serialize BakerId where
     get = BakerId <$> G.getWord64be
@@ -77,7 +77,14 @@ type BakerAggregationVerifyKey = Bls.PublicKey
 type BakerAggregationPrivateKey = Bls.SecretKey
 type BakerAggregationProof = Bls.Proof
 type LotteryPower = Ratio Amount
+
+-- | The type of the birk parameter "election difficulty".
+-- The value must be in the range [0,1).
 type ElectionDifficulty = Double
+type FinalizationCommitteeSize = Word32
+
+isValidElectionDifficulty :: ElectionDifficulty -> Bool
+isValidElectionDifficulty d = d >= 0 && d < 1
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
@@ -85,7 +92,7 @@ type VoterVRFPublicKey = VRF.PublicKey
 type VoterAggregationVerifyKey = Bls.PublicKey
 type VoterSignKey = Sig.SignKey
 type VoterAggregationPrivateKey = Bls.SecretKey
-newtype VoterPower = VoterPower Int
+newtype VoterPower = VoterPower AmountUnit
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Show, Integral, S.Serialize)
 
 -- * Blockchain specific types.
@@ -186,10 +193,13 @@ instance S.Serialize TransactionExpiryTime where
 transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
 transactionExpired = (<) . expiry
 
--- |Type of GTU amounts.
+-- |Type representing the amount unit which is defined as the smallest
+-- meaningful amount of GTUs.
+-- Currently this unit is 10^-4 GTU and doesn't have a proper name.
 -- FIXME: This likely needs to be Word128.
-newtype Amount = Amount { _amount :: Word64 }
-    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, FromJSON, ToJSON) via Word64
+type AmountUnit = Word64
+newtype Amount = Amount { _amount :: AmountUnit }
+    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, FromJSON, ToJSON) via AmountUnit
 
 instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
