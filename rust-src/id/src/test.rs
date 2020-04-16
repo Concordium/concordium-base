@@ -156,6 +156,7 @@ pub fn test_create_attributes() -> ExampleAttributeList {
     ExampleAttributeList {
         valid_to,
         created_at,
+        max_accounts: 237,
         alist,
         _phantom: Default::default(),
     }

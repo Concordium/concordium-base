@@ -6,7 +6,7 @@ use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
-use std::{collections::btree_map::BTreeMap, convert::TryFrom};
+use std::collections::btree_map::BTreeMap;
 
 use crypto_common::*;
 
@@ -82,11 +82,12 @@ fn main() {
         prf_key,
     };
 
-    let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-    let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+    let valid_to = YearMonth::new(2022, 5).unwrap(); // May 2022
+    let created_at = YearMonth::new(2020, 5).unwrap(); // May 2020
     let attributes = ExampleAttributeList {
         valid_to,
         created_at,
+        max_accounts: 238,
         alist,
         _phantom: Default::default(),
     };
