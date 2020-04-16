@@ -134,6 +134,8 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
     Ok(to_string(&response)?)
 }
 
+fn check_account_address_aux(input: &str) -> bool { input.parse::<AccountAddress>().is_ok() }
+
 fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
 
@@ -494,6 +496,26 @@ pub unsafe extern "C" fn create_credential(
     success: *mut u8,
 ) -> *mut c_char {
     create_credential_ext(input_ptr, success)
+}
+
+#[no_mangle]
+/// Take a pointer to a NUL-terminated UTF8-string and return whether this is
+/// a correct format for a concordium address.
+/// A non-zero return value signals success.
+/// #Safety
+/// The input must be NUL-terminated.
+pub unsafe extern "C" fn check_account_address(input_ptr: *const c_char) -> u8 {
+    let input_str = {
+        match CStr::from_ptr(input_ptr).to_str() {
+            Ok(s) => s,
+            Err(_) => return 0,
+        }
+    };
+    if check_account_address_aux(input_str) {
+        1
+    } else {
+        0
+    }
 }
 
 #[no_mangle]
