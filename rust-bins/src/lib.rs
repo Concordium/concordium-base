@@ -32,12 +32,7 @@ pub fn read_identity_providers() -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>:
 }
 
 /// Parse YYYYMM as YearMonth
-pub fn parse_yearmonth(input: &str) -> Option<YearMonth> {
-    match YearMonth::from_str(input) {
-        Ok(ym) => Some(ym),
-        Err(_) => None,
-    }
-}
+pub fn parse_yearmonth(input: &str) -> Option<YearMonth> { YearMonth::from_str(input).ok() }
 
 pub fn write_json_to_file<T: SerdeSerialize>(filepath: &str, v: &T) -> io::Result<()> {
     let path = Path::new(filepath);
