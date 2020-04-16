@@ -139,9 +139,8 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
 }
 
 #[no_mangle]
-/// The JNI wrapper for the `create_id_request_and_private_data` method.
-/// The `input` parameter must be a properly initalized `java.lang.String` that is non-null.
-/// The input must be valid JSON according to specified format
+/// The JNI wrapper for the `check_account_address` method.
+/// The `input` parameter must be a `java.lang.String` that is non-null.
 pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_check_1account_1address(
     env: JNIEnv,
     _: JClass,
