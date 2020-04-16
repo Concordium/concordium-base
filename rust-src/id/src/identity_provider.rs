@@ -146,7 +146,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     let key_vec = &ps_public_key.ys;
 
     // FIXME: Handle error gracefully, do not panic.
-    assert!(key_vec.len() >= n + m + 3 + 3 + 1);
+    assert!(key_vec.len() >= n + m + 7);
 
     // add threshold to the message
     message = message.plus_point(&key_vec[2].mul_by_scalar(&threshold.to_scalar::<P::G1>()));
@@ -162,7 +162,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     message = message.plus_point(&key_vec[m + 3 + 3].mul_by_scalar(&max_accounts));
     // NB: It is crucial that att_vec is an ordered map and that .values iterator
     // returns messages in order of tags.
-    for (k, v) in key_vec.iter().skip(m + 3 + 3 + 1).zip(att_vec.values()) {
+    for (k, v) in key_vec.iter().skip(m + 7).zip(att_vec.values()) {
         let att = v.to_field_element();
         message = message.plus_point(&k.mul_by_scalar(&att));
     }
