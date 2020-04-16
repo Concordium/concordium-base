@@ -13,7 +13,7 @@ use pedersen_scheme::{
     Value as PedersenValue,
 };
 use ps_sig::{public as pssig, signature::*, unknown_message::SigRetrievalRandomness};
-use std::collections::btree_map::BTreeMap;
+use std::{collections::btree_map::BTreeMap, str::FromStr};
 
 use crate::sigma_protocols::{
     com_enc_eq::ComEncEqProof, com_eq::ComEqProof, com_eq_different_groups::ComEqDiffGrpsProof,
@@ -424,12 +424,12 @@ impl Deserial for YearMonth {
     }
 }
 
-impl YearMonth {
-    pub fn new(year: u16, month: u8) -> YearMonth { YearMonth { year, month } }
+impl std::str::FromStr for YearMonth {
+    type Err = std::io::Error;
 
-    pub fn from_str(s: &str) -> Fallible<YearMonth> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.len() != 6 {
-            bail!("Invalid length of YYYYMM");
+            return Err(Error::new(ErrorKind::Other, "Invalid length of YYYYMM"));
         }
         let (s_year, s_month) = s.split_at(4);
         let year = s_year
@@ -440,6 +440,10 @@ impl YearMonth {
             .map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
         Ok(YearMonth { year, month })
     }
+}
+
+impl YearMonth {
+    pub fn new(year: u16, month: u8) -> YearMonth { YearMonth { year, month } }
 
     pub fn now() -> YearMonth {
         use chrono::Datelike;
@@ -477,7 +481,7 @@ impl From<YearMonth> for u64 {
     /// Convert expiry (year and month) to unsigned 64-bit integer.
     /// Least significant byte is month, following two bytes are year
     fn from(v: YearMonth) -> Self {
-        let byte0 = (v.month & 0xFF) as u64;
+        let byte0 = v.month as u64;
         let byte1 = (v.year & 0xFF) as u64;
         let byte2 = ((v.year >> 8) & 0xFF) as u64;
         let result: u64 = byte0 | (byte1 << 8) | (byte2 << 16);
