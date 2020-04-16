@@ -122,11 +122,8 @@ genPayload = oneof [genDeployModule,
           abProofAccount <- genAccountOwnershipProof
           return AddBaker{..}
 
-        genProof = BS.pack <$> (vector =<< choose (50,200))
-
         genRemoveBaker = do
           rbId <- genBakerId
-          rbProof <- genProof
           return RemoveBaker{..}
 
         genUpdateBakerAccount = do
