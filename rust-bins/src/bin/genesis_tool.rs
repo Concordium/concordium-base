@@ -121,15 +121,12 @@ fn main() {
             }
         };
 
-    let context = make_context_from_ip_info(
-        ip_info.clone(),
-        ChoiceArParameters {
-            // use all anonymity revokers.
-            ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
-            // all but one threshold
-            threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
-        },
-    )
+    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
+        // use all anonymity revokers.
+        ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
+        // all but one threshold
+        threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
+    })
     .expect("Constructed AR data is valid.");
 
     // we also read the global context from another json file (called
@@ -206,8 +203,8 @@ fn main() {
 
         let id_object = IdentityObject {
             pre_identity_object: pio,
-            alist: attributes,
-            signature: ip_sig,
+            alist:               attributes,
+            signature:           ip_sig,
         };
 
         let id_object_use_data = IdObjectUseData { aci, randomness };
@@ -226,7 +223,7 @@ fn main() {
         let address = AccountAddress::new(&cdi.values.reg_id);
 
         let acc_keys = AccountKeys {
-            keys: acc_data
+            keys:      acc_data
                 .keys
                 .iter()
                 .map(|(&idx, kp)| (idx, VerifyKey::from(kp)))

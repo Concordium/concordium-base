@@ -58,8 +58,7 @@ pub fn output_json<T: SerdeSerialize>(v: &T) {
 
 pub fn read_json_from_file<P: AsRef<Path>, T: DeserializeOwned>(path: P) -> io::Result<T>
 where
-    P: std::fmt::Debug,
-{
+    P: std::fmt::Debug, {
     let file = File::open(path)?;
 
     let reader = BufReader::new(file);
