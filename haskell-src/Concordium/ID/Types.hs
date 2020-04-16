@@ -279,18 +279,29 @@ type CredentialValidTo = YearMonth
 -- |CreatedAt of a credential.
 type CredentialCreatedAt = YearMonth
 
--- |YearMonth used store expiry (validTo) and creation (createdAt)
---  note Ord derive is correct, as it compares fields sequentially
+-- |YearMonth used store expiry (validTo) and creation (createdAt).
+-- The year is in Gregorian calendar and months are numbered from 1, i.e.,
+-- 1 is January, ..., 12 is December.
+-- Year must be a 4 digit year, i.e., between 1000 and 9999.
 data YearMonth = YearMonth {
-  year :: Word16,
-  month :: Word8
-  } deriving(Eq, Show, Ord)
+  ymYear :: !Word16,
+  ymMonth :: !Word8
+  } deriving(Eq, Ord)
+
+-- Show in compressed form of YYYYMM
+instance Show YearMonth where
+  show YearMonth{..} = show ymYear ++ (if ymMonth < 10 then ("0" ++ show ymMonth) else (show ymMonth))
 
 instance Serialize YearMonth where
   put YearMonth{..} = 
-    S.putWord16be year <>
-    S.putWord8 month
-  get = YearMonth <$> get <*> get
+    S.putWord16be ymYear <>
+    S.putWord8 ymMonth
+  get = do
+    ymYear <- S.getWord16be
+    unless (ymYear >= 1000 && ymYear < 10000) $ fail "Year must be 4 digits exactly."
+    ymMonth <- S.getWord8
+    unless (ymMonth >= 1 && ymMonth <= 12) $ fail "Month must be between 1 and 12 inclusive."
+    return YearMonth{..}
 
 newtype AttributeTag = AttributeTag Word8
  deriving (Eq, Show, Serialize, Ord, Enum, Num) via Word8
@@ -341,14 +352,23 @@ data Policy = Policy {
   } deriving(Eq, Show)
 
 instance ToJSON YearMonth where
-  toJSON YearMonth{..} = toJSON str
-    where str = (show year) ++ (if month < 10 then ("0" ++ show month) else (show month))
+  toJSON ym = String (Text.pack (show ym))
 
 instance FromJSON YearMonth where
   parseJSON = withText "YearMonth" $ \v -> do
-    year <- (take 4 v)
-    month <- v .: "month"
-    return YearMonth{..}
+    unless (Text.length v == 6) $ fail "YearMonth value must be exactly 6 characters."
+    let (year, month) = Text.splitAt 4 v
+    let eyear = Text.decimal year
+    let emonth = Text.decimal month
+    case eyear of
+      Left err -> fail $ "Year not a valid numeric value: " ++ err
+      Right (ymYear, rest) -> do
+        unless (Text.null rest && ymYear >= 1000 && ymYear <= 10000) $ fail "Year not valid."
+        case emonth of
+          Left err -> fail $ "Month not a valid numeric value: " ++ err
+          Right (ymMonth, rest') -> do
+            unless (Text.null rest' && ymMonth >= 1 && ymMonth <= 12) $ fail "Month not within range."
+            return YearMonth{..}
 
 instance ToJSON Policy where
   toJSON Policy{..} = object [
