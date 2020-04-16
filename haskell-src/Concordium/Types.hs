@@ -269,7 +269,7 @@ data Account = Account {
   -- A Max priority queue allows us to efficiently check for existence of such credentials,
   -- as well as listing of all valid credentials, and efficient insertion of new credentials.
   -- The priority is the expiry time of the credential.
-  ,_accountCredentials :: !(Queue.MaxPQueue CredentialExpiryTime CredentialDeploymentValues)
+  ,_accountCredentials :: !(Queue.MaxPQueue CredentialValidTo CredentialDeploymentValues)
   -- |The baker to which this account's stake is delegated (if any).
   ,_accountStakeDelegate :: !(Maybe BakerId)
   -- |The set of instances belonging to this account.
@@ -298,7 +298,7 @@ instance S.Serialize Account where
     _accountEncryptedAmount <- S.get
     _accountEncryptionKey <- S.get
     _accountVerificationKeys <- S.get
-    preAccountCredentials <- Queue.fromList . map (\cdv -> (pExpiry (cdvPolicy cdv), cdv)) <$> S.get
+    preAccountCredentials <- Queue.fromList . map (\cdv -> (pValidTo (cdvPolicy cdv), cdv)) <$> S.get
     let _accountCredentials = Queue.seqSpine preAccountCredentials preAccountCredentials
     _accountStakeDelegate <- S.get
     _accountInstances <- Set.fromList <$> S.get
