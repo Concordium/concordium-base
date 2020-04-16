@@ -138,6 +138,22 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
     }
 }
 
+#[no_mangle]
+/// The JNI wrapper for the `create_id_request_and_private_data` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that is non-null.
+/// The input must be valid JSON according to specified format
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_check_1account_1address(
+    env: JNIEnv,
+    _: JClass,
+    input: JString,
+) -> jboolean {
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => return 0,
+    };
+    check_account_address_aux(&String::from(input_str))
+}
+
 /// Method for wrapping the return value to Java
 /// We use a class in Java land for returning data from Rust
 /// If everything succeeds, then the `result` field will be 1 and the `output` field will contain the JSON response

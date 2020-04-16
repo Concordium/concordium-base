@@ -2,8 +2,8 @@
 
 use libc::c_char;
 use wallet::{
-    create_credential_ext, create_id_request_and_private_data_ext, create_transfer_ext,
-    free_response_string_ext,
+    check_account_address as check_account_address_ext, create_credential_ext,
+    create_id_request_and_private_data_ext, create_transfer_ext, free_response_string_ext,
 };
 
 #[no_mangle]
@@ -45,6 +45,16 @@ pub unsafe extern "C" fn create_transfer(
     success: *mut u8,
 ) -> *mut c_char {
     create_transfer_ext(input_ptr, success)
+}
+
+#[no_mangle]
+/// Take a pointer to a NUL-terminated UTF8-string and return whether this is
+/// a correct format for a concordium address.
+/// A non-zero return value signals success.
+/// #Safety
+/// The input must be NUL-terminated.
+pub unsafe extern "C" fn check_account_address(input_ptr: *const c_char) -> u8 {
+    check_account_address_ext(input_ptr)
 }
 
 #[no_mangle]
