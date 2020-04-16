@@ -41,11 +41,11 @@ dummyCredential address pValidTo pCreatedAt = ID.CredentialDeploymentValues
 
 {-# WARNING dummyMaxValidTo "Invalid validTo, only for testing." #-}
 dummyMaxValidTo :: ID.YearMonth
-dummyMaxValidTo = YearMonth 2199 12
+dummyMaxValidTo = YearMonth 9999 12
 
 {-# WARNING dummyLowValidTo "Invalid validTo, only for testing." #-}
 dummyLowValidTo :: ID.YearMonth
-dummyLowValidTo = YearMonth 1900 1
+dummyLowValidTo = YearMonth 1000 1
 
 {-# WARNING dummyCreatedAt "Invalid creation time, only for testing." #-}
 dummyCreatedAt :: ID.YearMonth
