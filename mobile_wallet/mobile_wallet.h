@@ -4,6 +4,15 @@
 #include <stdlib.h>
 
 /**
+ * Take a pointer to a NUL-terminated UTF8-string and return whether this is
+ * a correct format for a concordium address.
+ * A non-zero return value signals success.
+ * #Safety
+ * The input must be NUL-terminated.
+ */
+uint8_t check_account_address(const char *input_ptr);
+
+/**
  * # Safety
  * The input pointer must point to a null-terminated buffer, otherwise this
  * function will fail in unspecified ways.
