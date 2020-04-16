@@ -114,10 +114,13 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
         ..
     } = ip_info;
 
-    let context = match make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        ar_identities,
-        threshold,
-    }) {
+    let context = match make_context_from_ip_info(
+        ip_info.clone(),
+        ChoiceArParameters {
+            ar_identities,
+            threshold,
+        },
+    ) {
         Some(x) => x,
         None => return respond_log!(request, "Could not make context"),
     };
@@ -129,8 +132,8 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
             let id_use_data = IdObjectUseData { aci, randomness };
             let id_object = IdentityObject {
                 pre_identity_object: pio,
-                signature:           sig,
-                alist:               attributes,
+                signature: sig,
+                alist: attributes,
             };
             let response = json!({
                 "identityObject": id_object,
@@ -183,10 +186,10 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
             match s.ip_infos.get(&ip_id) {
                 Some(ref ip_info) => {
                     let policy: Policy<ExampleCurve, ExampleAttribute> = Policy {
-                        expiry:        id_object.alist.expiry,
-                        creation_time: id_object.alist.creation_time,
-                        policy_vec:    items,
-                        _phantom:      Default::default(),
+                        valid_to: id_object.alist.valid_to,
+                        created_at: id_object.alist.created_at,
+                        policy_vec: items,
+                        _phantom: Default::default(),
                     };
                     (
                         &ip_info.public_ip_info,

@@ -352,7 +352,7 @@ fn verify_pok_sig<
     blinded_sig: &ps_sig::BlindedSignature<P>,
     proof: &com_eq_sig::ComEqSigProof<P, C>,
 ) -> bool {
-    // Capacity for id_cred_sec, cmm_prf, threshold, tags, expiry, creation_time
+    // Capacity for id_cred_sec, cmm_prf, threshold, tags, valid_to, created_at
     // choice_ar_parameters and cmm_attributes
     let mut comm_vec =
         Vec::with_capacity(6 + choice_ar_parameters.len() + commitments.cmm_attributes.len());
@@ -381,13 +381,14 @@ fn verify_pok_sig<
         }
     };
 
-    // add commitment with randomness 0 for variant and expiry of
-    // the attribute list
+    // add commitment with randomness 0 for variant, valid_to and created_at
     comm_vec.push(commitment_key.hide(&Value::new(tags), &zero));
-    comm_vec
-        .push(commitment_key.hide(&Value::new(C::scalar_from_u64(policy.expiry.into())), &zero));
     comm_vec.push(commitment_key.hide(
-        &Value::new(C::scalar_from_u64(policy.creation_time.into())),
+        &Value::new(C::scalar_from_u64(policy.valid_to.into())),
+        &zero,
+    ));
+    comm_vec.push(commitment_key.hide(
+        &Value::new(C::scalar_from_u64(policy.created_at.into())),
         &zero,
     ));
 
@@ -492,11 +493,11 @@ mod tests {
             signature: ip_sig,
         };
         let id_use_data = IdObjectUseData { aci, randomness };
-        let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-        let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
         let policy = Policy {
-            expiry,
-            creation_time,
+            valid_to,
+            created_at,
             policy_vec: {
                 let mut tree = BTreeMap::new();
                 tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
@@ -505,7 +506,7 @@ mod tests {
             _phantom: Default::default(),
         };
         let acc_data = AccountData {
-            keys:     {
+            keys: {
                 let mut keys = BTreeMap::new();
                 keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
                 keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));

@@ -2,7 +2,6 @@ use crate::aggregate_sig::*;
 use crypto_common::*;
 use ffi_helpers::*;
 use id::sigma_protocols::dlog::DlogProof;
-use libc::size_t;
 use pairing::bls12_381::Bls12;
 use rand::{rngs::StdRng, thread_rng, SeedableRng};
 use random_oracle::RandomOracle;

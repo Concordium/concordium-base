@@ -273,13 +273,13 @@ instance FromJSON AttributeValue where
 
   parseJSON _ = fail "Attribute value must be either a string or an int."
 
--- |Expiry time of a credential.
-type CredentialExpiryTime = YearMonth
+-- |ValidTo of a credential.
+type CredentialValidTo = YearMonth
 
--- |Creation time of a credential.
-type CredentialCreationTime = YearMonth
+-- |CreatedAt of a credential.
+type CredentialCreatedAt = YearMonth
 
--- |YearMonth used store expiry and creation time
+-- |YearMonth used store expiry (validTo) and creation (createdAt)
 --  note Ord derive is correct, as it compares fields sequentially
 data YearMonth = YearMonth {
   year :: Word16,
@@ -287,7 +287,7 @@ data YearMonth = YearMonth {
   } deriving(Eq, Show, Ord)
 
 instance Serialize YearMonth where
-  put YearMonth{..} =
+  put YearMonth{..} = 
     S.putWord16be year <>
     S.putWord8 month
   get = YearMonth <$> get <*> get
@@ -332,37 +332,35 @@ instance ToJSON AttributeTag where
   toJSON tag = maybe "UNKNOWN" toJSON $ Map.lookup tag invMapping
 
 data Policy = Policy {
-  -- |Expiry of this credential.
-  pExpiry :: CredentialExpiryTime,
-  -- |Creation time of this credential
-  pCreationTime :: CredentialCreationTime,
+  -- |Validity of this credential.
+  pValidTo :: CredentialValidTo,
+  -- |Creation of this credential
+  pCreatedAt :: CredentialCreatedAt,
   -- |List of items in this attribute list.
   pItems :: Map.Map AttributeTag AttributeValue
   } deriving(Eq, Show)
 
 instance ToJSON YearMonth where
-  toJSON YearMonth{..} = object [
-    "year" .= year,
-    "month" .= month
-    ]
+  toJSON YearMonth{..} = toJSON str
+    where str = (show year) ++ (if month < 10 then ("0" ++ show month) else (show month))
 
 instance FromJSON YearMonth where
-  parseJSON = withObject "YearMonth" $ \v -> do
-    year <- v .: "year"
+  parseJSON = withText "YearMonth" $ \v -> do
+    year <- (take 4 v)
     month <- v .: "month"
     return YearMonth{..}
 
 instance ToJSON Policy where
   toJSON Policy{..} = object [
-    "expiry" .= pExpiry,
-    "creationTime" .= pCreationTime,
+    "validTo" .= pValidTo,
+    "createdAt" .= pCreatedAt,
     "revealedAttributes" .= pItems
     ]
 
 instance FromJSON Policy where
   parseJSON = withObject "Policy" $ \v -> do
-    pExpiry <- v .: "expiry"
-    pCreationTime <- v .: "creationTime"
+    pValidTo <- v .: "validTo"
+    pCreatedAt <- v .: "createdAt"
     pItems <- v .: "revealedAttributes"
     return Policy{..}
 
@@ -552,8 +550,8 @@ instance FromJSON CredentialDeploymentValues where
 
 getPolicy :: Get Policy
 getPolicy = do
-  pExpiry <- get
-  pCreationTime <- get
+  pValidTo <- get
+  pCreatedAt <- get
   l <- fromIntegral <$> getWord16be
   pItems <- safeFromAscList =<< replicateM l (getTwoOf get get)
   return Policy{..}
@@ -561,8 +559,8 @@ getPolicy = do
 putPolicy :: Putter Policy
 putPolicy Policy{..} =
   let l = length pItems
-  in put pExpiry <>
-     put pCreationTime <>
+  in put pValidTo <>
+     put pCreatedAt <>
      putWord16be (fromIntegral l) <>
      mapM_ (putTwoOf put put) (Map.toAscList pItems)
 

@@ -10,9 +10,13 @@ use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
 use ps_sig;
+use rand::*;
 use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
-use rand::*;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::*;
+#[cfg(all(target_arch = "wasm32", feature = "wasm-browser-test"))]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 use either::Left;
 
@@ -38,8 +42,8 @@ pub fn test_create_ars<T: Rng>(
         let ar_info = ArInfo::<ExampleCurve> {
             ar_identity: ArIdentity(i as u32),
             ar_description: Description {
-                name:        format!("AnonymityRevoker{}", i),
-                url:         format!("AnonymityRevoker{}.com", i),
+                name: format!("AnonymityRevoker{}", i),
+                url: format!("AnonymityRevoker{}.com", i),
                 description: format!("AnonymityRevoker{}", i),
             },
             ar_public_key,
@@ -74,14 +78,14 @@ pub fn test_create_ip_info<T: Rng>(
     (
         IpData {
             public_ip_info: IpInfo {
-                ip_identity:    IpIdentity(0),
+                ip_identity: IpIdentity(0),
                 ip_description: Description {
-                    name:        "IP0".to_owned(),
-                    url:         "IP0.com".to_owned(),
+                    name: "IP0".to_owned(),
+                    url: "IP0.com".to_owned(),
                     description: "IP0".to_owned(),
                 },
-                ip_verify_key:  ip_public_key,
-                ip_ars:         IpAnonymityRevokers {
+                ip_verify_key: ip_public_key,
+                ip_ars: IpAnonymityRevokers {
                     ars: ar_infos,
                     ar_cmm_key: ar_ck,
                     ar_base,
@@ -90,7 +94,7 @@ pub fn test_create_ip_info<T: Rng>(
             ip_secret_key,
             metadata: IpMetadata {
                 issuance_start: "URL.com".to_owned(),
-                icon:           "BeautifulIcon.ico".to_owned(),
+                icon: "BeautifulIcon.ico".to_owned(),
             },
         },
         ar_keys,
@@ -129,10 +133,13 @@ pub fn test_create_pio(
     let ars: Vec<ArIdentity> = (0..threshold).map(ArIdentity).collect::<Vec<_>>();
 
     // Create context
-    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        ar_identities: ars,
-        threshold:     Threshold(threshold),
-    })
+    let context = make_context_from_ip_info(
+        ip_info.clone(),
+        ChoiceArParameters {
+            ar_identities: ars,
+            threshold: Threshold(threshold),
+        },
+    )
     .expect("The constructed ARs are invalid.");
 
     // Create and return PIO
@@ -147,18 +154,17 @@ pub fn test_create_attributes() -> ExampleAttributeList {
     alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
     alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
 
-    let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-    let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+    let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+    let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
     ExampleAttributeList {
-        expiry,
-        creation_time,
+        valid_to,
+        created_at,
         alist,
         _phantom: Default::default(),
     }
 }
 
-#[test]
-fn test_pipeline() {
+pub fn test_pipeline() {
     let mut csprng = thread_rng();
 
     // Generate PIO
@@ -189,11 +195,11 @@ fn test_pipeline() {
         signature: ip_sig,
     };
     let id_use_data = IdObjectUseData { aci, randomness };
-    let expiry = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
-    let creation_time = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
+    let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+    let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
     let policy = Policy {
-        expiry,
-        creation_time,
+        valid_to,
+        created_at,
         policy_vec: {
             let mut tree = BTreeMap::new();
             tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
@@ -202,7 +208,7 @@ fn test_pipeline() {
         _phantom: Default::default(),
     };
     let acc_data = AccountData {
-        keys:     {
+        keys: {
             let mut keys = BTreeMap::new();
             keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
             keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
@@ -295,4 +301,13 @@ fn test_pipeline() {
     cdi.values.ar_data.rotate_left(1);
     let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
     assert_ne!(cdi_check, Ok(()));
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+pub fn run_pipeline_wasm() {}
+
+#[test]
+pub fn run_pipeline() {
+    test_pipeline();
 }

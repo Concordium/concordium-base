@@ -71,17 +71,34 @@ fn main() {
                             .value_name("F")
                             .help("The amount of finalizers to generate. Defaults to all bakers.")
                             .required(false),
+                    )
+                    .arg(
+                        Arg::with_name("balance")
+                            .long("balance")
+                            .value_name("AMOUNT")
+                            .help("Balance on each of the baker accounts.")
+                            .default_value("35000000000"),
                     ),
             )
             .subcommand(
                 SubCommand::with_name("create-accounts")
-                    .about("Create beta accounts.")
+                    .about("Create a given number of accounts. These do not delegate to any baker.")
                     .arg(
                         Arg::with_name("num")
                             .long("num")
                             .value_name("N")
                             .help("Number of accounts to generate.")
                             .required(true),
+                    )
+                    .arg(
+                        Arg::with_name("template")
+                            .long("template")
+                            .value_name("TEMPLATE")
+                            .help(
+                                "Template on how to name accounts; they will be name \
+                                 TEMPLATE-$N.json.",
+                            )
+                            .default_value("account"),
                     ),
             );
 
@@ -104,12 +121,15 @@ fn main() {
             }
         };
 
-    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        // use all anonymity revokers.
-        ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
-        // all but one threshold
-        threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
-    })
+    let context = make_context_from_ip_info(
+        ip_info.clone(),
+        ChoiceArParameters {
+            // use all anonymity revokers.
+            ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
+            // all but one threshold
+            threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
+        },
+    )
     .expect("Constructed AR data is valid.");
 
     // we also read the global context from another json file (called
@@ -140,8 +160,8 @@ fn main() {
         let prf_key = prf::SecretKey::generate(csprng);
 
         // Expire in 1 year from now.
-        let creation_time = YearMonth::now();
-        let expiry = {
+        let created_at = YearMonth::now();
+        let valid_to = {
             let mut now = YearMonth::now();
             now.year += 1;
             now
@@ -155,8 +175,8 @@ fn main() {
         };
 
         let attributes = ExampleAttributeList {
-            expiry,
-            creation_time,
+            valid_to,
+            created_at,
             alist,
             _phantom: Default::default(),
         };
@@ -168,8 +188,8 @@ fn main() {
         let ip_sig = sig_ok.expect("There is an error in signing");
 
         let policy = Policy {
-            expiry,
-            creation_time,
+            valid_to,
+            created_at,
             policy_vec: BTreeMap::new(),
             _phantom: Default::default(),
         };
@@ -186,8 +206,8 @@ fn main() {
 
         let id_object = IdentityObject {
             pre_identity_object: pio,
-            alist:               attributes,
-            signature:           ip_sig,
+            alist: attributes,
+            signature: ip_sig,
         };
 
         let id_object_use_data = IdObjectUseData { aci, randomness };
@@ -206,7 +226,7 @@ fn main() {
         let address = AccountAddress::new(&cdi.values.reg_id);
 
         let acc_keys = AccountKeys {
-            keys:      acc_data
+            keys: acc_data
                 .keys
                 .iter()
                 .map(|(&idx, kp)| (idx, VerifyKey::from(kp)))
@@ -242,6 +262,14 @@ fn main() {
                     return;
                 }
             },
+        };
+
+        let balance = match matches.value_of("balance").unwrap().parse::<u64>() {
+            Ok(n) => n,
+            Err(err) => {
+                eprintln!("Could not parse balance: {}", err);
+                return;
+            }
         };
 
         let mut bakers = Vec::with_capacity(num_bakers);
@@ -294,7 +322,7 @@ fn main() {
                 "account": json!({
                     "address": address_json,
                     "accountKeys": account_keys,
-                    "balance": 1_000_000_000_000u64,
+                    "balance": balance,
                     "credential": credential_json
                 })
             });
@@ -316,6 +344,9 @@ fn main() {
                 return;
             }
         };
+
+        let prefix = matches.value_of("template").unwrap(); // has default value, will be present.
+
         let mut accounts = Vec::with_capacity(num_accounts);
         for acc_num in 0..num_accounts {
             let (account_data_json, credential_json, account_keys, address_json) =
@@ -330,7 +361,7 @@ fn main() {
             accounts.push(public_account_data);
 
             if let Err(err) = write_json_to_file(
-                &format!("beta-account-{}.json", acc_num),
+                &format!("{}-{}.json", prefix, acc_num),
                 &json!(account_data_json),
             ) {
                 eprintln!(
@@ -341,7 +372,7 @@ fn main() {
         }
         // finally output all of the public account data in one file. This is used to
         // generate genesis.
-        if let Err(err) = write_json_to_file("beta-accounts.json", &json!(accounts)) {
+        if let Err(err) = write_json_to_file(&format!("{}s.json", prefix), &json!(accounts)) {
             eprintln!("Could not output beta-accounts.json file because {}.", err)
         }
     }

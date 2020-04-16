@@ -25,7 +25,7 @@ dummyRegId addr = ID.RegIdCred . FBS.pack $ bytes
 -- will neither be serialized, nor inspected.
 {-# WARNING dummyCredential "Invalid credential, only for testing." #-}
 dummyCredential :: ID.AccountAddress -> ID.YearMonth -> ID.YearMonth -> ID.CredentialDeploymentValues
-dummyCredential address pExpiry pCreationTime = ID.CredentialDeploymentValues
+dummyCredential address pValidTo pCreatedAt = ID.CredentialDeploymentValues
     {
       cdvAccount = ID.ExistingAccount address,
       cdvRegId = dummyRegId address,
@@ -39,17 +39,17 @@ dummyCredential address pExpiry pCreationTime = ID.CredentialDeploymentValues
       ..
     }
 
-{-# WARNING dummyMaxExpiryTime "Invalid expiry time, only for testing." #-}
-dummyMaxExpiryTime :: ID.YearMonth
-dummyMaxExpiryTime = YearMonth 2199 12
+{-# WARNING dummyMaxValidTo "Invalid validTo, only for testing." #-}
+dummyMaxValidTo :: ID.YearMonth
+dummyMaxValidTo = YearMonth 2199 12
 
-{-# WARNING dummyLowExpiryTime "Do not use in production." #-}
-dummyLowExpiryTime :: ID.YearMonth
-dummyLowExpiryTime = YearMonth 1900 1
+{-# WARNING dummyLowValidTo "Invalid validTo, only for testing." #-}
+dummyLowValidTo :: ID.YearMonth
+dummyLowValidTo = YearMonth 1900 1
 
-{-# WARNING dummyCreationTime "Invalid creation time, only for testing." #-}
-dummyCreationTime :: ID.YearMonth
-dummyCreationTime = YearMonth 2020 3
+{-# WARNING dummyCreatedAt "Invalid creation time, only for testing." #-}
+dummyCreatedAt :: ID.YearMonth
+dummyCreatedAt = YearMonth 2020 3
 
 {-# WARNING dummyEmptyIdentityProviders "Invalid identity providers, only for testing." #-}
 dummyEmptyIdentityProviders :: [IP.IpInfo]
