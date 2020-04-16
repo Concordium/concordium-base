@@ -9,8 +9,9 @@ use serde::{de::DeserializeOwned, Serialize as SerdeSerialize};
 
 use std::{
     fs::File,
-    io::{self, BufReader, Error, ErrorKind},
+    io::{self, BufReader},
     path::Path,
+    str::FromStr,
 };
 
 pub type ExampleCurve = <Bls12 as Pairing>::G1;
@@ -31,18 +32,11 @@ pub fn read_identity_providers() -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>:
 }
 
 /// Parse YYYYMM as YearMonth
-pub fn parse_yearmonth(input: &str) -> io::Result<YearMonth> {
-    if input.len() != 6 {
-        return None;
+pub fn parse_yearmonth(input: &str) -> Option<YearMonth> {
+    match YearMonth::from_str(input) {
+        Ok(ym) => Some(ym),
+        Err(_) => None,
     }
-    let (s_year, s_month) = input.split_at(4);
-    let year = s_year
-        .parse::<u16>()
-        .map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
-    let month = s_month
-        .parse::<u8>()
-        .map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
-    Ok(YearMonth { year, month })
 }
 
 pub fn write_json_to_file<T: SerdeSerialize>(filepath: &str, v: &T) -> io::Result<()> {
@@ -58,7 +52,8 @@ pub fn output_json<T: SerdeSerialize>(v: &T) {
 
 pub fn read_json_from_file<P: AsRef<Path>, T: DeserializeOwned>(path: P) -> io::Result<T>
 where
-    P: std::fmt::Debug, {
+    P: std::fmt::Debug,
+{
     let file = File::open(path)?;
 
     let reader = BufReader::new(file);
