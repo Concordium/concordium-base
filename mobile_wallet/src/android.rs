@@ -4,11 +4,14 @@
 
 use jni::{
     objects::{JClass, JString, JValue},
-    sys::{jint, jobject},
+    sys::{jboolean, jint, jobject},
     JNIEnv,
 };
 use std::ffi::CString;
-use wallet::{create_credential_ext, create_id_request_and_private_data_ext, create_transfer_ext};
+use wallet::{
+    check_account_address_ext, create_credential_ext, create_id_request_and_private_data_ext,
+    create_transfer_ext,
+};
 
 #[no_mangle]
 /// The JNI wrapper for the `create_id_request_and_private_data` method.
@@ -136,6 +139,21 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
             &format!("Could not read CString from crypto library {:?}", e),
         ),
     }
+}
+
+#[no_mangle]
+/// The JNI wrapper for the `check_account_address` method.
+/// The `input` parameter must be a `java.lang.String` that is non-null.
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_check_1account_1address(
+    env: JNIEnv,
+    _: JClass,
+    input: JString,
+) -> jboolean {
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(_) => return 0,
+    };
+    unsafe { check_account_address_ext(input_str.as_ptr()) }
 }
 
 /// Method for wrapping the return value to Java
