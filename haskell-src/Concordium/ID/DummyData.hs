@@ -24,7 +24,7 @@ dummyRegId addr = ID.RegIdCred . FBS.pack $ bytes
 -- Should only be used when only the existence of a credential is needed in testing, but the credential
 -- will neither be serialized, nor inspected.
 {-# WARNING dummyCredential "Invalid credential, only for testing." #-}
-dummyCredential :: ID.AccountAddress -> ID.YearMonth -> ID.YearMonth -> ID.CredentialDeploymentValues
+dummyCredential :: ID.AccountAddress -> ID.CredentialValidTo -> ID.CredentialCreatedAt -> ID.CredentialDeploymentValues
 dummyCredential address pValidTo pCreatedAt = ID.CredentialDeploymentValues
     {
       cdvAccount = ID.ExistingAccount address,
