@@ -131,7 +131,7 @@ fn sign_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Respo
     let response = sign_id_object_aux(&s.ip_data, &param);
     match response {
         Ok(v) => rouille::log(&request, ::std::io::stderr(), || {
-            rouille::Response::json(&v)
+            rouille::Response::json(&json!({ "identityObject": v }))
         }),
         Err(e) => rouille::log(&request, ::std::io::stderr(), || {
             rouille::Response::text(format!("{}", e)).with_status_code(400)
