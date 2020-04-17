@@ -20,7 +20,6 @@ import Data.Aeson hiding (encode, decode)
 import Data.Aeson.Types(toJSONKeyText)
 import Data.Maybe(fromMaybe)
 import Control.Monad
-import Control.Monad.Fail hiding(fail)
 import Control.Monad.Except
 import qualified Data.Text as Text
 import Control.DeepSeq
@@ -304,7 +303,7 @@ attributeNames = ["firstName",
                  ]
 
 mapping :: Map.Map Text.Text AttributeTag
-mapping = Map.fromList $ zip attributeNames [0..] 
+mapping = Map.fromList $ zip attributeNames [0..]
 
 invMapping :: Map.Map AttributeTag Text.Text
 invMapping = Map.fromList $ zip [0..] attributeNames

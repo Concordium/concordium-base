@@ -62,7 +62,7 @@ Library
                 , vector >= 0.12
                 , template-haskell >= 2.14
                 , text >= 1.2.3.1
-                , primitive == 0.6.*
+                , primitive >= 0.7
                 , deepseq >= 1.4
                 , ghc-prim >= 0.5.3
                 , constraints >= 0.10
