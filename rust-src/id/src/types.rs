@@ -43,45 +43,50 @@ use base58check::*;
 
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, SerdeSerialize, SerdeDeserialize)]
-#[serde(transparent)]
-pub struct AccountAddress(
-    #[serde(serialize_with = "base58_encode")]
-    #[serde(deserialize_with = "base58_decode")]
-    [u8; ACCOUNT_ADDRESS_SIZE],
-);
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct AccountAddress([u8; ACCOUNT_ADDRESS_SIZE]);
 
-fn base58_encode<S: Serializer>(v: &[u8; ACCOUNT_ADDRESS_SIZE], ser: S) -> Result<S::Ok, S::Error> {
-    let b58_str = v.to_base58check(1);
-    ser.serialize_str(&b58_str)
+// Parse from string assuming base58 check encoding.
+impl std::str::FromStr for AccountAddress {
+    type Err = ();
+
+    fn from_str(v: &str) -> Result<Self, Self::Err> {
+        let (version, body) = v.from_base58check().map_err(|_| ())?;
+        if version == 1 && body.len() == ACCOUNT_ADDRESS_SIZE {
+            let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
+            buf.copy_from_slice(&body);
+            Ok(AccountAddress(buf))
+        } else {
+            Err(())
+        }
+    }
 }
 
-fn base58_decode<'de, D: Deserializer<'de>>(
-    des: D,
-) -> Result<[u8; ACCOUNT_ADDRESS_SIZE], D::Error> {
-    des.deserialize_str(Base58Visitor)
+impl SerdeSerialize for AccountAddress {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let b58_str = self.0.to_base58check(1);
+        ser.serialize_str(&b58_str)
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for AccountAddress {
+    fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        des.deserialize_str(Base58Visitor)
+    }
 }
 
 struct Base58Visitor;
 
 impl<'de> Visitor<'de> for Base58Visitor {
-    type Value = [u8; ACCOUNT_ADDRESS_SIZE];
+    type Value = AccountAddress;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         write!(formatter, "A base58 string, version 1.")
     }
 
     fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        let (version, body) = v
-            .from_base58check()
-            .map_err(|err| de::Error::custom(format!("{:?}", err)))?;
-        if version == 1 && body.len() == ACCOUNT_ADDRESS_SIZE {
-            let mut buf = [0u8; ACCOUNT_ADDRESS_SIZE];
-            buf.copy_from_slice(&body);
-            Ok(buf)
-        } else {
-            Err(de::Error::custom("Wrong Base58 version."))
-        }
+        v.parse::<AccountAddress>()
+            .map_err(|_| de::Error::custom("Wrong Base58 version."))
     }
 }
 

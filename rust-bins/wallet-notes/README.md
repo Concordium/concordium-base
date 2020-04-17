@@ -45,6 +45,20 @@ The output of this function is a JSON object with two keys
   
 An example returned value is in the file [example-id-object-data.json](example-id-object-data.json).
 
+## check_account_address
+
+This function takes as input a NUL-terminated in utf8 encoding string and
+returns a uint8.
+- if the string is valid UTF8 encoding and has the correct concordium address
+  format then 1 is returned
+- in all other cases 0 is returned.
+
+An example of a valid address is 
+`4MzQSgx2A7PwAyfu54yxZS3NjDUjX6HpisQMBJtzL7B6dbodrh`
+
+An example of an invalid address is 
+`3MzQSgx2A7PwAyfu54yxZS3NjDUjX6HpisQMBJtzL7B6dbodrh`.
+
 ### Performance
 
 At the moment the `create_id_request_and_private_data` call takes about 30ms on
