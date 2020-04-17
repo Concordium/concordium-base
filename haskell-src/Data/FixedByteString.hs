@@ -18,8 +18,6 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Short.Internal as BSS
 import Data.Primitive.ByteArray
-import Data.Primitive.Addr
-import Data.Primitive.Ptr
 
 import Control.Monad.Primitive(touch)
 
@@ -49,8 +47,8 @@ create f = snd <$> createWith f
 createWith :: forall a b . FixedLength a => (Ptr Word8 -> IO b) -> IO (b, FixedByteString a)
 createWith f = do
   mbarr <- newPinnedByteArray len
-  let !(Addr ptr) = mutableByteArrayContents mbarr
-  r <- f (Ptr ptr)
+  let !mutable = mutableByteArrayContents mbarr
+  r <- f mutable
   touch mbarr  -- DO NOT REMOVE. GHC does strange things if you do leading to weird errors
                -- The issue probably that the dependency between mbarr and ptr is lost
                -- and so the optimizer sometimes seems to move the copy before the foreign
@@ -80,7 +78,7 @@ unpack (FixedByteString fbs) = foldrByteArray (:) [] fbs
 
 -- |Create a 'FixedByteString' from a list of bytes in reverse order.
 -- If the list is too short, the remaining bytes are filled with @0@.
--- If it is too long, only the first @fixedLength (undefined :: a)@ 
+-- If it is too long, only the first @fixedLength (undefined :: a)@
 -- bytes are used.
 fromReversedBytes :: forall a. (FixedLength a) => [Word8] -> FixedByteString a
 fromReversedBytes = unsafeCreate . fill (limit - 1)
@@ -114,7 +112,7 @@ instance FixedLength a => Storable (FixedByteString a) where
     sizeOf _ = fixedLength (undefined :: a)
     alignment _ = 1
     peek ptr = create (\p' -> copyBytes p' (castPtr ptr) (fixedLength (undefined :: a)))
-    poke (Ptr ptr) (FixedByteString fbs) = copyByteArrayToAddr (Addr ptr) fbs 0 (fixedLength (undefined :: a))
+    poke ptr (FixedByteString fbs) = copyByteArrayToAddr (castPtr ptr) fbs 0 (fixedLength (undefined :: a))
 
 -- |Convert an 'Integer' to a 'FixedByteString'.  The encoding is big endian and modulo @2 ^ (8 * fixedLength undefined)@.
 encodeInteger :: forall a. (FixedLength a) => Integer -> FixedByteString a
@@ -137,13 +135,13 @@ decodeIntegerSigned (FixedByteString fbs) = doDecode 0 0 fbs
         len = fixedLength (undefined :: a)
         doDecode i v ptr
             | i >= len = v
-            | i == 0 = 
+            | i == 0 =
                 let (b :: Word8) = indexByteArray ptr i in
                 if testBit b 8 then
                     doDecode 1 (shiftL (-1) 8 .|. toInteger b) ptr
                 else
                     doDecode 1 (toInteger b) ptr
-            | otherwise = 
+            | otherwise =
                 let (b :: Word8) = indexByteArray ptr i in
                 doDecode (i+1) (shiftL v 8 .|. toInteger b) ptr
 
@@ -204,7 +202,7 @@ instance (FixedLength a) => Enum (FixedByteString a) where
     fromEnum = fromInteger . decodeIntegerSigned
 
 instance (FixedLength a) => Bits (FixedByteString a) where
-    (.&.) = zipWithBytes (.&.) 
+    (.&.) = zipWithBytes (.&.)
     (.|.) = zipWithBytes (.|.)
     xor = zipWithBytes xor
     complement = mapBytes complement
@@ -276,8 +274,8 @@ fromByteString = fromShortByteString . BSS.toShort
 -- If the IO action writes to the pointer the changes will not be reflected back.
 {-# NOINLINE withPtrReadOnly #-}
 withPtrReadOnly :: forall s a . FixedLength s => FixedByteString s -> (Ptr Word8 -> IO a) -> IO a
-withPtrReadOnly (FixedByteString ba) f = allocaBytes size $ \ptr@(Ptr addr) -> do
-  copyByteArrayToAddr (Addr addr) ba 0 size
+withPtrReadOnly (FixedByteString ba) f = allocaBytes size $ \ptr -> do
+  copyByteArrayToAddr ptr ba 0 size
   f ptr
   where size = fixedLength (undefined :: s)
 
@@ -289,8 +287,8 @@ withPtrReadOnlyST (FixedByteString ba) f = runST comp
           comp = do
             mba <- newPinnedByteArray size
             copyByteArray mba 0 ba 0 size
-            let !(Addr ptr) = mutableByteArrayContents mba
-            r <- f (Ptr ptr)
+            let !mutable = mutableByteArrayContents mba
+            r <- f mutable
             touch mba
             return r
           size = fixedLength (undefined :: s)
