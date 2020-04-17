@@ -6,4 +6,6 @@ payload = {'id_request': open("id-request.json", 'r').read()}
 
 r = requests.get('http://localhost:8000/request_id', params=payload)
 
+print(r)
+
 print(json.dumps(json.loads(r.text), indent=4, sort_keys=True))

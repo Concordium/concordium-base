@@ -810,7 +810,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
 
         // TODO: hard-coded length of the key for now, but should be changed
         // based on the maximum length of the attribute list
-        let id_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(20, &mut csprng);
+        let id_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(30, &mut csprng);
         let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
 
         let ar_base = ExampleCurve::generate(&mut csprng);
