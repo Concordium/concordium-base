@@ -40,6 +40,9 @@ import qualified Data.PQueue.Prio.Max as Queue
 import Data.Aeson as AE
 import Data.Aeson.TH
 
+import Data.Time
+import Data.Time.Clock.POSIX
+
 import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
@@ -193,6 +196,22 @@ instance S.Serialize TransactionExpiryTime where
 transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
 transactionExpired = (<) . expiry
 
+-- |Check if whether the given timestamp is no greater than the end of the day
+-- of the given year and month.
+isTimestampBefore :: Timestamp -> YearMonth -> Bool
+isTimestampBefore ts ym =
+    utcTs < utcYearMonthExpiryTs
+  where
+    utcTs = posixSecondsToUTCTime (fromIntegral ts)
+    utcYearMonthExpiryTs = UTCTime expiryDay 0
+      where
+        year = toInteger (ymYear ym)
+        month = fromIntegral (ymMonth ym)
+        expiryYear = if month == 12 then year + 1 else year
+        expiryMonth = if month == 12 then 1 else (month + 1) -- (month % 12) + 1
+        expiryDay = fromGregorian expiryYear expiryMonth 1 -- unchecked, always valid
+
+
 -- |Type representing the amount unit which is defined as the smallest
 -- meaningful amount of GTUs.
 -- Currently this unit is 10^-4 GTU and doesn't have a proper name.
@@ -269,7 +288,7 @@ data Account = Account {
   -- A Max priority queue allows us to efficiently check for existence of such credentials,
   -- as well as listing of all valid credentials, and efficient insertion of new credentials.
   -- The priority is the expiry time of the credential.
-  ,_accountCredentials :: !(Queue.MaxPQueue CredentialExpiryTime CredentialDeploymentValues)
+  ,_accountCredentials :: !(Queue.MaxPQueue CredentialValidTo CredentialDeploymentValues)
   -- |The baker to which this account's stake is delegated (if any).
   ,_accountStakeDelegate :: !(Maybe BakerId)
   -- |The set of instances belonging to this account.
@@ -298,7 +317,7 @@ instance S.Serialize Account where
     _accountEncryptedAmount <- S.get
     _accountEncryptionKey <- S.get
     _accountVerificationKeys <- S.get
-    preAccountCredentials <- Queue.fromList . map (\cdv -> (pExpiry (cdvPolicy cdv), cdv)) <$> S.get
+    preAccountCredentials <- Queue.fromList . map (\cdv -> (pValidTo (cdvPolicy cdv), cdv)) <$> S.get
     let _accountCredentials = Queue.seqSpine preAccountCredentials preAccountCredentials
     _accountStakeDelegate <- S.get
     _accountInstances <- Set.fromList <$> S.get
