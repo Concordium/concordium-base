@@ -1,19 +1,19 @@
 {
     "attributeList": {
         "chosenAttributes": {
-            "countryOfResidence": "14",
-            "dob": "13",
-            "firstName": "10",
-            "idDocExpiresAt": "20",
-            "idDocIssuedAt": "19",
-            "idDocIssuer": "18",
-            "idDocNo": "17",
-            "idDocType": "16",
-            "lastName": "11",
-            "nationalIdNo": "21",
-            "nationality": "15",
-            "sex": "12",
-            "taxIdNo": "22"
+            "countryOfResidence": "DE",
+            "dob": "19800229",
+            "firstName": "John",
+            "idDocExpiresAt": "20291231",
+            "idDocIssuedAt": "20200401",
+            "idDocIssuer": "DK",
+            "idDocNo": "1234567890",
+            "idDocType": "1",
+            "lastName": "Doe",
+            "nationalIdNo": "DK123456789",
+            "nationality": "DK",
+            "sex": "1",
+            "taxIdNo": "DE987654321"
         },
         "createdAt": "202004",
         "maxAccounts": 238,
@@ -59,5 +59,6 @@
         "proofCommitmentsSame": "1361177c1f8d83d9430a2d07116beea41ab2f11be277d1c946f16a02dd8bec0a5793a491a135cd24b6857b93455fe9c13c4c6034ce666aeca73e337ec093d46e1cc38ec4d84fd8cec00b7643d4e774565cd2615e497192db16389361a138aab33f4d2e62500afc4269e430bae38c8c5b0a3cee0bef1506ebceb8c1d6afb59bf8",
         "proofCommitmentsToIdCredSecSame": "618c1b1a808ea9f6d94dbb284f2565f3c0b54962aeba2a85e22eb52430cb56310000000103699a10d2a97f97165f53968cb59ee174532ba485cdc891634e8984498652d75f709a94d24f0058daca3c31b05059f1eb2a9f893ae345413db8990aea9eff91"
     },
-    "signature": "ab10cc517fdd3d9375a4ba88e413ffeca7796952ad1c717c2d456e8219a13d55c23ea7b2c32b39c8c057d34b235274108071a26c4fabb3e7fa1e18893fdea3cab2be08db485a96f45e52441055d685a8fc1e9ae2ddd90d873738199a468efb1a"
+    "signature": "a9e9805a1465a96f31ada6d3fd88149f0909d02f0a6d3cb973149835ad705aa6d83e34fd5077d37325213c9bacb0641ba986fff34a2697746356dfee9c9d3559c5f168bb31bfe90a960e23a2291c45f01c4d3496f4fdd9fbd3ef78e347f3b9ae"
 }
+
