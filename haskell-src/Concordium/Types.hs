@@ -40,6 +40,9 @@ import qualified Data.PQueue.Prio.Max as Queue
 import Data.Aeson as AE
 import Data.Aeson.TH
 
+import Data.Time
+import Data.Time.Clock.POSIX
+
 import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
@@ -192,6 +195,22 @@ instance S.Serialize TransactionExpiryTime where
 
 transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
 transactionExpired = (<) . expiry
+
+-- |Check if whether the given timestamp is no greater than the end of the day
+-- of the given year and month.
+isTimestampBefore :: Timestamp -> YearMonth -> Bool
+isTimestampBefore ts ym =
+    utcTs < utcYearMonthExpiryTs
+  where
+    utcTs = posixSecondsToUTCTime (fromIntegral ts)
+    utcYearMonthExpiryTs = UTCTime expiryDay 0
+      where
+        year = toInteger (ymYear ym)
+        month = fromIntegral (ymMonth ym)
+        expiryYear = if month == 12 then year + 1 else year
+        expiryMonth = if month == 12 then 1 else (month + 1) -- (month % 12) + 1
+        expiryDay = fromGregorian expiryYear expiryMonth 1 -- unchecked, always valid
+
 
 -- |Type representing the amount unit which is defined as the smallest
 -- meaningful amount of GTUs.
