@@ -1,12 +1,15 @@
 use pairing::bls12_381::{Bls12, G1};
 
-use id::types::*;
+use curve_arithmetic::curve_arithmetic::*;
+use id::{ffi::AttributeKind, identity_provider::verify_credentials, types::*};
 
 use clap::{App, AppSettings, Arg};
 
-use wallet;
+use serde_json::{from_str, from_value, json, to_value, Value};
 
-use serde_json::json;
+#[macro_use]
+extern crate failure;
+use failure::Fallible;
 
 // server imports
 #[macro_use]
@@ -14,12 +17,92 @@ extern crate rouille;
 
 type ExampleCurve = G1;
 
+type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
+
 struct ServerState {
     /// Public and private information about the identity providers.
     /// This also contains information about anonymity revokers.
     ip_data: IpData<Bls12, ExampleCurve>,
     /// Global parameters needed for deployment of credentials.
     global_params: GlobalContext<ExampleCurve>,
+}
+
+// this needs to be in sync with ATTRIBUTE_NAMES
+pub const DEFAULT_VALUES: [&str; 13] = [
+    "John",
+    "Doe",
+    "1",
+    "19800229",
+    "DE",
+    "DK",
+    "1",
+    "1234567890",
+    "DK",
+    "20200401",
+    "20291231",
+    "DK123456789",
+    "DE987654321",
+];
+
+// Add data to the attribute list if needed. This is just to simulate the fact
+// that not all attributes are needed.
+fn dummy_alist() -> ExampleAttributeList {
+    let created_at = YearMonth::now();
+    let valid_to = YearMonth {
+        year: created_at.year + 1,
+        ..created_at
+    }; // a year from now.
+    let mut alist = std::collections::BTreeMap::new();
+    // fill in the missing pieces with dummy values.
+    for (i, &v) in DEFAULT_VALUES.iter().enumerate() {
+        let idx = AttributeTag::from(i as u8);
+        if alist.get(&idx).is_none() {
+            let _ = alist.insert(idx, AttributeKind(v.to_string()));
+        }
+    }
+    AttributeList {
+        valid_to,
+        created_at,
+        max_accounts: 238,
+        alist,
+        _phantom: Default::default(),
+    }
+}
+
+fn sign_id_object_aux(ip_data: &IpData<Bls12, ExampleCurve>, v: &str) -> Fallible<Value> {
+    let v: Value = match from_str(v) {
+        Ok(v) => v,
+        Err(e) => bail!("Cannot decode input request: {}", e),
+    };
+    let id_obj_value = {
+        match v.get("idObjectRequest") {
+            Some(v) => v.clone(),
+            None => bail!("Field 'idObjectRequest' not present but should be."),
+        }
+    };
+    let request: PreIdentityObject<Bls12, ExampleCurve> = from_value(id_obj_value)?;
+
+    // We create a dummy attribute list to simulate the workflow.
+    // FIXME: This is temporary, of course, and should be replaced by business
+    // logic.
+    let alist = dummy_alist();
+    let vf = verify_credentials(
+        &request,
+        &ip_data.public_ip_info,
+        &alist,
+        &ip_data.ip_secret_key,
+    );
+    match vf {
+        Ok(signature) => {
+            let id_object = IdentityObject {
+                pre_identity_object: request,
+                alist,
+                signature,
+            };
+            Ok(to_value(&id_object)?)
+        }
+        Err(e) => bail!("Could not generate signature because {:?}.", e),
+    }
 }
 
 fn respond_ips(_request: &rouille::Request, s: &ServerState) -> rouille::Response {
@@ -45,7 +128,7 @@ fn sign_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Respo
             })
         }
     };
-    let response = wallet::sign_id_object(&s.ip_data, &param);
+    let response = sign_id_object_aux(&s.ip_data, &param);
     match response {
         Ok(v) => rouille::log(&request, ::std::io::stderr(), || {
             rouille::Response::json(&v)

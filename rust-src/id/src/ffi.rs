@@ -12,10 +12,6 @@ use std::{fmt, io::Cursor, slice, str::FromStr};
 use byteorder::ReadBytesExt;
 use crypto_common::size_t;
 use ffi_helpers::*;
-use num::{
-    bigint::{BigUint, ParseBigIntError},
-    Num,
-};
 use rand::thread_rng;
 use serde::{
     de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
@@ -24,13 +20,13 @@ use serde::{
 use serde_json;
 
 /// Concrete attribute kinds
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-// represented as big-endian bytes.
-pub struct AttributeKind([u8; 31]);
+#[derive(Clone, PartialEq, Eq, Debug)]
+// All currently supported attributes are string values.
+pub struct AttributeKind(pub String);
 
 impl SerdeSerialize for AttributeKind {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_str(&BigUint::from_bytes_be(&self.0).to_str_radix(10))
+        ser.serialize_str(&self.0)
     }
 }
 
@@ -46,29 +42,15 @@ impl<'de> Visitor<'de> for AttributeKindVisitor {
     type Value = AttributeKind;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            formatter,
-            "An integer, or a string representing an integer."
-        )
+        write!(formatter, "A string less than 31 bytes when decoded.")
     }
 
     fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        let n = BigUint::from_str_radix(v, 10).map_err(de::Error::custom)?;
-        let bytes = n.to_bytes_be();
-        if bytes.len() > 31 {
+        if v.as_bytes().len() > 31 {
             Err(de::Error::custom("Value too big."))
         } else {
-            let mut slice = [0u8; 31];
-            slice[31 - bytes.len()..].copy_from_slice(&bytes);
-            Ok(AttributeKind(slice))
+            Ok(AttributeKind(v.to_string()))
         }
-    }
-
-    fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-        let bytes = v.to_be_bytes();
-        let mut slice = [0u8; 31];
-        slice[31 - 8..].copy_from_slice(&bytes);
-        Ok(AttributeKind(slice))
     }
 }
 
@@ -76,9 +58,9 @@ impl Deserial for AttributeKind {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
         let len: u8 = source.get()?;
         if len <= 31 {
-            let mut buf = [0u8; 31];
-            source.read_exact(&mut buf[(31 - len as usize)..31])?;
-            Ok(AttributeKind(buf))
+            let mut buf = vec![0u8; len as usize];
+            source.read_exact(&mut buf)?;
+            Ok(AttributeKind(String::from_utf8(buf)?))
         } else {
             bail!("Attributes can be at most 31 bytes.")
         }
@@ -87,33 +69,20 @@ impl Deserial for AttributeKind {
 
 impl Serial for AttributeKind {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let mut l: u8 = 0;
-        for &x in self.0.iter() {
-            if x != 0u8 {
-                break;
-            }
-            l += 1;
-        }
-        out.put(&(31 - l));
-        out.write_all(&self.0[l as usize..])
+        out.put(&(self.0.as_bytes().len() as u8));
+        out.write_all(self.0.as_bytes())
             .expect("Writing to buffer should succeed.");
     }
 }
 
 #[derive(Debug)]
 pub enum ParseAttributeError {
-    IntDecodingFailed(ParseBigIntError),
     ValueTooLarge,
-}
-
-impl From<ParseBigIntError> for ParseAttributeError {
-    fn from(err: ParseBigIntError) -> Self { ParseAttributeError::IntDecodingFailed(err) }
 }
 
 impl fmt::Display for ParseAttributeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ParseAttributeError::IntDecodingFailed(ref e) => e.fmt(f),
             ParseAttributeError::ValueTooLarge => "Value out of range.".fmt(f),
         }
     }
@@ -123,12 +92,8 @@ impl FromStr for AttributeKind {
     type Err = ParseAttributeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let buint = BigUint::from_str(s)?;
-        if buint.bits() <= 31 * 8 {
-            let bytes = buint.to_bytes_be();
-            let mut buf = [0; 31];
-            buf[31 - bytes.len()..].copy_from_slice(&bytes);
-            Ok(AttributeKind(buf))
+        if s.as_bytes().len() <= 31 {
+            Ok(AttributeKind(s.to_string()))
         } else {
             Err(ParseAttributeError::ValueTooLarge)
         }
@@ -136,28 +101,21 @@ impl FromStr for AttributeKind {
 }
 
 impl fmt::Display for AttributeKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AttributeKind(x) => write!(f, "{}", BigUint::from_bytes_be(x)),
-        }
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 impl From<u64> for AttributeKind {
-    fn from(x: u64) -> Self {
-        let mut buf = [0u8; 31];
-        buf[23..].copy_from_slice(&x.to_be_bytes());
-        AttributeKind(buf)
-    }
+    fn from(x: u64) -> Self { AttributeKind(x.to_string()) }
 }
 
 impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
     fn to_field_element(&self) -> <G1 as Curve>::Scalar {
-        let AttributeKind(x) = self;
         let mut buf = [0u8; 32];
-        buf[1..].copy_from_slice(x);
+        let len = self.0.as_bytes().len();
+        buf[1 + (31 - len)..].copy_from_slice(self.0.as_bytes());
+        buf[0] = len as u8; // this should be valid because len <= 31 so the first two bits will be unset
         <<G1 as Curve>::Scalar as Deserial>::deserial(&mut Cursor::new(&buf))
-            .expect("31 bytes fits into a scalar.")
+            .expect("31 bytes + length fits into a scalar.")
     }
 }
 
@@ -316,7 +274,7 @@ mod test {
     use either::Either::Left;
     use pairing::bls12_381::Bls12;
     use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
-    use std::collections::btree_map::BTreeMap;
+    use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
     type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
     type ExampleCurve = G1;
@@ -346,11 +304,10 @@ mod test {
 
         let prf_key = prf::SecretKey::generate(&mut csprng);
 
-        let expiry_date = 123123123;
         let alist = {
             let mut alist = BTreeMap::new();
             alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
-            alist.insert(AttributeTag::from(1u8), AttributeKind::from(313123333));
+            alist.insert(AttributeTag::from(1u8), AttributeKind::from(313_123_333));
             alist
         };
 
@@ -359,8 +316,12 @@ mod test {
             prf_key,
         };
 
+        let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+        let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
         let alist = ExampleAttributeList {
-            expiry: expiry_date,
+            valid_to,
+            created_at,
+            max_accounts: 238,
             alist,
             _phantom: Default::default(),
         };
@@ -383,23 +344,25 @@ mod test {
         };
 
         let policy = Policy {
-            expiry:     expiry_date,
+            valid_to,
+            created_at,
             policy_vec: {
                 let mut tree = BTreeMap::new();
                 tree.insert(AttributeTag::from(0u8), AttributeKind::from(55));
                 tree
             },
-            _phantom:   Default::default(),
+            _phantom: Default::default(),
         };
 
         let wrong_policy = Policy {
-            expiry:     expiry_date,
+            valid_to,
+            created_at,
             policy_vec: {
                 let mut tree = BTreeMap::new();
                 tree.insert(AttributeTag::from(0u8), AttributeKind::from(5));
                 tree
             },
-            _phantom:   Default::default(),
+            _phantom: Default::default(),
         };
 
         let mut keys = BTreeMap::new();

@@ -87,7 +87,8 @@ fn bench_parts(c: &mut Criterion) {
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
-    let expiry_date = 123123123;
+    let valid_to = YearMonth::new(2021, 1);
+    let created_at = YearMonth::new(2021, 1);
     let alist = {
         let mut alist = BTreeMap::new();
         alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
@@ -100,7 +101,8 @@ fn bench_parts(c: &mut Criterion) {
     };
 
     let alist = ExampleAttributeList {
-        expiry: expiry_date,
+        valid_to,
+        created_at,
         alist,
         _phantom: Default::default(),
     };
@@ -121,13 +123,14 @@ fn bench_parts(c: &mut Criterion) {
     };
 
     let policy = Policy {
-        expiry:     expiry_date,
+        valid_to,
+        created_at,
         policy_vec: {
             let mut tree = BTreeMap::new();
             tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
             tree
         },
-        _phantom:   Default::default(),
+        _phantom: Default::default(),
     };
 
     let mut keys = BTreeMap::new();

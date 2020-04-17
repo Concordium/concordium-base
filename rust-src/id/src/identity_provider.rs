@@ -117,7 +117,9 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     ps_public_key: &ps_sig::PublicKey<P>,
 ) -> Result<ps_sig::UnknownMessage<P>, Reason> {
     // TODO: handle the errors
-    let expiry = P::G1::scalar_from_u64(att_list.expiry);
+    let valid_to = P::G1::scalar_from_u64(att_list.valid_to.into());
+    let created_at = P::G1::scalar_from_u64(att_list.created_at.into());
+    let max_accounts = P::G1::scalar_from_u64(att_list.max_accounts.into());
 
     let tags = {
         match encode_tags(att_list.alist.keys()) {
@@ -132,7 +134,8 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     // - anonymity revocation threshold
     // - list of anonymity revokers
     // - tags of the attribute list
-    // - expiry date of the attribute list
+    // - valid_to date of the attribute list
+    // - created_at of the attribute list
     // - attribute list elements
 
     let mut message = cmm_sc.0;
@@ -143,7 +146,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     let key_vec = &ps_public_key.ys;
 
     // FIXME: Handle error gracefully, do not panic.
-    assert!(key_vec.len() >= n + m + 3 + 2);
+    assert!(key_vec.len() >= n + m + 7);
 
     // add threshold to the message
     message = message.plus_point(&key_vec[2].mul_by_scalar(&threshold.to_scalar::<P::G1>()));
@@ -154,10 +157,12 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     }
 
     message = message.plus_point(&key_vec[m + 3].mul_by_scalar(&tags));
-    message = message.plus_point(&key_vec[m + 3 + 1].mul_by_scalar(&expiry));
+    message = message.plus_point(&key_vec[m + 3 + 1].mul_by_scalar(&valid_to));
+    message = message.plus_point(&key_vec[m + 3 + 2].mul_by_scalar(&created_at));
+    message = message.plus_point(&key_vec[m + 3 + 3].mul_by_scalar(&max_accounts));
     // NB: It is crucial that att_vec is an ordered map and that .values iterator
     // returns messages in order of tags.
-    for (k, v) in key_vec.iter().skip(m + 3 + 2).zip(att_vec.values()) {
+    for (k, v) in key_vec.iter().skip(m + 7).zip(att_vec.values()) {
         let att = v.to_field_element();
         message = message.plus_point(&k.mul_by_scalar(&att));
     }

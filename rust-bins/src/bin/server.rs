@@ -183,7 +183,8 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
             match s.ip_infos.get(&ip_id) {
                 Some(ref ip_info) => {
                     let policy: Policy<ExampleCurve, ExampleAttribute> = Policy {
-                        expiry:     id_object.alist.expiry,
+                        valid_to:   id_object.alist.valid_to,
+                        created_at: id_object.alist.created_at,
                         policy_vec: items,
                         _phantom:   Default::default(),
                     };

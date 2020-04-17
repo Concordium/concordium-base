@@ -11,7 +11,7 @@ use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
 use ps_sig;
 use rand::*;
-use std::collections::btree_map::BTreeMap;
+use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::*;
@@ -151,9 +151,12 @@ pub fn test_create_attributes() -> ExampleAttributeList {
     alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
     alist.insert(AttributeTag::from(8u8), AttributeKind::from(31));
 
-    let expiry = 123123123;
+    let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+    let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
     ExampleAttributeList {
-        expiry,
+        valid_to,
+        created_at,
+        max_accounts: 237,
         alist,
         _phantom: Default::default(),
     }
@@ -190,15 +193,17 @@ pub fn test_pipeline() {
         signature: ip_sig,
     };
     let id_use_data = IdObjectUseData { aci, randomness };
-    let expiry_date = 123123123;
+    let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
+    let created_at = YearMonth::try_from(2020 << 8 | 5).unwrap(); // May 2020
     let policy = Policy {
-        expiry:     expiry_date,
+        valid_to,
+        created_at,
         policy_vec: {
             let mut tree = BTreeMap::new();
             tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
             tree
         },
-        _phantom:   Default::default(),
+        _phantom: Default::default(),
     };
     let acc_data = AccountData {
         keys:     {

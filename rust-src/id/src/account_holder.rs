@@ -441,6 +441,7 @@ where
         cred_counter,
         &commitments.cmm_cred_counter,
         &commitment_rands.cred_counter_rand,
+        &commitment_rands.max_accounts_rand,
         reg_id_exponent,
         reg_id,
         &mut csprng,
@@ -519,8 +520,9 @@ fn compute_pok_sig<
     csprng: &mut R,
 ) -> Fallible<com_eq_sig::ComEqSigProof<P, C>> {
     let att_vec = &alist.alist;
-    // number of user chosen attributes (+2 is for tags and expiry)
-    let num_user_attributes = att_vec.len() + 2;
+    // number of user chosen attributes (+4 is for tags, valid_to, created_at,
+    // max_accounts)
+    let num_user_attributes = att_vec.len() + 4;
     // To these there are always two attributes (idCredSec and prf key) added.
     let num_total_attributes = num_user_attributes + 2;
     let num_ars = ar_list.len(); // we commit to each anonymity revoker, with randomness 0
@@ -570,23 +572,34 @@ fn compute_pok_sig<
     let tags_val = Value::new(encode_tags(alist.alist.keys())?);
     let tags_cmm = commitment_key.hide(&tags_val, &zero);
 
-    let expiry_val = Value::new(C::scalar_from_u64(alist.expiry));
-    let expiry_cmm = commitment_key.hide(&expiry_val, &zero);
+    let valid_to_val = Value::new(C::scalar_from_u64(alist.valid_to.into()));
+    let valid_to_cmm = commitment_key.hide(&valid_to_val, &zero);
+
+    let created_at_val = Value::new(C::scalar_from_u64(alist.created_at.into()));
+    let created_at_cmm = commitment_key.hide(&created_at_val, &zero);
+
+    let max_accounts_val = Value::new(C::scalar_from_u64(alist.max_accounts.into()));
+    let max_accounts_cmm =
+        commitment_key.hide(&max_accounts_val, &commitment_rands.max_accounts_rand);
 
     secrets.push((tags_val, &zero));
     gxs.push(y_tildas[num_ars + 3]);
-    secrets.push((expiry_val, &zero));
+    secrets.push((valid_to_val, &zero));
     gxs.push(y_tildas[num_ars + 4]);
+    secrets.push((created_at_val, &zero));
+    gxs.push(y_tildas[num_ars + 5]);
+    secrets.push((max_accounts_val, &commitment_rands.max_accounts_rand));
+    gxs.push(y_tildas[num_ars + 6]);
 
     // FIXME: Likely we need to make sure there are enough y_tildas first and fail
     // gracefully otherwise.
     // NB: It is crucial here that we use a btreemap. This guarantees that
     // the att_vec.iter() iterator is ordered by keys.
     ensure!(
-        y_tildas.len() > att_vec.len() + num_ars + 4,
+        y_tildas.len() > att_vec.len() + num_ars + 5,
         "The PS key must be long enough to accommodate all the attributes"
     );
-    for (&g, (tag, v)) in y_tildas.iter().skip(num_ars + 4 + 1).zip(att_vec.iter()) {
+    for (&g, (tag, v)) in y_tildas.iter().skip(num_ars + 5 + 1).zip(att_vec.iter()) {
         secrets.push((
             Value {
                 value: v.to_field_element(),
@@ -613,7 +626,9 @@ fn compute_pok_sig<
     }
 
     comm_vec.push(tags_cmm);
-    comm_vec.push(expiry_cmm);
+    comm_vec.push(valid_to_cmm);
+    comm_vec.push(created_at_cmm);
+    comm_vec.push(max_accounts_cmm);
 
     for (idx, v) in alist.alist.iter() {
         match commitments.cmm_attributes.get(idx) {
@@ -647,6 +662,7 @@ pub struct CommitmentsRandomness<'a, C: Curve> {
     id_cred_sec_rand:  &'a PedersenRandomness<C>,
     prf_rand:          PedersenRandomness<C>,
     cred_counter_rand: PedersenRandomness<C>,
+    max_accounts_rand: PedersenRandomness<C>,
     attributes_rand:   HashMap<AttributeTag, PedersenRandomness<C>>,
 }
 
@@ -672,6 +688,10 @@ fn compute_commitments<'a, C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
     let cred_counter_scalar = C::scalar_from_u64(u64::from(cred_counter));
     let (cmm_cred_counter, cred_counter_rand) =
         commitment_key.commit(&Value::view_scalar(&cred_counter_scalar), csprng);
+    let (cmm_max_accounts, max_accounts_rand) = commitment_key.commit(
+        &Value::view_scalar(&C::scalar_from_u64(u64::from(alist.max_accounts))),
+        csprng,
+    );
     let att_vec = &alist.alist;
     let n = att_vec.len();
     // only commitments to attributes which are not revealed.
@@ -692,6 +712,7 @@ fn compute_commitments<'a, C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
     let cdc = CredDeploymentCommitments {
         cmm_prf,
         cmm_cred_counter,
+        cmm_max_accounts,
         cmm_attributes,
         cmm_id_cred_sec_sharing_coeff: cmm_id_cred_sec_sharing_coeff.to_owned(),
     };
@@ -700,6 +721,7 @@ fn compute_commitments<'a, C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
         id_cred_sec_rand,
         prf_rand,
         cred_counter_rand,
+        max_accounts_rand,
         attributes_rand,
     };
     (cdc, cr)
@@ -716,6 +738,10 @@ fn compute_pok_reg_id<C: Curve, R: Rng>(
     cred_counter: u8,
     cmm_cred_counter: &Commitment<C>,
     cred_counter_rand: &PedersenRandomness<C>,
+    // max_accounts_rand is not used at the moment.
+    // it should be used for the range proof that cred_counter < max_accounts, but
+    // that is not yet available
+    _max_accounts_rand: &PedersenRandomness<C>,
     reg_id_exponent: C::Scalar,
     reg_id: C,
     csprng: &mut R,
@@ -937,14 +963,17 @@ mod tests {
             signature: ip_sig,
         };
         let id_use_data = IdObjectUseData { aci, randomness };
+        let valid_to = YearMonth::new(2022, 5).unwrap(); // May 2022
+        let created_at = YearMonth::new(2020, 5).unwrap(); // May 2020
         let policy = Policy {
-            expiry:     42,
+            valid_to,
+            created_at,
             policy_vec: {
                 let mut tree = BTreeMap::new();
                 tree.insert(AttributeTag::from(8u8), AttributeKind::from(31));
                 tree
             },
-            _phantom:   Default::default(),
+            _phantom: Default::default(),
         };
         let mut keys = BTreeMap::new();
         keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
