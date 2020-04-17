@@ -33,6 +33,7 @@ import qualified Data.Serialize as S
 import Data.Hashable(Hashable)
 
 import Control.Monad
+import qualified Data.Kind as DK
 
 import Data.Aeson
 import Data.Int
@@ -74,7 +75,7 @@ type instance ExprAnnot UA = NoAnnot
 type instance TypeAnnot UA = NoAnnot
 type instance PatternAnnot UA = NoAnnot
 
-type AnnotContext (c :: * -> Constraint) (a :: *) =
+type AnnotContext (c :: DK.Type -> Constraint) (a :: DK.Type) =
   (c (ExprAnnot a),
    c (PatternAnnot a),
    c (TypeAnnot a))
@@ -149,7 +150,7 @@ data Atom origin =
   deriving (Eq, Show, Functor, Foldable, Traversable, Typeable, Data)
 
 data Expr annot origin
-  = 
+  =
   -- |Basic literals and variables.
   Atom !(Atom origin)
   -- |An anonymous function with type of its argument. We use the de-bruijn
@@ -166,11 +167,11 @@ data Expr annot origin
   -- De-Bruijn convention here as well).
   | Let !(Type annot origin) !(Expr annot origin) !(Expr annot origin)
   -- |Mutually recursive let. The list of binders can be empty. In the example
-  -- 
+  --
   -- @
   --    letrec [(tdom1, e1, tcod1), (tdom2, e2, tcod2)] ebody
   -- @
-  -- 
+  --
   --   * in expressions @e1@ and @e2@ DeBruijn index 0 refers to the local variable
   --     and indices 1 and 2 refer to the functions defined by @e2@ and @e1@ respectively
   --   * in expression @ebody@ DeBruijn index 0 refers to (the functions defined by) @e2@ and 1 to @e1@
@@ -237,7 +238,7 @@ data TBase =
            | TWord256
            | TByteString
            | TByteStr32
-           | TCAddress  -- contract address 
+           | TCAddress  -- contract address
            | TAAddress  -- account address
     deriving (Show, Eq, Generic, Typeable, Data)
 
@@ -251,7 +252,7 @@ numInhab _ = Nothing -- infinity for the purposes of typechecking.
 
 instance S.Serialize TBase
 
-instance Hashable TBase 
+instance Hashable TBase
 
 -- |Equivalent to Name, but separated for sanity checking.
 newtype TyName = TyName Word32
@@ -348,7 +349,7 @@ deriving instance (AnnotContext Data annot, Data annot, Data v) => Data (DataTyp
 
 -- |The parameter v in 'Sender' and 'Getter' are going to be instantiated with
 -- Type in 'ConstraintDecl' and with 'Expr' in 'ConstraintImpl'.
-data Sender v = Sender { 
+data Sender v = Sender {
                        sName :: !Name
                        , sVal :: !v
                        }
@@ -368,12 +369,12 @@ data ConstraintDecl annot v
       -- other contracts. They should be of type (and will be typechecked to be)
       -- Instance(n) -> t -> Amount -> Transaction where Instance(n) is the contraint
       -- type introduced by this declaration.
-      , senders   :: ![Sender (Type annot v)] 
+      , senders   :: ![Sender (Type annot v)]
       -- |Getters of a constraint are methods which can be used to access the state
       -- of any instance implementing this class. They should be of type (and will be
       -- typechecked to be) Instance(n) -> t where Instance(n) is the contraint
       -- type introduce by this declaration.
-      , getters   :: ![Getter (Type annot v)] 
+      , getters   :: ![Getter (Type annot v)]
       }
     deriving (Generic, Functor, Foldable, Traversable)
 
@@ -395,8 +396,8 @@ data ConstraintImpl annot origin
     = ConstraintImpl
       {
       constraintNameImpl :: ConstraintRef origin
-      , sendersImpl   :: ![Sender (Expr annot origin)] 
-      , gettersImpl   :: ![Getter (Expr annot origin)] 
+      , sendersImpl   :: ![Sender (Expr annot origin)]
+      , gettersImpl   :: ![Getter (Expr annot origin)]
       }
     deriving (Generic, Functor, Foldable, Traversable)
 
@@ -435,13 +436,13 @@ deriving instance (AnnotContext Data annot, Data origin, Data annot) => Data (Co
 -- Binders are accounted for by lifting (i.e., substitution is capture avoiding).
 -- For instance, if the type is @TForall (BTV 1)@
 -- and the list is @[BTV 3]@ the resulting type will be @TForall (BTV 4)@.
--- 
+--
 -- If n is the length of the list then only free variables 0..n-1 are updated.
 -- The rest are not changed.
--- 
+--
 -- This function can be used to instantiate the arity arguments of datatype
 -- constructors.
--- 
+--
 -- NOTE: This should not be used during typechecking since it can be very costly
 -- in relation to term size.
 applyTy :: [Type annot origin] -> Type annot origin -> Type annot origin
@@ -465,9 +466,9 @@ applyTy ts t = go t 0
 -- meant to be used when the type being substituted into starts as ∀ α . τ and we substitute
 -- for the variable α, removing a binder. This means that all variables in τ that point beyond
 -- α must now be decreased.
--- 
+--
 -- Thus @substTy (0→1) 1 = 1→0@ and @substTy (∀(0→1)) (∀(0→1)) = ∀(0→(∀(0→2)))@.
--- 
+--
 -- NOTE: This should not be used during typechecking since it can cause
 -- exponential blow up (by repeated use) in term size when we blindly substitute.
 substTy :: Type annot origin -> Type annot origin -> Type annot origin
@@ -501,7 +502,7 @@ substTy t t' = go (fromIntegral (0::Word32)) t
 -- There is a complication this function must address and why it is not entirely straightforward.
 -- Suppose we are instantiating the type ∀α.α with the list of [∀α.α, Int64].
 -- The result should be Int64.
--- 
+--
 -- This function is equivalent to first repeatedly stripping a ∀ and using
 -- 'substTy' to substitute the types and then using 'checkLiftedTyEq'.
 {-# SPECIALIZE checkTyEqWithSubst :: BoundTyVar -> [Type UA ModuleRef] -> Type UA ModuleRef -> Type UA ModuleRef -> Bool #-}
@@ -576,7 +577,7 @@ checkTyEqWithSubst toLift subst ty goalTy =
 -- If the lists differ in length return @False@.
 allPairs :: (a -> b -> Bool) -> [a] -> [b] -> Bool
 allPairs p = go
-  where go (x:xs) (y:ys) = 
+  where go (x:xs) (y:ys) =
           if p x y then go xs ys
           else False
         go [] [] = True
@@ -689,7 +690,7 @@ type Version = Word32
 -- |This is the unit that can be deployed on the chain. The module should not be
 -- empty, so there should be either a non-empty list of datatypes, constraints, definitions, or contracts.
 data Module annot =
-  Module { 
+  Module {
          mImports :: ![Import]
          , mDataTypes :: ![DataType annot ModuleName]
          , mConstraintDecls :: ![ConstraintDecl annot ModuleName]
@@ -1099,7 +1100,7 @@ getLit = do h <- G.getWord8
               _ -> fail "Not a valid literal."
 
 getAtom :: S.Serialize origin => G.Get (Atom origin)
-getAtom = 
+getAtom =
   G.getWord8 >>= \case
     0 -> Literal <$> getLit
     1 -> Var . BoundVar <$> getBoundVar
@@ -1116,7 +1117,7 @@ getExpr = do h <- G.getWord8
                3 -> do
                  atom <- getAtom
                  l <- getLength
-                 atoms <- replicateM l getAtom 
+                 atoms <- replicateM l getAtom
                  return $! App atom atoms
                4 -> Let <$> getType <*> getExpr <*> getExpr
                5 -> do l <- getLength
@@ -1162,7 +1163,7 @@ getConstraintDecl = do
   lg <- getLength
   getters <- replicateM lg $ liftM2 Getter getName getType
   return $ ConstraintDecl{..}
-  
+
 getDataCons :: G.Get (DataCon annot ModuleName)
 getDataCons = do
   dcName <- getName

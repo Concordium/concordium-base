@@ -25,7 +25,6 @@ import Concordium.Utils
 
 import Data.List
 import qualified Concordium.Crypto.SHA256 as H
-import Concordium.Crypto.SignatureScheme(Signature, KeyPair)
 import Concordium.Crypto.SignatureScheme as SigScheme
 
 import qualified Data.Vector as Vec
