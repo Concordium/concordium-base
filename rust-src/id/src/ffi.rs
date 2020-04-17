@@ -22,7 +22,7 @@ use serde_json;
 /// Concrete attribute kinds
 #[derive(Clone, PartialEq, Eq, Debug)]
 // All currently supported attributes are string values.
-pub struct AttributeKind(String);
+pub struct AttributeKind(pub String);
 
 impl SerdeSerialize for AttributeKind {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
