@@ -13,7 +13,7 @@ use pedersen_scheme::{
     Value as PedersenValue,
 };
 use ps_sig::{public as pssig, signature::*, unknown_message::SigRetrievalRandomness};
-use std::collections::btree_map::BTreeMap;
+use std::{collections::btree_map::BTreeMap, str::FromStr};
 
 use crate::sigma_protocols::{
     com_enc_eq::ComEncEqProof, com_eq::ComEqProof, com_eq_different_groups::ComEqDiffGrpsProof,
@@ -289,17 +289,20 @@ where
 /// NB: The length of this list must be less than 256.
 /// This must be consistent with the value of attributeNames in
 /// haskell-src/Concordium/ID/Types.hs
-pub const ATTRIBUTE_NAMES: [&str; 10] = [
-    "MaxAccount",
-    "CreationTime",
-    "PreName",
-    "LastName",
-    "Sex",
-    "DateOfBirth",
-    "CountryOfResidence",
-    "CountryOfNationality",
-    "MaritalStatus",
-    "PassportNumber",
+pub const ATTRIBUTE_NAMES: [&str; 13] = [
+    "firstName",
+    "lastName",
+    "sex",
+    "dob",
+    "countryOfResidence",
+    "nationality",
+    "idDocType",
+    "idDocNo",
+    "idDocIssuer",
+    "idDocIssuedAt",
+    "idDocExpiresAt",
+    "nationalIdNo",
+    "taxIdNo",
 ];
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -370,10 +373,127 @@ impl From<u8> for AttributeTag {
     fn from(x: u8) -> Self { AttributeTag(x) }
 }
 
-pub trait Attribute<F: Field>:
-    Copy + Clone + Sized + Send + Sync + fmt::Display + Serialize {
+pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Serialize {
     // convert an attribute to a field element
     fn to_field_element(&self) -> F;
+}
+
+/// YearMonth in Gregorian calendar.
+/// The year is in Gregorian calendar and months are numbered from 1, i.e.,
+/// 1 is January, ..., 12 is December.
+/// Year must be a 4 digit year, i.e., between 1000 and 9999.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct YearMonth {
+    pub year:  u16,
+    pub month: u8,
+}
+
+impl SerdeSerialize for YearMonth {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer, {
+        let s = format!("{}{:0>2}", self.year, self.month);
+        serializer.serialize_str(&s)
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for YearMonth {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>, {
+        deserializer.deserialize_str(YearMonthVisitor)
+    }
+}
+
+struct YearMonthVisitor;
+
+impl<'de> Visitor<'de> for YearMonthVisitor {
+    type Value = YearMonth;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a year and month in format YYYYMM")
+    }
+
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error, {
+        YearMonth::from_str(s).map_err(de::Error::custom)
+    }
+}
+
+impl Serial for YearMonth {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.put(&self.year);
+        out.put(&self.month);
+    }
+}
+
+impl Deserial for YearMonth {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let year = source.get()?;
+        let month = source.get()?;
+        Ok(YearMonth { year, month })
+    }
+}
+
+impl std::str::FromStr for YearMonth {
+    type Err = failure::Error;
+
+    fn from_str(s: &str) -> Fallible<Self> {
+        if s.len() != 6 {
+            bail!("Invalid length of YYYYMM.")
+        }
+        let (s_year, s_month) = s.split_at(4);
+        let year = s_year.parse::<u16>()?;
+        let month = s_month.parse::<u8>()?;
+        if let Some(ym) = YearMonth::new(year, month) {
+            Ok(ym)
+        } else {
+            bail!("Year or month out of range.")
+        }
+    }
+}
+
+impl YearMonth {
+    /// Construct a new YearMonth object.
+    /// This method checks that year and month are in range.
+    pub fn new(year: u16, month: u8) -> Option<Self> {
+        if year >= 1000 && year < 10000 && month >= 1 && month <= 12 {
+            Some(YearMonth { year, month })
+        } else {
+            None
+        }
+    }
+
+    pub fn now() -> YearMonth {
+        use chrono::Datelike;
+        let now = chrono::Utc::now();
+        YearMonth {
+            year:  now.year() as u16,
+            month: now.month() as u8,
+        }
+    }
+}
+
+impl TryFrom<u64> for YearMonth {
+    type Error = ();
+
+    /// Try to convert unsigned 64-bit integer to year and month. Least
+    /// significant byte is month, following two bytes is year in big endian
+    fn try_from(v: u64) -> Result<Self, Self::Error> {
+        let month = (v & 0xFF) as u8;
+        let year = ((v >> 8) & 0xFFFF) as u16;
+        if year < 1000 || year >= 10000 || month < 1 || month > 12 {
+            return Err(());
+        }
+        Ok(YearMonth { year, month })
+    }
+}
+
+impl From<YearMonth> for u64 {
+    /// Convert expiry (year and month) to unsigned 64-bit integer.
+    /// Least significant byte is month, following two bytes are year
+    fn from(v: YearMonth) -> Self { u64::from(v.month) | (u64::from(v.year) << 8) }
 }
 
 #[derive(Clone, Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
@@ -382,8 +502,14 @@ pub trait Attribute<F: Field>:
     deserialize = "F: Field, AttributeType: Attribute<F> + SerdeDeserialize<'de>"
 ))]
 pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
-    #[serde(rename = "expiryDate")]
-    pub expiry: u64,
+    #[serde(rename = "validTo")]
+    pub valid_to: YearMonth,
+    #[serde(rename = "createdAt")]
+    pub created_at: YearMonth,
+    /// Maximum number of accounts that can be created from the owning identity
+    /// object.
+    #[serde(rename = "maxAccounts")]
+    pub max_accounts: u8,
     /// The attributes map. The map size can be at most k where k is the number
     /// of bits that fit into a field element.
     #[serde(rename = "chosenAttributes")]
@@ -646,6 +772,8 @@ pub struct CredDeploymentCommitments<C: Curve> {
     pub cmm_prf: pedersen::Commitment<C>,
     /// commitment to credential counter
     pub cmm_cred_counter: pedersen::Commitment<C>,
+    /// commitment to the max account number.
+    pub cmm_max_accounts: pedersen::Commitment<C>,
     /// List of commitments to the attributes that are not revealed.
     /// For the purposes of checking signatures, the commitments to those
     /// that are revealed as part of the policy are going to be computed by the
@@ -742,9 +870,10 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Expiry time, in seconds since the unix epoch, ignoring leap seconds.
-    #[serde(rename = "expiryDate")]
-    pub expiry: u64,
+    #[serde(rename = "validTo")]
+    pub valid_to: YearMonth,
+    #[serde(rename = "createdAt")]
+    pub created_at: YearMonth,
     /// Revealed attributes for now. In the future we might have
     /// additional items with (Tag, Property, Proof).
     #[serde(rename = "revealedAttributes")]
@@ -755,7 +884,8 @@ pub struct Policy<C: Curve, AttributeType: Attribute<C::Scalar>> {
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, AttributeType> {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        out.put(&self.expiry);
+        out.put(&self.valid_to);
+        out.put(&self.created_at);
         out.put(&(self.policy_vec.len() as u16));
         serial_map_no_length(&self.policy_vec, out)
     }
@@ -763,11 +893,13 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Serial for Policy<C, Attribu
 
 impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, AttributeType> {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
-        let expiry = source.get()?;
+        let valid_to = source.get()?;
+        let created_at = source.get()?;
         let len: u16 = source.get()?;
         let policy_vec = deserial_map_no_length(source, usize::from(len))?;
         Ok(Policy {
-            expiry,
+            valid_to,
+            created_at,
             policy_vec,
             _phantom: Default::default(),
         })
@@ -1407,4 +1539,37 @@ pub struct IdObjectUseData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
         deserialize_with = "base16_decode"
     )]
     pub randomness: SigRetrievalRandomness<P>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_yearmonth_serialization() {
+        // Test equality
+        let ym1 = YearMonth::new(2020, 02).unwrap();
+        let ym2 = YearMonth::new(2020, 02).unwrap();
+        assert_eq!(ym1, ym2);
+
+        // Test serialization
+        let mut buf = Vec::new();
+        buf.put(&ym1);
+        let mut cursor = std::io::Cursor::new(buf);
+        let ym1_parsed = cursor.get().unwrap();
+        assert_eq!(ym1, ym1_parsed);
+
+        // Test JSON serialization
+        let json = serde_json::to_string(&ym1).unwrap();
+        assert_eq!("\"202002\"", json);
+        let ym1_parsed = serde_json::from_str(&json).unwrap();
+        assert_eq!(ym1, ym1_parsed);
+
+        // Test u64 serialization
+        // 202002 => hex: 00000111 11100100 00000010 = dec: 7 228 2 = u64: 517122
+        let num: u64 = u64::from(ym1);
+        assert_eq!(num, 517122);
+        let ym1_parsed = YearMonth::try_from(num).unwrap();
+        assert_eq!(ym1, ym1_parsed);
+    }
 }

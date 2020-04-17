@@ -70,7 +70,6 @@ fn main() {
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
     // Choose variant of the attribute list. Should not matter for this use case.
-    let expiry_date = 123_123_123; //
     let alist = {
         let mut alist = BTreeMap::new();
         let _ = alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
@@ -83,8 +82,12 @@ fn main() {
         prf_key,
     };
 
+    let valid_to = YearMonth::new(2022, 5).unwrap(); // May 2022
+    let created_at = YearMonth::new(2020, 5).unwrap(); // May 2020
     let attributes = ExampleAttributeList {
-        expiry: expiry_date,
+        valid_to,
+        created_at,
+        max_accounts: 238,
         alist,
         _phantom: Default::default(),
     };
@@ -124,13 +127,14 @@ fn main() {
     let id_object_use_data = IdObjectUseData { aci, randomness };
 
     let policy = Policy {
-        expiry:     expiry_date,
+        valid_to,
+        created_at,
         policy_vec: {
             let mut tree = BTreeMap::new();
             tree.insert(AttributeTag::from(1u8), AttributeKind::from(31));
             tree
         },
-        _phantom:   Default::default(),
+        _phantom: Default::default(),
     };
     {
         // output testdata.bin for basic verification checking.

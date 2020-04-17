@@ -1,8 +1,6 @@
 use id::{ffi::*, types::*};
 use pairing::bls12_381::Bls12;
 
-use chrono::NaiveDateTime;
-
 use serde_json::{to_string_pretty, to_writer_pretty};
 
 use curve_arithmetic::curve_arithmetic::*;
@@ -11,8 +9,9 @@ use serde::{de::DeserializeOwned, Serialize as SerdeSerialize};
 
 use std::{
     fs::File,
-    io::{self, BufReader, Error, ErrorKind},
+    io::{self, BufReader},
     path::Path,
+    str::FromStr,
 };
 
 pub type ExampleCurve = <Bls12 as Pairing>::G1;
@@ -32,13 +31,8 @@ pub fn read_identity_providers() -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>:
     read_json_from_file(IDENTITY_PROVIDERS).ok()
 }
 
-pub fn parse_expiry_date(input: &str) -> io::Result<u64> {
-    let mut input = input.to_owned();
-    input.push_str(" 23:59:59");
-    let dt = NaiveDateTime::parse_from_str(&input, "%d %B %Y %H:%M:%S")
-        .map_err(|x| Error::new(ErrorKind::Other, x.to_string()))?;
-    Ok(dt.timestamp() as u64)
-}
+/// Parse YYYYMM as YearMonth
+pub fn parse_yearmonth(input: &str) -> Option<YearMonth> { YearMonth::from_str(input).ok() }
 
 pub fn write_json_to_file<T: SerdeSerialize>(filepath: &str, v: &T) -> io::Result<()> {
     let path = Path::new(filepath);

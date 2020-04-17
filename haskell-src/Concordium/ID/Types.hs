@@ -11,7 +11,6 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Base16 as BS16
 import Concordium.Crypto.SignatureScheme
-import Data.Bits
 import Data.Serialize as S
 import GHC.Generics
 import Data.Hashable
@@ -25,7 +24,6 @@ import Control.Monad.Fail hiding(fail)
 import Control.Monad.Except
 import qualified Data.Text as Text
 import Control.DeepSeq
-import Data.Scientific
 import System.Random
 import qualified Data.Map.Strict as Map
 
@@ -227,71 +225,83 @@ instance Serialize Proofs where
     Proofs <$> getShortByteString l
 
 -- |We assume an non-negative integer.
-newtype AttributeValue = AttributeValue Integer
-  deriving(Show, Eq)
+newtype AttributeValue = AttributeValue ShortByteString
+  deriving(Eq)
 
--- |Unroll a positive integer into little-endian bytes.
-unroll :: Integer -> [Word8]
-unroll v | v < 0 = error "Negative integer, precondition violated."
-         | v == 0 = [0]
-         | otherwise = go v
-  where go 0 = []
-        go n = let (d, m) = divMod n 256
-               in fromIntegral m : go d
+instance Show AttributeValue where
+  show (AttributeValue bytes) = Text.unpack (Text.decodeUtf8 (BSS.fromShort bytes))
 
 instance Serialize AttributeValue where
-    put (AttributeValue i) =
-        let bytes = unroll i in
-          putWord8 (fromIntegral (length bytes)) <>
-          mapM_ putWord8 (reverse bytes)
+    put (AttributeValue bytes) =
+      putWord8 (fromIntegral (BSS.length bytes)) <>
+      putShortByteString bytes
 
     get = do
       l <- getWord8
       if l <= 31 then do
-        bytes <- replicateM (fromIntegral l) getWord8
-        return . AttributeValue $! foldl (\acc b -> acc `shiftL` 8 + fromIntegral b) 0 bytes
+        bytes <- getShortByteString (fromIntegral l)
+        return $! AttributeValue bytes
       else fail "Attribute malformed. Must fit into 31 bytes."
 
 instance ToJSON AttributeValue where
-  toJSON (AttributeValue v) = String (Text.pack (show v))
+  -- this is safe because the bytestring should contain 
+  toJSON (AttributeValue v) = String (Text.decodeUtf8 (BSS.fromShort v))
 
 instance FromJSON AttributeValue where
-  parseJSON (String s) =
-    case Text.decimal s of
-      Left err -> fail err
-      Right (i, rest)
-          | Text.null rest -> do
-              if i >= 0 && i < 2^(248 :: Word) then
-                return (AttributeValue i)
-              else fail "Input out of range."
-          | otherwise -> fail $ "Input malformed, remaining input: " ++ Text.unpack rest
+  parseJSON = withText "Attribute value"$ \v -> do
+    let s = Text.encodeUtf8 v
+    unless (BS.length s <= 31) $ fail "Attribute values must fit into 31 bytes."
+    return (AttributeValue (BSS.toShort s))
 
-  parseJSON (Number n) = do
-    case toBoundedInteger n :: Maybe Word64 of
-      Just x -> return (AttributeValue (fromIntegral x))
-      Nothing -> fail "Not an integer in correct range."
+-- |ValidTo of a credential.
+type CredentialValidTo = YearMonth
 
-  parseJSON _ = fail "Attribute value must be either a string or an int."
+-- |CreatedAt of a credential.
+type CredentialCreatedAt = YearMonth
 
--- |Expiry time of a credential.
-type CredentialExpiryTime = Word64
+-- |YearMonth used store expiry (validTo) and creation (createdAt).
+-- The year is in Gregorian calendar and months are numbered from 1, i.e.,
+-- 1 is January, ..., 12 is December.
+-- Year must be a 4 digit year, i.e., between 1000 and 9999.
+data YearMonth = YearMonth {
+  ymYear :: !Word16,
+  ymMonth :: !Word8
+  } deriving(Eq, Ord)
+
+-- Show in compressed form of YYYYMM
+instance Show YearMonth where
+  show YearMonth{..} = show ymYear ++ (if ymMonth < 10 then ("0" ++ show ymMonth) else (show ymMonth))
+
+instance Serialize YearMonth where
+  put YearMonth{..} = 
+    S.putWord16be ymYear <>
+    S.putWord8 ymMonth
+  get = do
+    ymYear <- S.getWord16be
+    unless (ymYear >= 1000 && ymYear < 10000) $ fail "Year must be 4 digits exactly."
+    ymMonth <- S.getWord8
+    unless (ymMonth >= 1 && ymMonth <= 12) $ fail "Month must be between 1 and 12 inclusive."
+    return YearMonth{..}
 
 newtype AttributeTag = AttributeTag Word8
  deriving (Eq, Show, Serialize, Ord, Enum, Num) via Word8
 
 -- *NB: This mapping must be kept consistent with the mapping in id/types.rs.
 attributeNames :: [Text.Text]
-attributeNames = ["MaxAccount",
-                   "CreationTime",
-                   "PreName",
-                   "LastName",
-                   "Sex",
-                   "DateOfBirth",
-                   "CountryOfResidence",
-                   "CountryOfNationality",
-                   "MaritalStatus",
-                   "PassportNumber"
-                   ]
+attributeNames = ["firstName",
+                  "lastName",
+                  "sex",
+                  "dob",
+                  "countryOfResidence",
+                  "nationality",
+                  "idDocType",
+                  "idDocNo",
+                  "idDocIssuer",
+                  "idDocIssuedAt",
+                  "idDocExpiresAt",
+                  "nationalIdNo",
+                  "taxIdNo"
+                 ]
 
 mapping :: Map.Map Text.Text AttributeTag
 mapping = Map.fromList $ zip attributeNames [0..] 
@@ -317,21 +327,44 @@ instance ToJSON AttributeTag where
   toJSON tag = maybe "UNKNOWN" toJSON $ Map.lookup tag invMapping
 
 data Policy = Policy {
-  -- |Expiry date of this credential. In seconds since unix epoch.
-  pExpiry :: CredentialExpiryTime,
+  -- |Validity of this credential.
+  pValidTo :: CredentialValidTo,
+  -- |Creation of this credential
+  pCreatedAt :: CredentialCreatedAt,
   -- |List of items in this attribute list.
   pItems :: Map.Map AttributeTag AttributeValue
   } deriving(Eq, Show)
 
+instance ToJSON YearMonth where
+  toJSON ym = String (Text.pack (show ym))
+
+instance FromJSON YearMonth where
+  parseJSON = withText "YearMonth" $ \v -> do
+    unless (Text.length v == 6) $ fail "YearMonth value must be exactly 6 characters."
+    let (year, month) = Text.splitAt 4 v
+    let eyear = Text.decimal year
+    let emonth = Text.decimal month
+    case eyear of
+      Left err -> fail $ "Year not a valid numeric value: " ++ err
+      Right (ymYear, rest) -> do
+        unless (Text.null rest && ymYear >= 1000 && ymYear <= 10000) $ fail "Year not valid."
+        case emonth of
+          Left err -> fail $ "Month not a valid numeric value: " ++ err
+          Right (ymMonth, rest') -> do
+            unless (Text.null rest' && ymMonth >= 1 && ymMonth <= 12) $ fail "Month not within range."
+            return YearMonth{..}
+
 instance ToJSON Policy where
   toJSON Policy{..} = object [
-    "expiryDate" .= pExpiry,
+    "validTo" .= pValidTo,
+    "createdAt" .= pCreatedAt,
     "revealedAttributes" .= pItems
     ]
 
 instance FromJSON Policy where
   parseJSON = withObject "Policy" $ \v -> do
-    pExpiry <- v .: "expiryDate"
+    pValidTo <- v .: "validTo"
+    pCreatedAt <- v .: "createdAt"
     pItems <- v .: "revealedAttributes"
     return Policy{..}
 
@@ -521,7 +554,8 @@ instance FromJSON CredentialDeploymentValues where
 
 getPolicy :: Get Policy
 getPolicy = do
-  pExpiry <- getWord64be
+  pValidTo <- get
+  pCreatedAt <- get
   l <- fromIntegral <$> getWord16be
   pItems <- safeFromAscList =<< replicateM l (getTwoOf get get)
   return Policy{..}
@@ -529,7 +563,8 @@ getPolicy = do
 putPolicy :: Putter Policy
 putPolicy Policy{..} =
   let l = length pItems
-  in putWord64be pExpiry <>
+  in put pValidTo <>
+     put pCreatedAt <>
      putWord16be (fromIntegral l) <>
      mapM_ (putTwoOf put put) (Map.toAscList pItems)
 

@@ -11,7 +11,6 @@ use either::Either::{Left, Right};
 use id::{
     account_holder::{generate_cdi, generate_pio},
     ffi::AttributeKind,
-    identity_provider::verify_credentials,
     secret_sharing::Threshold,
     types::*,
 };
@@ -23,11 +22,10 @@ use std::ffi::{CStr, CString};
 
 use failure::Fallible;
 use rand::thread_rng;
-use serde_json::{from_str, from_value, to_string, to_value, Value};
+use serde_json::{from_str, from_value, to_string, Value};
 
 use sha2::{Digest, Sha256};
 
-type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
 type ExampleCurve = G1;
 
 fn create_transfer_aux(input: &str) -> Fallible<String> {
@@ -254,7 +252,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     let mut policy_vec = std::collections::BTreeMap::new();
     for tag in tags {
         if let Some(att) = id_object.alist.alist.get(&tag) {
-            if policy_vec.insert(tag, *att).is_some() {
+            if policy_vec.insert(tag, att.clone()).is_some() {
                 bail!("Cannot reveal an attribute more than once.")
             }
         } else {
@@ -263,7 +261,8 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     }
 
     let policy = Policy {
-        expiry: id_object.alist.expiry,
+        valid_to: id_object.alist.valid_to,
+        created_at: id_object.alist.created_at,
         policy_vec,
         _phantom: Default::default(),
     };
@@ -289,66 +288,6 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         "accountAddress": address,
     });
     Ok(to_string(&response)?)
-}
-
-// Add data to the attribute list if needed. This is just to simulate the fact
-// that not all attributes are needed.
-fn dummy_alist() -> ExampleAttributeList {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let expiry = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|x| x.as_secs() + 31_556_926) // one year from now as expiry
-        .unwrap_or(0);
-    let mut alist = std::collections::BTreeMap::new();
-    let len = ATTRIBUTE_NAMES.len();
-    // fill in the missing pieces with dummy values.
-    for i in 0..len {
-        let idx = AttributeTag::from(i as u8);
-        if alist.get(&idx).is_none() {
-            let _ = alist.insert(idx, AttributeKind::from((i + 10) as u64));
-        }
-    }
-    AttributeList {
-        expiry,
-        alist,
-        _phantom: Default::default(),
-    }
-}
-
-pub fn sign_id_object(ip_data: &IpData<Bls12, ExampleCurve>, v: &str) -> Fallible<Value> {
-    let v: Value = match from_str(v) {
-        Ok(v) => v,
-        Err(e) => bail!("Cannot decode input request: {}", e),
-    };
-    let id_obj_value = {
-        match v.get("idObjectRequest") {
-            Some(v) => v.clone(),
-            None => bail!("Field 'idObjectRequest' not present but should be."),
-        }
-    };
-    let request: PreIdentityObject<Bls12, ExampleCurve> = from_value(id_obj_value)?;
-
-    // We create a dummy attribute list to simulate the workflow.
-    // FIXME: This is temporary, of course, and should be replaced by business
-    // logic.
-    let alist = dummy_alist();
-    let vf = verify_credentials(
-        &request,
-        &ip_data.public_ip_info,
-        &alist,
-        &ip_data.ip_secret_key,
-    );
-    match vf {
-        Ok(signature) => {
-            let id_object = IdentityObject {
-                pre_identity_object: request,
-                alist,
-                signature,
-            };
-            Ok(to_value(&id_object)?)
-        }
-        Err(e) => bail!("Could not generate signature because {:?}.", e),
-    }
 }
 
 /// # Safety
