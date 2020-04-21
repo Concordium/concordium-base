@@ -36,9 +36,14 @@ import Concordium.Types.Acorn.Interfaces
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs
 
--- |These are the messages that are generated as parts of contract execution.
-data InternalMessage annot = TSend !ContractAddress !Amount !(Value annot) | TSimpleTransfer !Address !Amount
-    deriving(Show)
+-- | Messages or transfers generated as part of contract execution, each to be sent to a contract or an account.
+data InternalMessage annot
+  -- | A message (Acorn value) to be sent to the given contract, together with an amount to be
+  -- transferred to it from the sender of the message.
+  = TSend !ContractAddress !Amount !(Value annot)
+  -- | A transfer to be made to the given address.
+  | TSimpleTransfer !Address !Amount
+  deriving(Show)
 
 type Proof = BS.ByteString
 
@@ -368,7 +373,7 @@ data Event =
            | Updated {
                -- |Address of the contract that was updated.
                euAddress :: !ContractAddress,
-               -- |Address of the instigator of the update, an account or contract.
+               -- |Address of the instigator of the update, i.e. source of the message, an account or contract.
                euInstigator :: !Address,
                -- |Amount which was transferred to the contract.
                euAmount :: !Amount,
