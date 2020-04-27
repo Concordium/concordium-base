@@ -377,7 +377,7 @@ genesisSlot = 0
 
 type EpochLength = Slot
 
-newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show) via Word64
+newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, Hashable) via Word64
 
 instance S.Serialize BlockHeight where
   put = S.putWord64be . theBlockHeight
