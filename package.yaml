@@ -18,12 +18,25 @@ extra-source-files:
 # common to point users to the README.md file.
 description:         See README
 
+default-extensions:
+- RecordWildCards
+- LambdaCase
+- TupleSections
+- MultiParamTypeClasses
+- FlexibleContexts
+- FlexibleInstances
+- FunctionalDependencies
+- GeneralizedNewtypeDeriving
+
 flags:
   static:
     description: Use static linking.
     manual: True
     default: False
-
+  disable-smart-contracts:
+    description: Disable transactions related to smart contracts
+    manual: True
+    default: False
 
 dependencies:
 - base >= 4.7 && < 5
@@ -44,6 +57,7 @@ dependencies:
 - pqueue >= 1.4.1
 - prettyprinter >= 1.2
 - random >= 1.1
+- template-haskell >= 2.14
 
 library:
   source-dirs: src
@@ -54,6 +68,10 @@ library:
     - -Werror=missing-methods
     - -Wredundant-constraints
     - -fno-ignore-asserts
+  when:
+      condition: flag(disable-smart-contracts)
+      cpp-options:
+        - -DDISABLE_SMART_CONTRACTS
 
 tests:
   types-test:

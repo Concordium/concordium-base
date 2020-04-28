@@ -38,6 +38,10 @@ import Data.Set(Set)
 import qualified Data.PQueue.Prio.Max as Queue
 
 import Data.Aeson as AE
+import Data.Aeson.TH
+
+import Data.Time
+import Data.Time.Clock.POSIX
 
 import qualified Data.Serialize as S
 import qualified Data.Serialize.Put as P
@@ -61,7 +65,7 @@ instance Ord (Hashed a) where
 
 -- * Types releated to bakers.
 newtype BakerId = BakerId Word64
-    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON) via Word64
 
 instance S.Serialize BakerId where
     get = BakerId <$> G.getWord64be
@@ -74,8 +78,16 @@ type BakerElectionVerifyKey = VRF.PublicKey
 type BakerElectionPrivateKey = VRF.KeyPair
 type BakerAggregationVerifyKey = Bls.PublicKey
 type BakerAggregationPrivateKey = Bls.SecretKey
+type BakerAggregationProof = Bls.Proof
 type LotteryPower = Ratio Amount
+
+-- | The type of the birk parameter "election difficulty".
+-- The value must be in the range [0,1).
 type ElectionDifficulty = Double
+type FinalizationCommitteeSize = Word32
+
+isValidElectionDifficulty :: ElectionDifficulty -> Bool
+isValidElectionDifficulty d = d >= 0 && d < 1
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
@@ -83,7 +95,7 @@ type VoterVRFPublicKey = VRF.PublicKey
 type VoterAggregationVerifyKey = Bls.PublicKey
 type VoterSignKey = Sig.SignKey
 type VoterAggregationPrivateKey = Bls.SecretKey
-newtype VoterPower = VoterPower Int
+newtype VoterPower = VoterPower AmountUnit
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Show, Integral, S.Serialize)
 
 -- * Blockchain specific types.
@@ -134,6 +146,7 @@ instance S.Serialize ContractAddress where
 -- |Unique module reference.
 newtype ModuleRef = ModuleRef {moduleRef :: Hash.Hash}
     deriving(Eq, Ord, Hashable, Typeable, Data)
+    deriving (FromJSON, ToJSON) via Hash.Hash
 
 instance Show ModuleRef where
   show (ModuleRef m) = show m
@@ -169,36 +182,68 @@ instance S.Serialize Address where
 
 -- | Time in milliseconds since the epoch
 newtype Timestamp = Timestamp { tsMillis :: Word64 }
-  deriving (Show, Read, Eq, Num, Ord, Real, Enum, Integral, S.Serialize, FromJSON) via Word64
+  deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON) via Word64
 -- | Time duration in milliseconds
 newtype Duration = Duration { durationMillis :: Word64 }
-  deriving (Show, Read, Eq, Num, Ord, Real, Enum, Integral, S.Serialize, FromJSON) via Word64
+  deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON) via Word64
+
+-- | Convert a 'Timestamp' to a 'UTCTime'
+timestampToUTCTime :: Timestamp -> UTCTime
+timestampToUTCTime ts = posixSecondsToUTCTime $ fromIntegral (tsMillis ts) / 1000
+
+-- | Covert a 'UTCTime' to a 'Timestamp'.
+-- This rounds down to the nearest millisecond.
+utcTimeToTimestamp :: UTCTime -> Timestamp
+utcTimeToTimestamp = Timestamp . truncate . (*1000) . utcTimeToPOSIXSeconds
+
+-- | Convert a 'Timestamp' to seconds since the epoch, rounding down
+timestampToSeconds :: Timestamp -> Word64
+timestampToSeconds ts = tsMillis ts `div` 1000
+
+durationToNominalDiffTime :: Duration -> NominalDiffTime
+durationToNominalDiffTime dur = fromIntegral (durationMillis dur) / 1000
+
+addDuration :: Timestamp -> Duration -> Timestamp
+addDuration (Timestamp ts) (Duration d) = Timestamp (ts + d)
 
 -- | Expiry time of a transaction in seconds since the epoch
 newtype TransactionExpiryTime = TransactionExpiryTime { expiry :: Word64 }
-    deriving (Show, Read, Eq, Num, Ord) via Word64
+    deriving (Show, Read, Eq, Num, Ord, FromJSON, ToJSON) via Word64
 
 instance S.Serialize TransactionExpiryTime where
   put = P.putWord64be . expiry
   get = TransactionExpiryTime <$> G.getWord64be
 
-instance FromJSON TransactionExpiryTime where
-  parseJSON v = TransactionExpiryTime <$> parseJSON v
-
 transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
 transactionExpired (TransactionExpiryTime x) (Timestamp t) = 1000*x < t
 
--- |Type of GTU amounts.
+-- |Check if whether the given timestamp is no greater than the end of the day
+-- of the given year and month.
+isTimestampBefore :: Timestamp -> YearMonth -> Bool
+isTimestampBefore ts ym =
+    utcTs < utcYearMonthExpiryTs
+  where
+    utcTs = timestampToUTCTime ts
+    utcYearMonthExpiryTs = UTCTime expiryDay 0
+      where
+        year = toInteger (ymYear ym)
+        month = fromIntegral (ymMonth ym)
+        expiryYear = if month == 12 then year + 1 else year
+        expiryMonth = if month == 12 then 1 else (month + 1) -- (month % 12) + 1
+        expiryDay = fromGregorian expiryYear expiryMonth 1 -- unchecked, always valid
+
+
+-- |Type representing the amount unit which is defined as the smallest
+-- meaningful amount of GTUs.
+-- Currently this unit is 10^-4 GTU and doesn't have a proper name.
 -- FIXME: This likely needs to be Word128.
-newtype Amount = Amount { _amount :: Word64 }
-    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable) via Word64
+type AmountUnit = Word64
+newtype Amount = Amount { _amount :: AmountUnit }
+    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, FromJSON, ToJSON) via AmountUnit
 
 instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
   put (Amount v) = P.putWord64be v
-
-instance FromJSON Amount where
-  parseJSON v = Amount <$> parseJSON v
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
@@ -221,24 +266,18 @@ applyAmountDelta del amt =
 -- |The type used to count exact execution cost. This cost is then converted to
 -- amounts in some way.
 newtype Energy = Energy { _energy :: Word64 }
-    deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded) via Word64
+    deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded, FromJSON, ToJSON) via Word64
 
 instance S.Serialize Energy where
   get = Energy <$> G.getWord64be
   put (Energy v) = P.putWord64be v
 
-instance FromJSON Energy where
-  parseJSON v = Energy <$> parseJSON v
-
 newtype Nonce = Nonce Word64
-    deriving (Show, Read, Eq, Ord, Num, Enum) via Word64
+    deriving (Show, Read, Eq, Ord, Num, Enum, FromJSON, ToJSON) via Word64
 
 instance S.Serialize Nonce where
   put (Nonce w) = P.putWord64be w
   get = Nonce <$> G.getWord64be
-
-instance FromJSON Nonce where
-  parseJSON v = Nonce <$> parseJSON v
 
 minNonce :: Nonce
 minNonce = 1
@@ -270,7 +309,7 @@ data Account = Account {
   -- A Max priority queue allows us to efficiently check for existence of such credentials,
   -- as well as listing of all valid credentials, and efficient insertion of new credentials.
   -- The priority is the expiry time of the credential.
-  ,_accountCredentials :: !(Queue.MaxPQueue CredentialExpiryTime CredentialDeploymentValues)
+  ,_accountCredentials :: !(Queue.MaxPQueue CredentialValidTo CredentialDeploymentValues)
   -- |The baker to which this account's stake is delegated (if any).
   ,_accountStakeDelegate :: !(Maybe BakerId)
   -- |The set of instances belonging to this account.
@@ -299,7 +338,7 @@ instance S.Serialize Account where
     _accountEncryptedAmount <- S.get
     _accountEncryptionKey <- S.get
     _accountVerificationKeys <- S.get
-    preAccountCredentials <- Queue.fromList . map (\cdv -> (pExpiry (cdvPolicy cdv), cdv)) <$> S.get
+    preAccountCredentials <- Queue.fromList . map (\cdv -> (pValidTo (cdvPolicy cdv), cdv)) <$> S.get
     let _accountCredentials = Queue.seqSpine preAccountCredentials preAccountCredentials
     _accountStakeDelegate <- S.get
     _accountInstances <- Set.fromList <$> S.get
@@ -323,7 +362,7 @@ newAccount _accountVerificationKeys _accountAddress = Account {
 
 -- |Size of the transaction payload.
 newtype PayloadSize = PayloadSize Word32
-    deriving (Eq, Show, Ord, Num, Real, Enum, Integral) via Word32
+    deriving (Eq, Show, Ord, Num, Real, Enum, Integral, FromJSON, ToJSON) via Word32
 
 -- |Serialization format as specified
 --
@@ -351,7 +390,7 @@ payloadSize = fromIntegral . BSS.length . _spayload
 -- *Types that are morally part of the consensus, but need to be exposed in
 -- other parts of the system as well, e.g., in smart contracts.
 
-newtype Slot = Slot {theSlot :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
+newtype Slot = Slot {theSlot :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, Read, S.Serialize) via Word64
 
 -- |The slot number of the genesis block (0).
 genesisSlot :: Slot
@@ -359,7 +398,12 @@ genesisSlot = 0
 
 type EpochLength = Slot
 
-newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, S.Serialize)
+newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, Hashable) via Word64
+
+instance S.Serialize BlockHeight where
+  put = S.putWord64be . theBlockHeight
+  get = BlockHeight <$> S.getWord64be
+
 
 -- |Blockchain metadata as needed by contract execution.
 data ChainMetadata =
@@ -378,9 +422,15 @@ data ChainMetadata =
                 }
 
 
+type TransactionHash = Hash.Hash
+
 -- * Types related to blocks
 
 type BlockHash = Hash.Hash
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
+
+
+-- Template haskell derivations. At the end to get around staging restrictions.
+$(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
