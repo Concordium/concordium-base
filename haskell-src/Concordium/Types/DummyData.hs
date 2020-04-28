@@ -3,7 +3,6 @@ module Concordium.Types.DummyData where
 
 import qualified Concordium.Crypto.SignatureScheme as SigScheme
 import Concordium.Types
-import Concordium.ID.Types(randomAccountAddress, makeSingletonAC)
 import qualified Data.PQueue.Prio.Max as Queue
 import Concordium.Crypto.DummyData
 import Concordium.ID.DummyData
@@ -25,7 +24,7 @@ mkAccountNoCredentials key addr amnt = newAccount (makeSingletonAC key) addr & (
 {-# WARNING mkAccount "Do not use in production." #-}
 mkAccount :: SigScheme.VerifyKey -> AccountAddress -> Amount -> Account
 mkAccount key addr amnt = mkAccountNoCredentials key addr amnt &
-                           (accountCredentials .~ (Queue.singleton dummyLowExpiryTime (dummyCredential addr dummyLowExpiryTime)))
+                           (accountCredentials .~ (Queue.singleton dummyMaxValidTo (dummyCredential addr dummyMaxValidTo dummyCreatedAt)))
 
 {-# WARNING makeFakeBakerAccount "Do not use in production." #-}
 makeFakeBakerAccount :: BakerId -> Account
@@ -35,7 +34,7 @@ makeFakeBakerAccount bid =
           _accountCredentials = credentialList}
   where
     vfKey = SigScheme.correspondingVerifyKey kp
-    credentialList = Queue.singleton dummyLowExpiryTime (dummyCredential address dummyLowExpiryTime)
+    credentialList = Queue.singleton dummyMaxValidTo (dummyCredential address dummyMaxValidTo dummyCreatedAt)
     acct = newAccount (makeSingletonAC vfKey) address
     -- NB the negation makes it not conflict with other fake accounts we create elsewhere.
     seed = - (fromIntegral bid) - 1

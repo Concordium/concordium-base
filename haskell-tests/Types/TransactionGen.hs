@@ -13,6 +13,7 @@ import Concordium.Types
 import Concordium.ID.Types
 
 import Control.Monad
+import qualified Data.Map.Strict as Map
 import qualified Data.FixedByteString as FBS
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
@@ -44,7 +45,7 @@ genBareTransaction = do
   btrHeader <- genTransactionHeader
   btrPayload <- EncodedPayload . BSS.pack <$> vector (fromIntegral (thPayloadSize btrHeader))
   numKeys <- choose (1, 255)
-  btrSignature <- TransactionSignature <$> replicateM numKeys (do
+  btrSignature <- TransactionSignature . Map.fromList <$> replicateM numKeys (do
     idx <- KeyIndex <$> arbitrary
     sLen <- choose (50,70)
     sig <- Signature . BSS.pack <$> vector sLen
@@ -56,9 +57,9 @@ baseTime = read "2019-09-23 13:27:13.257285424 UTC"
 
 genTransaction :: Gen Transaction
 genTransaction = do
-  trBareTransaction <- genBareTransaction
-  trArrivalTime <- arbitrary
-  let body = encode trBareTransaction
-  let trHash = hash body
-  let trSize = BS.length body
-  return $ Transaction{..}
+  wmdData <- genBareTransaction
+  wmdArrivalTime <- arbitrary
+  let body = encode wmdData
+  let wmdHash = hash body
+  let wmdSize = BS.length body
+  return $ WithMetadata{..}

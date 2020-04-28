@@ -51,7 +51,7 @@ import Concordium.Crypto.DummyData
 --   return CredentialDeploymentInformation{..}
 
 genAttributeValue :: Gen AttributeValue
-genAttributeValue = AttributeValue . (\x -> abs x `mod` 2^(248 :: Int)) <$> arbitrary
+genAttributeValue = AttributeValue . BSS.pack <$> (vector =<< choose (0,31))
 
 genDlogProof :: Gen Dlog25519Proof
 genDlogProof = fst . randomProof . mkStdGen <$> resize 100000 arbitrary
@@ -64,8 +64,11 @@ genAccountOwnershipProof = do
      proof <- genDlogProof
      return (keyIndex, proof))
 
-genAggregationVerifykey :: Gen BakerAggregationVerifyKey
-genAggregationVerifykey = fmap Bls.derivePublicKey secretBlsKeyGen
+genAggregationVerifyKeyAndProof :: Gen (BakerAggregationVerifyKey, BakerAggregationProof)
+genAggregationVerifyKeyAndProof = do
+  c <- arbitrary
+  sk <- secretBlsKeyGen
+  return (Bls.derivePublicKey sk, Bls.proveKnowledgeOfSK (BS.pack c) sk)
 
 genPayload :: Gen Payload
 genPayload = oneof [genDeployModule,
@@ -112,18 +115,15 @@ genPayload = oneof [genDeployModule,
         genAddBaker = do
           abElectionVerifyKey <- VRF.publicKey <$> arbitrary
           abSignatureVerifyKey <- BlockSig.verifyKey <$> genBlockKeyPair
-          abAggregationVerifyKey <- genAggregationVerifykey
+          (abAggregationVerifyKey, abProofAggregation) <- genAggregationVerifyKeyAndProof
           abAccount <- genAddress
           abProofSig <- genDlogProof
           abProofElection <- genDlogProof
           abProofAccount <- genAccountOwnershipProof
           return AddBaker{..}
 
-        genProof = BS.pack <$> (vector =<< choose (50,200))
-
         genRemoveBaker = do
           rbId <- genBakerId
-          rbProof <- genProof
           return RemoveBaker{..}
 
         genUpdateBakerAccount = do
