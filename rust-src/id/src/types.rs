@@ -1224,6 +1224,79 @@ pub struct CredDeploymentInfo<
     pub proofs: CredDeploymentProofs<P, C>,
 }
 
+/// The version of a data structure.
+#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize)]
+pub struct Version {
+    #[serde(rename = "v")]
+    value: u32,
+}
+
+impl Serial for Version {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        let mut buf = Vec::with_capacity(5);
+        let mut v = self.value;
+
+        // Create 7-bit encoding with all MSB set to 1
+        while v > 0 {
+            let byte = (1 << 7) | (v & 0b01111111) as u8;
+            buf.push(byte);
+            v = v >> 7;
+        }
+
+        // Convert to BigEndian, ensure last byte has MSB=0, write to buffer
+        buf[0] = buf[0] & 0b01111111;
+        buf.reverse();
+        out.write_all(&buf).expect("Writing to buffer is safe");
+    }
+}
+
+impl Deserial for Version {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut acc: u32 = 0;
+        for _ in 0..5 {
+            let byte = source.read_u8()? as u32;
+            if byte >= 0b10000000 {
+                acc = (acc << 7) | (byte & 0b01111111);
+            } else {
+                acc = (acc << 7) | byte;
+                break;
+            }
+        }
+        Ok(Version { value: acc })
+    }
+}
+
+/// Versioned<T> represents T as a versioned data-structure.
+/// The version is a integer number up to the implementation,
+/// which is serialized using variable integer encoding.
+/// The caller is responsible for ensuringe the data structure `T`
+/// is compatible with the version number.
+#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+pub struct Versioned<T> {
+    #[serde(flatten)]
+    pub version: Version,
+
+    #[serde(flatten)]
+    pub value: T,
+}
+
+impl<T: Serial> Serial for Versioned<T> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.put(&self.version);
+        out.put(&self.value);
+    }
+}
+
+/// A versioned structure should only be deserialized the caller is certain the
+/// `value` is consistent with the supported version.
+impl<T: Deserial> Deserial for Versioned<T> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let version: Version = source.get()?;
+        let value: T = source.get()?;
+        Ok(Versioned { version, value })
+    }
+}
+
 /// Context needed to generate pre-identity object.
 /// This context is derived from the public information of the identity
 /// provider, as well as some other global parameters which can be found in the
@@ -1544,6 +1617,8 @@ pub struct IdObjectUseData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::thread_rng;
+    use rand_core::RngCore;
 
     #[test]
     fn test_yearmonth_serialization() {
@@ -1571,5 +1646,44 @@ mod tests {
         assert_eq!(num, 517122);
         let ym1_parsed = YearMonth::try_from(num).unwrap();
         assert_eq!(ym1, ym1_parsed);
+    }
+
+    #[test]
+    fn test_version_serialization() {
+        let mut current: u32 = 1;
+
+        // Test each bit in u32 is encoded correctly
+        for _ in 0..32 {
+            let actual = Version { value: current };
+            let parsed = serialize_deserialize(&actual).unwrap();
+            assert_eq!(actual, parsed);
+            current = current * 2;
+        }
+
+        // Test some random numbers
+        let mut rng = thread_rng();
+        for _ in 0..1000 {
+            let actual = Version {
+                value: rng.next_u32(),
+            };
+            let mut v: Vec<u8> = Vec::new();
+            actual.serial(&mut v);
+            print!("Actual: {}", actual.value);
+            print!("  Encoding: ");
+            for b in v {
+                print!("{:02x?}", b);
+            }
+            println!();
+
+            let parsed = serialize_deserialize(&actual).unwrap();
+            assert_eq!(actual, parsed);
+        }
+
+        // Fixed test vector
+        let test = Version { value: 1700794014 };
+        let actual: Vec<u8> = vec![0x86, 0xab, 0x80, 0x9d, 0x1e];
+        let mut buffer: Vec<u8> = Vec::new();
+        test.serial(&mut buffer);
+        assert_eq!(buffer, actual);
     }
 }
