@@ -198,7 +198,9 @@ impl AccountOwnershipProof {
     /// Number of individual proofs in this proof.
     /// NB: This method relies on the invariant that proofs should not
     /// have more than 255 elements.
-    pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.proofs.len() as u8) }
+    pub fn num_proofs(&self) -> SignatureThreshold {
+        SignatureThreshold(self.proofs.len() as u8)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
@@ -208,7 +210,9 @@ impl AccountOwnershipProof {
 pub struct IpIdentity(pub u32);
 
 impl fmt::Display for IpIdentity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
@@ -217,7 +221,9 @@ impl fmt::Display for IpIdentity {
 pub struct ArIdentity(pub u32);
 
 impl fmt::Display for ArIdentity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
@@ -264,7 +270,8 @@ pub fn merge_iter<'a, K: Ord + 'a, V1: 'a, V2: 'a, I1, I2, F>(i1: I1, i2: I2, mu
 where
     I1: std::iter::IntoIterator<Item = (&'a K, &'a V1)>,
     I2: std::iter::IntoIterator<Item = (&'a K, &'a V2)>,
-    F: FnMut(Either<&'a V1, &'a V2>), {
+    F: FnMut(Either<&'a V1, &'a V2>),
+{
     let mut iter_1 = i1.into_iter().peekable();
     let mut iter_2 = i2.into_iter().peekable();
     while let (Some(&(tag_1, v_1)), Some(&(tag_2, v_2))) = (iter_1.peek(), iter_2.peek()) {
@@ -312,7 +319,9 @@ pub const ATTRIBUTE_NAMES: [&str; 13] = [
 pub struct AttributeStringTag(String);
 
 impl<'a> fmt::Display for AttributeStringTag {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 // NB: This requires that the length of ATTRIBUTE_NAMES is no more than 256.
@@ -366,11 +375,15 @@ impl std::str::FromStr for AttributeTag {
 }
 
 impl Into<usize> for AttributeTag {
-    fn into(self) -> usize { self.0.into() }
+    fn into(self) -> usize {
+        self.0.into()
+    }
 }
 
 impl From<u8> for AttributeTag {
-    fn from(x: u8) -> Self { AttributeTag(x) }
+    fn from(x: u8) -> Self {
+        AttributeTag(x)
+    }
 }
 
 pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Serialize {
@@ -384,14 +397,15 @@ pub trait Attribute<F: Field>: Clone + Sized + Send + Sync + fmt::Display + Seri
 /// Year must be a 4 digit year, i.e., between 1000 and 9999.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct YearMonth {
-    pub year:  u16,
+    pub year: u16,
     pub month: u8,
 }
 
 impl SerdeSerialize for YearMonth {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer, {
+        S: Serializer,
+    {
         let s = format!("{}{:0>2}", self.year, self.month);
         serializer.serialize_str(&s)
     }
@@ -400,7 +414,8 @@ impl SerdeSerialize for YearMonth {
 impl<'de> SerdeDeserialize<'de> for YearMonth {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>, {
+        D: Deserializer<'de>,
+    {
         deserializer.deserialize_str(YearMonthVisitor)
     }
 }
@@ -416,7 +431,8 @@ impl<'de> Visitor<'de> for YearMonthVisitor {
 
     fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
     where
-        E: de::Error, {
+        E: de::Error,
+    {
         YearMonth::from_str(s).map_err(de::Error::custom)
     }
 }
@@ -469,7 +485,7 @@ impl YearMonth {
         use chrono::Datelike;
         let now = chrono::Utc::now();
         YearMonth {
-            year:  now.year() as u16,
+            year: now.year() as u16,
             month: now.month() as u8,
         }
     }
@@ -493,7 +509,9 @@ impl TryFrom<u64> for YearMonth {
 impl From<YearMonth> for u64 {
     /// Convert expiry (year and month) to unsigned 64-bit integer.
     /// Least significant byte is month, following two bytes are year
-    fn from(v: YearMonth) -> Self { u64::from(v.month) | (u64::from(v.year) << 8) }
+    fn from(v: YearMonth) -> Self {
+        u64::from(v.month) | (u64::from(v.year) << 8)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
@@ -997,11 +1015,15 @@ impl<'de> Visitor<'de> for VerifyKeyVisitor {
 }
 
 impl From<acc_sig_scheme::PublicKey> for VerifyKey {
-    fn from(pk: acc_sig_scheme::PublicKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
+    fn from(pk: acc_sig_scheme::PublicKey) -> Self {
+        VerifyKey::Ed25519VerifyKey(pk)
+    }
 }
 
 impl From<&ed25519::Keypair> for VerifyKey {
-    fn from(kp: &ed25519::Keypair) -> Self { VerifyKey::Ed25519VerifyKey(kp.public) }
+    fn from(kp: &ed25519::Keypair) -> Self {
+        VerifyKey::Ed25519VerifyKey(kp.public)
+    }
 }
 
 /// Compare byte representation.
@@ -1014,11 +1036,15 @@ impl Ord for VerifyKey {
 }
 
 impl PartialOrd for VerifyKey {
-    fn partial_cmp(&self, other: &VerifyKey) -> Option<Ordering> { Some(self.cmp(other)) }
+    fn partial_cmp(&self, other: &VerifyKey) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl PartialEq for VerifyKey {
-    fn eq(&self, other: &VerifyKey) -> bool { self.cmp(other) == Ordering::Equal }
+    fn eq(&self, other: &VerifyKey) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
 }
 
 impl Serial for VerifyKey {
@@ -1224,79 +1250,6 @@ pub struct CredDeploymentInfo<
     pub proofs: CredDeploymentProofs<P, C>,
 }
 
-/// The version of a data structure.
-#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize)]
-pub struct Version {
-    #[serde(rename = "v")]
-    value: u32,
-}
-
-impl Serial for Version {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        let mut buf = Vec::with_capacity(5);
-        let mut v = self.value;
-
-        // Create 7-bit encoding with all MSB set to 1
-        while v > 0 {
-            let byte = (1 << 7) | (v & 0b01111111) as u8;
-            buf.push(byte);
-            v = v >> 7;
-        }
-
-        // Convert to BigEndian, ensure last byte has MSB=0, write to buffer
-        buf[0] = buf[0] & 0b01111111;
-        buf.reverse();
-        out.write_all(&buf).expect("Writing to buffer is safe");
-    }
-}
-
-impl Deserial for Version {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
-        let mut acc: u32 = 0;
-        for _ in 0..5 {
-            let byte = source.read_u8()? as u32;
-            if byte >= 0b10000000 {
-                acc = (acc << 7) | (byte & 0b01111111);
-            } else {
-                acc = (acc << 7) | byte;
-                break;
-            }
-        }
-        Ok(Version { value: acc })
-    }
-}
-
-/// Versioned<T> represents T as a versioned data-structure.
-/// The version is a integer number up to the implementation,
-/// which is serialized using variable integer encoding.
-/// The caller is responsible for ensuringe the data structure `T`
-/// is compatible with the version number.
-#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
-pub struct Versioned<T> {
-    #[serde(flatten)]
-    pub version: Version,
-
-    #[serde(flatten)]
-    pub value: T,
-}
-
-impl<T: Serial> Serial for Versioned<T> {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        out.put(&self.version);
-        out.put(&self.value);
-    }
-}
-
-/// A versioned structure should only be deserialized the caller is certain the
-/// `value` is consistent with the supported version.
-impl<T: Deserial> Deserial for Versioned<T> {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
-        let version: Version = source.get()?;
-        let value: T = source.get()?;
-        Ok(Versioned { version, value })
-    }
-}
-
 /// Context needed to generate pre-identity object.
 /// This context is derived from the public information of the identity
 /// provider, as well as some other global parameters which can be found in the
@@ -1444,7 +1397,7 @@ impl<'de> Visitor<'de> for AccountDataVisitor {
             }
         }
         Ok(AccountData {
-            keys:     out_keys,
+            keys: out_keys,
             existing: existing.unwrap(),
         })
     }
@@ -1504,7 +1457,9 @@ impl Deserial for AccountKeys {
 }
 
 impl AccountKeys {
-    pub fn get(&self, idx: KeyIndex) -> Option<&VerifyKey> { self.keys.get(&idx) }
+    pub fn get(&self, idx: KeyIndex) -> Option<&VerifyKey> {
+        self.keys.get(&idx)
+    }
 }
 
 /// Serialization of relevant types.
@@ -1547,7 +1502,9 @@ impl Deserial for SchemeId {
 impl ArIdentity {
     /// Curve scalars must be big enough to accommodate all 32 bit unsigned
     /// integers.
-    pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)) }
+    pub fn to_scalar<C: Curve>(self) -> C::Scalar {
+        C::scalar_from_u64(u64::from(self.0))
+    }
 }
 
 /// Metadata that we need off-chain for various purposes, but should not go on
@@ -1617,8 +1574,6 @@ pub struct IdObjectUseData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::thread_rng;
-    use rand_core::RngCore;
 
     #[test]
     fn test_yearmonth_serialization() {
@@ -1646,44 +1601,5 @@ mod tests {
         assert_eq!(num, 517122);
         let ym1_parsed = YearMonth::try_from(num).unwrap();
         assert_eq!(ym1, ym1_parsed);
-    }
-
-    #[test]
-    fn test_version_serialization() {
-        let mut current: u32 = 1;
-
-        // Test each bit in u32 is encoded correctly
-        for _ in 0..32 {
-            let actual = Version { value: current };
-            let parsed = serialize_deserialize(&actual).unwrap();
-            assert_eq!(actual, parsed);
-            current = current * 2;
-        }
-
-        // Test some random numbers
-        let mut rng = thread_rng();
-        for _ in 0..1000 {
-            let actual = Version {
-                value: rng.next_u32(),
-            };
-            let mut v: Vec<u8> = Vec::new();
-            actual.serial(&mut v);
-            print!("Actual: {}", actual.value);
-            print!("  Encoding: ");
-            for b in v {
-                print!("{:02x?}", b);
-            }
-            println!();
-
-            let parsed = serialize_deserialize(&actual).unwrap();
-            assert_eq!(actual, parsed);
-        }
-
-        // Fixed test vector
-        let test = Version { value: 1700794014 };
-        let actual: Vec<u8> = vec![0x86, 0xab, 0x80, 0x9d, 0x1e];
-        let mut buffer: Vec<u8> = Vec::new();
-        test.serial(&mut buffer);
-        assert_eq!(buffer, actual);
     }
 }
