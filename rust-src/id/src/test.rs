@@ -303,7 +303,7 @@ pub fn test_pipeline() {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen_test]
-pub fn run_pipeline_wasm() {}
+pub fn run_pipeline_wasm() { test_pipeline(); }
 
 #[test]
 pub fn run_pipeline() { test_pipeline(); }
