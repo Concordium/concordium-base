@@ -21,6 +21,21 @@ pub enum Reason {
     IllegalAttributeRequirements,
 }
 
+impl std::fmt::Display for Reason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Reason::*;
+        match *self {
+            FailedToVerifyKnowledgeOfIdCredSec => {
+                write!(f, "Cannot verify knowledge of idCredSec.")
+            }
+            FailedToVerifyIdCredSecEquality => write!(f, "Cannot verify consistency of idCredSec."),
+            FailedToVerifyPrfData => write!(f, "Cannot verify consistency of PRF data."),
+            WrongArParameters => write!(f, "Inconsistent anonymity revocation parameters."),
+            IllegalAttributeRequirements => write!(f, "Illegal attributes."),
+        }
+    }
+}
+
 fn check_ar_parameters<C: Curve>(
     _choice_ar_parameters: &(Vec<ArInfo<C>>, Threshold),
     _ip_ar_info: &[ArInfo<C>],
@@ -28,16 +43,12 @@ fn check_ar_parameters<C: Curve>(
     // some business logic here
     true
 }
-pub fn verify_credentials<
-    P: Pairing,
-    AttributeType: Attribute<P::ScalarField>,
-    C: Curve<Scalar = P::ScalarField>,
->(
+
+/// Validate the proofs in an identity object request.
+pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     pre_id_obj: &PreIdentityObject<P, C>,
     ip_info: &IpInfo<P, C>,
-    alist: &AttributeList<C::Scalar, AttributeType>,
-    ip_secret_key: &ps_sig::SecretKey<P>,
-) -> Result<ps_sig::Signature<P>, Reason> {
+) -> Result<(), Reason> {
     let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.ys[0], ip_info.ip_verify_key.g);
     let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.ys[1], ip_info.ip_verify_key.g);
 
@@ -96,6 +107,20 @@ pub fn verify_credentials<
     if !b_2 {
         return Err(Reason::FailedToVerifyPrfData);
     }
+    Ok(())
+}
+
+pub fn sign_identity_object<
+    P: Pairing,
+    AttributeType: Attribute<P::ScalarField>,
+    C: Curve<Scalar = P::ScalarField>,
+>(
+    pre_id_obj: &PreIdentityObject<P, C>,
+    ip_info: &IpInfo<P, C>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
+    ip_secret_key: &ps_sig::SecretKey<P>,
+) -> Result<ps_sig::Signature<P>, Reason> {
+    let choice_ar_handles = pre_id_obj.choice_ar_parameters.ar_identities.clone();
     let message: ps_sig::UnknownMessage<P> = compute_message(
         &pre_id_obj.cmm_prf,
         &pre_id_obj.cmm_sc,
@@ -106,6 +131,22 @@ pub fn verify_credentials<
     )?;
     let mut csprng = thread_rng();
     Ok(ip_secret_key.sign_unknown_message(&message, &mut csprng))
+}
+
+/// Validate the request and sign the identity object.
+pub fn verify_credentials<
+    P: Pairing,
+    AttributeType: Attribute<P::ScalarField>,
+    C: Curve<Scalar = P::ScalarField>,
+>(
+    pre_id_obj: &PreIdentityObject<P, C>,
+    ip_info: &IpInfo<P, C>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
+    ip_secret_key: &ps_sig::SecretKey<P>,
+) -> Result<ps_sig::Signature<P>, Reason> {
+    validate_request(pre_id_obj, ip_info)?;
+
+    sign_identity_object(pre_id_obj, ip_info, alist, ip_secret_key)
 }
 
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
