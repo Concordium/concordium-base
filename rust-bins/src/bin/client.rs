@@ -497,6 +497,8 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         }
     };
 
+    let versioned_cdi = Versioned::new(VERSION_CREDENTIAL, cdi);
+
     // Double check that the generated CDI is going to be successfully validated.
     // let checked = verify_cdi(&global_ctx, &ip_info, &cdi);
     // if let Err(e) = checked {
@@ -511,18 +513,18 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // accepted by the simple-client for sending transactions.
 
     if let Some(json_file) = matches.value_of("out") {
-        match write_json_to_file(json_file, &cdi) {
+        match write_json_to_file(json_file, &versioned_cdi) {
             Ok(_) => println!("Wrote transaction payload to JSON file."),
             Err(e) => {
                 eprintln!("Could not JSON write to file because {}", e);
-                output_json(&cdi);
+                output_json(&versioned_cdi);
             }
         }
     }
     if let Some(bin_file) = matches.value_of("bin-out") {
         match File::create(&bin_file) {
             // This is a bit stupid, we should write directly to the sink.
-            Ok(mut file) => match file.write_all(&to_bytes(&cdi)) {
+            Ok(mut file) => match file.write_all(&to_bytes(&versioned_cdi)) {
                 Ok(_) => println!("Wrote binary data to provided file."),
                 Err(e) => {
                     eprintln!("Could not write binary to file because {}", e);
