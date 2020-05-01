@@ -25,7 +25,9 @@ impl std::fmt::Display for Reason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Reason::*;
         match *self {
-            FailedToVerifyKnowledgeOfIdCredSec => write!(f, "Cannot verify knowledge of idCredSec."),
+            FailedToVerifyKnowledgeOfIdCredSec => {
+                write!(f, "Cannot verify knowledge of idCredSec.")
+            }
             FailedToVerifyIdCredSecEquality => write!(f, "Cannot verify consistency of idCredSec."),
             FailedToVerifyPrfData => write!(f, "Cannot verify consistency of PRF data."),
             WrongArParameters => write!(f, "Inconsistent anonymity revocation parameters."),
@@ -33,7 +35,6 @@ impl std::fmt::Display for Reason {
         }
     }
 }
-
 
 fn check_ar_parameters<C: Curve>(
     _choice_ar_parameters: &(Vec<ArInfo<C>>, Threshold),
