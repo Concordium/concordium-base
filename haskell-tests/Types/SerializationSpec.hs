@@ -18,9 +18,6 @@ import Data.Aeson as AE
 import Data.ByteString.Lazy as BS    
 import Data.Int
 
-import Types.CoreAllGen(genCAddress)
-
-
 groupIntoSize :: Int64 -> [Char]
 groupIntoSize s =
   let kb = s `div` 1000
