@@ -1541,6 +1541,24 @@ pub struct IdObjectUseData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub randomness: SigRetrievalRandomness<P>,
 }
 
+/// Data that needs to be stored by the identity provider to support anonymity
+/// revocation.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct AnonymityRevocationRecord<C: Curve> {
+    /// The number that identifies the identity object to the identity provider.
+    #[serde(
+        rename = "idCredPub",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub id_cred_pub: C,
+    /// Data that contains encryptions of the prf key that supports additional
+    /// anonymity revocation.
+    #[serde(rename = "arData")]
+    pub ar_data: Vec<IpArData<C>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
