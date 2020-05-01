@@ -44,6 +44,13 @@ stages:
     - ( cd rust-src && cargo clippy --color=always --all )
     - ( cd rust-bins && cargo clippy --color=always --all )
 
+"cargo:build-bench":
+  extends: .generic-lint
+  stage: test
+  cache: {}
+  script:
+    - ( cd rust-src && cargo bench --color=always --no-run)
+
 "stack:test":
   extends: .generic-test
   stage: test

@@ -1,3 +1,4 @@
+use crypto_common::*;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -6,6 +7,7 @@ use id::{
     account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*,
     secret_sharing::Threshold, types::*,
 };
+use std::io::Cursor;
 
 use pairing::bls12_381::{Bls12, G1};
 use ps_sig;
@@ -28,7 +30,7 @@ type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, Examp
 fn bench_parts(c: &mut Criterion) {
     let mut csprng = thread_rng();
 
-    let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(10, &mut csprng);
+    let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(20, &mut csprng);
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
     let secret = ExampleCurve::generate_scalar(&mut csprng);
@@ -87,8 +89,8 @@ fn bench_parts(c: &mut Criterion) {
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
-    let valid_to = YearMonth::new(2021, 1);
-    let created_at = YearMonth::new(2021, 1);
+    let valid_to = YearMonth::new(2021, 1).unwrap();
+    let created_at = YearMonth::new(2021, 1).unwrap();
     let alist = {
         let mut alist = BTreeMap::new();
         alist.insert(AttributeTag::from(0u8), AttributeKind::from(55));
@@ -103,6 +105,7 @@ fn bench_parts(c: &mut Criterion) {
     let alist = ExampleAttributeList {
         valid_to,
         created_at,
+        max_accounts: 255,
         alist,
         _phantom: Default::default(),
     };
@@ -114,7 +117,12 @@ fn bench_parts(c: &mut Criterion) {
     .expect("The constructed ARs are valid.");
 
     let (pio, randomness) = generate_pio(&context, &aci);
-    let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
+    let pio_ser = to_bytes(&pio);
+    let ip_info_ser = to_bytes(&ip_info);
+    let pio_des = from_bytes(&mut Cursor::new(&pio_ser)).unwrap();
+    let ip_info_des = from_bytes(&mut Cursor::new(&ip_info_ser)).unwrap();
+    let sig_ok =
+        verify_credentials::<_, _, ExampleCurve>(&pio_des, &ip_info_des, &alist, &ip_secret_key);
 
     let ip_sig = sig_ok.unwrap();
 
