@@ -180,21 +180,42 @@ instance S.Serialize Address where
   put (AddressContract cnt) = P.putWord8 1 <> S.put cnt
 
 
--- | Time in seconds since the epoch
-type Timestamp = Word64
--- | Time duration in seconds
-type Duration = Word64
+-- | Time in milliseconds since the epoch
+newtype Timestamp = Timestamp { tsMillis :: Word64 }
+  deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON) via Word64
+-- | Time duration in milliseconds
+newtype Duration = Duration { durationMillis :: Word64 }
+  deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON) via Word64
 
--- | Expiry time of a transaction
-newtype TransactionExpiryTime = TransactionExpiryTime { expiry :: Timestamp }
-    deriving (Show, Read, Eq, Num, Ord, FromJSON, ToJSON) via Timestamp
+-- | Convert a 'Timestamp' to a 'UTCTime'
+timestampToUTCTime :: Timestamp -> UTCTime
+timestampToUTCTime ts = posixSecondsToUTCTime $ fromIntegral (tsMillis ts) / 1000
+
+-- | Covert a 'UTCTime' to a 'Timestamp'.
+-- This rounds down to the nearest millisecond.
+utcTimeToTimestamp :: UTCTime -> Timestamp
+utcTimeToTimestamp = Timestamp . truncate . (*1000) . utcTimeToPOSIXSeconds
+
+-- | Convert a 'Timestamp' to seconds since the epoch, rounding down
+timestampToSeconds :: Timestamp -> Word64
+timestampToSeconds ts = tsMillis ts `div` 1000
+
+durationToNominalDiffTime :: Duration -> NominalDiffTime
+durationToNominalDiffTime dur = fromIntegral (durationMillis dur) / 1000
+
+addDuration :: Timestamp -> Duration -> Timestamp
+addDuration (Timestamp ts) (Duration d) = Timestamp (ts + d)
+
+-- | Expiry time of a transaction in seconds since the epoch
+newtype TransactionExpiryTime = TransactionExpiryTime { expiry :: Word64 }
+    deriving (Show, Read, Eq, Num, Ord, FromJSON, ToJSON) via Word64
 
 instance S.Serialize TransactionExpiryTime where
   put = P.putWord64be . expiry
   get = TransactionExpiryTime <$> G.getWord64be
 
 transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
-transactionExpired = (<) . expiry
+transactionExpired (TransactionExpiryTime x) (Timestamp t) = 1000*x < t
 
 -- |Check if whether the given timestamp is no greater than the end of the day
 -- of the given year and month.
@@ -202,7 +223,7 @@ isTimestampBefore :: Timestamp -> YearMonth -> Bool
 isTimestampBefore ts ym =
     utcTs < utcYearMonthExpiryTs
   where
-    utcTs = posixSecondsToUTCTime (fromIntegral ts)
+    utcTs = timestampToUTCTime ts
     utcYearMonthExpiryTs = UTCTime expiryDay 0
       where
         year = toInteger (ymYear ym)
