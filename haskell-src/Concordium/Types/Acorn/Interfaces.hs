@@ -54,6 +54,9 @@ data DataTypeInterface annot = DataTypeInterface
     -- | The constructors' visibility (for a module interface: 'Core.Public' if
     -- the constructors are exported)
   , dtiCtorsVis :: !Core.Visibility
+    -- | Whether this datatype is storable, i.e., whether it is a normal declared datatype and each
+    -- type occurring in its constructors is a storable type.
+  , dtiIsStorable :: Bool
   }
   deriving(Eq, Generic)
 
@@ -657,12 +660,14 @@ instance S.Serialize (DataTypeInterface annot) where
   put (DataTypeInterface{..}) =
     S.put dtiParams <>
     putHashMap dtiCtors <>
-    Core.putVisibility dtiCtorsVis
+    Core.putVisibility dtiCtorsVis <>
+    S.put dtiIsStorable
 
   get = do
     dtiParams <- S.get
     dtiCtors <- getHashMap
     dtiCtorsVis <- Core.getVisibility
+    dtiIsStorable <- S.get
     return DataTypeInterface{..}
 
 instance S.Serialize (Interface annot) where
