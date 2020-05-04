@@ -299,9 +299,8 @@ data Account = Account {
   ,_accountEncryptedAmount :: ![EncryptedAmount]
   -- |Encryption key with which the encrypted amount on this account must be
   -- encrypted. Other accounts use it to send encrypted amounts to this account,
-  -- if the key exists. Accounts start with no encryption key, and once the key
-  -- is chosen it cannot be changed.
-  ,_accountEncryptionKey :: !(Maybe AccountEncryptionKey)
+  -- if the key exists.
+  ,_accountEncryptionKey :: !AccountEncryptionKey
   -- |The key used to verify transaction signatures, it records the signature scheme used as well.
   ,_accountVerificationKeys :: !AccountKeys
   -- |For now the only operation we need with a credential is to check whether
@@ -348,12 +347,12 @@ instance HashableTo Hash.Hash Account where
   getHash = Hash.hash . S.runPut . S.put
 
 -- |Create an empty account with the given public key.
-newAccount :: AccountKeys -> AccountAddress -> Account
-newAccount _accountVerificationKeys _accountAddress = Account {
+newAccount :: AccountKeys -> AccountAddress -> CredentialRegistrationID -> Account
+newAccount _accountVerificationKeys _accountAddress regId = Account {
         _accountNonce = minNonce,
         _accountAmount = 0,
         _accountEncryptedAmount = [],
-        _accountEncryptionKey = Nothing,
+        _accountEncryptionKey = makeEncryptionKey regId,
         _accountCredentials = Queue.empty,
         _accountStakeDelegate = Nothing,
         _accountInstances = Set.empty,
