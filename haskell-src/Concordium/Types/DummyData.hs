@@ -17,7 +17,8 @@ import Concordium.Crypto.VRF as VRF
 -- late expiry date, but is otherwise not well-formed.
 {-# WARNING mkAccountNoCredentials "Do not use in production." #-}
 mkAccountNoCredentials :: SigScheme.VerifyKey -> AccountAddress -> Amount -> Account
-mkAccountNoCredentials key addr amnt = newAccount (makeSingletonAC key) addr & (accountAmount .~ amnt)
+mkAccountNoCredentials key addr amnt =
+  newAccount (makeSingletonAC key) addr (dummyRegId addr) & (accountAmount .~ amnt)
 
 -- This generates an account with a single credential and single keypair, which has sufficiently
 -- late expiry date, but is otherwise not well-formed.
@@ -34,8 +35,9 @@ makeFakeBakerAccount bid =
           _accountCredentials = credentialList}
   where
     vfKey = SigScheme.correspondingVerifyKey kp
-    credentialList = Queue.singleton dummyMaxValidTo (dummyCredential address dummyMaxValidTo dummyCreatedAt)
-    acct = newAccount (makeSingletonAC vfKey) address
+    credential = dummyCredential address dummyMaxValidTo dummyCreatedAt
+    credentialList = Queue.singleton dummyMaxValidTo credential
+    acct = newAccount (makeSingletonAC vfKey) address (cdvRegId credential)
     -- NB the negation makes it not conflict with other fake accounts we create elsewhere.
     seed = - (fromIntegral bid) - 1
     (address, seed') = randomAccountAddress (mkStdGen seed)
