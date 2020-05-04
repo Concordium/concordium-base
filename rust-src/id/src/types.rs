@@ -1098,7 +1098,7 @@ impl<'de> Visitor<'de> for CredentialAccountVisitor {
         let mut keys = None;
         let mut threshold = None;
         while keys.is_none() || threshold.is_none() {
-            if let Some(k) = map.next_key::<&str>()? {
+            if let Some(k) = map.next_key::<String>()? {
                 if k == "keys" {
                     if keys.is_none() {
                         keys = Some(map.next_value()?);
