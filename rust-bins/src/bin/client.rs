@@ -259,7 +259,7 @@ If not present a fresh key-pair will be generated.",
 
 /// Revoke the anonymity of the credential.
 fn handle_revoke_anonymity(matches: &ArgMatches) {
-    let credential: CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute> =
+    let versioned_credential: Versioned<CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute>> =
         match matches.value_of("credential").map(read_json_from_file) {
             Some(Ok(r)) => r,
             Some(Err(x)) => {
@@ -268,6 +268,7 @@ fn handle_revoke_anonymity(matches: &ArgMatches) {
             }
             None => panic!("Should not happen since the argument is mandatory."),
         };
+    let credential = versioned_credential.value();
     let revocation_threshold = credential.values.threshold;
 
     let ar_data = credential.values.ar_data;

@@ -74,7 +74,7 @@ impl<T> Versioned<T> {
 
     pub fn version(&self) -> Version { self.version }
 
-    pub fn value(&self) -> &T { &self.value }
+    pub fn value(self) -> T { self.value }
 }
 
 impl<T: Serial> Serial for Versioned<T> {
