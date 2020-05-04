@@ -76,7 +76,6 @@ genPayload = oneof [genDeployModule,
                     genUpdate,
                     genTransfer,
 --                  genCredential,
-                    genEncryption,
                     genAddBaker,
                     genRemoveBaker,
                     genUpdateBakerAccount,
@@ -106,11 +105,6 @@ genPayload = oneof [genDeployModule,
           a <- oneof [AddressContract <$> genCAddress, AddressAccount <$> genAddress]
           amnt <- Amount <$> arbitrary
           return $ Transfer a amnt
-
-        -- NB: if the encryption key is going to be fixed length this needs to change
-        genEncryption = do
-          l <- choose (30,50)
-          DeployEncryptionKey . EncKeyAcc . BSS.pack <$> vector l
 
         genAddBaker = do
           abElectionVerifyKey <- VRF.publicKey <$> arbitrary
