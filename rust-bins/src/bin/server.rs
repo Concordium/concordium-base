@@ -8,6 +8,8 @@ use std::collections::btree_map::BTreeMap;
 use client_server_helpers::*;
 use curve_arithmetic::Curve;
 
+use crypto_common::*;
+
 use rand::*;
 use serde_json::{from_value as from_json, json, to_string_pretty, Value};
 
@@ -245,8 +247,10 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
         Right(addr) => addr,
     };
 
+    let versioned_cdi = Versioned::new(VERSION_CREDENTIAL, cdi);
+
     let response = json!({
-        "credential": cdi,
+        "credential": versioned_cdi,
         "accountData": acc_data,
         "accountAddress": address,
     });

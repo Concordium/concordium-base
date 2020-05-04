@@ -8,6 +8,8 @@ use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Thresh
 use pairing::bls12_381::{Bls12, G1};
 use std::collections::btree_map::BTreeMap;
 
+use crypto_common::*;
+
 use rand::{rngs::ThreadRng, *};
 
 use pedersen_scheme::Value as PedersenValue;
@@ -223,6 +225,8 @@ fn main() {
 
         let address = AccountAddress::new(&cdi.values.reg_id);
 
+        let versioned_cdi = Versioned::new(VERSION_CREDENTIAL, cdi);
+
         let acc_keys = AccountKeys {
             keys:      acc_data
                 .keys
@@ -236,10 +240,10 @@ fn main() {
         let account_data_json = json!({
             "address": address,
             "accountData": acc_data,
-            "credential": cdi,
+            "credential": versioned_cdi,
             "aci": id_object_use_data.aci,
         });
-        (account_data_json, cdi, acc_keys, address)
+        (account_data_json, versioned_cdi, acc_keys, address)
     };
 
     if let Some(matches) = matches.subcommand_matches("create-bakers") {
