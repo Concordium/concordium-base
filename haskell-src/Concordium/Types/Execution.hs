@@ -108,11 +108,6 @@ data Payload =
       -- |Amount to transfer.
       tAmount :: !Amount
       }
-  -- |Deploy an encryption key to an existing account.
-  | DeployEncryptionKey {
-      -- |The encryption key to deploy.
-      dekKey :: !IDTypes.AccountEncryptionKey
-      }
   -- |Add a new baker with fresh id.
   | AddBaker {
       -- NOTE: The baker id should probably be generated automatically.
@@ -217,11 +212,8 @@ instance S.Serialize Payload where
     P.putWord8 3 <>
     S.put tToAddress <>
     S.put tAmount
-  put DeployEncryptionKey{..} =
-    P.putWord8 4 <>
-    S.put dekKey
   put AddBaker{..} =
-    P.putWord8 5 <>
+    P.putWord8 4 <>
     S.put abElectionVerifyKey <>
     S.put abSignatureVerifyKey <>
     S.put abAggregationVerifyKey <>
@@ -231,25 +223,25 @@ instance S.Serialize Payload where
     S.put abProofAccount <>
     S.put abProofAggregation
   put RemoveBaker{..} =
-    P.putWord8 6 <>
+    P.putWord8 5 <>
     S.put rbId
   put UpdateBakerAccount{..} =
-    P.putWord8 7 <>
+    P.putWord8 6 <>
     S.put ubaId <>
     S.put ubaAddress <>
     S.put ubaProof
   put UpdateBakerSignKey{..} =
-    P.putWord8 8 <>
+    P.putWord8 7 <>
     S.put ubsId <>
     S.put ubsKey <>
     S.put ubsProof
   put DelegateStake{..} =
-    P.putWord8 9 <>
+    P.putWord8 8 <>
     S.put dsID
   put UndelegateStake =
-    P.putWord8 10
+    P.putWord8 9
   put UpdateElectionDifficulty{..} =
-    P.putWord8 11 <>
+    P.putWord8 10 <>
     S.put uedDifficulty
 
   get =
@@ -273,9 +265,6 @@ instance S.Serialize Payload where
               tAmount <- S.get
               return Transfer{..}
             4 -> do
-              dekKey <- S.get
-              return DeployEncryptionKey{..}
-            5 -> do
               abElectionVerifyKey <- S.get
               abSignatureVerifyKey <- S.get
               abAggregationVerifyKey <- S.get
@@ -285,22 +274,22 @@ instance S.Serialize Payload where
               abProofAccount <- S.get
               abProofAggregation <- S.get
               return AddBaker{..}
-            6 -> do
+            5 -> do
               rbId <- S.get
               return RemoveBaker{..}
-            7 -> do
+            6 -> do
               ubaId <- S.get
               ubaAddress <- S.get
               ubaProof <- S.get
               return UpdateBakerAccount{..}
-            8 -> do
+            7 -> do
               ubsId <- S.get
               ubsKey <- S.get
               ubsProof <- S.get
               return UpdateBakerSignKey{..}
-            9 -> DelegateStake <$> S.get
-            10 -> return UndelegateStake
-            11 -> do
+            8 -> DelegateStake <$> S.get
+            9 -> return UndelegateStake
+            10 -> do
               uedDifficulty <- S.get
               unless (isValidElectionDifficulty uedDifficulty) $
                 fail $ "Illegal election difficulty: " ++ show uedDifficulty
