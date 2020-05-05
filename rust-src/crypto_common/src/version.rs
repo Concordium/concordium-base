@@ -9,11 +9,15 @@ pub struct Version(pub u32);
 
 impl Version {
     #[inline]
-    pub fn value(&self) -> u32 { self.0 }
+    pub fn value(&self) -> u32 {
+        self.0
+    }
 }
 
 impl From<Version> for u32 {
-    fn from(val: Version) -> u32 { val.0 }
+    fn from(val: Version) -> u32 {
+        val.0
+    }
 }
 
 impl Serial for Version {
@@ -64,17 +68,21 @@ impl Deserial for Version {
 pub struct Versioned<T> {
     #[serde(rename = "v")]
     pub version: Version,
-
-    #[serde(flatten)]
     pub value: T,
 }
 
 impl<T> Versioned<T> {
-    pub fn new(version: Version, value: T) -> Versioned<T> { Versioned { version, value } }
+    pub fn new(version: Version, value: T) -> Versioned<T> {
+        Versioned { version, value }
+    }
 
-    pub fn version(&self) -> Version { self.version }
+    pub fn version(&self) -> Version {
+        self.version
+    }
 
-    pub fn value(self) -> T { self.value }
+    pub fn value(self) -> T {
+        self.value
+    }
 }
 
 impl<T: Serial> Serial for Versioned<T> {
@@ -157,7 +165,7 @@ mod tests {
         let versioned = Versioned::new(Version(1337), ex);
 
         let json = serde_json::to_string(&versioned).unwrap();
-        let actual_json = "{\"v\":1337,\"n\":42,\"s\":\"Test\"}";
+        let actual_json = "{\"v\":1337,\"value\":{\"n\":42,\"s\":\"Test\"}}";
         assert_eq!(json, actual_json);
     }
 }
