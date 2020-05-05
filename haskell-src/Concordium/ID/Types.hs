@@ -183,11 +183,11 @@ newtype AccountDecryptionKey = DecKeyAcc ShortByteString
     deriving Serialize via Short65K
 
 -- encryption key for accounts (Elgamal?)
-newtype AccountEncryptionKey = EncKeyAcc ShortByteString
-    deriving (Eq)
-    deriving Show via Short65K
-    deriving Serialize via Short65K
-    deriving(FromJSON, ToJSON) via ByteStringHex
+newtype AccountEncryptionKey = AccountEncryptionKey CredentialRegistrationID
+    deriving (Eq, Show, Serialize, FromJSON, ToJSON) via CredentialRegistrationID
+
+makeEncryptionKey :: CredentialRegistrationID -> AccountEncryptionKey
+makeEncryptionKey = AccountEncryptionKey
 
 data RegIdSize
 
