@@ -3,7 +3,6 @@
 module Concordium.ID.Types where
 
 import Data.Word
-import Data.Bits
 import Data.Data(Data, Typeable)
 import Data.ByteString(ByteString)
 import Data.ByteString.Short(ShortByteString)

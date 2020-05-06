@@ -7,6 +7,7 @@ import Data.Bits
 import Data.Data(Data, Typeable)
 import Data.ByteString(ByteString)
 import Data.ByteString.Short(ShortByteString)
+import Data.HashMap.Strict(member)
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
@@ -81,13 +82,7 @@ instance (ToJSON a) => ToJSON (Versioned a) where
     ]
 
 -- instance (FromJSON a) => FromJSON (Versioned a) where
---   parseJSON = withObject "Versioned object" $ \obj -> do
+--   parseJSON = withObject "Versioned" $ \obj -> do
 --      v <- obj .: "v"
 --      value <- obj .: "value"
 --      return Versioned{..}
-
--- instance (FromJSON a) => FromJSON (Versioned a) where
---   parseJSON v = (withObject "Versioned") $ \obj -> do
---     vVersion <- obj .: "v"
---     vValue <- obj .: "value"
---     return Versioned{..}
