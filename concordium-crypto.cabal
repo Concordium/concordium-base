@@ -32,6 +32,7 @@ Library
                    Concordium.Crypto.VRF
                    Data.FixedByteString
                    Data.Base58Encoding
+                   Concordium.Common.Version
                    Concordium.ID.Types
                    Concordium.ID.Account
                    Concordium.ID.Parameters
@@ -100,6 +101,7 @@ Test-Suite tests
 
   other-modules:
    ConcordiumTests.Data.Base58Encoding
+   ConcordiumTests.Common.Version
    ConcordiumTests.Crypto.SHA256
    ConcordiumTests.Crypto.Ed25519Signature
    ConcordiumTests.Crypto.VRF

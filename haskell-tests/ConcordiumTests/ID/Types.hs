@@ -31,12 +31,6 @@ genAddress :: Gen AccountAddress
 genAddress = do
   AccountAddress . FBS.pack <$> vector accountAddressSize
 
-testVersionBytes :: Property
-testVersionBytes = S.encode (Version 1700794014) === (BS.pack [0x86, 0xab, 0x80, 0x9d, 0x1e])
-
-testVersionJSON :: Property
-testVersionJSON = 1 === 1
-
 -- Check that serializations in Haskell and rust, json and binary are compatible.
 checkCDICompatibility :: FilePath -> FilePath -> Expectation
 checkCDICompatibility filename referenceFile = do
@@ -52,5 +46,3 @@ tests = describe "Concordium.ID" $ do
   specify "account address JSON" $ withMaxSuccess 1000 testJSON
   specify "account address from bytes" $ withMaxSuccess 1000 testFromBytes
   specify "JSON/binary serialization check" $ checkCDICompatibility "testdata/cdi.json" "testdata/cdi.bin"
-  specify "versioning to and from bytes" $ withMaxSuccess 1000 testVersionBytes
-  specify "versioning to and from json" $ withMaxSuccess 1000 testVersionJSON
