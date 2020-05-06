@@ -283,54 +283,6 @@ instance Serialize YearMonth where
     unless (ymMonth >= 1 && ymMonth <= 12) $ fail "Month must be between 1 and 12 inclusive."
     return YearMonth{..}
 
--- |Data structure version
-newtype Version  = Version Word32
-    deriving (Eq, Ord, Hashable)
-    deriving Show via Word32
-    deriving (FromJSON, ToJSON) via Word32
-
--- Needs correct encoding of 7-bit varint
-instance Serialize Version where
-  put (Version v) = S.putWord32be v
-  get = Version <$> S.getWord32be
-  -- put (Version 0) = S.putWord8 0
-  -- put (Version v) = S.put (reverse (encode7 v))
-  --   where
-  --     encode7 :: Word32 -> [Word8]
-  --     encode7 value = writeOneByte value []
-  --     getSevenBitsWithMsbOne :: Word32 -> Word8
-  --     getSevenBitsWithMsbOne n = if n >= 127 then (fromIntegral n) else (fromIntegral n) + 128
-  --     writeOneByte :: Word32 -> [Word8] -> [Word8]
-  --     writeOneByte value acc = if value > 0
-  --       then writeOneByte (shiftR value 7) (getSevenBitsWithMsbOne value : acc)
-  --       else acc
-  
--- |Versioned data structure
-data Versioned a = Versioned {
-  -- |Version of the data
-  vVersion :: Version,
-  -- |The data structure
-  vValue :: a
-} deriving(Eq, Show)
-
-instance (Serialize a) => Serialize (Versioned a) where
-  put Versioned {..} =
-    put vVersion <> put vValue
-  get = Versioned <$> get <*> get
-
-instance (ToJSON a) => ToJSON (Versioned a) where
-  toJSON (Versioned {..}) = object [
-    "v" .= vVersion,
-    "value" .= vValue
-    ]
-
--- instance (FromJSON a) => FromJSON (Versioned a) where
---   parseJSON v = withObject "Versioned" $ \obj -> do
---     vVersion <- obj .: "v"
---     vValue <- obj .: "value"
---     return Versioned{..}
-
-
 newtype AttributeTag = AttributeTag Word8
  deriving (Eq, Show, Serialize, Ord, Enum, Num) via Word8
 
