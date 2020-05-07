@@ -9,15 +9,11 @@ pub struct Version(pub u32);
 
 impl Version {
     #[inline]
-    pub fn value(self) -> u32 {
-        self.0
-    }
+    pub fn value(self) -> u32 { self.0 }
 }
 
 impl From<Version> for u32 {
-    fn from(val: Version) -> u32 {
-        val.0
-    }
+    fn from(val: Version) -> u32 { val.0 }
 }
 
 impl Serial for Version {
@@ -72,17 +68,11 @@ pub struct Versioned<T> {
 }
 
 impl<T> Versioned<T> {
-    pub fn new(version: Version, value: T) -> Versioned<T> {
-        Versioned { version, value }
-    }
+    pub fn new(version: Version, value: T) -> Versioned<T> { Versioned { version, value } }
 
-    pub fn version(&self) -> Version {
-        self.version
-    }
+    pub fn version(&self) -> Version { self.version }
 
-    pub fn value(self) -> T {
-        self.value
-    }
+    pub fn value(self) -> T { self.value }
 }
 
 impl<T: Serial> Serial for Versioned<T> {
