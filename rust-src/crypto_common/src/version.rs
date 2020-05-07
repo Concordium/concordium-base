@@ -9,7 +9,7 @@ pub struct Version(pub u32);
 
 impl Version {
     #[inline]
-    pub fn value(&self) -> u32 {
+    pub fn value(self) -> u32 {
         self.0
     }
 }
