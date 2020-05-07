@@ -81,8 +81,8 @@ instance (ToJSON a) => ToJSON (Versioned a) where
     "value" .= vValue
     ]
 
--- instance (FromJSON a) => FromJSON (Versioned a) where
---   parseJSON = withObject "Versioned" $ \obj -> do
---      v <- obj .: "v"
---      value <- obj .: "value"
---      return Versioned{..}
+instance FromJSON a => FromJSON (Versioned a) where
+  parseJSON = withObject "Versioned" $ \obj -> do
+    vVersion <- obj .: "v"
+    vValue <- obj .: "value"
+    return Versioned {..}

@@ -32,7 +32,16 @@ testVersionToJSON = json === "{\"value\":2,\"v\":4}"
     version = Version 4
     value = ExampleType $ fromIntegral 2
 
+testVersionFromJSON :: Property
+testVersionFromJSON = object === Just realversioned
+  where
+    object = decode "{\"value\":2,\"v\":4}"
+    realversioned = Versioned version value
+    version = Version 4
+    value = ExampleType $ fromIntegral 2
+
 tests :: Spec
 tests = describe "Concordium.Common" $ do
   specify "versioning to bytes" $ testVersionToBytes
   specify "versioning to json" $ testVersionToJSON
+  specify "versioning from json" $ testVersionFromJSON
