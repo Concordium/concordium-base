@@ -184,7 +184,11 @@ instance S.Serialize Address where
 
 -- | Time in milliseconds since the epoch
 newtype Timestamp = Timestamp { tsMillis :: Word64 }
-  deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON, PersistField, PersistFieldSql) via Word64
+  deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON, PersistField) via Word64
+
+instance PersistFieldSql Timestamp where
+    sqlType _ = SqlInt64
+
 -- | Time duration in milliseconds
 newtype Duration = Duration { durationMillis :: Word64 }
   deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON) via Word64
@@ -399,7 +403,11 @@ genesisSlot = 0
 
 type EpochLength = Slot
 
-newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, Hashable, PersistField, PersistFieldSql) via Word64
+newtype BlockHeight = BlockHeight {theBlockHeight :: Word64} deriving (Eq, Ord, Num, Real, Enum, Integral, Show, Hashable, PersistField) via Word64
+
+instance PersistFieldSql BlockHeight where
+  sqlType _ = SqlInt64
+
 
 instance S.Serialize BlockHeight where
   put = S.putWord64be . theBlockHeight
