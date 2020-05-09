@@ -408,8 +408,15 @@ data AccountNonFinalizedTransactions = AccountNonFinalizedTransactions {
 } deriving (Eq)
 makeLenses ''AccountNonFinalizedTransactions
 
+-- |Empty (no pending transactions) account non-finalized table starting at the
+-- minimal nonce.
 emptyANFT :: AccountNonFinalizedTransactions
-emptyANFT = AccountNonFinalizedTransactions Map.empty minNonce
+emptyANFT = emptyANFTWithNonce minNonce
+
+-- |An account non-finalized table with no pending transactions and given
+-- starting nonce.
+emptyANFTWithNonce :: Nonce -> AccountNonFinalizedTransactions
+emptyANFTWithNonce n = AccountNonFinalizedTransactions Map.empty n
 
 -- |Result of a transaction is block dependent.
 data TransactionStatus =
