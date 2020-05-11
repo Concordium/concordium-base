@@ -388,10 +388,10 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // from the above and the pre-identity object we make a policy
     let mut revealed_attributes: BTreeMap<AttributeTag, ExampleAttribute> = BTreeMap::new();
     for idx in atts {
-        let idx = AttributeTag(idx as u8);
-        match alist.get(&idx) {
+        let tag = alist.keys().collect::<Vec<_>>()[idx];
+        match alist.get(tag) {
             Some(elem) => {
-                if revealed_attributes.insert(idx, elem.clone()).is_some() {
+                if revealed_attributes.insert(*tag, elem.clone()).is_some() {
                     eprintln!("Duplicate attribute idx.");
                     return;
                 }
