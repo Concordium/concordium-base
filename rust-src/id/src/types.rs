@@ -1241,7 +1241,7 @@ pub struct Context<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub choice_ar_parameters: (Vec<ArInfo<C>>, Threshold),
 }
 
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct GlobalContext<C: Curve> {
     /// A shared commitment key known to the chain and the account holder (and
