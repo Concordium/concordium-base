@@ -1,13 +1,13 @@
 {
     "ipIdentity": 0,
-    "name": "Aleš",
     "attributes": {
         "chosenAttributes": {
-            "CountryOfNationality": "17",
-            "CountryOfResidence": "16",
-            "CreationTime": "11"
+            "countryOfResidence": "DK",
+            "nationality": "DK"
         },
-        "expiryDate": 1612796169
+        "createdAt": "202005",
+        "maxAccounts": 80,
+        "validTo": "202105"
     },
     "anonymityRevokers": [0,1,2],
     "threshold": 2
