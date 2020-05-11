@@ -1,3 +1,4 @@
+use crypto_common::*;
 use id::{ffi::*, types::*};
 use pairing::bls12_381::Bls12;
 
@@ -24,11 +25,11 @@ pub static GLOBAL_CONTEXT: &str = "database/global.json";
 pub static IDENTITY_PROVIDERS: &str = "database/identity_providers.json";
 
 pub fn read_global_context(filename: &str) -> Option<GlobalContext<ExampleCurve>> {
-    read_json_from_file(filename).ok()
+    read_exact_versioned_json_from_file(VERSION_GLOBAL_PARAMETERS, filename).ok()
 }
 
 pub fn read_identity_providers() -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>::G1>>> {
-    read_json_from_file(IDENTITY_PROVIDERS).ok()
+    read_exact_versioned_vec_json_from_file(VERSION_IP_INFO_PUBLIC, IDENTITY_PROVIDERS).ok()
 }
 
 /// Parse YYYYMM as YearMonth
@@ -53,4 +54,46 @@ where
     let reader = BufReader::new(file);
     let u = serde_json::from_reader(reader)?;
     Ok(u)
+}
+
+/// Reads JSON from a file and check the stored version is equal the argument.
+pub fn read_exact_versioned_json_from_file<P: AsRef<Path>, T: DeserializeOwned>(
+    version: Version,
+    path: P,
+) -> io::Result<T>
+where
+    P: std::fmt::Debug, {
+    let versioned: Versioned<T> = read_json_from_file(path)?;
+    if versioned.version() == version {
+        Ok(versioned.value())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Invalid version in file",
+        ))
+    }
+}
+
+/// Reads JSON from a file and check the stored version is equal the argument.
+pub fn read_exact_versioned_vec_json_from_file<P: AsRef<Path>, T: DeserializeOwned>(
+    version: Version,
+    path: P,
+) -> io::Result<Vec<T>>
+where
+    P: std::fmt::Debug,
+    T: Clone, {
+    let mut versioned: Vec<Versioned<T>> = read_json_from_file(path)?;
+    if versioned.iter().any(|v| v.version() != version) {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Invalid version in vectored file",
+        ))
+    } else {
+        let mut result = Vec::new();
+        while let Some(t) = versioned.pop() {
+            result.push(t.value());
+        }
+        result.reverse();
+        Ok(result)
+    }
 }

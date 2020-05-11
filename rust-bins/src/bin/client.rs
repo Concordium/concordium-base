@@ -259,16 +259,17 @@ If not present a fresh key-pair will be generated.",
 
 /// Revoke the anonymity of the credential.
 fn handle_revoke_anonymity(matches: &ArgMatches) {
-    let versioned_credential: Versioned<CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute>> =
-        match matches.value_of("credential").map(read_json_from_file) {
-            Some(Ok(r)) => r,
-            Some(Err(x)) => {
-                eprintln!("Could not read credential because {}", x);
-                return;
-            }
-            None => panic!("Should not happen since the argument is mandatory."),
-        };
-    let credential = versioned_credential.value();
+    let credential: CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute> = match matches
+        .value_of("credential")
+        .map(|c| read_exact_versioned_json_from_file(VERSION_CREDENTIAL, c))
+    {
+        Some(Ok(r)) => r,
+        Some(Err(x)) => {
+            eprintln!("Could not read credential because {}", x);
+            return;
+        }
+        None => panic!("Should not happen since the argument is mandatory."),
+    };
     let revocation_threshold = credential.values.threshold;
 
     let ar_data = credential.values.ar_data;
@@ -346,7 +347,10 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         }
     };
 
-    let ip_info = match matches.value_of("ip-info").map(read_json_from_file) {
+    let ip_info = match matches
+        .value_of("ip-info")
+        .map(|ip| read_exact_versioned_json_from_file(VERSION_IP_INFO_PUBLIC, ip))
+    {
         Some(Ok(v)) => v,
         Some(Err(x)) => {
             eprintln!("Could not read identity provider info because {}", x);
@@ -884,10 +888,12 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         };
         println!("writing ip_{} in file {}", id, ip_fname);
         write_json_to_file(&ip_fname, &full_info).ok()?;
+        let versioned_ip_info_public =
+            Versioned::new(VERSION_IP_INFO_PUBLIC, full_info.public_ip_info);
         println!("writing ip_{} public data in file {}", id, ip_fname_pub);
-        write_json_to_file(&ip_fname_pub, &full_info.public_ip_info).ok()?;
+        write_json_to_file(&ip_fname_pub, &versioned_ip_info_public).ok()?;
 
-        res.push(full_info.public_ip_info);
+        res.push(versioned_ip_info_public);
     }
     write_json_to_file(IDENTITY_PROVIDERS, &res).ok()?;
     Some(())
@@ -904,5 +910,6 @@ fn handle_generate_global(_matches: &ArgMatches) -> Option<()> {
         // in the attribute list. This is so that we can reveal items individually.
         on_chain_commitment_key: CommitmentKey::generate(&mut csprng),
     };
-    write_json_to_file(GLOBAL_CONTEXT, &gc).ok()
+    let vgc = Versioned::new(VERSION_GLOBAL_PARAMETERS, gc);
+    write_json_to_file(GLOBAL_CONTEXT, &vgc).ok()
 }
