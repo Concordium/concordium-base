@@ -38,15 +38,17 @@ struct ServerState {
 }
 
 fn respond_global_params(_request: &rouille::Request, s: &ServerState) -> rouille::Response {
-    let response = to_string_pretty(&s.global_params).unwrap();
+    let versioned_global_params =
+        Versioned::new(VERSION_GLOBAL_PARAMETERS, s.global_params.clone());
+    let response = to_string_pretty(&versioned_global_params).unwrap();
     rouille::Response::text(response)
 }
 
 fn respond_ips(_request: &rouille::Request, s: &ServerState) -> rouille::Response {
-    let response: Vec<IpInfo<_, _>> = s
+    let response: Vec<Versioned<IpInfo<_, _>>> = s
         .ip_infos
         .iter()
-        .map(|id| (id.1).public_ip_info.clone())
+        .map(|id| Versioned::new(VERSION_IP_INFO_PUBLIC, (id.1).public_ip_info.clone()))
         .collect();
     rouille::Response::json(&response)
 }
@@ -134,10 +136,12 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
                 signature:           sig,
                 alist:               attributes,
             };
+            let ver_id_use_data = Versioned::new(VERSION_ID_OBJECT_USE_DATA, id_use_data);
+            let ver_id_object = Versioned::new(VERSION_IDENTITY_OBJECT, id_object);
             let response = json!({
-                "identityObject": id_object,
+                "identityObject": ver_id_object,
+                "idUseData": ver_id_use_data,
                 "ipIdentity": ip_info.ip_identity,
-                "idUseData": id_use_data,
             });
             rouille::Response::json(&response)
         }
@@ -155,11 +159,19 @@ type GenerateCredentialData = (
 
 fn parse_generate_credential_input_json(v: &Value) -> Option<GenerateCredentialData> {
     let ip_id = from_json(v.get("ipIdentity")?.clone()).ok()?;
-    let id_object: IdentityObject<Bls12, ExampleCurve, ExampleAttribute> = v
+    let ver_id_object: Versioned<IdentityObject<Bls12, ExampleCurve, ExampleAttribute>> = v
         .get("identityObject")
         .and_then(|x| from_json(x.clone()).ok())?;
-    let private: IdObjectUseData<Bls12, ExampleCurve> =
+    let ver_private: Versioned<IdObjectUseData<Bls12, ExampleCurve>> =
         v.get("idUseData").and_then(|x| from_json(x.clone()).ok())?;
+    if ver_id_object.version() != VERSION_IDENTITY_OBJECT {
+        return None;
+    }
+    if ver_private.version() != VERSION_ID_OBJECT_USE_DATA {
+        return None;
+    }
+    let id_object = ver_id_object.value();
+    let private = ver_private.value();
     let policy_items = {
         if let Some(items) = v.get("revealedAttributes") {
             from_json(items.clone()).ok()?
