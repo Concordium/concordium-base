@@ -337,7 +337,10 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         let file = matches
             .value_of("id-object")
             .expect("id-object parameter mandatory.");
-        match read_json_from_file::<_, IdentityObject<Bls12, ExampleCurve, ExampleAttribute>>(file)
+        match read_exact_versioned_json_from_file::<
+            _,
+            IdentityObject<Bls12, ExampleCurve, ExampleAttribute>,
+        >(VERSION_IDENTITY_OBJECT, file)
         {
             Ok(v) => v,
             Err(x) => {
@@ -457,17 +460,19 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // which we need to generate CDI.
     // This file should also contain the public keys of the identity provider who
     // signed the object.
-    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = match read_json_from_file(
-        matches
-            .value_of("private")
-            .expect("Should not happen because argument is mandatory."),
-    ) {
-        Ok(v) => v,
-        Err(x) => {
-            eprintln!("Could not read CHI object because {}", x);
-            return;
-        }
-    };
+    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> =
+        match read_exact_versioned_json_from_file(
+            VERSION_ID_OBJECT_USE_DATA,
+            matches
+                .value_of("private")
+                .expect("Should not happen because argument is mandatory."),
+        ) {
+            Ok(v) => v,
+            Err(x) => {
+                eprintln!("Could not read CHI object because {}", x);
+                return;
+            }
+        };
 
     // We ask what regid index they would like to use.
     let x = match Input::new().with_prompt("Index").interact() {
@@ -572,7 +577,10 @@ fn handle_create_chi(matches: &ArgMatches) {
 /// account holder.
 fn handle_act_as_ip(matches: &ArgMatches) {
     let pio_path = Path::new(matches.value_of("pio").unwrap());
-    let pio = match read_json_from_file::<_, PreIdentityObject<_, _>>(&pio_path) {
+    let pio = match read_exact_versioned_json_from_file::<_, PreIdentityObject<_, _>>(
+        VERSION_PRE_IDENTITY_OBJECT,
+        &pio_path,
+    ) {
         Ok(pio) => pio,
         Err(e) => {
             eprintln!("Could not read file because {}", e);
@@ -645,21 +653,20 @@ fn handle_act_as_ip(matches: &ArgMatches) {
                 alist: attributes,
                 signature,
             };
+            let signature = id_object.signature.clone();
+            let ver_id_object = Versioned::new(VERSION_IDENTITY_OBJECT, id_object);
             println!("Successfully checked pre-identity data.");
             if let Some(signed_out_path) = matches.value_of("out") {
-                if write_json_to_file(signed_out_path, &id_object).is_ok() {
+                if write_json_to_file(signed_out_path, &ver_id_object).is_ok() {
                     println!("Wrote signed identity object to file.");
                 } else {
                     println!(
                         "Could not write Identity object to file. The signature is: {}",
-                        base16_encode_string(&id_object.signature)
+                        base16_encode_string(&signature)
                     );
                 }
             } else {
-                println!(
-                    "The signature is: {}",
-                    base16_encode_string(&id_object.signature)
-                );
+                println!("The signature is: {}", base16_encode_string(&signature));
             }
         }
         Err(r) => eprintln!("Could not verify pre-identity object {:?}", r),
@@ -774,26 +781,28 @@ fn handle_start_ip(matches: &ArgMatches) {
     // the only thing left is to output all the information
 
     let id_use_data = IdObjectUseData { aci, randomness };
+    let ver_id_use_data = Versioned::new(VERSION_ID_OBJECT_USE_DATA, id_use_data);
     if let Some(aci_out_path) = matches.value_of("private") {
-        if write_json_to_file(aci_out_path, &id_use_data).is_ok() {
+        if write_json_to_file(aci_out_path, &ver_id_use_data).is_ok() {
             println!("Wrote ACI and randomness to file.");
         } else {
             println!("Could not write ACI data to file. Outputting to standard output.");
-            output_json(&id_use_data);
+            output_json(&ver_id_use_data);
         }
     } else {
-        output_json(&id_use_data);
+        output_json(&ver_id_use_data);
     }
 
+    let ver_pio = Versioned::new(VERSION_PRE_IDENTITY_OBJECT, pio);
     if let Some(pio_out_path) = matches.value_of("public") {
-        if write_json_to_file(pio_out_path, &pio).is_ok() {
+        if write_json_to_file(pio_out_path, &ver_pio).is_ok() {
             println!("Wrote PIO data to file.");
         } else {
             println!("Could not write PIO data to file. Outputting to standard output.");
-            output_json(&pio);
+            output_json(&ver_pio);
         }
     } else {
-        output_json(&pio);
+        output_json(&ver_pio);
     }
 }
 
