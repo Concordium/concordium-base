@@ -965,7 +965,7 @@ impl<'de> Visitor<'de> for VerifyKeyVisitor {
 
     fn visit_map<A: de::MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
         let mut map = map;
-        let mut tmp_map: BTreeMap<&str, &str> = BTreeMap::new();
+        let mut tmp_map: BTreeMap<String, String> = BTreeMap::new();
         while tmp_map.len() < 2 {
             if let Some((k, v)) = map.next_entry()? {
                 if k == "schemeId" {
@@ -992,7 +992,7 @@ impl<'de> Visitor<'de> for VerifyKeyVisitor {
             .ok_or_else(|| de::Error::custom("Could not find verifyKey, should not happen."))?;
         let bytes = decode(vf_key_str).map_err(de::Error::custom)?;
         let key = from_bytes(&mut Cursor::new(&bytes)).map_err(de::Error::custom)?;
-        Ok(key)
+        Ok(VerifyKey::Ed25519VerifyKey(key))
     }
 }
 
@@ -1098,7 +1098,7 @@ impl<'de> Visitor<'de> for CredentialAccountVisitor {
         let mut keys = None;
         let mut threshold = None;
         while keys.is_none() || threshold.is_none() {
-            if let Some(k) = map.next_key::<&str>()? {
+            if let Some(k) = map.next_key::<String>()? {
                 if k == "keys" {
                     if keys.is_none() {
                         keys = Some(map.next_value()?);

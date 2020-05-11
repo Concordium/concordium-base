@@ -41,14 +41,14 @@ A request is a JSON object which looks as
 ```json
 {
     "ipIdentity": 0,
-    "name": "Aleš",
     "attributes": {
         "chosenAttributes": {
-            "CountryOfNationality": "17",
-            "CountryOfResidence": "16",
-            "CreationTime": "11"
+            "countryOfResidence": "DK",
+            "nationality": "SI"
         },
-        "expiryDate": 1612796169
+        "createdAt": "202005",
+        "maxAccounts": 80,
+        "validTo": "202105"
     },
     "anonymityRevokers": [0,1,2],
     "threshold": 2
@@ -70,5 +70,3 @@ The input file ([example](example_server_interactions/example_credential_request
 
 A returned value from this interaction is a JSON object with two fields, `credential` and `accountData` ([example](example_server_interactions/example_credential_response.json)).
 The credential is what can be deployed on the chain, and the `accountData` should be stored because it is needed to sign transactions from the account containing this credential.
-
-If the request already contains the account data then the same is returned, see [example request](example_server_interactions/example_credential_request_existing.json) and [example response](example_server_interactions/example_credential_response_existing.json).
