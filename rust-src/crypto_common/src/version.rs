@@ -1,9 +1,12 @@
 use crate::*;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
-pub const VERSION_CREDENTIAL: Version = Version(0);
 pub const VERSION_GLOBAL_PARAMETERS: Version = Version(0);
+pub const VERSION_CREDENTIAL: Version = Version(0);
 pub const VERSION_IP_INFO_PUBLIC: Version = Version(0);
+pub const VERSION_ID_OBJECT_USE_DATA: Version = Version(0);
+pub const VERSION_PRE_IDENTITY_OBJECT: Version = Version(0);
+pub const VERSION_IDENTITY_OBJECT: Version = Version(0);
 
 /// The version of a data structure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, SerdeSerialize, SerdeDeserialize)]
