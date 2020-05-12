@@ -15,6 +15,12 @@ module Concordium.Types.Acorn.NumericTypes where
 import GHC.Generics
 import Data.Data(Data, Typeable)
 import Data.Hashable(Hashable)
+import Data.Serialize
+import Data.Bits
+import Text.Read
+import Data.Aeson as AE
+import Data.Aeson.Encoding
+import qualified Data.Text as Text
 
 import Data.Maybe
 
@@ -164,3 +170,32 @@ instance Num Word128 where
   abs (Word128 a) = Word128 a -- word is always non-negative
   signum (Word128 a) = Word128 $ signum a -- 0 or 1
   fromInteger a = Word128 $ a `mod` nWord128
+
+instance Serialize Word128 where
+  put (Word128 w) = do
+    putWord64be $ fromIntegral (unsafeShiftR w 64)
+    putWord64be $ fromIntegral w
+  get = do
+    high <- getWord64be
+    low <- getWord64be
+    return $ Word128 $ (unsafeShiftL (toInteger high) 64) .|. toInteger low
+
+instance Read Word128 where
+  readPrec = do
+    v <- readPrec
+    if v < minWord128 || v > maxWord128 then
+      fail "Out of bounds"
+    else
+      return (Word128 v)
+
+instance ToJSON Word128 where
+  toJSON (Word128 v) = AE.String (Text.pack $ show v)
+  toEncoding (Word128 v) = integerText v
+
+instance FromJSON Word128 where
+  parseJSON val = do
+    v <- parseJSON val
+    if v < minWord128 || v > maxWord128 then
+      fail "Out of bounds"
+    else
+      return (Word128 v)

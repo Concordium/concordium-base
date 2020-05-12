@@ -21,6 +21,7 @@ import qualified Concordium.Crypto.BlsSignature as Bls
 import Concordium.ID.Types
 import Concordium.Crypto.SignatureScheme(SchemeId)
 import Concordium.Types.HashableTo
+import Concordium.Types.Acorn.NumericTypes
 
 import Control.Exception(assert)
 
@@ -243,13 +244,9 @@ isTimestampBefore ts ym =
 -- meaningful amount of GTUs.
 -- Currently this unit is 10^-4 GTU and doesn't have a proper name.
 -- FIXME: This likely needs to be Word128.
-type AmountUnit = Word64
+type AmountUnit = Word128
 newtype Amount = Amount { _amount :: AmountUnit }
-    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, FromJSON, ToJSON) via AmountUnit
-
-instance S.Serialize Amount where
-  get = Amount <$> G.getWord64be
-  put (Amount v) = P.putWord64be v
+    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, FromJSON, ToJSON, S.Serialize) via AmountUnit
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
