@@ -43,6 +43,6 @@ checkCDICompatibility filename referenceFile = do
 
 tests :: Spec
 tests = describe "Concordium.ID" $ do
-  specify "account address JSON" $ withMaxSuccess 1000 testJSON
-  specify "account address from bytes" $ withMaxSuccess 1000 testFromBytes
+  specify "account address JSON" $ withMaxSuccess 100000 testJSON
+  specify "account address from bytes" $ withMaxSuccess 100000 testFromBytes
   specify "JSON/binary serialization check" $ checkCDICompatibility "testdata/cdi.json" "testdata/cdi.bin"
