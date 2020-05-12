@@ -3,8 +3,11 @@ use pairing::bls12_381::{Bls12, G1};
 use curve_arithmetic::curve_arithmetic::*;
 use id::{ffi::AttributeKind, identity_provider::verify_credentials, types::*};
 
+use crypto_common::*;
+
 use clap::{App, AppSettings, Arg};
 
+use client_server_helpers::*;
 use serde_json::{from_str, from_value, json, to_value, Value};
 
 #[macro_use]
@@ -99,7 +102,8 @@ fn sign_id_object_aux(ip_data: &IpData<Bls12, ExampleCurve>, v: &str) -> Fallibl
                 alist,
                 signature,
             };
-            Ok(to_value(&id_object)?)
+            let ver_id_object = Versioned::new(VERSION_IDENTITY_OBJECT, id_object);
+            Ok(to_value(&ver_id_object)?)
         }
         Err(e) => bail!("Could not generate signature because {:?}.", e),
     }
@@ -109,13 +113,15 @@ fn respond_ips(_request: &rouille::Request, s: &ServerState) -> rouille::Respons
     // return an array to be consistent with future extensions
     let response = vec![json!({
         "metadata": s.ip_data.metadata,
-        "ipInfo": s.ip_data.public_ip_info
+        "ipInfo": Versioned::new(VERSION_IP_INFO_PUBLIC, s.ip_data.public_ip_info.clone()),
     })];
     rouille::Response::json(&response)
 }
 
 fn respond_global(_request: &rouille::Request, s: &ServerState) -> rouille::Response {
-    rouille::Response::json(&s.global_params)
+    let versioned_global_params =
+        Versioned::new(VERSION_GLOBAL_PARAMETERS, s.global_params.clone());
+    rouille::Response::json(&versioned_global_params)
 }
 
 fn sign_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Response {
@@ -156,9 +162,9 @@ pub fn main() {
             Arg::with_name("global")
                 .short("G")
                 .long("global")
-                .default_value("global.json")
+                .default_value(GLOBAL_CONTEXT)
                 .value_name("FILE")
-                .help("File with global parameters."),
+                .help("File with crypographic parameters."),
         )
         .arg(
             Arg::with_name("address")
@@ -175,7 +181,18 @@ pub fn main() {
         .value_of("ip-data")
         .unwrap_or("identity-provider.json");
 
-    let global_file = matches.value_of("global").unwrap_or("global.json");
+    let global_params = {
+        if let Some(gc) = read_global_context(
+            matches
+                .value_of("global")
+                .expect("We have a default value, so should exist."),
+        ) {
+            gc
+        } else {
+            eprintln!("Cannot read global context information database. Terminating.");
+            return;
+        }
+    };
 
     let address = matches.value_of("address").unwrap_or("localhost:8000");
 
@@ -190,31 +207,12 @@ pub fn main() {
         }
     };
 
-    let global_file = match ::std::fs::File::open(global_file) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("Could not open global params file because {}. Aborting.", e);
-            return;
-        }
-    };
-
     let reader = ::std::io::BufReader::new(file);
     let ip_data = {
         match serde_json::from_reader(reader) {
             Ok(x) => x,
             Err(e) => {
                 eprintln!("Cannot read identity provider data due to {}. Aborting.", e);
-                return;
-            }
-        }
-    };
-
-    let reader = ::std::io::BufReader::new(global_file);
-    let global_params = {
-        match serde_json::from_reader(reader) {
-            Ok(x) => x,
-            Err(e) => {
-                eprintln!("Cannot read global parameters due to {}. Aborting.", e);
                 return;
             }
         }
