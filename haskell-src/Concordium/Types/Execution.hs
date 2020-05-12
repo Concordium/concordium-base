@@ -300,6 +300,15 @@ instance S.Serialize Payload where
 encodePayload :: Payload -> EncodedPayload
 encodePayload = EncodedPayload . BSS.toShort . S.encode
 
+-- |Like 'S.decode', but make sure to consume all the input
+decodeAll :: S.Serialize a => BS.ByteString -> Either String a
+decodeAll bs =  S.runGet getter bs
+  where getter = do
+          r <- S.get
+          br <- S.bytesRead
+          unless (br == BS.length bs) $ fail "Payload size incorrect."  -- make sure to use up all the data
+          return r
+
 #ifdef DISABLE_SMART_CONTRACTS
 $(reportWarning "Disabling smart contract related transactions." >> return [])
 decodePayload (EncodedPayload s) =
@@ -312,10 +321,10 @@ decodePayload (EncodedPayload s) =
             ttype == 2 ||
             ttype == 4 then
            Left "Unsupported transaction type."
-         else S.decode (S.isolate (BS.length bs) bs `S.label` "Deserialize payload.") -- make sure to use up all the data
+         else decodeAll bs
 #else
 $(reportWarning "All transaction types allowed." >> return [])
-decodePayload (EncodedPayload s) = S.decode (BSS.fromShort s)
+decodePayload (EncodedPayload s) = decodeAll . BSS.fromShort $ s
 #endif
 decodePayload :: EncodedPayload -> Either String Payload
 {-# INLINE decodePayload #-}
