@@ -312,7 +312,7 @@ decodePayload (EncodedPayload s) =
             ttype == 2 ||
             ttype == 4 then
            Left "Unsupported transaction type."
-         else S.decode bs
+         else S.decode (S.isolate (BS.length bs) bs `S.label` "Deserialize payload.") -- make sure to use up all the data
 #else
 $(reportWarning "All transaction types allowed." >> return [])
 decodePayload (EncodedPayload s) = S.decode (BSS.fromShort s)
