@@ -343,7 +343,7 @@ fn handle_combine(matches: &ArgMatches) {
         return;
     }
 
-    let mut shares_with_identities: Vec<(ArIdentity, ShareNumber, Message<ExampleCurve>)> =
+    let mut ar_decrypted_data_vec: Vec<ChainArDecryptedData<ExampleCurve>> =
         Vec::with_capacity(shares_values.len());
     let mut shares: Vec<(ShareNumber, Message<ExampleCurve>)> =
         Vec::with_capacity(shares_values.len());
@@ -354,30 +354,33 @@ fn handle_combine(matches: &ArgMatches) {
                 eprintln!("Could not read from ar file {} {}", share_value, y);
                 return;
             }
-            Ok(val) => shares_with_identities.push(val),
+            Ok(val) => ar_decrypted_data_vec.push(val),
         }
     }
 
     let mut share_numbers = Vec::new();
     let mut ar_identities = Vec::new();
 
-    for (ar_identity, share_number, message) in shares_with_identities {
-        match ar_data
-            .iter()
-            .find(|&x| x.id_cred_pub_share_number == share_number && x.ar_identity == ar_identity)
-        {
+    for ar_decrypted_data in ar_decrypted_data_vec {
+        match ar_data.iter().find(|&x| {
+            x.id_cred_pub_share_number == ar_decrypted_data.id_cred_pub_share_number
+                && x.ar_identity == ar_decrypted_data.ar_identity
+        }) {
             None => {
                 eprintln!(
                     "AR with {:?} and {:?} is not part of the credential",
-                    ar_identity, share_number
+                    ar_decrypted_data.ar_identity, ar_decrypted_data.id_cred_pub_share_number
                 );
                 return;
             }
             Some(_) => {}
         }
-        share_numbers.push(share_number.0);
-        ar_identities.push(ar_identity.0);
-        shares.push((share_number, message));
+        share_numbers.push(ar_decrypted_data.id_cred_pub_share_number.0);
+        ar_identities.push(ar_decrypted_data.ar_identity.0);
+        shares.push((
+            ar_decrypted_data.id_cred_pub_share_number,
+            ar_decrypted_data.id_cred_pub_share,
+        ));
     }
     share_numbers.sort();
     share_numbers.dedup();
@@ -431,7 +434,8 @@ fn handle_decrypt(matches: &ArgMatches) {
         }
         None => panic!("Should not happen since the argument is mandatory."),
     };
-    let share: (ArIdentity, ShareNumber, Message<ExampleCurve>);
+    // let share: (ArIdentity, ShareNumber, Message<ExampleCurve>);
+    let share: ChainArDecryptedData<ExampleCurve>;
 
     match ar_data
         .iter()
@@ -445,11 +449,11 @@ fn handle_decrypt(matches: &ArgMatches) {
             let m = ar
                 .ar_secret_key
                 .decrypt(&single_ar_data.enc_id_cred_pub_share);
-            share = (
-                single_ar_data.ar_identity,
-                single_ar_data.id_cred_pub_share_number,
-                m,
-            );
+            share = ChainArDecryptedData {
+                ar_identity:              single_ar_data.ar_identity,
+                id_cred_pub_share_number: single_ar_data.id_cred_pub_share_number,
+                id_cred_pub_share:        m,
+            };
         }
     }
     let json = share;
