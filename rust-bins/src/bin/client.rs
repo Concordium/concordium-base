@@ -33,8 +33,6 @@ use either::Either::Left;
 
 use client_server_helpers::*;
 
-use std::collections::HashSet;
-
 static IP_PREFIX: &str = "database/identity_provider-";
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "anonymity_revoker-";
@@ -454,7 +452,17 @@ fn handle_combine_multiple(matches: &ArgMatches){
         return;
     }
     
-    let id_cred_pub = reveal_id_cred_pub(&shares);
+    let id_cred_pub = reveal_id_cred_pub(&shares); 
+    let json = encode(&to_bytes(&id_cred_pub));
+    if let Some(json_file) = matches.value_of("out") {
+        match write_json_to_file(json_file, &json) {
+            Ok(_) => println!("Wrote idCredPub JSON file."),
+            Err(e) => {
+                eprintln!("Could not JSON write to file because {}", e);
+                output_json(&json);
+            }
+        }
+    }
     println!(
         "IdCredPub of the credential owner is {}",
         encode(&to_bytes(&id_cred_pub))
@@ -475,26 +483,8 @@ fn handle_decrypt_one(matches: &ArgMatches){
             }
             None => panic!("Should not happen since the argument is mandatory."),
         };
-    let revocation_threshold = credential.values.threshold;
 
     let ar_data = credential.values.ar_data;
-
-    // A list of filenames with private info from anonymity revokers.
-    // let ar_values: Vec<_> = match matches.values_of("ar-private") {
-    //     Some(v) => v.collect(),
-    //     None => panic!("Could not read ar-private"),
-    // };
-    // let mut ars: Vec<ArData<ExampleCurve>> = Vec::with_capacity(ar_values.len());
-    // for ar_value in ar_values.iter() {
-    //     match read_json_from_file(ar_value) {
-    //         Err(y) => {
-    //             eprintln!("Could not read from ar file {} {}", ar_value, y);
-    //             return;
-    //         }
-    //         Ok(val) => ars.push(val),
-    //     }
-    // }
-
     let ar: ArData<ExampleCurve> =
         match matches.value_of("ar-private").map(read_json_from_file) {
             Some(Ok(r)) => r,
@@ -504,41 +494,24 @@ fn handle_decrypt_one(matches: &ArgMatches){
             }
             None => panic!("Should not happen since the argument is mandatory."),
         };
-
-    // let number_of_ars = ars.len();
-    // let number_of_ars = u32::try_from(number_of_ars)
-    //     .expect("Number of anonymity revokers should not exceed 2^32-1");
-    // if number_of_ars < revocation_threshold.into() {
-    //     eprintln!(
-    //         "insufficient number of anonymity revokers {}, {:?}",
-    //         number_of_ars, revocation_threshold
-    //     );
-    //     return;
-    // }
-    // let mut shares = Vec::with_capacity(ars.len());
     let share : (ArIdentity, ShareNumber, Message<ExampleCurve>);
 
-    // for ar in ars.into_iter() {
-        match ar_data
-            .iter()
-            .find(|&x| x.ar_identity == ar.public_ar_info.ar_identity)
-        {
-            None => {
-                eprintln!("AR is not part of the credential");
-                return;
-            }
-            Some(single_ar_data) => {
-                let m = ar
-                    .ar_secret_key
-                    .decrypt(&single_ar_data.enc_id_cred_pub_share);
-                // shares.push((single_ar_data.id_cred_pub_share_number, m))
-                share = (single_ar_data.ar_identity, single_ar_data.id_cred_pub_share_number, m);
-
-            }
+    match ar_data
+        .iter()
+        .find(|&x| x.ar_identity == ar.public_ar_info.ar_identity)
+    {
+        None => {
+            eprintln!("AR is not part of the credential");
+            return;
         }
-    // }
+        Some(single_ar_data) => {
+            let m = ar
+                .ar_secret_key
+                .decrypt(&single_ar_data.enc_id_cred_pub_share);
+            share = (single_ar_data.ar_identity, single_ar_data.id_cred_pub_share_number, m);
 
-    // let json = shares;
+        }
+    }
     let json = share;
     if let Some(json_file) = matches.value_of("out") {
         match write_json_to_file(json_file, &json) {
