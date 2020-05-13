@@ -318,8 +318,7 @@ decodePayload (EncodedPayload s) =
        Just (ttype, _) ->
          if ttype == 0 ||  -- the numbers here must match the serialization of the payload above (Serialize instance)
             ttype == 1 ||
-            ttype == 2 ||
-            ttype == 4 then
+            ttype == 2 then
            Left "Unsupported transaction type."
          else decodeAll bs
 #else
