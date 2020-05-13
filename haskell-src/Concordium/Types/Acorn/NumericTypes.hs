@@ -21,6 +21,8 @@ import Text.Read
 import Data.Aeson as AE
 import Data.Aeson.Encoding
 import qualified Data.Text as Text
+import System.Random
+import Test.QuickCheck
 
 import Data.Maybe
 
@@ -136,6 +138,9 @@ instance Num Int128 where
   signum (Int128 a) = Int128 $ signum a
   fromInteger a = Int128 $ norm128 a
 
+instance Arbitrary Int128 where
+  arbitrary = arbitrarySizedBoundedIntegral
+  shrink = shrinkIntegral
 
 -- ** Word128
 
@@ -189,8 +194,8 @@ instance Read Word128 where
       return (Word128 v)
 
 instance ToJSON Word128 where
-  toJSON (Word128 v) = AE.String (Text.pack $ show v)
-  toEncoding (Word128 v) = integerText v
+  toJSON (Word128 v) = toJSON v
+  toEncoding (Word128 v) = toEncoding v
 
 instance FromJSON Word128 where
   parseJSON val = do
@@ -199,3 +204,13 @@ instance FromJSON Word128 where
       fail "Out of bounds"
     else
       return (Word128 v)
+
+instance Random Word128 where
+  randomR (Word128 lo, Word128 hi) g = (Word128 a, g') 
+    where
+      (a, g') = randomR (lo, hi) g
+  random = randomR (Word128 minWord128, Word128 maxWord128)
+
+instance Arbitrary Word128 where
+  arbitrary = arbitrarySizedBoundedIntegral
+  shrink = shrinkIntegral

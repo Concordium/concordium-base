@@ -59,6 +59,8 @@ dependencies:
 - random >= 1.1
 - template-haskell >= 2.14
 - persistent >= 2.10
+- text >= 1.2
+- QuickCheck >= 2.12
 
 library:
   source-dirs: src
