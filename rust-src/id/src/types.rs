@@ -5,7 +5,7 @@ use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
 use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
-use elgamal::{cipher::Cipher, secret::SecretKey as ElgamalSecretKey};
+use elgamal::{cipher::Cipher, message::Message, secret::SecretKey as ElgamalSecretKey};
 use ff::{Field, PrimeField};
 use hex::{decode, encode};
 use pedersen_scheme::{
@@ -592,6 +592,21 @@ pub struct ChainArData<C: Curve> {
     /// encrypted share of id cred pub
     #[serde(rename = "encIdCredPubShare")]
     pub enc_id_cred_pub_share: Cipher<C>,
+    /// the number of the share
+    #[serde(rename = "idCredPubShareNumber")]
+    pub id_cred_pub_share_number: ShareNumber,
+}
+
+/// Data structure for when a anonymity revoker decrypts its encrypted share
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct ChainArDecryptedData<C: Curve> {
+    /// identity of the anonymity revoker
+    #[serde(rename = "arIdentity")]
+    pub ar_identity: ArIdentity,
+    /// encrypted share of id cred pub
+    #[serde(rename = "idCredPubShare")]
+    pub id_cred_pub_share: Message<C>,
     /// the number of the share
     #[serde(rename = "idCredPubShareNumber")]
     pub id_cred_pub_share_number: ShareNumber,
