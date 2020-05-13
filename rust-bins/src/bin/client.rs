@@ -1,5 +1,5 @@
-use id::anonymity_revoker::reveal_id_cred_pub;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use id::anonymity_revoker::reveal_id_cred_pub;
 
 use ed25519_dalek as ed25519;
 use id::secret_sharing::*;
@@ -249,7 +249,9 @@ If not present a fresh key-pair will be generated.",
         )
         .subcommand(
             SubCommand::with_name("decrypt")
-                .about("Take a deployed credential and let each anonymity revoker decrypt their share")
+                .about(
+                    "Take a deployed credential and let each anonymity revoker decrypt their share",
+                )
                 .arg(
                     Arg::with_name("credential")
                         .long("credential")
@@ -360,8 +362,8 @@ If not present a fresh key-pair will be generated.",
     exec_if("combine-multiple").map(handle_combine_multiple);
 }
 
-fn handle_combine(matches: &ArgMatches){
-    let shares : Vec<(ShareNumber, Message<ExampleCurve>)> = 
+fn handle_combine(matches: &ArgMatches) {
+    let shares: Vec<(ShareNumber, Message<ExampleCurve>)> =
         match matches.value_of("shares").map(read_json_from_file) {
             Some(Ok(r)) => r,
             Some(Err(x)) => {
@@ -370,7 +372,7 @@ fn handle_combine(matches: &ArgMatches){
             }
             None => panic!("Should not happen since the argument is mandatory."),
         };
-    
+
     let id_cred_pub = reveal_id_cred_pub(&shares);
     println!(
         "IdCredPub of the credential owner is {}",
@@ -382,7 +384,7 @@ fn handle_combine(matches: &ArgMatches){
     );
 }
 
-fn handle_combine_multiple(matches: &ArgMatches){
+fn handle_combine_multiple(matches: &ArgMatches) {
     let credential: CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute> =
         match matches.value_of("credential").map(read_json_from_file) {
             Some(Ok(r)) => r,
@@ -412,8 +414,10 @@ fn handle_combine_multiple(matches: &ArgMatches){
         return;
     }
 
-    let mut shares_with_identities : Vec<(ArIdentity, ShareNumber, Message<ExampleCurve>)> = Vec::with_capacity(shares_values.len());
-    let mut shares : Vec<(ShareNumber, Message<ExampleCurve>)> = Vec::with_capacity(shares_values.len());
+    let mut shares_with_identities: Vec<(ArIdentity, ShareNumber, Message<ExampleCurve>)> =
+        Vec::with_capacity(shares_values.len());
+    let mut shares: Vec<(ShareNumber, Message<ExampleCurve>)> =
+        Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {
         match read_json_from_file(share_value) {
@@ -431,28 +435,33 @@ fn handle_combine_multiple(matches: &ArgMatches){
     for (ar_identity, share_number, message) in shares_with_identities {
         match ar_data
             .iter()
-            .find(|&x| x.id_cred_pub_share_number == share_number && x.ar_identity == ar_identity){
-                None => {
-                    eprintln!("AR with {:?} and {:?} is not part of the credential", ar_identity, share_number);
-                    return;
-                }
-                Some(_) => {}
+            .find(|&x| x.id_cred_pub_share_number == share_number && x.ar_identity == ar_identity)
+        {
+            None => {
+                eprintln!(
+                    "AR with {:?} and {:?} is not part of the credential",
+                    ar_identity, share_number
+                );
+                return;
             }
+            Some(_) => {}
+        }
         share_numbers.push(share_number.0);
         ar_identities.push(ar_identity.0);
         shares.push((share_number, message));
-
-    } 
+    }
     share_numbers.sort();
     share_numbers.dedup();
     ar_identities.sort();
     ar_identities.dedup();
-    if share_numbers.len() < shares.len() || ar_identities.len() < shares.len(){
-        eprintln!("No duplicates among the anonymity revokers identities nor share numbers are allowed");
+    if share_numbers.len() < shares.len() || ar_identities.len() < shares.len() {
+        eprintln!(
+            "No duplicates among the anonymity revokers identities nor share numbers are allowed"
+        );
         return;
     }
-    
-    let id_cred_pub = reveal_id_cred_pub(&shares); 
+
+    let id_cred_pub = reveal_id_cred_pub(&shares);
     let json = encode(&to_bytes(&id_cred_pub));
     if let Some(json_file) = matches.value_of("out") {
         match write_json_to_file(json_file, &json) {
@@ -473,7 +482,7 @@ fn handle_combine_multiple(matches: &ArgMatches){
     );
 }
 
-fn handle_decrypt_one(matches: &ArgMatches){
+fn handle_decrypt_one(matches: &ArgMatches) {
     let credential: CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute> =
         match matches.value_of("credential").map(read_json_from_file) {
             Some(Ok(r)) => r,
@@ -485,16 +494,15 @@ fn handle_decrypt_one(matches: &ArgMatches){
         };
 
     let ar_data = credential.values.ar_data;
-    let ar: ArData<ExampleCurve> =
-        match matches.value_of("ar-private").map(read_json_from_file) {
-            Some(Ok(r)) => r,
-            Some(Err(x)) => {
-                eprintln!("Could not read ar-private because {}", x);
-                return;
-            }
-            None => panic!("Should not happen since the argument is mandatory."),
-        };
-    let share : (ArIdentity, ShareNumber, Message<ExampleCurve>);
+    let ar: ArData<ExampleCurve> = match matches.value_of("ar-private").map(read_json_from_file) {
+        Some(Ok(r)) => r,
+        Some(Err(x)) => {
+            eprintln!("Could not read ar-private because {}", x);
+            return;
+        }
+        None => panic!("Should not happen since the argument is mandatory."),
+    };
+    let share: (ArIdentity, ShareNumber, Message<ExampleCurve>);
 
     match ar_data
         .iter()
@@ -508,8 +516,11 @@ fn handle_decrypt_one(matches: &ArgMatches){
             let m = ar
                 .ar_secret_key
                 .decrypt(&single_ar_data.enc_id_cred_pub_share);
-            share = (single_ar_data.ar_identity, single_ar_data.id_cred_pub_share_number, m);
-
+            share = (
+                single_ar_data.ar_identity,
+                single_ar_data.id_cred_pub_share_number,
+                m,
+            );
         }
     }
     let json = share;
@@ -524,7 +535,7 @@ fn handle_decrypt_one(matches: &ArgMatches){
     }
 }
 
-fn handle_decrypt(matches: &ArgMatches){
+fn handle_decrypt(matches: &ArgMatches) {
     let credential: CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute> =
         match matches.value_of("credential").map(read_json_from_file) {
             Some(Ok(r)) => r,
