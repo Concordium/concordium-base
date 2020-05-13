@@ -1,3 +1,4 @@
+use id::anonymity_revoker::reveal_id_cred_pub;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
 use ed25519_dalek as ed25519;
@@ -245,6 +246,51 @@ If not present a fresh key-pair will be generated.",
                         .required(true)
                         .help("File with anonymity revoker's private and public keys."),
                 ),
+        )
+        .subcommand(
+            SubCommand::with_name("decrypt")
+                .about("Take a deployed credential and let each anonymity revoker decrypt their share")
+                .arg(
+                    Arg::with_name("credential")
+                        .long("credential")
+                        .short("c")
+                        .value_name("FILE")
+                        .required(true)
+                        .help("File with the JSON encoded credential."),
+                )
+                .arg(
+                    Arg::with_name("ar-private")
+                        .long("ar-private")
+                        .short("a")
+                        .multiple(true)
+                        .value_name("FILE(S)")
+                        .required(true)
+                        .help("File with anonymity revoker's private and public keys."),
+                )
+                .arg(
+                    Arg::with_name("out")
+                        .long("out")
+                        .value_name("FILE")
+                        .help("File to output the JSON transaction payload to."),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("combine")
+                .about("Combines decrypted shares of anonymity revokers to get IdCredPub")
+                .arg(
+                    Arg::with_name("shares")
+                        .long("shares")
+                        .short("s")
+                        .value_name("FILE")
+                        .required(true)
+                        .help("File with the JSON encoded decrypted shares."),
+                )
+                .arg(
+                    Arg::with_name("out")
+                        .long("out")
+                        .value_name("FILE")
+                        .help("File to output the JSON IdCredPub"),
+                ),
         );
     let matches = app.get_matches();
     let exec_if = |x: &str| matches.subcommand_matches(x);
@@ -255,6 +301,102 @@ If not present a fresh key-pair will be generated.",
     exec_if("ip-sign-pio").map(handle_act_as_ip);
     exec_if("deploy-credential").map(handle_deploy_credential);
     exec_if("revoke-anonymity").map(handle_revoke_anonymity);
+    exec_if("decrypt").map(handle_decrypt);
+    exec_if("combine").map(handle_combine);
+}
+
+fn handle_combine(matches: &ArgMatches){
+    let shares : Vec<(ShareNumber, Message<ExampleCurve>)> = 
+        match matches.value_of("shares").map(read_json_from_file) {
+            Some(Ok(r)) => r,
+            Some(Err(x)) => {
+                eprintln!("Could not read shares because {}", x);
+                return;
+            }
+            None => panic!("Should not happen since the argument is mandatory."),
+        };
+    
+    let id_cred_pub = reveal_id_cred_pub(&shares);
+    println!(
+        "IdCredPub of the credential owner is {}",
+        encode(&to_bytes(&id_cred_pub))
+    );
+    println!(
+        "Contact the identity provider with this information to get the real-life identity of the \
+         user."
+    );
+}
+
+fn handle_decrypt(matches: &ArgMatches){
+    let credential: CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute> =
+        match matches.value_of("credential").map(read_json_from_file) {
+            Some(Ok(r)) => r,
+            Some(Err(x)) => {
+                eprintln!("Could not read credential because {}", x);
+                return;
+            }
+            None => panic!("Should not happen since the argument is mandatory."),
+        };
+    let revocation_threshold = credential.values.threshold;
+
+    let ar_data = credential.values.ar_data;
+
+    // A list of filenames with private info from anonymity revokers.
+    let ar_values: Vec<_> = match matches.values_of("ar-private") {
+        Some(v) => v.collect(),
+        None => panic!("Could not read ar-private"),
+    };
+    let mut ars: Vec<ArData<ExampleCurve>> = Vec::with_capacity(ar_values.len());
+    for ar_value in ar_values.iter() {
+        match read_json_from_file(ar_value) {
+            Err(y) => {
+                eprintln!("Could not read from ar file {} {}", ar_value, y);
+                return;
+            }
+            Ok(val) => ars.push(val),
+        }
+    }
+
+    let number_of_ars = ars.len();
+    let number_of_ars = u32::try_from(number_of_ars)
+        .expect("Number of anonymity revokers should not exceed 2^32-1");
+    if number_of_ars < revocation_threshold.into() {
+        eprintln!(
+            "insufficient number of anonymity revokers {}, {:?}",
+            number_of_ars, revocation_threshold
+        );
+        return;
+    }
+    let mut shares = Vec::with_capacity(ars.len());
+
+    for ar in ars.into_iter() {
+        match ar_data
+            .iter()
+            .find(|&x| x.ar_identity == ar.public_ar_info.ar_identity)
+        {
+            None => {
+                eprintln!("AR is not part of the credential");
+                return;
+            }
+            Some(single_ar_data) => {
+                let m = ar
+                    .ar_secret_key
+                    .decrypt(&single_ar_data.enc_id_cred_pub_share);
+                shares.push((single_ar_data.id_cred_pub_share_number, m))
+            }
+        }
+    }
+
+    let json = shares;
+    if let Some(json_file) = matches.value_of("out") {
+        match write_json_to_file(json_file, &json) {
+            Ok(_) => println!("Wrote decryptions of shares to JSON file."),
+            Err(e) => {
+                eprintln!("Could not JSON write to file because {}", e);
+                output_json(&json);
+            }
+        }
+    }
 }
 
 /// Revoke the anonymity of the credential.
