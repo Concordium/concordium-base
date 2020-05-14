@@ -33,6 +33,8 @@ use either::Either::Left;
 
 use client_server_helpers::*;
 
+use serde_json::json;
+
 static IP_PREFIX: &str = "database/identity_provider-";
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "anonymity_revoker-";
@@ -270,7 +272,7 @@ If not present a fresh key-pair will be generated.",
                     Arg::with_name("out")
                         .long("out")
                         .value_name("FILE")
-                        .help("File to output the JSON transaction payload to."),
+                        .help("File to output the decryption to."),
                 ),
         )
         .subcommand(
@@ -321,7 +323,7 @@ fn handle_combine(matches: &ArgMatches) {
                 eprintln!("Could not read credential because {}", x);
                 return;
             }
-            None => panic!("Should not happen since the argument is mandatory."),
+            None => unreachable!(),
         };
     let revocation_threshold = credential.values.threshold;
 
@@ -387,31 +389,33 @@ fn handle_combine(matches: &ArgMatches) {
     ar_identities.sort();
     ar_identities.dedup();
     if share_numbers.len() < shares.len() || ar_identities.len() < shares.len() {
-        eprintln!(
+        println!(
             "No duplicates among the anonymity revokers identities nor share numbers are allowed"
         );
         return;
     }
 
     let id_cred_pub = reveal_id_cred_pub(&shares);
-    let json = encode(&to_bytes(&id_cred_pub));
-    if let Some(json_file) = matches.value_of("out") {
-        match write_json_to_file(json_file, &json) {
-            Ok(_) => println!("Wrote idCredPub JSON file."),
-            Err(e) => {
-                eprintln!("Could not JSON write to file because {}", e);
-                output_json(&json);
-            }
-        }
-    }
+    let id_cred_pub_string = base16_encode_string(&id_cred_pub);
     println!(
-        "IdCredPub of the credential owner is {}",
-        encode(&to_bytes(&id_cred_pub))
+        "IdCredPub of the credential owner is:\n {}",
+        id_cred_pub_string
     );
     println!(
         "Contact the identity provider with this information to get the real-life identity of the \
          user."
     );
+
+    if let Some(json_file) = matches.value_of("out") {
+        let json = json!({ "idCredPub": id_cred_pub_string });
+        match write_json_to_file(json_file, &json) {
+            Ok(_) => println!("Wrote idCredPub to {}.", json_file),
+            Err(e) => {
+                println!("Could not JSON write to file because {}", e);
+                output_json(&json);
+            }
+        }
+    }
 }
 
 fn handle_decrypt(matches: &ArgMatches) {
@@ -422,7 +426,7 @@ fn handle_decrypt(matches: &ArgMatches) {
                 eprintln!("Could not read credential because {}", x);
                 return;
             }
-            None => panic!("Should not happen since the argument is mandatory."),
+            None => unreachable!(),
         };
 
     let ar_data = credential.values.ar_data;
@@ -432,7 +436,7 @@ fn handle_decrypt(matches: &ArgMatches) {
             eprintln!("Could not read ar-private because {}", x);
             return;
         }
-        None => panic!("Should not happen since the argument is mandatory."),
+        None => unreachable!(),
     };
     // let share: (ArIdentity, ShareNumber, Message<ExampleCurve>);
     let share: ChainArDecryptedData<ExampleCurve>;
@@ -459,12 +463,14 @@ fn handle_decrypt(matches: &ArgMatches) {
     let json = share;
     if let Some(json_file) = matches.value_of("out") {
         match write_json_to_file(json_file, &json) {
-            Ok(_) => println!("Wrote decryption of share to JSON file."),
+            Ok(_) => println!("Wrote decryption to {}", json_file),
             Err(e) => {
-                eprintln!("Could not JSON write to file because {}", e);
+                println!("Could not JSON write to file because {}", e);
                 output_json(&json);
             }
         }
+    } else {
+        output_json(&json);
     }
 }
 
