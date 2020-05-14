@@ -296,6 +296,31 @@ data Value annot =
                          }
   deriving(Show, Eq)
 
+-- | Compute the conceptual size of a storable 'Value' in bytes, aborting with 'Nothing' when the
+-- given limit is exceeded.
+-- The size of a literal is as specified by 'Core.literalSize', the size of a constructor is
+-- counted with 4 bytes.
+--
+-- If the value is not storable, i.e., contains other 'Value' constructors than 'VLiteral'
+-- or 'VConstructor', this throws an error when reaching such a constructor.
+storableSizeWithLimit :: Value annot -> Word64 -> Maybe Word64
+storableSizeWithLimit val maxSize =
+  go val maxSize >>= \remainingSize -> return $ maxSize - remainingSize
+  where go :: Value annot -> (Word64 -> Maybe Word64)
+        go v =
+          case v of
+            VLiteral l ->
+              withSize (Core.literalSize l) return
+            VConstructor _ vals ->
+              withSize 4 $ \remainingSize -> foldM (flip go) remainingSize vals
+            _ -> error "FATAL: Trying to compute the size of a non-storable value. This should not happen."
+        withSize :: Word64 -> (Word64 -> Maybe Word64) -> (Word64 -> Maybe Word64)
+        withSize size cont = \remainingSize ->
+          if size > remainingSize
+          then Nothing
+          else cont $ remainingSize - size
+
+
 putSeqLength :: S.Putter (Seq.Seq a)
 putSeqLength l = P.putWord32be (fromIntegral (Seq.length l))
 
