@@ -80,7 +80,7 @@ deriving instance Core.AnnotContext Show annot => Show (ContractInterface annot)
 data Interface annot = Interface
     { -- | The unique name of the module.
       uniqueName :: !Core.ModuleRef
-      -- | The size of the module, used to compute the cost of deployment.
+      -- | The serialized size of the module in bytes, used to compute the cost of deployment.
     , iSize :: Word64
       -- The modules the module lists as imports, i.e., the modules where exported
       -- types, terms, contracts and constraints can be used from in the module.
