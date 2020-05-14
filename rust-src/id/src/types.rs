@@ -598,13 +598,14 @@ pub struct ChainArData<C: Curve> {
 }
 
 /// Data structure for when a anonymity revoker decrypts its encrypted share
+/// This is the decrypted counterpart of ChainArData
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct ChainArDecryptedData<C: Curve> {
     /// identity of the anonymity revoker
     #[serde(rename = "arIdentity")]
     pub ar_identity: ArIdentity,
-    /// encrypted share of id cred pub
+    /// share of id cred pub
     #[serde(rename = "idCredPubShare")]
     pub id_cred_pub_share: Message<C>,
     /// the number of the share
