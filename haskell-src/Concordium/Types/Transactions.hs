@@ -95,7 +95,7 @@ data TransactionHeader = TransactionHeader {
     } deriving (Show)
 
 -- | The size of a serialized transaction header in bytes.
-transactionHeaderSize :: Int
+transactionHeaderSize :: Word64
 transactionHeaderSize =
   32 -- AccountAddress (FBS 32)
   + 8 -- Nonce (Word64)
@@ -104,7 +104,7 @@ transactionHeaderSize =
   + 8 -- TransactionExpiryTime (Word64)
 
 -- | Get the size of serialized transactions header and payload in bytes.
-getTransactionHeaderPayloadSize :: TransactionHeader -> Int
+getTransactionHeaderPayloadSize :: TransactionHeader -> Word64
 getTransactionHeaderPayloadSize h = fromIntegral (thPayloadSize h) + transactionHeaderSize
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionHeader)
