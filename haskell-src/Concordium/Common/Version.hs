@@ -4,39 +4,33 @@ module Concordium.Common.Version where
 
 import Data.Word
 import Data.Bits
-import Data.Data(Data, Typeable)
-import Data.ByteString(ByteString)
-import Data.ByteString.Short(ShortByteString)
-import Data.HashMap.Strict(member)
-import qualified Data.ByteString.Short as BSS
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BS8
-import qualified Data.ByteString.Base16 as BS16
-import Concordium.Crypto.SignatureScheme
 import Data.Serialize as S
-import GHC.Generics
 import Data.Hashable
-import qualified Data.Text.Read as Text
-import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
-import Data.Aeson.Types(toJSONKeyText)
-import Data.Maybe(fromMaybe)
 import Control.Monad
-import Control.Monad.Except
-import qualified Data.Text as Text
-import Control.DeepSeq
-import System.Random
-import qualified Data.Map.Strict as Map
 
-import Data.Base58Encoding
-import qualified Data.FixedByteString as FBS
-import Concordium.Crypto.ByteStringHelpers
-import Concordium.Crypto.FFIDataTypes
-import qualified Concordium.Crypto.SHA256 as SHA256
+
+
+-- |Constants
+__versionBlock :: Version
+__versionBlock = Version 0
+
+__versionTransaction :: Version
+__versionTransaction = Version 0
+
+__versionGenesisData :: Version
+__versionGenesisData = Version 0
+
+__versionGenesisParams :: Version
+__versionGenesisParams = Version 0
+
+__versionCredential :: Version
+__versionCredential = Version 0
+
 
 
 -- |Data structure version
-newtype Version  = Version Word32
+newtype Version = Version Word32
     deriving (Eq, Ord, Hashable)
     deriving Show via Word32
     deriving (FromJSON, ToJSON) via Word32
@@ -61,6 +55,8 @@ instance Serialize Version where
           if testBit byte 7
             then decode7 (128 * acc + fromIntegral (clearBit byte 7)) (left-1)
             else return (Version (128 * acc + fromIntegral byte))
+
+
 
 -- |Versioned data structure
 data Versioned a = Versioned {
