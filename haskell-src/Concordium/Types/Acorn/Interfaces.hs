@@ -301,19 +301,22 @@ data Value annot =
 -- The size of a literal is as specified by 'Core.literalSize', the size of a constructor is
 -- counted with 4 bytes.
 --
--- If the value is not storable, i.e., contains other 'Value' constructors than 'VLiteral'
--- or 'VConstructor', this throws an error when reaching such a constructor.
+-- This function should only be called with a storable value, and if not it will return 'Nothing',
+-- essentially making it as if non-storable values have unbounded size.
 storableSizeWithLimit :: Value annot -> Word64 -> Maybe Word64
 storableSizeWithLimit val maxSize =
-  go val maxSize >>= \remainingSize -> return $ maxSize - remainingSize
-  where go :: Value annot -> (Word64 -> Maybe Word64)
+  case go val maxSize of
+    Just remainingSize -> Just (maxSize - remainingSize)
+    Nothing -> Nothing
+
+  where go :: Value annot -> Word64 -> Maybe Word64
         go v =
           case v of
             VLiteral l ->
-              withSize (Core.literalSize l) return
+              withSize (Core.literalSize l) Just
             VConstructor _ vals ->
               withSize 4 $ \remainingSize -> foldM (flip go) remainingSize vals
-            _ -> error "FATAL: Trying to compute the size of a non-storable value. This should not happen."
+            _ -> const Nothing -- This should not happen by precondition: value not storable.
         withSize :: Word64 -> (Word64 -> Maybe Word64) -> (Word64 -> Maybe Word64)
         withSize size cont = \remainingSize ->
           if size > remainingSize
