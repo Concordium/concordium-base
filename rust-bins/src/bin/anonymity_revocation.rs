@@ -81,7 +81,7 @@ fn main() {
     exec_if("combine").map(handle_combine);
 }
 
-// Combine shares to get idCredPub of the owner of the credential
+/// Combine shares to get idCredPub of the owner of the credential
 fn handle_combine(matches: &ArgMatches) {
     let credential: CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute> =
         match matches.value_of("credential").map(read_json_from_file) {
@@ -90,7 +90,7 @@ fn handle_combine(matches: &ArgMatches) {
                 eprintln!("Could not read credential because {}", x);
                 return;
             }
-            None => unreachable!(),
+            None => unreachable!("Should not happen since the argument is mandatory."),
         };
     let revocation_threshold = credential.values.threshold;
 
@@ -98,7 +98,10 @@ fn handle_combine(matches: &ArgMatches) {
 
     let shares_values: Vec<_> = match matches.values_of("shares") {
         Some(v) => v.collect(),
-        None => panic!("Could not read shares"),
+        None => {
+            eprintln!("Could not read shares");
+            return;
+        }
     };
 
     let number_of_ars = shares_values.len();
@@ -194,7 +197,7 @@ fn handle_decrypt(matches: &ArgMatches) {
                 eprintln!("Could not read credential because {}", x);
                 return;
             }
-            None => unreachable!(),
+            None => unreachable!("Should not happen since the argument is mandatory."),
         };
 
     let ar_data = credential.values.ar_data;
@@ -204,7 +207,7 @@ fn handle_decrypt(matches: &ArgMatches) {
             eprintln!("Could not read ar-private because {}", x);
             return;
         }
-        None => unreachable!(),
+        None => unreachable!("Should not happen since the argument is mandatory."),
     };
     let share: ChainArDecryptedData<ExampleCurve>;
 
@@ -227,16 +230,15 @@ fn handle_decrypt(matches: &ArgMatches) {
             };
         }
     }
-    let json = share;
     if let Some(json_file) = matches.value_of("out") {
-        match write_json_to_file(json_file, &json) {
+        match write_json_to_file(json_file, &share) {
             Ok(_) => println!("Wrote decryption to {}", json_file),
             Err(e) => {
                 println!("Could not JSON write to file because {}", e);
-                output_json(&json);
+                output_json(&share);
             }
         }
     } else {
-        output_json(&json);
+        output_json(&share);
     }
 }
