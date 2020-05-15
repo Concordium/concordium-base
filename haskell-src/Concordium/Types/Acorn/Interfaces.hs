@@ -80,7 +80,7 @@ deriving instance Core.AnnotContext Show annot => Show (ContractInterface annot)
 data Interface annot = Interface
     { -- | The unique name of the module.
       uniqueName :: !Core.ModuleRef
-      -- | The size of the module, used to compute the cost of deployment.
+      -- | The serialized size of the module in bytes, used to compute the cost of deployment.
     , iSize :: Word64
       -- The modules the module lists as imports, i.e., the modules where exported
       -- types, terms, contracts and constraints can be used from in the module.
@@ -295,6 +295,34 @@ data Value annot =
                          , vinstance_implements :: !(LinkedImplementsValue annot) -- ^All constraints this instance implements.
                          }
   deriving(Show, Eq)
+
+-- | Compute the conceptual size of a storable 'Value' in bytes, aborting with 'Nothing' when the
+-- given limit is exceeded.
+-- The size of a literal is as specified by 'Core.literalSize', the size of a constructor is
+-- counted with 4 bytes.
+--
+-- This function should only be called with a storable value, and if not it will return 'Nothing',
+-- essentially making it as if non-storable values have unbounded size.
+storableSizeWithLimit :: Value annot -> Word64 -> Maybe Word64
+storableSizeWithLimit val maxSize =
+  case go val maxSize of
+    Just remainingSize -> Just (maxSize - remainingSize)
+    Nothing -> Nothing
+
+  where go :: Value annot -> Word64 -> Maybe Word64
+        go v =
+          case v of
+            VLiteral l ->
+              withSize (Core.literalSize l) Just
+            VConstructor _ vals ->
+              withSize 4 $ \remainingSize -> foldM (flip go) remainingSize vals
+            _ -> const Nothing -- This should not happen by precondition: value not storable.
+        withSize :: Word64 -> (Word64 -> Maybe Word64) -> (Word64 -> Maybe Word64)
+        withSize size cont = \remainingSize ->
+          if size > remainingSize
+          then Nothing
+          else cont $ remainingSize - size
+
 
 putSeqLength :: S.Putter (Seq.Seq a)
 putSeqLength l = P.putWord32be (fromIntegral (Seq.length l))
