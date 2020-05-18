@@ -97,7 +97,7 @@ data Literal =
   | AAddress !AccountAddress
   deriving (Show, Eq, Generic, Typeable, Data)
 
--- |Size of a literal in bytes used in computation of the size of linked terms
+-- |Size of a literal in bytes used in computation of the size of linked terms and values.
 literalSize :: Literal -> Word64
 literalSize = \case
   Str s -> fromIntegral (BS.length s)
