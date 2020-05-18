@@ -27,13 +27,14 @@ __versionGenesisParams = Version 0
 __versionCredential :: Version
 __versionCredential = Version 0
 
+__versionFinalizationRecord :: Version
+__versionFinalizationRecord = Version 0
+
 
 
 -- |Data structure version
 newtype Version = Version Word32
-    deriving (Eq, Ord, Hashable)
-    deriving Show via Word32
-    deriving (FromJSON, ToJSON) via Word32
+    deriving (Eq, Ord, Hashable, Show, FromJSON, ToJSON)
 
 instance Serialize Version where
   put (Version v) = mapM_ S.putWord8 (encode7 v)
@@ -61,9 +62,9 @@ instance Serialize Version where
 -- |Versioned data structure
 data Versioned a = Versioned {
   -- |Version of the data
-  vVersion :: Version,
+  vVersion :: !Version,
   -- |The data structure
-  vValue :: a
+  vValue :: !a
 } deriving(Eq, Show)
 
 instance (Serialize a) => Serialize (Versioned a) where
