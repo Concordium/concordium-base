@@ -1,0 +1,20 @@
+pipeline {
+    agent any
+    stages {
+        stage('ecr-login') {
+            steps {
+                sh '$(aws --region eu-west-1 ecr get-login | sed -e \'s/-e none//g\')'
+            }
+        }
+        stage('build') {
+            environment {
+                DOCKER_BUILDKIT = 1
+            }
+            steps {
+                sshagent (credentials: ['jenkins']) {
+                    sh 'VERSION_TAG=$(git rev-parse --verify HEAD) && docker build --no-cache --ssh default -t 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/wallet-server:$VERSION_TAG -f scripts/Dockerfile . && docker push 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/wallet-server:$VERSION_TAG'
+                }
+            }
+        }
+    }
+}
