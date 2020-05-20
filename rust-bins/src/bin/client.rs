@@ -14,7 +14,6 @@ use elgamal::{public::PublicKey, secret::SecretKey};
 
 use id::{account_holder::*, identity_provider::*, types::*};
 use pairing::bls12_381::Bls12;
-use ps_sig;
 
 use rand::*;
 

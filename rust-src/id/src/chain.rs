@@ -10,7 +10,6 @@ use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
-use ps_sig;
 use std::collections::BTreeSet;
 
 use either::Either;

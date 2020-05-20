@@ -34,8 +34,6 @@ use std::{
     io::{Cursor, Read},
 };
 
-use failure;
-
 use sha2::{Digest, Sha256};
 
 // only for account addresses

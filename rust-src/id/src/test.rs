@@ -9,7 +9,6 @@ use ed25519_dalek as ed25519;
 use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
-use ps_sig;
 use rand::*;
 use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
