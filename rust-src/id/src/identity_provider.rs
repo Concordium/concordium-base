@@ -9,7 +9,6 @@ use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use random_oracle::RandomOracle;
 
 use ff::Field;
-use ps_sig;
 use rand::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
