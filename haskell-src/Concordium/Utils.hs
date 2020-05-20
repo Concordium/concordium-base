@@ -103,3 +103,10 @@ singleton' !x = Seq.singleton x
 {-# INLINE cons' #-}
 cons' :: a -> [a] -> [a]
 cons' !x = (x:)
+
+-- *Strict functions on pairs.
+
+-- |Force the evaluation of the components of the pair.
+($!!) :: ((a,b) -> c) -> (a,b) -> c
+f $!! (!x, !y) = f (x,y)
+{-# INLINE ($!!) #-}
