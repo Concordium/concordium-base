@@ -10,7 +10,6 @@ use id::{
 use std::io::Cursor;
 
 use pairing::bls12_381::{Bls12, G1};
-use ps_sig;
 
 use rand::*;
 

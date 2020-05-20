@@ -17,7 +17,6 @@ use serde::{
     de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
     Serializer,
 };
-use serde_json;
 
 /// Concrete attribute kinds
 #[derive(Clone, PartialEq, Eq, Debug)]

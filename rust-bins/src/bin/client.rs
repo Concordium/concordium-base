@@ -10,11 +10,10 @@ use std::collections::btree_map::BTreeMap;
 use curve_arithmetic::Curve;
 use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
-use elgamal::{message::Message, public::PublicKey, secret::SecretKey};
-use hex::encode;
+use elgamal::{public::PublicKey, secret::SecretKey};
+
 use id::{account_holder::*, identity_provider::*, types::*};
 use pairing::bls12_381::Bls12;
-use ps_sig;
 
 use rand::*;
 
@@ -22,7 +21,6 @@ use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
 
 use std::{
     cmp::max,
-    convert::TryFrom,
     fs::File,
     io::{self, Write},
     path::Path,
@@ -254,78 +252,6 @@ If not present a fresh key-pair will be generated.",
     exec_if("generate-global").map(handle_generate_global);
     exec_if("ip-sign-pio").map(handle_act_as_ip);
     exec_if("deploy-credential").map(handle_deploy_credential);
-    exec_if("revoke-anonymity").map(handle_revoke_anonymity);
-}
-
-/// Revoke the anonymity of the credential.
-fn handle_revoke_anonymity(matches: &ArgMatches) {
-    let credential: CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute> =
-        match matches.value_of("credential").map(read_json_from_file) {
-            Some(Ok(r)) => r,
-            Some(Err(x)) => {
-                eprintln!("Could not read credential because {}", x);
-                return;
-            }
-            None => panic!("Should not happen since the argument is mandatory."),
-        };
-    let revocation_threshold = credential.values.threshold;
-
-    let ar_data = credential.values.ar_data;
-
-    // A list of filenames with private info from anonymity revokers.
-    let ar_values: Vec<_> = match matches.values_of("ar-private") {
-        Some(v) => v.collect(),
-        None => panic!("Could not read ar-private"),
-    };
-    let mut ars: Vec<ArData<ExampleCurve>> = Vec::with_capacity(ar_values.len());
-    for ar_value in ar_values.iter() {
-        match read_json_from_file(ar_value) {
-            Err(y) => {
-                eprintln!("Could not read from ar file {} {}", ar_value, y);
-                return;
-            }
-            Ok(val) => ars.push(val),
-        }
-    }
-
-    let number_of_ars = ars.len();
-    let number_of_ars = u32::try_from(number_of_ars)
-        .expect("Number of anonymity revokers should not exceed 2^32-1");
-    if number_of_ars < revocation_threshold.into() {
-        eprintln!(
-            "insufficient number of anonymity revokers {}, {:?}",
-            number_of_ars, revocation_threshold
-        );
-        return;
-    }
-    let mut shares = Vec::with_capacity(ars.len());
-
-    for ar in ars.into_iter() {
-        match ar_data
-            .iter()
-            .find(|&x| x.ar_identity == ar.public_ar_info.ar_identity)
-        {
-            None => {
-                eprintln!("AR is not part of the credential");
-                return;
-            }
-            Some(single_ar_data) => {
-                let Message { value: m } = ar
-                    .ar_secret_key
-                    .decrypt(&single_ar_data.enc_id_cred_pub_share);
-                shares.push((single_ar_data.id_cred_pub_share_number, m))
-            }
-        }
-    }
-    let id_cred_pub = reveal_in_group(&shares);
-    println!(
-        "IdCredPub of the credential owner is {}",
-        encode(&to_bytes(&id_cred_pub))
-    );
-    println!(
-        "Contact the identity provider with this information to get the real-life identity of the \
-         user."
-    );
 }
 
 /// Read the identity object, select attributes to reveal and create a
