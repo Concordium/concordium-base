@@ -8,7 +8,6 @@ use crypto_common::*;
 use elgamal::message::Message;
 
 use id::types::*;
-use pairing::bls12_381::Bls12;
 
 use std::convert::TryFrom;
 
@@ -16,29 +15,34 @@ use client_server_helpers::*;
 
 use serde_json::json;
 
+#[macro_use]
+extern crate failure;
+use failure::Fallible;
+
 fn main() {
-    let app = App::new("Prototype client showcasing ID layer interactions.")
-        .version("0.36787944117")
+    let app = App::new("A tool for anonymity revocation.")
+        .version("0.00787499699")
         .author("Concordium")
         .setting(AppSettings::ArgRequiredElseHelp)
         .global_setting(AppSettings::ColoredHelp)
+        .arg(
+            Arg::with_name("credential")
+                .long("credential")
+                .short("c")
+                .value_name("FILE")
+                .global(true)
+                .help("File with the JSON encoded credential or credential values."),
+        )
         .subcommand(
             SubCommand::with_name("decrypt")
                 .about("Take a deployed credential and let one anonymity revoker decrypt its share")
-                .arg(
-                    Arg::with_name("credential")
-                        .long("credential")
-                        .short("c")
-                        .value_name("FILE")
-                        .required(true)
-                        .help("File with the JSON encoded credential."),
-                )
                 .arg(
                     Arg::with_name("ar-private")
                         .long("ar-private")
                         .short("a")
                         .value_name("FILE")
                         .required(true)
+                        .requires("credential")
                         .help("File with anonymity revoker's private and public keys."),
                 )
                 .arg(
@@ -52,20 +56,13 @@ fn main() {
             SubCommand::with_name("combine")
                 .about("Combines decrypted shares of anonymity revokers to get idCredPub")
                 .arg(
-                    Arg::with_name("credential")
-                        .long("credential")
-                        .short("c")
-                        .value_name("FILE")
-                        .required(true)
-                        .help("File with the JSON encoded credential."),
-                )
-                .arg(
                     Arg::with_name("shares")
                         .long("shares")
                         .short("s")
                         .multiple(true)
                         .value_name("FILE(S)")
                         .required(true)
+                        .requires("credential")
                         .help("Files with the JSON encoded decrypted shares."),
                 )
                 .arg(
@@ -81,20 +78,34 @@ fn main() {
     exec_if("combine").map(handle_combine);
 }
 
+fn read_credential_values(
+    file_name: &str,
+) -> Fallible<CredentialDeploymentValues<ExampleCurve, ExampleAttribute>> {
+    // this will work fine even if the whole credential is given since
+    // JSON serialization of credentials flattens the values.
+    match read_json_from_file(file_name) {
+        Ok(r) => Ok(r),
+        Err(x) => bail!("Could not read credential because {}", x),
+    }
+}
+
 /// Combine shares to get idCredPub of the owner of the credential
 fn handle_combine(matches: &ArgMatches) {
-    let credential: CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute> =
-        match matches.value_of("credential").map(read_json_from_file) {
-            Some(Ok(r)) => r,
-            Some(Err(x)) => {
-                eprintln!("Could not read credential because {}", x);
+    let credential: CredentialDeploymentValues<ExampleCurve, ExampleAttribute> = {
+        let file_name = matches
+            .value_of("credential")
+            .expect("Mandatory argument should be present.");
+        match read_credential_values(file_name) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("{}", e);
                 return;
             }
-            None => unreachable!("Should not happen since the argument is mandatory."),
-        };
-    let revocation_threshold = credential.values.threshold;
+        }
+    };
+    let revocation_threshold = credential.threshold;
 
-    let ar_data = credential.values.ar_data;
+    let ar_data = credential.ar_data;
 
     let shares_values: Vec<_> = match matches.values_of("shares") {
         Some(v) => v.collect(),
@@ -190,17 +201,20 @@ fn handle_combine(matches: &ArgMatches) {
 
 /// Decrypt encIdCredPubShare
 fn handle_decrypt(matches: &ArgMatches) {
-    let credential: CredDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute> =
-        match matches.value_of("credential").map(read_json_from_file) {
-            Some(Ok(r)) => r,
-            Some(Err(x)) => {
-                eprintln!("Could not read credential because {}", x);
+    let credential: CredentialDeploymentValues<ExampleCurve, ExampleAttribute> = {
+        let file_name = matches
+            .value_of("credential")
+            .expect("Mandatory argument should be present.");
+        match read_credential_values(file_name) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("{}", e);
                 return;
             }
-            None => unreachable!("Should not happen since the argument is mandatory."),
-        };
+        }
+    };
 
-    let ar_data = credential.values.ar_data;
+    let ar_data = credential.ar_data;
     let ar: ArData<ExampleCurve> = match matches.value_of("ar-private").map(read_json_from_file) {
         Some(Ok(r)) => r,
         Some(Err(x)) => {
