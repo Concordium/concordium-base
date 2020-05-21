@@ -7,6 +7,8 @@ import qualified Data.Map.Strict as M
 import qualified Data.Sequence as Seq
 import Lens.Micro.Internal
 import Lens.Micro.Platform
+import Data.Monoid(First)
+import Control.Monad
 
 import Control.Monad.State.Class
 
@@ -26,7 +28,29 @@ instance Ord k => At' (M.Map k v) where
   {-# INLINE at' #-}
 
 
+-- *Strict versions of some lenses.
+(?~!) :: ASetter s t a (Maybe b) -> b -> s -> t
+l ?~! b = b `seq` set l (Just b)
+{-# INLINE (?~!) #-}
+
+infixr 4 ?~!
+
 -- *Strict versions of monadic state lenses.
+
+-- |Strict version of `gets` that evaluates the given function strictly on the
+-- state before returning.
+gets' :: MonadState s m => (s -> a) -> m a
+gets' f = f <$!> get
+{-# INLINE gets' #-}
+
+preuse' :: MonadState s m => Getting (First a) s a -> m (Maybe a)
+preuse' l = gets' (preview l)
+{-# INLINE preuse' #-}
+
+use' :: MonadState s m => Getting a s a -> m a
+use' l = gets' (view l)
+{-# INLINE use' #-}
+
 
 (.=!) :: MonadState s m => ASetter s s a b -> b -> m ()
 l .=! x = modify' (l .~ x)
@@ -48,7 +72,7 @@ l <~! mb = mb >>= (l .=!)
 infixr 2 <~!
 
 (?=!) :: MonadState s m => ASetter s s a (Maybe b) -> b -> m ()
-l ?=! b = b `seq` l .= Just b
+l ?=! b = l .=! (b `seq` Just b)
 {-# INLINE (?=!) #-}
 
 infix 4 ?=!
