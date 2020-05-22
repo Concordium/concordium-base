@@ -25,6 +25,10 @@ rouille = "3.0"
 path = "../rust-src/crypto_common"
 version = "0"
 
+[dependencies.crypto_common_derive]
+path = "../rust-src/crypto_common_derive"
+version = "0"
+
 [dependencies.curve_arithmetic]
 path = "../rust-src/curve_arithmetic"
 version = "0"
