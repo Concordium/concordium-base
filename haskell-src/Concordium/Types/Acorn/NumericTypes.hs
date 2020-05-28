@@ -18,9 +18,7 @@ import Data.Hashable(Hashable)
 import Data.Serialize
 import Data.Bits
 import Text.Read
-import Data.Aeson as AE
-import Data.Aeson.Encoding
-import qualified Data.Text as Text
+import Data.Aeson
 import System.Random
 import Test.QuickCheck
 
