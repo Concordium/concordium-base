@@ -5,7 +5,6 @@ import Data.Word
 import Data.Int
 
 import Concordium.Types.Acorn.NumericTypes
-import Types.NumericTypes()
 
 import Test.Hspec
 import Test.Hspec.QuickCheck
