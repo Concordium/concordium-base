@@ -9,7 +9,6 @@ import Control.Monad
 
 import Concordium.Types
 import Concordium.Types.Acorn.Core
-import Types.NumericTypes()
 import Data.FixedByteString as FBS
 
 import qualified Concordium.Crypto.SHA256 as SHA256
