@@ -10,6 +10,7 @@ import Concordium.Crypto.SignatureScheme
 import Data.Time.Clock
 
 import Concordium.Types
+import Concordium.Types.HashableTo
 import Concordium.ID.Types
 
 import Control.Monad
@@ -60,6 +61,7 @@ genTransaction = do
   wmdData <- genBareTransaction
   wmdArrivalTime <- arbitrary
   let body = encode wmdData
-  let wmdHash = hash body
+  let wmdSignHash = getHash wmdData
+  let wmdHash = getHash wmdData
   let wmdSize = BS.length body
   return $ WithMetadata{..}
