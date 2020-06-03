@@ -1,5 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -11,6 +12,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE QuantifiedConstraints #-}
@@ -18,8 +20,10 @@
 
 module Concordium.Types.Acorn.Interfaces where
 
+import qualified Data.Kind as DK
 import GHC.Generics(Generic)
 
+import Data.Coerce
 import Data.Vector(Vector)
 import qualified Data.Vector as Vector
 import Data.Hashable(Hashable)
@@ -40,6 +44,24 @@ import qualified Data.Serialize as S
 
 import Concordium.Types
 import qualified Concordium.Types.Acorn.Core as Core
+
+-- |Size of a term as used when linking.
+-- This type is used for two different things. The `linked` type parameter
+-- can be used to distinguish between these two use sites.
+newtype TermSize (linked :: DK.Type -> DK.Type) = TermSize { _termSize :: Word64 }
+    deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded, S.Serialize) via Word64
+
+type LinkedTermSize = TermSize Linked
+type UnlinkedTermSize = TermSize Unlinked
+
+-- |Consider an unlinked term size as linked. Needed during linking to compute the size of the linked term.
+{-# INLINE considerAsLinked #-}
+considerAsLinked :: UnlinkedTermSize -> LinkedTermSize
+considerAsLinked = coerce
+
+-- |Computed size of some value in bytes.
+newtype ByteSize = ByteSize { _byteSize :: Word64 }
+    deriving (Show, Read, Eq, Enum, Ord, Num, Real, Integral, Hashable, Bounded) via Word64
 
 -- * Datatypes involved in typechecking, and any other operations involving types.
 
@@ -303,21 +325,23 @@ data Value annot =
 --
 -- This function should only be called with a storable value, and if not it will return 'Nothing',
 -- essentially making it as if non-storable values have unbounded size.
-storableSizeWithLimit :: Value annot -> Word64 -> Maybe Word64
+--
+-- The given type @a@ should be a 64-bit type to avoid any issues with overflow.
+storableSizeWithLimit :: forall a annot . (Integral a) => Value annot -> a -> Maybe a
 storableSizeWithLimit val maxSize =
   case go val maxSize of
     Just remainingSize -> Just (maxSize - remainingSize)
     Nothing -> Nothing
 
-  where go :: Value annot -> Word64 -> Maybe Word64
+  where go :: Value annot -> a -> Maybe a
         go v =
           case v of
             VLiteral l ->
-              withSize (Core.literalSize l) Just
+              withSize (fromIntegral (Core.literalSize l)) Just
             VConstructor _ vals ->
               withSize 4 $ \remainingSize -> foldM (flip go) remainingSize vals
             _ -> const Nothing -- This should not happen by precondition: value not storable.
-        withSize :: Word64 -> (Word64 -> Maybe Word64) -> (Word64 -> Maybe Word64)
+        withSize :: a -> (a -> Maybe a) -> (a -> Maybe a)
         withSize size cont = \remainingSize ->
           if size > remainingSize
           then Nothing
@@ -570,9 +594,9 @@ deriving instance (v ~ linked (Expr linked annot), Eq v, Eq annot) => Eq (Expr l
 data ImplementsValue linked annot = ImplementsValue
     {
     -- |The list of sender methods for a particular constraint this contract implements.
-    ivSenders :: !(Vector (SenderTy linked annot, Word64)),
+    ivSenders :: !(Vector (SenderTy linked annot, TermSize linked)),
     -- |The list of getter methods for a particular constraint this contract implements.
-    ivGetters :: !(Vector (GetterTy linked annot, Word64))
+    ivGetters :: !(Vector (GetterTy linked annot, TermSize linked))
     } deriving(Functor)
 
 deriving instance (v ~ linked (Expr linked annot), Show v, Show annot) => Show (ImplementsValue linked annot)
@@ -602,7 +626,7 @@ data LinkedExprWithDeps annot = LinkedExprWithDeps {
   -- |The actual linked expression.
   leExpr :: !(LinkedExpr annot),
   -- |List of dependencies with sizes.
-  leDeps :: !(HashMap (Core.ModuleRef, Core.Name) Word64)
+  leDeps :: !(HashMap (Core.ModuleRef, Core.Name) (TermSize Linked))
   } deriving(Eq, Show, Functor)
 
 data Foreign =
@@ -628,9 +652,9 @@ type LinkedReceiveMethod annot = LinkedExpr annot
 data ContractValue linked annot = ContractValue
     {
       -- |The compiled initilization method.
-      cvInitMethod :: !(InitMethod linked annot, Word64),
+      cvInitMethod :: !(InitMethod linked annot, TermSize linked),
       -- |The compiled receive method.
-      cvReceiveMethod :: !(ReceiveMethod linked annot, Word64),
+      cvReceiveMethod :: !(ReceiveMethod linked annot, TermSize linked),
       -- |A map of all the implemented constraints.
       cvImplements :: !(HashMap (Core.ModuleRef, Core.TyName) (ImplementsValue linked annot)) 
     } deriving(Generic, Functor)
@@ -652,7 +676,7 @@ data ValueInterface linked annot = ValueInterface {
   -- |Compiled top-level definitions.
   -- Private and public (since at runtime a public definition might depend on the private one).
   -- We also record the sizes of terms.
-  viDefs :: !(HashMap Core.Name (Expr linked annot, Word64)),
+  viDefs :: !(HashMap Core.Name (Expr linked annot, TermSize linked)),
   -- |Exported contracts with their init and receive methods.
   viContracts :: !(HashMap Core.TyName (ContractValue linked annot))
   } deriving(Functor)
@@ -728,7 +752,7 @@ class Monad m => InterpreterMonad annot m | m -> annot where
   getCurrentContractState :: ContractAddress -> m (Maybe (HashMap AbsoluteConstraintRef (LinkedImplementsValue annot), Value annot))
 
 class Monad m => LinkerMonad annot m | m -> annot where
-  getExprInModule :: Core.ModuleRef -> Core.Name -> m (Maybe (UnlinkedExpr annot, Word64))
+  getExprInModule :: Core.ModuleRef -> Core.Name -> m (Maybe (UnlinkedExpr annot, TermSize Unlinked))
 
   tryGetLinkedExpr :: Core.ModuleRef -> Core.Name -> m (Maybe (LinkedExprWithDeps annot))
 
