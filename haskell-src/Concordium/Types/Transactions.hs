@@ -52,13 +52,18 @@ getTransactionNumSigs = length . tsSignature
 instance S.Serialize TransactionSignature where
   put TransactionSignature{..} = do
     S.putWord8 (fromIntegral (length tsSignature))
-    forM_ (Map.toList tsSignature) $ \(idx, sig) -> S.put idx <> S.put sig
+    forM_ (Map.toAscList tsSignature) $ \(idx, sig) -> S.put idx <> S.put sig
   get = do
     len <- S.getWord8
     when (len == 0) $ fail "Need at least one signature."
-    -- it is fine to redefine signatures during serialization (if there are multiple with the same key index).
-    -- this cannot harm validity
-    TransactionSignature . Map.fromList <$> replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+    let accumulateSigs accum mlast count
+          | count == 0 = return accum
+          | otherwise = do
+              idx <- S.get
+              forM_ mlast $ \lasti -> unless (idx > lasti) $ fail "Signatures are not in canonical order."
+              sig <- S.get
+              accumulateSigs (Map.insert idx sig accum) (Just idx) (count - 1)
+    TransactionSignature <$> accumulateSigs Map.empty Nothing len
 
 -- |Size of the signature in bytes.
 -- Should be kept up to date with the serialize instance.
@@ -92,7 +97,7 @@ data TransactionHeader = TransactionHeader {
     -- |Absolute expiration time after which transaction will not be executed
     -- TODO In the future, transaction will not be executed but added to a block and charged NRG
     thExpiry :: TransactionExpiryTime
-    } deriving (Show)
+    } deriving (Show, Eq)
 
 -- | The size of a serialized transaction header in bytes.
 transactionHeaderSize :: Word64
@@ -108,13 +113,6 @@ getTransactionHeaderPayloadSize :: TransactionHeader -> Word64
 getTransactionHeaderPayloadSize h = fromIntegral (thPayloadSize h) + transactionHeaderSize
 
 $(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 2} ''TransactionHeader)
-
--- |Eq instance ignores derived fields.
-instance Eq TransactionHeader where
-  th1 == th2 = thNonce th1 == thNonce th2 &&
-               thEnergyAmount th1 == thEnergyAmount th2 &&
-               thPayloadSize th1 == thPayloadSize th2 &&
-               thExpiry th1 == thExpiry th2
 
 -- * @SPEC: <$DOCS/Transactions#transaction-header-serialization>
 instance S.Serialize TransactionHeader where
@@ -157,37 +155,31 @@ instance S.Serialize BareTransaction where
     btrPayload <- getPayload (thPayloadSize btrHeader)
     return $! BareTransaction{..}
 
+instance HashableTo TransactionHashV0 BareTransaction where
+  getHash = transactionHashFromBareTransaction
+  {-# INLINE getHash #-}
+
+instance HashableTo TransactionSignHashV0 BareTransaction where
+  getHash = transactionSignHashFromBareTransaction
+
 fromBareTransaction :: TransactionTime -> BareTransaction -> Transaction
-fromBareTransaction wmdArrivalTime wmdData@BareTransaction{..} =
-  let txBodyBytes = S.runPut (S.put btrHeader <> putPayload btrPayload)
-      wmdHash = H.hash txBodyBytes
-      wmdSize = BS.length txBodyBytes + BS.length (S.encode btrSignature)
+fromBareTransaction wmdArrivalTime wmdData =
+  let wmdHash = getHash wmdData
+      wmdSignHash = getHash wmdData
+      wmdSize = BS.length (S.encode wmdData)
   in WithMetadata{..}
 
 data WithMetadata value = WithMetadata {
   wmdData :: !value,
   -- |Size of the data in bytes, derived field.
   wmdSize :: !Int,
+  -- |Hash of the transaction as used for signing
+  wmdSignHash :: !TransactionSignHash,
   -- |Hash of the transaction. Derived from the first field.
   wmdHash :: !TransactionHash,
   -- |Arrival time of the transaction.
   wmdArrivalTime :: !TransactionTime
-  } deriving(Show, Functor)
-
--- Serialize instance which writes out everything including the metadata.
-instance S.Serialize value => S.Serialize (WithMetadata value) where
-  put WithMetadata{..} =
-    S.put wmdData <>
-    S.putWord64be (fromIntegral wmdSize) <>
-    S.put wmdHash <>
-    S.put wmdArrivalTime
-
-  get = do
-    wmdData <- S.get
-    wmdSize <- fromIntegral <$> S.getWord64be
-    wmdHash <- S.get
-    wmdArrivalTime <- S.get
-    return WithMetadata{..}
+  } deriving(Show)
 
 metaDataSize :: Int
 metaDataSize = H.digestSize + 8 + 8
@@ -216,9 +208,9 @@ instance Eq (WithMetadata value) where
 instance Ord (WithMetadata value) where
   compare t1 t2 = compare (wmdHash t1) (wmdHash t2)
 
-instance HashableTo H.Hash (WithMetadata value) where
+instance HashableTo TransactionHash (WithMetadata value) where
   {-# INLINE getHash #-}
-  getHash x = wmdHash x
+  getHash = wmdHash
 
 type Transaction = WithMetadata BareTransaction
 type CredentialDeploymentWithMeta = WithMetadata CredentialDeploymentInformation
@@ -227,7 +219,8 @@ fromCDI :: TransactionTime -> CredentialDeploymentInformation -> CredentialDeplo
 fromCDI wmdArrivalTime wmdData =
   let cdiBytes = S.encode wmdData
       wmdSize = BS.length cdiBytes
-      wmdHash = H.hash cdiBytes
+      wmdHash = getHash (CredentialDeployment wmdData)
+      wmdSignHash = TransactionSignHashV0 (v0TransactionHash wmdHash)
   in WithMetadata{..}
 
 -- |Data that can go onto a block.
@@ -239,9 +232,9 @@ data BareBlockItem =
       biCred :: !CredentialDeploymentInformation
   } deriving(Eq, Show)
 
-instance HashableTo H.Hash BareBlockItem where
-  getHash NormalTransaction{..} = transactionHash biTransaction
-  getHash CredentialDeployment{..} = H.hash (S.encode biCred)
+instance HashableTo TransactionHash BareBlockItem where
+  getHash NormalTransaction{..} = transactionHashFromBareTransaction biTransaction
+  getHash CredentialDeployment{..} = transactionHashFromCDI biCred
 
 type BlockItem = WithMetadata BareBlockItem
 
@@ -259,10 +252,104 @@ instance ToPut BareBlockItem where
   {-# INLINE toPut #-}
   toPut = S.put
 
+normalTransaction :: Transaction -> BlockItem
+normalTransaction WithMetadata{..} = WithMetadata{wmdData = NormalTransaction wmdData, ..}
+
+credentialDeployment :: WithMetadata CredentialDeploymentInformation -> BlockItem
+credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeployment wmdData, ..}
+
 -- |Size of the block item when full serialized (including metadata).
 blockItemSize :: BlockItem -> Int
 blockItemSize bi = metaDataSize + biSize bi
 
+-- * 'TransactionSignHash' funcations
+
+-- |Construct a 'TransactionSignHash' from the serialized bytes of
+-- a bare transaction's header and payload.
+transactionSignHashFromBareTransactionBytes :: BS.ByteString -> TransactionSignHashV0
+transactionSignHashFromBareTransactionBytes = TransactionSignHashV0 . H.hash
+
+-- |Construct a 'TransactionSignHash' from a 'TransactionHeader' and 'EncodedPayload'.
+transactionSignHashFromHeaderPayload :: TransactionHeader -> EncodedPayload -> TransactionSignHashV0
+transactionSignHashFromHeaderPayload btrHeader btrPayload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy $ S.put btrHeader <> putPayload btrPayload
+
+-- |Construct a 'TransactionSignHash' from a 'BareTransaction'.
+transactionSignHashFromBareTransaction :: BareTransaction -> TransactionSignHashV0
+transactionSignHashFromBareTransaction BareTransaction{..} = transactionSignHashFromHeaderPayload btrHeader btrPayload
+
+-- |Since a 'CredentialDeploymentInformation' is not signed in the manner
+-- of a conventional transaction, we make a dummy 'TransactionSignHash'
+-- from a 'TransactionHash'.  This must not be used to generate a
+-- 'TransactionSignHash' for a regular transaction.
+transactionSignHashForCDI :: TransactionHashV0 -> TransactionSignHashV0
+transactionSignHashForCDI = TransactionSignHashV0 . v0TransactionHash
+
+-- * 'TransactionHash' functions
+
+-- |Construct a 'TransactionHash' for a regular transaction given
+-- the transaction signature, and header and payload in serialized
+-- form.
+transactionHashFromBareTransactionBytes ::
+  BS.ByteString
+  -- ^Serialized signature
+  -> BS.ByteString
+  -- ^Serialized header and payload
+  -> TransactionHashV0
+transactionHashFromBareTransactionBytes sigBytes txBytes = TransactionHashV0 $ H.hash $ BS.singleton 0 <> sigBytes <> txBytes
+
+transactionHashFromBareTransactionParts ::
+  TransactionSignature
+  -> TransactionHeader
+  -> EncodedPayload
+  -> TransactionHashV0
+transactionHashFromBareTransactionParts sig hdr payload
+    = TransactionHashV0 $ H.hashLazy $ S.runPutLazy $
+        S.putWord8 0 <> S.put sig <> S.put hdr <> putPayload payload
+
+-- |Construct a 'TransactionHash' for a 'BareTransaction'.
+transactionHashFromBareTransaction :: BareTransaction -> TransactionHashV0
+transactionHashFromBareTransaction BareTransaction{..} = transactionHashFromBareTransactionParts btrSignature btrHeader btrPayload
+
+-- |Construct a transaction hash for a 'CredentialDeploymentInformation'
+-- given its serialized form.
+transactionHashFromCDIBytes ::
+  BS.ByteString
+  -- ^Serialized 'CredentialDeploymentInformation'
+  -> TransactionHashV0
+transactionHashFromCDIBytes bytes = TransactionHashV0 $ H.hash $ BS.singleton 1 <> bytes
+
+-- |Construct a transaction hash for a 'CredentialDeploymentInformation'.
+transactionHashFromCDI :: CredentialDeploymentInformation -> TransactionHashV0
+transactionHashFromCDI = transactionHashFromCDIBytes . S.encode
+
+-- * Serialization
+
+-- |Deserialize a transaction, but don't check it's signature.
+--
+-- * @SPEC: <$DOCS/Transactions#serialization-format-transactions>
+getUnverifiedTransaction :: TransactionTime -> S.Get Transaction
+getUnverifiedTransaction wmdArrivalTime = do
+  (btrSignature, sigSize) <- S.lookAhead $! do
+    sigStart <- S.bytesRead
+    btrSignature <- S.get
+    sigEnd <- S.bytesRead
+    return (btrSignature, sigEnd - sigStart)
+  sigBytes <- S.getBytes sigSize
+  -- we use lookahead to deserialize the transaction without consuming the input.
+  -- after that we read the bytes we just deserialized for further processing.
+  (btrHeader, btrPayload, bodySize) <- S.lookAhead $! do
+    start <- S.bytesRead
+    trHeader <- S.get
+    trPayload <- getPayload (thPayloadSize trHeader)
+    end <- S.bytesRead
+    return (trHeader, trPayload, end - start)
+  txBytes <- S.getBytes bodySize
+  let wmdSignHash = transactionSignHashFromBareTransactionBytes txBytes
+  let wmdHash = transactionHashFromBareTransactionBytes sigBytes txBytes
+  let wmdSize = bodySize + sigSize
+  return WithMetadata{wmdData=BareTransaction{..},..}
+
+-- |Deserialize a 'CredentialDeploymentWithMeta'.
 getCDWM :: TransactionTime -> S.Get CredentialDeploymentWithMeta
 getCDWM time = do
     start <- S.bytesRead
@@ -272,16 +359,17 @@ getCDWM time = do
       return (cdi, end)
     let wmdSize = end - start
     bytes <- S.getByteString wmdSize
-    let wmdHash = H.hash bytes
+    let wmdHash = transactionHashFromCDIBytes bytes
+    let wmdSignHash = transactionSignHashForCDI wmdHash
     return WithMetadata{wmdArrivalTime=time,..}
 
--- |Get reconstructing metadata.
-getBlockItem :: Word64 -- ^Timestamp of when the item arrived.
+-- |Get a block item, reconstructing metadata.
+getBlockItem :: TransactionTime -- ^Timestamp of when the item arrived.
              -> S.Get BlockItem
 getBlockItem time =
     S.getWord8 >>= \case
-      0 -> fmap NormalTransaction <$> getUnverifiedTransaction time
-      1 -> fmap CredentialDeployment <$> getCDWM time
+      0 -> normalTransaction <$> getUnverifiedTransaction time
+      1 -> credentialDeployment <$> getCDWM time
       _ -> fail "Block item must be either normal transaction or credential deployment."
 
 -- |Class which is one part of serialize
@@ -298,27 +386,6 @@ instance ToPut BareTransaction where
   {-# INLINE toPut #-}
   toPut = S.put
 
--- |Deserialize a transaction, but don't check it's signature.
---
--- * @SPEC: <$DOCS/Transactions#serialization-format-transactions>
-getUnverifiedTransaction :: TransactionTime -> S.Get Transaction
-getUnverifiedTransaction wmdArrivalTime = do
-  sigStart <- S.bytesRead
-  btrSignature <- S.get
-  sigEnd <- S.bytesRead
-  -- we use lookahead to deserialize the transaction without consuming the input.
-  -- after that we read the bytes we just deserialized for further processing.
-  (btrHeader, btrPayload, bodySize) <- S.lookAhead $! do
-    start <- S.bytesRead
-    trHeader <- S.get
-    trPayload <- getPayload (thPayloadSize trHeader)
-    end <- S.bytesRead
-    return (trHeader, trPayload, end - start)
-  txBytes <- S.getBytes bodySize
-  let wmdHash = H.hash txBytes
-  let sigSize = sigEnd - sigStart
-  let wmdSize = bodySize + sigSize
-  return WithMetadata{wmdData=BareTransaction{..},..}
 
 -- |Make a transaction out of minimal data needed.
 -- This computes the derived fields, in particular the hash of the transaction.
@@ -326,8 +393,10 @@ makeTransaction :: TransactionTime -> TransactionSignature -> TransactionHeader 
 makeTransaction wmdArrivalTime btrSignature btrHeader btrPayload =
     let txBodyBytes = S.runPut $ S.put btrHeader <> putPayload btrPayload
         -- transaction hash only refers to the body, not the signature of the transaction
-        wmdHash = H.hash txBodyBytes
-        wmdSize = BS.length txBodyBytes + BS.length (S.encode btrSignature)
+        wmdSignHash = transactionSignHashFromBareTransactionBytes txBodyBytes
+        sigBytes = S.encode btrSignature
+        wmdHash = transactionHashFromBareTransactionBytes sigBytes txBodyBytes
+        wmdSize = BS.length txBodyBytes + BS.length sigBytes
         wmdData = BareTransaction{..}
     in WithMetadata{..}
 
@@ -345,9 +414,9 @@ signTransactionSingle kp = signTransaction [(0, kp)]
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
 signTransaction :: [(KeyIndex, KeyPair)] -> TransactionHeader -> EncodedPayload -> BareTransaction
 signTransaction keys btrHeader btrPayload =
-  let body = S.runPut (S.put btrHeader <> putPayload btrPayload)
+  let 
       -- only sign the hash of the transaction
-      bodyHash = H.hashToByteString (H.hash body)
+      bodyHash = transactionSignHashToByteString $ transactionSignHashFromHeaderPayload btrHeader btrPayload
       tsSignature = Map.fromList $ map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) keys
       btrSignature = TransactionSignature{..}
   in BareTransaction{..}
@@ -357,7 +426,7 @@ signTransaction keys btrHeader btrPayload =
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
 verifyTransaction :: TransactionData msg => AccountKeys -> msg -> Bool
 verifyTransaction keys tx =
-  let bodyHash = H.hashToByteString (transactionHash tx)
+  let bodyHash = transactionSignHashToByteString (transactionSignatureHash tx)
       TransactionSignature sigs = transactionSignature tx
       keysCheck = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getAccountKey idx keys)) True (Map.toList sigs)
       numSigs = length sigs
@@ -375,7 +444,10 @@ class TransactionData t where
     transactionGasAmount :: t -> Energy
     transactionPayload :: t -> EncodedPayload
     transactionSignature :: t -> TransactionSignature
-    transactionHash :: t -> H.Hash
+    transactionSignatureHash :: t -> TransactionSignHash
+    transactionSignatureHash tr = transactionSignHashFromHeaderPayload (transactionHeader tr) (transactionPayload tr)
+    transactionHash :: t -> TransactionHash
+    transactionHash tr = transactionHashFromBareTransactionParts (transactionSignature tr) (transactionHeader tr) (transactionPayload tr)
     transactionSize :: t -> Int
 
 instance TransactionData BareTransaction where
@@ -385,7 +457,6 @@ instance TransactionData BareTransaction where
     transactionGasAmount = thEnergyAmount . btrHeader
     transactionPayload = btrPayload
     transactionSignature = btrSignature
-    transactionHash t = H.hash (S.runPut $ S.put (btrHeader t) <> putPayload (btrPayload t))
     transactionSize t = BS.length serialized
       where serialized = S.encode t
 
@@ -396,7 +467,8 @@ instance TransactionData Transaction where
     transactionGasAmount = thEnergyAmount . btrHeader . wmdData
     transactionPayload = btrPayload . wmdData
     transactionSignature = btrSignature . wmdData
-    transactionHash = getHash
+    transactionSignatureHash = wmdSignHash
+    transactionHash = wmdHash
     transactionSize = wmdSize
 
 data AccountNonFinalizedTransactions = AccountNonFinalizedTransactions {

@@ -431,8 +431,22 @@ data ChainMetadata =
                 , slotTime :: Timestamp
                 }
 
+-- |The hash of a transaction which is then signed.
+-- (Naturally, this does not include the transaction signature.)
+newtype TransactionSignHashV0 = TransactionSignHashV0 {v0TransactionSignHash :: Hash.Hash}
+  deriving newtype (Eq, Ord, Show, S.Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
 
-type TransactionHash = Hash.Hash
+type TransactionSignHash = TransactionSignHashV0
+
+transactionSignHashToByteString :: TransactionSignHash -> ByteString
+transactionSignHashToByteString = Hash.hashToByteString . v0TransactionSignHash
+
+-- |Hash of a transaction including the signature.
+-- (For credential deployments, there is no signature.)
+newtype TransactionHashV0 = TransactionHashV0 {v0TransactionHash :: Hash.Hash}
+  deriving newtype (Eq, Ord, Show, S.Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
+
+type TransactionHash = TransactionHashV0
 
 -- * Types related to blocks
 
