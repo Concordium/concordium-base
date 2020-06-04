@@ -248,10 +248,6 @@ instance S.Serialize BareBlockItem  where
     1 -> CredentialDeployment <$> S.get
     _ -> fail "Unknown bare block item."
 
-instance ToPut BareBlockItem where
-  {-# INLINE toPut #-}
-  toPut = S.put
-
 normalTransaction :: Transaction -> BlockItem
 normalTransaction WithMetadata{..} = WithMetadata{wmdData = NormalTransaction wmdData, ..}
 
@@ -371,21 +367,6 @@ getBlockItem time =
       0 -> normalTransaction <$> getUnverifiedTransaction time
       1 -> credentialDeployment <$> getCDWM time
       _ -> fail "Block item must be either normal transaction or credential deployment."
-
--- |Class which is one part of serialize
-class ToPut a where
-  toPut :: a -> S.Put
-
--- |When writing to bytes ignore the metadata.
-instance ToPut value => ToPut (WithMetadata value) where
-  {-# INLINE toPut #-}
-  toPut = toPut . wmdData
-
--- |Serialize without metadata.
-instance ToPut BareTransaction where
-  {-# INLINE toPut #-}
-  toPut = S.put
-
 
 -- |Make a transaction out of minimal data needed.
 -- This computes the derived fields, in particular the hash of the transaction.

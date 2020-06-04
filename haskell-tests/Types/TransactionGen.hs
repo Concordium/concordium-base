@@ -4,7 +4,6 @@ module Types.TransactionGen where
 
 import Test.QuickCheck
 
-import Concordium.Crypto.SHA256(hash)
 import Concordium.Types.Transactions
 import Concordium.Crypto.SignatureScheme
 import Data.Time.Clock
