@@ -1,5 +1,7 @@
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE EmptyDataDeriving #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -96,6 +98,23 @@ data Literal =
   | CAddress !ContractAddress
   | AAddress !AccountAddress
   deriving (Show, Eq, Generic, Typeable, Data)
+
+-- |A pattern synonym for amounts in Acorn.
+mkAmount :: Amount -> Literal
+mkAmount (Amount a) = Word64 a
+
+{-# INLINE extractAmount #-}
+extractAmount :: Literal -> Maybe Amount
+extractAmount (Word64 v) = Just (Amount v)
+extractAmount _ = Nothing
+
+-- |A uni-directional pattern to extract an Amount from a literal.
+pattern AmountLiteral :: Amount -> Literal
+pattern AmountLiteral v <- (extractAmount -> Just v)
+
+-- |Bidirectional pattern synonym for the amount type in acorn.
+pattern TAmount :: Type annot orig
+pattern TAmount = TBase TWord64
 
 -- |Size of a literal in bytes used in computation of the size of linked terms and values.
 literalSize :: Literal -> Word64

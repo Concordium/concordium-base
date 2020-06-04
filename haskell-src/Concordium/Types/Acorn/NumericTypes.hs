@@ -15,6 +15,12 @@ module Concordium.Types.Acorn.NumericTypes where
 import GHC.Generics
 import Data.Data(Data, Typeable)
 import Data.Hashable(Hashable)
+import Data.Serialize
+import Data.Bits
+import Text.Read
+import Data.Aeson
+import System.Random
+import Test.QuickCheck
 
 import Data.Maybe
 
@@ -130,6 +136,9 @@ instance Num Int128 where
   signum (Int128 a) = Int128 $ signum a
   fromInteger a = Int128 $ norm128 a
 
+instance Arbitrary Int128 where
+  arbitrary = arbitrarySizedBoundedIntegral
+  shrink = shrinkIntegral
 
 -- ** Word128
 
@@ -164,3 +173,42 @@ instance Num Word128 where
   abs (Word128 a) = Word128 a -- word is always non-negative
   signum (Word128 a) = Word128 $ signum a -- 0 or 1
   fromInteger a = Word128 $ a `mod` nWord128
+
+instance Serialize Word128 where
+  put (Word128 w) = do
+    putWord64be $ fromIntegral (unsafeShiftR w 64)
+    putWord64be $ fromIntegral w
+  get = do
+    high <- getWord64be
+    low <- getWord64be
+    return $ Word128 $ (unsafeShiftL (toInteger high) 64) .|. toInteger low
+
+instance Read Word128 where
+  readPrec = do
+    v <- readPrec
+    if v < minWord128 || v > maxWord128 then
+      fail "Out of bounds"
+    else
+      return (Word128 v)
+
+instance ToJSON Word128 where
+  toJSON (Word128 v) = toJSON v
+  toEncoding (Word128 v) = toEncoding v
+
+instance FromJSON Word128 where
+  parseJSON val = do
+    v <- parseJSON val
+    if v < minWord128 || v > maxWord128 then
+      fail "Out of bounds"
+    else
+      return (Word128 v)
+
+instance Random Word128 where
+  randomR (Word128 lo, Word128 hi) g = (Word128 a, g') 
+    where
+      (a, g') = randomR (lo, hi) g
+  random = randomR (Word128 minWord128, Word128 maxWord128)
+
+instance Arbitrary Word128 where
+  arbitrary = arbitrarySizedBoundedIntegral
+  shrink = shrinkIntegral
