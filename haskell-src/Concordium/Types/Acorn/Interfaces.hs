@@ -327,6 +327,9 @@ data Value annot =
 -- essentially making it as if non-storable values have unbounded size.
 --
 -- The given type @a@ should be a 64-bit type to avoid any issues with overflow.
+--
+-- We allow a general Integral type here for more convenient use in the scheduler where
+-- the used size can be used for either computing storage or lookup costs.
 storableSizeWithLimit :: forall a annot . (Integral a) => Value annot -> a -> Maybe a
 storableSizeWithLimit val maxSize =
   case go val maxSize of
@@ -593,9 +596,13 @@ deriving instance (v ~ linked (Expr linked annot), Eq v, Eq annot) => Eq (Expr l
 
 data ImplementsValue linked annot = ImplementsValue
     {
-    -- |The list of sender methods for a particular constraint this contract implements.
+    -- |The list of sender methods for a particular constraint this contract implements,
+    -- together with the size of each method. In each contract instance sender methods
+    -- are identified by the index in this vector.
     ivSenders :: !(Vector (SenderTy linked annot, TermSize linked)),
-    -- |The list of getter methods for a particular constraint this contract implements.
+    -- |The list of getter methods for a particular constraint this contract implements,
+    -- together with the size of each method. In each contract instance getter methods
+    -- are identified by the index in this vector.
     ivGetters :: !(Vector (GetterTy linked annot, TermSize linked))
     } deriving(Functor)
 
@@ -651,11 +658,16 @@ type LinkedReceiveMethod annot = LinkedExpr annot
 -- |A 'ContractValue' is what a contract evaluates to. It contains the code of the init and receive methods.
 data ContractValue linked annot = ContractValue
     {
-      -- |The compiled initilization method.
+      -- |The compiled initilization method with its size. If the value is
+      -- unlinked the size is of the unlinked method without the dependencies,
+      -- otherewise of the fully linked method.
       cvInitMethod :: !(InitMethod linked annot, TermSize linked),
-      -- |The compiled receive method.
+      -- |The compiled receive method with its size. If the value is unlinked
+      -- the size is of the unlinked method without the dependencies, otherewise
+      -- of the fully linked method.
       cvReceiveMethod :: !(ReceiveMethod linked annot, TermSize linked),
-      -- |A map of all the implemented constraints.
+      -- |A map of all the implemented constraints, identified via module name + name of constraint
+      -- in that module.
       cvImplements :: !(HashMap (Core.ModuleRef, Core.TyName) (ImplementsValue linked annot)) 
     } deriving(Generic, Functor)
 
