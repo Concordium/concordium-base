@@ -193,6 +193,14 @@ data Payload =
       -- |Proof of knowledge of the signing key corresponding to the new verification key
       ubavkProof :: !BakerAggregationProof
       }
+  | UpdateBakerElectionKey {
+      -- |Id of the baker to update
+      ubekId :: !BakerId,
+      -- |New election key
+      ubekKey :: !BakerElectionVerifyKey,
+      -- |Proof of knowledge of the secret key corresponding to the new election key
+      ubekProof :: !Dlog25519Proof
+      }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -257,6 +265,11 @@ instance S.Serialize Payload where
     S.put ubavkId <>
     S.put ubavkKey <>
     S.put ubavkProof
+  put UpdateBakerElectionKey{..} =
+    P.putWord8 12 <>
+    S.put ubekId <>
+    S.put ubekKey <>
+    S.put ubekProof
 
   get =
     G.getWord8 >>=
@@ -313,6 +326,12 @@ instance S.Serialize Payload where
               ubavkKey <- S.get
               ubavkProof <- S.get
               return UpdateBakerAggregationVerifyKey{..}
+            12 -> do
+              ubekId <- S.get
+              ubekKey <- S.get
+              ubekProof <- S.get
+              return UpdateBakerElectionKey{..}
+
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 {-# INLINE encodePayload #-}
