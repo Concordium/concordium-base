@@ -426,7 +426,7 @@ signTransaction keys btrHeader btrPayload =
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
 verifyTransaction :: TransactionData msg => AccountKeys -> msg -> Bool
 verifyTransaction keys tx =
-  let bodyHash = transactionSignHashToByteString (transactionSignatureHash tx)
+  let bodyHash = transactionSignHashToByteString (transactionSignHash tx)
       TransactionSignature sigs = transactionSignature tx
       keysCheck = foldl' (\b (idx, sig) -> b && maybe False (\vfKey -> SigScheme.verify vfKey bodyHash sig) (getAccountKey idx keys)) True (Map.toList sigs)
       numSigs = length sigs
@@ -444,8 +444,8 @@ class TransactionData t where
     transactionGasAmount :: t -> Energy
     transactionPayload :: t -> EncodedPayload
     transactionSignature :: t -> TransactionSignature
-    transactionSignatureHash :: t -> TransactionSignHash
-    transactionSignatureHash tr = transactionSignHashFromHeaderPayload (transactionHeader tr) (transactionPayload tr)
+    transactionSignHash :: t -> TransactionSignHash
+    transactionSignHash tr = transactionSignHashFromHeaderPayload (transactionHeader tr) (transactionPayload tr)
     transactionHash :: t -> TransactionHash
     transactionHash tr = transactionHashFromBareTransactionParts (transactionSignature tr) (transactionHeader tr) (transactionPayload tr)
     transactionSize :: t -> Int
@@ -467,7 +467,7 @@ instance TransactionData Transaction where
     transactionGasAmount = thEnergyAmount . btrHeader . wmdData
     transactionPayload = btrPayload . wmdData
     transactionSignature = btrSignature . wmdData
-    transactionSignatureHash = wmdSignHash
+    transactionSignHash = wmdSignHash
     transactionHash = wmdHash
     transactionSize = wmdSize
 
