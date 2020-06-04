@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -184,10 +185,7 @@ instance S.Serialize Address where
 
 -- | Time in milliseconds since the epoch
 newtype Timestamp = Timestamp { tsMillis :: Word64 }
-  deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON, PersistField) via Word64
-
-instance PersistFieldSql Timestamp where
-    sqlType _ = SqlInt64
+  deriving newtype (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON, PersistField, PersistFieldSql)
 
 -- | Time duration in milliseconds
 newtype Duration = Duration { durationMillis :: Word64 }
@@ -405,16 +403,11 @@ genesisSlot = 0
 type EpochLength = Slot
 
 newtype BlockHeight = BlockHeight {theBlockHeight :: Word64}
-  deriving (Eq, Ord, Num, Real, Enum, Integral, Show, Hashable, FromJSON, ToJSON, PersistField) via Word64
-
-instance PersistFieldSql BlockHeight where
-  sqlType _ = SqlInt64
-
+  deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Show, Hashable, FromJSON, ToJSON, PersistField, PersistFieldSql)
 
 instance S.Serialize BlockHeight where
   put = S.putWord64be . theBlockHeight
   get = BlockHeight <$> S.getWord64be
-
 
 -- |Blockchain metadata as needed by contract execution.
 data ChainMetadata =
