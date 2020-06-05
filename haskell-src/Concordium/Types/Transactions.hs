@@ -258,6 +258,10 @@ credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeploym
 blockItemSize :: BlockItem -> Int
 blockItemSize bi = metaDataSize + biSize bi
 
+-- |Serialize a block item without metadata.
+putBlockItem :: BlockItem -> S.Put
+putBlockItem = S.put . wmdData
+
 -- * 'TransactionSignHash' functions
 
 -- |Construct a 'TransactionSignHash' from the serialized bytes of
