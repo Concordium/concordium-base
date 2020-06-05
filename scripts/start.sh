@@ -4,13 +4,13 @@ if [ -n "$WALLET_SERVER_INFOS_FILE" ];
 then
     ARGS="$ARGS --ip-infos $WALLET_SERVER_INFOS_FILE"
 else
-    ARGS="$ARGS --ip-infos /genesis-complementary-bundle/identity-providers-with-metadata.json"
+    ARGS="$ARGS --ip-infos /wallet-server-data/identity-providers-with-metadata.json"
 fi
 if [ -n "$WALLET_SERVER_GLOBAL_FILE" ];
 then
     ARGS="$ARGS --global $WALLET_SERVER_GLOBAL_FILE"
 else
-    ARGS="$ARGS --global /genesis-complementary-bundle/global.json"
+    ARGS="$ARGS --global /wallet-server-data/global.json"
 fi
 if [ -n "$DB_SLEEP" ];
 then
