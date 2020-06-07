@@ -110,10 +110,8 @@ extractAmount _ = Nothing
 
 -- |A uni-directional pattern to extract an Amount from a literal.
 pattern AmountLiteral :: Amount -> Literal
-pattern AmountLiteral v <- (extractAmount -> Just v)
-
-amountToLiteral :: Amount -> Literal
-amountToLiteral (Amount v) = Word64 v
+pattern AmountLiteral v <- (extractAmount -> Just v) where
+  AmountLiteral v = let Amount a = v in Word64 a
 
 -- |Bidirectional pattern synonym for the amount type in acorn.
 pattern TAmount :: Type annot orig
