@@ -72,7 +72,7 @@ mulC = checkOpBounds (*)
 
 divC :: (Integral a, Bounded a) => a -> a -> Maybe a
 divC x y = if y /= 0 && (y /= -1 || x > minBound) -- This is only correct if using two's complement.
-           then Just (x `div` y) -- cannot overflow, therefore use operation on a
+           then Just (x `div` y) -- cannot overflow, therefore use the underlying operation
            else Nothing
 
 modC :: Integral a => a -> a -> Maybe a
@@ -81,23 +81,20 @@ modC x y = if y /= 0
            else Nothing
 
 powC :: (Integral a, Bounded a) => a -> a -> Maybe a
-powC x y = if y >= 0
-           then checkOpBounds (^) x y
-           else Nothing
+powC = maybePow mulC
 
 -- ** Defaulting operations (default to 0 on error)
 
 divD :: (Integral a, Bounded a) => a -> a -> a
 divD x y = fromMaybe 0 $ divC x y
 
-modD :: (Integral a) => a -> a -> a
+modD :: Integral a => a -> a -> a
 modD x y = fromMaybe 0 $ modC x y
 
--- | Note: Defaults on negative exponent, normalizes on overflow
+-- |Modular exponentiation, defaulting to 0 if the exponent is negative,
+-- and otherwise doing repeated multiplication as defined by the Num instance.
 powD :: Integral a => a -> a -> a
-powD x y = if y >= 0
-           then fromInteger $ (toInteger x)^(toInteger y)
-           else 0
+powD x y = if y < 0 then 0 else x ^ y -- NB: This requires that the Num instance (*) is appropriate
 
 -- ** Int128
 
@@ -110,13 +107,17 @@ minInt128 = -2^(127 :: Int)
 maxInt128 :: Integer
 maxInt128 = 2^(127 :: Int) - 1
 
--- | A 128-bit integer behaving like fixed-size integers in two's complement representation with respect to minBound/maxBound and overflow arithmetics. Note that in contrast to Data.Int.Int64, this does not produce an exception for (minBound `div` -1) but will adopt a value out of bounds. To avoid this, use the provided checked or defaulting operations. Enum methods might not be reasonable and should not be used.
+-- | A 128-bit integer behaving like fixed-size integers in two's complement representation
+-- with respect to minBound/maxBound and overflow arithmetics.
+-- Note that in contrast to Data.Int.Int64, this does not produce an exception for (minBound `div` -1)
+-- but will adopt a value out of bounds. To avoid this, use the provided checked or defaulting operations.
+-- Enum methods might not be reasonable and should not be used.
 newtype Int128 = Int128 Integer
   deriving(Generic, Hashable, Eq, Ord, Real, Enum, Integral, Typeable, Data)
   -- Real and Enum are required for Integral
 
 instance Show Int128 where
-  show (Int128 i) = show i
+  show (Int128 i) = show (norm128 i)
 
 instance Bounded Int128 where
   minBound = Int128 minInt128
@@ -187,7 +188,7 @@ instance Read Word128 where
   readPrec = do
     v <- readPrec
     if v < minWord128 || v > maxWord128 then
-      fail "Out of bounds"
+      fail "Word128: Out of bounds"
     else
       return (Word128 v)
 
@@ -199,7 +200,7 @@ instance FromJSON Word128 where
   parseJSON val = do
     v <- parseJSON val
     if v < minWord128 || v > maxWord128 then
-      fail "Out of bounds"
+      fail "Word128: Out of bounds"
     else
       return (Word128 v)
 
@@ -212,3 +213,22 @@ instance Random Word128 where
 instance Arbitrary Word128 where
   arbitrary = arbitrarySizedBoundedIntegral
   shrink = shrinkIntegral
+
+-- Auxiliary functions.
+-- |Compute the exponential function terminating early if
+-- the given multiplication function yields a Nothing.
+-- This performs modular exponentiation linear in the
+-- number of bits in the exponent.
+maybePow :: (Num a, Integral b) => (a -> a -> Maybe a) -> a -> b -> Maybe a
+maybePow mul x0 y0 | y0 <= 0 = Nothing
+                   | y0 == 0 = Just 1
+                   | otherwise = f y0 x0
+    where -- mutually recursive functions computing
+          -- f y x = x ^ y
+          f y x | even y = mul x x >>= f (y `quot` 2)
+                | y == 1 = Just x
+                | otherwise = mul x x >>= g (y `quot` 2) x
+          -- g y z x = (x ^ y) * z
+          g y z x | even y = mul x x >>= g (y `quot` 2) z
+                  | y == 1 = mul x z
+                  | otherwise = mul x x >>= \x' -> mul x z >>= \z' -> g (y `quot` 2) z' x'
