@@ -112,6 +112,9 @@ extractAmount _ = Nothing
 pattern AmountLiteral :: Amount -> Literal
 pattern AmountLiteral v <- (extractAmount -> Just v)
 
+amountToLiteral :: Amount -> Literal
+amountToLiteral (Amount v) = Word64 v
+
 -- |Bidirectional pattern synonym for the amount type in acorn.
 pattern TAmount :: Type annot orig
 pattern TAmount = TBase TWord64
