@@ -189,7 +189,7 @@ data Payload =
       -- |Id of the baker to update
       ubavkId :: !BakerId,
       -- |New aggregation verification key
-      ubavkKey :: BakerAggregationVerifyKey,
+      ubavkKey :: !BakerAggregationVerifyKey,
       -- |Proof of knowledge of the signing key corresponding to the new verification key
       ubavkProof :: !BakerAggregationProof
       }
