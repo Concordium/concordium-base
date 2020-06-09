@@ -132,7 +132,9 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
     Ok(to_string(&response)?)
 }
 
-fn check_account_address_aux(input: &str) -> bool { input.parse::<AccountAddress>().is_ok() }
+fn check_account_address_aux(input: &str) -> bool {
+    input.parse::<AccountAddress>().is_ok()
+}
 
 fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
@@ -176,10 +178,13 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
         .iter()
         .map(|x| x.ar_identity)
         .collect::<Vec<_>>();
-    let context = make_context_from_ip_info(ip_info, ChoiceArParameters {
-        ar_identities,
-        threshold,
-    })
+    let context = make_context_from_ip_info(
+        ip_info,
+        ChoiceArParameters {
+            ar_identities,
+            threshold,
+        },
+    )
     .ok_or_else(|| format_err!("Invalid choice of anonymity revokers. Should not happen."))?;
     let (pio, randomness) = generate_pio(&context, &aci);
 
@@ -380,7 +385,7 @@ pub unsafe fn create_id_request_and_private_data_ext(
 /// # Safety
 /// The input pointer must point to a null-terminated buffer, otherwise this
 /// function will fail in unspecified ways.
-pub unsafe extern "C" fn create_id_request_and_private_data(
+pub unsafe extern "C" fn create_id_request_and_private_data_c(
     input_ptr: *const c_char,
     success: *mut u8,
 ) -> *mut c_char {
@@ -430,7 +435,7 @@ pub unsafe fn create_credential_ext(input_ptr: *const c_char, success: *mut u8) 
 /// # Safety
 /// The input pointer must point to a null-terminated buffer, otherwise this
 /// function will fail in unspecified ways.
-pub unsafe extern "C" fn create_credential(
+pub unsafe extern "C" fn create_credential_c(
     input_ptr: *const c_char,
     success: *mut u8,
 ) -> *mut c_char {
@@ -440,7 +445,7 @@ pub unsafe extern "C" fn create_credential(
 #[no_mangle]
 /// # Safety
 /// The input must be NUL-terminated.
-pub unsafe extern "C" fn check_account_address_ext(input_ptr: *const c_char) -> u8 {
+pub unsafe fn check_account_address_ext(input_ptr: *const c_char) -> u8 {
     let input_str = {
         match CStr::from_ptr(input_ptr).to_str() {
             Ok(s) => s,
@@ -461,7 +466,7 @@ pub unsafe extern "C" fn check_account_address_ext(input_ptr: *const c_char) -> 
 ///
 /// # Safety
 /// The input must be NUL-terminated.
-pub unsafe extern "C" fn check_account_address(input_ptr: *const c_char) -> u8 {
+pub unsafe extern "C" fn check_account_address_c(input_ptr: *const c_char) -> u8 {
     check_account_address_ext(input_ptr)
 }
 
@@ -477,7 +482,7 @@ pub unsafe extern "C" fn check_account_address(input_ptr: *const c_char) -> u8 {
 /// # Safety
 /// The input pointer must point to a null-terminated buffer, otherwise this
 /// function will fail in unspecified ways.
-pub unsafe extern "C" fn create_transfer(
+pub unsafe extern "C" fn create_transfer_c(
     input_ptr: *const c_char,
     success: *mut u8,
 ) -> *mut c_char {
@@ -497,7 +502,9 @@ pub unsafe fn free_response_string_ext(ptr: *mut c_char) {
 /// # Safety
 /// This function is unsafe in the sense that if the argument pointer was not
 /// Constructed via CString::into_raw its behaviour is undefined.
-pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) { free_response_string_ext(ptr) }
+pub unsafe extern "C" fn free_response_string_c(ptr: *mut c_char) {
+    free_response_string_ext(ptr)
+}
 
 #[cfg(test)]
 mod test {}
