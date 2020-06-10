@@ -64,7 +64,8 @@ fn main() {
                          K-1).",
                     )
                     .default_value("3")
-                    .required(false),
+                    .required(false)
+                    .global(true),
             )
             .subcommand(
                 SubCommand::with_name("create-bakers")
