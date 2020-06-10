@@ -3,9 +3,10 @@
 use rand::*;
 
 use crypto_common::*;
+use crypto_common_derive::*;
 use curve_arithmetic::Curve;
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
 #[repr(transparent)]
 pub struct Message<C: Curve> {
     pub value: C,
