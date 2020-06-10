@@ -18,7 +18,6 @@ use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey as PedersenKey,
     randomness::Randomness as PedersenRandomness, value as pedersen, value::Value,
 };
-use ps_sig;
 use rand::{rngs::ThreadRng, *};
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap};
 

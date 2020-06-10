@@ -57,6 +57,17 @@ fn main() {
                     .required(false)
                     .global(true),
             )
+            .arg(
+                Arg::with_name("num_keys")
+                    .long("num_keys")
+                    .value_name("K")
+                    .help(
+                        "The number of keys each account should have. Threshold is set to max(1, \
+                         K-1).",
+                    )
+                    .default_value("3")
+                    .required(false),
+            )
             .subcommand(
                 SubCommand::with_name("create-bakers")
                     .about("Create new bakers.")
@@ -131,6 +142,14 @@ fn main() {
     })
     .expect("Constructed AR data is valid.");
 
+    let num_keys = match matches.value_of("num_keys").unwrap().parse::<usize>() {
+        Ok(num_keys) if num_keys > 0 && num_keys <= 255 => num_keys,
+        _ => {
+            eprintln!("num_keys should be a positive integer <= 255.");
+            return;
+        }
+    };
+
     // we also read the global context from another json file (called
     // global.context). We need commitment keys and other data in there.
     let global_ctx = {
@@ -195,13 +214,15 @@ fn main() {
         };
 
         let mut keys = BTreeMap::new();
-        keys.insert(KeyIndex(0), ed25519::Keypair::generate(csprng));
-        keys.insert(KeyIndex(1), ed25519::Keypair::generate(csprng));
-        keys.insert(KeyIndex(2), ed25519::Keypair::generate(csprng));
+        for idx in 0..num_keys {
+            keys.insert(KeyIndex(idx as u8), ed25519::Keypair::generate(csprng));
+        }
+
+        let threshold = SignatureThreshold(if num_keys == 1 { 1 } else { num_keys as u8 - 1 });
 
         let acc_data = AccountData {
             keys,
-            existing: Left(SignatureThreshold(2)),
+            existing: Left(threshold),
         };
 
         let id_object = IdentityObject {
@@ -228,12 +249,12 @@ fn main() {
         let versioned_cdi = Versioned::new(VERSION_CREDENTIAL, cdi);
 
         let acc_keys = AccountKeys {
-            keys:      acc_data
+            keys: acc_data
                 .keys
                 .iter()
                 .map(|(&idx, kp)| (idx, VerifyKey::from(kp)))
                 .collect(),
-            threshold: SignatureThreshold(2),
+            threshold,
         };
 
         // output private account data
