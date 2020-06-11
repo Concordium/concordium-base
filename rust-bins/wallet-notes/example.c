@@ -3,11 +3,11 @@
 #include <stdint.h>
 #include <string.h>
 
-char* create_id_request_and_private_data(char*, uint8_t* );
-char* create_credential(char*, uint8_t* );
-char* create_transfer(char*, uint8_t* );
-uint8_t check_account_address(char*);
-void free_response_string(char*);
+char* create_id_request_and_private_data_c(char*, uint8_t* );
+char* create_credential_c(char*, uint8_t* );
+char* create_transfer_c(char*, uint8_t* );
+uint8_t check_account_address_c(char*);
+void free_response_string_c(char*);
 
 int main(int argc, char *argv[]) {
   char *buffer = 0;
@@ -31,11 +31,11 @@ int main(int argc, char *argv[]) {
       char *out;
       // if input is named credential-cdi.json try to get the credential
       if (strcmp(argv[1], "credential-input.json") == 0) {
-        out = create_credential(buffer, &flag);
+        out = create_credential_c(buffer, &flag);
       } else if (strcmp(argv[1], "transfer-input.json") == 0) {
-        out = create_transfer(buffer, &flag);
+        out = create_transfer_c(buffer, &flag);
       } else {
-        out = create_id_request_and_private_data(buffer, &flag);
+        out = create_id_request_and_private_data_c(buffer, &flag);
       } 
       if (flag) {
         printf("%s\n", out);
@@ -43,10 +43,10 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Failure.\n");
         fprintf(stderr, "%s\n", out);
       }
-      free_response_string(out);
+      free_response_string_c(out);
     }
   } else {
-      if (check_account_address(argv[1])) {
+      if (check_account_address_c(argv[1])) {
         printf("Account address valid.\n");
       } else {
         printf("Account address invalid.\n");
