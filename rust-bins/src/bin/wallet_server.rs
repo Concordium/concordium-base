@@ -68,9 +68,9 @@ pub fn main() {
             Arg::with_name("global")
                 .short("G")
                 .long("global")
-                .default_value(GLOBAL_CONTEXT)
+                .default_value("global.json")
                 .value_name("FILE")
-                .help("File with crypographic parameters."),
+                .help("File with global parameters."),
         )
         .arg(
             Arg::with_name("address")
@@ -87,18 +87,7 @@ pub fn main() {
         .value_of("ip-infos")
         .unwrap_or("identity-providers-with-metadata.json");
 
-    let global_params = {
-        if let Some(gc) = read_global_context(
-            matches
-                .value_of("global")
-                .expect("We have a default value, so should exist."),
-        ) {
-            gc
-        } else {
-            eprintln!("Cannot read global context information database. Terminating.");
-            return;
-        }
-    };
+    let global_file = matches.value_of("global").unwrap_or("global.json");
 
     let address = matches.value_of("address").unwrap_or("localhost:8000");
 
@@ -109,6 +98,14 @@ pub fn main() {
                 "Could not open identity provider file because {}. Aborting.",
                 e
             );
+            return;
+        }
+    };
+
+    let global_file = match ::std::fs::File::open(global_file) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Could not open global params file because {}. Aborting.", e);
             return;
         }
     };
