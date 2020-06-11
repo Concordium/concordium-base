@@ -6,8 +6,6 @@ use crypto_common_derive::*;
 use curve_arithmetic::curve_arithmetic::*;
 use id::types::*;
 
-use crypto_common::*;
-
 use clap::{App, AppSettings, Arg};
 
 use failure::Fallible;
