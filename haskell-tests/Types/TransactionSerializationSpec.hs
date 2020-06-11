@@ -6,9 +6,7 @@ import Test.QuickCheck as QC
 
 import Data.Serialize
 
-import qualified Data.Serialize.Put as P
-import qualified Data.Serialize.Get as G
-import Data.ByteString.Lazy as BS    
+import qualified Data.ByteString as  BS
 
 import Types.TransactionGen
 import Concordium.Types.Transactions
@@ -23,8 +21,8 @@ groupIntoSize s =
           in show lb ++ " -- " ++ show ub ++ "B"
 
 checkTransaction :: BareTransaction -> Property
-checkTransaction tx = let bs = P.runPutLazy (put tx)
-              in  case G.runGet get (BS.toStrict bs) of
+checkTransaction tx = let bs = encode tx
+              in  case decode bs of
                     Left err -> counterexample err False
                     Right tx' -> QC.label (groupIntoSize (BS.length bs)) $ tx === tx'
 
@@ -34,7 +32,19 @@ testTransaction size = forAll (resize size genBareTransaction) checkTransaction
 dummyTime :: TransactionTime
 dummyTime = 37
 
+checkBlockItem :: BlockItem -> Property
+checkBlockItem bi = 
+    case runGet (getBlockItem (wmdArrivalTime bi)) bs of
+      Left err -> counterexample err False
+      Right bi' -> QC.label (groupIntoSize (BS.length bs)) $ bi === bi'
+  where
+    bs = encode $ wmdData bi
+
+testBlockItem :: Property
+testBlockItem = forAll genBlockItem checkBlockItem
+
 tests :: Spec
-tests = do
+tests = parallel $ do
   specify "Transaction serialization with size = 100." $ withMaxSuccess 10000 $ testTransaction 100
   specify "Transaction serialization with size = 1000." $ withMaxSuccess 10000 $ testTransaction 1000
+  specify "BlockItem serialization." $ withMaxSuccess 10000 $ testBlockItem
