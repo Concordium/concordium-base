@@ -184,6 +184,15 @@ data Payload =
       -- |The new election difficulty. Must be in the range [0,1).
       uedDifficulty :: !ElectionDifficulty
       }
+  -- |Update the aggregation verification key of the baker
+  | UpdateBakerAggregationVerifyKey {
+      -- |Id of the baker to update
+      ubavkId :: !BakerId,
+      -- |New aggregation verification key
+      ubavkKey :: !BakerAggregationVerifyKey,
+      -- |Proof of knowledge of the signing key corresponding to the new verification key
+      ubavkProof :: !BakerAggregationProof
+      }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -243,6 +252,11 @@ instance S.Serialize Payload where
   put UpdateElectionDifficulty{..} =
     P.putWord8 10 <>
     S.put uedDifficulty
+  put UpdateBakerAggregationVerifyKey{..} =
+    P.putWord8 11 <>
+    S.put ubavkId <>
+    S.put ubavkKey <>
+    S.put ubavkProof
 
   get =
     G.getWord8 >>=
@@ -294,6 +308,11 @@ instance S.Serialize Payload where
               unless (isValidElectionDifficulty uedDifficulty) $
                 fail $ "Illegal election difficulty: " ++ show uedDifficulty
               return UpdateElectionDifficulty{..}
+            11 -> do
+              ubavkId <- S.get
+              ubavkKey <- S.get
+              ubavkProof <- S.get
+              return UpdateBakerAggregationVerifyKey{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 {-# INLINE encodePayload #-}
@@ -424,6 +443,12 @@ data Event =
                -- |New key.
                ebekuNewKey :: !BakerElectionVerifyKey
                }
+           | BakerAggregationKeyUpdated {
+               -- |The baker.
+               ebakuBaker :: !BakerId,
+               -- |The updated key
+               ebakuNewKey :: !BakerAggregationVerifyKey
+               }
            | StakeDelegated {
                -- |Account which is delegating.
                esdAccount :: !AccountAddress,
@@ -524,6 +549,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   | UpdatingNonExistentBaker !BakerId
                   | InvalidStakeDelegationTarget !BakerId -- ^The target of stake delegation is not a valid baker.
                   | DuplicateSignKey !BakerSignVerifyKey -- ^A baker with the given signing key already exists.
+                  | DuplicateAggregationKey !BakerAggregationVerifyKey -- ^A baker with the given aggregation key already exists
                   -- |A transaction should be sent from the baker's current account, but is not.
                   | NotFromBakerAccount { nfbaFromAccount :: !AccountAddress, -- ^Sender account of the transaction
                                           nfbaCurrentBakerAccount :: !AccountAddress -- ^Current baker account.
