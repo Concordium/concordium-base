@@ -10,6 +10,7 @@ import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Base16 as BS16
+import Concordium.Common.Version
 import Concordium.Crypto.SignatureScheme
 import Data.Serialize as S
 import GHC.Generics
@@ -601,8 +602,12 @@ data CredentialDeploymentInformation = CredentialDeploymentInformation {
 -- proof is serialized with 4 byte length.
 instance Serialize CredentialDeploymentInformation where
   put CredentialDeploymentInformation{..} =
-    put cdiValues <> put cdiProofs
-  get = CredentialDeploymentInformation <$> get <*> get
+    put __versionCredential <> put cdiValues <> put cdiProofs
+  get = do
+    version <- Version <$> get
+    if version /= __versionCredential then fail "Invalid credential version"
+    else do
+      CredentialDeploymentInformation <$> get <*> get
 
 -- |NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
 instance Eq CredentialDeploymentInformation where
