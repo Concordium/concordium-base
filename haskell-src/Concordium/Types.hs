@@ -167,7 +167,7 @@ putModuleRef (ModuleRef mref) =
 -- |An address is either a contract or account.
 data Address = AddressAccount !AccountAddress
              | AddressContract !ContractAddress
-             deriving (Show, Eq)
+             deriving (Eq)
 
 instance S.Serialize Address where
   get = do
@@ -181,6 +181,9 @@ instance S.Serialize Address where
   put (AddressAccount acc) = P.putWord8 0 <> S.put acc
   put (AddressContract cnt) = P.putWord8 1 <> S.put cnt
 
+instance Show Address where
+  show (AddressAccount a) = show a
+  show (AddressContract a) = show a
 
 -- | Time in milliseconds since the epoch
 newtype Timestamp = Timestamp { tsMillis :: Word64 }
