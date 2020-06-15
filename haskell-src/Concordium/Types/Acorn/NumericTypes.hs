@@ -70,14 +70,28 @@ subC = checkOpBounds (-)
 mulC :: (Integral a, Bounded a) => a -> a -> Maybe a
 mulC = checkOpBounds (*)
 
+-- Implemented following the specification on https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/divmodnote-letter.pdf
+
 divC :: (Integral a, Bounded a) => a -> a -> Maybe a
-divC x y = if y /= 0 && (y /= -1 || x > minBound) -- This is only correct if using two's complement.
-           then Just (x `div` y) -- cannot overflow, therefore use the underlying operation
+divC x y = if y /= 0 && (y /= -1 || x > minBound) -- this is only correct if using two's complement
+           then let (q, r) = x `divMod` y in -- cannot overflow, therefore use underlying operation
+                  if r > abs y then
+                    Nothing
+                  else Just $ if r < 0 then
+                    if y > 0 then q - 1
+                    else q + 1
+                  else q
            else Nothing
 
 modC :: Integral a => a -> a -> Maybe a
 modC x y = if y /= 0
-           then Just (x `mod` y) -- cannot overflow, therefore use operation on a
+           then let r = x `mod` y in -- cannot overflow, therefore use operation on a
+                  if r > abs y then
+                    Nothing
+                  else Just $ if r < 0 then
+                    if y > 0 then r + y
+                    else r - y
+                  else r
            else Nothing
 
 powC :: (Integral a, Bounded a) => a -> a -> Maybe a
@@ -205,7 +219,7 @@ instance FromJSON Word128 where
       return (Word128 v)
 
 instance Random Word128 where
-  randomR (Word128 lo, Word128 hi) g = (Word128 a, g') 
+  randomR (Word128 lo, Word128 hi) g = (Word128 a, g')
     where
       (a, g') = randomR (lo, hi) g
   random = randomR (Word128 minWord128, Word128 maxWord128)
