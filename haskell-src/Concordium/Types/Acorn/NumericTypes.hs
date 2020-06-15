@@ -73,8 +73,8 @@ mulC = checkOpBounds (*)
 -- Implemented following the specification on https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/divmodnote-letter.pdf
 
 divC :: (Integral a, Bounded a) => a -> a -> Maybe a
-divC x y = if y /= 0 && (y /= -1 || x > minBound)
-           then let q = x `div` y
+divC x y = if y /= 0 && (y /= -1 || x > minBound) -- this is only correct if using two's complement
+           then let q = x `div` y -- cannot overflow, therefore use underlying operation
                     r = x `mod` y in
                   if r > abs y then
                     Nothing
@@ -86,7 +86,7 @@ divC x y = if y /= 0 && (y /= -1 || x > minBound)
 
 modC :: Integral a => a -> a -> Maybe a
 modC x y = if y /= 0
-           then let r = x `mod` y in
+           then let r = x `mod` y in -- cannot overflow, therefore use operation on a
                   if r > abs y then
                     Nothing
                   else Just $ if r < 0 then
