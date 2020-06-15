@@ -201,6 +201,25 @@ data Payload =
       -- |Proof of knowledge of the secret key corresponding to the new election key
       ubekProof :: !Dlog25519Proof
       }
+  -- Updates existing keys used for signing transactions for the sender's account
+  | UpdateAccountKeys {
+      -- |List of key indeces to update and the associated key to update to
+      uakKeys :: ![(KeyIndex, AccountVerificationKey)]
+    }
+  -- Adds additional keys to the sender's account, optionally updating the signature threshold too
+  | AddAccountKeys {
+      -- |List of key indeces to add and the associated key
+      aakKeys :: ![(KeyIndex, AccountVerificationKey)],
+      -- |Optional value for updating the threshold of the signature scheme
+      aakThreshold :: !(Maybe SignatureThreshold)
+    }
+  -- Remove keys from the sender's account, optionally updating the signature threshold too
+  | RemoveAccountKeys {
+      -- |List of indeces of keys to remove
+      rakIndeces :: ![KeyIndex],
+      -- |Optional value for updating the threshold of the signature scheme
+      rakThreshold :: !(Maybe SignatureThreshold)
+    }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -270,6 +289,17 @@ instance S.Serialize Payload where
     S.put ubekId <>
     S.put ubekKey <>
     S.put ubekProof
+  put UpdateAccountKeys{..} =
+    P.putWord8 13 <>
+    S.put uakKeys
+  put AddAccountKeys{..} =
+    P.putWord8 14 <>
+    S.put aakKeys <>
+    S.put aakThreshold
+  put RemoveAccountKeys{..} =
+    P.putWord8 15 <>
+    S.put rakIndeces <>
+    S.put rakThreshold
 
   get =
     G.getWord8 >>=
@@ -331,6 +361,17 @@ instance S.Serialize Payload where
               ubekKey <- S.get
               ubekProof <- S.get
               return UpdateBakerElectionKey{..}
+            13 -> do
+              uakKeys <- S.get
+              return UpdateAccountKeys{..}
+            14 -> do
+              aakKeys <- S.get
+              aakThreshold <- S.get
+              return AddAccountKeys{..}
+            15 -> do
+              rakIndeces <- S.get
+              rakThreshold <- S.get
+              return RemoveAccountKeys{..}
 
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
@@ -486,6 +527,15 @@ data Event =
                -- |The new election difficulty.
                eeduDifficulty :: !Double
                }
+           | AccountKeysUpdated {
+               akuKeys :: ![(KeyIndex, AccountVerificationKey)]
+               }
+           | AccountKeysAdded {
+               akaKeys :: ![(KeyIndex, AccountVerificationKey)]
+               }
+           | AccountKeysRemoved {
+               akrIndices :: ![KeyIndex]
+               }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -575,6 +625,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                                         }
                   -- |A transaction should be sent from a special account, but is not.
                   | NotFromSpecialAccount
+                  | NonexistentAccountKey !KeyIndex -- |Encountered index to which no account key belongs
     deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason
