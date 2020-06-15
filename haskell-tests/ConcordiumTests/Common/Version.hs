@@ -5,8 +5,6 @@
 module ConcordiumTests.Common.Version where
 
 import Concordium.Common.Version
-import qualified Data.FixedByteString as FBS
-import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
@@ -14,7 +12,6 @@ import qualified Data.Serialize as S
 import Data.Word
 import Test.QuickCheck
 import Test.Hspec
-import Test.HUnit
 import Data.Aeson
 
 newtype ExampleType = ExampleType Word32
@@ -25,17 +22,17 @@ testVersionToBytes :: Property
 testVersionToBytes = S.encode (Version 1700794014) === (BS.pack [0x86, 0xab, 0x80, 0x9d, 0x1e])
 
 testVersionToJSON :: Property
-testVersionToJSON = json === "{\"value\":2,\"v\":4}"
+testVersionToJSON = jsonValue === "{\"value\":2,\"v\":4}"
   where
-    json = BSL8.unpack $ encode versioned
+    jsonValue = BSL8.unpack $ encode versioned
     versioned = Versioned version value
     version = Version 4
     value = ExampleType $ fromIntegral 2
 
 testVersionFromJSON :: Property
-testVersionFromJSON = object === Just realversioned
+testVersionFromJSON = objectValue === Just realversioned
   where
-    object = decode "{\"value\":2,\"v\":4}"
+    objectValue = decode "{\"value\":2,\"v\":4}"
     realversioned = Versioned version value
     version = Version 4
     value = ExampleType $ fromIntegral 2
