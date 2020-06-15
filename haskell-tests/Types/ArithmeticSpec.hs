@@ -219,6 +219,10 @@ arithmeticSpecs smallNumGen =
       specify "compare checked mul" (forAll smallNumGen (\x -> forAll smallNumGen (compareChecked mulC mul x)))
       specify "compare checked div" (property $ compareChecked divC' divD')
       specify "compare checked mod" (property $ compareChecked modC' modD')
+      specify "compare checked pow" (forAll smallNumGen (\x -> forAll (elements [0..10]) (compareChecked powC' powD' x)))
+
+    describe "Div/mod relation" $ modifyMaxSuccess (const 50000) $ do
+      specify "checked div/mod" (property $ compareChecked2 (\_ y q r -> q * y + r) (\x _ _ _ -> x) divC' modC) -- NOTE: compareChecked2 is for comparing checked vs. unchecked, but here it is just the checked operation
       -- euclidean division specifies that the equality D = d * q + r should hold always and 0 <= r < \d\
       specify "euclidean property on div and mod" (property $ \x y -> let q = divC' x y
                                                                           r = modC' x y in
@@ -226,10 +230,6 @@ arithmeticSpecs smallNumGen =
                                                                        isJust r ==>
                                                                        x == add (mul y $ fromJust q) (fromJust r) &&
                                                                        fromJust r < abs y)
-      specify "compare checked pow" (forAll smallNumGen (\x -> forAll (elements [0..10]) (compareChecked powC' powD' x)))
-
-    describe "Div/mod relation" $ modifyMaxSuccess (const 50000) $ do
-      specify "checked div/mod" (property $ compareChecked2 (\_ y q r -> q * y + r) (\x _ _ _ -> x) divC' modC) -- NOTE: compareChecked2 is for comparing checked vs. unchecked, but here it is just the checked operation
     describe "Representation conversion within same type" $ modifyMaxSuccess (const 50000) $ do
       specify "Involution on same type" $ forAll arbitrary (\x -> ((toIntegralNormalizing x) :: a) === x)
 
