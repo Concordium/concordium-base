@@ -614,8 +614,15 @@ instance Eq CredentialDeploymentInformation where
   cdi1 == cdi2 = cdiValues cdi1 == cdiValues cdi2
 
 instance FromJSON CredentialDeploymentInformation where
-  parseJSON = withObject "CredentialDeploymentInformation" $ \v -> do
-    cdiValues <- parseJSON (Object v)
-    proofsText <- v .: "proofs"
-    return CredentialDeploymentInformation{cdiProofs = Proofs (BSS.toShort . fst . BS16.decode . Text.encodeUtf8 $ proofsText),
-                                           ..}
+  parseJSON = withObject "VersionedCredentialDeploymentInformation" $ \v -> do
+    version <- v .: "v"
+    value <- v .: "value"
+    when (version /= __versionCredential) (fail "Invalid credential version")
+    unpackedValue <- withObject "CredentialDeploymentInformation"
+                        (\w -> do
+                          cdiValues <- parseJSON (Object w)
+                          proofsText <- w .: "proofs"
+                          return CredentialDeploymentInformation{cdiProofs = Proofs (BSS.toShort . fst . BS16.decode . Text.encodeUtf8 $ proofsText), ..}
+                        )
+                        value
+    return unpackedValue
