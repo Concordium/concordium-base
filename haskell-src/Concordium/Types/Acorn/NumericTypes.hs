@@ -74,8 +74,7 @@ mulC = checkOpBounds (*)
 
 divC :: (Integral a, Bounded a) => a -> a -> Maybe a
 divC x y = if y /= 0 && (y /= -1 || x > minBound) -- this is only correct if using two's complement
-           then let q = x `div` y -- cannot overflow, therefore use underlying operation
-                    r = x `mod` y in
+           then let (q, r) = x `divMod` y in -- cannot overflow, therefore use underlying operation
                   if r > abs y then
                     Nothing
                   else Just $ if r < 0 then
