@@ -3,12 +3,12 @@
 use crypto_common::*;
 use curve_arithmetic::curve_arithmetic::Curve;
 
-use sha3::{Digest, Sha3_256};
-use std::io::{Cursor, Write};
+use sha3::{Digest, Sha3_512};
+use std::io::Write;
 
 /// State of the random oracle, used to incrementally build up the output.
 #[repr(transparent)]
-pub struct RandomOracle(Sha3_256);
+pub struct RandomOracle(Sha3_512);
 
 impl Write for RandomOracle {
     #[inline(always)]
@@ -30,7 +30,7 @@ impl Write for RandomOracle {
 impl Buffer for RandomOracle {
     type Result = sha3::digest::generic_array::GenericArray<
         u8,
-        <Sha3_256 as sha3::digest::Digest>::OutputSize,
+        <Sha3_512 as sha3::digest::Digest>::OutputSize,
     >;
 
     #[inline(always)]
@@ -42,12 +42,12 @@ impl Buffer for RandomOracle {
 
 impl RandomOracle {
     /// Start with the initial empty state of the oracle.
-    pub fn empty() -> Self { RandomOracle(Sha3_256::new()) }
+    pub fn empty() -> Self { RandomOracle(Sha3_512::new()) }
 
     /// Start with the initial string.
     /// Equivalent to ```ro.empty().append()```, but meant to be
     /// used with a domain string.
-    pub fn domain<B: AsRef<[u8]>>(data: B) -> Self { RandomOracle(Sha3_256::new().chain(data)) }
+    pub fn domain<B: AsRef<[u8]>>(data: B) -> Self { RandomOracle(Sha3_512::new().chain(data)) }
 
     /// Duplicate the random oracle, creating a fresh copy of it.
     /// Further calls to 'append' or 'add' are independent.
@@ -105,27 +105,14 @@ impl RandomOracle {
         ro
     }
 
-    /// Try to convert the computed result into a field element. This takes the
-    /// first SCALAR_LENGTH elements of result and tries to convert them to a
-    /// scalar.
-    /// This will fail (return None) if either
-    /// * the output of the oracle does not have enought bytes (should not
-    ///   happen)
-    /// * the output of the oracle is not < q (the size of the scalar field).
-    ///   Here the bytes are taken to represent a number in big-endian encoding.
-    pub fn result_to_scalar<C: Curve>(self) -> Option<C::Scalar> {
-        let res = self.result();
-        let res_ref = res.as_ref();
-        if res_ref.len() >= C::SCALAR_LENGTH {
-            from_bytes(&mut Cursor::new(&res_ref[..C::SCALAR_LENGTH])).ok()
-        } else {
-            None
-        }
-    }
+    /// Try to convert the computed result into a field element. This interprets
+    /// the output of the random oracle as a big-endian integer and reduces is
+    /// mod field order.
+    pub fn result_to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_bytes_mod(self.result()) }
 
     /// Finish and try to convert to scalar. Equivalent to
     /// ```ro.append(input).result_to_scalar()```.
-    pub fn finish_to_scalar<C: Curve, B: Serial>(self, data: &B) -> Option<C::Scalar> {
+    pub fn finish_to_scalar<C: Curve, B: Serial>(self, data: &B) -> C::Scalar {
         self.append(data).result_to_scalar::<C>()
     }
 }
