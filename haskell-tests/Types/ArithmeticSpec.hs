@@ -223,6 +223,13 @@ arithmeticSpecs smallNumGen =
 
     describe "Div/mod relation" $ modifyMaxSuccess (const 50000) $ do
       specify "checked div/mod" (property $ compareChecked2 (\_ y q r -> q * y + r) (\x _ _ _ -> x) divC' modC) -- NOTE: compareChecked2 is for comparing checked vs. unchecked, but here it is just the checked operation
+      -- euclidean division specifies that the equality D = d * q + r should hold always and 0 <= r < \d\
+      specify "euclidean property on div and mod" (property $ \x y -> let q = divC' x y
+                                                                          r = modC' x y in
+                                                                       isJust q &&
+                                                                       isJust r ==>
+                                                                       x == add (mul y $ fromJust q) (fromJust r) &&
+                                                                       fromJust r < abs y)
     describe "Representation conversion within same type" $ modifyMaxSuccess (const 50000) $ do
       specify "Involution on same type" $ forAll arbitrary (\x -> ((toIntegralNormalizing x) :: a) === x)
 
@@ -232,7 +239,7 @@ specCastIntWord :: forall a b . (Bounded a, Integral a, Show a,
                        => Gen a -> Gen a -> Gen b -> SpecWith ()
 specCastIntWord negNumGenA nonNegNumGenA _ = do
   describe "Int -> Word" $ modifyMaxSuccess (const 5000) $ do
-    specify "minInt" $ toInteger (toIntegralNormalizing (minBound :: a) :: b) `shouldBe` -(toInteger (minBound :: a)) 
+    specify "minInt" $ toInteger (toIntegralNormalizing (minBound :: a) :: b) `shouldBe` -(toInteger (minBound :: a))
     specify "minInt'" $ toInteger (toIntegralNormalizing (minBound :: a) :: b) `shouldBe` toInteger (maxBound :: b) + toInteger (minBound :: a) + 1
     specify "minInt+1" $ toInteger (toIntegralNormalizing ((minBound :: a)+1) :: b) `shouldBe` toInteger (maxBound :: b) + toInteger (minBound :: a) + 2
     specify "-1" $ toInteger ((toIntegralNormalizing (-1 :: a)) :: b) `shouldBe` toInteger (maxBound :: b)
@@ -245,7 +252,7 @@ specCastIntWord negNumGenA nonNegNumGenA _ = do
 
 -- a should be a Word type, b an Int type of the same bit size
 specCastWordInt :: forall a b . (Bounded a, Integral a, Arbitrary a, Show a,
-                                 Bounded b, Integral b,              Show b)
+                                 Bounded b, Integral b, Show b)
                        => Gen a -> Gen b -> SpecWith ()
 specCastWordInt _ _ = do
   describe "Word -> Int" $ modifyMaxSuccess (const 5000) $ do

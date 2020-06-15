@@ -610,7 +610,6 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   | SerializationFailure -- ^Serialization of the body failed.
                   | OutOfEnergy -- ^We ran of out energy to process this transaction.
                   | Rejected -- ^Rejected due to contract logic.
-                  | AccountEncryptionKeyAlreadyExists AccountAddress IDTypes.AccountEncryptionKey
                   | NonExistentRewardAccount !AccountAddress -- ^Reward account desired by the baker does not exist.
                   | InvalidProof -- ^Proof that the baker owns relevant private keys is not valid.
                   | RemovingNonExistentBaker !BakerId
