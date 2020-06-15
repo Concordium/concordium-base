@@ -48,37 +48,24 @@ pub fn prove_aggregate_dlog<T: Curve, R: Rng>(
         .append(public)
         .extend_from(coeff.iter());
 
-    // Only allocate the vector once and just reset it each iteration. The vector
-    // can be big, and there is no reason to allocate a new one each iteration.
     let mut rands = Vec::with_capacity(n);
-    loop {
-        rands.clear();
-        let mut point = T::zero_point();
+    let mut point = T::zero_point();
 
-        for g in coeff.iter() {
-            let rand = T::generate_non_zero_scalar(csprng);
-            point = point.plus_point(&g.mul_by_scalar(&rand));
-            rands.push(rand);
-        }
-        let maybe_challenge = hasher.append_fresh(&point).result_to_scalar::<T>();
-        match maybe_challenge {
-            None => {} // loop again
-            Some(challenge) => {
-                if challenge != T::Scalar::zero() {
-                    let mut witness = Vec::with_capacity(n);
-                    for (ref s, ref r) in izip!(secret, rands) {
-                        let mut wit = challenge;
-                        wit.mul_assign(s);
-                        wit.negate();
-                        wit.add_assign(r);
-                        witness.push(wit);
-                    }
-                    let proof = AggregateDlogProof { challenge, witness };
-                    return proof;
-                }
-            }
-        }
+    for g in coeff.iter() {
+        let rand = T::generate_non_zero_scalar(csprng);
+        point = point.plus_point(&g.mul_by_scalar(&rand));
+        rands.push(rand);
     }
+    let challenge = hasher.append(&point).result_to_scalar::<T>();
+    let mut witness = Vec::with_capacity(n);
+    for (ref s, ref r) in izip!(secret, rands) {
+        let mut wit = challenge;
+        wit.mul_assign(s);
+        wit.negate();
+        wit.add_assign(r);
+        witness.push(wit);
+    }
+    AggregateDlogProof { challenge, witness }
 }
 
 /// Verify a proof of knowledge of secret values. The arguments are as
@@ -86,7 +73,7 @@ pub fn prove_aggregate_dlog<T: Curve, R: Rng>(
 /// * `ro` - Random oracle used in the challenge computation. This can be used
 ///   to make sure that the proof is only valid in a certain context.
 /// * `evaluation` - The evaluation $y$ (see above for notation).
-/// * `coeff` - THe list of generators for discrete log proofs.
+/// * `coeff` - The list of generators for discrete log proofs.
 pub fn verify_aggregate_dlog<T: Curve>(
     ro: RandomOracle,
     public: &T,
@@ -106,10 +93,7 @@ pub fn verify_aggregate_dlog<T: Curve>(
         point = point.plus_point(&g.mul_by_scalar(w));
     }
     let computed_challenge = hasher.finish_to_scalar::<T, _>(&point);
-    match computed_challenge {
-        None => false,
-        Some(computed_challenge) => proof.challenge == computed_challenge,
-    }
+    proof.challenge == computed_challenge
 }
 
 #[cfg(test)]

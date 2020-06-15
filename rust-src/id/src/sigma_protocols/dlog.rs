@@ -25,33 +25,22 @@ pub fn prove_dlog<T: Curve, R: Rng>(
 ) -> DlogProof<T> {
     let hasher = ro.append_bytes("dlog").append(public).append(base);
 
-    loop {
-        let rand_scalar = T::generate_non_zero_scalar(csprng);
-        let randomised_point = base.mul_by_scalar(&rand_scalar);
+    let rand_scalar = T::generate_non_zero_scalar(csprng);
+    let randomised_point = base.mul_by_scalar(&rand_scalar);
 
-        let maybe_challenge = hasher
-            .append_fresh(&randomised_point)
-            .result_to_scalar::<T>();
-        match maybe_challenge {
-            None => {} // loop again
-            Some(challenge) => {
-                // The proof is not going to be valid unless alpha (randomised
-                // point) is also zero in such a case.
-                // So we resample in such a case.
-                if challenge != T::Scalar::zero() {
-                    let mut witness = *secret;
-                    witness.mul_assign(&challenge);
-                    witness.add_assign(&rand_scalar);
+    let challenge = hasher.append(&randomised_point).result_to_scalar::<T>();
 
-                    let proof = DlogProof {
-                        challenge,
-                        witness,
-                        _phantom: Default::default(),
-                    };
-                    return proof;
-                } // else loop again
-            }
-        }
+    // The proof is not going to be valid unless alpha (randomised
+    // point) is also zero in such a case.
+    // So we resample in such a case.
+    let mut witness = *secret;
+    witness.mul_assign(&challenge);
+    witness.add_assign(&rand_scalar);
+
+    DlogProof {
+        challenge,
+        witness,
+        _phantom: Default::default(),
     }
 }
 
@@ -68,10 +57,7 @@ pub fn verify_dlog<T: Curve>(ro: RandomOracle, base: &T, public: &T, proof: &Dlo
     // Or we should not require it to be non-zero if this is never checked, unless
     // it can be used to leak secrets.
     let computed_challenge = hasher.finish_to_scalar::<T, _>(&randomised_point);
-    match computed_challenge {
-        None => false,
-        Some(computed_challenge) => computed_challenge == proof.challenge,
-    }
+    computed_challenge == proof.challenge
 }
 
 #[cfg(test)]

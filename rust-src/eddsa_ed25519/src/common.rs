@@ -1,7 +1,6 @@
-use rand::*;
-
 /// TODO: Is this actually used anywhere? Seems bad if it is.
-pub fn generate_challenge_prefix<R: Rng>(csprng: &mut R) -> Vec<u8> {
+#[cfg(test)]
+pub fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
     // length of the challenge
     let l = csprng.gen_range(0, 1000);
     let mut challenge_prefix = vec![0; l];

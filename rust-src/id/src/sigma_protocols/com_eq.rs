@@ -66,52 +66,40 @@ pub fn prove_com_eq<C: Curve, T: Curve<Scalar = C::Scalar>, R: Rng>(
         .append(cmm_key)
         .extend_from(gxs.iter());
 
-    loop {
-        // For each iteration of the loop we need to recompute the challenge,
-        // but we reuse the prefix computation from above.
-        let mut hasher2 = hasher.split();
-        let mut tmp_u = T::zero_point();
-        // clear the vector of randoms for the current iteration.
-        // Doing it this way avoids reallocating a whole new vector on each iteration.
-        rands.clear();
-        for g in gxs {
-            let alpha_i = Value::<C>::generate_non_zero(csprng);
-            // This cR_i is R_i from the specification.
-            let (v_i, cR_i) = cmm_key.commit(&alpha_i, csprng);
-            tmp_u = tmp_u.plus_point(&g.mul_by_scalar(&alpha_i));
-            hasher2.add(&v_i);
-            rands.push((alpha_i, cR_i));
-        }
-        hasher2.add(&tmp_u);
-        let challenge = hasher2.result_to_scalar::<T>();
-        match challenge {
-            None => {} // loop again
-            Some(challenge) => {
-                // In the unlikely case that the challenge is 0 we try with a
-                // different randomness. The reason for this is that in such a
-                // case the proof will not be valid. This should not happen in
-                // practice though.
-                if challenge != T::Scalar::zero() {
-                    let mut witness = Vec::with_capacity(n);
-                    for ((r_i, a_i), (ref alpha_i, ref cR_i)) in izip!(secret, rands) {
-                        // compute alpha_i - a_i * c
-                        let mut s_i = challenge;
-                        s_i.mul_assign(a_i);
-                        s_i.negate();
-                        s_i.add_assign(alpha_i);
-                        // compute R_i - r_i * c
-                        let mut t_i: C::Scalar = challenge;
-                        t_i.mul_assign(r_i);
-                        t_i.negate();
-                        t_i.add_assign(cR_i);
-                        witness.push((s_i, t_i))
-                    }
-                    let proof = ComEqProof { challenge, witness };
-                    return proof;
-                }
-            }
-        }
+    // For each iteration of the loop we need to recompute the challenge,
+    // but we reuse the prefix computation from above.
+    let mut hasher2 = hasher.split();
+    let mut tmp_u = T::zero_point();
+    // clear the vector of randoms for the current iteration.
+    // Doing it this way avoids reallocating a whole new vector on each iteration.
+    rands.clear();
+    for g in gxs {
+        let alpha_i = Value::<C>::generate_non_zero(csprng);
+        // This cR_i is R_i from the specification.
+        let (v_i, cR_i) = cmm_key.commit(&alpha_i, csprng);
+        tmp_u = tmp_u.plus_point(&g.mul_by_scalar(&alpha_i));
+        hasher2.add(&v_i);
+        rands.push((alpha_i, cR_i));
     }
+    hasher2.add(&tmp_u);
+    let challenge = hasher2.result_to_scalar::<T>();
+    // In the unlikely case that the challenge is 0 the proof will not be valid.
+    // But that is exceedingly unlikely.
+    let mut witness = Vec::with_capacity(n);
+    for ((r_i, a_i), (ref alpha_i, ref cR_i)) in izip!(secret, rands) {
+        // compute alpha_i - a_i * c
+        let mut s_i = challenge;
+        s_i.mul_assign(a_i);
+        s_i.negate();
+        s_i.add_assign(alpha_i);
+        // compute R_i - r_i * c
+        let mut t_i: C::Scalar = challenge;
+        t_i.mul_assign(r_i);
+        t_i.negate();
+        t_i.add_assign(cR_i);
+        witness.push((s_i, t_i))
+    }
+    ComEqProof { challenge, witness }
 }
 
 /// Specialization of the above for when we only have a single commitment.
@@ -175,10 +163,7 @@ pub fn verify_com_eq<C: Curve, T: Curve<Scalar = C::Scalar>>(
     hasher.add(&u);
 
     let computed_challenge = hasher.result_to_scalar::<T>();
-    match computed_challenge {
-        None => false,
-        Some(computed_challenge) => computed_challenge == proof.challenge,
-    }
+    computed_challenge == proof.challenge
 }
 
 /// Specialization of the above when only a single commitment is given.

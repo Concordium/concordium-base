@@ -68,45 +68,33 @@ pub fn prove_com_enc_eq<T: Curve, R: Rng>(
         .append(pub_key)
         .append(cmm_key);
 
-    loop {
-        let beta = Value::generate_non_zero(csprng);
-        let (rand_cipher, alpha) = pub_key.encrypt_exponent_rand(csprng, &beta.value);
-        let (rand_cmm, gamma) = cmm_key.commit(&beta, csprng);
+    let beta = Value::generate_non_zero(csprng);
+    let (rand_cipher, alpha) = pub_key.encrypt_exponent_rand(csprng, &beta.value);
+    let (rand_cmm, gamma) = cmm_key.commit(&beta, csprng);
 
-        let maybe_challenge = hasher
-            .append_fresh(&rand_cipher)
-            .append(&rand_cmm)
-            .result_to_scalar::<T>();
-        match maybe_challenge {
-            None => {} // loop again
-            Some(challenge) => {
-                // In an extremely unlikely case the challenge is 0 the proof is
-                // not going to be valid (unless alpha, beta, gamma are specific values) so we
-                // loop again.
-                if challenge != T::Scalar::zero() {
-                    let x = secret.value;
-                    let cR = secret.elgamal_rand;
-                    let r = &secret.pedersen_rand;
-                    let mut z_1 = challenge;
-                    z_1.negate();
-                    z_1.mul_assign(cR);
-                    z_1.add_assign(&alpha);
+    let challenge = hasher
+        .append(&rand_cipher)
+        .append(&rand_cmm)
+        .result_to_scalar::<T>();
+    let x = secret.value;
+    let cR = secret.elgamal_rand;
+    let r = &secret.pedersen_rand;
+    let mut z_1 = challenge;
+    z_1.negate();
+    z_1.mul_assign(cR);
+    z_1.add_assign(&alpha);
 
-                    let mut z_2 = challenge;
-                    z_2.negate();
-                    z_2.mul_assign(x);
-                    z_2.add_assign(&beta);
+    let mut z_2 = challenge;
+    z_2.negate();
+    z_2.mul_assign(x);
+    z_2.add_assign(&beta);
 
-                    let mut z_3 = challenge;
-                    z_3.negate();
-                    z_3.mul_assign(r);
-                    z_3.add_assign(&gamma);
-                    let witness = (z_1, z_2, z_3);
-                    return ComEncEqProof { challenge, witness };
-                }
-            }
-        }
-    }
+    let mut z_3 = challenge;
+    z_3.negate();
+    z_3.mul_assign(r);
+    z_3.add_assign(&gamma);
+    let witness = (z_1, z_2, z_3);
+    ComEncEqProof { challenge, witness }
 }
 
 /// Verify a proof of knowledge.
@@ -162,10 +150,7 @@ pub fn verify_com_enc_eq<T: Curve>(
         .append(&a_3);
 
     let computed_challenge = hasher.result_to_scalar::<T>();
-    match computed_challenge {
-        None => false,
-        Some(computed_challenge) => computed_challenge == proof.challenge,
-    }
+    computed_challenge == proof.challenge
 }
 
 #[cfg(test)]

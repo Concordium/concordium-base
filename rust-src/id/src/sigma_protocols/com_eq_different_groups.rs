@@ -56,40 +56,30 @@ pub fn prove_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>, R: Rng>
         .append(cmm_key_1)
         .append(cmm_key_2);
 
-    loop {
-        let alpha_1 = Value::generate_non_zero(csprng);
-        let (u, alpha_2) = cmm_key_1.commit(&alpha_1, csprng);
-        let (v, cR) = cmm_key_2.commit(alpha_1.view(), csprng);
+    let alpha_1 = Value::generate_non_zero(csprng);
+    let (u, alpha_2) = cmm_key_1.commit(&alpha_1, csprng);
+    let (v, cR) = cmm_key_2.commit(alpha_1.view(), csprng);
 
-        let maybe_challenge = hasher.append_fresh(&u).finish_to_scalar::<C1, _>(&v);
-        match maybe_challenge {
-            None => {} // loop again
-            Some(challenge) => {
-                // if the computed challenge is 0 the proof will not be valid (unless extremely
-                // exceptional circumstances happen). Thus in such a case we resample.
-                if challenge != C1::Scalar::zero() {
-                    let mut s_1 = challenge;
-                    s_1.mul_assign(secret.value);
-                    s_1.negate();
-                    s_1.add_assign(&alpha_1);
+    let challenge = hasher.append(&u).finish_to_scalar::<C1, _>(&v);
+    // if the computed challenge is 0 the proof will not be valid (unless extremely
+    // exceptional circumstances happen). Thus in such a case we resample.
+    let mut s_1 = challenge;
+    s_1.mul_assign(secret.value);
+    s_1.negate();
+    s_1.add_assign(&alpha_1);
 
-                    let mut s_2 = challenge;
-                    s_2.mul_assign(secret.rand_cmm_1);
-                    s_2.negate();
-                    s_2.add_assign(&alpha_2);
+    let mut s_2 = challenge;
+    s_2.mul_assign(secret.rand_cmm_1);
+    s_2.negate();
+    s_2.add_assign(&alpha_2);
 
-                    let mut t = challenge;
-                    t.mul_assign(secret.rand_cmm_2);
-                    t.negate();
-                    t.add_assign(&cR);
-                    let proof = ComEqDiffGrpsProof {
-                        challenge,
-                        witness: (s_1, s_2, t),
-                    };
-                    return proof;
-                }
-            }
-        }
+    let mut t = challenge;
+    t.mul_assign(secret.rand_cmm_2);
+    t.negate();
+    t.add_assign(&cR);
+    ComEqDiffGrpsProof {
+        challenge,
+        witness: (s_1, s_2, t),
     }
 }
 
@@ -136,10 +126,7 @@ pub fn verify_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
         .append(cmm_key_2)
         .append(&u)
         .finish_to_scalar::<C1, _>(&v);
-    match computed_challenge {
-        None => false,
-        Some(computed_challenge) => computed_challenge == proof.challenge,
-    }
+    computed_challenge == proof.challenge
 }
 
 #[cfg(test)]

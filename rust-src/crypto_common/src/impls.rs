@@ -12,17 +12,9 @@ use crate::serialize::*;
 impl Deserial for Fr {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Fr> {
         let mut frrepr: FrRepr = FrRepr([0u64; 4]);
-        let mut i = true;
         // Read the scalar in big endian.
-        // FIXME: Here we always set the first bit to 0. This is not desirable,
-        // and we should rework this particular aspect. In particular, having it
-        // like so can cause subtle issues when we hash elements.
         for digit in frrepr.as_mut().iter_mut().rev() {
             *digit = source.get()?;
-            if i {
-                *digit &= !(1 << 63);
-                i = false;
-            }
         }
         Ok(Fr::from_repr(frrepr)?)
     }

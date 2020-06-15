@@ -53,63 +53,54 @@ pub fn prove_com_mult<T: Curve, R: Rng>(
         .append(cmm_3)
         .append(cmm_key);
 
-    loop {
-        let alpha_1 = Value::generate_non_zero(csprng);
-        let alpha_2 = Value::generate_non_zero(csprng);
-        let alpha_3 = Value::generate_non_zero(csprng);
+    let alpha_1 = Value::generate_non_zero(csprng);
+    let alpha_2 = Value::generate_non_zero(csprng);
+    let alpha_3 = Value::generate_non_zero(csprng);
 
-        let (v_1, cR_1) = cmm_key.commit(&alpha_1, csprng);
-        let (v_2, cR_2) = cmm_key.commit(&alpha_2, csprng);
-        let (v_3, cR_3) = cmm_key.commit(&alpha_3, csprng);
+    let (v_1, cR_1) = cmm_key.commit(&alpha_1, csprng);
+    let (v_2, cR_2) = cmm_key.commit(&alpha_2, csprng);
+    let (v_3, cR_3) = cmm_key.commit(&alpha_3, csprng);
 
-        let cmm_key_1 = CommitmentKey(cmm_1.0, cmm_key.1);
-        let (v, cR) = cmm_key_1.commit(&alpha_2, csprng);
+    let cmm_key_1 = CommitmentKey(cmm_1.0, cmm_key.1);
+    let (v, cR) = cmm_key_1.commit(&alpha_2, csprng);
 
-        let maybe_challenge = hasher
-            .append_fresh(&v_1)
-            .append(&v_2)
-            .append(&v_3)
-            .finish_to_scalar::<T, _>(&v);
-        match maybe_challenge {
-            None => {} // loop again
-            Some(challenge) => {
-                // If challenge is zero the proof is very unlikely to be valid.
-                // Hence we resample.
-                if challenge != T::Scalar::zero() {
-                    let mut ss = [challenge; 3];
-                    let mut ts = [challenge; 3];
-                    let alphas = [alpha_1, alpha_2, alpha_3];
-                    let rands = [cR_1, cR_2, cR_3];
-                    for i in 0..3 {
-                        ss[i].mul_assign(&secret.values[i]);
-                        ss[i].negate();
-                        ss[i].add_assign(&alphas[i]);
+    let challenge = hasher
+        .append(&v_1)
+        .append(&v_2)
+        .append(&v_3)
+        .finish_to_scalar::<T, _>(&v);
 
-                        ts[i].mul_assign(&secret.rands[i]);
-                        ts[i].negate();
-                        ts[i].add_assign(&rands[i]);
-                    }
+    // If challenge is zero the proof is very unlikely to be valid.
+    // But that is exceedingly unlikely.
+    let mut ss = [challenge; 3];
+    let mut ts = [challenge; 3];
+    let alphas = [alpha_1, alpha_2, alpha_3];
+    let rands = [cR_1, cR_2, cR_3];
+    for i in 0..3 {
+        ss[i].mul_assign(&secret.values[i]);
+        ss[i].negate();
+        ss[i].add_assign(&alphas[i]);
 
-                    // compute r_3 - r_1a_2
-                    let mut r = secret.rands[0].randomness; // r_1
-                    r.mul_assign(&secret.values[1]); // r_1 * a_2
-                    r.negate();
-                    r.add_assign(&secret.rands[2]);
+        ts[i].mul_assign(&secret.rands[i]);
+        ts[i].negate();
+        ts[i].add_assign(&rands[i]);
+    }
 
-                    let mut t = challenge;
-                    t.mul_assign(&r);
-                    t.negate();
-                    t.add_assign(&cR);
-                    let proof = ComMultProof {
-                        challenge,
-                        ss,
-                        ts,
-                        t,
-                    };
-                    return proof;
-                }
-            }
-        }
+    // compute r_3 - r_1a_2
+    let mut r = secret.rands[0].randomness; // r_1
+    r.mul_assign(&secret.values[1]); // r_1 * a_2
+    r.negate();
+    r.add_assign(&secret.rands[2]);
+
+    let mut t = challenge;
+    t.mul_assign(&r);
+    t.negate();
+    t.add_assign(&cR);
+    ComMultProof {
+        challenge,
+        ss,
+        ts,
+        t,
     }
 }
 
@@ -158,10 +149,7 @@ pub fn verify_com_mult<T: Curve>(
         .plus_point(&h.mul_by_scalar(&proof.t));
 
     let computed_challenge = hasher.finish_to_scalar::<T, _>(&v);
-    match computed_challenge {
-        None => false,
-        Some(computed_challenge) => computed_challenge == proof.challenge,
-    }
+    computed_challenge == proof.challenge
 }
 
 #[cfg(test)]

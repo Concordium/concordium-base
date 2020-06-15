@@ -90,7 +90,7 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
         "The PS key must be at least das long as the list of commitments."
     );
 
-    let hasher = ro
+    let mut hasher = ro
         .append_bytes("com_eq_sig")
         .append(blinded_sig)
         .extend_from(commitments.iter())
@@ -102,81 +102,66 @@ pub fn prove_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>, R: Rng>(
     // for the commitment part of the proof.
     let mut mus_cRs = Vec::with_capacity(n);
 
-    loop {
-        // clear at the beginning of each iteration so that we can append afresh
-        mus_cRs.clear();
-        let mut hasher2 = hasher.split();
+    // randomness corresponding to the r_prime (r').
+    let rho_prime = <P::G2 as Curve>::generate_non_zero_scalar(csprng);
 
-        // randomness corresponding to the r_prime (r').
-        let rho_prime = <P::G2 as Curve>::generate_non_zero_scalar(csprng);
+    // The auxiliary point which we are going to pair with a_hat to obtain the final
+    // challenge. This is using the bilinearity property of pairings and differs
+    // from the specification in the way the computation is carried out, but
+    // not in the observable outcomes.
+    let mut point = g_tilda.mul_by_scalar(&rho_prime);
 
-        // The auxiliary point which we are going to pair with a_hat to obtain the final
-        // challenge. This is using the bilinearity property of pairings and differs
-        // from the specification in the way the computation is carried out, but
-        // not in the observable outcomes.
-        let mut point = g_tilda.mul_by_scalar(&rho_prime);
+    for i in 0..n {
+        // Random value.
+        let mu_i = Value::generate_non_zero(csprng);
 
-        for i in 0..n {
-            // Random value.
-            let mu_i = Value::generate_non_zero(csprng);
+        // And a point in G2 computed from it.
+        let cU_i = cY_tilda(i).mul_by_scalar(&mu_i);
+        // A commitment to the value v_i, and a randomness
+        let (c_i, cR_i) = cmm_key.commit(&mu_i, csprng);
 
-            // And a point in G2 computed from it.
-            let cU_i = cY_tilda(i).mul_by_scalar(&mu_i);
-            // A commitment to the value v_i, and a randomness
-            let (c_i, cR_i) = cmm_key.commit(&mu_i, csprng);
+        // Save these for later
+        mus_cRs.push((mu_i, cR_i));
 
-            // Save these for later
-            mus_cRs.push((mu_i, cR_i));
+        // And add the commitment c_i directly to the hash
+        hasher.add(&c_i);
+        // And the other point to the running total (since we have to hash the result of
+        // the pairing)
+        point = point.plus_point(&cU_i);
+    }
+    // // add X_tilda (corresponds to multiplying by v_3)
+    // let v_2_pre_pair = cX_tilda.plus_point(&point);
+    // let v_2_pair = P::pair(a_hat, v_2_pre_pair);
+    let paired = P::pair(&a_hat, &point);
+    // TODO: here we could assert and check that v_2_pair = pair(b_hat, g_tilda)
+    // This should be the case if the input is valid.
 
-            // And add the commitment c_i directly to the hash
-            hasher2.add(&c_i);
-            // And the other point to the running total (since we have to hash the result of
-            // the pairing)
-            point = point.plus_point(&cU_i);
-        }
-        // // add X_tilda (corresponds to multiplying by v_3)
-        // let v_2_pre_pair = cX_tilda.plus_point(&point);
-        // let v_2_pair = P::pair(a_hat, v_2_pre_pair);
-        let paired = P::pair(&a_hat, &point);
-        // TODO: here we could assert and check that v_2_pair = pair(b_hat, g_tilda)
-        // This should be the case if the input is valid.
+    let challenge = hasher.finish_to_scalar::<C, _>(&paired);
+    // If challange = 0 the proof is not going to be valid.
+    // However this is an exceedingly unlikely case
+    let mut wit_r_prime: P::ScalarField = challenge;
+    wit_r_prime.mul_assign(&r_prime);
+    wit_r_prime.negate();
+    wit_r_prime.add_assign(&rho_prime);
 
-        let maybe_challenge = hasher2.finish_to_scalar::<C, _>(&paired);
-        match maybe_challenge {
-            None => {} // loop again
-            Some(challenge) => {
-                // if challange = 0 the proof is not going to be valid.
-                // Hence we resample (this is an extremely unlikely case though, not to
-                // occur in practice.
-                if challenge != <P::G2 as Curve>::Scalar::zero() {
-                    let mut wit_r_prime: P::ScalarField = challenge;
-                    wit_r_prime.mul_assign(&r_prime);
-                    wit_r_prime.negate();
-                    wit_r_prime.add_assign(&rho_prime);
+    let mut wit_messages_randoms = Vec::with_capacity(n);
+    for ((ref m, r), (ref mu, ref rho)) in izip!(secret.values_and_rands, mus_cRs) {
+        let mut wit_m = challenge;
+        wit_m.mul_assign(m);
+        wit_m.negate();
+        wit_m.add_assign(mu);
 
-                    let mut wit_messages_randoms = Vec::with_capacity(n);
-                    for ((ref m, r), (ref mu, ref rho)) in izip!(secret.values_and_rands, mus_cRs) {
-                        let mut wit_m = challenge;
-                        wit_m.mul_assign(m);
-                        wit_m.negate();
-                        wit_m.add_assign(mu);
+        let mut wit_r = challenge;
+        wit_r.mul_assign(r);
+        wit_r.negate();
+        wit_r.add_assign(rho);
 
-                        let mut wit_r = challenge;
-                        wit_r.mul_assign(r);
-                        wit_r.negate();
-                        wit_r.add_assign(rho);
-
-                        wit_messages_randoms.push((wit_m, wit_r));
-                    }
-                    let proof = ComEqSigProof {
-                        challenge,
-                        witness_rho: wit_r_prime,
-                        witness_commit: wit_messages_randoms,
-                    };
-                    return proof;
-                }
-            }
-        }
+        wit_messages_randoms.push((wit_m, wit_r));
+    }
+    ComEqSigProof {
+        challenge,
+        witness_rho: wit_r_prime,
+        witness_commit: wit_messages_randoms,
     }
 }
 
@@ -254,10 +239,7 @@ pub fn verify_com_eq_sig<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     if let Some(paired) = paired {
         let computed_challenge = hasher.finish_to_scalar::<C, _>(&paired);
-        match computed_challenge {
-            None => false,
-            Some(computed_challenge) => computed_challenge == proof.challenge,
-        }
+        computed_challenge == proof.challenge
     } else {
         false
     }

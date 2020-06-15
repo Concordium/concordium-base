@@ -14,6 +14,26 @@ use pairing::{
 };
 use rand::*;
 
+// Helper function for both G1 and G2 instances.
+fn scalar_from_bytes_mod_helper<A: AsRef<[u8]>>(bytes: A) -> Fr {
+    // iterate over 64-bit chunks
+    let mut acc = Fr::zero();
+    let factor = Fr::from_repr(FrRepr([0, 1, 0, 0])).expect("2^64 is representable.");
+    // traverse 8 byte chunks
+    // Traverse from the beginning, but if the length
+    // is not a multiple of 8, the first chunk is shortened.
+
+    // This loop essentially interprets the chunks as base-2^64 values.
+    let mut v = [0; 8];
+    for chunk in bytes.as_ref().rchunks(8).rev() {
+        v[8 - chunk.len()..].copy_from_slice(&chunk);
+        let n = u64::from_be_bytes(v);
+        acc.mul_assign(&factor);
+        acc.add_assign(&Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable."));
+    }
+    acc
+}
+
 impl Curve for G2 {
     type Base = Fq;
     type Compressed = G2Compressed;
@@ -75,8 +95,14 @@ impl Curve for G2 {
         }
     }
 
+    #[inline(always)]
     fn scalar_from_u64(n: u64) -> Self::Scalar {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
+    }
+
+    #[inline(always)]
+    fn scalar_from_bytes_mod<A: AsRef<[u8]>>(bytes: A) -> Self::Scalar {
+        scalar_from_bytes_mod_helper(bytes)
     }
 
     fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
@@ -155,8 +181,14 @@ impl Curve for G1 {
         }
     }
 
+    #[inline(always)]
     fn scalar_from_u64(n: u64) -> Self::Scalar {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
+    }
+
+    #[inline(always)]
+    fn scalar_from_bytes_mod<A: AsRef<[u8]>>(bytes: A) -> Self::Scalar {
+        scalar_from_bytes_mod_helper(bytes)
     }
 
     fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
@@ -235,6 +267,11 @@ impl Curve for G1Affine {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
 
+    #[inline(always)]
+    fn scalar_from_bytes_mod<A: AsRef<[u8]>>(bytes: A) -> Self::Scalar {
+        scalar_from_bytes_mod_helper(bytes)
+    }
+
     fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
         let mut g = G1Compressed::empty();
         bytes.read_exact(g.as_mut())?;
@@ -311,6 +348,11 @@ impl Curve for G2Affine {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
 
+    #[inline(always)]
+    fn scalar_from_bytes_mod<A: AsRef<[u8]>>(bytes: A) -> Self::Scalar {
+        scalar_from_bytes_mod_helper(bytes)
+    }
+
     fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
         let mut g = G2Compressed::empty();
         bytes.read_exact(g.as_mut())?;
@@ -364,6 +406,17 @@ mod tests {
     use super::*;
     use crypto_common::*;
     use std::io::Cursor;
+
+    // Check that scalar_from_bytes_mod_helper works on small values.
+    #[test]
+    fn scalar_from_bytes_small() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..1000 {
+            let n = Fr::random(&mut rng);
+            let bytes = to_bytes(&n);
+            assert_eq!(scalar_from_bytes_mod_helper(&bytes), n);
+        }
+    }
 
     // For development only, delete later
     #[test]
