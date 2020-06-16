@@ -4,7 +4,7 @@ extern crate failure;
 extern crate serde_json;
 
 use crypto_common::{base16_decode_string, base16_encode_string, c_char, Put};
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};

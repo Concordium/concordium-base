@@ -4,7 +4,7 @@
 //! the blinded version of the signature, and commitments to the values that
 //! were signed.
 
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::*;
 use ff::Field;
 use rand::*;
 

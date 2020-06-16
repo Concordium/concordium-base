@@ -2,7 +2,7 @@
 
 use crate::errors::{InternalError::DivisionByZero, *};
 use crypto_common::*;
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::Curve;
 
 use ff::Field;
 use rand::*;

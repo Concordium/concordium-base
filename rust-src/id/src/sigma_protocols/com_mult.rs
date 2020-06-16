@@ -2,7 +2,7 @@
 //! This protocol enables one to prove that the the product of two commited
 //! values is equal to the third commited value, without revealing the values
 //! themselves.
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::Curve;
 use ff::Field;
 use rand::*;
 

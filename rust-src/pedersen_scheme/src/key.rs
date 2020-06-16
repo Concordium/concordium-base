@@ -1,8 +1,8 @@
 //! Commitment key type
 
-use crate::{commitment::*, randomness::*, value::*};
+use crate::{commitment::*, randomness::*};
 
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::*;
 
 use crypto_common::*;
 use crypto_common_derive::*;

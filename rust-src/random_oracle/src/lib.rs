@@ -1,7 +1,7 @@
 //! This module provides the random oracle replacement function needed in the
 //! sigma protocols, and any other constructions needing it.
 use crypto_common::*;
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::Curve;
 
 use sha3::{Digest, Sha3_512};
 use std::io::Write;

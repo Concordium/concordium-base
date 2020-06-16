@@ -1,5 +1,5 @@
 use crate::unknown_message::SigRetrievalRandomness;
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::*;
 use rand::*;
 
 use crypto_common::*;

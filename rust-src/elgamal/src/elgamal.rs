@@ -3,7 +3,7 @@ use rand::*;
 use rayon::prelude::*;
 
 use crypto_common::*;
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::Curve;
 
 use std::io::Cursor;
 

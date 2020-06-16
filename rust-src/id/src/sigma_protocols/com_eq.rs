@@ -6,7 +6,7 @@
 //! be of the same prime order, and for the implementation the field of scalars
 //! must be the same type for both groups.
 
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::Curve;
 use ff::Field;
 use rand::*;
 

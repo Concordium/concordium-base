@@ -457,6 +457,10 @@ impl<T: Deserial + Eq + Hash, S: BuildHasher + Default> Deserial for HashSet<T, 
     }
 }
 
+impl<'a, T: Serial> Serial for &'a T {
+    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) { (*self).serial(target) }
+}
+
 // Helpers for json serialization
 
 use hex::{decode, encode};

@@ -1,6 +1,6 @@
 use crate::secret_sharing::{ShareNumber, Threshold};
 use crypto_common::*;
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
