@@ -112,9 +112,10 @@ pub fn prove_dlog_ed25519(
         .split()
         .append_bytes(&randomised_point.compress().to_bytes())
         .result();
-    let mut array = [0u8; 64];
+    // FIXME: Do the same as in other proofs in sigma_protocols in id.
+    let mut array = [0u8; 32];
     array.copy_from_slice(&challenge_bytes.as_ref());
-    let challenge = Scalar::from_bytes_mod_order_wide(&array);
+    let challenge = Scalar::from_bytes_mod_order(array);
     Ed25519DlogProof {
         challenge,
         witness: rand_scalar - challenge * secret,
@@ -137,9 +138,10 @@ pub fn verify_dlog_ed25519(
                 .append_bytes(&randomised_point.compress().to_bytes());
             // FIXME: Should do the same as for normal dlog.
             let challenge_bytes = hasher.result();
-            let mut array = [0u8; 64];
+            // FIXME: Do the same as in other proofs in sigma_protocols in id.
+            let mut array = [0u8; 32];
             array.copy_from_slice(&challenge_bytes.as_ref());
-            let challenge = Scalar::from_bytes_mod_order_wide(&array);
+            let challenge = Scalar::from_bytes_mod_order(array);
             challenge == proof.challenge
         }
     }
