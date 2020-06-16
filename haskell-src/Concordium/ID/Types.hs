@@ -604,7 +604,7 @@ instance Serialize CredentialDeploymentInformation where
   put CredentialDeploymentInformation{..} =
     put __versionCredential <> put cdiValues <> put cdiProofs
   get = do
-    version <- Version <$> get
+    version <- get
     when (version /= __versionCredential) (fail "Invalid credential version")
     CredentialDeploymentInformation <$> get <*> get
 
