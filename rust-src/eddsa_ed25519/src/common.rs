@@ -1,4 +1,3 @@
-/// TODO: Is this actually used anywhere? Seems bad if it is.
 #[cfg(test)]
 pub fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
     // length of the challenge

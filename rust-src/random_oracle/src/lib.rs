@@ -1,14 +1,26 @@
 //! This module provides the random oracle replacement function needed in the
 //! sigma protocols, and any other constructions needing it.
 use crypto_common::*;
+use crypto_common_derive::Serialize;
 use curve_arithmetic::Curve;
 
-use sha3::{Digest, Sha3_512};
+use sha3::{Digest, Sha3_256};
 use std::io::Write;
 
 /// State of the random oracle, used to incrementally build up the output.
 #[repr(transparent)]
-pub struct RandomOracle(Sha3_512);
+pub struct RandomOracle(Sha3_256);
+
+/// Type of challenges computed from the random oracle.
+/// We use 32 byte output of SHA3-256
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct Challenge {
+    challenge: [u8; 32],
+}
+
+impl AsRef<[u8]> for Challenge {
+    fn as_ref(&self) -> &[u8] { &self.challenge }
+}
 
 impl Write for RandomOracle {
     #[inline(always)]
@@ -30,7 +42,7 @@ impl Write for RandomOracle {
 impl Buffer for RandomOracle {
     type Result = sha3::digest::generic_array::GenericArray<
         u8,
-        <Sha3_512 as sha3::digest::Digest>::OutputSize,
+        <Sha3_256 as sha3::digest::Digest>::OutputSize,
     >;
 
     #[inline(always)]
@@ -42,12 +54,12 @@ impl Buffer for RandomOracle {
 
 impl RandomOracle {
     /// Start with the initial empty state of the oracle.
-    pub fn empty() -> Self { RandomOracle(Sha3_512::new()) }
+    pub fn empty() -> Self { RandomOracle(Sha3_256::new()) }
 
     /// Start with the initial string.
     /// Equivalent to ```ro.empty().append()```, but meant to be
     /// used with a domain string.
-    pub fn domain<B: AsRef<[u8]>>(data: B) -> Self { RandomOracle(Sha3_512::new().chain(data)) }
+    pub fn domain<B: AsRef<[u8]>>(data: B) -> Self { RandomOracle(Sha3_256::new().chain(data)) }
 
     /// Duplicate the random oracle, creating a fresh copy of it.
     /// Further calls to 'append' or 'add' are independent.
@@ -82,9 +94,9 @@ impl RandomOracle {
     pub fn extend_from<'a, I, B: 'a>(self, iter: I) -> Self
     where
         B: Serial,
-        I: Iterator<Item = &'a B>, {
+        I: IntoIterator<Item = &'a B>, {
         let mut ro = self;
-        for i in iter {
+        for i in iter.into_iter() {
             ro.add(i)
         }
         ro
@@ -114,6 +126,13 @@ impl RandomOracle {
     /// ```ro.append(input).result_to_scalar()```.
     pub fn finish_to_scalar<C: Curve, B: Serial>(self, data: &B) -> C::Scalar {
         self.append(data).result_to_scalar::<C>()
+    }
+
+    /// Get a challenge from the current state, consuming the state.
+    pub fn get_challenge(self) -> Challenge {
+        Challenge {
+            challenge: self.result().into(),
+        }
     }
 }
 

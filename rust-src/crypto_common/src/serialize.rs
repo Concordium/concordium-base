@@ -358,6 +358,23 @@ impl<T: Deserial> Deserial for [T; 3] {
     }
 }
 
+// Some more generic implementations
+impl<T: Serial + Default> Serial for [T; 32] {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        for x in self.iter() {
+            x.serial(out);
+        }
+    }
+}
+
+impl Deserial for [u8; 32] {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut out: [u8; 32] = Default::default();
+        source.read_exact(&mut out)?;
+        Ok(out)
+    }
+}
+
 // Some more std implementations
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
