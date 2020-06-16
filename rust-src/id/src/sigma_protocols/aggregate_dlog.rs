@@ -3,7 +3,7 @@
 //! logarithms $a_1 ... a_n$ public values $ y = \prod G_i^{a_i} $.
 //! This is a specialization of `com_eq` protocol where we do not require
 //! commitments.
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::Curve;
 use ff::Field;
 use rand::*;
 

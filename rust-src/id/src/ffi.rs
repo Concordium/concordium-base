@@ -3,7 +3,7 @@ use crate::{
     types::*,
 };
 use crypto_common::*;
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
 

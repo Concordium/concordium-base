@@ -1,7 +1,7 @@
 //! This module provides the implementation of the discrete log sigma protocol
 //! which enables one to prove knowledge of the discrete logarithm without
 //! revealing it.
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::Curve;
 use ff::Field;
 use rand::*;
 use random_oracle::RandomOracle;
@@ -30,9 +30,8 @@ pub fn prove_dlog<T: Curve, R: Rng>(
 
     let challenge = hasher.append(&randomised_point).result_to_scalar::<T>();
 
-    // The proof is not going to be valid unless alpha (randomised
-    // point) is also zero in such a case.
-    // So we resample in such a case.
+    // If the challenge is zero, the proof is not going to be valid unless alpha
+    // (randomised point) is also zero.
     let mut witness = *secret;
     witness.mul_assign(&challenge);
     witness.add_assign(&rand_scalar);

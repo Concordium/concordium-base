@@ -2,7 +2,7 @@
 //! This protocol is used to prove that the encrypted value (encrypted via
 //! ElGamal) is the same as the value commited to via the Pedersen commitment.
 
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::Curve;
 use ff::Field;
 use rand::*;
 

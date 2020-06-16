@@ -1,5 +1,5 @@
 use crypto_common::*;
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::*;
 use pedersen_scheme::Commitment;
 
 use rand::*;

@@ -2,7 +2,7 @@
 //! protocol. This protocol enables one to prove that the value committed to in
 //! two commitments $C_1$ and $C_2$ in (potentially) two different groups (of
 //! the same order) is the same.
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::Curve;
 use ff::Field;
 use rand::*;
 
