@@ -605,9 +605,8 @@ instance Serialize CredentialDeploymentInformation where
     put __versionCredential <> put cdiValues <> put cdiProofs
   get = do
     version <- Version <$> get
-    if version /= __versionCredential then fail "Invalid credential version"
-    else do
-      CredentialDeploymentInformation <$> get <*> get
+    when (version /= __versionCredential) (fail "Invalid credential version")
+    CredentialDeploymentInformation <$> get <*> get
 
 -- |NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
 instance Eq CredentialDeploymentInformation where
@@ -615,14 +614,16 @@ instance Eq CredentialDeploymentInformation where
 
 instance FromJSON CredentialDeploymentInformation where
   parseJSON = withObject "VersionedCredentialDeploymentInformation" $ \v -> do
-    version <- v .: "v"
-    value <- v .: "value"
-    when (version /= __versionCredential) (fail "Invalid credential version")
-    unpackedValue <- withObject "CredentialDeploymentInformation"
-                        (\w -> do
-                          cdiValues <- parseJSON (Object w)
-                          proofsText <- w .: "proofs"
-                          return CredentialDeploymentInformation{cdiProofs = Proofs (BSS.toShort . fst . BS16.decode . Text.encodeUtf8 $ proofsText), ..}
-                        )
-                        value
-    return unpackedValue
+      version <- v .: "v"
+      value <- v .: "value"
+      when (version /= __versionCredential) (fail "Invalid credential version")
+      unpackedValue <- withObject "CredentialDeploymentInformation" parseCDI value
+      return unpackedValue
+    where
+      parseCDI = \w -> do
+        cdiValues <- parseJSON (Object w)
+        proofsText <- w .: "proofs"
+        return CredentialDeploymentInformation {
+            cdiProofs = Proofs (BSS.toShort . fst . BS16.decode . Text.encodeUtf8 $ proofsText),
+            ..
+          }
