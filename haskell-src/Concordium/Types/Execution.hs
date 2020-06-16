@@ -435,13 +435,6 @@ data Event =
                -- |Account to which it was deployed.
                ecdAccount :: !AccountAddress
                }
-           -- |A new encryption key was deployed onto an account.
-           | AccountEncryptionKeyDeployed {
-               -- |The encryption key.
-               eaekdKey :: !IDTypes.AccountEncryptionKey,
-               -- |Account to which it was deployed.
-               eaekdAccount :: !AccountAddress
-               }
            | BakerAdded !BakerId
            | BakerRemoved !BakerId
            | BakerAccountUpdated {
