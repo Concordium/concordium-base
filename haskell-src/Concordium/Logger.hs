@@ -4,7 +4,8 @@
 -- | Event logging monad.
 module Concordium.Logger where
 
-import Control.Monad.IO.Class (MonadIO)
+import Control.Exception
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Class (MonadTrans (..))
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.Maybe
@@ -17,6 +18,8 @@ import Control.Monad.Trans.Writer.Lazy as Lazy
 import Control.Monad.Trans.Writer.Strict as Strict
 import Data.Word
 
+-- * Base types
+
 -- | The source module for a log event.
 data LogSource
   = Runner
@@ -27,8 +30,10 @@ data LogSource
   | Skov
   | Baker
   | External
+  | GlobalState
   | BlockState
   | TreeState
+  | LMDB
   deriving (Eq, Ord, Show)
 
 -- | Convert a 'LogSource' value to the representation required by the
@@ -72,9 +77,8 @@ logLevelId LLTrace = 5
 type LogMethod m = LogSource -> LogLevel -> String -> m ()
 
 type LogIO = LoggerT IO
-
 ------------------------------------------------------------------------------
--- The @LoggerT@ monad transformer
+-- * The @LoggerT@ monad transformer
 
 -- | The 'LoggerT' monad transformer equips a monad with logging
 --  functionality.
@@ -97,7 +101,7 @@ runSilentLogger :: Applicative m => LoggerT m a -> m a
 runSilentLogger = flip runLoggerT (\_ _ _ -> pure ())
 
 ------------------------------------------------------------------------------
--- The @MonadLogger@ class
+-- * The @MonadLogger@ class
 
 -- | Class for a monad that supports logging.
 class Monad m => MonadLogger m where
@@ -124,3 +128,18 @@ instance (MonadLogger m, Monoid w) => MonadLogger (Lazy.WriterT w m) where
 instance (MonadLogger m, Monoid w) => MonadLogger (Strict.WriterT w m) where
 instance (MonadLogger m, Monoid w) => MonadLogger (Lazy.RWST r w s m) where
 instance (MonadLogger m, Monoid w) => MonadLogger (Strict.RWST r w s m) where
+
+--------------------------------------------------------------------------------
+-- * Helpers
+
+-- |Short alias to log an exception and throw it using the MonadIO instance
+logExceptionAndThrow :: (MonadLogger m, MonadIO m, Exception e) => LogSource -> e -> m a
+logExceptionAndThrow src exception = do
+  logEvent src LLError $ displayException exception
+  liftIO $ throwIO $ exception
+
+-- |Short alias to log an error message and throw it using the MonadIO instance inside a userError
+logErrorAndThrow :: (MonadLogger m, MonadIO m) => LogSource -> String -> m a
+logErrorAndThrow src msg = do
+  logEvent src LLError msg
+  liftIO $ throwIO $ userError msg
