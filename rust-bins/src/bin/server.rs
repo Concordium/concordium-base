@@ -164,14 +164,14 @@ fn parse_generate_credential_input_json(v: &Value) -> Option<GenerateCredentialD
         .and_then(|x| from_json(x.clone()).ok())?;
     let ver_private: Versioned<IdObjectUseData<Bls12, ExampleCurve>> =
         v.get("idUseData").and_then(|x| from_json(x.clone()).ok())?;
-    if ver_id_object.version() != VERSION_IDENTITY_OBJECT {
+    if ver_id_object.version != VERSION_IDENTITY_OBJECT {
         return None;
     }
-    if ver_private.version() != VERSION_ID_OBJECT_USE_DATA {
+    if ver_private.version != VERSION_ID_OBJECT_USE_DATA {
         return None;
     }
-    let id_object = ver_id_object.value();
-    let private = ver_private.value();
+    let id_object = ver_id_object.value;
+    let private = ver_private.value;
     let policy_items = {
         if let Some(items) = v.get("revealedAttributes") {
             from_json(items.clone()).ok()?

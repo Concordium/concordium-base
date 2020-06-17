@@ -1,61 +1,66 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings, LambdaCase #-}
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia, DeriveDataTypeable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings #-}
 module Concordium.Common.Version where
 
 import Data.Word
 import Data.Bits
-import Data.Serialize as S
+import qualified Data.Serialize as S
+import qualified Data.Aeson as AE
+import Data.Aeson ((.:), (.=))
 import Data.Hashable
-import Data.Aeson hiding (encode, decode)
 import Control.Monad
 
 
 
 -- |Constants
-__versionBlock :: Version
-__versionBlock = Version 0
+versionBlock :: Version
+versionBlock = Version 0
 
-__versionTransaction :: Version
-__versionTransaction = Version 0
+versionTransaction :: Version
+versionTransaction = Version 0
 
-__versionGenesisData :: Version
-__versionGenesisData = Version 0
+versionGenesisData :: Version
+versionGenesisData = Version 0
 
-__versionGenesisParams :: Version
-__versionGenesisParams = Version 0
+versionGenesisParams :: Version
+versionGenesisParams = Version 0
 
-__versionCredential :: Version
-__versionCredential = Version 0
+versionCredential :: Version
+versionCredential = Version 0
 
-__versionFinalizationRecord :: Version
-__versionFinalizationRecord = Version 0
+versionFinalizationRecord :: Version
+versionFinalizationRecord = Version 0
 
 
 
--- |Data structure version
+-- |Version of a data structure. Binary coded as a variable integer represented by
+-- bytes, where MSB=1 indicates more bytes follow, and the 7 lower bits in a byte
+-- is Big Endian data bits for the value. A version number is bounded by u32 max.
 newtype Version = Version Word32
-    deriving (Eq, Ord, Hashable, Show, FromJSON, ToJSON)
+    deriving (Eq, Ord, Hashable, Show, AE.FromJSON, AE.ToJSON)
 
-instance Serialize Version where
+instance S.Serialize Version where
   put (Version v) = mapM_ S.putWord8 (encode7 v)
     where
       encode7 :: Word32 -> [Word8]
       encode7 n = let (x:xs) = go n
                   in reverse (x:map (`setBit` 7) xs)
-        where go x =
-                if x == 0 then [0]
-                else let (d, m) =  x `divMod` 128
-                    in if d == 0 then [fromIntegral m]
+        where go x = let (d, m) =  x `quotRem` 128
+                     in if d == 0 then [fromIntegral m]
                         else fromIntegral m : go d
   get = decode7 0 5
     where
-      decode7 :: Word32 -> Integer -> Get Version
+      decode7 :: Word32 -> Integer -> S.Get Version
       decode7 acc left = do
           unless (left > 0) $ fail "Invalid version number"
           byte <- S.getWord8
           if testBit byte 7
             then decode7 (128 * acc + fromIntegral (clearBit byte 7)) (left-1)
-            else return (Version (128 * acc + fromIntegral byte))
+            else
+              let
+                value = 128 * acc + fromIntegral byte
+              in do
+                unless (value < 4294967295) $ fail "Invalid version number"
+                return (Version value)
 
 
 
@@ -67,19 +72,19 @@ data Versioned a = Versioned {
   vValue :: !a
 } deriving(Eq, Show)
 
-instance (Serialize a) => Serialize (Versioned a) where
+instance (S.Serialize a) => S.Serialize (Versioned a) where
   put Versioned {..} =
-    put vVersion <> put vValue
-  get = Versioned <$> get <*> get
+    S.put vVersion <> S.put vValue
+  get = Versioned <$> S.get <*> S.get
 
-instance (ToJSON a) => ToJSON (Versioned a) where
-  toJSON (Versioned {..}) = object [
+instance (AE.ToJSON a) => AE.ToJSON (Versioned a) where
+  toJSON Versioned{..} = AE.object [
     "v" .= vVersion,
     "value" .= vValue
     ]
 
-instance FromJSON a => FromJSON (Versioned a) where
-  parseJSON = withObject "Versioned" $ \obj -> do
+instance AE.FromJSON a => AE.FromJSON (Versioned a) where
+  parseJSON = AE.withObject "Versioned" $ \obj -> do
     vVersion <- obj .: "v"
     vValue <- obj .: "value"
     return Versioned {..}

@@ -577,8 +577,8 @@ fn handle_act_as_ip(matches: &ArgMatches) {
                 alist: attributes,
                 signature,
             };
-            let signature = id_object.signature.clone();
             let ver_id_object = Versioned::new(VERSION_IDENTITY_OBJECT, id_object);
+            let signature = &ver_id_object.value.signature;
             println!("Successfully checked pre-identity data.");
             if let Some(signed_out_path) = matches.value_of("out") {
                 if write_json_to_file(signed_out_path, &ver_id_object).is_ok() {
@@ -586,11 +586,11 @@ fn handle_act_as_ip(matches: &ArgMatches) {
                 } else {
                     println!(
                         "Could not write Identity object to file. The signature is: {}",
-                        base16_encode_string(&signature)
+                        base16_encode_string(signature)
                     );
                 }
             } else {
-                println!("The signature is: {}", base16_encode_string(&signature));
+                println!("The signature is: {}", base16_encode_string(signature));
             }
         }
         Err(r) => eprintln!("Could not verify pre-identity object {:?}", r),

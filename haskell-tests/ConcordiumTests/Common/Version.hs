@@ -15,8 +15,7 @@ import Test.Hspec
 import Data.Aeson
 
 newtype ExampleType = ExampleType Word32
-    deriving (Eq, Show, Ord)
-    deriving (FromJSON, ToJSON) via Word32
+    deriving (Eq, Show, Ord, FromJSON, ToJSON)
 
 testVersionToBytes :: Property
 testVersionToBytes = S.encode (Version 1700794014) === (BS.pack [0x86, 0xab, 0x80, 0x9d, 0x1e])
