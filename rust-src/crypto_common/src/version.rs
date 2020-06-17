@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn test_version_serialization_testvector() {
-        let test = Version(1_700_794_014);
+        let test = Version::from(1_700_794_014);
         let actual: Vec<u8> = vec![0x86, 0xab, 0x80, 0x9d, 0x1e];
         let mut buffer: Vec<u8> = Vec::new();
         test.serial(&mut buffer);
@@ -114,8 +114,8 @@ mod tests {
 
     #[test]
     fn test_version_serialization_minmax() {
-        let min = Version(0);
-        let max = Version(u32::max_value());
+        let min = Version::from(0);
+        let max = Version::from(u32::max_value());
         let min_actual: Vec<u8> = vec![0x00];
         let max_actual: Vec<u8> = vec![0x8F, 0xFF, 0xFF, 0xFF, 0x7F];
         let mut buffer: Vec<u8> = Vec::new();
@@ -138,7 +138,7 @@ mod tests {
     fn test_version_serialization_singlebits() {
         let mut current: u32 = 1;
         for _ in 0..32 {
-            let actual = Version(current);
+            let actual = Version::from(current);
             let parsed = serialize_deserialize(&actual).unwrap();
             assert_eq!(actual, parsed);
             current *= 2;
@@ -149,7 +149,7 @@ mod tests {
     fn test_version_serialization_random() {
         let mut rng = thread_rng();
         for _ in 0..1000 {
-            let actual = Version(rng.next_u32());
+            let actual = Version::from(rng.next_u32());
             let parsed = serialize_deserialize(&actual).unwrap();
             assert_eq!(actual, parsed);
         }
@@ -168,7 +168,7 @@ mod tests {
             s: String::from("Test"),
         };
 
-        let versioned = Versioned::new(Version(1337), ex);
+        let versioned = Versioned::new(Version::from(1337), ex);
 
         let json = serde_json::to_string(&versioned).unwrap();
         let actual_json = "{\"v\":1337,\"value\":{\"n\":42,\"s\":\"Test\"}}";
