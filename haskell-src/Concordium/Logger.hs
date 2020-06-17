@@ -8,6 +8,7 @@ import Control.Exception
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Class (MonadTrans (..))
 import Control.Monad.Trans.Reader
+import Control.Monad.Reader.Class
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.RWS.Lazy as Lazy
@@ -16,6 +17,7 @@ import Control.Monad.Trans.State.Lazy as Lazy
 import Control.Monad.Trans.State.Strict as Strict
 import Control.Monad.Trans.Writer.Lazy as Lazy
 import Control.Monad.Trans.Writer.Strict as Strict
+import Data.Functor.Identity
 import Data.Word
 
 -- * Base types
@@ -83,7 +85,8 @@ type LogIO = LoggerT IO
 -- | The 'LoggerT' monad transformer equips a monad with logging
 --  functionality.
 newtype LoggerT m a = LoggerT {runLoggerT' :: ReaderT (LogMethod m) m a}
-  deriving (Functor, Applicative, Monad, MonadIO)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader (LogMethod m))
+-- The MonadReader instance will allow us to unwrap the method inside LogIO to provide it when we need a LogMethod IO. I think this should be eventually removed.
 
 instance MonadTrans LoggerT where
   lift = LoggerT . lift
@@ -116,6 +119,8 @@ class Monad m => MonadLogger m where
 instance Monad m => MonadLogger (LoggerT m) where
   logEvent = logIt
 
+instance MonadLogger Identity where
+  logEvent _ _ _ = pure ()
 ------------------------------------------------------------------------------
 -- Instances for other mtl transformers.
 
