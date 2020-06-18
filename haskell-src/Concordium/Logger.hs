@@ -36,19 +36,12 @@ data LogSource
   | BlockState
   | TreeState
   | LMDB
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Enum)
 
 -- | Convert a 'LogSource' value to the representation required by the
 --  Rust API.
 logSourceId :: LogSource -> Word8
-logSourceId Runner = 1
-logSourceId Afgjort = 2
-logSourceId Birk = 3
-logSourceId Crypto = 4
-logSourceId Kontrol = 5
-logSourceId Skov = 6
-logSourceId Baker = 7
-logSourceId External = 8
+logSourceId = fromIntegral . fromEnum
 
 -- | The logging level for a log event.
 data LogLevel
@@ -86,13 +79,10 @@ type LogIO = LoggerT IO
 --  functionality.
 newtype LoggerT m a = LoggerT {runLoggerT' :: ReaderT (LogMethod m) m a}
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader (LogMethod m))
--- The MonadReader instance will allow us to unwrap the method inside LogIO to provide it when we need a LogMethod IO. I think this should be eventually removed.
+
 
 instance MonadTrans LoggerT where
   lift = LoggerT . lift
-
-logIt :: LogSource -> LogLevel -> String -> LoggerT m ()
-logIt s l m = LoggerT $ ReaderT (\logm -> logm s l m)
 
 -- | Run an action in the 'LoggerT' monad, handling log events with the
 --  given log method.
@@ -117,10 +107,14 @@ class Monad m => MonadLogger m where
 -- These instances are declared in the same way as done in the mtl package.
 -- See https://hackage.haskell.org/package/mtl-2.2.2/docs/src/Control.Monad.Reader.Class.html#MonadReader
 instance Monad m => MonadLogger (LoggerT m) where
-  logEvent = logIt
+  logEvent src lvl msg = do
+    logm <- Control.Monad.Reader.Class.ask
+    lift $ logm src lvl msg
 
+-- The Identity Monad will not do any logging. This instance is only used in the StaticEnvironment implementation
 instance MonadLogger Identity where
   logEvent _ _ _ = pure ()
+
 ------------------------------------------------------------------------------
 -- Instances for other mtl transformers.
 
