@@ -14,6 +14,7 @@ pub const VERSION_IDENTITY_OBJECT: Version = Version { value: 0 };
 /// u32 max.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, SerdeSerialize, SerdeDeserialize)]
 pub struct Version {
+    #[serde(flatten)]
     pub value: u32,
 }
 
