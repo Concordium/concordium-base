@@ -602,10 +602,8 @@ data CredentialDeploymentInformation = CredentialDeploymentInformation {
 -- proof is serialized with 4 byte length.
 instance Serialize CredentialDeploymentInformation where
   put CredentialDeploymentInformation{..} =
-    put versionCredential <> put cdiValues <> put cdiProofs
+    put cdiValues <> put cdiProofs
   get = do
-    version <- get
-    unless (version == versionCredential) $ fail "Invalid credential version"
     CredentialDeploymentInformation <$> get <*> get
 
 -- |NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
@@ -613,16 +611,10 @@ instance Eq CredentialDeploymentInformation where
   cdi1 == cdi2 = cdiValues cdi1 == cdiValues cdi2
 
 instance FromJSON CredentialDeploymentInformation where
-  parseJSON = withObject "VersionedCredentialDeploymentInformation" $ \v -> do
-      version <- v .: "v"
-      value <- v .: "value"
-      unless (version == versionCredential) $ fail "Invalid credential version"
-      withObject "CredentialDeploymentInformation" parseCDI value
-    where
-      parseCDI x = do
-        cdiValues <- parseJSON (Object x)
-        proofsText <- x .: "proofs"
-        return CredentialDeploymentInformation {
-            cdiProofs = Proofs (BSS.toShort . fst . BS16.decode . Text.encodeUtf8 $ proofsText),
-            ..
-          }
+  parseJSON = withObject "CredentialDeploymentInformation" $ \x -> do
+    cdiValues <- parseJSON (Object x)
+    proofsText <- x .: "proofs"
+    return CredentialDeploymentInformation {
+        cdiProofs = Proofs (BSS.toShort . fst . BS16.decode . Text.encodeUtf8 $ proofsText),
+        ..
+      }
