@@ -49,9 +49,9 @@ instance S.Serialize Version where
                         else fromIntegral m : go d
   get = decode7 0 5
     where
-      decode7 :: Word32 -> Integer -> S.Get Version
+      decode7 :: Word64 -> Word8 -> S.Get Version
       decode7 acc left = do
-          unless (left > 0) $ fail "Invalid version number"
+          unless (left > 0) $ fail "Version number byte overflow"
           byte <- S.getWord8
           if testBit byte 7
             then decode7 (128 * acc + fromIntegral (clearBit byte 7)) (left-1)
@@ -59,8 +59,8 @@ instance S.Serialize Version where
               let
                 value = 128 * acc + fromIntegral byte
               in do
-                unless (value < 4294967295) $ fail "Invalid version number"
-                return (Version value)
+                unless (value <= 4294967295) $ fail "Version number value overflow"
+                return (Version (fromIntegral value))
 
 
 
