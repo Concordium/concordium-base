@@ -13,8 +13,8 @@ pub const VERSION_IDENTITY_OBJECT: Version = Version { value: 0 };
 /// byte is Big Endian data bits for the value. A version number is bounded by
 /// u32 max.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, SerdeSerialize, SerdeDeserialize)]
+#[serde(transparent)]
 pub struct Version {
-    #[serde(flatten)]
     pub value: u32,
 }
 
