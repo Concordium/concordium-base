@@ -10,7 +10,6 @@ import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Base16 as BS16
-import Concordium.Common.Version
 import Concordium.Crypto.SignatureScheme
 import Data.Serialize as S
 import GHC.Generics
