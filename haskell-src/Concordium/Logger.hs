@@ -21,6 +21,7 @@ import Data.Functor.Identity
 import Data.Word
 
 -- * Base types
+-- These types are consumed in Rust through the ffi on consensus-rust/src/ffi.rs
 
 -- | The source module for a log event.
 data LogSource
