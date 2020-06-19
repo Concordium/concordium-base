@@ -15,8 +15,8 @@ import Control.Monad
 versionBlock :: Version
 versionBlock = Version 0
 
-versionTransaction :: Version
-versionTransaction = Version 0
+versionBareBlockItem :: Version
+versionBareBlockItem = Version 0
 
 versionGenesisData :: Version
 versionGenesisData = Version 0
