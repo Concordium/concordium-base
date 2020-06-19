@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 module ConcordiumTests.ID.Types where
 
+import Concordium.Common.Version
 import Concordium.ID.Types
 import qualified Data.FixedByteString as FBS
 import qualified Data.ByteString.Char8 as BS8
@@ -36,7 +37,7 @@ checkCDICompatibility :: FilePath -> FilePath -> Expectation
 checkCDICompatibility filename referenceFile = do
   eitherDecodeFileStrict filename >>= \case
     Left err -> assertFailure err
-    Right (input :: CredentialDeploymentInformation) -> do
+    Right (input :: (Versioned CredentialDeploymentInformation)) -> do
       referenceOutput <- BS.readFile referenceFile
       -- we do unpack for better error reporting, easier to compare lists of word8s
       assertEqual "Incompatible binary serializations." (BS.unpack referenceOutput) (BS.unpack (S.encode input))
