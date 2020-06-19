@@ -83,6 +83,7 @@ newtype LoggerT m a = LoggerT {runLoggerT' :: ReaderT (LogMethod m) m a}
 
 instance MonadTrans LoggerT where
   lift = LoggerT . lift
+  {-# INLINE lift #-}
 
 -- | Run an action in the 'LoggerT' monad, handling log events with the
 --  given log method.
