@@ -72,7 +72,11 @@ impl RandomOracle {
     ///
     /// where equality means equality of outcomes, i.e., calling result on each
     /// of the states will produce the same bytearray.
-    pub fn append<B: Serial>(self, data: &B) -> Self { RandomOracle(self.0.chain(&to_bytes(data))) }
+    pub fn append<B: Serial>(self, data: &B) -> Self {
+        let mut buf = self;
+        data.serial(&mut buf);
+        buf
+    }
 
     /// Same as append, but modifies the oracle state instead of consuming it
     pub fn add<B: Serial>(&mut self, data: &B) { self.put(data) }
