@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 
 use either::Either;
 
-use crate::sigma_protocols::{com_enc_eq, com_eq_sig, com_mult};
+use crate::sigma_protocols::{com_enc_eq, com_eq_sig, com_mult, common::*};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CDIVerificationError {
@@ -25,6 +25,7 @@ pub enum CDIVerificationError {
     AccountOwnership,
     Policy,
     AR,
+    Proof,
 }
 
 impl Display for CDIVerificationError {
@@ -37,6 +38,7 @@ impl Display for CDIVerificationError {
             CDIVerificationError::AccountOwnership => write!(f, "AccountOwnership"),
             CDIVerificationError::Policy => write!(f, "PolicyVerificationError"),
             CDIVerificationError::AR => write!(f, "AnonymityRevokerVerificationError"),
+            CDIVerificationError::Proof => write!(f, "ProofVerificationError"),
         }
     }
 }
@@ -96,34 +98,69 @@ pub fn verify_cdi_worker<
     let ro = RandomOracle::domain("credential").append(&cdi.values);
 
     let commitments = &cdi.proofs.commitments;
-    // verify id_cred sharing data
-    let check_id_cred_pub = verify_id_cred_pub_sharing_data(
-        ro.split(),
+
+    // We now need to construct a uniform verifier
+    // since we cannot check proofs independently.
+
+    let verifier_reg_id = com_mult::ComMult {
+        cmms:    [
+            commitments.cmm_prf.combine(&commitments.cmm_cred_counter),
+            Commitment(cdi.values.reg_id),
+            Commitment(on_chain_commitment_key.0),
+        ],
+        cmm_key: *on_chain_commitment_key,
+    };
+    // FIXME: Figure out a pattern to get rid of these clone's.
+    let witness_reg_id = cdi.proofs.proof_reg_id.clone();
+
+    let cdv = &cdi.values;
+    let proofs = &cdi.proofs;
+
+    let verifier_sig = pok_sig_verifier(
+        on_chain_commitment_key,
+        cdi.values.threshold,
+        choice_ar_parameters,
+        &cdi.values.policy,
+        &commitments,
+        ip_verify_key,
+        &cdi.proofs.sig,
+    );
+    let verifier_sig = if let Some(v) = verifier_sig {
+        v
+    } else {
+        return Err(CDIVerificationError::Signature);
+    };
+
+    let witness_sig = cdi.proofs.proof_ip_sig.clone();
+
+    let (id_cred_pub_verifier, id_cred_pub_witnesses) = id_cred_pub_verifier(
         on_chain_commitment_key,
         choice_ar_parameters,
         &cdi.values.ar_data,
         &commitments.cmm_id_cred_sec_sharing_coeff,
         &cdi.proofs.proof_id_cred_pub,
-    );
-    if !check_id_cred_pub {
-        return Err(CDIVerificationError::IdCredPub);
+    )?;
+
+    let verifier = AndAdapter {
+        first:  verifier_reg_id,
+        second: verifier_sig,
+    };
+    let verifier = verifier.add_prover(id_cred_pub_verifier);
+    let witness = AndWitness {
+        w1: AndWitness {
+            w1: witness_reg_id,
+            w2: witness_sig,
+        },
+        w2: id_cred_pub_witnesses,
+    };
+    let proof = SigmaProof {
+        challenge: cdi.proofs.challenge,
+        witness,
+    };
+
+    if !verify(ro.split(), &verifier, &proof) {
+        return Err(CDIVerificationError::Proof);
     }
-
-    let check_reg_id = verify_pok_reg_id(
-        ro.split(),
-        on_chain_commitment_key,
-        &commitments.cmm_prf,
-        &commitments.cmm_cred_counter,
-        cdi.values.reg_id,
-        &cdi.proofs.proof_reg_id,
-    );
-
-    if !check_reg_id {
-        return Err(CDIVerificationError::RegId);
-    }
-
-    let cdv = &cdi.values;
-    let proofs = &cdi.proofs;
 
     match cdv.cred_account {
         CredentialAccount::ExistingAccount(_addr) => {
@@ -186,38 +223,32 @@ pub fn verify_cdi_worker<
         }
     };
 
-    let check_pok_sig = verify_pok_sig(
-        ro,
-        on_chain_commitment_key,
-        cdi.values.threshold,
-        choice_ar_parameters,
-        &cdi.values.policy,
-        &commitments,
-        ip_verify_key,
-        &cdi.proofs.sig,
-        &cdi.proofs.proof_ip_sig,
-    );
-
-    if !check_pok_sig {
-        return Err(CDIVerificationError::Signature);
-    }
-
     let check_policy = verify_policy(on_chain_commitment_key, &commitments, &cdi.values.policy);
 
     if !check_policy {
         return Err(CDIVerificationError::Policy);
     }
+
     Ok(())
 }
+
 /// verify id_cred data
-fn verify_id_cred_pub_sharing_data<C: Curve>(
-    ro: RandomOracle,
-    commitment_key: &CommitmentKey<C>,
-    choice_ar_parameters: &[&ArInfo<C>],
-    chain_ar_data: &[ChainArData<C>],
-    cmm_sharing_coeff: &[Commitment<C>],
-    proof_id_cred_pub: &[(ShareNumber, com_enc_eq::ComEncEqProof<C>)],
-) -> bool {
+fn id_cred_pub_verifier<'a, C: Curve>(
+    commitment_key: &'a CommitmentKey<C>,
+    choice_ar_parameters: &'a [&ArInfo<C>],
+    chain_ar_data: &'a [ChainArData<C>],
+    cmm_sharing_coeff: &'a [Commitment<C>],
+    proof_id_cred_pub: &'a [(ShareNumber, com_enc_eq::Witness<C>)],
+) -> Result<
+    (
+        ReplicateAdapter<com_enc_eq::ComEncEq<C>>,
+        ReplicateWitness<com_enc_eq::Witness<C>>,
+    ),
+    CDIVerificationError,
+> {
+    let mut provers = Vec::with_capacity(proof_id_cred_pub.len());
+    let mut witnesses = Vec::with_capacity(proof_id_cred_pub.len());
+
     for ar in chain_ar_data.iter() {
         let cmm_share = commitment_to_share(ar.id_cred_pub_share_number, cmm_sharing_coeff);
         // finding the correct AR data by share number
@@ -225,33 +256,31 @@ fn verify_id_cred_pub_sharing_data<C: Curve>(
             .iter()
             .find(|&x| x.0 == ar.id_cred_pub_share_number)
         {
-            None => {
-                return false;
-            }
+            None => return Err(CDIVerificationError::IdCredPub),
             // finding the correct AR info
-            Some((_, proof)) => match choice_ar_parameters
+            Some((_, witness)) => match choice_ar_parameters
                 .iter()
                 .find(|&x| x.ar_identity == ar.ar_identity)
             {
-                None => return false,
+                None => return Err(CDIVerificationError::IdCredPub),
                 Some(ar_info) => {
-                    // verifying the proof
-                    if !com_enc_eq::verify_com_enc_eq(
-                        ro.split(),
-                        &ar.enc_id_cred_pub_share,
-                        &cmm_share,
-                        &ar_info.ar_public_key,
-                        commitment_key,
-                        proof,
-                    ) {
-                        return false;
-                    }
+                    let item_prover = com_enc_eq::ComEncEq {
+                        cipher:     ar.enc_id_cred_pub_share,
+                        commitment: cmm_share,
+                        pub_key:    ar_info.ar_public_key,
+                        cmm_key:    *commitment_key,
+                    };
+                    provers.push(item_prover);
+                    witnesses.push(witness.clone());
                 }
             },
         }
     }
-    true
+    Ok((ReplicateAdapter { protocols: provers }, ReplicateWitness {
+        witnesses,
+    }))
 }
+
 // computing the commitment to a single share from the commitments to the
 // coefficients
 pub fn commitment_to_share<C: Curve>(
@@ -335,27 +364,29 @@ fn verify_policy<C: Curve, AttributeType: Attribute<C::Scalar>>(
     true
 }
 
+/// Verify the proof of knowledge of signature on the attribute list.
+/// A none return value means we cannot construct a verifier, and consequently
+/// it should be interperted as the signature being invalid.
 #[allow(clippy::too_many_arguments)]
-fn verify_pok_sig<
+fn pok_sig_verifier<
+    'a,
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 >(
-    ro: RandomOracle,
-    commitment_key: &CommitmentKey<C>,
+    commitment_key: &'a CommitmentKey<C>,
     threshold: Threshold,
-    choice_ar_parameters: &[&ArInfo<C>],
-    policy: &Policy<C, AttributeType>,
-    commitments: &CredDeploymentCommitments<C>,
-    ip_pub_key: &ps_sig::PublicKey<P>,
-    blinded_sig: &ps_sig::BlindedSignature<P>,
-    proof: &com_eq_sig::ComEqSigProof<P, C>,
-) -> bool {
+    choice_ar_parameters: &'a [&ArInfo<C>],
+    policy: &'a Policy<C, AttributeType>,
+    commitments: &'a CredDeploymentCommitments<C>,
+    ip_pub_key: &'a ps_sig::PublicKey<P>,
+    blinded_sig: &'a ps_sig::BlindedSignature<P>,
+) -> Option<com_eq_sig::ComEqSig<P, C>> {
     // Capacity for id_cred_sec, cmm_prf, threshold, tags, valid_to, created_at
     // choice_ar_parameters and cmm_attributes
     let mut comm_vec =
         Vec::with_capacity(6 + choice_ar_parameters.len() + commitments.cmm_attributes.len());
-    let cmm_id_cred_sec = commitments.cmm_id_cred_sec_sharing_coeff[0];
+    let cmm_id_cred_sec = *commitments.cmm_id_cred_sec_sharing_coeff.first()?;
     comm_vec.push(cmm_id_cred_sec);
     comm_vec.push(commitments.cmm_prf);
 
@@ -376,7 +407,7 @@ fn verify_pok_sig<
                 .chain(commitments.cmm_attributes.keys()),
         ) {
             Ok(v) => v,
-            Err(_) => return false,
+            Err(_) => return None,
         }
     };
 
@@ -414,39 +445,14 @@ fn verify_pok_sig<
         f,
     );
 
-    com_eq_sig::verify_com_eq_sig::<P, C>(
-        ro,
-        blinded_sig,
-        &comm_vec,
-        ip_pub_key,
-        commitment_key,
-        proof,
-    )
-}
-
-fn verify_pok_reg_id<C: Curve>(
-    ro: RandomOracle,
-    on_chain_commitment_key: &CommitmentKey<C>,
-    cmm_prf: &Commitment<C>,
-    cmm_cred_counter: &Commitment<C>,
-    reg_id: C,
-    proof: &com_mult::ComMultProof<C>,
-) -> bool {
-    // coefficients of the protocol derived from the pedersen key
-    let g = on_chain_commitment_key.0;
-
-    // commitments are the public values.
-    // NOTE: In order for this to work the reg_id must be computed with the same
-    // generator as the first element of the on-chain commitment key
-
-    com_mult::verify_com_mult(
-        ro,
-        &cmm_prf.combine(&cmm_cred_counter),
-        &Commitment(reg_id),
-        &Commitment(g),
-        on_chain_commitment_key,
-        &proof,
-    )
+    Some(com_eq_sig::ComEqSig {
+        // FIXME: Figure out how to restructure to get rid of this clone.
+        blinded_sig: blinded_sig.clone(),
+        commitments: comm_vec,
+        // FIXME: Figure out how to restructure to get rid of this clone.
+        ps_pub_key: ip_pub_key.clone(),
+        comm_key:   *commitment_key,
+    })
 }
 
 #[cfg(test)]
@@ -515,7 +521,7 @@ mod tests {
             },
             existing: Left(SignatureThreshold(2)),
         };
-        let cdi = generate_cdi(
+        let cdi = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,

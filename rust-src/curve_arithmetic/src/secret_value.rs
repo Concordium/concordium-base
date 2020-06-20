@@ -8,7 +8,8 @@ use crypto_common::*;
 use rand::*;
 use std::ops::Deref;
 
-/// A value that will be commited to.
+/// A secret value. The idea of this datatype is to mark
+/// scalars as secret, which we
 /// NB: For the view function it is important that we have #[repr(transparent)].
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Serialize)]

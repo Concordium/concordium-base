@@ -235,3 +235,13 @@ impl<L: Serial, R: Serial> Serial for Either<L, R> {
         }
     }
 }
+
+use std::rc::Rc;
+// Use the underlying type's instance.
+impl<T: Serial> Serial for Rc<T> {
+    fn serial<B: Buffer>(&self, out: &mut B) { out.put(self.as_ref()) }
+}
+
+impl<T: Deserial> Deserial for Rc<T> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> { Ok(Rc::new(source.get()?)) }
+}

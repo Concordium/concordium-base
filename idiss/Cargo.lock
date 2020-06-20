@@ -786,6 +786,7 @@ name = "random_oracle"
 version = "0.1.0"
 dependencies = [
  "crypto_common 0.1.0",
+ "crypto_common_derive 0.1.0",
  "curve_arithmetic 0.1.0",
  "itertools 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -129,10 +129,10 @@ pub extern "C" fn verify_cdi_ffi(
     cdi_len: size_t,
 ) -> i32 {
     if gc_ptr.is_null() {
-        return -7;
+        return -9;
     }
     if ip_info_ptr.is_null() {
-        return -8;
+        return -10;
     }
 
     let acc_keys = if acc_keys_ptr.is_null() {
@@ -142,7 +142,7 @@ pub extern "C" fn verify_cdi_ffi(
         if let Ok(acc_keys) = AccountKeys::deserial(&mut Cursor::new(&acc_key_bytes)) {
             Some(acc_keys)
         } else {
-            return -10;
+            return -12;
         }
     };
 
@@ -150,7 +150,7 @@ pub extern "C" fn verify_cdi_ffi(
     match CredDeploymentInfo::<Bls12, G1, AttributeKind>::deserial(&mut Cursor::new(&cdi_bytes)) {
         Err(err) => {
             eprintln!("{}", err);
-            -9
+            -11
         }
         Ok(cdi) => {
             match chain::verify_cdi::<Bls12, G1, AttributeKind>(
@@ -167,6 +167,7 @@ pub extern "C" fn verify_cdi_ffi(
                 Err(CDIVerificationError::Policy) => -5,
                 Err(CDIVerificationError::AR) => -6,
                 Err(CDIVerificationError::AccountOwnership) => -7,
+                Err(CDIVerificationError::Proof) => -8,
             }
         }
     }
@@ -281,10 +282,10 @@ mod test {
     fn test_pipeline() {
         let mut csprng = thread_rng();
 
-        let secret = ExampleCurve::generate_scalar(&mut csprng);
+        let secret = PedersenValue::generate(&mut csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
             id_cred: IdCredentials {
-                id_cred_sec: PedersenValue { value: secret },
+                id_cred_sec: std::rc::Rc::new(secret),
             },
         };
 
@@ -330,7 +331,8 @@ mod test {
             threshold:     Threshold(2),
         })
         .expect("The constructed ARs are valid.");
-        let (pio, randomness) = generate_pio(&context, &aci);
+        let (pio, randomness) =
+            generate_pio(&context, &aci).expect("Creating the credential should succeed.");
 
         let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
 
@@ -382,7 +384,7 @@ mod test {
             signature: ip_sig,
         };
 
-        let cdi = generate_cdi(
+        let cdi = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,
@@ -393,7 +395,7 @@ mod test {
         )
         .expect("Should generate the credential successfully.");
 
-        let wrong_cdi = generate_cdi(
+        let wrong_cdi = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,

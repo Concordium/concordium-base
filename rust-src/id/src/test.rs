@@ -105,7 +105,7 @@ pub fn test_create_aci<T: Rng>(csprng: &mut T) -> AccCredentialInfo<ExampleCurve
     let secret = ExampleCurve::generate_scalar(csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_cred: IdCredentials {
-            id_cred_sec: PedersenValue::new(secret),
+            id_cred_sec: std::rc::Rc::new(PedersenValue::new(secret)),
         },
     };
 
@@ -139,7 +139,8 @@ pub fn test_create_pio(
     .expect("The constructed ARs are invalid.");
 
     // Create and return PIO
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let (pio, randomness) =
+        generate_pio(&context, &aci).expect("Generating the pre-identity object should succeed.");
     (context, pio, randomness)
 }
 
@@ -214,7 +215,7 @@ pub fn test_pipeline() {
         },
         existing: Left(SignatureThreshold(2)),
     };
-    let cdi = generate_cdi(
+    let cdi = create_credential(
         &ip_info,
         &global_ctx,
         &id_object,
@@ -285,7 +286,7 @@ pub fn test_pipeline() {
     // generate a new cdi from a modified pre-identity object in which we swapped
     // two anonymity revokers. Verification of this credential should fail the
     // signature at the very least.
-    let mut cdi = generate_cdi(
+    let mut cdi = create_credential(
         &ip_info,
         &global_ctx,
         &id_object,
