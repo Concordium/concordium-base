@@ -12,6 +12,7 @@ pub mod types;
 
 #[macro_use]
 extern crate crypto_common_derive;
+
 #[macro_use]
 extern crate failure;
 

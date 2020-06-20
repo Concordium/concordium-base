@@ -11,11 +11,13 @@ use random_oracle::{Challenge, RandomOracle};
 
 use crate::sigma_protocols::common::*;
 
-pub struct AggregateDlog<'a, C: Curve> {
+use std::rc::Rc;
+
+pub struct AggregateDlog<C: Curve> {
     /// Evaluated point.
-    public: &'a C,
+    public: C,
     /// The points G_i references in the module description, in the given order.
-    coeff: &'a [C],
+    coeff: Vec<C>,
 }
 
 /// Aggregate dlog witness. We deliberately make it opaque.
@@ -28,34 +30,27 @@ pub struct Witness<C: Curve> {
 /// Convenient alias for aggregate dlog proof
 pub type Proof<C> = SigmaProof<Witness<C>>;
 
-impl<'a, C: Curve> SigmaProtocolCommon for AggregateDlog<'a, C> {
+impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
     type CommitMessage = C;
     type ProtocolChallenge = C::Scalar;
+    type ProverState = Vec<C::Scalar>;
     type ProverWitness = Witness<C>;
+    type SecretData = Vec<Rc<C::Scalar>>;
 
     fn public(&self, ro: RandomOracle) -> RandomOracle {
-        ro.append(self.public).extend_from(self.coeff)
+        ro.append(&self.public).extend_from(&self.coeff)
     }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
         C::scalar_from_bytes_mod(challenge)
     }
-}
-
-impl<'a, C: Curve> SigmaProtocolProver for AggregateDlog<'a, C> {
-    type ProverState = Vec<C::Scalar>;
-    type SecretData = &'a [C::Scalar];
 
     fn commit_point<R: rand::Rng>(
         &self,
-        secret: Self::SecretData,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         // Make sure our data is consistent.
-        let n = secret.len();
-        if self.coeff.len() != n {
-            return None;
-        }
+        let n = self.coeff.len();
 
         let mut rands = Vec::with_capacity(n);
         let mut point = C::zero_point();
@@ -88,9 +83,7 @@ impl<'a, C: Curve> SigmaProtocolProver for AggregateDlog<'a, C> {
         }
         Some(Witness { witness })
     }
-}
 
-impl<'a, C: Curve> SigmaProtocolVerifier for AggregateDlog<'a, C> {
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
@@ -100,10 +93,30 @@ impl<'a, C: Curve> SigmaProtocolVerifier for AggregateDlog<'a, C> {
             return None;
         }
         let mut point = self.public.mul_by_scalar(challenge);
-        for (ref w, ref g) in izip!(witness.witness.iter(), self.coeff) {
+        for (ref w, ref g) in izip!(witness.witness.iter(), self.coeff.iter()) {
             point = point.plus_point(&g.mul_by_scalar(w));
         }
         Some(point)
+    }
+
+    #[cfg(test)]
+    fn with_valid_data<R: rand::Rng>(
+        data_size: usize,
+        csprng: &mut R,
+        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+    ) {
+        let mut secret = Vec::with_capacity(data_size);
+        let mut coeff = Vec::with_capacity(data_size);
+        let mut public = C::zero_point();
+        for _ in 0..data_size {
+            let s = C::generate_scalar(csprng);
+            let g = C::generate(csprng);
+            public = public.plus_point(&g.mul_by_scalar(&s));
+            secret.push(Rc::new(s));
+            coeff.push(g);
+        }
+        let agg = AggregateDlog { public, coeff };
+        f(agg, secret, csprng)
     }
 }
 
@@ -117,25 +130,17 @@ mod tests {
     pub fn test_aggregate_dlog_correctness() {
         let mut csprng = thread_rng();
         for i in 1..20 {
-            let mut secret = Vec::with_capacity(i);
-            let mut coeff = Vec::with_capacity(i);
-            let mut public = <G1 as Curve>::zero_point();
-            for _ in 0..i {
-                let s = G1::generate_scalar(&mut csprng);
-                let g = G1::generate(&mut csprng);
-                public = public.plus_point(&g.mul_by_scalar(&s));
-                secret.push(s);
-                coeff.push(g);
-            }
-            let agg = AggregateDlog {
-                public: &public,
-                coeff:  &coeff,
-            };
-            let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let ro = RandomOracle::domain(&challenge_prefix);
-            let proof =
-                prove(ro.split(), &agg, &secret, &mut csprng).expect("Input data is valid.");
-            assert!(verify(ro, &agg, &proof));
+            AggregateDlog::with_valid_data(
+                i,
+                &mut csprng,
+                |agg: AggregateDlog<G1>, secret, csprng| {
+                    let challenge_prefix = generate_challenge_prefix(csprng);
+                    let ro = RandomOracle::domain(&challenge_prefix);
+                    let proof =
+                        prove(ro.split(), &agg, secret, csprng).expect("Input data is valid.");
+                    assert!(verify(ro, &agg, &proof));
+                },
+            )
         }
     }
 
@@ -143,50 +148,36 @@ mod tests {
     pub fn test_aggregate_dlog_soundness() {
         let mut csprng = thread_rng();
         for i in 1..20 {
-            // Generate proof
-            let mut secret = Vec::with_capacity(i);
-            let mut coeff = Vec::with_capacity(i);
-            let mut public = G1::zero_point();
-            for _ in 0..i {
-                let s = G1::generate_scalar(&mut csprng);
-                let g = G1::generate(&mut csprng);
-                public = public.plus_point(&g.mul_by_scalar(&s));
-                secret.push(s);
-                coeff.push(g);
-            }
-            let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let ro = RandomOracle::domain(&challenge_prefix);
-            let agg = AggregateDlog {
-                public: &public,
-                coeff:  &coeff,
-            };
-            let proof =
-                prove(ro.split(), &agg, &secret, &mut csprng).expect("Input data is valid.");
+            AggregateDlog::with_valid_data(i, &mut csprng, |agg, secret, csprng| {
+                let challenge_prefix = generate_challenge_prefix(csprng);
+                let ro = RandomOracle::domain(&challenge_prefix);
+                let proof = prove(ro.split(), &agg, secret, csprng).expect("Input data is valid.");
 
-            // Construct invalid parameters
-            let index_wrong_coeff: usize = csprng.gen_range(0, i);
+                // Construct invalid parameters
+                let index_wrong_coeff: usize = csprng.gen_range(0, i);
 
-            let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
-            let wrong_public = G1::generate(&mut csprng);
-            let mut wrong_coeff = coeff.clone();
-            wrong_coeff[index_wrong_coeff] = G1::generate(&mut csprng);
+                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
+                let wrong_public = G1::generate(csprng);
+                let mut wrong_coeff = agg.coeff.clone();
+                wrong_coeff[index_wrong_coeff] = G1::generate(csprng);
 
-            // Verify failure for invalid parameters
-            // Incorrect context string
-            assert!(!verify(wrong_ro, &agg, &proof));
-            let wrong_agg = AggregateDlog {
-                public: &wrong_public,
-                ..agg
-            };
-            // Incorrect public data: incorrect evaluation.
-            assert!(!verify(ro.split(), &wrong_agg, &proof));
+                // Verify failure for invalid parameters
+                // Incorrect context string
+                assert!(!verify(wrong_ro, &agg, &proof));
+                let wrong_agg = AggregateDlog {
+                    public: wrong_public,
+                    ..agg
+                };
+                // Incorrect public data: incorrect evaluation.
+                assert!(!verify(ro.split(), &wrong_agg, &proof));
 
-            let wrong_agg_coeff = AggregateDlog {
-                coeff: &wrong_coeff,
-                ..agg
-            };
-            // Incorrect public data: incorrect coefficient.
-            assert!(!verify(ro.split(), &wrong_agg_coeff, &proof));
+                let wrong_agg_coeff = AggregateDlog {
+                    coeff: wrong_coeff,
+                    ..agg
+                };
+                // Incorrect public data: incorrect coefficient.
+                assert!(!verify(ro.split(), &wrong_agg_coeff, &proof));
+            })
         }
     }
 }

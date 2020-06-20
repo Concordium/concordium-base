@@ -1,7 +1,6 @@
 use crate::aggregate_sig::*;
 use crypto_common::*;
 use ffi_helpers::*;
-use id::sigma_protocols::dlog::DlogProof;
 use pairing::bls12_381::Bls12;
 use rand::{rngs::StdRng, thread_rng, SeedableRng};
 use random_oracle::RandomOracle;
@@ -36,7 +35,7 @@ macro_derive_to_bytes!(Box bls_proof_to_bytes, Proof<Bls12>);
 macro_derive_binary!(Box bls_sk_eq, SecretKey<Bls12>, SecretKey::eq);
 macro_derive_binary!(Box bls_pk_eq, PublicKey<Bls12>, PublicKey::eq);
 macro_derive_binary!(Box bls_sig_eq, Signature<Bls12>, Signature::eq);
-macro_derive_binary!(Box bls_proof_eq, Proof<Bls12>, DlogProof::eq);
+// macro_derive_binary!(Box bls_proof_eq, Proof<Bls12>, DlogProof::eq);
 
 macro_rules! macro_cmp {
     (Arc $function_name:ident, $type:ty) => {
@@ -170,7 +169,12 @@ pub extern "C" fn bls_prove(
     let ro = RandomOracle::empty().append_bytes(ro_bytes);
     let mut csprng = thread_rng();
     let prf = sk.prove(&mut csprng, ro);
-    Box::into_raw(Box::new(prf))
+    if let Some(prf) = prf {
+        Box::into_raw(Box::new(prf))
+    } else {
+        // TODO: Handle this on the Haskell side as well.
+        std::ptr::null_mut()
+    }
 }
 
 #[no_mangle]

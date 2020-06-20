@@ -17,7 +17,7 @@ impl<P: Pairing> PartialEq for BlindingRandomness<P> {
 }
 
 #[repr(transparent)]
-#[derive(Debug, Eq, PartialEq, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 /// Type wrapper around a signature, indicating that it is a blinded variant.
 pub struct BlindedSignature<P: Pairing> {
     pub sig: Signature<P>,
@@ -25,6 +25,7 @@ pub struct BlindedSignature<P: Pairing> {
 
 /// This trait allows automatic conversion of &BlindedSignature<P> to
 /// &Signature<P>.
+/// FIXME: Why is this function needed? It seems dangerous.
 impl<P: Pairing> Deref for BlindedSignature<P> {
     type Target = Signature<P>;
 
@@ -32,7 +33,7 @@ impl<P: Pairing> Deref for BlindedSignature<P> {
 }
 
 /// A signature
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Signature<C: Pairing>(pub C::G1, pub C::G1);
 
 impl<C: Pairing> PartialEq for Signature<C> {

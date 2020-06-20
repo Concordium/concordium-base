@@ -13,7 +13,7 @@ pub struct RandomOracle(Sha3_256);
 
 /// Type of challenges computed from the random oracle.
 /// We use 32 byte output of SHA3-256
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy)]
 pub struct Challenge {
     challenge: [u8; 32],
 }

@@ -26,7 +26,6 @@ pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
     let ident_serializer = format_ident!("serializer", span = span);
     let ident_deserializer = format_ident!("deserializer", span = span);
     let gen = quote! {
-        use serde;
         impl #impl_generics SerdeSerialize for #name #ty_generics #where_clauses {
             fn serialize<#ident: serde::Serializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
                 base16_encode(self, #ident_serializer)

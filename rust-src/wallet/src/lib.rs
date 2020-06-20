@@ -9,7 +9,7 @@ use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
 use id::{
-    account_holder::{generate_cdi, generate_pio},
+    account_holder::{create_credential, generate_pio},
     ffi::AttributeKind,
     secret_sharing::Threshold,
     types::*,
@@ -25,6 +25,8 @@ use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Value};
 
 use sha2::{Digest, Sha256};
+
+use std::rc::Rc;
 
 type ExampleCurve = G1;
 
@@ -160,7 +162,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let secret = ExampleCurve::generate_scalar(&mut csprng);
     let chi = CredentialHolderInfo::<ExampleCurve> {
         id_cred: IdCredentials {
-            id_cred_sec: PedersenValue { value: secret },
+            id_cred_sec: Rc::new(PedersenValue { value: secret }),
         },
     };
 
@@ -181,7 +183,12 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
         threshold,
     })
     .ok_or_else(|| format_err!("Invalid choice of anonymity revokers. Should not happen."))?;
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let (pio, randomness) = {
+        match generate_pio(&context, &aci) {
+            Some(x) => x,
+            None => bail!("Generating the pre-identity object failed."),
+        }
+    };
 
     let id_use_data = IdObjectUseData { aci, randomness };
 
@@ -267,7 +274,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         _phantom: Default::default(),
     };
 
-    let cdi = generate_cdi(
+    let cdi = create_credential(
         &ip_info,
         &global,
         &id_object,

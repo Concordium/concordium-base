@@ -6,172 +6,166 @@ use curve_arithmetic::Curve;
 use ff::Field;
 use rand::*;
 
+use crate::sigma_protocols::common::*;
 use crypto_common::*;
 use crypto_common_derive::*;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::RandomOracle;
 
+use std::rc::Rc;
+
 #[derive(Debug)]
-pub struct ComEqDiffGrpsSecret<'a, C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
-    pub value:      &'a Value<C2>,
-    pub rand_cmm_1: &'a Randomness<C1>,
-    pub rand_cmm_2: &'a Randomness<C2>,
+pub struct ComEqDiffGroupsSecret<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
+    pub value:      Rc<Value<C2>>,
+    pub rand_cmm_1: Rc<Randomness<C1>>,
+    pub rand_cmm_2: Rc<Randomness<C2>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Copy, Serialize, SerdeBase16Serialize)]
-pub struct ComEqDiffGrpsProof<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
-    challenge: C1::Scalar,
-    witness:   (C1::Scalar, C1::Scalar, C2::Scalar),
+pub struct Witness<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
+    /// The triple (s_1, s_2, t).
+    witness: (C1::Scalar, C1::Scalar, C2::Scalar),
 }
 
-/// Construct a proof of knowledge from public and secret values.
-/// The input parameters are as follows.
-/// * `ro` - Random oracle used in the challenge computation. This can be used
-///   to make sure that the proof is only valid in a certain context.
-/// * `commitment_{1,2}` - A pair of commitments to the same value in different
-///   groups.
-/// * `cmm_key_{1,2}` - A pair of commitment keys (for the first and second
-///   commitment, respectively).
-/// * `secret` - The triple $(a_1, a_2, r)$ of the value $a_1$ that is commited,
-///   and the randomnesses $a_2$ and $r$ for the first and second commitment,
-///   respectively.
-/// * `csprng` - A cryptographically secure random number generator.
+pub struct ComEqDiffGroups<C1: Curve, C2: Curve> {
+    /// A pair of commitments to the same value in different
+    ///   groups.
+    pub commitment_1: Commitment<C1>,
+    pub commitment_2: Commitment<C2>,
+    /// A pair of commitment keys (for the first and second
+    /// commitment, respectively)
+    pub cmm_key_1: CommitmentKey<C1>,
+    pub cmm_key_2: CommitmentKey<C2>,
+}
+
 #[allow(non_snake_case)]
-pub fn prove_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>, R: Rng>(
-    ro: RandomOracle,
-    commitment_1: &Commitment<C1>,
-    commitment_2: &Commitment<C2>,
-    cmm_key_1: &CommitmentKey<C1>,
-    cmm_key_2: &CommitmentKey<C2>,
-    secret: &ComEqDiffGrpsSecret<C1, C2>,
-    csprng: &mut R,
-) -> ComEqDiffGrpsProof<C1, C2> {
-    let y = commitment_1;
-    let cC = commitment_2;
+impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroups<C1, C2> {
+    type CommitMessage = (Commitment<C1>, Commitment<C2>);
+    type ProtocolChallenge = C1::Scalar;
+    // The triple alpha_1, alpha_2, R
+    type ProverState = (Value<C1>, Randomness<C1>, Randomness<C2>);
+    type ProverWitness = Witness<C1, C2>;
+    type SecretData = ComEqDiffGroupsSecret<C1, C2>;
 
-    let hasher = ro
-        .append_bytes("com_eq_different_groups")
-        .append(y)
-        .append(cC)
-        .append(cmm_key_1)
-        .append(cmm_key_2);
-
-    let alpha_1 = Value::generate_non_zero(csprng);
-    let (u, alpha_2) = cmm_key_1.commit(&alpha_1, csprng);
-    let (v, cR) = cmm_key_2.commit(alpha_1.view(), csprng);
-
-    let challenge = hasher.append(&u).finish_to_scalar::<C1, _>(&v);
-    // if the computed challenge is 0 the proof will not be valid (unless extremely
-    // exceptional circumstances happen). Thus in such a case we resample.
-    let mut s_1 = challenge;
-    s_1.mul_assign(secret.value);
-    s_1.negate();
-    s_1.add_assign(&alpha_1);
-
-    let mut s_2 = challenge;
-    s_2.mul_assign(secret.rand_cmm_1);
-    s_2.negate();
-    s_2.add_assign(&alpha_2);
-
-    let mut t = challenge;
-    t.mul_assign(secret.rand_cmm_2);
-    t.negate();
-    t.add_assign(&cR);
-    ComEqDiffGrpsProof {
-        challenge,
-        witness: (s_1, s_2, t),
+    #[inline]
+    fn public(&self, ro: RandomOracle) -> RandomOracle {
+        ro.append(&self.commitment_1)
+            .append(&self.commitment_2)
+            .append(&self.cmm_key_1)
+            .append(&self.cmm_key_2)
     }
-}
 
-/// Verify a proof of knowledge from public and secret values.
-/// The input parameters are as follows.
-/// * `ro` - Random oracle used in the challenge computation. This can be used
-///   to make sure that the proof is only valid in a certain context.
-/// * `commitment_{1,2}` - A pair of commitments to the same value in different
-///   groups.
-/// * `cmm_key_{1,2}` - A pair of commitment keys (for the first and second
-///   commitment respectively).
-#[allow(non_snake_case)]
-#[allow(clippy::many_single_char_names)]
-pub fn verify_com_eq_diff_grps<C1: Curve, C2: Curve<Scalar = C1::Scalar>>(
-    ro: RandomOracle,
-    commitment_1: &Commitment<C1>,
-    commitment_2: &Commitment<C2>,
-    cmm_key_1: &CommitmentKey<C1>,
-    cmm_key_2: &CommitmentKey<C2>,
-    proof: &ComEqDiffGrpsProof<C1, C2>,
-) -> bool {
-    let y = commitment_1;
-    let cC = commitment_2;
+    #[inline]
+    fn get_challenge(&self, challenge: &random_oracle::Challenge) -> Self::ProtocolChallenge {
+        C1::scalar_from_bytes_mod(challenge)
+    }
 
-    let CommitmentKey(cG1, cG2) = cmm_key_1;
-    let CommitmentKey(g, h) = cmm_key_2;
+    #[inline]
+    fn commit_point<R: Rng>(
+        &self,
+        csprng: &mut R,
+    ) -> Option<(Self::CommitMessage, Self::ProverState)> {
+        let alpha_1 = Value::generate_non_zero(csprng);
+        let (u, alpha_2) = self.cmm_key_1.commit(&alpha_1, csprng);
+        let (v, cR) = self.cmm_key_2.commit(alpha_1.view(), csprng);
+        Some(((u, v), (alpha_1, alpha_2, cR)))
+    }
 
-    let (s_1, s_2, t) = proof.witness;
+    #[inline]
+    fn generate_witness(
+        &self,
+        secret: Self::SecretData,
+        state: Self::ProverState,
+        challenge: &Self::ProtocolChallenge,
+    ) -> Option<Self::ProverWitness> {
+        let mut s_1 = *challenge;
+        s_1.mul_assign(&secret.value);
+        s_1.negate();
+        s_1.add_assign(&state.0);
 
-    let u = y
-        .mul_by_scalar(&proof.challenge)
-        .plus_point(&cG1.mul_by_scalar(&s_1))
-        .plus_point(&cG2.mul_by_scalar(&s_2));
-    let v = cC
-        .mul_by_scalar(&proof.challenge)
-        .plus_point(&g.mul_by_scalar(&s_1))
-        .plus_point(&h.mul_by_scalar(&t));
+        let mut s_2 = *challenge;
+        s_2.mul_assign(&secret.rand_cmm_1);
+        s_2.negate();
+        s_2.add_assign(&state.1);
 
-    let computed_challenge = ro
-        .append_bytes("com_eq_different_groups")
-        .append(y)
-        .append(cC)
-        .append(cmm_key_1)
-        .append(cmm_key_2)
-        .append(&u)
-        .finish_to_scalar::<C1, _>(&v);
-    computed_challenge == proof.challenge
+        let mut t = *challenge;
+        t.mul_assign(&secret.rand_cmm_2);
+        t.negate();
+        t.add_assign(&state.2);
+        Some(Witness {
+            witness: (s_1, s_2, t),
+        })
+    }
+
+    #[inline]
+    fn extract_point(
+        &self,
+        challenge: &Self::ProtocolChallenge,
+        witness: &Self::ProverWitness,
+    ) -> Option<Self::CommitMessage> {
+        let y = self.commitment_1;
+        let cC = self.commitment_2;
+
+        let CommitmentKey(cG1, cG2) = self.cmm_key_1;
+        let CommitmentKey(g, h) = self.cmm_key_2;
+
+        let (s_1, s_2, t) = witness.witness;
+
+        let u = y
+            .mul_by_scalar(challenge)
+            .plus_point(&cG1.mul_by_scalar(&s_1))
+            .plus_point(&cG2.mul_by_scalar(&s_2));
+        let v = cC
+            .mul_by_scalar(challenge)
+            .plus_point(&g.mul_by_scalar(&s_1))
+            .plus_point(&h.mul_by_scalar(&t));
+        Some((Commitment(u), Commitment(v)))
+    }
+
+    #[cfg(test)]
+    fn with_valid_data<R: Rng>(
+        _data_size: usize,
+        csprng: &mut R,
+        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+    ) {
+        let a_1: Value<C2> = Value::generate_non_zero(csprng);
+        let cmm_key_1: CommitmentKey<C1> = CommitmentKey::generate(csprng);
+        let cmm_key_2: CommitmentKey<C2> = CommitmentKey::generate(csprng);
+
+        let (u, a_2) = cmm_key_1.commit((&a_1).view(), csprng);
+        let (v, r) = cmm_key_2.commit(&a_1, csprng);
+        let cdg = ComEqDiffGroups {
+            cmm_key_1,
+            cmm_key_2,
+            commitment_1: u,
+            commitment_2: v,
+        };
+        let secret = ComEqDiffGroupsSecret {
+            value:      Rc::new(a_1),
+            rand_cmm_1: Rc::new(a_2),
+            rand_cmm_2: Rc::new(r),
+        };
+        f(cdg, secret, csprng)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sigma_protocols::common::*;
-    use pairing::bls12_381::{G1Affine, G2Affine};
-    use rand::rngs::ThreadRng;
+    use pairing::bls12_381::{G1, G2};
 
     #[test]
     pub fn test_com_eq_diff_grps_correctness() {
         let mut csprng = thread_rng();
         for _i in 0..100 {
-            let a_1 = Value::<G2Affine>::generate_non_zero(&mut csprng);
-            let cmm_key_1 = CommitmentKey::<G1Affine>::generate(&mut csprng);
-            let cmm_key_2 = CommitmentKey::<G2Affine>::generate(&mut csprng);
+            ComEqDiffGroups::<G1, G2>::with_valid_data(0, &mut csprng, |cdg, secret, csprng| {
+                let challenge_prefix = generate_challenge_prefix(csprng);
+                let ro = RandomOracle::domain(&challenge_prefix);
 
-            let (u, a_2) = cmm_key_1.commit((&a_1).view(), &mut csprng);
-            let (v, r) = cmm_key_2.commit(&a_1, &mut csprng);
-
-            let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let ro = RandomOracle::domain(&challenge_prefix);
-
-            let secret = ComEqDiffGrpsSecret {
-                value:      &a_1,
-                rand_cmm_1: &a_2,
-                rand_cmm_2: &r,
-            };
-            let proof = prove_com_eq_diff_grps::<G1Affine, G2Affine, ThreadRng>(
-                ro.split(),
-                &u,
-                &v,
-                &cmm_key_1,
-                &cmm_key_2,
-                &secret,
-                &mut csprng,
-            );
-            assert!(verify_com_eq_diff_grps(
-                ro.split(),
-                &u,
-                &v,
-                &cmm_key_1,
-                &cmm_key_2,
-                &proof
-            ));
+                let proof =
+                    prove(ro.split(), &cdg, secret, csprng).expect("Proving should succeed.");
+                assert!(verify(ro, &cdg, &proof))
+            })
         }
     }
 
@@ -179,100 +173,50 @@ mod tests {
     pub fn test_com_eq_diff_grps_soundness() {
         let mut csprng = thread_rng();
         for _i in 0..100 {
-            // Generate proof
-            let a_1 = Value::<G2Affine>::generate_non_zero(&mut csprng);
-            let cmm_key_1 = CommitmentKey::<G1Affine>::generate(&mut csprng);
-            let cmm_key_2 = CommitmentKey::<G2Affine>::generate(&mut csprng);
+            ComEqDiffGroups::<G1, G2>::with_valid_data(0, &mut csprng, |cdg, secret, csprng| {
+                let challenge_prefix = generate_challenge_prefix(csprng);
+                let ro = RandomOracle::domain(&challenge_prefix);
 
-            let (u, a_2) = cmm_key_1.commit((&a_1).view(), &mut csprng);
-            let (v, r) = cmm_key_2.commit(&a_1, &mut csprng);
+                let proof =
+                    prove(ro.split(), &cdg, secret, csprng).expect("Proving should succeed.");
 
-            let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let ro = RandomOracle::domain(&challenge_prefix);
+                // Construct invalid parameters
+                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
+                assert!(!verify(wrong_ro, &cdg, &proof));
+                let mut wrong_cdg = cdg;
+                {
+                    let tmp = wrong_cdg.cmm_key_1;
+                    wrong_cdg.cmm_key_1 = CommitmentKey::generate(csprng);
+                    assert!(!verify(ro.split(), &wrong_cdg, &proof));
+                    wrong_cdg.cmm_key_1 = tmp;
+                }
+                {
+                    let tmp = wrong_cdg.cmm_key_2;
+                    wrong_cdg.cmm_key_1 = CommitmentKey::generate(csprng);
+                    assert!(!verify(ro.split(), &wrong_cdg, &proof));
+                    wrong_cdg.cmm_key_2 = tmp;
+                }
 
-            let secret = ComEqDiffGrpsSecret {
-                value:      &a_1,
-                rand_cmm_1: &a_2,
-                rand_cmm_2: &r,
-            };
-            let proof = prove_com_eq_diff_grps::<G1Affine, G2Affine, ThreadRng>(
-                ro.split(),
-                &u,
-                &v,
-                &cmm_key_1,
-                &cmm_key_2,
-                &secret,
-                &mut csprng,
-            );
+                {
+                    let tmp = wrong_cdg.commitment_1;
+                    wrong_cdg.commitment_1 = wrong_cdg
+                        .cmm_key_1
+                        .commit(&Value::generate(csprng), csprng)
+                        .0;
+                    assert!(!verify(ro.split(), &wrong_cdg, &proof));
+                    wrong_cdg.commitment_1 = tmp;
+                }
 
-            // Construct invalid parameters
-            let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
-            let wrong_cmm_key_1 = CommitmentKey::<G1Affine>::generate(&mut csprng);
-            let wrong_cmm_key_2 = CommitmentKey::<G2Affine>::generate(&mut csprng);
-            let (wrong_u, _) = wrong_cmm_key_1.commit((&a_1).view(), &mut csprng);
-            let (wrong_v, _) = wrong_cmm_key_2.commit(&a_1, &mut csprng);
-
-            // Verify failure for invalid parameters
-            assert!(verify_com_eq_diff_grps(
-                ro.split(),
-                &u,
-                &v,
-                &cmm_key_1,
-                &cmm_key_2,
-                &proof
-            ));
-            assert!(!verify_com_eq_diff_grps(
-                wrong_ro, &u, &v, &cmm_key_1, &cmm_key_2, &proof
-            ));
-            assert!(!verify_com_eq_diff_grps(
-                ro.split(),
-                &wrong_u,
-                &v,
-                &cmm_key_1,
-                &cmm_key_2,
-                &proof
-            ));
-            assert!(!verify_com_eq_diff_grps(
-                ro.split(),
-                &u,
-                &wrong_v,
-                &cmm_key_1,
-                &cmm_key_2,
-                &proof
-            ));
-            assert!(!verify_com_eq_diff_grps(
-                ro.split(),
-                &u,
-                &v,
-                &wrong_cmm_key_1,
-                &cmm_key_2,
-                &proof
-            ));
-            assert!(!verify_com_eq_diff_grps(
-                ro.split(),
-                &u,
-                &v,
-                &cmm_key_1,
-                &wrong_cmm_key_2,
-                &proof
-            ));
-        }
-    }
-
-    #[test]
-    pub fn test_com_eq_diff_grps_proof_serialization() {
-        let mut csprng = thread_rng();
-        for _i in 0..100 {
-            let challenge = G1Affine::generate_scalar(&mut csprng);
-            let witness = (
-                G1Affine::generate_scalar(&mut csprng),
-                G1Affine::generate_scalar(&mut csprng),
-                G1Affine::generate_scalar(&mut csprng),
-            );
-            let ap = ComEqDiffGrpsProof::<G1Affine, G2Affine> { challenge, witness };
-            let app = serialize_deserialize(&ap);
-            assert!(app.is_ok());
-            assert_eq!(ap, app.unwrap());
+                {
+                    let tmp = wrong_cdg.commitment_2;
+                    wrong_cdg.commitment_2 = wrong_cdg
+                        .cmm_key_2
+                        .commit(&Value::generate(csprng), csprng)
+                        .0;
+                    assert!(!verify(ro.split(), &wrong_cdg, &proof));
+                    wrong_cdg.commitment_2 = tmp;
+                }
+            })
         }
     }
 }

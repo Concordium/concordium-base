@@ -1,5 +1,6 @@
 use crate::secret_sharing::{ShareNumber, Threshold};
 use crypto_common::*;
+use crypto_common_derive::*;
 use curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as acc_sig_scheme;
@@ -16,8 +17,7 @@ use ps_sig::{public as pssig, signature::*, unknown_message::SigRetrievalRandomn
 use std::{collections::btree_map::BTreeMap, str::FromStr};
 
 use crate::sigma_protocols::{
-    com_enc_eq::ComEncEqProof, com_eq::ComEqProof, com_eq_different_groups::ComEqDiffGrpsProof,
-    com_eq_sig::ComEqSigProof, com_mult::ComMultProof, dlog::DlogProof,
+    com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, dlog,
 };
 
 use serde::{
@@ -27,6 +27,7 @@ use serde::{
 
 use byteorder::{BigEndian, ReadBytesExt};
 use either::Either;
+use random_oracle::Challenge;
 use std::{
     cmp::Ordering,
     convert::TryFrom,
@@ -35,6 +36,8 @@ use std::{
 };
 
 use sha2::{Digest, Sha256};
+
+use std::rc::Rc;
 
 // only for account addresses
 use base58check::*;
@@ -156,8 +159,8 @@ impl<'de> Visitor<'de> for SignatureThresholdVisitor {
 /// Index of an account key that is to be used.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
 #[repr(transparent)]
-#[serde(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(transparent)]
 pub struct KeyIndex(pub u8);
 
 #[derive(Debug, PartialEq, Eq)]
@@ -522,12 +525,12 @@ pub struct AttributeList<F: Field, AttributeType: Attribute<F>> {
 /// a scalar raising a generator to this scalar gives a public credentials. If
 /// two groups have the same scalar field we can have two different public
 /// credentials from the same secret credentials.
-#[derive(SerdeSerialize, SerdeDeserialize)]
-#[serde(transparent)]
-#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+#[derive(SerdeBase16Serialize)]
 pub struct IdCredentials<C: Curve> {
-    /// secret id credentials
-    pub id_cred_sec: PedersenValue<C>,
+    /// Secret id credentials.
+    /// Since the use of this value is quite complex, we allocate
+    /// it on the heap and retain a pointer to it for easy sharing.
+    pub id_cred_sec: Rc<PedersenValue<C>>,
 }
 
 /// Private credential holder information. A user maintaints these
@@ -570,12 +573,12 @@ pub struct IpArData<C: Curve> {
     /// the number of the share
     #[serde(rename = "prfKeyShareNumber")]
     pub prf_key_share_number: ShareNumber,
-    /// proof that the computed commitment to the share
+    /// Witness to the proof that the computed commitment to the share
     /// contains the same value as the encryption
     /// the commitment to the share is not sent but computed from
     /// the commitments to the sharing coefficients
     #[serde(rename = "proofComEncEq")]
-    pub proof_com_enc_eq: ComEncEqProof<C>,
+    pub proof_com_enc_eq: com_enc_eq::Witness<C>,
 }
 
 /// Data relating to a single anonymity revoker sent by the account holder to
@@ -621,6 +624,24 @@ pub struct ChoiceArParameters {
     pub threshold: Threshold,
 }
 
+/// Proof that the data sent to the identity provider
+/// is well-formed.
+#[derive(Serialize)]
+pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Challenge for the combined proof. This includes the three proofs below,
+    /// and additionally also the proofs in IpArData.
+    pub challenge: Challenge,
+    /// Witness to the proof of konwledge of IdCredSec.
+    pub id_cred_sec_witness: dlog::Witness<C>,
+    /// Witness to the proof that cmm_sc and id_cred_pub
+    /// are hiding the same id_cred_sec.
+    pub commitments_same_proof: com_eq::Witness<C>,
+    /// Witness to the proof that cmm_prf and the
+    /// second commitment to the prf key (hidden in cmm_prf_sharing_coeff)
+    /// are hiding the same value.
+    pub commitments_prf_same: com_eq_different_groups::Witness<P::G1, C>,
+}
+
 /// Information sent from the account holder to the identity provider.
 /// This includes only the cryptographic parts, the attribute list is
 /// in a different object below.
@@ -641,24 +662,16 @@ pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Anonymity revocation data for the chosen anonymity revokers.
     #[serde(rename = "ipArData")]
     pub ip_ar_data: Vec<IpArData<C>>,
-    /// choice of anonyimity revocation parameters
-    /// the vec is a vector of ar identities
-    /// the second element of the pair is the threshold for revocation.
-    /// must be less than or equal the length of the vector.
-    /// NB:IP needs to check this
+    /// Choice of anonyimity revocation parameters.
+    /// NB:IP needs to check that they make sense in the context of the public
+    /// keys they are allowed to use.
     #[serde(rename = "choiceArData")]
     pub choice_ar_parameters: ChoiceArParameters,
-    /// Proof of knowledge of secret credentials corresponding to id_cred_pub
-    #[serde(rename = "pokSecCred")]
-    pub pok_sc: DlogProof<C>,
     /// Commitment to id cred sec using the commitment key of IP derived from
     /// the PS public key. This is used to compute the message that the IP
     /// signs.
     #[serde(rename = "idCredSecCommitment")]
     pub cmm_sc: pedersen::Commitment<P::G1>,
-    /// Proof that cmm_sc and id_cred_pub are hiding the same value.
-    #[serde(rename = "proofCommitmentsToIdCredSecSame")]
-    pub proof_com_eq_sc: ComEqProof<P::G1>,
     /// Commitment to the prf key in group G1.
     #[serde(rename = "prfKeyCommitmentWithIP")]
     pub cmm_prf: pedersen::Commitment<P::G1>,
@@ -668,11 +681,14 @@ pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// where K is the prf key
     #[serde(rename = "prfKeySharingCoeffCommitments")]
     pub cmm_prf_sharing_coeff: Vec<pedersen::Commitment<C>>,
-    /// Proof that the first and snd commitments to the prf are hiding the same
-    /// value. The first commitment is cmm_prf and the second is the first in
-    /// the vec cmm_prf_sharing_coeff
-    #[serde(rename = "proofCommitmentsSame")]
-    pub proof_com_eq: ComEqDiffGrpsProof<P::G1, C>,
+    /// Proofs of knowledge. See the documentation of PreIdentityProof for
+    /// details.
+    #[serde(
+        rename = "proofsOfKnowledge",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub poks: PreIdentityProof<P, C>,
 }
 
 /// The data we get back from the identity provider.
@@ -803,24 +819,26 @@ pub struct CredDeploymentCommitments<C: Curve> {
 
 // FIXME: The sig should be part of the values so that it is part of the
 // challenge computation.
-#[derive(Debug, PartialEq, Eq, SerdeBase16IgnoreLengthSerialize)]
+#[derive(Debug, SerdeBase16IgnoreLengthSerialize)]
 pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// (Blinded) Signature derived from the signature on the pre-identity
     /// object by the IP
     pub sig: BlindedSignature<P>,
     /// list of  commitments to the attributes .
     pub commitments: CredDeploymentCommitments<C>,
-    /// Proofs that the encrypted shares of id_cred_pub and
+    /// Challenge used for all of the proofs.
+    pub challenge: Challenge,
+    /// Witnesses for proofs that the encrypted shares of id_cred_pub and
     /// commitments (in chain_ar_data) hide the same values.
-    /// each proof is indexed by the share number.
-    pub proof_id_cred_pub: Vec<(ShareNumber, ComEncEqProof<C>)>,
-    /// Proof of knowledge of signature of Identity Provider on the list
-    /// (idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n],
-    /// AR[1], ..., AR[m])
-    pub proof_ip_sig: ComEqSigProof<P, C>,
+    /// each witness is indexed by the share number.
+    pub proof_id_cred_pub: Vec<(ShareNumber, com_enc_eq::Witness<C>)>,
+    /// Witnesses for proof of knowledge of signature of Identity Provider on
+    /// the list (idCredSec, prfKey, attributes[0], attributes[1],...,
+    /// attributes[n], AR[1], ..., AR[m])
+    pub proof_ip_sig: com_eq_sig::Witness<P, C>,
     /// Proof that reg_id = prf_K(x). Also establishes that reg_id is computed
     /// from the prf key signed by the identity provider.
-    pub proof_reg_id: ComMultProof<C>,
+    pub proof_reg_id: com_mult::Witness<C>,
     /// Proof of knowledge of acc secret keys (signing keys corresponding to the
     /// verification keys either on the account already, or the ones which are
     /// part of this credential.
@@ -828,10 +846,6 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// deploying proofs on own account.
     /// We could consider replacing this proof by just a list of signatures.
     pub proof_acc_sk: AccountOwnershipProof,
-    /* Proof that the attribute list in commitments.cmm_attributes satisfy the
-     * policy for now this is mainly achieved by opening the corresponding
-     * commitments.
-     * pub proof_policy: PolicyProof<C>, */
 }
 
 // This is an unfortunate situation, but we need to manually write a
@@ -842,6 +856,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for CredDeploymentPro
         let mut tmp_out = Vec::new();
         tmp_out.put(&self.sig);
         tmp_out.put(&self.commitments);
+        tmp_out.put(&self.challenge);
         tmp_out.put(&self.proof_id_cred_pub);
         tmp_out.put(&self.proof_ip_sig);
         tmp_out.put(&self.proof_reg_id);
@@ -859,6 +874,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
         let mut limited = source.take(u64::from(len));
         let sig = limited.get()?;
         let commitments = limited.get()?;
+        let challenge = limited.get()?;
         let proof_id_cred_pub = limited.get()?;
         let proof_ip_sig = limited.get()?;
         let proof_reg_id = limited.get()?;
@@ -867,6 +883,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
             Ok(CredDeploymentProofs {
                 sig,
                 commitments,
+                challenge,
                 proof_id_cred_pub,
                 proof_ip_sig,
                 proof_reg_id,
@@ -1220,7 +1237,7 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     pub policy: Policy<C, AttributeType>,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
                  Attribute<C::Scalar> + SerdeSerialize",

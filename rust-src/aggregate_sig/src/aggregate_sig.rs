@@ -1,13 +1,15 @@
-use curve_arithmetic::{Curve, Pairing};
+use curve_arithmetic::{Curve, Pairing, Value};
 use ff::Field;
 use generic_array::GenericArray;
-use id::sigma_protocols::dlog::*;
+use id::sigma_protocols::{common::*, dlog::*};
 use rand::Rng;
 use random_oracle::RandomOracle;
 use rayon::iter::*;
 use sha2::{Digest, Sha512};
 
 use crypto_common::*;
+
+use std::rc::Rc;
 
 pub const PUBLIC_KEY_SIZE: usize = 96;
 pub const SECRET_KEY_SIZE: usize = 32;
@@ -30,14 +32,15 @@ impl<P: Pairing> SecretKey<P> {
         Signature(signature)
     }
 
-    pub fn prove<R: Rng>(&self, csprng: &mut R, ro: RandomOracle) -> Proof<P> {
-        prove_dlog(
-            csprng,
-            ro,
-            &P::G2::one_point().mul_by_scalar(&self.0),
-            &self.0,
-            &P::G2::one_point(),
-        )
+    pub fn prove<R: Rng>(&self, csprng: &mut R, ro: RandomOracle) -> Option<Proof<P>> {
+        let prover = Dlog {
+            public: P::G2::one_point().mul_by_scalar(&self.0),
+            coeff:  P::G2::one_point(),
+        };
+        let secret = DlogSecret {
+            secret: Rc::new(Value { value: self.0 }),
+        };
+        prove(ro, &prover, secret, csprng)
     }
 }
 
@@ -79,7 +82,11 @@ impl<P: Pairing> PublicKey<P> {
     }
 
     pub fn check_proof(&self, ro: RandomOracle, proof: &Proof<P>) -> bool {
-        verify_dlog(ro, &P::G2::one_point(), &self.0, proof)
+        let verifier = Dlog {
+            public: self.0,
+            coeff:  P::G2::one_point(),
+        };
+        verify(ro, &verifier, proof)
     }
 }
 
@@ -118,7 +125,7 @@ impl<P: Pairing> PartialEq for Signature<P> {
 }
 
 // A proof of knowledge of a secretkey
-pub type Proof<P> = DlogProof<<P as Pairing>::G2>;
+pub type Proof<P> = SigmaProof<Witness<<P as Pairing>::G2>>;
 
 // Verifies an aggregate signature on pairs (messages m_i, PK_i) for i=1..n by
 // checking     pairing(sig, g_2) == product_{i=0}^n ( pairing(g1_hash(m_i),
@@ -390,7 +397,9 @@ mod test {
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
             let sig = sk.sign(&m);
-            let proof = sk.prove(&mut rng, ro.split());
+            let proof = sk
+                .prove(&mut rng, ro.split())
+                .expect("Proving should succeed.");
 
             let sk_from_bytes = serialize_deserialize(&sk);
             let pk_from_bytes = serialize_deserialize(&pk);
@@ -405,7 +414,7 @@ mod test {
             assert_eq!(sig.0, sig_from_bytes.0);
             assert_eq!(sk.0, sk_from_bytes.0);
             assert_eq!(pk.0, pk_from_bytes.0);
-            assert_eq!(proof, proof_from_bytes);
+            assert!(pk.check_proof(ro.split(), &proof_from_bytes));
             assert!(pk.verify(&m, sig_from_bytes));
             assert!(pk_from_bytes.verify(&m, sig));
             assert!(pk.check_proof(ro, &proof))
@@ -425,7 +434,7 @@ mod test {
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
             let sig = sk.sign(&m);
-            let proof = sk.prove(&mut rng, ro);
+            let proof = sk.prove(&mut rng, ro).expect("Proving should succeed.");
 
             let sk_bytes = to_bytes(&sk);
             let pk_bytes = to_bytes(&pk);
@@ -463,7 +472,9 @@ mod test {
 
             let sk = SecretKey::<Bls12>::generate(&mut csprng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
-            let proof = sk.prove(&mut csprng, ro1.split());
+            let proof = sk
+                .prove(&mut csprng, ro1.split())
+                .expect("Proving should succeed.");
 
             assert!(pk.check_proof(ro1.split(), &proof));
             // check that it doesn't verify a proof with the wrong context

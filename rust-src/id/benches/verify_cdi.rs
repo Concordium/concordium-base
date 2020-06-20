@@ -18,6 +18,8 @@ use std::collections::BTreeMap;
 
 use either::Left;
 
+use std::rc::Rc;
+
 use criterion::*;
 
 type ExampleCurve = G1;
@@ -35,7 +37,7 @@ fn bench_parts(c: &mut Criterion) {
     let secret = ExampleCurve::generate_scalar(&mut csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_cred: IdCredentials {
-            id_cred_sec: PedersenValue::new(secret),
+            id_cred_sec: Rc::new(PedersenValue::new(secret)),
         },
     };
 
@@ -115,7 +117,8 @@ fn bench_parts(c: &mut Criterion) {
     })
     .expect("The constructed ARs are valid.");
 
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let (pio, randomness) =
+        generate_pio(&context, &aci).expect("Generating the pre-identity object succeed.");
     let pio_ser = to_bytes(&pio);
     let ip_info_ser = to_bytes(&ip_info);
     let pio_des = from_bytes(&mut Cursor::new(&pio_ser)).unwrap();
@@ -158,7 +161,7 @@ fn bench_parts(c: &mut Criterion) {
         signature: ip_sig,
     };
 
-    let cdi = generate_cdi(
+    let cdi = create_credential(
         &ip_info,
         &global_ctx,
         &id_object,
@@ -199,7 +202,7 @@ fn bench_parts(c: &mut Criterion) {
     );
 
     let bench_generate_cdi = move |b: &mut Bencher, x: &(_, _, _, _, _, _, _)| {
-        b.iter(|| generate_cdi(x.0, x.1, x.2, x.3, x.4, x.5, x.6).unwrap())
+        b.iter(|| create_credential(x.0, x.1, x.2, x.3, x.4, x.5, x.6).unwrap())
     };
     c.bench_with_input(
         BenchmarkId::new("Generate CDI", ""),
