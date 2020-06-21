@@ -5,8 +5,6 @@ use id::secret_sharing::*;
 
 use crypto_common::*;
 
-use std::collections::btree_map::BTreeMap;
-
 use curve_arithmetic::Curve;
 use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
@@ -21,9 +19,11 @@ use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
 
 use std::{
     cmp::max,
+    collections::btree_map::BTreeMap,
     fs::File,
     io::{self, Write},
     path::Path,
+    rc::Rc,
 };
 
 use either::Either::Left;
@@ -405,7 +405,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // - acc_data of the account onto which we are deploying this credential
     //   (private and public)
 
-    let cdi = generate_cdi(
+    let cdi = create_credential(
         &ip_info,
         &global_ctx,
         &id_object,
@@ -467,7 +467,7 @@ fn handle_create_chi(matches: &ArgMatches) {
     let secret = ExampleCurve::generate_scalar(&mut csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_cred: IdCredentials {
-            id_cred_sec: PedersenValue { value: secret },
+            id_cred_sec: Rc::new(PedersenValue { value: secret }),
         },
     };
 
@@ -688,7 +688,8 @@ fn handle_start_ip(matches: &ArgMatches) {
     // and finally generate the pre-identity object
     // we also retrieve the randomness which we must keep private.
     // This randomness must be used
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let (pio, randomness) =
+        generate_pio(&context, &aci).expect("Generating the pre-identity object should succeed.");
 
     // the only thing left is to output all the information
 

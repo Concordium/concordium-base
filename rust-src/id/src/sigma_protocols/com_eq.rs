@@ -128,6 +128,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
     }
 
     #[cfg(test)]
+    #[allow(clippy::many_single_char_names)]
     fn with_valid_data<R: rand::Rng>(
         _data_size: usize,
         csprng: &mut R,

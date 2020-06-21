@@ -39,9 +39,16 @@ pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub comm_key: CommitmentKey<C>,
 }
 
+pub type ValuesAndRands<C> = (Rc<Value<C>>, Rc<Randomness<C>>);
+
 pub struct ComEqSigSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub blind_rand:       Rc<BlindingRandomness<P>>,
-    pub values_and_rands: Vec<(Rc<Value<C>>, Rc<Randomness<C>>)>,
+    pub values_and_rands: Vec<ValuesAndRands<C>>,
+}
+
+pub struct ComEqSigState<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    pub rho_prime:  P::ScalarField,
+    pub mus_and_rs: Vec<(Value<C>, Randomness<C>)>,
 }
 
 #[allow(non_snake_case)]
@@ -49,7 +56,7 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
     type CommitMessage = (P::TargetField, Vec<Commitment<C>>);
     type ProtocolChallenge = C::Scalar;
     // Triple (rho', [mu_i], [R_i])
-    type ProverState = (P::ScalarField, Vec<(Value<C>, Randomness<C>)>);
+    type ProverState = ComEqSigState<P, C>;
     type ProverWitness = Witness<P, C>;
     type SecretData = ComEqSigSecret<P, C>;
 
@@ -120,7 +127,10 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
         // let v_2_pre_pair = cX_tilda.plus_point(&point);
         // let v_2_pair = P::pair(a_hat, v_2_pre_pair);
         let paired = P::pair(&a_hat, &point);
-        Some(((paired, commitments), (rho_prime, mus_cRs)))
+        Some(((paired, commitments), ComEqSigState {
+            rho_prime,
+            mus_and_rs: mus_cRs,
+        }))
     }
 
     #[inline]
@@ -130,7 +140,7 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
     ) -> Option<Self::ProverWitness> {
-        if secret.values_and_rands.len() != state.1.len() {
+        if secret.values_and_rands.len() != state.mus_and_rs.len() {
             return None;
         }
         let n = secret.values_and_rands.len();
@@ -141,10 +151,11 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
         let mut wit_r_prime = *challenge;
         wit_r_prime.mul_assign(&r_prime);
         wit_r_prime.negate();
-        wit_r_prime.add_assign(&state.0);
+        wit_r_prime.add_assign(&state.rho_prime);
 
         let mut wit_messages_randoms = Vec::with_capacity(n);
-        for ((ref m, ref r), (ref mu, ref rho)) in izip!(secret.values_and_rands, state.1) {
+        for ((ref m, ref r), (ref mu, ref rho)) in izip!(secret.values_and_rands, state.mus_and_rs)
+        {
             let mut wit_m = *challenge;
             wit_m.mul_assign(m);
             wit_m.negate();

@@ -17,7 +17,9 @@ use ps_sig::{public as pssig, signature::*, unknown_message::SigRetrievalRandomn
 use std::{collections::btree_map::BTreeMap, str::FromStr};
 
 use crate::sigma_protocols::{
-    com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, dlog,
+    com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult,
+    common::{ReplicateAdapter, ReplicateWitness},
+    dlog,
 };
 
 use serde::{
@@ -641,6 +643,13 @@ pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// are hiding the same value.
     pub commitments_prf_same: com_eq_different_groups::Witness<P::G1, C>,
 }
+
+/// A type alias for the combined proofs relating to the shared encryption of
+/// IdCredPub.
+pub type IdCredPubVerifiers<C> = (
+    ReplicateAdapter<com_enc_eq::ComEncEq<C>>,
+    ReplicateWitness<com_enc_eq::Witness<C>>,
+);
 
 /// Information sent from the account holder to the identity provider.
 /// This includes only the cryptographic parts, the attribute list is

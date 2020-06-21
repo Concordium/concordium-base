@@ -233,8 +233,8 @@ type SharingData<C> = (
 );
 
 /// A function to compute sharing data.
-pub fn compute_sharing_data<'a, C: Curve>(
-    shared_scalar: &'a Value<C>,                 // Value to be shared.
+pub fn compute_sharing_data<C: Curve>(
+    shared_scalar: &Value<C>,                    // Value to be shared.
     ar_parameters: &(Vec<ArInfo<C>>, Threshold), // Anonimity revokers
     commitment_key: &PedersenKey<C>,             // commitment key
 ) -> SharingData<C> {
@@ -675,10 +675,7 @@ fn compute_pok_sig<
             // if we commited with non-zero randomness get it.
             // otherwise we must have commited with zero randomness
             // which we should use
-            att_rands
-                .get(tag)
-                .map(|x| x.clone())
-                .unwrap_or(zero.clone()),
+            att_rands.get(tag).cloned().unwrap_or_else(|| zero.clone()),
         ));
         gxs.push(g);
     }
@@ -741,7 +738,7 @@ pub struct CommitmentsRandomness<C: Curve> {
 /// For the other values the verifier (the chain) will compute commitments with
 /// randomness 0 in order to verify knowledge of the signature.
 #[allow(clippy::too_many_arguments)]
-fn compute_commitments<'a, C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
+fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     commitment_key: &PedersenKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     prf_key: &prf::SecretKey<C>,
@@ -804,18 +801,18 @@ fn compute_commitments<'a, C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng
 
 /// proof of knowledge of registration id
 #[allow(clippy::too_many_arguments)]
-fn compute_pok_reg_id<'a, C: Curve>(
-    on_chain_commitment_key: &'a PedersenKey<C>,
+fn compute_pok_reg_id<C: Curve>(
+    on_chain_commitment_key: &PedersenKey<C>,
     prf_key: prf::SecretKey<C>,
-    cmm_prf: &'a Commitment<C>,
-    prf_rand: &'a PedersenRandomness<C>,
+    cmm_prf: &Commitment<C>,
+    prf_rand: &PedersenRandomness<C>,
     cred_counter: u8,
-    cmm_cred_counter: &'a Commitment<C>,
-    cred_counter_rand: &'a PedersenRandomness<C>,
+    cmm_cred_counter: &Commitment<C>,
+    cred_counter_rand: &PedersenRandomness<C>,
     // max_accounts_rand is not used at the moment.
     // it should be used for the range proof that cred_counter < max_accounts, but
     // that is not yet available
-    _max_accounts_rand: &'a PedersenRandomness<C>,
+    _max_accounts_rand: &PedersenRandomness<C>,
     reg_id_exponent: C::Scalar,
     reg_id: C,
 ) -> (com_mult::ComMult<C>, com_mult::ComMultSecret<C>) {
@@ -999,7 +996,7 @@ mod tests {
     /// This test generates a CDI and check values were set correct.
     /// It does not yet test the proofs for correct-/soundness.
     #[test]
-    pub fn test_generate_cdi() {
+    pub fn test_create_credential() {
         // Create IP info with threshold = num_ars - 1
         let max_attrs = 10;
         let num_ars = 4;

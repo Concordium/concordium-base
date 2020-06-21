@@ -3,7 +3,7 @@ use pairing::bls12_381::Bls12;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use id::{account_holder::*, identity_provider::*, types::*};
-use std::collections::btree_map::BTreeMap;
+use std::collections::{btree_map::BTreeMap, HashMap};
 
 use client_server_helpers::*;
 use curve_arithmetic::Curve;
@@ -17,7 +17,7 @@ use pedersen_scheme::Value as PedersenValue;
 use std::cmp::max;
 
 use either::Either::{Left, Right};
-use std::collections::HashMap;
+use std::rc::Rc;
 
 // server imports
 #[macro_use]
@@ -99,7 +99,7 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
     let secret = ExampleCurve::generate_scalar(&mut csprng);
     let chi = CredentialHolderInfo::<ExampleCurve> {
         id_cred: IdCredentials {
-            id_cred_sec: PedersenValue { value: secret },
+            id_cred_sec: Rc::new(PedersenValue { value: secret }),
         },
     };
 
@@ -121,7 +121,11 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
         Some(x) => x,
         None => return respond_log!(request, "Could not make context"),
     };
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let (pio, randomness) = if let Some(v) = generate_pio(&context, &aci) {
+        v
+    } else {
+        return respond_log!(request, "Could not generate pre-identity object.");
+    };
 
     let vf = verify_credentials(&pio, &ip_info, &attributes, &ip_sec_key);
     match vf {
@@ -225,7 +229,7 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
         }
     };
 
-    let cdi = generate_cdi(
+    let cdi = create_credential(
         ip_info,
         &s.global_params,
         &id_object,
