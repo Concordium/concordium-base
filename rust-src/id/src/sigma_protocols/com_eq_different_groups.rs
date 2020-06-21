@@ -98,6 +98,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     }
 
     #[inline]
+    #[allow(clippy::many_single_char_names)]
     fn extract_point(
         &self,
         challenge: &Self::ProtocolChallenge,
@@ -123,6 +124,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     }
 
     #[cfg(test)]
+    #[allow(clippy::many_single_char_names)]
     fn with_valid_data<R: Rng>(
         _data_size: usize,
         csprng: &mut R,

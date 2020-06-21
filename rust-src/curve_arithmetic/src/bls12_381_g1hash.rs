@@ -574,7 +574,7 @@ fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingEr
 pub fn hash_bytes_to_fq(one: bool, bytes: &[u8]) -> Fq {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
-    h.input(if one { [0u8] } else { [1u8] });
+    h.input(if one { [1u8] } else { [0u8] });
     h.input(bytes);
     loop {
         hash.copy_from_slice(h.result_reset().as_slice());

@@ -14,9 +14,7 @@ use rand::*;
 
 use pedersen_scheme::Value as PedersenValue;
 
-use std::path::Path;
-
-use std::{fs::File, io::Write};
+use std::{fs::File, io::Write, path::Path, rc::Rc};
 
 use either::Either::{Left, Right};
 
@@ -47,7 +45,7 @@ fn main() {
     let secret = ExampleCurve::generate_scalar(&mut csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_cred: IdCredentials {
-            id_cred_sec: PedersenValue::new(secret),
+            id_cred_sec: Rc::new(PedersenValue::new(secret)),
         },
     };
 
@@ -99,7 +97,8 @@ fn main() {
         threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
     })
     .expect("Constructed AR data is valid.");
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let (pio, randomness) =
+        generate_pio(&context, &aci).expect("Generating the pre-identity object should succeed.");
 
     let sig_ok = verify_credentials(&pio, &ip_info, &attributes, &ip_secret_key);
 
@@ -148,7 +147,7 @@ fn main() {
             existing: Left(SignatureThreshold(2)),
         };
 
-        let cdi_1 = generate_cdi(
+        let cdi_1 = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,
@@ -166,7 +165,7 @@ fn main() {
             existing: Right(AccountAddress::new(&cdi_1.values.reg_id)),
         };
 
-        let cdi_2 = generate_cdi(
+        let cdi_2 = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,
@@ -269,7 +268,7 @@ fn main() {
             }
         };
 
-        let cdi = generate_cdi(
+        let cdi = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,

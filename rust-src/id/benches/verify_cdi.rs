@@ -201,7 +201,7 @@ fn bench_parts(c: &mut Criterion) {
         bench_pio,
     );
 
-    let bench_generate_cdi = move |b: &mut Bencher, x: &(_, _, _, _, _, _, _)| {
+    let bench_create_credential = move |b: &mut Bencher, x: &(_, _, _, _, _, _, _)| {
         b.iter(|| create_credential(x.0, x.1, x.2, x.3, x.4, x.5, x.6).unwrap())
     };
     c.bench_with_input(
@@ -215,7 +215,7 @@ fn bench_parts(c: &mut Criterion) {
             &policy,
             &acc_data,
         ),
-        bench_generate_cdi,
+        bench_create_credential,
     );
 
     let bench_verify_cdi =

@@ -181,10 +181,7 @@ fn compute_prf_sharing_verifier<'a, C: Curve>(
     cmm_sharing_coeff: &'a [Commitment<C>],
     ip_ar_data: &'a [IpArData<C>],
     choice_ar_parameters: &'a [ArInfo<C>],
-) -> Option<(
-    ReplicateAdapter<com_enc_eq::ComEncEq<C>>,
-    ReplicateWitness<com_enc_eq::Witness<C>>,
-)> {
+) -> Option<IdCredPubVerifiers<C>> {
     let mut verifiers = Vec::with_capacity(ip_ar_data.len());
     let mut witnesses = Vec::with_capacity(ip_ar_data.len());
 

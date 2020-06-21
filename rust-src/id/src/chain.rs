@@ -239,13 +239,7 @@ fn id_cred_pub_verifier<'a, C: Curve>(
     chain_ar_data: &'a [ChainArData<C>],
     cmm_sharing_coeff: &'a [Commitment<C>],
     proof_id_cred_pub: &'a [(ShareNumber, com_enc_eq::Witness<C>)],
-) -> Result<
-    (
-        ReplicateAdapter<com_enc_eq::ComEncEq<C>>,
-        ReplicateWitness<com_enc_eq::Witness<C>>,
-    ),
-    CDIVerificationError,
-> {
+) -> Result<IdCredPubVerifiers<C>, CDIVerificationError> {
     let mut provers = Vec::with_capacity(proof_id_cred_pub.len());
     let mut witnesses = Vec::with_capacity(proof_id_cred_pub.len());
 

@@ -14,7 +14,7 @@ use pedersen_scheme::Value as PedersenValue;
 
 use crypto_common::base16_encode_string;
 use serde_json::json;
-use std::path::Path;
+use std::{path::Path, rc::Rc};
 
 use ec_vrf_ed25519 as vrf;
 
@@ -169,7 +169,7 @@ fn main() {
         let secret = ExampleCurve::generate_scalar(csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
             id_cred: IdCredentials {
-                id_cred_sec: PedersenValue::new(secret),
+                id_cred_sec: Rc::new(PedersenValue::new(secret)),
             },
         };
 
@@ -199,7 +199,8 @@ fn main() {
             _phantom: Default::default(),
         };
 
-        let (pio, randomness) = generate_pio(&context, &aci);
+        let (pio, randomness) = generate_pio(&context, &aci)
+            .expect("Generating the pre-identity object should succeed.");
 
         let sig_ok = verify_credentials(&pio, &ip_info, &attributes, &ip_secret_key);
 
@@ -232,7 +233,7 @@ fn main() {
 
         let id_object_use_data = IdObjectUseData { aci, randomness };
 
-        let cdi = generate_cdi(
+        let cdi = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,
