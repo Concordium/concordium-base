@@ -40,6 +40,8 @@ impl<C: Curve> PublicKey<C> {
         T: Rng, {
         let k = Randomness::generate(csprng);
         let g = self.generator.mul_by_scalar(&k.randomness);
+        // FIXME: Could use multiexponentiation when we are calling from
+        // encrypt_exponent_rand.
         let s = self.key.mul_by_scalar(&k.randomness).plus_point(&m.value);
         (Cipher(g, s), k)
     }
