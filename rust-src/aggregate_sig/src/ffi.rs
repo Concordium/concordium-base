@@ -1,6 +1,7 @@
 use crate::aggregate_sig::*;
 use crypto_common::*;
 use ffi_helpers::*;
+use id::sigma_protocols::dlog;
 use pairing::bls12_381::Bls12;
 use rand::{rngs::StdRng, thread_rng, SeedableRng};
 use random_oracle::RandomOracle;
@@ -35,7 +36,7 @@ macro_derive_to_bytes!(Box bls_proof_to_bytes, Proof<Bls12>);
 macro_derive_binary!(Box bls_sk_eq, SecretKey<Bls12>, SecretKey::eq);
 macro_derive_binary!(Box bls_pk_eq, PublicKey<Bls12>, PublicKey::eq);
 macro_derive_binary!(Box bls_sig_eq, Signature<Bls12>, Signature::eq);
-// macro_derive_binary!(Box bls_proof_eq, Proof<Bls12>, DlogProof::eq);
+macro_derive_binary!(Box bls_proof_eq, Proof<Bls12>, dlog::Proof::eq);
 
 macro_rules! macro_cmp {
     (Arc $function_name:ident, $type:ty) => {

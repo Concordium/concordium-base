@@ -25,7 +25,7 @@ pub struct DlogSecret<C: Curve> {
 
 /// Dlog witness. We deliberately make it opaque.
 /// We implement Copy to make the interface easier to use.
-#[derive(Debug, Serialize, Clone, Copy)]
+#[derive(Debug, Serialize, Clone, Copy, Eq, PartialEq)]
 pub struct Witness<C: Curve> {
     witness: C::Scalar,
 }
