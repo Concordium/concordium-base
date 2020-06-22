@@ -6,18 +6,15 @@ use id::{account_holder::*, identity_provider::*, types::*};
 use std::collections::{btree_map::BTreeMap, HashMap};
 
 use client_server_helpers::*;
-use curve_arithmetic::Curve;
 
 use rand::*;
 use serde_json::{from_value as from_json, json, to_string_pretty, Value};
 
 use clap::{App, AppSettings, Arg};
 use id::secret_sharing::Threshold;
-use pedersen_scheme::Value as PedersenValue;
 use std::cmp::max;
 
 use either::Either::{Left, Right};
-use std::rc::Rc;
 
 // server imports
 #[macro_use]
@@ -96,11 +93,8 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
     // generate the prf key
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
     let chi = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: Rc::new(PedersenValue { value: secret }),
-        },
+        id_cred: IdCredentials::generate(&mut csprng),
     };
 
     let aci = AccCredentialInfo {

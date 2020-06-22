@@ -7,7 +7,7 @@ use crate::{cipher::*, message::*, secret::*};
 
 use crypto_common::*;
 use crypto_common_derive::*;
-use curve_arithmetic::Curve;
+use curve_arithmetic::{Curve, Value};
 
 /// Elgamal public key .
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
@@ -75,7 +75,7 @@ impl<C: Curve> PublicKey<C> {
     pub fn encrypt_exponent_rand<T>(
         &self,
         csprng: &mut T,
-        e: &C::Scalar,
+        e: &Value<C>,
     ) -> (Cipher<C>, Randomness<C>)
     where
         T: Rng, {
@@ -83,13 +83,13 @@ impl<C: Curve> PublicKey<C> {
         self.encrypt_rand(csprng, &Message { value })
     }
 
-    pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &C::Scalar) -> Cipher<C>
+    pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &Value<C>) -> Cipher<C>
     where
         T: Rng, {
         self.encrypt_exponent_rand(csprng, e).0
     }
 
-    pub fn encrypt_exponent_vec<T>(&self, csprng: &mut T, e: &[C::Scalar]) -> Vec<Cipher<C>>
+    pub fn encrypt_exponent_vec<T>(&self, csprng: &mut T, e: &[Value<C>]) -> Vec<Cipher<C>>
     where
         T: Rng, {
         e.iter()

@@ -18,12 +18,10 @@ use elgamal::cipher::Cipher;
 use ff::Field;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey as PedersenKey,
-    randomness::Randomness as PedersenRandomness, value as pedersen, value::Value,
+    randomness::Randomness as PedersenRandomness, value::Value,
 };
 use rand::{rngs::ThreadRng, *};
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap};
-
-use std::rc::Rc;
 
 /// Generate PreIdentityObject out of the account holder information,
 /// the chosen anonymity revoker information, and the necessary contextual
@@ -40,12 +38,12 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         .mul_by_scalar(&aci.cred_holder_info.id_cred.id_cred_sec);
 
     // PRF related computation
-    let prf::SecretKey(prf_key_scalar) = aci.prf_key;
+    let prf_key = &aci.prf_key;
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
     // revocation.
     // sharing data, commitments to sharing coefficients, and randomness of the
     // commitments sharing data is a list of SingleArData
-    let prf_value = Value::new(aci.prf_key.0);
+    let prf_value = aci.prf_key.to_value();
 
     let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data(
         &prf_value,
@@ -57,14 +55,14 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let ar_commitment_key = context.ip_info.ip_ars.ar_cmm_key;
 
     // Commit and prove knowledge of id_cred_sec
-    let id_cred_sec = aci.cred_holder_info.id_cred.id_cred_sec.clone();
+    let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
     let sc_ck = PedersenKey(
         context.ip_info.ip_verify_key.ys[0],
         context.ip_info.ip_verify_key.g,
     );
 
-    let (cmm_sc, cmm_sc_rand) = sc_ck.commit(id_cred_sec.view(), &mut csprng);
-    let cmm_sc_rand = Rc::new(cmm_sc_rand);
+    let (cmm_sc, cmm_sc_rand) = sc_ck.commit(&id_cred_sec, &mut csprng);
+    let cmm_sc_rand = cmm_sc_rand;
     // We now construct all the zero-knowledge proofs.
     // Since all proofs must be bound together, we
     // first construct inputs to all the proofs, and only at the end
@@ -93,9 +91,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let secret = (secret, com_eq::ComEqSecret::<P::G1> {
         r: cmm_sc_rand.clone(),
         // FIXME: This should be refactored so that we don't have to break abstraction.
-        a: Rc::new(Value {
-            value: id_cred_sec.value,
-        }),
+        a: id_cred_sec.view(),
     });
 
     // Commit to the PRF key for the IP and prove equality for the secret-shared PRF
@@ -104,9 +100,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         context.ip_info.ip_verify_key.ys[1],
         context.ip_info.ip_verify_key.g,
     );
-    let (cmm_prf, rand_cmm_prf) =
-        commitment_key_prf.commit(&pedersen::Value::view_scalar(&prf_key_scalar), &mut csprng);
-    let rand_cmm_prf = Rc::new(rand_cmm_prf);
+    let (cmm_prf, rand_cmm_prf) = commitment_key_prf.commit(prf_key, &mut csprng);
+    let rand_cmm_prf = rand_cmm_prf;
     let snd_cmm_prf = cmm_prf_sharing_coeff.first()?;
     let rand_snd_cmm_prf = cmm_coeff_randomness.first()?.clone();
 
@@ -118,10 +113,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         cmm_key_2:    context.ip_info.ip_ars.ar_cmm_key,
     });
     let secret = (secret, com_eq_different_groups::ComEqDiffGroupsSecret {
-        // FIXME: Need better abstractions here.
-        value:      Rc::new(Value {
-            value: prf_key_scalar,
-        }),
+        value:      prf_key.to_value(),
         rand_cmm_1: rand_cmm_prf.clone(),
         rand_cmm_2: rand_snd_cmm_prf,
     });
@@ -206,22 +198,24 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // randomness to retrieve the signature
     // We add randomness from both of the commitments.
     // See specification of ps_sig and id layer for why this is so.
-    let mut sig_retrieval_rand = cmm_sc_rand.randomness;
+    let mut sig_retrieval_rand = P::ScalarField::zero();
+    sig_retrieval_rand.add_assign(&cmm_sc_rand);
     sig_retrieval_rand.add_assign(&rand_cmm_prf);
-    Some((prio, ps_sig::SigRetrievalRandomness {
-        randomness: sig_retrieval_rand,
-    }))
+    Some((
+        prio,
+        ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand),
+    ))
 }
 
 /// Convenient data structure to collect data related to a single AR
 pub struct SingleArData<C: Curve> {
     ar_identity:             ArIdentity,
-    share:                   Rc<Value<C>>,
+    share:                   Value<C>,
     share_number:            ShareNumber,
     encrypted_share:         Cipher<C>,
-    encryption_randomness:   Rc<elgamal::Randomness<C>>,
+    encryption_randomness:   elgamal::Randomness<C>,
     cmm_to_share:            Commitment<C>,
-    randomness_cmm_to_share: Rc<PedersenRandomness<C>>,
+    randomness_cmm_to_share: PedersenRandomness<C>,
     ar_public_key:           elgamal::PublicKey<C>,
 }
 
@@ -229,7 +223,7 @@ type SharingData<C> = (
     Vec<SingleArData<C>>,
     Vec<Commitment<C>>, /* Commitments to the coefficients of sharing polynomial S + b1 X + b2
                          * X^2... */
-    Vec<Rc<PedersenRandomness<C>>>,
+    Vec<PedersenRandomness<C>>,
 );
 
 /// A function to compute sharing data.
@@ -253,13 +247,13 @@ pub fn compute_sharing_data<C: Curve>(
     // randomness values corresponding to the commitments
     let mut cmm_coeff_randomness = Vec::with_capacity(tu as usize);
     // first randomness is the one used in commiting to the scalar
-    cmm_coeff_randomness.push(Rc::new(cmm_scalar_rand));
+    cmm_coeff_randomness.push(cmm_scalar_rand);
     // fill the rest
     for i in 1..tu {
         let (cmm, rnd) =
             commitment_key.commit(&sharing_data.coefficients[i as usize - 1], &mut csprng);
         cmm_sharing_coefficients.push(cmm);
-        cmm_coeff_randomness.push(Rc::new(rnd));
+        cmm_coeff_randomness.push(rnd);
     }
     // a vector of Ar data
     let mut ar_data: Vec<SingleArData<C>> = Vec::with_capacity(n as usize);
@@ -274,14 +268,14 @@ pub fn compute_sharing_data<C: Curve>(
         let (cmm, rnd) = commitment_to_share(si, &cmm_sharing_coefficients, &cmm_coeff_randomness);
         // fill Ar data
         let single_ar_data = SingleArData {
-            ar_identity:             ar.ar_identity,
-            share:                   Rc::new(share),
-            share_number:            si,
-            encrypted_share:         cipher,
-            encryption_randomness:   Rc::new(rnd2),
-            cmm_to_share:            cmm,
-            randomness_cmm_to_share: Rc::new(rnd),
-            ar_public_key:           pk,
+            ar_identity: ar.ar_identity,
+            share,
+            share_number: si,
+            encrypted_share: cipher,
+            encryption_randomness: rnd2,
+            cmm_to_share: cmm,
+            randomness_cmm_to_share: rnd,
+            ar_public_key: pk,
         };
         ar_data.push(single_ar_data)
     }
@@ -293,7 +287,7 @@ pub fn compute_sharing_data<C: Curve>(
 pub fn commitment_to_share<C: Curve>(
     share_number: ShareNumber,
     coeff_commitments: &[Commitment<C>],
-    coeff_randomness: &[Rc<PedersenRandomness<C>>],
+    coeff_randomness: &[PedersenRandomness<C>],
 ) -> (Commitment<C>, PedersenRandomness<C>) {
     assert_eq!(coeff_commitments.len(), coeff_randomness.len());
     let mut cmm_share_point: C = C::zero_point();
@@ -310,9 +304,7 @@ pub fn commitment_to_share<C: Curve>(
         cmm_share_randomness_scalar.add_assign(rand);
     }
     let cmm = Commitment(cmm_share_point);
-    let rnd = PedersenRandomness {
-        randomness: cmm_share_randomness_scalar,
-    };
+    let rnd = PedersenRandomness::new(cmm_share_randomness_scalar);
     (cmm, rnd)
 }
 
@@ -343,7 +335,7 @@ where
     let prio = &id_object.pre_identity_object;
     let alist = &id_object.alist;
 
-    let prf_key = aci.prf_key;
+    let prf_key = &aci.prf_key;
     let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
     let reg_id_exponent = match aci.prf_key.prf_exponent(cred_counter) {
         Ok(exp) => exp,
@@ -358,7 +350,7 @@ where
     let reg_id = global_context
         .on_chain_commitment_key
         .hide(
-            &Value::view_scalar(&reg_id_exponent),
+            &Value::<C>::new(reg_id_exponent),
             &PedersenRandomness::zero(),
         )
         .0;
@@ -375,7 +367,7 @@ where
     let choice_ar_parameters = (choice_ars, prio.choice_ar_parameters.threshold);
     // sharing data for id cred sec
     let (id_cred_data, cmm_id_cred_sec_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data(
-        id_cred_sec.view(),
+        id_cred_sec,
         &choice_ar_parameters,
         &global_context.on_chain_commitment_key,
     );
@@ -398,13 +390,12 @@ where
     // and then we blind the signature to disassociate it from the message.
     // only the second part is used (as per the protocol)
     let (blinded_sig, blind_rand) = retrieved_sig.blind(&mut csprng);
-    let blind_rand = Rc::new(blind_rand);
     // We now compute commitments to all the items in the attribute list.
     // We use the on-chain pedersen commitment key.
     let (commitments, commitment_rands) = compute_commitments(
         &global_context.on_chain_commitment_key,
         &alist,
-        &prf_key,
+        prf_key,
         cred_counter,
         &cmm_id_cred_sec_sharing_coeff,
         cmm_coeff_randomness,
@@ -480,7 +471,7 @@ where
     // max_account.
     let (prover_reg_id, secret_reg_id) = compute_pok_reg_id(
         &global_context.on_chain_commitment_key,
-        prf_key,
+        prf_key.clone(),
         &commitments.cmm_prf,
         &commitment_rands.prf_rand,
         cred_counter,
@@ -577,7 +568,7 @@ fn compute_pok_sig<
     ar_list: &[ArIdentity],
     ip_pub_key: &ps_sig::PublicKey<P>,
     blinded_sig: &ps_sig::BlindedSignature<P>,
-    blind_rand: Rc<ps_sig::BlindingRandomness<P>>,
+    blind_rand: ps_sig::BlindingRandomness<P>,
 ) -> Fallible<(com_eq_sig::ComEqSig<P, C>, com_eq_sig::ComEqSigSecret<P, C>)> {
     let att_vec = &alist.alist;
     // number of user chosen attributes (+4 is for tags, valid_to, created_at,
@@ -603,54 +594,38 @@ fn compute_pok_sig<
 
     let mut secrets = Vec::with_capacity(num_total_commitments);
     secrets.push((
-        Rc::new(Value {
-            // FIXME: This should not be done! Breaks abstraction barrier.
-            value: id_cred_sec.value,
-        }),
+        id_cred_sec.clone(),
         commitment_rands.id_cred_sec_rand.clone(),
     ));
     gxs.push(y_tildas[0]);
-    let prf_key_scalar = prf_key.0;
-    secrets.push((
-        Rc::new(Value {
-            // FIXME: This should not be done! Breaks abstraction barrier.
-            value: prf_key_scalar,
-        }),
-        commitment_rands.prf_rand.clone(),
-    ));
+    secrets.push((prf_key.to_value(), commitment_rands.prf_rand.clone()));
     gxs.push(y_tildas[1]);
     // commitment randomness (0) for the threshold
-    let zero = Rc::new(PedersenRandomness::zero());
-    secrets.push((
-        Rc::new(Value::new(threshold.to_scalar::<C>())),
-        Rc::clone(&zero),
-    ));
+    let zero = PedersenRandomness::<C>::zero();
+    secrets.push((Value::new(threshold.to_scalar::<C>()), zero.clone()));
     gxs.push(y_tildas[2]);
     for i in 3..num_ars + 3 {
         // all id revoker ids are commited with randomness 0
-        secrets.push((
-            Rc::new(Value::new(ar_list[i - 3].to_scalar::<C>())),
-            Rc::clone(&zero),
-        ));
+        secrets.push((Value::new(ar_list[i - 3].to_scalar::<C>()), zero.clone()));
         gxs.push(y_tildas[i]);
     }
 
     let att_rands = &commitment_rands.attributes_rand;
 
-    let tags_val = Rc::new(Value::new(encode_tags(alist.alist.keys())?));
+    let tags_val = Value::new(encode_tags(alist.alist.keys())?);
     let tags_cmm = commitment_key.hide(&tags_val, &zero);
 
-    let valid_to_val = Rc::new(Value::new(C::scalar_from_u64(alist.valid_to.into())));
+    let valid_to_val = Value::new(C::scalar_from_u64(alist.valid_to.into()));
     let valid_to_cmm = commitment_key.hide(&valid_to_val, &zero);
 
-    let created_at_val = Rc::new(Value::new(C::scalar_from_u64(alist.created_at.into())));
+    let created_at_val = Value::new(C::scalar_from_u64(alist.created_at.into()));
     let created_at_cmm = commitment_key.hide(&created_at_val, &zero);
 
-    let max_accounts_val = Rc::new(Value::new(C::scalar_from_u64(alist.max_accounts.into())));
+    let max_accounts_val = Value::new(C::scalar_from_u64(alist.max_accounts.into()));
     let max_accounts_cmm =
         commitment_key.hide(&max_accounts_val, &commitment_rands.max_accounts_rand);
 
-    secrets.push((tags_val, Rc::clone(&zero)));
+    secrets.push((tags_val, zero.clone()));
     gxs.push(y_tildas[num_ars + 3]);
     secrets.push((valid_to_val, zero.clone()));
     gxs.push(y_tildas[num_ars + 4]);
@@ -669,9 +644,7 @@ fn compute_pok_sig<
     );
     for (&g, (tag, v)) in y_tildas.iter().skip(num_ars + 5 + 1).zip(att_vec.iter()) {
         secrets.push((
-            Rc::new(Value {
-                value: v.to_field_element(),
-            }),
+            Value::new(v.to_field_element()),
             // if we commited with non-zero randomness get it.
             // otherwise we must have commited with zero randomness
             // which we should use
@@ -686,11 +659,11 @@ fn compute_pok_sig<
     comm_vec.push(commitments.cmm_prf);
 
     // add commitment to threshold with randomness 0
-    comm_vec.push(commitment_key.hide(&Value::new(threshold.to_scalar::<C>()), &zero));
+    comm_vec.push(commitment_key.hide(&Value::<C>::new(threshold.to_scalar::<C>()), &zero));
 
     // and all commitments to ARs with randomness 0
     for ar in ar_list.iter() {
-        comm_vec.push(commitment_key.hide(&Value::new(ar.to_scalar::<C>()), &zero));
+        comm_vec.push(commitment_key.hide(&Value::<C>::new(ar.to_scalar::<C>()), &zero));
     }
 
     comm_vec.push(tags_cmm);
@@ -702,7 +675,7 @@ fn compute_pok_sig<
         match commitments.cmm_attributes.get(idx) {
             None => {
                 // need to commit with randomness 0
-                let value = Value::new(v.to_field_element());
+                let value = Value::<C>::new(v.to_field_element());
                 let cmm = commitment_key.hide(&value, &zero);
                 comm_vec.push(cmm);
             }
@@ -726,11 +699,11 @@ fn compute_pok_sig<
 }
 
 pub struct CommitmentsRandomness<C: Curve> {
-    id_cred_sec_rand:  Rc<PedersenRandomness<C>>,
-    prf_rand:          Rc<PedersenRandomness<C>>,
-    cred_counter_rand: Rc<PedersenRandomness<C>>,
-    max_accounts_rand: Rc<PedersenRandomness<C>>,
-    attributes_rand:   HashMap<AttributeTag, Rc<PedersenRandomness<C>>>,
+    id_cred_sec_rand:  PedersenRandomness<C>,
+    prf_rand:          PedersenRandomness<C>,
+    cred_counter_rand: PedersenRandomness<C>,
+    max_accounts_rand: PedersenRandomness<C>,
+    attributes_rand:   HashMap<AttributeTag, PedersenRandomness<C>>,
 }
 
 /// Computing the commitments for the credential deployment info. We only
@@ -744,7 +717,7 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     prf_key: &prf::SecretKey<C>,
     cred_counter: u8,
     cmm_id_cred_sec_sharing_coeff: &[Commitment<C>],
-    cmm_coeff_randomness: Vec<Rc<PedersenRandomness<C>>>,
+    cmm_coeff_randomness: Vec<PedersenRandomness<C>>,
     policy: &Policy<C, AttributeType>,
     csprng: &mut R,
 ) -> Fallible<(CredDeploymentCommitments<C>, CommitmentsRandomness<C>)> {
@@ -754,16 +727,12 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
         bail!("Commitment randomness is an empty vector.");
     };
 
-    let prf::SecretKey(prf_scalar) = prf_key;
-    let (cmm_prf, prf_rand) = commitment_key.commit(Value::view_scalar(prf_scalar), csprng);
+    let (cmm_prf, prf_rand) = commitment_key.commit(&prf_key, csprng);
 
-    let cred_counter_scalar = C::scalar_from_u64(u64::from(cred_counter));
-    let (cmm_cred_counter, cred_counter_rand) =
-        commitment_key.commit(&Value::view_scalar(&cred_counter_scalar), csprng);
-    let (cmm_max_accounts, max_accounts_rand) = commitment_key.commit(
-        &Value::view_scalar(&C::scalar_from_u64(u64::from(alist.max_accounts))),
-        csprng,
-    );
+    let cred_counter = Value::<C>::new(C::scalar_from_u64(u64::from(cred_counter)));
+    let (cmm_cred_counter, cred_counter_rand) = commitment_key.commit(&cred_counter, csprng);
+    let max_accounts = Value::<C>::new(C::scalar_from_u64(u64::from(alist.max_accounts)));
+    let (cmm_max_accounts, max_accounts_rand) = commitment_key.commit(&max_accounts, csprng);
     let att_vec = &alist.alist;
     let n = att_vec.len();
     // only commitments to attributes which are not revealed.
@@ -775,10 +744,10 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
         // in case the value is openened there is no need to hide it.
         // We can just commit with randomness 0.
         if !policy.policy_vec.contains_key(&i) {
-            let value = Value::new(val.to_field_element());
+            let value = Value::<C>::new(val.to_field_element());
             let (cmm, rand) = commitment_key.commit(&value, csprng);
             cmm_attributes.insert(i, cmm);
-            attributes_rand.insert(i, Rc::new(rand));
+            attributes_rand.insert(i, rand);
         }
     }
     let cdc = CredDeploymentCommitments {
@@ -791,9 +760,9 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
 
     let cr = CommitmentsRandomness {
         id_cred_sec_rand,
-        prf_rand: Rc::new(prf_rand),
-        cred_counter_rand: Rc::new(cred_counter_rand),
-        max_accounts_rand: Rc::new(max_accounts_rand),
+        prf_rand,
+        cred_counter_rand,
+        max_accounts_rand,
         attributes_rand,
     };
     Ok((cdc, cr))
@@ -821,7 +790,7 @@ fn compute_pok_reg_id<C: Curve>(
     // NOTE: In order for this to work the reg_id must be computed
     // with the same base as the first element of the commitment key.
     let cmm_one = on_chain_commitment_key.hide(
-        &Value::view_scalar(&C::Scalar::one()),
+        &Value::<C>::new(C::Scalar::one()),
         &PedersenRandomness::zero(),
     );
 
@@ -834,23 +803,24 @@ fn compute_pok_reg_id<C: Curve>(
     // finally the secret keys are derived from actual commited values
     // and the randomness.
 
-    let mut k = prf_key.0;
-    // FIXME: Handle the error case (which cannot happen for the current curve, but
-    // in general ...)
-    k.add_assign(&C::scalar_from_u64(u64::from(cred_counter)));
-    let mut rand_1 = prf_rand.randomness;
+    let mut k = C::scalar_from_u64(u64::from(cred_counter));
+    k.add_assign(&prf_key);
+
+    // combine the two randomness witnesses
+    let mut rand_1 = C::Scalar::zero();
+    rand_1.add_assign(&prf_rand);
     rand_1.add_assign(&cred_counter_rand);
     // reg_id is the commitment to reg_id_exponent with randomness 0
     // the right-hand side of the equation is commitment to 1 with randomness 0
     let values = [
-        Rc::new(Value::new(k)),
-        Rc::new(Value::new(reg_id_exponent)),
-        Rc::new(Value::new(C::Scalar::one())),
+        Value::new(k),
+        Value::new(reg_id_exponent),
+        Value::new(C::Scalar::one()),
     ];
     let rands = [
-        Rc::new(PedersenRandomness { randomness: rand_1 }),
-        Rc::new(PedersenRandomness::zero()),
-        Rc::new(PedersenRandomness::zero()),
+        PedersenRandomness::new(rand_1),
+        PedersenRandomness::zero(),
+        PedersenRandomness::zero(),
     ];
 
     let secret = com_mult::ComMultSecret { values, rands };
@@ -1071,7 +1041,7 @@ mod tests {
         let reg_id = global_ctx
             .on_chain_commitment_key
             .hide(
-                &Value::view_scalar(&reg_id_exponent),
+                &Value::<ExampleCurve>::new(reg_id_exponent),
                 &PedersenRandomness::zero(),
             )
             .0;

@@ -1,7 +1,7 @@
 use clap::{App, AppSettings, Arg};
 
 use client_server_helpers::*;
-use curve_arithmetic::{Curve, Pairing};
+use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
@@ -12,9 +12,7 @@ use crypto_common::*;
 
 use rand::*;
 
-use pedersen_scheme::Value as PedersenValue;
-
-use std::{fs::File, io::Write, path::Path, rc::Rc};
+use std::{fs::File, io::Write, path::Path};
 
 use either::Either::{Left, Right};
 
@@ -42,11 +40,8 @@ fn main() {
 
     let mut csprng = thread_rng();
 
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: Rc::new(PedersenValue::new(secret)),
-        },
+        id_cred: IdCredentials::generate(&mut csprng),
     };
 
     // Load identity provider and anonymity revokers.

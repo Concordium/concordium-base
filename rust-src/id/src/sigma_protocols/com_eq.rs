@@ -17,8 +17,6 @@ use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 
 use crate::sigma_protocols::common::*;
 
-use std::rc::Rc;
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
 pub struct Witness<T: Curve> {
     /// The pair $(s, t)$ where
@@ -48,8 +46,8 @@ pub struct ComEq<C: Curve, D: Curve<Scalar = C::Scalar>> {
 }
 
 pub struct ComEqSecret<C: Curve> {
-    pub r: Rc<Randomness<C>>,
-    pub a: Rc<Value<C>>,
+    pub r: Randomness<C>,
+    pub a: Value<C>,
 }
 
 #[allow(non_snake_case)]
@@ -114,13 +112,11 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
         // FIXME: Could benefit from multiexponentiation
         u = u.plus_point(&self.g.mul_by_scalar(&witness.witness.0));
 
-        let v = self
-            .commitment
-            .mul_by_scalar(challenge)
-            .plus_point(&self.cmm_key.hide(
-                Value::view_scalar(&witness.witness.0),
-                Randomness::view_scalar(&witness.witness.1),
-            ));
+        let v = self.commitment.mul_by_scalar(challenge).plus_point(
+            &self
+                .cmm_key
+                .hide_worker(&witness.witness.0, &witness.witness.1),
+        );
         Some(CommittedPoints {
             u,
             v: Commitment(v),
@@ -146,10 +142,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
             cmm_key: comm_key,
             g,
         };
-        let secret = ComEqSecret {
-            r: Rc::new(randomness),
-            a: Rc::new(a),
-        };
+        let secret = ComEqSecret { r: randomness, a };
         f(com_eq, secret, csprng)
     }
 }
@@ -189,7 +182,7 @@ mod test {
                 let mut wrong_com_eq = com_eq;
                 {
                     let tmp = wrong_com_eq.commitment;
-                    let v = Value::generate(csprng);
+                    let v = Value::<G1>::generate(csprng);
                     wrong_com_eq.commitment = wrong_com_eq.cmm_key.commit(&v, csprng).0;
                     assert!(!verify(ro.split(), &wrong_com_eq, &proof));
                     wrong_com_eq.commitment = tmp;

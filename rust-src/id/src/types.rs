@@ -39,8 +39,6 @@ use std::{
 
 use sha2::{Digest, Sha256};
 
-use std::rc::Rc;
-
 // only for account addresses
 use base58check::*;
 
@@ -532,7 +530,17 @@ pub struct IdCredentials<C: Curve> {
     /// Secret id credentials.
     /// Since the use of this value is quite complex, we allocate
     /// it on the heap and retain a pointer to it for easy sharing.
-    pub id_cred_sec: Rc<PedersenValue<C>>,
+    pub id_cred_sec: PedersenValue<C>,
+}
+
+impl<C: Curve> IdCredentials<C> {
+    /// Use a cryptographically secure random number generator to
+    /// generate a fresh secret credential.
+    pub fn generate<R: rand::Rng>(csprng: &mut R) -> Self {
+        IdCredentials {
+            id_cred_sec: PedersenValue::generate(csprng),
+        }
+    }
 }
 
 /// Private credential holder information. A user maintaints these

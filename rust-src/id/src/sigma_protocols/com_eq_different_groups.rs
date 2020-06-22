@@ -12,13 +12,11 @@ use crypto_common_derive::*;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::RandomOracle;
 
-use std::rc::Rc;
-
 #[derive(Debug)]
 pub struct ComEqDiffGroupsSecret<C1: Curve, C2: Curve<Scalar = C1::Scalar>> {
-    pub value:      Rc<Value<C2>>,
-    pub rand_cmm_1: Rc<Randomness<C1>>,
-    pub rand_cmm_2: Rc<Randomness<C2>>,
+    pub value:      Value<C2>,
+    pub rand_cmm_1: Randomness<C1>,
+    pub rand_cmm_2: Randomness<C2>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Copy, Serialize, SerdeBase16Serialize)]
@@ -67,7 +65,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let alpha_1 = Value::generate_non_zero(csprng);
         let (u, alpha_2) = self.cmm_key_1.commit(&alpha_1, csprng);
-        let (v, cR) = self.cmm_key_2.commit(alpha_1.view(), csprng);
+        let (v, cR) = self.cmm_key_2.commit(&alpha_1, csprng);
         Some(((u, v), (alpha_1, alpha_2, cR)))
     }
 
@@ -134,7 +132,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
         let cmm_key_1: CommitmentKey<C1> = CommitmentKey::generate(csprng);
         let cmm_key_2: CommitmentKey<C2> = CommitmentKey::generate(csprng);
 
-        let (u, a_2) = cmm_key_1.commit((&a_1).view(), csprng);
+        let (u, a_2) = cmm_key_1.commit(&a_1, csprng);
         let (v, r) = cmm_key_2.commit(&a_1, csprng);
         let cdg = ComEqDiffGroups {
             cmm_key_1,
@@ -143,9 +141,9 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
             commitment_2: v,
         };
         let secret = ComEqDiffGroupsSecret {
-            value:      Rc::new(a_1),
-            rand_cmm_1: Rc::new(a_2),
-            rand_cmm_2: Rc::new(r),
+            value:      a_1,
+            rand_cmm_1: a_2,
+            rand_cmm_2: r,
         };
         f(cdg, secret, csprng)
     }
@@ -203,7 +201,7 @@ mod tests {
                     let tmp = wrong_cdg.commitment_1;
                     wrong_cdg.commitment_1 = wrong_cdg
                         .cmm_key_1
-                        .commit(&Value::generate(csprng), csprng)
+                        .commit(&Value::<G1>::generate(csprng), csprng)
                         .0;
                     assert!(!verify(ro.split(), &wrong_cdg, &proof));
                     wrong_cdg.commitment_1 = tmp;
@@ -213,7 +211,7 @@ mod tests {
                     let tmp = wrong_cdg.commitment_2;
                     wrong_cdg.commitment_2 = wrong_cdg
                         .cmm_key_2
-                        .commit(&Value::generate(csprng), csprng)
+                        .commit(&Value::<G2>::generate(csprng), csprng)
                         .0;
                     assert!(!verify(ro.split(), &wrong_cdg, &proof));
                     wrong_cdg.commitment_2 = tmp;

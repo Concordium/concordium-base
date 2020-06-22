@@ -8,7 +8,7 @@ use std::ops::Deref;
 
 /// Randomness used to blind a signature.
 #[derive(Debug, Eq, Serialize)]
-pub struct BlindingRandomness<P: Pairing>(pub P::ScalarField, pub P::ScalarField);
+pub struct BlindingRandomness<P: Pairing>(pub Secret<P::ScalarField>, pub Secret<P::ScalarField>);
 
 /// Manual implementation to relax the requirements on `P`. The derived
 /// instance would have required P to have `PartialEq`.
@@ -68,7 +68,7 @@ impl<C: Pairing> Signature<C> {
         let a_hid = a.mul_by_scalar(&r);
         let b_hid = b.plus_point(&a.mul_by_scalar(&t)).mul_by_scalar(&r);
         let sig = Signature(a_hid, b_hid);
-        let randomness = BlindingRandomness(r, t);
+        let randomness = BlindingRandomness(Secret::new(r), Secret::new(t));
         (BlindedSignature { sig }, randomness)
     }
 }

@@ -9,8 +9,6 @@ use sha2::{Digest, Sha512};
 
 use crypto_common::*;
 
-use std::rc::Rc;
-
 pub const PUBLIC_KEY_SIZE: usize = 96;
 pub const SECRET_KEY_SIZE: usize = 32;
 pub const SIGNATURE_SIZE: usize = 48;
@@ -38,7 +36,7 @@ impl<P: Pairing> SecretKey<P> {
             coeff:  P::G2::one_point(),
         };
         let secret = DlogSecret {
-            secret: Rc::new(Value { value: self.0 }),
+            secret: Value::new(self.0),
         };
         prove(ro, &prover, secret, csprng)
     }

@@ -13,12 +13,10 @@ use pairing::bls12_381::{Bls12, G1};
 
 use rand::*;
 
-use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
+use pedersen_scheme::key as pedersen_key;
 use std::collections::BTreeMap;
 
 use either::Left;
-
-use std::rc::Rc;
 
 use criterion::*;
 
@@ -34,11 +32,8 @@ fn bench_parts(c: &mut Criterion) {
     let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(20, &mut csprng);
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: Rc::new(PedersenValue::new(secret)),
-        },
+        id_cred: IdCredentials::generate(&mut csprng),
     };
 
     let ar_base = ExampleCurve::generate(&mut csprng);

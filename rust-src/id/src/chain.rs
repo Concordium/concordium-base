@@ -387,14 +387,15 @@ fn pok_sig_verifier<
     // compute commitments with randomness 0
     let zero = Randomness::zero();
     // add commitment to threshold with randomness 0
-    comm_vec.push(commitment_key.hide(&Value::new(threshold.to_scalar::<C>()), &zero));
+    comm_vec.push(commitment_key.hide(&Value::<C>::new(threshold.to_scalar::<C>()), &zero));
     // and all commitments to ARs with randomness 0
     for ar in choice_ar_parameters {
-        comm_vec.push(commitment_key.hide(&Value::new(ar.ar_identity.to_scalar::<C>()), &zero));
+        comm_vec
+            .push(commitment_key.hide(&Value::<C>::new(ar.ar_identity.to_scalar::<C>()), &zero));
     }
 
     let tags = {
-        match encode_tags(
+        match encode_tags::<C::Scalar, _>(
             policy
                 .policy_vec
                 .keys()
@@ -406,13 +407,13 @@ fn pok_sig_verifier<
     };
 
     // add commitment with randomness 0 for variant, valid_to and created_at
-    comm_vec.push(commitment_key.hide(&Value::new(tags), &zero));
+    comm_vec.push(commitment_key.hide(&Value::<C>::new(tags), &zero));
     comm_vec.push(commitment_key.hide(
-        &Value::new(C::scalar_from_u64(policy.valid_to.into())),
+        &Value::<C>::new(C::scalar_from_u64(policy.valid_to.into())),
         &zero,
     ));
     comm_vec.push(commitment_key.hide(
-        &Value::new(C::scalar_from_u64(policy.created_at.into())),
+        &Value::<C>::new(C::scalar_from_u64(policy.created_at.into())),
         &zero,
     ));
     comm_vec.push(commitments.cmm_max_accounts);
@@ -425,7 +426,7 @@ fn pok_sig_verifier<
 
     let f = |v: Either<&AttributeType, &Commitment<_>>| match v {
         Either::Left(v) => {
-            let value = Value::new(v.to_field_element());
+            let value = Value::<C>::new(v.to_field_element());
             comm_vec.push(commitment_key.hide(&value, &zero));
         }
         Either::Right(v) => {

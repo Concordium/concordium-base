@@ -4,7 +4,7 @@ mod curve_arithmetic;
 pub use crate::curve_arithmetic::*;
 
 pub mod secret_value;
-pub use secret_value::Value;
+pub use secret_value::{Secret, Value};
 
 #[macro_use]
 extern crate crypto_common_derive;

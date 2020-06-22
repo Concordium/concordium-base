@@ -15,7 +15,7 @@ use pairing::bls12_381::Bls12;
 
 use rand::*;
 
-use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
+use pedersen_scheme::CommitmentKey;
 
 use std::{
     cmp::max,
@@ -23,7 +23,6 @@ use std::{
     fs::File,
     io::{self, Write},
     path::Path,
-    rc::Rc,
 };
 
 use either::Either::Left;
@@ -464,11 +463,8 @@ fn handle_deploy_credential(matches: &ArgMatches) {
 /// Create a new CHI object (essentially new idCredPub and idCredSec).
 fn handle_create_chi(matches: &ArgMatches) {
     let mut csprng = thread_rng();
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: Rc::new(PedersenValue { value: secret }),
-        },
+        id_cred: IdCredentials::generate(&mut csprng),
     };
 
     if let Some(filepath) = matches.value_of("out") {

@@ -4,7 +4,6 @@ extern crate failure;
 extern crate serde_json;
 
 use crypto_common::{base16_decode_string, base16_encode_string, c_char, Put};
-use curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
@@ -15,7 +14,6 @@ use id::{
     types::*,
 };
 use pairing::bls12_381::{Bls12, G1};
-use pedersen_scheme::Value as PedersenValue;
 use std::{cmp::max, collections::BTreeMap};
 
 use std::ffi::{CStr, CString};
@@ -25,8 +23,6 @@ use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Value};
 
 use sha2::{Digest, Sha256};
-
-use std::rc::Rc;
 
 type ExampleCurve = G1;
 
@@ -159,11 +155,8 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
     let chi = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: Rc::new(PedersenValue { value: secret }),
-        },
+        id_cred: IdCredentials::generate(&mut csprng),
     };
 
     let aci = AccCredentialInfo {

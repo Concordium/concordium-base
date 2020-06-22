@@ -8,7 +8,7 @@ use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::bls12_381::{Bls12, G1};
-use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
+use pedersen_scheme::key as pedersen_key;
 use rand::*;
 use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
@@ -102,11 +102,8 @@ pub fn test_create_ip_info<T: Rng>(
 
 /// Create random AccCredentialInfo (ACI) to be used by tests
 pub fn test_create_aci<T: Rng>(csprng: &mut T) -> AccCredentialInfo<ExampleCurve> {
-    let secret = ExampleCurve::generate_scalar(csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: std::rc::Rc::new(PedersenValue::new(secret)),
-        },
+        id_cred: IdCredentials::generate(csprng),
     };
 
     let prf_key = prf::SecretKey::generate(csprng);

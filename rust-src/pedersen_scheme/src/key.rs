@@ -15,21 +15,31 @@ pub struct CommitmentKey<C: Curve>(pub C, pub C);
 impl<C: Curve> CommitmentKey<C> {
     pub fn new(v: C, r: C) -> Self { CommitmentKey(v, r) }
 
-    pub fn commit<T>(&self, s: &Value<C>, csprng: &mut T) -> (Commitment<C>, Randomness<C>)
+    pub fn commit<T, V: AsRef<C::Scalar>>(
+        &self,
+        s: &V,
+        csprng: &mut T,
+    ) -> (Commitment<C>, Randomness<C>)
     where
         T: Rng, {
         let r = Randomness::<C>::generate(csprng);
         (self.hide(s, &r), r)
     }
 
-    pub fn hide(&self, s: &Value<C>, r: &Randomness<C>) -> Commitment<C> {
+    /// The low-level worker function that actually does the commitment.
+    /// The interface is not very type-safe, hence the availability of other
+    /// functions.
+    pub fn hide_worker(&self, value: &C::Scalar, randomness: &C::Scalar) -> Commitment<C> {
         let h = self.1;
         let g = self.0;
-        let message = s.value;
-        let r_scalar = r.randomness;
-        let hr = h.mul_by_scalar(&r_scalar);
-        let gm = g.mul_by_scalar(&message);
+        let hr = h.mul_by_scalar(randomness);
+        let gm = g.mul_by_scalar(value);
         Commitment(hr.plus_point(&gm))
+    }
+
+    #[inline(always)]
+    pub fn hide<V: AsRef<C::Scalar>>(&self, s: &V, r: &Randomness<C>) -> Commitment<C> {
+        self.hide_worker(s.as_ref(), r.as_ref())
     }
 
     pub fn open(&self, s: &Value<C>, r: &Randomness<C>, c: &Commitment<C>) -> bool {

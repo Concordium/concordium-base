@@ -7,6 +7,8 @@ use curve_arithmetic::*;
 use rand::*;
 use std::ops::Deref;
 
+use std::rc::Rc;
+
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize, SerdeBase16Serialize)]
 /// Encrypted message.
 pub struct Cipher<C: Curve>(pub C, pub C);
@@ -15,7 +17,7 @@ pub struct Cipher<C: Curve>(pub C, pub C);
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[repr(transparent)]
 pub struct Randomness<C: Curve> {
-    pub randomness: C::Scalar,
+    pub randomness: Rc<Secret<C::Scalar>>,
 }
 
 /// This trait allows automatic conversion of &Randomness<C> to &C::Scalar.
@@ -26,13 +28,17 @@ impl<C: Curve> Deref for Randomness<C> {
 }
 
 impl<C: Curve> Randomness<C> {
+    pub fn new(v: C::Scalar) -> Self {
+        Randomness {
+            randomness: Rc::new(Secret::new(v)),
+        }
+    }
+
     /// Generate a non-zero randomness. Used in encryption.
     pub fn generate<T>(csprng: &mut T) -> Self
     where
         T: Rng, {
-        Randomness {
-            randomness: C::generate_non_zero_scalar(csprng),
-        }
+        Randomness::new(C::generate_non_zero_scalar(csprng))
     }
 }
 
