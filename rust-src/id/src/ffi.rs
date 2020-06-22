@@ -273,7 +273,7 @@ mod test {
     use ed25519_dalek as ed25519;
     use either::Either::Left;
     use pairing::bls12_381::Bls12;
-    use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
+    use pedersen_scheme::key as pedersen_key;
     use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
     type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
@@ -282,11 +282,8 @@ mod test {
     fn test_pipeline() {
         let mut csprng = thread_rng();
 
-        let secret = PedersenValue::generate(&mut csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
-            id_cred: IdCredentials {
-                id_cred_sec: std::rc::Rc::new(secret),
-            },
+            id_cred: IdCredentials::generate(&mut csprng),
         };
 
         // Create IP

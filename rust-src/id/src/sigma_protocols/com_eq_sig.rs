@@ -14,8 +14,6 @@ use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use ps_sig::{BlindedSignature, BlindingRandomness, PublicKey as PsSigPublicKey};
 use random_oracle::RandomOracle;
 
-use std::rc::Rc;
-
 #[derive(Clone, Debug, Serialize)]
 pub struct Witness<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// The witness that the prover knows $r'$ (see specification)
@@ -39,10 +37,10 @@ pub struct ComEqSig<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub comm_key: CommitmentKey<C>,
 }
 
-pub type ValuesAndRands<C> = (Rc<Value<C>>, Rc<Randomness<C>>);
+pub type ValuesAndRands<C> = (Value<C>, Randomness<C>);
 
 pub struct ComEqSigSecret<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    pub blind_rand:       Rc<BlindingRandomness<P>>,
+    pub blind_rand:       BlindingRandomness<P>,
     pub values_and_rands: Vec<ValuesAndRands<C>>,
 }
 
@@ -202,9 +200,9 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
             izip!(commitments.iter(), cY_tildas, witness.witness_commit.iter())
         {
             // compute C_i^c * g^mu_i h^R_i
-            let cP = cC_i.mul_by_scalar(challenge).plus_point(
-                &cmm_key.hide(Value::view_scalar(wit_m), Randomness::view_scalar(wit_r)),
-            );
+            let cP = cC_i
+                .mul_by_scalar(challenge)
+                .plus_point(&cmm_key.hide_worker(wit_m, wit_r));
             cmms.push(Commitment(cP));
 
             point = point.plus_point(&cY_tilda.mul_by_scalar(&wit_m));
@@ -238,20 +236,20 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
         let mut secrets = Vec::with_capacity(data_size);
         // commitment to the signer.
         // the randomness used to mask the actual values.
-        let mask = P::generate_non_zero_scalar(csprng);
+        let mask = SigRetrievalRandomness::generate_non_zero(csprng);
         let mut comm_to_signer: P::G1 = ps_pk.g.mul_by_scalar(&mask);
         let mut commitments = Vec::with_capacity(data_size);
         for cY_j in ps_pk.ys.iter().take(csprng.gen_range(0, data_size)) {
             let v_j = Value::generate(csprng);
             let (c_j, r_j) = cmm_key.commit(&v_j, csprng);
             comm_to_signer = comm_to_signer.plus_point(&cY_j.mul_by_scalar(&v_j));
-            secrets.push((Rc::new(v_j), Rc::new(r_j)));
+            secrets.push((v_j, r_j));
             commitments.push(c_j);
         }
         let unknown_message = UnknownMessage(comm_to_signer);
         let sig = ps_sk
             .sign_unknown_message(&unknown_message, csprng)
-            .retrieve(&SigRetrievalRandomness::<P> { randomness: mask });
+            .retrieve(&mask);
         let (blinded_sig, blind_rand) = sig.blind(csprng);
         let ces = ComEqSig {
             commitments,
@@ -261,7 +259,7 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
         };
 
         let secret = ComEqSigSecret {
-            blind_rand:       Rc::new(blind_rand),
+            blind_rand,
             values_and_rands: secrets,
         };
         f(ces, secret, csprng)
@@ -323,7 +321,7 @@ mod tests {
                         let tmp = wrong_ces.commitments[idx];
                         wrong_ces.commitments[idx] = wrong_ces
                             .comm_key
-                            .commit(&Value::generate(csprng), csprng)
+                            .commit(&Value::<G1>::generate(csprng), csprng)
                             .0;
                         assert!(!verify(ro.split(), &wrong_ces, &proof));
                         wrong_ces.commitments[idx] = tmp;

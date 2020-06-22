@@ -5,6 +5,8 @@ use pedersen_scheme::Commitment;
 use rand::*;
 use std::ops::Deref;
 
+use std::rc::Rc;
+
 #[derive(Debug, Serialize)]
 pub struct UnknownMessage<C: Pairing>(pub C::G1);
 
@@ -30,13 +32,33 @@ impl<P: Pairing> From<Commitment<P::G1>> for UnknownMessage<P> {
 #[derive(Debug, Serialize)]
 #[repr(transparent)]
 pub struct SigRetrievalRandomness<P: Pairing> {
-    pub randomness: P::ScalarField,
+    pub randomness: Rc<Secret<P::ScalarField>>,
 }
 
-impl<P: Pairing> Deref for SigRetrievalRandomness<P> {
-    type Target = P::ScalarField;
+/// This trait allows automatic conversion of &SigRetrievalRandomness<C> to
+/// &C::Scalar.
+impl<C: Pairing> std::ops::Deref for SigRetrievalRandomness<C> {
+    type Target = C::ScalarField;
 
-    fn deref(&self) -> &P::ScalarField { &self.randomness }
+    fn deref(&self) -> &C::ScalarField { &self.randomness }
+}
+
+impl<C: Pairing> AsRef<C::ScalarField> for SigRetrievalRandomness<C> {
+    fn as_ref(&self) -> &C::ScalarField { &self.randomness }
+}
+
+impl<C: Pairing> SigRetrievalRandomness<C> {
+    pub fn new(secret: C::ScalarField) -> Self {
+        SigRetrievalRandomness {
+            randomness: Rc::new(Secret::new(secret)),
+        }
+    }
+
+    /// Generate a non-zero SigRetrievalRandomness `SigRetrievalRandomness` from
+    /// a `csprng`.
+    pub fn generate_non_zero<T: Rng>(csprng: &mut T) -> SigRetrievalRandomness<C> {
+        SigRetrievalRandomness::new(C::generate_non_zero_scalar(csprng))
+    }
 }
 
 impl<C: Pairing> UnknownMessage<C> {

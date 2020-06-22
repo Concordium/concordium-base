@@ -3,13 +3,13 @@ use rand::*;
 use rayon::prelude::*;
 
 use crypto_common::*;
-use curve_arithmetic::Curve;
+use curve_arithmetic::{Curve, Value};
 
 use std::io::Cursor;
 
 // FIXME: This is a bad implementation. There is no need to involve
 // serialization. endianness sensetive
-pub fn value_to_chunks<C: Curve>(val: &C::Scalar, chunk_size: usize) -> Vec<C::Scalar> {
+pub fn value_to_chunks<C: Curve>(val: &C::Scalar, chunk_size: usize) -> Vec<Value<C>> {
     assert!(chunk_size <= C::SCALAR_LENGTH);
     assert_eq!(C::SCALAR_LENGTH % chunk_size, 0);
     let n = C::SCALAR_LENGTH / chunk_size;
@@ -19,14 +19,15 @@ pub fn value_to_chunks<C: Curve>(val: &C::Scalar, chunk_size: usize) -> Vec<C::S
         let mut buf = vec![0u8; C::SCALAR_LENGTH - chunk_size];
         buf.extend_from_slice(&scalar_bytes[i..(i + chunk_size)]);
         let scalar = (&mut Cursor::new(&mut buf)).get().unwrap();
-        scalar_chunks.push(scalar);
+        scalar_chunks.push(Value::new(scalar));
     }
     scalar_chunks
 }
 
 // FIXME: This is a bad implementation. There is no need to involve
 // serialization.
-pub fn chunks_to_value<C: Curve>(chunks: Vec<C::Scalar>) -> C::Scalar {
+// There is also no need to pass in a vector.
+pub fn chunks_to_value<C: Curve>(chunks: Vec<Value<C>>) -> Value<C> {
     let number_of_chunks = chunks.len();
     assert!(number_of_chunks <= C::SCALAR_LENGTH);
     assert_eq!(C::SCALAR_LENGTH % number_of_chunks, 0);
@@ -41,12 +42,12 @@ pub fn chunks_to_value<C: Curve>(chunks: Vec<C::Scalar>) -> C::Scalar {
         );
         scalar_bytes.extend_from_slice(&chunk_bytes[C::SCALAR_LENGTH - chunk_size..]);
     }
-    (&mut Cursor::new(&mut scalar_bytes)).get().unwrap()
+    Value::new((&mut Cursor::new(&mut scalar_bytes)).get().unwrap())
 }
 
 pub fn encrypt_in_chunks<C: Curve, R: Rng>(
     pk: &PublicKey<C>,
-    val: &C::Scalar,
+    val: &Value<C>,
     chunk_size: usize,
     csprng: &mut R,
 ) -> Vec<Cipher<C>> {
@@ -54,8 +55,8 @@ pub fn encrypt_in_chunks<C: Curve, R: Rng>(
     pk.encrypt_exponent_vec(csprng, &chunks.as_slice())
 }
 
-pub fn decrypt_from_chunks<C: Curve>(sk: &SecretKey<C>, cipher: &[Cipher<C>]) -> C::Scalar {
-    let scalars = cipher.into_par_iter().map(|c| sk.decrypt_exponent(c));
+pub fn decrypt_from_chunks<C: Curve>(sk: &SecretKey<C>, cipher: &[Cipher<C>]) -> Value<C> {
+    let scalars = cipher.iter().map(|c| sk.decrypt_exponent(c));
     chunks_to_value::<C>(scalars.collect())
 }
 
@@ -141,12 +142,14 @@ mod tests {
                 for _i in 1..10 {
                     let n = csprng.gen_range(0, 1000);
                     let mut e = <$curve_type as Curve>::Scalar::zero();
-                    let one_scalar = <$curve_type as Curve>::Scalar::one();
+                    let one_scalar =
+                        Value::<$curve_type>::new(<$curve_type as Curve>::Scalar::one());
                     for _ in 0..n {
                         e.add_assign(&one_scalar);
                     }
-                    let c = pk.encrypt_exponent(&mut csprng, &e);
+                    let c = pk.encrypt_exponent(&mut csprng, &Value::new(e));
                     let e2 = sk.decrypt_exponent(&c);
+                    let e = Value::new(e);
                     assert_eq!(e, e2);
                 }
             }
@@ -185,7 +188,7 @@ mod tests {
                 // let possible_chunk_sizes = [32];
 
                 for _i in 1..10 {
-                    let scalar = <$curve_type>::generate_scalar(&mut csprng);
+                    let scalar = Value::<$curve_type>::generate(&mut csprng);
                     let chunk_size_index: usize = csprng.gen_range(0, possible_chunk_sizes.len());
                     let chunk_size = possible_chunk_sizes[chunk_size_index];
                     let chunks = value_to_chunks::<$curve_type>(&scalar, chunk_size);
@@ -213,7 +216,7 @@ mod tests {
                 let possible_chunk_sizes = [2];
 
                 for _i in 1..2 {
-                    let scalar = <$curve_type>::generate_scalar(&mut csprng);
+                    let scalar = Value::<$curve_type>::generate(&mut csprng);
                     let chunk_size_index: usize = csprng.gen_range(0, possible_chunk_sizes.len());
                     let chunk_size = possible_chunk_sizes[chunk_size_index];
                     let cipher = encrypt_in_chunks::<$curve_type, ThreadRng>(

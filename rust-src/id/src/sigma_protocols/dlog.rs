@@ -10,8 +10,6 @@ use crate::sigma_protocols::common::*;
 use crypto_common::*;
 use crypto_common_derive::*;
 
-use std::rc::Rc;
-
 pub struct Dlog<C: Curve> {
     /// Evaluated point.
     pub public: C,
@@ -20,7 +18,7 @@ pub struct Dlog<C: Curve> {
 }
 
 pub struct DlogSecret<C: Curve> {
-    pub secret: Rc<Value<C>>,
+    pub secret: Value<C>,
 }
 
 /// Dlog witness. We deliberately make it opaque.
@@ -89,7 +87,7 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
         csprng: &mut R,
         f: impl FnOnce(Dlog<C>, Self::SecretData, &mut R) -> (),
     ) {
-        let secret = Rc::new(Value::generate(csprng));
+        let secret = Value::generate(csprng);
         let base = C::generate(csprng);
         let public = base.mul_by_scalar(&secret);
         let dlog = Dlog {

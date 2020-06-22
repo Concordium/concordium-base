@@ -1,7 +1,7 @@
 use clap::{App, AppSettings, Arg, SubCommand};
 
 use client_server_helpers::*;
-use curve_arithmetic::{Curve, Pairing};
+use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
@@ -10,11 +10,9 @@ use std::collections::btree_map::BTreeMap;
 
 use rand::{rngs::ThreadRng, *};
 
-use pedersen_scheme::Value as PedersenValue;
-
 use crypto_common::base16_encode_string;
 use serde_json::json;
-use std::{path::Path, rc::Rc};
+use std::path::Path;
 
 use ec_vrf_ed25519 as vrf;
 
@@ -166,11 +164,8 @@ fn main() {
 
     // Roughly one year
     let generate_account = |csprng: &mut ThreadRng| {
-        let secret = ExampleCurve::generate_scalar(csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
-            id_cred: IdCredentials {
-                id_cred_sec: Rc::new(PedersenValue::new(secret)),
-            },
+            id_cred: IdCredentials::generate(csprng),
         };
 
         // Choose prf key.

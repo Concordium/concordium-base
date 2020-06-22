@@ -15,13 +15,11 @@ use elgamal::{
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness as PedersenRandomness, Value};
 use random_oracle::RandomOracle;
 
-use std::rc::Rc;
-
 #[derive(Debug)]
 pub struct ComEncEqSecret<T: Curve> {
-    pub value:         Rc<Value<T>>,
-    pub elgamal_rand:  Rc<ElgamalRandomness<T>>,
-    pub pedersen_rand: Rc<PedersenRandomness<T>>,
+    pub value:         Value<T>,
+    pub elgamal_rand:  ElgamalRandomness<T>,
+    pub pedersen_rand: PedersenRandomness<T>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
@@ -77,7 +75,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let beta = Value::generate_non_zero(csprng);
-        let (rand_cipher, alpha) = self.pub_key.encrypt_exponent_rand(csprng, &beta.value);
+        let (rand_cipher, alpha) = self.pub_key.encrypt_exponent_rand(csprng, &beta);
         let (rand_cmm, gamma) = self.cmm_key.commit(&beta, csprng);
         Some(((rand_cipher, rand_cmm), (beta, alpha, gamma)))
     }
@@ -156,13 +154,13 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         let public_key = ElGamalPublicKey::from(&sk);
         let comm_key = CommitmentKey::generate(csprng);
 
-        let x = Rc::new(Value::generate_non_zero(csprng));
-        let (cipher, elgamal_randomness) = public_key.encrypt_exponent_rand(csprng, &x.value);
+        let x = Value::generate_non_zero(csprng);
+        let (cipher, elgamal_randomness) = public_key.encrypt_exponent_rand(csprng, &x);
         let (commitment, randomness) = comm_key.commit(&x, csprng);
         let secret = ComEncEqSecret {
             value:         x,
-            elgamal_rand:  Rc::new(elgamal_randomness),
-            pedersen_rand: Rc::new(randomness),
+            elgamal_rand:  elgamal_randomness,
+            pedersen_rand: randomness,
         };
         let com_enc_eq = ComEncEq {
             cipher,
@@ -220,7 +218,7 @@ mod tests {
 
                 {
                     let tmp = wrong_com_enc_eq.commitment;
-                    let v = Value::generate(csprng);
+                    let v = Value::<G1>::generate(csprng);
                     wrong_com_enc_eq.commitment = wrong_com_enc_eq.cmm_key.commit(&v, csprng).0;
                     assert!(!verify(ro.split(), &wrong_com_enc_eq, &proof));
                     wrong_com_enc_eq.commitment = tmp;

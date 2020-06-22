@@ -10,12 +10,9 @@ use crypto_common::*;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::{Challenge, RandomOracle};
 
-use std::rc::Rc;
-
-#[derive(Clone)]
 pub struct ComMultSecret<T: Curve> {
-    pub values: [Rc<Value<T>>; 3],
-    pub rands:  [Rc<Randomness<T>>; 3],
+    pub values: [Value<T>; 3],
+    pub rands:  [Randomness<T>; 3],
 }
 
 /// The ComMult sigma proof instance.
@@ -100,7 +97,8 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         }
 
         // compute r_3 - r_1a_2
-        let mut r = secret.rands[0].randomness; // r_1
+        let mut r = C::Scalar::one();
+        r.mul_assign(&secret.rands[0]); // r_1
         r.mul_assign(&secret.values[1]); // r_1 * a_2
         r.negate();
         r.add_assign(&secret.rands[2]);
@@ -122,11 +120,9 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         let mut points = [Commitment(C::zero_point()); 3];
         for (i, (s_i, t_i)) in izip!(witness.ss.iter(), witness.ts.iter()).enumerate() {
             points[i] = Commitment(
-                self.cmms[i].mul_by_scalar(challenge).plus_point(
-                    &self
-                        .cmm_key
-                        .hide(Value::view_scalar(s_i), Randomness::view_scalar(t_i)),
-                ),
+                self.cmms[i]
+                    .mul_by_scalar(challenge)
+                    .plus_point(&self.cmm_key.hide_worker(s_i, t_i)),
             );
         }
         let h = &self.cmm_key.1;
@@ -149,9 +145,9 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         let cmm_key = CommitmentKey::generate(csprng);
         let a_1 = Value::<C>::generate_non_zero(csprng);
         let a_2 = Value::<C>::generate_non_zero(csprng);
-        let mut a_3 = a_1.value;
+        let mut a_3 = C::Scalar::one();
+        a_3.mul_assign(&a_1);
         a_3.mul_assign(&a_2);
-
         let a_3 = Value::new(a_3);
 
         let (cmm_1, r_1) = cmm_key.commit(&a_1, csprng);
@@ -159,8 +155,8 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         let (cmm_3, r_3) = cmm_key.commit(&a_3, csprng);
 
         let secret = ComMultSecret {
-            values: [Rc::new(a_1), Rc::new(a_2), Rc::new(a_3)],
-            rands:  [Rc::new(r_1), Rc::new(r_2), Rc::new(r_3)],
+            values: [a_1, a_2, a_3],
+            rands:  [r_1, r_2, r_3],
         };
 
         let com_mult = ComMult {
@@ -210,10 +206,8 @@ mod tests {
                 let mut wrong_cmm = com_mult;
                 for i in 0..3 {
                     let tmp = wrong_cmm.cmms[i];
-                    wrong_cmm.cmms[i] = wrong_cmm
-                        .cmm_key
-                        .commit(&pedersen_scheme::Value::generate(csprng), csprng)
-                        .0;
+                    let v = pedersen_scheme::Value::<G1>::generate(csprng);
+                    wrong_cmm.cmms[i] = wrong_cmm.cmm_key.commit(&v, csprng).0;
                     assert!(!verify(ro.split(), &wrong_cmm, &proof));
                     wrong_cmm.cmms[i] = tmp;
                 }

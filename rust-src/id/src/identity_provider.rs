@@ -318,16 +318,16 @@ mod tests {
     use crate::test::*;
 
     use pairing::bls12_381::G1;
-    use pedersen_scheme::{key::CommitmentKey, Randomness, Value as PedersenValue};
+    use pedersen_scheme::{key::CommitmentKey, Value as PedersenValue};
 
     type ExampleCurve = G1;
 
     // Eval a polynomial at point.
-    fn eval_poly<F: Field>(coeffs: &[F], x: &F) -> F {
+    fn eval_poly<F: Field, X: AsRef<F>>(coeffs: &[X], x: &F) -> F {
         let mut acc = F::zero();
         for coeff in coeffs.iter().rev() {
             acc.mul_assign(x);
-            acc.add_assign(coeff);
+            acc.add_assign(coeff.as_ref());
         }
         acc
     }
@@ -345,12 +345,11 @@ mod tests {
         let mut values = Vec::new();
         for _i in 0..=d {
             // Make commitments to coefficients
-            let a = G1::generate_scalar(&mut csprng);
-            let v = PedersenValue::from_scalar(a);
+            let v = PedersenValue::<G1>::generate(&mut csprng);
             let (c, r) = ck.commit(&v, &mut csprng);
             coeffs.push(c);
-            rands.push(r.randomness);
-            values.push(a);
+            rands.push(r);
+            values.push(v);
         }
 
         // Sample some random share numbers
@@ -362,13 +361,7 @@ mod tests {
             let rv = eval_poly(&rands, &point);
 
             let p0 = commitment_to_share(sh, &coeffs);
-            assert_eq!(
-                p0,
-                ck.hide(
-                    PedersenValue::view_scalar(&pv),
-                    Randomness::view_scalar(&rv)
-                )
-            );
+            assert_eq!(p0, ck.hide_worker(&pv, &rv));
         }
     }
 
@@ -465,9 +458,8 @@ mod tests {
 
         // Act (make cmm_sc be comm. of id_cred_sec but with wrong/fresh randomness)
         let sc_ck = CommitmentKey(ctx.ip_info.ip_verify_key.ys[0], ctx.ip_info.ip_verify_key.g);
-        let id_cred_sec = aci.cred_holder_info.id_cred.id_cred_sec.value;
-        let val = curve_arithmetic::secret_value::Value::from_scalar(id_cred_sec);
-        let (cmm_sc, _) = sc_ck.commit(&val, &mut csprng);
+        let id_cred_sec = aci.cred_holder_info.id_cred.id_cred_sec;
+        let (cmm_sc, _) = sc_ck.commit(&id_cred_sec, &mut csprng);
         pio.cmm_sc = cmm_sc;
         let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
 
@@ -500,7 +492,7 @@ mod tests {
 
         // Act (make cmm_prf be a commitment to a wrong/random value)
         let ck = ip_info.ip_ars.ar_cmm_key;
-        let val = curve_arithmetic::secret_value::Value::generate(&mut csprng);
+        let val = curve_arithmetic::Value::<G1>::generate(&mut csprng);
         let (cmm_prf, _) = ck.commit(&val, &mut csprng);
         pio.cmm_prf = cmm_prf;
         let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
