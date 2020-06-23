@@ -4,8 +4,6 @@ use rand::*;
 
 use crypto_common::*;
 
-use std::ops::Deref;
-
 /// Randomness used to blind a signature.
 #[derive(Debug, Eq, Serialize)]
 pub struct BlindingRandomness<P: Pairing>(pub Secret<P::ScalarField>, pub Secret<P::ScalarField>);
@@ -21,15 +19,6 @@ impl<P: Pairing> PartialEq for BlindingRandomness<P> {
 /// Type wrapper around a signature, indicating that it is a blinded variant.
 pub struct BlindedSignature<P: Pairing> {
     pub sig: Signature<P>,
-}
-
-/// This trait allows automatic conversion of &BlindedSignature<P> to
-/// &Signature<P>.
-/// FIXME: Why is this function needed? It seems dangerous.
-impl<P: Pairing> Deref for BlindedSignature<P> {
-    type Target = Signature<P>;
-
-    fn deref(&self) -> &Signature<P> { &self.sig }
 }
 
 /// A signature
