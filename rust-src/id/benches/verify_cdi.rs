@@ -162,7 +162,7 @@ fn bench_parts(c: &mut Criterion) {
         &id_object,
         &id_use_data,
         0,
-        &policy,
+        policy,
         &acc_data,
     )
     .expect("Should generate the credential successfully.");
@@ -207,7 +207,7 @@ fn bench_parts(c: &mut Criterion) {
             &id_object,
             &id_use_data,
             0,
-            &policy,
+            policy,
             &acc_data,
         ),
         bench_create_credential,

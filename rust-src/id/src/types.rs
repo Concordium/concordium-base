@@ -966,9 +966,9 @@ pub struct PolicyProof<C: Curve> {
     /// Randomness to open the expiry commitment.
     pub expiry_rand: PedersenRandomness<C>,
     /// The u16 is the index of the attribute
-    /// The Scalar is the witness (technically the randomness in the commitment)
-    /// i.e. to open.
-    pub cmm_opening_map: Vec<(u16, PedersenRandomness<C>)>,
+    /// The Scalar is the witness (technically the randomness in the
+    /// commitment).
+    pub cmm_opening_map: Vec<(AttributeTag, PedersenRandomness<C>)>,
 }
 
 #[derive(Debug, Eq)]

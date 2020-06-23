@@ -1,5 +1,5 @@
 use crate::curve_arithmetic::CurveDecodingError;
-use byteorder::{BigEndian, ReadBytesExt}; // TODO: maybe delete
+use byteorder::{BigEndian, ReadBytesExt};
 use ff::{Field, PrimeField};
 use group::{CurveProjective, EncodedPoint};
 use pairing::bls12_381::{Fq, FqRepr, G1Uncompressed, G1};

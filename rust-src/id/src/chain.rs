@@ -522,7 +522,7 @@ mod tests {
             &id_object,
             &id_use_data,
             0,
-            &policy,
+            policy,
             &acc_data,
         )
         .expect("Should generate the credential successfully.");
