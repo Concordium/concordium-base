@@ -410,7 +410,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         &id_object,
         &id_use_data,
         x,
-        &policy,
+        policy,
         &acc_data,
     );
 

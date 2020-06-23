@@ -90,7 +90,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
     let secret = (secret, com_eq::ComEqSecret::<P::G1> {
         r: cmm_sc_rand.clone(),
-        // FIXME: This should be refactored so that we don't have to break abstraction.
         a: id_cred_sec.view(),
     });
 
@@ -322,7 +321,7 @@ pub fn create_credential<
     id_object: &IdentityObject<P, C, AttributeType>,
     id_object_use_data: &IdObjectUseData<P, C>,
     cred_counter: u8,
-    policy: &Policy<C, AttributeType>,
+    policy: Policy<C, AttributeType>,
     acc_data: &AccountData,
 ) -> Fallible<CredDeploymentInfo<P, C, AttributeType>>
 where
@@ -418,13 +417,12 @@ where
     };
 
     // We have all the values now.
-    // FIXME: With more uniform infrastructure we can avoid all the cloning here.
     let cred_values = CredentialDeploymentValues {
         reg_id,
         threshold: prio.choice_ar_parameters.threshold,
         ar_data,
         ip_identity: ip_info.ip_identity,
-        policy: policy.clone(),
+        policy,
         cred_account,
     };
 
@@ -584,6 +582,11 @@ fn compute_pok_sig<
     let y_tildas = &ip_pub_key.y_tildas;
 
     ensure!(
+        y_tildas.len() > att_vec.len() + num_ars + 5,
+        "The PS key must be long enough to accommodate all the attributes"
+    );
+
+    ensure!(
         y_tildas.len() >= num_total_attributes,
         "Too many attributes {} >= {}",
         y_tildas.len(),
@@ -634,14 +637,8 @@ fn compute_pok_sig<
     secrets.push((max_accounts_val, commitment_rands.max_accounts_rand.clone()));
     gxs.push(y_tildas[num_ars + 6]);
 
-    // FIXME: Likely we need to make sure there are enough y_tildas first and fail
-    // gracefully otherwise.
     // NB: It is crucial here that we use a btreemap. This guarantees that
     // the att_vec.iter() iterator is ordered by keys.
-    ensure!(
-        y_tildas.len() > att_vec.len() + num_ars + 5,
-        "The PS key must be long enough to accommodate all the attributes"
-    );
     for (&g, (tag, v)) in y_tildas.iter().skip(num_ars + 5 + 1).zip(att_vec.iter()) {
         secrets.push((
             Value::new(v.to_field_element()),
@@ -688,7 +685,6 @@ fn compute_pok_sig<
         values_and_rands: secrets,
     };
     let prover = com_eq_sig::ComEqSig {
-        // FIXME: Figure out how to get rid of the clone.
         blinded_sig: blinded_sig.clone(),
         commitments: comm_vec,
         // FIXME: Figure out how to get rid of the clone
@@ -1024,7 +1020,7 @@ mod tests {
             &id_object,
             &id_use_data,
             cred_ctr,
-            &policy,
+            policy.clone(),
             &acc_data,
         )
         .expect("Could not generate CDI");

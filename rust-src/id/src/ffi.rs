@@ -387,7 +387,7 @@ mod test {
             &id_object,
             &id_use_data,
             0,
-            &policy,
+            policy,
             &acc_data,
         )
         .expect("Should generate the credential successfully.");
@@ -398,7 +398,7 @@ mod test {
             &id_object,
             &id_use_data,
             0,
-            &wrong_policy,
+            wrong_policy,
             &acc_data,
         )
         .expect("Should generate the credential successfully.");

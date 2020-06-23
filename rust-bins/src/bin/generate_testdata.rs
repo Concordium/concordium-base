@@ -148,7 +148,7 @@ fn main() {
             &id_object,
             &id_object_use_data,
             53,
-            &policy,
+            policy.clone(),
             &acc_data,
         )
         .expect("We should have generated valid data.");
@@ -166,7 +166,7 @@ fn main() {
             &id_object,
             &id_object_use_data,
             53,
-            &policy,
+            policy.clone(),
             &acc_data_2,
         )
         .expect("We should have generated valid data.");
@@ -269,7 +269,7 @@ fn main() {
             &id_object,
             &id_object_use_data,
             acc_num,
-            &policy,
+            policy.clone(),
             &acc_data,
         )
         .expect("We should have generated valid data.");

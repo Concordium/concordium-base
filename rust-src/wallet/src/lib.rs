@@ -273,7 +273,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         &id_object,
         &id_use_data,
         acc_num,
-        &policy,
+        policy,
         &acc_data,
     )?;
 

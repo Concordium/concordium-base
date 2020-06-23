@@ -234,7 +234,7 @@ fn main() {
             &id_object,
             &id_object_use_data,
             53,
-            &policy,
+            policy,
             &acc_data,
         )
         .expect("We should have constructed valid data.");

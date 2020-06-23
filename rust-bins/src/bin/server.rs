@@ -229,7 +229,7 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
         &id_object,
         &id_use_data,
         n_acc,
-        &policy,
+        policy,
         &acc_data,
     );
 
