@@ -2,7 +2,7 @@
 
 use core::fmt::Debug;
 
-use clear_on_drop::clear::Clear;
+use zeroize::Zeroize;
 
 use curve25519_dalek::{constants, digest::Digest, edwards::EdwardsPoint, scalar::Scalar};
 
@@ -16,7 +16,6 @@ use crate::{constants::*, errors::*, public::*};
 use crypto_common::*;
 
 /// An EdDSA secret key.
-#[derive(Default)] // we derive Default in order to use the clear() method in Drop
 pub struct SecretKey(pub(crate) [u8; SECRET_KEY_LENGTH]);
 
 impl ConstantTimeEq for SecretKey {
@@ -51,7 +50,7 @@ impl Debug for SecretKey {
 
 /// Overwrite secret key material with null bytes when it goes out of scope.
 impl Drop for SecretKey {
-    fn drop(&mut self) { self.0.clear(); }
+    fn drop(&mut self) { self.0.zeroize(); }
 }
 
 impl AsRef<[u8]> for SecretKey {
@@ -175,7 +174,6 @@ impl<'d> Deserialize<'d> for SecretKey {
 // same signature scheme, and which both fail in exactly the same way.  For a
 // better-designed, Schnorr-based signature scheme, see Trevor Perrin's work on
 // "generalised EdDSA" and "VXEdDSA".
-#[derive(Default)] // we derive Default in order to use the clear() method in Drop
 pub struct ExpandedSecretKey {
     pub(crate) key:   Scalar,
     pub(crate) nonce: [u8; 32],
@@ -184,8 +182,8 @@ pub struct ExpandedSecretKey {
 /// Overwrite secret key material with null bytes when it goes out of scope.
 impl Drop for ExpandedSecretKey {
     fn drop(&mut self) {
-        self.key.clear();
-        self.nonce.clear();
+        self.key.zeroize();
+        self.nonce.zeroize();
     }
 }
 
@@ -260,9 +258,9 @@ impl ExpandedSecretKey {
         message: &[u8],
         rng: &mut R,
     ) -> Proof {
-        // FIXME: This error should be handled gracefully if it can happen.
-        let h: EdwardsPoint = public_key.hash_to_curve(message).expect("prove failed");
-        // let x = self.mangle_scalar_bits_and_return_scalar(); //secret key
+        let h: EdwardsPoint = public_key
+            .hash_to_curve(message)
+            .expect("Failure should not happen for non-maliciously crafted input.");
         let x = self.key;
         let h_to_x = x * h; // h^x
         let k = Scalar::random(rng); // nonce
@@ -279,41 +277,5 @@ impl ExpandedSecretKey {
         let k_minus_cx = k - (c * x);
 
         Proof(h_to_x, c, k_minus_cx)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl Serialize for ExpandedSecretKey {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer, {
-        serializer.serialize_bytes(&self.to_bytes()[..])
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'d> Deserialize<'d> for ExpandedSecretKey {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'d>, {
-        struct ExpandedSecretKeyVisitor;
-
-        impl<'d> Visitor<'d> for ExpandedSecretKeyVisitor {
-            type Value = ExpandedSecretKey;
-
-            fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                formatter.write_str(
-                    "An ed25519 expanded secret key as 64 bytes, as specified in RFC8032.",
-                )
-            }
-
-            fn visit_bytes<E>(self, bytes: &[u8]) -> Result<ExpandedSecretKey, E>
-            where
-                E: SerdeError, {
-                ExpandedSecretKey::from_bytes(bytes)
-                    .or(Err(SerdeError::invalid_length(bytes.len(), &self)))
-            }
-        }
-        deserializer.deserialize_bytes(ExpandedSecretKeyVisitor)
     }
 }

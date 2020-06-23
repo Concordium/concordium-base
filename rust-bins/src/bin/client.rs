@@ -634,8 +634,7 @@ fn handle_start_ip(matches: &ArgMatches) {
         }
     };
 
-    // FIXME: THis clone is unnecessary.
-    let ar_handles = ip_info.ip_ars.ars.clone();
+    let ar_handles = &ip_info.ip_ars.ars;
     let mrs: Vec<&str> = ar_handles
         .iter()
         .map(|x| x.ar_description.name.as_str())

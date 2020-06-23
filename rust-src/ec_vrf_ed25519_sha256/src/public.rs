@@ -105,34 +105,33 @@ impl PublicKey {
         PublicKey(compressed, point)
     }
 
-    pub fn hash_to_curve(&self, message: &[u8]) -> Result<EdwardsPoint, ProofError> {
-        let mut ctr = 0u32;
-        let mut done = false;
+    /// This implements the protocol as in https://tools.ietf.org/html/draft-goldbe-vrf-01#page-13
+    /// The failure should not happen in practice, expected number of iterations
+    /// is 2.
+    pub fn hash_to_curve(&self, message: &[u8]) -> Option<EdwardsPoint> {
         let mut p_candidate_bytes = [0u8; 32];
         let mut h: Sha256 = Sha256::new();
         h.input(&self.as_bytes());
         h.input(&message);
-        while !done {
+        for ctr in 0..=u8::max_value() {
             let mut attempt_h = h.clone();
             attempt_h.input(ctr.to_be_bytes());
             let hash = attempt_h.result();
-            p_candidate_bytes.copy_from_slice(hash.as_slice());
+            p_candidate_bytes.copy_from_slice(&hash);
             let p_candidate = CompressedEdwardsY(p_candidate_bytes);
             if let Some(ed_point) = p_candidate.decompress() {
-                return Ok(ed_point.mul_by_cofactor());
-            }
-            if ctr == u32::max_value() {
-                done = true;
-            } else {
-                ctr += 1;
+                // Make sure the point is not of small order, i.e., it will
+                // not be 0 after multiplying by cofactor.
+                if !ed_point.is_small_order() {
+                    return Some(ed_point.mul_by_cofactor());
+                }
             }
         }
-        Err(ProofError(InternalError::PointDecompression))
+        None
     }
 
     pub fn verify_key(&self) -> bool { !self.1.is_small_order() }
 
-    // TODO : Rename variable names more appropriately
     #[allow(clippy::many_single_char_names)]
     pub fn verify(&self, pi: &Proof, message: &[u8]) -> bool {
         let Proof(point, c, s) = pi; // s should be equal k- c x, where k is random and x is secret key
@@ -141,8 +140,8 @@ impl PublicKey {
         let self_to_c = c * self.1; // self_to_c should be equal to g^(cx)
         let u = self_to_c + g_to_s; // should equal g^k
         match self.hash_to_curve(message) {
-            Err(_) => false,
-            Ok(h) => {
+            None => false,
+            Some(h) => {
                 let v = (c * point) + (s * h); // should equal h^cs * h^(k-cx) = h^k
                 let derivable_c = hash_points(&[
                     constants::ED25519_BASEPOINT_COMPRESSED,
