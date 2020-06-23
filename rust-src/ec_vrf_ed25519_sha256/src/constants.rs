@@ -23,3 +23,6 @@ const EXPANDED_SECRET_KEY_NONCE_LENGTH: usize = 32;
 /// The length of an "expanded" ed25519 key, `ExpandedSecretKey`, in bytes.
 pub const EXPANDED_SECRET_KEY_LENGTH: usize =
     EXPANDED_SECRET_KEY_KEY_LENGTH + EXPANDED_SECRET_KEY_NONCE_LENGTH;
+
+/// Suite string as defined by https://tools.ietf.org/id/draft-irtf-cfrg-vrf-04.html#suites
+pub const SUITE_STRING: [u8; 1] = [3u8];
