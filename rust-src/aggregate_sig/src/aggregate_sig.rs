@@ -30,7 +30,7 @@ impl<P: Pairing> SecretKey<P> {
         Signature(signature)
     }
 
-    pub fn prove<R: Rng>(&self, csprng: &mut R, ro: RandomOracle) -> Option<Proof<P>> {
+    pub fn prove<R: Rng>(&self, csprng: &mut R, ro: RandomOracle) -> Proof<P> {
         let prover = Dlog {
             public: P::G2::one_point().mul_by_scalar(&self.0),
             coeff:  P::G2::one_point(),
@@ -39,6 +39,7 @@ impl<P: Pairing> SecretKey<P> {
             secret: Value::new(self.0),
         };
         prove(ro, &prover, secret, csprng)
+            .expect("Input-data is valid, so proving should succeed for this dlog proof.")
     }
 }
 
@@ -395,9 +396,7 @@ mod test {
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
             let sig = sk.sign(&m);
-            let proof = sk
-                .prove(&mut rng, ro.split())
-                .expect("Proving should succeed.");
+            let proof = sk.prove(&mut rng, ro.split());
 
             let sk_from_bytes = serialize_deserialize(&sk);
             let pk_from_bytes = serialize_deserialize(&pk);
@@ -432,7 +431,7 @@ mod test {
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
             let sig = sk.sign(&m);
-            let proof = sk.prove(&mut rng, ro).expect("Proving should succeed.");
+            let proof = sk.prove(&mut rng, ro);
 
             let sk_bytes = to_bytes(&sk);
             let pk_bytes = to_bytes(&pk);
@@ -470,9 +469,7 @@ mod test {
 
             let sk = SecretKey::<Bls12>::generate(&mut csprng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
-            let proof = sk
-                .prove(&mut csprng, ro1.split())
-                .expect("Proving should succeed.");
+            let proof = sk.prove(&mut csprng, ro1.split());
 
             assert!(pk.check_proof(ro1.split(), &proof));
             // check that it doesn't verify a proof with the wrong context
