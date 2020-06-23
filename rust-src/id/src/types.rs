@@ -10,8 +10,7 @@ use elgamal::{cipher::Cipher, message::Message, secret::SecretKey as ElgamalSecr
 use ff::{Field, PrimeField};
 use hex::{decode, encode};
 use pedersen_scheme::{
-    commitment as pedersen, key::CommitmentKey as PedersenKey, Randomness as PedersenRandomness,
-    Value as PedersenValue,
+    commitment as pedersen, key::CommitmentKey as PedersenKey, Value as PedersenValue,
 };
 use ps_sig::{public as pssig, signature::*, unknown_message::SigRetrievalRandomness};
 use std::{collections::btree_map::BTreeMap, str::FromStr};
@@ -957,18 +956,6 @@ impl<C: Curve, AttributeType: Attribute<C::Scalar>> Deserial for Policy<C, Attri
 #[derive(Debug, PartialEq, Eq)]
 pub enum SchemeId {
     Ed25519,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize)]
-pub struct PolicyProof<C: Curve> {
-    /// Randomness to open the variant commitment.
-    pub variant_rand: PedersenRandomness<C>,
-    /// Randomness to open the expiry commitment.
-    pub expiry_rand: PedersenRandomness<C>,
-    /// The u16 is the index of the attribute
-    /// The Scalar is the witness (technically the randomness in the
-    /// commitment).
-    pub cmm_opening_map: Vec<(AttributeTag, PedersenRandomness<C>)>,
 }
 
 #[derive(Debug, Eq)]
