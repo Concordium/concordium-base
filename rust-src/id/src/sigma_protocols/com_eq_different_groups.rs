@@ -55,7 +55,7 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
 
     #[inline]
     fn get_challenge(&self, challenge: &random_oracle::Challenge) -> Self::ProtocolChallenge {
-        C1::scalar_from_bytes_mod(challenge)
+        C1::scalar_from_bytes(challenge)
     }
 
     #[inline]

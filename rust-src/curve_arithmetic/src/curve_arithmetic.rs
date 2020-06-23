@@ -58,10 +58,9 @@ pub trait Curve:
     /// Make a scalar from a 64-bit unsigned integer. This function assumes that
     /// the field is big enough to accommodate any 64-bit unsigned integer.
     fn scalar_from_u64(n: u64) -> Self::Scalar;
-    /// Make a scalar by interpreting the given bytes as a big-endian unsigned
-    /// integer, and reducing modulo the field size. This function assumes the
-    /// field is big enough to accommodate any 64-bit unsigned integer.
-    fn scalar_from_bytes_mod<A: AsRef<[u8]>>(bs: A) -> Self::Scalar;
+    /// Make a scalar by taking the first Scalar::CAPACITY bits and interpreting
+    /// them as a little-endian integer.
+    fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar;
     /// Hash to a curve point from a seed. This is deterministic function.
     fn hash_to_group(m: &[u8]) -> Self;
 }
