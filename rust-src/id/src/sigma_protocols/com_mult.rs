@@ -49,7 +49,7 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
 
     #[inline]
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes_mod(challenge)
+        C::scalar_from_bytes(challenge)
     }
 
     #[inline]

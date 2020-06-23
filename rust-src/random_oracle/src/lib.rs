@@ -124,7 +124,7 @@ impl RandomOracle {
     /// Try to convert the computed result into a field element. This interprets
     /// the output of the random oracle as a big-endian integer and reduces is
     /// mod field order.
-    pub fn result_to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_bytes_mod(self.result()) }
+    pub fn result_to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_bytes(self.result()) }
 
     /// Finish and try to convert to scalar. Equivalent to
     /// ```ro.append(input).result_to_scalar()```.

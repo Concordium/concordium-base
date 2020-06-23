@@ -68,7 +68,7 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
 
     #[inline]
     fn get_challenge(&self, challenge: &random_oracle::Challenge) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes_mod(challenge)
+        C::scalar_from_bytes(challenge)
     }
 
     #[inline]

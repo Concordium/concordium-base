@@ -80,7 +80,7 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
     }
 
     fn get_challenge(&self, challenge: &random_oracle::Challenge) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes_mod(&challenge)
+        C::scalar_from_bytes(&challenge)
     }
 
     fn generate_witness(

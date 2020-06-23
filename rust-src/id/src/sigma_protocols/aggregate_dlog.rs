@@ -42,7 +42,7 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
     }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes_mod(challenge)
+        C::scalar_from_bytes(challenge)
     }
 
     fn commit_point<R: rand::Rng>(
