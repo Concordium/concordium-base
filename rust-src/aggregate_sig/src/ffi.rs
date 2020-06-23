@@ -170,12 +170,7 @@ pub extern "C" fn bls_prove(
     let ro = RandomOracle::empty().append_bytes(ro_bytes);
     let mut csprng = thread_rng();
     let prf = sk.prove(&mut csprng, ro);
-    if let Some(prf) = prf {
-        Box::into_raw(Box::new(prf))
-    } else {
-        // TODO: Handle this on the Haskell side as well.
-        std::ptr::null_mut()
-    }
+    Box::into_raw(Box::new(prf))
 }
 
 #[no_mangle]
