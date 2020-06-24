@@ -27,6 +27,9 @@ versionGenesisParams = Version 0
 versionCredential :: Version
 versionCredential = Version 0
 
+versionFinalizationMessage :: Version
+versionFinalizationMessage = Version 0
+
 versionFinalizationRecord :: Version
 versionFinalizationRecord = Version 0
 
