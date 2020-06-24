@@ -388,6 +388,7 @@ data BlockEvents =
 
 -- |Events which are generated during transaction execution.
 -- These are only used for commited transactions.
+-- Must be kept in sync with 'showEvents' in concordium-client (Output.hs).
 data Event =
            -- |Module with the given address was deployed.
            ModuleDeployed !Core.ModuleRef
@@ -533,12 +534,13 @@ instance S.Serialize ValidResult
 instance S.Serialize TransactionSummary
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
+-- Must be kept in sync with 'showRejectReason' in concordium-client (Output.hs).
 data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module has failed.
                   | MissingImports  -- ^Error when there were missing imports (determined before typechecking).
                   | ModuleHashAlreadyExists !Core.ModuleRef  -- ^As the name says.
                   | MessageTypeError -- ^Message to the receive method is of the wrong type.
                   | ParamsTypeError -- ^Parameters of the init method are of the wrong type.
-                  | InvalidAccountReference !AccountAddress -- ^Account does not exists.
+                  | InvalidAccountReference !AccountAddress -- ^Account does not exist.
                   | InvalidContractReference !Core.ModuleRef !Core.TyName -- ^Reference to a non-existing contract.
                   | InvalidModuleReference !Core.ModuleRef   -- ^Reference to a non-existing module.
                   | InvalidContractAddress !ContractAddress -- ^Contract instance does not exist.
