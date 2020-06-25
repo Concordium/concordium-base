@@ -35,11 +35,11 @@ pub fn test_create_ars<T: Rng>(
 ) -> (Vec<ArInfo<ExampleCurve>>, Vec<SecretKey<ExampleCurve>>) {
     let mut ar_infos = Vec::new();
     let mut ar_keys = Vec::new();
-    for i in 0..num_ars {
+    for i in 1..=num_ars {
         let ar_secret_key = SecretKey::generate(ar_base, csprng);
         let ar_public_key = PublicKey::from(&ar_secret_key);
         let ar_info = ArInfo::<ExampleCurve> {
-            ar_identity: ArIdentity(i as u32),
+            ar_identity: ArIdentity::new(i as u32),
             ar_description: Description {
                 name:        format!("AnonymityRevoker{}", i),
                 url:         format!("AnonymityRevoker{}.com", i),
@@ -118,15 +118,17 @@ pub fn test_create_aci<T: Rng>(csprng: &mut T) -> AccCredentialInfo<ExampleCurve
 pub fn test_create_pio(
     aci: &AccCredentialInfo<ExampleCurve>,
     ip_info: &IpInfo<ExamplePairing, ExampleCurve>,
-    num_ars: u8,
+    num_ars: u8, // should be at least 1
 ) -> (
     Context<ExamplePairing, ExampleCurve>,
     PreIdentityObject<ExamplePairing, ExampleCurve>,
     ps_sig::SigRetrievalRandomness<ExamplePairing>,
 ) {
     // Select all ARs except last one
-    let threshold = num_ars as u32 - 1;
-    let ars: Vec<ArIdentity> = (0..threshold).map(ArIdentity).collect::<Vec<_>>();
+    let threshold = num_ars as u8 - 1;
+    let ars: Vec<ArIdentity> = (1..=threshold)
+        .map(|x| ArIdentity::new(u32::from(x)))
+        .collect::<Vec<_>>();
 
     // Create context
     let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
@@ -258,16 +260,15 @@ pub fn test_pipeline() {
 
     // Revoking anonymity using all but one AR
     let mut shares = Vec::new();
-    for i in 0..(num_ars - 1) {
+    for (i, key) in (1..=(num_ars - 1)).zip(ar_keys) {
         let ar = cdi
             .values
             .ar_data
-            .iter()
-            .find(|&x| x.ar_identity == ArIdentity(i as u32))
-            .unwrap();
+            .get(&ArIdentity::new(i as u32))
+            .expect("Anonymity revoker i is present.");
         let decrypted_share = (
-            ar.id_cred_pub_share_number.into(),
-            ar_keys[i as usize].decrypt(&ar.enc_id_cred_pub_share),
+            ArIdentity::new(u32::from(i)),
+            key.decrypt(&ar.enc_id_cred_pub_share),
         );
         shares.push(decrypted_share);
     }
@@ -293,7 +294,28 @@ pub fn test_pipeline() {
         &acc_data,
     )
     .expect("Should generate the credential successfully.");
-    cdi.values.ar_data.rotate_left(1);
+    // Swap two ar_data values for two anonymity revokers.
+    let x_2 = cdi
+        .values
+        .ar_data
+        .get(&ArIdentity::new(2))
+        .expect("AR 2 exists")
+        .clone();
+    let x_3 = cdi
+        .values
+        .ar_data
+        .get(&ArIdentity::new(3))
+        .expect("AR 3 exists")
+        .clone();
+    *cdi.values
+        .ar_data
+        .get_mut(&ArIdentity::new(2))
+        .expect("AR 2 exists") = x_3;
+    *cdi.values
+        .ar_data
+        .get_mut(&ArIdentity::new(3))
+        .expect("AR 2 exists") = x_2;
+    // Verification should now fail.
     let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
     assert_ne!(cdi_check, Ok(()));
 }

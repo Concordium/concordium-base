@@ -29,6 +29,8 @@ use either::Either::Left;
 
 use client_server_helpers::*;
 
+use std::convert::TryFrom;
+
 static IP_PREFIX: &str = "database/identity_provider-";
 static IP_NAME_PREFIX: &str = "identity_provider-";
 static AR_NAME_PREFIX: &str = "anonymity_revoker-";
@@ -663,15 +665,15 @@ fn handle_start_ip(matches: &ArgMatches) {
             .default(1)
             .interact()
         {
-            Threshold((threshold + 1) as u32) // +1 because the indexing of the
-                                              // selection starts at 1
+            Threshold((threshold + 1) as u8) // +1 because the indexing of the
+                                             // selection starts at 1
         } else {
             let d = max(1, num_ars - 1);
             println!(
                 "Selecting default value (= {}) for revocation threshold.",
                 d
             );
-            Threshold(d as u32)
+            Threshold(d as u8)
         }
     };
 
@@ -740,7 +742,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let ar0_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar0_public_key = PublicKey::from(&ar0_secret_key);
         let ar0_info = ArInfo {
-            ar_identity:    ArIdentity(0u32),
+            ar_identity:    ArIdentity::try_from(1u32).unwrap(),
             ar_description: mk_ar_description(0),
             ar_public_key:  ar0_public_key,
         };
@@ -753,7 +755,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar1_public_key = PublicKey::from(&ar1_secret_key);
         let ar1_info = ArInfo {
-            ar_identity:    ArIdentity(1u32),
+            ar_identity:    ArIdentity::try_from(2u32).unwrap(),
             ar_description: mk_ar_description(1),
             ar_public_key:  ar1_public_key,
             // ar_elgamal_generator: PublicKey::generator(),
@@ -767,7 +769,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar2_public_key = PublicKey::from(&ar2_secret_key);
         let ar2_info = ArInfo {
-            ar_identity:    ArIdentity(2u32),
+            ar_identity:    ArIdentity::try_from(3u32).unwrap(),
             ar_description: mk_ar_description(2),
             ar_public_key:  ar2_public_key,
             // ar_elgamal_generator: PublicKey::generator(),

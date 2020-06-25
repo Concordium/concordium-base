@@ -148,10 +148,7 @@ pub extern "C" fn verify_cdi_ffi(
 
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
     match CredDeploymentInfo::<Bls12, G1, AttributeKind>::deserial(&mut Cursor::new(&cdi_bytes)) {
-        Err(err) => {
-            eprintln!("{}", err);
-            -11
-        }
+        Err(_) => -11,
         Ok(cdi) => {
             match chain::verify_cdi::<Bls12, G1, AttributeKind>(
                 from_ptr!(gc_ptr),
@@ -324,7 +321,7 @@ mod test {
         };
 
         let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-            ar_identities: vec![ArIdentity(0), ArIdentity(1), ArIdentity(2)],
+            ar_identities: vec![ArIdentity::new(1), ArIdentity::new(2), ArIdentity::new(3)],
             threshold:     Threshold(2),
         })
         .expect("The constructed ARs are valid.");

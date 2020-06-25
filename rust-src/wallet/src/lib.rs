@@ -3,6 +3,8 @@ extern crate failure;
 #[macro_use]
 extern crate serde_json;
 
+use std::convert::TryInto;
+
 use crypto_common::{base16_decode_string, base16_encode_string, c_char, Put};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -146,7 +148,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let threshold = {
         let l = ip_info.ip_ars.ars.len();
         ensure!(l > 0, "IpInfo should have at least 1 anonymity revoker.");
-        Threshold(max((l - 1) as u32, 1))
+        Threshold(max((l - 1).try_into().unwrap_or(255), 1))
     };
 
     // Should be safe on iOS and Android, by calling SecRandomCopyBytes/getrandom,
