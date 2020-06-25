@@ -180,8 +180,8 @@ pub fn reveal<P: Into<u64> + Copy, C: Curve>(shares: &[(P, PedersenValue<C>)]) -
 /// Same as above, but coefficients of the polynomial are group elements (and
 /// the polynomial is valued in a group), as opposed to field elements.
 pub fn reveal_in_group<P: Into<u64> + Copy, C: Curve>(shares: &[(P, C)]) -> C {
-    let kxs = shares.into_iter().map(|(fst, _)| *fst).collect::<Vec<_>>();
-    shares.into_iter().fold(C::zero_point(), |accum, (i, v)| {
+    let kxs = shares.iter().map(|(fst, _)| *fst).collect::<Vec<_>>();
+    shares.iter().fold(C::zero_point(), |accum, (i, v)| {
         let s = lagrange::<P, C>(&kxs, *i);
         let vs = v.mul_by_scalar(&s);
         vs.plus_point(&accum)
