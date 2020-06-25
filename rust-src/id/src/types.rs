@@ -905,7 +905,7 @@ pub struct ArInfo<C: Curve> {
 /// The commitments sent by the account holder to the chain in order to
 /// deploy credentials
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
-pub struct CredDeploymentCommitments<C: Curve> {
+pub struct CredentialDeploymentCommitments<C: Curve> {
     /// commitment to the prf key
     pub cmm_prf: pedersen::Commitment<C>,
     /// commitment to credential counter
@@ -931,7 +931,7 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// object by the IP
     pub sig: BlindedSignature<P>,
     /// list of  commitments to the attributes .
-    pub commitments: CredDeploymentCommitments<C>,
+    pub commitments: CredentialDeploymentCommitments<C>,
     /// Challenge used for all of the proofs.
     pub challenge: Challenge,
     /// Witnesses to the proof that the computed commitment to the share
@@ -1342,7 +1342,7 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
                    Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
-pub struct CredDeploymentInfo<
+pub struct CredentialDeploymentInfo<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,

@@ -147,7 +147,9 @@ pub extern "C" fn verify_cdi_ffi(
     };
 
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
-    match CredDeploymentInfo::<Bls12, G1, AttributeKind>::deserial(&mut Cursor::new(&cdi_bytes)) {
+    match CredentialDeploymentInfo::<Bls12, G1, AttributeKind>::deserial(&mut Cursor::new(
+        &cdi_bytes,
+    )) {
         Err(_) => -11,
         Ok(cdi) => {
             match chain::verify_cdi::<Bls12, G1, AttributeKind>(

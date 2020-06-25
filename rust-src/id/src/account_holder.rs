@@ -309,7 +309,7 @@ pub fn create_credential<
     cred_counter: u8,
     policy: Policy<C, AttributeType>,
     acc_data: &AccountData,
-) -> Fallible<CredDeploymentInfo<P, C, AttributeType>>
+) -> Fallible<CredentialDeploymentInfo<P, C, AttributeType>>
 where
     AttributeType: Clone, {
     let mut csprng = thread_rng();
@@ -532,7 +532,7 @@ where
         proof_acc_sk,
     };
 
-    let info = CredDeploymentInfo {
+    let info = CredentialDeploymentInfo {
         values: cred_values,
         proofs: cdp,
     };
@@ -546,7 +546,7 @@ fn compute_pok_sig<
     AttributeType: Attribute<C::Scalar>,
 >(
     commitment_key: &PedersenKey<C>,
-    commitments: &CredDeploymentCommitments<C>,
+    commitments: &CredentialDeploymentCommitments<C>,
     commitment_rands: &CommitmentsRandomness<C>,
     id_cred_sec: &Value<C>,
     prf_key: &prf::SecretKey<C>,
@@ -709,7 +709,7 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
     cmm_coeff_randomness: Vec<PedersenRandomness<C>>,
     policy: &Policy<C, AttributeType>,
     csprng: &mut R,
-) -> Fallible<(CredDeploymentCommitments<C>, CommitmentsRandomness<C>)> {
+) -> Fallible<(CredentialDeploymentCommitments<C>, CommitmentsRandomness<C>)> {
     let id_cred_sec_rand = if let Some(v) = cmm_coeff_randomness.first() {
         v.clone()
     } else {
@@ -739,7 +739,7 @@ fn compute_commitments<C: Curve, AttributeType: Attribute<C::Scalar>, R: Rng>(
             attributes_rand.insert(i, rand);
         }
     }
-    let cdc = CredDeploymentCommitments {
+    let cdc = CredentialDeploymentCommitments {
         cmm_prf,
         cmm_cred_counter,
         cmm_max_accounts,

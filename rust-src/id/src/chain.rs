@@ -48,7 +48,7 @@ pub fn verify_cdi<
     global_context: &GlobalContext<C>,
     ip_info: &IpInfo<P, C>,
     acc_keys: Option<&AccountKeys>,
-    cdi: &CredDeploymentInfo<P, C, AttributeType>,
+    cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     let num_ars = cdi.values.ar_data.len();
     let mut choice_ar_parameters = Vec::with_capacity(num_ars);
@@ -81,7 +81,7 @@ pub fn verify_cdi_worker<
     ip_verify_key: &ps_sig::PublicKey<P>,
     choice_ar_parameters: &[&ArInfo<C>],
     acc_keys: Option<&AccountKeys>,
-    cdi: &CredDeploymentInfo<P, C, AttributeType>,
+    cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     // Compute the challenge prefix by hashing the values.
     let ro = RandomOracle::domain("credential").append(&cdi.values);
@@ -274,7 +274,7 @@ fn id_cred_pub_verifier<C: Curve>(
 /// and that check is part of the signature check.
 fn verify_policy<C: Curve, AttributeType: Attribute<C::Scalar>>(
     _commitment_key: &CommitmentKey<C>,
-    _commitments: &CredDeploymentCommitments<C>,
+    _commitments: &CredentialDeploymentCommitments<C>,
     _policy: &Policy<C, AttributeType>,
 ) -> bool {
     // let variant_scalar = C::scalar_from_u64(u64::from(policy.variant)).unwrap();
@@ -348,7 +348,7 @@ fn pok_sig_verifier<
     threshold: Threshold,
     choice_ar_parameters: &'a [&ArInfo<C>],
     policy: &'a Policy<C, AttributeType>,
-    commitments: &'a CredDeploymentCommitments<C>,
+    commitments: &'a CredentialDeploymentCommitments<C>,
     ip_pub_key: &'a ps_sig::PublicKey<P>,
     blinded_sig: &'a ps_sig::BlindedSignature<P>,
 ) -> Option<com_eq_sig::ComEqSig<P, C>> {
