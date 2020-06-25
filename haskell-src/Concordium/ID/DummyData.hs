@@ -31,7 +31,7 @@ dummyCredential address pValidTo pCreatedAt = ID.CredentialDeploymentValues
       cdvRegId = dummyRegId address,
       cdvIpId = ID.IP_ID 0,
       cdvThreshold = ID.Threshold 2,
-      cdvArData = [],
+      cdvArData = OrdMap.empty,
       cdvPolicy = ID.Policy {
         pItems = OrdMap.empty,
         ..
