@@ -1,12 +1,12 @@
-use crate::secret_sharing::*;
+use crate::{secret_sharing::*, types::*};
 use curve_arithmetic::*;
 use elgamal::message::Message;
 
-pub fn reveal_id_cred_pub<C: Curve>(shares: &[(ShareNumber, Message<C>)]) -> C {
+pub fn reveal_id_cred_pub<C: Curve>(shares: &[(ArIdentity, Message<C>)]) -> C {
     reveal_in_group(
         &shares
             .iter()
             .map(|(n, m)| (*n, m.value))
-            .collect::<Vec<(ShareNumber, C)>>(),
+            .collect::<Vec<_>>(),
     )
 }

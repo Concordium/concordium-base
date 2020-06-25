@@ -1,4 +1,4 @@
-use crate::types::*;
+use crate::{types::*, utils};
 
 use failure::Fallible;
 
@@ -20,7 +20,7 @@ use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey as PedersenKey,
     randomness::Randomness as PedersenRandomness, value::Value,
 };
-use rand::{rngs::ThreadRng, *};
+use rand::*;
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap};
 
 /// Generate PreIdentityObject out of the account holder information,
@@ -143,12 +143,10 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         };
         replicated_provers.push(item_prover);
         replicated_secrets.push(secret);
-        ip_ar_data.push(move |proof_com_enc_eq| IpArData {
-            ar_identity: item.ar_identity,
+        ip_ar_data.push((item.ar_identity, move |proof_com_enc_eq| IpArData {
             enc_prf_key_share: item.encrypted_share,
-            prf_key_share_number: item.share_number,
             proof_com_enc_eq,
-        });
+        }));
     }
 
     // Extract identities of the chosen ARs for use in PIO
@@ -171,9 +169,9 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let ip_ar_data = ip_ar_data
         .iter()
-        .zip(proof.witness.w2.witnesses)
-        .map(|(f, w)| f(w))
-        .collect::<Vec<_>>();
+        .zip(proof.witness.w2.witnesses.into_iter())
+        .map(|(&(ar_id, f), w)| (ar_id, f(w)))
+        .collect::<BTreeMap<ArIdentity, _>>();
     let poks = PreIdentityProof {
         challenge:              proof.challenge,
         id_cred_sec_witness:    proof.witness.w1.w1.w1,
@@ -210,7 +208,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 pub struct SingleArData<C: Curve> {
     ar_identity:             ArIdentity,
     share:                   Value<C>,
-    share_number:            ShareNumber,
     encrypted_share:         Cipher<C>,
     encryption_randomness:   elgamal::Randomness<C>,
     cmm_to_share:            Commitment<C>,
@@ -225,7 +222,7 @@ type SharingData<C> = (
     Vec<PedersenRandomness<C>>,
 );
 
-/// A function to compute sharing data.
+/// A function to compute sharing data for a single value.
 pub fn compute_sharing_data<C: Curve>(
     shared_scalar: &Value<C>,                    // Value to be shared.
     ar_parameters: &(Vec<ArInfo<C>>, Threshold), // Anonimity revokers
@@ -233,43 +230,41 @@ pub fn compute_sharing_data<C: Curve>(
 ) -> SharingData<C> {
     let n = ar_parameters.0.len() as u32;
     let t = ar_parameters.1;
-    let tu: u32 = t.into();
     let mut csprng = thread_rng();
     // first commit to the scalar
     let (cmm_scalar, cmm_scalar_rand) = commitment_key.commit(&shared_scalar, &mut csprng);
-    // share the scalar
-    let sharing_data = share::<C, ThreadRng>(&shared_scalar, ShareNumber::from(n), t, &mut csprng);
+    // We evaluate the polynomial at ar_identities.
+    let share_points = ar_parameters.0.iter().map(|x| x.ar_identity);
+    // share the scalar on ar_identity points.
+    let sharing_data = share::<C, _, _, _>(&shared_scalar, share_points, t, &mut csprng);
     // commitments to the sharing coefficients
-    let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(tu as usize);
+    let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(t.into());
     // first coefficient is the shared scalar
     cmm_sharing_coefficients.push(cmm_scalar);
     // randomness values corresponding to the commitments
-    let mut cmm_coeff_randomness = Vec::with_capacity(tu as usize);
+    let mut cmm_coeff_randomness = Vec::with_capacity(t.into());
     // first randomness is the one used in commiting to the scalar
     cmm_coeff_randomness.push(cmm_scalar_rand);
     // fill the rest
-    for i in 1..tu {
-        let (cmm, rnd) =
-            commitment_key.commit(&sharing_data.coefficients[i as usize - 1], &mut csprng);
+    for coeff in sharing_data.coefficients.iter() {
+        let (cmm, rnd) = commitment_key.commit(coeff, &mut csprng);
         cmm_sharing_coefficients.push(cmm);
         cmm_coeff_randomness.push(rnd);
     }
     // a vector of Ar data
     let mut ar_data: Vec<SingleArData<C>> = Vec::with_capacity(n as usize);
-    for (i, (share_number, share)) in izip!(1..=n, sharing_data.shares.into_iter()) {
-        let si = ShareNumber::from(i as u32);
-        let ar = &ar_parameters.0[i as usize - 1];
+    for (ar, share) in izip!(ar_parameters.0.iter(), sharing_data.shares.into_iter()) {
+        let si = ar.ar_identity;
         let pk = ar.ar_public_key;
-        assert_eq!(ShareNumber::from(i), share_number);
         // encrypt the share
         let (cipher, rnd2) = pk.encrypt_exponent_rand(&mut csprng, &share);
         // compute the commitment to this share from the commitment to the coeff
-        let (cmm, rnd) = commitment_to_share(si, &cmm_sharing_coefficients, &cmm_coeff_randomness);
+        let (cmm, rnd) =
+            commitment_to_share_and_rand(si, &cmm_sharing_coefficients, &cmm_coeff_randomness);
         // fill Ar data
         let single_ar_data = SingleArData {
-            ar_identity: ar.ar_identity,
+            ar_identity: si,
             share,
-            share_number: si,
             encrypted_share: cipher,
             encryption_randomness: rnd2,
             cmm_to_share: cmm,
@@ -281,28 +276,19 @@ pub fn compute_sharing_data<C: Curve>(
     (ar_data, cmm_sharing_coefficients, cmm_coeff_randomness)
 }
 
-/// computing the commitment to single share from the commitments to
-/// the coefficients of the polynomial
-pub fn commitment_to_share<C: Curve>(
-    share_number: ShareNumber,
+/// Computing the commitment to single share from the commitments to
+/// the coefficients of the polynomial.
+pub fn commitment_to_share_and_rand<C: Curve>(
+    share_number: ArIdentity,
     coeff_commitments: &[Commitment<C>],
     coeff_randomness: &[PedersenRandomness<C>],
 ) -> (Commitment<C>, PedersenRandomness<C>) {
     assert_eq!(coeff_commitments.len(), coeff_randomness.len());
-    let mut cmm_share_point: C = C::zero_point();
-    let mut cmm_share_randomness_scalar: C::Scalar = Field::zero();
-    let share_scalar = share_number.to_scalar::<C>();
-    // Horner's scheme in the exponent
-    for cmm in coeff_commitments.iter().rev() {
-        cmm_share_point = cmm_share_point.mul_by_scalar(&share_scalar);
-        cmm_share_point = cmm_share_point.plus_point(cmm);
-    }
-    // Horner's scheme
-    for rand in coeff_randomness.iter().rev() {
-        cmm_share_randomness_scalar.mul_assign(&share_scalar);
-        cmm_share_randomness_scalar.add_assign(rand);
-    }
-    let cmm = Commitment(cmm_share_point);
+
+    let cmm = utils::commitment_to_share(&share_number.to_scalar::<C>(), coeff_commitments);
+
+    let cmm_share_randomness_scalar =
+        utils::evaluate_poly(coeff_randomness, &share_number.to_scalar::<C>());
     let rnd = PedersenRandomness::new(cmm_share_randomness_scalar);
     (cmm, rnd)
 }
@@ -372,13 +358,16 @@ where
     );
     let number_of_ars = prio.choice_ar_parameters.ar_identities.len();
     // filling ar data
-    let mut ar_data: Vec<ChainArData<C>> = Vec::with_capacity(number_of_ars);
+    let mut ar_data = BTreeMap::new();
     for item in id_cred_data.iter() {
-        ar_data.push(ChainArData {
-            ar_identity:              item.ar_identity,
-            enc_id_cred_pub_share:    item.encrypted_share,
-            id_cred_pub_share_number: item.share_number,
-        });
+        if ar_data
+            .insert(item.ar_identity, ChainArData {
+                enc_id_cred_pub_share: item.encrypted_share,
+            })
+            .is_some()
+        {
+            bail!("Duplicate identity providers.")
+        }
     }
 
     let ip_pub_key = &ip_info.ip_verify_key;
@@ -457,7 +446,7 @@ where
                     cmm_key:    global_context.on_chain_commitment_key,
                 };
 
-                id_cred_pub_share_numbers.push(item.share_number);
+                id_cred_pub_share_numbers.push(ar_info.ar_identity);
                 id_cred_pub_provers.push(item_prover);
                 id_cred_pub_secrets.push(secret);
             }
@@ -480,8 +469,8 @@ where
         reg_id,
     );
 
-    let choice_ar_handles: Vec<ArIdentity> =
-        cred_values.ar_data.iter().map(|x| x.ar_identity).collect();
+    let choice_ar_handles: Vec<ArIdentity> = cred_values.ar_data.iter().map(|(x, _)| *x).collect();
+
     // Proof of knowledge of the signature of the identity provider.
     let (prover_sig, secret_sig) = compute_pok_sig(
         &global_context.on_chain_commitment_key,
@@ -574,9 +563,13 @@ fn compute_pok_sig<
     let num_user_attributes = att_vec.len() + 4;
     // To these there are always two attributes (idCredSec and prf key) added.
     let num_total_attributes = num_user_attributes + 2;
-    let num_ars = ar_list.len(); // we commit to each anonymity revoker, with randomness 0
-                                 // and finally we also commit to the anonymity revocation threshold.
-                                 // so the total number of commitments is as follows
+    let ar_scalars = match encode_ars(ar_list) {
+        Some(x) => x,
+        None => bail!("Cannot encode anonymity revokers."),
+    };
+    let num_ars = ar_scalars.len(); // we commit to each anonymity revoker, with randomness 0
+                                    // and finally we also commit to the anonymity revocation threshold.
+                                    // so the total number of commitments is as follows
     let num_total_commitments = num_total_attributes + num_ars + 1;
 
     let y_tildas = &ip_pub_key.y_tildas;
@@ -608,8 +601,8 @@ fn compute_pok_sig<
     secrets.push((Value::new(threshold.to_scalar::<C>()), zero.clone()));
     gxs.push(y_tildas[2]);
     for i in 3..num_ars + 3 {
-        // all id revoker ids are commited with randomness 0
-        secrets.push((Value::new(ar_list[i - 3].to_scalar::<C>()), zero.clone()));
+        // the encoded id revoker are commited with randomness 0.
+        secrets.push((Value::new(ar_scalars[i - 3]), zero.clone()));
         gxs.push(y_tildas[i]);
     }
 
@@ -659,8 +652,8 @@ fn compute_pok_sig<
     comm_vec.push(commitment_key.hide(&Value::<C>::new(threshold.to_scalar::<C>()), &zero));
 
     // and all commitments to ARs with randomness 0
-    for ar in ar_list.iter() {
-        comm_vec.push(commitment_key.hide(&Value::<C>::new(ar.to_scalar::<C>()), &zero));
+    for ar in ar_scalars.iter() {
+        comm_vec.push(commitment_key.hide_worker(&ar, &zero));
     }
 
     comm_vec.push(tags_cmm);
@@ -937,11 +930,6 @@ mod tests {
                 (ar_parameters.0)[i].ar_identity,
                 "ArData ar_identity is invalid"
             );
-            assert_eq!(
-                data.share_number,
-                ShareNumber(i as u32 + 1),
-                "ArData share_number is invalid"
-            );
             // Add check of encrypted_share and encrypted_randomness
             let cmm_ok = ck.open(
                 &data.share,
@@ -1052,7 +1040,7 @@ mod tests {
         // Check threshold
         assert_eq!(
             cdi.values.threshold,
-            Threshold(num_ars as u32 - 1),
+            Threshold(num_ars - 1),
             "CDI threshold is invalid"
         );
 

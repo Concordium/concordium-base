@@ -1,4 +1,4 @@
-use crate::secret_sharing::{ShareNumber, Threshold};
+use crate::secret_sharing::Threshold;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::*;
@@ -211,13 +211,70 @@ impl fmt::Display for IpIdentity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
-#[serde(transparent)]
-#[derive(SerdeSerialize, SerdeDeserialize)]
-pub struct ArIdentity(pub u32);
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Clone,
+    Copy,
+    Hash,
+    Serial,
+    SerdeSerialize,
+    SerdeDeserialize,
+)]
+#[serde(try_from = "u32", into = "u32")]
+/// Identity of the anonymity revoker on the chain. This defines their
+/// evaluation point for secret sharing, and thus it cannot be 0.
+pub struct ArIdentity(u32);
+
+impl Deserial for ArIdentity {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let x = source.get()?;
+        if x == 0 {
+            bail!("ArIdentity must be non-zero.")
+        } else {
+            Ok(ArIdentity(x))
+        }
+    }
+}
 
 impl fmt::Display for ArIdentity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+}
+
+impl Into<u32> for ArIdentity {
+    fn into(self) -> u32 { self.0 }
+}
+
+impl Into<u64> for ArIdentity {
+    fn into(self) -> u64 { u64::from(self.0) }
+}
+
+impl TryFrom<u32> for ArIdentity {
+    type Error = &'static str;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        if value == 0 {
+            Err("Zero is not a valid ArIdentity.")
+        } else {
+            Ok(ArIdentity(value))
+        }
+    }
+}
+
+impl ArIdentity {
+    /// Curve scalars must be big enough to accommodate all 32 bit unsigned
+    /// integers.
+    pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)) }
+
+    #[cfg(test)]
+    // This is unchecked, and only used in tests.
+    pub fn new(x: u32) -> Self {
+        assert_ne!(x, 0, "Trying to construct ArIdentity 0.");
+        ArIdentity(x)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
@@ -255,6 +312,50 @@ pub fn encode_tags<'a, F: PrimeField, I: std::iter::IntoIterator<Item = &'a Attr
     // This should not fail (since we check capacity), but in case it does we just
     // propagate the error.
     Ok(F::from_repr(f)?)
+}
+
+/// Encode anonymity revokers into a list of scalars.
+/// The encoding is as follows.
+/// Given a list of identity providers, and a capacity C,
+/// we encode it into multiple scalars, in big-endian representation.
+/// The encodings are shifted, and the last (least significant) bit
+/// of the scalar encodes whether there are more scalars to follow.
+/// That is the case if and only if the bit is 1.
+/// The field must be big enough to encode u64.
+pub fn encode_ars<F: PrimeField>(ars: &[ArIdentity]) -> Option<Vec<F>> {
+    let max_bit: usize = (F::CAPACITY - 1) as usize;
+    // NB: This 32 must be the same as the size of the ArIdentity.
+    let num_ars_per_element = max_bit / 32;
+    let chunks = ars.chunks(num_ars_per_element);
+    let num_scalars = chunks.len();
+    let mut scalars = Vec::with_capacity(num_scalars);
+    let mut two = F::one();
+    two.add_assign(&F::one());
+    let two = two;
+
+    for chunk in chunks {
+        let mut f = F::zero().into_repr();
+        for (i, &ar_id) in chunk.iter().enumerate() {
+            let ar_id: u32 = ar_id.into();
+            let x: u64 = if i % 2 == 0 {
+                u64::from(ar_id)
+            } else {
+                u64::from(ar_id) << 32
+            };
+            f.as_mut()[i / 2] |= x;
+        }
+        let mut scalar = F::from_repr(f).ok()?;
+        // shift one bit left.
+        scalar.mul_assign(&two);
+        scalars.push(scalar)
+    }
+    if num_scalars == 0 {
+        scalars.push(F::zero())
+    }
+    // This should not fail since we've explicitly added an element to
+    // make sure we have enough scalars, but we still just propagate the error.
+    scalars.last_mut()?.add_assign(&F::one());
+    Some(scalars)
 }
 
 /// Given two ordered iterators call the corresponding functions in the
@@ -573,15 +674,8 @@ pub struct AccCredentialInfo<C: Curve> {
 #[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
-    /// identity of the anonymity revoker (for now this needs to be unique per
-    /// IP) if stored in the chain it needs to be unique in general
-    #[serde(rename = "arIdentity")]
-    pub ar_identity: ArIdentity,
     #[serde(rename = "encPrfKeyShare")]
     pub enc_prf_key_share: Cipher<C>,
-    /// the number of the share
-    #[serde(rename = "prfKeyShareNumber")]
-    pub prf_key_share_number: ShareNumber,
     /// Witness to the proof that the computed commitment to the share
     /// contains the same value as the encryption
     /// the commitment to the share is not sent but computed from
@@ -596,19 +690,19 @@ pub struct IpArData<C: Curve> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct ChainArData<C: Curve> {
-    /// identity of the anonymity revoker
-    #[serde(rename = "arIdentity")]
-    pub ar_identity: ArIdentity,
     /// encrypted share of id cred pub
     #[serde(rename = "encIdCredPubShare")]
     pub enc_id_cred_pub_share: Cipher<C>,
-    /// the number of the share
-    #[serde(rename = "idCredPubShareNumber")]
-    pub id_cred_pub_share_number: ShareNumber,
 }
 
 /// Data structure for when a anonymity revoker decrypts its encrypted share
-/// This is the decrypted counterpart of ChainArData
+/// This is the decrypted counterpart of ChainArData.
+/// This structure contains an explicit ArIdentity in contrast to the
+/// `ChainArData`. The reason for that is the use-case for this structure is
+/// that an individual anonymity revoker decrypts its share and sends it, and we
+/// need the context for that. In the other cases the data is always in the
+/// context of a credential or pre-identity object, and as a result part of the
+/// map.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct ChainArDecryptedData<C: Curve> {
@@ -618,9 +712,6 @@ pub struct ChainArDecryptedData<C: Curve> {
     /// share of id cred pub
     #[serde(rename = "idCredPubShare")]
     pub id_cred_pub_share: Message<C>,
-    /// the number of the share
-    #[serde(rename = "idCredPubShareNumber")]
-    pub id_cred_pub_share_number: ShareNumber,
 }
 
 /// Choice of anonymity revocation parameters
@@ -677,7 +768,8 @@ pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub id_cred_pub: C,
     /// Anonymity revocation data for the chosen anonymity revokers.
     #[serde(rename = "ipArData")]
-    pub ip_ar_data: Vec<IpArData<C>>,
+    #[map_size_length = 4]
+    pub ip_ar_data: BTreeMap<ArIdentity, IpArData<C>>,
     /// Choice of anonyimity revocation parameters.
     /// NB:IP needs to check that they make sense in the context of the public
     /// keys they are allowed to use.
@@ -833,8 +925,6 @@ pub struct CredDeploymentCommitments<C: Curve> {
     pub cmm_id_cred_sec_sharing_coeff: Vec<pedersen::Commitment<C>>,
 }
 
-// FIXME: The sig should be part of the values so that it is part of the
-// challenge computation.
 #[derive(Debug, SerdeBase16IgnoreLengthSerialize)]
 pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// (Blinded) Signature derived from the signature on the pre-identity
@@ -844,10 +934,11 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     pub commitments: CredDeploymentCommitments<C>,
     /// Challenge used for all of the proofs.
     pub challenge: Challenge,
-    /// Witnesses for proofs that the encrypted shares of id_cred_pub and
-    /// commitments (in chain_ar_data) hide the same values.
-    /// each witness is indexed by the share number.
-    pub proof_id_cred_pub: Vec<(ShareNumber, com_enc_eq::Witness<C>)>,
+    /// Witnesses to the proof that the computed commitment to the share
+    /// contains the same value as the encryption
+    /// the commitment to the share is not sent but computed from
+    /// the commitments to the sharing coefficients
+    pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
     /// Witnesses for proof of knowledge of signature of Identity Provider on
     /// the list (idCredSec, prfKey, attributes[0], attributes[1],...,
     /// attributes[n], AR[1], ..., AR[m])
@@ -873,7 +964,8 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for CredDeploymentPro
         tmp_out.put(&self.sig);
         tmp_out.put(&self.commitments);
         tmp_out.put(&self.challenge);
-        tmp_out.put(&self.proof_id_cred_pub);
+        tmp_out.put(&(self.proof_id_cred_pub.len() as u32));
+        serial_map_no_length(&self.proof_id_cred_pub, &mut tmp_out);
         tmp_out.put(&self.proof_ip_sig);
         tmp_out.put(&self.proof_reg_id);
         tmp_out.put(&self.proof_acc_sk);
@@ -891,7 +983,9 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
         let sig = limited.get()?;
         let commitments = limited.get()?;
         let challenge = limited.get()?;
-        let proof_id_cred_pub = limited.get()?;
+        let proof_id_cred_pub_len: u32 = limited.get()?;
+        let proof_id_cred_pub =
+            deserial_map_no_length(&mut limited, proof_id_cred_pub_len as usize)?;
         let proof_ip_sig = limited.get()?;
         let proof_reg_id = limited.get()?;
         let proof_acc_sk = limited.get()?;
@@ -1233,9 +1327,9 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     /// identity. NB: The order is important since it is the same order as that
     /// signed by the identity provider, and permuting the list will invalidate
     /// the signature from the identity provider.
-    #[size_length = 2]
+    #[map_size_length = 2]
     #[serde(rename = "arData")]
-    pub ar_data: Vec<ChainArData<C>>,
+    pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
     /// Policy of this credential object.
     #[serde(rename = "policy")]
     pub policy: Policy<C, AttributeType>,
@@ -1504,12 +1598,6 @@ impl Deserial for SchemeId {
             _ => bail!("Only Ed25519 signature scheme supported."),
         }
     }
-}
-
-impl ArIdentity {
-    /// Curve scalars must be big enough to accommodate all 32 bit unsigned
-    /// integers.
-    pub fn to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_u64(u64::from(self.0)) }
 }
 
 /// Metadata that we need off-chain for various purposes, but should not go on

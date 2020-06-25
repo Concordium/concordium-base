@@ -1,16 +1,13 @@
 use random_oracle::RandomOracle;
 
-use crate::{
-    secret_sharing::{ShareNumber, Threshold},
-    types::*,
-};
+use crate::{secret_sharing::Threshold, types::*, utils};
 use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use either::Either;
 
@@ -53,22 +50,14 @@ pub fn verify_cdi<
     acc_keys: Option<&AccountKeys>,
     cdi: &CredDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
-    // anonimity revocation data
-    // preprocessing
-    let ars = &cdi
-        .values
-        .ar_data
-        .iter()
-        .map(|x| x.ar_identity)
-        .collect::<Vec<ArIdentity>>();
-
-    let mut choice_ar_parameters = Vec::with_capacity(ars.len());
+    let num_ars = cdi.values.ar_data.len();
+    let mut choice_ar_parameters = Vec::with_capacity(num_ars);
 
     // find ArInfo's corresponding to this credential in the
     // IpInfo.
     // FIXME: This is quadratic due to the choice of data structures.
     // We could likely have a map in IPInfo instead of a list.
-    for &handle in ars.iter() {
+    for &handle in cdi.values.ar_data.keys() {
         match ip_info.ip_ars.ars.iter().find(|&x| x.ar_identity == handle) {
             None => return Err(CDIVerificationError::AR),
             Some(ar_info) => choice_ar_parameters.push(ar_info),
@@ -233,64 +222,51 @@ pub fn verify_cdi_worker<
 }
 
 /// verify id_cred data
-fn id_cred_pub_verifier<'a, C: Curve>(
-    commitment_key: &'a CommitmentKey<C>,
-    choice_ar_parameters: &'a [&ArInfo<C>],
-    chain_ar_data: &'a [ChainArData<C>],
-    cmm_sharing_coeff: &'a [Commitment<C>],
-    proof_id_cred_pub: &'a [(ShareNumber, com_enc_eq::Witness<C>)],
+fn id_cred_pub_verifier<C: Curve>(
+    commitment_key: &CommitmentKey<C>,
+    choice_ar_parameters: &[&ArInfo<C>],
+    chain_ar_data: &BTreeMap<ArIdentity, ChainArData<C>>,
+    cmm_sharing_coeff: &[Commitment<C>],
+    proof_id_cred_pub: &BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
 ) -> Result<IdCredPubVerifiers<C>, CDIVerificationError> {
     let mut provers = Vec::with_capacity(proof_id_cred_pub.len());
     let mut witnesses = Vec::with_capacity(proof_id_cred_pub.len());
 
-    for ar in chain_ar_data.iter() {
-        let cmm_share = commitment_to_share(ar.id_cred_pub_share_number, cmm_sharing_coeff);
-        // finding the correct AR data by share number
-        match proof_id_cred_pub
+    // The encryptions and the proofs have to match.
+    if chain_ar_data.len() != proof_id_cred_pub.len() {
+        return Err(CDIVerificationError::IdCredPub);
+    }
+
+    // The following relies on the fact that iterators over BTreeMap are
+    // over sorted values.
+    for ((ar_id, ar_data), (ar_id_1, witness)) in chain_ar_data.iter().zip(proof_id_cred_pub.iter())
+    {
+        if ar_id != ar_id_1 {
+            return Err(CDIVerificationError::IdCredPub);
+        }
+        let cmm_share = utils::commitment_to_share(&ar_id.to_scalar::<C>(), cmm_sharing_coeff);
+
+        // finding the correct AR data.
+        match choice_ar_parameters
             .iter()
-            .find(|&x| x.0 == ar.id_cred_pub_share_number)
+            .find(|&x| x.ar_identity == *ar_id)
         {
             None => return Err(CDIVerificationError::IdCredPub),
-            // finding the correct AR info
-            Some((_, witness)) => match choice_ar_parameters
-                .iter()
-                .find(|&x| x.ar_identity == ar.ar_identity)
-            {
-                None => return Err(CDIVerificationError::IdCredPub),
-                Some(ar_info) => {
-                    let item_prover = com_enc_eq::ComEncEq {
-                        cipher:     ar.enc_id_cred_pub_share,
-                        commitment: cmm_share,
-                        pub_key:    ar_info.ar_public_key,
-                        cmm_key:    *commitment_key,
-                    };
-                    provers.push(item_prover);
-                    witnesses.push(witness.clone());
-                }
-            },
+            Some(ar_info) => {
+                let item_prover = com_enc_eq::ComEncEq {
+                    cipher:     ar_data.enc_id_cred_pub_share,
+                    commitment: cmm_share,
+                    pub_key:    ar_info.ar_public_key,
+                    cmm_key:    *commitment_key,
+                };
+                provers.push(item_prover);
+                witnesses.push(witness.clone());
+            }
         }
     }
     Ok((ReplicateAdapter { protocols: provers }, ReplicateWitness {
         witnesses,
     }))
-}
-
-// computing the commitment to a single share from the commitments to the
-// coefficients
-pub fn commitment_to_share<C: Curve>(
-    share_number: ShareNumber,
-    coeff_commitments: &[Commitment<C>],
-) -> Commitment<C> {
-    let mut cmm_share_point: C = C::zero_point();
-    let share_scalar = share_number.to_scalar::<C>();
-    // Essentially Horner's scheme in the exponent.
-    // Likely this would be better done with multiexponentiation,
-    // although this is not clear.
-    for cmm in coeff_commitments.iter().rev() {
-        cmm_share_point = cmm_share_point.mul_by_scalar(&share_scalar);
-        cmm_share_point = cmm_share_point.plus_point(&cmm);
-    }
-    Commitment(cmm_share_point)
 }
 
 /// Verify a policy. This currently does not do anything since
@@ -376,10 +352,15 @@ fn pok_sig_verifier<
     ip_pub_key: &'a ps_sig::PublicKey<P>,
     blinded_sig: &'a ps_sig::BlindedSignature<P>,
 ) -> Option<com_eq_sig::ComEqSig<P, C>> {
+    let ar_scalars = encode_ars(
+        &choice_ar_parameters
+            .iter()
+            .map(|x| x.ar_identity)
+            .collect::<Vec<ArIdentity>>(),
+    )?;
     // Capacity for id_cred_sec, cmm_prf, threshold, tags, valid_to, created_at
-    // choice_ar_parameters and cmm_attributes
-    let mut comm_vec =
-        Vec::with_capacity(6 + choice_ar_parameters.len() + commitments.cmm_attributes.len());
+    // ar_scalars and cmm_attributes
+    let mut comm_vec = Vec::with_capacity(6 + ar_scalars.len() + commitments.cmm_attributes.len());
     let cmm_id_cred_sec = *commitments.cmm_id_cred_sec_sharing_coeff.first()?;
     comm_vec.push(cmm_id_cred_sec);
     comm_vec.push(commitments.cmm_prf);
@@ -389,9 +370,8 @@ fn pok_sig_verifier<
     // add commitment to threshold with randomness 0
     comm_vec.push(commitment_key.hide(&Value::<C>::new(threshold.to_scalar::<C>()), &zero));
     // and all commitments to ARs with randomness 0
-    for ar in choice_ar_parameters {
-        comm_vec
-            .push(commitment_key.hide(&Value::<C>::new(ar.ar_identity.to_scalar::<C>()), &zero));
+    for ar in ar_scalars {
+        comm_vec.push(commitment_key.hide_worker(&ar, &zero));
     }
 
     let tags = {

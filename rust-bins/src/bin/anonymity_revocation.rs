@@ -1,8 +1,6 @@
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use id::anonymity_revoker::reveal_id_cred_pub;
 
-use id::secret_sharing::*;
-
 use crypto_common::*;
 
 use elgamal::message::Message;
@@ -105,8 +103,6 @@ fn handle_combine(matches: &ArgMatches) {
     };
     let revocation_threshold = credential.threshold;
 
-    let ar_data = credential.ar_data;
-
     let shares_values: Vec<_> = match matches.values_of("shares") {
         Some(v) => v.collect(),
         None => {
@@ -116,8 +112,8 @@ fn handle_combine(matches: &ArgMatches) {
     };
 
     let number_of_ars = shares_values.len();
-    let number_of_ars = u32::try_from(number_of_ars)
-        .expect("Number of anonymity revokers should not exceed 2^32-1");
+    let number_of_ars =
+        u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^32-1");
     if number_of_ars < revocation_threshold.into() {
         eprintln!(
             "insufficient number of anonymity revokers {}, {:?}",
@@ -128,7 +124,7 @@ fn handle_combine(matches: &ArgMatches) {
 
     let mut ar_decrypted_data_vec: Vec<ChainArDecryptedData<ExampleCurve>> =
         Vec::with_capacity(shares_values.len());
-    let mut shares: Vec<(ShareNumber, Message<ExampleCurve>)> =
+    let mut shares: Vec<(ArIdentity, Message<ExampleCurve>)> =
         Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {
@@ -141,35 +137,16 @@ fn handle_combine(matches: &ArgMatches) {
         }
     }
 
-    let mut share_numbers = Vec::new();
-    let mut ar_identities = Vec::new();
+    let mut ar_identities = Vec::with_capacity(ar_decrypted_data_vec.len());
 
     for ar_decrypted_data in ar_decrypted_data_vec {
-        match ar_data.iter().find(|&x| {
-            x.id_cred_pub_share_number == ar_decrypted_data.id_cred_pub_share_number
-                && x.ar_identity == ar_decrypted_data.ar_identity
-        }) {
-            None => {
-                eprintln!(
-                    "AR with {:?} and {:?} is not part of the credential",
-                    ar_decrypted_data.ar_identity, ar_decrypted_data.id_cred_pub_share_number
-                );
-                return;
-            }
-            Some(_) => {}
-        }
-        share_numbers.push(ar_decrypted_data.id_cred_pub_share_number.0);
-        ar_identities.push(ar_decrypted_data.ar_identity.0);
-        shares.push((
-            ar_decrypted_data.id_cred_pub_share_number,
-            ar_decrypted_data.id_cred_pub_share,
-        ));
+        let ar_id = ar_decrypted_data.ar_identity;
+        ar_identities.push(ar_id);
+        shares.push((ar_id, ar_decrypted_data.id_cred_pub_share));
     }
-    share_numbers.sort();
-    share_numbers.dedup();
     ar_identities.sort();
     ar_identities.dedup();
-    if share_numbers.len() < shares.len() || ar_identities.len() < shares.len() {
+    if ar_identities.len() < shares.len() {
         println!(
             "No duplicates among the anonymity revokers identities nor share numbers are allowed"
         );
@@ -225,10 +202,7 @@ fn handle_decrypt(matches: &ArgMatches) {
     };
     let share: ChainArDecryptedData<ExampleCurve>;
 
-    match ar_data
-        .iter()
-        .find(|&x| x.ar_identity == ar.public_ar_info.ar_identity)
-    {
+    match ar_data.get(&ar.public_ar_info.ar_identity) {
         None => {
             eprintln!("AR is not part of the credential");
             return;
@@ -238,9 +212,8 @@ fn handle_decrypt(matches: &ArgMatches) {
                 .ar_secret_key
                 .decrypt(&single_ar_data.enc_id_cred_pub_share);
             share = ChainArDecryptedData {
-                ar_identity:              single_ar_data.ar_identity,
-                id_cred_pub_share_number: single_ar_data.id_cred_pub_share_number,
-                id_cred_pub_share:        m,
+                ar_identity:       ar.public_ar_info.ar_identity,
+                id_cred_pub_share: m,
             };
         }
     }

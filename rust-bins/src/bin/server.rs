@@ -59,7 +59,7 @@ fn parse_id_object_input_json(
     // default threshold is one less than the amount of anonymity revokers
     // if the field "threshold" is not present this is what we take.
     let threshold = match v.get("threshold") {
-        None => Threshold(max(1, ars.len() - 1) as u32),
+        None => Threshold(max(1, ars.len() - 1) as u8),
         Some(v) => from_json(v.clone()).ok()?,
     };
     let alist = v

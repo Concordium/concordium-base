@@ -1,15 +1,16 @@
 use crate::{
-    secret_sharing::{ShareNumber, Threshold},
+    secret_sharing::Threshold,
     sigma_protocols::{com_enc_eq, com_eq, com_eq_different_groups, common::*, dlog},
     types::*,
+    utils,
 };
 use curve_arithmetic::{Curve, Pairing};
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 
 use random_oracle::RandomOracle;
 
-use ff::Field;
 use rand::*;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reason {
@@ -176,33 +177,33 @@ pub fn sign_identity_object<
     Ok(ip_secret_key.sign_unknown_message(&message, &mut csprng))
 }
 
-fn compute_prf_sharing_verifier<'a, C: Curve>(
-    ar_commitment_key: &'a CommitmentKey<C>,
-    cmm_sharing_coeff: &'a [Commitment<C>],
-    ip_ar_data: &'a [IpArData<C>],
-    choice_ar_parameters: &'a [ArInfo<C>],
+fn compute_prf_sharing_verifier<C: Curve>(
+    ar_commitment_key: &CommitmentKey<C>,
+    cmm_sharing_coeff: &[Commitment<C>],
+    ip_ar_data: &BTreeMap<ArIdentity, IpArData<C>>,
+    choice_ar_parameters: &[ArInfo<C>],
 ) -> Option<IdCredPubVerifiers<C>> {
     let mut verifiers = Vec::with_capacity(ip_ar_data.len());
     let mut witnesses = Vec::with_capacity(ip_ar_data.len());
 
-    for ar in ip_ar_data.iter() {
-        let cmm_share = commitment_to_share(ar.prf_key_share_number, cmm_sharing_coeff);
+    for (&ar_id, ar_data) in ip_ar_data.iter() {
+        let cmm_share = utils::commitment_to_share(&ar_id.to_scalar::<C>(), cmm_sharing_coeff);
         // finding the right encryption key
         match choice_ar_parameters
             .iter()
-            .find(|&x| x.ar_identity == ar.ar_identity)
+            .find(|&x| x.ar_identity == ar_id)
         {
             None => return None,
             Some(ar_info) => {
                 let verifier = com_enc_eq::ComEncEq {
-                    cipher:     ar.enc_prf_key_share,
+                    cipher:     ar_data.enc_prf_key_share,
                     commitment: cmm_share,
                     pub_key:    ar_info.ar_public_key,
                     cmm_key:    *ar_commitment_key,
                 };
                 verifiers.push(verifier);
                 // TODO: Figure out whether we can somehow get rid of this clone.
-                witnesses.push(ar.proof_com_enc_eq.clone());
+                witnesses.push(ar_data.proof_com_enc_eq.clone());
             }
         }
     }
@@ -252,17 +253,21 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     // the list to be signed consists of (in that order)
     // - commitment to idcredsec
     // - commitment to prf key
-    // - anonymity revocation threshold
-    // - list of anonymity revokers
+    // - encoding of anonymity revokers.
     // - tags of the attribute list
     // - valid_to date of the attribute list
     // - created_at of the attribute list
     // - attribute list elements
 
+    let ar_encoded = match encode_ars(ar_list) {
+        Some(x) => x,
+        None => return Err(Reason::WrongArParameters),
+    };
+
     let mut message = cmm_sc.0;
     message = message.plus_point(&cmm_prf.0);
     let att_vec = &att_list.alist;
-    let m = ar_list.len();
+    let m = ar_encoded.len();
     let n = att_vec.len();
     let key_vec = &ps_public_key.ys;
 
@@ -274,7 +279,8 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     message = message.plus_point(&key_vec[2].mul_by_scalar(&threshold.to_scalar::<P::G1>()));
     // and add all anonymity revocation
     for i in 3..(m + 3) {
-        let ar_handle = ar_list[i - 3].to_scalar::<P::G1>();
+        let ar_handle = ar_encoded[i - 3];
+        // FIXME: Could benefit from multiexponentiation
         message = message.plus_point(&key_vec[i].mul_by_scalar(&ar_handle));
     }
 
@@ -292,25 +298,6 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     Ok(msg)
 }
 
-/// Given a list of commitments g^{a_i}h^{r_i}
-/// and a point x (the share number), compute
-/// g^p(x)h^r(x) where
-/// p(x) = a_0 + a_1 x + ... + a_n x^n
-/// r(x) = r_0 + r_1 x + ... + r_n x^n
-pub fn commitment_to_share<C: Curve>(
-    share_number: ShareNumber,
-    coeff_commitments: &[Commitment<C>],
-) -> Commitment<C> {
-    // TODO: This would benefit from multiexponentiation.
-    let mut cmm_share_point: C = coeff_commitments[0].0;
-    for (i, Commitment(cmm_point)) in coeff_commitments.iter().enumerate().skip(1) {
-        let j_pow_i: C::Scalar = share_number.to_scalar::<C>().pow([i as u64]);
-        let a = cmm_point.mul_by_scalar(&j_pow_i);
-        cmm_share_point = cmm_share_point.plus_point(&a);
-    }
-    Commitment(cmm_share_point)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -319,6 +306,8 @@ mod tests {
 
     use pairing::bls12_381::G1;
     use pedersen_scheme::{key::CommitmentKey, Value as PedersenValue};
+
+    use ff::Field;
 
     type ExampleCurve = G1;
 
@@ -354,13 +343,13 @@ mod tests {
 
         // Sample some random share numbers
         for _ in 0..100 {
-            let sh = ShareNumber::from(csprng.next_u32());
+            let sh: ArIdentity = ArIdentity::new(std::cmp::max(1, csprng.next_u32()));
             // And evaluate the values and rands at sh.
-            let point = ExampleCurve::scalar_from_u64(u64::from(sh.0));
+            let point = sh.to_scalar::<ExampleCurve>();
             let pv = eval_poly(&values, &point);
             let rv = eval_poly(&rands, &point);
 
-            let p0 = commitment_to_share(sh, &coeffs);
+            let p0 = utils::commitment_to_share(&sh.to_scalar::<ExampleCurve>(), &coeffs);
             assert_eq!(p0, ck.hide_worker(&pv, &rv));
         }
     }
