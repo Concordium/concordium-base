@@ -244,7 +244,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     let max_accounts = P::G1::scalar_from_u64(att_list.max_accounts.into());
 
     let tags = {
-        match encode_tags(att_list.alist.keys()) {
+        match utils::encode_tags(att_list.alist.keys()) {
             Ok(f) => f,
             Err(_) => return Err(Reason::IllegalAttributeRequirements),
         }
@@ -259,7 +259,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     // - created_at of the attribute list
     // - attribute list elements
 
-    let ar_encoded = match encode_ars(ar_list) {
+    let ar_encoded = match utils::encode_ars(ar_list) {
         Some(x) => x,
         None => return Err(Reason::WrongArParameters),
     };
