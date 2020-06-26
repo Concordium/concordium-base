@@ -113,7 +113,7 @@ fn handle_combine(matches: &ArgMatches) {
 
     let number_of_ars = shares_values.len();
     let number_of_ars =
-        u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^32-1");
+        u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^8-1");
     if number_of_ars < revocation_threshold.into() {
         eprintln!(
             "insufficient number of anonymity revokers {}, {:?}",

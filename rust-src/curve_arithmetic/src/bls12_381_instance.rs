@@ -26,7 +26,7 @@ fn scalar_from_bytes_helper<A: AsRef<[u8]>>(bytes: A) -> Fr {
     }
     // unset two topmost bits in the last read u64.
     fr[3] &= !(1u64 << 63 | 1u64 << 62);
-    Fr::from_repr(FrRepr(fr)).expect("The scalar is valid since we erased two top bits.")
+    Fr::from_repr(FrRepr(fr)).expect("The scalar with top two bits erased should be valid.")
 }
 
 impl Curve for G2 {
