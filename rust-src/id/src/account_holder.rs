@@ -600,9 +600,13 @@ fn compute_pok_sig<
     gxs.push(y_tildas[0]);
     secrets.push((prf_key.to_value(), commitment_rands.prf_rand.clone()));
     gxs.push(y_tildas[1]);
-    // commitment randomness (0) for the threshold
+
+    let public_vals =
+        utils::encode_public_credential_values(alist.created_at, alist.valid_to, threshold)?;
+
+    // commitment randomness (0) for the public parameters.
     let zero = PedersenRandomness::<C>::zero();
-    secrets.push((Value::new(threshold.to_scalar::<C>()), zero.clone()));
+    secrets.push((Value::new(public_vals), zero.clone()));
     gxs.push(y_tildas[2]);
     for i in 3..num_ars + 3 {
         // the encoded id revoker are commited with randomness 0.
@@ -612,31 +616,21 @@ fn compute_pok_sig<
 
     let att_rands = &commitment_rands.attributes_rand;
 
-    let tags_val = Value::new(utils::encode_tags(alist.alist.keys())?);
-    let tags_cmm = commitment_key.hide(&tags_val, &zero);
-
-    let valid_to_val = Value::new(C::scalar_from_u64(alist.valid_to.into()));
-    let valid_to_cmm = commitment_key.hide(&valid_to_val, &zero);
-
-    let created_at_val = Value::new(C::scalar_from_u64(alist.created_at.into()));
-    let created_at_cmm = commitment_key.hide(&created_at_val, &zero);
+    let tags_val = utils::encode_tags(alist.alist.keys())?;
+    let tags_cmm = commitment_key.hide_worker(&tags_val, &zero);
 
     let max_accounts_val = Value::new(C::scalar_from_u64(alist.max_accounts.into()));
     let max_accounts_cmm =
         commitment_key.hide(&max_accounts_val, &commitment_rands.max_accounts_rand);
 
-    secrets.push((tags_val, zero.clone()));
+    secrets.push((Value::new(tags_val), zero.clone()));
     gxs.push(y_tildas[num_ars + 3]);
-    secrets.push((valid_to_val, zero.clone()));
-    gxs.push(y_tildas[num_ars + 4]);
-    secrets.push((created_at_val, zero.clone()));
-    gxs.push(y_tildas[num_ars + 5]);
     secrets.push((max_accounts_val, commitment_rands.max_accounts_rand.clone()));
-    gxs.push(y_tildas[num_ars + 6]);
+    gxs.push(y_tildas[num_ars + 4]);
 
     // NB: It is crucial here that we use a btreemap. This guarantees that
     // the att_vec.iter() iterator is ordered by keys.
-    for (&g, (tag, v)) in y_tildas.iter().skip(num_ars + 5 + 1).zip(att_vec.iter()) {
+    for (&g, (tag, v)) in y_tildas.iter().skip(num_ars + 3 + 1).zip(att_vec.iter()) {
         secrets.push((
             Value::new(v.to_field_element()),
             // if we commited with non-zero randomness get it.
@@ -653,7 +647,7 @@ fn compute_pok_sig<
     comm_vec.push(commitments.cmm_prf);
 
     // add commitment to threshold with randomness 0
-    comm_vec.push(commitment_key.hide(&Value::<C>::new(threshold.to_scalar::<C>()), &zero));
+    comm_vec.push(commitment_key.hide_worker(&public_vals, &zero));
 
     // and all commitments to ARs with randomness 0
     for ar in ar_scalars.iter() {
@@ -661,8 +655,6 @@ fn compute_pok_sig<
     }
 
     comm_vec.push(tags_cmm);
-    comm_vec.push(valid_to_cmm);
-    comm_vec.push(created_at_cmm);
     comm_vec.push(max_accounts_cmm);
 
     for (idx, v) in alist.alist.iter() {

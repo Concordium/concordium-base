@@ -1,4 +1,4 @@
-use crate::types::*;
+use crate::{secret_sharing::Threshold, types::*};
 use curve_arithmetic::Curve;
 use ff::{Field, PrimeField};
 use pedersen_scheme::Commitment;
@@ -117,6 +117,27 @@ pub fn encode_ars<F: PrimeField>(ars: &BTreeSet<ArIdentity>) -> Option<Vec<F>> {
     // make sure we have enough scalars, but we still just propagate the error.
     scalars.last_mut()?.add_assign(&F::one());
     Some(scalars)
+}
+
+/// Encode two yearmonth values into a scalar.
+/// This encodes them after converting them into u32, first putting created_at,
+/// and then valid_to into the scalar. Thus create_at starts at the
+/// least-significant bit. The threshold is stored in the next byte.
+///
+/// NB: The field's capacity must be at least 128 bits.
+pub fn encode_public_credential_values<F: PrimeField>(
+    created_at: YearMonth,
+    valid_to: YearMonth,
+    threshold: Threshold,
+) -> Fallible<F> {
+    let mut f = F::zero().into_repr();
+    let ca: u32 = created_at.into();
+    let vt: u32 = valid_to.into();
+    let s = u64::from(vt) << 32 | u64::from(ca);
+    f.as_mut()[0] = s; // limbs in as_mut are little endian.
+    let threshold: u8 = threshold.into();
+    f.as_mut()[1] = u64::from(threshold);
+    Ok(F::from_repr(f)?)
 }
 
 #[cfg(test)]

@@ -239,8 +239,6 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     att_list: &AttributeList<P::ScalarField, AttributeType>,
     ps_public_key: &ps_sig::PublicKey<P>,
 ) -> Result<ps_sig::UnknownMessage<P>, Reason> {
-    let valid_to = P::G1::scalar_from_u64(att_list.valid_to.into());
-    let created_at = P::G1::scalar_from_u64(att_list.created_at.into());
     let max_accounts = P::G1::scalar_from_u64(att_list.max_accounts.into());
 
     let tags = {
@@ -253,10 +251,9 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     // the list to be signed consists of (in that order)
     // - commitment to idcredsec
     // - commitment to prf key
+    // - created_at and valid_to dates of the attribute list
     // - encoding of anonymity revokers.
     // - tags of the attribute list
-    // - valid_to date of the attribute list
-    // - created_at of the attribute list
     // - attribute list elements
 
     let ar_encoded = match utils::encode_ars(ar_list) {
@@ -275,8 +272,14 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
         return Err(Reason::TooManyAttributes);
     }
 
-    // add threshold to the message
-    message = message.plus_point(&key_vec[2].mul_by_scalar(&threshold.to_scalar::<P::G1>()));
+    // The error here should never happen, but it is safe to just propagate it if it
+    // does by any chance.
+    let public_params =
+        utils::encode_public_credential_values(att_list.created_at, att_list.valid_to, threshold)
+            .map_err(|_| Reason::IllegalAttributeRequirements)?;
+
+    // add valid_to, created_at, threshold.
+    message = message.plus_point(&key_vec[2].mul_by_scalar(&public_params));
     // and add all anonymity revocation
     for i in 3..(m + 3) {
         let ar_handle = ar_encoded[i - 3];
@@ -285,12 +288,10 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     }
 
     message = message.plus_point(&key_vec[m + 3].mul_by_scalar(&tags));
-    message = message.plus_point(&key_vec[m + 3 + 1].mul_by_scalar(&valid_to));
-    message = message.plus_point(&key_vec[m + 3 + 2].mul_by_scalar(&created_at));
-    message = message.plus_point(&key_vec[m + 3 + 3].mul_by_scalar(&max_accounts));
+    message = message.plus_point(&key_vec[m + 3 + 1].mul_by_scalar(&max_accounts));
     // NB: It is crucial that att_vec is an ordered map and that .values iterator
     // returns messages in order of tags.
-    for (k, v) in key_vec.iter().skip(m + 7).zip(att_vec.values()) {
+    for (k, v) in key_vec.iter().skip(m + 5).zip(att_vec.values()) {
         let att = v.to_field_element();
         message = message.plus_point(&k.mul_by_scalar(&att));
     }

@@ -525,6 +525,24 @@ impl From<YearMonth> for u64 {
     fn from(v: YearMonth) -> Self { u64::from(v.month) | (u64::from(v.year) << 8) }
 }
 
+impl From<&YearMonth> for u64 {
+    /// Convert expiry (year and month) to unsigned 64-bit integer.
+    /// Least significant byte is month, following two bytes are year
+    fn from(v: &YearMonth) -> Self { u64::from(v.month) | (u64::from(v.year) << 8) }
+}
+
+impl From<&YearMonth> for u32 {
+    /// Convert expiry (year and month) to unsigned 32-bit integer.
+    /// Least significant byte is month, following two bytes are year
+    fn from(v: &YearMonth) -> Self { u32::from(v.month) | (u32::from(v.year) << 8) }
+}
+
+impl From<YearMonth> for u32 {
+    /// Convert expiry (year and month) to unsigned 32-bit integer.
+    /// Least significant byte is month, following two bytes are year
+    fn from(v: YearMonth) -> Self { u32::from(v.month) | (u32::from(v.year) << 8) }
+}
+
 #[derive(Clone, Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
     serialize = "F: Field, AttributeType: Attribute<F> + SerdeSerialize",
