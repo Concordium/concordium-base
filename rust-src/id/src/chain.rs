@@ -358,17 +358,20 @@ fn pok_sig_verifier<
             .map(|x| x.ar_identity)
             .collect::<BTreeSet<ArIdentity>>(),
     )?;
-    // Capacity for id_cred_sec, cmm_prf, threshold, tags, valid_to, created_at
+    // Capacity for id_cred_sec, cmm_prf, (threshold, valid_to, created_at), tags
     // ar_scalars and cmm_attributes
-    let mut comm_vec = Vec::with_capacity(6 + ar_scalars.len() + commitments.cmm_attributes.len());
+    let mut comm_vec = Vec::with_capacity(4 + ar_scalars.len() + commitments.cmm_attributes.len());
     let cmm_id_cred_sec = *commitments.cmm_id_cred_sec_sharing_coeff.first()?;
     comm_vec.push(cmm_id_cred_sec);
     comm_vec.push(commitments.cmm_prf);
 
     // compute commitments with randomness 0
     let zero = Randomness::zero();
-    // add commitment to threshold with randomness 0
-    comm_vec.push(commitment_key.hide(&Value::<C>::new(threshold.to_scalar::<C>()), &zero));
+    let public_params =
+        utils::encode_public_credential_values(policy.created_at, policy.valid_to, threshold)
+            .ok()?;
+    // add commitment to public values with randomness 0
+    comm_vec.push(commitment_key.hide_worker(&public_params, &zero));
     // and all commitments to ARs with randomness 0
     for ar in ar_scalars {
         comm_vec.push(commitment_key.hide_worker(&ar, &zero));
@@ -388,14 +391,6 @@ fn pok_sig_verifier<
 
     // add commitment with randomness 0 for variant, valid_to and created_at
     comm_vec.push(commitment_key.hide(&Value::<C>::new(tags), &zero));
-    comm_vec.push(commitment_key.hide(
-        &Value::<C>::new(C::scalar_from_u64(policy.valid_to.into())),
-        &zero,
-    ));
-    comm_vec.push(commitment_key.hide(
-        &Value::<C>::new(C::scalar_from_u64(policy.created_at.into())),
-        &zero,
-    ));
     comm_vec.push(commitments.cmm_max_accounts);
 
     // now, we go through the policy and remaining commitments and
