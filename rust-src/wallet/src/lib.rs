@@ -167,12 +167,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     };
 
     // Choice of anonymity revokers, all of them in this implementation.
-    let ar_identities = ip_info
-        .ip_ars
-        .ars
-        .iter()
-        .map(|x| x.ar_identity)
-        .collect::<Vec<_>>();
+    let ar_identities = ip_info.ip_ars.ars.iter().map(|x| x.ar_identity).collect();
     let context = make_context_from_ip_info(ip_info, ChoiceArParameters {
         ar_identities,
         threshold,

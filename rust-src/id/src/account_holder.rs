@@ -21,7 +21,7 @@ use pedersen_scheme::{
     randomness::Randomness as PedersenRandomness, value::Value,
 };
 use rand::*;
-use std::collections::{btree_map::BTreeMap, hash_map::HashMap};
+use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
 
 /// Generate PreIdentityObject out of the account holder information,
 /// the chosen anonymity revoker information, and the necessary contextual
@@ -469,7 +469,11 @@ where
         reg_id,
     );
 
-    let choice_ar_handles: Vec<ArIdentity> = cred_values.ar_data.iter().map(|(x, _)| *x).collect();
+    let choice_ar_handles = cred_values
+        .ar_data
+        .iter()
+        .map(|(x, _)| *x)
+        .collect::<BTreeSet<_>>();
 
     // Proof of knowledge of the signature of the identity provider.
     let (prover_sig, secret_sig) = compute_pok_sig(
@@ -552,7 +556,7 @@ fn compute_pok_sig<
     prf_key: &prf::SecretKey<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     threshold: Threshold,
-    ar_list: &[ArIdentity],
+    ar_list: &BTreeSet<ArIdentity>,
     ip_pub_key: &ps_sig::PublicKey<P>,
     blinded_sig: &ps_sig::BlindedSignature<P>,
     blind_rand: ps_sig::BlindingRandomness<P>,

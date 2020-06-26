@@ -10,7 +10,7 @@ use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use random_oracle::RandomOracle;
 
 use rand::*;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reason {
@@ -235,7 +235,7 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
     cmm_prf: &Commitment<P::G1>,
     cmm_sc: &Commitment<P::G1>,
     threshold: Threshold,
-    ar_list: &[ArIdentity],
+    ar_list: &BTreeSet<ArIdentity>,
     att_list: &AttributeList<P::ScalarField, AttributeType>,
     ps_public_key: &ps_sig::PublicKey<P>,
 ) -> Result<ps_sig::UnknownMessage<P>, Reason> {

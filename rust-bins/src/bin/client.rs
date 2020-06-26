@@ -19,7 +19,7 @@ use pedersen_scheme::CommitmentKey;
 
 use std::{
     cmp::max,
-    collections::btree_map::BTreeMap,
+    collections::{btree_map::BTreeMap, BTreeSet},
     fs::File,
     io::{self, Write},
     path::Path,
@@ -642,7 +642,7 @@ fn handle_start_ip(matches: &ArgMatches) {
         .map(|x| x.ar_description.name.as_str())
         .collect();
 
-    let mut choice_ars = vec![];
+    let mut choice_ars = BTreeSet::new();
 
     let ar_info = Checkboxes::new()
         .with_prompt("Choose anonymity revokers")
@@ -655,7 +655,7 @@ fn handle_start_ip(matches: &ArgMatches) {
         return;
     }
     for idx in ar_info.into_iter() {
-        choice_ars.push(ar_handles[idx].ar_identity);
+        choice_ars.insert(ar_handles[idx].ar_identity);
     }
 
     let threshold = {

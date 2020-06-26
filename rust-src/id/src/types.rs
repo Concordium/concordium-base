@@ -13,7 +13,10 @@ use pedersen_scheme::{
     commitment as pedersen, key::CommitmentKey as PedersenKey, Value as PedersenValue,
 };
 use ps_sig::{public as pssig, signature::*, unknown_message::SigRetrievalRandomness};
-use std::{collections::btree_map::BTreeMap, str::FromStr};
+use std::{
+    collections::{btree_map::BTreeMap, BTreeSet},
+    str::FromStr,
+};
 
 use crate::sigma_protocols::{
     com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult,
@@ -643,8 +646,8 @@ pub struct ChainArDecryptedData<C: Curve> {
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 pub struct ChoiceArParameters {
     #[serde(rename = "arIdentities")]
-    #[size_length = 4]
-    pub ar_identities: Vec<ArIdentity>,
+    #[set_size_length = 2]
+    pub ar_identities: BTreeSet<ArIdentity>,
     #[serde(rename = "threshold")]
     pub threshold: Threshold,
 }

@@ -4,6 +4,7 @@ use ff::{Field, PrimeField};
 use pedersen_scheme::Commitment;
 
 use failure::Fallible;
+use std::collections::BTreeSet;
 
 /// Given a list of commitments g^{a_i}h^{r_i}
 /// and a point x (the share number), compute
@@ -76,8 +77,14 @@ pub fn encode_tags<'a, F: PrimeField, I: std::iter::IntoIterator<Item = &'a Attr
 /// of the scalar encodes whether there are more scalars to follow.
 /// That is the case if and only if the bit is 1.
 /// The field must be big enough to encode u64.
-pub fn encode_ars<F: PrimeField>(ars: &[ArIdentity]) -> Option<Vec<F>> {
+///
+/// This function will encode sorted identities
+pub fn encode_ars<F: PrimeField>(ars: &BTreeSet<ArIdentity>) -> Option<Vec<F>> {
     let max_bit: usize = (F::CAPACITY - 1) as usize;
+
+    // Collect into an __acending__ vector.
+    let ars = ars.iter().copied().collect::<Vec<_>>();
+
     // NB: This 32 must be the same as the size of the ArIdentity.
     let num_ars_per_element = max_bit / 32;
     let chunks = ars.chunks(num_ars_per_element);
@@ -122,7 +129,7 @@ mod tests {
 
     #[test]
     pub fn test_last_bit() {
-        let ars = (1..10).map(ArIdentity::new).collect::<Vec<_>>();
+        let ars = (1..10).map(ArIdentity::new).collect::<BTreeSet<_>>();
         let encoded = encode_ars::<Fr>(&ars).expect("Encodign should succeed.");
         // Field size of Fr is 254 bits, so what we expect is to have two scalars
         assert_eq!(encoded.len(), 2, "Encoded ARs should fit into two scalars.");
@@ -147,9 +154,10 @@ mod tests {
             for x in xs.iter_mut() {
                 *x = ArIdentity::new(csprng.gen_range(1, 100));
             }
-            let encoded = encode_ars::<Fr>(&xs).expect("Encoding should succeed.");
-            if let Some(xs_ex) = seen.insert(encoded.clone(), xs.clone()) {
-                assert_eq!(xs, xs_ex);
+            let set = xs.iter().copied().collect::<BTreeSet<_>>();
+            let encoded = encode_ars::<Fr>(&set).expect("Encoding should succeed.");
+            if let Some(set_ex) = seen.insert(encoded.clone(), set.clone()) {
+                assert_eq!(set, set_ex);
             }
         }
     }
