@@ -1,6 +1,9 @@
+use crate::types::*;
 use curve_arithmetic::Curve;
-use ff::Field;
+use ff::{Field, PrimeField};
 use pedersen_scheme::Commitment;
+
+use failure::Fallible;
 
 /// Given a list of commitments g^{a_i}h^{r_i}
 /// and a point x (the share number), compute
@@ -32,4 +35,122 @@ pub fn evaluate_poly<F: Field, R: AsRef<F>>(coeffs: &[R], point: &F) -> F {
         eval.add_assign(rand.as_ref());
     }
     eval
+}
+
+/// Encode attribute tags into a big-integer bits. The tags are encoded from
+/// least significant bit up, i.e., LSB of the result is set IFF tag0 is in the
+/// list. This function will fail if
+/// - there are repeated attributes in the list
+/// - there are tags in the list which do not fit into the field capacity
+pub fn encode_tags<'a, F: PrimeField, I: std::iter::IntoIterator<Item = &'a AttributeTag>>(
+    i: I,
+) -> Fallible<F> {
+    // Since F is supposed to be a field, its capacity must be at least 1, hence the
+    // next line is safe. Maximum tag that can be stored.
+    let max_tag = F::CAPACITY - 1;
+    let mut f = F::zero().into_repr();
+    let limbs = f.as_mut(); // this is an array of 64 bit limbs, with least significant digit first
+    for &AttributeTag(tag) in i.into_iter() {
+        let idx = tag / 64;
+        let place = tag % 64;
+        if u32::from(tag) > max_tag || usize::from(idx) > limbs.len() {
+            bail!("Tag out of range: {}", tag)
+        }
+        let mask: u64 = 1 << place;
+        if limbs[usize::from(idx)] & mask != 0 {
+            bail!("Duplicate tag {}", tag)
+        } else {
+            limbs[usize::from(idx)] |= mask;
+        }
+    }
+    // This should not fail (since we check capacity), but in case it does we just
+    // propagate the error.
+    Ok(F::from_repr(f)?)
+}
+
+/// Encode anonymity revokers into a list of scalars.
+/// The encoding is as follows.
+/// Given a list of identity providers, and a capacity C,
+/// we encode it into multiple scalars, in big-endian representation.
+/// The encodings are shifted, and the last (least significant) bit
+/// of the scalar encodes whether there are more scalars to follow.
+/// That is the case if and only if the bit is 1.
+/// The field must be big enough to encode u64.
+pub fn encode_ars<F: PrimeField>(ars: &[ArIdentity]) -> Option<Vec<F>> {
+    let max_bit: usize = (F::CAPACITY - 1) as usize;
+    // NB: This 32 must be the same as the size of the ArIdentity.
+    let num_ars_per_element = max_bit / 32;
+    let chunks = ars.chunks(num_ars_per_element);
+    let num_scalars = chunks.len();
+    let mut scalars = Vec::with_capacity(num_scalars);
+    let mut two = F::one();
+    two.add_assign(&F::one());
+    let two = two;
+
+    for chunk in chunks {
+        let mut f = F::zero().into_repr();
+        for (i, &ar_id) in chunk.iter().enumerate() {
+            let ar_id: u32 = ar_id.into();
+            let x: u64 = if i % 2 == 0 {
+                u64::from(ar_id)
+            } else {
+                u64::from(ar_id) << 32
+            };
+            f.as_mut()[i / 2] |= x;
+        }
+        let mut scalar = F::from_repr(f).ok()?;
+        // shift one bit left.
+        scalar.mul_assign(&two);
+        scalars.push(scalar)
+    }
+    if num_scalars == 0 {
+        scalars.push(F::zero())
+    }
+    // This should not fail since we've explicitly added an element to
+    // make sure we have enough scalars, but we still just propagate the error.
+    scalars.last_mut()?.add_assign(&F::one());
+    Some(scalars)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crypto_common::to_bytes;
+    use pairing::bls12_381::Fr;
+    use rand::{thread_rng, Rng};
+    use std::collections::BTreeMap;
+
+    #[test]
+    pub fn test_last_bit() {
+        let ars = (1..10).map(ArIdentity::new).collect::<Vec<_>>();
+        let encoded = encode_ars::<Fr>(&ars).expect("Encodign should succeed.");
+        // Field size of Fr is 254 bits, so what we expect is to have two scalars
+        assert_eq!(encoded.len(), 2, "Encoded ARs should fit into two scalars.");
+        let s1 = to_bytes(&encoded[0]);
+        let s2 = to_bytes(&encoded[1]);
+        // last bit of the first one must be 0
+        assert_eq!(s1[31] & 1u8, 0u8, "Last bit of the first scalar must be 0.");
+        assert_eq!(
+            s2[31] & 1u8,
+            1u8,
+            "Last bit of the second scalar must be 1."
+        );
+    }
+
+    #[test]
+    // Test that the encoding of anonymity revokers is injective.
+    pub fn test_encoding_injective() {
+        let mut csprng = thread_rng();
+        let mut seen = BTreeMap::new();
+        for n in 1..50 {
+            let mut xs = vec![ArIdentity::new(1); n];
+            for x in xs.iter_mut() {
+                *x = ArIdentity::new(csprng.gen_range(1, 100));
+            }
+            let encoded = encode_ars::<Fr>(&xs).expect("Encoding should succeed.");
+            if let Some(xs_ex) = seen.insert(encoded.clone(), xs.clone()) {
+                assert_eq!(xs, xs_ex);
+            }
+        }
+    }
 }

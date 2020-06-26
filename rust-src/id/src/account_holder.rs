@@ -563,7 +563,7 @@ fn compute_pok_sig<
     let num_user_attributes = att_vec.len() + 4;
     // To these there are always two attributes (idCredSec and prf key) added.
     let num_total_attributes = num_user_attributes + 2;
-    let ar_scalars = match encode_ars(ar_list) {
+    let ar_scalars = match utils::encode_ars(ar_list) {
         Some(x) => x,
         None => bail!("Cannot encode anonymity revokers."),
     };
@@ -608,7 +608,7 @@ fn compute_pok_sig<
 
     let att_rands = &commitment_rands.attributes_rand;
 
-    let tags_val = Value::new(encode_tags(alist.alist.keys())?);
+    let tags_val = Value::new(utils::encode_tags(alist.alist.keys())?);
     let tags_cmm = commitment_key.hide(&tags_val, &zero);
 
     let valid_to_val = Value::new(C::scalar_from_u64(alist.valid_to.into()));

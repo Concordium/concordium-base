@@ -352,7 +352,7 @@ fn pok_sig_verifier<
     ip_pub_key: &'a ps_sig::PublicKey<P>,
     blinded_sig: &'a ps_sig::BlindedSignature<P>,
 ) -> Option<com_eq_sig::ComEqSig<P, C>> {
-    let ar_scalars = encode_ars(
+    let ar_scalars = utils::encode_ars(
         &choice_ar_parameters
             .iter()
             .map(|x| x.ar_identity)
@@ -375,7 +375,7 @@ fn pok_sig_verifier<
     }
 
     let tags = {
-        match encode_tags::<C::Scalar, _>(
+        match utils::encode_tags::<C::Scalar, _>(
             policy
                 .policy_vec
                 .keys()
