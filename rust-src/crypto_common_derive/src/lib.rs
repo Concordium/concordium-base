@@ -75,7 +75,10 @@ pub fn serde_base16_ignore_length_serialize_derive(input: TokenStream) -> TokenS
     gen.into()
 }
 
-#[proc_macro_derive(Deserial, attributes(size_length, map_size_length, string_size_length))]
+#[proc_macro_derive(
+    Deserial,
+    attributes(size_length, map_size_length, set_size_length, string_size_length)
+)]
 pub fn deserial_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     impl_deserial(&ast)
@@ -135,6 +138,14 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                         deserial_map_no_length(#source, usize::try_from(len)?)?
                     };
                 });
+            } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
+                let id = format_ident!("u{}", 8 * l);
+                tokens.extend(quote! {
+                    let #ident = {
+                        let len: #id = #id::deserial(#source)?;
+                        deserial_set_no_length(#source, usize::try_from(len)?)?
+                    };
+                });
             } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
                 let id = format_ident!("u{}", 8 * l);
                 tokens.extend(quote! {
@@ -190,7 +201,10 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
     }
 }
 
-#[proc_macro_derive(Serial, attributes(size_length, map_size_length, string_size_length))]
+#[proc_macro_derive(
+    Serial,
+    attributes(size_length, map_size_length, set_size_length, string_size_length)
+)]
 pub fn serial_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     impl_serial(&ast)
@@ -225,6 +239,13 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                             let len: #id = self.#ident.len() as #id;
                             len.serial(#out);
                             serial_map_no_length(&self.#ident, #out);
+                        })
+                    } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
+                        let id = format_ident!("u{}", 8 * l);
+                        body.extend(quote! {
+                            let len: #id = self.#ident.len() as #id;
+                            len.serial(#out);
+                            serial_set_no_length(&self.#ident, #out);
                         })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
                         let id = format_ident!("u{}", 8 * l);
@@ -272,6 +293,14 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                             #len_ident.serial(#out);
                             serial_map_no_length(&self.#ident, #out);
                         })
+                    } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
+                        let id = format_ident!("u{}", 8 * l);
+                        let len_ident = format_ident!("len_{}", i);
+                        body.extend(quote! {
+                            let #len_ident: #id = #ident.len() as #id;
+                            #len_ident.serial(#out);
+                            serial_set_no_length(&self.#ident, #out);
+                        })
                     } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
                         let id = format_ident!("u{}", 8 * l);
                         let len_ident = format_ident!("len_{}", i);
@@ -304,7 +333,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
 
 #[proc_macro_derive(
     Serialize,
-    attributes(size_length, map_size_length, string_size_length)
+    attributes(size_length, map_size_length, set_size_length, string_size_length)
 )]
 pub fn serialize_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");

@@ -356,7 +356,7 @@ fn pok_sig_verifier<
         &choice_ar_parameters
             .iter()
             .map(|x| x.ar_identity)
-            .collect::<Vec<ArIdentity>>(),
+            .collect::<BTreeSet<ArIdentity>>(),
     )?;
     // Capacity for id_cred_sec, cmm_prf, threshold, tags, valid_to, created_at
     // ar_scalars and cmm_attributes

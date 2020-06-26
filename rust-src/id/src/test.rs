@@ -10,7 +10,7 @@ use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key as pedersen_key;
 use rand::*;
-use std::{collections::btree_map::BTreeMap, convert::TryFrom};
+use std::{collections::BTreeMap, convert::TryFrom};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::*;
@@ -132,7 +132,7 @@ pub fn test_create_pio(
 
     // Create context
     let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        ar_identities: ars,
+        ar_identities: ars.into_iter().collect(),
         threshold:     Threshold(threshold),
     })
     .expect("The constructed ARs are invalid.");

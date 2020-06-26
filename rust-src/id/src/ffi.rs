@@ -273,7 +273,11 @@ mod test {
     use either::Either::Left;
     use pairing::bls12_381::Bls12;
     use pedersen_scheme::key as pedersen_key;
-    use std::{collections::btree_map::BTreeMap, convert::TryFrom};
+    use std::{
+        collections::{btree_map::BTreeMap, BTreeSet},
+        convert::TryFrom,
+        iter::FromIterator,
+    };
 
     type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
     type ExampleCurve = G1;
@@ -323,7 +327,11 @@ mod test {
         };
 
         let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-            ar_identities: vec![ArIdentity::new(1), ArIdentity::new(2), ArIdentity::new(3)],
+            ar_identities: BTreeSet::from_iter(vec![
+                ArIdentity::new(1),
+                ArIdentity::new(2),
+                ArIdentity::new(3),
+            ]),
             threshold:     Threshold(2),
         })
         .expect("The constructed ARs are valid.");

@@ -109,11 +109,14 @@ fn bench_parts(c: &mut Criterion) {
     };
 
     let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        ar_identities: vec![
+        ar_identities: [
             ArIdentity::try_from(1).unwrap(),
             ArIdentity::try_from(2).unwrap(),
             ArIdentity::try_from(4).unwrap(),
-        ],
+        ]
+        .iter()
+        .copied()
+        .collect(),
         threshold:     Threshold(2),
     })
     .expect("The constructed ARs are valid.");
