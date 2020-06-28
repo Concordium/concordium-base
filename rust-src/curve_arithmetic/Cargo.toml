@@ -30,8 +30,12 @@ name = "curve_arithmetic"
 crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dev-dependencies]
-criterion = "0.2"
+criterion = "0.3"
 
 [[bench]]
 name = "hash_bench"
+harness = false
+
+[[bench]]
+name = "multiexp_bench"
 harness = false

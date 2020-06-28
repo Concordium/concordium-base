@@ -3,7 +3,7 @@
 //! values is equal to the third commited value, without revealing the values
 //! themselves.
 use crate::sigma_protocols::common::*;
-use curve_arithmetic::Curve;
+use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 
 use crypto_common::*;
@@ -119,20 +119,29 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
     ) -> Option<Self::CommitMessage> {
         let mut points = [Commitment(C::zero_point()); 3];
         for (i, (s_i, t_i)) in izip!(witness.ss.iter(), witness.ts.iter()).enumerate() {
-            points[i] = Commitment(
-                self.cmms[i]
-                    .mul_by_scalar(challenge)
-                    .plus_point(&self.cmm_key.hide_worker(s_i, t_i)),
-            );
+            points[i] = {
+                let bases = [self.cmms[i].0, self.cmm_key.0, self.cmm_key.1];
+                let powers = [*challenge, *s_i, *t_i];
+                let cmm = multiexp(&bases, &powers);
+                Commitment(cmm)
+            } // Commitment(
+              //     self.cmms[i]
+              //         .mul_by_scalar(challenge)
+              //         .plus_point(&self.cmm_key.hide_worker(s_i, t_i)),
+              // );
         }
         let h = &self.cmm_key.1;
         let s_2 = &witness.ss[1];
         let cC_3 = self.cmms[2];
         let cC_1 = self.cmms[0];
-        let v = cC_3
-            .mul_by_scalar(challenge)
-            .plus_point(&cC_1.mul_by_scalar(s_2))
-            .plus_point(&h.mul_by_scalar(&witness.t));
+        let v = {
+            let bases = [cC_3.0, cC_1.0, *h];
+            let powers = [*challenge, *s_2, witness.t];
+            multiexp(&bases, &powers)
+        }; // cC_3
+           //    .mul_by_scalar(challenge)
+           //    .plus_point(&cC_1.mul_by_scalar(s_2))
+           //    .plus_point(&h.mul_by_scalar(&witness.t));
         Some((points, Commitment(v)))
     }
 
