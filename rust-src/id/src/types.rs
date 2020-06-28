@@ -461,7 +461,7 @@ impl Deserial for YearMonth {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
         let year = source.get()?;
         let month = source.get()?;
-        Ok(YearMonth { year, month })
+        YearMonth::new(year, month).ok_or_else(|| format_err!("Invalid year/month."))
     }
 }
 
@@ -512,10 +512,7 @@ impl TryFrom<u64> for YearMonth {
     fn try_from(v: u64) -> Result<Self, Self::Error> {
         let month = (v & 0xFF) as u8;
         let year = ((v >> 8) & 0xFFFF) as u16;
-        if year < 1000 || year >= 10000 || month < 1 || month > 12 {
-            return Err(());
-        }
-        Ok(YearMonth { year, month })
+        YearMonth::new(year, month).ok_or(())
     }
 }
 
