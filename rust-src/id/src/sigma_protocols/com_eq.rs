@@ -6,7 +6,7 @@
 //! be of the same prime order, and for the implementation the field of scalars
 //! must be the same type for both groups.
 
-use curve_arithmetic::Curve;
+use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 
 use random_oracle::RandomOracle;
@@ -108,9 +108,11 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
         challenge: &Self::ProtocolChallenge,
         witness: &Self::ProverWitness,
     ) -> Option<Self::CommitMessage> {
-        let mut u = self.y.mul_by_scalar(challenge);
+        // let mut u = self.y.mul_by_scalar(challenge);
         // FIXME: Could benefit from multiexponentiation
-        u = u.plus_point(&self.g.mul_by_scalar(&witness.witness.0));
+        // u = u.plus_point(&self.g.mul_by_scalar(&witness.witness.0));
+
+        let u = multiexp(&[self.y, self.g], &[*challenge, witness.witness.0]);
 
         let v = self.commitment.mul_by_scalar(challenge).plus_point(
             &self
