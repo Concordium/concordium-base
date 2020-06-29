@@ -4,16 +4,14 @@
 
 use crate::curve_arithmetic::*;
 use crypto_common::*;
-
 use ff::Field;
-
 use rand::*;
 use std::{
     ops::{Deref, Drop},
+    ptr,
     rc::Rc,
+    sync::atomic,
 };
-
-use std::{ptr, sync::atomic};
 
 /// A generic wrapper for a secret that implements a zeroize on drop.
 /// Other types are expected to wrap this in more convenient interfaces.
@@ -45,15 +43,16 @@ impl<F: Field + Serialize> Deref for Secret<F> {
 // upstream dependencies decide to implement drop themselves.
 impl<F: Field + Serialize> Drop for Secret<F> {
     fn drop(&mut self) {
-        // This implementation is what the Zeroize t
+        // This implementation is what the Zeroize trait implementations do.
+        // It protects against most reorderings by the compiler.
         unsafe { ptr::write_volatile(&mut self.secret, F::zero()) }
         atomic::compiler_fence(atomic::Ordering::SeqCst);
     }
 }
 
 /// A secret value. The idea of this datatype is to mark
-/// scalars as secret, which we
-/// NB: For the view function it is important that we have #[repr(transparent)].
+/// some scalars as secret, so that their use is harder and there is
+/// no implicit copy.
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Serialize, Clone, SerdeBase16Serialize)]
 pub struct Value<C: Curve> {

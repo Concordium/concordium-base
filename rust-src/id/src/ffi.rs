@@ -2,21 +2,18 @@ use crate::{
     chain::{self, CDIVerificationError},
     types::*,
 };
-use crypto_common::*;
+use byteorder::ReadBytesExt;
+use crypto_common::{size_t, *};
 use curve_arithmetic::*;
+use ffi_helpers::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
-
-use std::{fmt, io::Cursor, slice, str::FromStr};
-
-use byteorder::ReadBytesExt;
-use crypto_common::size_t;
-use ffi_helpers::*;
 use rand::thread_rng;
 use serde::{
     de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
     Serializer,
 };
+use std::{fmt, io::Cursor, slice, str::FromStr};
 
 /// Concrete attribute kinds
 #[derive(Clone, PartialEq, Eq, Debug)]

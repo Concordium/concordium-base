@@ -1,17 +1,18 @@
-use random_oracle::RandomOracle;
-
-use crate::{secret_sharing::Threshold, types::*, utils};
+use crate::{
+    secret_sharing::Threshold,
+    sigma_protocols::{com_enc_eq, com_eq_sig, com_mult, common::*},
+    types::*,
+    utils,
+};
 use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
+use either::Either;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
+use random_oracle::RandomOracle;
 use std::collections::{BTreeMap, BTreeSet};
-
-use either::Either;
-
-use crate::sigma_protocols::{com_enc_eq, com_eq_sig, com_mult, common::*};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CDIVerificationError {

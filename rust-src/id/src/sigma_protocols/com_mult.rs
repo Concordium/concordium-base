@@ -3,10 +3,9 @@
 //! values is equal to the third commited value, without revealing the values
 //! themselves.
 use crate::sigma_protocols::common::*;
+use crypto_common::*;
 use curve_arithmetic::Curve;
 use ff::Field;
-
-use crypto_common::*;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::{Challenge, RandomOracle};
 

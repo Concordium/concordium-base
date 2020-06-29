@@ -1,7 +1,4 @@
-use crate::sigma_protocols::common::*;
-
-use crate::sigma_protocols::{com_enc_eq, com_eq_sig, dlog};
-
+use crate::sigma_protocols::{com_enc_eq, com_eq_sig, common::*, dlog};
 use pairing::bls12_381::{Bls12, G1, G2};
 use random_oracle::RandomOracle;
 
