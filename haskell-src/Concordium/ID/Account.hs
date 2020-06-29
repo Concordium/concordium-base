@@ -34,12 +34,12 @@ foreign import ccall unsafe "verify_cdi_ffi" verifyCDIFFI
 verifyCredential :: GlobalContext -> IpInfo -> Maybe AccountKeys -> CredentialDeploymentInformationBytes -> Bool
 verifyCredential gc ipInfo Nothing cdiBytes = unsafeDupablePerformIO $ do
     res <- withGlobalContext gc $ \gcPtr ->
-           withIpInfo ipInfo $ \ipInfoPtr ->
-           unsafeUseAsCStringLen cdiBytes $ \(cdiBytesPtr, cdiBytesLen) ->
-           -- this use of unsafe is fine since at this point we know the CDI
-           -- bytes is a non-empty string, so the pointer cdiBytesPtr will be
-           -- non-null
-           verifyCDIFFI gcPtr ipInfoPtr nullPtr 0 (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
+            withIpInfo ipInfo $ \ipInfoPtr ->
+              unsafeUseAsCStringLen cdiBytes $ \(cdiBytesPtr, cdiBytesLen) -> do
+              -- this use of unsafe is fine since at this point we know the CDI
+              -- bytes is a non-empty string, so the pointer cdiBytesPtr will be
+              -- non-null
+              verifyCDIFFI gcPtr ipInfoPtr nullPtr 0 (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
     return (res == 1)
 verifyCredential gc ipInfo (Just keys) cdiBytes = unsafeDupablePerformIO $ do
     res <- withGlobalContext gc $ \gcPtr ->

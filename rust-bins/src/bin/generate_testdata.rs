@@ -1,24 +1,14 @@
 use clap::{App, AppSettings, Arg};
-
 use client_server_helpers::*;
-use curve_arithmetic::{Curve, Pairing};
+use crypto_common::*;
+use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
+use either::Either::{Left, Right};
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
-use std::collections::btree_map::BTreeMap;
-
-use crypto_common::*;
-
 use rand::*;
-
-use pedersen_scheme::Value as PedersenValue;
-
-use std::path::Path;
-
-use std::{fs::File, io::Write};
-
-use either::Either::{Left, Right};
+use std::{collections::btree_map::BTreeMap, fs::File, io::Write, path::Path};
 
 type ExampleCurve = G1;
 
@@ -44,11 +34,8 @@ fn main() {
 
     let mut csprng = thread_rng();
 
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: PedersenValue::new(secret),
-        },
+        id_cred: IdCredentials::generate(&mut csprng),
     };
 
     // Load identity provider and anonymity revokers.
@@ -99,7 +86,8 @@ fn main() {
         threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
     })
     .expect("Constructed AR data is valid.");
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let (pio, randomness) =
+        generate_pio(&context, &aci).expect("Generating the pre-identity object should succeed.");
 
     let sig_ok = verify_credentials(&pio, &ip_info, &attributes, &ip_secret_key);
 
@@ -148,13 +136,13 @@ fn main() {
             existing: Left(SignatureThreshold(2)),
         };
 
-        let cdi_1 = generate_cdi(
+        let cdi_1 = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,
             &id_object_use_data,
             53,
-            &policy,
+            policy.clone(),
             &acc_data,
         )
         .expect("We should have generated valid data.");
@@ -166,13 +154,13 @@ fn main() {
             existing: Right(AccountAddress::new(&cdi_1.values.reg_id)),
         };
 
-        let cdi_2 = generate_cdi(
+        let cdi_2 = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,
             &id_object_use_data,
             53,
-            &policy,
+            policy.clone(),
             &acc_data_2,
         )
         .expect("We should have generated valid data.");
@@ -269,13 +257,13 @@ fn main() {
             }
         };
 
-        let cdi = generate_cdi(
+        let cdi = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,
             &id_object_use_data,
             acc_num,
-            &policy,
+            policy.clone(),
             &acc_data,
         )
         .expect("We should have generated valid data.");

@@ -5,7 +5,7 @@
 
 use core::fmt::{self, Display};
 // use pairing::{GroupDecodingError, PrimeFieldDecodingError};
-// use curve_arithmetic::curve_arithmetic::*;
+// use curve_arithmetic::*;
 
 /// Internal errors.  
 

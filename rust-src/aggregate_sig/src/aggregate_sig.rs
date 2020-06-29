@@ -1,7 +1,7 @@
-use curve_arithmetic::{Curve, Pairing};
+use curve_arithmetic::{Curve, Pairing, Value};
 use ff::Field;
 use generic_array::GenericArray;
-use id::sigma_protocols::dlog::*;
+use id::sigma_protocols::{common::*, dlog::*};
 use rand::Rng;
 use random_oracle::RandomOracle;
 use rayon::iter::*;
@@ -31,13 +31,15 @@ impl<P: Pairing> SecretKey<P> {
     }
 
     pub fn prove<R: Rng>(&self, csprng: &mut R, ro: RandomOracle) -> Proof<P> {
-        prove_dlog(
-            csprng,
-            ro,
-            &P::G2::one_point().mul_by_scalar(&self.0),
-            &self.0,
-            &P::G2::one_point(),
-        )
+        let prover = Dlog {
+            public: P::G2::one_point().mul_by_scalar(&self.0),
+            coeff:  P::G2::one_point(),
+        };
+        let secret = DlogSecret {
+            secret: Value::new(self.0),
+        };
+        prove(ro, &prover, secret, csprng)
+            .expect("Input-data is valid, so proving should succeed for this dlog proof.")
     }
 }
 
@@ -79,7 +81,11 @@ impl<P: Pairing> PublicKey<P> {
     }
 
     pub fn check_proof(&self, ro: RandomOracle, proof: &Proof<P>) -> bool {
-        verify_dlog(ro, &P::G2::one_point(), &self.0, proof)
+        let verifier = Dlog {
+            public: self.0,
+            coeff:  P::G2::one_point(),
+        };
+        verify(ro, &verifier, proof)
     }
 }
 
@@ -118,7 +124,7 @@ impl<P: Pairing> PartialEq for Signature<P> {
 }
 
 // A proof of knowledge of a secretkey
-pub type Proof<P> = DlogProof<<P as Pairing>::G2>;
+pub type Proof<P> = SigmaProof<Witness<<P as Pairing>::G2>>;
 
 // Verifies an aggregate signature on pairs (messages m_i, PK_i) for i=1..n by
 // checking     pairing(sig, g_2) == product_{i=0}^n ( pairing(g1_hash(m_i),
@@ -405,7 +411,7 @@ mod test {
             assert_eq!(sig.0, sig_from_bytes.0);
             assert_eq!(sk.0, sk_from_bytes.0);
             assert_eq!(pk.0, pk_from_bytes.0);
-            assert_eq!(proof, proof_from_bytes);
+            assert!(pk.check_proof(ro.split(), &proof_from_bytes));
             assert!(pk.verify(&m, sig_from_bytes));
             assert!(pk_from_bytes.verify(&m, sig));
             assert!(pk.check_proof(ro, &proof))

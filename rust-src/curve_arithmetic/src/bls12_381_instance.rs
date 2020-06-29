@@ -14,6 +14,21 @@ use pairing::{
 };
 use rand::*;
 
+// Helper function for both G1 and G2 instances.
+fn scalar_from_bytes_helper<A: AsRef<[u8]>>(bytes: A) -> Fr {
+    // Traverse at most 4 8-byte chunks, for a total of 256 bits.
+    // The top-most two bits in the last chunk are set to 0.
+    let mut fr = [0u64; 4];
+    let mut v = [0; 8];
+    for (i, chunk) in bytes.as_ref().chunks(8).take(4).enumerate() {
+        v[..chunk.len()].copy_from_slice(&chunk);
+        fr[i] = u64::from_le_bytes(v);
+    }
+    // unset two topmost bits in the last read u64.
+    fr[3] &= !(1u64 << 63 | 1u64 << 62);
+    Fr::from_repr(FrRepr(fr)).expect("The scalar with top two bits erased should be valid.")
+}
+
 impl Curve for G2 {
     type Base = Fq;
     type Compressed = G2Compressed;
@@ -75,8 +90,14 @@ impl Curve for G2 {
         }
     }
 
+    #[inline(always)]
     fn scalar_from_u64(n: u64) -> Self::Scalar {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
+    }
+
+    #[inline(always)]
+    fn scalar_from_bytes<A: AsRef<[u8]>>(bytes: A) -> Self::Scalar {
+        scalar_from_bytes_helper(bytes)
     }
 
     fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
@@ -155,8 +176,14 @@ impl Curve for G1 {
         }
     }
 
+    #[inline(always)]
     fn scalar_from_u64(n: u64) -> Self::Scalar {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
+    }
+
+    #[inline(always)]
+    fn scalar_from_bytes<A: AsRef<[u8]>>(bytes: A) -> Self::Scalar {
+        scalar_from_bytes_helper(bytes)
     }
 
     fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
@@ -235,6 +262,11 @@ impl Curve for G1Affine {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
 
+    #[inline(always)]
+    fn scalar_from_bytes<A: AsRef<[u8]>>(bytes: A) -> Self::Scalar {
+        scalar_from_bytes_helper(bytes)
+    }
+
     fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
         let mut g = G1Compressed::empty();
         bytes.read_exact(g.as_mut())?;
@@ -311,6 +343,11 @@ impl Curve for G2Affine {
         Fr::from_repr(FrRepr::from(n)).expect("Every u64 is representable.")
     }
 
+    #[inline(always)]
+    fn scalar_from_bytes<A: AsRef<[u8]>>(bytes: A) -> Self::Scalar {
+        scalar_from_bytes_helper(bytes)
+    }
+
     fn bytes_to_curve_unchecked<R: ReadBytesExt>(bytes: &mut R) -> Fallible<Self> {
         let mut g = G2Compressed::empty();
         bytes.read_exact(g.as_mut())?;
@@ -365,13 +402,23 @@ mod tests {
     use crypto_common::*;
     use std::io::Cursor;
 
-    // For development only, delete later
+    // Check that scalar_from_bytes_helper works on small values.
     #[test]
-    fn smoke_test_hash() {
-        let mut rng = thread_rng();
-        for _i in 0..10000 {
-            let bytes = rng.gen::<[u8; 32]>();
-            let _ = <Bls12 as Pairing>::G1::hash_to_group(&bytes);
+    fn scalar_from_bytes_small() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..1000 {
+            let n = Fr::random(&mut rng);
+            let mut bytes = to_bytes(&n);
+            bytes.reverse();
+            let m = scalar_from_bytes_helper(&bytes);
+            // make sure that n and m only differ in the topmost bit.
+            let n = n.into_repr().0;
+            let m = m.into_repr().0;
+            let mask = !(1u64 << 63 | 1u64 << 62);
+            assert_eq!(n[0], m[0], "First limb.");
+            assert_eq!(n[1], m[1], "Second limb.");
+            assert_eq!(n[2], m[2], "Third limb.");
+            assert_eq!(n[3] & mask, m[3] & mask, "Fourth limb with top bit masked.");
         }
     }
 
