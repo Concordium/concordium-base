@@ -55,8 +55,29 @@ pub trait Curve:
             }
         }
     }
+     /// Make a scalar from a 64-bit unsigned integer. This function assumes that
+    /// the field is big enough to accommodate any 64-bit unsigned integer.
     fn scalar_from_u64(n: u64) -> Self::Scalar;
+    /// Make a scalar by interpreting the given bytes as a big-endian unsigned
+    /// integer, and reducing modulo the field size. This function assumes the
+    /// field is big enough to accommodate any 64-bit unsigned integer.
+    fn scalar_from_bytes_mod<A: AsRef<[u8]>>(bs: A) -> Self::Scalar;
+    /// Hash to a curve point from a seed. This is deterministic function.
     fn hash_to_group(m: &[u8]) -> Self;
+}
+
+#[allow(non_snake_case)]
+pub fn multiscalar_multiplication<C: Curve>(a: &[C::Scalar], G: &[C]) -> C{
+    let n = a.len();
+    if G.len() != n {
+        panic!("a and G should have the same length");
+    }
+    let mut sum = C::zero_point();
+    for i in 0..n {
+        let aiGi =G[i].mul_by_scalar(&a[i]);
+        sum = sum.plus_point(&aiGi);
+    }
+    sum
 }
 
 pub trait Pairing: Sized + 'static + Clone {

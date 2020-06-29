@@ -1,9 +1,31 @@
 [package]
 name = "bulletproofs"
 version = "0.1.0"
-authors = ["emilmb <emil@bennedsen.eu>"]
+authors = ["Concordium AG <contact@concordium.com>"]
 edition = "2018"
+
+[lib]
+name = "bulletproofs"
+crate-type = ["rlib", "staticlib", "cdylib"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+merlin = { version = "2", default-features = false }
+pairing = "0.15"
+ff = "0.5"
+rand    = "=0.7"
+group = "0.2"
+bit-vec = "0.6"
+
+[dependencies.curve_arithmetic]
+path = "../curve_arithmetic"
+version = "0"
+
+[dependencies.crypto_common]
+path = "../crypto_common"
+version = "0"
+
+[dependencies.vector_pedersen_scheme]
+path = "../vector_pedersen_scheme"
+version = "0"
