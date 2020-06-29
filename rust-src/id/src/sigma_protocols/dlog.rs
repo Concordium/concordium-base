@@ -1,14 +1,12 @@
 //! This module provides the implementation of the discrete log sigma protocol
 //! which enables one to prove knowledge of the discrete logarithm without
 //! revealing it.
+use crate::sigma_protocols::common::*;
+use crypto_common::*;
+use crypto_common_derive::*;
 use curve_arithmetic::{Curve, Value};
 use ff::Field;
 use random_oracle::{Challenge, RandomOracle};
-
-use crate::sigma_protocols::common::*;
-
-use crypto_common::*;
-use crypto_common_derive::*;
 
 pub struct Dlog<C: Curve> {
     /// Evaluated point.

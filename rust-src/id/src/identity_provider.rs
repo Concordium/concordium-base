@@ -6,10 +6,8 @@ use crate::{
 };
 use curve_arithmetic::{Curve, Pairing};
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
-
-use random_oracle::RandomOracle;
-
 use rand::*;
+use random_oracle::RandomOracle;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

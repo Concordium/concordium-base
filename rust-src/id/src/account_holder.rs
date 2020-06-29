@@ -1,26 +1,24 @@
-use crate::{types::*, utils};
-
-use failure::Fallible;
-
-use random_oracle::RandomOracle;
-
 use crate::{
     secret_sharing::*,
     sigma_protocols::{
         com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult, common::*, dlog,
     },
+    types::*,
+    utils,
 };
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use either::Either;
 use elgamal::cipher::Cipher;
+use failure::Fallible;
 use ff::Field;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey as PedersenKey,
     randomness::Randomness as PedersenRandomness, value::Value,
 };
 use rand::*;
+use random_oracle::RandomOracle;
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
 
 /// Generate PreIdentityObject out of the account holder information,

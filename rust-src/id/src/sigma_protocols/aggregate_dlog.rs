@@ -3,14 +3,11 @@
 //! logarithms $a_1 ... a_n$ public values $ y = \prod G_i^{a_i} $.
 //! This is a specialization of `com_eq` protocol where we do not require
 //! commitments.
+use crate::sigma_protocols::common::*;
+use crypto_common::*;
 use curve_arithmetic::Curve;
 use ff::Field;
-
-use crypto_common::*;
 use random_oracle::{Challenge, RandomOracle};
-
-use crate::sigma_protocols::common::*;
-
 use std::rc::Rc;
 
 pub struct AggregateDlog<C: Curve> {

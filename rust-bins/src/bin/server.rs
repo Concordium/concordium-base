@@ -1,20 +1,16 @@
-use pairing::bls12_381::Bls12;
-
+use clap::{App, AppSettings, Arg};
+use client_server_helpers::*;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
-use id::{account_holder::*, identity_provider::*, types::*};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-
-use client_server_helpers::*;
-
+use either::Either::{Left, Right};
+use id::{account_holder::*, identity_provider::*, secret_sharing::Threshold, types::*};
+use pairing::bls12_381::Bls12;
 use rand::*;
 use serde_json::{from_value as from_json, json, to_string_pretty, Value};
-
-use clap::{App, AppSettings, Arg};
-use id::secret_sharing::Threshold;
-use std::cmp::max;
-
-use either::Either::{Left, Right};
+use std::{
+    cmp::max,
+    collections::{BTreeMap, BTreeSet, HashMap},
+};
 
 // server imports
 #[macro_use]

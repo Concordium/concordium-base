@@ -1,17 +1,10 @@
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-use id::anonymity_revoker::reveal_id_cred_pub;
-
-use crypto_common::*;
-
-use elgamal::message::Message;
-
-use id::types::*;
-
-use std::convert::TryFrom;
-
 use client_server_helpers::*;
-
+use crypto_common::*;
+use elgamal::message::Message;
+use id::{anonymity_revoker::reveal_id_cred_pub, types::*};
 use serde_json::json;
+use std::convert::TryFrom;
 
 #[macro_use]
 extern crate failure;

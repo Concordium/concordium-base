@@ -1335,9 +1335,8 @@ pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     choice_ar_handles: ChoiceArParameters,
 ) -> Option<Context<P, C>> {
     let mut choice_ars = Vec::with_capacity(choice_ar_handles.ar_identities.len());
-    let ip_ar_parameters = &ip_info.ip_ars.ars.clone();
     for ar in choice_ar_handles.ar_identities.into_iter() {
-        match ip_ar_parameters.iter().find(|&x| x.ar_identity == ar) {
+        match ip_info.ip_ars.ars.iter().find(|&x| x.ar_identity == ar) {
             None => return None,
             Some(ar_info) => choice_ars.push(ar_info.clone()),
         }
