@@ -1,9 +1,8 @@
+use crypto_common::*;
 use curve_arithmetic::*;
 use ff::Field;
-use rand::*;
-
-use crypto_common::*;
 use pedersen_scheme::Value as PedersenValue;
+use rand::*;
 use serde_json::{json, Value};
 use std::convert::TryFrom;
 

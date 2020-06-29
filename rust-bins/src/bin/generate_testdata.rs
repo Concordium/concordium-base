@@ -1,20 +1,14 @@
 use clap::{App, AppSettings, Arg};
-
 use client_server_helpers::*;
+use crypto_common::*;
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
+use either::Either::{Left, Right};
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
-use std::collections::btree_map::BTreeMap;
-
-use crypto_common::*;
-
 use rand::*;
-
-use std::{fs::File, io::Write, path::Path};
-
-use either::Either::{Left, Right};
+use std::{collections::btree_map::BTreeMap, fs::File, io::Write, path::Path};
 
 type ExampleCurve = G1;
 

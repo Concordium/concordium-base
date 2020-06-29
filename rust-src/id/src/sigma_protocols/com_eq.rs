@@ -6,16 +6,13 @@
 //! be of the same prime order, and for the implementation the field of scalars
 //! must be the same type for both groups.
 
-use curve_arithmetic::Curve;
-use ff::Field;
-
-use random_oracle::RandomOracle;
-
+use crate::sigma_protocols::common::*;
 use crypto_common::*;
 use crypto_common_derive::*;
+use curve_arithmetic::Curve;
+use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
-
-use crate::sigma_protocols::common::*;
+use random_oracle::RandomOracle;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
 pub struct Witness<T: Curve> {

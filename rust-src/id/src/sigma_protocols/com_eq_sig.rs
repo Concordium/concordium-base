@@ -4,14 +4,13 @@
 //! the blinded version of the signature, and commitments to the values that
 //! were signed.
 
-use curve_arithmetic::*;
-use ff::Field;
-use rand::*;
-
 use crate::sigma_protocols::common::*;
 use crypto_common::*;
+use curve_arithmetic::*;
+use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use ps_sig::{BlindedSignature, BlindingRandomness, PublicKey as PsSigPublicKey};
+use rand::*;
 use random_oracle::RandomOracle;
 
 #[derive(Clone, Debug, Serialize)]
