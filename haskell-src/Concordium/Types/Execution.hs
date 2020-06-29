@@ -530,6 +530,9 @@ data Event =
            | AccountKeysRemoved {
                akrIndices :: ![KeyIndex]
                }
+           | AccountKeysSignThresholdUpdated {
+               akstuThreshold :: !SignatureThreshold
+               }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -619,7 +622,11 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                                         }
                   -- |A transaction should be sent from a special account, but is not.
                   | NotFromSpecialAccount
-                  | NonexistentAccountKey !KeyIndex -- |Encountered index to which no account key belongs
+                  | NonexistentAccountKey !KeyIndex -- |Encountered index to which no account key belongs when removing or updating keys
+                  | DuplicateKeyIndex !KeyIndex -- |Encountered duplicate key index when adding, updating or removing account keys
+                  | KeyIndexAlreadyInUse !KeyIndex -- |Attempted to add an account key to a key index already in use
+                  -- |When the account key threshold is updated, it must not exceed the amount of existing keys
+                  | InvalidAccountKeySignThreshold
     deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason
