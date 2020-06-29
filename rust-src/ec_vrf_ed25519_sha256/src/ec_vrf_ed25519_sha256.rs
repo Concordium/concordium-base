@@ -18,8 +18,7 @@ pub use crate::{errors::*, proof::*, public::*, secret::*};
 use crypto_common::*;
 
 /// An ed25519 keypair.
-// we derive Default in order to use the clear() method in Drop
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct Keypair {
     /// The secret half of this keypair.
     pub secret: SecretKey,

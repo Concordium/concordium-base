@@ -1,11 +1,9 @@
+use byteorder::ReadBytesExt;
+use crypto_common::{Serial, Serialize};
 use failure::{Fail, Fallible};
 use ff::{Field, PrimeField};
 use rand::*;
 use std::fmt::{Debug, Display, Formatter};
-
-use byteorder::ReadBytesExt;
-
-use crypto_common::{Serial, Serialize};
 
 #[derive(Debug)]
 pub enum CurveDecodingError {
@@ -55,7 +53,13 @@ pub trait Curve:
             }
         }
     }
+    /// Make a scalar from a 64-bit unsigned integer. This function assumes that
+    /// the field is big enough to accommodate any 64-bit unsigned integer.
     fn scalar_from_u64(n: u64) -> Self::Scalar;
+    /// Make a scalar by taking the first Scalar::CAPACITY bits and interpreting
+    /// them as a little-endian integer.
+    fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar;
+    /// Hash to a curve point from a seed. This is deterministic function.
     fn hash_to_group(m: &[u8]) -> Self;
 }
 

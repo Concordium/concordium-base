@@ -9,9 +9,11 @@ pub mod identity_provider;
 pub mod secret_sharing;
 pub mod sigma_protocols;
 pub mod types;
+pub mod utils;
 
 #[macro_use]
 extern crate crypto_common_derive;
+
 #[macro_use]
 extern crate failure;
 

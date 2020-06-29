@@ -1,14 +1,26 @@
 //! This module provides the random oracle replacement function needed in the
 //! sigma protocols, and any other constructions needing it.
 use crypto_common::*;
-use curve_arithmetic::curve_arithmetic::Curve;
+use crypto_common_derive::Serialize;
+use curve_arithmetic::Curve;
 
 use sha3::{Digest, Sha3_256};
-use std::io::{Cursor, Write};
+use std::io::Write;
 
 /// State of the random oracle, used to incrementally build up the output.
 #[repr(transparent)]
 pub struct RandomOracle(Sha3_256);
+
+/// Type of challenges computed from the random oracle.
+/// We use 32 byte output of SHA3-256
+#[derive(Debug, Serialize, PartialEq, Eq, Clone, Copy)]
+pub struct Challenge {
+    challenge: [u8; 32],
+}
+
+impl AsRef<[u8]> for Challenge {
+    fn as_ref(&self) -> &[u8] { &self.challenge }
+}
 
 impl Write for RandomOracle {
     #[inline(always)]
@@ -60,7 +72,11 @@ impl RandomOracle {
     ///
     /// where equality means equality of outcomes, i.e., calling result on each
     /// of the states will produce the same bytearray.
-    pub fn append<B: Serial>(self, data: &B) -> Self { RandomOracle(self.0.chain(&to_bytes(data))) }
+    pub fn append<B: Serial>(self, data: &B) -> Self {
+        let mut buf = self;
+        data.serial(&mut buf);
+        buf
+    }
 
     /// Same as append, but modifies the oracle state instead of consuming it
     pub fn add<B: Serial>(&mut self, data: &B) { self.put(data) }
@@ -82,9 +98,9 @@ impl RandomOracle {
     pub fn extend_from<'a, I, B: 'a>(self, iter: I) -> Self
     where
         B: Serial,
-        I: Iterator<Item = &'a B>, {
+        I: IntoIterator<Item = &'a B>, {
         let mut ro = self;
-        for i in iter {
+        for i in iter.into_iter() {
             ro.add(i)
         }
         ro
@@ -105,28 +121,22 @@ impl RandomOracle {
         ro
     }
 
-    /// Try to convert the computed result into a field element. This takes the
-    /// first SCALAR_LENGTH elements of result and tries to convert them to a
-    /// scalar.
-    /// This will fail (return None) if either
-    /// * the output of the oracle does not have enought bytes (should not
-    ///   happen)
-    /// * the output of the oracle is not < q (the size of the scalar field).
-    ///   Here the bytes are taken to represent a number in big-endian encoding.
-    pub fn result_to_scalar<C: Curve>(self) -> Option<C::Scalar> {
-        let res = self.result();
-        let res_ref = res.as_ref();
-        if res_ref.len() >= C::SCALAR_LENGTH {
-            from_bytes(&mut Cursor::new(&res_ref[..C::SCALAR_LENGTH])).ok()
-        } else {
-            None
-        }
-    }
+    /// Try to convert the computed result into a field element. This interprets
+    /// the output of the random oracle as a big-endian integer and reduces is
+    /// mod field order.
+    pub fn result_to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_bytes(self.result()) }
 
     /// Finish and try to convert to scalar. Equivalent to
     /// ```ro.append(input).result_to_scalar()```.
-    pub fn finish_to_scalar<C: Curve, B: Serial>(self, data: &B) -> Option<C::Scalar> {
+    pub fn finish_to_scalar<C: Curve, B: Serial>(self, data: &B) -> C::Scalar {
         self.append(data).result_to_scalar::<C>()
+    }
+
+    /// Get a challenge from the current state, consuming the state.
+    pub fn get_challenge(self) -> Challenge {
+        Challenge {
+            challenge: self.result().into(),
+        }
     }
 }
 

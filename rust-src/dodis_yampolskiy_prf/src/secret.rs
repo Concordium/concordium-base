@@ -2,21 +2,54 @@
 
 use crate::errors::{InternalError::DivisionByZero, *};
 use crypto_common::*;
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::{Curve, Secret, Value};
+
+use rand::*;
+use std::rc::Rc;
 
 use ff::Field;
-use rand::*;
 
 /// A PRF  key.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
-pub struct SecretKey<C: Curve>(pub C::Scalar);
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, SerdeBase16Serialize)]
+pub struct SecretKey<C: Curve>(pub Rc<Secret<C::Scalar>>);
+
+/// This trait allows automatic conversion of &SecretKey<C> to &C::Scalar.
+impl<C: Curve> std::ops::Deref for SecretKey<C> {
+    type Target = C::Scalar;
+
+    fn deref(&self) -> &C::Scalar { &self.0 }
+}
+
+impl<C: Curve> AsRef<C::Scalar> for SecretKey<C> {
+    fn as_ref(&self) -> &C::Scalar { &self.0 }
+}
 
 impl<C: Curve> SecretKey<C> {
+    pub fn new(secret: C::Scalar) -> Self { SecretKey(Rc::new(Secret::new(secret))) }
+
+    /// Generate a non-zero SecretKey `SecretKey` from a `csprng`.
+    pub fn generate_non_zero<T: Rng>(csprng: &mut T) -> SecretKey<C> {
+        SecretKey::new(C::generate_non_zero_scalar(csprng))
+    }
+
+    /// View the SecretKey as a SecretKey in another group. This does not
+    /// copy the secret SecretKey.
+    #[inline]
+    pub fn view<T: Curve<Scalar = C::Scalar>>(&self) -> SecretKey<T> { SecretKey(self.0.clone()) }
+
+    /// View the SecretKey as a generic secret value. This does not
+    /// copy the secret value.
+    #[inline]
+    pub fn to_value<T: Curve<Scalar = C::Scalar>>(&self) -> Value<T> {
+        Value {
+            value: self.0.clone(),
+        }
+    }
+
     pub fn prf_exponent(&self, n: u8) -> Result<C::Scalar, PrfError> {
-        let x = C::scalar_from_u64(u64::from(n));
-        let mut k = self.0;
-        k.add_assign(&x);
-        match k.inverse() {
+        let mut x = C::scalar_from_u64(u64::from(n));
+        x.add_assign(self);
+        match x.inverse() {
             None => Err(PrfError(DivisionByZero)),
             Some(y) => Ok(y),
         }
@@ -31,7 +64,7 @@ impl<C: Curve> SecretKey<C> {
     pub fn generate<T>(csprng: &mut T) -> SecretKey<C>
     where
         T: Rng, {
-        SecretKey(C::generate_scalar(csprng))
+        SecretKey::new(C::generate_scalar(csprng))
     }
 }
 

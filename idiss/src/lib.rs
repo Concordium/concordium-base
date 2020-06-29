@@ -2,7 +2,7 @@ use pairing::bls12_381::{Bls12, G1};
 
 use crypto_common::base16_decode_string;
 
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::*;
 use id::{
     ffi::AttributeKind,
     identity_provider::{sign_identity_object, validate_request as ip_validate_request},

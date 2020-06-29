@@ -2,21 +2,18 @@ use crate::{
     chain::{self, CDIVerificationError},
     types::*,
 };
-use crypto_common::*;
-use curve_arithmetic::curve_arithmetic::*;
+use byteorder::ReadBytesExt;
+use crypto_common::{size_t, *};
+use curve_arithmetic::*;
+use ffi_helpers::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
-
-use std::{fmt, io::Cursor, slice, str::FromStr};
-
-use byteorder::ReadBytesExt;
-use crypto_common::size_t;
-use ffi_helpers::*;
 use rand::thread_rng;
 use serde::{
     de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
     Serializer,
 };
+use std::{fmt, io::Cursor, slice, str::FromStr};
 
 /// Concrete attribute kinds
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -129,10 +126,10 @@ pub extern "C" fn verify_cdi_ffi(
     cdi_len: size_t,
 ) -> i32 {
     if gc_ptr.is_null() {
-        return -7;
+        return -9;
     }
     if ip_info_ptr.is_null() {
-        return -8;
+        return -10;
     }
 
     let acc_keys = if acc_keys_ptr.is_null() {
@@ -142,16 +139,15 @@ pub extern "C" fn verify_cdi_ffi(
         if let Ok(acc_keys) = AccountKeys::deserial(&mut Cursor::new(&acc_key_bytes)) {
             Some(acc_keys)
         } else {
-            return -10;
+            return -12;
         }
     };
 
     let cdi_bytes = slice_from_c_bytes!(cdi_ptr, cdi_len as usize);
-    match CredDeploymentInfo::<Bls12, G1, AttributeKind>::deserial(&mut Cursor::new(&cdi_bytes)) {
-        Err(err) => {
-            eprintln!("{}", err);
-            -9
-        }
+    match CredentialDeploymentInfo::<Bls12, G1, AttributeKind>::deserial(&mut Cursor::new(
+        &cdi_bytes,
+    )) {
+        Err(_) => -11,
         Ok(cdi) => {
             match chain::verify_cdi::<Bls12, G1, AttributeKind>(
                 from_ptr!(gc_ptr),
@@ -167,6 +163,7 @@ pub extern "C" fn verify_cdi_ffi(
                 Err(CDIVerificationError::Policy) => -5,
                 Err(CDIVerificationError::AR) => -6,
                 Err(CDIVerificationError::AccountOwnership) => -7,
+                Err(CDIVerificationError::Proof) => -8,
             }
         }
     }
@@ -272,8 +269,12 @@ mod test {
     use ed25519_dalek as ed25519;
     use either::Either::Left;
     use pairing::bls12_381::Bls12;
-    use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
-    use std::{collections::btree_map::BTreeMap, convert::TryFrom};
+    use pedersen_scheme::key as pedersen_key;
+    use std::{
+        collections::{btree_map::BTreeMap, BTreeSet},
+        convert::TryFrom,
+        iter::FromIterator,
+    };
 
     type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
     type ExampleCurve = G1;
@@ -281,11 +282,8 @@ mod test {
     fn test_pipeline() {
         let mut csprng = thread_rng();
 
-        let secret = ExampleCurve::generate_scalar(&mut csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
-            id_cred: IdCredentials {
-                id_cred_sec: PedersenValue { value: secret },
-            },
+            id_cred: IdCredentials::generate(&mut csprng),
         };
 
         // Create IP
@@ -326,11 +324,16 @@ mod test {
         };
 
         let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-            ar_identities: vec![ArIdentity(0), ArIdentity(1), ArIdentity(2)],
+            ar_identities: BTreeSet::from_iter(vec![
+                ArIdentity::new(1),
+                ArIdentity::new(2),
+                ArIdentity::new(3),
+            ]),
             threshold:     Threshold(2),
         })
         .expect("The constructed ARs are valid.");
-        let (pio, randomness) = generate_pio(&context, &aci);
+        let (pio, randomness) =
+            generate_pio(&context, &aci).expect("Creating the credential should succeed.");
 
         let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
 
@@ -382,24 +385,24 @@ mod test {
             signature: ip_sig,
         };
 
-        let cdi = generate_cdi(
+        let cdi = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,
             &id_use_data,
             0,
-            &policy,
+            policy,
             &acc_data,
         )
         .expect("Should generate the credential successfully.");
 
-        let wrong_cdi = generate_cdi(
+        let wrong_cdi = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,
             &id_use_data,
             0,
-            &wrong_policy,
+            wrong_policy,
             &acc_data,
         )
         .expect("Should generate the credential successfully.");
