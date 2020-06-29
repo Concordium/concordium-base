@@ -6,8 +6,6 @@ use syn::spanned::Spanned;
 
 use proc_macro::TokenStream;
 
-use proc_macro2;
-
 #[proc_macro_derive(SerdeBase16Serialize)]
 pub fn serde_base16_serialize_derive(input: TokenStream) -> TokenStream {
     let mut ast: syn::DeriveInput = syn::parse(input).expect("Cannot parse input.");

@@ -1,35 +1,24 @@
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-
-use ed25519_dalek as ed25519;
-use id::secret_sharing::*;
-
+use client_server_helpers::*;
 use crypto_common::*;
-
 use curve_arithmetic::Curve;
 use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
+use ed25519_dalek as ed25519;
+use either::Either::Left;
 use elgamal::{public::PublicKey, secret::SecretKey};
-
-use id::{account_holder::*, identity_provider::*, types::*};
+use id::{account_holder::*, identity_provider::*, secret_sharing::*, types::*};
 use pairing::bls12_381::Bls12;
-
-use rand::*;
-
 use pedersen_scheme::CommitmentKey;
-
+use rand::*;
 use std::{
     cmp::max,
     collections::{btree_map::BTreeMap, BTreeSet},
+    convert::TryFrom,
     fs::File,
     io::{self, Write},
     path::Path,
 };
-
-use either::Either::Left;
-
-use client_server_helpers::*;
-
-use std::convert::TryFrom;
 
 static IP_PREFIX: &str = "database/identity_provider-";
 static IP_NAME_PREFIX: &str = "identity_provider-";

@@ -1,11 +1,9 @@
+use byteorder::ReadBytesExt;
+use crypto_common::{Serial, Serialize};
 use failure::{Fail, Fallible};
 use ff::{Field, PrimeField};
 use rand::*;
 use std::fmt::{Debug, Display, Formatter};
-
-use byteorder::ReadBytesExt;
-
-use crypto_common::{Serial, Serialize};
 
 #[derive(Debug)]
 pub enum CurveDecodingError {

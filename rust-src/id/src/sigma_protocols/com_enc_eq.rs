@@ -2,17 +2,16 @@
 //! This protocol is used to prove that the encrypted value (encrypted via
 //! ElGamal) is the same as the value commited to via the Pedersen commitment.
 
-use curve_arithmetic::{multiexp, Curve};
-use ff::Field;
-use rand::*;
-
 use crate::sigma_protocols::common::*;
 use crypto_common::*;
 use crypto_common_derive::*;
+use curve_arithmetic::{multiexp, Curve};
 use elgamal::{
     Cipher as ElGamalCipher, PublicKey as ElGamalPublicKey, Randomness as ElgamalRandomness,
 };
+use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness as PedersenRandomness, Value};
+use rand::*;
 use random_oracle::RandomOracle;
 
 #[derive(Debug)]

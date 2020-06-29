@@ -2,14 +2,13 @@
 //! protocol. This protocol enables one to prove that the value committed to in
 //! two commitments $C_1$ and $C_2$ in (potentially) two different groups (of
 //! the same order) is the same.
-use curve_arithmetic::{multiexp, Curve};
-use ff::Field;
-use rand::*;
-
 use crate::sigma_protocols::common::*;
 use crypto_common::*;
 use crypto_common_derive::*;
+use curve_arithmetic::{multiexp, Curve};
+use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
+use rand::*;
 use random_oracle::RandomOracle;
 
 #[derive(Debug)]
