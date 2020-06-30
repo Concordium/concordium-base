@@ -28,7 +28,10 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
             return wrap_return_tuple(
                 &env,
                 127,
-                &format!("Could not read java.lang.String given as input due to {:?}", e),
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
             )
         }
     };
@@ -69,7 +72,10 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
             return wrap_return_tuple(
                 &env,
                 127,
-                &format!("Could not read java.lang.String given as input due to {:?}", e),
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
             )
         }
     };
@@ -108,7 +114,10 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
             return wrap_return_tuple(
                 &env,
                 127,
-                &format!("Could not read java.lang.String given as input due to {:?}", e),
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
             )
         }
     };
@@ -197,10 +206,11 @@ fn wrap_return_tuple(env: &JNIEnv, code: u8, message: &str) -> jobject {
         }
     };
 
-    match env.new_object_unchecked(class, method_id, &[
-        JValue::Int(code as jint),
-        JValue::Object(*jstr_value),
-    ]) {
+    match env.new_object_unchecked(
+        class,
+        method_id,
+        &[JValue::Int(code as jint), JValue::Object(*jstr_value)],
+    ) {
         Ok(res) => res.into_inner(),
         Err(e) => {
             return wrap_return_tuple(
