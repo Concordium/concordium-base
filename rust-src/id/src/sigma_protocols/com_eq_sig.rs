@@ -193,21 +193,41 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
             return None;
         }
 
-        let mut point = g_tilda.mul_by_scalar(&witness.witness_rho);
+        // storing values for multiexponentiation. gs is bases, es is powers.
+        let mut gs = Vec::with_capacity(n + 2);
+        let mut es = Vec::with_capacity(n + 2);
+
+        // let mut point = g_tilda.mul_by_scalar(&witness.witness_rho);
+        gs.push(g_tilda);
+        es.push(witness.witness_rho);
         let mut cmms = Vec::with_capacity(n);
         for (cC_i, cY_tilda, (wit_m, wit_r)) in
             izip!(commitments.iter(), cY_tildas, witness.witness_commit.iter())
         {
             // compute C_i^c * g^mu_i h^R_i
-            let cP = cC_i
-                .mul_by_scalar(challenge)
-                .plus_point(&cmm_key.hide_worker(wit_m, wit_r));
+            let bases = [cC_i.0, cmm_key.0, cmm_key.1];
+            let powers = [*challenge, *wit_m, *wit_r];
+            let cP = multiexp(&bases, &powers);
+            // let cP = cC_i
+            //     .mul_by_scalar(challenge)
+            //     .plus_point(&cmm_key.hide_worker(wit_m, wit_r));
             cmms.push(Commitment(cP));
-
-            point = point.plus_point(&cY_tilda.mul_by_scalar(&wit_m));
+            gs.push(*cY_tilda);
+            es.push(*wit_m);
+            // point = point.plus_point(&cY_tilda.mul_by_scalar(&wit_m));
         }
-        // finally add X_tilda
-        let point = point.plus_point(&cX_tilda.inverse_point().mul_by_scalar(challenge));
+        // finally add X_tilda and -challenge to the powers.
+        gs.push(cX_tilda);
+        {
+            let mut x = *challenge;
+            x.negate();
+            es.push(x);
+        }
+
+        // let point =
+        // point.plus_point(&cX_tilda.inverse_point().mul_by_scalar(challenge));
+
+        let point = multiexp(&gs, &es);
 
         // We have now computed a point `point` such that
         // ```v_3^{-c} * v_1^R \prod u_i^w_i = e(a_hat, point)```

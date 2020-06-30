@@ -5,7 +5,7 @@
 use crate::sigma_protocols::common::*;
 use crypto_common::*;
 use crypto_common_derive::*;
-use curve_arithmetic::Curve;
+use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use rand::*;
@@ -109,14 +109,24 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
 
         let (s_1, s_2, t) = witness.witness;
 
-        let u = y
-            .mul_by_scalar(challenge)
-            .plus_point(&cG1.mul_by_scalar(&s_1))
-            .plus_point(&cG2.mul_by_scalar(&s_2));
-        let v = cC
-            .mul_by_scalar(challenge)
-            .plus_point(&g.mul_by_scalar(&s_1))
-            .plus_point(&h.mul_by_scalar(&t));
+        let u = {
+            let bases = [y.0, cG1, cG2];
+            let powers = [*challenge, s_1, s_2];
+            multiexp(&bases, &powers)
+        };
+        // y
+        //     .mul_by_scalar(challenge)
+        //     .plus_point(&cG1.mul_by_scalar(&s_1))
+        //     .plus_point(&cG2.mul_by_scalar(&s_2));
+        let v = {
+            let bases = [cC.0, g, h];
+            let powers = [*challenge, s_1, t];
+            multiexp(&bases, &powers)
+        };
+        // cC
+        //     .mul_by_scalar(challenge)
+        //     .plus_point(&g.mul_by_scalar(&s_1))
+        //     .plus_point(&h.mul_by_scalar(&t));
         Some((Commitment(u), Commitment(v)))
     }
 

@@ -32,9 +32,10 @@ impl<C: Curve> CommitmentKey<C> {
     pub fn hide_worker(&self, value: &C::Scalar, randomness: &C::Scalar) -> Commitment<C> {
         let h = self.1;
         let g = self.0;
-        let hr = h.mul_by_scalar(randomness);
-        let gm = g.mul_by_scalar(value);
-        Commitment(hr.plus_point(&gm))
+        let cmm = multiexp(&[g, h], &[*value, *randomness]);
+        // let hr = h.mul_by_scalar(randomness);
+        // let gm = g.mul_by_scalar(value);
+        Commitment(cmm) // hr.plus_point(&gm))
     }
 
     #[inline(always)]
