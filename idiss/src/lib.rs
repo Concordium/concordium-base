@@ -22,7 +22,9 @@ fn parse_exact_versioned_ip_info(
     ip_info_str: &str,
 ) -> Result<IpInfo<Bls12, ExampleCurve>, JsValue> {
     let v: Value = from_str(ip_info_str).map_err(show_err)?;
-    let ip_info_v = v.get("ipInfo").ok_or_else(|| show_err("Field 'ipInfo' must be present."))?;
+    let ip_info_v = v
+        .get("ipInfo")
+        .ok_or_else(|| show_err("Field 'ipInfo' must be present."))?;
     let res: Result<Versioned<IpInfo<Bls12, ExampleCurve>>, Error> = from_value(ip_info_v.clone());
     match res {
         Ok(vip) if vip.version == VERSION_IP_INFO_PUBLIC => Ok(vip.value),
@@ -61,7 +63,9 @@ pub fn validate_request(ip_info_str: &str, request_str: &str) -> bool {
     vf.is_ok()
 }
 
-fn show_err<D: Display>(err: D) -> JsValue { JsValue::from_str(&format!("ERROR: {}", err)) }
+fn show_err<D: Display>(err: D) -> JsValue {
+    JsValue::from_str(&format!("ERROR: {}", err))
+}
 
 #[wasm_bindgen]
 pub fn create_identity_object(
@@ -108,7 +112,7 @@ pub fn create_anonymity_revocation_record(request_str: &str) -> Result<String, J
     };
     let ar_record = AnonymityRevocationRecord {
         id_cred_pub: request.id_cred_pub,
-        ar_data:     request.ip_ar_data,
+        ar_data: request.ip_ar_data,
     };
     Ok(to_string(&ar_record)
         .expect("JSON serialization of anonymity revocation records should not fail."))
