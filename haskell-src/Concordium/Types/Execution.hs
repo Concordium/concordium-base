@@ -522,15 +522,19 @@ data Event =
                eeduDifficulty :: !Double
                }
            | AccountKeysUpdated {
+               akuAccount :: !AccountAddress,
                akuKeys :: ![(KeyIndex, AccountVerificationKey)]
                }
            | AccountKeysAdded {
+               akuAccount :: !AccountAddress,
                akaKeys :: ![(KeyIndex, AccountVerificationKey)]
                }
            | AccountKeysRemoved {
+               akuAccount :: !AccountAddress,
                akrIndices :: ![KeyIndex]
                }
            | AccountKeysSignThresholdUpdated {
+               akuAccount :: !AccountAddress,
                akstuThreshold :: !SignatureThreshold
                }
   deriving (Show, Generic, Eq)
