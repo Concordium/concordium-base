@@ -3,146 +3,141 @@
 //! logarithms $a_1 ... a_n$ public values $ y = \prod G_i^{a_i} $.
 //! This is a specialization of `com_eq` protocol where we do not require
 //! commitments.
-use curve_arithmetic::curve_arithmetic::Curve;
-use ff::Field;
-use rand::*;
-
+use crate::sigma_protocols::common::*;
 use crypto_common::*;
-use random_oracle::RandomOracle;
+use curve_arithmetic::Curve;
+use ff::Field;
+use random_oracle::{Challenge, RandomOracle};
+use std::rc::Rc;
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct AggregateDlogProof<T: Curve> {
-    /// The challenge computed by the prover.
-    challenge: T::Scalar,
-    /// The list of $s_i$ where
-    /// * $s_i = \alpha_i - c a_i$
-    /// where $c$ is the challenge and $\alpha_i$ are prover chosen
-    /// random scalars, and $a_i$ are the secret values.
-    #[size_length = 4]
-    witness: Vec<T::Scalar>,
+pub struct AggregateDlog<C: Curve> {
+    /// Evaluated point.
+    public: C,
+    /// The points G_i references in the module description, in the given order.
+    coeff: Vec<C>,
 }
 
-/// Construct a proof of knowledge of secret values. The arguments are as
-/// follows.
-/// * `ro` - Random oracle used in the challenge computation. This can be used
-///   to make sure that the proof is only valid in a certain context.
-/// * `evaluation` - The evaluation $y$ (see above for notation).
-/// * `coeff` - The list of generators for discrete log proofs.
-/// * `secret` - The list of secret values $a_i$. The length of this list must
-///   be the
-/// same as the lenght of `coeff`.
-/// * `csprng` - A cryptographically secure random number generator.
-pub fn prove_aggregate_dlog<T: Curve, R: Rng>(
-    ro: RandomOracle,
-    public: &T,
-    coeff: &[T],
-    secret: &[T::Scalar],
-    csprng: &mut R,
-) -> AggregateDlogProof<T> {
-    let n = secret.len();
-    // FIXME: Likely the return value should be an option type (or Result type).
-    assert_eq!(coeff.len(), n);
+/// Aggregate dlog witness. We deliberately make it opaque.
+#[derive(Debug, Serialize)]
+pub struct Witness<C: Curve> {
+    #[size_length = 4]
+    witness: Vec<C::Scalar>,
+}
 
-    let hasher = ro
-        .append_bytes("aggregate_dlog")
-        .append(public)
-        .extend_from(coeff.iter());
+/// Convenient alias for aggregate dlog proof
+pub type Proof<C> = SigmaProof<Witness<C>>;
 
-    // Only allocate the vector once and just reset it each iteration. The vector
-    // can be big, and there is no reason to allocate a new one each iteration.
-    let mut rands = Vec::with_capacity(n);
-    loop {
-        rands.clear();
-        let mut point = T::zero_point();
+impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
+    type CommitMessage = C;
+    type ProtocolChallenge = C::Scalar;
+    type ProverState = Vec<C::Scalar>;
+    type ProverWitness = Witness<C>;
+    type SecretData = Vec<Rc<C::Scalar>>;
 
-        for g in coeff.iter() {
-            let rand = T::generate_non_zero_scalar(csprng);
+    fn public(&self, ro: RandomOracle) -> RandomOracle {
+        ro.append(&self.public).extend_from(&self.coeff)
+    }
+
+    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
+        C::scalar_from_bytes(challenge)
+    }
+
+    fn commit_point<R: rand::Rng>(
+        &self,
+        csprng: &mut R,
+    ) -> Option<(Self::CommitMessage, Self::ProverState)> {
+        // Make sure our data is consistent.
+        let n = self.coeff.len();
+
+        let mut rands = Vec::with_capacity(n);
+        let mut point = C::zero_point();
+        for g in self.coeff.iter() {
+            let rand = C::generate_non_zero_scalar(csprng);
+            // FIXME: Multiexponentiation would be useful in this case.
             point = point.plus_point(&g.mul_by_scalar(&rand));
             rands.push(rand);
         }
-        let maybe_challenge = hasher.append_fresh(&point).result_to_scalar::<T>();
-        match maybe_challenge {
-            None => {} // loop again
-            Some(challenge) => {
-                if challenge != T::Scalar::zero() {
-                    let mut witness = Vec::with_capacity(n);
-                    for (ref s, ref r) in izip!(secret, rands) {
-                        let mut wit = challenge;
-                        wit.mul_assign(s);
-                        wit.negate();
-                        wit.add_assign(r);
-                        witness.push(wit);
-                    }
-                    let proof = AggregateDlogProof { challenge, witness };
-                    return proof;
-                }
-            }
+        Some((point, rands))
+    }
+
+    fn generate_witness(
+        &self,
+        secret: Self::SecretData,
+        state: Self::ProverState,
+        challenge: &Self::ProtocolChallenge,
+    ) -> Option<Self::ProverWitness> {
+        let n = secret.len();
+        if state.len() != n {
+            return None;
         }
+        let mut witness = Vec::with_capacity(n);
+        for (ref s, ref r) in izip!(secret, state) {
+            let mut wit = *challenge;
+            wit.mul_assign(s);
+            wit.negate();
+            wit.add_assign(r);
+            witness.push(wit);
+        }
+        Some(Witness { witness })
     }
-}
 
-/// Verify a proof of knowledge of secret values. The arguments are as
-/// follows.
-/// * `ro` - Random oracle used in the challenge computation. This can be used
-///   to make sure that the proof is only valid in a certain context.
-/// * `evaluation` - The evaluation $y$ (see above for notation).
-/// * `coeff` - THe list of generators for discrete log proofs.
-pub fn verify_aggregate_dlog<T: Curve>(
-    ro: RandomOracle,
-    public: &T,
-    coeff: &[T],
-    proof: &AggregateDlogProof<T>,
-) -> bool {
-    let hasher = ro
-        .append_bytes("aggregate_dlog")
-        .append(public)
-        .extend_from(coeff.iter());
+    fn extract_point(
+        &self,
+        challenge: &Self::ProtocolChallenge,
+        witness: &Self::ProverWitness,
+    ) -> Option<Self::CommitMessage> {
+        if witness.witness.len() != self.coeff.len() {
+            return None;
+        }
+        let mut point = self.public.mul_by_scalar(challenge);
+        for (ref w, ref g) in izip!(witness.witness.iter(), self.coeff.iter()) {
+            point = point.plus_point(&g.mul_by_scalar(w));
+        }
+        Some(point)
+    }
 
-    let mut point = public.mul_by_scalar(&proof.challenge);
-    if proof.witness.len() != coeff.len() {
-        return false;
-    }
-    for (ref w, ref g) in izip!(&proof.witness, coeff) {
-        point = point.plus_point(&g.mul_by_scalar(w));
-    }
-    let computed_challenge = hasher.finish_to_scalar::<T, _>(&point);
-    match computed_challenge {
-        None => false,
-        Some(computed_challenge) => proof.challenge == computed_challenge,
+    #[cfg(test)]
+    fn with_valid_data<R: rand::Rng>(
+        data_size: usize,
+        csprng: &mut R,
+        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+    ) {
+        let mut secret = Vec::with_capacity(data_size);
+        let mut coeff = Vec::with_capacity(data_size);
+        let mut public = C::zero_point();
+        for _ in 0..data_size {
+            let s = C::generate_scalar(csprng);
+            let g = C::generate(csprng);
+            public = public.plus_point(&g.mul_by_scalar(&s));
+            secret.push(Rc::new(s));
+            coeff.push(g);
+        }
+        let agg = AggregateDlog { public, coeff };
+        f(agg, secret, csprng)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sigma_protocols::common::*;
-    use pairing::bls12_381::G1Affine;
-    use rand::rngs::ThreadRng;
+    use pairing::bls12_381::G1;
+    use rand::{thread_rng, Rng};
 
     #[test]
     pub fn test_aggregate_dlog_correctness() {
         let mut csprng = thread_rng();
         for i in 1..20 {
-            let mut secret = Vec::with_capacity(i);
-            let mut coeff = Vec::with_capacity(i);
-            let mut public = <G1Affine as Curve>::zero_point();
-            for _ in 0..i {
-                let s = G1Affine::generate_scalar(&mut csprng);
-                let g = G1Affine::generate(&mut csprng);
-                public = public.plus_point(&g.mul_by_scalar(&s));
-                secret.push(s);
-                coeff.push(g);
-            }
-            let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let ro = RandomOracle::domain(&challenge_prefix);
-            let proof = prove_aggregate_dlog::<G1Affine, ThreadRng>(
-                ro.split(),
-                &public,
-                &coeff,
-                &secret,
+            AggregateDlog::with_valid_data(
+                i,
                 &mut csprng,
-            );
-            assert!(verify_aggregate_dlog(ro, &public, &coeff, &proof));
+                |agg: AggregateDlog<G1>, secret, csprng| {
+                    let challenge_prefix = generate_challenge_prefix(csprng);
+                    let ro = RandomOracle::domain(&challenge_prefix);
+                    let proof =
+                        prove(ro.split(), &agg, secret, csprng).expect("Input data is valid.");
+                    assert!(verify(ro, &agg, &proof));
+                },
+            )
         }
     }
 
@@ -150,65 +145,36 @@ mod tests {
     pub fn test_aggregate_dlog_soundness() {
         let mut csprng = thread_rng();
         for i in 1..20 {
-            // Generate proof
-            let mut secret = Vec::with_capacity(i);
-            let mut coeff = Vec::with_capacity(i);
-            let mut public = <G1Affine as Curve>::zero_point();
-            for _ in 0..i {
-                let s = G1Affine::generate_scalar(&mut csprng);
-                let g = G1Affine::generate(&mut csprng);
-                public = public.plus_point(&g.mul_by_scalar(&s));
-                secret.push(s);
-                coeff.push(g);
-            }
-            let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let ro = RandomOracle::domain(&challenge_prefix);
-            let proof = prove_aggregate_dlog::<G1Affine, ThreadRng>(
-                ro.split(),
-                &public,
-                &coeff,
-                &secret,
-                &mut csprng,
-            );
+            AggregateDlog::with_valid_data(i, &mut csprng, |agg, secret, csprng| {
+                let challenge_prefix = generate_challenge_prefix(csprng);
+                let ro = RandomOracle::domain(&challenge_prefix);
+                let proof = prove(ro.split(), &agg, secret, csprng).expect("Input data is valid.");
 
-            // Construct invalid parameters
-            let index_wrong_coeff: usize = csprng.gen_range(0, i);
+                // Construct invalid parameters
+                let index_wrong_coeff: usize = csprng.gen_range(0, i);
 
-            let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
-            let wrong_public = public.double_point();
-            let mut wrong_coeff = coeff.clone();
-            wrong_coeff[index_wrong_coeff] = wrong_coeff[index_wrong_coeff].double_point();
+                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
+                let wrong_public = G1::generate(csprng);
+                let mut wrong_coeff = agg.coeff.clone();
+                wrong_coeff[index_wrong_coeff] = G1::generate(csprng);
 
-            // Verify failure for invalid parameters
-            assert!(!verify_aggregate_dlog(wrong_ro, &public, &coeff, &proof));
-            assert!(!verify_aggregate_dlog(
-                ro.split(),
-                &wrong_public,
-                &coeff,
-                &proof
-            ));
-            assert!(!verify_aggregate_dlog(
-                ro.split(),
-                &public,
-                &wrong_coeff,
-                &proof
-            ));
-        }
-    }
+                // Verify failure for invalid parameters
+                // Incorrect context string
+                assert!(!verify(wrong_ro, &agg, &proof));
+                let wrong_agg = AggregateDlog {
+                    public: wrong_public,
+                    ..agg
+                };
+                // Incorrect public data: incorrect evaluation.
+                assert!(!verify(ro.split(), &wrong_agg, &proof));
 
-    #[test]
-    pub fn test_serialization() {
-        let mut csprng = thread_rng();
-        for i in 1..20 {
-            let mut witness = vec![<G1Affine as Curve>::Scalar::zero(); i];
-            let challenge: <G1Affine as Curve>::Scalar = G1Affine::generate_scalar(&mut csprng);
-            for j in 0..i {
-                witness[j] = G1Affine::generate_scalar(&mut csprng);
-            }
-            let ap = AggregateDlogProof::<G1Affine> { challenge, witness };
-            let app = serialize_deserialize(&ap);
-            assert!(app.is_ok());
-            assert_eq!(ap, app.unwrap());
+                let wrong_agg_coeff = AggregateDlog {
+                    coeff: wrong_coeff,
+                    ..agg
+                };
+                // Incorrect public data: incorrect coefficient.
+                assert!(!verify(ro.split(), &wrong_agg_coeff, &proof));
+            })
         }
     }
 }

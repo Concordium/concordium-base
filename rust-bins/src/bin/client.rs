@@ -1,34 +1,24 @@
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-
-use ed25519_dalek as ed25519;
-use id::secret_sharing::*;
-
+use client_server_helpers::*;
 use crypto_common::*;
-
-use std::collections::btree_map::BTreeMap;
-
 use curve_arithmetic::Curve;
 use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
+use ed25519_dalek as ed25519;
+use either::Either::Left;
 use elgamal::{public::PublicKey, secret::SecretKey};
-
-use id::{account_holder::*, identity_provider::*, types::*};
+use id::{account_holder::*, identity_provider::*, secret_sharing::*, types::*};
 use pairing::bls12_381::Bls12;
-
+use pedersen_scheme::CommitmentKey;
 use rand::*;
-
-use pedersen_scheme::{CommitmentKey, Value as PedersenValue};
-
 use std::{
     cmp::max,
+    collections::{btree_map::BTreeMap, BTreeSet},
+    convert::TryFrom,
     fs::File,
     io::{self, Write},
     path::Path,
 };
-
-use either::Either::Left;
-
-use client_server_helpers::*;
 
 static IP_PREFIX: &str = "database/identity_provider-";
 static IP_NAME_PREFIX: &str = "identity_provider-";
@@ -405,13 +395,13 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // - acc_data of the account onto which we are deploying this credential
     //   (private and public)
 
-    let cdi = generate_cdi(
+    let cdi = create_credential(
         &ip_info,
         &global_ctx,
         &id_object,
         &id_use_data,
         x,
-        &policy,
+        policy,
         &acc_data,
     );
 
@@ -464,11 +454,8 @@ fn handle_deploy_credential(matches: &ArgMatches) {
 /// Create a new CHI object (essentially new idCredPub and idCredSec).
 fn handle_create_chi(matches: &ArgMatches) {
     let mut csprng = thread_rng();
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: PedersenValue { value: secret },
-        },
+        id_cred: IdCredentials::generate(&mut csprng),
     };
 
     if let Some(filepath) = matches.value_of("out") {
@@ -638,14 +625,13 @@ fn handle_start_ip(matches: &ArgMatches) {
         }
     };
 
-    // FIXME: THis clone is unnecessary.
-    let ar_handles = ip_info.ip_ars.ars.clone();
+    let ar_handles = &ip_info.ip_ars.ars;
     let mrs: Vec<&str> = ar_handles
         .iter()
         .map(|x| x.ar_description.name.as_str())
         .collect();
 
-    let mut choice_ars = vec![];
+    let mut choice_ars = BTreeSet::new();
 
     let ar_info = Checkboxes::new()
         .with_prompt("Choose anonymity revokers")
@@ -658,7 +644,7 @@ fn handle_start_ip(matches: &ArgMatches) {
         return;
     }
     for idx in ar_info.into_iter() {
-        choice_ars.push(ar_handles[idx].ar_identity);
+        choice_ars.insert(ar_handles[idx].ar_identity);
     }
 
     let threshold = {
@@ -668,15 +654,15 @@ fn handle_start_ip(matches: &ArgMatches) {
             .default(1)
             .interact()
         {
-            Threshold((threshold + 1) as u32) // +1 because the indexing of the
-                                              // selection starts at 1
+            Threshold((threshold + 1) as u8) // +1 because the indexing of the
+                                             // selection starts at 1
         } else {
             let d = max(1, num_ars - 1);
             println!(
                 "Selecting default value (= {}) for revocation threshold.",
                 d
             );
-            Threshold(d as u32)
+            Threshold(d as u8)
         }
     };
 
@@ -688,7 +674,8 @@ fn handle_start_ip(matches: &ArgMatches) {
     // and finally generate the pre-identity object
     // we also retrieve the randomness which we must keep private.
     // This randomness must be used
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let (pio, randomness) =
+        generate_pio(&context, &aci).expect("Generating the pre-identity object should succeed.");
 
     // the only thing left is to output all the information
 
@@ -744,7 +731,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let ar0_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar0_public_key = PublicKey::from(&ar0_secret_key);
         let ar0_info = ArInfo {
-            ar_identity:    ArIdentity(0u32),
+            ar_identity:    ArIdentity::try_from(1u32).unwrap(),
             ar_description: mk_ar_description(0),
             ar_public_key:  ar0_public_key,
         };
@@ -757,7 +744,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar1_public_key = PublicKey::from(&ar1_secret_key);
         let ar1_info = ArInfo {
-            ar_identity:    ArIdentity(1u32),
+            ar_identity:    ArIdentity::try_from(2u32).unwrap(),
             ar_description: mk_ar_description(1),
             ar_public_key:  ar1_public_key,
             // ar_elgamal_generator: PublicKey::generator(),
@@ -771,7 +758,7 @@ fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
         let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
         let ar2_public_key = PublicKey::from(&ar2_secret_key);
         let ar2_info = ArInfo {
-            ar_identity:    ArIdentity(2u32),
+            ar_identity:    ArIdentity::try_from(3u32).unwrap(),
             ar_description: mk_ar_description(2),
             ar_public_key:  ar2_public_key,
             // ar_elgamal_generator: PublicKey::generator(),

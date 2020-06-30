@@ -3,15 +3,11 @@
 
 // rustc seems to think the typenames in match statements (e.g. in
 // Display) should be snake cased, for some reason.
-#![allow(non_snake_case)]
-
 use core::fmt::{self, Display};
 
 /// Internal errors.  Most application-level developers will likely not
 /// need to pay any attention to these.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-// TODO : Remove when done prototyping
-#[allow(dead_code)]
 pub(crate) enum InternalError {
     PointDecompression,
     ScalarFormat,

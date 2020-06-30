@@ -13,10 +13,12 @@ use pairing::bls12_381::{Bls12, G1};
 
 use rand::*;
 
-use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
+use pedersen_scheme::key as pedersen_key;
 use std::collections::BTreeMap;
 
 use either::Left;
+
+use std::convert::TryFrom;
 
 use criterion::*;
 
@@ -32,11 +34,8 @@ fn bench_parts(c: &mut Criterion) {
     let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(20, &mut csprng);
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: PedersenValue::new(secret),
-        },
+        id_cred: IdCredentials::generate(&mut csprng),
     };
 
     let ar_base = ExampleCurve::generate(&mut csprng);
@@ -44,7 +43,7 @@ fn bench_parts(c: &mut Criterion) {
     let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar1_public_key = PublicKey::from(&ar1_secret_key);
     let ar1_info = ArInfo::<G1> {
-        ar_identity:    ArIdentity(1),
+        ar_identity:    ArIdentity::try_from(1).unwrap(),
         ar_description: mk_dummy_description("A good AR".to_string()),
         ar_public_key:  ar1_public_key,
     };
@@ -52,7 +51,7 @@ fn bench_parts(c: &mut Criterion) {
     let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar2_public_key = PublicKey::from(&ar2_secret_key);
     let ar2_info = ArInfo::<G1> {
-        ar_identity:    ArIdentity(2),
+        ar_identity:    ArIdentity::try_from(2).unwrap(),
         ar_description: mk_dummy_description("A nice AR".to_string()),
         ar_public_key:  ar2_public_key,
     };
@@ -60,7 +59,7 @@ fn bench_parts(c: &mut Criterion) {
     let ar3_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar3_public_key = PublicKey::from(&ar3_secret_key);
     let ar3_info = ArInfo::<G1> {
-        ar_identity:    ArIdentity(3),
+        ar_identity:    ArIdentity::try_from(3).unwrap(),
         ar_description: mk_dummy_description("Weird AR".to_string()),
         ar_public_key:  ar3_public_key,
     };
@@ -68,7 +67,7 @@ fn bench_parts(c: &mut Criterion) {
     let ar4_secret_key = SecretKey::generate(&ar_base, &mut csprng);
     let ar4_public_key = PublicKey::from(&ar4_secret_key);
     let ar4_info = ArInfo::<G1> {
-        ar_identity:    ArIdentity(4),
+        ar_identity:    ArIdentity::try_from(4).unwrap(),
         ar_description: mk_dummy_description("Ok AR".to_string()),
         ar_public_key:  ar4_public_key,
     };
@@ -110,12 +109,20 @@ fn bench_parts(c: &mut Criterion) {
     };
 
     let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        ar_identities: vec![ArIdentity(1), ArIdentity(2), ArIdentity(4)],
+        ar_identities: [
+            ArIdentity::try_from(1).unwrap(),
+            ArIdentity::try_from(2).unwrap(),
+            ArIdentity::try_from(4).unwrap(),
+        ]
+        .iter()
+        .copied()
+        .collect(),
         threshold:     Threshold(2),
     })
     .expect("The constructed ARs are valid.");
 
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let (pio, randomness) =
+        generate_pio(&context, &aci).expect("Generating the pre-identity object succeed.");
     let pio_ser = to_bytes(&pio);
     let ip_info_ser = to_bytes(&ip_info);
     let pio_des = from_bytes(&mut Cursor::new(&pio_ser)).unwrap();
@@ -158,36 +165,29 @@ fn bench_parts(c: &mut Criterion) {
         signature: ip_sig,
     };
 
-    let cdi = generate_cdi(
+    let cdi = create_credential(
         &ip_info,
         &global_ctx,
         &id_object,
         &id_use_data,
         0,
-        &policy,
+        policy.clone(),
         &acc_data,
     )
     .expect("Should generate the credential successfully.");
 
+    let ar_2 = ArIdentity::try_from(2).unwrap();
+
     // revoking anonymity
-    let second_ar = cdi
-        .values
-        .ar_data
-        .iter()
-        .find(|&x| x.ar_identity == ArIdentity(2))
-        .unwrap();
+    let second_ar = cdi.values.ar_data.get(&ar_2).unwrap();
     let decrypted_share_ar2 = (
-        second_ar.id_cred_pub_share_number.into(),
+        ar_2,
         ar2_secret_key.decrypt(&second_ar.enc_id_cred_pub_share),
     );
-    let fourth_ar = cdi
-        .values
-        .ar_data
-        .iter()
-        .find(|&x| x.ar_identity == ArIdentity(4))
-        .unwrap();
+    let ar_4 = ArIdentity::try_from(4).unwrap();
+    let fourth_ar = cdi.values.ar_data.get(&ar_4).unwrap();
     let decrypted_share_ar4 = (
-        fourth_ar.id_cred_pub_share_number,
+        ar_4,
         ar4_secret_key.decrypt(&fourth_ar.enc_id_cred_pub_share),
     );
 
@@ -198,9 +198,10 @@ fn bench_parts(c: &mut Criterion) {
         bench_pio,
     );
 
-    let bench_generate_cdi = move |b: &mut Bencher, x: &(_, _, _, _, _, _, _)| {
-        b.iter(|| generate_cdi(x.0, x.1, x.2, x.3, x.4, x.5, x.6).unwrap())
-    };
+    let bench_create_credential =
+        move |b: &mut Bencher, x: &(_, _, _, _, _, Policy<ExampleCurve, AttributeKind>, _)| {
+            b.iter(|| create_credential(x.0, x.1, x.2, x.3, x.4, x.5.clone(), x.6).unwrap())
+        };
     c.bench_with_input(
         BenchmarkId::new("Generate CDI", ""),
         &(
@@ -209,10 +210,10 @@ fn bench_parts(c: &mut Criterion) {
             &id_object,
             &id_use_data,
             0,
-            &policy,
+            policy,
             &acc_data,
         ),
-        bench_generate_cdi,
+        bench_create_credential,
     );
 
     let bench_verify_cdi =

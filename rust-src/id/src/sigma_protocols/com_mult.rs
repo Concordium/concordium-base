@@ -2,207 +2,196 @@
 //! This protocol enables one to prove that the the product of two commited
 //! values is equal to the third commited value, without revealing the values
 //! themselves.
-use curve_arithmetic::curve_arithmetic::Curve;
-use ff::Field;
-use rand::*;
-
+use crate::sigma_protocols::common::*;
 use crypto_common::*;
+use curve_arithmetic::{multiexp, Curve};
+use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
-use random_oracle::RandomOracle;
+use random_oracle::{Challenge, RandomOracle};
 
-pub struct ComMultSecret<'a, T: Curve> {
-    pub values: &'a [Value<T>; 3],
-    pub rands:  &'a [Randomness<T>; 3],
+pub struct ComMultSecret<T: Curve> {
+    pub values: [Value<T>; 3],
+    pub rands:  [Randomness<T>; 3],
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct ComMultProof<T: Curve> {
-    /// Computed challenge.
-    challenge: T::Scalar,
-    /// The witness, expanded using the same notation as in the specification.
-    ss: [T::Scalar; 3],
-    ts: [T::Scalar; 3],
-    t: T::Scalar,
-}
-
-/// Construct a proof of knowledge of multiplicative relationship. The arguments
-/// are as follows.
-/// * `ro` - Random oracle used in the challenge computation. This can be used
-///   to make sure that the proof is only valid in a certain context.
+/// The ComMult sigma proof instance.
 /// * `cmm_{1,2,3}` - The triple of commitments (the product of the first two
 ///   commited values should be equal to the last)
 /// * `cmm_key` - The commitment key with which all the commitments are
 ///   generated.
-/// * `secret` - The list of pairs $(a_i, r_i)$ where $r_i$ is the commitment
-///   randomness, and $a_i$ the commited to value.
-/// * `csprng` - A cryptographically secure random number generator.
-#[allow(non_snake_case)]
-pub fn prove_com_mult<T: Curve, R: Rng>(
-    ro: RandomOracle,
-    cmm_1: &Commitment<T>,
-    cmm_2: &Commitment<T>,
-    cmm_3: &Commitment<T>,
-    cmm_key: &CommitmentKey<T>,
-    secret: &ComMultSecret<T>,
-    csprng: &mut R,
-) -> ComMultProof<T> {
-    let hasher = ro
-        .append_bytes("com_mult")
-        .append(cmm_1)
-        .append(cmm_2)
-        .append(cmm_3)
-        .append(cmm_key);
+pub struct ComMult<C: Curve> {
+    pub cmms:    [Commitment<C>; 3],
+    pub cmm_key: CommitmentKey<C>,
+}
 
-    loop {
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
+pub struct Witness<C: Curve> {
+    /// The witness, expanded using the same notation as in the specification.
+    ss: [C::Scalar; 3],
+    ts: [C::Scalar; 3],
+    t: C::Scalar,
+}
+
+#[allow(non_snake_case)]
+impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
+    type CommitMessage = ([Commitment<C>; 3], Commitment<C>);
+    type ProtocolChallenge = C::Scalar;
+    // alpha's, R_i's, R's
+    type ProverState = ([Value<C>; 3], [Randomness<C>; 3], Randomness<C>);
+    type ProverWitness = Witness<C>;
+    type SecretData = ComMultSecret<C>;
+
+    #[inline]
+    fn public(&self, ro: RandomOracle) -> RandomOracle {
+        ro.extend_from(self.cmms.iter()).append(&self.cmm_key)
+    }
+
+    #[inline]
+    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
+        C::scalar_from_bytes(challenge)
+    }
+
+    #[inline]
+    fn commit_point<R: rand::Rng>(
+        &self,
+        csprng: &mut R,
+    ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let alpha_1 = Value::generate_non_zero(csprng);
         let alpha_2 = Value::generate_non_zero(csprng);
         let alpha_3 = Value::generate_non_zero(csprng);
 
-        let (v_1, cR_1) = cmm_key.commit(&alpha_1, csprng);
-        let (v_2, cR_2) = cmm_key.commit(&alpha_2, csprng);
-        let (v_3, cR_3) = cmm_key.commit(&alpha_3, csprng);
+        let (v_1, cR_1) = self.cmm_key.commit(&alpha_1, csprng);
+        let (v_2, cR_2) = self.cmm_key.commit(&alpha_2, csprng);
+        let (v_3, cR_3) = self.cmm_key.commit(&alpha_3, csprng);
 
-        let cmm_key_1 = CommitmentKey(cmm_1.0, cmm_key.1);
+        let cmm_key_1 = CommitmentKey(self.cmms[0].0, self.cmm_key.1);
         let (v, cR) = cmm_key_1.commit(&alpha_2, csprng);
+        Some((
+            ([v_1, v_2, v_3], v),
+            ([alpha_1, alpha_2, alpha_3], [cR_1, cR_2, cR_3], cR),
+        ))
+    }
 
-        let maybe_challenge = hasher
-            .append_fresh(&v_1)
-            .append(&v_2)
-            .append(&v_3)
-            .finish_to_scalar::<T, _>(&v);
-        match maybe_challenge {
-            None => {} // loop again
-            Some(challenge) => {
-                // If challenge is zero the proof is very unlikely to be valid.
-                // Hence we resample.
-                if challenge != T::Scalar::zero() {
-                    let mut ss = [challenge; 3];
-                    let mut ts = [challenge; 3];
-                    let alphas = [alpha_1, alpha_2, alpha_3];
-                    let rands = [cR_1, cR_2, cR_3];
-                    for i in 0..3 {
-                        ss[i].mul_assign(&secret.values[i]);
-                        ss[i].negate();
-                        ss[i].add_assign(&alphas[i]);
+    #[inline]
+    fn generate_witness(
+        &self,
+        secret: Self::SecretData,
+        state: Self::ProverState,
+        challenge: &Self::ProtocolChallenge,
+    ) -> Option<Self::ProverWitness> {
+        let mut ss = [*challenge; 3];
+        let mut ts = [*challenge; 3];
 
-                        ts[i].mul_assign(&secret.rands[i]);
-                        ts[i].negate();
-                        ts[i].add_assign(&rands[i]);
-                    }
+        let alphas = state.0;
+        let rands = state.1;
+        let cR = state.2;
+        for i in 0..3 {
+            ss[i].mul_assign(&secret.values[i]);
+            ss[i].negate();
+            ss[i].add_assign(&alphas[i]);
 
-                    // compute r_3 - r_1a_2
-                    let mut r = secret.rands[0].randomness; // r_1
-                    r.mul_assign(&secret.values[1]); // r_1 * a_2
-                    r.negate();
-                    r.add_assign(&secret.rands[2]);
-
-                    let mut t = challenge;
-                    t.mul_assign(&r);
-                    t.negate();
-                    t.add_assign(&cR);
-                    let proof = ComMultProof {
-                        challenge,
-                        ss,
-                        ts,
-                        t,
-                    };
-                    return proof;
-                }
-            }
+            ts[i].mul_assign(&secret.rands[i]);
+            ts[i].negate();
+            ts[i].add_assign(&rands[i]);
         }
+
+        // compute r_3 - r_1a_2
+        let mut r = C::Scalar::one();
+        r.mul_assign(&secret.rands[0]); // r_1
+        r.mul_assign(&secret.values[1]); // r_1 * a_2
+        r.negate();
+        r.add_assign(&secret.rands[2]);
+
+        let mut t = r;
+        t.mul_assign(challenge);
+        t.negate();
+        t.add_assign(&cR);
+
+        Some(Witness { ss, ts, t })
     }
-}
 
-/// Verify proof of knowledge of multiplicative relationship. The arguments are
-/// as follows.
-/// * `ro` - Random oracle used in the challenge computation. This can be used
-///   to make sure that the proof is only valid in a certain context.
-/// * `cmm_{1,2,3}` - The triple of commitments (the product of the first two
-///   commited values should be equal to the last)
-/// * `cmm_key` - The commitment key with which all the commitments are
-///   generated.
-#[allow(non_snake_case)]
-pub fn verify_com_mult<T: Curve>(
-    ro: RandomOracle,
-    cmm_1: &Commitment<T>,
-    cmm_2: &Commitment<T>,
-    cmm_3: &Commitment<T>,
-    cmm_key: &CommitmentKey<T>,
-    proof: &ComMultProof<T>,
-) -> bool {
-    let mut hasher = ro
-        .append_bytes("com_mult")
-        .append(cmm_1)
-        .append(cmm_2)
-        .append(cmm_3)
-        .append(cmm_key);
+    #[inline]
+    fn extract_point(
+        &self,
+        challenge: &Self::ProtocolChallenge,
+        witness: &Self::ProverWitness,
+    ) -> Option<Self::CommitMessage> {
+        let mut points = [Commitment(C::zero_point()); 3];
+        for (i, (s_i, t_i)) in izip!(witness.ss.iter(), witness.ts.iter()).enumerate() {
+            points[i] = {
+                let bases = [self.cmms[i].0, self.cmm_key.0, self.cmm_key.1];
+                let powers = [*challenge, *s_i, *t_i];
+                let cmm = multiexp(&bases, &powers);
+                Commitment(cmm)
+            } // Commitment(
+              //     self.cmms[i]
+              //         .mul_by_scalar(challenge)
+              //         .plus_point(&self.cmm_key.hide_worker(s_i, t_i)),
+              // );
+        }
+        let h = &self.cmm_key.1;
+        let s_2 = &witness.ss[1];
+        let cC_3 = self.cmms[2];
+        let cC_1 = self.cmms[0];
+        let v = {
+            let bases = [cC_3.0, cC_1.0, *h];
+            let powers = [*challenge, *s_2, witness.t];
+            multiexp(&bases, &powers)
+        }; // cC_3
+           //    .mul_by_scalar(challenge)
+           //    .plus_point(&cC_1.mul_by_scalar(s_2))
+           //    .plus_point(&h.mul_by_scalar(&witness.t));
+        Some((points, Commitment(v)))
+    }
 
-    for (c_i, s_i, t_i) in izip!(
-        [cmm_1, cmm_2, cmm_3].iter(),
-        proof.ss.iter(),
-        proof.ts.iter()
+    #[cfg(test)]
+    fn with_valid_data<R: rand::Rng>(
+        _data_size: usize,
+        csprng: &mut R,
+        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
     ) {
-        let v_i = c_i
-            .mul_by_scalar(&proof.challenge)
-            .plus_point(&cmm_key.hide(Value::view_scalar(s_i), Randomness::view_scalar(t_i)));
-        hasher.add(&v_i);
-    }
+        let cmm_key = CommitmentKey::generate(csprng);
+        let a_1 = Value::<C>::generate_non_zero(csprng);
+        let a_2 = Value::<C>::generate_non_zero(csprng);
+        let mut a_3 = C::Scalar::one();
+        a_3.mul_assign(&a_1);
+        a_3.mul_assign(&a_2);
+        let a_3 = Value::new(a_3);
 
-    let h = cmm_key.1;
-    let s_2 = proof.ss[1];
-    let cC_3 = cmm_3;
-    let cC_1 = cmm_1;
-    let v = cC_3
-        .mul_by_scalar(&proof.challenge)
-        .plus_point(&cC_1.mul_by_scalar(&s_2))
-        .plus_point(&h.mul_by_scalar(&proof.t));
+        let (cmm_1, r_1) = cmm_key.commit(&a_1, csprng);
+        let (cmm_2, r_2) = cmm_key.commit(&a_2, csprng);
+        let (cmm_3, r_3) = cmm_key.commit(&a_3, csprng);
 
-    let computed_challenge = hasher.finish_to_scalar::<T, _>(&v);
-    match computed_challenge {
-        None => false,
-        Some(computed_challenge) => computed_challenge == proof.challenge,
+        let secret = ComMultSecret {
+            values: [a_1, a_2, a_3],
+            rands:  [r_1, r_2, r_3],
+        };
+
+        let com_mult = ComMult {
+            cmms: [cmm_1, cmm_2, cmm_3],
+            cmm_key,
+        };
+        f(com_mult, secret, csprng)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sigma_protocols::common::*;
     use pairing::bls12_381::G1;
+    use rand::thread_rng;
 
     #[test]
     pub fn test_com_mult_correctness() {
         let mut csprng = thread_rng();
         for _ in 0..100 {
-            let cmm_key = CommitmentKey::generate(&mut csprng);
-            let a_1 = Value::<G1>::generate_non_zero(&mut csprng);
-            let a_2 = Value::<G1>::generate_non_zero(&mut csprng);
-            let mut a_3 = a_1.value;
-            a_3.mul_assign(&a_2);
-
-            let a_3 = Value::new(a_3);
-
-            let (c_1, r_1) = cmm_key.commit(&a_1, &mut csprng);
-            let (c_2, r_2) = cmm_key.commit(&a_2, &mut csprng);
-            let (c_3, r_3) = cmm_key.commit(&a_3, &mut csprng);
-
-            let secret = ComMultSecret {
-                values: &[a_1, a_2, a_3],
-                rands:  &[r_1, r_2, r_3],
-            };
-
-            let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let ro = RandomOracle::domain(&challenge_prefix);
-            let proof =
-                prove_com_mult(ro.split(), &c_1, &c_2, &c_3, &cmm_key, &secret, &mut csprng);
-            assert!(verify_com_mult(
-                ro.split(),
-                &c_1,
-                &c_2,
-                &c_3,
-                &cmm_key,
-                &proof
-            ));
+            ComMult::<G1>::with_valid_data(0, &mut csprng, |com_mult, secret, csprng| {
+                let challenge_prefix = generate_challenge_prefix(csprng);
+                let ro = RandomOracle::domain(&challenge_prefix);
+                let proof =
+                    prove(ro.split(), &com_mult, secret, csprng).expect("Proving should succeed.");
+                assert!(verify(ro, &com_mult, &proof));
+            })
         }
     }
 
@@ -210,117 +199,31 @@ mod tests {
     pub fn test_com_mult_soundness() {
         let mut csprng = thread_rng();
         for _ in 0..100 {
-            // Generate proof
-            let cmm_key = CommitmentKey::generate(&mut csprng);
-            let a_1 = Value::<G1>::generate_non_zero(&mut csprng);
-            let a_2 = Value::<G1>::generate_non_zero(&mut csprng);
-            let mut a_3 = a_1.value;
-            a_3.mul_assign(&a_2);
+            ComMult::<G1>::with_valid_data(0, &mut csprng, |com_mult, secret, csprng| {
+                let challenge_prefix = generate_challenge_prefix(csprng);
+                let ro = RandomOracle::domain(&challenge_prefix);
+                let proof =
+                    prove(ro.split(), &com_mult, secret, csprng).expect("Proving should succeed.");
+                assert!(verify(ro.split(), &com_mult, &proof));
 
-            let a_3 = Value::new(a_3);
+                // Construct invalid parameters
+                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
 
-            let (c_1, r_1) = cmm_key.commit(&a_1, &mut csprng);
-            let (c_2, r_2) = cmm_key.commit(&a_2, &mut csprng);
-            let (c_3, r_3) = cmm_key.commit(&a_3, &mut csprng);
+                // Verify failure for invalid parameters
+                assert!(!verify(wrong_ro, &com_mult, &proof));
+                let mut wrong_cmm = com_mult;
+                for i in 0..3 {
+                    let tmp = wrong_cmm.cmms[i];
+                    let v = pedersen_scheme::Value::<G1>::generate(csprng);
+                    wrong_cmm.cmms[i] = wrong_cmm.cmm_key.commit(&v, csprng).0;
+                    assert!(!verify(ro.split(), &wrong_cmm, &proof));
+                    wrong_cmm.cmms[i] = tmp;
+                }
 
-            let secret = ComMultSecret {
-                values: &[a_1, a_2, a_3],
-                rands:  &[r_1, r_2, r_3],
-            };
+                wrong_cmm.cmm_key = pedersen_scheme::CommitmentKey::generate(csprng);
 
-            let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let ro = RandomOracle::domain(&challenge_prefix);
-            let proof =
-                prove_com_mult(ro.split(), &c_1, &c_2, &c_3, &cmm_key, &secret, &mut csprng);
-            assert!(verify_com_mult(
-                ro.split(),
-                &c_1,
-                &c_2,
-                &c_3,
-                &cmm_key,
-                &proof
-            ));
-
-            // Construct invalid parameters
-            let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
-            let wrong_c1 = pedersen_scheme::commitment::Commitment(c_1.double_point());
-            let wrong_c2 = pedersen_scheme::commitment::Commitment(c_2.double_point());
-            let wrong_c3 = pedersen_scheme::commitment::Commitment(c_3.double_point());
-            let mut wrong_cmm_key_0 = cmm_key;
-            wrong_cmm_key_0.0 = wrong_cmm_key_0.0.double_point();
-            let mut wrong_cmm_key_1 = cmm_key;
-            wrong_cmm_key_1.1 = wrong_cmm_key_1.1.double_point();
-
-            // Verify failure for invalid parameters
-            assert!(!verify_com_mult(
-                wrong_ro, &c_1, &c_2, &c_3, &cmm_key, &proof
-            ));
-            assert!(!verify_com_mult(
-                ro.split(),
-                &wrong_c1,
-                &c_2,
-                &c_3,
-                &cmm_key,
-                &proof
-            ));
-            assert!(!verify_com_mult(
-                ro.split(),
-                &c_1,
-                &wrong_c2,
-                &c_3,
-                &cmm_key,
-                &proof
-            ));
-            assert!(!verify_com_mult(
-                ro.split(),
-                &c_1,
-                &c_2,
-                &wrong_c3,
-                &cmm_key,
-                &proof
-            ));
-            assert!(!verify_com_mult(
-                ro.split(),
-                &c_1,
-                &c_2,
-                &c_3,
-                &wrong_cmm_key_0,
-                &proof
-            ));
-            assert!(!verify_com_mult(
-                ro.split(),
-                &c_1,
-                &c_2,
-                &c_3,
-                &wrong_cmm_key_1,
-                &proof
-            ));
+                assert!(!verify(ro.split(), &wrong_cmm, &proof))
+            })
         }
-    }
-
-    #[test]
-    pub fn test_com_mult_proof_serialization() {
-        let mut csprng = thread_rng();
-        let challenge = G1::generate_scalar(&mut csprng);
-        let ss = [
-            G1::generate_scalar(&mut csprng),
-            G1::generate_scalar(&mut csprng),
-            G1::generate_scalar(&mut csprng),
-        ];
-        let ts = [
-            G1::generate_scalar(&mut csprng),
-            G1::generate_scalar(&mut csprng),
-            G1::generate_scalar(&mut csprng),
-        ];
-        let t = G1::generate_scalar(&mut csprng);
-        let cp = ComMultProof::<G1> {
-            challenge,
-            ss,
-            ts,
-            t,
-        };
-        let cpp = serialize_deserialize(&cp);
-        assert!(cpp.is_ok());
-        assert_eq!(cp, cpp.unwrap());
     }
 }

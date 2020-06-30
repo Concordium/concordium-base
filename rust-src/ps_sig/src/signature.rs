@@ -1,14 +1,12 @@
 use crate::unknown_message::SigRetrievalRandomness;
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::*;
 use rand::*;
 
 use crypto_common::*;
 
-use std::ops::Deref;
-
 /// Randomness used to blind a signature.
 #[derive(Debug, Eq, Serialize)]
-pub struct BlindingRandomness<P: Pairing>(pub P::ScalarField, pub P::ScalarField);
+pub struct BlindingRandomness<P: Pairing>(pub Secret<P::ScalarField>, pub Secret<P::ScalarField>);
 
 /// Manual implementation to relax the requirements on `P`. The derived
 /// instance would have required P to have `PartialEq`.
@@ -17,22 +15,14 @@ impl<P: Pairing> PartialEq for BlindingRandomness<P> {
 }
 
 #[repr(transparent)]
-#[derive(Debug, Eq, PartialEq, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 /// Type wrapper around a signature, indicating that it is a blinded variant.
 pub struct BlindedSignature<P: Pairing> {
     pub sig: Signature<P>,
 }
 
-/// This trait allows automatic conversion of &BlindedSignature<P> to
-/// &Signature<P>.
-impl<P: Pairing> Deref for BlindedSignature<P> {
-    type Target = Signature<P>;
-
-    fn deref(&self) -> &Signature<P> { &self.sig }
-}
-
 /// A signature
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Signature<C: Pairing>(pub C::G1, pub C::G1);
 
 impl<C: Pairing> PartialEq for Signature<C> {
@@ -67,7 +57,7 @@ impl<C: Pairing> Signature<C> {
         let a_hid = a.mul_by_scalar(&r);
         let b_hid = b.plus_point(&a.mul_by_scalar(&t)).mul_by_scalar(&r);
         let sig = Signature(a_hid, b_hid);
-        let randomness = BlindingRandomness(r, t);
+        let randomness = BlindingRandomness(Secret::new(r), Secret::new(t));
         (BlindedSignature { sig }, randomness)
     }
 }
