@@ -5,7 +5,7 @@
 use crate::sigma_protocols::common::*;
 use crypto_common::*;
 use crypto_common_derive::*;
-use curve_arithmetic::Curve;
+use curve_arithmetic::{multiexp, Curve};
 use elgamal::{
     Cipher as ElGamalCipher, PublicKey as ElGamalPublicKey, Randomness as ElgamalRandomness,
 };
@@ -128,17 +128,29 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         let e_2 = self.cipher.1;
         let cC = self.commitment.0;
 
-        let a_1 = g_1
-            .mul_by_scalar(&z_1)
-            .plus_point(&e_1.mul_by_scalar(&challenge));
-        let a_2 = g_1
-            .mul_by_scalar(&z_2)
-            .plus_point(&h_1.mul_by_scalar(&z_1))
-            .plus_point(&e_2.mul_by_scalar(&challenge));
-        let a_3 = g
-            .mul_by_scalar(&z_2)
-            .plus_point(&h.mul_by_scalar(&z_3))
-            .plus_point(&cC.mul_by_scalar(&challenge));
+        let a_1 = {
+            let bases = [g_1, e_1];
+            let powers = [z_1, *challenge];
+            multiexp(&bases, &powers)
+        }; // g_1
+           //    .mul_by_scalar(&z_1)
+           //    .plus_point(&e_1.mul_by_scalar(&challenge));
+        let a_2 = {
+            let bases = [g_1, h_1, e_2];
+            let powers = [z_2, z_1, *challenge];
+            multiexp(&bases, &powers)
+        }; // g_1
+           //    .mul_by_scalar(&z_2)
+           //    .plus_point(&h_1.mul_by_scalar(&z_1))
+           //    .plus_point(&e_2.mul_by_scalar(&challenge));
+        let a_3 = {
+            let bases = [g, h, cC];
+            let powers = [z_2, z_3, *challenge];
+            multiexp(&bases, &powers)
+        }; // g
+           //    .mul_by_scalar(&z_2)
+           //    .plus_point(&h.mul_by_scalar(&z_3))
+           //    .plus_point(&cC.mul_by_scalar(&challenge));
         Some((ElGamalCipher(a_1, a_2), Commitment(a_3)))
     }
 
