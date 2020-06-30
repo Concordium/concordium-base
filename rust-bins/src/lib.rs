@@ -1,12 +1,8 @@
+use curve_arithmetic::*;
 use id::{ffi::*, types::*};
 use pairing::bls12_381::Bls12;
-
-use serde_json::{to_string_pretty, to_writer_pretty};
-
-use curve_arithmetic::curve_arithmetic::*;
-
 use serde::{de::DeserializeOwned, Serialize as SerdeSerialize};
-
+use serde_json::{to_string_pretty, to_writer_pretty};
 use std::{
     fs::File,
     io::{self, BufReader},

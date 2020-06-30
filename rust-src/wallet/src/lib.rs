@@ -3,19 +3,19 @@ extern crate failure;
 #[macro_use]
 extern crate serde_json;
 
+use std::convert::TryInto;
+
 use crypto_common::{base16_decode_string, base16_encode_string, c_char, Put};
-use curve_arithmetic::curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
 use id::{
-    account_holder::{generate_cdi, generate_pio},
+    account_holder::{create_credential, generate_pio},
     ffi::AttributeKind,
     secret_sharing::Threshold,
     types::*,
 };
 use pairing::bls12_381::{Bls12, G1};
-use pedersen_scheme::Value as PedersenValue;
 use std::{cmp::max, collections::BTreeMap};
 
 use std::ffi::{CStr, CString};
@@ -148,7 +148,7 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let threshold = {
         let l = ip_info.ip_ars.ars.len();
         ensure!(l > 0, "IpInfo should have at least 1 anonymity revoker.");
-        Threshold(max((l - 1) as u32, 1))
+        Threshold(max((l - 1).try_into().unwrap_or(255), 1))
     };
 
     // Should be safe on iOS and Android, by calling SecRandomCopyBytes/getrandom,
@@ -157,11 +157,8 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
     let chi = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: PedersenValue { value: secret },
-        },
+        id_cred: IdCredentials::generate(&mut csprng),
     };
 
     let aci = AccCredentialInfo {
@@ -170,18 +167,18 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     };
 
     // Choice of anonymity revokers, all of them in this implementation.
-    let ar_identities = ip_info
-        .ip_ars
-        .ars
-        .iter()
-        .map(|x| x.ar_identity)
-        .collect::<Vec<_>>();
+    let ar_identities = ip_info.ip_ars.ars.iter().map(|x| x.ar_identity).collect();
     let context = make_context_from_ip_info(ip_info, ChoiceArParameters {
         ar_identities,
         threshold,
     })
     .ok_or_else(|| format_err!("Invalid choice of anonymity revokers. Should not happen."))?;
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let (pio, randomness) = {
+        match generate_pio(&context, &aci) {
+            Some(x) => x,
+            None => bail!("Generating the pre-identity object failed."),
+        }
+    };
 
     let id_use_data = IdObjectUseData { aci, randomness };
 
@@ -267,13 +264,13 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         _phantom: Default::default(),
     };
 
-    let cdi = generate_cdi(
+    let cdi = create_credential(
         &ip_info,
         &global,
         &id_object,
         &id_use_data,
         acc_num,
-        &policy,
+        policy,
         &acc_data,
     )?;
 

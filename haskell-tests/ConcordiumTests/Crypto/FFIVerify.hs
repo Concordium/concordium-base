@@ -14,6 +14,7 @@ import Test.Hspec
 filePath :: FilePath
 filePath = "testdata/testdata.bin"
 
+
 getData :: Get (GlobalContext, IpInfo)
 getData = getTwoOf get get
 

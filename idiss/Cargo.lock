@@ -281,6 +281,7 @@ dependencies = [
  "sha2 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "signatory 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "subtle 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "zeroize 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -786,6 +787,7 @@ name = "random_oracle"
 version = "0.1.0"
 dependencies = [
  "crypto_common 0.1.0",
+ "crypto_common_derive 0.1.0",
  "curve_arithmetic 0.1.0",
  "itertools 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",

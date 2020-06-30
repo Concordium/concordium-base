@@ -1,11 +1,9 @@
+use byteorder::ReadBytesExt;
+use crypto_common::{Serial, Serialize};
 use failure::{Fail, Fallible};
 use ff::{Field, PrimeField};
 use rand::*;
 use std::fmt::{Debug, Display, Formatter};
-
-use byteorder::ReadBytesExt;
-
-use crypto_common::{Serial, Serialize};
 
 #[derive(Debug)]
 pub enum CurveDecodingError {
@@ -20,7 +18,7 @@ impl Fail for CurveDecodingError {}
 
 pub trait Curve:
     Serialize + Copy + Clone + Sized + Send + Sync + Debug + Display + PartialEq + Eq + 'static {
-    type Scalar: Field + Serialize;
+    type Scalar: PrimeField + Field + Serialize;
     type Base: Field;
     type Compressed;
     const SCALAR_LENGTH: usize;
@@ -55,13 +53,12 @@ pub trait Curve:
             }
         }
     }
-     /// Make a scalar from a 64-bit unsigned integer. This function assumes that
+    /// Make a scalar from a 64-bit unsigned integer. This function assumes that
     /// the field is big enough to accommodate any 64-bit unsigned integer.
     fn scalar_from_u64(n: u64) -> Self::Scalar;
-    /// Make a scalar by interpreting the given bytes as a big-endian unsigned
-    /// integer, and reducing modulo the field size. This function assumes the
-    /// field is big enough to accommodate any 64-bit unsigned integer.
-    fn scalar_from_bytes_mod<A: AsRef<[u8]>>(bs: A) -> Self::Scalar;
+    /// Make a scalar by taking the first Scalar::CAPACITY bits and interpreting
+    /// them as a little-endian integer.
+    fn scalar_from_bytes<A: AsRef<[u8]>>(bs: A) -> Self::Scalar;
     /// Hash to a curve point from a seed. This is deterministic function.
     fn hash_to_group(m: &[u8]) -> Self;
 }
@@ -153,6 +150,126 @@ pub trait Pairing: Sized + 'static + Clone {
             if !s.is_zero() {
                 return s;
             }
+        }
+    }
+}
+
+/// Like 'multiexp_worker', but computes a reasonable window size automatically.
+#[inline(always)]
+pub fn multiexp<C: Curve>(gs: &[C], exps: &[C::Scalar]) -> C {
+    // This number is based on the benchmark in benches/multiexp_bench.rs
+    let window_size = 4;
+    multiexp_worker(gs, exps, window_size)
+}
+
+/// This implements the WNAF method from
+/// https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf
+/// Assumes:
+/// - the lengths of inputs are the same
+/// - window_size < 62
+pub fn multiexp_worker<C: Curve>(gs: &[C], exps: &[C::Scalar], window_size: usize) -> C {
+    // Compute the wnaf
+
+    let k = exps.len();
+    assert_eq!(gs.len(), k);
+    assert!(window_size >= 1);
+    assert!(window_size < 62);
+
+    // 2^{window_size + 1}
+    let two_to_wp1: u64 = 2 << window_size;
+    // a mask to extract the lowest window_size + 1 bits from a scalar.
+    let mask: u64 = two_to_wp1 - 1;
+    let mut wnaf = Vec::with_capacity(k);
+    // 1 / 2 scalar
+    let half = C::scalar_from_u64(2)
+        .inverse()
+        .expect("Field size must be at least 3.");
+
+    for c in exps.iter() {
+        let mut v = Vec::new();
+        let mut c = *c;
+        while !c.is_zero() {
+            let limb = c.into_repr().as_ref()[0];
+            // if the first bit is set
+            if limb & 1 == 1 {
+                let u = limb & mask;
+                // check if window_size'th bit is set.
+                if u & (1 << window_size) != 0 {
+                    c.sub_assign(&C::scalar_from_u64(u));
+                    c.add_assign(&C::scalar_from_u64(two_to_wp1));
+                    v.push((u as i64) - (two_to_wp1 as i64));
+                } else {
+                    c.sub_assign(&C::scalar_from_u64(u));
+                    v.push(u as i64);
+                }
+            } else {
+                v.push(0);
+            }
+            c.mul_assign(&half);
+        }
+        wnaf.push(v);
+    }
+
+    // precomputation stage
+    let mut table = Vec::with_capacity(k);
+    for g in gs.iter() {
+        let sq = g.plus_point(&g);
+        let mut tmp = *g;
+        // All of the odd exponents, between 1 and 2^w.
+        let num_exponents = 1 << (window_size - 1);
+        let mut exps = Vec::with_capacity(num_exponents);
+        exps.push(tmp);
+        for _ in 1..num_exponents {
+            tmp = tmp.plus_point(&sq);
+            exps.push(tmp);
+        }
+        table.push(exps);
+    }
+
+    // evaluate using the precomputed table
+    let mut a = C::zero_point();
+    for j in (0..=C::Scalar::NUM_BITS as usize).rev() {
+        a = a.double_point();
+        for i in 0..k {
+            match wnaf[i].get(j) {
+                Some(&ge) if ge > 0 => {
+                    a = a.plus_point(&table[i][(ge / 2) as usize]);
+                }
+                Some(&ge) if ge < 0 => {
+                    a = a.minus_point(&table[i][((-ge) / 2) as usize]);
+                }
+                _ => (),
+            }
+        }
+    }
+    a
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pairing::bls12_381::G1;
+
+    #[test]
+    pub fn test_multiscalar() {
+        let mut csprng = thread_rng();
+        for l in 1..100 {
+            let mut gs = Vec::with_capacity(l);
+            let mut es = Vec::with_capacity(l);
+            for _ in 0..l {
+                gs.push(G1::generate(&mut csprng));
+                es.push(G1::generate_scalar(&mut csprng));
+            }
+            let mut goal = G1::zero_point();
+            // Naive multiply + add method.
+            for (g, e) in gs.iter().zip(es.iter()) {
+                goal = goal.plus_point(&g.mul_by_scalar(e))
+            }
+            let g = multiexp(&gs, &es);
+            assert!(
+                goal.minus_point(&g).is_zero_point(),
+                "Multiexponentiation produces a different answer than the naive method."
+            )
         }
     }
 }

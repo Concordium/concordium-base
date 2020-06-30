@@ -1,23 +1,16 @@
-use pairing::bls12_381::Bls12;
-
+use clap::{App, AppSettings, Arg};
+use client_server_helpers::*;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
-use id::{account_holder::*, identity_provider::*, types::*};
-use std::collections::btree_map::BTreeMap;
-
-use client_server_helpers::*;
-use curve_arithmetic::Curve;
-
+use either::Either::{Left, Right};
+use id::{account_holder::*, identity_provider::*, secret_sharing::Threshold, types::*};
+use pairing::bls12_381::Bls12;
 use rand::*;
 use serde_json::{from_value as from_json, json, to_string_pretty, Value};
-
-use clap::{App, AppSettings, Arg};
-use id::secret_sharing::Threshold;
-use pedersen_scheme::Value as PedersenValue;
-use std::cmp::max;
-
-use either::Either::{Left, Right};
-use std::collections::HashMap;
+use std::{
+    cmp::max,
+    collections::{BTreeMap, BTreeSet, HashMap},
+};
 
 // server imports
 #[macro_use]
@@ -51,18 +44,23 @@ fn respond_ips(_request: &rouille::Request, s: &ServerState) -> rouille::Respons
 
 fn parse_id_object_input_json(
     v: &Value,
-) -> Option<(IpIdentity, Threshold, Vec<ArIdentity>, ExampleAttributeList)> {
+) -> Option<(
+    IpIdentity,
+    Threshold,
+    BTreeSet<ArIdentity>,
+    ExampleAttributeList,
+)> {
     let ip_id = from_json(v.get("ipIdentity")?.clone()).ok()?;
     let ar_values = v.get("anonymityRevokers")?.as_array()?;
-    let ars: Vec<ArIdentity> = ar_values
+    let ars = ar_values
         .iter()
         .cloned()
         .map(|x| from_json(x).ok())
-        .collect::<Option<Vec<ArIdentity>>>()?;
+        .collect::<Option<BTreeSet<ArIdentity>>>()?;
     // default threshold is one less than the amount of anonymity revokers
     // if the field "threshold" is not present this is what we take.
     let threshold = match v.get("threshold") {
-        None => Threshold(max(1, ars.len() - 1) as u32),
+        None => Threshold(max(1, ars.len() - 1) as u8),
         Some(v) => from_json(v.clone()).ok()?,
     };
     let alist = v
@@ -96,11 +94,8 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
     // generate the prf key
     let prf_key = prf::SecretKey::generate(&mut csprng);
 
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
     let chi = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: PedersenValue { value: secret },
-        },
+        id_cred: IdCredentials::generate(&mut csprng),
     };
 
     let aci = AccCredentialInfo {
@@ -121,7 +116,11 @@ fn respond_id_object(request: &rouille::Request, s: &ServerState) -> rouille::Re
         Some(x) => x,
         None => return respond_log!(request, "Could not make context"),
     };
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let (pio, randomness) = if let Some(v) = generate_pio(&context, &aci) {
+        v
+    } else {
+        return respond_log!(request, "Could not generate pre-identity object.");
+    };
 
     let vf = verify_credentials(&pio, &ip_info, &attributes, &ip_sec_key);
     match vf {
@@ -225,13 +224,13 @@ fn respond_generate_credential(request: &rouille::Request, s: &ServerState) -> r
         }
     };
 
-    let cdi = generate_cdi(
+    let cdi = create_credential(
         ip_info,
         &s.global_params,
         &id_object,
         &id_use_data,
         n_acc,
-        &policy,
+        policy,
         &acc_data,
     );
 

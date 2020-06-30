@@ -5,7 +5,7 @@ use crate::{cipher::*, message::*};
 use rand::*;
 
 use crypto_common::*;
-use curve_arithmetic::Curve;
+use curve_arithmetic::{Curve, Value};
 
 use ff::Field;
 
@@ -37,7 +37,7 @@ impl<C: Curve> SecretKey<C> {
         Message { value }
     }
 
-    pub fn decrypt_exponent(&self, c: &Cipher<C>) -> C::Scalar {
+    pub fn decrypt_exponent(&self, c: &Cipher<C>) -> Value<C> {
         let m = self.decrypt(c).value;
         let mut a = <C::Scalar as Field>::zero();
         let mut i = C::zero_point();
@@ -46,10 +46,10 @@ impl<C: Curve> SecretKey<C> {
             i = i.plus_point(&self.generator);
             a.add_assign(&field_one);
         }
-        a
+        Value::new(a)
     }
 
-    pub fn decrypt_exponent_vec(&self, v: &[Cipher<C>]) -> Vec<C::Scalar> {
+    pub fn decrypt_exponent_vec(&self, v: &[Cipher<C>]) -> Vec<Value<C>> {
         v.iter().map(|y| self.decrypt_exponent(y)).collect()
     }
 

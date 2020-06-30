@@ -1,26 +1,17 @@
+use aggregate_sig as agg;
 use clap::{App, AppSettings, Arg, SubCommand};
-
 use client_server_helpers::*;
-use curve_arithmetic::{Curve, Pairing};
+use crypto_common::base16_encode_string;
+use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
+use ec_vrf_ed25519 as vrf;
 use ed25519_dalek as ed25519;
+use either::Either::Left;
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
-use std::collections::btree_map::BTreeMap;
-
 use rand::{rngs::ThreadRng, *};
-
-use pedersen_scheme::Value as PedersenValue;
-
-use crypto_common::base16_encode_string;
 use serde_json::json;
-use std::path::Path;
-
-use ec_vrf_ed25519 as vrf;
-
-use aggregate_sig as agg;
-
-use either::Either::Left;
+use std::{collections::btree_map::BTreeMap, path::Path};
 
 type ExampleCurve = G1;
 
@@ -166,11 +157,8 @@ fn main() {
 
     // Roughly one year
     let generate_account = |csprng: &mut ThreadRng| {
-        let secret = ExampleCurve::generate_scalar(csprng);
         let ah_info = CredentialHolderInfo::<ExampleCurve> {
-            id_cred: IdCredentials {
-                id_cred_sec: PedersenValue::new(secret),
-            },
+            id_cred: IdCredentials::generate(csprng),
         };
 
         // Choose prf key.
@@ -199,7 +187,8 @@ fn main() {
             _phantom: Default::default(),
         };
 
-        let (pio, randomness) = generate_pio(&context, &aci);
+        let (pio, randomness) = generate_pio(&context, &aci)
+            .expect("Generating the pre-identity object should succeed.");
 
         let sig_ok = verify_credentials(&pio, &ip_info, &attributes, &ip_secret_key);
 
@@ -232,13 +221,13 @@ fn main() {
 
         let id_object_use_data = IdObjectUseData { aci, randomness };
 
-        let cdi = generate_cdi(
+        let cdi = create_credential(
             &ip_info,
             &global_ctx,
             &id_object,
             &id_object_use_data,
             53,
-            &policy,
+            policy,
             &acc_data,
         )
         .expect("We should have constructed valid data.");
