@@ -13,6 +13,16 @@ import Data.FixedByteString as FBS
 import Lens.Micro.Platform
 import Concordium.Crypto.VRF as VRF
 
+-- This generates an account with a single credential, the given list of keys and signature threshold,
+-- which has sufficiently late expiry date, but is otherwise not well-formed.
+-- The keys are indexed in ascending order starting from 0
+{-# WARNING mkAccountMultipleKeys "Do not use in production." #-}
+mkAccountMultipleKeys :: [SigScheme.VerifyKey] -> SignatureThreshold -> AccountAddress -> Amount -> Account
+mkAccountMultipleKeys keys threshold addr amount =
+  newAccount (makeAccountKeys keys threshold) addr (dummyRegId addr)
+      & (accountAmount .~ amount)
+      & (accountCredentials .~ (Queue.singleton dummyMaxValidTo (dummyCredential addr dummyMaxValidTo dummyCreatedAt)))
+
 -- This generates an account without any credentials
 -- late expiry date, but is otherwise not well-formed.
 {-# WARNING mkAccountNoCredentials "Do not use in production." #-}
