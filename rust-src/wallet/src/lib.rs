@@ -3,7 +3,7 @@ extern crate failure;
 #[macro_use]
 extern crate serde_json;
 
-use crypto_common::{base16_decode_string, base16_encode_string, c_char, Put};
+use crypto_common::{version::*, base16_decode_string, base16_encode_string, c_char, Put};
 use curve_arithmetic::curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -186,8 +186,8 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let id_use_data = IdObjectUseData { aci, randomness };
 
     let response = json!({
-        "idObjectRequest": pio,
-        "privateIdObjectData": id_use_data,
+        "idObjectRequest": Versioned::new(VERSION_PRE_IDENTITY_OBJECT, pio),
+        "privateIdObjectData": Versioned::new(VERSION_ID_OBJECT_USE_DATA, id_use_data),
     });
 
     Ok(to_string(&response)?)
@@ -283,7 +283,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     };
 
     let response = json!({
-        "credential": cdi,
+        "credential": Versioned::new(VERSION_CREDENTIAL, cdi),
         "accountData": acc_data,
         "accountAddress": address,
     });
