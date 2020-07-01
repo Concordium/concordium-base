@@ -13,7 +13,7 @@ use serde::{
     de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
     Serializer,
 };
-use std::{fmt, io::Cursor, slice, str::FromStr};
+use std::{collections::BTreeMap, fmt, io::Cursor, slice, str::FromStr};
 
 /// Concrete attribute kinds
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -119,7 +119,8 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn verify_cdi_ffi(
     gc_ptr: *const GlobalContext<G1>,
-    ip_info_ptr: *const IpInfo<Bls12, G1>,
+    ip_info_ptr: *const IpInfo<Bls12>,
+    ars_infos_ptr: *const BTreeMap<ArIdentity, ArInfo<G1>>,
     acc_keys_ptr: *const u8,
     acc_keys_len: size_t,
     cdi_ptr: *const u8,
@@ -130,6 +131,9 @@ pub extern "C" fn verify_cdi_ffi(
     }
     if ip_info_ptr.is_null() {
         return -10;
+    }
+    if ars_infos_ptr.is_null() {
+        return -11;
     }
 
     let acc_keys = if acc_keys_ptr.is_null() {
@@ -147,11 +151,12 @@ pub extern "C" fn verify_cdi_ffi(
     match CredentialDeploymentInfo::<Bls12, G1, AttributeKind>::deserial(&mut Cursor::new(
         &cdi_bytes,
     )) {
-        Err(_) => -11,
+        Err(_) => -12,
         Ok(cdi) => {
             match chain::verify_cdi::<Bls12, G1, AttributeKind>(
                 from_ptr!(gc_ptr),
                 from_ptr!(ip_info_ptr),
+                from_ptr!(ars_infos_ptr),
                 acc_keys.as_ref(),
                 &cdi,
             ) {
@@ -198,15 +203,15 @@ macro_generate_commitment_key!(
 );
 
 // derive conversion methods for IpInfo to be used in Haskell.
-macro_free_ffi!(Box ip_info_free, IpInfo<Bls12, G1>);
-macro_derive_from_bytes!(Box ip_info_from_bytes, IpInfo<Bls12, G1>);
-macro_derive_to_bytes!(Box ip_info_to_bytes, IpInfo<Bls12, G1>);
-macro_derive_from_json!(ip_info_from_json, IpInfo<Bls12, G1>);
-macro_derive_to_json!(ip_info_to_json, IpInfo<Bls12, G1>);
+macro_free_ffi!(Box ip_info_free, IpInfo<Bls12>);
+macro_derive_from_bytes!(Box ip_info_from_bytes, IpInfo<Bls12>);
+macro_derive_to_bytes!(Box ip_info_to_bytes, IpInfo<Bls12>);
+macro_derive_from_json!(ip_info_from_json, IpInfo<Bls12>);
+macro_derive_to_json!(ip_info_to_json, IpInfo<Bls12>);
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn ip_info_ip_identity(ip_info_ptr: *const IpInfo<Bls12, G1>) -> u32 {
+pub extern "C" fn ip_info_ip_identity(ip_info_ptr: *const IpInfo<Bls12>) -> u32 {
     let ip_info = from_ptr!(ip_info_ptr);
     ip_info.ip_identity.0
 }
@@ -269,12 +274,7 @@ mod test {
     use ed25519_dalek as ed25519;
     use either::Either::Left;
     use pairing::bls12_381::Bls12;
-    use pedersen_scheme::key as pedersen_key;
-    use std::{
-        collections::{btree_map::BTreeMap, BTreeSet},
-        convert::TryFrom,
-        iter::FromIterator,
-    };
+    use std::{collections::btree_map::BTreeMap, convert::TryFrom};
 
     type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
     type ExampleCurve = G1;
@@ -290,14 +290,11 @@ mod test {
         let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
-        let (
-            IpData {
-                public_ip_info: ip_info,
-                ip_secret_key,
-                metadata: _,
-            },
-            _,
-        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            metadata: _,
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
 
         let prf_key = prf::SecretKey::generate(&mut csprng);
 
@@ -323,27 +320,22 @@ mod test {
             _phantom: Default::default(),
         };
 
-        let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-            ar_identities: BTreeSet::from_iter(vec![
-                ArIdentity::new(1),
-                ArIdentity::new(2),
-                ArIdentity::new(3),
-            ]),
-            threshold:     Threshold(2),
-        })
-        .expect("The constructed ARs are valid.");
-        let (pio, randomness) =
-            generate_pio(&context, &aci).expect("Creating the credential should succeed.");
+        let global_ctx = GlobalContext::<G1>::generate(&mut csprng);
 
-        let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
+        let (ars_infos, _ars_secret) =
+            test_create_ars(&global_ctx.generator, num_ars - 1, &mut csprng);
+
+        let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
+        let threshold = Threshold(num_ars - 1);
+        let (pio, randomness) = generate_pio(&context, threshold, &aci)
+            .expect("Creating the credential should succeed.");
+
+        let sig_ok = verify_credentials(&pio, context, &alist, &ip_secret_key);
 
         // First test, check that we have a valid signature.
         assert!(sig_ok.is_ok());
 
         let ip_sig = sig_ok.unwrap();
-        let global_ctx = GlobalContext::<G1> {
-            on_chain_commitment_key: pedersen_key::CommitmentKey::generate(&mut csprng),
-        };
 
         let policy = Policy {
             valid_to,
@@ -385,20 +377,11 @@ mod test {
             signature: ip_sig,
         };
 
-        let cdi = create_credential(
-            &ip_info,
-            &global_ctx,
-            &id_object,
-            &id_use_data,
-            0,
-            policy,
-            &acc_data,
-        )
-        .expect("Should generate the credential successfully.");
+        let cdi = create_credential(context, &id_object, &id_use_data, 0, policy, &acc_data)
+            .expect("Should generate the credential successfully.");
 
         let wrong_cdi = create_credential(
-            &ip_info,
-            &global_ctx,
+            context,
             &id_object,
             &id_use_data,
             0,
@@ -412,10 +395,12 @@ mod test {
 
         let gc_ptr = Box::into_raw(Box::new(global_ctx));
         let ip_info_ptr = Box::into_raw(Box::new(ip_info));
+        let ars_infos_ptr = Box::into_raw(Box::new(ars_infos));
 
         let cdi_check = verify_cdi_ffi(
             gc_ptr,
             ip_info_ptr,
+            ars_infos_ptr,
             std::ptr::null(),
             0,
             cdi_bytes.as_ptr(),
@@ -427,6 +412,7 @@ mod test {
         let wrong_cdi_check = verify_cdi_ffi(
             gc_ptr,
             ip_info_ptr,
+            ars_infos_ptr,
             std::ptr::null(),
             0,
             wrong_cdi_bytes.as_ptr(),

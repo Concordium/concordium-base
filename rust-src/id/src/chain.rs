@@ -47,27 +47,15 @@ pub fn verify_cdi<
     AttributeType: Attribute<C::Scalar>,
 >(
     global_context: &GlobalContext<C>,
-    ip_info: &IpInfo<P, C>,
+    ip_info: &IpInfo<P>,
+    ars_infos: &BTreeMap<ArIdentity, ArInfo<C>>,
     acc_keys: Option<&AccountKeys>,
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
-    let num_ars = cdi.values.ar_data.len();
-    let mut choice_ar_parameters = Vec::with_capacity(num_ars);
-
-    // find ArInfo's corresponding to this credential in the
-    // IpInfo.
-    // FIXME: This is quadratic due to the choice of data structures.
-    // We could likely have a map in IPInfo instead of a list.
-    for &handle in cdi.values.ar_data.keys() {
-        match ip_info.ip_ars.ars.iter().find(|&x| x.ar_identity == handle) {
-            None => return Err(CDIVerificationError::AR),
-            Some(ar_info) => choice_ar_parameters.push(ar_info),
-        }
-    }
     verify_cdi_worker(
         &global_context.on_chain_commitment_key,
         &ip_info.ip_verify_key,
-        &choice_ar_parameters,
+        &ars_infos,
         acc_keys,
         cdi,
     )
@@ -80,7 +68,9 @@ pub fn verify_cdi_worker<
 >(
     on_chain_commitment_key: &CommitmentKey<C>,
     ip_verify_key: &ps_sig::PublicKey<P>,
-    choice_ar_parameters: &[&ArInfo<C>],
+    // NB: The following map only needs to be a superset of the ars
+    // in the cdi.
+    known_ars: &BTreeMap<ArIdentity, ArInfo<C>>,
     acc_keys: Option<&AccountKeys>,
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
@@ -109,7 +99,11 @@ pub fn verify_cdi_worker<
     let verifier_sig = pok_sig_verifier(
         on_chain_commitment_key,
         cdi.values.threshold,
-        choice_ar_parameters,
+        &cdi.values
+            .ar_data
+            .keys()
+            .copied()
+            .collect::<BTreeSet<ArIdentity>>(),
         &cdi.values.policy,
         &commitments,
         ip_verify_key,
@@ -125,7 +119,7 @@ pub fn verify_cdi_worker<
 
     let (id_cred_pub_verifier, id_cred_pub_witnesses) = id_cred_pub_verifier(
         on_chain_commitment_key,
-        choice_ar_parameters,
+        known_ars,
         &cdi.values.ar_data,
         &commitments.cmm_id_cred_sec_sharing_coeff,
         &cdi.proofs.proof_id_cred_pub,
@@ -225,7 +219,7 @@ pub fn verify_cdi_worker<
 /// verify id_cred data
 fn id_cred_pub_verifier<C: Curve>(
     commitment_key: &CommitmentKey<C>,
-    choice_ar_parameters: &[&ArInfo<C>],
+    known_ars: &BTreeMap<ArIdentity, ArInfo<C>>,
     chain_ar_data: &BTreeMap<ArIdentity, ChainArData<C>>,
     cmm_sharing_coeff: &[Commitment<C>],
     proof_id_cred_pub: &BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
@@ -248,22 +242,17 @@ fn id_cred_pub_verifier<C: Curve>(
         let cmm_share = utils::commitment_to_share(&ar_id.to_scalar::<C>(), cmm_sharing_coeff);
 
         // finding the correct AR data.
-        match choice_ar_parameters
-            .iter()
-            .find(|&x| x.ar_identity == *ar_id)
-        {
-            None => return Err(CDIVerificationError::IdCredPub),
-            Some(ar_info) => {
-                let item_prover = com_enc_eq::ComEncEq {
-                    cipher:     ar_data.enc_id_cred_pub_share,
-                    commitment: cmm_share,
-                    pub_key:    ar_info.ar_public_key,
-                    cmm_key:    *commitment_key,
-                };
-                provers.push(item_prover);
-                witnesses.push(witness.clone());
-            }
-        }
+        let ar_info = known_ars
+            .get(ar_id)
+            .ok_or(CDIVerificationError::IdCredPub)?;
+        let item_prover = com_enc_eq::ComEncEq {
+            cipher:     ar_data.enc_id_cred_pub_share,
+            commitment: cmm_share,
+            pub_key:    ar_info.ar_public_key,
+            cmm_key:    *commitment_key,
+        };
+        provers.push(item_prover);
+        witnesses.push(witness.clone());
     }
     Ok((ReplicateAdapter { protocols: provers }, ReplicateWitness {
         witnesses,
@@ -347,18 +336,13 @@ fn pok_sig_verifier<
 >(
     commitment_key: &'a CommitmentKey<C>,
     threshold: Threshold,
-    choice_ar_parameters: &'a [&ArInfo<C>],
+    choice_ar_parameters: &BTreeSet<ArIdentity>,
     policy: &'a Policy<C, AttributeType>,
     commitments: &'a CredentialDeploymentCommitments<C>,
     ip_pub_key: &'a ps_sig::PublicKey<P>,
     blinded_sig: &'a ps_sig::BlindedSignature<P>,
 ) -> Option<com_eq_sig::ComEqSig<P, C>> {
-    let ar_scalars = utils::encode_ars(
-        &choice_ar_parameters
-            .iter()
-            .map(|x| x.ar_identity)
-            .collect::<BTreeSet<ArIdentity>>(),
-    )?;
+    let ar_scalars = utils::encode_ars(choice_ar_parameters)?;
     // Capacity for id_cred_sec, cmm_prf, (threshold, valid_to, created_at), tags
     // ar_scalars and cmm_attributes
     let mut comm_vec = Vec::with_capacity(4 + ar_scalars.len() + commitments.cmm_attributes.len());
@@ -434,7 +418,7 @@ mod tests {
 
     use ed25519_dalek as ed25519;
     use either::Left;
-    use pedersen_scheme::key as PedersenKey;
+    use pairing::bls12_381::G1;
     use rand::*;
     use std::collections::btree_map::BTreeMap;
 
@@ -445,25 +429,22 @@ mod tests {
         // Generate PIO
         let max_attrs = 10;
         let num_ars = 5;
-        let (
-            IpData {
-                public_ip_info: ip_info,
-                ip_secret_key,
-                metadata: _,
-            },
-            _,
-        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            metadata: _,
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let global_ctx = GlobalContext::<G1>::generate(&mut csprng);
+        let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
-        let (_context, pio, randomness) = test_create_pio(&aci, &ip_info, num_ars);
+        let (context, pio, randomness) =
+            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
         let alist = test_create_attributes();
-        let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, context, &alist, &ip_secret_key);
         assert!(sig_ok.is_ok());
 
         // Generate CDI
         let ip_sig = sig_ok.unwrap();
-        let global_ctx = GlobalContext {
-            on_chain_commitment_key: PedersenKey::CommitmentKey::generate(&mut csprng),
-        };
         let id_object = IdentityObject {
             pre_identity_object: pio,
             alist,
@@ -492,17 +473,10 @@ mod tests {
             },
             existing: Left(SignatureThreshold(2)),
         };
-        let cdi = create_credential(
-            &ip_info,
-            &global_ctx,
-            &id_object,
-            &id_use_data,
-            0,
-            policy,
-            &acc_data,
-        )
-        .expect("Should generate the credential successfully.");
-        let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
+        let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
+        let cdi = create_credential(context, &id_object, &id_use_data, 0, policy, &acc_data)
+            .expect("Should generate the credential successfully.");
+        let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, None, &cdi);
         assert_eq!(cdi_check, Ok(()));
     }
 }

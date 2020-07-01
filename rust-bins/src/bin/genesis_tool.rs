@@ -1,5 +1,5 @@
 use aggregate_sig as agg;
-use clap::{App, AppSettings, Arg, SubCommand};
+use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::base16_encode_string;
 use curve_arithmetic::Pairing;
@@ -11,7 +11,8 @@ use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Thresh
 use pairing::bls12_381::{Bls12, G1};
 use rand::{rngs::ThreadRng, *};
 use serde_json::json;
-use std::{collections::btree_map::BTreeMap, path::Path};
+use std::{collections::btree_map::BTreeMap, path::PathBuf};
+use structopt::StructOpt;
 
 type ExampleCurve = G1;
 
@@ -19,141 +20,122 @@ type ExampleAttribute = AttributeKind;
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
 
-fn main() {
-    let app =
-        App::new("Generate bakers with accounts for inclusion in genesis or just beta accounts.")
-            .version("0.31830988618")
-            .author("Concordium")
-            .setting(AppSettings::ArgRequiredElseHelp)
-            .global_setting(AppSettings::ColoredHelp)
-            .arg(
-                Arg::with_name("ip-data")
-                    .long("ip-data")
-                    .value_name("FILE")
-                    .help(
-                        "File with all information about the identity provider that is going to \
-                         sign all the credentials.",
-                    )
-                    .required(false)
-                    .global(true),
-            )
-            .arg(
-                Arg::with_name("global")
-                    .long("global")
-                    .value_name("FILE")
-                    .help("File with global parameters.")
-                    .default_value(GLOBAL_CONTEXT)
-                    .required(false)
-                    .global(true),
-            )
-            .arg(
-                Arg::with_name("num_keys")
-                    .long("num_keys")
-                    .value_name("K")
-                    .help(
-                        "The number of keys each account should have. Threshold is set to max(1, \
-                         K-1).",
-                    )
-                    .default_value("3")
-                    .required(false)
-                    .global(true),
-            )
-            .subcommand(
-                SubCommand::with_name("create-bakers")
-                    .about("Create new bakers.")
-                    .arg(
-                        Arg::with_name("num")
-                            .long("num")
-                            .value_name("N")
-                            .help("Number of bakers to generate.")
-                            .required(true),
-                    )
-                    .arg(
-                        Arg::with_name("num_finalizers")
-                            .long("num_finalizers")
-                            .value_name("F")
-                            .help("The amount of finalizers to generate. Defaults to all bakers.")
-                            .required(false),
-                    )
-                    .arg(
-                        Arg::with_name("balance")
-                            .long("balance")
-                            .value_name("AMOUNT")
-                            .help("Balance on each of the baker accounts.")
-                            .default_value("35000000000"),
-                    ),
-            )
-            .subcommand(
-                SubCommand::with_name("create-accounts")
-                    .about("Create a given number of accounts. These do not delegate to any baker.")
-                    .arg(
-                        Arg::with_name("num")
-                            .long("num")
-                            .value_name("N")
-                            .help("Number of accounts to generate.")
-                            .required(true),
-                    )
-                    .arg(
-                        Arg::with_name("template")
-                            .long("template")
-                            .value_name("TEMPLATE")
-                            .help(
-                                "Template on how to name accounts; they will be name \
-                                 TEMPLATE-$N.json.",
-                            )
-                            .default_value("account"),
-                    ),
-            );
+#[derive(StructOpt)]
+#[structopt(
+    version = "0.31830988618",
+    author = "Concordium",
+    about = "Generate bakers with accounts for inclusion in genesis or just beta accounts."
+)]
+struct GenesisTool {
+    #[structopt(
+        long = "ip-data",
+        help = "File with all information about the identity provider (public and private).",
+        global = true
+    )]
+    ip_data: PathBuf,
+    #[structopt(
+        long = "global",
+        help = "File with global parameters.",
+        default_value = "database/global.json",
+        global = true
+    )]
+    global: PathBuf,
+    #[structopt(
+        long = "ars",
+        help = "File with a list of anonymity revokers..",
+        default_value = "database/anonymity_revokers.json"
+    )]
+    anonymity_revokers: PathBuf,
+    #[structopt(
+        name = "num-keys",
+        help = "The number of keys each account should have. Threshold is set to max(1, K-1).",
+        default_value = "3"
+    )]
+    num_keys: usize,
+    #[structopt(subcommand)]
+    command: Command,
+}
 
-    let matches = app.get_matches();
+#[derive(StructOpt)]
+enum Command {
+    #[structopt(name = "create-bakers", about = "Create new bakers.")]
+    CreateBakers {
+        #[structopt(name = "num", help = "Number of bakers to generate.")]
+        num: usize,
+        #[structopt(
+            name = "num-finalizers",
+            help = "The amount of finalizers to generate. Defaults to all bakers."
+        )]
+        num_finalizers: Option<usize>,
+        #[structopt(
+            name = "balance",
+            help = "Balance on each of the baker accounts.",
+            default_value = "35000000000"
+        )]
+        balance: u64,
+    },
+    CreateAccounts {
+        #[structopt(name = "num", help = "Number of accounts to generate.")]
+        num: usize,
+        #[structopt(
+            name = "template",
+            help = "Template on how to name accounts; they will be named TEMPLATE-$N.json.",
+            value_name = "TEMPLATE",
+            default_value = "account"
+        )]
+        template: String,
+    },
+}
+
+fn main() {
+    let gt = {
+        let app = GenesisTool::clap()
+            .setting(AppSettings::ArgRequiredElseHelp)
+            .global_setting(AppSettings::ColoredHelp);
+        let matches = app.get_matches();
+        GenesisTool::from_clap(&matches)
+    };
 
     let mut csprng = thread_rng();
 
     // Load identity provider and anonymity revokers.
-    let ip_data_path = Path::new(matches.value_of("ip-data").unwrap());
-    let (ip_info, ip_secret_key) =
-        match read_json_from_file::<_, IpData<Bls12, ExampleCurve>>(&ip_data_path) {
-            Ok(IpData {
-                public_ip_info,
-                ip_secret_key,
-                ..
-            }) => (public_ip_info, ip_secret_key),
-            Err(e) => {
-                eprintln!("Could not parse identity issuer JSON because: {}", e);
-                return;
-            }
-        };
-
-    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        // use all anonymity revokers.
-        ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
-        // all but one threshold
-        threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
-    })
-    .expect("Constructed AR data is valid.");
-
-    let num_keys = match matches.value_of("num_keys").unwrap().parse::<usize>() {
-        Ok(num_keys) if num_keys > 0 && num_keys <= 255 => num_keys,
-        _ => {
-            eprintln!("num_keys should be a positive integer <= 255.");
+    let (ip_info, ip_secret_key) = match read_json_from_file::<_, IpData<Bls12>>(&gt.ip_data) {
+        Ok(IpData {
+            public_ip_info,
+            ip_secret_key,
+            ..
+        }) => (public_ip_info, ip_secret_key),
+        Err(e) => {
+            eprintln!("Could not parse identity issuer JSON because: {}", e);
             return;
         }
     };
 
-    // we also read the global context from another json file (called
-    // global.context). We need commitment keys and other data in there.
     let global_ctx = {
-        if let Some(gc) = read_global_context(
-            matches
-                .value_of("global")
-                .expect("We have a default value, so should exist."),
-        ) {
+        if let Some(gc) = read_global_context(&gt.global) {
             gc
         } else {
             eprintln!("Cannot read global context information database. Terminating.");
             return;
         }
     };
+
+    let ars_infos = {
+        if let Some(ars) = read_anonymity_revokers(&gt.anonymity_revokers) {
+            ars
+        } else {
+            eprintln!("Cannot read anonymity revokers from the database. Terminating.");
+            return;
+        }
+    };
+
+    let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
+    let threshold = Threshold((ars_infos.len() - 1) as u8);
+
+    if gt.num_keys == 0 && gt.num_keys > 255 {
+        eprintln!("num_keys should be a positive integer <= 255.");
+        return;
+    }
 
     // Roughly one year
     let generate_account = |csprng: &mut ThreadRng| {
@@ -187,10 +169,10 @@ fn main() {
             _phantom: Default::default(),
         };
 
-        let (pio, randomness) = generate_pio(&context, &aci)
+        let (pio, randomness) = generate_pio(&context, threshold, &aci)
             .expect("Generating the pre-identity object should succeed.");
 
-        let sig_ok = verify_credentials(&pio, &ip_info, &attributes, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, context, &attributes, &ip_secret_key);
 
         let ip_sig = sig_ok.expect("There is an error in signing");
 
@@ -202,11 +184,17 @@ fn main() {
         };
 
         let mut keys = BTreeMap::new();
-        for idx in 0..num_keys {
+        for idx in 0..gt.num_keys {
             keys.insert(KeyIndex(idx as u8), ed25519::Keypair::generate(csprng));
         }
 
-        let threshold = SignatureThreshold(if num_keys == 1 { 1 } else { num_keys as u8 - 1 });
+        let threshold = SignatureThreshold(
+            if gt.num_keys == 1 {
+                1
+            } else {
+                gt.num_keys as u8 - 1
+            },
+        );
 
         let acc_data = AccountData {
             keys,
@@ -222,8 +210,7 @@ fn main() {
         let id_object_use_data = IdObjectUseData { aci, randomness };
 
         let cdi = create_credential(
-            &ip_info,
-            &global_ctx,
+            context,
             &id_object,
             &id_object_use_data,
             53,
@@ -253,136 +240,110 @@ fn main() {
         (account_data_json, cdi, acc_keys, address)
     };
 
-    if let Some(matches) = matches.subcommand_matches("create-bakers") {
-        let num_bakers = match matches.value_of("num").unwrap().parse() {
-            Ok(n) => n,
-            Err(err) => {
-                eprintln!("Could not parse the number of bakers: {}", err);
-                return;
-            }
-        };
+    match gt.command {
+        Command::CreateBakers {
+            num,
+            num_finalizers,
+            balance,
+        } => {
+            let num_bakers = num;
+            let num_finalizers = num_finalizers.unwrap_or(num_bakers);
 
-        let num_finalizers = match matches.value_of("num_finalizers") {
-            None => num_bakers,
-            Some(arg) => match arg.parse() {
-                Ok(n) => n,
-                Err(err) => {
-                    eprintln!("Could not parse the number of finalizers: {}", err);
-                    return;
+            let mut bakers = Vec::with_capacity(num_bakers);
+            for baker in 0..num_bakers {
+                let (account_data_json, credential_json, account_keys, address_json) =
+                    generate_account(&mut csprng);
+                if let Err(err) =
+                    write_json_to_file(&format!("baker-{}-account.json", baker), &account_data_json)
+                {
+                    eprintln!(
+                        "Could not output account data for baker {}, because {}.",
+                        baker, err
+                    );
                 }
-            },
-        };
 
-        let balance = match matches.value_of("balance").unwrap().parse::<u64>() {
-            Ok(n) => n,
-            Err(err) => {
-                eprintln!("Could not parse balance: {}", err);
-                return;
-            }
-        };
+                // vrf keypair
+                let vrf_key = vrf::Keypair::generate(&mut csprng);
+                // signature keypair
+                let sign_key = ed25519::Keypair::generate(&mut csprng);
 
-        let mut bakers = Vec::with_capacity(num_bakers);
-        for baker in 0..num_bakers {
-            let (account_data_json, credential_json, account_keys, address_json) =
-                generate_account(&mut csprng);
-            if let Err(err) =
-                write_json_to_file(&format!("baker-{}-account.json", baker), &account_data_json)
-            {
-                eprintln!(
-                    "Could not output account data for baker {}, because {}.",
-                    baker, err
-                );
-            }
+                let agg_sign_key = agg::SecretKey::<Bls12>::generate(&mut csprng);
+                let agg_verify_key = agg::PublicKey::from_secret(agg_sign_key);
 
-            // vrf keypair
-            let vrf_key = vrf::Keypair::generate(&mut csprng);
-            // signature keypair
-            let sign_key = ed25519::Keypair::generate(&mut csprng);
+                // Output baker vrf and election keys in a json file.
+                let baker_data_json = json!({
+                    "electionPrivateKey": base16_encode_string(&vrf_key.secret),
+                    "electionVerifyKey": base16_encode_string(&vrf_key.public),
+                    "signatureSignKey": base16_encode_string(&sign_key.secret),
+                    "signatureVerifyKey": base16_encode_string(&sign_key.public),
+                    "aggregationSignKey": base16_encode_string(&agg_sign_key),
+                    "aggregationVerifyKey": base16_encode_string(&agg_verify_key),
+                });
 
-            let agg_sign_key = agg::SecretKey::<Bls12>::generate(&mut csprng);
-            let agg_verify_key = agg::PublicKey::from_secret(agg_sign_key);
+                if let Err(err) = write_json_to_file(
+                    &format!("baker-{}-credentials.json", baker),
+                    &baker_data_json,
+                ) {
+                    eprintln!(
+                        "Could not output baker credential for baker {}, because {}.",
+                        baker, err
+                    );
+                }
 
-            // Output baker vrf and election keys in a json file.
-            let baker_data_json = json!({
-                "electionPrivateKey": base16_encode_string(&vrf_key.secret),
-                "electionVerifyKey": base16_encode_string(&vrf_key.public),
-                "signatureSignKey": base16_encode_string(&sign_key.secret),
-                "signatureVerifyKey": base16_encode_string(&sign_key.public),
-                "aggregationSignKey": base16_encode_string(&agg_sign_key),
-                "aggregationVerifyKey": base16_encode_string(&agg_verify_key),
-            });
-
-            if let Err(err) = write_json_to_file(
-                &format!("baker-{}-credentials.json", baker),
-                &baker_data_json,
-            ) {
-                eprintln!(
-                    "Could not output baker credential for baker {}, because {}.",
-                    baker, err
-                );
+                // Finally store a json value storing public data for this baker.
+                let public_baker_data = json!({
+                    "electionVerifyKey": base16_encode_string(&vrf_key.public),
+                    "signatureVerifyKey": base16_encode_string(&sign_key.public),
+                    "aggregationVerifyKey": base16_encode_string(&agg_verify_key),
+                    "finalizer": baker < num_finalizers,
+                    "account": json!({
+                        "address": address_json,
+                        "accountKeys": account_keys,
+                        "balance": balance,
+                        "credential": credential_json
+                    })
+                });
+                bakers.push(public_baker_data);
             }
 
-            // Finally store a json value storing public data for this baker.
-            let public_baker_data = json!({
-                "electionVerifyKey": base16_encode_string(&vrf_key.public),
-                "signatureVerifyKey": base16_encode_string(&sign_key.public),
-                "aggregationVerifyKey": base16_encode_string(&agg_verify_key),
-                "finalizer": baker < num_finalizers,
-                "account": json!({
-                    "address": address_json,
+            // finally output all of the bakers in one file. This is used to generate
+            // genesis.
+            if let Err(err) = write_json_to_file("bakers.json", &json!(bakers)) {
+                eprintln!("Could not output bakers.json file because {}.", err)
+            }
+        }
+        Command::CreateAccounts { num, ref template } => {
+            let num_accounts = num;
+            let prefix = template;
+
+            let mut accounts = Vec::with_capacity(num_accounts);
+            for acc_num in 0..num_accounts {
+                let (account_data_json, credential_json, account_keys, address_json) =
+                    generate_account(&mut csprng);
+                let public_account_data = json!({
+                    "schemeId": "Ed25519",
                     "accountKeys": account_keys,
-                    "balance": balance,
+                    "address": address_json,
+                    "balance": 1_000_000_000_000u64,
                     "credential": credential_json
-                })
-            });
-            bakers.push(public_baker_data);
-        }
+                });
+                accounts.push(public_account_data);
 
-        // finally output all of the bakers in one file. This is used to generate
-        // genesis.
-        if let Err(err) = write_json_to_file("bakers.json", &json!(bakers)) {
-            eprintln!("Could not output bakers.json file because {}.", err)
-        }
-    }
-
-    if let Some(matches) = matches.subcommand_matches("create-accounts") {
-        let num_accounts = match matches.value_of("num").unwrap().parse() {
-            Ok(n) => n,
-            Err(err) => {
-                eprintln!("Could not parse the number of bakers: {}", err);
-                return;
+                if let Err(err) = write_json_to_file(
+                    &format!("{}-{}.json", prefix, acc_num),
+                    &json!(account_data_json),
+                ) {
+                    eprintln!(
+                        "Could not output beta-account-{}.json file because {}.",
+                        acc_num, err
+                    )
+                }
             }
-        };
-
-        let prefix = matches.value_of("template").unwrap(); // has default value, will be present.
-
-        let mut accounts = Vec::with_capacity(num_accounts);
-        for acc_num in 0..num_accounts {
-            let (account_data_json, credential_json, account_keys, address_json) =
-                generate_account(&mut csprng);
-            let public_account_data = json!({
-                "schemeId": "Ed25519",
-                "accountKeys": account_keys,
-                "address": address_json,
-                "balance": 1_000_000_000_000u64,
-                "credential": credential_json
-            });
-            accounts.push(public_account_data);
-
-            if let Err(err) = write_json_to_file(
-                &format!("{}-{}.json", prefix, acc_num),
-                &json!(account_data_json),
-            ) {
-                eprintln!(
-                    "Could not output beta-account-{}.json file because {}.",
-                    acc_num, err
-                )
+            // finally output all of the public account data in one file. This is used to
+            // generate genesis.
+            if let Err(err) = write_json_to_file(&format!("{}s.json", prefix), &json!(accounts)) {
+                eprintln!("Could not output beta-accounts.json file because {}.", err)
             }
-        }
-        // finally output all of the public account data in one file. This is used to
-        // generate genesis.
-        if let Err(err) = write_json_to_file(&format!("{}s.json", prefix), &json!(accounts)) {
-            eprintln!("Could not output beta-accounts.json file because {}.", err)
         }
     }
 }
