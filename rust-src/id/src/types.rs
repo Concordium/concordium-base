@@ -1,4 +1,13 @@
-use crate::secret_sharing::Threshold;
+use crate::{
+    secret_sharing::Threshold,
+    sigma_protocols::{
+        com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult,
+        common::{ReplicateAdapter, ReplicateWitness},
+        dlog,
+    },
+};
+use base58check::*;
+use byteorder::ReadBytesExt;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::*;
@@ -6,6 +15,7 @@ use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
 use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
+use either::Either;
 use elgamal::{cipher::Cipher, message::Message, secret::SecretKey as ElgamalSecretKey};
 use ff::Field;
 use hex::{decode, encode};
@@ -13,36 +23,20 @@ use pedersen_scheme::{
     commitment as pedersen, key::CommitmentKey as PedersenKey, Value as PedersenValue,
 };
 use ps_sig::{public as pssig, signature::*, unknown_message::SigRetrievalRandomness};
-use std::{
-    collections::{btree_map::BTreeMap, BTreeSet},
-    str::FromStr,
-};
-
-use crate::sigma_protocols::{
-    com_enc_eq, com_eq, com_eq_different_groups, com_eq_sig, com_mult,
-    common::{ReplicateAdapter, ReplicateWitness},
-    dlog,
-};
-
+use random_oracle::Challenge;
 use serde::{
     de, de::Visitor, ser::SerializeMap, Deserialize as SerdeDeserialize, Deserializer,
     Serialize as SerdeSerialize, Serializer,
 };
-
-use byteorder::{BigEndian, ReadBytesExt};
-use either::Either;
-use random_oracle::Challenge;
+use sha2::{Digest, Sha256};
 use std::{
     cmp::Ordering,
+    collections::{btree_map::BTreeMap, BTreeSet},
     convert::TryFrom,
     fmt,
     io::{Cursor, Read},
-};
-
-use sha2::{Digest, Sha256};
-
-// only for account addresses
-use base58check::*;
+    str::FromStr,
+}; // only for account addresses
 
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
@@ -779,6 +773,8 @@ pub struct IpAnonymityRevokers<C: Curve> {
     #[serde(rename = "arCommitmentKey")]
     pub ar_cmm_key: PedersenKey<C>,
     /// Chosen generator of the group used by the anonymity revokers.
+    /// NB: All public keys of anonymity revokers must be generated with respect
+    /// to this generator.
     #[serde(serialize_with = "base16_encode")]
     #[serde(deserialize_with = "base16_decode")]
     #[serde(rename = "arBase")]
@@ -811,11 +807,8 @@ pub fn mk_dummy_description(name: String) -> Description {
 
 /// Public information about an identity provider.
 #[derive(Debug, Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(
-    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>",
-    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>"
-))]
-pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+#[serde(bound(serialize = "P: Pairing", deserialize = "P: Pairing"))]
+pub struct IpInfo<P: Pairing> {
     /// Unique identifier of the identity provider.
     #[serde(rename = "ipIdentity")]
     pub ip_identity: IpIdentity,
@@ -825,9 +818,9 @@ pub struct IpInfo<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// PS public key of the IP
     #[serde(rename = "ipVerifyKey")]
     pub ip_verify_key: pssig::PublicKey<P>,
-    #[serde(rename = "ipAnonymityRevokers")]
-    pub ip_ars: IpAnonymityRevokers<C>,
 }
+
+type ArPublicKey<C> = elgamal::PublicKey<C>;
 
 /// Information on a single anonymity reovker held by the IP
 /// typically an IP will hold a more than one.
@@ -842,7 +835,7 @@ pub struct ArInfo<C: Curve> {
     pub ar_description: Description,
     /// elgamal encryption key of the anonymity revoker
     #[serde(rename = "arPublicKey")]
-    pub ar_public_key: elgamal::PublicKey<C>,
+    pub ar_public_key: ArPublicKey<C>,
 }
 
 /// The commitments sent by the account holder to the chain in order to
@@ -1296,56 +1289,66 @@ pub struct CredentialDeploymentInfo<
     pub proofs: CredDeploymentProofs<P, C>,
 }
 
-/// Context needed to generate pre-identity object.
+/// Context needed to generate pre-identity object as well as to check it.
 /// This context is derived from the public information of the identity
 /// provider, as well as some other global parameters which can be found in the
 /// struct 'GlobalContext'.
-/// FIXME: This is a remnant from how things were at some point, and probably
-/// needs to be updated.
-#[derive(Serialize)]
-pub struct Context<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
-    /// Public information on the chosen identity provider and anonymity
-    /// revoker(s).
-    pub ip_info: IpInfo<P, C>,
-    /// choice of anonyimity revocation parameters
-    /// that is a choice of subset of anonymity revokers
-    /// and a threshold parameter.
-    pub choice_ar_parameters: (Vec<ArInfo<C>>, Threshold),
+#[derive(Clone)]
+pub struct IPContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    /// Public information on the chosen identity provider.
+    pub ip_info: &'a IpInfo<P>,
+    /// Public information on the __chosen__ anonymity revokers.
+    pub ars_infos: &'a BTreeMap<ArIdentity, ArInfo<C>>,
+    pub global_context: &'a GlobalContext<C>,
 }
+
+impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IPContext<'a, P, C> {}
 
 #[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct GlobalContext<C: Curve> {
+    /// Generator of the curve C, used for, e.g., elgamal encryption.
+    #[serde(
+        rename = "generator",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub generator: C,
     /// A shared commitment key known to the chain and the account holder (and
     /// therefore it is public). The account holder uses this commitment key to
     /// generate commitments to values in the attribute list.
     /// This key should presumably be generated at genesis time via some shared
     /// multi-party computation since none of the parties should know anything
-    /// special about it (so that commitment is binding, and that the commitment
-    /// cannot be broken).
+    /// special about it, so that the commitment is binding.
     #[serde(rename = "onChainCommitmentKey")]
     pub on_chain_commitment_key: PedersenKey<C>,
+}
+
+impl<C: Curve> GlobalContext<C> {
+    /// Generate a new global context.
+    pub fn generate(csprng: &mut impl rand::Rng) -> Self {
+        GlobalContext {
+            generator:               C::generate(csprng),
+            on_chain_commitment_key: PedersenKey::generate(csprng),
+        }
+    }
 }
 
 /// Make a context in which the account holder can produce a pre-identity object
 /// to send to the identity provider. Also requires access to the global context
 /// of parameters, e.g., dlog-proof base point.
-pub fn make_context_from_ip_info<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
-    ip_info: IpInfo<P, C>,
-    choice_ar_handles: ChoiceArParameters,
-) -> Option<Context<P, C>> {
-    let mut choice_ars = Vec::with_capacity(choice_ar_handles.ar_identities.len());
-    for ar in choice_ar_handles.ar_identities.into_iter() {
-        match ip_info.ip_ars.ars.iter().find(|&x| x.ar_identity == ar) {
-            None => return None,
-            Some(ar_info) => choice_ars.push(ar_info.clone()),
+impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> IPContext<'a, P, C> {
+    pub fn new(
+        ip_info: &'a IpInfo<P>,                         // identity provider keys
+        ars_infos: &'a BTreeMap<ArIdentity, ArInfo<C>>, // keys of anonymity revokers.
+        global_context: &'a GlobalContext<C>,
+    ) -> Self {
+        IPContext {
+            ip_info,
+            ars_infos,
+            global_context,
         }
     }
-
-    Some(Context {
-        ip_info,
-        choice_ar_parameters: (choice_ars, choice_ar_handles.threshold),
-    })
 }
 
 /// Account data needed by the account holder to generate proofs to deploy the
@@ -1506,25 +1509,6 @@ impl AccountKeys {
 }
 
 /// Serialization of relevant types.
-
-/// Serialize a string by putting the length first as 2 bytes, big endian.
-pub fn short_string_to_bytes(s: &str) -> Vec<u8> {
-    let bytes = s.as_bytes();
-    let l = bytes.len();
-    assert!(l < 65536);
-    let mut out = crypto_common::safe_with_capacity(l + 2);
-    out.extend_from_slice(&(l as u16).to_be_bytes());
-    out.extend_from_slice(bytes);
-    out
-}
-/// TODO: We really should not be using Strings.
-pub fn bytes_to_short_string(cur: &mut Cursor<&[u8]>) -> Option<String> {
-    let l = cur.read_u16::<BigEndian>().ok()?;
-    let mut svec = vec![0; l as usize];
-    cur.read_exact(&mut svec).ok()?;
-    String::from_utf8(svec).ok()
-}
-
 impl Serial for SchemeId {
     fn serial<B: Buffer>(&self, out: &mut B) {
         match self {
@@ -1555,17 +1539,15 @@ pub struct IpMetadata {
 }
 
 /// Private and public data on an identity provider.
+/// This is used purely off-chain.
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
-#[serde(bound(
-    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>",
-    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>"
-))]
-pub struct IpData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+#[serde(bound(serialize = "P: Pairing", deserialize = "P: Pairing"))]
+pub struct IpData<P: Pairing> {
     /// Off-chain metadata about the identity provider
     #[serde(rename = "metadata")]
     pub metadata: IpMetadata,
     #[serde(rename = "ipInfo")]
-    pub public_ip_info: IpInfo<P, C>,
+    pub public_ip_info: IpInfo<P>,
     #[serde(
         rename = "ipSecretKey",
         serialize_with = "base16_encode",
@@ -1575,6 +1557,7 @@ pub struct IpData<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 }
 
 /// Private and public data on an anonymity revoker.
+/// This is used purely off-chain.
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct ArData<C: Curve> {

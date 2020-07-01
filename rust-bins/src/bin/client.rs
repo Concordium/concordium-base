@@ -1,7 +1,6 @@
-use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::*;
-use curve_arithmetic::Curve;
 use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -9,33 +8,26 @@ use either::Either::Left;
 use elgamal::{public::PublicKey, secret::SecretKey};
 use id::{account_holder::*, identity_provider::*, secret_sharing::*, types::*};
 use pairing::bls12_381::Bls12;
-use pedersen_scheme::CommitmentKey;
 use rand::*;
 use std::{
     cmp::max,
-    collections::{btree_map::BTreeMap, BTreeSet},
+    collections::btree_map::BTreeMap,
     convert::TryFrom,
     fs::File,
     io::{self, Write},
-    path::Path,
+    path::PathBuf,
 };
+use structopt::StructOpt;
 
-static IP_PREFIX: &str = "database/identity_provider-";
 static IP_NAME_PREFIX: &str = "identity_provider-";
-static AR_NAME_PREFIX: &str = "anonymity_revoker-";
+static AR_NAME_PREFIX: &str = "AR-";
 
-fn mk_ip_filename(n: usize) -> String {
-    let mut s = IP_PREFIX.to_string();
-    s.push_str(&n.to_string());
-    s.push_str(".json");
-    s
-}
-
-fn mk_ip_filename_pub(n: usize) -> String {
-    let mut s = IP_PREFIX.to_string();
-    s.push_str(&n.to_string());
-    s.push_str(".pub.json");
-    s
+fn mk_ip_filename(path: &PathBuf, n: usize) -> (PathBuf, PathBuf) {
+    let mut public = path.clone();
+    public.push(format!("{}{}.pub.json", IP_NAME_PREFIX, n));
+    let mut private = path.clone();
+    private.push(format!("{}{}.json", IP_NAME_PREFIX, n));
+    (public, private)
 }
 
 fn mk_ip_description(n: usize) -> Description {
@@ -44,18 +36,17 @@ fn mk_ip_description(n: usize) -> Description {
     mk_dummy_description(s)
 }
 
-fn mk_ar_filename(m: usize, n: usize) -> String {
-    let mut s = IP_PREFIX.to_string();
-    s.push_str(&m.to_string());
-    s.push_str("_");
-    s.push_str(&AR_NAME_PREFIX.to_string());
-    // let mut s = AR_PREFIX.to_string();
-    s.push_str(&n.to_string());
-    s.push_str(".json");
-    s
+// Generate name for the n-th anonymity revoker.
+// Returns the pair for public and public + private data.
+fn mk_ar_filename(path: &PathBuf, n: u32) -> (PathBuf, PathBuf) {
+    let mut public = path.clone();
+    public.push(format!("{}{}.pub.json", AR_NAME_PREFIX, n));
+    let mut private = path.clone();
+    private.push(format!("{}{}.json", AR_NAME_PREFIX, n));
+    (public, private)
 }
 
-fn mk_ar_description(n: usize) -> Description {
+fn mk_ar_description(n: u32) -> Description {
     let mut s = AR_NAME_PREFIX.to_string();
     s.push_str(&n.to_string());
     mk_dummy_description(s)
@@ -72,187 +63,226 @@ fn read_validto() -> io::Result<YearMonth> {
     }
 }
 
+#[derive(StructOpt)]
+struct CreateChi {
+    #[structopt(long = "out")]
+    out: Option<PathBuf>,
+}
+
+#[derive(StructOpt)]
+struct StartIp {
+    #[structopt(long = "chi", help = "File with input credential holder information.")]
+    chi: PathBuf,
+    #[structopt(long = "ips", help = "File with a list of identity providers.", default_value = IDENTITY_PROVIDERS)]
+    identity_providers: PathBuf,
+    #[structopt(
+        long = "ars",
+        help = "File with a list of anonymity revokers..",
+        default_value = "database/anonymity_revokers.json"
+    )]
+    anonymity_revokers: PathBuf,
+    #[structopt(long = "private", help = "File to write the private ACI data to.")]
+    private: Option<PathBuf>,
+    #[structopt(
+        long = "public",
+        help = "File to write the public data to be sent to the identity provider."
+    )]
+    public: Option<PathBuf>,
+    #[structopt(
+        long = "global",
+        help = "File with global parameters.",
+        default_value = "database/global.json"
+    )]
+    global: PathBuf,
+}
+
+#[derive(StructOpt)]
+struct GenerateIps {
+    #[structopt(
+        long = "num",
+        help = "Number of identity providers to generate.",
+        default_value = "10"
+    )]
+    num: usize,
+    #[structopt(
+        long = "num-ars",
+        help = "Number of anonymity revokers to generate. All anonymity revokers will be \
+                associated with all identity providers.",
+        default_value = "5"
+    )]
+    num_ars: u32,
+    #[structopt(
+        long = "global",
+        help = "File with global parameters.",
+        default_value = "database/global.json"
+    )]
+    global: PathBuf,
+    #[structopt(
+        long = "key-capacity",
+        help = "Size of the identity provider key. The length of this key limits the number of \
+                attributes the identity provider can sign.",
+        default_value = "30"
+    )]
+    key_capacity: usize,
+    #[structopt(
+        long = "out-dir",
+        help = "Directory to write the generate identity providers to.",
+        default_value = "database"
+    )]
+    output_dir: PathBuf,
+}
+
+#[derive(StructOpt)]
+struct GenerateGlobal {
+    #[structopt(
+        long = "out-file",
+        help = "File to write the generated global parameters to.",
+        default_value = "database/global.json"
+    )]
+    output_file: PathBuf,
+}
+
+#[derive(StructOpt)]
+struct IpSignPio {
+    #[structopt(
+        long = "pio",
+        help = "File with input pre-identity object information."
+    )]
+    pio: PathBuf,
+    #[structopt(
+        long = "ip-data",
+        help = "File with all information about the identity provider (public and private)."
+    )]
+    ip_data: PathBuf,
+    #[structopt(long = "out", help = "File to write the signed identity object to.")]
+    out_file: Option<PathBuf>,
+    #[structopt(
+        long = "global",
+        help = "File with global parameters.",
+        default_value = "database/global.json"
+    )]
+    global: PathBuf,
+    #[structopt(
+        long = "ars",
+        help = "File with a list of anonymity revokers..",
+        default_value = "database/anonymity_revokers.json"
+    )]
+    anonymity_revokers: PathBuf,
+}
+
+#[derive(StructOpt)]
+struct CreateCredential {
+    #[structopt(
+        long = "id-object",
+        help = "File with the JSON encoded identity object."
+    )]
+    id_object: PathBuf,
+    #[structopt(
+        long = "global",
+        help = "File with global parameters.",
+        default_value = "database/global.json"
+    )]
+    global: PathBuf,
+    #[structopt(
+        long = "ip-info",
+        help = "File with the JSON encoded information about the identity provider."
+    )]
+    ip_info: PathBuf,
+    #[structopt(
+        long = "private",
+        help = "File with private credential holder information used to generate the identity \
+                object."
+    )]
+    private: PathBuf,
+    #[structopt(
+        long = "account",
+        help = "File with existing account private info (verification and signature keys). If not \
+                present a fresh key-pair will be generated."
+    )]
+    account: Option<PathBuf>,
+    #[structopt(
+        long = "bin-out",
+        help = "File to output the binary transaction payload to."
+    )]
+    bin_out: Option<PathBuf>,
+    #[structopt(long = "out", help = "File to output the JSON transaction payload to.")]
+    out: Option<PathBuf>,
+    #[structopt(
+        long = "keys-out",
+        help = "File to output account keys.",
+        default_value = "account_keys.json"
+    )]
+    keys_out: PathBuf,
+    #[structopt(
+        long = "ars",
+        help = "File with a list of anonymity revokers..",
+        default_value = "database/anonymity_revokers.json"
+    )]
+    anonymity_revokers: PathBuf,
+}
+
+#[derive(StructOpt)]
+#[structopt(
+    about = "Prototype client showcasing ID layer interactions.",
+    author = "Concordium",
+    version = "0.36787944117"
+)]
+enum IdClient {
+    #[structopt(
+        name = "create-chi",
+        about = "Create new credential holder information."
+    )]
+    CreateChi(CreateChi),
+    #[structopt(
+        name = "start-ip",
+        about = "Generate data to send to the identity provider to sign and verify."
+    )]
+    StartIp(StartIp),
+    #[structopt(
+        name = "generate-ips",
+        about = "Generate given number of identity providers and anonymity revokers. With public \
+                 and private keys."
+    )]
+    GenerateIps(GenerateIps),
+    #[structopt(name = "generate-global")]
+    GenerateGlobal(GenerateGlobal),
+    #[structopt(
+        name = "ip-sign-pio",
+        about = "Act as the identity provider, checking and signing a pre-identity object."
+    )]
+    IpSignPio(IpSignPio),
+    #[structopt(
+        name = "create-credential",
+        about = "Take the identity object, select attributes to reveal and create a credential \
+                 object to deploy on chain."
+    )]
+    CreateCredential(CreateCredential),
+}
+
 fn main() {
-    let app = App::new("Prototype client showcasing ID layer interactions.")
-        .version("0.36787944117")
-        .author("Concordium")
+    let app = IdClient::clap()
         .setting(AppSettings::ArgRequiredElseHelp)
-        .global_setting(AppSettings::ColoredHelp)
-        .subcommand(
-            SubCommand::with_name("create-chi")
-                .about("Create new credential holder information.")
-                .arg(
-                    Arg::with_name("out")
-                        .long("out")
-                        .value_name("FILE")
-                        .short("o")
-                        .help("write generated credential holder information to file"),
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("start-ip")
-                .about("Generate data to send to the identity provider to sign and verify.")
-                .arg(
-                    Arg::with_name("chi")
-                        .long("chi")
-                        .value_name("FILE")
-                        .help("File with input credential holder information.")
-                        .required(true),
-                )
-                .arg(
-                    Arg::with_name("private")
-                        .long("private")
-                        .value_name("FILE")
-                        .help("File to write the private ACI data to."),
-                )
-                .arg(
-                    Arg::with_name("public")
-                        .long("public")
-                        .value_name("FILE")
-                        .help("File to write the public data to be sent to the identity provider."),
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("generate-ips")
-                .about("Generate given number of identity providers. Public and private keys.")
-                .arg(
-                    Arg::with_name("num")
-                        .long("num")
-                        .value_name("N")
-                        .short("n")
-                        .help("number of identity providers to generate"),
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("generate-global")
-                .about("Generate the global context of parameters."),
-        )
-        .subcommand(
-            SubCommand::with_name("ip-sign-pio")
-                .about("Act as the identity provider, checking and signing a pre-identity object.")
-                .arg(
-                    Arg::with_name("pio")
-                        .long("pio")
-                        .value_name("FILE")
-                        .help("File with input pre-identity object information.")
-                        .required(true),
-                )
-                .arg(
-                    Arg::with_name("ip-data")
-                        .long("ip-data")
-                        .value_name("FILE")
-                        .help(
-                            "File with all information about the identity provider (public and \
-                             private).",
-                        )
-                        .required(true),
-                )
-                .arg(
-                    Arg::with_name("out")
-                        .long("out")
-                        .short("o")
-                        .value_name("FILE")
-                        .help("File to write the signed identity object to."),
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("deploy-credential")
-                .about(
-                    "Take the identity object, select attributes to reveal and create a \
-                     credential object to deploy on chain.",
-                )
-                .arg(
-                    Arg::with_name("id-object")
-                        .long("id-object")
-                        .short("i")
-                        .value_name("FILE")
-                        .required(true)
-                        .help("File with the JSON encoded identity object."),
-                )
-                .arg(
-                    Arg::with_name("ip-info")
-                        .long("ip-info")
-                        .value_name("FILE")
-                        .required(true)
-                        .help(
-                            "File with the JSON encoded information about the identity provider.",
-                        ),
-                )
-                .arg(
-                    Arg::with_name("private")
-                        .long("private")
-                        .short("c")
-                        .value_name("FILE")
-                        .required(true)
-                        .help(
-                            "File with private credential holder information used to generate the \
-                             identity object.",
-                        ),
-                )
-                .arg(
-                    Arg::with_name("account")
-                        .long("account")
-                        .short("a")
-                        .value_name("FILE")
-                        .help(
-                            "File with existing account private info (verification and signature \
-                             keys).
-If not present a fresh key-pair will be generated.",
-                        ),
-                )
-                .arg(
-                    Arg::with_name("bin-out")
-                        .long("bin-out")
-                        .value_name("FILE")
-                        .help("File to output the binary transaction payload to."),
-                )
-                .arg(
-                    Arg::with_name("out")
-                        .long("out")
-                        .value_name("FILE")
-                        .help("File to output the JSON transaction payload to."),
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("revoke-anonymity")
-                .about("Take a deployed credential and determine who it belongs to.")
-                .arg(
-                    Arg::with_name("credential")
-                        .long("credential")
-                        .short("c")
-                        .value_name("FILE")
-                        .required(true)
-                        .help("File with the JSON encoded credential."),
-                )
-                .arg(
-                    Arg::with_name("ar-private")
-                        .long("ar-private")
-                        .short("a")
-                        .multiple(true)
-                        .value_name("FILE(S)")
-                        .required(true)
-                        .help("File with anonymity revoker's private and public keys."),
-                ),
-        );
+        .global_setting(AppSettings::ColoredHelp);
     let matches = app.get_matches();
-    let exec_if = |x: &str| matches.subcommand_matches(x);
-    exec_if("create-chi").map(handle_create_chi);
-    exec_if("start-ip").map(handle_start_ip);
-    exec_if("generate-ips").map(handle_generate_ips);
-    exec_if("generate-global").map(handle_generate_global);
-    exec_if("ip-sign-pio").map(handle_act_as_ip);
-    exec_if("deploy-credential").map(handle_deploy_credential);
+    let client = IdClient::from_clap(&matches);
+    use IdClient::*;
+    match client {
+        CreateChi(chi) => handle_create_chi(chi),
+        StartIp(ip) => handle_start_ip(ip),
+        GenerateIps(ips) => handle_generate_ips(ips),
+        GenerateGlobal(gl) => handle_generate_global(gl),
+        IpSignPio(isp) => handle_act_as_ip(isp),
+        CreateCredential(cc) => handle_create_credential(cc),
+    }
 }
 
 /// Read the identity object, select attributes to reveal and create a
 /// transaction.
-fn handle_deploy_credential(matches: &ArgMatches) {
+fn handle_create_credential(cc: CreateCredential) {
     let id_object = {
-        let file = matches
-            .value_of("id-object")
-            .expect("id-object parameter mandatory.");
-        match read_json_from_file::<_, IdentityObject<Bls12, ExampleCurve, ExampleAttribute>>(file)
-        {
+        match read_json_from_file::<_, IdentityObject<Bls12, ExampleCurve, ExampleAttribute>>(
+            cc.id_object,
+        ) {
             Ok(v) => v,
             Err(x) => {
                 eprintln!("Could not read identity object because {}", x);
@@ -261,19 +291,18 @@ fn handle_deploy_credential(matches: &ArgMatches) {
         }
     };
 
-    let ip_info = match matches.value_of("ip-info").map(read_json_from_file) {
-        Some(Ok(v)) => v,
-        Some(Err(x)) => {
+    let ip_info = match read_json_from_file(cc.ip_info) {
+        Ok(v) => v,
+        Err(x) => {
             eprintln!("Could not read identity provider info because {}", x);
             return;
         }
-        None => unreachable!("Mandatory argument."),
     };
 
     // we also read the global context from another json file (called
     // global.context). We need commitment keys and other data in there.
     let global_ctx = {
-        if let Some(gc) = read_global_context(GLOBAL_CONTEXT) {
+        if let Some(gc) = read_global_context(cc.global) {
             gc
         } else {
             eprintln!("Cannot read global context information database. Terminating.");
@@ -328,7 +357,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // We now generate or read account verification/signature key pair.
     let mut known_acc = false;
     let acc_data = {
-        if let Some(acc_data_file) = matches.value_of("account") {
+        if let Some(acc_data_file) = cc.account {
             match read_json_from_file(acc_data_file) {
                 Ok(acc_data) => {
                     known_acc = true;
@@ -361,18 +390,14 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             "Generated fresh verification and signature key of the account to file \
              account_keys.json"
         );
-        write_json_to_file("account_keys.json", &acc_data).ok();
+        write_json_to_file(&cc.keys_out, &acc_data).ok();
     }
 
     // finally we also read the credential holder information with secret keys
     // which we need to generate CDI.
     // This file should also contain the public keys of the identity provider who
     // signed the object.
-    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = match read_json_from_file(
-        matches
-            .value_of("private")
-            .expect("Should not happen because argument is mandatory."),
-    ) {
+    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = match read_json_from_file(&cc.private) {
         Ok(v) => v,
         Err(x) => {
             eprintln!("Could not read CHI object because {}", x);
@@ -395,15 +420,19 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // - acc_data of the account onto which we are deploying this credential
     //   (private and public)
 
-    let cdi = create_credential(
-        &ip_info,
-        &global_ctx,
-        &id_object,
-        &id_use_data,
-        x,
-        policy,
-        &acc_data,
-    );
+    // all known anonymity revokers.
+    let ars = {
+        if let Some(ars) = read_anonymity_revokers(cc.anonymity_revokers) {
+            ars
+        } else {
+            eprintln!("Cannot read anonymity revokers from the database. Terminating.");
+            return;
+        }
+    };
+
+    let context = IPContext::new(&ip_info, &ars, &global_ctx);
+
+    let cdi = create_credential(context, &id_object, &id_use_data, x, policy, &acc_data);
 
     let cdi = match cdi {
         Ok(cdi) => cdi,
@@ -426,7 +455,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
     // Now simply output the credential object in the transaction format
     // accepted by the simple-client for sending transactions.
 
-    if let Some(json_file) = matches.value_of("out") {
+    if let Some(json_file) = cc.out {
         match write_json_to_file(json_file, &cdi) {
             Ok(_) => println!("Wrote transaction payload to JSON file."),
             Err(e) => {
@@ -435,7 +464,7 @@ fn handle_deploy_credential(matches: &ArgMatches) {
             }
         }
     }
-    if let Some(bin_file) = matches.value_of("bin-out") {
+    if let Some(bin_file) = cc.bin_out {
         match File::create(&bin_file) {
             // This is a bit stupid, we should write directly to the sink.
             Ok(mut file) => match file.write_all(&to_bytes(&cdi)) {
@@ -452,13 +481,13 @@ fn handle_deploy_credential(matches: &ArgMatches) {
 }
 
 /// Create a new CHI object (essentially new idCredPub and idCredSec).
-fn handle_create_chi(matches: &ArgMatches) {
+fn handle_create_chi(cc: CreateChi) {
     let mut csprng = thread_rng();
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_cred: IdCredentials::generate(&mut csprng),
     };
 
-    if let Some(filepath) = matches.value_of("out") {
+    if let Some(filepath) = cc.out {
         match write_json_to_file(filepath, &ah_info) {
             Ok(()) => println!("Wrote CHI to file."),
             Err(_) => {
@@ -476,29 +505,45 @@ fn handle_create_chi(matches: &ArgMatches) {
 /// private information of the identity provider, check and sign the
 /// pre-identity object to generate the identity object to send back to the
 /// account holder.
-fn handle_act_as_ip(matches: &ArgMatches) {
-    let pio_path = Path::new(matches.value_of("pio").unwrap());
-    let pio = match read_json_from_file::<_, PreIdentityObject<_, _>>(&pio_path) {
+fn handle_act_as_ip(aai: IpSignPio) {
+    let pio = match read_json_from_file::<_, PreIdentityObject<_, _>>(&aai.pio) {
         Ok(pio) => pio,
         Err(e) => {
             eprintln!("Could not read file because {}", e);
             return;
         }
     };
-    let ip_data_path = Path::new(matches.value_of("ip-data").unwrap());
-    let (ip_info, ip_sec_key) =
-        match read_json_from_file::<_, IpData<Bls12, ExampleCurve>>(&ip_data_path) {
-            Ok(ip_data) => (ip_data.public_ip_info, ip_data.ip_secret_key),
-            Err(x) => {
-                eprintln!("Could not read identity issuer information because {}", x);
-                return;
-            }
-        };
+    let (ip_info, ip_sec_key) = match read_json_from_file::<_, IpData<Bls12>>(&aai.ip_data) {
+        Ok(ip_data) => (ip_data.public_ip_info, ip_data.ip_secret_key),
+        Err(x) => {
+            eprintln!("Could not read identity issuer information because {}", x);
+            return;
+        }
+    };
 
     let valid_to = match read_validto() {
         Ok(ym) => ym,
         Err(e) => {
             eprintln!("Could not read credential expiry because {}", e);
+            return;
+        }
+    };
+
+    let global_ctx = {
+        if let Some(gc) = read_global_context(aai.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context information database. Terminating.");
+            return;
+        }
+    };
+
+    // all known anonymity revokers.
+    let ars = {
+        if let Some(ars) = read_anonymity_revokers(aai.anonymity_revokers) {
+            ars
+        } else {
+            eprintln!("Cannot read anonymity revokers from the database. Terminating.");
             return;
         }
     };
@@ -542,7 +587,8 @@ fn handle_act_as_ip(matches: &ArgMatches) {
         alist,
         _phantom: Default::default(),
     };
-    let vf = verify_credentials(&pio, &ip_info, &attributes, &ip_sec_key);
+    let context = IPContext::new(&ip_info, &ars, &global_ctx);
+    let vf = verify_credentials(&pio, context, &attributes, &ip_sec_key);
 
     match vf {
         Ok(signature) => {
@@ -552,9 +598,12 @@ fn handle_act_as_ip(matches: &ArgMatches) {
                 signature,
             };
             println!("Successfully checked pre-identity data.");
-            if let Some(signed_out_path) = matches.value_of("out") {
-                if write_json_to_file(signed_out_path, &id_object).is_ok() {
-                    println!("Wrote signed identity object to file.");
+            if let Some(signed_out_path) = aai.out_file {
+                if write_json_to_file(signed_out_path.clone(), &id_object).is_ok() {
+                    println!(
+                        "Wrote signed identity object to file {:?}",
+                        signed_out_path.as_os_str()
+                    );
                 } else {
                     println!(
                         "Could not write Identity object to file. The signature is: {}",
@@ -572,10 +621,9 @@ fn handle_act_as_ip(matches: &ArgMatches) {
     }
 }
 
-fn handle_start_ip(matches: &ArgMatches) {
-    let path = Path::new(matches.value_of("chi").unwrap());
+fn handle_start_ip(sip: StartIp) {
     let chi = {
-        if let Ok(chi) = read_json_from_file(&path) {
+        if let Ok(chi) = read_json_from_file(&sip.chi) {
             chi
         } else {
             eprintln!("Could not read credential holder information.");
@@ -593,7 +641,7 @@ fn handle_start_ip(matches: &ArgMatches) {
 
     // now choose an identity provider.
     let ips = {
-        if let Some(ips) = read_identity_providers() {
+        if let Some(ips) = read_identity_providers(sip.identity_providers) {
             ips
         } else {
             eprintln!("Cannot read identity providers from the database. Terminating.");
@@ -625,13 +673,19 @@ fn handle_start_ip(matches: &ArgMatches) {
         }
     };
 
-    let ar_handles = &ip_info.ip_ars.ars;
-    let mrs: Vec<&str> = ar_handles
-        .iter()
+    let ars = {
+        if let Some(ars) = read_anonymity_revokers(sip.anonymity_revokers) {
+            ars
+        } else {
+            eprintln!("Cannot read anonymity revokers from the database. Terminating.");
+            return;
+        }
+    };
+
+    let mrs: Vec<&str> = ars
+        .values()
         .map(|x| x.ar_description.name.as_str())
         .collect();
-
-    let mut choice_ars = BTreeSet::new();
 
     let ar_info = Checkboxes::new()
         .with_prompt("Choose anonymity revokers")
@@ -640,11 +694,18 @@ fn handle_start_ip(matches: &ArgMatches) {
         .unwrap();
     let num_ars = ar_info.len();
     if ar_info.is_empty() {
-        eprintln!("You need to select AR");
+        eprintln!("You need to select an AR.");
         return;
     }
+    let keys = ars.keys().collect::<Vec<_>>();
+    let mut choice_ars = BTreeMap::new();
     for idx in ar_info.into_iter() {
-        choice_ars.insert(ar_handles[idx].ar_identity);
+        choice_ars.insert(
+            *keys[idx],
+            ars.get(keys[idx])
+                .expect("AR should exist by construction.")
+                .clone(),
+        );
     }
 
     let threshold = {
@@ -666,21 +727,26 @@ fn handle_start_ip(matches: &ArgMatches) {
         }
     };
 
-    let context = make_context_from_ip_info(ip_info, ChoiceArParameters {
-        ar_identities: choice_ars,
-        threshold,
-    })
-    .expect("The user should not be able to select invalid ARs due to the input method.");
+    let global_ctx = {
+        if let Some(gc) = read_global_context(sip.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context information database. Terminating.");
+            return;
+        }
+    };
+
+    let context = IPContext::new(&ip_info, &choice_ars, &global_ctx);
     // and finally generate the pre-identity object
     // we also retrieve the randomness which we must keep private.
     // This randomness must be used
-    let (pio, randomness) =
-        generate_pio(&context, &aci).expect("Generating the pre-identity object should succeed.");
+    let (pio, randomness) = generate_pio(&context, threshold, &aci)
+        .expect("Generating the pre-identity object should succeed.");
 
     // the only thing left is to output all the information
 
     let id_use_data = IdObjectUseData { aci, randomness };
-    if let Some(aci_out_path) = matches.value_of("private") {
+    if let Some(aci_out_path) = sip.private {
         if write_json_to_file(aci_out_path, &id_use_data).is_ok() {
             println!("Wrote ACI and randomness to file.");
         } else {
@@ -691,7 +757,7 @@ fn handle_start_ip(matches: &ArgMatches) {
         output_json(&id_use_data);
     }
 
-    if let Some(pio_out_path) = matches.value_of("public") {
+    if let Some(pio_out_path) = sip.public {
         if write_json_to_file(pio_out_path, &pio).is_ok() {
             println!("Wrote PIO data to file.");
         } else {
@@ -707,112 +773,120 @@ fn handle_start_ip(matches: &ArgMatches) {
 /// anonymity revokers. For now we generate identity providers with names
 /// IP_PREFIX-i.json and its associated anonymity revoker has name
 /// AR_PRFEFIX-i.json.
-fn handle_generate_ips(matches: &ArgMatches) -> Option<()> {
+fn handle_generate_ips(gip: GenerateIps) {
     let mut csprng = thread_rng();
-    let num: usize = matches.value_of("num").unwrap_or("10").parse().ok()?;
-    println!("generating {} IPs", num);
+    let num: usize = gip.num;
+    let num_ars: u32 = gip.num_ars;
+
+    // First generate anonymity revokers with ids 1..num-ars.
+    println!("Generating {} anonymity revokers.", num_ars);
+    let mut ar_identities = Vec::with_capacity(num_ars as usize);
+
+    // we also read the global context from another json file (called
+    // global.context). We need the generator from there.
+    let global_ctx = {
+        if let Some(gc) = read_global_context(gip.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context information database. Terminating.");
+            return;
+        }
+    };
+    {
+        let ar_base = global_ctx.generator;
+        let mut all_ars = BTreeMap::new();
+
+        for i in 1..=num_ars {
+            let ar_secret_key = SecretKey::generate(&ar_base, &mut csprng);
+            let ar_public_key = PublicKey::from(&ar_secret_key);
+            let ar_identity = ArIdentity::try_from(i).unwrap();
+            let public_ar_info = ArInfo {
+                ar_identity,
+                ar_description: mk_ar_description(i),
+                ar_public_key,
+            };
+            ar_identities.push(ar_identity);
+            let (ar_pub_fname, ar_fname) = mk_ar_filename(&gip.output_dir, i);
+            let ar_data = ArData {
+                public_ar_info,
+                ar_secret_key,
+            };
+            println!("writing AR({}) in file {:?}", i, ar_fname);
+            if let Err(err) = write_json_to_file(&ar_fname, &ar_data) {
+                eprintln!("Could not write anonymity revoker {}: {}", i, err);
+                return;
+            }
+            println!("writing public AR({}) in file {:?}", i, ar_fname);
+            if let Err(err) = write_json_to_file(&ar_pub_fname, &ar_data.public_ar_info) {
+                eprintln!("Could not write anonymity revoker {}: {}", i, err);
+                return;
+            }
+            let _ = all_ars.insert(ar_identity, ar_data.public_ar_info);
+        }
+
+        let mut ars_path = gip.output_dir.clone();
+        ars_path.push("anonymity_revokers.json");
+        if let Err(err) = write_json_to_file(ars_path.clone(), &all_ars) {
+            eprintln!("Could not write out anonymity revokers: {}", err);
+            return;
+        } else {
+            println!("Wrote out anonymity revokers to {:?}", ars_path.as_os_str())
+        }
+    }
+
+    println!("Generating {} identity providers.", num);
     let mut res = Vec::with_capacity(num);
     for id in 0..num {
         // generate an identity provider and for each
         // identity provider three anonymity revokers
-        let ip_fname = mk_ip_filename(id);
-        let ip_fname_pub = mk_ip_filename_pub(id);
-        let ar0_fname = mk_ar_filename(id, 0);
-        let ar1_fname = mk_ar_filename(id, 1);
-        let ar2_fname = mk_ar_filename(id, 2);
+        let (ip_fname_pub, ip_fname) = mk_ip_filename(&gip.output_dir, id);
 
         // TODO: hard-coded length of the key for now, but should be changed
         // based on the maximum length of the attribute list
-        let id_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(30, &mut csprng);
+        let id_secret_key =
+            ps_sig::secret::SecretKey::<Bls12>::generate(gip.key_capacity, &mut csprng);
         let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
-
-        let ar_base = ExampleCurve::generate(&mut csprng);
-
-        let ar0_secret_key = SecretKey::generate(&ar_base, &mut csprng);
-        let ar0_public_key = PublicKey::from(&ar0_secret_key);
-        let ar0_info = ArInfo {
-            ar_identity:    ArIdentity::try_from(1u32).unwrap(),
-            ar_description: mk_ar_description(0),
-            ar_public_key:  ar0_public_key,
-        };
-
-        let private_js0 = ArData {
-            public_ar_info: ar0_info,
-            ar_secret_key:  ar0_secret_key,
-        };
-
-        let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
-        let ar1_public_key = PublicKey::from(&ar1_secret_key);
-        let ar1_info = ArInfo {
-            ar_identity:    ArIdentity::try_from(2u32).unwrap(),
-            ar_description: mk_ar_description(1),
-            ar_public_key:  ar1_public_key,
-            // ar_elgamal_generator: PublicKey::generator(),
-        };
-
-        let private_js1 = ArData {
-            public_ar_info: ar1_info,
-            ar_secret_key:  ar1_secret_key,
-        };
-
-        let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
-        let ar2_public_key = PublicKey::from(&ar2_secret_key);
-        let ar2_info = ArInfo {
-            ar_identity:    ArIdentity::try_from(3u32).unwrap(),
-            ar_description: mk_ar_description(2),
-            ar_public_key:  ar2_public_key,
-            // ar_elgamal_generator: PublicKey::generator(),
-        };
-
-        let private_js2 = ArData {
-            public_ar_info: ar2_info,
-            ar_secret_key:  ar2_secret_key,
-        };
-
-        write_json_to_file(&ar0_fname, &private_js0).ok()?;
-        write_json_to_file(&ar1_fname, &private_js1).ok()?;
-        write_json_to_file(&ar2_fname, &private_js2).ok()?;
 
         let ip_info = IpInfo {
             ip_identity:    IpIdentity(id as u32),
             ip_description: mk_ip_description(id),
             ip_verify_key:  id_public_key,
-            ip_ars:         IpAnonymityRevokers {
-                ars: vec![
-                    private_js0.public_ar_info,
-                    private_js1.public_ar_info,
-                    private_js2.public_ar_info,
-                ],
-                ar_cmm_key: CommitmentKey::<ExampleCurve>::generate(&mut csprng),
-                ar_base,
-            },
         };
         let full_info = IpData {
             metadata:       Default::default(),
             ip_secret_key:  id_secret_key,
             public_ip_info: ip_info,
         };
-        println!("writing ip_{} in file {}", id, ip_fname);
-        write_json_to_file(&ip_fname, &full_info).ok()?;
-        println!("writing ip_{} public data in file {}", id, ip_fname_pub);
-        write_json_to_file(&ip_fname_pub, &full_info.public_ip_info).ok()?;
-
+        println!("writing ip_{} in file {:?}", id, ip_fname.as_os_str());
+        if let Err(err) = write_json_to_file(&ip_fname, &full_info) {
+            eprintln!("Could not write out identity provider: {}", err);
+            return;
+        }
+        println!(
+            "writing ip_{} public data in file {:?}",
+            id,
+            ip_fname_pub.as_os_str()
+        );
+        if let Err(err) = write_json_to_file(&ip_fname_pub, &full_info.public_ip_info) {
+            eprintln!("Could not write out identity provider: {}", err);
+            return;
+        }
         res.push(full_info.public_ip_info);
     }
-    write_json_to_file(IDENTITY_PROVIDERS, &res).ok()?;
-    Some(())
+    let mut ips_path = gip.output_dir;
+    ips_path.push("identity_providers.json");
+    if let Err(err) = write_json_to_file(ips_path, &res) {
+        eprintln!("Could not write out list of identity providers: {}", err);
+        return;
+    }
+    println!("Done.");
 }
 
 /// Generate the global context.
-fn handle_generate_global(_matches: &ArgMatches) -> Option<()> {
+fn handle_generate_global(gl: GenerateGlobal) {
     let mut csprng = thread_rng();
-    let gc = GlobalContext::<ExampleCurve> {
-        // we generate the commitment key for 1 value only.
-        // Since the scheme supports general vectors of values this is inefficient
-        // but is OK for now.
-        // The reason we only need 1 value is that we commit to each value separately
-        // in the attribute list. This is so that we can reveal items individually.
-        on_chain_commitment_key: CommitmentKey::generate(&mut csprng),
-    };
-    write_json_to_file(GLOBAL_CONTEXT, &gc).ok()
+    let gc = GlobalContext::<ExampleCurve>::generate(&mut csprng);
+    if let Err(err) = write_json_to_file(&gl.output_file, &gc) {
+        eprintln!("Could not write global parameters because {}.", err);
+    }
 }
