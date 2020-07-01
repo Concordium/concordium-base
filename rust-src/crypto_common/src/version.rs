@@ -34,15 +34,17 @@ impl Serial for Version {
         }
 
         // Create 7-bit encoding with all MSB set to 1
-        let mut buf = Vec::with_capacity(5);
+        let mut buf: [u8; 5] = [0; 5];
         let mut v = self.value;
+        let mut len = 0;
         while v > 0 {
-            let byte = (1 << 7) | (v & 0b0111_1111) as u8;
-            buf.push(byte);
+            buf[len] = (1 << 7) | (v & 0b0111_1111) as u8;
             v >>= 7;
+            len += 1;
         }
 
         // Convert to BigEndian, ensure last byte has MSB=0, write to buffer
+        let buf = &mut buf[..len];
         buf[0] &= 0b0111_1111;
         buf.reverse();
         out.write_all(&buf).expect("Writing to buffer is safe");
@@ -138,11 +140,11 @@ mod tests {
     #[test]
     fn test_version_serialization_singlebits() {
         let mut current: u32 = 1;
-        for _ in 0..32 {
+        for _ in 0..31 {
             let actual = Version::from(current);
             let parsed = serialize_deserialize(&actual).unwrap();
             assert_eq!(actual, parsed);
-            current *= 2;
+            current <<= 1;
         }
     }
 
