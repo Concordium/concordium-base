@@ -371,7 +371,7 @@ instance FromJSON Policy where
 -- |Unique identifier of the anonymity revoker.
 newtype ArIdentity = ArIdentity Word32
     deriving(Eq, Ord)
-    deriving Show via Word32
+    deriving (Show, Hashable) via Word32
 
 instance Serialize ArIdentity where
   put (ArIdentity n) = S.putWord32be n
