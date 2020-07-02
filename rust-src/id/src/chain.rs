@@ -45,10 +45,11 @@ pub fn verify_cdi<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
+    A: HasArPublicKey<C>,
 >(
     global_context: &GlobalContext<C>,
     ip_info: &IpInfo<P>,
-    ars_infos: &BTreeMap<ArIdentity, ArInfo<C>>,
+    ars_infos: &BTreeMap<ArIdentity, A>,
     acc_keys: Option<&AccountKeys>,
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
@@ -61,16 +62,17 @@ pub fn verify_cdi<
     )
 }
 
-pub fn verify_cdi_worker<
+fn verify_cdi_worker<
     P: Pairing,
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
+    A: HasArPublicKey<C>,
 >(
     on_chain_commitment_key: &CommitmentKey<C>,
     ip_verify_key: &ps_sig::PublicKey<P>,
     // NB: The following map only needs to be a superset of the ars
     // in the cdi.
-    known_ars: &BTreeMap<ArIdentity, ArInfo<C>>,
+    known_ars: &BTreeMap<ArIdentity, A>,
     acc_keys: Option<&AccountKeys>,
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
@@ -217,9 +219,9 @@ pub fn verify_cdi_worker<
 }
 
 /// verify id_cred data
-fn id_cred_pub_verifier<C: Curve>(
+fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
     commitment_key: &CommitmentKey<C>,
-    known_ars: &BTreeMap<ArIdentity, ArInfo<C>>,
+    known_ars: &BTreeMap<ArIdentity, A>,
     chain_ar_data: &BTreeMap<ArIdentity, ChainArData<C>>,
     cmm_sharing_coeff: &[Commitment<C>],
     proof_id_cred_pub: &BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
@@ -248,7 +250,7 @@ fn id_cred_pub_verifier<C: Curve>(
         let item_prover = com_enc_eq::ComEncEq {
             cipher:     ar_data.enc_id_cred_pub_share,
             commitment: cmm_share,
-            pub_key:    ar_info.ar_public_key,
+            pub_key:    *ar_info.get_public_key(),
             cmm_key:    *commitment_key,
         };
         provers.push(item_prover);

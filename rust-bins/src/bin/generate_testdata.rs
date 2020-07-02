@@ -211,6 +211,14 @@ fn main() {
         let ip_info_bytes = to_bytes(&ip_info);
         out.put(&(ip_info_bytes.len() as u32));
         out.write_all(&ip_info_bytes).unwrap();
+        let ars_len = ars_infos.len();
+        out.put(&(ars_len as u64)); // length of the list, expected big-endian in Haskell.
+        for ar in ars_infos.values() {
+            let ar_bytes = to_bytes(ar);
+            out.put(&(ar_bytes.len() as u32));
+            out.write_all(&ar_bytes).unwrap();
+        }
+
         // output the first credential
         let cdi1_bytes = to_bytes(&cdi_1);
         out.put(&(cdi1_bytes.len() as u32));
