@@ -592,6 +592,7 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
                  | ExceedsMaxBlockEnergy -- ^The transaction's deposited energy exceeds the maximum block energy limit.
                  | ExceedsMaxBlockSize -- ^The baker decided that this transaction is too big to put in a block.
                  | NonExistentIdentityProvider !IDTypes.IdentityProviderIdentity
+                 | UnsupportedAnonymityRevokers -- ^One of the anonymity revokers in the credential is not known.
                  | NonExistentAccount !AccountAddress -- ^Cannot deploy credential onto a non-existing account.
                  | AccountCredentialInvalid
                  | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
