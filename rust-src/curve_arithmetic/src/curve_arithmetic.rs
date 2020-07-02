@@ -64,7 +64,7 @@ pub trait Curve:
 }
 
 #[allow(non_snake_case)]
-pub fn multiscalar_multiplication<C: Curve>(a: &[C::Scalar], G: &[C]) -> C{
+pub fn multiscalar_multiplication_naive<C: Curve>(a: &[C::Scalar], G: &[C]) -> C{
     let n = a.len();
     if G.len() != n {
         panic!("a and G should have the same length");
@@ -75,6 +75,11 @@ pub fn multiscalar_multiplication<C: Curve>(a: &[C::Scalar], G: &[C]) -> C{
         sum = sum.plus_point(&aiGi);
     }
     sum
+}
+
+#[allow(non_snake_case)]
+pub fn multiscalar_multiplication<C: Curve>(a: &[C::Scalar], G: &[C]) -> C{
+    multiexp(G, a)
 }
 
 pub trait Pairing: Sized + 'static + Clone {
@@ -162,6 +167,7 @@ pub fn multiexp<C: Curve>(gs: &[C], exps: &[C::Scalar]) -> C {
     multiexp_worker(gs, exps, window_size)
 }
 
+
 /// This implements the WNAF method from
 /// https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf
 /// Assumes:
@@ -243,6 +249,87 @@ pub fn multiexp_worker<C: Curve>(gs: &[C], exps: &[C::Scalar], window_size: usiz
         }
     }
     a
+}
+
+pub fn multiexp_worker_given_table<C: Curve>(exps: &[C::Scalar], table: &[Vec<C>], window_size: usize) -> C {
+    // Compute the wnaf
+
+    let k = exps.len();
+    // assert_eq!(gs.len(), k);
+    assert!(window_size >= 1);
+    assert!(window_size < 62);
+
+    // 2^{window_size + 1}
+    let two_to_wp1: u64 = 2 << window_size;
+    // a mask to extract the lowest window_size + 1 bits from a scalar.
+    let mask: u64 = two_to_wp1 - 1;
+    let mut wnaf = Vec::with_capacity(k);
+    // 1 / 2 scalar
+    let half = C::scalar_from_u64(2)
+        .inverse()
+        .expect("Field size must be at least 3.");
+
+    for c in exps.iter() {
+        let mut v = Vec::new();
+        let mut c = *c;
+        while !c.is_zero() {
+            let limb = c.into_repr().as_ref()[0];
+            // if the first bit is set
+            if limb & 1 == 1 {
+                let u = limb & mask;
+                // check if window_size'th bit is set.
+                if u & (1 << window_size) != 0 {
+                    c.sub_assign(&C::scalar_from_u64(u));
+                    c.add_assign(&C::scalar_from_u64(two_to_wp1));
+                    v.push((u as i64) - (two_to_wp1 as i64));
+                } else {
+                    c.sub_assign(&C::scalar_from_u64(u));
+                    v.push(u as i64);
+                }
+            } else {
+                v.push(0);
+            }
+            c.mul_assign(&half);
+        }
+        wnaf.push(v);
+    }
+
+    // evaluate using the precomputed table
+    let mut a = C::zero_point();
+    for j in (0..=C::Scalar::NUM_BITS as usize).rev() {
+        a = a.double_point();
+        for i in 0..k {
+            match wnaf[i].get(j) {
+                Some(&ge) if ge > 0 => {
+                    a = a.plus_point(&table[i][(ge / 2) as usize]);
+                }
+                Some(&ge) if ge < 0 => {
+                    a = a.minus_point(&table[i][((-ge) / 2) as usize]);
+                }
+                _ => (),
+            }
+        }
+    }
+    a
+}
+
+pub fn multiexp_table<C: Curve>(gs: &[C], window_size: usize)->Vec<Vec<C>>{
+    let k = gs.len();
+    let mut table = Vec::with_capacity(k);
+    for g in gs.iter() {
+        let sq = g.plus_point(&g);
+        let mut tmp = *g;
+        // All of the odd exponents, between 1 and 2^w.
+        let num_exponents = 1 << (window_size - 1);
+        let mut exps = Vec::with_capacity(num_exponents);
+        exps.push(tmp);
+        for _ in 1..num_exponents {
+            tmp = tmp.plus_point(&sq);
+            exps.push(tmp);
+        }
+        table.push(exps);
+    }
+    table
 }
 
 #[cfg(test)]

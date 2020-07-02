@@ -4,7 +4,7 @@
 //! The randomness used in commitment
 
 use crypto_common::*;
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::Curve;
 
 use ff::Field;
 
