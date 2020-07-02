@@ -26,18 +26,52 @@ type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, Examp
     author = "Concordium",
     about = "Generate bakers with accounts for inclusion in genesis or just beta accounts."
 )]
-struct GenesisTool {
+enum GenesisTool {
+    #[structopt(name = "create-bakers", about = "Create new bakers.")]
+    CreateBakers {
+        #[structopt(long = "num", help = "Number of bakers to generate.")]
+        num: usize,
+        #[structopt(
+            long = "num-finalizers",
+            help = "The amount of finalizers to generate. Defaults to all bakers."
+        )]
+        num_finalizers: Option<usize>,
+        #[structopt(
+            long = "balance",
+            help = "Balance on each of the baker accounts.",
+            default_value = "35000000000"
+        )]
+        balance: u64,
+        #[structopt(flatten)]
+        common: CommonOptions,
+    },
+    #[structopt(name = "create-accounts", about = "Create new accounts.")]
+    CreateAccounts {
+        #[structopt(long = "num", help = "Number of accounts to generate.")]
+        num: usize,
+        #[structopt(
+            name = "template",
+            help = "Template on how to name accounts; they will be named TEMPLATE-$N.json.",
+            value_name = "TEMPLATE",
+            default_value = "account"
+        )]
+        template: String,
+        #[structopt(flatten)]
+        common: CommonOptions,
+    },
+}
+
+#[derive(StructOpt)]
+struct CommonOptions {
     #[structopt(
         long = "ip-data",
-        help = "File with all information about the identity provider (public and private).",
-        global = true
+        help = "File with all information about the identity provider (public and private)."
     )]
     ip_data: PathBuf,
     #[structopt(
         long = "global",
         help = "File with global parameters.",
-        default_value = "database/global.json",
-        global = true
+        default_value = "database/global.json"
     )]
     global: PathBuf,
     #[structopt(
@@ -47,44 +81,11 @@ struct GenesisTool {
     )]
     anonymity_revokers: PathBuf,
     #[structopt(
-        name = "num-keys",
+        long = "num-keys",
         help = "The number of keys each account should have. Threshold is set to max(1, K-1).",
         default_value = "3"
     )]
     num_keys: usize,
-    #[structopt(subcommand)]
-    command: Command,
-}
-
-#[derive(StructOpt)]
-enum Command {
-    #[structopt(name = "create-bakers", about = "Create new bakers.")]
-    CreateBakers {
-        #[structopt(name = "num", help = "Number of bakers to generate.")]
-        num: usize,
-        #[structopt(
-            name = "num-finalizers",
-            help = "The amount of finalizers to generate. Defaults to all bakers."
-        )]
-        num_finalizers: Option<usize>,
-        #[structopt(
-            name = "balance",
-            help = "Balance on each of the baker accounts.",
-            default_value = "35000000000"
-        )]
-        balance: u64,
-    },
-    CreateAccounts {
-        #[structopt(name = "num", help = "Number of accounts to generate.")]
-        num: usize,
-        #[structopt(
-            name = "template",
-            help = "Template on how to name accounts; they will be named TEMPLATE-$N.json.",
-            value_name = "TEMPLATE",
-            default_value = "account"
-        )]
-        template: String,
-    },
 }
 
 fn main() {
@@ -96,10 +97,15 @@ fn main() {
         GenesisTool::from_clap(&matches)
     };
 
+    let common = match gt {
+        GenesisTool::CreateBakers { ref common, .. } => common,
+        GenesisTool::CreateAccounts { ref common, .. } => common,
+    };
+
     let mut csprng = thread_rng();
 
     // Load identity provider and anonymity revokers.
-    let (ip_info, ip_secret_key) = match read_json_from_file::<_, IpData<Bls12>>(&gt.ip_data) {
+    let (ip_info, ip_secret_key) = match read_json_from_file::<_, IpData<Bls12>>(&common.ip_data) {
         Ok(IpData {
             public_ip_info,
             ip_secret_key,
@@ -112,7 +118,7 @@ fn main() {
     };
 
     let global_ctx = {
-        if let Some(gc) = read_global_context(&gt.global) {
+        if let Some(gc) = read_global_context(&common.global) {
             gc
         } else {
             eprintln!("Cannot read global context information database. Terminating.");
@@ -121,7 +127,7 @@ fn main() {
     };
 
     let ars_infos = {
-        if let Some(ars) = read_anonymity_revokers(&gt.anonymity_revokers) {
+        if let Some(ars) = read_anonymity_revokers(&common.anonymity_revokers) {
             ars
         } else {
             eprintln!("Cannot read anonymity revokers from the database. Terminating.");
@@ -132,7 +138,7 @@ fn main() {
     let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
     let threshold = Threshold((ars_infos.len() - 1) as u8);
 
-    if gt.num_keys == 0 && gt.num_keys > 255 {
+    if common.num_keys == 0 && common.num_keys > 255 {
         eprintln!("num_keys should be a positive integer <= 255.");
         return;
     }
@@ -184,15 +190,15 @@ fn main() {
         };
 
         let mut keys = BTreeMap::new();
-        for idx in 0..gt.num_keys {
+        for idx in 0..common.num_keys {
             keys.insert(KeyIndex(idx as u8), ed25519::Keypair::generate(csprng));
         }
 
         let threshold = SignatureThreshold(
-            if gt.num_keys == 1 {
+            if common.num_keys == 1 {
                 1
             } else {
-                gt.num_keys as u8 - 1
+                common.num_keys as u8 - 1
             },
         );
 
@@ -240,11 +246,12 @@ fn main() {
         (account_data_json, cdi, acc_keys, address)
     };
 
-    match gt.command {
-        Command::CreateBakers {
+    match gt {
+        GenesisTool::CreateBakers {
             num,
             num_finalizers,
             balance,
+            ..
         } => {
             let num_bakers = num;
             let num_finalizers = num_finalizers.unwrap_or(num_bakers);
@@ -312,7 +319,9 @@ fn main() {
                 eprintln!("Could not output bakers.json file because {}.", err)
             }
         }
-        Command::CreateAccounts { num, ref template } => {
+        GenesisTool::CreateAccounts {
+            num, ref template, ..
+        } => {
             let num_accounts = num;
             let prefix = template;
 
