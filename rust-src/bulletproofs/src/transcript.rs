@@ -1,4 +1,4 @@
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::Curve;
 use crypto_common::to_bytes;
 use merlin::Transcript;
 
@@ -25,6 +25,6 @@ impl TranscriptProtocol for Transcript {
     fn challenge_scalar<C:Curve>(&mut self, label: &'static [u8]) -> C::Scalar {
         let mut buf = [0; 32];
         self.challenge_bytes(label, &mut buf);
-        C::scalar_from_bytes_mod(&buf)
+        C::scalar_from_bytes(&buf)
     }
 }

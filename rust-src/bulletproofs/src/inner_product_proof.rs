@@ -1,4 +1,7 @@
-use curve_arithmetic::curve_arithmetic::Curve;
+use curve_arithmetic::Curve;
+use curve_arithmetic::multiscalar_multiplication;
+use curve_arithmetic::multiscalar_multiplication_naive;
+use curve_arithmetic::multiexp_worker;
 use ff::{Field, PrimeField};
 use merlin::Transcript;
 use crate::transcript::TranscriptProtocol;
@@ -25,7 +28,6 @@ pub fn prove_inner_product<C: Curve> (
     transcript: &mut Transcript,
     mut G_vec: Vec<C>,
     mut H_vec: Vec<C>,
-    P_prime: &C,
     Q: &C,
     mut a_vec: Vec<C::Scalar>,
     mut b_vec: Vec<C::Scalar>
@@ -61,6 +63,27 @@ pub fn prove_inner_product<C: Curve> (
         let Lj = a_lo_G_hi.plus_point(&b_hi_H_lo).plus_point(&a_lo_b_hi_Q);
         let Rj = a_hi_G_lo.plus_point(&b_lo_H_hi).plus_point(&a_hi_b_lo_Q);
 
+        //Maybe faster:
+        // let mut Lj_scalars = Vec::with_capacity(n+1);
+        // Lj_scalars.extend_from_slice(a_lo);
+        // Lj_scalars.extend_from_slice(b_hi);
+        // Lj_scalars.push(inner_product(a_lo, b_hi));
+        // let mut Lj_points = Vec::with_capacity(n+1);
+        // Lj_points.extend_from_slice(G_hi);
+        // Lj_points.extend_from_slice(H_lo);
+        // Lj_points.push(*Q);
+        // let Lj = multiscalar_multiplication(&Lj_scalars, &Lj_points);
+        // let mut Rj_scalars = Vec::with_capacity(n+1);
+        // Rj_scalars.extend_from_slice(a_hi);
+        // Rj_scalars.extend_from_slice(b_lo);
+        // Rj_scalars.push(inner_product(a_hi, b_lo));
+        // let mut Rj_points = Vec::with_capacity(n+1);
+        // Rj_points.extend_from_slice(G_lo);
+        // Rj_points.extend_from_slice(H_hi);
+        // Rj_points.push(*Q);
+        // let Rj = multiscalar_multiplication(&Rj_scalars, &Rj_points);
+        //end maybe faster
+
         transcript.append_point(b"Lj", &Lj);
         transcript.append_point(b"Rj", &Rj);
         L.push(Lj);
@@ -75,6 +98,8 @@ pub fn prove_inner_product<C: Curve> (
         let mut b = Vec::with_capacity(a_lo.len());
         let mut G = Vec::with_capacity(a_lo.len());
         let mut H = Vec::with_capacity(a_lo.len());
+        let G_scalars = vec![u_j_inv, u_j]; // For faster way
+        let H_scalars = vec![u_j, u_j_inv]; // For faster way
         for i in 0..a_lo.len() {
             // Calculating new a vector: 
             let mut a_lo_u_j = a_lo[i];
@@ -99,15 +124,24 @@ pub fn prove_inner_product<C: Curve> (
             b.push(sum);
 
             // Calculating new G vector: 
-            let G_lo_u_j_inv = G_lo[i].mul_by_scalar(&u_j_inv);
-            let u_j_G_hi = G_hi[i].mul_by_scalar(&u_j);
-            let sum = G_lo_u_j_inv.plus_point(&u_j_G_hi);
+            // let G_lo_u_j_inv = G_lo[i].mul_by_scalar(&u_j_inv);
+            // let u_j_G_hi = G_hi[i].mul_by_scalar(&u_j);
+            // let sum = G_lo_u_j_inv.plus_point(&u_j_G_hi);
+
+            //Maybe faster
+            let G_points = vec![G_lo[i], G_hi[i]];
+            let sum = multiscalar_multiplication(&G_scalars, &G_points);
+            //end maybe faster
             G.push(sum);
 
             // Calculating new H vector: 
-            let H_lo_u_j = H_lo[i].mul_by_scalar(&u_j);
-            let u_j_inv_H_hi = H_hi[i].mul_by_scalar(&u_j_inv);
-            let sum = H_lo_u_j.plus_point(&u_j_inv_H_hi);
+            // let H_lo_u_j = H_lo[i].mul_by_scalar(&u_j);
+            // let u_j_inv_H_hi = H_hi[i].mul_by_scalar(&u_j_inv);
+            // let sum = H_lo_u_j.plus_point(&u_j_inv_H_hi);
+            //Maybe faster
+            let H_points = vec![H_lo[i], H_hi[i]];
+            let sum = multiscalar_multiplication(&H_scalars, &H_points);
+            //end maybe faster
             H.push(sum);
         }
         a_vec = a;
@@ -134,10 +168,10 @@ pub fn verify_scalars<C: Curve>(transcript: &mut Transcript, n: usize,
     let mut ab = a;
     ab.mul_assign(&b); 
     
-    let mut u = vec![];
-    let mut u_inv = vec![];
-    let mut u_sq = vec![];
-    let mut u_inv_sq = vec![];
+    let mut u = Vec::with_capacity(L.len());
+    let mut u_inv = Vec::with_capacity(L.len());
+    let mut u_sq = Vec::with_capacity(L.len());
+    let mut u_inv_sq = Vec::with_capacity(L.len());
     for j in 0..L.len() {
         transcript.append_point(b"Lj", &L[j]);
         transcript.append_point(b"Rj", &R[j]);
@@ -156,7 +190,7 @@ pub fn verify_scalars<C: Curve>(transcript: &mut Transcript, n: usize,
         u_inv_sq.push(u_j_inv_sq);
     }
     
-    let mut s = vec![];
+    let mut s = Vec::with_capacity(n);
     let mut s_0 = u_inv[0];
     for i in 1..u_inv.len() { // This could be done in the above loop
         s_0.mul_assign(&u_inv[i]);
@@ -280,19 +314,19 @@ pub fn inner_product<F : Field>(a: &[F], b: &[F]) -> F{
 }
 
 
-#[allow(non_snake_case)]
-pub fn multiscalar_multiplication<C: Curve>(a: &[C::Scalar], G: &[C]) -> C{
-    let n = a.len();
-    if G.len() != n {
-        panic!("a and G should have the same length");
-    }
-    let mut sum = C::zero_point();
-    for i in 0..n {
-        let aiGi =G[i].mul_by_scalar(&a[i]);
-        sum = sum.plus_point(&aiGi);
-    }
-    sum
-}
+// #[allow(non_snake_case)]
+// pub fn multiscalar_multiplication<C: Curve>(a: &[C::Scalar], G: &[C]) -> C{
+//     let n = a.len();
+//     if G.len() != n {
+//         panic!("a and G should have the same length");
+//     }
+//     let mut sum = C::zero_point();
+//     for i in 0..n {
+//         let aiGi =G[i].mul_by_scalar(&a[i]);
+//         sum = sum.plus_point(&aiGi);
+//     }
+//     sum
+// }
 
 
 
@@ -303,6 +337,7 @@ mod tests {
     use pairing::bls12_381::FqRepr;
     use rand::{thread_rng};
     use std::time::{Duration, Instant};
+    use std::thread;
     type SomeCurve = G1;
     type SomeField = Fr;
 
@@ -340,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn test_msm(){
+    fn test_msm_basic(){
         let rng = &mut thread_rng();
         let mut Gis = Vec::new();
         let g1 = SomeCurve::generate(rng);
@@ -352,13 +387,20 @@ mod tests {
         let a2 = SomeCurve::generate_scalar(rng);
         ais.push(a1);
         ais.push(a2);
+
+        println!("Naively with two points and two scalars");
+        let now = Instant::now();
         let a1g1 = g1.mul_by_scalar(&a1);
         let a2g2 = g2.mul_by_scalar(&a2);
         let mut sum = a1g1;
         sum = sum.plus_point(&a2g2);
-
-        let sum2 = multiscalar_multiplication(&ais[..], &Gis[..]);
+        println!("Done in {} µs", now.elapsed().as_micros());
         println!("sum1: {}", sum);
+
+        println!("Using fast msm with two points and two scalars");
+        let now = Instant::now();
+        let sum2 = multiscalar_multiplication(&ais[..], &Gis[..]);
+        println!("Done in {} µs", now.elapsed().as_micros());
         println!("sum2: {}", sum2);
         assert_eq!(sum, sum2);
     }
@@ -367,30 +409,68 @@ mod tests {
     #[allow(non_snake_case)]
     fn test_msm_bench(){
         let rng = &mut thread_rng();
-        let mut Gis = Vec::new();
-        let mut ais = Vec::new();
-        let n = 10000;
+        let n = 100000;
+        let mut Gis = Vec::with_capacity(n);
+        let mut ais = Vec::with_capacity(n);
         for _ in 0..n {
             let g = SomeCurve::generate(rng);
             Gis.push(g);
             let a = SomeCurve::generate_scalar(rng);
             ais.push(a);
         }
+        
+        println!("Doing msm in two go's");
+        let now = Instant::now();
+        let sum1 = multiscalar_multiplication(&ais[..n/2], &Gis[..n/2]);
+        let sum2 = multiscalar_multiplication(&ais[n/2..], &Gis[n/2..]);
+        let sum = sum1.plus_point(&sum2);
+        
+        println!("Done in {} ms", now.elapsed().as_millis());
+        println!("sum: {}", sum);
+        let sleeping_time = Duration::from_millis(3000);
+        // let now = time::Instant::now();
+
+        thread::sleep(sleeping_time);
+
         println!("Doing msm in one go");
         let now = Instant::now();
         let sum = multiscalar_multiplication(&ais[..], &Gis[..]);
 
         println!("Done in {} ms", now.elapsed().as_millis());
         println!("sum: {}", sum);
+    }
 
-        println!("Doing msm in two go's");
+
+    #[test]
+    fn test_msm_with_one_vector(){
+        let rng = &mut thread_rng();
+        let mut Gis = Vec::new();
+        // let mut ais = Vec::new();
+        let n = 100000;
+        let one = SomeField::one();
+        let ais = vec![one; n];
+        for _ in 0..n {
+            let g = SomeCurve::generate(rng);
+            Gis.push(g);
+            // let a = SomeCurve::generate_scalar(rng);
+            // ais.push(a);
+        }
+
+        println!("Doing msm naively");
         let now = Instant::now();
-        let sum1 = multiscalar_multiplication(&ais[..n/2], &Gis[..n/2]);
-        let sum2 = multiscalar_multiplication(&ais[n/2..], &Gis[n/2..]);
-        let sum = sum1.plus_point(&sum2);
+        let sum = multiscalar_multiplication_naive(&ais[..], &Gis[..]);
 
         println!("Done in {} ms", now.elapsed().as_millis());
         println!("sum: {}", sum);
+
+        println!("Doing msm using wnaf stuff");
+        let now = Instant::now();
+        let sum = multiexp_worker(&Gis[..], &ais[..], 1);//(&ais[..], &Gis[..]);
+
+        println!("Done in {} ms", now.elapsed().as_millis());
+        println!("sum: {}", sum);
+
+        
     }
 
     #[test]
@@ -398,7 +478,7 @@ mod tests {
     fn test_inner_product_proof(){
         //Testing with n = 4
         let rng = &mut thread_rng();
-        let n = 8;
+        let n = 32*16;
         let mut G_vec = vec![];
         let mut H_vec = vec![];
         let mut a_vec = vec![];
@@ -417,11 +497,18 @@ mod tests {
 
         let Q =  SomeCurve::generate(rng);
         let P_prime = multiscalar_multiplication(&a_vec, &G_vec).plus_point(&multiscalar_multiplication(&b_vec, &H_vec)).plus_point(&Q.mul_by_scalar(&inner_product(&a_vec, &b_vec)));
+        // let P_prime = SomeCurve::zero_point();
         let mut transcript = Transcript::new(&[]);
-        let proof = prove_inner_product(&mut transcript, G_vec.clone(), H_vec.clone(), &P_prime, &Q, a_vec, b_vec);
+        
+        println!("Producing inner product proof");
+        let now = Instant::now();
+        let proof = prove_inner_product(&mut transcript, G_vec.clone(), H_vec.clone(), &Q, a_vec, b_vec);
+        println!("Done in {} ms", now.elapsed().as_millis());
+        // let P_prime = P_prime_;
 
         let mut transcript = Transcript::new(&[]);
-        assert!(verify_inner_product(&mut transcript, G_vec, H_vec, P_prime, Q, proof));
+        println!("{}", verify_inner_product(&mut transcript, G_vec, H_vec, P_prime, Q, proof));
+        // assert!(verify_inner_product(&mut transcript, G_vec, H_vec, P_prime, Q, proof));
 
     }
 }

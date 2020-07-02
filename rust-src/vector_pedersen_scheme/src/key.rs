@@ -2,8 +2,9 @@
 
 use crate::{commitment::*, randomness::*};
 
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::Curve;
 use curve_arithmetic::Value;
+use curve_arithmetic::multiscalar_multiplication;
 
 use crypto_common::*;
 use crypto_common_derive::*;
@@ -26,11 +27,11 @@ impl<C: Curve> CommitmentKey<C> {
     pub fn hide(&self, s: &[Value<C>], r: &Randomness<C>) -> Commitment<C> {
         let h = self.1;
         let G = self.0.clone();
-        let messages : Vec<_> = s.iter().map(|x| x.value).collect();
+        let messages : Vec<C::Scalar> = s.iter().map(|x| (*x.clone())).collect();
         let r_scalar = r.randomness;
         let hr = h.mul_by_scalar(&r_scalar);
         // let gm = g.mul_by_scalar(&message);
-        let msm = multiscalar_multiplication(&messages, &G);
+        let msm = multiscalar_multiplication::<C>(&messages[..], &G[..]);
         Commitment(msm.plus_point(&hr))
     }
 
