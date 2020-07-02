@@ -234,7 +234,8 @@ instance Arbitrary Word128 where
 -- This performs modular exponentiation linear in the
 -- number of bits in the exponent.
 maybePow :: (Num a, Integral b) => (a -> a -> Maybe a) -> a -> b -> Maybe a
-maybePow mul x0 y0 | y0 <= 0 = Nothing
+maybePow mul x0 y0 | y0 < 0 = Nothing
+                   | x0 == 0, y0 == 0 = Nothing
                    | y0 == 0 = Just 1
                    | otherwise = f y0 x0
     where -- mutually recursive functions computing
