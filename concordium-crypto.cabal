@@ -36,6 +36,7 @@ Library
                    Concordium.ID.Account
                    Concordium.ID.Parameters
                    Concordium.ID.IdentityProvider
+                   Concordium.ID.AnonymityRevoker
                    Concordium.ID.DummyData
                    Concordium.Crypto.FFIDataTypes
                    Concordium.Crypto.ByteStringHelpers

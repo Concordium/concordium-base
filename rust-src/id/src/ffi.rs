@@ -120,7 +120,8 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
 pub extern "C" fn verify_cdi_ffi(
     gc_ptr: *const GlobalContext<G1>,
     ip_info_ptr: *const IpInfo<Bls12>,
-    ars_infos_ptr: *const BTreeMap<ArIdentity, ArInfo<G1>>,
+    ars_infos_ptr: *const *mut ArInfo<G1>,
+    ars_infos_len: size_t,
     acc_keys_ptr: *const u8,
     acc_keys_len: size_t,
     cdi_ptr: *const u8,
@@ -132,9 +133,6 @@ pub extern "C" fn verify_cdi_ffi(
     if ip_info_ptr.is_null() {
         return -10;
     }
-    if ars_infos_ptr.is_null() {
-        return -11;
-    }
 
     let acc_keys = if acc_keys_ptr.is_null() {
         None
@@ -143,7 +141,7 @@ pub extern "C" fn verify_cdi_ffi(
         if let Ok(acc_keys) = AccountKeys::deserial(&mut Cursor::new(&acc_key_bytes)) {
             Some(acc_keys)
         } else {
-            return -12;
+            return -11;
         }
     };
 
@@ -153,10 +151,24 @@ pub extern "C" fn verify_cdi_ffi(
     )) {
         Err(_) => -12,
         Ok(cdi) => {
-            match chain::verify_cdi::<Bls12, G1, AttributeKind>(
+            let mut ars_infos = BTreeMap::new();
+            let ars: &[*mut ArInfo<G1>] =
+                slice_from_c_bytes!(ars_infos_ptr, ars_infos_len as usize);
+            for &ptr in ars {
+                let ar_info: &ArInfo<G1> = from_ptr!(ptr);
+                if ars_infos
+                    .insert(ar_info.ar_identity, ar_info.ar_public_key)
+                    .is_some()
+                {
+                    // There should be no duplicate ar_ids in the list. The caller should ensure
+                    // that.
+                    return -13;
+                }
+            }
+            match chain::verify_cdi::<Bls12, G1, AttributeKind, ArPublicKey<G1>>(
                 from_ptr!(gc_ptr),
                 from_ptr!(ip_info_ptr),
-                from_ptr!(ars_infos_ptr),
+                &ars_infos,
                 acc_keys.as_ref(),
                 &cdi,
             ) {
@@ -222,6 +234,19 @@ macro_derive_from_bytes!(Box global_context_from_bytes, GlobalContext<G1>);
 macro_derive_to_bytes!(Box global_context_to_bytes, GlobalContext<G1>);
 macro_derive_from_json!(global_context_from_json, GlobalContext<G1>);
 macro_derive_to_json!(global_context_to_json, GlobalContext<G1>);
+
+// derive conversion methods for ArInfo to be used in Haskell
+macro_free_ffi!(Box ar_info_free, ArInfo<G1>);
+macro_derive_from_bytes!(Box ar_info_from_bytes, ArInfo<G1>);
+macro_derive_to_bytes!(Box ar_info_to_bytes, ArInfo<G1>);
+macro_derive_from_json!(ar_info_from_json, ArInfo<G1>);
+macro_derive_to_json!(ar_info_to_json, ArInfo<G1>);
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn ar_info_ar_identity(ar_info_ptr: *const ArInfo<G1>) -> u32 {
+    let ar_info = from_ptr!(ar_info_ptr);
+    ar_info.ar_identity.into()
+}
 
 #[derive(Serialize)]
 pub struct ElgamalGenerator(G1);
@@ -395,12 +420,16 @@ mod test {
 
         let gc_ptr = Box::into_raw(Box::new(global_ctx));
         let ip_info_ptr = Box::into_raw(Box::new(ip_info));
-        let ars_infos_ptr = Box::into_raw(Box::new(ars_infos));
+        let ars_infos_ptr = ars_infos
+            .into_iter()
+            .map(|(_, x)| Box::into_raw(Box::new(x)))
+            .collect::<Vec<_>>();
 
         let cdi_check = verify_cdi_ffi(
             gc_ptr,
             ip_info_ptr,
-            ars_infos_ptr,
+            ars_infos_ptr.as_ptr(),
+            ars_infos_ptr.len() as size_t,
             std::ptr::null(),
             0,
             cdi_bytes.as_ptr(),
@@ -412,7 +441,8 @@ mod test {
         let wrong_cdi_check = verify_cdi_ffi(
             gc_ptr,
             ip_info_ptr,
-            ars_infos_ptr,
+            ars_infos_ptr.as_ptr(),
+            ars_infos_ptr.len() as size_t,
             std::ptr::null(),
             0,
             wrong_cdi_bytes.as_ptr(),

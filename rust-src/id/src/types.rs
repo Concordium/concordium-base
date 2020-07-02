@@ -820,7 +820,8 @@ pub struct IpInfo<P: Pairing> {
     pub ip_verify_key: pssig::PublicKey<P>,
 }
 
-type ArPublicKey<C> = elgamal::PublicKey<C>;
+/// Public key of an anonymity revoker.
+pub type ArPublicKey<C> = elgamal::PublicKey<C>;
 
 /// Information on a single anonymity reovker held by the IP
 /// typically an IP will hold a more than one.
@@ -836,6 +837,22 @@ pub struct ArInfo<C: Curve> {
     /// elgamal encryption key of the anonymity revoker
     #[serde(rename = "arPublicKey")]
     pub ar_public_key: ArPublicKey<C>,
+}
+
+/// A helper trait to access only the public key of the ArInfo structure.
+/// We use this to have functions work both on a map of public keys only, as
+/// well as on maps of ArInfos, see verify_cdi.
+
+pub trait HasArPublicKey<C: Curve> {
+    fn get_public_key(&self) -> &ArPublicKey<C>;
+}
+
+impl<C: Curve> HasArPublicKey<C> for ArInfo<C> {
+    fn get_public_key(&self) -> &ArPublicKey<C> { &self.ar_public_key }
+}
+
+impl<C: Curve> HasArPublicKey<C> for ArPublicKey<C> {
+    fn get_public_key(&self) -> &ArPublicKey<C> { self }
 }
 
 /// The commitments sent by the account holder to the chain in order to
@@ -1297,7 +1314,10 @@ pub struct CredentialDeploymentInfo<
 pub struct IPContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// Public information on the chosen identity provider.
     pub ip_info: &'a IpInfo<P>,
-    /// Public information on the __chosen__ anonymity revokers.
+    /// Public information on the __supported__ anonymity revokers.
+    /// This is used by the identity provider and the chain to
+    /// validate the identity object requests, to validate credentials,
+    /// as well as by the account holder to create a credential.
     pub ars_infos: &'a BTreeMap<ArIdentity, ArInfo<C>>,
     pub global_context: &'a GlobalContext<C>,
 }
