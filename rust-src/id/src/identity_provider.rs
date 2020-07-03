@@ -38,19 +38,14 @@ impl std::fmt::Display for Reason {
     }
 }
 
-fn check_ar_parameters<C: Curve>(
-    _choice_ar_parameters: &(Vec<ArInfo<C>>, Threshold),
-    _ip_ar_info: &[ArInfo<C>],
-) -> bool {
-    // some business logic here
-    true
-}
-
+/// FIXME: This function does not check that the anonymity revocation
+/// parameters make sense.
 /// Validate all the proofs in an identity object request.
 pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     pre_id_obj: &PreIdentityObject<P, C>,
-    ip_info: &IpInfo<P, C>,
+    context: IPContext<P, C>,
 ) -> Result<(), Reason> {
+    let ip_info = &context.ip_info;
     let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.ys[0], ip_info.ip_verify_key.g);
     let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.ys[1], ip_info.ip_verify_key.g);
 
@@ -58,7 +53,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let id_cred_sec_verifier = dlog::Dlog {
         public: pre_id_obj.id_cred_pub,
-        coeff:  ip_info.ip_ars.ar_base,
+        coeff:  context.global_context.generator,
     };
     let id_cred_sec_witness = pre_id_obj.poks.id_cred_sec_witness;
 
@@ -67,7 +62,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         commitment: pre_id_obj.cmm_sc,
         y:          pre_id_obj.id_cred_pub,
         cmm_key:    commitment_key_sc,
-        g:          ip_info.ip_ars.ar_base,
+        g:          context.global_context.generator,
     };
 
     // TODO: Figure out whether we can somehow get rid of this clone.
@@ -77,21 +72,26 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let revocation_threshold = pre_id_obj.choice_ar_parameters.threshold;
 
     let number_of_ars = choice_ar_handles.len();
+    // We have to have at least one anonymity revoker, and the threshold.
+    // Revocation threshold is always at least 1 by the data type definition and
+    // serialization implementation.
+    // Thus strictly speaking the first part of the check is redundant, but
+    // it does not hurt.
+    let rt_usize: usize = revocation_threshold.into();
+    if number_of_ars == 0 || rt_usize > number_of_ars {
+        return Err(Reason::WrongArParameters);
+    }
+
     let mut choice_ars = Vec::with_capacity(number_of_ars);
     for ar in choice_ar_handles.iter() {
-        match ip_info.ip_ars.ars.iter().find(|&x| x.ar_identity == *ar) {
+        match context.ars_infos.get(ar) {
             None => return Err(Reason::WrongArParameters),
             Some(ar_info) => choice_ars.push(ar_info.clone()),
         }
     }
 
-    // VRF
-    let choice_ar_parameters = (choice_ars, revocation_threshold);
-    if !check_ar_parameters(&choice_ar_parameters, &ip_info.ip_ars.ars) {
-        return Err(Reason::WrongArParameters);
-    }
     // ar commitment key
-    let ar_ck = ip_info.ip_ars.ar_cmm_key;
+    let ar_ck = &context.global_context.on_chain_commitment_key;
 
     // The commitment to the PRF key to the identity providers
     // must have at least one value.
@@ -108,15 +108,15 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             .first()
             .expect("Precondition checked."),
         cmm_key_1:    commitment_key_prf,
-        cmm_key_2:    ar_ck,
+        cmm_key_2:    *ar_ck,
     };
     let witness_prf_same = pre_id_obj.poks.commitments_prf_same;
 
     let prf_verification = compute_prf_sharing_verifier(
-        &ar_ck,
+        ar_ck,
         &pre_id_obj.cmm_prf_sharing_coeff,
         &pre_id_obj.ip_ar_data,
-        &choice_ar_parameters.0,
+        &context.ars_infos,
     );
     let (prf_sharing_verifier, prf_sharing_witness) = match prf_verification {
         Some(v) => v,
@@ -157,7 +157,7 @@ pub fn sign_identity_object<
     C: Curve<Scalar = P::ScalarField>,
 >(
     pre_id_obj: &PreIdentityObject<P, C>,
-    ip_info: &IpInfo<P, C>,
+    ip_info: &IpInfo<P>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Reason> {
@@ -179,31 +179,24 @@ fn compute_prf_sharing_verifier<C: Curve>(
     ar_commitment_key: &CommitmentKey<C>,
     cmm_sharing_coeff: &[Commitment<C>],
     ip_ar_data: &BTreeMap<ArIdentity, IpArData<C>>,
-    choice_ar_parameters: &[ArInfo<C>],
+    known_ars: &BTreeMap<ArIdentity, ArInfo<C>>,
 ) -> Option<IdCredPubVerifiers<C>> {
     let mut verifiers = Vec::with_capacity(ip_ar_data.len());
     let mut witnesses = Vec::with_capacity(ip_ar_data.len());
 
-    for (&ar_id, ar_data) in ip_ar_data.iter() {
+    for (ar_id, ar_data) in ip_ar_data.iter() {
         let cmm_share = utils::commitment_to_share(&ar_id.to_scalar::<C>(), cmm_sharing_coeff);
         // finding the right encryption key
-        match choice_ar_parameters
-            .iter()
-            .find(|&x| x.ar_identity == ar_id)
-        {
-            None => return None,
-            Some(ar_info) => {
-                let verifier = com_enc_eq::ComEncEq {
-                    cipher:     ar_data.enc_prf_key_share,
-                    commitment: cmm_share,
-                    pub_key:    ar_info.ar_public_key,
-                    cmm_key:    *ar_commitment_key,
-                };
-                verifiers.push(verifier);
-                // TODO: Figure out whether we can somehow get rid of this clone.
-                witnesses.push(ar_data.proof_com_enc_eq.clone());
-            }
-        }
+        let ar_info = known_ars.get(ar_id)?;
+        let verifier = com_enc_eq::ComEncEq {
+            cipher:     ar_data.enc_prf_key_share,
+            commitment: cmm_share,
+            pub_key:    ar_info.ar_public_key,
+            cmm_key:    *ar_commitment_key,
+        };
+        verifiers.push(verifier);
+        // TODO: Figure out whether we can somehow get rid of this clone.
+        witnesses.push(ar_data.proof_com_enc_eq.clone());
     }
     Some((
         ReplicateAdapter {
@@ -220,13 +213,13 @@ pub fn verify_credentials<
     C: Curve<Scalar = P::ScalarField>,
 >(
     pre_id_obj: &PreIdentityObject<P, C>,
-    ip_info: &IpInfo<P, C>,
+    context: IPContext<P, C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Reason> {
-    validate_request(pre_id_obj, ip_info)?;
+    validate_request(pre_id_obj, context)?;
 
-    sign_identity_object(pre_id_obj, ip_info, alist, ip_secret_key)
+    sign_identity_object(pre_id_obj, &context.ip_info, alist, ip_secret_key)
 }
 
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
@@ -360,20 +353,19 @@ mod tests {
         let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
-        let (
-            IpData {
-                public_ip_info: ip_info,
-                ip_secret_key,
-                metadata: _,
-            },
-            _,
-        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let global_ctx = GlobalContext::<G1>::generate(&mut csprng);
+        let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
+
         let aci = test_create_aci(&mut csprng);
-        let (_, pio, _) = test_create_pio(&aci, &ip_info, num_ars);
+        let (context, pio, _) = test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
         let attrs = test_create_attributes();
 
         // Act
-        let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, context, &attrs, &ip_secret_key);
 
         // Assert
         assert!(sig_ok.is_ok());
@@ -391,7 +383,6 @@ mod tests {
     // IpData {
     // public_ip_info: ip_info,
     // ip_secret_key,
-    // metadata: _,
     // },
     // _,
     // ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
@@ -432,16 +423,14 @@ mod tests {
         let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
-        let (
-            IpData {
-                public_ip_info: ip_info,
-                ip_secret_key,
-                metadata: _,
-            },
-            _,
-        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let global_ctx = GlobalContext::<G1>::generate(&mut csprng);
+        let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
-        let (ctx, mut pio, _) = test_create_pio(&aci, &ip_info, num_ars);
+        let (ctx, mut pio, _) = test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
         let attrs = test_create_attributes();
 
         // Act (make cmm_sc be comm. of id_cred_sec but with wrong/fresh randomness)
@@ -449,7 +438,7 @@ mod tests {
         let id_cred_sec = aci.cred_holder_info.id_cred.id_cred_sec;
         let (cmm_sc, _) = sc_ck.commit(&id_cred_sec, &mut csprng);
         pio.cmm_sc = cmm_sc;
-        let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, ctx, &attrs, &ip_secret_key);
 
         // Assert
         assert_eq!(
@@ -466,24 +455,25 @@ mod tests {
         let max_attrs = 10;
         let num_ars = 4;
         let mut csprng = thread_rng();
-        let (
-            IpData {
-                public_ip_info: ip_info,
-                ip_secret_key,
-                metadata: _,
-            },
-            _,
-        ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let global_ctx = GlobalContext::<G1>::generate(&mut csprng);
+        let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
-        let (_, mut pio, _) = test_create_pio(&aci, &ip_info, num_ars);
+        let (context, mut pio, _) =
+            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
         let attrs = test_create_attributes();
 
         // Act (make cmm_prf be a commitment to a wrong/random value)
-        let ck = ip_info.ip_ars.ar_cmm_key;
         let val = curve_arithmetic::Value::<G1>::generate(&mut csprng);
-        let (cmm_prf, _) = ck.commit(&val, &mut csprng);
+        let (cmm_prf, _) = context
+            .global_context
+            .on_chain_commitment_key
+            .commit(&val, &mut csprng);
         pio.cmm_prf = cmm_prf;
-        let sig_ok = verify_credentials(&pio, &ip_info, &attrs, &ip_secret_key);
+        let sig_ok = verify_credentials(&pio, context, &attrs, &ip_secret_key);
 
         // Assert
         assert_eq!(
