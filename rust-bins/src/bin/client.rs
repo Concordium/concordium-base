@@ -7,7 +7,7 @@ use ed25519_dalek as ed25519;
 use either::Either::Left;
 use elgamal::{public::PublicKey, secret::SecretKey};
 use id::{account_holder::*, identity_provider::*, secret_sharing::*, types::*};
-use pairing::bls12_381::Bls12;
+use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use std::{
     cmp::max,
@@ -222,6 +222,38 @@ struct CreateCredential {
 }
 
 #[derive(StructOpt)]
+struct ExtendIpList {
+    #[structopt(
+        long = "ips-meta-file",
+        help = "File with identity providers with metadata.",
+        default_value = "identity-providers-with-metadata.json"
+    )]
+    ips_with_metadata: PathBuf,
+    #[structopt(
+        long = "ip",
+        help = "File with public information about the new identity provider"
+    )]
+    ip: PathBuf,
+    #[structopt(
+        long = "metadata",
+        help = "File with metadata that should be included with the identity provider."
+    )]
+    metadata: PathBuf,
+    #[structopt(
+        long = "ars",
+        help = "File with a list of all known anonymity revokers..",
+        default_value = "database/anonymity_revokers.json"
+    )]
+    anonymity_revokers: PathBuf,
+    #[structopt(
+        long = "selected-ars",
+        help = "List of identifiers for anonymity revokers that should be included with the \
+                identity provider."
+    )]
+    selected_ars: Vec<u32>,
+}
+
+#[derive(StructOpt)]
 #[structopt(
     about = "Prototype client showcasing ID layer interactions.",
     author = "Concordium",
@@ -257,6 +289,11 @@ enum IdClient {
                  object to deploy on chain."
     )]
     CreateCredential(CreateCredential),
+    #[structopt(
+        name = "extend-ip-list",
+        about = "Extend the list of identity providers as served by the wallet-proxy."
+    )]
+    ExtendIpList(ExtendIpList),
 }
 
 fn main() {
@@ -273,6 +310,86 @@ fn main() {
         GenerateGlobal(gl) => handle_generate_global(gl),
         IpSignPio(isp) => handle_act_as_ip(isp),
         CreateCredential(cc) => handle_create_credential(cc),
+        ExtendIpList(eil) => handle_extend_ip_list(eil),
+    }
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize)]
+struct IpsWithMetadata {
+    #[serde(rename = "metadata")]
+    metadata: IpMetadata,
+    #[serde(rename = "ipInfo")]
+    ip_info: IpInfo<Bls12>,
+    #[serde(rename = "arsInfos")]
+    ars_infos: BTreeMap<ArIdentity, ArInfo<G1>>,
+}
+
+fn handle_extend_ip_list(eil: ExtendIpList) {
+    let mut existing_db = {
+        if eil.ips_with_metadata.exists() {
+            match read_json_from_file::<_, Vec<IpsWithMetadata>>(eil.ips_with_metadata.clone()) {
+                Ok(v) => v,
+                Err(x) => {
+                    eprintln!("Could not decode file because {}", x);
+                    return;
+                }
+            }
+        } else {
+            Vec::new()
+        }
+    };
+
+    let metadata = match read_json_from_file(eil.metadata) {
+        Ok(v) => v,
+        Err(x) => {
+            eprintln!("Could not decode metadata file because {}", x);
+            return;
+        }
+    };
+
+    let ip_info = match read_json_from_file(eil.ip) {
+        Ok(v) => v,
+        Err(x) => {
+            eprintln!("Could not decode identity provider because {}", x);
+            return;
+        }
+    };
+
+    let all_ars_infos: BTreeMap<ArIdentity, ArInfo<G1>> =
+        match read_json_from_file(eil.anonymity_revokers) {
+            Ok(v) => v,
+            Err(x) => {
+                eprintln!("Could not decode anonymity revokers file because {}", x);
+                return;
+            }
+        };
+
+    let mut selected_ars = BTreeMap::new();
+    for ar_id in eil.selected_ars {
+        match ArIdentity::try_from(ar_id) {
+            Err(err) => {
+                eprintln!("{} is not a valid ArIdentity: {}", ar_id, err);
+                return;
+            }
+            Ok(ar_id) => {
+                if let Some(ar) = all_ars_infos.get(&ar_id) {
+                    let _ = selected_ars.insert(ar_id, ar.clone());
+                } else {
+                    eprintln!("Selected AR {} not found.", ar_id);
+                    return;
+                }
+            }
+        }
+    }
+    existing_db.push(IpsWithMetadata {
+        ip_info,
+        metadata,
+        ars_infos: selected_ars,
+    });
+    if let Err(err) = write_json_to_file(eil.ips_with_metadata, &existing_db) {
+        eprintln!("Could not write output due to {}", err);
+    } else {
+        println!("Done.")
     }
 }
 
@@ -853,7 +970,6 @@ fn handle_generate_ips(gip: GenerateIps) {
             ip_verify_key:  id_public_key,
         };
         let full_info = IpData {
-            metadata:       Default::default(),
             ip_secret_key:  id_secret_key,
             public_ip_info: ip_info,
         };

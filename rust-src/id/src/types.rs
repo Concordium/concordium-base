@@ -1563,9 +1563,6 @@ pub struct IpMetadata {
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 #[serde(bound(serialize = "P: Pairing", deserialize = "P: Pairing"))]
 pub struct IpData<P: Pairing> {
-    /// Off-chain metadata about the identity provider
-    #[serde(rename = "metadata")]
-    pub metadata: IpMetadata,
     #[serde(rename = "ipInfo")]
     pub public_ip_info: IpInfo<P>,
     #[serde(

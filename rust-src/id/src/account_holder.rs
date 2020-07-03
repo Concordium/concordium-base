@@ -948,7 +948,6 @@ mod tests {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
-            metadata: _,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let aci = test_create_aci(&mut csprng);
         let global_ctx = GlobalContext::generate(&mut csprng);

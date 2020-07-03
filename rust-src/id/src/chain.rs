@@ -434,7 +434,6 @@ mod tests {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
-            metadata: _,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate(&mut csprng);
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
