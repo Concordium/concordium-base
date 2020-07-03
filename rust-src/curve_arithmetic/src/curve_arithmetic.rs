@@ -181,7 +181,7 @@ pub fn multiexp_worker<C: Curve>(gs: &[C], exps: &[C::Scalar], window_size: usiz
     assert!(window_size >= 1);
     assert!(window_size < 62);
 
-    let mut table = multiexp_table(gs, window_size);
+    let table = multiexp_table(gs, window_size);
 
     multiexp_worker_given_table(exps, &table, window_size)
 }
