@@ -1,6 +1,6 @@
 mod inner_product_proof;
-mod transcript;
 mod range_proof;
+mod transcript;
 
 #[cfg(test)]
 mod tests {
