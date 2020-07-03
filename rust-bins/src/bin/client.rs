@@ -106,8 +106,7 @@ struct GenerateIps {
     num: usize,
     #[structopt(
         long = "num-ars",
-        help = "Number of anonymity revokers to generate. All anonymity revokers will be \
-                associated with all identity providers.",
+        help = "Number of anonymity revokers to generate.",
         default_value = "5"
     )]
     num_ars: u32,
@@ -718,8 +717,8 @@ fn handle_act_as_ip(aai: IpSignPio) {
             if let Some(signed_out_path) = aai.out_file {
                 if write_json_to_file(signed_out_path.clone(), &id_object).is_ok() {
                     println!(
-                        "Wrote signed identity object to file {:?}",
-                        signed_out_path.as_os_str()
+                        "Wrote signed identity object to file {}",
+                        signed_out_path.display()
                     );
                 } else {
                     println!(
@@ -947,7 +946,7 @@ fn handle_generate_ips(gip: GenerateIps) {
             eprintln!("Could not write out anonymity revokers: {}", err);
             return;
         } else {
-            println!("Wrote out anonymity revokers to {:?}", ars_path.as_os_str())
+            println!("Wrote out anonymity revokers to {}", ars_path.display())
         }
     }
 
@@ -973,15 +972,15 @@ fn handle_generate_ips(gip: GenerateIps) {
             ip_secret_key:  id_secret_key,
             public_ip_info: ip_info,
         };
-        println!("writing ip_{} in file {:?}", id, ip_fname.as_os_str());
+        println!("writing ip_{} in file {}", id, ip_fname.display());
         if let Err(err) = write_json_to_file(&ip_fname, &full_info) {
             eprintln!("Could not write out identity provider: {}", err);
             return;
         }
         println!(
-            "writing ip_{} public data in file {:?}",
+            "writing ip_{} public data in file {}",
             id,
-            ip_fname_pub.as_os_str()
+            ip_fname_pub.display()
         );
         if let Err(err) = write_json_to_file(&ip_fname_pub, &full_info.public_ip_info) {
             eprintln!("Could not write out identity provider: {}", err);

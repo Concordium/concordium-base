@@ -50,12 +50,18 @@ enum GenesisTool {
         #[structopt(long = "num", help = "Number of accounts to generate.")]
         num: usize,
         #[structopt(
-            name = "template",
+            long = "template",
             help = "Template on how to name accounts; they will be named TEMPLATE-$N.json.",
             value_name = "TEMPLATE",
             default_value = "account"
         )]
         template: String,
+        #[structopt(
+            long = "balance",
+            help = "Initial balance on each of the accounts.",
+            default_value = "1000000000000"
+        )]
+        balance: u64,
         #[structopt(flatten)]
         common: CommonOptions,
     },
@@ -86,6 +92,12 @@ struct CommonOptions {
         default_value = "3"
     )]
     num_keys: usize,
+    #[structopt(
+        long = "out-dir",
+        help = "Directory to write the generated files into.",
+        default_value = "."
+    )]
+    out_dir: PathBuf,
 }
 
 fn main() {
@@ -246,6 +258,12 @@ fn main() {
         (account_data_json, cdi, acc_keys, address)
     };
 
+    let mk_out_path = |s| {
+        let mut path = common.out_dir.clone();
+        path.push(s);
+        path
+    };
+
     match gt {
         GenesisTool::CreateBakers {
             num,
@@ -260,9 +278,10 @@ fn main() {
             for baker in 0..num_bakers {
                 let (account_data_json, credential_json, account_keys, address_json) =
                     generate_account(&mut csprng);
-                if let Err(err) =
-                    write_json_to_file(&format!("baker-{}-account.json", baker), &account_data_json)
-                {
+                if let Err(err) = write_json_to_file(
+                    mk_out_path(format!("baker-{}-account.json", baker)),
+                    &account_data_json,
+                ) {
                     eprintln!(
                         "Could not output account data for baker {}, because {}.",
                         baker, err
@@ -288,7 +307,7 @@ fn main() {
                 });
 
                 if let Err(err) = write_json_to_file(
-                    &format!("baker-{}-credentials.json", baker),
+                    mk_out_path(format!("baker-{}-credentials.json", baker)),
                     &baker_data_json,
                 ) {
                     eprintln!(
@@ -315,12 +334,17 @@ fn main() {
 
             // finally output all of the bakers in one file. This is used to generate
             // genesis.
-            if let Err(err) = write_json_to_file("bakers.json", &json!(bakers)) {
+            if let Err(err) =
+                write_json_to_file(mk_out_path("bakers.json".to_owned()), &json!(bakers))
+            {
                 eprintln!("Could not output bakers.json file because {}.", err)
             }
         }
         GenesisTool::CreateAccounts {
-            num, ref template, ..
+            num,
+            ref template,
+            balance,
+            ..
         } => {
             let num_accounts = num;
             let prefix = template;
@@ -333,13 +357,13 @@ fn main() {
                     "schemeId": "Ed25519",
                     "accountKeys": account_keys,
                     "address": address_json,
-                    "balance": 1_000_000_000_000u64,
+                    "balance": balance,
                     "credential": credential_json
                 });
                 accounts.push(public_account_data);
 
                 if let Err(err) = write_json_to_file(
-                    &format!("{}-{}.json", prefix, acc_num),
+                    mk_out_path(format!("{}-{}.json", prefix, acc_num)),
                     &json!(account_data_json),
                 ) {
                     eprintln!(
@@ -350,7 +374,9 @@ fn main() {
             }
             // finally output all of the public account data in one file. This is used to
             // generate genesis.
-            if let Err(err) = write_json_to_file(&format!("{}s.json", prefix), &json!(accounts)) {
+            if let Err(err) =
+                write_json_to_file(mk_out_path(format!("{}s.json", prefix)), &json!(accounts))
+            {
                 eprintln!("Could not output beta-accounts.json file because {}.", err)
             }
         }
