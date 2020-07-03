@@ -13,12 +13,14 @@ import Data.Word
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.Binary.Builder as BB
 import Concordium.ID.Types
 import Data.Serialize
 import System.IO.Unsafe
 import Control.DeepSeq
 
 import qualified Data.Aeson as AE
+import qualified Data.Aeson.Encoding as AE
 
 newtype IpInfo = IpInfo (ForeignPtr IpInfo)
 
@@ -33,6 +35,11 @@ withIpInfo :: IpInfo -> (Ptr IpInfo -> IO b) -> IO b
 withIpInfo (IpInfo fp) = withForeignPtr fp
 
 -- This instance is different from the Rust one, it puts the length information up front.
+-- The binary serialization of identity providers is not used anywhere on the rust side,
+-- and it is only used for
+--   - block state storage
+--   - genesis block
+-- on the Haskell side.
 instance Serialize IpInfo where
   get = do
     v <- getWord32be
@@ -44,7 +51,7 @@ instance Serialize IpInfo where
   put (IpInfo e) = let bs = toBytesHelper ipInfoToBytes e
                    in putWord32be (fromIntegral (BS.length bs)) <> putByteString bs
 
--- NB: This Eq instance should onoly be used for testing. It is not guaranteed
+-- NB: This Eq instance should only be used for testing. It is not guaranteed
 -- to be semantically meaningful.
 instance Eq IpInfo where
   (IpInfo e1) == (IpInfo e2) = tob e1 == tob e2
@@ -82,6 +89,8 @@ instance AE.ToJSON IpInfo where
     case AE.decodeStrict (ipInfoToJSON ipinfo) of
       Nothing -> error "Internal error: Rust serialization does not produce valid JSON."
       Just v -> v
+  toEncoding = AE.unsafeToEncoding . BB.fromByteString . ipInfoToJSON
+
 
 -- Instances for benchmarking
 instance NFData IpInfo where
