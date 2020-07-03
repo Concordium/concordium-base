@@ -613,7 +613,7 @@ instance FromJSON CredentialDeploymentInformation where
     cdiValues <- parseJSON (Object x)
     proofsText <- x .: "proofs"
     let (bs, rest) = BS16.decode . Text.encodeUtf8 $ proofsText
-    when (BS.null rest) $ fail "Could not decode hexadecimal CDI proofs"
+    unless (BS.null rest) $ fail "Could not decode hexadecimal CDI proofs"
     return CredentialDeploymentInformation {
         cdiProofs = Proofs (BSS.toShort bs),
         ..
