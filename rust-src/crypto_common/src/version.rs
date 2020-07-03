@@ -55,7 +55,7 @@ impl Deserial for Version {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
         let mut acc: u64 = 0;
         for _ in 0..5 {
-            let byte = source.read_u8()? as u64;
+            let byte = u64::from(source.read_u8()?);
             if byte >= 0b1000_0000 {
                 acc = (acc << 7) | (byte & 0b0111_1111);
             } else {
@@ -63,7 +63,7 @@ impl Deserial for Version {
                 break;
             }
         }
-        if acc > u32::max_value() as u64 {
+        if acc > u64::from(u32::max_value()) {
             bail!("Version overflow");
         }
         Ok(Version::from(acc as u32))
