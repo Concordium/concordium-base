@@ -33,7 +33,9 @@ versionFinalizationMessage = Version 0
 versionFinalizationRecord :: Version
 versionFinalizationRecord = Version 0
 
-
+instance Bounded Version where
+  minBound = (Version 0)
+  maxBound = (Version (maxBound :: Word32))
 
 -- |Version of a data structure. Binary coded as a variable integer represented by
 -- bytes, where MSB=1 indicates more bytes follow, and the 7 lower bits in a byte
@@ -62,8 +64,9 @@ instance S.Serialize Version where
               let
                 value = 128 * acc + fromIntegral byte
               in do
-                unless (value <= 4294967295) $ fail "Version number value overflow"
-                return (Version (fromIntegral value))
+                let v = Version (fromIntegral value)
+                unless (v <= (maxBound :: Version)) $ fail "Version number value overflow"
+                return v
 
 
 

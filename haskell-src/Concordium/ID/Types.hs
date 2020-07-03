@@ -602,8 +602,7 @@ data CredentialDeploymentInformation = CredentialDeploymentInformation {
 instance Serialize CredentialDeploymentInformation where
   put CredentialDeploymentInformation{..} =
     put cdiValues <> put cdiProofs
-  get = do
-    CredentialDeploymentInformation <$> get <*> get
+  get = CredentialDeploymentInformation <$> get <*> get
 
 -- |NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
 instance Eq CredentialDeploymentInformation where
@@ -613,7 +612,9 @@ instance FromJSON CredentialDeploymentInformation where
   parseJSON = withObject "CredentialDeploymentInformation" $ \x -> do
     cdiValues <- parseJSON (Object x)
     proofsText <- x .: "proofs"
+    let (bs, rest) = BS16.decode . Text.encodeUtf8 $ proofsText
+    when (BS.null rest) $ fail "Could not decode hexadecimal CDI proofs"
     return CredentialDeploymentInformation {
-        cdiProofs = Proofs (BSS.toShort . fst . BS16.decode . Text.encodeUtf8 $ proofsText),
+        cdiProofs = Proofs (BSS.toShort bs),
         ..
       }
