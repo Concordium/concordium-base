@@ -318,7 +318,6 @@ mod test {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
-            metadata: _,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
 
         let prf_key = prf::SecretKey::generate(&mut csprng);

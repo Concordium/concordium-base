@@ -80,10 +80,6 @@ pub fn test_create_ip_info<T: Rng>(
             ip_verify_key:  ip_public_key,
         },
         ip_secret_key,
-        metadata: IpMetadata {
-            issuance_start: "URL.com".to_owned(),
-            icon:           "BeautifulIcon.ico".to_owned(),
-        },
     }
 }
 
