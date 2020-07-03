@@ -52,7 +52,7 @@ instance Serialize ArInfo where
   put (ArInfo e) = let bs = toBytesHelper arInfoToBytes e
                    in putWord32be (fromIntegral (BS.length bs)) <> putByteString bs
 
--- NB: This Eq instance should onoly be used for testing. It is not guaranteed
+-- NB: This Eq instance should only be used for testing. It is not guaranteed
 -- to be semantically meaningful.
 instance Eq ArInfo where
   (ArInfo e1) == (ArInfo e2) = tob e1 == tob e2
