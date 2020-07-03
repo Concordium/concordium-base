@@ -15,46 +15,21 @@ import Test.QuickCheck
 import Test.Hspec
 import Data.Aeson
 
-newtype ExampleType = ExampleType Word32
-    deriving (Eq, Show, Ord, FromJSON, ToJSON)
-
 testVersionTestVector :: Property
 testVersionTestVector = S.encode (Version 1700794014) === (BS.pack [0x86, 0xab, 0x80, 0x9d, 0x1e])
 
-testVersionToJSON :: Property
-testVersionToJSON = jsonValue === "{\"value\":2,\"v\":4}"
-  where
-    jsonValue = BSL8.unpack $ encode versioned
-    versioned = Versioned version value
-    version = Version 4
-    value = ExampleType $ fromIntegral (2 :: Integer)
+testSerialize :: Property
+testSerialize = forAll genVersion $ \v -> S.decode (S.encode v) === Right v
 
-testVersionFromJSON :: Property
-testVersionFromJSON = objectValue === Just realversioned
-  where
-    objectValue = decode "{\"value\":2,\"v\":4}"
-    realversioned = Versioned version value
-    version = Version 4
-    value = ExampleType $ fromIntegral (2 :: Integer)
+testJSON :: Property
+testJSON = forAll genVersion $ \v -> decode (encode v) === Just v
 
-testEncodeDecode :: Int -> Property
-testEncodeDecode v = (S.decode bytes) === (Right version)
-  where
-    version = Version (fromIntegral (v `mod` 4294967296))
-    bytes = S.encode version
-
-testRandom :: Int -> Property
-testRandom seed = (S.decode bytes) === (Right (version))
-  where
-    gen = mkStdGen seed
-    v = fst $ randomR (0 :: Integer, 4294967295) gen
-    version = Version (fromIntegral v)
-    bytes = S.encode version
+genVersion :: Gen Version
+genVersion = Version <$> arbitrary
 
 tests :: Spec
 tests = describe "Concordium.Common" $ do
-  specify "versioning to bytes" $ testVersionTestVector
-  specify "versioning to json" $ testVersionToJSON
-  specify "versioning from json" $ testVersionFromJSON
-  it "versioning encode decode" $ withMaxSuccess 1000 $ testEncodeDecode
-  it "versioning random" $ withMaxSuccess 1000 $ testRandom
+  specify "versioning test vector" $ testVersionTestVector
+  it "versioning binary encoding" $ withMaxSuccess 1000 $ testSerialize
+  it "versioning json encoding" $ withMaxSuccess 1000 $ testJSON
+
