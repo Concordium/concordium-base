@@ -165,7 +165,7 @@ mod tests {
     
     #[allow(non_snake_case)]
     fn prove<C:Curve, T: Rng>(n: u8, m: u8, v_vec: Vec<u64>, G: Vec<C>, H: Vec<C>, B: C, B_tilde: C, csprng: &mut T, 
-        transcript: &mut Transcript) -> (Vec<Commitment<C>>, RangeProof<C>, C){
+        transcript: &mut Transcript) -> (Vec<Commitment<C>>, RangeProof<C>){
         let nm = G.len();
         let mut a_L : Vec<C::Scalar> = Vec::with_capacity(n as usize);
         let mut a_R : Vec<C::Scalar> = Vec::with_capacity(n as usize);
@@ -174,18 +174,18 @@ mod tests {
         // let mut S_vec : Vec<Commitment<C>> = Vec::with_capacity(m as usize);
         let mut s_L = Vec::with_capacity(n as usize);
         let mut s_R = Vec::with_capacity(n as usize);
-        let mut A = C::zero_point();
-        let mut S = C::zero_point();
+        // let mut A = C::zero_point();
+        // let mut S = C::zero_point();
         for _ in 0..nm {
             s_L.push(C::generate_scalar(csprng));
             s_R.push(C::generate_scalar(csprng));
         }
-        let mut j = 0;
+        // let mut j = 0;
         let v_keys = CommitmentKey(vec![B], B_tilde);
         let mut v_tilde_vec : Vec<C::Scalar> = Vec::with_capacity(m as usize);
         let mut a_tilde_vec : Vec<C::Scalar> = Vec::with_capacity(m as usize);
         let mut s_tilde_vec : Vec<C::Scalar> = Vec::with_capacity(m as usize);
-        let v_copy = v_vec.clone(); // DEBUG 
+        // let v_copy = v_vec.clone(); // DEBUG 
         for v in v_vec {
             let (a_L_j, a_R_j) = a_L_a_R(v, n);
             a_L.extend(&a_L_j);
@@ -220,7 +220,7 @@ mod tests {
             // S_vec.push(S_j);
             // A = A.plus_point(&A_j.0);
             // S = S.plus_point(&S_j.0);
-            j+=1;
+            // j+=1;
         }
         let mut a_tilde_sum = C::Scalar::zero();
         let mut s_tilde_sum = C::Scalar::zero();
@@ -315,12 +315,8 @@ mod tests {
         let mut t_2 = Vec::with_capacity(m as usize);
         let mut t_1_tilde = Vec::with_capacity(m as usize);
         let mut t_2_tilde = Vec::with_capacity(m as usize);
-        let mut T_1 = C::zero_point();
-        let mut T_2 = C::zero_point();
-        // let mut T_1_0 = C::zero_point(); // DEBUG
-        // let mut T_2_0 = C::zero_point(); // DEBUG
-        // let mut T_1_1 = C::zero_point(); // DEBUG
-        // let mut T_2_1 = C::zero_point(); // DEBUG
+        // let mut T_1 = C::zero_point();
+        // let mut T_2 = C::zero_point();
         
         for j in 0..m as usize {
             let n = n as usize;
@@ -346,8 +342,8 @@ mod tests {
 
             let t_1_j_tilde = Randomness::<C>::generate(csprng);
             let t_2_j_tilde = Randomness::<C>::generate(csprng);
-            let t_1_j_value : Value<C> = Value::new(t_1_j);
-            let t_2_j_value : Value<C> = Value::new(t_2_j);
+            // let t_1_j_value : Value<C> = Value::new(t_1_j);
+            // let t_2_j_value : Value<C> = Value::new(t_2_j);
             // let T_1_j = v_keys.hide(&[t_1_j_value], &t_1_j_tilde); // This line and the below: 107 ms vs 125 ms
             // let T_2_j = v_keys.hide(&[t_2_j_value], &t_2_j_tilde);
             t_1_tilde.push(t_1_j_tilde);
@@ -355,14 +351,6 @@ mod tests {
 
             // T_1 = T_1.plus_point(&T_1_j.0); // We could use msm here using the scalars from above
             // T_2 = T_2.plus_point(&T_2_j.0);
-            // if j==0 { // DEBUG
-            //     T_1_0 = T_1_j.0;
-            //     T_2_0 = T_2_j.0;
-            // }
-            // if j==1 { // DEBUG
-            //     T_1_1 = T_1_j.0;
-            //     T_2_1 = T_2_j.0;
-            // }
         }
 
         let mut t_1_sum = C::Scalar::zero();
@@ -383,7 +371,7 @@ mod tests {
         transcript.append_point(b"T1", &T_1);
         transcript.append_point(b"T2", &T_2);
         let x : C::Scalar = transcript.challenge_scalar::<C>(b"x");
-        println!("prover's x = {:?}", x);
+        // println!("prover's x = {:?}", x);
         let mut x2 = x;
         x2.mul_assign(&x);
         let mut l : Vec<C::Scalar> = Vec::with_capacity(nm);
@@ -403,10 +391,6 @@ mod tests {
         let mut tx : C::Scalar = C::Scalar::zero();
         let mut tx_tilde : C::Scalar = C::Scalar::zero();
         let mut e_tilde : C::Scalar = C::Scalar::zero();
-        // let mut tx0 = C::Scalar::zero(); //DEBUG
-        // let mut tx0_tilde = C::Scalar::zero(); //DEBUG
-        // let mut tx1 = C::Scalar::zero(); //DEBUG
-        // let mut tx1_tilde = C::Scalar::zero(); //DEBUG
         for j in 0..m as usize { // Around 1 ms
             //tx:
             let mut t1jx = t_1[j];
@@ -430,14 +414,6 @@ mod tests {
             txj_tilde.add_assign(&xt1j_tilde);
             txj_tilde.add_assign(&x2t2j_tilde);
             tx_tilde.add_assign(&txj_tilde);
-            // if j==0 { // DEBUG
-            //     tx0 = tjx;
-            //     tx0_tilde = txj_tilde;
-            // }
-            // if j==1 { // DEBUG
-            //     tx1 = tjx;
-            //     tx1_tilde = txj_tilde;
-            // }
 
             //e tilde:
             let mut ej_tilde = x;
@@ -446,150 +422,31 @@ mod tests {
             e_tilde.add_assign(&ej_tilde);
         }
 
-        // // DEBUG
-        // let mut vec_1_2_n = vec![];
-        // let mut two_i = C::Scalar::one();
-        // for _ in 0..n as usize {
-        //     vec_1_2_n.push(two_i);
-        //     two_i.double();
-        // }
-
-        // let mut vec_y_0_n = vec![];
-        // let mut y_i = C::Scalar::one();
-        // for _ in 0..n as usize {
-        //     vec_y_0_n.push(y_i);
-        //     y_i.mul_assign(&y);
-        // }
-
-        // let mut vec_y_1_n = vec![];
-        // // let mut y_i = C::Scalar::one();
-        // for _ in 0..n as usize {
-        //     vec_y_1_n.push(y_i);
-        //     y_i.mul_assign(&y);
-        // }
-
-        
-        // let one_vec = vec![C::Scalar::one(); n as usize];
-        // println!("<a_(L,(0)), 2^n> = {:?}", inner_product(&a_L[0..n as usize], &vec_1_2_n[..]));
-        // println!("<a_(L,(1)), 2^n> = {:?}", inner_product(&a_L[n as usize..(2*n) as usize], &vec_1_2_n[..]));
-        // println!("<a_(L,(2)), 2^n> = {:?}", inner_product(&a_L[2*n as usize..(3*n) as usize], &vec_1_2_n[..]));
-        // println!("<a_(L,(3)), 2^n> = {:?}", inner_product(&a_L[3*n as usize..(4*n) as usize], &vec_1_2_n[..]));
-
-        // println!("<a_(L,(0))-1 - a_(R,(0)), y_(0)^n> = {:?}", inner_product(&minus_vec(&minus_vec(&a_L[0..n as usize], &one_vec), &a_R[0..n as usize]), &vec_y_0_n));
-        // println!("<a_(L,(1))-1 - a_(R,(1)), y_(1)^n> = {:?}", inner_product(&minus_vec(&minus_vec(&a_L[n as usize..(2*n) as usize], &one_vec), &a_R[n as usize..(2*n) as usize]), &vec_y_1_n));
-
-        // let mut LHS1 = z;
-        // LHS1.mul_assign(&z);
-        // LHS1.mul_assign(&z);
-        // LHS1.mul_assign(&C::scalar_from_u64(v_copy[1]));
-        // let mut ip1=inner_product(&a_L[n as usize..(2*n) as usize], &vec_1_2_n[..]);
-        // ip1.mul_assign(&z);
-        // ip1.mul_assign(&z);
-        // ip1.mul_assign(&z);
-        // let mut ip2 = inner_product(&minus_vec(&minus_vec(&a_L[n as usize..(2*n) as usize], &one_vec), &a_R[n as usize..(2*n) as usize]), &vec_y_1_n);
-        // ip2.mul_assign(&z);
-        // let ip3 = inner_product(&a_L[n as usize..(2*n) as usize], &mul_vectors(&a_R[n as usize..(2*n) as usize], &vec_y_1_n));
-        // let mut RHS1 = ip1;
-        // RHS1.add_assign(&ip2);
-        // RHS1.add_assign(&ip3);
-        // println!("equal? {:?}", RHS1 == LHS1);
-
-
-        // //Calculate delta(x,y):
-        // // for j = 0 : 
-        // let mut ip_1_y_n0 = C::Scalar::zero();
-        // let mut yi = C::Scalar::one();
-        // for _ in 0..n as usize {
-        //     ip_1_y_n0.add_assign(&yi);
-        //     yi.mul_assign(&y);
-        // }
-        // let mut ip_1_2_n = C::Scalar::zero();
-        // let mut two_i = C::Scalar::one();
-        // for _ in 0..n as usize {
-        //     ip_1_2_n.add_assign(&two_i);
-        //     two_i.double();
-        // }
-        // let mut z2 = z;
-        // z2.mul_assign(&z);
-        // let mut z3 = z2;
-        // z3.mul_assign(&z);
-        // let mut z3_1_2_n = z3;
-        // z3_1_2_n.mul_assign(&ip_1_2_n);
-        // let mut delta_yz = z;
-        // delta_yz.sub_assign(&z2);
-        // delta_yz.mul_assign(&ip_1_y_n0);
-        // delta_yz.sub_assign(&z3_1_2_n);
-        // let mut x2 = x;
-        // x2.mul_assign(&x);
-        // let LHS = B.mul_by_scalar(&tx0).plus_point(&B_tilde.mul_by_scalar(&tx0_tilde));
-        // let RHS = V_vec[0].0.mul_by_scalar(&z2).plus_point(&B.mul_by_scalar(&delta_yz)).plus_point(&T_1_0.mul_by_scalar(&x)).plus_point(&T_2_0.mul_by_scalar(&x2));
-        // println!("--------- DEBUG j=0 -----------");
-        // println!("LHS = {:?}", LHS);
-        // println!("RHS = {:?}", RHS);
-        // println!("Are they equal? {:?}", LHS == RHS);
-        // println!("Are they equal? {:?}", LHS.minus_point(&RHS).is_zero_point());
-        // println!("--------- DEBUG END -----------");
-        // // for j = 1 : 
-        // let mut ip_1_y_n1 = C::Scalar::zero();
-        // let mut yi = C::Scalar::one();
-        // for _ in 0..n as usize { // when j = 1 we start from we have y_j^n = (y^n, y^(n+1), ..., y^(2n-1))
-        //     yi.mul_assign(&y);
-        // }
-        // for _ in 0..n as usize {
-        //     ip_1_y_n1.add_assign(&yi);
-        //     yi.mul_assign(&y);
-        // }
-        // let mut ip_1_2_n = C::Scalar::zero();
-        // let mut two_i = C::Scalar::one();
-        // for _ in 0..n as usize {
-        //     ip_1_2_n.add_assign(&two_i);
-        //     two_i.double();
-        // }
-        // let mut z2 = z;
-        // z2.mul_assign(&z);
-        // let mut z3 = z2;
-        // z3.mul_assign(&z);
-        // let mut z3_1_2_n = z3;
-        // z3_1_2_n.mul_assign(&z); // when j = 1, z_(j) = z
-        // z3_1_2_n.mul_assign(&ip_1_2_n);
-        // let mut delta_yz = z;
-        // delta_yz.sub_assign(&z2);
-        // delta_yz.mul_assign(&ip_1_y_n1);
-        // delta_yz.sub_assign(&z3_1_2_n);
-        // let mut x2 = x;
-        // x2.mul_assign(&x);
-        // let LHS = B.mul_by_scalar(&tx1).plus_point(&B_tilde.mul_by_scalar(&tx1_tilde));
-        // let RHS = V_vec[1].0.mul_by_scalar(&z2).mul_by_scalar(&z).plus_point(&B.mul_by_scalar(&delta_yz)).plus_point(&T_1_1.mul_by_scalar(&x)).plus_point(&T_2_1.mul_by_scalar(&x2));
-        // println!("--------- DEBUG j=1 -----------");
-        // println!("LHS = {:?}", LHS);
-        // println!("RHS = {:?}", RHS);
-        // println!("Are they equal? {:?}", LHS == RHS);
-        // println!("Are they equal? {:?}", LHS.minus_point(&RHS).is_zero_point());
-        // println!("--------- DEBUG END -----------");
-
-        // //DEBUG END
+       
         
         transcript.append_scalar::<C>(b"tx", &tx);
         transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
         transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
         let w : C::Scalar = transcript.challenge_scalar::<C>(b"w");
         let Q = B.mul_by_scalar(&w);
-        let mut H_prime : Vec<C> = Vec::with_capacity(nm);
+        // let mut H_prime : Vec<C> = Vec::with_capacity(nm);
+        let mut H_prime_scalars : Vec<C::Scalar> = Vec::with_capacity(nm);
         let y_inv = y.inverse().unwrap();
         let mut y_inv_i = C::Scalar::one();
         for i in 0..nm {
-            H_prime.push(H[i].mul_by_scalar(&y_inv_i)); // 245 ms vs 126 ms or 625 ms vs 510
+            // H_prime.push(H[i].mul_by_scalar(&y_inv_i)); // 245 ms vs 126 ms or 625 ms vs 510
+            H_prime_scalars.push(y_inv_i);
             y_inv_i.mul_assign(&y_inv);
         }
 
         // let P_prime = multiscalar_multiplication(&l, &G).plus_point(&multiscalar_multiplication(&r, &H_prime)).plus_point(&Q.mul_by_scalar(&inner_product(&l, &r)));
-        let P_prime = C::zero_point();
+        // let P_prime = C::zero_point();
         // println!("Prover's P' = 0? {:?}", P_prime.is_zero_point());
-        let ip_proof = prove_inner_product(transcript, G, H_prime, &Q, l, r);
-        let k = nm.next_power_of_two().trailing_zeros() as usize; //This line is also used in Bulletproofs's implementation
+        let ip_proof = prove_inner_product_with_scalars(transcript, G, H, &H_prime_scalars, &Q, l, r);
+        // let k = nm.next_power_of_two().trailing_zeros() as usize; //This line is also used in Bulletproofs's implementation
         // let ip_proof = InnerProductProof{L: vec![C::zero_point(); k], R: vec![C::zero_point(); k], a: C::Scalar::zero(), b:C::Scalar::zero()};
 
-        (V_vec, RangeProof{A, S, T_1, T_2, tx, tx_tilde, e_tilde, ip_proof}, P_prime)
+        (V_vec, RangeProof{A, S, T_1, T_2, tx, tx_tilde, e_tilde, ip_proof})
     }
 
     fn cheat_prove<C:Curve, T: Rng>(n: u8, m: u8, v_vec: Vec<u64>, G: Vec<C>, H: Vec<C>, B: C, B_tilde: C, csprng: &mut T, 
@@ -597,8 +454,6 @@ mod tests {
         let nm = (n as usize)*(m as usize);
         let v_copy = v_vec.clone();
         let mut V_vec : Vec<Commitment<C>> = Vec::with_capacity(m as usize);
-        let mut A_vec : Vec<Commitment<C>> = Vec::with_capacity(m as usize);
-        let mut S_vec : Vec<Commitment<C>> = Vec::with_capacity(m as usize);
         let mut v_tilde_vec : Vec<C::Scalar> = Vec::with_capacity(m as usize);
         let v_keys = CommitmentKey(vec![B], B_tilde);
         for v in v_vec {
@@ -681,7 +536,7 @@ mod tests {
         (V_vec, RangeProof{A, S, T_1, T_2, tx, tx_tilde, e_tilde, ip_proof})
     }
 
-    fn verify<C: Curve>(transcript: &mut Transcript, n: u8, commitments: Vec<Commitment<C>>, proof: RangeProof<C>, G: Vec<C>, H: Vec<C>, B: C, B_tilde: C) -> C{
+    fn verify<C: Curve>(transcript: &mut Transcript, n: u8, commitments: Vec<Commitment<C>>, proof: RangeProof<C>, G: Vec<C>, H: Vec<C>, B: C, B_tilde: C) -> bool{
         let m = commitments.len();
         for V in commitments.clone() {
             transcript.append_point(b"Vj", &V.0);
@@ -706,7 +561,7 @@ mod tests {
         let x : C::Scalar = transcript.challenge_scalar::<C>(b"x");
         let mut x2 = x;
         x2.mul_assign(&x);
-        println!("verifier's x = {:?}", x);
+        // println!("verifier's x = {:?}", x);
         transcript.append_scalar::<C>(b"tx", &tx);
         transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
         transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
@@ -752,7 +607,8 @@ mod tests {
         // println!("LHS = {:?}", LHS);
         // println!("RHS = {:?}", RHS);
         // println!("Are they equal? {:?}", LHS == RHS);
-        println!("First check = {:?}", LHS.minus_point(&RHS).is_zero_point());
+        let first = LHS.minus_point(&RHS).is_zero_point();
+        println!("First check = {:?}", first);
         
         let ip_proof = proof.ip_proof;
         let mut z_2_nm : Vec<C::Scalar> = Vec::with_capacity(G.len());
@@ -777,7 +633,7 @@ mod tests {
         let one = C::Scalar::one();
         let ip1z = multiscalar_multiplication(&vec![one; G.len()], &G).mul_by_scalar(&z);
         let ip2z = multiscalar_multiplication(&vec![one; H.len()], &H).mul_by_scalar(&z);
-        println!("len = {}", H.len());
+        // println!("len = {}", H.len());
         let ip3 = multiscalar_multiplication(&z_2_nm, &H); //Expensive!
         let P = A.plus_point(&S.mul_by_scalar(&x)).minus_point(&B_tilde.mul_by_scalar(&e_tilde)).minus_point(&ip1z).plus_point(&ip2z).plus_point(&ip3);
         let mut txw = tx;
@@ -794,9 +650,9 @@ mod tests {
         }
 
         // println!("Verifier's P' = {:?}", P_prime);
-        let b : bool = verify_inner_product(transcript, G, H_prime, P_prime, Q, ip_proof); // Very expensive
-        println!("Second check = {:?}", b);
-        P_prime
+        let second : bool = verify_inner_product(transcript, G, H_prime, P_prime, Q, &ip_proof); // Very expensive
+        println!("Second check = {:?}", second);
+        first && second
     }
 
     fn verify_efficient<C: Curve>(transcript: &mut Transcript, n: u8, commitments: Vec<Commitment<C>>, proof: RangeProof<C>, G: Vec<C>, H: Vec<C>, B: C, B_tilde: C) -> bool{
@@ -824,7 +680,7 @@ mod tests {
         let x : C::Scalar = transcript.challenge_scalar::<C>(b"x");
         let mut x2 = x;
         x2.mul_assign(&x);
-        println!("verifier's x = {:?}", x);
+        // println!("verifier's x = {:?}", x);
         transcript.append_scalar::<C>(b"tx", &tx);
         transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
         transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
@@ -867,10 +723,8 @@ mod tests {
         RHS = RHS.plus_point(&B.mul_by_scalar(&delta_yz)).plus_point(&T_1.mul_by_scalar(&x)).plus_point(&T_2.mul_by_scalar(&x2));
 
         println!("--------------- VERIFICATION ----------------");
-        // println!("LHS = {:?}", LHS);
-        // println!("RHS = {:?}", RHS);
-        // println!("Are they equal? {:?}", LHS == RHS);
-        println!("First check = {:?}", LHS.minus_point(&RHS).is_zero_point());
+        let first = LHS.minus_point(&RHS).is_zero_point();
+        println!("First check = {:?}", first);
         
         let ip_proof = proof.ip_proof;
         let mut H_scalars : Vec<C::Scalar> = Vec::with_capacity(G.len());
@@ -882,7 +736,7 @@ mod tests {
             z_2_m.push(z_j);
             z_j.mul_assign(&z);
         }
-        let (u_sq, u_inv_sq, s) = verify_scalars(transcript, G.len(), ip_proof.clone());
+        let (u_sq, u_inv_sq, s) = verify_scalars(transcript, G.len(), &ip_proof.clone());
         let a = ip_proof.a;
         let b = ip_proof.b;
         let L = ip_proof.L;
@@ -932,10 +786,9 @@ mod tests {
         let mut sum = A_term.plus_point(&S_term).plus_point(&B_term).plus_point(&B_tilde_term).plus_point(&G_term).plus_point(&H_term).plus_point(&L_term).plus_point(&R_term);
         
 
-
-        println!("Second check = {:?}", sum.is_zero_point());
-        true
-
+        let second = sum.is_zero_point();
+        println!("Second check = {:?}", second);
+        first && second 
     }
 
     fn verify_more_efficient<C: Curve>(transcript: &mut Transcript, n: u8, commitments: Vec<Commitment<C>>, proof: RangeProof<C>, mut G: Vec<C>, mut H: Vec<C>, B: C, B_tilde: C) -> bool{
@@ -1021,7 +874,7 @@ mod tests {
             z_2_m.push(z_j);
             z_j.mul_assign(&z);
         }
-        let (u_sq, u_inv_sq, s) = verify_scalars(transcript, G.len(), ip_proof.clone());
+        let (u_sq, u_inv_sq, s) = verify_scalars(transcript, G.len(), &ip_proof.clone());
         let a = ip_proof.a;
         let b = ip_proof.b;
         let mut L = ip_proof.L;
@@ -1044,7 +897,7 @@ mod tests {
         }
         let A_scalar = C::Scalar::one();
         let S_scalar = x;
-        let c = w; // Shuld be generated randomly
+        let c = w; // TODO: Shuld be generated randomly
         let mut T_1_scalar = c;
         T_1_scalar.mul_assign(&x);
         let mut T_2_scalar = T_1_scalar;
@@ -1122,15 +975,14 @@ mod tests {
         all_points.append(&mut R);
 
         let sum2 = multiscalar_multiplication(&all_scalars, &all_points);
-        println!("len of msm vector = {}", all_scalars.len());
+        // println!("len of msm vector = {}", all_scalars.len());
 
 
         // println!("Second check = {:?}", sum.is_zero_point());
-        println!("HEJ HEJ");
-        println!("sum2 check = {:?}", sum2.is_zero_point());
+        let b : bool = sum2.is_zero_point();
+        println!(" check = {:?}", b);
         // println!("sum1==sum2? {:?}", sum==sum2);
-        true
-
+        b
     }
 
     #[test]
@@ -1194,8 +1046,8 @@ mod tests {
         let n = 32;
         let m = 16;
         let nm = (n as usize)*(m as usize);
-        let mut G = Vec::with_capacity((nm));
-        let mut H = Vec::with_capacity((nm));
+        let mut G = Vec::with_capacity(nm);
+        let mut H = Vec::with_capacity(nm);
 
         for i in 0..(nm) {
             let g = SomeCurve::generate(rng);
@@ -1222,14 +1074,14 @@ mod tests {
         println!("Prove that all numbers in {:?} are in [0, 2^{:?})", v_vec.clone(), n);
         let now = Instant::now();
         println!("Proving..");
-        let (commitments, proof, P_prime_prover) = prove(n, m, v_vec.clone(), G.clone(), H.clone(), B, B_tilde, rng, &mut transcript);
+        let (commitments, proof) = prove(n, m, v_vec.clone(), G.clone(), H.clone(), B, B_tilde, rng, &mut transcript);
         println!("Prove done! Proving time: {} ms", now.elapsed().as_millis());
         
         let now = Instant::now();
         println!("Verifying..");
         let mut transcript = Transcript::new(&[]);
-        let P_prime_verifier = verify(&mut transcript, n, commitments.clone(), proof.clone(), G.clone(), H.clone(), B, B_tilde);
-        println!("P_prime equal? {}", P_prime_prover == P_prime_verifier);
+        let b = verify(&mut transcript, n, commitments.clone(), proof.clone(), G.clone(), H.clone(), B, B_tilde);
+        // println!("P_prime equal? {}", P_prime_prover == P_prime_verifier);
         println!("Verification done! time: {} ms", now.elapsed().as_millis());
 
         //Testing the (slightly) more efficient verifier:

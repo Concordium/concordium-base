@@ -181,74 +181,9 @@ pub fn multiexp_worker<C: Curve>(gs: &[C], exps: &[C::Scalar], window_size: usiz
     assert!(window_size >= 1);
     assert!(window_size < 62);
 
-    // 2^{window_size + 1}
-    let two_to_wp1: u64 = 2 << window_size;
-    // a mask to extract the lowest window_size + 1 bits from a scalar.
-    let mask: u64 = two_to_wp1 - 1;
-    let mut wnaf = Vec::with_capacity(k);
-    // 1 / 2 scalar
-    let half = C::scalar_from_u64(2)
-        .inverse()
-        .expect("Field size must be at least 3.");
+    let mut table = multiexp_table(gs, window_size);
 
-    for c in exps.iter() {
-        let mut v = Vec::new();
-        let mut c = *c;
-        while !c.is_zero() {
-            let limb = c.into_repr().as_ref()[0];
-            // if the first bit is set
-            if limb & 1 == 1 {
-                let u = limb & mask;
-                // check if window_size'th bit is set.
-                if u & (1 << window_size) != 0 {
-                    c.sub_assign(&C::scalar_from_u64(u));
-                    c.add_assign(&C::scalar_from_u64(two_to_wp1));
-                    v.push((u as i64) - (two_to_wp1 as i64));
-                } else {
-                    c.sub_assign(&C::scalar_from_u64(u));
-                    v.push(u as i64);
-                }
-            } else {
-                v.push(0);
-            }
-            c.mul_assign(&half);
-        }
-        wnaf.push(v);
-    }
-
-    // precomputation stage
-    let mut table = Vec::with_capacity(k);
-    for g in gs.iter() {
-        let sq = g.plus_point(&g);
-        let mut tmp = *g;
-        // All of the odd exponents, between 1 and 2^w.
-        let num_exponents = 1 << (window_size - 1);
-        let mut exps = Vec::with_capacity(num_exponents);
-        exps.push(tmp);
-        for _ in 1..num_exponents {
-            tmp = tmp.plus_point(&sq);
-            exps.push(tmp);
-        }
-        table.push(exps);
-    }
-
-    // evaluate using the precomputed table
-    let mut a = C::zero_point();
-    for j in (0..=C::Scalar::NUM_BITS as usize).rev() {
-        a = a.double_point();
-        for i in 0..k {
-            match wnaf[i].get(j) {
-                Some(&ge) if ge > 0 => {
-                    a = a.plus_point(&table[i][(ge / 2) as usize]);
-                }
-                Some(&ge) if ge < 0 => {
-                    a = a.minus_point(&table[i][((-ge) / 2) as usize]);
-                }
-                _ => (),
-            }
-        }
-    }
-    a
+    multiexp_worker_given_table(exps, &table, window_size)
 }
 
 pub fn multiexp_worker_given_table<C: Curve>(exps: &[C::Scalar], table: &[Vec<C>], window_size: usize) -> C {
