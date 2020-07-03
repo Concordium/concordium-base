@@ -13,6 +13,7 @@ import Data.Word
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.Binary.Builder as BB
 import Data.Serialize
 import Control.DeepSeq
 import System.IO.Unsafe
@@ -20,6 +21,7 @@ import System.IO.Unsafe
 import Concordium.ID.Types
 
 import qualified Data.Aeson as AE
+import qualified Data.Aeson.Encoding as AE
 
 newtype ArInfo = ArInfo (ForeignPtr ArInfo)
 
@@ -34,13 +36,18 @@ withArInfo :: ArInfo -> (Ptr ArInfo -> IO b) -> IO b
 withArInfo (ArInfo fp) = withForeignPtr fp
 
 -- This instance is different from the Rust one, it puts the length information up front.
+-- The binary serialization of anonymity revokers is not used anywhere on the rust side,
+-- and it is only used for
+--   - block state storage
+--   - genesis block
+-- on the Haskell side.
 instance Serialize ArInfo where
   get = do
     v <- getWord32be
     bs <- getByteString (fromIntegral v)
     case fromBytesHelper freeArInfo arInfoFromBytes bs of
       Nothing -> fail "Cannot decode ArInfo."
-      Just x -> return $! (ArInfo x)
+      Just x -> return (ArInfo x)
 
   put (ArInfo e) = let bs = toBytesHelper arInfoToBytes e
                    in putWord32be (fromIntegral (BS.length bs)) <> putByteString bs
@@ -85,6 +92,7 @@ instance AE.ToJSON ArInfo where
     case AE.decodeStrict (arInfoToJSON arInfo) of
       Nothing -> error "Internal error: Rust serialization does not produce valid JSON."
       Just v -> v
+  toEncoding = AE.unsafeToEncoding . BB.fromByteString . arInfoToJSON
 
 -- Instances for benchmarking
 instance NFData ArInfo where
