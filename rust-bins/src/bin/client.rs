@@ -214,7 +214,7 @@ struct CreateCredential {
     keys_out: PathBuf,
     #[structopt(
         long = "ars",
-        help = "File with a list of anonymity revokers..",
+        help = "File with a list of anonymity revokers.",
         default_value = "database/anonymity_revokers.json"
     )]
     anonymity_revokers: PathBuf,
@@ -240,7 +240,7 @@ struct ExtendIpList {
     metadata: PathBuf,
     #[structopt(
         long = "ars",
-        help = "File with a list of all known anonymity revokers..",
+        help = "File with a list of all known anonymity revokers.",
         default_value = "database/anonymity_revokers.json"
     )]
     anonymity_revokers: PathBuf,
