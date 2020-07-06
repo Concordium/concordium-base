@@ -12,6 +12,7 @@ use crypto_common_derive::*;
 pub struct CommitmentKey<C: Curve>(pub Vec<C>, pub C);
 
 impl<C: Curve> CommitmentKey<C> {
+    #[allow(non_snake_case)]
     pub fn new(G: Vec<C>, h: C) -> Self { CommitmentKey(G, h) }
 
     // pub fn commit<T>(&self, s: &Value<C>, csprng: &mut T) -> (Commitment<C>,
@@ -21,6 +22,7 @@ impl<C: Curve> CommitmentKey<C> {
     //     (self.hide(s, &r), r)
     // }
 
+    #[allow(non_snake_case)]
     pub fn hide(&self, s: &[Value<C>], r: &Randomness<C>) -> Commitment<C> {
         let h = self.1;
         let G = self.0.clone();

@@ -2,19 +2,13 @@ use crate::{inner_product_proof::*, transcript::TranscriptProtocol};
 use curve_arithmetic::{
     multiexp_table, multiexp_worker_given_table, multiscalar_multiplication, Curve, Value,
 };
-use ff::{Field, PrimeField};
-use group::{CurveAffine, CurveProjective, EncodedPoint};
+use ff::Field;
+// use group::{CurveAffine, CurveProjective};
 use merlin::Transcript;
-use pairing::{
-    bls12_381::{
-        Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G1Prepared, G2Affine, G2Compressed,
-        G2Prepared, G1, G2,
-    },
-    Engine, PairingCurveAffine,
-};
 use rand::*;
 use vector_pedersen_scheme::*;
 
+#[allow(non_snake_case)]
 #[derive(Clone)]
 pub struct RangeProof<C: Curve> {
     A:        C,
@@ -27,43 +21,49 @@ pub struct RangeProof<C: Curve> {
     ip_proof: InnerProductProof<C>,
 }
 
-fn bool_to_int(b: bool) -> u8 {
-    match b {
-        true => 1,
-        false => 0,
-    }
-}
+// #[allow(non_snake_case)]
+// fn bool_to_int(b: bool) -> u8 {
+//     match b {
+//         true => 1,
+//         false => 0,
+//     }
+// }
 
-fn ith_bit(v: u64, i: u8) -> u8 { bool_to_int(v & (1 << i) != 0) }
+// #[allow(non_snake_case)]
+// fn ith_bit(v: u64, i: u8) -> u8 { bool_to_int(v & (1 << i) != 0) }
 
+#[allow(non_snake_case)]
 fn ith_bit_bool(v: u64, i: u8) -> bool { v & (1 << i) != 0 }
 
-fn integer_to_bit_vector_over_prime_field<F: PrimeField>(v: u64, n: u8) -> Vec<F> {
-    let mut bv = Vec::with_capacity(n as usize);
-    for i in 0..n {
-        if ith_bit_bool(v, i) {
-            bv.push(F::one());
-        } else {
-            bv.push(F::zero());
-        }
-    }
-    bv
-}
+// #[allow(non_snake_case)]
+// fn integer_to_bit_vector_over_prime_field<F: PrimeField>(v: u64, n: u8) ->
+// Vec<F> {     let mut bv = Vec::with_capacity(n as usize);
+//     for i in 0..n {
+//         if ith_bit_bool(v, i) {
+//             bv.push(F::one());
+//         } else {
+//             bv.push(F::zero());
+//         }
+//     }
+//     bv
+// }
 
-fn mul_vectors<F: Field>(a: &[F], b: &[F]) -> Vec<F> {
-    if a.len() != b.len() {
-        panic!("a and b should have the same length");
-    }
+// #[allow(non_snake_case)]
+// fn mul_vectors<F: Field>(a: &[F], b: &[F]) -> Vec<F> {
+//     if a.len() != b.len() {
+//         panic!("a and b should have the same length");
+//     }
 
-    let mut c = Vec::with_capacity(a.len());
-    for (&x, &y) in a.iter().zip(b.iter()) {
-        let mut xy = x;
-        xy.mul_assign(&y);
-        c.push(xy);
-    }
-    c
-}
+//     let mut c = Vec::with_capacity(a.len());
+//     for (&x, &y) in a.iter().zip(b.iter()) {
+//         let mut xy = x;
+//         xy.mul_assign(&y);
+//         c.push(xy);
+//     }
+//     c
+// }
 
+#[allow(non_snake_case)]
 fn a_L_a_R<F: Field>(v: u64, n: u8) -> (Vec<F>, Vec<F>) {
     let mut a_L = Vec::with_capacity(n as usize);
     let mut a_R = Vec::with_capacity(n as usize);
@@ -79,6 +79,7 @@ fn a_L_a_R<F: Field>(v: u64, n: u8) -> (Vec<F>, Vec<F>) {
     (a_L, a_R)
 }
 
+#[allow(non_snake_case)]
 fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
     let mut two_n = Vec::with_capacity(n as usize);
     let mut two_i = F::one();
@@ -89,21 +90,24 @@ fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
     two_n
 }
 
-fn minus_vec<F: Field>(a: &[F], b: &[F]) -> Vec<F> {
-    if a.len() != b.len() {
-        panic!("a and b should have the same length");
-    }
-    let mut c = Vec::with_capacity(a.len());
-    for i in 0..a.len() {
-        let mut c_i = a[i];
-        c_i.sub_assign(&b[i]);
-        c.push(c_i);
-    }
-    c
-}
+// #[allow(non_snake_case)]
+// fn minus_vec<F: Field>(a: &[F], b: &[F]) -> Vec<F> {
+//     if a.len() != b.len() {
+//         panic!("a and b should have the same length");
+//     }
+//     let mut c = Vec::with_capacity(a.len());
+//     for i in 0..a.len() {
+//         let mut c_i = a[i];
+//         c_i.sub_assign(&b[i]);
+//         c.push(c_i);
+//     }
+//     c
+// }
 
+#[allow(clippy::many_single_char_names)]
 #[allow(non_snake_case)]
-fn prove<C: Curve, T: Rng>(
+#[allow(clippy::too_many_arguments)]
+pub fn prove<C: Curve, T: Rng>(
     n: u8,
     m: u8,
     v_vec: Vec<u64>,
@@ -183,11 +187,13 @@ fn prove<C: Curve, T: Rng>(
     // let S = multiscalar_multiplication(&s_L,
     // &G).plus_point(&multiscalar_multiplication(&s_R,
     // &H)).plus_point(&B_tilde.mul_by_scalar(&s_tilde_sum));
-    let mut A_scalars: Vec<C::Scalar> = a_L.iter().chain(a_R.iter()).map(|&x| x).collect();
+    // let mut A_scalars: Vec<C::Scalar> = a_L.iter().chain(a_R.iter()).map(|&x|
+    // x).collect();
+    let mut A_scalars: Vec<C::Scalar> = a_L.iter().chain(a_R.iter()).copied().collect();
     A_scalars.push(a_tilde_sum);
-    let mut S_scalars: Vec<C::Scalar> = s_L.iter().chain(s_R.iter()).map(|&x| x).collect();
+    let mut S_scalars: Vec<C::Scalar> = s_L.iter().chain(s_R.iter()).copied().collect();
     S_scalars.push(s_tilde_sum);
-    let mut GH_B_tilde: Vec<C> = G.iter().chain(H.iter()).map(|&x| x).collect();
+    let mut GH_B_tilde: Vec<C> = G.iter().chain(H.iter()).copied().collect();
     GH_B_tilde.push(B_tilde);
     let window_size = 4;
     let table = multiexp_table(&GH_B_tilde, window_size);
@@ -388,7 +394,7 @@ fn prove<C: Curve, T: Rng>(
     let mut H_prime_scalars: Vec<C::Scalar> = Vec::with_capacity(nm);
     let y_inv = y.inverse().unwrap();
     let mut y_inv_i = C::Scalar::one();
-    for i in 0..nm {
+    for _i in 0..nm {
         // H_prime.push(H[i].mul_by_scalar(&y_inv_i)); // 245 ms vs 126 ms or 625 ms vs
         // 510
         H_prime_scalars.push(y_inv_i);
@@ -418,6 +424,10 @@ fn prove<C: Curve, T: Rng>(
     })
 }
 
+#[allow(non_snake_case)]
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::many_single_char_names)]
 fn cheat_prove<C: Curve, T: Rng>(
     n: u8,
     m: u8,
@@ -462,7 +472,7 @@ fn cheat_prove<C: Curve, T: Rng>(
 
     let mut tx: C::Scalar = C::Scalar::zero();
     let mut tx_tilde: C::Scalar = C::Scalar::zero();
-    let mut e_tilde: C::Scalar = C::Scalar::zero();
+    let e_tilde: C::Scalar = C::Scalar::zero();
     transcript.append_point(b"T1", &T_1);
     transcript.append_point(b"T2", &T_2);
     let x: C::Scalar = transcript.challenge_scalar::<C>(b"x");
@@ -473,14 +483,14 @@ fn cheat_prove<C: Curve, T: Rng>(
         z2vj.mul_assign(&z_m[j]); // This line is MISSING in the Bulletproof documentation
         let v_value = C::scalar_from_u64(v_copy[j]);
         z2vj.mul_assign(&v_value);
-        let mut tjx = z2vj;
+        let tjx = z2vj;
         tx.add_assign(&tjx);
 
         // tx tilde:
         let mut z2vj_tilde = z_m[2];
         z2vj_tilde.mul_assign(&z_m[j]); // This line is MISSING in the Bulletproof documentation
         z2vj_tilde.mul_assign(&v_tilde_vec[j]);
-        let mut txj_tilde = z2vj_tilde;
+        let txj_tilde = z2vj_tilde;
         tx_tilde.add_assign(&txj_tilde);
     }
     // delta:
@@ -529,6 +539,10 @@ fn cheat_prove<C: Curve, T: Rng>(
     })
 }
 
+#[allow(non_snake_case)]
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::many_single_char_names)]
 fn verify<C: Curve>(
     transcript: &mut Transcript,
     n: u8,
@@ -599,8 +613,8 @@ fn verify<C: Curve>(
         .plus_point(&B_tilde.mul_by_scalar(&tx_tilde));
     let mut RHS = C::zero_point();
     let mut zj2 = z2;
-    for j in 0..m {
-        let Vj = commitments[j].0;
+    for com in commitments {
+        let Vj = com.0;
         // println!("V_{:?} = {:?}", j, Vj);
         RHS = RHS.plus_point(&Vj.mul_by_scalar(&zj2));
         zj2.mul_assign(&z);
@@ -623,7 +637,7 @@ fn verify<C: Curve>(
     let mut z_2_m: Vec<C::Scalar> = Vec::with_capacity(m);
     let mut z_j = z;
     z_j.mul_assign(&z);
-    for j in 0..m {
+    for _j in 0..m {
         z_2_m.push(z_j);
         z_j.mul_assign(&z);
     }
@@ -656,8 +670,8 @@ fn verify<C: Curve>(
     let mut H_prime: Vec<C> = Vec::with_capacity(m * n as usize);
     let y_inv = y.inverse().unwrap();
     let mut y_inv_i = C::Scalar::one();
-    for i in 0..m * n as usize {
-        H_prime.push(H[i].mul_by_scalar(&y_inv_i)); // Expensive!
+    for x in H {
+        H_prime.push(x.mul_by_scalar(&y_inv_i)); // Expensive!
         y_inv_i.mul_assign(&y_inv);
     }
 
@@ -667,7 +681,10 @@ fn verify<C: Curve>(
     first && second
 }
 
-fn verify_efficient<C: Curve>(
+#[allow(non_snake_case)]
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::many_single_char_names)]
+pub fn verify_efficient<C: Curve>(
     transcript: &mut Transcript,
     n: u8,
     commitments: Vec<Commitment<C>>,
@@ -737,8 +754,8 @@ fn verify_efficient<C: Curve>(
         .plus_point(&B_tilde.mul_by_scalar(&tx_tilde));
     let mut RHS = C::zero_point();
     let mut zj2 = z2;
-    for j in 0..m {
-        let Vj = commitments[j].0;
+    for com in commitments {
+        let Vj = com.0;
         // println!("V_{:?} = {:?}", j, Vj);
         RHS = RHS.plus_point(&Vj.mul_by_scalar(&zj2));
         zj2.mul_assign(&z);
@@ -758,11 +775,11 @@ fn verify_efficient<C: Curve>(
     let mut z_2_m: Vec<C::Scalar> = Vec::with_capacity(m);
     let mut z_j = z;
     z_j.mul_assign(&z);
-    for j in 0..m {
+    for _j in 0..m {
         z_2_m.push(z_j);
         z_j.mul_assign(&z);
     }
-    let (u_sq, u_inv_sq, s) = verify_scalars(transcript, G.len(), &ip_proof.clone());
+    let VerificationScalars(u_sq, u_inv_sq, s) = verify_scalars(transcript, G.len(), &ip_proof);
     let a = ip_proof.a;
     let b = ip_proof.b;
     let L = ip_proof.L;
@@ -797,10 +814,10 @@ fn verify_efficient<C: Curve>(
     let B_tilde_scalar = minus_e_tilde;
     let B_tilde_term = B_tilde.mul_by_scalar(&B_tilde_scalar);
     let mut G_scalars = Vec::with_capacity(G.len());
-    for i in 0..G.len() {
+    for si in s {
         let mut G_scalar = z;
         G_scalar.negate();
-        let mut sa = s[i];
+        let mut sa = si;
         sa.mul_assign(&a);
         G_scalar.sub_assign(&sa);
         G_scalars.push(G_scalar);
@@ -809,7 +826,7 @@ fn verify_efficient<C: Curve>(
     let L_term = multiscalar_multiplication(&u_sq, &L); // Expensive!
     let R_term = multiscalar_multiplication(&u_inv_sq, &R); // Expensive!
 
-    let mut sum = A_term
+    let sum = A_term
         .plus_point(&S_term)
         .plus_point(&B_term)
         .plus_point(&B_tilde_term)
@@ -823,6 +840,10 @@ fn verify_efficient<C: Curve>(
     first && second
 }
 
+#[allow(non_snake_case)]
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::many_single_char_names)]
 fn verify_more_efficient<C: Curve>(
     transcript: &mut Transcript,
     n: u8,
@@ -912,11 +933,11 @@ fn verify_more_efficient<C: Curve>(
     let mut z_2_m: Vec<C::Scalar> = Vec::with_capacity(m);
     let mut z_j = z;
     z_j.mul_assign(&z);
-    for j in 0..m {
+    for _j in 0..m {
         z_2_m.push(z_j);
         z_j.mul_assign(&z);
     }
-    let (u_sq, u_inv_sq, s) = verify_scalars(transcript, G.len(), &ip_proof.clone());
+    let VerificationScalars(u_sq, u_inv_sq, s) = verify_scalars(transcript, G.len(), &ip_proof);
     let a = ip_proof.a;
     let b = ip_proof.b;
     let mut L = ip_proof.L;
@@ -963,19 +984,19 @@ fn verify_more_efficient<C: Curve>(
     c_delta_minus_tx.sub_assign(&tx);
     c_delta_minus_tx.mul_assign(&c);
     B_scalar.add_assign(&c_delta_minus_tx);
-    let B_term = B.mul_by_scalar(&B_scalar);
+    // let B_term = B.mul_by_scalar(&B_scalar);
     let mut minus_e_tilde = e_tilde;
     minus_e_tilde.negate();
     let mut B_tilde_scalar = minus_e_tilde;
     let mut ctx_tilde = tx_tilde;
     ctx_tilde.mul_assign(&c);
     B_tilde_scalar.sub_assign(&ctx_tilde);
-    let B_tilde_term = B_tilde.mul_by_scalar(&B_tilde_scalar);
+    // let B_tilde_term = B_tilde.mul_by_scalar(&B_tilde_scalar);
     let mut G_scalars = Vec::with_capacity(G.len());
-    for i in 0..G.len() {
+    for si in s {
         let mut G_scalar = z;
         G_scalar.negate();
-        let mut sa = s[i];
+        let mut sa = si;
         sa.mul_assign(&a);
         G_scalar.sub_assign(&sa);
         G_scalars.push(G_scalar);
@@ -1032,8 +1053,17 @@ fn verify_more_efficient<C: Curve>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bit_vec::BitVec;
-    use std::time::{Duration, Instant};
+    use ff::PrimeField;
+    use pairing::bls12_381::{Fr, FrRepr, G1};
+    use std::time::Instant;
+
+    // use pairing::{
+    //     bls12_381::{
+    //         Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G1Prepared, G2Affine,
+    // G2Compressed,         G2Prepared, G1, G2,
+    //     },
+    //     Engine, PairingCurveAffine,
+    // };
     type SomeCurve = G1;
     type SomeField = Fr;
 
@@ -1076,31 +1106,31 @@ mod tests {
         let two_n = two_n_vec(n);
         let ip = inner_product(&a_L, &two_n);
         println!("v = {:?}", ip);
-        println!("a_L o a_R = {:?}", mul_vectors(&a_L, &a_R));
+        // println!("a_L o a_R = {:?}", mul_vectors(&a_L, &a_R));
         assert!(true);
     }
 
-    #[test]
-    fn test_bv() {
-        let a = 256 as u32;
-        let a = 3 as u64;
-        let bytes = a.to_be_bytes();
+    // #[test]
+    // fn test_bv() {
+    //     let a = 256 as u32;
+    //     let a = 3 as u64;
+    //     let bytes = a.to_be_bytes();
 
-        let avec = BitVec::from_bytes(&bytes);
-        for i in avec {
-            let mut b = 0;
-            if i {
-                b = 1;
-            }
-            print!("{:?}", b);
-        }
-        print!("\n\n");
-        for i in 0..10 {
-            print!("{:?}", ith_bit(a, i));
-        }
+    //     let avec = BitVec::from_bytes(&bytes);
+    //     for i in avec {
+    //         let mut b = 0;
+    //         if i {
+    //             b = 1;
+    //         }
+    //         print!("{:?}", b);
+    //     }
+    //     print!("\n\n");
+    //     for i in 0..10 {
+    //         print!("{:?}", ith_bit(a, i));
+    //     }
 
-        println!("\n\n");
-    }
+    //     println!("\n\n");
+    // }
 
     #[test]
     fn test_vector_com() {
