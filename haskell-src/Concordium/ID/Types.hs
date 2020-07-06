@@ -20,6 +20,7 @@ import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
 import Data.Aeson.Types(toJSONKeyText)
 import Data.Maybe(fromMaybe)
+import qualified Data.Set as Set
 import Control.Monad
 import Control.Monad.Except
 import qualified Data.Text as Text
@@ -154,6 +155,9 @@ instance FromJSON AccountKeys where
 getAccountKey :: KeyIndex -> AccountKeys -> Maybe VerifyKey
 getAccountKey idx keys = Map.lookup idx (akKeys keys)
 
+getKeyIndices :: AccountKeys -> Set.Set KeyIndex
+getKeyIndices keys = Map.keysSet $ akKeys keys
+
 -- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32
     deriving (Eq, Hashable)
@@ -244,7 +248,7 @@ instance Serialize AttributeValue where
       else fail "Attribute malformed. Must fit into 31 bytes."
 
 instance ToJSON AttributeValue where
-  -- this is safe because the bytestring should contain 
+  -- this is safe because the bytestring should contain
   toJSON (AttributeValue v) = String (Text.decodeUtf8 (BSS.fromShort v))
 
 instance FromJSON AttributeValue where
@@ -273,7 +277,7 @@ instance Show YearMonth where
   show YearMonth{..} = show ymYear ++ (if ymMonth < 10 then ("0" ++ show ymMonth) else (show ymMonth))
 
 instance Serialize YearMonth where
-  put YearMonth{..} = 
+  put YearMonth{..} =
     S.putWord16be ymYear <>
     S.putWord8 ymMonth
   get = do
