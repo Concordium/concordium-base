@@ -10,6 +10,7 @@ import qualified Data.ByteString.Char8 as BS
 import Concordium.ID.Account
 import Concordium.ID.Parameters
 import Concordium.ID.IdentityProvider
+import Concordium.ID.AnonymityRevoker
 
 import Data.Serialize
 
@@ -17,21 +18,16 @@ import Data.Serialize
 filePath :: FilePath
 filePath = "testdata/testdata.bin"
 
-getData :: Get (GlobalContext, IpInfo)
-getData = getTwoOf get get
-
-type Data = (GlobalContext, IpInfo, CredentialDeploymentInformationBytes)
+type Data = (GlobalContext, IpInfo, [ArInfo], CredentialDeploymentInformationBytes)
 
 readData :: BS.ByteString -> Either String Data
 readData bs = flip runGet bs $ do
   gc <- get
   ipInfo <- get
+  arInfos <- get
   l1 <- getWord32be
   cdi1 <- getByteString (fromIntegral l1)
-  return (gc, ipInfo, cdi1)
-
-testVerify :: (GlobalContext, IpInfo) -> CredentialDeploymentInformationBytes -> Bool
-testVerify (gc, ipInfo) = verifyCredential gc ipInfo Nothing
+  return (gc, ipInfo, arInfos, cdi1)
 
 setup :: IO Data
 setup = do
@@ -43,8 +39,8 @@ setup = do
 
 verify :: Benchmark
 verify =
-    env setup $ \ ~(gc, ipInfo, cdi1) -> 
-          bench "Verify credential success" $ nf (verifyCredential gc ipInfo Nothing) cdi1
+    env setup $ \ ~(gc, ipInfo, arInfos, cdi1) -> 
+          bench "Verify credential success" $ nf (verifyCredential gc ipInfo arInfos Nothing) cdi1
 
 main :: IO ()
 main = defaultMainWith (defaultConfig { timeLimit = 15 }) [
