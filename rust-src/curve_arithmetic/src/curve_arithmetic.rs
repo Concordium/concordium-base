@@ -64,23 +64,21 @@ pub trait Curve:
 }
 
 #[allow(non_snake_case)]
-pub fn multiscalar_multiplication_naive<C: Curve>(a: &[C::Scalar], G: &[C]) -> C{
+pub fn multiscalar_multiplication_naive<C: Curve>(a: &[C::Scalar], G: &[C]) -> C {
     let n = a.len();
     if G.len() != n {
         panic!("a and G should have the same length");
     }
     let mut sum = C::zero_point();
     for i in 0..n {
-        let aiGi =G[i].mul_by_scalar(&a[i]);
+        let aiGi = G[i].mul_by_scalar(&a[i]);
         sum = sum.plus_point(&aiGi);
     }
     sum
 }
 
 #[allow(non_snake_case)]
-pub fn multiscalar_multiplication<C: Curve>(a: &[C::Scalar], G: &[C]) -> C{
-    multiexp(G, a)
-}
+pub fn multiscalar_multiplication<C: Curve>(a: &[C::Scalar], G: &[C]) -> C { multiexp(G, a) }
 
 pub trait Pairing: Sized + 'static + Clone {
     type ScalarField: PrimeField + Serialize;
@@ -167,7 +165,6 @@ pub fn multiexp<C: Curve>(gs: &[C], exps: &[C::Scalar]) -> C {
     multiexp_worker(gs, exps, window_size)
 }
 
-
 /// This implements the WNAF method from
 /// https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf
 /// Assumes:
@@ -186,7 +183,11 @@ pub fn multiexp_worker<C: Curve>(gs: &[C], exps: &[C::Scalar], window_size: usiz
     multiexp_worker_given_table(exps, &table, window_size)
 }
 
-pub fn multiexp_worker_given_table<C: Curve>(exps: &[C::Scalar], table: &[Vec<C>], window_size: usize) -> C {
+pub fn multiexp_worker_given_table<C: Curve>(
+    exps: &[C::Scalar],
+    table: &[Vec<C>],
+    window_size: usize,
+) -> C {
     // Compute the wnaf
 
     let k = exps.len();
@@ -248,7 +249,7 @@ pub fn multiexp_worker_given_table<C: Curve>(exps: &[C::Scalar], table: &[Vec<C>
     a
 }
 
-pub fn multiexp_table<C: Curve>(gs: &[C], window_size: usize)->Vec<Vec<C>>{
+pub fn multiexp_table<C: Curve>(gs: &[C], window_size: usize) -> Vec<Vec<C>> {
     let k = gs.len();
     let mut table = Vec::with_capacity(k);
     for g in gs.iter() {

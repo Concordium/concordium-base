@@ -2,9 +2,7 @@
 
 use crate::{commitment::*, randomness::*};
 
-use curve_arithmetic::Curve;
-use curve_arithmetic::Value;
-use curve_arithmetic::multiscalar_multiplication;
+use curve_arithmetic::{multiscalar_multiplication, Curve, Value};
 
 use crypto_common::*;
 use crypto_common_derive::*;
@@ -17,8 +15,8 @@ pub struct CommitmentKey<C: Curve>(pub Vec<C>, pub C);
 impl<C: Curve> CommitmentKey<C> {
     pub fn new(G: Vec<C>, h: C) -> Self { CommitmentKey(G, h) }
 
-    // pub fn commit<T>(&self, s: &Value<C>, csprng: &mut T) -> (Commitment<C>, Randomness<C>)
-    // where
+    // pub fn commit<T>(&self, s: &Value<C>, csprng: &mut T) -> (Commitment<C>,
+    // Randomness<C>) where
     //     T: Rng, {
     //     let r = Randomness::<C>::generate(csprng);
     //     (self.hide(s, &r), r)
@@ -27,7 +25,7 @@ impl<C: Curve> CommitmentKey<C> {
     pub fn hide(&self, s: &[Value<C>], r: &Randomness<C>) -> Commitment<C> {
         let h = self.1;
         let G = self.0.clone();
-        let messages : Vec<C::Scalar> = s.iter().map(|x| (*x.clone())).collect();
+        let messages: Vec<C::Scalar> = s.iter().map(|x| (*x.clone())).collect();
         let r_scalar = r.randomness;
         let hr = h.mul_by_scalar(&r_scalar);
         // let gm = g.mul_by_scalar(&message);
@@ -35,8 +33,8 @@ impl<C: Curve> CommitmentKey<C> {
         Commitment(msm.plus_point(&hr))
     }
 
-    // pub fn open(&self, s: &Value<C>, r: &Randomness<C>, c: &Commitment<C>) -> bool {
-    //     self.hide(s, r) == *c
+    // pub fn open(&self, s: &Value<C>, r: &Randomness<C>, c: &Commitment<C>) ->
+    // bool {     self.hide(s, r) == *c
     // }
 
     // pub fn generate<T>(csprng: &mut T) -> CommitmentKey<C>
@@ -59,8 +57,8 @@ impl<C: Curve> CommitmentKey<C> {
 //             pub fn $function_name() {
 //                 let mut csprng = thread_rng();
 //                 for _i in 1..100 {
-//                     let sk = CommitmentKey::<$curve_type>::generate(&mut csprng);
-//                     let res_sk2 = serialize_deserialize(&sk);
+//                     let sk = CommitmentKey::<$curve_type>::generate(&mut
+// csprng);                     let res_sk2 = serialize_deserialize(&sk);
 //                     assert!(res_sk2.is_ok());
 //                     let sk2 = res_sk2.unwrap();
 //                     assert_eq!(sk2, sk);
@@ -69,9 +67,11 @@ impl<C: Curve> CommitmentKey<C> {
 //         };
 //     }
 
-//     // macro_test_key_byte_conversion!(key_byte_conversion_bls12_381_g1_affine, G1Affine);
+//     // macro_test_key_byte_conversion!
+// (key_byte_conversion_bls12_381_g1_affine, G1Affine);
 
-//     // macro_test_key_byte_conversion!(key_byte_conversion_bls12_381_g2_affine, G2Affine);
+//     // macro_test_key_byte_conversion!
+// (key_byte_conversion_bls12_381_g2_affine, G2Affine);
 
 //     // macro_rules! macro_test_commit_open {
 //     //     ($function_name:ident, $curve_type:path) => {
@@ -79,13 +79,14 @@ impl<C: Curve> CommitmentKey<C> {
 //     //         pub fn $function_name() {
 //     //             let mut csprng = thread_rng();
 //     //             for _i in 1..100 {
-//     //                 let sk = CommitmentKey::<$curve_type>::generate(&mut csprng);
-//     //                 let ss = Value::<$curve_type>::generate(&mut csprng);
-//     //                 let (c, r) = sk.commit(&ss, &mut csprng);
+//     //                 let sk = CommitmentKey::<$curve_type>::generate(&mut
+// csprng);     //                 let ss = Value::<$curve_type>::generate(&mut
+// csprng);     //                 let (c, r) = sk.commit(&ss, &mut csprng);
 //     //                 assert!(sk.open(&ss, &r, &c));
-//     //                 assert!(!sk.open(&ss, &r, &Commitment::<$curve_type>::generate(&mut csprng)));
-//     //                 assert!(!sk.open(&ss, &Randomness::<$curve_type>::generate(&mut csprng), &c));
-//     //             }
+//     //                 assert!(!sk.open(&ss, &r,
+// &Commitment::<$curve_type>::generate(&mut csprng)));     //
+// assert!(!sk.open(&ss, &Randomness::<$curve_type>::generate(&mut csprng),
+// &c));     //             }
 //     //         }
 //     //     };
 //     // }
