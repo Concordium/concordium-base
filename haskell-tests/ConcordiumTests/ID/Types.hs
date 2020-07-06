@@ -37,7 +37,7 @@ checkCDICompatibility :: FilePath -> FilePath -> Expectation
 checkCDICompatibility filename referenceFile = do
   eitherDecodeFileStrict filename >>= \case
     Left err -> assertFailure err
-    Right (input :: (Versioned CredentialDeploymentInformation)) -> do
+    Right (input :: Versioned CredentialDeploymentInformation) -> do
       referenceOutput <- BS.readFile referenceFile
       -- we do unpack for better error reporting, easier to compare lists of word8s
       assertEqual "Incompatible binary serializations." (BS.unpack referenceOutput) (BS.unpack (S.encode input))

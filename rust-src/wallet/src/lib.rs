@@ -283,7 +283,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     };
 
     let response = json!({
-        "credential": Version::new(VERSION_CREDENTIAL, cdi),
+        "credential": Versioned::new(VERSION_CREDENTIAL, cdi),
         "accountData": acc_data,
         "accountAddress": address,
     });
