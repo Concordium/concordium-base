@@ -18,24 +18,22 @@ import Concordium.Crypto.VRF as VRF
 -- The keys are indexed in ascending order starting from 0
 {-# WARNING mkAccountMultipleKeys "Do not use in production." #-}
 mkAccountMultipleKeys :: [SigScheme.VerifyKey] -> SignatureThreshold -> AccountAddress -> Amount -> Account
-mkAccountMultipleKeys keys threshold addr amount =
-  newAccount (makeAccountKeys keys threshold) addr (dummyRegId addr)
-      & (accountAmount .~ amount)
+mkAccountMultipleKeys keys threshold addr amount = mkAccountNoCredentials keys threshold addr amount
       & (accountCredentials .~ (Queue.singleton dummyMaxValidTo (dummyCredential addr dummyMaxValidTo dummyCreatedAt)))
 
 -- This generates an account without any credentials
 -- late expiry date, but is otherwise not well-formed.
 {-# WARNING mkAccountNoCredentials "Do not use in production." #-}
-mkAccountNoCredentials :: SigScheme.VerifyKey -> AccountAddress -> Amount -> Account
-mkAccountNoCredentials key addr amnt =
-  newAccount (makeSingletonAC key) addr (dummyRegId addr) & (accountAmount .~ amnt)
+mkAccountNoCredentials :: [SigScheme.VerifyKey] -> SignatureThreshold -> AccountAddress -> Amount -> Account
+mkAccountNoCredentials keys threshold addr amnt =
+  newAccount (makeAccountKeys keys threshold) addr (dummyRegId addr) & (accountAmount .~ amnt)
 
 -- This generates an account with a single credential and single keypair, which has sufficiently
 -- late expiry date, but is otherwise not well-formed.
 {-# WARNING mkAccount "Do not use in production." #-}
 mkAccount :: SigScheme.VerifyKey -> AccountAddress -> Amount -> Account
-mkAccount key addr amnt = mkAccountNoCredentials key addr amnt &
-                           (accountCredentials .~ (Queue.singleton dummyMaxValidTo (dummyCredential addr dummyMaxValidTo dummyCreatedAt)))
+mkAccount key addr amnt = mkAccountMultipleKeys [key] 1 addr amnt
+      & (accountCredentials .~ (Queue.singleton dummyMaxValidTo (dummyCredential addr dummyMaxValidTo dummyCreatedAt)))
 
 {-# WARNING makeFakeBakerAccount "Do not use in production." #-}
 makeFakeBakerAccount :: BakerId -> Account
