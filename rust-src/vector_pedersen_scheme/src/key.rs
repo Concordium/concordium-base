@@ -6,7 +6,6 @@ use curve_arithmetic::{multiscalar_multiplication, Curve, Value};
 
 use crypto_common::*;
 use crypto_common_derive::*;
-use rand::*;
 
 /// A commitment  key.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize)]
