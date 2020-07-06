@@ -17,10 +17,12 @@ import Control.Monad.Reader
 import Data.Char
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
-import qualified Data.HashMap.Strict as Map
+import qualified Data.HashMap.Strict as HMap
+import qualified Data.Map as Map
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
+import qualified Data.Set as Set
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Word
@@ -66,10 +68,10 @@ instance S.Serialize AccountOwnershipProof where
     AccountOwnershipProof <$> replicateM (fromIntegral l) (S.getTwoOf S.get S.get)
 
 instance AE.FromJSON AccountOwnershipProof where
-  parseJSON v = (AccountOwnershipProof . Map.toList) <$> AE.parseJSON v
+  parseJSON v = (AccountOwnershipProof . HMap.toList) <$> AE.parseJSON v
 
 instance AE.ToJSON AccountOwnershipProof where
-  toJSON (AccountOwnershipProof proofs) = AE.toJSON $ Map.fromList proofs
+  toJSON (AccountOwnershipProof proofs) = AE.toJSON $ HMap.fromList proofs
 
 -- |The transaction payload. Defines the supported kinds of transactions.
 --
@@ -203,20 +205,20 @@ data Payload =
       }
   -- Updates existing keys used for signing transactions for the sender's account
   | UpdateAccountKeys {
-      -- |List of key indeces to update and the associated key to update to
-      uakKeys :: ![(KeyIndex, AccountVerificationKey)]
+      -- |Update the account keys with to the ones in this map.
+      uakKeys :: !(Map.Map KeyIndex AccountVerificationKey)
     }
   -- Adds additional keys to the sender's account, optionally updating the signature threshold too
   | AddAccountKeys {
-      -- |List of key indeces to add and the associated key
-      aakKeys :: ![(KeyIndex, AccountVerificationKey)],
+      -- |Map of key indeces and the associated key to add
+      aakKeys :: !(Map.Map KeyIndex AccountVerificationKey),
       -- |Optional value for updating the threshold of the signature scheme
       aakThreshold :: !(Maybe SignatureThreshold)
     }
   -- Remove keys from the sender's account, optionally updating the signature threshold too
   | RemoveAccountKeys {
-      -- |List of indeces of keys to remove
-      rakIndeces :: ![KeyIndex],
+      -- |List of indices of keys to remove
+      rakIndices :: !(Set.Set KeyIndex),
       -- |Optional value for updating the threshold of the signature scheme
       rakThreshold :: !(Maybe SignatureThreshold)
     }
@@ -289,17 +291,20 @@ instance S.Serialize Payload where
     S.put ubekId <>
     S.put ubekKey <>
     S.put ubekProof
-  put UpdateAccountKeys{..} =
-    P.putWord8 13 <>
-    S.put uakKeys
-  put AddAccountKeys{..} =
-    P.putWord8 14 <>
-    S.put aakKeys <>
-    S.put aakThreshold
-  put RemoveAccountKeys{..} =
-    P.putWord8 15 <>
-    S.put rakIndeces <>
-    S.put rakThreshold
+  put UpdateAccountKeys{..} = do
+    P.putWord8 13
+    P.putWord8 (fromIntegral (length uakKeys))
+    forM_ (Map.toAscList uakKeys) $ \(idx, key) -> S.put idx <> S.put key
+  put AddAccountKeys{..} = do
+    P.putWord8 14
+    P.putWord8 (fromIntegral (length aakKeys))
+    forM_ (Map.toAscList aakKeys) $ \(idx, key) -> S.put idx <> S.put key
+    putMaybe aakThreshold
+  put RemoveAccountKeys{..} = do
+    P.putWord8 15
+    P.putWord8 (fromIntegral (length rakIndices))
+    forM_ (Set.toAscList rakIndices) $ \idx -> S.put idx
+    putMaybe rakThreshold
 
   get =
     G.getWord8 >>=
@@ -362,18 +367,51 @@ instance S.Serialize Payload where
               ubekProof <- S.get
               return UpdateBakerElectionKey{..}
             13 -> do
-              uakKeys <- S.get
+              len <- S.getWord8
+              uakKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
               return UpdateAccountKeys{..}
             14 -> do
-              aakKeys <- S.get
-              aakThreshold <- S.get
+              len <- S.getWord8
+              aakKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+              aakThreshold <- getMaybe
               return AddAccountKeys{..}
             15 -> do
-              rakIndeces <- S.get
-              rakThreshold <- S.get
+              len <- S.getWord8
+              rakIndices <- safeSetFromAscList =<< replicateM (fromIntegral len) S.get
+              rakThreshold <- getMaybe
               return RemoveAccountKeys{..}
 
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
+
+-- |Serialize a Maybe value
+-- Just v is serialized with a word8 tag 1 followed by the serialization of the value
+-- Nothing is seralized with a word8 tag 0.
+putMaybe :: S.Serialize a => P.Putter (Maybe a)
+putMaybe (Just v) = do
+  P.putWord8 1
+  S.put v
+putMaybe Nothing = S.putWord8 0
+
+-- |Deserialize a Maybe value
+-- Expects a leading 0 or 1 word8, 1 signaling Just and 0 signaling Nothing
+getMaybe :: S.Serialize a => S.Get (Maybe a)
+getMaybe = G.getWord8 >>=
+    \case 0 -> return Nothing
+          1 -> do
+              v <- S.get
+              return (Just v)
+          n -> fail $ "encountered invalid tag when deserializing a Maybe '" ++ show n ++ "'"
+
+-- |Builds a set from a list of ascending elements.
+-- Fails if the elements are not ordered or a duplicate is encountered.
+safeSetFromAscList :: (MonadFail m, Ord a) => [a] -> m (Set.Set a)
+safeSetFromAscList = go Set.empty Nothing
+    where
+      go s _ [] = return s
+      go s Nothing (a : rest) = go (Set.insert a s) (Just a) rest
+      go s (Just a') (a : rest)
+        | (a' < a) = go (Set.insert a s) (Just a) rest
+        | otherwise = fail "Elements are either not in ascending order, or a duplicate was found."
 
 {-# INLINE encodePayload #-}
 encodePayload :: Payload -> EncodedPayload
@@ -521,22 +559,11 @@ data Event =
                -- |The new election difficulty.
                eeduDifficulty :: !Double
                }
-           | AccountKeysUpdated {
-               akuAccount :: !AccountAddress,
-               akuKeys :: ![(KeyIndex, AccountVerificationKey)]
-               }
-           | AccountKeysAdded {
-               akuAccount :: !AccountAddress,
-               akaKeys :: ![(KeyIndex, AccountVerificationKey)]
-               }
-           | AccountKeysRemoved {
-               akuAccount :: !AccountAddress,
-               akrIndices :: ![KeyIndex]
-               }
-           | AccountKeysSignThresholdUpdated {
-               akuAccount :: !AccountAddress,
-               akstuThreshold :: !SignatureThreshold
-               }
+           -- |Keys at existing indexes were updated, no new indexes were added, threshold is unchanged
+           | AccountKeysUpdated
+           | AccountKeysAdded
+           | AccountKeysRemoved
+           | AccountKeysSignThresholdUpdated
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -626,10 +653,9 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                                         }
                   -- |A transaction should be sent from a special account, but is not.
                   | NotFromSpecialAccount
-                  | NonexistentAccountKey !KeyIndex -- |Encountered index to which no account key belongs when removing or updating keys
-                  | DuplicateKeyIndex !KeyIndex -- |Encountered duplicate key index when adding, updating or removing account keys
-                  | KeyIndexAlreadyInUse !KeyIndex -- |Attempted to add an account key to a key index already in use
+                  | NonExistentAccountKey -- |Encountered index to which no account key belongs when removing or updating keys
                   -- |When the account key threshold is updated, it must not exceed the amount of existing keys
+                  | KeyIndexAlreadyInUse -- |Attempted to add an account key to a key index already in use
                   | InvalidAccountKeySignThreshold
     deriving (Show, Eq, Generic)
 
