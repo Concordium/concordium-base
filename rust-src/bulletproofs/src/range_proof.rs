@@ -687,15 +687,15 @@ fn verify<C: Curve>(
 pub fn verify_efficient<C: Curve>(
     transcript: &mut Transcript,
     n: u8,
-    commitments: Vec<Commitment<C>>,
-    proof: RangeProof<C>,
-    G: Vec<C>,
-    H: Vec<C>,
+    commitments: &[Commitment<C>],
+    proof: &RangeProof<C>,
+    G: &[C],
+    H: &[C],
     B: C,
     B_tilde: C,
 ) -> bool {
     let m = commitments.len();
-    for V in commitments.clone() {
+    for V in commitments {
         transcript.append_point(b"Vj", &V.0);
     }
     let A = proof.A;
@@ -752,24 +752,25 @@ pub fn verify_efficient<C: Curve>(
     let LHS = B
         .mul_by_scalar(&tx)
         .plus_point(&B_tilde.mul_by_scalar(&tx_tilde));
-    let mut RHS = C::zero_point();
-    let mut zj2 = z2;
-    for com in commitments {
-        let Vj = com.0;
-        // println!("V_{:?} = {:?}", j, Vj);
-        RHS = RHS.plus_point(&Vj.mul_by_scalar(&zj2));
-        zj2.mul_assign(&z);
-    }
+    let mut RHS = {
+        let mut zj2 = z2;
+        let mut powers = Vec::with_capacity(m);
+        for _ in 0..m {
+            powers.push(zj2);
+            zj2.mul_assign(&z);
+        }
+        multiscalar_multiplication::<C, Commitment<C>>(&powers, commitments)
+    };
+
     RHS = RHS
-        .plus_point(&B.mul_by_scalar(&delta_yz))
-        .plus_point(&T_1.mul_by_scalar(&x))
-        .plus_point(&T_2.mul_by_scalar(&x2));
+        .plus_point(&multiscalar_multiplication(&[delta_yz, x, x2], &[B, T_1,T_2]));
 
-    println!("--------------- VERIFICATION ----------------");
+
+    // println!("--------------- VERIFICATION ----------------");
     let first = LHS.minus_point(&RHS).is_zero_point();
-    println!("First check = {:?}", first);
+    // println!("First check = {:?}", first);
 
-    let ip_proof = proof.ip_proof;
+    let ip_proof = &proof.ip_proof;
     let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
     let mut y_i = C::Scalar::one();
     let mut z_2_m: Vec<C::Scalar> = Vec::with_capacity(m);
@@ -782,8 +783,8 @@ pub fn verify_efficient<C: Curve>(
     let VerificationScalars(u_sq, u_inv_sq, s) = verify_scalars(transcript, G.len(), &ip_proof);
     let a = ip_proof.a;
     let b = ip_proof.b;
-    let L = ip_proof.L;
-    let R = ip_proof.R;
+    let L = &ip_proof.L;
+    let R = &ip_proof.R;
     let mut s_inv = s.clone();
     s_inv.reverse();
     let y_inv = y.inverse().unwrap();
@@ -836,7 +837,7 @@ pub fn verify_efficient<C: Curve>(
         .plus_point(&R_term);
 
     let second = sum.is_zero_point();
-    println!("Second check = {:?}", second);
+    // println!("Second check = {:?}", second);
     first && second
 }
 
@@ -844,18 +845,18 @@ pub fn verify_efficient<C: Curve>(
 #[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::many_single_char_names)]
-fn verify_more_efficient<C: Curve>(
+pub fn verify_more_efficient<C: Curve>(
     transcript: &mut Transcript,
     n: u8,
-    commitments: Vec<Commitment<C>>,
-    proof: RangeProof<C>,
-    mut G: Vec<C>,
-    mut H: Vec<C>,
+    commitments: &[Commitment<C>],
+    proof: &RangeProof<C>,
+    G: &[C],
+    H: &[C],
     B: C,
     B_tilde: C,
 ) -> bool {
     let m = commitments.len();
-    for V in commitments.clone() {
+    for V in commitments {
         transcript.append_point(b"Vj", &V.0);
     }
     let A = proof.A;
@@ -878,7 +879,7 @@ fn verify_more_efficient<C: Curve>(
     let x: C::Scalar = transcript.challenge_scalar::<C>(b"x");
     let mut x2 = x;
     x2.mul_assign(&x);
-    println!("verifier's x = {:?}", x);
+    // println!("verifier's x = {:?}", x);
     transcript.append_scalar::<C>(b"tx", &tx);
     transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
     transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
@@ -921,13 +922,13 @@ fn verify_more_efficient<C: Curve>(
     // RHS = RHS.plus_point(&B.mul_by_scalar(&delta_yz)).plus_point(&T_1.
     // mul_by_scalar(&x)).plus_point(&T_2.mul_by_scalar(&x2));
 
-    println!("--------------- VERIFICATION ----------------");
+    // println!("--------------- VERIFICATION ----------------");
     // println!("LHS = {:?}", LHS);
     // println!("RHS = {:?}", RHS);
     // println!("Are they equal? {:?}", LHS == RHS);
     // println!("First check = {:?}", LHS.minus_point(&RHS).is_zero_point());
 
-    let ip_proof = proof.ip_proof;
+    let ip_proof = &proof.ip_proof;
     let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
     let mut y_i = C::Scalar::one();
     let mut z_2_m: Vec<C::Scalar> = Vec::with_capacity(m);
@@ -940,8 +941,8 @@ fn verify_more_efficient<C: Curve>(
     let VerificationScalars(u_sq, u_inv_sq, s) = verify_scalars(transcript, G.len(), &ip_proof);
     let a = ip_proof.a;
     let b = ip_proof.b;
-    let mut L = ip_proof.L;
-    let mut R = ip_proof.R;
+    let L = &ip_proof.L;
+    let R = &ip_proof.R;
     let mut s_inv = s.clone();
     s_inv.reverse();
     let y_inv = y.inverse().unwrap();
@@ -1035,17 +1036,17 @@ fn verify_more_efficient<C: Curve>(
     all_points.push(B);
     all_points.push(B_tilde);
     all_points.append(&mut Vjs);
-    all_points.append(&mut G);
-    all_points.append(&mut H);
-    all_points.append(&mut L);
-    all_points.append(&mut R);
+    all_points.extend_from_slice(&G);
+    all_points.extend_from_slice(&H);
+    all_points.extend_from_slice(&L);
+    all_points.extend_from_slice(&R);
 
     let sum2 = multiscalar_multiplication(&all_scalars, &all_points);
     // println!("len of msm vector = {}", all_scalars.len());
 
     // println!("Second check = {:?}", sum.is_zero_point());
     let b: bool = sum2.is_zero_point();
-    println!(" check = {:?}", b);
+    // println!(" check = {:?}", b);
     // println!("sum1==sum2? {:?}", sum==sum2);
     b
 }
@@ -1238,10 +1239,10 @@ mod tests {
         let b2 = verify_efficient(
             &mut transcript,
             n,
-            commitments.clone(),
-            proof.clone(),
-            G.clone(),
-            H.clone(),
+            &commitments,
+            &proof,
+            &G,
+            &H,
             B,
             B_tilde,
         );
@@ -1255,10 +1256,10 @@ mod tests {
         let b3 = verify_more_efficient(
             &mut transcript,
             n,
-            commitments.clone(),
-            proof.clone(),
-            G.clone(),
-            H.clone(),
+            &commitments,
+            &proof,
+            &G,
+            &H,
             B,
             B_tilde,
         );
@@ -1295,10 +1296,10 @@ mod tests {
         let _b = verify_efficient(
             &mut transcript,
             n,
-            commitments.clone(),
-            proof.clone(),
-            G.clone(),
-            H.clone(),
+            &commitments,
+            &proof,
+            &G,
+            &H,
             B,
             B_tilde,
         );
@@ -1309,10 +1310,10 @@ mod tests {
         let _b = verify_more_efficient(
             &mut transcript,
             n,
-            commitments.clone(),
-            proof.clone(),
-            G.clone(),
-            H.clone(),
+            &commitments,
+            &proof,
+            &G,
+            &H,
             B,
             B_tilde,
         );
