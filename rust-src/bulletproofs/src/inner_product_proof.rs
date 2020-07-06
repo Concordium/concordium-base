@@ -1,18 +1,8 @@
 use crate::transcript::TranscriptProtocol;
-use curve_arithmetic::{
-    multiexp_table, multiexp_worker, multiexp_worker_given_table, multiscalar_multiplication,
-    multiscalar_multiplication_naive, Curve,
-};
-use ff::{Field, PrimeField};
-use group::{CurveAffine, CurveProjective, EncodedPoint};
+use curve_arithmetic::{multiscalar_multiplication, Curve};
+use ff::Field;
+// use group::{CurveAffine, CurveProjective, EncodedPoint};
 use merlin::Transcript;
-use pairing::{
-    bls12_381::{
-        Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G1Prepared, G2Affine, G2Compressed,
-        G2Prepared, G1, G2,
-    },
-    Engine, PairingCurveAffine,
-};
 
 #[allow(non_snake_case)]
 #[derive(Clone)]
@@ -24,6 +14,7 @@ pub struct InnerProductProof<C: Curve> {
 }
 
 #[allow(non_snake_case)]
+#[allow(dead_code)]
 pub fn prove_inner_product<C: Curve>(
     transcript: &mut Transcript,
     mut G_vec: Vec<C>,
@@ -39,7 +30,7 @@ pub fn prove_inner_product<C: Curve>(
     let mut L = Vec::with_capacity(k);
     let mut R = Vec::with_capacity(k);
 
-    for j in 0..k {
+    for _j in 0..k {
         n = G_vec.len();
         let a_lo = &a_vec[..n / 2];
         let a_hi = &a_vec[n / 2..];
@@ -292,12 +283,19 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
     InnerProductProof { L, R, a, b }
 }
 
+pub struct VerificationScalars<C: Curve>(
+    pub Vec<C::Scalar>,
+    pub Vec<C::Scalar>,
+    pub Vec<C::Scalar>,
+);
+
 #[allow(non_snake_case)]
+#[allow(clippy::many_single_char_names)]
 pub fn verify_scalars<C: Curve>(
     transcript: &mut Transcript,
     n: usize,
     proof: &InnerProductProof<C>,
-) -> (Vec<C::Scalar>, Vec<C::Scalar>, Vec<C::Scalar>) {
+) -> VerificationScalars<C> {
     // let n = G_vec.len();
     let L = &proof.L;
     let R = &proof.R;
@@ -306,19 +304,22 @@ pub fn verify_scalars<C: Curve>(
     let mut ab = a;
     ab.mul_assign(&b);
 
-    let mut u = Vec::with_capacity(L.len());
-    let mut u_inv = Vec::with_capacity(L.len());
+    // let mut u = Vec::with_capacity(L.len());
+    // let mut u_inv = Vec::with_capacity(L.len());
     let mut u_sq = Vec::with_capacity(L.len());
     let mut u_inv_sq = Vec::with_capacity(L.len());
+    let mut s = Vec::with_capacity(n);
+    let mut s_0 = C::Scalar::one();
     for j in 0..L.len() {
         transcript.append_point(b"Lj", &L[j]);
         transcript.append_point(b"Rj", &R[j]);
         let u_j: C::Scalar = transcript.challenge_scalar::<C>(b"uj");
         // println!("Verifier's u_{:?} = {:?}", j, u_j);
 
-        u.push(u_j);
+        // u.push(u_j);
         let u_j_inv = u_j.inverse().unwrap(); // be careful here
-        u_inv.push(u_j_inv);
+        s_0.mul_assign(&u_j_inv);
+        // u_inv.push(u_j_inv);
         let mut u_j_sq = u_j;
         u_j_sq.mul_assign(&u_j);
         u_sq.push(u_j_sq);
@@ -326,13 +327,6 @@ pub fn verify_scalars<C: Curve>(
         let mut u_j_inv_sq = u_j_inv;
         u_j_inv_sq.mul_assign(&u_j_inv);
         u_inv_sq.push(u_j_inv_sq);
-    }
-
-    let mut s = Vec::with_capacity(n);
-    let mut s_0 = u_inv[0];
-    for i in 1..u_inv.len() {
-        // This could be done in the above loop
-        s_0.mul_assign(&u_inv[i]);
     }
 
     s.push(s_0);
@@ -345,9 +339,10 @@ pub fn verify_scalars<C: Curve>(
         s_i.mul_assign(&u_sq[L.len() - 1 - lg_i]);
         s.push(s_i);
     }
-    (u_sq, u_inv_sq, s)
+    VerificationScalars(u_sq, u_inv_sq, s)
 }
 
+#[allow(dead_code)]
 #[allow(non_snake_case)]
 pub fn verify_inner_product<C: Curve>(
     transcript: &mut Transcript,
@@ -365,7 +360,7 @@ pub fn verify_inner_product<C: Curve>(
     let mut ab = a;
     ab.mul_assign(&b);
 
-    let (u_sq, u_inv_sq, s) = verify_scalars(transcript, n, &proof);
+    let VerificationScalars(u_sq, u_inv_sq, s) = verify_scalars(transcript, n, &proof);
 
     let mut s_inv = s.clone();
     s_inv.reverse();
@@ -392,9 +387,6 @@ pub fn verify_inner_product<C: Curve>(
         .minus_point(&sum);
     P_prime.minus_point(&RHS).is_zero_point()
 }
-
-#[allow(non_snake_case)]
-fn f<C: Curve>(g: C) -> C { g.double_point() }
 
 #[allow(non_snake_case)]
 pub fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
@@ -428,7 +420,19 @@ pub fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pairing::bls12_381::FqRepr;
+    // use pairing::bls12_381::FqRepr;
+    use curve_arithmetic::{
+        multiexp_table, multiexp_worker, multiexp_worker_given_table,
+        multiscalar_multiplication_naive,
+    };
+    use pairing::bls12_381::{Fr, G1};
+    // use pairing::{
+    //     bls12_381::{
+    //         Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G1Prepared, G2Affine,
+    // G2Compressed,         G2Prepared, G1, G2,
+    //     },
+    //     Engine, PairingCurveAffine,
+    // };
     use rand::thread_rng;
     use std::{
         thread,
