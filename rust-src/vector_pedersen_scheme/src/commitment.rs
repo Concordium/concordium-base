@@ -6,7 +6,6 @@ use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
 
-use std::ops::Deref;
 
 /// A Commitment is a group element .
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
@@ -27,11 +26,10 @@ impl<C: Curve> Commitment<C> {
 /// This trait allows automatic conversion of &Commitment<C> to &C. In
 /// particular this means that we can simply write `c.mul_by_scalar`, for
 /// example.
-impl<C: Curve> Deref for Commitment<C> {
-    type Target = C;
-
-    fn deref(&self) -> &C { &self.0 }
+impl<C: Curve> std::borrow::Borrow<C> for Commitment<C> {
+    fn borrow(&self) -> &C { &self.0 }
 }
+
 
 #[cfg(test)]
 mod tests {

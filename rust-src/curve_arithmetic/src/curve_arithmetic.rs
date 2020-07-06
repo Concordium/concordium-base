@@ -3,7 +3,8 @@ use crypto_common::{Serial, Serialize};
 use failure::{Fail, Fallible};
 use ff::{Field, PrimeField};
 use rand::*;
-use std::fmt::{Debug, Display, Formatter};
+use std::{borrow::Borrow, fmt::{Debug, Display, Formatter}};
+
 
 #[derive(Debug)]
 pub enum CurveDecodingError {
@@ -78,7 +79,9 @@ pub fn multiscalar_multiplication_naive<C: Curve>(a: &[C::Scalar], G: &[C]) -> C
 }
 
 #[allow(non_snake_case)]
-pub fn multiscalar_multiplication<C: Curve>(a: &[C::Scalar], G: &[C]) -> C { multiexp(G, a) }
+pub fn multiscalar_multiplication<C: Curve, X: Borrow<C>>(a: &[C::Scalar], G: &[X]) -> C{
+    multiexp(G, a)
+}
 
 pub trait Pairing: Sized + 'static + Clone {
     type ScalarField: PrimeField + Serialize;
@@ -159,7 +162,7 @@ pub trait Pairing: Sized + 'static + Clone {
 
 /// Like 'multiexp_worker', but computes a reasonable window size automatically.
 #[inline(always)]
-pub fn multiexp<C: Curve>(gs: &[C], exps: &[C::Scalar]) -> C {
+pub fn multiexp<C: Curve, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar]) -> C {
     // This number is based on the benchmark in benches/multiexp_bench.rs
     let window_size = 4;
     multiexp_worker(gs, exps, window_size)
@@ -170,7 +173,7 @@ pub fn multiexp<C: Curve>(gs: &[C], exps: &[C::Scalar]) -> C {
 /// Assumes:
 /// - the lengths of inputs are the same
 /// - window_size < 62
-pub fn multiexp_worker<C: Curve>(gs: &[C], exps: &[C::Scalar], window_size: usize) -> C {
+pub fn multiexp_worker<C: Curve, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar], window_size: usize) -> C {
     // Compute the wnaf
 
     let k = exps.len();
@@ -183,11 +186,7 @@ pub fn multiexp_worker<C: Curve>(gs: &[C], exps: &[C::Scalar], window_size: usiz
     multiexp_worker_given_table(exps, &table, window_size)
 }
 
-pub fn multiexp_worker_given_table<C: Curve>(
-    exps: &[C::Scalar],
-    table: &[Vec<C>],
-    window_size: usize,
-) -> C {
+pub fn multiexp_worker_given_table<C: Curve>(exps: &[C::Scalar], table: &[Vec<C>], window_size: usize) -> C {
     // Compute the wnaf
 
     let k = exps.len();
@@ -197,6 +196,7 @@ pub fn multiexp_worker_given_table<C: Curve>(
 
     // 2^{window_size + 1}
     let two_to_wp1: u64 = 2 << window_size;
+    let two_to_wp1_scalar = C::scalar_from_u64(two_to_wp1);
     // a mask to extract the lowest window_size + 1 bits from a scalar.
     let mask: u64 = two_to_wp1 - 1;
     let mut wnaf = Vec::with_capacity(k);
@@ -216,7 +216,7 @@ pub fn multiexp_worker_given_table<C: Curve>(
                 // check if window_size'th bit is set.
                 if u & (1 << window_size) != 0 {
                     c.sub_assign(&C::scalar_from_u64(u));
-                    c.add_assign(&C::scalar_from_u64(two_to_wp1));
+                    c.add_assign(&two_to_wp1_scalar);
                     v.push((u as i64) - (two_to_wp1 as i64));
                 } else {
                     c.sub_assign(&C::scalar_from_u64(u));
@@ -234,13 +234,13 @@ pub fn multiexp_worker_given_table<C: Curve>(
     let mut a = C::zero_point();
     for j in (0..=C::Scalar::NUM_BITS as usize).rev() {
         a = a.double_point();
-        for i in 0..k {
-            match wnaf[i].get(j) {
+        for (wnaf_i, table_i) in wnaf.iter().zip(table.iter()) {
+            match wnaf_i.get(j) {
                 Some(&ge) if ge > 0 => {
-                    a = a.plus_point(&table[i][(ge / 2) as usize]);
+                    a = a.plus_point(&table_i[(ge / 2) as usize]);
                 }
                 Some(&ge) if ge < 0 => {
-                    a = a.minus_point(&table[i][((-ge) / 2) as usize]);
+                    a = a.minus_point(&table_i[((-ge) / 2) as usize]);
                 }
                 _ => (),
             }
@@ -249,12 +249,13 @@ pub fn multiexp_worker_given_table<C: Curve>(
     a
 }
 
-pub fn multiexp_table<C: Curve>(gs: &[C], window_size: usize) -> Vec<Vec<C>> {
+
+pub fn multiexp_table<C: Curve, X: Borrow<C>>(gs: &[X], window_size: usize)->Vec<Vec<C>>{
     let k = gs.len();
     let mut table = Vec::with_capacity(k);
     for g in gs.iter() {
-        let sq = g.plus_point(&g);
-        let mut tmp = *g;
+        let sq = g.borrow().plus_point(g.borrow());
+        let mut tmp = *g.borrow();
         // All of the odd exponents, between 1 and 2^w.
         let num_exponents = 1 << (window_size - 1);
         let mut exps = Vec::with_capacity(num_exponents);
@@ -267,6 +268,7 @@ pub fn multiexp_table<C: Curve>(gs: &[C], window_size: usize) -> Vec<Vec<C>> {
     }
     table
 }
+
 
 #[cfg(test)]
 mod tests {
