@@ -34,15 +34,17 @@ impl Serial for Version {
         }
 
         // Create 7-bit encoding with all MSB set to 1
-        let mut buf = Vec::with_capacity(5);
+        let mut buf: [u8; 5] = [0; 5];
         let mut v = self.value;
+        let mut len = 0;
         while v > 0 {
-            let byte = (1 << 7) | (v & 0b0111_1111) as u8;
-            buf.push(byte);
+            buf[len] = (1 << 7) | (v & 0b0111_1111) as u8;
             v >>= 7;
+            len += 1;
         }
 
         // Convert to BigEndian, ensure last byte has MSB=0, write to buffer
+        let buf = &mut buf[..len];
         buf[0] &= 0b0111_1111;
         buf.reverse();
         out.write_all(&buf).expect("Writing to buffer is safe");
@@ -53,7 +55,7 @@ impl Deserial for Version {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
         let mut acc: u64 = 0;
         for _ in 0..5 {
-            let byte = source.read_u8()? as u64;
+            let byte = u64::from(source.read_u8()?);
             if byte >= 0b1000_0000 {
                 acc = (acc << 7) | (byte & 0b0111_1111);
             } else {
@@ -61,7 +63,7 @@ impl Deserial for Version {
                 break;
             }
         }
-        if acc > u32::max_value() as u64 {
+        if acc > u64::from(u32::max_value()) {
             bail!("Version overflow");
         }
         Ok(Version::from(acc as u32))
@@ -138,11 +140,11 @@ mod tests {
     #[test]
     fn test_version_serialization_singlebits() {
         let mut current: u32 = 1;
-        for _ in 0..32 {
+        for _ in 0..31 {
             let actual = Version::from(current);
             let parsed = serialize_deserialize(&actual).unwrap();
             assert_eq!(actual, parsed);
-            current *= 2;
+            current <<= 1;
         }
     }
 
