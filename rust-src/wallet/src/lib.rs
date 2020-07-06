@@ -137,17 +137,31 @@ fn check_account_address_aux(input: &str) -> bool { input.parse::<AccountAddress
 fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
 
-    let ip_info: IpInfo<Bls12, ExampleCurve> = {
+    let ip_info: IpInfo<Bls12> = {
         match v.get("ipInfo") {
             Some(v) => from_value(v.clone())?,
             None => bail!("Field 'ipInfo' not present, but should be."),
         }
     };
 
+    let global_context: GlobalContext<ExampleCurve> = {
+        match v.get("global") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'global' not present, but should be."),
+        }
+    };
+
+    let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = {
+        match v.get("arsInfos") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'arsInfos' not present, but should be."),
+        }
+    };
+
     // FIXME: IP defined threshold
     let threshold = {
-        let l = ip_info.ip_ars.ars.len();
-        ensure!(l > 0, "IpInfo should have at least 1 anonymity revoker.");
+        let l = ars_infos.len();
+        ensure!(l > 0, "ArInfos should have at least 1 anonymity revoker.");
         Threshold(max((l - 1).try_into().unwrap_or(255), 1))
     };
 
@@ -167,14 +181,9 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     };
 
     // Choice of anonymity revokers, all of them in this implementation.
-    let ar_identities = ip_info.ip_ars.ars.iter().map(|x| x.ar_identity).collect();
-    let context = make_context_from_ip_info(ip_info, ChoiceArParameters {
-        ar_identities,
-        threshold,
-    })
-    .ok_or_else(|| format_err!("Invalid choice of anonymity revokers. Should not happen."))?;
+    let context = IPContext::new(&ip_info, &ars_infos, &global_context);
     let (pio, randomness) = {
-        match generate_pio(&context, &aci) {
+        match generate_pio(&context, threshold, &aci) {
             Some(x) => x,
             None => bail!("Generating the pre-identity object failed."),
         }
@@ -192,14 +201,21 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
 fn create_credential_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
-    let ip_info: IpInfo<Bls12, ExampleCurve> = {
+    let ip_info: IpInfo<Bls12> = {
         match v.get("ipInfo") {
             Some(v) => from_value(v.clone())?,
             None => bail!("Field 'ipInfo' not present, but should be."),
         }
     };
 
-    let global: GlobalContext<ExampleCurve> = {
+    let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = {
+        match v.get("arsInfos") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'arsInfos' not present, but should be."),
+        }
+    };
+
+    let global_context: GlobalContext<ExampleCurve> = {
         match v.get("global") {
             Some(v) => from_value(v.clone())?,
             None => bail!("Field 'global' not present, but should be."),
@@ -264,9 +280,10 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         _phantom: Default::default(),
     };
 
+    let context = IPContext::new(&ip_info, &ars_infos, &global_context);
+
     let cdi = create_credential(
-        &ip_info,
-        &global,
+        context,
         &id_object,
         &id_use_data,
         acc_num,
