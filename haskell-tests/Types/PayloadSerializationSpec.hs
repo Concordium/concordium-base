@@ -36,7 +36,7 @@ import Concordium.Crypto.DummyData
 --   cdvRegId <- RegIdCred . FBS.pack <$> vector (FBS.fixedLength (undefined :: RegIdSize))
 --   cdvIpId <- IP_ID . BS.pack <$> vector 53
 --   cdvArData <- do
---     ardName <- ARName . BS.pack <$> (vector =<< choose (0,1000))
+--     ardName <- ArIdentity . BS.pack <$> (vector =<< choose (0,1000))
 --     ardIdCredPubEnc <- AREnc . BS.pack <$> (vector =<< choose(30,80))
 --     return AnonymityRevocationData{..}
 --   cdvPolicy <- do
