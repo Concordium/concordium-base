@@ -459,6 +459,7 @@ mod tests {
         // assert!(true);
     }
 
+    #[allow(non_snake_case)]
     #[test]
     fn test_msm_basic() {
         let rng = &mut thread_rng();
@@ -490,6 +491,7 @@ mod tests {
         assert_eq!(sum, sum2);
     }
 
+    #[allow(non_snake_case)]
     #[test]
     fn test_msm_list() {
         let rng = &mut thread_rng();
@@ -505,7 +507,7 @@ mod tests {
 
         let w = 8;
         let table = multiexp_table(&Gis, w);
-        let sum = multiexp_worker_given_table(&ais, &table, w);
+        // let sum = multiexp_worker_given_table(&ais, &table, w);
         let mut list: Vec<SomeCurve> = Vec::with_capacity(n);
 
         println!("Naively creating list");
@@ -563,6 +565,7 @@ mod tests {
         println!("sum: {}", sum);
     }
 
+    #[allow(non_snake_case)]
     #[test]
     fn test_msm_with_one_vector() {
         let rng = &mut thread_rng();
@@ -662,7 +665,7 @@ mod tests {
         let mut a_vec = vec![];
         let mut b_vec = vec![];
         let y = SomeCurve::generate_scalar(rng);
-        for i in 0..n {
+        for _ in 0..n {
             let g = SomeCurve::generate(rng);
             let h = SomeCurve::generate(rng);
             let a = SomeCurve::generate_scalar(rng);

@@ -1053,8 +1053,8 @@ fn verify_more_efficient<C: Curve>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ff::PrimeField;
-    use pairing::bls12_381::{Fr, FrRepr, G1};
+    // use ff::PrimeField;
+    use pairing::bls12_381::G1;
     use std::time::Instant;
 
     // use pairing::{
@@ -1065,50 +1065,50 @@ mod tests {
     //     Engine, PairingCurveAffine,
     // };
     type SomeCurve = G1;
-    type SomeField = Fr;
+    // type SomeField = Fr;
 
-    #[test]
-    fn test_repr() {
-        let zero = SomeField::zero();
-        let one = SomeField::one();
-        let mut two = SomeField::one();
-        two.add_assign(&one);
-        let mut three = SomeField::one();
-        three.add_assign(&two);
-        let mut four = three;
-        four.add_assign(&one);
-        let mut five = three;
-        five.add_assign(&two);
-        println!("{:?}", one);
-        println!("{:?}", two);
-        println!("{:?}", three);
+    // #[test]
+    // fn test_repr() {
+    //     let zero = SomeField::zero();
+    //     let one = SomeField::one();
+    //     let mut two = SomeField::one();
+    //     two.add_assign(&one);
+    //     let mut three = SomeField::one();
+    //     three.add_assign(&two);
+    //     let mut four = three;
+    //     four.add_assign(&one);
+    //     let mut five = three;
+    //     five.add_assign(&two);
+    //     println!("{:?}", one);
+    //     println!("{:?}", two);
+    //     println!("{:?}", three);
 
-        let three_bv = vec![one, one];
-        let two_n = vec![one, two];
-        let ip = inner_product(&three_bv, &two_n);
-        println!("three = {:?}", ip);
+    //     let three_bv = vec![one, one];
+    //     let two_n = vec![one, two];
+    //     let ip = inner_product(&three_bv, &two_n);
+    //     println!("three = {:?}", ip);
 
-        let five_bv = vec![one, zero, one];
-        let two_n = vec![one, two, four];
-        let ip = inner_product(&five_bv, &two_n);
-        println!("five = {:?}", ip);
+    //     let five_bv = vec![one, zero, one];
+    //     let two_n = vec![one, two, four];
+    //     let ip = inner_product(&five_bv, &two_n);
+    //     println!("five = {:?}", ip);
 
-        let seven = Fr::from_str("7").unwrap();
-        let seven_repr = FrRepr::from(7);
-        println!("{:?}", seven);
-        println!("{:?}", seven_repr);
-        println!("{:?}", seven.into_repr());
-        println!("{:?}", Fr::from_repr(seven_repr));
+    //     let seven = Fr::from_str("7").unwrap();
+    //     let seven_repr = FrRepr::from(7);
+    //     println!("{:?}", seven);
+    //     println!("{:?}", seven_repr);
+    //     println!("{:?}", seven.into_repr());
+    //     println!("{:?}", Fr::from_repr(seven_repr));
 
-        let v = 10;
-        let n = 4;
-        let (a_L, a_R) = a_L_a_R::<SomeField>(v, n);
-        let two_n = two_n_vec(n);
-        let ip = inner_product(&a_L, &two_n);
-        println!("v = {:?}", ip);
-        // println!("a_L o a_R = {:?}", mul_vectors(&a_L, &a_R));
-        assert!(true);
-    }
+    //     let v = 10;
+    //     let n = 4;
+    //     // let (a_L, a_R) = a_L_a_R::<SomeField>(v, n);
+    //     let two_n = two_n_vec(n);
+    //     let ip = inner_product(&a_L, &two_n);
+    //     println!("v = {:?}", ip);
+    //     // println!("a_L o a_R = {:?}", mul_vectors(&a_L, &a_R));
+    //     assert!(true);
+    // }
 
     // #[test]
     // fn test_bv() {
@@ -1132,6 +1132,7 @@ mod tests {
     //     println!("\n\n");
     // }
 
+    #[allow(non_snake_case)]
     #[test]
     fn test_vector_com() {
         let rng = &mut thread_rng();
@@ -1161,6 +1162,7 @@ mod tests {
         println!("{:?}", com);
     }
 
+    #[allow(non_snake_case)]
     #[test]
     fn test_prove() {
         // Test for n = m = 4
@@ -1171,7 +1173,7 @@ mod tests {
         let mut G = Vec::with_capacity(nm);
         let mut H = Vec::with_capacity(nm);
 
-        for i in 0..(nm) {
+        for _i in 0..(nm) {
             let g = SomeCurve::generate(rng);
             let h = SomeCurve::generate(rng);
 
@@ -1216,7 +1218,7 @@ mod tests {
         let now = Instant::now();
         println!("Verifying..");
         let mut transcript = Transcript::new(&[]);
-        let b = verify(
+        let b1 = verify(
             &mut transcript,
             n,
             commitments.clone(),
@@ -1233,7 +1235,7 @@ mod tests {
         println!("Verifying (slightly) more efficiently..");
         let now = Instant::now();
         let mut transcript = Transcript::new(&[]);
-        let b = verify_efficient(
+        let b2 = verify_efficient(
             &mut transcript,
             n,
             commitments.clone(),
@@ -1250,7 +1252,7 @@ mod tests {
         println!("Verifying even more efficiently..");
         let now = Instant::now();
         let mut transcript = Transcript::new(&[]);
-        let b = verify_more_efficient(
+        let b3 = verify_more_efficient(
             &mut transcript,
             n,
             commitments.clone(),
@@ -1262,6 +1264,7 @@ mod tests {
         );
         println!("Verification done! time: {} ms", now.elapsed().as_millis());
         // println!("Efficient verifier's output = {:?}", b);
+        assert!(b1 && b2 && b3);
 
         // CHEATING prover:
         println!("\n\n --------------------- CHEATING PROVER -----------------------");
@@ -1289,7 +1292,7 @@ mod tests {
         println!("Verifying more efficiently..");
         let now = Instant::now();
         let mut transcript = Transcript::new(&[]);
-        let b = verify_efficient(
+        let _b = verify_efficient(
             &mut transcript,
             n,
             commitments.clone(),
@@ -1303,7 +1306,7 @@ mod tests {
         println!("Verifying even more efficiently..");
         let now = Instant::now();
         let mut transcript = Transcript::new(&[]);
-        let b = verify_more_efficient(
+        let _b = verify_more_efficient(
             &mut transcript,
             n,
             commitments.clone(),
