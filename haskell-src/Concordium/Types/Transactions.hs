@@ -7,6 +7,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Concordium.Types.Transactions where
 
+import Concordium.Common.Version
 import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Control.Exception
@@ -363,10 +364,18 @@ getCDWM time = do
     let wmdSignHash = transactionSignHashForCDI wmdHash
     return WithMetadata{wmdArrivalTime=time,..}
 
+getVersionedBlockItem :: TransactionTime -> S.Get BlockItem
+getVersionedBlockItem time = do
+    version <- S.get :: S.Get Version
+    a <- case version of
+      0 -> getBlockItemV0 time
+      _ -> fail "Bad block version"
+    return a
+
 -- |Get a block item, reconstructing metadata.
-getBlockItem :: TransactionTime -- ^Timestamp of when the item arrived.
+getBlockItemV0 :: TransactionTime -- ^Timestamp of when the item arrived.
              -> S.Get BlockItem
-getBlockItem time =
+getBlockItemV0 time =
     S.getWord8 >>= \case
       0 -> normalTransaction <$> getUnverifiedTransaction time
       1 -> credentialDeployment <$> getCDWM time
