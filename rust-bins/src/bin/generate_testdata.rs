@@ -204,7 +204,6 @@ fn main() {
             threshold: SignatureThreshold(2),
         };
 
-
         let mut out = Vec::new();
         let gc_bytes = to_bytes(&global_ctx);
         out.put(&(gc_bytes.len() as u32));
