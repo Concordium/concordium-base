@@ -6,7 +6,6 @@ use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::Curve;
 
-
 /// A Commitment is a group element .
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
 pub struct Commitment<C: Curve>(pub C);
@@ -29,7 +28,6 @@ impl<C: Curve> Commitment<C> {
 impl<C: Curve> std::borrow::Borrow<C> for Commitment<C> {
     fn borrow(&self) -> &C { &self.0 }
 }
-
 
 #[cfg(test)]
 mod tests {

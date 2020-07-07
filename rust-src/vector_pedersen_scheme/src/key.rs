@@ -30,7 +30,7 @@ impl<C: Curve> CommitmentKey<C> {
         let r_scalar = r.randomness;
         let hr = h.mul_by_scalar(&r_scalar);
         // let gm = g.mul_by_scalar(&message);
-        let msm = multiscalar_multiplication::<C,_>(&messages[..], &G[..]);
+        let msm = multiscalar_multiplication::<C, _>(&messages[..], &G[..]);
         Commitment(msm.plus_point(&hr))
     }
 
