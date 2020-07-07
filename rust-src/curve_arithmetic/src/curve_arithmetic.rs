@@ -3,8 +3,10 @@ use crypto_common::{Serial, Serialize};
 use failure::{Fail, Fallible};
 use ff::{Field, PrimeField};
 use rand::*;
-use std::{borrow::Borrow, fmt::{Debug, Display, Formatter}};
-
+use std::{
+    borrow::Borrow,
+    fmt::{Debug, Display, Formatter},
+};
 
 #[derive(Debug)]
 pub enum CurveDecodingError {
@@ -79,7 +81,7 @@ pub fn multiscalar_multiplication_naive<C: Curve>(a: &[C::Scalar], G: &[C]) -> C
 }
 
 #[allow(non_snake_case)]
-pub fn multiscalar_multiplication<C: Curve, X: Borrow<C>>(a: &[C::Scalar], G: &[X]) -> C{
+pub fn multiscalar_multiplication<C: Curve, X: Borrow<C>>(a: &[C::Scalar], G: &[X]) -> C {
     multiexp(G, a)
 }
 
@@ -173,7 +175,11 @@ pub fn multiexp<C: Curve, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar]) -> C {
 /// Assumes:
 /// - the lengths of inputs are the same
 /// - window_size < 62
-pub fn multiexp_worker<C: Curve, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar], window_size: usize) -> C {
+pub fn multiexp_worker<C: Curve, X: Borrow<C>>(
+    gs: &[X],
+    exps: &[C::Scalar],
+    window_size: usize,
+) -> C {
     // Compute the wnaf
 
     let k = exps.len();
@@ -186,7 +192,11 @@ pub fn multiexp_worker<C: Curve, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar], win
     multiexp_worker_given_table(exps, &table, window_size)
 }
 
-pub fn multiexp_worker_given_table<C: Curve>(exps: &[C::Scalar], table: &[Vec<C>], window_size: usize) -> C {
+pub fn multiexp_worker_given_table<C: Curve>(
+    exps: &[C::Scalar],
+    table: &[Vec<C>],
+    window_size: usize,
+) -> C {
     // Compute the wnaf
 
     let k = exps.len();
@@ -249,8 +259,7 @@ pub fn multiexp_worker_given_table<C: Curve>(exps: &[C::Scalar], table: &[Vec<C>
     a
 }
 
-
-pub fn multiexp_table<C: Curve, X: Borrow<C>>(gs: &[X], window_size: usize)->Vec<Vec<C>>{
+pub fn multiexp_table<C: Curve, X: Borrow<C>>(gs: &[X], window_size: usize) -> Vec<Vec<C>> {
     let k = gs.len();
     let mut table = Vec::with_capacity(k);
     for g in gs.iter() {
@@ -268,7 +277,6 @@ pub fn multiexp_table<C: Curve, X: Borrow<C>>(gs: &[X], window_size: usize)->Vec
     }
     table
 }
-
 
 #[cfg(test)]
 mod tests {

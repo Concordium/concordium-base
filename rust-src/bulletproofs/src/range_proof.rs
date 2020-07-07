@@ -762,9 +762,9 @@ pub fn verify_efficient<C: Curve>(
         multiscalar_multiplication::<C, Commitment<C>>(&powers, commitments)
     };
 
-    RHS = RHS
-        .plus_point(&multiscalar_multiplication(&[delta_yz, x, x2], &[B, T_1,T_2]));
-
+    RHS = RHS.plus_point(&multiscalar_multiplication(&[delta_yz, x, x2], &[
+        B, T_1, T_2,
+    ]));
 
     // println!("--------------- VERIFICATION ----------------");
     let first = LHS.minus_point(&RHS).is_zero_point();
@@ -1236,16 +1236,7 @@ mod tests {
         println!("Verifying (slightly) more efficiently..");
         let now = Instant::now();
         let mut transcript = Transcript::new(&[]);
-        let b2 = verify_efficient(
-            &mut transcript,
-            n,
-            &commitments,
-            &proof,
-            &G,
-            &H,
-            B,
-            B_tilde,
-        );
+        let b2 = verify_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
         println!("Verification done! time: {} ms", now.elapsed().as_millis());
         // println!("Efficient verifier's output = {:?}", b);
 
@@ -1253,16 +1244,8 @@ mod tests {
         println!("Verifying even more efficiently..");
         let now = Instant::now();
         let mut transcript = Transcript::new(&[]);
-        let b3 = verify_more_efficient(
-            &mut transcript,
-            n,
-            &commitments,
-            &proof,
-            &G,
-            &H,
-            B,
-            B_tilde,
-        );
+        let b3 =
+            verify_more_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
         println!("Verification done! time: {} ms", now.elapsed().as_millis());
         // println!("Efficient verifier's output = {:?}", b);
         assert!(b1 && b2 && b3);
@@ -1293,30 +1276,13 @@ mod tests {
         println!("Verifying more efficiently..");
         let now = Instant::now();
         let mut transcript = Transcript::new(&[]);
-        let _b = verify_efficient(
-            &mut transcript,
-            n,
-            &commitments,
-            &proof,
-            &G,
-            &H,
-            B,
-            B_tilde,
-        );
+        let _b = verify_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
         println!("Verification done! time: {} ms", now.elapsed().as_millis());
         println!("Verifying even more efficiently..");
         let now = Instant::now();
         let mut transcript = Transcript::new(&[]);
-        let _b = verify_more_efficient(
-            &mut transcript,
-            n,
-            &commitments,
-            &proof,
-            &G,
-            &H,
-            B,
-            B_tilde,
-        );
+        let _b =
+            verify_more_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
         println!("Verification done! time: {} ms", now.elapsed().as_millis());
 
         // println!("Prover's P' = {:?}", P_prime_prover.into_affine());
