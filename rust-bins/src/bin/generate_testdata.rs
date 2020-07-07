@@ -204,9 +204,6 @@ fn main() {
             threshold: SignatureThreshold(2),
         };
 
-        // Created versioned CDIs
-        let versioned_cdi_1 = Versioned::new(VERSION_CREDENTIAL, cdi_1);
-        let versioned_cdi_2 = Versioned::new(VERSION_CREDENTIAL, cdi_2);
 
         let mut out = Vec::new();
         let gc_bytes = to_bytes(&global_ctx);
@@ -224,14 +221,14 @@ fn main() {
         }
 
         // output the first credential
-        let vcdi1_bytes = to_bytes(&versioned_cdi_1);
-        out.put(&(vcdi1_bytes.len() as u32));
-        out.write_all(&vcdi1_bytes).unwrap();
+        let cdi1_bytes = to_bytes(&cdi_1);
+        out.put(&(cdi1_bytes.len() as u32));
+        out.write_all(&cdi1_bytes).unwrap();
         // and account keys and then the second credential
         out.put(&acc_keys);
-        let vcdi2_bytes = to_bytes(&versioned_cdi_2);
-        out.put(&(vcdi2_bytes.len() as u32));
-        out.write_all(&vcdi2_bytes).unwrap();
+        let cdi2_bytes = to_bytes(&cdi_2);
+        out.put(&(cdi2_bytes.len() as u32));
+        out.write_all(&cdi2_bytes).unwrap();
 
         // finally we add a completely new set of keys to have a simple negative test
         let acc_keys_3 = {
@@ -269,14 +266,14 @@ fn main() {
         // We also output the cdi in JSON and binary, to test compatiblity with
         // the haskell serialization
 
-        if let Err(err) = write_json_to_file("cdi.json", &versioned_cdi_1) {
+        if let Err(err) = write_json_to_file("cdi.json", &cdi_1) {
             eprintln!("Could not output JSON file cdi.json, because {}.", err);
         } else {
             println!("Output cdi.json.");
         }
 
         let cdi_file = File::create("cdi.bin");
-        if let Err(err) = cdi_file.unwrap().write_all(&to_bytes(&versioned_cdi_1)) {
+        if let Err(err) = cdi_file.unwrap().write_all(&to_bytes(&cdi_1)) {
             eprintln!("Could not output binary file cdi.bin, because {}.", err);
         } else {
             println!("Output binary file cdi.bin.");
