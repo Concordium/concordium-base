@@ -477,7 +477,17 @@ type AccountVerificationKey = VerifyKey
 -- The value is at least 1 and at most 255.
 newtype SignatureThreshold = SignatureThreshold Word8
     deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
-    deriving (Serialize, Read) via Word8
+
+instance Serialize SignatureThreshold where
+  get = do
+    w <- getWord8
+    when (w == 0) $ fail "0 is not a valid signature threshold."
+    return (SignatureThreshold w)
+  put (SignatureThreshold w) = putWord8 w
+
+instance Read SignatureThreshold where
+  -- filter out the 0 values
+  readsPrec parsePrec input = [(SignatureThreshold w, rest) | (w, rest) <- readsPrec parsePrec input, w /= 0]
 
 instance ToJSON SignatureThreshold where
   toJSON (SignatureThreshold x) = toJSON x
