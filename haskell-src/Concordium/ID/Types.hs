@@ -477,7 +477,7 @@ type AccountVerificationKey = VerifyKey
 -- The value is at least 1 and at most 255.
 newtype SignatureThreshold = SignatureThreshold Word8
     deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
-    deriving Serialize via Word8
+    deriving (Serialize, Read) via Word8
 
 instance ToJSON SignatureThreshold where
   toJSON (SignatureThreshold x) = toJSON x
