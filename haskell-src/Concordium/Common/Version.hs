@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings, ScopedTypeVariables, DerivingVia #-}
 module Concordium.Common.Version where
 
 import Data.Word
@@ -41,7 +41,7 @@ instance Bounded Version where
 -- bytes, where MSB=1 indicates more bytes follow, and the 7 lower bits in a byte
 -- is Big Endian data bits for the value. A version number is bounded by u32 max.
 newtype Version = Version Word32
-    deriving (Eq, Ord, Hashable, Show, AE.FromJSON, AE.ToJSON)
+    deriving (Eq, Ord, Num, Hashable, Show, AE.FromJSON, AE.ToJSON) via Word32
 
 instance S.Serialize Version where
   put (Version v) = mapM_ S.putWord8 (encode7 v)
@@ -94,3 +94,32 @@ instance AE.FromJSON a => AE.FromJSON (Versioned a) where
     vVersion <- obj .: "v"
     vValue <- obj .: "value"
     return Versioned {..}
+
+-- currentVersion' :: forall a. (VersionedSerialize a) => a -> Version
+-- currentVersion' _ = currentVersion (Proxy :: Proxy a)
+
+-- class forall a. VersionedSerialize a where
+--     -- |Get the current version of a data structure
+--     currentVersion :: Proxy a -> Version
+
+
+
+    -- |Put structure with provided version
+    -- putExactVersion :: Version -> Put a
+    -- -- |Get structure with the provided version
+    -- getExactVersion :: Version -> Get a
+    -- -- |Put a structure with the current version
+    -- putVersioned :: Put a
+    -- putVersioned = putExactVersion (currentVersion (Proxy :: Proxy a))
+    -- -- |Get a structure with the current version
+    -- getVersioned :: Get a
+    -- putVersioned = getExactVersion (currentVersion (Proxy :: Proxy a))
+
+-- instance VersionedSerialize Block
+
+-- instance (VersionedSerialize a) => S.Serialize (Versioned a) where
+--    put (Versioned v val) = case putExactVersion v of
+-- 		Just p -> put v >> put p
+-- 		Nothing -> error "Version not supported"
+--    get = getExactVersiononed
+   
