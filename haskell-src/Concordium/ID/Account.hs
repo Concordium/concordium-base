@@ -1,12 +1,13 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
-module Concordium.ID.Account where
+module Concordium.ID.Account(CredentialDeploymentInformationBytes, verifyCredential) where
 
 import GHC.Word
 import System.IO.Unsafe
 import Foreign.Ptr
 import Foreign.C.Types
+import Foreign.Marshal.Array
 import Data.Int
 import Data.ByteString.Unsafe
 
@@ -15,6 +16,7 @@ import Data.ByteString as BS
 import Concordium.ID.Types
 import Concordium.ID.Parameters
 import Concordium.ID.IdentityProvider
+import Concordium.ID.AnonymityRevoker
 import Data.Serialize(encode)
 
 type CredentialDeploymentInformationBytes = ByteString
@@ -22,33 +24,48 @@ type CredentialDeploymentInformationBytes = ByteString
 foreign import ccall unsafe "verify_cdi_ffi" verifyCDIFFI
                :: Ptr GlobalContext
                -> Ptr IpInfo
-               -> Ptr Word8
-               -> CSize
-               -> Ptr Word8
-               -> CSize
+               -> Ptr (Ptr ArInfo)
+               -> CSize -- ^Length of the ArInfo list.
+               -> Ptr Word8 -- ^Serialized account keys.
+               -> CSize -- ^Length of the serialized account keys.
+               -> Ptr Word8 -- ^Serialized credential.
+               -> CSize  -- ^Length of the serialized credential.
                -> IO Int32
 
 -- FIXME: We pass in keys as byte arrays which is quite bad since
 -- keys are not bytes, but rather we know that they are well-formed already.
 
-verifyCredential :: GlobalContext -> IpInfo -> Maybe AccountKeys -> CredentialDeploymentInformationBytes -> Bool
-verifyCredential gc ipInfo Nothing cdiBytes = unsafeDupablePerformIO $ do
+withArInfoArray :: [Ptr ArInfo] -> [ArInfo] -> (Int -> Ptr (Ptr ArInfo) -> IO a) -> IO a
+withArInfoArray arPtrs [] k = withArrayLen arPtrs k
+withArInfoArray arPtrs (ar:ars) k = withArInfo ar $ \arPtr -> withArInfoArray (arPtr:arPtrs) ars k
+
+verifyCredential :: GlobalContext -> IpInfo -> [ArInfo] -> Maybe AccountKeys -> CredentialDeploymentInformationBytes -> Bool
+verifyCredential gc ipInfo arInfos Nothing cdiBytes = unsafeDupablePerformIO $ do
     res <- withGlobalContext gc $ \gcPtr ->
-           withIpInfo ipInfo $ \ipInfoPtr ->
-           unsafeUseAsCStringLen cdiBytes $ \(cdiBytesPtr, cdiBytesLen) ->
-           -- this use of unsafe is fine since at this point we know the CDI
-           -- bytes is a non-empty string, so the pointer cdiBytesPtr will be
-           -- non-null
-           verifyCDIFFI gcPtr ipInfoPtr nullPtr 0 (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
+            withIpInfo ipInfo $ \ipInfoPtr ->
+              withArInfoArray [] arInfos $ \len arPtr ->
+                unsafeUseAsCStringLen cdiBytes $ \(cdiBytesPtr, cdiBytesLen) -> do
+                -- this use of unsafe is fine since at this point we know the CDI
+                -- bytes is a non-empty string, so the pointer cdiBytesPtr will be
+                -- non-null
+                verifyCDIFFI gcPtr ipInfoPtr arPtr (fromIntegral len) nullPtr 0 (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
     return (res == 1)
-verifyCredential gc ipInfo (Just keys) cdiBytes = unsafeDupablePerformIO $ do
+verifyCredential gc ipInfo arInfos (Just keys) cdiBytes = unsafeDupablePerformIO $ do
     res <- withGlobalContext gc $ \gcPtr ->
            withIpInfo ipInfo $ \ipInfoPtr ->
-           unsafeUseAsCStringLen keyBytes $ \(keyBytesPtr, keyBytesLen) ->
-           unsafeUseAsCStringLen cdiBytes $ \(cdiBytesPtr, cdiBytesLen) ->
-           -- this use of unsafe is fine since at this point we know the CDI
-           -- bytes is a non-empty string, so the pointer cdiBytesPtr will be
-           -- non-null
-           verifyCDIFFI gcPtr ipInfoPtr (castPtr keyBytesPtr) (fromIntegral keyBytesLen) (castPtr cdiBytesPtr) (fromIntegral cdiBytesLen)
+             withArInfoArray [] arInfos $ \len arPtr ->
+               unsafeUseAsCStringLen keyBytes $ \(keyBytesPtr, keyBytesLen) ->
+               unsafeUseAsCStringLen cdiBytes $ \(cdiBytesPtr, cdiBytesLen) ->
+               -- this use of unsafe is fine since at this point we know the CDI
+               -- bytes is a non-empty string, so the pointer cdiBytesPtr will be
+               -- non-null
+               verifyCDIFFI gcPtr
+                            ipInfoPtr
+                            arPtr
+                            (fromIntegral len)
+                            (castPtr keyBytesPtr)
+                            (fromIntegral keyBytesLen)
+                            (castPtr cdiBytesPtr)
+                            (fromIntegral cdiBytesLen)
     return (res == 1)
     where keyBytes = encode keys

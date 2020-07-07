@@ -4,7 +4,7 @@
 
 use crypto_common::*;
 use crypto_common_derive::*;
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::*;
 
 use std::ops::Deref;
 

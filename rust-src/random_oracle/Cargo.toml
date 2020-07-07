@@ -20,6 +20,10 @@ version = "0"
 path = "../crypto_common"
 version = "0"
 
+[dependencies.crypto_common_derive]
+path = "../crypto_common_derive"
+version = "0"
+
 [lib]
 name = "random_oracle"
 crate-type = ["rlib", "staticlib", "cdylib" ]

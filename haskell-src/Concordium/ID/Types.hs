@@ -15,6 +15,7 @@ import Data.Serialize as S
 import GHC.Generics
 import Data.Hashable
 import qualified Data.Text.Read as Text
+import qualified Text.Read as Text
 import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
 import Data.Aeson.Types(toJSONKeyText)
@@ -368,25 +369,46 @@ instance FromJSON Policy where
     return Policy{..}
 
 -- |Unique identifier of the anonymity revoker.
-newtype ARName = ARName Word32
-    deriving(Eq)
-    deriving Show via Word32
+newtype ArIdentity = ArIdentity Word32
+    deriving(Eq, Ord)
+    deriving (Show, Hashable) via Word32
 
-instance Serialize ARName where
-  put (ARName n) = S.putWord32be n
-  get = ARName <$> S.getWord32be
+instance Serialize ArIdentity where
+  put (ArIdentity n) = S.putWord32be n
+  get = do
+    n <- S.getWord32be
+    when (n == 0) $ fail "ArIdentity must be at least 1."
+    return (ArIdentity n)
 
 -- |Public key of an anonymity revoker.
 newtype AnonymityRevokerPublicKey = AnonymityRevokerPublicKey ElgamalPublicKey
     deriving(Eq, Serialize, NFData)
     deriving Show via ElgamalPublicKey
 
-instance ToJSON ARName where
-  toJSON (ARName v) = toJSON v
+instance ToJSON ArIdentity where
+  toJSON (ArIdentity v) = toJSON v
 
 -- |NB: This just reads the string. No decoding.
-instance FromJSON ARName where
-  parseJSON v = ARName <$> parseJSON v
+instance FromJSON ArIdentity where
+  parseJSON v = do
+    n <- parseJSON v
+    when (n == 0) $ fail "ArIdentity must be at least 1."
+    return (ArIdentity n)
+
+instance FromJSONKey ArIdentity where
+  fromJSONKey = FromJSONKeyTextParser arIdFromText
+      where arIdFromText t = do
+              when (Text.length t > 10) $ fail "Out of bounds."
+              case Text.readMaybe (Text.unpack t) of
+                Nothing -> fail "Not an integral value."
+                Just i -> do
+                  when (i <= 0) $ fail "ArIdentity must be positive."
+                  when (i > toInteger (maxBound :: Word32)) $ fail "ArIdentity out of bounds."
+                  return (ArIdentity (fromInteger i))
+
+-- NB: This instance relies on the show instance being the one of Word32.
+instance ToJSONKey ArIdentity where
+  toJSONKey = toJSONKeyText (Text.pack . show)
 
 -- |Encryption of data with anonymity revoker's public key.
 newtype AREnc = AREnc ElgamalCipher
@@ -405,46 +427,45 @@ instance Serialize ShareNumber where
   put (ShareNumber n) = S.putWord32be n
   get = ShareNumber <$> S.getWord32be
 
-newtype Threshold = Threshold Word32
+-- |Anonymity revocation threshold.
+newtype Threshold = Threshold Word8
     deriving (Eq, Show, Ord)
-    deriving (FromJSON, ToJSON) via Word32
+    deriving (ToJSON) via Word8
+
+instance FromJSON Threshold where
+  parseJSON v = do
+    n <- parseJSON v
+    when (n == 0) $ fail "Threshold must be at least 1."
+    return (Threshold n)
 
 instance Serialize Threshold where
-  put (Threshold n) = S.putWord32be n
-  get = Threshold <$> S.getWord32be
-
+  put (Threshold n) = S.putWord8 n
+  get = do
+    n <- S.getWord8
+    when (n == 0) $ fail "Threshold must be at least 1."
+    return (Threshold n)
 
 -- |Data needed on-chain to revoke anonymity of the account holder.
-data ChainArData = ChainArData {
-  -- |Unique identifier of the anonimity revoker.
-  ardName :: !ARName,
+newtype ChainArData = ChainArData {
   -- |Encrypted share of id cred pub
-  ardIdCredPubShare :: !AREnc,
-  -- |The share number of this share.
-  ardIdCredPubShareNumber :: !ShareNumber
+  ardIdCredPubShare :: AREnc
   } deriving(Eq, Show)
 
 
 instance ToJSON ChainArData where
-  toJSON (ChainArData{..}) = object [
-    "arIdentity" .= ardName,
-    "encIdCredPubShare" .=  ardIdCredPubShare,
-    "idCredPubShareNumber" .= ardIdCredPubShareNumber
+  toJSON ChainArData{..} = object [
+    "encIdCredPubShare" .=  ardIdCredPubShare
     ]
 
 instance FromJSON ChainArData where
   parseJSON = withObject "ChainArData" $ \v -> do
-    ardName <- v .: "arIdentity"
     ardIdCredPubShare <- v .: "encIdCredPubShare"
-    ardIdCredPubShareNumber <- v .: "idCredPubShareNumber"
     return ChainArData{..}
 
 instance Serialize ChainArData where
   put ChainArData{..} =
-    put ardName <>
-    put ardIdCredPubShare <>
-    put ardIdCredPubShareNumber
-  get = ChainArData <$> get <*> get <*> get
+    put ardIdCredPubShare
+  get = ChainArData <$> get
 
 type AccountVerificationKey = VerifyKey
 
@@ -519,7 +540,7 @@ data CredentialDeploymentValues = CredentialDeploymentValues {
   -- |Revocation threshold. Any set of this many anonymity revokers can reveal IdCredPub.
   cdvThreshold :: !Threshold,
   -- |Anonymity revocation data associated with this credential.
-  cdvArData :: ![ChainArData],
+  cdvArData :: !(Map.Map ArIdentity ChainArData),
   -- |Policy. At the moment only opening of specific commitments.
   cdvPolicy :: !Policy
 } deriving(Eq, Show)
@@ -574,7 +595,7 @@ instance Serialize CredentialDeploymentValues where
     cdvIpId <- get
     cdvThreshold <- get
     l <- S.getWord16be
-    cdvArData <- replicateM (fromIntegral l) get
+    cdvArData <- safeFromAscList =<< replicateM (fromIntegral l) get
     cdvPolicy <- getPolicy
     return CredentialDeploymentValues{..}
 
@@ -584,7 +605,7 @@ instance Serialize CredentialDeploymentValues where
     put cdvIpId <>
     put cdvThreshold <>
     S.putWord16be (fromIntegral (length cdvArData)) <>
-    mapM_ put cdvArData <>
+    mapM_ put (Map.toAscList cdvArData) <>
     putPolicy cdvPolicy
 
 -- |The credential deployment information consists of values deployed and the

@@ -1,24 +1,15 @@
-use clap::{App, AppSettings, Arg};
-
+use clap::AppSettings;
 use client_server_helpers::*;
-use curve_arithmetic::{Curve, Pairing};
+use crypto_common::*;
+use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
+use either::Either::{Left, Right};
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
 use pairing::bls12_381::{Bls12, G1};
-use std::collections::btree_map::BTreeMap;
-
-use crypto_common::*;
-
 use rand::*;
-
-use pedersen_scheme::Value as PedersenValue;
-
-use std::path::Path;
-
-use std::{fs::File, io::Write};
-
-use either::Either::{Left, Right};
+use std::{collections::btree_map::BTreeMap, fs::File, io::Write, path::PathBuf};
+use structopt::StructOpt;
 
 type ExampleCurve = G1;
 
@@ -26,45 +17,78 @@ type ExampleAttribute = AttributeKind;
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
 
-fn main() {
-    let app = App::new("Generate test credentials.")
-        .version("0.36787944117")
-        .author("Concordium")
-        .setting(AppSettings::ArgRequiredElseHelp)
-        .global_setting(AppSettings::ColoredHelp)
-        .arg(
-            Arg::with_name("ip-data")
-                .long("ip-data")
-                .value_name("FILE")
-                .help("File with all information about the identity provider (public and private).")
-                .required(true),
-        );
+#[derive(StructOpt)]
+#[structopt(
+    version = "0.36787944117",
+    author = "Concordium",
+    about = "Generate test credentials."
+)]
+struct GenerateTestData {
+    #[structopt(
+        long = "ip-data",
+        help = "File with all information about the identity provider (public and private)."
+    )]
+    ip_data: PathBuf,
+    #[structopt(
+        long = "global",
+        help = "File with global parameters.",
+        default_value = "database/global.json"
+    )]
+    global: PathBuf,
+    #[structopt(
+        long = "ars",
+        help = "File with a list of anonymity revokers..",
+        default_value = "database/anonymity_revokers.json"
+    )]
+    anonymity_revokers: PathBuf,
+}
 
-    let matches = app.get_matches();
+fn main() {
+    let args = {
+        let app = GenerateTestData::clap()
+            .setting(AppSettings::ArgRequiredElseHelp)
+            .global_setting(AppSettings::ColoredHelp);
+        let matches = app.get_matches();
+        GenerateTestData::from_clap(&matches)
+    };
 
     let mut csprng = thread_rng();
 
-    let secret = ExampleCurve::generate_scalar(&mut csprng);
+    // all known anonymity revokers.
+    let ars_infos = {
+        if let Some(ars) = read_anonymity_revokers(args.anonymity_revokers) {
+            ars
+        } else {
+            eprintln!("Cannot read anonymity revokers from the database. Terminating.");
+            return;
+        }
+    };
+
+    let global_ctx = {
+        if let Some(gc) = read_global_context(args.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context information database. Terminating.");
+            return;
+        }
+    };
+
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: PedersenValue::new(secret),
-        },
+        id_cred: IdCredentials::generate(&mut csprng),
     };
 
     // Load identity provider and anonymity revokers.
-    let ip_data_path = Path::new(matches.value_of("ip-data").unwrap());
-    let (ip_info, ip_secret_key) =
-        match read_json_from_file::<_, IpData<Bls12, ExampleCurve>>(&ip_data_path) {
-            Ok(IpData {
-                ip_secret_key,
-                public_ip_info,
-                ..
-            }) => (public_ip_info, ip_secret_key),
-            Err(x) => {
-                eprintln!("Could not read identity issuer information because {}", x);
-                return;
-            }
-        };
+    let (ip_info, ip_secret_key) = match read_json_from_file::<_, IpData<Bls12>>(args.ip_data) {
+        Ok(IpData {
+            ip_secret_key,
+            public_ip_info,
+            ..
+        }) => (public_ip_info, ip_secret_key),
+        Err(x) => {
+            eprintln!("Could not read identity issuer information because {}", x);
+            return;
+        }
+    };
 
     // Choose prf key.
     let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -92,16 +116,12 @@ fn main() {
         _phantom: Default::default(),
     };
 
-    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        // use all anonymity revokers.
-        ar_identities: ip_info.ip_ars.ars.iter().map(|ar| ar.ar_identity).collect(),
-        // all but one threshold
-        threshold: Threshold((ip_info.ip_ars.ars.len() - 1) as _),
-    })
-    .expect("Constructed AR data is valid.");
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
+    // Threshold is all anonymity revokers.
+    let (pio, randomness) = generate_pio(&context, Threshold(ars_infos.len() as u8), &aci)
+        .expect("Generating the pre-identity object should succeed.");
 
-    let sig_ok = verify_credentials(&pio, &ip_info, &attributes, &ip_secret_key);
+    let sig_ok = verify_credentials(&pio, context, &attributes, &ip_secret_key);
 
     // First test, check that we have a valid signature.
     assert!(sig_ok.is_ok());
@@ -148,13 +168,12 @@ fn main() {
             existing: Left(SignatureThreshold(2)),
         };
 
-        let cdi_1 = generate_cdi(
-            &ip_info,
-            &global_ctx,
+        let cdi_1 = create_credential(
+            context,
             &id_object,
             &id_object_use_data,
             53,
-            &policy,
+            policy.clone(),
             &acc_data,
         )
         .expect("We should have generated valid data.");
@@ -166,13 +185,12 @@ fn main() {
             existing: Right(AccountAddress::new(&cdi_1.values.reg_id)),
         };
 
-        let cdi_2 = generate_cdi(
-            &ip_info,
-            &global_ctx,
+        let cdi_2 = create_credential(
+            context,
             &id_object,
             &id_object_use_data,
             53,
-            &policy,
+            policy.clone(),
             &acc_data_2,
         )
         .expect("We should have generated valid data.");
@@ -197,6 +215,14 @@ fn main() {
         let ip_info_bytes = to_bytes(&ip_info);
         out.put(&(ip_info_bytes.len() as u32));
         out.write_all(&ip_info_bytes).unwrap();
+        let ars_len = ars_infos.len();
+        out.put(&(ars_len as u64)); // length of the list, expected big-endian in Haskell.
+        for ar in ars_infos.values() {
+            let ar_bytes = to_bytes(ar);
+            out.put(&(ar_bytes.len() as u32));
+            out.write_all(&ar_bytes).unwrap();
+        }
+
         // output the first credential
         let vcdi1_bytes = to_bytes(&versioned_cdi_1);
         out.put(&(vcdi1_bytes.len() as u32));
@@ -273,13 +299,12 @@ fn main() {
             }
         };
 
-        let cdi = generate_cdi(
-            &ip_info,
-            &global_ctx,
+        let cdi = create_credential(
+            context,
             &id_object,
             &id_object_use_data,
             acc_num,
-            &policy,
+            policy.clone(),
             &acc_data,
         )
         .expect("We should have generated valid data.");

@@ -37,6 +37,7 @@ Library
                    Concordium.ID.Account
                    Concordium.ID.Parameters
                    Concordium.ID.IdentityProvider
+                   Concordium.ID.AnonymityRevoker
                    Concordium.ID.DummyData
                    Concordium.Crypto.FFIDataTypes
                    Concordium.Crypto.ByteStringHelpers
@@ -49,7 +50,8 @@ Library
 
   Build-depends:  base >=4.7
                 , aeson >= 1.4.2
-                , aeson-pretty >= 0.8
+                -- binary is used by aeson and we need for a couple of instances
+                , binary >= 0.8
                 , scientific >= 0.3.6
                 , bytestring >=0.10
                 , base16-bytestring

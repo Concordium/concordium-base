@@ -1,344 +1,213 @@
 //! The module provides the implementation of the `com_eq` sigma protocol.
-//! This protocol enables one to prove knowledge of discrete logarithms $a_1 ...
-//! a_n$ together with randomnesses $r_1 ... r_n$ corresponding to public values
-//! $ y = \prod G_i^{a_i} $ and commitments $C_i = commit(a_i, r_i)$.
+//! This protocol enables one to prove knowledge of discrete logarithm $a_1$
+//! together with randomnesses $r_1$ corresponding to the public value
+//! $ y = \prod G_i^{a_i} $ and commitment $C = commit(a_1, r_1)$.
 //! The product y and commitments can be in different groups, but they have to
 //! be of the same prime order, and for the implementation the field of scalars
 //! must be the same type for both groups.
 
-use curve_arithmetic::curve_arithmetic::Curve;
-use ff::Field;
-use rand::*;
-
-use random_oracle::RandomOracle;
-
+use crate::sigma_protocols::common::*;
 use crypto_common::*;
 use crypto_common_derive::*;
+use curve_arithmetic::{multiexp, Curve};
+use ff::Field;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
+use random_oracle::RandomOracle;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
-pub struct ComEqProof<T: Curve> {
-    /// The challenge computed by the prover.
-    challenge: T::Scalar,
-    /// The list of pairs $(s_i, t_i)$ where
-    /// * $s_i = \alpha_i - c a_i$
-    /// * $t_i = R_i - c r_i$
-    /// where $c$ is the challenge and $\alpha_i$ and $R_i$ are prover chosen
+pub struct Witness<T: Curve> {
+    /// The pair $(s, t)$ where
+    /// * $s = \alpha - c a$
+    /// * $t = R - c r$
+    /// where $c$ is the challenge and $\alpha$ and $R$ are prover chosen
     /// random scalars.
-    #[size_length = 4]
-    witness: Vec<(T::Scalar, T::Scalar)>,
+    witness: (T::Scalar, T::Scalar),
 }
 
-/// Construct a proof of knowledge of secret values. The arguments are as
-/// follows.
-/// * `ro` - Random oracle used in the challenge computation. This can be used
-///   to make sure that the proof is only valid in a certain context.
-/// * `commitments` - The list of commitments.
-/// * `y` - The evaluation $y$ (see above for notation).
-/// * `cmm_key` - The commitment key with which all the commitments are
-///   generated
-/// * `gxs` - The list of generators for discrete log proofs.
-/// * `secret` - The list of pairs $(r_i, a_i)$ where $r_i$ is the commitment
-///   randomness, and $a_i$ the commited to value.
-/// * `csprng` - A cryptographically secure random number generator.
+#[derive(Debug, Serialize)]
+pub struct CommittedPoints<C: Curve, D: Curve> {
+    pub(crate) u: C,
+    pub(crate) v: Commitment<D>,
+}
+
+pub struct ComEq<C: Curve, D: Curve<Scalar = C::Scalar>> {
+    /// The list of commitments.
+    pub commitment: Commitment<D>,
+    /// The evaluation $y$ (see above for notation).
+    pub y: C,
+    /// The commitment key with which all the commitments are
+    ///   generated
+    pub cmm_key: CommitmentKey<D>,
+    /// The generator for discrete log.
+    pub g: C,
+}
+
+pub struct ComEqSecret<C: Curve> {
+    pub r: Randomness<C>,
+    pub a: Value<C>,
+}
+
 #[allow(non_snake_case)]
-pub fn prove_com_eq<C: Curve, T: Curve<Scalar = C::Scalar>, R: Rng>(
-    ro: RandomOracle,
-    commitments: &[Commitment<C>],
-    y: &T,
-    cmm_key: &CommitmentKey<C>,
-    gxs: &[T],
-    secret: &[(&Randomness<C>, &Value<C>)],
-    csprng: &mut R,
-) -> ComEqProof<C> {
-    let n = commitments.len();
-    // FIXME: This should be handled better by returning an Option(Proof).
-    // Or at the very least stating the precondition.
-    assert_eq!(secret.len(), n);
-    assert_eq!(gxs.len(), n);
+impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
+    type CommitMessage = CommittedPoints<C, D>;
+    type ProtocolChallenge = C::Scalar;
+    // Vector of pairs (alpha_i, R_i).
+    type ProverState = (Value<D>, Randomness<D>);
+    type ProverWitness = Witness<C>;
+    type SecretData = ComEqSecret<D>;
 
-    let mut rands = Vec::with_capacity(n);
-
-    let hasher = ro
-        .append_bytes("com_eq")
-        .extend_from(commitments.iter())
-        .append(y)
-        .append(cmm_key)
-        .extend_from(gxs.iter());
-
-    loop {
-        // For each iteration of the loop we need to recompute the challenge,
-        // but we reuse the prefix computation from above.
-        let mut hasher2 = hasher.split();
-        let mut tmp_u = T::zero_point();
-        // clear the vector of randoms for the current iteration.
-        // Doing it this way avoids reallocating a whole new vector on each iteration.
-        rands.clear();
-        for g in gxs {
-            let alpha_i = Value::<C>::generate_non_zero(csprng);
-            // This cR_i is R_i from the specification.
-            let (v_i, cR_i) = cmm_key.commit(&alpha_i, csprng);
-            tmp_u = tmp_u.plus_point(&g.mul_by_scalar(&alpha_i));
-            hasher2.add(&v_i);
-            rands.push((alpha_i, cR_i));
-        }
-        hasher2.add(&tmp_u);
-        let challenge = hasher2.result_to_scalar::<T>();
-        match challenge {
-            None => {} // loop again
-            Some(challenge) => {
-                // In the unlikely case that the challenge is 0 we try with a
-                // different randomness. The reason for this is that in such a
-                // case the proof will not be valid. This should not happen in
-                // practice though.
-                if challenge != T::Scalar::zero() {
-                    let mut witness = Vec::with_capacity(n);
-                    for ((r_i, a_i), (ref alpha_i, ref cR_i)) in izip!(secret, rands) {
-                        // compute alpha_i - a_i * c
-                        let mut s_i = challenge;
-                        s_i.mul_assign(a_i);
-                        s_i.negate();
-                        s_i.add_assign(alpha_i);
-                        // compute R_i - r_i * c
-                        let mut t_i: C::Scalar = challenge;
-                        t_i.mul_assign(r_i);
-                        t_i.negate();
-                        t_i.add_assign(cR_i);
-                        witness.push((s_i, t_i))
-                    }
-                    let proof = ComEqProof { challenge, witness };
-                    return proof;
-                }
-            }
-        }
-    }
-}
-
-/// Specialization of the above for when we only have a single commitment.
-pub fn prove_com_eq_single<C: Curve, T: Curve<Scalar = C::Scalar>, R: Rng>(
-    ro: RandomOracle,
-    commitment: &Commitment<C>,
-    y: &T,
-    cmm_key: &CommitmentKey<C>,
-    gx: &T,
-    secret: (&Randomness<C>, &Value<C>),
-    csprng: &mut R,
-) -> ComEqProof<C> {
-    prove_com_eq(ro, &[*commitment], y, cmm_key, &[*gx], &[secret], csprng)
-}
-
-#[allow(clippy::many_single_char_names)]
-/// Verify a proof of knowledge. The arguments are as follows.
-/// * `ro` - Random oracle used in the challenge computation. This can be used
-///   to make sure that the proof is only valid in a certain context.
-/// * `commitments` - The list of commitments.
-/// * `y` - The evaluation $y$ (see above for notation).
-/// * `cmm_key` - The commitment key with which all the commitments are
-///   generated
-/// * `gxs` - The list of generators for discrete log proofs.
-/// * `proof` - Proposed proof.
-pub fn verify_com_eq<C: Curve, T: Curve<Scalar = C::Scalar>>(
-    ro: RandomOracle,
-    commitments: &[Commitment<C>],
-    y: &T,
-    cmm_key: &CommitmentKey<C>,
-    gxs: &[T],
-    proof: &ComEqProof<C>,
-) -> bool {
-    if commitments.len() != proof.witness.len() {
-        return false;
-    }
-    if gxs.len() != proof.witness.len() {
-        return false;
+    fn public(&self, ro: RandomOracle) -> RandomOracle {
+        ro.append(&self.commitment)
+            .append(&self.y)
+            .append(&self.cmm_key)
+            .append(&self.g)
     }
 
-    let challenge = &proof.challenge;
+    fn commit_point<R: rand::Rng>(
+        &self,
+        csprng: &mut R,
+    ) -> Option<(Self::CommitMessage, Self::ProverState)> {
+        let mut u = C::zero_point();
 
-    let mut u = y.mul_by_scalar(challenge);
-    for (g, (s_i, _)) in izip!(gxs, &proof.witness) {
-        u = u.plus_point(&g.mul_by_scalar(&s_i));
+        let alpha = Value::<D>::generate_non_zero(csprng);
+        // This cR_i is R_i from the specification.
+        let (v, cR) = self.cmm_key.commit(&alpha, csprng);
+        u = u.plus_point(&self.g.mul_by_scalar(&alpha));
+        Some((CommittedPoints { u, v }, (alpha, cR)))
     }
 
-    let mut hasher = ro
-        .append_bytes("com_eq")
-        .extend_from(commitments.iter())
-        .append(y)
-        .append(cmm_key)
-        .extend_from(gxs.iter());
-
-    for (c, (s_i, t_i)) in izip!(commitments.iter(), &proof.witness) {
-        let v = c
-            .mul_by_scalar(challenge)
-            .plus_point(&cmm_key.hide(Value::view_scalar(s_i), Randomness::view_scalar(t_i)));
-        hasher.add(&v);
+    fn get_challenge(&self, challenge: &random_oracle::Challenge) -> Self::ProtocolChallenge {
+        C::scalar_from_bytes(&challenge)
     }
-    hasher.add(&u);
 
-    let computed_challenge = hasher.result_to_scalar::<T>();
-    match computed_challenge {
-        None => false,
-        Some(computed_challenge) => computed_challenge == proof.challenge,
+    fn generate_witness(
+        &self,
+        secret: Self::SecretData,
+        state: Self::ProverState,
+        challenge: &Self::ProtocolChallenge,
+    ) -> Option<Self::ProverWitness> {
+        let (ref alpha, ref cR) = state;
+        // compute alpha_i - a_i * c
+        let mut s = *challenge;
+        s.mul_assign(&secret.a);
+        s.negate();
+        s.add_assign(alpha);
+        // compute R_i - r_i * c
+        let mut t: C::Scalar = *challenge;
+        t.mul_assign(&secret.r);
+        t.negate();
+        t.add_assign(cR);
+        Some(Witness { witness: (s, t) })
     }
-}
 
-/// Specialization of the above when only a single commitment is given.
-pub fn verify_com_eq_single<C: Curve, T: Curve<Scalar = C::Scalar>>(
-    ro: RandomOracle,
-    commitment: &Commitment<C>,
-    y: &T,
-    cmm_key: &CommitmentKey<C>,
-    gx: &T,
-    proof: &ComEqProof<C>,
-) -> bool {
-    verify_com_eq(ro, &[*commitment], y, cmm_key, &[*gx], proof)
+    fn extract_point(
+        &self,
+        challenge: &Self::ProtocolChallenge,
+        witness: &Self::ProverWitness,
+    ) -> Option<Self::CommitMessage> {
+        // let mut u = self.y.mul_by_scalar(challenge);
+        // FIXME: Could benefit from multiexponentiation
+        // u = u.plus_point(&self.g.mul_by_scalar(&witness.witness.0));
+
+        let u = multiexp(&[self.y, self.g], &[*challenge, witness.witness.0]);
+
+        let v = self.commitment.mul_by_scalar(challenge).plus_point(
+            &self
+                .cmm_key
+                .hide_worker(&witness.witness.0, &witness.witness.1),
+        );
+        Some(CommittedPoints {
+            u,
+            v: Commitment(v),
+        })
+    }
+
+    #[cfg(test)]
+    #[allow(clippy::many_single_char_names)]
+    fn with_valid_data<R: rand::Rng>(
+        _data_size: usize,
+        csprng: &mut R,
+        f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
+    ) {
+        let comm_key = CommitmentKey::generate(csprng);
+        let a = Value::<D>::generate_non_zero(csprng);
+        let (c, randomness) = comm_key.commit(&a, csprng);
+        let g = C::generate(csprng);
+        let mut y = C::zero_point();
+        y = y.plus_point(&g.mul_by_scalar(&a));
+        let com_eq = ComEq {
+            commitment: c,
+            y,
+            cmm_key: comm_key,
+            g,
+        };
+        let secret = ComEqSecret { r: randomness, a };
+        f(com_eq, secret, csprng)
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::sigma_protocols::common::*;
-    use pairing::bls12_381::G1Affine;
+    use pairing::bls12_381::{G1, G2};
 
     #[test]
     pub fn test_com_eq_correctness() {
-        let mut csprng = thread_rng();
-        let mut secret: Vec<(&Randomness<_>, &Value<_>)> = Vec::with_capacity(20);
-        let mut cxs = Vec::with_capacity(20);
-        let mut gxs = Vec::with_capacity(20);
-        for i in 1..20 {
-            secret.clear();
-            cxs.clear();
-            gxs.clear();
-            let g = G1Affine::generate(&mut csprng);
-            let h = G1Affine::generate(&mut csprng);
-            let mut y = G1Affine::zero_point();
-            let comm_key = CommitmentKey(g, h);
-            for _ in 0..i {
-                let a = Value::generate_non_zero(&mut csprng);
-                let (c, randomness) = comm_key.commit(&a, &mut csprng);
-                let g_i = G1Affine::generate(&mut csprng);
-                y = y.plus_point(&g_i.mul_by_scalar(&a));
-                secret.push((Box::leak(Box::new(randomness)), Box::leak(Box::new(a))));
-                cxs.push(c);
-                gxs.push(g_i);
-            }
-            let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let ro = RandomOracle::domain(&challenge_prefix);
-            let proof = prove_com_eq(ro.split(), &cxs, &y, &comm_key, &gxs, &secret, &mut csprng);
-            let res = verify_com_eq(ro, &cxs, &y, &comm_key, &gxs, &proof);
-            assert!(res, "Verification of produced proof.");
+        let mut csprng = rand::thread_rng();
+        for _i in 1..20 {
+            ComEq::<G1, G2>::with_valid_data(0, &mut csprng, |com_eq, secret, csprng| {
+                let challenge_prefix = generate_challenge_prefix(csprng);
+                let ro = RandomOracle::domain(&challenge_prefix);
+                let proof =
+                    prove(ro.split(), &com_eq, secret, csprng).expect("Proving should succeed.");
+                let res = verify(ro, &com_eq, &proof);
+                assert!(res, "Verification of produced proof.");
+            })
         }
     }
 
     #[test]
     pub fn test_com_eq_soundness() {
-        let mut csprng = thread_rng();
-        let mut secret: Vec<(&Randomness<_>, &Value<_>)> = Vec::with_capacity(20);
-        let mut cxs = Vec::with_capacity(20);
-        let mut gxs = Vec::with_capacity(20);
+        let mut csprng = rand::thread_rng();
         for i in 1..20 {
-            // Generate proof
-            secret.clear();
-            cxs.clear();
-            gxs.clear();
-            let g = G1Affine::generate(&mut csprng);
-            let h = G1Affine::generate(&mut csprng);
-            let mut y = G1Affine::zero_point();
-            let comm_key = CommitmentKey(g, h);
-            for _ in 0..i {
-                let a = Value::generate_non_zero(&mut csprng);
-                let (c, randomness) = comm_key.commit(&a, &mut csprng);
-                let g_i = G1Affine::generate(&mut csprng);
-                y = y.plus_point(&g_i.mul_by_scalar(&a));
-                secret.push((Box::leak(Box::new(randomness)), Box::leak(Box::new(a))));
-                cxs.push(c);
-                gxs.push(g_i);
-            }
-            let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let ro = RandomOracle::domain(&challenge_prefix);
-            let proof = prove_com_eq(ro.split(), &cxs, &y, &comm_key, &gxs, &secret, &mut csprng);
+            ComEq::<G1, G2>::with_valid_data(i, &mut csprng, |com_eq, secret, csprng| {
+                let challenge_prefix = generate_challenge_prefix(csprng);
+                let ro = RandomOracle::domain(&challenge_prefix);
+                let proof =
+                    prove(ro.split(), &com_eq, secret, csprng).expect("Proving should succeed.");
 
-            // Construct invalid parameters
-            let index_wrong_cx: usize = csprng.gen_range(0, i);
-            let index_wrong_gx: usize = csprng.gen_range(0, i);
+                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
+                assert!(!verify(wrong_ro, &com_eq, &proof));
+                let mut wrong_com_eq = com_eq;
+                {
+                    let tmp = wrong_com_eq.commitment;
+                    let v = Value::<G1>::generate(csprng);
+                    wrong_com_eq.commitment = wrong_com_eq.cmm_key.commit(&v, csprng).0;
+                    assert!(!verify(ro.split(), &wrong_com_eq, &proof));
+                    wrong_com_eq.commitment = tmp;
+                }
 
-            let wrong_ro = RandomOracle::domain(generate_challenge_prefix(&mut csprng));
-            let mut wrong_cxs = cxs.to_owned();
-            wrong_cxs[index_wrong_cx].0 = wrong_cxs[index_wrong_cx].0.double_point();
-            let wrong_y = y.double_point();
-            let mut wrong_comm_key_0 = comm_key;
-            wrong_comm_key_0.0 = wrong_comm_key_0.0.double_point();
-            let mut wrong_comm_key_1 = comm_key;
-            wrong_comm_key_1.1 = wrong_comm_key_1.1.double_point();
-            let mut wrong_gxs = gxs.to_owned();
-            wrong_gxs[index_wrong_gx] = wrong_gxs[index_wrong_gx].double_point();
+                {
+                    let tmp = wrong_com_eq.y;
+                    wrong_com_eq.y = G1::generate(csprng);
+                    assert!(!verify(ro.split(), &wrong_com_eq, &proof));
+                    wrong_com_eq.y = tmp;
+                }
 
-            // Verify failure for invalid parameters
-            assert!(!verify_com_eq(wrong_ro, &cxs, &y, &comm_key, &gxs, &proof));
-            assert!(!verify_com_eq(
-                ro.split(),
-                &wrong_cxs,
-                &y,
-                &comm_key,
-                &gxs,
-                &proof
-            ));
-            assert!(!verify_com_eq(
-                ro.split(),
-                &cxs,
-                &wrong_y,
-                &comm_key,
-                &gxs,
-                &proof
-            ));
-            assert!(!verify_com_eq(
-                ro.split(),
-                &cxs,
-                &y,
-                &wrong_comm_key_0,
-                &gxs,
-                &proof
-            ));
-            assert!(!verify_com_eq(
-                ro.split(),
-                &cxs,
-                &y,
-                &wrong_comm_key_1,
-                &gxs,
-                &proof
-            ));
-            assert!(!verify_com_eq(
-                ro.split(),
-                &cxs,
-                &y,
-                &comm_key,
-                &wrong_gxs,
-                &proof
-            ));
-        }
-    }
+                {
+                    let tmp = wrong_com_eq.cmm_key;
+                    wrong_com_eq.cmm_key = CommitmentKey::generate(csprng);
+                    assert!(!verify(ro.split(), &wrong_com_eq, &proof));
+                    wrong_com_eq.cmm_key = tmp;
+                }
 
-    #[test]
-    pub fn test_com_eq_proof_serialization() {
-        let mut csprng = thread_rng();
-        for _ in 1..100 {
-            let challenge = G1Affine::generate_scalar(&mut csprng);
-            let lrp1 = csprng.gen_range(1, 30);
-            let mut rp1 = Vec::with_capacity(lrp1);
-            for _ in 0..lrp1 {
-                rp1.push(G1Affine::generate(&mut csprng));
-            }
-            let lw = csprng.gen_range(1, 87);
-            let mut witness = Vec::with_capacity(lw);
-            for _ in 0..lw {
-                let a = G1Affine::generate_scalar(&mut csprng);
-                let b = G1Affine::generate_scalar(&mut csprng);
-                witness.push((a, b));
-            }
-            let cep = ComEqProof::<G1Affine> { challenge, witness };
-            let cepp = serialize_deserialize(&cep);
-            assert!(cepp.is_ok());
-            assert_eq!(cep, cepp.unwrap());
+                {
+                    let tmp = wrong_com_eq.g;
+                    wrong_com_eq.g = G1::generate(csprng);
+                    assert!(!verify(ro.split(), &wrong_com_eq, &proof));
+                    wrong_com_eq.g = tmp;
+                }
+            })
         }
     }
 }

@@ -17,6 +17,15 @@ macro_rules! rand_m_of_length {
     }};
 }
 
+pub fn bench_hash_to_curve(c: &mut Criterion) {
+    let mut csprng = thread_rng();
+    let msg = rand_m_of_length!(1000, csprng);
+    let msg_clone = msg.clone();
+    c.bench_function("hash_to_g1", move |b| {
+        b.iter(|| G1::hash_to_group(&msg_clone))
+    });
+}
+
 // To run this benches do the following:
 // - make bls12_381_g1hash pub in lib.rs
 // - make hash_bytes_to_fq pub in bls12_381_g1hash.rs
@@ -29,15 +38,6 @@ macro_rules! rand_m_of_length {
 //         b.iter(|| hash_bytes_to_fq(&msg_clone))
 //     });
 // }
-
-pub fn bench_hash_to_curve(c: &mut Criterion) {
-    let mut csprng = thread_rng();
-    let msg = rand_m_of_length!(1000, csprng);
-    let msg_clone = msg.clone();
-    c.bench_function("hash_to_g1", move |b| {
-        b.iter(|| G1::hash_to_group(&msg_clone))
-    });
-}
 
 // criterion_group!(hash_to_fq, bench_hash_to_fq);
 criterion_group!(hash_to_curve, bench_hash_to_curve);
