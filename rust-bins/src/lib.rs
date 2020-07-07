@@ -36,7 +36,7 @@ pub fn read_identity_providers<P: AsRef<Path> + std::fmt::Debug>(
 pub fn read_anonymity_revokers<P: AsRef<Path> + std::fmt::Debug>(
     filename: P,
 ) -> Option<BTreeMap<ArIdentity, ArInfo<ExampleCurve>>> {
-    read_json_from_file(filename).ok()
+    read_exact_versioned_map_json_from_file(VERSION_AR_INFO_PUBLIC, filename).ok()
 }
 
 /// Parse YYYYMM as YearMonth
@@ -102,5 +102,34 @@ where
             ),
         )),
         None => Ok(versioned.into_iter().map(|x| x.value).collect()),
+    }
+}
+
+/// Read a map of versioned objects from a JSON file and check all versions are
+/// equal the argument.
+pub fn read_exact_versioned_map_json_from_file<P, K, T>(
+    version: Version,
+    path: P,
+) -> io::Result<BTreeMap<K, T>>
+where
+    P: AsRef<Path> + std::fmt::Debug,
+    K: DeserializeOwned + std::cmp::Ord,
+    T: DeserializeOwned, {
+    let versioned: BTreeMap<K, Versioned<T>> = read_json_from_file(path)?;
+    match versioned.iter().find(|(_, v)| v.version != version) {
+        Some((_, v)) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Invalid version in map file, expected: {:?}, got: {:?}",
+                version, v.version,
+            ),
+        )),
+        None => {
+            let mut result: BTreeMap<K, T> = BTreeMap::new();
+            for (k, v) in versioned.into_iter() {
+                result.insert(k, v.value);
+            }
+            Ok(result)
+        }
     }
 }
