@@ -4,19 +4,21 @@
 //! The randomness used in commitment
 
 use crypto_common::*;
-use curve_arithmetic::curve_arithmetic::*;
+use curve_arithmetic::*;
 
 use ff::Field;
 
 use rand::*;
 use std::ops::Deref;
 
+use std::rc::Rc;
+
 /// Randomness used in the commitment.
 /// Secret by default.
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct Randomness<C: Curve> {
-    pub randomness: C::Scalar,
+    pub randomness: Rc<Secret<C::Scalar>>,
 }
 
 /// This trait allows automatic conversion of &Randomness<C> to &C::Scalar.
@@ -26,37 +28,33 @@ impl<C: Curve> Deref for Randomness<C> {
     fn deref(&self) -> &C::Scalar { &self.randomness }
 }
 
+impl<C: Curve> AsRef<C::Scalar> for Randomness<C> {
+    fn as_ref(&self) -> &C::Scalar { &self.randomness }
+}
+
 impl<C: Curve> Randomness<C> {
-    /// Zero randomness.
-    #[inline]
-    pub fn zero() -> Self {
+    pub fn new(x: C::Scalar) -> Self {
         Randomness {
-            randomness: C::Scalar::zero(),
+            randomness: Rc::new(Secret::new(x)),
         }
     }
+
+    /// Zero randomness.
+    #[inline]
+    pub fn zero() -> Self { Randomness::new(C::Scalar::zero()) }
 
     /// Generate a scalar as randomness.
     pub fn generate<T>(csprng: &mut T) -> Randomness<C>
     where
         T: Rng, {
-        Randomness {
-            randomness: C::generate_scalar(csprng),
-        }
+        Randomness::new(C::generate_scalar(csprng))
     }
 
     /// Generate a non-zero scalar as randomness.
     pub fn generate_non_zero<T>(csprng: &mut T) -> Randomness<C>
     where
         T: Rng, {
-        Randomness {
-            randomness: C::generate_non_zero_scalar(csprng),
-        }
-    }
-
-    /// View a scalar as randomness.
-    #[inline]
-    pub fn view_scalar(scalar: &C::Scalar) -> &Self {
-        unsafe { &*(scalar as *const C::Scalar as *const Randomness<C>) }
+        Randomness::new(C::generate_non_zero_scalar(csprng))
     }
 }
 

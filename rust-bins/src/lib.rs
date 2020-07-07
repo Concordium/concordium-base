@@ -1,14 +1,11 @@
 use crypto_common::*;
+use curve_arithmetic::*;
 use id::{ffi::*, types::*};
 use pairing::bls12_381::Bls12;
-
-use serde_json::{to_string_pretty, to_writer_pretty};
-
-use curve_arithmetic::curve_arithmetic::*;
-
 use serde::{de::DeserializeOwned, Serialize as SerdeSerialize};
-
+use serde_json::{to_string_pretty, to_writer_pretty};
 use std::{
+    collections::BTreeMap,
     fs::File,
     io::{self, BufReader},
     path::Path,
@@ -24,20 +21,29 @@ pub type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, E
 pub static GLOBAL_CONTEXT: &str = "database/global.json";
 pub static IDENTITY_PROVIDERS: &str = "database/identity_providers.json";
 
-pub fn read_global_context(filename: &str) -> Option<GlobalContext<ExampleCurve>> {
+pub fn read_global_context<P: AsRef<Path> + std::fmt::Debug>(
+    filename: P,
+) -> Option<GlobalContext<ExampleCurve>> {
     read_exact_versioned_json_from_file(VERSION_GLOBAL_PARAMETERS, filename).ok()
 }
 
-pub fn read_identity_providers() -> Option<Vec<IpInfo<Bls12, <Bls12 as Pairing>::G1>>> {
-    read_exact_versioned_vec_json_from_file(VERSION_IP_INFO_PUBLIC, IDENTITY_PROVIDERS).ok()
+pub fn read_identity_providers<P: AsRef<Path> + std::fmt::Debug>(
+    filename: P,
+) -> Option<Vec<IpInfo<Bls12>>> {
+    read_exact_versioned_vec_json_from_file(VERSION_IP_INFO_PUBLIC, filename).ok()
+}
+
+pub fn read_anonymity_revokers<P: AsRef<Path> + std::fmt::Debug>(
+    filename: P,
+) -> Option<BTreeMap<ArIdentity, ArInfo<ExampleCurve>>> {
+    read_json_from_file(filename).ok()
 }
 
 /// Parse YYYYMM as YearMonth
 pub fn parse_yearmonth(input: &str) -> Option<YearMonth> { YearMonth::from_str(input).ok() }
 
-pub fn write_json_to_file<T: SerdeSerialize>(filepath: &str, v: &T) -> io::Result<()> {
-    let path = Path::new(filepath);
-    let file = File::create(&path)?;
+pub fn write_json_to_file<P: AsRef<Path>, T: SerdeSerialize>(filepath: P, v: &T) -> io::Result<()> {
+    let file = File::create(filepath)?;
     Ok(to_writer_pretty(file, v)?)
 }
 

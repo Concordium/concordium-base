@@ -8,9 +8,8 @@ use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use elgamal::{public::PublicKey, secret::SecretKey};
 use pairing::bls12_381::{Bls12, G1};
-use pedersen_scheme::{key as pedersen_key, Value as PedersenValue};
 use rand::*;
-use std::{collections::btree_map::BTreeMap, convert::TryFrom};
+use std::{collections::BTreeMap, convert::TryFrom};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::*;
@@ -32,14 +31,18 @@ pub fn test_create_ars<T: Rng>(
     ar_base: &ExampleCurve,
     num_ars: u8,
     csprng: &mut T,
-) -> (Vec<ArInfo<ExampleCurve>>, Vec<SecretKey<ExampleCurve>>) {
-    let mut ar_infos = Vec::new();
-    let mut ar_keys = Vec::new();
-    for i in 0..num_ars {
+) -> (
+    BTreeMap<ArIdentity, ArInfo<ExampleCurve>>,
+    BTreeMap<ArIdentity, SecretKey<ExampleCurve>>,
+) {
+    let mut ar_infos = BTreeMap::new();
+    let mut ar_keys = BTreeMap::new();
+    for i in 1..=num_ars {
+        let ar_id = ArIdentity::new(i as u32);
         let ar_secret_key = SecretKey::generate(ar_base, csprng);
         let ar_public_key = PublicKey::from(&ar_secret_key);
         let ar_info = ArInfo::<ExampleCurve> {
-            ar_identity: ArIdentity(i as u32),
+            ar_identity: ar_id,
             ar_description: Description {
                 name:        format!("AnonymityRevoker{}", i),
                 url:         format!("AnonymityRevoker{}.com", i),
@@ -47,8 +50,8 @@ pub fn test_create_ars<T: Rng>(
             },
             ar_public_key,
         };
-        ar_infos.push(ar_info);
-        ar_keys.push(ar_secret_key);
+        let _ = ar_infos.insert(ar_id, ar_info);
+        let _ = ar_keys.insert(ar_id, ar_secret_key);
     }
     (ar_infos, ar_keys)
 }
@@ -58,55 +61,32 @@ pub fn test_create_ip_info<T: Rng>(
     csprng: &mut T,
     num_ars: u8,
     max_attrs: u8,
-) -> (
-    IpData<ExamplePairing, ExampleCurve>,
-    Vec<SecretKey<ExampleCurve>>,
-) {
+) -> IpData<ExamplePairing> {
     // Create key for IP long enough to encode the attributes and anonymity
     // revokers.
     let ps_len = (5 + num_ars + max_attrs) as usize;
     let ip_secret_key = ps_sig::secret::SecretKey::<ExamplePairing>::generate(ps_len, csprng);
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
 
-    // Create ARs
-    let ar_ck = pedersen_key::CommitmentKey::generate(csprng);
-    let ar_base = ExampleCurve::generate(csprng);
-    let (ar_infos, ar_keys) = test_create_ars(&ar_base, num_ars, csprng);
-
-    // Return IpData with public info and private key
-    (
-        IpData {
-            public_ip_info: IpInfo {
-                ip_identity:    IpIdentity(0),
-                ip_description: Description {
-                    name:        "IP0".to_owned(),
-                    url:         "IP0.com".to_owned(),
-                    description: "IP0".to_owned(),
-                },
-                ip_verify_key:  ip_public_key,
-                ip_ars:         IpAnonymityRevokers {
-                    ars: ar_infos,
-                    ar_cmm_key: ar_ck,
-                    ar_base,
-                },
+    // Return IpData with public and private keys.
+    IpData {
+        public_ip_info: IpInfo {
+            ip_identity:    IpIdentity(0),
+            ip_description: Description {
+                name:        "IP0".to_owned(),
+                url:         "IP0.com".to_owned(),
+                description: "IP0".to_owned(),
             },
-            ip_secret_key,
-            metadata: IpMetadata {
-                issuance_start: "URL.com".to_owned(),
-                icon:           "BeautifulIcon.ico".to_owned(),
-            },
+            ip_verify_key:  ip_public_key,
         },
-        ar_keys,
-    )
+        ip_secret_key,
+    }
 }
 
 /// Create random AccCredentialInfo (ACI) to be used by tests
 pub fn test_create_aci<T: Rng>(csprng: &mut T) -> AccCredentialInfo<ExampleCurve> {
-    let secret = ExampleCurve::generate_scalar(csprng);
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
-        id_cred: IdCredentials {
-            id_cred_sec: PedersenValue::new(secret),
-        },
+        id_cred: IdCredentials::generate(csprng),
     };
 
     let prf_key = prf::SecretKey::generate(csprng);
@@ -117,29 +97,27 @@ pub fn test_create_aci<T: Rng>(csprng: &mut T) -> AccCredentialInfo<ExampleCurve
 }
 
 /// Create PreIdentityObject for an account holder to be used by tests,
-/// with the anonymity revocation using all but the last AR.
-pub fn test_create_pio(
+/// with the anonymity revocation using all the given ars_infos.
+pub fn test_create_pio<'a>(
     aci: &AccCredentialInfo<ExampleCurve>,
-    ip_info: &IpInfo<ExamplePairing, ExampleCurve>,
-    num_ars: u8,
+    ip_info: &'a IpInfo<ExamplePairing>,
+    ars_infos: &'a BTreeMap<ArIdentity, ArInfo<ExampleCurve>>,
+    global_ctx: &'a GlobalContext<ExampleCurve>,
+    num_ars: u8, // should be at least 1
 ) -> (
-    Context<ExamplePairing, ExampleCurve>,
+    IPContext<'a, ExamplePairing, ExampleCurve>,
     PreIdentityObject<ExamplePairing, ExampleCurve>,
     ps_sig::SigRetrievalRandomness<ExamplePairing>,
 ) {
-    // Select all ARs except last one
-    let threshold = num_ars as u32 - 1;
-    let ars: Vec<ArIdentity> = (0..threshold).map(ArIdentity).collect::<Vec<_>>();
+    // Create context with all anonymity revokers
+    let context = IPContext::new(ip_info, ars_infos, global_ctx);
 
-    // Create context
-    let context = make_context_from_ip_info(ip_info.clone(), ChoiceArParameters {
-        ar_identities: ars,
-        threshold:     Threshold(threshold),
-    })
-    .expect("The constructed ARs are invalid.");
+    // Select all ARs except last one
+    let threshold = Threshold::try_from(num_ars - 1).unwrap_or(Threshold(1));
 
     // Create and return PIO
-    let (pio, randomness) = generate_pio(&context, &aci);
+    let (pio, randomness) = generate_pio(&context, threshold, &aci)
+        .expect("Generating the pre-identity object should succeed.");
     (context, pio, randomness)
 }
 
@@ -167,25 +145,26 @@ pub fn test_pipeline() {
     // Generate PIO
     let max_attrs = 10;
     let num_ars = 5;
-    let (
-        IpData {
-            public_ip_info: ip_info,
-            ip_secret_key,
-            metadata: _,
-        },
-        ar_keys,
-    ) = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+    let IpData {
+        public_ip_info: ip_info,
+        ip_secret_key,
+        ..
+    } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+
+    let global_ctx = GlobalContext::generate(&mut csprng);
+
+    let (ars_infos, ars_secret) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
+
     let aci = test_create_aci(&mut csprng);
-    let (_context, pio, randomness) = test_create_pio(&aci, &ip_info, num_ars);
+    let (context, pio, randomness) =
+        test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
     let alist = test_create_attributes();
-    let sig_ok = verify_credentials(&pio, &ip_info, &alist, &ip_secret_key);
-    assert!(sig_ok.is_ok());
+    let sig_ok = verify_credentials(&pio, context, &alist, &ip_secret_key);
+    assert!(sig_ok.is_ok(), "Signature on the credential is invalid.");
 
     // Generate CDI
     let ip_sig = sig_ok.unwrap();
-    let global_ctx = GlobalContext {
-        on_chain_commitment_key: pedersen_key::CommitmentKey::generate(&mut csprng),
-    };
+
     let id_object = IdentityObject {
         pre_identity_object: pio,
         alist,
@@ -214,17 +193,16 @@ pub fn test_pipeline() {
         },
         existing: Left(SignatureThreshold(2)),
     };
-    let cdi = generate_cdi(
-        &ip_info,
-        &global_ctx,
+    let cdi = create_credential(
+        context,
         &id_object,
         &id_use_data,
         0,
-        &policy,
+        policy.clone(),
         &acc_data,
     )
     .expect("Should generate the credential successfully.");
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
+    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, None, &cdi);
     assert_eq!(cdi_check, Ok(()));
 
     // Verify serialization
@@ -260,43 +238,51 @@ pub fn test_pipeline() {
 
     // Revoking anonymity using all but one AR
     let mut shares = Vec::new();
-    for i in 0..(num_ars - 1) {
+    for (ar_id, key) in ars_secret.iter().skip(1) {
         let ar = cdi
             .values
             .ar_data
-            .iter()
-            .find(|&x| x.ar_identity == ArIdentity(i as u32))
-            .unwrap();
-        let decrypted_share = (
-            ar.id_cred_pub_share_number.into(),
-            ar_keys[i as usize].decrypt(&ar.enc_id_cred_pub_share),
-        );
+            .get(ar_id)
+            .expect(&format!("Anonymity revoker {} is not present.", ar_id));
+        let decrypted_share = (*ar_id, key.decrypt(&ar.enc_id_cred_pub_share));
         shares.push(decrypted_share);
     }
     let revealed_id_cred_pub = reveal_id_cred_pub(&shares);
     assert_eq!(
         revealed_id_cred_pub,
-        ip_info
-            .ip_ars
-            .ar_base
+        global_ctx
+            .generator
             .mul_by_scalar(&id_use_data.aci.cred_holder_info.id_cred.id_cred_sec)
     );
 
     // generate a new cdi from a modified pre-identity object in which we swapped
     // two anonymity revokers. Verification of this credential should fail the
     // signature at the very least.
-    let mut cdi = generate_cdi(
-        &ip_info,
-        &global_ctx,
-        &id_object,
-        &id_use_data,
-        0,
-        &policy,
-        &acc_data,
-    )
-    .expect("Should generate the credential successfully.");
-    cdi.values.ar_data.rotate_left(1);
-    let cdi_check = verify_cdi(&global_ctx, &ip_info, None, &cdi);
+    let mut cdi = create_credential(context, &id_object, &id_use_data, 0, policy, &acc_data)
+        .expect("Should generate the credential successfully.");
+    // Swap two ar_data values for two anonymity revokers.
+    let x_2 = cdi
+        .values
+        .ar_data
+        .get(&ArIdentity::new(2))
+        .expect("AR 2 exists")
+        .clone();
+    let x_3 = cdi
+        .values
+        .ar_data
+        .get(&ArIdentity::new(3))
+        .expect("AR 3 exists")
+        .clone();
+    *cdi.values
+        .ar_data
+        .get_mut(&ArIdentity::new(2))
+        .expect("AR 2 exists") = x_3;
+    *cdi.values
+        .ar_data
+        .get_mut(&ArIdentity::new(3))
+        .expect("AR 2 exists") = x_2;
+    // Verification should now fail.
+    let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, None, &cdi);
     assert_ne!(cdi_check, Ok(()));
 }
 

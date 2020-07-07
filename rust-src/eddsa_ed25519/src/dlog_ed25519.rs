@@ -104,29 +104,21 @@ pub fn prove_dlog_ed25519(
     let secret = scalar_from_secret_key(&secret_key);
     // FIXME: Add base to the proof.
     let hasher = ro.append_bytes("dlog_ed25519").append(public);
-    loop {
-        // FIXME non_zero scalar should be generated
-        let rand_scalar = generate_rand_scalar();
-        let randomised_point = &rand_scalar * &constants::ED25519_BASEPOINT_TABLE;
-        let challenge_bytes = hasher
-            .split()
-            .append_bytes(&randomised_point.compress().to_bytes())
-            .result();
-        let mut array = [0u8; 32];
-        array.copy_from_slice(&challenge_bytes.as_ref()[..32]);
-        let maybe_challenge = Scalar::from_canonical_bytes(array);
-        match maybe_challenge {
-            None => {} // loop again
-            Some(challenge) => {
-                if challenge != Scalar::zero() {
-                    let proof = Ed25519DlogProof {
-                        challenge,
-                        witness: rand_scalar - challenge * secret,
-                    };
-                    return proof;
-                } // else try another time.
-            }
-        }
+
+    // FIXME non_zero scalar should be generated
+    let rand_scalar = generate_rand_scalar();
+    let randomised_point = &rand_scalar * &constants::ED25519_BASEPOINT_TABLE;
+    let challenge_bytes = hasher
+        .split()
+        .append_bytes(&randomised_point.compress().to_bytes())
+        .result();
+    // FIXME: Do the same as in other proofs in sigma_protocols in id.
+    let mut array = [0u8; 32];
+    array.copy_from_slice(&challenge_bytes.as_ref());
+    let challenge = Scalar::from_bytes_mod_order(array);
+    Ed25519DlogProof {
+        challenge,
+        witness: rand_scalar - challenge * secret,
     }
 }
 
@@ -146,13 +138,11 @@ pub fn verify_dlog_ed25519(
                 .append_bytes(&randomised_point.compress().to_bytes());
             // FIXME: Should do the same as for normal dlog.
             let challenge_bytes = hasher.result();
+            // FIXME: Do the same as in other proofs in sigma_protocols in id.
             let mut array = [0u8; 32];
-            array.copy_from_slice(&challenge_bytes.as_ref()[..32]);
-            let maybe_challenge = Scalar::from_canonical_bytes(array);
-            match maybe_challenge {
-                None => false,
-                Some(challenge) => challenge == proof.challenge,
-            }
+            array.copy_from_slice(&challenge_bytes.as_ref());
+            let challenge = Scalar::from_bytes_mod_order(array);
+            challenge == proof.challenge
         }
     }
 }

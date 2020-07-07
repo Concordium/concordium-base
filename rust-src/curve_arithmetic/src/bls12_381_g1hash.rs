@@ -1,11 +1,12 @@
 use crate::curve_arithmetic::CurveDecodingError;
-use byteorder::{BigEndian, ReadBytesExt}; // TODO: maybe delete
-use bytes::BufMut;
-use ff::{Field, PrimeField, PrimeFieldDecodingError};
+use ff::{Field, PrimeField};
 use group::{CurveProjective, EncodedPoint};
 use pairing::bls12_381::{Fq, FqRepr, G1Uncompressed, G1};
 use sha2::{Digest, Sha512};
-use std::io::{Cursor, Write};
+use std::{
+    convert::TryInto,
+    io::{Cursor, Write},
+};
 
 // (p-3)/4 where p is the prime characteristic of the field Fq (p=q)
 #[allow(clippy::unreadable_literal)]
@@ -499,16 +500,14 @@ pub fn hash_to_g1(bytes: &[u8]) -> G1 {
     // Concatenate the message with 0u8 and 1u8 respectively
     // The paper suggests concatenating a single bit - but since the point is to
     // get two unrelated field elements, concatenating with 0u8 and 1u8 is ok
-    let mut bytes0: Vec<u8> = bytes.to_vec();
-    bytes0.put(0u8);
-    let mut bytes1: Vec<u8> = bytes.to_vec();
-    bytes1.put(1u8);
+    // Instead of forming two new byte arrays we pass a boolean to hash_bytes_to_fq
+    // function below.
 
-    // Notice, this hashing functions varies from the one used by the paper
-    // We use sha512 iteratively until the first 48 bytes of the resulting
+    // Notice, this hashing functions varies from the one used by the paper We
+    // use sha512 iteratively until the first 47 bytes + 5 bits of the resulting
     // digest represents a field element
-    let t0 = hash_bytes_to_fq(&bytes0);
-    let t1 = hash_bytes_to_fq(&bytes1);
+    let t0 = hash_bytes_to_fq(false, bytes);
+    let t1 = hash_bytes_to_fq(true, bytes);
 
     // compute the two points on E1'(Fq) - the 11 isogenous curve
     let (x0, y0, z0) = simplified_swu(t0);
@@ -538,6 +537,7 @@ pub fn hash_to_g1(bytes: &[u8]) -> G1 {
 // CAREFUL! This point is NOT guaranteed to be in the correct order subgroup
 // To get the point into the correct order subgroup, multiply by 1 +
 // 15132376222941642752
+#[inline]
 fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingError> {
     if z.is_zero() {
         Ok(G1::zero())
@@ -572,37 +572,30 @@ fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingEr
     }
 }
 
-// Hash to Fq by hashing using Sha512 and decode the first 48 bytes as an uint
-// in big endian. If this number is larger than q, retry.
-pub fn hash_bytes_to_fq(bytes: &[u8]) -> Fq {
+/// Hash to Fq by hashing using Sha512 and decode the first 381 bits as an
+/// unsigned integer in little endian representation. Repeat feeding the
+/// output of the hash into the hash until successful.
+pub fn hash_bytes_to_fq(one: bool, bytes: &[u8]) -> Fq {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
+    h.input(if one { [1u8] } else { [0u8] });
     h.input(bytes);
+    let mut fqrepr = [0u64; 6];
+    // We need 381 bits to represent the Fq field, so the topmost three bits will
+    // always be unset.
+    let mask: u64 = !(0b111 << 61);
     loop {
-        hash.copy_from_slice(h.result_reset().as_slice());
+        hash.copy_from_slice(&h.result_reset());
+        for (chunk, f) in hash.chunks_exact(8).zip(fqrepr.iter_mut()) {
+            *f = u64::from_le_bytes(chunk.try_into().expect("Chunk size is always 8."));
+        }
+        // Clear the topmost 3 bits.
+        fqrepr[5] &= mask;
         // keep trying to hash, until we hit an element in Fq
-        if let Ok(fq) = decode_hash_to_fq(&mut Cursor::new(&hash)) {
+        if let Ok(fq) = Fq::from_repr(FqRepr(fqrepr)) {
             return fq;
         }
-        h.input(hash.as_ref());
-    }
-}
-
-fn decode_hash_to_fq(bytes: &mut Cursor<&[u8]>) -> Result<Fq, PrimeFieldDecodingError> {
-    let mut fqrepr: FqRepr = FqRepr([0u64; 6]);
-    let mut i = true;
-    for digit in fqrepr.as_mut().iter_mut().rev() {
-        *digit = bytes
-            .read_u64::<BigEndian>()
-            .map_err(|_| PrimeFieldDecodingError::NotInField("Not in field".into()))?;
-        if i {
-            *digit &= !(1 << 63);
-            i = false;
-        }
-    }
-    match Fq::from_repr(fqrepr) {
-        Ok(fq) => Ok(fq),
-        Err(_) => Err(PrimeFieldDecodingError::NotInField("Not in field".into())),
+        h.input(&hash[..]);
     }
 }
 
@@ -810,6 +803,7 @@ enum Sign {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use byteorder::{BigEndian, ReadBytesExt};
     use ff::SqrtField;
     use rand::{rngs::StdRng, thread_rng, SeedableRng};
 

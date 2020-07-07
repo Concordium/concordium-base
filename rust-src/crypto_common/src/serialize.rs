@@ -266,6 +266,39 @@ pub fn deserial_map_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy, V: Dese
     Ok(out)
 }
 
+pub fn serial_set_no_length<'a, B: Buffer, K: Serial + 'a>(map: &BTreeSet<K>, out: &mut B) {
+    for k in map.iter() {
+        out.put(k);
+    }
+}
+
+/// NB: This ensures there are no duplicates, hence the specialized type.
+/// Moreover this will only succeed if keys are listed in order.
+pub fn deserial_set_no_length<R: ReadBytesExt, K: Deserial + Ord + Copy>(
+    source: &mut R,
+    len: usize,
+) -> Fallible<BTreeSet<K>> {
+    let mut out = BTreeSet::new();
+    let mut x = None;
+    for _ in 0..len {
+        let k = source.get()?;
+        match x {
+            None => {
+                out.insert(k);
+            }
+            Some(kk) => {
+                if k > kk {
+                    out.insert(k);
+                } else {
+                    bail!("Keys not in order.")
+                }
+            }
+        }
+        x = Some(k);
+    }
+    Ok(out)
+}
+
 impl<T: Serial, S: Serial> Serial for (T, S) {
     #[inline]
     fn serial<B: Buffer>(&self, out: &mut B) {
@@ -358,6 +391,23 @@ impl<T: Deserial> Deserial for [T; 3] {
     }
 }
 
+// Some more generic implementations
+impl<T: Serial + Default> Serial for [T; 32] {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        for x in self.iter() {
+            x.serial(out);
+        }
+    }
+}
+
+impl Deserial for [u8; 32] {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let mut out: [u8; 32] = Default::default();
+        source.read_exact(&mut out)?;
+        Ok(out)
+    }
+}
+
 // Some more std implementations
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
@@ -431,7 +481,7 @@ impl Deserial for SocketAddr {
 }
 
 use std::{
-    collections::HashSet,
+    collections::{BTreeSet, HashSet},
     hash::{BuildHasher, Hash},
 };
 
@@ -455,6 +505,10 @@ impl<T: Deserial + Eq + Hash, S: BuildHasher + Default> Deserial for HashSet<T, 
         }
         Ok(out)
     }
+}
+
+impl<'a, T: Serial> Serial for &'a T {
+    fn serial<W: Buffer + WriteBytesExt>(&self, target: &mut W) { (*self).serial(target) }
 }
 
 // Helpers for json serialization

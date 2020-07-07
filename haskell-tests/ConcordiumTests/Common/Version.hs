@@ -5,12 +5,9 @@
 module ConcordiumTests.Common.Version where
 
 import Concordium.Common.Version
-import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
 
-import System.Random
-import Data.Word
 import Test.QuickCheck
 import Test.Hspec
 import Data.Aeson
