@@ -6,6 +6,7 @@ pub mod com_eq_sig;
 pub mod com_mult;
 pub mod common;
 pub mod dlog;
+pub mod com_lin;
 
 #[cfg(test)]
 pub mod sigma_test;
