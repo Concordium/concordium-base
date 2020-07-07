@@ -4,6 +4,7 @@ use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 pub const VERSION_GLOBAL_PARAMETERS: Version = Version { value: 0 };
 pub const VERSION_CREDENTIAL: Version = Version { value: 0 };
 pub const VERSION_IP_INFO_PUBLIC: Version = Version { value: 0 };
+pub const VERSION_AR_INFO_PUBLIC: Version = Version { value: 0 };
 pub const VERSION_ID_OBJECT_USE_DATA: Version = Version { value: 0 };
 pub const VERSION_PRE_IDENTITY_OBJECT: Version = Version { value: 0 };
 pub const VERSION_IDENTITY_OBJECT: Version = Version { value: 0 };

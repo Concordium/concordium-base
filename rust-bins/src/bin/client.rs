@@ -637,7 +637,10 @@ fn handle_act_as_ip(aai: IpSignPio) {
             return;
         }
     };
-    let (ip_info, ip_sec_key) = match read_json_from_file::<_, IpData<Bls12>>(&aai.ip_data) {
+    let (ip_info, ip_sec_key) = match read_exact_versioned_json_from_file::<_, IpData<Bls12>>(
+        VERSION_IP_INFO_PUBLIC,
+        &aai.ip_data,
+    ) {
         Ok(ip_data) => (ip_data.public_ip_info, ip_data.ip_secret_key),
         Err(x) => {
             eprintln!("Could not read identity issuer information because {}", x);
@@ -746,7 +749,7 @@ fn handle_act_as_ip(aai: IpSignPio) {
 
 fn handle_start_ip(sip: StartIp) {
     let chi = {
-        if let Ok(chi) = read_json_from_file(&sip.chi) {
+        if let Ok(chi) = read_exact_versioned_json_from_file(VERSION_CREDENTIAL, &sip.chi) {
             chi
         } else {
             eprintln!("Could not read credential holder information.");
@@ -763,8 +766,10 @@ fn handle_start_ip(sip: StartIp) {
     };
 
     // now choose an identity provider.
-    let ips = {
-        if let Some(ips) = read_identity_providers(sip.identity_providers) {
+    let ips: Vec<IpInfo<Bls12>> = {
+        if let Ok(ips) =
+            read_exact_versioned_vec_json_from_file(VERSION_IP_INFO_PUBLIC, sip.identity_providers)
+        {
             ips
         } else {
             eprintln!("Cannot read identity providers from the database. Terminating.");
@@ -942,16 +947,22 @@ fn handle_generate_ips(gip: GenerateIps) {
                 return;
             }
             println!("writing public AR({}) in file {:?}", i, ar_fname);
-            if let Err(err) = write_json_to_file(&ar_pub_fname, &ar_data.public_ar_info) {
+            let ver_public_ar_info =
+                Versioned::new(VERSION_AR_INFO_PUBLIC, ar_data.public_ar_info.clone());
+            if let Err(err) = write_json_to_file(&ar_pub_fname, &ver_public_ar_info) {
                 eprintln!("Could not write anonymity revoker {}: {}", i, err);
                 return;
             }
             let _ = all_ars.insert(ar_identity, ar_data.public_ar_info);
         }
 
+        let mut ver_all_ars = BTreeMap::new();
+        for (k, v) in all_ars.iter() {
+            ver_all_ars.insert(k, Versioned::new(VERSION_AR_INFO_PUBLIC, v));
+        }
         let mut ars_path = gip.output_dir.clone();
         ars_path.push("anonymity_revokers.json");
-        if let Err(err) = write_json_to_file(ars_path.clone(), &all_ars) {
+        if let Err(err) = write_json_to_file(ars_path.clone(), &ver_all_ars) {
             eprintln!("Could not write out anonymity revokers: {}", err);
             return;
         } else {
