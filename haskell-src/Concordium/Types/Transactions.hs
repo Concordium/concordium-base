@@ -364,8 +364,8 @@ getCDWM time = do
     let wmdSignHash = transactionSignHashForCDI wmdHash
     return WithMetadata{wmdArrivalTime=time,..}
 
-getVersionedBlockItem :: TransactionTime -> S.Get BlockItem
-getVersionedBlockItem time = do
+getExactVersionedBlockItem :: TransactionTime -> S.Get BlockItem
+getExactVersionedBlockItem time = do
     version <- S.get :: S.Get Version
     a <- case version of
       0 -> getBlockItemV0 time

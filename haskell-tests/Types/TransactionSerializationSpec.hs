@@ -34,7 +34,7 @@ dummyTime = 37
 
 checkBlockItem :: BlockItem -> Property
 checkBlockItem bi = 
-    case runGet (getBlockItem (wmdArrivalTime bi)) bs of
+    case runGet (getBlockItemV0 (wmdArrivalTime bi)) bs of
       Left err -> counterexample err False
       Right bi' -> QC.label (groupIntoSize (BS.length bs)) $ bi === bi'
   where
