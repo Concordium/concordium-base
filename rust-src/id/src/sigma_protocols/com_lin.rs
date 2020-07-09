@@ -46,9 +46,6 @@ impl<C: Curve> SigmaProtocol for ComLin<C>{
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
-
-        let cm : Self::CommitMessage;
-        let ps : Self::ProverState;
         let n = self.cmms.len();
         let mut ais = Vec::with_capacity(n);
         let mut alphas : Vec<Value<C>> = Vec::with_capacity(n);
@@ -181,13 +178,54 @@ mod tests {
     #[test]
     pub fn test_com_lin_correctness() {
         let mut csprng = thread_rng();
-        for _ in 0..2 {
-            ComLin::<G1>::with_valid_data(6, &mut csprng, |com_lin, secret, csprng| {
+        for _ in 0..10 {
+            ComLin::<G1>::with_valid_data(10, &mut csprng, |com_lin, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
                 let ro = RandomOracle::domain(&challenge_prefix);
                 let proof = prove(ro.split(), &com_lin, secret, csprng).expect("Proving should succeed.");
-                println!("{}", verify(ro, &com_lin, &proof));
-                // assert!(verify(ro, &com_lin, &proof));
+                // println!("{}", verify(ro, &com_lin, &proof));
+                assert!(verify(ro, &com_lin, &proof));
+            })
+        }
+    }
+
+    #[test]
+    pub fn test_com_lin_soundness() {
+        let mut csprng = thread_rng();
+        for _ in 0..2 {
+            let n = 6;
+            ComLin::<G1>::with_valid_data(n, &mut csprng, |com_lin, secret, csprng| {
+                let challenge_prefix = generate_challenge_prefix(csprng);
+                let ro = RandomOracle::domain(&challenge_prefix);
+                let proof =
+                    prove(ro.split(), &com_lin, secret, csprng).expect("Proving should succeed.");
+                assert!(verify(ro.split(), &com_lin, &proof));
+
+                // Construct invalid parameters
+                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
+
+                // Verify failure for invalid parameters
+                assert!(!verify(wrong_ro, &com_lin, &proof));
+                let mut wrong_cmm = com_lin;
+                for i in 0..n {
+                    let tmp = wrong_cmm.cmms[i];
+                    let v = pedersen_scheme::Value::<G1>::generate(csprng);
+                    wrong_cmm.cmms[i] = wrong_cmm.cmm_key.commit(&v, csprng).0;
+                    assert!(!verify(ro.split(), &wrong_cmm, &proof));
+                    wrong_cmm.cmms[i] = tmp;
+                }
+
+                {
+                    let tmp = wrong_cmm.cmm;
+                    let v = pedersen_scheme::Value::<G1>::generate(csprng);
+                    wrong_cmm.cmm = wrong_cmm.cmm_key.commit(&v, csprng).0;
+                    assert!(!verify(ro.split(), &wrong_cmm, &proof));
+                    wrong_cmm.cmm = tmp;
+                }
+
+                wrong_cmm.cmm_key = pedersen_scheme::CommitmentKey::generate(csprng);
+
+                assert!(!verify(ro.split(), &wrong_cmm, &proof))
             })
         }
     }
