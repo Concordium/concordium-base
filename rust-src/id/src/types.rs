@@ -115,12 +115,23 @@ impl AccountAddress {
 }
 
 /// Threshold for the number of signatures required.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serial)]
 #[repr(transparent)]
 /// The values of this type must maintain the property that they are not 0.
 #[serde(transparent)]
 #[derive(SerdeSerialize)]
 pub struct SignatureThreshold(pub u8);
+
+impl Deserial for SignatureThreshold {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let w = source.get()?;
+        if w > 0 {
+            Ok(SignatureThreshold(w))
+        } else {
+            bail!("0 is not a valid signature threshold.")
+        }
+    }
+}
 
 // Need to manually implement deserialize to maintain the property that it is
 // non-zero.
