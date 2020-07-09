@@ -97,6 +97,34 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
 
 fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
     let mut csprng = thread_rng();
+    let n = 100;
+    let (sks, pks) = get_sks_pks!(n, csprng);
+    let m = rand_m_of_length!(1000, csprng);
+
+    let mut agg_sig = sks[0].sign(&m);
+    for i in 1..n {
+        let new_sig = sks[i].sign(&m);
+        agg_sig = new_sig.aggregate(agg_sig);
+    }
+
+    c.bench_function("verify_aggregate_sig_trusted_keys_100", move |b| {
+        b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
+    });
+
+    let n = 150;
+    let (sks, pks) = get_sks_pks!(n, csprng);
+    let m = rand_m_of_length!(1000, csprng);
+
+    let mut agg_sig = sks[0].sign(&m);
+    for i in 1..n {
+        let new_sig = sks[i].sign(&m);
+        agg_sig = new_sig.aggregate(agg_sig);
+    }
+
+    c.bench_function("verify_aggregate_sig_trusted_keys_150", move |b| {
+        b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
+    });
+
     let n = 200;
     let (sks, pks) = get_sks_pks!(n, csprng);
     let m = rand_m_of_length!(1000, csprng);
@@ -108,6 +136,90 @@ fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
     }
 
     c.bench_function("verify_aggregate_sig_trusted_keys_200", move |b| {
+        b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
+    });
+
+    let n = 250;
+    let (sks, pks) = get_sks_pks!(n, csprng);
+    let m = rand_m_of_length!(1000, csprng);
+
+    let mut agg_sig = sks[0].sign(&m);
+    for i in 1..n {
+        let new_sig = sks[i].sign(&m);
+        agg_sig = new_sig.aggregate(agg_sig);
+    }
+
+    c.bench_function("verify_aggregate_sig_trusted_keys_250", move |b| {
+        b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
+    });
+
+    let n = 300;
+    let (sks, pks) = get_sks_pks!(n, csprng);
+    let m = rand_m_of_length!(1000, csprng);
+
+    let mut agg_sig = sks[0].sign(&m);
+    for i in 1..n {
+        let new_sig = sks[i].sign(&m);
+        agg_sig = new_sig.aggregate(agg_sig);
+    }
+
+    c.bench_function("verify_aggregate_sig_trusted_keys_300", move |b| {
+        b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
+    });
+
+    let n = 350;
+    let (sks, pks) = get_sks_pks!(n, csprng);
+    let m = rand_m_of_length!(1000, csprng);
+
+    let mut agg_sig = sks[0].sign(&m);
+    for i in 1..n {
+        let new_sig = sks[i].sign(&m);
+        agg_sig = new_sig.aggregate(agg_sig);
+    }
+
+    c.bench_function("verify_aggregate_sig_trusted_keys_350", move |b| {
+        b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
+    });
+
+    let n = 400;
+    let (sks, pks) = get_sks_pks!(n, csprng);
+    let m = rand_m_of_length!(1000, csprng);
+
+    let mut agg_sig = sks[0].sign(&m);
+    for i in 1..n {
+        let new_sig = sks[i].sign(&m);
+        agg_sig = new_sig.aggregate(agg_sig);
+    }
+
+    c.bench_function("verify_aggregate_sig_trusted_keys_400", move |b| {
+        b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
+    });
+
+    let n = 600;
+    let (sks, pks) = get_sks_pks!(n, csprng);
+    let m = rand_m_of_length!(1000, csprng);
+
+    let mut agg_sig = sks[0].sign(&m);
+    for i in 1..n {
+        let new_sig = sks[i].sign(&m);
+        agg_sig = new_sig.aggregate(agg_sig);
+    }
+
+    c.bench_function("verify_aggregate_sig_trusted_keys_600", move |b| {
+        b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
+    });
+
+    let n = 1500;
+    let (sks, pks) = get_sks_pks!(n, csprng);
+    let m = rand_m_of_length!(1000, csprng);
+
+    let mut agg_sig = sks[0].sign(&m);
+    for i in 1..n {
+        let new_sig = sks[i].sign(&m);
+        agg_sig = new_sig.aggregate(agg_sig);
+    }
+
+    c.bench_function("verify_aggregate_sig_trusted_keys_1500", move |b| {
         b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
     });
 
