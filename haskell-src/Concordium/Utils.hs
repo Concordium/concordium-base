@@ -7,10 +7,11 @@ import qualified Data.Map.Strict as M
 import qualified Data.Sequence as Seq
 import Lens.Micro.Internal
 import Lens.Micro.Platform
-import Data.Monoid(First)
+import Data.Monoid (First)
 import Control.Monad
-
+import qualified Data.Set as Set
 import Control.Monad.State.Class
+import Data.Maybe
 
 -- |Strict version of `At`.
 --
@@ -134,3 +135,24 @@ cons' !x = (x:)
 ($!!) :: ((a,b) -> c) -> (a,b) -> c
 f $!! (!x, !y) = f (x,y)
 {-# INLINE ($!!) #-}
+
+-- * Helper lenses
+
+nonEmpty :: (Monoid (f v), Foldable f) => Lens' (Maybe (f v)) (f v)
+nonEmpty afb s = f <$> afb (fromMaybe mempty s)
+    where
+        f y = if null y then Nothing else Just y
+{-# INLINE nonEmpty #-}
+
+-- * Monadic conditionals
+
+whenM :: (Monad m) => m Bool -> m () -> m ()
+whenM t a = t >>= \r -> when r a
+
+-- * Misc
+whenAddToSet :: (Ord v, MonadState s m) => v -> Lens' s (Set.Set v) -> m () -> m ()
+whenAddToSet val setLens act = do
+    theSet <- use setLens
+    unless (val `Set.member` theSet) $ do
+        setLens .= Set.insert val theSet
+        act
