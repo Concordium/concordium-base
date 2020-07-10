@@ -39,7 +39,7 @@ path="../id"
 version = ""
 
 [dev-dependencies]
-criterion = "0.2"
+criterion = "0.3.3"
 
 [lib]
 name = "aggregate_sig"
