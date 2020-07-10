@@ -1,8 +1,8 @@
 use crate::transcript::TranscriptProtocol;
-use curve_arithmetic::{Curve, multiexp};
-use ff::Field;
 use crypto_common::*;
 use crypto_common_derive::*;
+use curve_arithmetic::{multiexp, Curve};
+use ff::Field;
 use merlin::Transcript;
 
 #[allow(non_snake_case)]
@@ -10,20 +10,21 @@ use merlin::Transcript;
 pub struct InnerProductProof<C: Curve> {
     pub l_vec: Vec<C>,
     pub r_vec: Vec<C>,
-    pub a: C::Scalar,
-    pub b: C::Scalar,
+    pub a:     C::Scalar,
+    pub b:     C::Scalar,
 }
 
 /// This function computes a inner product proof,
-/// which is a proof of knowledge that the prover knows vectors a and b such that P'=<a,G>+<b,H>+<a,b>Q.
-/// The arguments are
-/// - G_vec - the vector G of elliptic curve points 
-/// - H_vec - the vector H of elliptic curve points 
+/// which is a proof of knowledge that the prover knows vectors a and b such
+/// that P'=<a,G>+<b,H>+<a,b>Q. The arguments are
+/// - G_vec - the vector G of elliptic curve points
+/// - H_vec - the vector H of elliptic curve points
 /// - Q - the elliptiv curve point Q
-/// - a_vec - the vector a of scalars 
+/// - a_vec - the vector a of scalars
 /// - b_vec - the vector b of scalars
 /// Precondictions:
-/// G_vec, H_vec, a_vec and b_vec should all be of the same length, and this length must a power of 2. 
+/// G_vec, H_vec, a_vec and b_vec should all be of the same length, and this
+/// length must a power of 2.
 #[allow(non_snake_case)]
 #[allow(dead_code)]
 // #[cfg(test)]
@@ -52,10 +53,10 @@ pub fn prove_inner_product<C: Curve>(
         let b_hi = &b_vec[n / 2..];
         let H_lo = &H_vec[..n / 2];
         let H_hi = &H_vec[n / 2..];
-        let a_lo_G_hi = multiexp( G_hi, a_lo);
-        let a_hi_G_lo = multiexp( G_lo, a_hi);
-        let b_hi_H_lo = multiexp( H_lo, b_hi);
-        let b_lo_H_hi = multiexp( H_hi, b_lo);
+        let a_lo_G_hi = multiexp(G_hi, a_lo);
+        let a_hi_G_lo = multiexp(G_lo, a_hi);
+        let b_hi_H_lo = multiexp(H_lo, b_hi);
+        let b_lo_H_hi = multiexp(H_hi, b_lo);
         let a_lo_b_hi_Q = Q.mul_by_scalar(&inner_product(a_lo, b_hi));
         let a_hi_b_lo_Q = Q.mul_by_scalar(&inner_product(a_hi, b_lo));
 
@@ -127,7 +128,7 @@ pub fn prove_inner_product<C: Curve>(
 
             // Maybe faster
             let G_points = [G_lo[i], G_hi[i]];
-            let sum = multiexp( &G_points, &G_scalars);
+            let sum = multiexp(&G_points, &G_scalars);
             // end maybe faster
             G.push(sum);
 
@@ -137,7 +138,7 @@ pub fn prove_inner_product<C: Curve>(
             // let sum = H_lo_u_j.plus_point(&u_j_inv_H_hi);
             // Maybe faster
             let H_points = [H_lo[i], H_hi[i]];
-            let sum = multiexp( &H_points, &H_scalars);
+            let sum = multiexp(&H_points, &H_scalars);
             // end maybe faster
             H.push(sum);
         }
@@ -150,23 +151,31 @@ pub fn prove_inner_product<C: Curve>(
     let a = a_vec[0];
     let b = b_vec[0];
 
-    InnerProductProof { l_vec: L, r_vec: R, a, b }
+    InnerProductProof {
+        l_vec: L,
+        r_vec: R,
+        a,
+        b,
+    }
 }
 
 /// This function computes a inner product proof,
-/// which is a proof of knowledge that the prover knows vectors a and b such that P'=<a,G>+<b,H'>+<a,b>Q,
-/// but where H' = c ∘ H (pointwise scalarmultiplication) for already known vectors c (of scalars) and H (of elliptic curve points).
-/// This is more efficient than calling prove_inner_product with G and H', but the output is a proof of the same statement. 
+/// which is a proof of knowledge that the prover knows vectors a and b such
+/// that P'=<a,G>+<b,H'>+<a,b>Q, but where H' = c ∘ H (pointwise
+/// scalarmultiplication) for already known vectors c (of scalars) and H (of
+/// elliptic curve points). This is more efficient than calling
+/// prove_inner_product with G and H', but the output is a proof of the same
+/// statement. The arguments are
 /// The arguments are
-/// The arguments are
-/// - G_vec - the vector G of elliptic curve points 
-/// - H_vec - the vector H of elliptic curve points 
-/// - H_prime_scalars - the vector c of scalars such that H' = c ∘ H 
+/// - G_vec - the vector G of elliptic curve points
+/// - H_vec - the vector H of elliptic curve points
+/// - H_prime_scalars - the vector c of scalars such that H' = c ∘ H
 /// - Q - the elliptiv curve point Q
-/// - a_vec - the vector a of scalars 
+/// - a_vec - the vector a of scalars
 /// - b_vec - the vector b of scalars
 /// Precondictions:
-/// G_vec, H_vec, a_vec and b_vec should all be of the same length, and this length must a power of 2. 
+/// G_vec, H_vec, a_vec and b_vec should all be of the same length, and this
+/// length must a power of 2.
 #[allow(non_snake_case)]
 pub fn prove_inner_product_with_scalars<C: Curve>(
     transcript: &mut Transcript,
@@ -194,8 +203,8 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
         let b_hi = &b_vec[n / 2..];
         let H_lo = &H_vec[..n / 2];
         let H_hi = &H_vec[n / 2..];
-        let a_lo_G_hi = multiexp( G_hi, a_lo);
-        let a_hi_G_lo = multiexp( G_lo, a_hi);
+        let a_lo_G_hi = multiexp(G_hi, a_lo);
+        let a_hi_G_lo = multiexp(G_lo, a_hi);
         let b_hi_H_lo: C;
         let b_lo_H_hi: C;
         if j == 0 {
@@ -219,11 +228,11 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
                     xy
                 })
                 .collect();
-            b_hi_H_lo = multiexp( H_lo, &b_hi);
-            b_lo_H_hi = multiexp( H_hi, &b_lo);
+            b_hi_H_lo = multiexp(H_lo, &b_hi);
+            b_lo_H_hi = multiexp(H_hi, &b_lo);
         } else {
-            b_hi_H_lo = multiexp( H_lo, b_hi);
-            b_lo_H_hi = multiexp( H_hi, b_lo);
+            b_hi_H_lo = multiexp(H_lo, b_hi);
+            b_lo_H_hi = multiexp(H_hi, b_lo);
         }
         let a_lo_b_hi_Q = Q.mul_by_scalar(&inner_product(a_lo, b_hi));
         let a_hi_b_lo_Q = Q.mul_by_scalar(&inner_product(a_hi, b_lo));
@@ -276,7 +285,7 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
 
             // Maybe faster
             let G_points = [G_lo[i], G_hi[i]];
-            let sum = multiexp( &G_points, &G_scalars);
+            let sum = multiexp(&G_points, &G_scalars);
             // end maybe faster
             G.push(sum);
 
@@ -293,7 +302,7 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
                 u_j_inv.mul_assign(&H_prime_scalars[i + a_lo.len()]);
                 H_scalars = [u_j, u_j_inv];
             }
-            let sum = multiexp( &H_points, &H_scalars);
+            let sum = multiexp(&H_points, &H_scalars);
             // end maybe faster
             H.push(sum);
         }
@@ -306,21 +315,27 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
     let a = a_vec[0];
     let b = b_vec[0];
 
-    InnerProductProof { l_vec: L, r_vec: R, a, b }
+    InnerProductProof {
+        l_vec: L,
+        r_vec: R,
+        a,
+        b,
+    }
 }
 
 /// This struct contains vectors of scalars that are needed for verification.
-pub struct VerificationScalars<C: Curve>{
-    pub u_sq: Vec<C::Scalar>,
+pub struct VerificationScalars<C: Curve> {
+    pub u_sq:     Vec<C::Scalar>,
     pub u_inv_sq: Vec<C::Scalar>,
-    pub s: Vec<C::Scalar>,
+    pub s:        Vec<C::Scalar>,
 }
 
 /// This function calculates the verification scalars
-/// that are used to verify an inner product proof. 
+/// that are used to verify an inner product proof.
 /// The arguments are
-/// - proof - a reference to a inner product proof. 
-/// - n - the number of elements in the vectors (of equal length) that was used to produce the inner product proof.
+/// - proof - a reference to a inner product proof.
+/// - n - the number of elements in the vectors (of equal length) that was used
+///   to produce the inner product proof.
 #[allow(non_snake_case)]
 #[allow(clippy::many_single_char_names)]
 pub fn verify_scalars<C: Curve>(
@@ -344,7 +359,7 @@ pub fn verify_scalars<C: Curve>(
         transcript.append_point(b"Lj", &L[j]);
         transcript.append_point(b"Rj", &R[j]);
         let u_j: C::Scalar = transcript.challenge_scalar::<C>(b"uj");
-        let u_j_inv = u_j.inverse().unwrap(); //TODO be careful here
+        let u_j_inv = u_j.inverse().unwrap(); // TODO be careful here
         s_0.mul_assign(&u_j_inv);
         let mut u_j_sq = u_j;
         u_j_sq.mul_assign(&u_j);
@@ -359,11 +374,12 @@ pub fn verify_scalars<C: Curve>(
     // We calculate entrances s_0, ..., s_n of the vector s, where
     // s_0 = u_k^{-1} ... u_0^{-1}
     // s_1 =  u_k^{-1} ... u_1^{-1} u_0^{1}
-    // s_2 =  u_k^{-1} ... u_2^{-1} u_1^{1} u_0^{-1} corresponding to the fact that 2 is 10 in binary
-    // ...
-    // s_5 =  u_k^{-1} ... u_0^{-1} u_0^{1} u_0^{-1} u_0^{1} corresponding to the fact that 5 is 101 in binary
-    // ... and so on.
-    // That is, to calculate s_i, the bits of i are distributed among the u_j's exponents but where 0 is replaced with -1.
+    // s_2 =  u_k^{-1} ... u_2^{-1} u_1^{1} u_0^{-1} corresponding to the fact that
+    // 2 is 10 in binary ...
+    // s_5 =  u_k^{-1} ... u_0^{-1} u_0^{1} u_0^{-1} u_0^{1} corresponding to the
+    // fact that 5 is 101 in binary ... and so on.
+    // That is, to calculate s_i, the bits of i are distributed among the u_j's
+    // exponents but where 0 is replaced with -1.
     for i in 1..n {
         let lg_i = (32 - 1 - (i as u32).leading_zeros()) as usize;
         let k = 1 << lg_i;
@@ -371,19 +387,20 @@ pub fn verify_scalars<C: Curve>(
         s_i.mul_assign(&u_sq[L.len() - 1 - lg_i]);
         s.push(s_i);
     }
-    VerificationScalars{u_sq, u_inv_sq, s}
+    VerificationScalars { u_sq, u_inv_sq, s }
 }
 
 /// This function verifies an inner product proof,
-/// i.e. a proof of knowledge of vectors a and b such that P'=<a,G>+<b,H>+<a,b>Q.
-/// The arguments are
-/// - G_vec - the vector G of elliptic curve points 
-/// - H_vec - the vector H of elliptic curve points 
+/// i.e. a proof of knowledge of vectors a and b such that
+/// P'=<a,G>+<b,H>+<a,b>Q. The arguments are
+/// - G_vec - the vector G of elliptic curve points
+/// - H_vec - the vector H of elliptic curve points
 /// - P_prime - the elliptic curve point P'
 /// - Q - the elliptic curve point Q
 /// - proof - the inner product proof
 /// Precondictions:
-/// G_vec, H_vec should all be of the same length, and this length must a power of 2. 
+/// G_vec, H_vec should all be of the same length, and this length must a power
+/// of 2.
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 pub fn verify_inner_product<C: Curve>(
@@ -403,13 +420,16 @@ pub fn verify_inner_product<C: Curve>(
     ab.mul_assign(&b);
 
     let verification_scalars = verify_scalars(transcript, n, &proof);
-    let (u_sq, u_inv_sq, s) = (verification_scalars.u_sq, verification_scalars.u_inv_sq, verification_scalars.s);
+    let (u_sq, u_inv_sq, s) = (
+        verification_scalars.u_sq,
+        verification_scalars.u_inv_sq,
+        verification_scalars.s,
+    );
 
-
-    let G = multiexp( &G_vec, &s);
+    let G = multiexp(&G_vec, &s);
     let mut s_inv = s;
     s_inv.reverse();
-    let H = multiexp( &H_vec, &s_inv);
+    let H = multiexp(&H_vec, &s_inv);
 
     let mut sum = C::zero_point();
     for j in 0..L.len() {
@@ -428,11 +448,11 @@ pub fn verify_inner_product<C: Curve>(
     P_prime.minus_point(&RHS).is_zero_point()
 }
 
-/// This function calculates the inner product between to vectors over any field F.
-/// The arguments are
+/// This function calculates the inner product between to vectors over any field
+/// F. The arguments are
 /// - a - the first vector
 /// - b - the second vector
-/// Precondition: 
+/// Precondition:
 /// a and b should have the same length.
 #[allow(non_snake_case)]
 pub fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
@@ -441,7 +461,7 @@ pub fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
         panic!("a and b should have the same length");
     }
     let mut sum = F::zero();
-    for (a,b) in a.iter().zip(b) {
+    for (a, b) in a.iter().zip(b) {
         let mut ab = *a;
         ab.mul_assign(b);
         sum.add_assign(&ab);
@@ -453,12 +473,9 @@ pub fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
 mod tests {
     use super::*;
     // use pairing::bls12_381::FqRepr;
-    use curve_arithmetic::{
-        multiexp_table, multiexp_worker_given_table,
-        // multiscalar_multiplication_naive,
-    };
-    use pairing::bls12_381::{Fr, G1};
+    use curve_arithmetic::{multiexp_table, multiexp_worker_given_table};
     use ff::PrimeField;
+    use pairing::bls12_381::{Fr, G1};
 
     // use pairing::{
     //     bls12_381::{
@@ -515,7 +532,7 @@ mod tests {
 
         println!("Using fast msm with two points and two scalars");
         let now = Instant::now();
-        let sum2 = multiexp( &Gis[..], &ais[..]);
+        let sum2 = multiexp(&Gis[..], &ais[..]);
         println!("Done in {} µs", now.elapsed().as_micros());
         println!("sum2: {}", sum2);
         assert_eq!(sum, sum2);
@@ -576,8 +593,8 @@ mod tests {
 
         println!("Doing msm in two go's");
         let now = Instant::now();
-        let sum1 = multiexp( &Gis[..n / 2], &ais[..n / 2]);
-        let sum2 = multiexp( &Gis[n / 2..], &ais[n / 2..]);
+        let sum1 = multiexp(&Gis[..n / 2], &ais[..n / 2]);
+        let sum2 = multiexp(&Gis[n / 2..], &ais[n / 2..]);
         let sum = sum1.plus_point(&sum2);
 
         println!("Done in {} ms", now.elapsed().as_millis());
@@ -589,7 +606,7 @@ mod tests {
 
         println!("Doing msm in one go");
         let now = Instant::now();
-        let sum = multiexp( &Gis[..], &ais[..]);
+        let sum = multiexp(&Gis[..], &ais[..]);
 
         println!("Done in {} ms", now.elapsed().as_millis());
         println!("sum: {}", sum);
@@ -648,8 +665,8 @@ mod tests {
         }
 
         let Q = SomeCurve::generate(rng);
-        let P_prime = multiexp( &G_vec, &a_vec)
-            .plus_point(&multiexp( &H_vec, &b_vec))
+        let P_prime = multiexp(&G_vec, &a_vec)
+            .plus_point(&multiexp(&H_vec, &b_vec))
             .plus_point(&Q.mul_by_scalar(&inner_product(&a_vec, &b_vec)));
         let mut transcript = Transcript::new(&[]);
 
@@ -663,8 +680,8 @@ mod tests {
             b_vec,
         );
 
-        let mut transcript = Transcript::new(&[]);            
-        
+        let mut transcript = Transcript::new(&[]);
+
         assert!(verify_inner_product(
             &mut transcript,
             G_vec,
@@ -709,8 +726,8 @@ mod tests {
             H_prime_scalars.push(y_inv_i);
             y_inv_i.mul_assign(&y_inv);
         }
-        let P_prime = multiexp( &G_vec, &a_vec)
-            .plus_point(&multiexp( &H_prime, &b_vec))
+        let P_prime = multiexp(&G_vec, &a_vec)
+            .plus_point(&multiexp(&H_prime, &b_vec))
             .plus_point(&Q.mul_by_scalar(&inner_product(&a_vec, &b_vec)));
         // let P_prime = SomeCurve::zero_point();
         let mut transcript = Transcript::new(&[]);
