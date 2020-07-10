@@ -116,6 +116,8 @@ fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
             move |b| b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig)),
         );
     }
+
+    group.finish();
 }
 
 // to bench has_duplicates, expose it in aggregate_sig.rs by making it public
