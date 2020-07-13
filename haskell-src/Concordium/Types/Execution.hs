@@ -210,7 +210,7 @@ data Payload =
     }
   -- Adds additional keys to the sender's account, optionally updating the signature threshold too
   | AddAccountKeys {
-      -- |Map of key indeces and the associated key to add
+      -- |Map of key indices and the associated key to add
       aakKeys :: !(Map.Map KeyIndex AccountVerificationKey),
       -- |Optional value for updating the threshold of the signature scheme
       aakThreshold :: !(Maybe SignatureThreshold)
