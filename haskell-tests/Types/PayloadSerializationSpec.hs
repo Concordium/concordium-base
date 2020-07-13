@@ -15,6 +15,7 @@ import Control.Monad
 import Concordium.Types
 import qualified Concordium.Crypto.BlockSignature as BlockSig
 import qualified Concordium.Crypto.BlsSignature as Bls
+import Concordium.Crypto.SignatureScheme
 import Concordium.Types.Execution
 import Concordium.ID.Types
 import qualified Concordium.Crypto.VRF as VRF
@@ -24,6 +25,9 @@ import qualified Data.Serialize as S
 import Types.CoreAllGen
 
 import Data.Int
+import qualified Data.Map as Map
+import qualified Data.List as L
+import qualified Data.Set as Set
 import System.Random
 import Concordium.Crypto.Proofs
 
@@ -81,7 +85,10 @@ genPayload = oneof [genDeployModule,
                     genUpdateBakerAccount,
                     genUpdateBakerSignKey,
                     genDelegateStake,
-                    genUndelegateStake
+                    genUndelegateStake,
+                    genUpdateAccountKeys,
+                    genAddAccountKeys,
+                    genRemoveAccountKeys
                     ]
   where
 --        genCredential = DeployCredential <$> genCredentialDeploymentInformation
@@ -138,6 +145,37 @@ genPayload = oneof [genDeployModule,
 
         genUndelegateStake = return UndelegateStake
 
+        genAccountKeysMap = do
+          n <- choose (0, 10)
+          indexList <- vectorOf n (KeyIndex <$> arbitrary)
+          mapList <- mapM (\idx -> do
+            kp <- genSigSchemeKeyPair
+            return (idx, correspondingVerifyKey kp))
+            (L.nub indexList)
+          return $ Map.fromList mapList
+
+        genSignThreshold = oneof [
+            (do
+              threshold <- choose (1,10)
+              return $ Just (SignatureThreshold threshold)),
+            (return Nothing)
+          ]
+
+        genUpdateAccountKeys = do
+          uakKeys <- genAccountKeysMap
+          return UpdateAccountKeys{..}
+
+        genAddAccountKeys = do
+          aakThreshold <- genSignThreshold
+          aakKeys <- genAccountKeysMap
+          return AddAccountKeys{..}
+
+        genRemoveAccountKeys = do
+          n <- choose (0, 10)
+          indices <- vectorOf n (KeyIndex <$> arbitrary)
+          rakThreshold <- genSignThreshold
+          let rakIndices = Set.fromList indices
+          return RemoveAccountKeys{..}
 
 groupIntoSize :: Int64 -> [Char]
 groupIntoSize s =

@@ -653,10 +653,10 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                                         }
                   -- |A transaction should be sent from a special account, but is not.
                   | NotFromSpecialAccount
-                  | NonExistentAccountKey -- |Encountered index to which no account key belongs when removing or updating keys
-                  -- |When the account key threshold is updated, it must not exceed the amount of existing keys
-                  | KeyIndexAlreadyInUse -- |Attempted to add an account key to a key index already in use
+                  | NonExistentAccountKey -- ^Encountered index to which no account key belongs when removing or updating keys
+                  | KeyIndexAlreadyInUse -- ^Attempted to add an account key to a key index already in use
                   | InvalidAccountKeySignThreshold
+                  -- ^When the account key threshold is updated, it must not exceed the amount of existing keys
     deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason
