@@ -33,7 +33,6 @@ mkAccountNoCredentials keys threshold addr amnt =
 {-# WARNING mkAccount "Do not use in production." #-}
 mkAccount :: SigScheme.VerifyKey -> AccountAddress -> Amount -> Account
 mkAccount key addr amnt = mkAccountMultipleKeys [key] 1 addr amnt
-      & (accountCredentials .~ (Queue.singleton dummyMaxValidTo (dummyCredential addr dummyMaxValidTo dummyCreatedAt)))
 
 {-# WARNING makeFakeBakerAccount "Do not use in production." #-}
 makeFakeBakerAccount :: BakerId -> Account
