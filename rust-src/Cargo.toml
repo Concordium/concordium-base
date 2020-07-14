@@ -17,5 +17,4 @@ members=[
    "random_oracle",
    "wallet",
    "bulletproofs",
-   "vector_pedersen_scheme"
 ]
