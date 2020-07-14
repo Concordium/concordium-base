@@ -11,7 +11,7 @@ import Test.Hspec.QuickCheck
 
 main :: IO ()
 main = hspec $ parallel $ do
-         describe "Acorn serialization tests" $ do
+         xdescribe "Acorn serialization tests" $ do
            modifyMaxSuccess (const 1000) $ Types.SerializationSpec.testExpr 25
            modifyMaxSuccess (const 500) $ Types.SerializationSpec.testExpr 50
            -- modifyMaxSuccess (const 250) $ Types.SerializationSpec.testExpr 75
