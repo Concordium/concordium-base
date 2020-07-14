@@ -303,7 +303,7 @@ instance S.Serialize Payload where
   put RemoveAccountKeys{..} = do
     P.putWord8 15
     P.putWord8 (fromIntegral (length rakIndices))
-    forM_ (Set.toAscList rakIndices) $ \idx -> S.put idx
+    forM_ (Set.toAscList rakIndices) S.put
     putMaybe rakThreshold
 
   get =
@@ -393,7 +393,9 @@ putMaybe (Just v) = do
 putMaybe Nothing = S.putWord8 0
 
 -- |Deserialize a Maybe value
--- Expects a leading 0 or 1 word8, 1 signaling Just and 0 signaling Nothing
+-- Expects a leading 0 or 1 word8, 1 signaling Just and 0 signaling Nothing.
+-- NB: This method is stricter than the Serialize instance method in that it only allows
+-- tags 0 and 1, whereas the Serialize.get method allows any non-zero tag for Just.
 getMaybe :: S.Serialize a => S.Get (Maybe a)
 getMaybe = G.getWord8 >>=
     \case 0 -> return Nothing
@@ -653,10 +655,12 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                                         }
                   -- |A transaction should be sent from a special account, but is not.
                   | NotFromSpecialAccount
-                  | NonExistentAccountKey -- ^Encountered index to which no account key belongs when removing or updating keys
-                  | KeyIndexAlreadyInUse -- ^Attempted to add an account key to a key index already in use
+                  -- |Encountered index to which no account key belongs when removing or updating keys
+                  | NonExistentAccountKey
+                  -- |Attempted to add an account key to a key index already in use
+                  | KeyIndexAlreadyInUse
+                  -- |When the account key threshold is updated, it must not exceed the amount of existing keys
                   | InvalidAccountKeySignThreshold
-                  -- ^When the account key threshold is updated, it must not exceed the amount of existing keys
     deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason
@@ -682,7 +686,7 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
                  | NonExistentIdentityProvider !IDTypes.IdentityProviderIdentity
                  | UnsupportedAnonymityRevokers -- ^One of the anonymity revokers in the credential is not known.
                  | NonExistentAccount !AccountAddress -- ^Cannot deploy credential onto a non-existing account.
-                 | AccountCredentialInvalid
+                 | AccountCredentialInvalid -- ^Account credential verification failed, the proofs were invalid or malformed.
                  | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
       deriving(Eq, Show)
 
