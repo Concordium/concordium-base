@@ -29,14 +29,46 @@ pub fn read_global_context<P: AsRef<Path> + std::fmt::Debug>(
 
 pub fn read_identity_providers<P: AsRef<Path> + std::fmt::Debug>(
     filename: P,
-) -> Option<Vec<IpInfo<Bls12>>> {
-    read_exact_versioned_vec_json_from_file(VERSION_IP_INFO_PUBLIC, filename).ok()
+) -> io::Result<IpInfos<Bls12>> {
+    let vips: io::Result<Versioned<IpInfos<Bls12>>> = read_json_from_file(filename);
+    if let Err(_) = vips {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Could not parse identity providers"),
+        ));
+    }
+    let vips = vips.unwrap();
+    match vips.version {
+        VERSION_IP_INFOS => Ok(vips.value),
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid identity providers version"),
+            ))
+        }
+    }
 }
 
 pub fn read_anonymity_revokers<P: AsRef<Path> + std::fmt::Debug>(
     filename: P,
-) -> Option<BTreeMap<ArIdentity, ArInfo<ExampleCurve>>> {
-    read_exact_versioned_map_json_from_file(VERSION_AR_INFO_PUBLIC, filename).ok()
+) -> io::Result<ArInfos<ExampleCurve>> {
+    let vars: io::Result<Versioned<ArInfos<ExampleCurve>>> = read_json_from_file(filename);
+    if let Err(_) = vars {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Could not parse anonymity revokers"),
+        ));
+    }
+    let vars = vars.unwrap();
+    match vars.version {
+        VERSION_AR_INFOS => Ok(vars.value),
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid anonymity revokers version"),
+            ))
+        }
+    }
 }
 
 /// Parse YYYYMM as YearMonth
@@ -76,7 +108,7 @@ where
         Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "Invalid  version in file, expected: {:?}, got: {:?}",
+                "Invalid version in file, expected: {:?}, got: {:?}",
                 version, versioned.version,
             ),
         ))

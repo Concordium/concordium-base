@@ -8,6 +8,8 @@ pub const VERSION_AR_INFO_PUBLIC: Version = Version { value: 0 };
 pub const VERSION_ID_OBJECT_USE_DATA: Version = Version { value: 0 };
 pub const VERSION_PRE_IDENTITY_OBJECT: Version = Version { value: 0 };
 pub const VERSION_IDENTITY_OBJECT: Version = Version { value: 0 };
+pub const VERSION_IP_INFOS: Version = Version { value: 0 };
+pub const VERSION_AR_INFOS: Version = Version { value: 0 };
 
 /// Version of a data structure. Binary coded as a variable integer represented
 /// by bytes, where MSB=1 indicates more bytes follow, and the 7 lower bits in a

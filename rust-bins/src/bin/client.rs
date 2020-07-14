@@ -541,8 +541,8 @@ fn handle_create_credential(cc: CreateCredential) {
 
     // all known anonymity revokers.
     let ars = {
-        if let Some(ars) = read_anonymity_revokers(cc.anonymity_revokers) {
-            ars
+        if let Ok(ars) = read_anonymity_revokers(cc.anonymity_revokers) {
+            ars.ars
         } else {
             eprintln!("Cannot read anonymity revokers from the database. Terminating.");
             return;
@@ -607,7 +607,6 @@ fn handle_create_chi(cc: CreateChi) {
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_cred: IdCredentials::generate(&mut csprng),
     };
-
     if let Some(filepath) = cc.out {
         match write_json_to_file(filepath, &ah_info) {
             Ok(()) => println!("Wrote CHI to file."),
@@ -637,10 +636,7 @@ fn handle_act_as_ip(aai: IpSignPio) {
             return;
         }
     };
-    let (ip_info, ip_sec_key) = match read_exact_versioned_json_from_file::<_, IpData<Bls12>>(
-        VERSION_IP_INFO_PUBLIC,
-        &aai.ip_data,
-    ) {
+    let (ip_info, ip_sec_key) = match read_json_from_file::<_, IpData<Bls12>>(&aai.ip_data) {
         Ok(ip_data) => (ip_data.public_ip_info, ip_data.ip_secret_key),
         Err(x) => {
             eprintln!("Could not read identity issuer information because {}", x);
@@ -667,8 +663,8 @@ fn handle_act_as_ip(aai: IpSignPio) {
 
     // all known anonymity revokers.
     let ars = {
-        if let Some(ars) = read_anonymity_revokers(aai.anonymity_revokers) {
-            ars
+        if let Ok(ars) = read_anonymity_revokers(aai.anonymity_revokers) {
+            ars.ars
         } else {
             eprintln!("Cannot read anonymity revokers from the database. Terminating.");
             return;
@@ -749,7 +745,7 @@ fn handle_act_as_ip(aai: IpSignPio) {
 
 fn handle_start_ip(sip: StartIp) {
     let chi = {
-        if let Ok(chi) = read_exact_versioned_json_from_file(VERSION_CREDENTIAL, &sip.chi) {
+        if let Ok(chi) = read_json_from_file(&sip.chi) {
             chi
         } else {
             eprintln!("Could not read credential holder information.");
@@ -766,11 +762,9 @@ fn handle_start_ip(sip: StartIp) {
     };
 
     // now choose an identity provider.
-    let ips: Vec<IpInfo<Bls12>> = {
-        if let Ok(ips) =
-            read_exact_versioned_vec_json_from_file(VERSION_IP_INFO_PUBLIC, sip.identity_providers)
-        {
-            ips
+    let ips: BTreeMap<IpIdentity, IpInfo<Bls12>> = {
+        if let Ok(ips) = read_identity_providers(sip.identity_providers) {
+            ips.idps
         } else {
             eprintln!("Cannot read identity providers from the database. Terminating.");
             return;
@@ -780,10 +774,10 @@ fn handle_start_ip(sip: StartIp) {
     // names of identity providers the user can choose from, together with the
     // names of anonymity revokers associated with them
     let mut ips_names = Vec::with_capacity(ips.len());
-    for x in ips.iter() {
+    for (_, v) in ips.iter() {
         ips_names.push(format!(
             "Identity provider {}, {}",
-            &x.ip_identity, x.ip_description.name
+            &v.ip_identity, v.ip_description.name
         ))
     }
 
@@ -794,7 +788,7 @@ fn handle_start_ip(sip: StartIp) {
             .default(0)
             .interact()
         {
-            ips[ip_info_idx].clone()
+            ips.get(&IpIdentity(ip_info_idx as u32)).unwrap().clone()
         } else {
             eprintln!("You have to choose an identity provider. Terminating.");
             return;
@@ -802,8 +796,8 @@ fn handle_start_ip(sip: StartIp) {
     };
 
     let ars = {
-        if let Some(ars) = read_anonymity_revokers(sip.anonymity_revokers) {
-            ars
+        if let Ok(ars) = read_anonymity_revokers(sip.anonymity_revokers) {
+            ars.ars
         } else {
             eprintln!("Cannot read anonymity revokers from the database. Terminating.");
             return;
@@ -924,7 +918,9 @@ fn handle_generate_ips(gip: GenerateIps) {
     };
     {
         let ar_base = global_ctx.generator;
-        let mut all_ars = BTreeMap::new();
+        let mut all_ars = ArInfos {
+            ars: BTreeMap::new(),
+        };
 
         for i in 1..=num_ars {
             let ar_secret_key = SecretKey::generate(&ar_base, &mut csprng);
@@ -953,15 +949,12 @@ fn handle_generate_ips(gip: GenerateIps) {
                 eprintln!("Could not write anonymity revoker {}: {}", i, err);
                 return;
             }
-            let _ = all_ars.insert(ar_identity, ar_data.public_ar_info);
+            let _ = all_ars.ars.insert(ar_identity, ar_data.public_ar_info);
         }
 
-        let mut ver_all_ars = BTreeMap::new();
-        for (k, v) in all_ars.iter() {
-            ver_all_ars.insert(k, Versioned::new(VERSION_AR_INFO_PUBLIC, v));
-        }
         let mut ars_path = gip.output_dir.clone();
         ars_path.push("anonymity_revokers.json");
+        let ver_all_ars = Versioned::new(VERSION_AR_INFOS, all_ars);
         if let Err(err) = write_json_to_file(ars_path.clone(), &ver_all_ars) {
             eprintln!("Could not write out anonymity revokers: {}", err);
             return;
@@ -971,7 +964,9 @@ fn handle_generate_ips(gip: GenerateIps) {
     }
 
     println!("Generating {} identity providers.", num);
-    let mut res = Vec::with_capacity(num);
+    let mut all_idps = IpInfos {
+        idps: BTreeMap::new(),
+    };
     for id in 0..num {
         // generate an identity provider and for each
         // identity provider three anonymity revokers
@@ -983,8 +978,9 @@ fn handle_generate_ips(gip: GenerateIps) {
             ps_sig::secret::SecretKey::<Bls12>::generate(gip.key_capacity, &mut csprng);
         let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
 
+        let ip_id = IpIdentity(id as u32);
         let ip_info = IpInfo {
-            ip_identity:    IpIdentity(id as u32),
+            ip_identity:    ip_id,
             ip_description: mk_ip_description(id),
             ip_verify_key:  id_public_key,
         };
@@ -998,7 +994,7 @@ fn handle_generate_ips(gip: GenerateIps) {
             return;
         }
         let versioned_ip_info_public =
-            Versioned::new(VERSION_IP_INFO_PUBLIC, full_info.public_ip_info);
+            Versioned::new(VERSION_IP_INFO_PUBLIC, full_info.public_ip_info.clone());
         println!(
             "writing ip_{} public data in file {}",
             id,
@@ -1008,11 +1004,12 @@ fn handle_generate_ips(gip: GenerateIps) {
             eprintln!("Could not write out identity provider: {}", err);
             return;
         }
-        res.push(versioned_ip_info_public);
+        all_idps.idps.insert(ip_id, full_info.public_ip_info);
     }
     let mut ips_path = gip.output_dir;
     ips_path.push("identity_providers.json");
-    if let Err(err) = write_json_to_file(ips_path, &res) {
+    let ver_all_idps = Versioned::new(VERSION_IP_INFOS, all_idps);
+    if let Err(err) = write_json_to_file(ips_path, &ver_all_idps) {
         eprintln!("Could not write out list of identity providers: {}", err);
         return;
     }

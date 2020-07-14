@@ -831,6 +831,14 @@ pub struct IpInfo<P: Pairing> {
     pub ip_verify_key: pssig::PublicKey<P>,
 }
 
+/// Collection of identity providers.
+#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "P: Pairing", deserialize = "P: Pairing"))]
+pub struct IpInfos<P: Pairing> {
+    #[serde(rename = "idps")]
+    pub idps: BTreeMap<IpIdentity, IpInfo<P>>,
+}
+
 /// Public key of an anonymity revoker.
 pub type ArPublicKey<C> = elgamal::PublicKey<C>;
 
@@ -848,6 +856,14 @@ pub struct ArInfo<C: Curve> {
     /// elgamal encryption key of the anonymity revoker
     #[serde(rename = "arPublicKey")]
     pub ar_public_key: ArPublicKey<C>,
+}
+
+/// Collection of anonymity revokers.
+#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct ArInfos<C: Curve> {
+    #[serde(rename = "ars")]
+    pub ars: BTreeMap<ArIdentity, ArInfo<C>>,
 }
 
 /// A helper trait to access only the public key of the ArInfo structure.
