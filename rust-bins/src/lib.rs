@@ -41,7 +41,7 @@ pub fn read_identity_providers<P: AsRef<Path> + std::fmt::Debug>(
     match vips.version {
         VERSION_IP_INFOS => Ok(vips.value),
         _ => {
-            return Err(io::Error::new(
+            Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Invalid identity providers version"),
             ))
@@ -63,7 +63,7 @@ pub fn read_anonymity_revokers<P: AsRef<Path> + std::fmt::Debug>(
     match vars.version {
         VERSION_AR_INFOS => Ok(vars.value),
         _ => {
-            return Err(io::Error::new(
+            Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Invalid anonymity revokers version"),
             ))
