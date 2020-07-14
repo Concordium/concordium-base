@@ -7,6 +7,7 @@ use criterion::Criterion;
 use curve_arithmetic::*;
 use merlin::Transcript;
 use pairing::bls12_381::G1;
+use pedersen_scheme::*;
 use rand::*;
 
 use std::time::Duration;
@@ -22,6 +23,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let nm: usize = usize::from(n) * usize::from(m);
     let mut G = Vec::with_capacity(nm);
     let mut H = Vec::with_capacity(nm);
+    let mut G_H = Vec::with_capacity(nm);
 
     for _ in 0..nm {
         let g = SomeCurve::generate(rng);
@@ -29,9 +31,12 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
 
         G.push(g);
         H.push(h);
+        G_H.push((g,h));
     }
     let B = SomeCurve::generate(rng);
     let B_tilde = SomeCurve::generate(rng);
+    let gens = Generators{G_H};
+    let keys = CommitmentKey(B, B_tilde);
 
     // Some numbers in [0, 2^n):
     let v_vec: Vec<u64> = vec![
@@ -47,19 +52,18 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let v_vec_p = v_vec.clone();
     let G_p = G.clone();
     let H_p = H.clone();
+    let gens_p = gens.clone();
     let mut transcript = Transcript::new(&[]);
     c.bench_function("Prover.", move |b| {
         b.iter(|| {
             prove(
+                &mut transcript,
+                rng,
                 n,
                 m,
-                v_vec_p.clone(),
-                G_p.clone(),
-                H_p.clone(),
-                B,
-                B_tilde,
-                rng,
-                &mut transcript,
+                &v_vec_p,
+                &gens_p,
+                &keys,
             );
         })
     });
@@ -67,32 +71,30 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let rng = &mut thread_rng();
     let mut transcript = Transcript::new(&[]);
     let (commitments, proof) = prove(
+        &mut transcript,
+        rng,
         n,
         m,
-        v_vec.clone(),
-        G.clone(),
-        H.clone(),
-        B,
-        B_tilde,
-        rng,
-        &mut transcript,
+        &v_vec,
+        &gens,
+        &keys,
     );
 
-    c.bench_function("Verifier.", move |b| {
-        b.iter(|| {
-            let mut transcript = Transcript::new(&[]);
-            assert!(verify_efficient(
-                &mut transcript,
-                n,
-                &commitments,
-                &proof,
-                &G,
-                &H,
-                B,
-                B_tilde,
-            ));
-        })
-    });
+    // c.bench_function("Verifier.", move |b| {
+    //     b.iter(|| {
+    //         let mut transcript = Transcript::new(&[]);
+    //         assert!(verify_efficient(
+    //             &mut transcript,
+    //             n,
+    //             &commitments,
+    //             &proof,
+    //             &G,
+    //             &H,
+    //             B,
+    //             B_tilde,
+    //         ));
+    //     })
+    // });
 }
 
 criterion_group!(
