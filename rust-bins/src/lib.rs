@@ -40,12 +40,10 @@ pub fn read_identity_providers<P: AsRef<Path> + std::fmt::Debug>(
     let vips = vips.unwrap();
     match vips.version {
         VERSION_IP_INFOS => Ok(vips.value),
-        _ => {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid identity providers version".to_string(),
-            ))
-        }
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Invalid identity providers version".to_string(),
+        )),
     }
 }
 
@@ -62,12 +60,10 @@ pub fn read_anonymity_revokers<P: AsRef<Path> + std::fmt::Debug>(
     let vars = vars.unwrap();
     match vars.version {
         VERSION_AR_INFOS => Ok(vars.value),
-        _ => {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid anonymity revokers version".to_string(),
-            ))
-        }
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Invalid anonymity revokers version".to_string(),
+        )),
     }
 }
 
