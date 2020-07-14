@@ -71,7 +71,7 @@ instance AE.FromJSON GlobalContext where
     -- this is a terrible hack to avoid writing duplicate instances
     -- hack in the sense of performance
     case jsonToGlobalContext (BSL.toStrict (AE.encode v)) of
-      Nothing -> fail "Could not decode IpInfo."
+      Nothing -> fail "Could not decode GlobalContext."
       Just ipinfo -> return ipinfo
   parseJSON _ = fail "IpInfo: Expected object."
 
