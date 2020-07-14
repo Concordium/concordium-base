@@ -31,10 +31,10 @@ pub fn read_identity_providers<P: AsRef<Path> + std::fmt::Debug>(
     filename: P,
 ) -> io::Result<IpInfos<Bls12>> {
     let vips: io::Result<Versioned<IpInfos<Bls12>>> = read_json_from_file(filename);
-    if let Err(_) = vips {
+    if vips.is_err() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("Could not parse identity providers"),
+            "Could not parse identity providers".to_string(),
         ));
     }
     let vips = vips.unwrap();
@@ -43,7 +43,7 @@ pub fn read_identity_providers<P: AsRef<Path> + std::fmt::Debug>(
         _ => {
             Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Invalid identity providers version"),
+                "Invalid identity providers version".to_string(),
             ))
         }
     }
@@ -53,10 +53,10 @@ pub fn read_anonymity_revokers<P: AsRef<Path> + std::fmt::Debug>(
     filename: P,
 ) -> io::Result<ArInfos<ExampleCurve>> {
     let vars: io::Result<Versioned<ArInfos<ExampleCurve>>> = read_json_from_file(filename);
-    if let Err(_) = vars {
+    if vars.is_err() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("Could not parse anonymity revokers"),
+            "Could not parse anonymity revokers".to_string(),
         ));
     }
     let vars = vars.unwrap();
@@ -65,7 +65,7 @@ pub fn read_anonymity_revokers<P: AsRef<Path> + std::fmt::Debug>(
         _ => {
             Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Invalid anonymity revokers version"),
+                "Invalid anonymity revokers version".to_string(),
             ))
         }
     }
