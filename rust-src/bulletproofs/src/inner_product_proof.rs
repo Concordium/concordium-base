@@ -158,7 +158,7 @@ pub fn prove_inner_product<C: Curve>(
 /// - b_slice - a slice to the vector b of scalars
 /// Precondictions:
 /// G_slice, H_slice, a_slice and b_slice should all be of the same length, and
-/// this length must a power of 2.
+/// this length must be a power of 2.
 #[allow(non_snake_case)]
 #[allow(dead_code)]
 pub fn prove_inner_product_with_scalars<C: Curve>(
