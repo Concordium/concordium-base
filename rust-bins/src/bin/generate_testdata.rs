@@ -56,8 +56,8 @@ fn main() {
 
     // all known anonymity revokers.
     let ars_infos = {
-        if let Some(ars) = read_anonymity_revokers(args.anonymity_revokers) {
-            ars
+        if let Ok(ars) = read_anonymity_revokers(args.anonymity_revokers) {
+            ars.ars
         } else {
             eprintln!("Cannot read anonymity revokers from the database. Terminating.");
             return;
