@@ -4,7 +4,7 @@ use ff::Field;
 use merlin::Transcript;
 use rand::*;
 use std::iter::once;
-use vector_pedersen_scheme::*;
+use pedersen_scheme::*;
 
 #[allow(non_snake_case)]
 #[derive(Clone)]
@@ -17,6 +17,19 @@ pub struct RangeProof<C: Curve> {
     tx_tilde: C::Scalar,
     e_tilde:  C::Scalar,
     ip_proof: InnerProductProof<C>,
+}
+
+#[allow(non_snake_case)]
+#[derive(Clone)]
+pub struct RangeProofBetter<C: Curve> {
+    A:        C,
+    S:        C,
+    T_1:      C,
+    T_2:      C,
+    tx:       C::Scalar,
+    tx_tilde: C::Scalar,
+    e_tilde:  C::Scalar,
+    ip_proof: InnerProductProofBetter<C>,
 }
 
 #[allow(non_snake_case)]
@@ -64,30 +77,36 @@ fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
     two_n
 }
 
+/// Struct containing generators G and H needed for range proofs
+#[allow(non_snake_case)]
+#[derive(Clone)]
+pub struct Generators<C> {
+    pub G_H: Vec<(C, C)>,
+}
+
 /// This function produces a range proof, i.e. a proof of knowledge
 /// of value v_1, v_2, ..., v_m that are all in [0, 2^n) that are consistent
 /// with commitments V_i to v_i. The arguments are
 /// - n - the number n such that v_i is in [0,2^n) for all i
 /// - m - the number of values that is proved to be in [0,2^n)
 /// - v_vec - the vector having v_1, ..., v_m as entrances
-/// - G - a vector of generators with length nm
-/// - H - a vector of generators with length nm
-/// - B - a generator
-/// - B_tilde - a generator
+/// - gens - generators containing vectors G and H both of length nm
+/// - v_keys - commitmentment keys B and B_tilde
 #[allow(clippy::many_single_char_names)]
 #[allow(non_snake_case)]
 #[allow(clippy::too_many_arguments)]
 pub fn prove<C: Curve, T: Rng>(
+    transcript: &mut Transcript,
+    csprng: &mut T,
     n: u8,
     m: u8,
-    v_vec: Vec<u64>,
-    G: Vec<C>,
-    H: Vec<C>,
-    B: C,
-    B_tilde: C,
-    csprng: &mut T,
-    transcript: &mut Transcript,
-) -> (Vec<Commitment<C>>, RangeProof<C>) {
+    v_vec: &[u64],
+    gens: &Generators<C>,
+    v_keys: &CommitmentKey<C>,
+) -> (Vec<Commitment<C>>, RangeProofBetter<C>) {
+    let (G, H) : (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
+    let B = v_keys.0;
+    let B_tilde = v_keys.1;
     let nm = G.len();
     let mut a_L: Vec<C::Scalar> = Vec::with_capacity(usize::from(n));
     let mut a_R: Vec<C::Scalar> = Vec::with_capacity(usize::from(n));
@@ -103,12 +122,12 @@ pub fn prove<C: Curve, T: Rng>(
         s_R.push(C::generate_scalar(csprng));
     }
     // let mut j = 0;
-    let v_keys = CommitmentKey(vec![B], B_tilde);
+    // let v_keys = CommitmentKey(B, B_tilde);
     let mut v_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     let mut a_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     let mut s_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     // let v_copy = v_vec.clone(); // DEBUG
-    for v in v_vec {
+    for &v in v_vec {
         let (a_L_j, a_R_j) = a_L_a_R(v, n);
         a_L.extend(&a_L_j);
         a_R.extend(&a_R_j);
@@ -130,8 +149,8 @@ pub fn prove<C: Curve, T: Rng>(
         s_tilde_vec.push(*s_j_tilde);
 
         let v_scalar = C::scalar_from_u64(v);
-        let v_value = Value::new(v_scalar);
-        let V_j = v_keys.hide(&[v_value], &v_j_tilde);
+        let v_value = Value::<C>::new(v_scalar);
+        let V_j = v_keys.hide(&v_value, &v_j_tilde);
         transcript.append_point(b"Vj", &V_j.0);
         // println!("Prover's V_{:?} = {:?}", j, V_j);
         // let A_keys = CommitmentKey(G_jH_j, B_tilde);
@@ -381,13 +400,15 @@ pub fn prove<C: Curve, T: Rng>(
     // &H_prime)).plus_point(&Q.mul_by_scalar(&inner_product(&l, &r)));
     // let P_prime = C::zero_point();
     // println!("Prover's P' = 0? {:?}", P_prime.is_zero_point());
-    let ip_proof = prove_inner_product_with_scalars(transcript, G, H, &H_prime_scalars, &Q, l, r);
+    // let ip_proof = prove_inner_product_with_scalars(transcript, G, H, &H_prime_scalars, &Q, l, r);
+    // let ip_proof = prove_inner_product_better(transcript, &G, &H_prime, &Q, &l, &r);
+    let ip_proof = prove_inner_product_with_scalars_better(transcript, &G, &H, &H_prime_scalars, &Q, &l, &r);
     // let k = nm.next_power_of_two().trailing_zeros() as usize; //This line is also
     // used in Bulletproofs's implementation let ip_proof = InnerProductProof{L:
     // vec![C::zero_point(); k], R: vec![C::zero_point(); k], a: C::Scalar::zero(),
     // b:C::Scalar::zero()};
 
-    (V_vec, RangeProof {
+    (V_vec, RangeProofBetter {
         A,
         S,
         T_1,
@@ -591,12 +612,13 @@ pub fn verify_more_efficient<C: Curve>(
     transcript: &mut Transcript,
     n: u8,
     commitments: &[Commitment<C>],
-    proof: &RangeProof<C>,
-    G: &[C],
-    H: &[C],
-    B: C,
-    B_tilde: C,
+    proof: &RangeProofBetter<C>,
+    gens: &Generators<C>,
+    v_keys: &CommitmentKey<C>
 ) -> bool {
+    let (G, H) : (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
+    let B = v_keys.0;
+    let B_tilde = v_keys.1;
     let m = commitments.len();
     for V in commitments {
         transcript.append_point(b"Vj", &V.0);
@@ -680,7 +702,7 @@ pub fn verify_more_efficient<C: Curve>(
         z_2_m.push(z_j);
         z_j.mul_assign(&z);
     }
-    let verification_scalars = verify_scalars(transcript, G.len(), &ip_proof);
+    let verification_scalars = verify_scalars_better(transcript, G.len(), &ip_proof);
     let (u_sq, u_inv_sq, s) = (
         verification_scalars.u_sq,
         verification_scalars.u_inv_sq,
@@ -688,8 +710,9 @@ pub fn verify_more_efficient<C: Curve>(
     );
     let a = ip_proof.a;
     let b = ip_proof.b;
-    let L = &ip_proof.l_vec;
-    let R = &ip_proof.r_vec;
+    // let L = &ip_proof.l_vec;
+    // let R = &ip_proof.r_vec;
+    let (L, R) : (Vec<_>, Vec<_>) = ip_proof.lr_vec.iter().cloned().unzip();
     let mut s_inv = s.clone();
     s_inv.reverse();
     let y_inv = y.inverse().unwrap();
@@ -811,6 +834,11 @@ mod tests {
     //     },
     //     Engine, PairingCurveAffine,
     // };
+
+    /// This function produces a proof that will satisfy the verifier's first check,
+    /// even if the values are not in the interval. 
+    /// The second check will fail, and therefore in the tests below the verifier should
+    /// output fail when checking a proof produced by cheat_prove
     type SomeCurve = G1;
     #[allow(non_snake_case)]
     #[allow(clippy::too_many_arguments)]
@@ -830,13 +858,13 @@ mod tests {
         let v_copy = v_vec.clone();
         let mut V_vec: Vec<Commitment<C>> = Vec::with_capacity(usize::from(m));
         let mut v_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
-        let v_keys = CommitmentKey(vec![B], B_tilde);
+        let v_keys = CommitmentKey(B, B_tilde);
         for v in v_vec {
             let v_scalar = C::scalar_from_u64(v);
-            let v_value = Value::new(v_scalar);
+            let v_value = Value::<C>::new(v_scalar);
             let v_j_tilde = Randomness::<C>::generate(csprng);
             v_tilde_vec.push(*v_j_tilde);
-            let V_j = v_keys.hide(&[v_value], &v_j_tilde);
+            let V_j = v_keys.hide(&v_value, &v_j_tilde);
             transcript.append_point(b"Vj", &V_j.0);
             V_vec.push(V_j);
             // A_vec.push(V_j);
@@ -937,6 +965,7 @@ mod tests {
     /// - B - a generator
     /// - B_tilde - a generator
     #[allow(non_snake_case)]
+    #[allow(dead_code)]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::many_single_char_names)]
     fn naive_verify<C: Curve>(
@@ -1135,16 +1164,19 @@ mod tests {
         let nm = (usize::from(n)) * (usize::from(m));
         let mut G = Vec::with_capacity(nm);
         let mut H = Vec::with_capacity(nm);
+        let mut G_H = Vec::with_capacity(nm);
 
         for _i in 0..(nm) {
             let g = SomeCurve::generate(rng);
             let h = SomeCurve::generate(rng);
-
             G.push(g);
             H.push(h);
+            G_H.push((g,h));
         }
+        let gens = Generators{G_H};
         let B = SomeCurve::generate(rng);
         let B_tilde = SomeCurve::generate(rng);
+        let keys = CommitmentKey(B, B_tilde);
 
         // Some numbers in [0, 2^n):
         let v_vec: Vec<u64> = vec![
@@ -1166,41 +1198,39 @@ mod tests {
         // let now = Instant::now();
         // println!("Proving..");
         let (commitments, proof) = prove(
+            &mut transcript,
+            rng,
             n,
             m,
-            v_vec.clone(),
-            G.clone(),
-            H.clone(),
-            B,
-            B_tilde,
-            rng,
-            &mut transcript,
+            &v_vec,
+            &gens,
+            &keys,
         );
 
-        // println!("Verifying..");
-        let mut transcript = Transcript::new(&[]);
-        let b1 = naive_verify(
-            &mut transcript,
-            n,
-            commitments.clone(),
-            proof.clone(),
-            G.clone(),
-            H.clone(),
-            B,
-            B_tilde,
-        );
+        // // println!("Verifying..");
+        // let mut transcript = Transcript::new(&[]);
+        // let b1 = naive_verify(
+        //     &mut transcript,
+        //     n,
+        //     commitments.clone(),
+        //     proof.clone(),
+        //     G.clone(),
+        //     H.clone(),
+        //     B,
+        //     B_tilde,
+        // );
 
-        let mut transcript = Transcript::new(&[]);
-        let b2 = verify_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
-        // println!("Efficient verifier's output = {:?}", b);
+        // let mut transcript = Transcript::new(&[]);
+        // let b2 = verify_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
+        // // println!("Efficient verifier's output = {:?}", b);
 
         // Testing the even more efficient verifier:
         let mut transcript = Transcript::new(&[]);
         let b3 =
-            verify_more_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
+            verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
         // println!("Efficient verifier's output = {:?}", b);
-        assert!(b1);
-        assert!(b2);
+        // assert!(b1);
+        // assert!(b2);
         assert!(b3);
     }
 
@@ -1258,10 +1288,10 @@ mod tests {
         );
         let mut transcript = Transcript::new(&[]);
         let b1 = verify_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
-        let mut transcript = Transcript::new(&[]);
-        let b2 =
-            verify_more_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
+        // let mut transcript = Transcript::new(&[]);
+        // let b2 =
+        //     verify_more_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
         assert!(!b1);
-        assert!(!b2);
+        // assert!(!b2);
     }
 }
