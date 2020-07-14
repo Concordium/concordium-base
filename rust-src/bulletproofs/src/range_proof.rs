@@ -331,8 +331,9 @@ pub fn prove<C: Curve, T: Rng>(
 /// - n - the number n such that each v_i is claimed to be in [0, 2^n) by the
 ///   prover
 /// - commitments - commitments V_i to each v_i
+/// - proof - the range proof
 /// - gens - generators containing vectors G and H both of length nm
-/// - v_keys - commitmentment keys B and B_tilde
+/// - v_keys - commitment keys B and B_tilde
 /// This function is more efficient than the naive_verify since it
 /// unfolds what the inner product proof verifier does using the verification
 /// scalars.

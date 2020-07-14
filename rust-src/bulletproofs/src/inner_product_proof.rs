@@ -309,7 +309,8 @@ pub struct VerificationScalars<C: Curve> {
 /// - proof - a reference to a inner product proof.
 /// - n - the number of elements in the vectors (of equal length) that was used
 ///   to produce the inner product proof.
-/// This also means that n = 2^k, where k is the length of proof.l_vec
+/// 
+/// This also means that n = 2^k, where k is the length of proof.lr_vec
 #[allow(non_snake_case)]
 #[allow(clippy::many_single_char_names)]
 pub fn verify_scalars<C: Curve>(
