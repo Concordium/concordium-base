@@ -31,11 +31,11 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
 
         G.push(g);
         H.push(h);
-        G_H.push((g,h));
+        G_H.push((g, h));
     }
     let B = SomeCurve::generate(rng);
     let B_tilde = SomeCurve::generate(rng);
-    let gens = Generators{G_H};
+    let gens = Generators { G_H };
     let keys = CommitmentKey(B, B_tilde);
 
     // Some numbers in [0, 2^n):
@@ -50,51 +50,33 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
            * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
     ];
     let v_vec_p = v_vec.clone();
-    let G_p = G.clone();
-    let H_p = H.clone();
+    // let G_p = G.clone();
+    // let H_p = H.clone();
     let gens_p = gens.clone();
     let mut transcript = Transcript::new(&[]);
     c.bench_function("Prover.", move |b| {
         b.iter(|| {
-            prove(
-                &mut transcript,
-                rng,
-                n,
-                m,
-                &v_vec_p,
-                &gens_p,
-                &keys,
-            );
+            prove(&mut transcript, rng, n, m, &v_vec_p, &gens_p, &keys);
         })
     });
 
     let rng = &mut thread_rng();
     let mut transcript = Transcript::new(&[]);
-    let (commitments, proof) = prove(
-        &mut transcript,
-        rng,
-        n,
-        m,
-        &v_vec,
-        &gens,
-        &keys,
-    );
+    let (commitments, proof) = prove(&mut transcript, rng, n, m, &v_vec, &gens, &keys);
 
-    // c.bench_function("Verifier.", move |b| {
-    //     b.iter(|| {
-    //         let mut transcript = Transcript::new(&[]);
-    //         assert!(verify_efficient(
-    //             &mut transcript,
-    //             n,
-    //             &commitments,
-    //             &proof,
-    //             &G,
-    //             &H,
-    //             B,
-    //             B_tilde,
-    //         ));
-    //     })
-    // });
+    c.bench_function("Verifier.", move |b| {
+        b.iter(|| {
+            let mut transcript = Transcript::new(&[]);
+            assert!(verify_efficient(
+                &mut transcript,
+                n,
+                &commitments,
+                &proof,
+                &gens,
+                &keys
+            ));
+        })
+    });
 }
 
 criterion_group!(

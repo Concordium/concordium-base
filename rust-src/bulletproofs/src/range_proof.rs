@@ -2,9 +2,9 @@ use crate::{inner_product_proof::*, transcript::TranscriptProtocol};
 use curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Value};
 use ff::Field;
 use merlin::Transcript;
+use pedersen_scheme::*;
 use rand::*;
 use std::iter::once;
-use pedersen_scheme::*;
 
 #[allow(non_snake_case)]
 #[derive(Clone)]
@@ -20,33 +20,7 @@ pub struct RangeProof<C: Curve> {
 }
 
 #[allow(non_snake_case)]
-#[derive(Clone)]
-pub struct RangeProofBetter<C: Curve> {
-    A:        C,
-    S:        C,
-    T_1:      C,
-    T_2:      C,
-    tx:       C::Scalar,
-    tx_tilde: C::Scalar,
-    e_tilde:  C::Scalar,
-    ip_proof: InnerProductProofBetter<C>,
-}
-
-#[allow(non_snake_case)]
 fn ith_bit_bool(v: u64, i: u8) -> bool { v & (1 << i) != 0 }
-
-// #[allow(non_snake_case)]
-// fn integer_to_bit_vector_over_prime_field<F: PrimeField>(v: u64, n: u8) ->
-// Vec<F> {     let mut bv = Vec::with_capacity(usize::from(n));
-//     for i in 0..n {
-//         if ith_bit_bool(v, i) {
-//             bv.push(F::one());
-//         } else {
-//             bv.push(F::zero());
-//         }
-//     }
-//     bv
-// }
 
 #[allow(non_snake_case)]
 fn a_L_a_R<F: Field>(v: u64, n: u8) -> (Vec<F>, Vec<F>) {
@@ -103,44 +77,27 @@ pub fn prove<C: Curve, T: Rng>(
     v_vec: &[u64],
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
-) -> (Vec<Commitment<C>>, RangeProofBetter<C>) {
-    let (G, H) : (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
+) -> (Vec<Commitment<C>>, RangeProof<C>) {
+    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
     let B = v_keys.0;
     let B_tilde = v_keys.1;
     let nm = G.len();
     let mut a_L: Vec<C::Scalar> = Vec::with_capacity(usize::from(n));
     let mut a_R: Vec<C::Scalar> = Vec::with_capacity(usize::from(n));
     let mut V_vec: Vec<Commitment<C>> = Vec::with_capacity(usize::from(m));
-    // let mut A_vec : Vec<Commitment<C>> = Vec::with_capacity(usize::from(m));
-    // let mut S_vec : Vec<Commitment<C>> = Vec::with_capacity(usize::from(m));
     let mut s_L = Vec::with_capacity(usize::from(n));
     let mut s_R = Vec::with_capacity(usize::from(n));
-    // let mut A = C::zero_point();
-    // let mut S = C::zero_point();
     for _ in 0..nm {
         s_L.push(C::generate_scalar(csprng));
         s_R.push(C::generate_scalar(csprng));
     }
-    // let mut j = 0;
-    // let v_keys = CommitmentKey(B, B_tilde);
     let mut v_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     let mut a_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     let mut s_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
-    // let v_copy = v_vec.clone(); // DEBUG
     for &v in v_vec {
         let (a_L_j, a_R_j) = a_L_a_R(v, n);
         a_L.extend(&a_L_j);
         a_R.extend(&a_R_j);
-        // let mut a_j = a_L_j;
-        // a_j.extend(&a_R_j);
-        // let a_j : Vec<Value<C>> = a_j.iter().map(|&x| Value::new(x)).collect();
-        // let n = usize::from(n);
-        // let s_L_j = &s_L[j*n..(j+1)*n];
-        // let s_R_j = &s_R[j*n..(j+1)*n];
-        // let s_j : Vec<Value<C>> = s_L_j.iter().chain(s_R_j).map(|&x|
-        // Value::new(x)).collect(); let G_j = &G[j*n..(j+1)*n];
-        // let H_j = &H[j*n..(j+1)*n];
-        // let G_jH_j : Vec<_> = G_j.iter().chain(H_j).map(|&x| x).collect();
         let v_j_tilde = Randomness::<C>::generate(csprng);
         let a_j_tilde = Randomness::<C>::generate(csprng);
         let s_j_tilde = Randomness::<C>::generate(csprng);
@@ -152,16 +109,7 @@ pub fn prove<C: Curve, T: Rng>(
         let v_value = Value::<C>::new(v_scalar);
         let V_j = v_keys.hide(&v_value, &v_j_tilde);
         transcript.append_point(b"Vj", &V_j.0);
-        // println!("Prover's V_{:?} = {:?}", j, V_j);
-        // let A_keys = CommitmentKey(G_jH_j, B_tilde);
-        // let A_j = A_keys.hide(&a_j, &a_j_tilde);
-        // let S_j = A_keys.hide(&s_j, &s_j_tilde);
         V_vec.push(V_j);
-        // A_vec.push(A_j);
-        // S_vec.push(S_j);
-        // A = A.plus_point(&A_j.0);
-        // S = S.plus_point(&S_j.0);
-        // j+=1;
     }
     let mut a_tilde_sum = C::Scalar::zero();
     let mut s_tilde_sum = C::Scalar::zero();
@@ -169,15 +117,6 @@ pub fn prove<C: Curve, T: Rng>(
         a_tilde_sum.add_assign(&a_tilde_vec[i]);
         s_tilde_sum.add_assign(&s_tilde_vec[i]);
     }
-    // Probably faster:
-    // let A = multiscalar_multiplication(&a_L,
-    // &G).plus_point(&multiscalar_multiplication(&a_R,
-    // &H)).plus_point(&B_tilde.mul_by_scalar(&a_tilde_sum));
-    // let S = multiscalar_multiplication(&s_L,
-    // &G).plus_point(&multiscalar_multiplication(&s_R,
-    // &H)).plus_point(&B_tilde.mul_by_scalar(&s_tilde_sum));
-    // let mut A_scalars: Vec<C::Scalar> = a_L.iter().chain(a_R.iter()).map(|&x|
-    // x).collect();
     let A_scalars: Vec<C::Scalar> = a_L
         .iter()
         .chain(a_R.iter())
@@ -200,19 +139,6 @@ pub fn prove<C: Curve, T: Rng>(
     let table = multiexp_table(&GH_B_tilde, window_size);
     let A = multiexp_worker_given_table(&A_scalars, &table, window_size);
     let S = multiexp_worker_given_table(&S_scalars, &table, window_size);
-    // println!("AA = A ? {}", AA == A);
-    // println!("SS = S ? {}", SS == S);
-
-    // let mut A = A_vec[0].0;
-    // for i in 1..(usize::from(m)) {
-    //     A = A.plus_point(&A_vec[i].0);
-    // }
-
-    // let mut S = S_vec[0].0;
-    // for i in 1..(usize::from(m)) {
-    //     S = S.plus_point(&S_vec[i].0);
-    // }
-
     transcript.append_point(b"A", &A);
     transcript.append_point(b"S", &S);
     let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
@@ -293,16 +219,8 @@ pub fn prove<C: Curve, T: Rng>(
 
         let t_1_j_tilde = Randomness::<C>::generate(csprng);
         let t_2_j_tilde = Randomness::<C>::generate(csprng);
-        // let t_1_j_value : Value<C> = Value::new(t_1_j);
-        // let t_2_j_value : Value<C> = Value::new(t_2_j);
-        // let T_1_j = v_keys.hide(&[t_1_j_value], &t_1_j_tilde); // This line and the
-        // below: 107 ms vs 125 ms let T_2_j = v_keys.hide(&[t_2_j_value],
-        // &t_2_j_tilde);
         t_1_tilde.push(t_1_j_tilde);
         t_2_tilde.push(t_2_j_tilde);
-
-        // T_1 = T_1.plus_point(&T_1_j.0); // We could use msm here using the
-        // scalars from above T_2 = T_2.plus_point(&T_2_j.0);
     }
 
     let mut t_1_sum = C::Scalar::zero();
@@ -321,8 +239,6 @@ pub fn prove<C: Curve, T: Rng>(
     let T_2 = B
         .mul_by_scalar(&t_2_sum)
         .plus_point(&B_tilde.mul_by_scalar(&t_2_tilde_sum));
-    // println!("T1 == TT1 ? {}", T_1 == TT1);
-    // println!("T2 == TT2 ? {}", T_2 == TT2);
 
     transcript.append_point(b"T1", &T_1);
     transcript.append_point(b"T2", &T_2);
@@ -389,26 +305,15 @@ pub fn prove<C: Curve, T: Rng>(
     let y_inv = y.inverse().unwrap();
     let mut y_inv_i = C::Scalar::one();
     for _i in 0..nm {
-        // H_prime.push(H[i].mul_by_scalar(&y_inv_i)); // 245 ms vs 126 ms or 625 ms vs
-        // 510
+        // H_prime.push(H[i].mul_by_scalar(&y_inv_i));
         H_prime_scalars.push(y_inv_i);
         y_inv_i.mul_assign(&y_inv);
     }
 
-    // let P_prime = multiscalar_multiplication(&l,
-    // &G).plus_point(&multiscalar_multiplication(&r,
-    // &H_prime)).plus_point(&Q.mul_by_scalar(&inner_product(&l, &r)));
-    // let P_prime = C::zero_point();
-    // println!("Prover's P' = 0? {:?}", P_prime.is_zero_point());
-    // let ip_proof = prove_inner_product_with_scalars(transcript, G, H, &H_prime_scalars, &Q, l, r);
-    // let ip_proof = prove_inner_product_better(transcript, &G, &H_prime, &Q, &l, &r);
-    let ip_proof = prove_inner_product_with_scalars_better(transcript, &G, &H, &H_prime_scalars, &Q, &l, &r);
-    // let k = nm.next_power_of_two().trailing_zeros() as usize; //This line is also
-    // used in Bulletproofs's implementation let ip_proof = InnerProductProof{L:
-    // vec![C::zero_point(); k], R: vec![C::zero_point(); k], a: C::Scalar::zero(),
-    // b:C::Scalar::zero()};
+    let ip_proof =
+        prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &l, &r);
 
-    (V_vec, RangeProofBetter {
+    (V_vec, RangeProof {
         A,
         S,
         T_1,
@@ -426,10 +331,8 @@ pub fn prove<C: Curve, T: Rng>(
 /// - n - the number n such that each v_i is claimed to be in [0, 2^n) by the
 ///   prover
 /// - commitments - commitments V_i to each v_i
-/// - G - a vector of generators with length nm
-/// - H - a vector of generators with length nm
-/// - B - a generator
-/// - B_tilde - a generator
+/// - gens - generators containing vectors G and H both of length nm
+/// - v_keys - commitmentment keys B and B_tilde
 /// This function is more efficient than the naive_verify since it
 /// unfolds what the inner product proof verifier does using the verification
 /// scalars.
@@ -441,11 +344,12 @@ pub fn verify_efficient<C: Curve>(
     n: u8,
     commitments: &[Commitment<C>],
     proof: &RangeProof<C>,
-    G: &[C],
-    H: &[C],
-    B: C,
-    B_tilde: C,
+    gens: &Generators<C>,
+    v_keys: &CommitmentKey<C>,
 ) -> bool {
+    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
+    let B = v_keys.0;
+    let B_tilde = v_keys.1;
     let m = commitments.len();
     for V in commitments {
         transcript.append_point(b"Vj", &V.0);
@@ -541,8 +445,7 @@ pub fn verify_efficient<C: Curve>(
     );
     let a = ip_proof.a;
     let b = ip_proof.b;
-    let L = &ip_proof.l_vec;
-    let R = &ip_proof.r_vec;
+    let (L, R): (Vec<_>, Vec<_>) = ip_proof.lr_vec.iter().cloned().unzip();
     let mut s_inv = s;
     s_inv.reverse();
     let y_inv = match y.inverse() {
@@ -604,6 +507,9 @@ pub fn verify_efficient<C: Curve>(
     sum.is_zero_point()
 }
 
+/// This function does the same as verify_efficient. It groups
+/// some of the verification checks a bit more and could be more efficient,
+/// but it seems in practice that the difference in efficieny is small.
 #[allow(non_snake_case)]
 #[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
@@ -612,11 +518,11 @@ pub fn verify_more_efficient<C: Curve>(
     transcript: &mut Transcript,
     n: u8,
     commitments: &[Commitment<C>],
-    proof: &RangeProofBetter<C>,
+    proof: &RangeProof<C>,
     gens: &Generators<C>,
-    v_keys: &CommitmentKey<C>
+    v_keys: &CommitmentKey<C>,
 ) -> bool {
-    let (G, H) : (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
+    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
     let B = v_keys.0;
     let B_tilde = v_keys.1;
     let m = commitments.len();
@@ -672,25 +578,7 @@ pub fn verify_more_efficient<C: Curve>(
     delta_yz.sub_assign(&z2);
     delta_yz.mul_assign(&ip_1_y_nm);
     delta_yz.sub_assign(&sum);
-
-    // //LHS of check equation 1:
-    // let LHS = B.mul_by_scalar(&tx).plus_point(&B_tilde.mul_by_scalar(&tx_tilde));
-    // let mut RHS = C::zero_point();
-    // let mut zj2 = z2;
-    // for j in 0..m {
-    //     let Vj = commitments[j].0;
-    //     // println!("V_{:?} = {:?}", j, Vj);
-    //     RHS = RHS.plus_point(&Vj.mul_by_scalar(&zj2));
-    //     zj2.mul_assign(&z);
-    // }
-    // RHS = RHS.plus_point(&B.mul_by_scalar(&delta_yz)).plus_point(&T_1.
-    // mul_by_scalar(&x)).plus_point(&T_2.mul_by_scalar(&x2));
-
     // println!("--------------- VERIFICATION ----------------");
-    // println!("LHS = {:?}", LHS);
-    // println!("RHS = {:?}", RHS);
-    // println!("Are they equal? {:?}", LHS == RHS);
-    // println!("First check = {:?}", LHS.minus_point(&RHS).is_zero_point());
 
     let ip_proof = &proof.ip_proof;
     let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
@@ -702,7 +590,7 @@ pub fn verify_more_efficient<C: Curve>(
         z_2_m.push(z_j);
         z_j.mul_assign(&z);
     }
-    let verification_scalars = verify_scalars_better(transcript, G.len(), &ip_proof);
+    let verification_scalars = verify_scalars(transcript, G.len(), &ip_proof);
     let (u_sq, u_inv_sq, s) = (
         verification_scalars.u_sq,
         verification_scalars.u_inv_sq,
@@ -710,9 +598,7 @@ pub fn verify_more_efficient<C: Curve>(
     );
     let a = ip_proof.a;
     let b = ip_proof.b;
-    // let L = &ip_proof.l_vec;
-    // let R = &ip_proof.r_vec;
-    let (L, R) : (Vec<_>, Vec<_>) = ip_proof.lr_vec.iter().cloned().unzip();
+    let (L, R): (Vec<_>, Vec<_>) = ip_proof.lr_vec.iter().cloned().unzip();
     let mut s_inv = s.clone();
     s_inv.reverse();
     let y_inv = y.inverse().unwrap();
@@ -755,14 +641,12 @@ pub fn verify_more_efficient<C: Curve>(
     c_delta_minus_tx.sub_assign(&tx);
     c_delta_minus_tx.mul_assign(&c);
     B_scalar.add_assign(&c_delta_minus_tx);
-    // let B_term = B.mul_by_scalar(&B_scalar);
     let mut minus_e_tilde = e_tilde;
     minus_e_tilde.negate();
     let mut B_tilde_scalar = minus_e_tilde;
     let mut ctx_tilde = tx_tilde;
     ctx_tilde.mul_assign(&c);
     B_tilde_scalar.sub_assign(&ctx_tilde);
-    // let B_tilde_term = B_tilde.mul_by_scalar(&B_tilde_scalar);
     let mut G_scalars = Vec::with_capacity(G.len());
     for si in s {
         let mut G_scalar = z;
@@ -773,19 +657,6 @@ pub fn verify_more_efficient<C: Curve>(
         G_scalars.push(G_scalar);
     }
     let mut Vjs: Vec<C> = commitments.iter().map(|x| x.0).collect();
-    // let H_term = multiexp( &H, &H_scalars); //Expensive!
-    // let A_term = A;
-    // let S_term = S.mul_by_scalar(&x);
-    // let G_term = multiexp( &G, &G_scalars); //Expensive!
-    // let L_term = multiexp( &L, &u_sq); //Expensive!
-    // let R_term = multiexp( &R, &u_inv_sq); //Expensive!
-    // let V_term = multiexp( &Vjs, &V_scalars); //Expensive!
-    // let T_1_term = T_1.mul_by_scalar(&T_1_scalar);
-    // let T_2_term = T_2.mul_by_scalar(&T_2_scalar);
-    // let mut sum =
-    // A_term.plus_point(&S_term).plus_point(&B_term).plus_point(&B_tilde_term).
-    // plus_point(&G_term).plus_point(&H_term).plus_point(&L_term).plus_point(&
-    // R_term).plus_point(&V_term).plus_point(&T_1_term).plus_point(&T_2_term);
     let mut all_scalars = vec![A_scalar];
     all_scalars.push(S_scalar);
     all_scalars.push(T_1_scalar);
@@ -812,7 +683,6 @@ pub fn verify_more_efficient<C: Curve>(
     all_points.extend_from_slice(&R);
 
     let sum2 = multiexp(&all_points, &all_scalars);
-    // println!("len of msm vector = {}", all_scalars.len());
 
     // println!("Second check = {:?}", sum.is_zero_point());
     let b: bool = sum2.is_zero_point();
@@ -824,21 +694,13 @@ pub fn verify_more_efficient<C: Curve>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use ff::PrimeField;
     use pairing::bls12_381::G1;
 
-    // use pairing::{
-    //     bls12_381::{
-    //         Bls12, Fq, Fr, FrRepr, G1Affine, G1Compressed, G1Prepared, G2Affine,
-    // G2Compressed,         G2Prepared, G1, G2,
-    //     },
-    //     Engine, PairingCurveAffine,
-    // };
-
-    /// This function produces a proof that will satisfy the verifier's first check,
-    /// even if the values are not in the interval. 
-    /// The second check will fail, and therefore in the tests below the verifier should
-    /// output fail when checking a proof produced by cheat_prove
+    /// This function produces a proof that will satisfy the verifier's first
+    /// check, even if the values are not in the interval.
+    /// The second check will fail, and therefore in the tests below the
+    /// verifier should output fail when checking a proof produced by
+    /// cheat_prove
     type SomeCurve = G1;
     #[allow(non_snake_case)]
     #[allow(clippy::too_many_arguments)]
@@ -936,11 +798,11 @@ mod tests {
 
         let ip_proof = prove_inner_product(
             transcript,
-            G,
-            H,
+            &G,
+            &H,
             &C::zero_point(),
-            vec![C::Scalar::zero(); nm],
-            vec![C::Scalar::zero(); nm],
+            &vec![C::Scalar::zero(); nm],
+            &vec![C::Scalar::zero(); nm],
         );
         (V_vec, RangeProof {
             A,
@@ -960,10 +822,9 @@ mod tests {
     /// - n - the number n such that each v_i is claimed to be in [0, 2^n) by
     ///   the prover
     /// - commitments - commitments V_i to each v_i
-    /// - G - a vector of generators with length nm
-    /// - H - a vector of generators with length nm
-    /// - B - a generator
-    /// - B_tilde - a generator
+    /// - gens - generators containing vectors G and H both of length nm
+    /// - v_keys - commitmentment keys B and B_tilde
+    /// It uses the inner product proof verifier.
     #[allow(non_snake_case)]
     #[allow(dead_code)]
     #[allow(clippy::too_many_arguments)]
@@ -971,13 +832,14 @@ mod tests {
     fn naive_verify<C: Curve>(
         transcript: &mut Transcript,
         n: u8,
-        commitments: Vec<Commitment<C>>,
-        proof: RangeProof<C>,
-        G: Vec<C>,
-        H: Vec<C>,
-        B: C,
-        B_tilde: C,
+        commitments: &[Commitment<C>],
+        proof: &RangeProof<C>,
+        gens: &Generators<C>,
+        v_keys: &CommitmentKey<C>,
     ) -> bool {
+        let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
+        let B = v_keys.0;
+        let B_tilde = v_keys.1;
         let m = commitments.len();
         for V in commitments.clone() {
             transcript.append_point(b"Vj", &V.0);
@@ -1059,7 +921,7 @@ mod tests {
         }
         // println!("First check = {:?}", first);
 
-        let ip_proof = proof.ip_proof;
+        let ip_proof = &proof.ip_proof;
         let mut z_2_nm: Vec<C::Scalar> = Vec::with_capacity(G.len());
         let mut y_i = C::Scalar::one();
         let mut z_2_m: Vec<C::Scalar> = Vec::with_capacity(m);
@@ -1105,59 +967,15 @@ mod tests {
         }
 
         // println!("Verifier's P' = {:?}", P_prime);
-        let second: bool = verify_inner_product(transcript, G, H_prime, P_prime, Q, &ip_proof); // Very expensive
-                                                                                                // println!("Second check = {:?}", second);
+        let second: bool = verify_inner_product(transcript, &G, &H_prime, &P_prime, &Q, &ip_proof); // Very expensive
+                                                                                                    // println!("Second check = {:?}", second);
         second
     }
-    // type SomeField = Fr;
-
-    // #[test]
-    // fn test_repr() {
-    //     let zero = SomeField::zero();
-    //     let one = SomeField::one();
-    //     let mut two = SomeField::one();
-    //     two.add_assign(&one);
-    //     let mut three = SomeField::one();
-    //     three.add_assign(&two);
-    //     let mut four = three;
-    //     four.add_assign(&one);
-    //     let mut five = three;
-    //     five.add_assign(&two);
-    //     println!("{:?}", one);
-    //     println!("{:?}", two);
-    //     println!("{:?}", three);
-
-    //     let three_bv = vec![one, one];
-    //     let two_n = vec![one, two];
-    //     let ip = inner_product(&three_bv, &two_n);
-    //     println!("three = {:?}", ip);
-
-    //     let five_bv = vec![one, zero, one];
-    //     let two_n = vec![one, two, four];
-    //     let ip = inner_product(&five_bv, &two_n);
-    //     println!("five = {:?}", ip);
-
-    //     let seven = Fr::from_str("7").unwrap();
-    //     let seven_repr = FrRepr::from(7);
-    //     println!("{:?}", seven);
-    //     println!("{:?}", seven_repr);
-    //     println!("{:?}", seven.into_repr());
-    //     println!("{:?}", Fr::from_repr(seven_repr));
-
-    //     let v = 10;
-    //     let n = 4;
-    //     // let (a_L, a_R) = a_L_a_R::<SomeField>(v, n);
-    //     let two_n = two_n_vec(n);
-    //     let ip = inner_product(&a_L, &two_n);
-    //     println!("v = {:?}", ip);
-    //     // println!("a_L o a_R = {:?}", mul_vectors(&a_L, &a_R));
-    //     assert!(true);
-    // }
 
     #[allow(non_snake_case)]
     #[test]
     fn test_prove() {
-        // Test for n = m = 4
+        // Test for nm = 512
         let rng = &mut thread_rng();
         let n = 32;
         let m = 16;
@@ -1171,9 +989,9 @@ mod tests {
             let h = SomeCurve::generate(rng);
             G.push(g);
             H.push(h);
-            G_H.push((g,h));
+            G_H.push((g, h));
         }
-        let gens = Generators{G_H};
+        let gens = Generators { G_H };
         let B = SomeCurve::generate(rng);
         let B_tilde = SomeCurve::generate(rng);
         let keys = CommitmentKey(B, B_tilde);
@@ -1190,47 +1008,18 @@ mod tests {
                * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
         ];
         let mut transcript = Transcript::new(&[]);
-        // println!(
-        //     "Prove that all numbers in {:?} are in [0, 2^{:?})",
-        //     v_vec.clone(),
-        //     n
-        // );
-        // let now = Instant::now();
-        // println!("Proving..");
-        let (commitments, proof) = prove(
-            &mut transcript,
-            rng,
-            n,
-            m,
-            &v_vec,
-            &gens,
-            &keys,
-        );
+        let (commitments, proof) = prove(&mut transcript, rng, n, m, &v_vec, &gens, &keys);
+        let mut transcript = Transcript::new(&[]);
+        let b1 = naive_verify(&mut transcript, n, &commitments, &proof, &gens, &keys);
 
-        // // println!("Verifying..");
-        // let mut transcript = Transcript::new(&[]);
-        // let b1 = naive_verify(
-        //     &mut transcript,
-        //     n,
-        //     commitments.clone(),
-        //     proof.clone(),
-        //     G.clone(),
-        //     H.clone(),
-        //     B,
-        //     B_tilde,
-        // );
-
-        // let mut transcript = Transcript::new(&[]);
-        // let b2 = verify_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
-        // // println!("Efficient verifier's output = {:?}", b);
+        let mut transcript = Transcript::new(&[]);
+        let b2 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
 
         // Testing the even more efficient verifier:
         let mut transcript = Transcript::new(&[]);
-        let b3 =
-            verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
-        // println!("Efficient verifier's output = {:?}", b);
-        // assert!(b1);
-        // assert!(b2);
+        let b3 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
+        assert!(b1);
+        assert!(b2);
         assert!(b3);
     }
 
@@ -1243,16 +1032,19 @@ mod tests {
         let nm = (usize::from(n)) * (usize::from(m));
         let mut G = Vec::with_capacity(nm);
         let mut H = Vec::with_capacity(nm);
+        let mut G_H = Vec::with_capacity(nm);
 
         for _i in 0..(nm) {
             let g = SomeCurve::generate(rng);
             let h = SomeCurve::generate(rng);
-
             G.push(g);
             H.push(h);
+            G_H.push((g, h));
         }
+        let gens = Generators { G_H };
         let B = SomeCurve::generate(rng);
         let B_tilde = SomeCurve::generate(rng);
+        let keys = CommitmentKey(B, B_tilde);
 
         // Some numbers in [0, 2^n):
         let v_vec: Vec<u64> = vec![
@@ -1266,15 +1058,7 @@ mod tests {
                * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
         ];
         // CHEATING prover:
-        // println!("\n\n --------------------- CHEATING PROVER
-        // -----------------------");
         let mut transcript = Transcript::new(&[]);
-        // println!(
-        //     "Prove that all numbers in {:?} are in [0, 2^{:?})",
-        //     v_vec.clone(),
-        //     n
-        // );
-        // println!("Proving..");
         let (commitments, proof) = cheat_prove(
             n,
             m,
@@ -1287,11 +1071,10 @@ mod tests {
             &mut transcript,
         );
         let mut transcript = Transcript::new(&[]);
-        let b1 = verify_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
-        // let mut transcript = Transcript::new(&[]);
-        // let b2 =
-        //     verify_more_efficient(&mut transcript, n, &commitments, &proof, &G, &H, B, B_tilde);
+        let b1 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
+        let mut transcript = Transcript::new(&[]);
+        let b2 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
         assert!(!b1);
-        // assert!(!b2);
+        assert!(!b2);
     }
 }
