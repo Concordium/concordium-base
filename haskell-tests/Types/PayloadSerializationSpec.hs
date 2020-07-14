@@ -7,9 +7,9 @@ import Test.Hspec.QuickCheck
 
 import Test.QuickCheck
 
-import Data.ByteString.Lazy as BSL
-import Data.ByteString as BS
-import Data.ByteString.Short as BSS
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Short as BSS
 import Control.Monad
 
 import Concordium.Types
@@ -26,7 +26,6 @@ import Types.CoreAllGen
 
 import Data.Int
 import qualified Data.Map as Map
-import qualified Data.List as L
 import qualified Data.Set as Set
 import System.Random
 import Concordium.Crypto.Proofs
@@ -145,19 +144,26 @@ genPayload = oneof [genDeployModule,
 
         genUndelegateStake = return UndelegateStake
 
+        -- generate an increasing list of key indices.
+        genIndices = do
+          maxLen <- choose (0::Int, 255)
+          let go is _ 0 = return is
+              go is nextIdx n = do
+                nextIndex <- choose (nextIdx, 255)
+                if nextIndex == 255 then
+                  return (KeyIndex nextIndex:is)
+                else go (KeyIndex nextIndex:is) (nextIndex+1) (n-1)
+          reverse <$> go [] 0 maxLen
+
         genAccountKeysMap = do
-          n <- choose (0, 10)
-          indexList <- vectorOf n (KeyIndex <$> arbitrary)
-          mapList <- mapM (\idx -> do
+          indexList <- genIndices
+          mapList <- forM indexList (\idx -> do
             kp <- genSigSchemeKeyPair
             return (idx, correspondingVerifyKey kp))
-            (L.nub indexList)
           return $ Map.fromList mapList
 
         genSignThreshold = oneof [
-            (do
-              threshold <- choose (1,10)
-              return $ Just (SignatureThreshold threshold)),
+            (Just . SignatureThreshold <$> choose (1,255)),
             (return Nothing)
           ]
 
@@ -171,8 +177,7 @@ genPayload = oneof [genDeployModule,
           return AddAccountKeys{..}
 
         genRemoveAccountKeys = do
-          n <- choose (0, 10)
-          indices <- vectorOf n (KeyIndex <$> arbitrary)
+          indices <- genIndices
           rakThreshold <- genSignThreshold
           let rakIndices = Set.fromList indices
           return RemoveAccountKeys{..}
@@ -194,8 +199,9 @@ checkPayload e = let bs = S.encodeLazy e
 
 tests :: Spec
 tests = describe "Payload serialization tests" $ do
-           test 25 5000
+           test 25 1000
            test 50 500
- where test size num = modifyMaxSuccess (const num) $
-                       specify ("Payload serialization with size = " ++ show size ++ ":") $
-                       forAll (resize size $ genPayload) checkPayload
+ where test size num =
+         modifyMaxSuccess (const num) $
+           specify ("Payload serialization with size = " ++ show size ++ ":") $
+           forAll (resize size $ genPayload) checkPayload
