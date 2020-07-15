@@ -24,6 +24,9 @@ versionGenesisData = Version 0
 versionGenesisParameters :: Version
 versionGenesisParameters = Version 0
 
+versionGlobalParameters :: Version
+versionGlobalParameters = Version 0
+
 versionCredential :: Version
 versionCredential = Version 0
 
