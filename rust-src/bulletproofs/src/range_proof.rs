@@ -77,7 +77,7 @@ pub fn prove<C: Curve, T: Rng>(
     v_vec: &[u64],
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
-) -> (Vec<Commitment<C>>, RangeProof<C>) {
+) -> (Vec<Commitment<C>>, Option<RangeProof<C>>) {
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
     let B = v_keys.0;
     let B_tilde = v_keys.1;
@@ -302,7 +302,10 @@ pub fn prove<C: Curve, T: Rng>(
     let Q = B.mul_by_scalar(&w);
     // let mut H_prime : Vec<C> = Vec::with_capacity(nm);
     let mut H_prime_scalars: Vec<C::Scalar> = Vec::with_capacity(nm);
-    let y_inv = y.inverse().unwrap();
+    let y_inv = match y.inverse() {
+        Some(inv) => inv,
+        None => return (V_vec, None),
+    };
     let mut y_inv_i = C::Scalar::one();
     for _i in 0..nm {
         // H_prime.push(H[i].mul_by_scalar(&y_inv_i));
@@ -310,19 +313,24 @@ pub fn prove<C: Curve, T: Rng>(
         y_inv_i.mul_assign(&y_inv);
     }
 
-    let ip_proof =
+    let proof =
         prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &l, &r);
+    
+    let rangeproof = match proof {
+        Some(ip_proof) => Some(RangeProof {
+            A,
+            S,
+            T_1,
+            T_2,
+            tx,
+            tx_tilde,
+            e_tilde,
+            ip_proof,
+        }),
+        _ => None
+    };
 
-    (V_vec, RangeProof {
-        A,
-        S,
-        T_1,
-        T_2,
-        tx,
-        tx_tilde,
-        e_tilde,
-        ip_proof,
-    })
+    (V_vec, rangeproof)
 }
 
 /// This function verifies a range proof, i.e. a proof of knowledge
@@ -716,7 +724,7 @@ mod tests {
         B_tilde: C,
         csprng: &mut T,
         transcript: &mut Transcript,
-    ) -> (Vec<Commitment<C>>, RangeProof<C>) {
+    ) -> (Vec<Commitment<C>>, Option<RangeProof<C>>) {
         let nm = (usize::from(n)) * (usize::from(m));
         let v_copy = v_vec.clone();
         let mut V_vec: Vec<Commitment<C>> = Vec::with_capacity(usize::from(m));
@@ -797,7 +805,7 @@ mod tests {
         delta_yz.sub_assign(&sum);
         tx.add_assign(&delta_yz);
 
-        let ip_proof = prove_inner_product(
+        let proof = prove_inner_product(
             transcript,
             &G,
             &H,
@@ -805,16 +813,22 @@ mod tests {
             &vec![C::Scalar::zero(); nm],
             &vec![C::Scalar::zero(); nm],
         );
-        (V_vec, RangeProof {
-            A,
-            S,
-            T_1,
-            T_2,
-            tx,
-            tx_tilde,
-            e_tilde,
-            ip_proof,
-        })
+
+        
+        let rangeproof = match proof {
+            Some(ip_proof) => Some(RangeProof {
+                A,
+                S,
+                T_1,
+                T_2,
+                tx,
+                tx_tilde,
+                e_tilde,
+                ip_proof,
+            }),
+            _ => None
+        };
+        (V_vec, rangeproof)
     }
 
     /// This function verifies a range proof, i.e. a proof of knowledge
@@ -1010,6 +1024,8 @@ mod tests {
         ];
         let mut transcript = Transcript::new(&[]);
         let (commitments, proof) = prove(&mut transcript, rng, n, m, &v_vec, &gens, &keys);
+        assert!(proof.is_some());
+        let proof = proof.unwrap();
         let mut transcript = Transcript::new(&[]);
         let b1 = naive_verify(&mut transcript, n, &commitments, &proof, &gens, &keys);
 
@@ -1071,6 +1087,8 @@ mod tests {
             rng,
             &mut transcript,
         );
+        assert!(proof.is_some());
+        let proof = proof.unwrap();
         let mut transcript = Transcript::new(&[]);
         let b1 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
         let mut transcript = Transcript::new(&[]);
