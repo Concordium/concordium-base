@@ -7,14 +7,18 @@ use criterion::Criterion;
 use curve_arithmetic::*;
 use merlin::Transcript;
 use pairing::bls12_381::G1;
+use pairing::bls12_381::Fr;
 use pedersen_scheme::*;
+use ff::Field;
 use rand::*;
 
 use std::time::Duration;
 
 use bulletproofs::range_proof::*;
+use bulletproofs::inner_product_proof::*;
 
 type SomeCurve = G1;
+type SomeField = Fr;
 
 pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let rng = &mut thread_rng();
@@ -50,8 +54,6 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
            * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
     ];
     let v_vec_p = v_vec.clone();
-    // let G_p = G.clone();
-    // let H_p = H.clone();
     let gens_p = gens.clone();
     let mut transcript = Transcript::new(&[]);
     c.bench_function("Prover.", move |b| {
@@ -74,7 +76,71 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
                 &proof,
                 &gens,
                 &keys
-            ));
+            ).is_ok());
+        })
+    });
+}
+
+
+#[allow(non_snake_case)]
+fn compare_inner_product_proof(c: &mut Criterion) {
+    // Testing with n = 4
+    let rng = &mut thread_rng();
+    let n = 32 * 16;
+    let mut G_vec = vec![];
+    let mut H_vec = vec![];
+    let mut a_vec = vec![];
+    let mut b_vec = vec![];
+    let y = SomeCurve::generate_scalar(rng);
+    for _ in 0..n {
+        let g = SomeCurve::generate(rng);
+        let h = SomeCurve::generate(rng);
+        let a = SomeCurve::generate_scalar(rng);
+        let b = SomeCurve::generate_scalar(rng);
+
+        G_vec.push(g);
+        H_vec.push(h);
+        a_vec.push(a);
+        b_vec.push(b);
+    }
+
+    let Q = SomeCurve::generate(rng);
+    let H = H_vec.clone();
+    let mut H_prime: Vec<SomeCurve> = Vec::with_capacity(n);
+    let y_inv = y.inverse().unwrap();
+    let mut H_prime_scalars: Vec<SomeField> = Vec::with_capacity(n);
+    let mut transcript = Transcript::new(&[]);
+    let G_vec_p = G_vec.clone();
+    let H_vec_p = H_vec.clone();
+    let a_vec_p = a_vec.clone();
+    let b_vec_p = b_vec.clone();
+    c.bench_function("Naive inner product proof.", move |b| {
+        b.iter(|| {
+            let mut y_inv_i = SomeField::one();
+            for i in 0..n {
+                H_prime.push(H[i].mul_by_scalar(&y_inv_i));
+                y_inv_i.mul_assign(&y_inv);
+            }
+            prove_inner_product(&mut transcript, &G_vec, &H_prime, &Q, &a_vec, &b_vec);
+        })
+    });
+    let mut transcript = Transcript::new(&[]);
+    c.bench_function("Better inner product proof with scalars.", move |b| {
+        b.iter(|| {
+            let mut y_inv_i = SomeField::one();
+            for _ in 0..n {
+                H_prime_scalars.push(y_inv_i);
+                y_inv_i.mul_assign(&y_inv);
+            }
+            prove_inner_product_with_scalars(
+                &mut transcript,
+                &G_vec_p,
+                &H_vec_p,
+                &H_prime_scalars,
+                &Q,
+                &a_vec_p,
+                &b_vec_p,
+            );
         })
     });
 }
@@ -82,5 +148,5 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
 criterion_group!(
     name = benchmarks;
     config = Criterion::default().measurement_time(Duration::from_millis(1000)).sample_size(10);
-    targets = prove_verify_benchmarks);
+    targets = prove_verify_benchmarks, compare_inner_product_proof);
 criterion_main!(benchmarks);

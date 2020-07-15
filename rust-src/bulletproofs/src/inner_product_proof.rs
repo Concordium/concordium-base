@@ -13,8 +13,23 @@ pub struct InnerProductProof<C: Curve> {
     pub b:      C::Scalar,
 }
 
+/// This function computes an inner product proof,
+/// which is a proof of knowledge that the prover knows vectors a and b such
+/// that P'=<a,G>+<b,H>+<a,b>Q.
+/// This function is only used for benchmarks and testing, since prove_inner_product_with_scalars
+/// is faster when producing the inner product proof inside the range proof.
+/// On its own it could be used to produce inner product proofs, though.
+///  The arguments are
+/// - G_slice - a slice to the vector G of elliptic curve points
+/// - H_slice - a slice to the vector H of elliptic curve points
+/// - H_prime_scalars - a slice to the vector c of scalars such that H' = c ∘ H
+/// - Q - the elliptic curve point Q
+/// - a_slice - a slice to the vector a of scalars
+/// - b_slice - a slice to the vector b of scalars
+/// Precondictions:
+/// G_slice, H_slice, a_slice and b_slice should all be of the same length, and
+/// this length must be a power of 2. 
 #[allow(non_snake_case)]
-#[cfg(test)]
 pub fn prove_inner_product<C: Curve>(
     transcript: &mut Transcript,
     G_slice: &[C],
@@ -198,9 +213,7 @@ pub struct VerificationScalars<C: Curve> {
 /// The arguments are
 /// - proof - a reference to a inner product proof.
 /// - n - the number of elements in the vectors (of equal length) that was used
-///   to produce the inner product proof.
-///
-/// This also means that n = 2^k, where k is the length of proof.lr_vec
+///   to produce the inner product proof. This also means that n = 2^k, where k is the length of proof.lr_vec
 #[allow(non_snake_case)]
 #[allow(clippy::many_single_char_names)]
 pub fn verify_scalars<C: Curve>(
@@ -226,7 +239,7 @@ pub fn verify_scalars<C: Curve>(
         let u_j_inv = match u_j.inverse(){
             Some(inv) => inv,
             _ => return None,
-        }; // TODO be careful here
+        }; 
         s_0.mul_assign(&u_j_inv);
         let mut u_j_sq = u_j;
         u_j_sq.mul_assign(&u_j);
@@ -279,8 +292,6 @@ pub fn verify_inner_product<C: Curve>(
     proof: &InnerProductProof<C>,
 ) -> bool {
     let n = G_vec.len();
-    // let L = &proof.l_vec;
-    // let R = &proof.r_vec;
     let L_R = &proof.lr_vec;
     let a = proof.a;
     let b = proof.b;
@@ -364,143 +375,6 @@ mod tests {
         assert!(ip == eleven);
     }
 
-    // #[allow(non_snake_case)]
-    // #[test]
-    // fn test_msm_basic() {
-    //     let rng = &mut thread_rng();
-    //     let mut Gis = Vec::new();
-    //     let g1 = SomeCurve::generate(rng);
-    //     let g2 = G1::generate(rng);
-    //     Gis.push(g1);
-    //     Gis.push(g2);
-    //     let mut ais = Vec::new();
-    //     let a1 = SomeCurve::generate_scalar(rng);
-    //     let a2 = SomeCurve::generate_scalar(rng);
-    //     ais.push(a1);
-    //     ais.push(a2);
-
-    //     println!("Naively with two points and two scalars");
-    //     let now = Instant::now();
-    //     let a1g1 = g1.mul_by_scalar(&a1);
-    //     let a2g2 = g2.mul_by_scalar(&a2);
-    //     let mut sum = a1g1;
-    //     sum = sum.plus_point(&a2g2);
-    //     println!("Done in {} µs", now.elapsed().as_micros());
-    //     println!("sum1: {}", sum);
-
-    //     println!("Using fast msm with two points and two scalars");
-    //     let now = Instant::now();
-    //     let sum2 = multiexp(&Gis[..], &ais[..]);
-    //     println!("Done in {} µs", now.elapsed().as_micros());
-    //     println!("sum2: {}", sum2);
-    //     assert_eq!(sum, sum2);
-    // }
-
-    // #[allow(non_snake_case)]
-    // #[test]
-    // fn test_msm_list() {
-    //     let rng = &mut thread_rng();
-    //     let n = 10000;
-    //     let mut Gis = Vec::with_capacity(n);
-    //     let mut ais = Vec::with_capacity(n);
-    //     for _ in 0..n {
-    //         let g = SomeCurve::generate(rng);
-    //         Gis.push(g);
-    //         let a = SomeCurve::generate_scalar(rng);
-    //         ais.push(a);
-    //     }
-
-    //     let w = 8;
-    //     let table = multiexp_table(&Gis, w);
-    //     // let sum = multiexp_worker_given_table(&ais, &table, w);
-    //     let mut list: Vec<SomeCurve> = Vec::with_capacity(n);
-
-    //     println!("Naively creating list");
-    //     let now = Instant::now();
-    //     for i in 0..n {
-    //         list.push(Gis[i].mul_by_scalar(&ais[i]));
-    //     }
-    //     println!("Done in {} ms", now.elapsed().as_millis());
-
-    //     let mut list2: Vec<SomeCurve> = Vec::with_capacity(n);
-    //     println!("Using fast msm to create list");
-    //     let now = Instant::now();
-    //     for i in 0..n {
-    //         let table_vec = table[i].clone();
-    //         let elem = multiexp_worker_given_table(&[ais[i]], &[table_vec], w);
-    //         // let elem = multiexp( &[Gis[i]], &[ais[i]]);
-    //         list2.push(elem);
-    //     }
-    //     println!("Done in {} ms", now.elapsed().as_millis());
-    //     println!("Equal? {}", list == list2);
-    // }
-
-    // #[test]
-    // #[allow(non_snake_case)]
-    // fn test_msm_bench() {
-    //     let rng = &mut thread_rng();
-    //     let n = 100000;
-    //     let mut Gis = Vec::with_capacity(n);
-    //     let mut ais = Vec::with_capacity(n);
-    //     for _ in 0..n {
-    //         let g = SomeCurve::generate(rng);
-    //         Gis.push(g);
-    //         let a = SomeCurve::generate_scalar(rng);
-    //         ais.push(a);
-    //     }
-
-    //     println!("Doing msm in two go's");
-    //     let now = Instant::now();
-    //     let sum1 = multiexp(&Gis[..n / 2], &ais[..n / 2]);
-    //     let sum2 = multiexp(&Gis[n / 2..], &ais[n / 2..]);
-    //     let sum = sum1.plus_point(&sum2);
-
-    //     println!("Done in {} ms", now.elapsed().as_millis());
-    //     println!("sum: {}", sum);
-    //     let sleeping_time = Duration::from_millis(3000);
-    //     // let now = time::Instant::now();
-
-    //     thread::sleep(sleeping_time);
-
-    //     println!("Doing msm in one go");
-    //     let now = Instant::now();
-    //     let sum = multiexp(&Gis[..], &ais[..]);
-
-    //     println!("Done in {} ms", now.elapsed().as_millis());
-    //     println!("sum: {}", sum);
-    // }
-
-    // #[allow(non_snake_case)]
-    // #[test]
-    // fn test_msm_with_one_vector() {
-    //     let rng = &mut thread_rng();
-    //     let mut Gis = Vec::new();
-    //     // let mut ais = Vec::new();
-    //     let n = 100000;
-    //     let one = SomeField::one();
-    //     let ais = vec![one; n];
-    //     for _ in 0..n {
-    //         let g = SomeCurve::generate(rng);
-    //         Gis.push(g);
-    //         // let a = SomeCurve::generate_scalar(rng);
-    //         // ais.push(a);
-    //     }
-
-    //     println!("Doing msm naively");
-    //     let now = Instant::now();
-    //     let sum = multiscalar_multiplication_naive(&ais[..], &Gis[..]);
-
-    //     println!("Done in {} ms", now.elapsed().as_millis());
-    //     println!("sum: {}", sum);
-
-    //     println!("Doing msm using wnaf stuff");
-    //     let now = Instant::now();
-    //     let sum = multiexp_worker(&Gis[..], &ais[..], 1); //(&ais[..], &Gis[..]);
-
-    //     println!("Done in {} ms", now.elapsed().as_millis());
-    //     println!("sum: {}", sum);
-    // }
-
     #[test]
     #[allow(non_snake_case)]
     fn test_inner_product_proof() {
@@ -543,69 +417,4 @@ mod tests {
             &proof
         ))
     }
-
-    // #[test]
-    // #[allow(non_snake_case)]
-    // fn compare_inner_product_proof() {
-    //     // Testing with n = 4
-    //     let rng = &mut thread_rng();
-    //     let n = 32 * 16;
-    //     let mut G_vec = vec![];
-    //     let mut H_vec = vec![];
-    //     let mut a_vec = vec![];
-    //     let mut b_vec = vec![];
-    //     let y = SomeCurve::generate_scalar(rng);
-    //     for _ in 0..n {
-    //         let g = SomeCurve::generate(rng);
-    //         let h = SomeCurve::generate(rng);
-    //         let a = SomeCurve::generate_scalar(rng);
-    //         let b = SomeCurve::generate_scalar(rng);
-
-    //         G_vec.push(g);
-    //         H_vec.push(h);
-    //         a_vec.push(a);
-    //         b_vec.push(b);
-    //     }
-
-    //     let Q = SomeCurve::generate(rng);
-    //     let H = H_vec.clone();
-    //     let mut H_prime: Vec<SomeCurve> = Vec::with_capacity(n);
-    //     let y_inv = y.inverse().unwrap();
-    //     let mut y_inv_i = SomeField::one();
-    //     let mut H_prime_scalars: Vec<SomeField> = Vec::with_capacity(n);
-    //     for i in 0..n {
-    //         H_prime.push(H[i].mul_by_scalar(&y_inv_i)); // 245 ms vs 126 ms
-    // or 625 ms vs 510         H_prime_scalars.push(y_inv_i);
-    //         y_inv_i.mul_assign(&y_inv);
-    //     }
-    //     let P_prime = multiexp(&G_vec, &a_vec)
-    //         .plus_point(&multiexp(&H_prime, &b_vec))
-    //         .plus_point(&Q.mul_by_scalar(&inner_product(&a_vec, &b_vec)));
-    //     // let P_prime = SomeCurve::zero_point();
-    //     let mut transcript = Transcript::new(&[]);
-
-    //     println!("Producing inner product proof");
-    //     let now = Instant::now();
-    //     // let proof = prove_inner_product(&mut transcript, G_vec.clone(),
-    //     // H_prime.clone(), &Q, a_vec, b_vec);
-    //     let proof = prove_inner_product_with_scalars(
-    //         &mut transcript,
-    //         G_vec.clone(),
-    //         H_vec.clone(),
-    //         &H_prime_scalars,
-    //         &Q,
-    //         a_vec,
-    //         b_vec,
-    //     );
-    //     println!("Done in {} ms", now.elapsed().as_millis());
-    //     // let P_prime = P_prime_;
-
-    //     let mut transcript = Transcript::new(&[]);
-    //     println!(
-    //         "{}",
-    //         verify_inner_product(&mut transcript, G_vec, H_prime, P_prime, Q,
-    // &proof)     );
-    //     // assert!(verify_inner_product(&mut transcript, G_vec, H_vec,
-    // P_prime,     // Q, proof));
-    // }
 }
