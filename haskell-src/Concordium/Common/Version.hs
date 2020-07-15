@@ -21,8 +21,8 @@ versionBareBlockItem = Version 0
 versionGenesisData :: Version
 versionGenesisData = Version 0
 
-versionGenesisParams :: Version
-versionGenesisParams = Version 0
+versionGenesisParameters :: Version
+versionGenesisParameters = Version 0
 
 versionCredential :: Version
 versionCredential = Version 0
@@ -32,6 +32,12 @@ versionFinalizationMessage = Version 0
 
 versionFinalizationRecord :: Version
 versionFinalizationRecord = Version 0
+
+versionIpInfos :: Version
+versionIpInfos = Version 0
+
+versionArInfos :: Version
+versionArInfos = Version 0
 
 instance Bounded Version where
   minBound = (Version 0)

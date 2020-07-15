@@ -178,6 +178,21 @@ instance ToJSON IdentityProviderIdentity where
 instance FromJSON IdentityProviderIdentity where
   parseJSON v = IP_ID <$> parseJSON v
 
+instance FromJSONKey IdentityProviderIdentity where
+  fromJSONKey = FromJSONKeyTextParser ipIdFromText
+      where ipIdFromText t = do
+              when (Text.length t > 10) $ fail "Out of bounds."
+              case Text.readMaybe (Text.unpack t) of
+                Nothing -> fail "IdentityProviderIdentity not an integral value."
+                Just i -> do
+                  when (i < 0) $ fail "IdentityProviderIdentity must be zero or positive."
+                  when (i > toInteger (maxBound :: Word32)) $ fail "IdentityProviderIdentity out of bounds."
+                  return (IP_ID (fromInteger i))
+
+-- NB: This instance relies on the show instance being the one of Word32.
+instance ToJSONKey IdentityProviderIdentity where
+  toJSONKey = toJSONKeyText (Text.pack . show)
+
 -- Account signatures (eddsa key)
 type AccountSignature = Signature
 
@@ -404,7 +419,7 @@ instance FromJSONKey ArIdentity where
       where arIdFromText t = do
               when (Text.length t > 10) $ fail "Out of bounds."
               case Text.readMaybe (Text.unpack t) of
-                Nothing -> fail "Not an integral value."
+                Nothing -> fail "ArIdentity not an integral value."
                 Just i -> do
                   when (i <= 0) $ fail "ArIdentity must be positive."
                   when (i > toInteger (maxBound :: Word32)) $ fail "ArIdentity out of bounds."

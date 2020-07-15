@@ -232,8 +232,8 @@ pub extern "C" fn ip_info_ip_identity(ip_info_ptr: *const IpInfo<Bls12>) -> u32 
 macro_free_ffi!(Box global_context_free, GlobalContext<G1>);
 macro_derive_from_bytes!(Box global_context_from_bytes, GlobalContext<G1>);
 macro_derive_to_bytes!(Box global_context_to_bytes, GlobalContext<G1>);
-macro_derive_from_json!(global_context_from_json, GlobalContext<G1>);
-macro_derive_to_json!(global_context_to_json, GlobalContext<G1>);
+macro_derive_from_json!(global_context_from_json, Versioned<GlobalContext<G1>>);
+macro_derive_to_json!(global_context_to_json, Versioned<GlobalContext<G1>>);
 
 // derive conversion methods for ArInfo to be used in Haskell
 macro_free_ffi!(Box ar_info_free, ArInfo<G1>);
