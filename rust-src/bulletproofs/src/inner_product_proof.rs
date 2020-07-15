@@ -16,10 +16,10 @@ pub struct InnerProductProof<C: Curve> {
 /// This function computes an inner product proof,
 /// which is a proof of knowledge that the prover knows vectors a and b such
 /// that P'=<a,G>+<b,H>+<a,b>Q.
-/// This function is only used for benchmarks and testing, since prove_inner_product_with_scalars
-/// is faster when producing the inner product proof inside the range proof.
-/// On its own it could be used to produce inner product proofs, though.
-///  The arguments are
+/// This function is only used for benchmarks and testing, since
+/// prove_inner_product_with_scalars is faster when producing the inner product
+/// proof inside the range proof. On its own it could be used to produce inner
+/// product proofs, though.  The arguments are
 /// - G_slice - a slice to the vector G of elliptic curve points
 /// - H_slice - a slice to the vector H of elliptic curve points
 /// - H_prime_scalars - a slice to the vector c of scalars such that H' = c ∘ H
@@ -28,7 +28,7 @@ pub struct InnerProductProof<C: Curve> {
 /// - b_slice - a slice to the vector b of scalars
 /// Precondictions:
 /// G_slice, H_slice, a_slice and b_slice should all be of the same length, and
-/// this length must be a power of 2. 
+/// this length must be a power of 2.
 #[allow(non_snake_case)]
 pub fn prove_inner_product<C: Curve>(
     transcript: &mut Transcript,
@@ -40,7 +40,9 @@ pub fn prove_inner_product<C: Curve>(
 ) -> Option<InnerProductProof<C>> {
     let one = C::Scalar::one();
     let H_scalars = vec![one; H_slice.len()];
-    prove_inner_product_with_scalars(transcript, G_slice, H_slice, &H_scalars, Q, a_slice, b_slice)
+    prove_inner_product_with_scalars(
+        transcript, G_slice, H_slice, &H_scalars, Q, a_slice, b_slice,
+    )
 }
 
 /// This function computes an inner product proof,
@@ -213,7 +215,8 @@ pub struct VerificationScalars<C: Curve> {
 /// The arguments are
 /// - proof - a reference to a inner product proof.
 /// - n - the number of elements in the vectors (of equal length) that was used
-///   to produce the inner product proof. This also means that n = 2^k, where k is the length of proof.lr_vec
+///   to produce the inner product proof. This also means that n = 2^k, where k
+///   is the length of proof.lr_vec
 #[allow(non_snake_case)]
 #[allow(clippy::many_single_char_names)]
 pub fn verify_scalars<C: Curve>(
@@ -236,10 +239,10 @@ pub fn verify_scalars<C: Curve>(
         transcript.append_point(b"Lj", Lj);
         transcript.append_point(b"Rj", Rj);
         let u_j: C::Scalar = transcript.challenge_scalar::<C>(b"uj");
-        let u_j_inv = match u_j.inverse(){
+        let u_j_inv = match u_j.inverse() {
             Some(inv) => inv,
             _ => return None,
-        }; 
+        };
         s_0.mul_assign(&u_j_inv);
         let mut u_j_sq = u_j;
         u_j_sq.mul_assign(&u_j);
@@ -267,7 +270,7 @@ pub fn verify_scalars<C: Curve>(
         s_i.mul_assign(&u_sq[L_R.len() - 1 - lg_i]);
         s.push(s_i);
     }
-    Some(VerificationScalars{ u_sq, u_inv_sq, s })
+    Some(VerificationScalars { u_sq, u_inv_sq, s })
 }
 
 /// This function verifies an inner product proof,
@@ -332,8 +335,8 @@ pub fn verify_inner_product<C: Curve>(
     P_prime.minus_point(&RHS).is_zero_point()
 }
 
-/// This function calculates the inner product between two vectors over any field
-/// F. The arguments are
+/// This function calculates the inner product between two vectors over any
+/// field F. The arguments are
 /// - a - the first vector
 /// - b - the second vector
 /// Precondition:

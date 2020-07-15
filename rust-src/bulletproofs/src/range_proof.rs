@@ -175,7 +175,6 @@ pub fn prove<C: Curve, T: Rng>(
         l_1.push(s_L[i]);
     }
 
-    
     let y_nm = z_vec(y, 0, nm);
 
     let two_n: Vec<C::Scalar> = two_n_vec(n);
@@ -324,9 +323,8 @@ pub fn prove<C: Curve, T: Rng>(
         y_inv_i.mul_assign(&y_inv);
     }
 
-    let proof =
-        prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &l, &r);
-    
+    let proof = prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &l, &r);
+
     let rangeproof = match proof {
         Some(ip_proof) => Some(RangeProof {
             A,
@@ -338,7 +336,7 @@ pub fn prove<C: Curve, T: Rng>(
             e_tilde,
             ip_proof,
         }),
-        _ => None
+        _ => None,
     };
 
     (V_vec, rangeproof)
@@ -347,7 +345,7 @@ pub fn prove<C: Curve, T: Rng>(
 #[derive(Debug, PartialEq)]
 pub enum VerificationError {
     DivisionError,
-    False(bool, bool)
+    False(bool, bool),
 }
 
 /// This function verifies a range proof, i.e. a proof of knowledge
@@ -643,7 +641,6 @@ mod tests {
             &vec![C::Scalar::zero(); nm],
         );
 
-        
         let rangeproof = match proof {
             Some(ip_proof) => Some(RangeProof {
                 A,
@@ -655,7 +652,7 @@ mod tests {
                 e_tilde,
                 ip_proof,
             }),
-            _ => None
+            _ => None,
         };
         (V_vec, rangeproof)
     }
@@ -889,7 +886,7 @@ mod tests {
         let ip_proof = &proof.ip_proof;
         let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
         let mut y_i = C::Scalar::one();
-        let z_2_m = z_vec(z,2, m);
+        let z_2_m = z_vec(z, 2, m);
         let verification_scalars = verify_scalars(transcript, G.len(), &ip_proof);
         if verification_scalars.is_none() {
             return false;
