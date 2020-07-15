@@ -99,12 +99,13 @@ genCredentialDeploymentInformation = do
     ]
   cdvRegId <- RegIdCred . FBS.pack <$> vector (FBS.fixedLength (undefined :: RegIdSize))
   cdvIpId <- IP_ID <$> arbitrary
-  cdvArData <- listOf $ do
-    ardName <- ARName <$> arbitrary
+  cdvArData <- Map.fromList <$> (listOf $ do
+    ardName <- do
+      n <- arbitrary
+      if n == 0 then return (ArIdentity 1) else return (ArIdentity n)
     ardIdCredPubShare <- AREnc <$> genElgamalCipher
-    ardIdCredPubShareNumber <- ShareNumber <$> arbitrary
-    return ChainArData{..}
-  cdvThreshold <- Threshold <$> choose (0, fromIntegral (length cdvArData))
+    return (ardName, ChainArData{..}))
+  cdvThreshold <- Threshold <$> choose (1, max 1 (fromIntegral (length cdvArData)))
   cdvPolicy <- do
     let ym = YearMonth <$> choose (1000,9999) <*> choose (1,12)
     pValidTo <- ym

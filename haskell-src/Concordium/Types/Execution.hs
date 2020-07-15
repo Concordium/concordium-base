@@ -17,10 +17,12 @@ import Control.Monad.Reader
 import Data.Char
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
-import qualified Data.HashMap.Strict as Map
+import qualified Data.HashMap.Strict as HMap
+import qualified Data.Map as Map
 import qualified Data.Serialize.Put as P
 import qualified Data.Serialize.Get as G
 import qualified Data.Serialize as S
+import qualified Data.Set as Set
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Word
@@ -66,10 +68,10 @@ instance S.Serialize AccountOwnershipProof where
     AccountOwnershipProof <$> replicateM (fromIntegral l) (S.getTwoOf S.get S.get)
 
 instance AE.FromJSON AccountOwnershipProof where
-  parseJSON v = (AccountOwnershipProof . Map.toList) <$> AE.parseJSON v
+  parseJSON v = (AccountOwnershipProof . HMap.toList) <$> AE.parseJSON v
 
 instance AE.ToJSON AccountOwnershipProof where
-  toJSON (AccountOwnershipProof proofs) = AE.toJSON $ Map.fromList proofs
+  toJSON (AccountOwnershipProof proofs) = AE.toJSON $ HMap.fromList proofs
 
 -- |The transaction payload. Defines the supported kinds of transactions.
 --
@@ -201,6 +203,25 @@ data Payload =
       -- |Proof of knowledge of the secret key corresponding to the new election key
       ubekProof :: !Dlog25519Proof
       }
+  -- Updates existing keys used for signing transactions for the sender's account
+  | UpdateAccountKeys {
+      -- |Update the account keys with to the ones in this map.
+      uakKeys :: !(Map.Map KeyIndex AccountVerificationKey)
+    }
+  -- Adds additional keys to the sender's account, optionally updating the signature threshold too
+  | AddAccountKeys {
+      -- |Map of key indices and the associated key to add
+      aakKeys :: !(Map.Map KeyIndex AccountVerificationKey),
+      -- |Optional value for updating the threshold of the signature scheme
+      aakThreshold :: !(Maybe SignatureThreshold)
+    }
+  -- Remove keys from the sender's account, optionally updating the signature threshold too
+  | RemoveAccountKeys {
+      -- |List of indices of keys to remove
+      rakIndices :: !(Set.Set KeyIndex),
+      -- |Optional value for updating the threshold of the signature scheme
+      rakThreshold :: !(Maybe SignatureThreshold)
+    }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -270,6 +291,20 @@ instance S.Serialize Payload where
     S.put ubekId <>
     S.put ubekKey <>
     S.put ubekProof
+  put UpdateAccountKeys{..} = do
+    P.putWord8 13
+    P.putWord8 (fromIntegral (length uakKeys))
+    forM_ (Map.toAscList uakKeys) $ \(idx, key) -> S.put idx <> S.put key
+  put AddAccountKeys{..} = do
+    P.putWord8 14
+    P.putWord8 (fromIntegral (length aakKeys))
+    forM_ (Map.toAscList aakKeys) $ \(idx, key) -> S.put idx <> S.put key
+    putMaybe aakThreshold
+  put RemoveAccountKeys{..} = do
+    P.putWord8 15
+    P.putWord8 (fromIntegral (length rakIndices))
+    forM_ (Set.toAscList rakIndices) S.put
+    putMaybe rakThreshold
 
   get =
     G.getWord8 >>=
@@ -331,8 +366,54 @@ instance S.Serialize Payload where
               ubekKey <- S.get
               ubekProof <- S.get
               return UpdateBakerElectionKey{..}
+            13 -> do
+              len <- S.getWord8
+              uakKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+              return UpdateAccountKeys{..}
+            14 -> do
+              len <- S.getWord8
+              aakKeys <- safeFromAscList =<< replicateM (fromIntegral len) (S.getTwoOf S.get S.get)
+              aakThreshold <- getMaybe
+              return AddAccountKeys{..}
+            15 -> do
+              len <- S.getWord8
+              rakIndices <- safeSetFromAscList =<< replicateM (fromIntegral len) S.get
+              rakThreshold <- getMaybe
+              return RemoveAccountKeys{..}
 
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
+
+-- |Serialize a Maybe value
+-- Just v is serialized with a word8 tag 1 followed by the serialization of the value
+-- Nothing is seralized with a word8 tag 0.
+putMaybe :: S.Serialize a => P.Putter (Maybe a)
+putMaybe (Just v) = do
+  P.putWord8 1
+  S.put v
+putMaybe Nothing = S.putWord8 0
+
+-- |Deserialize a Maybe value
+-- Expects a leading 0 or 1 word8, 1 signaling Just and 0 signaling Nothing.
+-- NB: This method is stricter than the Serialize instance method in that it only allows
+-- tags 0 and 1, whereas the Serialize.get method allows any non-zero tag for Just.
+getMaybe :: S.Serialize a => S.Get (Maybe a)
+getMaybe = G.getWord8 >>=
+    \case 0 -> return Nothing
+          1 -> do
+              v <- S.get
+              return (Just v)
+          n -> fail $ "encountered invalid tag when deserializing a Maybe '" ++ show n ++ "'"
+
+-- |Builds a set from a list of ascending elements.
+-- Fails if the elements are not ordered or a duplicate is encountered.
+safeSetFromAscList :: (MonadFail m, Ord a) => [a] -> m (Set.Set a)
+safeSetFromAscList = go Set.empty Nothing
+    where
+      go s _ [] = return s
+      go s Nothing (a : rest) = go (Set.insert a s) (Just a) rest
+      go s (Just a') (a : rest)
+        | (a' < a) = go (Set.insert a s) (Just a) rest
+        | otherwise = fail "Elements are either not in ascending order, or a duplicate was found."
 
 {-# INLINE encodePayload #-}
 encodePayload :: Payload -> EncodedPayload
@@ -388,6 +469,7 @@ data BlockEvents =
 
 -- |Events which are generated during transaction execution.
 -- These are only used for commited transactions.
+-- Must be kept in sync with 'showEvents' in concordium-client (Output.hs).
 data Event =
            -- |Module with the given address was deployed.
            ModuleDeployed !Core.ModuleRef
@@ -479,6 +561,11 @@ data Event =
                -- |The new election difficulty.
                eeduDifficulty :: !Double
                }
+           -- |Keys at existing indexes were updated, no new indexes were added, threshold is unchanged
+           | AccountKeysUpdated
+           | AccountKeysAdded
+           | AccountKeysRemoved
+           | AccountKeysSignThresholdUpdated
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -533,12 +620,13 @@ instance S.Serialize ValidResult
 instance S.Serialize TransactionSummary
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
+-- Must be kept in sync with 'showRejectReason' in concordium-client (Output.hs).
 data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module has failed.
                   | MissingImports  -- ^Error when there were missing imports (determined before typechecking).
                   | ModuleHashAlreadyExists !Core.ModuleRef  -- ^As the name says.
                   | MessageTypeError -- ^Message to the receive method is of the wrong type.
                   | ParamsTypeError -- ^Parameters of the init method are of the wrong type.
-                  | InvalidAccountReference !AccountAddress -- ^Account does not exists.
+                  | InvalidAccountReference !AccountAddress -- ^Account does not exist.
                   | InvalidContractReference !Core.ModuleRef !Core.TyName -- ^Reference to a non-existing contract.
                   | InvalidModuleReference !Core.ModuleRef   -- ^Reference to a non-existing module.
                   | InvalidContractAddress !ContractAddress -- ^Contract instance does not exist.
@@ -567,6 +655,12 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                                         }
                   -- |A transaction should be sent from a special account, but is not.
                   | NotFromSpecialAccount
+                  -- |Encountered index to which no account key belongs when removing or updating keys
+                  | NonExistentAccountKey
+                  -- |Attempted to add an account key to a key index already in use
+                  | KeyIndexAlreadyInUse
+                  -- |When the account key threshold is updated, it must not exceed the amount of existing keys
+                  | InvalidAccountKeySignThreshold
     deriving (Show, Eq, Generic)
 
 instance S.Serialize RejectReason
@@ -590,8 +684,9 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
                  | ExceedsMaxBlockEnergy -- ^The transaction's deposited energy exceeds the maximum block energy limit.
                  | ExceedsMaxBlockSize -- ^The baker decided that this transaction is too big to put in a block.
                  | NonExistentIdentityProvider !IDTypes.IdentityProviderIdentity
+                 | UnsupportedAnonymityRevokers -- ^One of the anonymity revokers in the credential is not known.
                  | NonExistentAccount !AccountAddress -- ^Cannot deploy credential onto a non-existing account.
-                 | AccountCredentialInvalid
+                 | AccountCredentialInvalid -- ^Account credential verification failed, the proofs were invalid or malformed.
                  | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
       deriving(Eq, Show)
 
