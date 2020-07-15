@@ -12,6 +12,7 @@ import Control.Monad
 import qualified Data.Set as Set
 import Control.Monad.State.Class
 import Data.Maybe
+import Data.Char
 
 -- |Strict version of `At`.
 --
@@ -156,3 +157,11 @@ whenAddToSet val setLens act = do
     unless (val `Set.member` theSet) $ do
         setLens .= Set.insert val theSet
         act
+
+-- * Misc helper functions
+
+-- |Convert the first character of a string to lowercase.
+-- (This is used in Template Haskell for generating JSON serialization code.)
+firstLower :: String -> String
+firstLower [] = []
+firstLower (c:cs) = toLower c : cs
