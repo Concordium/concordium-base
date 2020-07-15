@@ -180,10 +180,14 @@ pub fn verify_aggregate_sig_trusted_keys<P: Pairing>(
         return false;
     }
 
-    let sum = pks
-        .par_iter()
-        .fold(P::G2::zero_point, |sum, x| sum.plus_point(&x.0))
-        .reduce(P::G2::zero_point, |sum, x| sum.plus_point(&x));
+    let sum = if pks.len() < 150 {
+        pks.iter()
+            .fold(P::G2::zero_point(), |s, x| s.plus_point(&x.0))
+    } else {
+        pks.par_iter()
+            .fold(P::G2::zero_point, |s, x| s.plus_point(&x.0))
+            .reduce(P::G2::zero_point, |s, x| s.plus_point(&x))
+    };
 
     // compute pairings in parallel
     P::check_pairing_eq(
