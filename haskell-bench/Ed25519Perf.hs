@@ -32,11 +32,15 @@ setupVerifyEnvSer n = do
   (vk, s, doc) <- setupVerifyEnv n
   return (encode vk, encode s, doc)
 
+setupDeserializeVerificationKey :: IO (BS.ByteString)
+setupDeserializeVerificationKey = do
+  kp <- newKeyPair Ed25519
+  return (encode $ correspondingVerifyKey kp)
+
 signN :: Int -> Benchmark
 signN n =
     env (setupSignEnv n) $ \ ~(kp, doc) ->
           bench ("len = " ++ show n) $ nf (\x -> let Signature s = sign kp x in s) doc
-
 
 verifyN :: Int -> Benchmark
 verifyN n =
@@ -53,6 +57,15 @@ verifyNSer n =
                                      (_, Left err) -> error $ "Decode error: " ++ err
                                     ) (vk',s')
 
+deserializeVerificationKey :: Benchmark
+deserializeVerificationKey =
+  env (setupDeserializeVerificationKey) $ \encoded ->
+    bench ("deserializing key") $ nf (\bytes ->
+      let VerifyKeyEd25519 k = case decode bytes of
+            Left err -> error $ "Decode error: " ++ err
+            Right key -> key
+      in k) encoded
+
 main :: IO ()
 main = defaultMainWith (defaultConfig { timeLimit = 60 }) [
   -- bgroup "sign"
@@ -61,6 +74,9 @@ main = defaultMainWith (defaultConfig { timeLimit = 60 }) [
   -- ,signN 10000
   -- ,signN 100000
   -- ],
+  bgroup "deserializeVerificationKey"
+  [ deserializeVerificationKey
+  ],
   bgroup "verify"
   [verifyN 5000
   -- ,verifyN 1000
