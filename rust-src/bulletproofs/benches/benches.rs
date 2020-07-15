@@ -5,17 +5,15 @@ extern crate criterion;
 
 use criterion::Criterion;
 use curve_arithmetic::*;
-use merlin::Transcript;
-use pairing::bls12_381::G1;
-use pairing::bls12_381::Fr;
-use pedersen_scheme::*;
 use ff::Field;
+use merlin::Transcript;
+use pairing::bls12_381::{Fr, G1};
+use pedersen_scheme::*;
 use rand::*;
 
 use std::time::Duration;
 
-use bulletproofs::range_proof::*;
-use bulletproofs::inner_product_proof::*;
+use bulletproofs::{inner_product_proof::*, range_proof::*};
 
 type SomeCurve = G1;
 type SomeField = Fr;
@@ -69,18 +67,12 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     c.bench_function("Verifier.", move |b| {
         b.iter(|| {
             let mut transcript = Transcript::new(&[]);
-            assert!(verify_efficient(
-                &mut transcript,
-                n,
-                &commitments,
-                &proof,
-                &gens,
-                &keys
-            ).is_ok());
+            assert!(
+                verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys).is_ok()
+            );
         })
     });
 }
-
 
 #[allow(non_snake_case)]
 fn compare_inner_product_proof(c: &mut Criterion) {
