@@ -16,7 +16,7 @@ pub struct InnerProductProof<C: Curve> {
 #[allow(non_snake_case)]
 #[allow(dead_code)]
 // #[cfg(test)]
-pub fn prove_inner_product<C: Curve>(
+pub fn prove_inner_product_old<C: Curve>(
     transcript: &mut Transcript,
     G_slice: &[C],
     H_slice: &[C],
@@ -143,6 +143,22 @@ pub fn prove_inner_product<C: Curve>(
     InnerProductProof { lr_vec: L_R, a, b }
 }
 
+#[allow(non_snake_case)]
+#[allow(dead_code)]
+// #[cfg(test)]
+pub fn prove_inner_product<C: Curve>(
+    transcript: &mut Transcript,
+    G_slice: &[C],
+    H_slice: &[C],
+    Q: &C,
+    a_slice: &[C::Scalar],
+    b_slice: &[C::Scalar],
+) -> Option<InnerProductProof<C>> {
+    let one = C::Scalar::one();
+    let H_scalars = vec![one; H_slice.len()];
+    prove_inner_product_with_scalars(transcript, G_slice, H_slice, &H_scalars, Q, a_slice, b_slice)
+}
+
 /// This function computes an inner product proof,
 /// which is a proof of knowledge that the prover knows vectors a and b such
 /// that P'=<a,G>+<b,H'>+<a,b>Q, but where H' = c ∘ H (pointwise
@@ -169,9 +185,11 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
     Q: &C,
     a_slice: &[C::Scalar],
     b_slice: &[C::Scalar],
-) -> InnerProductProof<C> {
+) -> Option<InnerProductProof<C>> {
     let mut n = G_slice.len();
-    assert!(n.is_power_of_two());
+    if !n.is_power_of_two() {
+        return None;
+    }
     let k = n.next_power_of_two().trailing_zeros() as usize; // This line is also used in Bulletproofs's implementation
 
     let mut L_R = Vec::with_capacity(k);
@@ -291,7 +309,7 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
     let a = a_vec[0];
     let b = b_vec[0];
 
-    InnerProductProof { lr_vec: L_R, a, b }
+    Some(InnerProductProof { lr_vec: L_R, a, b })
 }
 
 /// This struct contains vectors of scalars that are needed for verification.
@@ -633,7 +651,8 @@ mod tests {
 
         // Producing inner product proof with vector length = n
         let proof = prove_inner_product(&mut transcript, &G_vec, &H_vec, &Q, &a_vec, &b_vec);
-
+        assert!(proof.is_some());
+        let proof = proof.unwrap();
         let mut transcript = Transcript::new(&[]);
 
         assert!(verify_inner_product(

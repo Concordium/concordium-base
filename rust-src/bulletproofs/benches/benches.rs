@@ -63,7 +63,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let rng = &mut thread_rng();
     let mut transcript = Transcript::new(&[]);
     let (commitments, proof) = prove(&mut transcript, rng, n, m, &v_vec, &gens, &keys);
-
+    let proof = proof.unwrap();
     c.bench_function("Verifier.", move |b| {
         b.iter(|| {
             let mut transcript = Transcript::new(&[]);
