@@ -51,6 +51,26 @@ fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
     two_n
 }
 
+/// This function takes one argument n and returns the
+/// vector (z^j, z^{j+1}, ..., z^{j+n-1}) in F^n for any field F
+/// The arguments are
+/// - z - the field element z
+/// - first_power - the first power j
+/// - n - the integer n
+#[allow(non_snake_case)]
+fn z_vec<F: Field>(z: F, first_power: usize, n: usize) -> Vec<F> {
+    let mut z_n = Vec::with_capacity(usize::from(n));
+    let mut z_i = F::one();
+    for _ in 0..first_power {
+        z_i.mul_assign(&z);
+    }
+    for _ in 0..n {
+        z_n.push(z_i);
+        z_i.mul_assign(&z);
+    }
+    z_n
+}
+
 /// Struct containing generators G and H needed for range proofs
 #[allow(non_snake_case)]
 #[derive(Clone)]
@@ -155,21 +175,12 @@ pub fn prove<C: Curve, T: Rng>(
         l_1.push(s_L[i]);
     }
 
-    let mut y_nm: Vec<C::Scalar> = Vec::with_capacity(nm);
-    let mut y_i = C::Scalar::one();
-    for _ in 0..nm {
-        y_nm.push(y_i);
-        y_i.mul_assign(&y);
-    }
+    
+    let y_nm = z_vec(y, 0, nm);
 
     let two_n: Vec<C::Scalar> = two_n_vec(n);
 
-    let mut z_m: Vec<C::Scalar> = Vec::with_capacity((m) as usize);
-    let mut z_j = C::Scalar::one();
-    for _ in 0..(m) as usize {
-        z_m.push(z_j);
-        z_j.mul_assign(&z);
-    }
+    let z_m = z_vec(z, 0, usize::from(m));
 
     // r_0 and r_1
     for i in 0..a_R.len() {
@@ -439,14 +450,12 @@ pub fn verify_efficient<C: Curve>(
     let ip_proof = &proof.ip_proof;
     let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
     let mut y_i = C::Scalar::one();
-    let mut z_2_m: Vec<C::Scalar> = Vec::with_capacity(m);
-    let mut z_j = z;
-    z_j.mul_assign(&z);
-    for _j in 0..m {
-        z_2_m.push(z_j);
-        z_j.mul_assign(&z);
-    }
+    let z_2_m = z_vec(z, 2, m);
     let verification_scalars = verify_scalars(transcript, G.len(), &ip_proof);
+    if verification_scalars.is_none() {
+        return false;
+    }
+    let verification_scalars = verification_scalars.unwrap();
     let (u_sq, u_inv_sq, s) = (
         verification_scalars.u_sq,
         verification_scalars.u_inv_sq,
@@ -592,14 +601,12 @@ pub fn verify_more_efficient<C: Curve>(
     let ip_proof = &proof.ip_proof;
     let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
     let mut y_i = C::Scalar::one();
-    let mut z_2_m: Vec<C::Scalar> = Vec::with_capacity(m);
-    let mut z_j = z;
-    z_j.mul_assign(&z);
-    for _j in 0..m {
-        z_2_m.push(z_j);
-        z_j.mul_assign(&z);
-    }
+    let z_2_m = z_vec(z,2, m);
     let verification_scalars = verify_scalars(transcript, G.len(), &ip_proof);
+    if verification_scalars.is_none() {
+        return false;
+    }
+    let verification_scalars = verification_scalars.unwrap();
     let (u_sq, u_inv_sq, s) = (
         verification_scalars.u_sq,
         verification_scalars.u_inv_sq,
@@ -610,7 +617,10 @@ pub fn verify_more_efficient<C: Curve>(
     let (L, R): (Vec<_>, Vec<_>) = ip_proof.lr_vec.iter().cloned().unzip();
     let mut s_inv = s.clone();
     s_inv.reverse();
-    let y_inv = y.inverse().unwrap();
+    let y_inv = match y.inverse() {
+        Some(inv) => inv,
+        None => return false,
+    };
     let two_n: Vec<C::Scalar> = two_n_vec(n);
     for i in 0..G.len() {
         let j = i / usize::from(n);
@@ -738,8 +748,6 @@ mod tests {
             let V_j = v_keys.hide(&v_value, &v_j_tilde);
             transcript.append_point(b"Vj", &V_j.0);
             V_vec.push(V_j);
-            // A_vec.push(V_j);
-            // S_vec.push(V_j);
         }
         let A = C::zero_point();
         let S = C::zero_point();
@@ -747,12 +755,7 @@ mod tests {
         transcript.append_point(b"S", &S);
         let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
         let z: C::Scalar = transcript.challenge_scalar::<C>(b"z");
-        let mut z_m: Vec<C::Scalar> = Vec::with_capacity((m) as usize);
-        let mut z_j = C::Scalar::one();
-        for _ in 0..(m) as usize {
-            z_m.push(z_j);
-            z_j.mul_assign(&z);
-        }
+        let z_m = z_vec(z, 0, usize::from(m));
         let T_1 = C::zero_point();
         let T_2 = C::zero_point();
 
@@ -939,14 +942,11 @@ mod tests {
         let ip_proof = &proof.ip_proof;
         let mut z_2_nm: Vec<C::Scalar> = Vec::with_capacity(G.len());
         let mut y_i = C::Scalar::one();
-        let mut z_2_m: Vec<C::Scalar> = Vec::with_capacity(m);
-        let mut z_j = z;
-        z_j.mul_assign(&z);
-        for _j in 0..m {
-            z_2_m.push(z_j);
-            z_j.mul_assign(&z);
-        }
-        let y_inv = y.inverse().unwrap();
+        let z_2_m = z_vec(z, 2, m);
+        let y_inv = match y.inverse() {
+            Some(inv) => inv,
+            None => return false,
+        };
         let two_n: Vec<C::Scalar> = two_n_vec(n);
         for i in 0..G.len() {
             let j = i / usize::from(n);
@@ -974,7 +974,10 @@ mod tests {
         // let (u_sq, u_inv_sq, s) = verify_scalars(transcript, usize::from(n),
         // ip_proof);
         let mut H_prime: Vec<C> = Vec::with_capacity(m * usize::from(n));
-        let y_inv = y.inverse().unwrap();
+        let y_inv = match y.inverse() {
+            Some(inv) => inv,
+            None => return false,
+        };
         let mut y_inv_i = C::Scalar::one();
         for x in H {
             H_prime.push(x.mul_by_scalar(&y_inv_i)); // Expensive!

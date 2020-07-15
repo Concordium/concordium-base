@@ -14,138 +14,7 @@ pub struct InnerProductProof<C: Curve> {
 }
 
 #[allow(non_snake_case)]
-#[allow(dead_code)]
-// #[cfg(test)]
-pub fn prove_inner_product_old<C: Curve>(
-    transcript: &mut Transcript,
-    G_slice: &[C],
-    H_slice: &[C],
-    Q: &C,
-    a_slice: &[C::Scalar],
-    b_slice: &[C::Scalar],
-) -> InnerProductProof<C> {
-    let mut n = G_slice.len();
-    assert!(n.is_power_of_two());
-    let k = n.next_power_of_two().trailing_zeros() as usize; // This line is also used in Bulletproofs's implementation
-
-    let mut L_R = Vec::with_capacity(k);
-    let mut a_vec = a_slice.to_vec();
-    let mut b_vec = b_slice.to_vec();
-    let mut G_vec = G_slice.to_vec();
-    let mut H_vec = H_slice.to_vec();
-    for _j in 0..k {
-        let a_lo = &a_vec[..n / 2];
-        let a_hi = &a_vec[n / 2..n];
-        let G_lo = &G_vec[..n / 2];
-        let G_hi = &G_vec[n / 2..n];
-        let b_lo = &b_vec[..n / 2];
-        let b_hi = &b_vec[n / 2..n];
-        let H_lo = &H_vec[..n / 2];
-        let H_hi = &H_vec[n / 2..n];
-        let a_lo_G_hi = multiexp(G_hi, a_lo);
-        let a_hi_G_lo = multiexp(G_lo, a_hi);
-        let b_hi_H_lo = multiexp(H_lo, b_hi);
-        let b_lo_H_hi = multiexp(H_hi, b_lo);
-        let a_lo_b_hi_Q = Q.mul_by_scalar(&inner_product(a_lo, b_hi));
-        let a_hi_b_lo_Q = Q.mul_by_scalar(&inner_product(a_hi, b_lo));
-
-        let Lj = a_lo_G_hi.plus_point(&b_hi_H_lo).plus_point(&a_lo_b_hi_Q);
-        let Rj = a_hi_G_lo.plus_point(&b_lo_H_hi).plus_point(&a_hi_b_lo_Q);
-
-        // Maybe faster:
-        // let mut Lj_scalars = Vec::with_capacity(n+1);
-        // Lj_scalars.extend_from_slice(a_lo);
-        // Lj_scalars.extend_from_slice(b_hi);
-        // Lj_scalars.push(inner_product(a_lo, b_hi));
-        // let mut Lj_points = Vec::with_capacity(n+1);
-        // Lj_points.extend_from_slice(G_hi);
-        // Lj_points.extend_from_slice(H_lo);
-        // Lj_points.push(*Q);
-        // let Lj = multiexp( &Lj_points, &Lj_scalars);
-        // let mut Rj_scalars = Vec::with_capacity(n+1);
-        // Rj_scalars.extend_from_slice(a_hi);
-        // Rj_scalars.extend_from_slice(b_lo);
-        // Rj_scalars.push(inner_product(a_hi, b_lo));
-        // let mut Rj_points = Vec::with_capacity(n+1);
-        // Rj_points.extend_from_slice(G_lo);
-        // Rj_points.extend_from_slice(H_hi);
-        // Rj_points.push(*Q);
-        // let Rj = multiexp( &Rj_points, &Rj_scalars);
-        // end maybe faster
-
-        transcript.append_point(b"Lj", &Lj);
-        transcript.append_point(b"Rj", &Rj);
-        L_R.push((Lj, Rj));
-        let u_j: C::Scalar = transcript.challenge_scalar::<C>(b"uj");
-        // println!("Prover's u_{:?} = {:?}", j, u_j);
-        let u_j_inv = u_j.inverse().unwrap(); // TODO avoid this
-
-        let G_scalars = [u_j_inv, u_j]; // For faster way
-        let H_scalars = [u_j, u_j_inv]; // For faster way
-        for i in 0..a_lo.len() {
-            let a_lo = &a_vec[..n / 2];
-            let a_hi = &a_vec[n / 2..n];
-            let G_lo = &G_vec[..n / 2];
-            let G_hi = &G_vec[n / 2..n];
-            let b_lo = &b_vec[..n / 2];
-            let b_hi = &b_vec[n / 2..n];
-            let H_lo = &H_vec[..n / 2];
-            let H_hi = &H_vec[n / 2..n];
-            // Calculating new a vector:
-            let mut a_lo_u_j = a_lo[i];
-            a_lo_u_j.mul_assign(&u_j);
-
-            let mut u_j_inv_a_hi = a_hi[i];
-            u_j_inv_a_hi.mul_assign(&u_j_inv);
-
-            let mut sum = a_lo_u_j;
-            sum.add_assign(&u_j_inv_a_hi);
-            a_vec[i] = sum;
-
-            // Calculating new b vector:
-            let mut b_lo_u_j_inv = b_lo[i];
-            b_lo_u_j_inv.mul_assign(&u_j_inv);
-
-            let mut u_j_b_hi = b_hi[i];
-            u_j_b_hi.mul_assign(&u_j);
-
-            let mut sum = b_lo_u_j_inv;
-            sum.add_assign(&u_j_b_hi);
-            b_vec[i] = sum;
-
-            // Calculating new G vector:
-            // let G_lo_u_j_inv = G_lo[i].mul_by_scalar(&u_j_inv);
-            // let u_j_G_hi = G_hi[i].mul_by_scalar(&u_j);
-            // let sum = G_lo_u_j_inv.plus_point(&u_j_G_hi);
-
-            // Maybe faster
-            let G_points = [G_lo[i], G_hi[i]];
-            let sum = multiexp(&G_points, &G_scalars);
-            // end maybe faster
-            G_vec[i] = sum;
-
-            // Calculating new H vector:
-            // let H_lo_u_j = H_lo[i].mul_by_scalar(&u_j);
-            // let u_j_inv_H_hi = H_hi[i].mul_by_scalar(&u_j_inv);
-            // let sum = H_lo_u_j.plus_point(&u_j_inv_H_hi);
-            // Maybe faster
-            let H_points = [H_lo[i], H_hi[i]];
-            let sum = multiexp(&H_points, &H_scalars);
-            // end maybe faster
-            H_vec[i] = sum;
-        }
-        n /= 2;
-    }
-
-    let a = a_vec[0];
-    let b = b_vec[0];
-
-    InnerProductProof { lr_vec: L_R, a, b }
-}
-
-#[allow(non_snake_case)]
-#[allow(dead_code)]
-// #[cfg(test)]
+#[cfg(test)]
 pub fn prove_inner_product<C: Curve>(
     transcript: &mut Transcript,
     G_slice: &[C],
@@ -190,7 +59,7 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
     if !n.is_power_of_two() {
         return None;
     }
-    let k = n.next_power_of_two().trailing_zeros() as usize; // This line is also used in Bulletproofs's implementation
+    let k = n.trailing_zeros() as usize; // This line is also used in Bulletproofs's implementation
 
     let mut L_R = Vec::with_capacity(k);
     let mut a_vec = a_slice.to_vec();
@@ -249,7 +118,10 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
         L_R.push((Lj, Rj));
         let u_j: C::Scalar = transcript.challenge_scalar::<C>(b"uj");
         // println!("Prover's u_{:?} = {:?}", j, u_j);
-        let u_j_inv = u_j.inverse().unwrap(); // TODO avoid unwrap
+        let u_j_inv = match u_j.inverse() {
+            Some(inv) => inv,
+            _ => return None,
+        };
 
         let G_scalars = [u_j_inv, u_j];
         let mut H_scalars = [u_j, u_j_inv];
@@ -335,7 +207,7 @@ pub fn verify_scalars<C: Curve>(
     transcript: &mut Transcript,
     n: usize,
     proof: &InnerProductProof<C>,
-) -> VerificationScalars<C> {
+) -> Option<VerificationScalars<C>> {
     // let n = G_vec.len();
     let L_R = &proof.lr_vec;
     let a = proof.a;
@@ -351,7 +223,10 @@ pub fn verify_scalars<C: Curve>(
         transcript.append_point(b"Lj", Lj);
         transcript.append_point(b"Rj", Rj);
         let u_j: C::Scalar = transcript.challenge_scalar::<C>(b"uj");
-        let u_j_inv = u_j.inverse().unwrap(); // TODO be careful here
+        let u_j_inv = match u_j.inverse(){
+            Some(inv) => inv,
+            _ => return None,
+        }; // TODO be careful here
         s_0.mul_assign(&u_j_inv);
         let mut u_j_sq = u_j;
         u_j_sq.mul_assign(&u_j);
@@ -379,7 +254,7 @@ pub fn verify_scalars<C: Curve>(
         s_i.mul_assign(&u_sq[L_R.len() - 1 - lg_i]);
         s.push(s_i);
     }
-    VerificationScalars { u_sq, u_inv_sq, s }
+    Some(VerificationScalars{ u_sq, u_inv_sq, s })
 }
 
 /// This function verifies an inner product proof,
@@ -413,6 +288,10 @@ pub fn verify_inner_product<C: Curve>(
     ab.mul_assign(&b);
 
     let verification_scalars = verify_scalars(transcript, n, &proof);
+    if verification_scalars.is_none() {
+        return false;
+    }
+    let verification_scalars = verification_scalars.unwrap();
     let (u_sq, u_inv_sq, s) = (
         verification_scalars.u_sq,
         verification_scalars.u_inv_sq,
@@ -442,7 +321,7 @@ pub fn verify_inner_product<C: Curve>(
     P_prime.minus_point(&RHS).is_zero_point()
 }
 
-/// This function calculates the inner product between to vectors over any field
+/// This function calculates the inner product between two vectors over any field
 /// F. The arguments are
 /// - a - the first vector
 /// - b - the second vector
