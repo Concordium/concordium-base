@@ -9,7 +9,6 @@ import qualified Data.FixedByteString as FBS
 import qualified Data.ByteString.Lazy as BSL
 import System.Random
 import Concordium.ID.Types as ID
-import Concordium.ID.IdentityProvider as IP
 import qualified Data.Aeson as AE
 
 -- Derive a dummy registration id from an account address. This hashes the
@@ -50,10 +49,6 @@ dummyLowValidTo = YearMonth 1000 1
 {-# WARNING dummyCreatedAt "Invalid creation time, only for testing." #-}
 dummyCreatedAt :: ID.YearMonth
 dummyCreatedAt = YearMonth 2020 3
-
-{-# WARNING dummyEmptyIdentityProviders "Invalid identity providers, only for testing." #-}
-dummyEmptyIdentityProviders :: [IP.IpInfo]
-dummyEmptyIdentityProviders = []
 
 {-# WARNING readCredential "Do not use in production." #-}
 readCredential :: FilePath -> IO ID.CredentialDeploymentInformation
