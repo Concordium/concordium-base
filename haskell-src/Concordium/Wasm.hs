@@ -1,6 +1,7 @@
-{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DerivingVia, DeriveGeneric #-}
 module Concordium.Wasm where
 
+import GHC.Generics
 import Data.Word
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
@@ -10,6 +11,7 @@ import Data.Serialize
 import qualified Data.Aeson as AE
 import Data.Text(Text)
 import qualified Data.Text.Encoding as Text
+import qualified Data.Set as Set
 
 import Concordium.Crypto.ByteStringHelpers(ByteStringHex(..))
 import qualified Concordium.Crypto.SHA256 as H
@@ -17,12 +19,14 @@ import qualified Concordium.Crypto.SHA256 as H
 import Concordium.Types
 import Concordium.Types.HashableTo
 
+type ModuleSource = ByteString
+
 -- |Web assembly module in binary format.
 data WasmModule = WasmModule {
   -- |Version of the Wasm standard and on-chain API this module corresponds to.
   wasmVersion :: Word32,
   -- |Source in binary wasm format.
-  wasmSource :: ByteString
+  wasmSource :: ModuleSource
   } deriving(Eq, Show)
 
 getModuleRef :: WasmModule -> ModuleRef
@@ -31,19 +35,39 @@ getModuleRef wm = ModuleRef (getHash wm)
 -- |Name of an init method inside a module.
 -- TODO: Naming scheme enforcement.
 newtype InitName = InitName { initName :: Text }
-    deriving(Eq, Show)
+    deriving(Eq, Show, Ord)
     deriving(AE.ToJSON, AE.FromJSON) via Text
 
 -- |Name of a receive method inside a module.
 -- TODO: Naming scheme enforcement.
 newtype ReceiveName = ReceiveName { receiveName :: Text }
-    deriving (Eq, Show)
+    deriving (Eq, Show, Ord)
     deriving(AE.ToJSON, AE.FromJSON) via Text
 
 -- |Parameter to either an init method or to a receive method.
 newtype Parameter = Parameter { parameter :: ShortByteString }
     deriving(Eq, Show)
     deriving(AE.ToJSON, AE.FromJSON) via ByteStringHex
+
+-- |A Wasm module interface with exposed entry-points.
+data ModuleInterface = ModuleInterface {
+  -- |Reference of the module on the chain.
+  miModuleRef :: ModuleRef,
+  -- |Init methods exposed by this module.
+  -- They should each be exposed with a type Amount -> ()
+  miExposedInit :: Set.Set InitName,
+  -- |Receive methods exposed by this module.
+  -- They should each be exposed with a type Amount -> ()
+  miExposedReceive :: Set.Set ReceiveName,
+  -- |Module source in binary format.
+  miModule :: WasmModule
+  } deriving(Eq, Show, Generic)
+
+instance Serialize ModuleInterface where
+-- FIXME: A more principled serialize method, order and ensure the order of sets.
+
+
+-- * Implementation of instances and the like.
 
 instance Serialize WasmModule where
   put WasmModule{..} =
