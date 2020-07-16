@@ -5,15 +5,18 @@ extern crate criterion;
 
 use criterion::Criterion;
 use curve_arithmetic::*;
+use ff::Field;
 use merlin::Transcript;
-use pairing::bls12_381::G1;
+use pairing::bls12_381::{Fr, G1};
+use pedersen_scheme::*;
 use rand::*;
 
 use std::time::Duration;
 
-use bulletproofs::range_proof::*;
+use bulletproofs::{inner_product_proof::*, range_proof::*};
 
 type SomeCurve = G1;
+type SomeField = Fr;
 
 pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let rng = &mut thread_rng();
@@ -22,6 +25,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let nm: usize = usize::from(n) * usize::from(m);
     let mut G = Vec::with_capacity(nm);
     let mut H = Vec::with_capacity(nm);
+    let mut G_H = Vec::with_capacity(nm);
 
     for _ in 0..nm {
         let g = SomeCurve::generate(rng);
@@ -29,9 +33,12 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
 
         G.push(g);
         H.push(h);
+        G_H.push((g, h));
     }
     let B = SomeCurve::generate(rng);
     let B_tilde = SomeCurve::generate(rng);
+    let gens = Generators { G_H };
+    let keys = CommitmentKey(B, B_tilde);
 
     // Some numbers in [0, 2^n):
     let v_vec: Vec<u64> = vec![
@@ -45,52 +52,87 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
            * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
     ];
     let v_vec_p = v_vec.clone();
-    let G_p = G.clone();
-    let H_p = H.clone();
+    let gens_p = gens.clone();
     let mut transcript = Transcript::new(&[]);
     c.bench_function("Prover.", move |b| {
         b.iter(|| {
-            prove(
-                n,
-                m,
-                v_vec_p.clone(),
-                G_p.clone(),
-                H_p.clone(),
-                B,
-                B_tilde,
-                rng,
-                &mut transcript,
-            );
+            prove(&mut transcript, rng, n, m, &v_vec_p, &gens_p, &keys);
         })
     });
 
     let rng = &mut thread_rng();
     let mut transcript = Transcript::new(&[]);
-    let (commitments, proof) = prove(
-        n,
-        m,
-        v_vec.clone(),
-        G.clone(),
-        H.clone(),
-        B,
-        B_tilde,
-        rng,
-        &mut transcript,
-    );
-
+    let (commitments, proof) = prove(&mut transcript, rng, n, m, &v_vec, &gens, &keys);
+    let proof = proof.unwrap();
     c.bench_function("Verifier.", move |b| {
         b.iter(|| {
             let mut transcript = Transcript::new(&[]);
-            assert!(verify_efficient(
+            assert!(
+                verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys).is_ok()
+            );
+        })
+    });
+}
+
+#[allow(non_snake_case)]
+fn compare_inner_product_proof(c: &mut Criterion) {
+    // Testing with n = 4
+    let rng = &mut thread_rng();
+    let n = 32 * 16;
+    let mut G_vec = vec![];
+    let mut H_vec = vec![];
+    let mut a_vec = vec![];
+    let mut b_vec = vec![];
+    let y = SomeCurve::generate_scalar(rng);
+    for _ in 0..n {
+        let g = SomeCurve::generate(rng);
+        let h = SomeCurve::generate(rng);
+        let a = SomeCurve::generate_scalar(rng);
+        let b = SomeCurve::generate_scalar(rng);
+
+        G_vec.push(g);
+        H_vec.push(h);
+        a_vec.push(a);
+        b_vec.push(b);
+    }
+
+    let Q = SomeCurve::generate(rng);
+    let H = H_vec.clone();
+    let mut H_prime: Vec<SomeCurve> = Vec::with_capacity(n);
+    let y_inv = y.inverse().unwrap();
+    let mut H_prime_scalars: Vec<SomeField> = Vec::with_capacity(n);
+    let mut transcript = Transcript::new(&[]);
+    let G_vec_p = G_vec.clone();
+    let H_vec_p = H_vec.clone();
+    let a_vec_p = a_vec.clone();
+    let b_vec_p = b_vec.clone();
+    c.bench_function("Naive inner product proof.", move |b| {
+        b.iter(|| {
+            let mut y_inv_i = SomeField::one();
+            for i in 0..n {
+                H_prime.push(H[i].mul_by_scalar(&y_inv_i));
+                y_inv_i.mul_assign(&y_inv);
+            }
+            prove_inner_product(&mut transcript, &G_vec, &H_prime, &Q, &a_vec, &b_vec);
+        })
+    });
+    let mut transcript = Transcript::new(&[]);
+    c.bench_function("Better inner product proof with scalars.", move |b| {
+        b.iter(|| {
+            let mut y_inv_i = SomeField::one();
+            for _ in 0..n {
+                H_prime_scalars.push(y_inv_i);
+                y_inv_i.mul_assign(&y_inv);
+            }
+            prove_inner_product_with_scalars(
                 &mut transcript,
-                n,
-                &commitments,
-                &proof,
-                &G,
-                &H,
-                B,
-                B_tilde,
-            ));
+                &G_vec_p,
+                &H_vec_p,
+                &H_prime_scalars,
+                &Q,
+                &a_vec_p,
+                &b_vec_p,
+            );
         })
     });
 }
@@ -98,5 +140,5 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
 criterion_group!(
     name = benchmarks;
     config = Criterion::default().measurement_time(Duration::from_millis(1000)).sample_size(10);
-    targets = prove_verify_benchmarks);
+    targets = prove_verify_benchmarks, compare_inner_product_proof);
 criterion_main!(benchmarks);
