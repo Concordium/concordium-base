@@ -266,6 +266,8 @@ mod tests {
         let C1 = cmm_key.hide_worker(&sum, &r1);
         let C2 = cmm_key.hide_worker(&sum, &r2);
         let C3 = cmm_key.hide_worker(&sum, &r3);
-        
+        let cmms = vec![C1, C2, C3];
+        let cmm = C;
+        let com_lin = ComLin{us, cmms, cmm, cmm_key};
     }
 }
