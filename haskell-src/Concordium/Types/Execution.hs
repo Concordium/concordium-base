@@ -37,7 +37,6 @@ import Concordium.Types.Execution.TH
 import Concordium.ID.Types
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs
-import Concordium.Crypto.ByteStringHelpers(ByteStringHex(..))
 
 -- |We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
@@ -460,11 +459,6 @@ data BlockEvents =
   -- |Reward to a finalizer.
   | FinalizationReward !Amount !BakerId
 
--- |Event as reported by contract execution.
-newtype ContractEvent = ContractEvent BSS.ShortByteString
-    deriving(Eq, Show, S.Serialize)
-    deriving(AE.ToJSON, AE.FromJSON) via ByteStringHex
-
 -- |Events which are generated during transaction execution.
 -- These are only used for commited transactions.
 -- Must be kept in sync with 'showEvents' in concordium-client (Output.hs).
@@ -481,7 +475,7 @@ data Event =
                ecAmount :: !Amount,
                -- |Events as reported by the contract via the log method, in the
                -- order they were reported.
-               ecEvents :: [ContractEvent]
+               ecEvents :: [Wasm.ContractEvent]
                -- TODO: We could include initial state hash here.
                -- Including the whole state is likely not a good idea.
                }
@@ -497,7 +491,7 @@ data Event =
                euMessage :: !Wasm.Parameter,
                -- |Events as reported by the contract via the log method, in the
                -- order they were reported.
-               euEvents :: [ContractEvent]
+               euEvents :: [Wasm.ContractEvent]
                -- TODO: We could include input/output state hashes here
                -- Including the whole state pre/post run is likely not a good idea.
                }
@@ -607,6 +601,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | InvalidReceiveMethod !ModuleRef !Wasm.ReceiveName -- ^Reference to a non-existing contract receive method.
                   | InvalidModuleReference !ModuleRef   -- ^Reference to a non-existing module.
                   | InvalidContractAddress !ContractAddress -- ^Contract instance does not exist.
+                  | RuntimeFailure -- ^Runtime exception occurred when running either the init or receive method.
                   | ReceiverAccountNoCredential !AccountAddress
                   -- ^The receiver account does not have a valid credential.
                   | ReceiverContractNoCredential !ContractAddress
@@ -639,6 +634,10 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   -- |When the account key threshold is updated, it must not exceed the amount of existing keys
                   | InvalidAccountKeySignThreshold
     deriving (Show, Eq, Generic)
+
+wasmRejectToRejectReason :: Wasm.ContractExecutionFailure -> RejectReason
+wasmRejectToRejectReason Wasm.ContractReject = Rejected
+wasmRejectToRejectReason Wasm.RuntimeFailure = RuntimeFailure
 
 instance S.Serialize RejectReason
 instance AE.ToJSON RejectReason
