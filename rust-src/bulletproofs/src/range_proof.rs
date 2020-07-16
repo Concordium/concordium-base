@@ -97,7 +97,8 @@ pub fn prove<C: Curve, T: Rng>(
     v_vec: &[u64],
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
-) -> (Vec<Commitment<C>>, Option<RangeProof<C>>) {
+    randomness: &[Randomness<C>],
+) -> Option<RangeProof<C>> {
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
     let B = v_keys.0;
     let B_tilde = v_keys.1;
@@ -114,18 +115,19 @@ pub fn prove<C: Curve, T: Rng>(
     let mut v_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     let mut a_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
     let mut s_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
-    for &v in v_vec {
-        let (a_L_j, a_R_j) = a_L_a_R(v, n);
+    for j in 0..v_vec.len() {
+        let (a_L_j, a_R_j) = a_L_a_R(v_vec[j], n);
         a_L.extend(&a_L_j);
         a_R.extend(&a_R_j);
-        let v_j_tilde = Randomness::<C>::generate(csprng);
+        // let v_j_tilde = Randomness::<C>::generate(csprng);
+        let v_j_tilde = &randomness[j];
         let a_j_tilde = Randomness::<C>::generate(csprng);
         let s_j_tilde = Randomness::<C>::generate(csprng);
-        v_tilde_vec.push(*v_j_tilde);
+        v_tilde_vec.push(*v_j_tilde.as_ref());
         a_tilde_vec.push(*a_j_tilde);
         s_tilde_vec.push(*s_j_tilde);
 
-        let v_scalar = C::scalar_from_u64(v);
+        let v_scalar = C::scalar_from_u64(v_vec[j]);
         let v_value = Value::<C>::new(v_scalar);
         let V_j = v_keys.hide(&v_value, &v_j_tilde);
         transcript.append_point(b"Vj", &V_j.0);
@@ -314,7 +316,7 @@ pub fn prove<C: Curve, T: Rng>(
     let mut H_prime_scalars: Vec<C::Scalar> = Vec::with_capacity(nm);
     let y_inv = match y.inverse() {
         Some(inv) => inv,
-        None => return (V_vec, None),
+        None => return None,
     };
     let mut y_inv_i = C::Scalar::one();
     for _i in 0..nm {
@@ -325,8 +327,8 @@ pub fn prove<C: Curve, T: Rng>(
 
     let proof = prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &l, &r);
 
-    let rangeproof = match proof {
-        Some(ip_proof) => Some(RangeProof {
+    if let Some(ip_proof) = proof {
+        return Some(RangeProof {
             A,
             S,
             T_1,
@@ -335,15 +337,13 @@ pub fn prove<C: Curve, T: Rng>(
             tx_tilde,
             e_tilde,
             ip_proof,
-        }),
-        _ => None,
-    };
-
-    (V_vec, rangeproof)
+        });
+    }
+    None
 }
 
-/// The verifier does two checks. In case verification fails, it can be useful to
-/// know which of the checks that lead to failure.
+/// The verifier does two checks. In case verification fails, it can be useful
+/// to know which of the checks that lead to failure.
 #[derive(Debug, PartialEq)]
 pub enum VerificationError {
     DivisionError,
@@ -446,12 +446,7 @@ pub fn verify_efficient<C: Curve>(
 
     RHS = RHS.plus_point(&multiexp(&[B, T_1, T_2], &[delta_yz, x, x2]));
 
-    // println!("--------------- VERIFICATION ----------------");
     let first = LHS.minus_point(&RHS).is_zero_point();
-    // if !first {
-    //     return false;
-    // }
-    // println!("First check = {:?}", first);
 
     let ip_proof = &proof.ip_proof;
     let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
@@ -543,8 +538,8 @@ mod tests {
 
     /// This function produces a proof that will satisfy the verifier's first
     /// check, even if the values are not in the interval.
-    /// The second check will fail. 
-    /// This is tested by checking if the verifier returns 
+    /// The second check will fail.
+    /// This is tested by checking if the verifier returns
     /// Err(VerificationError::False(true, false))
     type SomeCurve = G1;
     #[allow(non_snake_case)]
@@ -660,8 +655,8 @@ mod tests {
     }
 
     /// This function verifies a range proof, i.e. a proof of knowledge
-    /// of value v_1, v_2, ..., v_m that are all in [0, 2^n) that are consistent
-    /// with commitments V_i to v_i. The arguments are
+    /// of values v_1, v_2, ..., v_m that are all in [0, 2^n) that are
+    /// consistent with commitments V_i to v_i. The arguments are
     /// - n - the number n such that each v_i is claimed to be in [0, 2^n) by
     ///   the prover
     /// - commitments - commitments V_i to each v_i
@@ -1005,6 +1000,8 @@ mod tests {
         let mut G = Vec::with_capacity(nm);
         let mut H = Vec::with_capacity(nm);
         let mut G_H = Vec::with_capacity(nm);
+        let mut randomness = Vec::with_capacity(usize::from(m));
+        let mut commitments = Vec::with_capacity(usize::from(m));
 
         for _i in 0..(nm) {
             let g = SomeCurve::generate(rng);
@@ -1013,6 +1010,7 @@ mod tests {
             H.push(h);
             G_H.push((g, h));
         }
+
         let gens = Generators { G_H };
         let B = SomeCurve::generate(rng);
         let B_tilde = SomeCurve::generate(rng);
@@ -1029,8 +1027,26 @@ mod tests {
                * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8
                * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
         ];
+
+        for j in 0..usize::from(m) {
+            let r = Randomness::generate(rng);
+            let v_scalar = SomeCurve::scalar_from_u64(v_vec[j]);
+            let v_value = Value::<SomeCurve>::new(v_scalar);
+            let com = keys.hide(&v_value, &r);
+            randomness.push(r);
+            commitments.push(com);
+        }
         let mut transcript = Transcript::new(&[]);
-        let (commitments, proof) = prove(&mut transcript, rng, n, m, &v_vec, &gens, &keys);
+        let proof = prove(
+            &mut transcript,
+            rng,
+            n,
+            m,
+            &v_vec,
+            &gens,
+            &keys,
+            &randomness,
+        );
         assert!(proof.is_some());
         let proof = proof.unwrap();
         let mut transcript = Transcript::new(&[]);
