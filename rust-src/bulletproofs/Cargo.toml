@@ -26,8 +26,12 @@ version = "0"
 path = "../crypto_common"
 version = "0"
 
-[dependencies.vector_pedersen_scheme]
-path = "../vector_pedersen_scheme"
+[dependencies.pedersen_scheme]
+path = "../pedersen_scheme"
+version = "0"
+
+[dependencies.crypto_common_derive]
+path = "../crypto_common_derive"
 version = "0"
 
 [dev-dependencies]

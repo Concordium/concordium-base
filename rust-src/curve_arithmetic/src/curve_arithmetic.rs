@@ -67,20 +67,6 @@ pub trait Curve:
 }
 
 #[allow(non_snake_case)]
-pub fn multiscalar_multiplication_naive<C: Curve>(a: &[C::Scalar], G: &[C]) -> C {
-    let n = a.len();
-    if G.len() != n {
-        panic!("a and G should have the same length");
-    }
-    let mut sum = C::zero_point();
-    for i in 0..n {
-        let aiGi = G[i].mul_by_scalar(&a[i]);
-        sum = sum.plus_point(&aiGi);
-    }
-    sum
-}
-
-#[allow(non_snake_case)]
 pub fn multiscalar_multiplication<C: Curve, X: Borrow<C>>(a: &[C::Scalar], G: &[X]) -> C {
     multiexp(G, a)
 }
