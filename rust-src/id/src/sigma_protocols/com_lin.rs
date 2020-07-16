@@ -172,7 +172,9 @@ impl<C: Curve> SigmaProtocol for ComLin<C>{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pairing::bls12_381::G1;
+    use ff::PrimeField;
+    use pairing::bls12_381::{Fr, G1};
+    // use pairing::bls12_381::G1;
     use rand::thread_rng;
 
     #[test]
@@ -228,5 +230,42 @@ mod tests {
                 assert!(!verify(ro.split(), &wrong_cmm, &proof))
             })
         }
+    }
+    
+    #[test]
+    pub fn test_linear_relation_of_chunks() {
+        let mut rng = &mut thread_rng();
+        let number = Fr::from_str("2738").unwrap();
+        let x1 = Fr::from_str("2").unwrap();
+        let x2 = Fr::from_str("11").unwrap();
+        let x3 = Fr::from_str("10").unwrap();
+        let u1 = Fr::from_str("1").unwrap();
+        let u2 = Fr::from_str("16").unwrap();
+        let u3 = Fr::from_str("256").unwrap();
+        let mut term1 = x1;
+        term1.mul_assign(&u1);
+        let mut term2 = x2;
+        term2.mul_assign(&u2);
+        let mut term3 = x3;
+        term3.mul_assign(&u3);
+        let mut sum = term1;
+        sum.add_assign(&term2);
+        sum.add_assign(&term3);
+        println!("{:?}", sum == number);
+        let xs = vec![x1, x2, x3];
+        let us = vec![u1, u2, u3];
+        
+        let g = G1::generate(rng);
+        let h = G1::generate(rng);
+        let r = G1::generate_scalar(rng);
+        let r1 = G1::generate_scalar(rng);
+        let r2 = G1::generate_scalar(rng);
+        let r3 = G1::generate_scalar(rng);
+        let cmm_key = CommitmentKey(g,h);
+        let C = cmm_key.hide_worker(&sum, &r);
+        let C1 = cmm_key.hide_worker(&sum, &r1);
+        let C2 = cmm_key.hide_worker(&sum, &r2);
+        let C3 = cmm_key.hide_worker(&sum, &r3);
+        
     }
 }
