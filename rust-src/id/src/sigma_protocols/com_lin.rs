@@ -169,6 +169,7 @@ impl<C: Curve> SigmaProtocol for ComLin<C>{
     }
 } 
 
+#[allow(non_snake_case)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,6 +177,7 @@ mod tests {
     use pairing::bls12_381::{Fr, G1};
     // use pairing::bls12_381::G1;
     use rand::thread_rng;
+    use merlin::Transcript;
 
     #[test]
     pub fn test_com_lin_correctness() {
@@ -234,7 +236,7 @@ mod tests {
     
     #[test]
     pub fn test_linear_relation_of_chunks() {
-        let mut rng = &mut thread_rng();
+        let rng = &mut thread_rng();
         let number = Fr::from_str("2738").unwrap();
         let x1 = Fr::from_str("2").unwrap();
         let x2 = Fr::from_str("11").unwrap();
@@ -252,22 +254,64 @@ mod tests {
         sum.add_assign(&term2);
         sum.add_assign(&term3);
         println!("{:?}", sum == number);
-        let xs = vec![x1, x2, x3];
-        let us = vec![u1, u2, u3];
+        let x1 = Value::<G1>::new(x1);
+        let x2 = Value::<G1>::new(x2);
+        let x3 = Value::<G1>::new(x3);
+        let dummy = Value::<G1>::new(Fr::zero());
+        let sum = Value::<G1>::new(sum);
         
         let g = G1::generate(rng);
         let h = G1::generate(rng);
-        let r = G1::generate_scalar(rng);
-        let r1 = G1::generate_scalar(rng);
-        let r2 = G1::generate_scalar(rng);
-        let r3 = G1::generate_scalar(rng);
+        let r = Randomness::<G1>::generate(rng);
+        let r1 = Randomness::<G1>::generate(rng);
+        let r2 = Randomness::<G1>::generate(rng);
+        let r3 = Randomness::<G1>::generate(rng);
+        let r_dummy = Randomness::<G1>::generate(rng);
         let cmm_key = CommitmentKey(g,h);
-        let C = cmm_key.hide_worker(&sum, &r);
-        let C1 = cmm_key.hide_worker(&sum, &r1);
-        let C2 = cmm_key.hide_worker(&sum, &r2);
-        let C3 = cmm_key.hide_worker(&sum, &r3);
+        let C = cmm_key.hide(&sum, &r);
+        let C1 = cmm_key.hide(&x1, &r1);
+        let C2 = cmm_key.hide(&x2, &r2);
+        let C3 = cmm_key.hide(&x3, &r3);
+        let com_dummy = cmm_key.hide(&dummy, &r_dummy);
         let cmms = vec![C1, C2, C3];
+        let cmms_dummy = vec![C1, C2, C3, com_dummy];
+        let xs = vec![x1, x2, x3];
+        let us = vec![u1, u2, u3];
+        let rs = vec![r1, r2, r3];
+        let mut rs_dummy = rs.clone();
+        rs_dummy.push(r_dummy);
         let cmm = C;
         let com_lin = ComLin{us, cmms, cmm, cmm_key};
+        let secret = ComLinSecret{xs, rs, r};
+        let challenge_prefix = generate_challenge_prefix(rng);
+        let ro = RandomOracle::domain(&challenge_prefix);
+        let proof = prove(ro.split(), &com_lin, secret, rng).expect("Proving should succeed.");
+        // println!("{}", verify(ro, &com_lin, &proof));
+        assert!(verify(ro, &com_lin, &proof));
+        let mut transcript = Transcript::new(&[]);
+        let n = 4;
+        let m = 4;
+        let nm = 16;
+        let mut G_H = Vec::with_capacity(nm);
+        // xs.push(dummy);
+        let v_vec = vec![2,11,10,0];
+        for _i in 0..(nm) {
+            let g = G1::generate(rng);
+            let h = G1::generate(rng);
+            G_H.push((g, h));
+        }
+        let gens = bulletproofs::range_proof::Generators{G_H};
+        let proof = bulletproofs::range_proof::prove(
+            &mut transcript,
+            rng,
+            n,
+            m,
+            &v_vec,
+            &gens,
+            &cmm_key,
+            &rs_dummy,
+        );
+        let mut transcript = Transcript::new(&[]);
+        assert!(bulletproofs::range_proof::verify_efficient(&mut transcript, n, &cmms_dummy, &proof.unwrap(), &gens, &cmm_key).is_ok());
     }
 }
