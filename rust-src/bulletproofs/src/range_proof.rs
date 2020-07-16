@@ -327,8 +327,8 @@ pub fn prove<C: Curve, T: Rng>(
 
     let proof = prove_inner_product_with_scalars(transcript, &G, &H, &H_prime_scalars, &Q, &l, &r);
 
-    let rangeproof = match proof {
-        Some(ip_proof) => Some(RangeProof {
+    if let Some(ip_proof) = proof {
+        return Some(RangeProof {
             A,
             S,
             T_1,
@@ -337,15 +337,13 @@ pub fn prove<C: Curve, T: Rng>(
             tx_tilde,
             e_tilde,
             ip_proof,
-        }),
-        _ => None,
-    };
-
-    rangeproof
+        });
+    }
+    None
 }
 
-/// The verifier does two checks. In case verification fails, it can be useful to
-/// know which of the checks that lead to failure.
+/// The verifier does two checks. In case verification fails, it can be useful
+/// to know which of the checks that lead to failure.
 #[derive(Debug, PartialEq)]
 pub enum VerificationError {
     DivisionError,
@@ -540,8 +538,8 @@ mod tests {
 
     /// This function produces a proof that will satisfy the verifier's first
     /// check, even if the values are not in the interval.
-    /// The second check will fail. 
-    /// This is tested by checking if the verifier returns 
+    /// The second check will fail.
+    /// This is tested by checking if the verifier returns
     /// Err(VerificationError::False(true, false))
     type SomeCurve = G1;
     #[allow(non_snake_case)]
@@ -657,8 +655,8 @@ mod tests {
     }
 
     /// This function verifies a range proof, i.e. a proof of knowledge
-    /// of values v_1, v_2, ..., v_m that are all in [0, 2^n) that are consistent
-    /// with commitments V_i to v_i. The arguments are
+    /// of values v_1, v_2, ..., v_m that are all in [0, 2^n) that are
+    /// consistent with commitments V_i to v_i. The arguments are
     /// - n - the number n such that each v_i is claimed to be in [0, 2^n) by
     ///   the prover
     /// - commitments - commitments V_i to each v_i
@@ -1029,7 +1027,7 @@ mod tests {
                * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8
                * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
         ];
-        
+
         for j in 0..usize::from(m) {
             let r = Randomness::generate(rng);
             let v_scalar = SomeCurve::scalar_from_u64(v_vec[j]);
@@ -1039,7 +1037,16 @@ mod tests {
             commitments.push(com);
         }
         let mut transcript = Transcript::new(&[]);
-        let proof = prove(&mut transcript, rng, n, m, &v_vec, &gens, &keys, &randomness);
+        let proof = prove(
+            &mut transcript,
+            rng,
+            n,
+            m,
+            &v_vec,
+            &gens,
+            &keys,
+            &randomness,
+        );
         assert!(proof.is_some());
         let proof = proof.unwrap();
         let mut transcript = Transcript::new(&[]);

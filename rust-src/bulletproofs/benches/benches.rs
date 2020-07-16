@@ -53,7 +53,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
            * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8
            * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
     ];
-    
+
     for j in 0..usize::from(m) {
         let r = Randomness::generate(rng);
         let v_scalar = SomeCurve::scalar_from_u64(v_vec[j]);
@@ -68,13 +68,31 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let mut transcript = Transcript::new(&[]);
     c.bench_function("Prover.", move |b| {
         b.iter(|| {
-            prove(&mut transcript, rng, n, m, &v_vec_p, &gens_p, &keys, &randomness_p);
+            prove(
+                &mut transcript,
+                rng,
+                n,
+                m,
+                &v_vec_p,
+                &gens_p,
+                &keys,
+                &randomness_p,
+            );
         })
     });
 
     let rng = &mut thread_rng();
     let mut transcript = Transcript::new(&[]);
-    let proof = prove(&mut transcript, rng, n, m, &v_vec, &gens, &keys, &randomness);
+    let proof = prove(
+        &mut transcript,
+        rng,
+        n,
+        m,
+        &v_vec,
+        &gens,
+        &keys,
+        &randomness,
+    );
     let proof = proof.unwrap();
     c.bench_function("Verifier.", move |b| {
         b.iter(|| {
