@@ -342,6 +342,8 @@ pub fn prove<C: Curve, T: Rng>(
     (V_vec, rangeproof)
 }
 
+/// The verifier does two checks. In case verification fails, it can be useful to
+/// know which of the checks that lead to failure.
 #[derive(Debug, PartialEq)]
 pub enum VerificationError {
     DivisionError,
@@ -541,9 +543,9 @@ mod tests {
 
     /// This function produces a proof that will satisfy the verifier's first
     /// check, even if the values are not in the interval.
-    /// The second check will fail, and therefore in the tests below the
-    /// verifier should output fail when checking a proof produced by
-    /// cheat_prove
+    /// The second check will fail. 
+    /// This is tested by checking if the verifier returns 
+    /// Err(VerificationError::False(true, false))
     type SomeCurve = G1;
     #[allow(non_snake_case)]
     #[allow(clippy::too_many_arguments)]
