@@ -73,7 +73,7 @@ instance AE.FromJSON GlobalContext where
     case jsonToGlobalContext (BSL.toStrict (AE.encode v)) of
       Nothing -> fail "Could not decode GlobalContext."
       Just ipinfo -> return ipinfo
-  parseJSON _ = fail "IpInfo: Expected object."
+  parseJSON _ = fail "GlobalContext: Expected object."
 
 instance AE.ToJSON GlobalContext where
   toJSON ipinfo =
