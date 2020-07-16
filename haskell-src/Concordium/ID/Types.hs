@@ -110,8 +110,8 @@ newtype KeyIndex = KeyIndex Word8
     deriving (Hashable, Show, Read, S.Serialize, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Word8
 
 data AccountKeys = AccountKeys {
-  akKeys :: Map.Map KeyIndex VerifyKey,
-  akThreshold :: SignatureThreshold
+  akKeys :: !(Map.Map KeyIndex VerifyKey),
+  akThreshold :: !SignatureThreshold
   } deriving(Eq, Show, Ord)
 
 makeAccountKeys :: [VerifyKey] -> SignatureThreshold -> AccountKeys
