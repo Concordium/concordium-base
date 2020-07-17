@@ -18,3 +18,5 @@ target
 pkg
 *.hie
 *.iml
+*.state-*
+*.state

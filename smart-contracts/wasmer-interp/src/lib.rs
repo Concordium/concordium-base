@@ -3,9 +3,11 @@ use std::{
     cell::Cell,
     sync::{Arc, Mutex},
 };
-use wasmer_runtime::{error, func, types, imports, instantiate, Array, Ctx, ImportObject, Value, WasmPtr, Module};
+use wasmer_runtime::{
+    error, func, imports, instantiate, types, Array, Ctx, ImportObject, Module, Value, WasmPtr,
+};
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 /// Structure to support logging of events from smart contracts.
 pub struct Logs {
     pub logs: Arc<Mutex<LinkedList<Vec<u8>>>>,
@@ -34,13 +36,19 @@ impl Logs {
 
 // FIXME: Add support for trees, not just accept/reject.
 #[derive(Clone)]
-pub struct Outcome{
+// FIXME: This allow is only temporary, until we have more outcomes.
+pub struct Outcome {
+    #[allow(clippy::mutex_atomic)]
     pub cur_state: Arc<Mutex<bool>>,
 }
 
 impl Outcome {
+    // FIXME: This allow is only temporary, until we have more outcomes.
+    #[allow(clippy::mutex_atomic)]
     pub fn init() -> Outcome {
-        Self { cur_state: Arc::new(Mutex::new(true)) }
+        Self {
+            cur_state: Arc::new(Mutex::new(true)),
+        }
     }
 
     // FIXME: This is not how it should be.
@@ -77,17 +85,23 @@ pub struct State {
 }
 
 impl State {
+    pub fn is_empty(&self) -> bool {
+        if let Ok(guard) = self.state.lock() {
+            guard.is_empty()
+        } else {
+            unreachable!("Failed to acquire lock.")
+        }
+    }
+
     // FIXME: This should not be copying so much data around, but for POC it is fine.
     pub fn new(st: Option<&[u8]>) -> Self {
         match st {
-            None => 
-                Self {
-                    state: Arc::new(Mutex::new(Vec::new())),
-                },
-            Some(bytes) =>
-                Self {
-                    state: Arc::new(Mutex::new(Vec::from(bytes))),
-                }
+            None => Self {
+                state: Arc::new(Mutex::new(Vec::new())),
+            },
+            Some(bytes) => Self {
+                state: Arc::new(Mutex::new(Vec::from(bytes))),
+            },
         }
     }
 
@@ -292,7 +306,8 @@ pub fn invoke_receive(
     current_state: &[u8],
     receive_name: &str,
 ) -> Result<Option<(Logs, State)>, error::CallError> {
-    let (import_obj, logs, state, outcome) = make_imports(Which::Receive(receive_ctx, current_state));
+    let (import_obj, logs, state, outcome) =
+        make_imports(Which::Receive(receive_ctx, current_state));
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
     // Wasmer supports cacheing of modules into Artifacts.
@@ -311,9 +326,8 @@ pub fn get_inits(module: &Module) -> Vec<String> {
     let mut out = Vec::new();
     for export in module.exports() {
         if export.name.starts_with("init") {
-            match export.ty {
-                types::ExternDescriptor::Function(_) => out.push(export.name.to_owned()),
-                _ => (),
+            if let types::ExternDescriptor::Function(_) = export.ty {
+                out.push(export.name.to_owned());
             }
         }
     }
@@ -325,9 +339,8 @@ pub fn get_receives(module: &Module) -> Vec<String> {
     let mut out = Vec::new();
     for export in module.exports() {
         if export.name.starts_with("receive") {
-            match export.ty {
-                types::ExternDescriptor::Function(_) => out.push(export.name.to_owned()),
-                _ => (),
+            if let types::ExternDescriptor::Function(_) = export.ty {
+                out.push(export.name.to_owned());
             }
         }
     }
