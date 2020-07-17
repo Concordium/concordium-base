@@ -101,7 +101,16 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
         v_integers.push(r);
     }
 
-    prove(transcript, csprng, n, m, &v_integers, gens, v_keys, randomness)
+    prove(
+        transcript,
+        csprng,
+        n,
+        m,
+        &v_integers,
+        gens,
+        v_keys,
+        randomness,
+    )
 }
 
 /// This function produces a range proof, i.e. a proof of knowledge
@@ -561,8 +570,8 @@ pub fn verify_efficient<C: Curve>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pairing::bls12_381::{G1, Fr, FrRepr};
     use ff::PrimeField;
+    use pairing::bls12_381::{Fr, G1};
 
     /// This function produces a proof that will satisfy the verifier's first
     /// check, even if the values are not in the interval.
@@ -1149,7 +1158,6 @@ mod tests {
         assert!(!b2);
     }
 
-    
     #[allow(non_snake_case)]
     #[test]
     fn dummy_test() {
@@ -1180,6 +1188,5 @@ mod tests {
             println!("{:?}", r);
             v_integers.push(r);
         }
-
     }
 }
