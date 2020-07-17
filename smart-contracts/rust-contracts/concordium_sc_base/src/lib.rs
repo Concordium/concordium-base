@@ -1,4 +1,4 @@
-use std::io::{Read,Write};
+use std::io::{Read, Write};
 // Re-exports
 pub use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 pub use std::io::Seek;
@@ -33,13 +33,15 @@ pub mod internal {
 
 /// A type representing the constract state bytes.
 #[derive(Default)]
-pub struct ContractState{
+pub struct ContractState {
     current_position: u32,
 }
 
 impl ContractState {
     pub fn new() -> Self {
-        ContractState{current_position: 0}
+        ContractState {
+            current_position: 0,
+        }
     }
 
     /// Make sure that the memory size is at least that many bytes in size.
@@ -47,7 +49,7 @@ impl ContractState {
     pub fn reserve(&self, len: u32) -> bool {
         let cur_size = unsafe { state_size() };
         if cur_size < len {
-            let res = unsafe{ resize_state(len) };
+            let res = unsafe { resize_state(len) };
             res == 1
         } else {
             true
@@ -72,29 +74,34 @@ impl ContractState {
 
 impl std::io::Seek for ContractState {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-        use std::io::SeekFrom::*;
         use std::convert::TryFrom;
+        use std::io::SeekFrom::*;
         match pos {
-            Start(offset) => {
-                match u32::try_from(offset) {
-                    Ok(offset_u32) => {
-                        self.current_position = offset_u32;
-                        Ok(offset)
-                    },
-                    _ => Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, 
-                    "")),
+            Start(offset) => match u32::try_from(offset) {
+                Ok(offset_u32) => {
+                    self.current_position = offset_u32;
+                    Ok(offset)
                 }
+                _ => Err(std::io::Error::new(
+                    std::io::ErrorKind::AddrNotAvailable,
+                    "",
+                )),
             },
             End(delta) => {
                 let end = self.size();
                 if delta >= 0 {
-                    match u32::try_from(delta).ok().and_then(|x| self.current_position.checked_add(x)) {
+                    match u32::try_from(delta)
+                        .ok()
+                        .and_then(|x| self.current_position.checked_add(x))
+                    {
                         Some(offset_u32) => {
                             self.current_position = offset_u32;
                             Ok(u64::from(offset_u32))
-                        },
-                        _ => Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, 
-                        "")),
+                        }
+                        _ => Err(std::io::Error::new(
+                            std::io::ErrorKind::AddrNotAvailable,
+                            "",
+                        )),
                     }
                 } else {
                     match delta.checked_abs().and_then(|x| u32::try_from(x).ok()) {
@@ -102,25 +109,34 @@ impl std::io::Seek for ContractState {
                             let new_pos = end - before;
                             self.current_position = new_pos;
                             Ok(u64::from(new_pos))
-                        },
-                        _ => Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, 
-                            ""))
+                        }
+                        _ => Err(std::io::Error::new(
+                            std::io::ErrorKind::AddrNotAvailable,
+                            "",
+                        )),
                     }
                 }
             }
             Current(delta) => {
-                let new_offset = 
-                  if delta >= 0 { u32::try_from(delta).ok().and_then(|x| self.current_position.checked_add(x))}
-                  else {
-                      delta.checked_abs().and_then(|x| u32::try_from(x).ok()).and_then(|x| self.current_position.checked_sub(x))
-                  };
+                let new_offset = if delta >= 0 {
+                    u32::try_from(delta)
+                        .ok()
+                        .and_then(|x| self.current_position.checked_add(x))
+                } else {
+                    delta
+                        .checked_abs()
+                        .and_then(|x| u32::try_from(x).ok())
+                        .and_then(|x| self.current_position.checked_sub(x))
+                };
                 match new_offset {
                     Some(offset) => {
                         self.current_position = offset;
                         Ok(u64::from(offset))
-                    },
-                    _ => Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, 
-                        ""))
+                    }
+                    _ => Err(std::io::Error::new(
+                        std::io::ErrorKind::AddrNotAvailable,
+                        "",
+                    )),
                 }
             }
         }
@@ -133,8 +149,12 @@ impl Read for ContractState {
         let len: u32 = {
             match buf.len().try_into() {
                 Ok(v) => v,
-                _ => return Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, 
-                    ""))
+                _ => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::AddrNotAvailable,
+                        "",
+                    ))
+                }
             }
         };
         let num_read = unsafe { load_state(buf.as_mut_ptr(), len, self.current_position) };
@@ -149,14 +169,20 @@ impl Write for ContractState {
         let len: u32 = {
             match buf.len().try_into() {
                 Ok(v) => v,
-                _ => return Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, 
-                    ""))
+                _ => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::AddrNotAvailable,
+                        "",
+                    ))
+                }
             }
         };
         if self.current_position.checked_add(len).is_none() {
-            return Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, 
-                ""))
-            }
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AddrNotAvailable,
+                "",
+            ));
+        }
         let num_bytes = unsafe { write_state(buf.as_ptr(), len, self.current_position) };
         self.current_position += num_bytes; // safe because of check above that len + pos is small enough
         Ok(num_bytes as usize)
@@ -217,7 +243,7 @@ pub trait Serialize: Sized {
     fn deserial<R: ReadBytesExt>(_source: &mut R) -> Option<Self>;
 }
 
-impl <X: Serialize, Y: Serialize>Serialize for (X,Y) {
+impl<X: Serialize, Y: Serialize> Serialize for (X, Y) {
     fn serial<W: WriteBytesExt>(&self, out: &mut W) -> Option<()> {
         self.0.serial(out)?;
         self.1.serial(out)
@@ -225,7 +251,7 @@ impl <X: Serialize, Y: Serialize>Serialize for (X,Y) {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Option<Self> {
         let x = X::deserial(source)?;
         let y = Y::deserial(source)?;
-        Some((x,y))
+        Some((x, y))
     }
 }
 
@@ -251,9 +277,11 @@ pub mod events {
     use super::*;
     #[inline(always)]
     pub fn log_bytes(event: &[u8]) {
-        unsafe { log_event(event.as_ptr(), event.len() as u32); }
+        unsafe {
+            log_event(event.as_ptr(), event.len() as u32);
+        }
     }
-    
+
     #[inline(always)]
     pub fn log<S: Serialize>(event: &S) {
         let mut out = Vec::new();
@@ -267,7 +295,7 @@ pub mod events {
     }
 }
 
-pub unsafe trait IntoActions{
+pub unsafe trait IntoActions {
     fn into_actions(self);
 }
 
@@ -275,7 +303,7 @@ unsafe impl IntoActions for Option<()> {
     fn into_actions(self) {
         match self {
             None => unsafe { fail() },
-            Some(_) => unsafe { accept() }
+            Some(_) => unsafe { accept() },
         }
     }
 }
