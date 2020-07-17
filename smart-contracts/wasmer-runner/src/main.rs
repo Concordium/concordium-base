@@ -1,7 +1,10 @@
 use clap::AppSettings;
-use std::convert::TryInto;
-use std::io::{Read, Write};
-use std::{fs::File, path::PathBuf};
+use std::{
+    convert::TryInto,
+    fs::File,
+    io::{Read, Write},
+    path::PathBuf,
+};
 use structopt::StructOpt;
 use wasmer_interp::*;
 
@@ -39,11 +42,7 @@ struct CommonOptions {
 }
 
 #[derive(StructOpt)]
-#[structopt(
-    about = "Simple smart contract runner.",
-    author = "Concordium",
-    version = "0.12345"
-)]
+#[structopt(about = "Simple smart contract runner.", author = "Concordium", version = "0.12345")]
 enum WasmerRunner {
     #[structopt(name = "init", about = "Initialize a module.")]
     Init {
@@ -108,8 +107,14 @@ pub fn main() {
     };
 
     let common = match runner {
-        WasmerRunner::Init { ref common, .. } => common,
-        WasmerRunner::Receive { ref common, .. } => common,
+        WasmerRunner::Init {
+            ref common,
+            ..
+        } => common,
+        WasmerRunner::Receive {
+            ref common,
+            ..
+        } => common,
     };
     let addr = match hex::decode(&common.sender) {
         Ok(addr) if addr.len() == 32 => addr,
@@ -121,8 +126,7 @@ pub fn main() {
     let source = {
         let mut source = Vec::new();
         let mut file = File::open(&common.source).expect("Could not read file.");
-        file.read_to_end(&mut source)
-            .expect("Reading the source file failed.");
+        file.read_to_end(&mut source).expect("Reading the source file failed.");
         source
     };
 
@@ -137,9 +141,7 @@ pub fn main() {
                 None => println!("The new state is: {}", output),
                 Some(fp) => {
                     let mut out_file = File::create(fp).expect("Could not create output file.");
-                    out_file
-                        .write_all(output.as_bytes())
-                        .expect("Could not write out the state.");
+                    out_file.write_all(output.as_bytes()).expect("Could not write out the state.");
                 }
             }
         } else {
@@ -147,16 +149,17 @@ pub fn main() {
                 None => println!("The new state is: {:?}", state),
                 Some(fp) => {
                     let mut out_file = File::create(fp).expect("Could not create output file.");
-                    out_file
-                        .write_all(&state)
-                        .expect("Could not write out the state.")
+                    out_file.write_all(&state).expect("Could not write out the state.")
                 }
             }
         }
     };
 
     match runner {
-        WasmerRunner::Init { name, .. } => {
+        WasmerRunner::Init {
+            name,
+            ..
+        } => {
             let init_ctx = InitContext {
                 init_origin: addr[..].try_into().unwrap(),
             };
@@ -178,8 +181,11 @@ pub fn main() {
             ..
         } => {
             let receive_ctx = ReceiveContext {
-                invoker: addr[..].try_into().unwrap(),
-                self_address: ContractAddress { index, subindex },
+                invoker:      addr[..].try_into().unwrap(),
+                self_address: ContractAddress {
+                    index,
+                    subindex,
+                },
                 self_balance: balance,
             };
             // initial state of the smart contract, read from a file.
@@ -187,8 +193,7 @@ pub fn main() {
                 let mut file = File::open(&state).expect("Could not read state file.");
                 let metadata = file.metadata().expect("Could not read file metadata.");
                 let mut init_state = Vec::with_capacity(metadata.len() as usize);
-                file.read_to_end(&mut init_state)
-                    .expect("Reading the state file failed.");
+                file.read_to_end(&mut init_state).expect("Reading the state file failed.");
                 init_state
             };
             if let Some((logs, state)) =

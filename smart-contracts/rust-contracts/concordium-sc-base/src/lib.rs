@@ -22,13 +22,9 @@ extern "C" {
 }
 
 pub mod internal {
-    pub fn fail() {
-        unsafe { super::fail() }
-    }
+    pub fn fail() { unsafe { super::fail() } }
 
-    pub fn accept() {
-        unsafe { super::accept() }
-    }
+    pub fn accept() { unsafe { super::accept() } }
 }
 
 /// A type representing the constract state bytes.
@@ -67,25 +63,19 @@ impl ContractState {
         out
     }
 
-    pub fn size(&self) -> u32 {
-        unsafe { state_size() }
-    }
+    pub fn size(&self) -> u32 { unsafe { state_size() } }
 }
 
 impl std::io::Seek for ContractState {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-        use std::convert::TryFrom;
-        use std::io::SeekFrom::*;
+        use std::{convert::TryFrom, io::SeekFrom::*};
         match pos {
             Start(offset) => match u32::try_from(offset) {
                 Ok(offset_u32) => {
                     self.current_position = offset_u32;
                     Ok(offset)
                 }
-                _ => Err(std::io::Error::new(
-                    std::io::ErrorKind::AddrNotAvailable,
-                    "",
-                )),
+                _ => Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "")),
             },
             End(delta) => {
                 let end = self.size();
@@ -98,10 +88,7 @@ impl std::io::Seek for ContractState {
                             self.current_position = offset_u32;
                             Ok(u64::from(offset_u32))
                         }
-                        _ => Err(std::io::Error::new(
-                            std::io::ErrorKind::AddrNotAvailable,
-                            "",
-                        )),
+                        _ => Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "")),
                     }
                 } else {
                     match delta.checked_abs().and_then(|x| u32::try_from(x).ok()) {
@@ -110,18 +97,13 @@ impl std::io::Seek for ContractState {
                             self.current_position = new_pos;
                             Ok(u64::from(new_pos))
                         }
-                        _ => Err(std::io::Error::new(
-                            std::io::ErrorKind::AddrNotAvailable,
-                            "",
-                        )),
+                        _ => Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "")),
                     }
                 }
             }
             Current(delta) => {
                 let new_offset = if delta >= 0 {
-                    u32::try_from(delta)
-                        .ok()
-                        .and_then(|x| self.current_position.checked_add(x))
+                    u32::try_from(delta).ok().and_then(|x| self.current_position.checked_add(x))
                 } else {
                     delta
                         .checked_abs()
@@ -133,10 +115,7 @@ impl std::io::Seek for ContractState {
                         self.current_position = offset;
                         Ok(u64::from(offset))
                     }
-                    _ => Err(std::io::Error::new(
-                        std::io::ErrorKind::AddrNotAvailable,
-                        "",
-                    )),
+                    _ => Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "")),
                 }
             }
         }
@@ -149,12 +128,7 @@ impl Read for ContractState {
         let len: u32 = {
             match buf.len().try_into() {
                 Ok(v) => v,
-                _ => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::AddrNotAvailable,
-                        "",
-                    ))
-                }
+                _ => return Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "")),
             }
         };
         let num_read = unsafe { load_state(buf.as_mut_ptr(), len, self.current_position) };
@@ -169,28 +143,19 @@ impl Write for ContractState {
         let len: u32 = {
             match buf.len().try_into() {
                 Ok(v) => v,
-                _ => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::AddrNotAvailable,
-                        "",
-                    ))
-                }
+                _ => return Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "")),
             }
         };
         if self.current_position.checked_add(len).is_none() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::AddrNotAvailable,
-                "",
-            ));
+            return Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, ""));
         }
         let num_bytes = unsafe { write_state(buf.as_ptr(), len, self.current_position) };
         self.current_position += num_bytes; // safe because of check above that len + pos is small enough
         Ok(num_bytes as usize)
     }
+
     #[inline(always)]
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
+    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
 }
 
 /// The type of amounts on the chain.
@@ -201,9 +166,7 @@ pub type Amount = u64;
 pub struct AccountAddress([u8; 32]);
 
 impl Serialize for AccountAddress {
-    fn serial<W: WriteBytesExt>(&self, out: &mut W) -> Option<()> {
-        out.write_all(&self.0).ok()
-    }
+    fn serial<W: WriteBytesExt>(&self, out: &mut W) -> Option<()> { out.write_all(&self.0).ok() }
 
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Option<Self> {
         let mut bytes = [0u8; 32];
@@ -248,6 +211,7 @@ impl<X: Serialize, Y: Serialize> Serialize for (X, Y) {
         self.0.serial(out)?;
         self.1.serial(out)
     }
+
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Option<Self> {
         let x = X::deserial(source)?;
         let y = Y::deserial(source)?;
@@ -256,18 +220,16 @@ impl<X: Serialize, Y: Serialize> Serialize for (X, Y) {
 }
 
 impl Serialize for u8 {
-    fn serial<W: WriteBytesExt>(&self, out: &mut W) -> Option<()> {
-        out.write_u8(*self).ok()
-    }
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Option<Self> {
-        source.read_u8().ok()
-    }
+    fn serial<W: WriteBytesExt>(&self, out: &mut W) -> Option<()> { out.write_u8(*self).ok() }
+
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Option<Self> { source.read_u8().ok() }
 }
 
 impl Serialize for u32 {
     fn serial<W: WriteBytesExt>(&self, out: &mut W) -> Option<()> {
         out.write_u32::<LittleEndian>(*self).ok()
     }
+
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Option<Self> {
         source.read_u32::<LittleEndian>().ok()
     }
@@ -290,9 +252,7 @@ pub mod events {
     }
 
     #[inline(always)]
-    pub fn log_str(event: &str) {
-        log_bytes(event.as_bytes())
-    }
+    pub fn log_str(event: &str) { log_bytes(event.as_bytes()) }
 }
 
 pub unsafe trait IntoActions {

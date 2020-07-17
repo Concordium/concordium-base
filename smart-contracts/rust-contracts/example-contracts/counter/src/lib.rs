@@ -2,7 +2,7 @@ use concordium_sc_base::*;
 
 #[no_mangle]
 pub extern "C" fn init(amount: Amount) {
-    let ctx = InitContext { };
+    let ctx = InitContext {};
     let mut state_bytes = ContractState::new();
     match contract_init(ctx, amount) {
         Some(state) => {
@@ -16,19 +16,22 @@ pub extern "C" fn init(amount: Amount) {
 
 #[no_mangle]
 pub extern "C" fn receive(amount: Amount) {
-    let ctx = ReceiveContext { };
+    let ctx = ReceiveContext {};
     let mut state_bytes = ContractState::new();
     if let Some(mut state) = State::deserial(&mut state_bytes) {
         match contract_receive(ctx, amount, &mut state) {
             Some(()) => {
-                let res = state_bytes.seek(std::io::SeekFrom::Start(0)).ok().and_then(|_| state.serial(&mut state_bytes));
+                let res = state_bytes
+                    .seek(std::io::SeekFrom::Start(0))
+                    .ok()
+                    .and_then(|_| state.serial(&mut state_bytes));
                 if res.is_none() {
                     panic!("Could not write state.")
                 } else {
                     internal::accept()
                 }
-            },
-            None => internal::fail()
+            }
+            None => internal::fail(),
         }
     } else {
         panic!("Could not read state fully.")
@@ -38,9 +41,9 @@ pub extern "C" fn receive(amount: Amount) {
 // The following is an example.
 // Example state
 pub struct State {
-    step: u8,
+    step:          u8,
     current_count: u32,
-    initializer: AccountAddress,
+    initializer:   AccountAddress,
 }
 
 impl Serialize for State {
@@ -77,14 +80,14 @@ fn contract_init(ctx: InitContext, amount: Amount) -> Option<State> {
 fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> Option<()> {
     if amount <= 10 {
         events::log_str("Amount too small, not increasing.");
-        return None
+        return None;
     }
     if ctx.sender() != state.initializer {
         events::log_str("Only the initializer can increment.");
         None
     } else {
         let current_count = state.current_count + u32::from(state.step);
-        events::log(&(1u8,state.step));
+        events::log(&(1u8, state.step));
         state.current_count = current_count;
         Some(())
     }
