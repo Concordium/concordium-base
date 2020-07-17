@@ -101,7 +101,16 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
         v_integers.push(r);
     }
 
-    prove(transcript, csprng, n, m, &v_integers, gens, v_keys, randomness)
+    prove(
+        transcript,
+        csprng,
+        n,
+        m,
+        &v_integers,
+        gens,
+        v_keys,
+        randomness,
+    )
 }
 
 /// This function produces a range proof, i.e. a proof of knowledge
@@ -561,8 +570,7 @@ pub fn verify_efficient<C: Curve>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pairing::bls12_381::{G1, Fr, FrRepr};
-    use ff::PrimeField;
+    use pairing::bls12_381::G1;
 
     /// This function produces a proof that will satisfy the verifier's first
     /// check, even if the values are not in the interval.
@@ -1147,39 +1155,5 @@ mod tests {
         assert!(!b1.is_ok());
         assert!(b1.err().unwrap() == VerificationError::False(true, false));
         assert!(!b2);
-    }
-
-    
-    #[allow(non_snake_case)]
-    #[test]
-    fn dummy_test() {
-        // let n = Fr::from_str("18446744073709551615").unwrap().into_repr();
-        // println!("{:?}", n.0);
-        // let n2 = Fr::from_str("18446744073709551616").unwrap().into_repr();
-        // println!("{:?}", n2.0);
-        // let n3 = Fr::from_str("10").unwrap().into_repr();
-        // println!("{:?}", n3.as_ref());
-        // let test = 18446744073709551615;
-        // let n4 = FrRepr::from(test);
-        // println!("{:?}", n4.as_ref());
-        // let n4 = FrRepr([test, 0, 0, 0]);
-        // println!("{:?}", n4.as_ref());
-        // let n5 = SomeCurve::scalar_from_u64(5);
-        // println!("{:?}", n5.into_repr());
-
-        let n1 = Fr::from_str("1").unwrap();
-        let n2 = Fr::from_str("2").unwrap();
-        let n3 = Fr::from_str("3").unwrap();
-        let n4 = Fr::from_str("4").unwrap();
-        let v_vec = vec![n1, n2, n3, n4];
-        let v_slice = &v_vec[..];
-        let mut v_integers = Vec::with_capacity(v_vec.len());
-        for &v in v_slice {
-            let rep = v.into_repr();
-            let r = rep.as_ref()[0];
-            println!("{:?}", r);
-            v_integers.push(r);
-        }
-
     }
 }
