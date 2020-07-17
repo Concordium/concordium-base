@@ -1,6 +1,6 @@
-use std::collections::LinkedList;
 use std::{
     cell::Cell,
+    collections::LinkedList,
     sync::{Arc, Mutex},
 };
 use wasmer_runtime::{
@@ -19,12 +19,14 @@ impl Logs {
             logs: Arc::new(Mutex::new(LinkedList::new())),
         }
     }
+
     pub fn log_event(&self, event: Vec<u8>) {
         if let Ok(mut guard) = self.logs.lock() {
             guard.push_back(event);
         }
         // else todo
     }
+
     pub fn iterate(&self) -> LinkedList<Vec<u8>> {
         if let Ok(guard) = self.logs.lock() {
             guard.clone()
@@ -93,7 +95,8 @@ impl State {
         }
     }
 
-    // FIXME: This should not be copying so much data around, but for POC it is fine.
+    // FIXME: This should not be copying so much data around, but for POC it is
+    // fine.
     pub fn new(st: Option<&[u8]>) -> Self {
         match st {
             None => Self {
@@ -167,6 +170,7 @@ impl State {
             Err(_) => Err(()),
         }
     }
+
     pub fn get(&self) -> Vec<u8> {
         if let Ok(guard) = self.state.lock() {
             guard.clone()
@@ -264,12 +268,12 @@ pub struct InitContext {
 }
 
 pub struct ContractAddress {
-    pub index: u64,
+    pub index:    u64,
     pub subindex: u64,
 }
 
 pub struct ReceiveContext {
-    pub invoker: AccountAddress,
+    pub invoker:      AccountAddress,
     pub self_address: ContractAddress,
     pub self_balance: Amount,
 }
