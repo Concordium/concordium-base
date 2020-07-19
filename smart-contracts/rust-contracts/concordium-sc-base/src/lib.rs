@@ -1,13 +1,23 @@
-use std::io::{Read, Write};
-// Re-exports
-pub use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-pub use std::io::Seek;
-
+#![no_std]
+#![feature(alloc_error_handler)]
+extern crate alloc;
 extern crate wee_alloc;
+
+pub mod traits;
+
+pub use crate::traits::{Read, Seek, SeekFrom, Write};
+use alloc::{alloc::Layout, vec, vec::Vec};
+use core::result::*;
 
 // Use `wee_alloc` as the global allocator.
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
+#[alloc_error_handler]
+fn on_oom(_layout: Layout) -> ! { panic!() }
+
+#[panic_handler]
+fn abort_panic(_info: &core::panic::PanicInfo) -> ! { loop {} }
 
 #[cfg_attr(target_arch = "wasm32", link(wasm_import_module = "concordium"))]
 extern "C" {
@@ -66,16 +76,19 @@ impl ContractState {
     pub fn size(&self) -> u32 { unsafe { state_size() } }
 }
 
-impl std::io::Seek for ContractState {
-    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-        use std::{convert::TryFrom, io::SeekFrom::*};
+impl Seek for ContractState {
+    type Err = ();
+
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Err> {
+        use core::convert::TryFrom;
+        use SeekFrom::*;
         match pos {
             Start(offset) => match u32::try_from(offset) {
                 Ok(offset_u32) => {
                     self.current_position = offset_u32;
                     Ok(offset)
                 }
-                _ => Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "")),
+                _ => Err(()),
             },
             End(delta) => {
                 let end = self.size();
@@ -88,7 +101,7 @@ impl std::io::Seek for ContractState {
                             self.current_position = offset_u32;
                             Ok(u64::from(offset_u32))
                         }
-                        _ => Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "")),
+                        _ => Err(()),
                     }
                 } else {
                     match delta.checked_abs().and_then(|x| u32::try_from(x).ok()) {
@@ -97,7 +110,7 @@ impl std::io::Seek for ContractState {
                             self.current_position = new_pos;
                             Ok(u64::from(new_pos))
                         }
-                        _ => Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "")),
+                        _ => Err(()),
                     }
                 }
             }
@@ -115,7 +128,7 @@ impl std::io::Seek for ContractState {
                         self.current_position = offset;
                         Ok(u64::from(offset))
                     }
-                    _ => Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "")),
+                    _ => Err(()),
                 }
             }
         }
@@ -123,12 +136,14 @@ impl std::io::Seek for ContractState {
 }
 
 impl Read for ContractState {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        use std::convert::TryInto;
+    type Err = ();
+
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Err> {
+        use core::convert::TryInto;
         let len: u32 = {
             match buf.len().try_into() {
                 Ok(v) => v,
-                _ => return Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "")),
+                _ => return Err(()),
             }
         };
         let num_read = unsafe { load_state(buf.as_mut_ptr(), len, self.current_position) };
@@ -138,24 +153,23 @@ impl Read for ContractState {
 }
 
 impl Write for ContractState {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        use std::convert::TryInto;
+    type Err = ();
+
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Err> {
+        use core::convert::TryInto;
         let len: u32 = {
             match buf.len().try_into() {
                 Ok(v) => v,
-                _ => return Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "")),
+                _ => return Err(()),
             }
         };
         if self.current_position.checked_add(len).is_none() {
-            return Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, ""));
+            return Err(());
         }
         let num_bytes = unsafe { write_state(buf.as_ptr(), len, self.current_position) };
         self.current_position += num_bytes; // safe because of check above that len + pos is small enough
         Ok(num_bytes as usize)
     }
-
-    #[inline(always)]
-    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
 }
 
 /// The type of amounts on the chain.
@@ -166,9 +180,9 @@ pub type Amount = u64;
 pub struct AccountAddress([u8; 32]);
 
 impl Serialize for AccountAddress {
-    fn serial<W: WriteBytesExt>(&self, out: &mut W) -> Option<()> { out.write_all(&self.0).ok() }
+    fn serial<W: Write>(&self, out: &mut W) -> Option<()> { out.write_all(&self.0).ok() }
 
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Option<Self> {
+    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
         let mut bytes = [0u8; 32];
         source.read_exact(&mut bytes).ok()?;
         Some(AccountAddress(bytes))
@@ -202,17 +216,17 @@ impl ReceiveContext {
 }
 
 pub trait Serialize: Sized {
-    fn serial<W: WriteBytesExt>(&self, _out: &mut W) -> Option<()>;
-    fn deserial<R: ReadBytesExt>(_source: &mut R) -> Option<Self>;
+    fn serial<W: Write>(&self, _out: &mut W) -> Option<()>;
+    fn deserial<R: Read>(_source: &mut R) -> Option<Self>;
 }
 
 impl<X: Serialize, Y: Serialize> Serialize for (X, Y) {
-    fn serial<W: WriteBytesExt>(&self, out: &mut W) -> Option<()> {
+    fn serial<W: Write>(&self, out: &mut W) -> Option<()> {
         self.0.serial(out)?;
         self.1.serial(out)
     }
 
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Option<Self> {
+    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
         let x = X::deserial(source)?;
         let y = Y::deserial(source)?;
         Some((x, y))
@@ -220,19 +234,15 @@ impl<X: Serialize, Y: Serialize> Serialize for (X, Y) {
 }
 
 impl Serialize for u8 {
-    fn serial<W: WriteBytesExt>(&self, out: &mut W) -> Option<()> { out.write_u8(*self).ok() }
+    fn serial<W: Write>(&self, out: &mut W) -> Option<()> { out.write_u8(*self).ok() }
 
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Option<Self> { source.read_u8().ok() }
+    fn deserial<R: Read>(source: &mut R) -> Option<Self> { source.read_u8().ok() }
 }
 
 impl Serialize for u32 {
-    fn serial<W: WriteBytesExt>(&self, out: &mut W) -> Option<()> {
-        out.write_u32::<LittleEndian>(*self).ok()
-    }
+    fn serial<W: Write>(&self, out: &mut W) -> Option<()> { out.write_u32(*self).ok() }
 
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Option<Self> {
-        source.read_u32::<LittleEndian>().ok()
-    }
+    fn deserial<R: Read>(source: &mut R) -> Option<Self> { source.read_u32().ok() }
 }
 
 pub mod events {

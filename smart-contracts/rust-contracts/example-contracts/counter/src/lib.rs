@@ -1,3 +1,4 @@
+#![no_std]
 use concordium_sc_base::*;
 
 #[no_mangle]
@@ -22,7 +23,7 @@ pub extern "C" fn receive(amount: Amount) {
         match contract_receive(ctx, amount, &mut state) {
             Some(()) => {
                 let res = state_bytes
-                    .seek(std::io::SeekFrom::Start(0))
+                    .seek(SeekFrom::Start(0))
                     .ok()
                     .and_then(|_| state.serial(&mut state_bytes));
                 if res.is_none() {
@@ -47,15 +48,15 @@ pub struct State {
 }
 
 impl Serialize for State {
-    fn serial<W: WriteBytesExt>(&self, out: &mut W) -> Option<()> {
+    fn serial<W: Write>(&self, out: &mut W) -> Option<()> {
         out.write_u8(self.step).ok()?;
-        out.write_u32::<LittleEndian>(self.current_count).ok()?;
+        out.write_u32(self.current_count).ok()?;
         self.initializer.serial(out)
     }
 
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Option<Self> {
+    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
         let step = source.read_u8().ok()?;
-        let current_count = source.read_u32::<LittleEndian>().ok()?;
+        let current_count = source.read_u32().ok()?;
         let initializer = AccountAddress::deserial(source)?;
         Some(State {
             step,
