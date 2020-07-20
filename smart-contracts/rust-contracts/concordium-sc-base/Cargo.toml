@@ -9,6 +9,11 @@ edition = "2018"
 # Reduce code size, at the cost of performance in allocation heavy-code.
 wee_alloc="0.4.5"
 
+[features]
+default = ["std"]
+
+std = []
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 

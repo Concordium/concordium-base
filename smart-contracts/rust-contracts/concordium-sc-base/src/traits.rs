@@ -78,3 +78,8 @@ impl Write for Vec<u8> {
         Ok(buf.len())
     }
 }
+
+pub trait Serialize: Sized {
+    fn serial<W: Write>(&self, _out: &mut W) -> Option<()>;
+    fn deserial<R: Read>(_source: &mut R) -> Option<Self>;
+}
