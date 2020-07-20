@@ -1,54 +1,13 @@
 {-# OPTIONS_GHC -Wno-deprecations #-}
 module Concordium.Types.DummyData where
 
-import qualified Concordium.Crypto.SignatureScheme as SigScheme
 import Concordium.Types
-import qualified Data.PQueue.Prio.Max as Queue
 import Concordium.Crypto.DummyData
-import Concordium.ID.DummyData
 import Concordium.ID.Types
 import System.Random
 import Concordium.Crypto.SHA256
 import Data.FixedByteString as FBS
-import Lens.Micro.Platform
 import Concordium.Crypto.VRF as VRF
-
--- This generates an account with a single credential, the given list of keys and signature threshold,
--- which has sufficiently late expiry date, but is otherwise not well-formed.
--- The keys are indexed in ascending order starting from 0
-{-# WARNING mkAccountMultipleKeys "Do not use in production." #-}
-mkAccountMultipleKeys :: [SigScheme.VerifyKey] -> SignatureThreshold -> AccountAddress -> Amount -> Account
-mkAccountMultipleKeys keys threshold addr amount = mkAccountNoCredentials keys threshold addr amount
-      & (accountCredentials .~ (Queue.singleton dummyMaxValidTo (dummyCredential addr dummyMaxValidTo dummyCreatedAt)))
-
--- This generates an account without any credentials
--- late expiry date, but is otherwise not well-formed.
-{-# WARNING mkAccountNoCredentials "Do not use in production." #-}
-mkAccountNoCredentials :: [SigScheme.VerifyKey] -> SignatureThreshold -> AccountAddress -> Amount -> Account
-mkAccountNoCredentials keys threshold addr amnt =
-  newAccount (makeAccountKeys keys threshold) addr (dummyRegId addr) & (accountAmount .~ amnt)
-
--- This generates an account with a single credential and single keypair, which has sufficiently
--- late expiry date, but is otherwise not well-formed.
-{-# WARNING mkAccount "Do not use in production." #-}
-mkAccount :: SigScheme.VerifyKey -> AccountAddress -> Amount -> Account
-mkAccount key addr amnt = mkAccountMultipleKeys [key] 1 addr amnt
-
-{-# WARNING makeFakeBakerAccount "Do not use in production." #-}
-makeFakeBakerAccount :: BakerId -> Account
-makeFakeBakerAccount bid =
-    acct {_accountAmount = 1000000000000,
-          _accountStakeDelegate = Just bid,
-          _accountCredentials = credentialList}
-  where
-    vfKey = SigScheme.correspondingVerifyKey kp
-    credential = dummyCredential address dummyMaxValidTo dummyCreatedAt
-    credentialList = Queue.singleton dummyMaxValidTo credential
-    acct = newAccount (makeSingletonAC vfKey) address (cdvRegId credential)
-    -- NB the negation makes it not conflict with other fake accounts we create elsewhere.
-    seed = - (fromIntegral bid) - 1
-    (address, seed') = randomAccountAddress (mkStdGen seed)
-    kp = uncurry SigScheme.KeyPairEd25519 $ fst (randomEd25519KeyPair seed')
 
 {-# WARNING dummyblockPointer "Do not use in production." #-}
 dummyblockPointer :: BlockHash
