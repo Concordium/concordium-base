@@ -17,8 +17,6 @@ or similar, using the [rustup](https://rustup.rs/) tool. See the documentation o
 
 In order to contribute you should make a merge request and not push directly to master.
 
-
-
 # Smart Contracts
 
 This repository contains several packages to support smart contracts on and off-chain.
@@ -35,3 +33,42 @@ The [rust-contracts](./rust-contracts) aims to be organized into two parts. The 
 The second, [example-contracts](./rust-contracts/example-contracts) is meant for, well, example contracts using the aforementioned API.
 The list of currently implemented contracts is as follows:
 - [counter](./rust-contracts/example-contracts/counter) a counter contract with a simple logic on who can increment the counter. This is the minimal example.
+
+## Compiling smart contracts to Wasm
+
+The process for compiling smart contracts to Wasm is always the same, and we
+illustrate it here on the [counter](./rust-contracts/example-contracts/counter)
+contract. To compile Rust to Wasm you need to
+
+- install the rust wasm toolchain, for example by using
+```
+rustup target add wasm32-unknown-unknown
+```
+- run `cargo build` as
+```
+cargo build --target wasm32-unknown-unknown [--release]
+```
+(the `release` flag) is optional, by default it will build in debug builds,
+which are slower and bigger.
+
+Running `cargo build` will produce a single `.wasm` module in
+`target/wasm32-unknown-unknown/release/counter.wasm` or 
+`target/wasm32-unknown-unknown/debug/counter.wasm`, depending on whether the
+`--release` option was used or not.
+
+By default the module will be quite big in size, depending on the options used
+(e.g., whether it is compiled with `std` or not, it can be from 600+kB to more
+than a MB). However most of that code is redundant and can be stripped away.
+There are various tools and libraries for this. One such suite of tools is [Web
+assembly binary toolkit (wabt)](https://github.com/WebAssembly/wabt) and its
+tool `wasm-strip`.
+
+Using `wasm-strip` on the produced module produces a module of size 11-13kB ,
+depending on whether the `no_std` option was selected or not.
+
+### Default toolchain
+
+The default toolchain can be specified in the `.cargo/config` files inside the
+project, as exemplified in the [counter/.cargo/config](./rust-contracts/counter/.cargo/config) file.
+
+
