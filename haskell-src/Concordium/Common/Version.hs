@@ -50,7 +50,7 @@ instance Bounded Version where
 -- bytes, where MSB=1 indicates more bytes follow, and the 7 lower bits in a byte
 -- is Big Endian data bits for the value. A version number is bounded by u32 max.
 newtype Version = Version Word32
-    deriving (Eq, Ord, Num, Hashable, Show, AE.FromJSON, AE.ToJSON) via Word32
+    deriving (Eq, Ord, Num, Enum, Integral, Real, Hashable, Show, AE.FromJSON, AE.ToJSON) via Word32
 
 instance S.Serialize Version where
   put (Version v) = mapM_ S.putWord8 (encode7 v)
@@ -73,9 +73,8 @@ instance S.Serialize Version where
               let
                 value = 128 * acc + fromIntegral byte
               in do
-                let v = Version (fromIntegral value)
-                unless (v <= (maxBound :: Version)) $ fail "Version number value overflow"
-                return v
+                unless (value <= fromIntegral (maxBound :: Version)) $ fail "Version number value overflow"
+                return $ Version (fromIntegral value)
 
 
 

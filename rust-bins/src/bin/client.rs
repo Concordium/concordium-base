@@ -542,7 +542,7 @@ fn handle_create_credential(cc: CreateCredential) {
     // all known anonymity revokers.
     let ars = {
         if let Ok(ars) = read_anonymity_revokers(cc.anonymity_revokers) {
-            ars.ars
+            ars.anonymity_revokers
         } else {
             eprintln!("Cannot read anonymity revokers from the database. Terminating.");
             return;
@@ -664,7 +664,7 @@ fn handle_act_as_ip(aai: IpSignPio) {
     // all known anonymity revokers.
     let ars = {
         if let Ok(ars) = read_anonymity_revokers(aai.anonymity_revokers) {
-            ars.ars
+            ars.anonymity_revokers
         } else {
             eprintln!("Cannot read anonymity revokers from the database. Terminating.");
             return;
@@ -764,7 +764,7 @@ fn handle_start_ip(sip: StartIp) {
     // now choose an identity provider.
     let ips: BTreeMap<IpIdentity, IpInfo<Bls12>> = {
         if let Ok(ips) = read_identity_providers(sip.identity_providers) {
-            ips.idps
+            ips.identity_providers
         } else {
             eprintln!("Cannot read identity providers from the database. Terminating.");
             return;
@@ -797,7 +797,7 @@ fn handle_start_ip(sip: StartIp) {
 
     let ars = {
         if let Ok(ars) = read_anonymity_revokers(sip.anonymity_revokers) {
-            ars.ars
+            ars.anonymity_revokers
         } else {
             eprintln!("Cannot read anonymity revokers from the database. Terminating.");
             return;
@@ -919,7 +919,7 @@ fn handle_generate_ips(gip: GenerateIps) {
     {
         let ar_base = global_ctx.generator;
         let mut all_ars = ArInfos {
-            ars: BTreeMap::new(),
+            anonymity_revokers: BTreeMap::new(),
         };
 
         for i in 1..=num_ars {
@@ -949,7 +949,9 @@ fn handle_generate_ips(gip: GenerateIps) {
                 eprintln!("Could not write anonymity revoker {}: {}", i, err);
                 return;
             }
-            let _ = all_ars.ars.insert(ar_identity, ar_data.public_ar_info);
+            let _ = all_ars
+                .anonymity_revokers
+                .insert(ar_identity, ar_data.public_ar_info);
         }
 
         let mut ars_path = gip.output_dir.clone();
@@ -965,7 +967,7 @@ fn handle_generate_ips(gip: GenerateIps) {
 
     println!("Generating {} identity providers.", num);
     let mut all_idps = IpInfos {
-        idps: BTreeMap::new(),
+        identity_providers: BTreeMap::new(),
     };
     for id in 0..num {
         // generate an identity provider and for each
@@ -1004,7 +1006,9 @@ fn handle_generate_ips(gip: GenerateIps) {
             eprintln!("Could not write out identity provider: {}", err);
             return;
         }
-        all_idps.idps.insert(ip_id, full_info.public_ip_info);
+        all_idps
+            .identity_providers
+            .insert(ip_id, full_info.public_ip_info);
     }
     let mut ips_path = gip.output_dir;
     ips_path.push("identity_providers.json");

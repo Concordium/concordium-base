@@ -29,6 +29,10 @@ impl From<Version> for u32 {
     fn from(val: Version) -> u32 { val.value }
 }
 
+impl std::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { write!(f, "{}", self.value) }
+}
+
 impl Serial for Version {
     fn serial<B: Buffer>(&self, out: &mut B) {
         if self.value == 0 {
@@ -66,10 +70,9 @@ impl Deserial for Version {
                 break;
             }
         }
-        if acc > u64::from(u32::max_value()) {
-            bail!("Version overflow");
-        }
-        Ok(Version::from(acc as u32))
+        use std::convert::TryInto;
+        let value: u32 = acc.try_into()?;
+        Ok(Version::from(value))
     }
 }
 
@@ -159,25 +162,5 @@ mod tests {
             let parsed = serialize_deserialize(&actual).unwrap();
             assert_eq!(actual, parsed);
         }
-    }
-
-    #[test]
-    fn test_version_serialization_json() {
-        #[derive(SerdeSerialize, SerdeDeserialize)]
-        struct Example {
-            n: u32,
-            s: String,
-        };
-
-        let ex = Example {
-            n: 42,
-            s: String::from("Test"),
-        };
-
-        let versioned = Versioned::new(Version::from(1337), ex);
-
-        let json = serde_json::to_string(&versioned).unwrap();
-        let actual_json = "{\"v\":1337,\"value\":{\"n\":42,\"s\":\"Test\"}}";
-        assert_eq!(json, actual_json);
     }
 }

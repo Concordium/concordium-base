@@ -31,19 +31,20 @@ pub fn read_identity_providers<P: AsRef<Path> + std::fmt::Debug>(
     filename: P,
 ) -> io::Result<IpInfos<Bls12>> {
     let vips: io::Result<Versioned<IpInfos<Bls12>>> = read_json_from_file(filename);
-    if vips.is_err() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Could not parse identity providers".to_string(),
-        ));
-    }
-    let vips = vips.unwrap();
-    match vips.version {
-        VERSION_IP_INFOS => Ok(vips.value),
-        _ => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Invalid identity providers version".to_string(),
-        )),
+    match vips {
+        Err(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Could not parse identity providers".to_string(),
+            ))
+        }
+        Ok(v) => match v.version {
+            VERSION_IP_INFOS => Ok(v.value),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid identity providers version".to_string(),
+            )),
+        },
     }
 }
 
@@ -51,19 +52,20 @@ pub fn read_anonymity_revokers<P: AsRef<Path> + std::fmt::Debug>(
     filename: P,
 ) -> io::Result<ArInfos<ExampleCurve>> {
     let vars: io::Result<Versioned<ArInfos<ExampleCurve>>> = read_json_from_file(filename);
-    if vars.is_err() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Could not parse anonymity revokers".to_string(),
-        ));
-    }
-    let vars = vars.unwrap();
-    match vars.version {
-        VERSION_AR_INFOS => Ok(vars.value),
-        _ => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Invalid anonymity revokers version".to_string(),
-        )),
+    match vars {
+        Err(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Could not parse anonymity revokers".to_string(),
+            ))
+        }
+        Ok(v) => match v.version {
+            VERSION_AR_INFOS => Ok(v.value),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid anonymity revokers version".to_string(),
+            )),
+        },
     }
 }
 
@@ -104,7 +106,7 @@ where
         Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "Invalid version in file, expected: {:?}, got: {:?}",
+                "Invalid version in file, expected: {}, got: {}",
                 version, versioned.version,
             ),
         ))
@@ -125,7 +127,7 @@ where
         Some(m) => Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "Invalid version in vectored file, expected: {:?}, got: {:?}",
+                "Invalid version in vectored file, expected: {}, got: {}",
                 version, m.version,
             ),
         )),
@@ -148,7 +150,7 @@ where
         Some((_, v)) => Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "Invalid version in map file, expected: {:?}, got: {:?}",
+                "Invalid version in map file, expected: {}, got: {}",
                 version, v.version,
             ),
         )),
