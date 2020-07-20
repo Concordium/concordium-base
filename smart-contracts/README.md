@@ -69,6 +69,40 @@ depending on whether the `no_std` option was selected or not.
 ### Default toolchain
 
 The default toolchain can be specified in the `.cargo/config` files inside the
-project, as exemplified in the [counter/.cargo/config](./rust-contracts/counter/.cargo/config) file.
+project, as exemplified in the
+[counter/.cargo/config](./rust-contracts/example-contracts/counter/.cargo/config)
+file.
 
+### Compilation options
 
+Since a contract running on the chain will typically not be able to recover from
+panics, and error traces are not reported, it is useful not to bloat code size
+with them. Setting `panic=abort` will make it so that the compiler will generate
+simple `Wasm` traps on any panic that occurs. This option can be specified
+either in `.cargo/config` as exemplified in
+[counter/.cargo/config](./rust-contracts/example-contracts/counter/.cargo/config), 
+or in the `Cargo.toml` file as
+
+```
+[profile.release]
+# Don't unwind on panics, just trap.
+panic = "abort"
+```
+
+The latter will only set this option in `release` builds, for debug builds use
+
+```
+[profile.dev]
+# Don't unwind on panics, just trap.
+panic = "abort"
+```
+instead.
+
+An additional option that might be useful to minimize code size at the cost of
+some performance in some cases is
+```
+[profile.release]
+# Tell `rustc` to optimize for small code size.
+opt-level = "s"
+```
+or even `opt-level = "z"`.

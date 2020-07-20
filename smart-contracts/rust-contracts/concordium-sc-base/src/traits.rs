@@ -59,7 +59,7 @@ pub trait Read {
         Ok(u32::from_le_bytes(bytes))
     }
 
-    /// Read a `u8`
+    /// Read a `u8`.
     fn read_u8(&mut self) -> Result<u8, Self::Err> {
         let mut bytes = [0u8; 1];
         self.read_exact(&mut bytes)?;
