@@ -8,7 +8,11 @@ edition = "2018"
 [dependencies]
 # Reduce code size, at the cost of performance in allocation heavy-code.
 wee_alloc="0.4.5"
-byteorder = "1.3"
+
+[features]
+default = ["std"]
+
+std = []
 
 [lib]
 crate-type = ["cdylib", "rlib"]
