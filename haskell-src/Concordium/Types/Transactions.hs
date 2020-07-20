@@ -369,7 +369,7 @@ getExactVersionedBlockItem time = do
     version <- S.get :: S.Get Version
     a <- case version of
       0 -> getBlockItemV0 time
-      _ -> fail "Bad block version"
+      _ -> fail $ "Unsupported block item version " ++ (show version) ++ "."
     return a
 
 -- |Get a block item, reconstructing metadata.
