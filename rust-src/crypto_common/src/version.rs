@@ -144,17 +144,6 @@ mod tests {
     }
 
     #[test]
-    fn test_version_serialization_singlebits() {
-        let mut current: u32 = 1;
-        for _ in 0..31 {
-            let actual = Version::from(current);
-            let parsed = serialize_deserialize(&actual).unwrap();
-            assert_eq!(actual, parsed);
-            current <<= 1;
-        }
-    }
-
-    #[test]
     fn test_version_serialization_random() {
         let mut rng = thread_rng();
         for _ in 0..1000 {

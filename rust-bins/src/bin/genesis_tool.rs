@@ -140,15 +140,15 @@ fn main() {
 
     let ars_infos = {
         if let Ok(ars) = read_anonymity_revokers(&common.anonymity_revokers) {
-            ars.ars
+            ars
         } else {
             eprintln!("Cannot read anonymity revokers from the database. Terminating.");
             return;
         }
     };
 
-    let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
-    let threshold = Threshold((ars_infos.len() - 1) as u8);
+    let context = IPContext::new(&ip_info, &ars_infos.anonymity_revokers, &global_ctx);
+    let threshold = Threshold((ars_infos.anonymity_revokers.len() - 1) as u8);
 
     if common.num_keys == 0 && common.num_keys > 255 {
         eprintln!("num_keys should be a positive integer <= 255.");
