@@ -4,10 +4,20 @@ version = "0.1.0"
 authors = ["Concordium <info@concordium.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["cranelift"]
 
+cranelift = ["wasmer-runtime/default-backend-cranelift"]
+
+singlepass = ["wasmer-runtime/default-backend-singlepass"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-wasmer-runtime="0.17.1"
+libc = "0.2"
+
+[dependencies.wasmer-runtime]
+version="0.17.1"
+default-features = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]

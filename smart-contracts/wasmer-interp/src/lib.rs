@@ -1,11 +1,17 @@
+mod ffi;
+mod types;
+
 use std::{
     cell::Cell,
     collections::LinkedList,
     sync::{Arc, Mutex},
 };
 use wasmer_runtime::{
-    error, func, imports, instantiate, types, Array, Ctx, ImportObject, Module, Value, WasmPtr,
+    error, func, imports, instantiate, types as wasmer_types, Array, Ctx, ImportObject, Module,
+    Value, WasmPtr,
 };
+
+pub use types::*;
 
 #[derive(Clone, Default)]
 /// Structure to support logging of events from smart contracts.
@@ -32,6 +38,21 @@ impl Logs {
             guard.clone()
         } else {
             unreachable!("Failed.");
+        }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        if let Ok(guard) = self.logs.lock() {
+            let len = guard.len();
+            let mut out = Vec::with_capacity(4 * len + 4);
+            out[0..4].copy_from_slice(&(len as u32).to_be_bytes());
+            for v in guard.iter() {
+                out.extend_from_slice(&(v.len() as u32).to_be_bytes());
+                out.extend_from_slice(v);
+            }
+            out
+        } else {
+            unreachable!("Failed to acquire lock.")
         }
     }
 }
@@ -183,8 +204,13 @@ impl State {
 pub fn make_imports(which: Which) -> (ImportObject, Logs, State, Outcome) {
     let logs = Logs::new();
     let state = match which {
-        Which::Init(_) => State::new(None),
-        Which::Receive(_, bytes) => State::new(Some(bytes)),
+        Which::Init {
+            ..
+        } => State::new(None),
+        Which::Receive {
+            current_state,
+            ..
+        } => State::new(Some(current_state)),
     };
     let event_logs = logs.clone();
     let log_event = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, len: u32| {
@@ -220,8 +246,13 @@ pub fn make_imports(which: Which) -> (ImportObject, Logs, State, Outcome) {
     let state_size = move || s_state.len();
 
     let sender_bytes = match which {
-        Which::Init(ctx) => ctx.init_origin,
-        Which::Receive(ctx, _) => ctx.invoker,
+        Which::Init {
+            init_ctx,
+        } => init_ctx.init_origin,
+        Which::Receive {
+            receive_ctx,
+            ..
+        } => receive_ctx.invoker,
     };
 
     // Get the sender of the transaction.
@@ -246,7 +277,7 @@ pub fn make_imports(which: Which) -> (ImportObject, Logs, State, Outcome) {
 
     let imps = imports! {
         "concordium" => {
-            "sender" => func!(sender),
+            "get_sender" => func!(sender),
             "accept" => func!(accept),
             "fail" => func!(fail),
             "log_event" => func!(log_event),
@@ -259,37 +290,15 @@ pub fn make_imports(which: Which) -> (ImportObject, Logs, State, Outcome) {
     (imps, logs, state, outcome)
 }
 
-type Amount = u64;
-
-type AccountAddress = [u8; 32];
-
-pub struct InitContext {
-    pub init_origin: AccountAddress,
-}
-
-pub struct ContractAddress {
-    pub index:    u64,
-    pub subindex: u64,
-}
-
-pub struct ReceiveContext {
-    pub invoker:      AccountAddress,
-    pub self_address: ContractAddress,
-    pub self_balance: Amount,
-}
-
-pub enum Which<'a> {
-    Init(InitContext),
-    Receive(ReceiveContext, &'a [u8]),
-}
-
 pub fn invoke_init(
     wasm: &[u8],
     amount: Amount,
     init_ctx: InitContext,
     init_name: &str,
-) -> Result<Option<(Logs, State)>, error::CallError> {
-    let (import_obj, logs, state, outcome) = make_imports(Which::Init(init_ctx));
+) -> Result<InitResult, error::CallError> {
+    let (import_obj, logs, state, outcome) = make_imports(Which::Init {
+        init_ctx,
+    });
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
     // Wasmer supports cacheing of modules into Artifacts.
@@ -297,9 +306,12 @@ pub fn invoke_init(
         .expect("Instantiation should always succeed for well-formed modules.");
     let _ = inst.call(init_name, &[Value::I64(amount as i64)])?;
     if outcome.get() {
-        Ok(Some((logs, state)))
+        Ok(InitResult::Success {
+            logs,
+            state,
+        })
     } else {
-        Ok(None)
+        Ok(InitResult::Reject)
     }
 }
 
@@ -309,9 +321,11 @@ pub fn invoke_receive(
     receive_ctx: ReceiveContext,
     current_state: &[u8],
     receive_name: &str,
-) -> Result<Option<(Logs, State)>, error::CallError> {
-    let (import_obj, logs, state, outcome) =
-        make_imports(Which::Receive(receive_ctx, current_state));
+) -> Result<ReceiveResult, error::CallError> {
+    let (import_obj, logs, state, outcome) = make_imports(Which::Receive {
+        receive_ctx,
+        current_state,
+    });
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
     // Wasmer supports cacheing of modules into Artifacts.
@@ -319,9 +333,15 @@ pub fn invoke_receive(
         .expect("Instantiation should always succeed for well-formed modules.");
     let _ = inst.call(receive_name, &[Value::I64(amount as i64)])?;
     if outcome.get() {
-        Ok(Some((logs, state)))
+        Ok(ReceiveResult::Success {
+            logs,
+            state,
+            actions: vec![],
+        })
     } else {
-        Ok(None)
+        Ok(ReceiveResult::Reject {
+            logs,
+        })
     }
 }
 
@@ -330,7 +350,7 @@ pub fn get_inits(module: &Module) -> Vec<String> {
     let mut out = Vec::new();
     for export in module.exports() {
         if export.name.starts_with("init") {
-            if let types::ExternDescriptor::Function(_) = export.ty {
+            if let wasmer_types::ExternDescriptor::Function(_) = export.ty {
                 out.push(export.name.to_owned());
             }
         }
@@ -343,7 +363,7 @@ pub fn get_receives(module: &Module) -> Vec<String> {
     let mut out = Vec::new();
     for export in module.exports() {
         if export.name.starts_with("receive") {
-            if let types::ExternDescriptor::Function(_) = export.ty {
+            if let wasmer_types::ExternDescriptor::Function(_) = export.ty {
                 out.push(export.name.to_owned());
             }
         }

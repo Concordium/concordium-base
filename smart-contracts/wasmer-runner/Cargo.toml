@@ -7,10 +7,23 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wasmer-runtime="0.17.1"
 clap = "2.33"
 structopt = "0.3"
 hex = "0.4"
 
 [dependencies.wasmer-interp]
 path = "../wasmer-interp"
+
+[dev-dependencies]
+criterion = "0.3"
+wasmer-runtime-core="0.17.1"
+
+[dev-dependencies.wasmer-runtime]
+version="0.17.1"
+default-features = false
+features = ["default-backend-cranelift"]
+
+
+[[bench]]
+name = "wasm"
+harness = false
