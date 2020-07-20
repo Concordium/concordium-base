@@ -42,7 +42,7 @@ mod impls;
 mod prims;
 mod traits;
 mod types;
-pub use prims::{events, internal};
+pub use prims::{actions::*, events, internal};
 pub use traits::*;
 pub use types::*;
 
