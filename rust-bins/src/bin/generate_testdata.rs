@@ -57,7 +57,7 @@ fn main() {
     // all known anonymity revokers.
     let ars_infos = {
         if let Ok(ars) = read_anonymity_revokers(args.anonymity_revokers) {
-            ars.ars
+            ars
         } else {
             eprintln!("Cannot read anonymity revokers from the database. Terminating.");
             return;
@@ -116,10 +116,14 @@ fn main() {
         _phantom: Default::default(),
     };
 
-    let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
+    let context = IPContext::new(&ip_info, &ars_infos.anonymity_revokers, &global_ctx);
     // Threshold is all anonymity revokers.
-    let (pio, randomness) = generate_pio(&context, Threshold(ars_infos.len() as u8), &aci)
-        .expect("Generating the pre-identity object should succeed.");
+    let (pio, randomness) = generate_pio(
+        &context,
+        Threshold(ars_infos.anonymity_revokers.len() as u8),
+        &aci,
+    )
+    .expect("Generating the pre-identity object should succeed.");
 
     let sig_ok = verify_credentials(&pio, context, &attributes, &ip_secret_key);
 
@@ -211,9 +215,9 @@ fn main() {
         let ip_info_bytes = to_bytes(&ip_info);
         out.put(&(ip_info_bytes.len() as u32));
         out.write_all(&ip_info_bytes).unwrap();
-        let ars_len = ars_infos.len();
+        let ars_len = ars_infos.anonymity_revokers.len();
         out.put(&(ars_len as u64)); // length of the list, expected big-endian in Haskell.
-        for ar in ars_infos.values() {
+        for ar in ars_infos.anonymity_revokers.values() {
             let ar_bytes = to_bytes(ar);
             out.put(&(ar_bytes.len() as u32));
             out.write_all(&ar_bytes).unwrap();

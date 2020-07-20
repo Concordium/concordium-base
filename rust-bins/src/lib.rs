@@ -32,12 +32,10 @@ pub fn read_identity_providers<P: AsRef<Path> + std::fmt::Debug>(
 ) -> io::Result<IpInfos<Bls12>> {
     let vips: io::Result<Versioned<IpInfos<Bls12>>> = read_json_from_file(filename);
     match vips {
-        Err(_) => {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Could not parse identity providers".to_string(),
-            ))
-        }
+        Err(_) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Could not parse identity providers".to_string(),
+        )),
         Ok(v) => match v.version {
             VERSION_IP_INFOS => Ok(v.value),
             _ => Err(io::Error::new(
@@ -53,12 +51,10 @@ pub fn read_anonymity_revokers<P: AsRef<Path> + std::fmt::Debug>(
 ) -> io::Result<ArInfos<ExampleCurve>> {
     let vars: io::Result<Versioned<ArInfos<ExampleCurve>>> = read_json_from_file(filename);
     match vars {
-        Err(_) => {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Could not parse anonymity revokers".to_string(),
-            ))
-        }
+        Err(_) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Could not parse anonymity revokers".to_string(),
+        )),
         Ok(v) => match v.version {
             VERSION_AR_INFOS => Ok(v.value),
             _ => Err(io::Error::new(

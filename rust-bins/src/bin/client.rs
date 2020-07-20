@@ -762,9 +762,9 @@ fn handle_start_ip(sip: StartIp) {
     };
 
     // now choose an identity provider.
-    let ips: BTreeMap<IpIdentity, IpInfo<Bls12>> = {
+    let ips = {
         if let Ok(ips) = read_identity_providers(sip.identity_providers) {
-            ips.identity_providers
+            ips
         } else {
             eprintln!("Cannot read identity providers from the database. Terminating.");
             return;
@@ -773,8 +773,8 @@ fn handle_start_ip(sip: StartIp) {
 
     // names of identity providers the user can choose from, together with the
     // names of anonymity revokers associated with them
-    let mut ips_names = Vec::with_capacity(ips.len());
-    for (_, v) in ips.iter() {
+    let mut ips_names = Vec::with_capacity(ips.identity_providers.len());
+    for (_, v) in ips.identity_providers.iter() {
         ips_names.push(format!(
             "Identity provider {}, {}",
             &v.ip_identity, v.ip_description.name
@@ -788,7 +788,10 @@ fn handle_start_ip(sip: StartIp) {
             .default(0)
             .interact()
         {
-            ips.get(&IpIdentity(ip_info_idx as u32)).unwrap().clone()
+            ips.identity_providers
+                .get(&IpIdentity(ip_info_idx as u32))
+                .unwrap()
+                .clone()
         } else {
             eprintln!("You have to choose an identity provider. Terminating.");
             return;
@@ -797,7 +800,7 @@ fn handle_start_ip(sip: StartIp) {
 
     let ars = {
         if let Ok(ars) = read_anonymity_revokers(sip.anonymity_revokers) {
-            ars.anonymity_revokers
+            ars
         } else {
             eprintln!("Cannot read anonymity revokers from the database. Terminating.");
             return;
@@ -805,6 +808,7 @@ fn handle_start_ip(sip: StartIp) {
     };
 
     let mrs: Vec<&str> = ars
+        .anonymity_revokers
         .values()
         .map(|x| x.ar_description.name.as_str())
         .collect();
@@ -819,12 +823,13 @@ fn handle_start_ip(sip: StartIp) {
         eprintln!("You need to select an AR.");
         return;
     }
-    let keys = ars.keys().collect::<Vec<_>>();
+    let keys = ars.anonymity_revokers.keys().collect::<Vec<_>>();
     let mut choice_ars = BTreeMap::new();
     for idx in ar_info.into_iter() {
         choice_ars.insert(
             *keys[idx],
-            ars.get(keys[idx])
+            ars.anonymity_revokers
+                .get(keys[idx])
                 .expect("AR should exist by construction.")
                 .clone(),
         );
