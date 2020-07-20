@@ -834,9 +834,10 @@ pub struct IpInfo<P: Pairing> {
 /// Collection of identity providers.
 #[derive(Debug, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "P: Pairing", deserialize = "P: Pairing"))]
+#[serde(transparent)]
 pub struct IpInfos<P: Pairing> {
     #[serde(rename = "idps")]
-    pub idps: BTreeMap<IpIdentity, IpInfo<P>>,
+    pub identity_providers: BTreeMap<IpIdentity, IpInfo<P>>,
 }
 
 /// Public key of an anonymity revoker.
@@ -861,9 +862,10 @@ pub struct ArInfo<C: Curve> {
 /// Collection of anonymity revokers.
 #[derive(Debug, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+#[serde(transparent)]
 pub struct ArInfos<C: Curve> {
     #[serde(rename = "ars")]
-    pub ars: BTreeMap<ArIdentity, ArInfo<C>>,
+    pub anonymity_revokers: BTreeMap<ArIdentity, ArInfo<C>>,
 }
 
 /// A helper trait to access only the public key of the ArInfo structure.
