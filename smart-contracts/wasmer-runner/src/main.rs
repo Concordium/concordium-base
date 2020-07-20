@@ -163,8 +163,10 @@ pub fn main() {
             let init_ctx = InitContext {
                 init_origin: addr[..].try_into().unwrap(),
             };
-            if let Some((logs, state)) =
-                invoke_init(&source, common.amount, init_ctx, &name).expect("Invocation failed.")
+            if let InitResult::Success {
+                logs,
+                state,
+            } = invoke_init(&source, common.amount, init_ctx, &name).expect("Invocation failed.")
             {
                 println!("Init method run. The following logs were produced.");
                 print_result(state, logs)
@@ -196,9 +198,12 @@ pub fn main() {
                 file.read_to_end(&mut init_state).expect("Reading the state file failed.");
                 init_state
             };
-            if let Some((logs, state)) =
-                invoke_receive(&source, common.amount, receive_ctx, &init_state, &name)
-                    .expect("Calling receive failed.")
+            if let ReceiveResult::Success {
+                logs,
+                state,
+                ..
+            } = invoke_receive(&source, common.amount, receive_ctx, &init_state, &name)
+                .expect("Calling receive failed.")
             {
                 println!("Receive method run. The following logs were produced.");
                 print_result(state, logs)
