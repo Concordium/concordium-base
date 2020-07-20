@@ -177,18 +177,36 @@ impl InitContext {
     pub fn sender(&self) -> AccountAddress {
         let mut sender_bytes = [0u8; 32];
         unsafe {
-            sender(sender_bytes.as_mut_ptr());
+            get_sender(sender_bytes.as_mut_ptr());
         }
         AccountAddress(sender_bytes)
     }
+
+    pub fn parameter_bytes(&self) -> Vec<u8> {
+        let len = unsafe { get_parameter_size() };
+        let mut bytes = vec![0u8; len as usize];
+        unsafe { get_parameter(bytes.as_mut_ptr()) };
+        bytes
+    }
+
+    pub fn parameter<S: Serialize>(&self) -> Option<S> { todo!("Implement.") }
 }
 
 impl ReceiveContext {
     pub fn sender(&self) -> AccountAddress {
         let mut sender_bytes = [0u8; 32];
         unsafe {
-            sender(sender_bytes.as_mut_ptr());
+            get_sender(sender_bytes.as_mut_ptr());
         }
         AccountAddress(sender_bytes)
     }
+
+    pub fn parameter_bytes(&self) -> Vec<u8> {
+        let len = unsafe { get_parameter_size() };
+        let mut bytes = vec![0u8; len as usize];
+        unsafe { get_parameter(bytes.as_mut_ptr()) };
+        bytes
+    }
+
+    pub fn parameter<S: Serialize>(&self) -> Option<S> { todo!("Implement.") }
 }
