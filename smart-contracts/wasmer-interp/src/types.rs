@@ -48,13 +48,21 @@ pub enum InitResult {
         state: State,
         logs:  Logs,
     },
-    Reject,
+    Reject {
+        logs: Logs,
+    },
 }
 
 impl InitResult {
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
-            InitResult::Reject => vec![0],
+            InitResult::Reject {
+                logs,
+            } => {
+                let mut out = vec![0];
+                out.extend_from_slice(&logs.to_bytes());
+                out
+            }
             InitResult::Success {
                 state,
                 logs,
@@ -140,7 +148,7 @@ impl ReceiveResult {
             Reject {
                 logs,
             } => {
-                let mut out = vec![1];
+                let mut out = vec![0];
                 out.extend_from_slice(&logs.to_bytes());
                 out
             }
@@ -149,8 +157,10 @@ impl ReceiveResult {
                 logs,
                 actions,
             } => {
-                let mut out = vec![0];
-                out.extend_from_slice(&state.get());
+                let mut out = vec![1];
+                let state = state.get();
+                out.extend_from_slice(&(state.len() as u32).to_be_bytes());
+                out.extend_from_slice(&state);
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&(actions.len() as u32).to_be_bytes());
                 for a in actions.iter() {
