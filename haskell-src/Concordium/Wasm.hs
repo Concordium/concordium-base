@@ -115,6 +115,23 @@ data OutputEvent =
       }
   deriving(Eq, Show)
 
+instance Serialize OutputEvent where
+  put TSimpleTransfer{..} = putWord8 1 <> put erTo <> put erAmount
+  put TSend{..} = putWord8 0 <> put erAddr <> put erName <> put erAmount <> put erParameter
+
+  get = getWord8 >>= \case
+    0 -> do
+      erTo <- get
+      erAmount <- get
+      return TSimpleTransfer{..}
+    1 -> do
+      erAddr <- get
+      erName <- get
+      erAmount <- get
+      erParameter <- get
+      return TSend{..}
+    tag -> fail $ "Unsupported tag: " ++ show tag
+
 data EventsTree a =
   -- |Singleton event.
   Base !a
@@ -125,6 +142,16 @@ data EventsTree a =
   | Or !(EventsTree a) !(EventsTree a)
   deriving(Eq, Show, Functor)
 
+instance Serialize a => Serialize (EventsTree a) where
+  put = error "EventsTree.Serialize.put: Unimplemented."
+  get = error "EventsTree.Serialize.get Unimplemented."
+
+eventsTreeSize :: EventsTree a -> Int
+eventsTreeSize = go
+  where go (Base _) = 1
+        go (And l r) = go l + go r
+        go (Or l r) = go l + go r
+
 -- |Successful result of execution of a single contract invocation.
 -- |TODO: To be extended in the future.
 data ReceiveExecutionResult =
@@ -132,6 +159,15 @@ data ReceiveExecutionResult =
   Accept
   -- |A tree of events.
   | EventsTree (EventsTree OutputEvent)
+
+instance Serialize ReceiveExecutionResult where
+  put Accept = putWord32be 0
+  put (EventsTree evs) =
+    putWord32be (fromIntegral (eventsTreeSize evs)) <> put evs
+
+  get = getWord32be >>= \case
+    0 -> return Accept
+    _ -> EventsTree <$> get
 
 -- |Event as reported by contract execution.
 newtype ContractEvent = ContractEvent BSS.ShortByteString
@@ -145,12 +181,12 @@ instance Serialize ContractEvent where
 data SuccessfulResultData a = SuccessfulResultData {
   messages :: !a,
   newState :: !ContractState,
-  logs :: [ContractEvent]
+  logs :: ![ContractEvent]
   }
 
 -- |Reason for failure of contract execution.
 data ContractExecutionFailure =
-  ContractReject -- ^Contract decided to terminate execution.
+  ContractReject ![ContractEvent]-- ^Contract decided to terminate execution.
   | RuntimeFailure -- ^A trap was triggered.
   deriving(Eq, Show)
 
@@ -251,16 +287,16 @@ instance Serialize ReceiveContext where
 
 instance Serialize a => Serialize (SuccessfulResultData a) where
   put SuccessfulResultData{..} =
-    put messages <>
     put newState <>
     putWord32be (fromIntegral (length logs)) <>
-    mapM_ put logs
+    mapM_ put logs <>
+    put messages
 
   get = do
-    messages <- get
     newState <- get
     len <- fromIntegral <$> getWord32be
     logs <- replicateM len get
+    messages <- get
     return SuccessfulResultData{..}
 
 -- |Get a bytestring with length serialized as big-endian 4 bytes.
