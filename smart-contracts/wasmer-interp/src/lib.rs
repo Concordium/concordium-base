@@ -311,7 +311,9 @@ pub fn invoke_init(
             state,
         })
     } else {
-        Ok(InitResult::Reject)
+        Ok(InitResult::Reject {
+            logs,
+        })
     }
 }
 
