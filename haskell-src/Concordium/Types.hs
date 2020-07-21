@@ -147,15 +147,8 @@ instance Show ModuleRef where
   show (ModuleRef m) = show m
 
 instance S.Serialize ModuleRef where
-  get = getModuleRef
-  put = putModuleRef
-
-getModuleRef :: G.Get ModuleRef
-getModuleRef = ModuleRef <$> S.get
-
-putModuleRef :: P.Putter ModuleRef
-putModuleRef (ModuleRef mref) =
-  S.put mref
+  get = ModuleRef <$> S.get
+  put (ModuleRef mref) = S.put mref
 
 -- |An address is either a contract or account.
 data Address = AddressAccount !AccountAddress

@@ -3,6 +3,7 @@ module Concordium.Wasm where
 
 import GHC.Generics
 import Data.Word
+import Control.Monad
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Short(ShortByteString)
@@ -134,13 +135,17 @@ data ReceiveExecutionResult =
 
 -- |Event as reported by contract execution.
 newtype ContractEvent = ContractEvent BSS.ShortByteString
-    deriving(Eq, Show, Serialize)
+    deriving(Eq, Show)
     deriving(AE.ToJSON, AE.FromJSON) via ByteStringHex
+
+instance Serialize ContractEvent where
+  put (ContractEvent ev) = putShortByteStringWord32 ev
+  get = ContractEvent <$> getShortByteStringWord32
 
 data SuccessfulResultData a = SuccessfulResultData {
   messages :: !a,
-  logs :: [ContractEvent],
-  newState :: !ContractState
+  newState :: !ContractState,
+  logs :: [ContractEvent]
   }
 
 -- |Reason for failure of contract execution.
@@ -149,45 +154,15 @@ data ContractExecutionFailure =
   | RuntimeFailure -- ^A trap was triggered.
   deriving(Eq, Show)
 
--- |Apply an init function which is assumed to be part of the given module.
-applyInitFun
-    :: ModuleInterface
-    -> ChainMetadata -- ^Metadata available to the contract.
-    -> InitContext
-    -> InitName  -- ^Which method to invoke.
-    -> Parameter -- ^Parameters available to the method.
-    -> Amount  -- ^Amount the contract is initialized with.
-    -> InterpreterEnergy  -- ^Amount of energy available for execution.
-    -> Maybe (Either ContractExecutionFailure (SuccessfulResultData ()), InterpreterEnergy)
-    -- ^Nothing if execution used up all the energy,
-    -- and otherwise the result of execution with remaining interpreter energy.
-applyInitFun = error "Unimplemented."
-
--- |Apply a receive function which is assumed to be part of the given module.
-applyReceiveFun
-    :: ModuleInterface
-    -> ChainMetadata -- ^Metadata available to the contract.
-    -> ReceiveContext
-    -> ReceiveName  -- ^Which method to invoke.
-    -> Parameter -- ^Parameters available to the method.
-    -> Amount  -- ^Amount the contract is initialized with.
-    -> ContractState -- ^State of the contract to start in.
-    -> InterpreterEnergy  -- ^Amount of energy available for execution.
-    -> Maybe (Either ContractExecutionFailure (SuccessfulResultData ReceiveExecutionResult), InterpreterEnergy)
-    -- ^Nothing if execution used up all the energy,
-    -- and otherwise the result of execution with remaining interpreter energy.
-applyReceiveFun = error "Unimplemented."
-
--- |Process a module as received and make a module interface.
--- This should check the module is well-formed, and has the right imports and exports.
-processModule :: WasmModule -> Maybe ModuleInterface
-processModule = error "Unimplemented."
-
 -- |State of a smart contract. In general we don't know anything other than
 -- it is a sequence of bytes.
 -- FIXME: In the future this should be more structured allowing for more sharing.
 newtype ContractState = ContractState {contractState :: BS.ByteString }
-    deriving(Eq, Show)
+    deriving(Eq)
+
+-- The show instance just displays the bytes directly.
+instance Show ContractState where
+  show ContractState{..} = show (BS.unpack contractState)
 
 
 -- |Type used to measure contract storage costs.
@@ -257,6 +232,37 @@ instance Serialize Parameter where
   put = putShortByteStringWord32 . parameter
   get = Parameter <$> getShortByteStringWord32
 
+instance Serialize InitContext where
+  put (InitContext origin) = put origin
+  get = InitContext <$> get
+
+instance Serialize ReceiveContext where
+  put ReceiveContext{..} =
+      put invoker <>
+      put selfAddress <>
+      put selfBalance <>
+      put sender
+  get = do
+    invoker <- get
+    selfAddress <- get
+    selfBalance <- get
+    sender <- get
+    return ReceiveContext{..}
+
+instance Serialize a => Serialize (SuccessfulResultData a) where
+  put SuccessfulResultData{..} =
+    put messages <>
+    put newState <>
+    putWord32be (fromIntegral (length logs)) <>
+    mapM_ put logs
+
+  get = do
+    messages <- get
+    newState <- get
+    len <- fromIntegral <$> getWord32be
+    logs <- replicateM len get
+    return SuccessfulResultData{..}
+
 -- |Get a bytestring with length serialized as big-endian 4 bytes.
 getByteStringWord32 :: Get ByteString
 getByteStringWord32 = do
@@ -283,3 +289,4 @@ putShortByteStringWord32 :: Putter ShortByteString
 putShortByteStringWord32 bs =
   let len = fromIntegral (BSS.length bs)
   in putWord32be len <> putShortByteString bs
+
