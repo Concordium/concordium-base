@@ -45,7 +45,7 @@ impl Logs {
         if let Ok(guard) = self.logs.lock() {
             let len = guard.len();
             let mut out = Vec::with_capacity(4 * len + 4);
-            out[0..4].copy_from_slice(&(len as u32).to_be_bytes());
+            out.extend_from_slice(&(len as u32).to_be_bytes());
             for v in guard.iter() {
                 out.extend_from_slice(&(v.len() as u32).to_be_bytes());
                 out.extend_from_slice(v);
