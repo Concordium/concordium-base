@@ -38,6 +38,8 @@ pub use core::result::*;
 #[cfg(not(feature = "std"))]
 pub use alloc::{vec, vec::Vec};
 
+pub use concordium_sc_derive::{init, receive};
+
 mod impls;
 mod prims;
 mod traits;
