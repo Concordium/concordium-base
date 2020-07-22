@@ -67,6 +67,7 @@ impl Serialize for State {
 }
 
 #[init(name = "init")]
+#[inline(always)]
 fn contract_init(ctx: InitContext, amount: Amount) -> InitResult<State> {
     let initializer = ctx.sender();
     let step: u8 = (amount % 256) as u8;
@@ -80,16 +81,11 @@ fn contract_init(ctx: InitContext, amount: Amount) -> InitResult<State> {
 }
 
 #[receive(name = "receive")]
+#[inline(always)]
 fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> ReceiveResult {
-    if amount <= 10 {
-        bail!("Amount too small, not increasing.");
-    }
-    if ctx.sender() != state.initializer {
-        bail!("Only the initializer can increment.");
-    } else {
-        let current_count = state.current_count + u32::from(state.step);
-        events::log(&(1u8, state.step));
-        state.current_count = current_count;
-        Ok(ReceiveActions::Accept)
-    }
+    ensure!(amount > 10, "Amount too small, not increasing.");
+    ensure!(ctx.sender() == state.initializer, "Only the initializer can increment.");
+    events::log(&(1u8, state.step));
+    state.current_count += u32::from(state.step);
+    Ok(ReceiveActions::Accept)
 }
