@@ -28,7 +28,12 @@ Currently it consists of the following parts
 
 ## Rust-contracts
 
-The [rust-contracts](./rust-contracts) aims to be organized into two parts. The first [concordium-sc-base](./rust-contracts/concordium-sc-base) contains a Rust package that is meant to be developed into the core API all Rust smart contracts use. It wraps the primitives that are allowed to be used on the chain in safer wrappers. The goal is to provide an API that spans from low-level, requiring the user to be very careful, but allowing precise control over resources, to a high-level one with more safety, but less efficiency for more advanced uses.
+The [rust-contracts](./rust-contracts) aims to be organized into two (conceptually, technically three) parts.
+
+The first consisting of crates [concordium-sc-base](./rust-contracts/concordium-sc-base) and [concordium-sc-derive](./rust-contracts/concordium-sc-derive) contains Rust packages that are meant to be developed into the core API all Rust smart contracts use. It wraps the primitives that are allowed to be used on the chain in safer wrappers. The goal is to provide an API that spans from low-level, requiring the user to be very careful, but allowing precise control over resources, to a high-level one with more safety, but less efficiency for more advanced uses.
+The `concordium-sc-base` library is what is intended to be used directly, and the `concordium-sc-derive` provides some procedural macros that are re-exported by `concordium-sc-base`. These are used to remove the boilerplate FFI wrappers that are needed for each smart contract. 
+Currently there are two macros `init` and `receive` that can be used to generate low-level init and receive functions.
+The reason these macros are in a separate crate is because such macros must be in a special crate type `proc-macro`, which cannot have other exports than said macros.
 
 The second, [example-contracts](./rust-contracts/example-contracts) is meant for, well, example contracts using the aforementioned API.
 The list of currently implemented contracts is as follows:

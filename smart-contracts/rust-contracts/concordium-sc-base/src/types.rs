@@ -64,6 +64,23 @@ macro_rules! bail {
     }};
 }
 
+#[macro_export]
+/// The `ensure` macro can be used for cleaner error handling. It is analogous
+/// to `assert`, but instead of panicking it uses `bail` to terminate execution
+/// of the function early.
+macro_rules! ensure {
+    ($p:expr) => {
+        if !$p {
+            return Err(Reject {});
+        }
+    };
+    ($p:expr, $e:expr) => {{
+        if !$p {
+            $crate::bail!($e)
+        }
+    }};
+}
+
 /// The expected return type of the receive method of a smart contract.
 pub type ReceiveResult = Result<ReceiveActions, Reject>;
 

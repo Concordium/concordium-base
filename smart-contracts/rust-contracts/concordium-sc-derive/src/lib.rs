@@ -38,6 +38,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let ast: syn::ItemFn = syn::parse(item).expect("Init can only be applied to functions.");
+
     let fn_name = &ast.sig.ident;
     let mut out = quote! {
         #[no_mangle]
