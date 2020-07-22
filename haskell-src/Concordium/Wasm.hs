@@ -142,10 +142,6 @@ data EventsTree a =
   | Or !(EventsTree a) !(EventsTree a)
   deriving(Eq, Show, Functor)
 
-instance Serialize a => Serialize (EventsTree a) where
-  put = error "EventsTree.Serialize.put: Unimplemented."
-  get = error "EventsTree.Serialize.get Unimplemented."
-
 eventsTreeSize :: EventsTree a -> Int
 eventsTreeSize = go
   where go (Base _) = 1
@@ -160,14 +156,29 @@ data ReceiveExecutionResult =
   -- |A tree of events.
   | EventsTree (EventsTree OutputEvent)
 
+getEventsTree :: Word32 -> Get (EventsTree OutputEvent)
+getEventsTree = go []
+    where go acc n | n == 0 = if null acc then fail "Empty list of events." else return (foldr1 And acc)
+                   | otherwise = do
+                       lookAhead getWord8 >>= \case
+                         2 -> case acc of
+                           r:l:rest -> getWord8 >> go (And l r : rest) (n-1)
+                           _ -> fail "Malformed and stack."
+                         3 -> case acc of
+                           r:l:rest -> getWord8 >> go (Or l r : rest) (n-1)
+                           _ -> fail "Malformed or stack."
+                         _ -> do
+                           b <- get
+                           go (Base b : acc) (n-1)
+
 instance Serialize ReceiveExecutionResult where
   put Accept = putWord32be 0
   put (EventsTree evs) =
-    putWord32be (fromIntegral (eventsTreeSize evs)) <> put evs
+    putWord32be (fromIntegral (eventsTreeSize evs)) <> error "EventsTree.Serialize: Unimplemented."
 
   get = getWord32be >>= \case
     0 -> return Accept
-    _ -> EventsTree <$> get
+    n -> EventsTree <$> getEventsTree n
 
 -- |Event as reported by contract execution.
 newtype ContractEvent = ContractEvent BSS.ShortByteString
