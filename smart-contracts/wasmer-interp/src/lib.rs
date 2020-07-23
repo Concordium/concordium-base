@@ -1,17 +1,17 @@
 mod ffi;
 mod types;
 
+use contracts_common::*;
 use std::{
     cell::Cell,
     collections::LinkedList,
     sync::{Arc, Mutex},
 };
+pub use types::*;
 use wasmer_runtime::{
     error, func, imports, instantiate, types as wasmer_types, Array, Ctx, ImportObject, Module,
     Value, WasmPtr,
 };
-
-pub use types::*;
 
 #[derive(Clone, Default)]
 /// Structure to support logging of events from smart contracts.
@@ -201,7 +201,7 @@ impl State {
     }
 }
 
-pub fn make_imports(which: Which) -> (ImportObject, Logs, State, Outcome) {
+pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, State, Outcome) {
     let logs = Logs::new();
     let state = match which {
         Which::Init {
@@ -245,22 +245,19 @@ pub fn make_imports(which: Which) -> (ImportObject, Logs, State, Outcome) {
     let resize_state = move |new_size: u32| g_state.resize_state(new_size);
     let state_size = move || s_state.len();
 
-    let sender_bytes = match which {
-        Which::Init {
-            init_ctx,
-        } => init_ctx.init_origin,
-        Which::Receive {
-            receive_ctx,
-            ..
-        } => receive_ctx.invoker,
-    };
+    let outcome = Outcome::init();
+    let a_outcome = outcome.clone();
+    let f_outcome = a_outcome.clone();
+    let accept = move || a_outcome.accept();
+    let fail = move || f_outcome.fail();
 
-    // Get the sender of the transaction.
-    let sender = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
+    let parameter_size = parameter.len() as u32;
+    let get_parameter_size = move |_ctx: &mut Ctx| parameter_size;
+    let get_parameter = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
         let memory = ctx.memory(0);
-        match unsafe { ptr.deref_mut(memory, 0, 32) } {
+        match unsafe { ptr.deref_mut(memory, 0, parameter_size) } {
             Some(cells) => {
-                for (place, byte) in cells.iter_mut().zip(sender_bytes.as_ref()) {
+                for (place, byte) in cells.iter_mut().zip(&parameter) {
                     place.set(*byte);
                 }
                 Ok(())
@@ -269,36 +266,104 @@ pub fn make_imports(which: Which) -> (ImportObject, Logs, State, Outcome) {
         }
     };
 
-    let outcome = Outcome::init();
-    let a_outcome = outcome.clone();
-    let f_outcome = a_outcome.clone();
-    let accept = move || a_outcome.accept();
-    let fail = move || f_outcome.fail();
+    match which {
+        Which::Init {
+            ref init_ctx,
+        } => {
+            // Get the init context.
+            let init_bytes = to_bytes(init_ctx);
+            let get_init_ctx = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
+                let memory = ctx.memory(0);
+                match unsafe { ptr.deref_mut(memory, 0, 32) } {
+                    Some(cells) => {
+                        for (place, byte) in cells.iter_mut().zip(&init_bytes) {
+                            place.set(*byte);
+                        }
+                        Ok(())
+                    }
+                    None => Err(()),
+                }
+            };
+            let get_receive_ctx =
+                |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<u32, ()> { Err(()) };
+            let get_receive_ctx_size = |_ctx: &mut Ctx| -> Result<u32, ()> { Err(()) };
 
-    let imps = imports! {
-        "concordium" => {
-            "get_sender" => func!(sender),
-            "accept" => func!(accept),
-            "fail" => func!(fail),
-            "log_event" => func!(log_event),
-            "write_state" => func!(write_state),
-            "load_state" => func!(load_state),
-            "resize_state" => func!(resize_state),
-            "state_size" => func!(state_size),
-        },
-    };
-    (imps, logs, state, outcome)
+            let imps = imports! {
+                "concordium" => {
+                    "get_init_ctx" => func!(get_init_ctx),
+                    "get_receive_ctx" => func!(get_receive_ctx),
+                    "get_receive_ctx_size" => func!(get_receive_ctx_size),
+                    "get_parameter" => func!(get_parameter),
+                    "get_parameter_size" => func!(get_parameter_size),
+                    "accept" => func!(accept),
+                    "fail" => func!(fail),
+                    "log_event" => func!(log_event),
+                    "write_state" => func!(write_state),
+                    "load_state" => func!(load_state),
+                    "resize_state" => func!(resize_state),
+                    "state_size" => func!(state_size),
+                },
+            };
+            (imps, logs, state, outcome)
+        }
+        Which::Receive {
+            ref receive_ctx,
+            ..
+        } => {
+            let receive_bytes = to_bytes(receive_ctx);
+            let receive_bytes_len = receive_bytes.len() as u32;
+            let get_receive_ctx = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
+                let memory = ctx.memory(0);
+                match unsafe { ptr.deref_mut(memory, 0, receive_bytes_len) } {
+                    Some(cells) => {
+                        for (place, byte) in cells.iter_mut().zip(&receive_bytes) {
+                            place.set(*byte);
+                        }
+                        Ok(())
+                    }
+                    None => Err(()),
+                }
+            };
+            let get_receive_ctx_size = move |_ctx: &mut Ctx| -> u32 { receive_bytes_len };
+            let get_init_ctx =
+                |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<u32, ()> { Err(()) };
+
+            let imps = imports! {
+                "concordium" => {
+                    "get_init_ctx" => func!(get_init_ctx),
+                    "get_receive_ctx" => func!(get_receive_ctx),
+                    "get_receive_ctx_size" => func!(get_receive_ctx_size),
+                    "get_parameter" => func!(get_parameter),
+                    "get_parameter_size" => func!(get_parameter_size),
+                    "accept" => func!(accept),
+                    "fail" => func!(fail),
+                    "log_event" => func!(log_event),
+                    "write_state" => func!(write_state),
+                    "load_state" => func!(load_state),
+                    "resize_state" => func!(resize_state),
+                    "state_size" => func!(state_size),
+                },
+            };
+            (imps, logs, state, outcome)
+        }
+    }
 }
+
+type Parameter = Vec<u8>;
 
 pub fn invoke_init(
     wasm: &[u8],
     amount: Amount,
     init_ctx: InitContext,
     init_name: &str,
+    parameter: Parameter,
 ) -> Result<InitResult, error::CallError> {
-    let (import_obj, logs, state, outcome) = make_imports(Which::Init {
-        init_ctx,
-    });
+    let (import_obj, logs, state, outcome) = make_imports(
+        Which::Init {
+            init_ctx,
+        },
+        parameter,
+    );
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
     // Wasmer supports cacheing of modules into Artifacts.
@@ -323,11 +388,15 @@ pub fn invoke_receive(
     receive_ctx: ReceiveContext,
     current_state: &[u8],
     receive_name: &str,
+    parameter: Parameter,
 ) -> Result<ReceiveResult, error::CallError> {
-    let (import_obj, logs, state, outcome) = make_imports(Which::Receive {
-        receive_ctx,
-        current_state,
-    });
+    let (import_obj, logs, state, outcome) = make_imports(
+        Which::Receive {
+            receive_ctx,
+            current_state,
+        },
+        parameter,
+    );
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
     // Wasmer supports cacheing of modules into Artifacts.

@@ -46,14 +46,14 @@ pub use std::collections;
 #[cfg(feature = "std")]
 pub use std::convert;
 
-pub use concordium_sc_derive::{init, receive};
-
 mod impls;
 mod prims;
-mod traits;
 mod types;
+/// Re-export for ease of use.
+pub use concordium_sc_derive::{init, receive};
+pub use contracts_common::*;
+pub use impls::{Create, HasParameter};
 pub use prims::{actions::*, events, internal};
-pub use traits::*;
 pub use types::*;
 
 extern crate wee_alloc;

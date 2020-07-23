@@ -29,7 +29,7 @@ impl Serialize for State {
 #[init(name = "init")]
 #[inline(always)]
 fn contract_init(ctx: InitContext, amount: Amount) -> InitResult<State> {
-    let initializer = *ctx.sender();
+    let initializer = *ctx.init_origin();
     let step: u8 = (amount % 256) as u8;
     events::log(&(0u8, step));
     let state = State {

@@ -1,48 +1,5 @@
 use crate::*;
 
-pub type Amount = u64;
-
-pub type AccountAddress = [u8; 32];
-
-pub struct InitContext {
-    pub init_origin: AccountAddress,
-}
-
-pub struct ContractAddress {
-    pub index:    u64,
-    pub subindex: u64,
-}
-
-pub struct ReceiveContext {
-    pub invoker:      AccountAddress,
-    pub self_address: ContractAddress,
-    pub self_balance: Amount,
-}
-
-impl ReceiveContext {
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        use std::io::{Cursor, Read};
-        let mut cur = Cursor::new(bytes);
-        let mut invoker = [0u8; 32];
-        cur.read_exact(&mut invoker).ok()?;
-        let mut buf = [0u8; 8];
-        cur.read_exact(&mut buf).ok()?;
-        let index = u64::from_be_bytes(buf);
-        cur.read_exact(&mut buf).ok()?;
-        let subindex = u64::from_be_bytes(buf);
-        cur.read_exact(&mut buf).ok()?;
-        let self_balance = u64::from_be_bytes(buf);
-        Some(ReceiveContext {
-            self_balance,
-            invoker,
-            self_address: ContractAddress {
-                index,
-                subindex,
-            },
-        })
-    }
-}
-
 pub enum InitResult {
     Success {
         state: State,
@@ -93,6 +50,9 @@ pub enum Action {
     Or,
 }
 
+// This is not implementing serialize because that is currently set-up for
+// little-endian only, and we need big-endian for interoperability with the rest
+// of the system at the moment.
 impl Action {
     pub fn to_bytes(&self) -> Vec<u8> {
         use Action::*;
@@ -122,7 +82,7 @@ impl Action {
             } => {
                 let mut out = Vec::with_capacity(1 + 32 + 8);
                 out.push(1);
-                out.extend_from_slice(to_addr);
+                out.extend_from_slice(&to_addr.0);
                 out.extend_from_slice(&amount.to_be_bytes());
                 out
             }

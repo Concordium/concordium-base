@@ -15,6 +15,10 @@ singlepass = ["wasmer-runtime/default-backend-singlepass"]
 [dependencies]
 libc = "0.2"
 
+[dependencies.contracts-common]
+version = "0.1"
+path = "../contracts-common"
+
 [dependencies.wasmer-runtime]
 version="0.17.1"
 default-features = false

@@ -3,8 +3,7 @@
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
-
-use crate::traits::Serialize;
+use contracts_common::*;
 
 /// Interface to the chain. These functions are assumed to be instantiated by
 /// the scheduler with relevant primitives.
@@ -76,7 +75,8 @@ pub mod actions {
     //! The actions that a smart contract can produce as a
     //! result of its execution. These actions form a tree and are executed by
     //! the scheduler in the predefined order.
-    use crate::types::{AccountAddress, Action, Amount, ContractAddress};
+    use crate::types::Action;
+    use contracts_common::{AccountAddress, Amount, ContractAddress};
 
     impl Action {
         /// Send a given amount to an account.

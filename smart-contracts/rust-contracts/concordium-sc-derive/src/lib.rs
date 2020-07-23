@@ -53,6 +53,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut out = quote! {
         #[no_mangle]
         pub extern "C" fn #name(amount: Amount) {
+            use concordium_sc_base::Create;
             let ctx = InitContext::new();
             let mut state_bytes = ContractState::new();
             match #fn_name(ctx, amount) {
@@ -94,7 +95,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut out = quote! {
         #[no_mangle]
         pub extern "C" fn #name(amount: Amount) {
-            use concordium_sc_base::{internal, SeekFrom, ContractState};
+            use concordium_sc_base::{internal, SeekFrom, ContractState, Create};
             let ctx = ReceiveContext::new();
             let mut state_bytes = ContractState::new();
             if let Some(mut state) = State::deserial(&mut state_bytes) {

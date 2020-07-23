@@ -1,6 +1,5 @@
 use clap::AppSettings;
 use std::{
-    convert::TryInto,
     fs::File,
     io::{Read, Write},
     path::PathBuf,
@@ -32,13 +31,18 @@ struct CommonOptions {
     )]
     amount: u64,
     #[structopt(
-        name = "sender",
-        long = "sender",
-        about = "Who is sending this transaction, an account address."
+        name = "parameter",
+        long = "parameter",
+        about = "Path to a file with a parameter to invoke the method with. Parameter defaults to \
+                 an empty array if this is not given."
     )]
-    // FIXME: We use base16 encoding for testing for now.
-    sender: String,
-    // TODO: Parameter
+    parameter: Option<PathBuf>,
+    #[structopt(
+        name = "context",
+        long = "context",
+        about = "Path to the context file. Either init or receive, depending on the command."
+    )]
+    context: PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -74,26 +78,12 @@ enum WasmerRunner {
         )]
         state: PathBuf,
         #[structopt(
-            name = "contract-address",
-            long = "contract-address",
-            about = "Index of the contract address.",
-            default_value = "0"
-        )]
-        index: u64,
-        #[structopt(
-            name = "contract-subindex",
-            long = "contract-subindex",
-            about = "Subindex of the contract address.",
-            default_value = "0"
-        )]
-        subindex: u64,
-        #[structopt(
             name = "balance",
             long = "balance",
-            about = "Balance on the contract at the time it is invoked.",
-            default_value = "0"
+            about = "Balance on the contract at the time it is invoked. Overrides the balance in \
+                     the receive context."
         )]
-        balance: u64,
+        balance: Option<u64>,
     },
 }
 
@@ -115,13 +105,6 @@ pub fn main() {
             ref common,
             ..
         } => common,
-    };
-    let addr = match hex::decode(&common.sender) {
-        Ok(addr) if addr.len() == 32 => addr,
-        _ => {
-            eprintln!("Address decoding failed.");
-            return;
-        }
     };
     let source = {
         let mut source = Vec::new();
@@ -155,18 +138,34 @@ pub fn main() {
         }
     };
 
+    let parameter = {
+        match &common.parameter {
+            None => Vec::new(),
+            Some(param_file) => {
+                let mut param_file =
+                    File::open(&param_file).expect("Could not open parameter file.");
+                let mut input = Vec::new();
+                param_file.read_to_end(&mut input).expect("Could not read from parameter file.");
+                input
+            }
+        }
+    };
+
     match runner {
         WasmerRunner::Init {
             name,
             ..
         } => {
-            let init_ctx = InitContext {
-                init_origin: addr[..].try_into().unwrap(),
+            let init_ctx = {
+                let ctx_file = File::open(&common.context).expect("Could not open context file.");
+                serde_json::from_reader(std::io::BufReader::new(ctx_file))
+                    .expect("Could not parse init context")
             };
             if let InitResult::Success {
                 logs,
                 state,
-            } = invoke_init(&source, common.amount, init_ctx, &name).expect("Invocation failed.")
+            } = invoke_init(&source, common.amount, init_ctx, &name, parameter)
+                .expect("Invocation failed.")
             {
                 println!("Init method run. The following logs were produced.");
                 print_result(state, logs)
@@ -177,19 +176,18 @@ pub fn main() {
         WasmerRunner::Receive {
             name,
             state,
-            index,
-            subindex,
             balance,
             ..
         } => {
-            let receive_ctx = ReceiveContext {
-                invoker:      addr[..].try_into().unwrap(),
-                self_address: ContractAddress {
-                    index,
-                    subindex,
-                },
-                self_balance: balance,
+            let mut receive_ctx: contracts_common::ReceiveContext = {
+                let ctx_file = File::open(&common.context).expect("Could not open context file.");
+                serde_json::from_reader(std::io::BufReader::new(ctx_file))
+                    .expect("Could not parse init context")
             };
+            if let Some(balance) = balance {
+                receive_ctx.self_balance = balance;
+            }
+
             // initial state of the smart contract, read from a file.
             let init_state = {
                 let mut file = File::open(&state).expect("Could not read state file.");
@@ -202,8 +200,9 @@ pub fn main() {
                 logs,
                 state,
                 ..
-            } = invoke_receive(&source, common.amount, receive_ctx, &init_state, &name)
-                .expect("Calling receive failed.")
+            } =
+                invoke_receive(&source, common.amount, receive_ctx, &init_state, &name, parameter)
+                    .expect("Calling receive failed.")
             {
                 println!("Receive method run. The following logs were produced.");
                 print_result(state, logs)

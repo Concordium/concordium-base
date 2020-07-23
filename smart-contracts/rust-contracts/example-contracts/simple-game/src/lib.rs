@@ -3,25 +3,10 @@ use concordium_sc_base::*;
 
 use sha2::Digest;
 
-#[derive(Ord, PartialOrd, PartialEq, Eq)]
-struct Hash([u8; 32]);
-
 impl Serialize for Hash {
     fn serial<W: Write>(&self, out: &mut W) -> Option<()> { self.0.serial(out) }
 
     fn deserial<R: Read>(source: &mut R) -> Option<Self> { Some(Hash(source.get()?)) }
-}
-
-type Contribution = [u8; 32];
-
-pub struct State {
-    /// Number of contributions. Could be different from the size of the map if
-    /// the same person contributes multiple times.
-    num_contributions: u32,
-    /// Stored contributions. The Hash is the lowest per account.
-    contributions: collections::BTreeMap<AccountAddress, (Amount, Hash)>,
-    expiry: u64,
-    prefix: [u8; 32],
 }
 
 impl Serialize for State {
@@ -44,11 +29,6 @@ impl Serialize for State {
             prefix,
         })
     }
-}
-
-pub enum Message {
-    Contribute(Contribution),
-    Finalize,
 }
 
 impl Serialize for Message {
@@ -78,22 +58,40 @@ impl Serialize for Message {
     }
 }
 
+#[derive(Ord, PartialOrd, PartialEq, Eq)]
+struct Hash([u8; 32]);
+
+type Contribution = [u8; 32];
+
+pub struct State {
+    /// Number of contributions. Could be different from the size of the map if
+    /// the same person contributes multiple times.
+    num_contributions: u32,
+    /// Stored contributions. The Hash is the lowest per account.
+    contributions: collections::BTreeMap<AccountAddress, (Amount, Hash)>,
+    expiry: u64,
+    prefix: [u8; 32],
+}
+
+pub enum Message {
+    Contribute(Contribution),
+    Finalize,
+}
+
 #[init(name = "init")]
 #[inline(always)]
 fn contract_init(ctx: InitContext, amount: Amount) -> InitResult<State> {
-    let initializer = ctx.sender();
+    let initializer = ctx.init_origin();
     let mut contributions = collections::BTreeMap::new();
     let (expiry, init): (_, Contribution) = ctx.parameter().ok_or_else(Reject::default)?;
-    let addr = ctx.sender();
     let hash = {
         let mut hasher: sha2::Sha256 = Digest::new();
         hasher.update(&init);
-        hasher.update(addr);
         hasher.update(&initializer);
         Hash(hasher.finalize().into())
     };
     events::log_str(&hex::encode(&hash.0));
-    contributions.insert(*addr, (amount, hash));
+    contributions.insert(*initializer, (amount, hash));
     let state = State {
         num_contributions: 1,
         contributions,
@@ -135,8 +133,8 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
                         }
                     }
                     Ok(ReceiveActions::Accept)
-                },
-                _ => bail!("Only accounts can contribute.")
+                }
+                _ => bail!("Only accounts can contribute."),
             }
         }
         Message::Finalize => {

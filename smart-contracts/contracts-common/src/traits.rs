@@ -1,5 +1,4 @@
-extern crate alloc;
-
+#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use core::default::Default;
 
@@ -128,6 +127,17 @@ pub trait Serialize: Sized {
     fn deserial<R: Read>(_source: &mut R) -> Option<Self>;
 }
 
+/// A more convenient wrapper around `Serialize` that makes it easier to write
+/// deserialization code. It has a blanked implementation for any read and
+/// serialize pair. The key idea is that the type to deserialize is inferred
+/// from the context, enabling one to write, for example,
+///
+/// ```rust
+///   let x = source.get()?;
+///   let y = source.get()?;
+///   ...
+/// ```
+/// where `source` is any type that implements `Read`.
 pub trait Get<T> {
     fn get(&mut self) -> Option<T>;
 }

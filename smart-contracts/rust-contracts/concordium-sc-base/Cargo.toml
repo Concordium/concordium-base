@@ -13,10 +13,15 @@ wee_alloc="0.4.5"
 path = "../concordium-sc-derive"
 version = "0.1"
 
+[dependencies.contracts-common]
+path = "../../contracts-common"
+version = "0.1"
+default-features = false
+
 [features]
 default = ["std"]
 
-std = []
+std = ["contracts-common/std"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]

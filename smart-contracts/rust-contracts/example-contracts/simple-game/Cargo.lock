@@ -26,6 +26,7 @@ name = "concordium-sc-base"
 version = "0.1.0"
 dependencies = [
  "concordium-sc-derive",
+ "contracts-common",
  "wee_alloc",
 ]
 
@@ -37,6 +38,10 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "contracts-common"
+version = "0.1.0"
 
 [[package]]
 name = "cpuid-bool"
