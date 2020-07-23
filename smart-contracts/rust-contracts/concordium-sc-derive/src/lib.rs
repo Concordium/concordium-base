@@ -27,6 +27,16 @@ fn get_name<'a, I: IntoIterator<Item = &'a Meta>>(iter: I) -> Option<Ident> {
     })
 }
 
+/// Derive the appropriate export for an annotated init function.
+///
+/// This macro requires the following items to be present
+/// - name="init_name" where "init_name" will be the name of the generated
+///   function. It should be unique in the module.
+///
+/// The annotated function must be of a specific type.
+///
+/// TODO:
+/// - Document the expected type.
 #[proc_macro_attribute]
 pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
@@ -43,7 +53,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut out = quote! {
         #[no_mangle]
         pub extern "C" fn #name(amount: Amount) {
-            let ctx = InitContext {};
+            let ctx = InitContext::new();
             let mut state_bytes = ContractState::new();
             match #fn_name(ctx, amount) {
                 Ok(state) => {
@@ -59,6 +69,16 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     out.into()
 }
 
+/// Derive the appropriate export for an annotated receive function.
+///
+/// This macro requires the following items to be present
+/// - name="receive_name" where "receive_name" will be the name of the generated
+///   function. It should be unique in the module.
+///
+/// The annotated function must be of a specific type.
+///
+/// TODO:
+/// - Document the expected type.
 #[proc_macro_attribute]
 pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
@@ -75,7 +95,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[no_mangle]
         pub extern "C" fn #name(amount: Amount) {
             use concordium_sc_base::{internal, SeekFrom, ContractState};
-            let ctx = ReceiveContext {};
+            let ctx = ReceiveContext::new();
             let mut state_bytes = ContractState::new();
             if let Some(mut state) = State::deserial(&mut state_bytes) {
                 match #fn_name(ctx, amount, &mut state) {

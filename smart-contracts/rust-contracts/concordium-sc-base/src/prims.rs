@@ -37,15 +37,39 @@ extern "C" {
     // enough memory to write the parameter into (as returned by the previous
     // method).
     pub(crate) fn get_parameter(param_bytes: *mut u8) -> u32;
-    // write the sender (32 bytes) to the given location
-    pub(crate) fn get_sender(addr_bytes: *mut u8);
+    // Add a log item.
     fn log_event(start: *const u8, length: u32);
     // returns how many bytes were read.
     pub(crate) fn load_state(start: *mut u8, length: u32, offset: u32) -> u32;
     // returns how many bytes were written
     pub(crate) fn write_state(start: *const u8, length: u32, offset: u32) -> u32;
+    // Resize state to the new value (truncate if new size is smaller). Return 0 if
+    // this was unsuccesful (new state too big), or 1 if successful.
     pub(crate) fn resize_state(new_size: u32) -> u32; // returns 0 or 1.
-    pub(crate) fn state_size() -> u32; // get current state size in bytes.
+                                                      // get current state size in bytes.
+    pub(crate) fn state_size() -> u32;
+
+    // Write the chain context to the given location. Chain context
+    // is fixed-length consisting of
+    // - slotNumber
+    // - blockHeight
+    // - finalizedHeight
+    // - slotTime (in milliseconds)
+    pub(crate) fn get_chain_context(start: *mut u8);
+    // Get the init context (without the chain context).
+    // This consists of
+    // - address of the sender, 32 bytes
+    pub(crate) fn get_init_ctx(start: *mut u8);
+
+    pub(crate) fn get_receive_ctx_size() -> u32;
+    // Get the receive context (without the chain context).
+    // This consists of
+    // - invoker of the top-level transaction
+    // - address of the contract itself
+    // - self-balance of the contract
+    // - immediate sender of the message (either contract or account)
+    // - owner of the contract.
+    pub(crate) fn get_receive_ctx(start: *mut u8);
 }
 
 pub mod actions {

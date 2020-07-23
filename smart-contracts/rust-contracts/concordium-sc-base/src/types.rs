@@ -1,3 +1,5 @@
+use crate::*;
+
 /// A type representing the constract state bytes.
 #[derive(Default)]
 pub struct ContractState {
@@ -8,8 +10,16 @@ pub struct ContractState {
 pub type Amount = u64;
 
 /// Address of an account, as raw bytes.
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
 pub struct AccountAddress(pub(crate) [u8; 32]);
+
+impl convert::AsRef<[u8; 32]> for AccountAddress {
+    fn as_ref(&self) -> &[u8; 32] { &self.0 }
+}
+
+impl convert::AsRef<[u8]> for AccountAddress {
+    fn as_ref(&self) -> &[u8] { &self.0 }
+}
 
 /// Address of a contract.
 #[derive(Eq, PartialEq, Copy, Clone)]
@@ -19,10 +29,38 @@ pub struct ContractAddress {
 }
 
 /// Chain context accessible to the init methods.
-pub struct InitContext {}
+///
+/// TODO: We could optimize this to be initialized lazily
+pub struct InitContext {
+    pub(crate) metadata:    ChainMetadata,
+    pub(crate) init_origin: AccountAddress,
+}
+
+/// Either an address of an account, or contract.
+pub enum Address {
+    Account(AccountAddress),
+    Contract(ContractAddress),
+}
 
 /// Chain context accessible to the receive methods.
-pub struct ReceiveContext {}
+///
+/// TODO: We could optimize this to be initialized lazily.
+pub struct ReceiveContext {
+    pub(crate) metadata:     ChainMetadata,
+    pub(crate) invoker:      AccountAddress,
+    pub(crate) self_address: ContractAddress,
+    pub(crate) self_balance: Amount,
+    pub(crate) sender:       Address,
+    pub(crate) owner:        AccountAddress,
+}
+
+/// Chain metadata accessible to both receive and init methods.
+pub struct ChainMetadata {
+    pub(crate) slot_number:      u64,
+    pub(crate) block_height:     u64,
+    pub(crate) finalized_height: u64,
+    pub(crate) slot_time:        u64,
+}
 
 /// Actions that can be produced at the end of a contract execution. This
 /// type is deliberately not cloneable so that we can enforce that

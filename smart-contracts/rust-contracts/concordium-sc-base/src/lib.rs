@@ -36,7 +36,15 @@ fn abort_panic(_info: &core::panic::PanicInfo) -> ! { loop {} }
 pub use core::result::*;
 
 #[cfg(not(feature = "std"))]
+pub use alloc::collections;
+#[cfg(not(feature = "std"))]
 pub use alloc::{vec, vec::Vec};
+#[cfg(not(feature = "std"))]
+pub use core::convert;
+#[cfg(feature = "std")]
+pub use std::collections;
+#[cfg(feature = "std")]
+pub use std::convert;
 
 pub use concordium_sc_derive::{init, receive};
 
