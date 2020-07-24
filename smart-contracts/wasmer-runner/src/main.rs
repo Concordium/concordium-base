@@ -1,6 +1,5 @@
 use clap::AppSettings;
 use std::{
-    convert::TryInto,
     fs::File,
     io::{Read, Write},
     path::PathBuf,
@@ -9,91 +8,98 @@ use structopt::StructOpt;
 use wasmer_interp::*;
 
 #[derive(StructOpt)]
-struct CommonOptions {
-    #[structopt(name = "source", long = "source", about = "Binary module source.")]
+#[structopt(about = "Simple smart contract runner.", author = "Concordium", version = "0.12345")]
+struct WasmerRunner {
+    #[structopt(
+        name = "source",
+        long = "source",
+        global = true,
+        default_value = "contract.wasm",
+        help = "Binary module source."
+    )]
     source: PathBuf,
     #[structopt(
         name = "out",
         long = "out",
-        about = "Where to write the new contract state to. Defaults to stdout if not given."
+        global = true,
+        help = "Where to write the new contract state to. Defaults to stdout if not given."
     )]
     out: Option<PathBuf>,
     #[structopt(
         name = "hex",
         long = "hex",
-        about = "Whether to write the state as a hex string or not. Defaults to binary."
+        global = true,
+        help = "Whether to write the state as a hex string or not. Defaults to binary."
     )]
     hex_state: bool,
     #[structopt(
         name = "amount",
         long = "amount",
-        about = "The amount to invoke the method with.",
+        global = true,
+        help = "The amount to invoke the method with.",
         default_value = "0"
     )]
     amount: u64,
     #[structopt(
-        name = "sender",
-        long = "sender",
-        about = "Who is sending this transaction, an account address."
+        name = "parameter",
+        long = "parameter",
+        global = true,
+        help = "Path to a file with a parameter to invoke the method with. Parameter defaults to \
+                an empty array if this is not given."
     )]
-    // FIXME: We use base16 encoding for testing for now.
-    sender: String,
-    // TODO: Parameter
+    parameter: Option<PathBuf>,
+    #[structopt(flatten)]
+    command: Command,
 }
 
 #[derive(StructOpt)]
-#[structopt(about = "Simple smart contract runner.", author = "Concordium", version = "0.12345")]
-enum WasmerRunner {
+enum Command {
     #[structopt(name = "init", about = "Initialize a module.")]
     Init {
-        #[structopt(flatten)]
-        common: CommonOptions,
         #[structopt(
             name = "name",
             long = "name",
-            about = "Name of the method to invoke.",
+            help = "Name of the method to invoke.",
             default_value = "init"
         )]
         name: String,
+        #[structopt(
+            name = "context",
+            long = "context",
+            default_value = "./init-context.json",
+            help = "Path to the init context file."
+        )]
+        context: PathBuf,
     },
     #[structopt(name = "update", about = "Invoke a receive method of a module.")]
     Receive {
-        #[structopt(flatten)]
-        common: CommonOptions,
         #[structopt(
             name = "name",
             long = "name",
-            about = "Name of the method to invoke.",
+            help = "Name of the method to invoke.",
             default_value = "receive"
         )]
         name: String,
         #[structopt(
             name = "state",
             long = "state",
-            about = "File with existing state of the contract."
+            help = "File with existing state of the contract."
         )]
         state: PathBuf,
         #[structopt(
-            name = "contract-address",
-            long = "contract-address",
-            about = "Index of the contract address.",
-            default_value = "0"
-        )]
-        index: u64,
-        #[structopt(
-            name = "contract-subindex",
-            long = "contract-subindex",
-            about = "Subindex of the contract address.",
-            default_value = "0"
-        )]
-        subindex: u64,
-        #[structopt(
             name = "balance",
             long = "balance",
-            about = "Balance on the contract at the time it is invoked.",
-            default_value = "0"
+            help = "Balance on the contract at the time it is invoked. Overrides the balance in \
+                    the receive context."
         )]
-        balance: u64,
+        balance: Option<u64>,
+        #[structopt(
+            name = "context",
+            long = "context",
+            default_value = "./receive-context.json",
+            help = "Path to the receive context file."
+        )]
+        context: PathBuf,
     },
 }
 
@@ -106,38 +112,25 @@ pub fn main() {
         WasmerRunner::from_clap(&matches)
     };
 
-    let common = match runner {
-        WasmerRunner::Init {
-            ref common,
-            ..
-        } => common,
-        WasmerRunner::Receive {
-            ref common,
-            ..
-        } => common,
-    };
-    let addr = match hex::decode(&common.sender) {
-        Ok(addr) if addr.len() == 32 => addr,
-        _ => {
-            eprintln!("Address decoding failed.");
-            return;
-        }
-    };
     let source = {
         let mut source = Vec::new();
-        let mut file = File::open(&common.source).expect("Could not read file.");
+        let mut file = File::open(&runner.source).expect("Could not read file.");
         file.read_to_end(&mut source).expect("Reading the source file failed.");
         source
     };
 
     let print_result = |state: State, logs: Logs| {
         for (i, item) in logs.iterate().iter().enumerate() {
-            println!("{}: {:?}", i, item)
+            if let Ok(s) = std::str::from_utf8(item) {
+                println!("{}: {}", i, s)
+            } else {
+                println!("{}: {:?}", i, item)
+            }
         }
         let state = state.get();
-        if common.hex_state {
+        if runner.hex_state {
             let output = hex::encode(&state);
-            match &common.out {
+            match &runner.out {
                 None => println!("The new state is: {}", output),
                 Some(fp) => {
                     let mut out_file = File::create(fp).expect("Could not create output file.");
@@ -145,7 +138,7 @@ pub fn main() {
                 }
             }
         } else {
-            match &common.out {
+            match &runner.out {
                 None => println!("The new state is: {:?}", state),
                 Some(fp) => {
                     let mut out_file = File::create(fp).expect("Could not create output file.");
@@ -155,41 +148,56 @@ pub fn main() {
         }
     };
 
-    match runner {
-        WasmerRunner::Init {
-            name,
-            ..
+    let parameter = {
+        match &runner.parameter {
+            None => Vec::new(),
+            Some(param_file) => {
+                let mut param_file =
+                    File::open(&param_file).expect("Could not open parameter file.");
+                let mut input = Vec::new();
+                param_file.read_to_end(&mut input).expect("Could not read from parameter file.");
+                input
+            }
+        }
+    };
+
+    match runner.command {
+        Command::Init {
+            ref name,
+            ref context,
         } => {
-            let init_ctx = InitContext {
-                init_origin: addr[..].try_into().unwrap(),
+            let init_ctx = {
+                let ctx_file = File::open(context).expect("Could not open context file.");
+                serde_json::from_reader(std::io::BufReader::new(ctx_file))
+                    .expect("Could not parse init context")
             };
             if let InitResult::Success {
                 logs,
                 state,
-            } = invoke_init(&source, common.amount, init_ctx, &name).expect("Invocation failed.")
+            } = invoke_init(&source, runner.amount, init_ctx, &name, parameter)
+                .expect("Invocation failed.")
             {
-                println!("Init method run. The following logs were produced.");
+                println!("Init call succeeded. The following logs were produced.");
                 print_result(state, logs)
             } else {
                 println!("Init call rejected.")
             }
         }
-        WasmerRunner::Receive {
-            name,
-            state,
-            index,
-            subindex,
+        Command::Receive {
+            ref name,
+            ref state,
             balance,
-            ..
+            ref context,
         } => {
-            let receive_ctx = ReceiveContext {
-                invoker:      addr[..].try_into().unwrap(),
-                self_address: ContractAddress {
-                    index,
-                    subindex,
-                },
-                self_balance: balance,
+            let mut receive_ctx: contracts_common::ReceiveContext = {
+                let ctx_file = File::open(context).expect("Could not open context file.");
+                serde_json::from_reader(std::io::BufReader::new(ctx_file))
+                    .expect("Could not parse init context")
             };
+            if let Some(balance) = balance {
+                receive_ctx.self_balance = balance;
+            }
+
             // initial state of the smart contract, read from a file.
             let init_state = {
                 let mut file = File::open(&state).expect("Could not read state file.");
@@ -198,17 +206,67 @@ pub fn main() {
                 file.read_to_end(&mut init_state).expect("Reading the state file failed.");
                 init_state
             };
-            if let ReceiveResult::Success {
-                logs,
-                state,
-                ..
-            } = invoke_receive(&source, common.amount, receive_ctx, &init_state, &name)
-                .expect("Calling receive failed.")
-            {
-                println!("Receive method run. The following logs were produced.");
-                print_result(state, logs)
-            } else {
-                println!("Receive call rejected.")
+            let res =
+                invoke_receive(&source, runner.amount, receive_ctx, &init_state, &name, parameter)
+                    .expect("Calling receive failed.");
+            match res {
+                ReceiveResult::Success {
+                    logs,
+                    state,
+                    actions,
+                    ..
+                } => {
+                    println!("Receive method succeeded. The following logs were produced.");
+                    print_result(state, logs);
+                    println!("The following actions were produced.");
+                    for (i, action) in actions.iter().enumerate() {
+                        match action {
+                            Action::Send {
+                                to_addr,
+                                name,
+                                amount,
+                                parameter,
+                            } => println!(
+                                "{}: send a message to contract at ({}, {}), calling method {:?} \
+                                 with amount {} and parameter {:?}",
+                                i, to_addr.index, to_addr.subindex, name, amount, parameter
+                            ),
+                            Action::SimpleTransfer {
+                                to_addr,
+                                amount,
+                            } => {
+                                println!(
+                                    "{}: simple transfer to account {} of amount {}",
+                                    i,
+                                    serde_json::to_string(to_addr)
+                                        .expect("Address not valid JSON, should not happen."),
+                                    amount
+                                );
+                            }
+                            Action::And {
+                                l,
+                                r,
+                            } => println!("{}: AND composition of {} and {}", i, l, r),
+                            Action::Or {
+                                l,
+                                r,
+                            } => println!("{}: OR composition of {} and {}", i, l, r),
+                            Action::Accept => println!("{}: ACCEPT", i),
+                        }
+                    }
+                }
+                ReceiveResult::Reject {
+                    logs,
+                } => {
+                    for (i, item) in logs.iterate().iter().enumerate() {
+                        if let Ok(s) = std::str::from_utf8(item) {
+                            println!("{}: {}", i, s)
+                        } else {
+                            println!("{}: {:?}", i, item)
+                        }
+                    }
+                    println!("Receive call rejected.")
+                }
             }
         }
     }

@@ -1,5 +1,4 @@
-extern crate alloc;
-
+#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use core::default::Default;
 
@@ -53,6 +52,13 @@ pub trait Read {
     }
 
     /// Read a `u32` in little-endian format.
+    fn read_u64(&mut self) -> Result<u64, Self::Err> {
+        let mut bytes = [0u8; 8];
+        self.read_exact(&mut bytes)?;
+        Ok(u64::from_le_bytes(bytes))
+    }
+
+    /// Read a `u32` in little-endian format.
     fn read_u32(&mut self) -> Result<u32, Self::Err> {
         let mut bytes = [0u8; 4];
         self.read_exact(&mut bytes)?;
@@ -96,6 +102,9 @@ pub trait Write {
 
     /// Write a `u32` in little endian.
     fn write_u32(&mut self, x: u32) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+
+    /// Write a `u64` in little endian.
+    fn write_u64(&mut self, x: u64) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
 }
 
 impl Write for Vec<u8> {
@@ -116,4 +125,24 @@ pub trait Serialize: Sized {
     /// Attempt to read a structure from a given source, failing if an error
     /// occurs during deserialization or reading.
     fn deserial<R: Read>(_source: &mut R) -> Option<Self>;
+}
+
+/// A more convenient wrapper around `Serialize` that makes it easier to write
+/// deserialization code. It has a blanked implementation for any read and
+/// serialize pair. The key idea is that the type to deserialize is inferred
+/// from the context, enabling one to write, for example,
+///
+/// ```rust
+///   let x = source.get()?;
+///   let y = source.get()?;
+///   ...
+/// ```
+/// where `source` is any type that implements `Read`.
+pub trait Get<T> {
+    fn get(&mut self) -> Option<T>;
+}
+
+impl<R: Read, T: Serialize> Get<T> for R {
+    #[inline(always)]
+    fn get(&mut self) -> Option<T> { T::deserial(self) }
 }

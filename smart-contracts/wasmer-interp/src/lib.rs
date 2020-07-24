@@ -1,17 +1,17 @@
 mod ffi;
 mod types;
 
+use contracts_common::*;
 use std::{
     cell::Cell,
     collections::LinkedList,
     sync::{Arc, Mutex},
 };
+pub use types::*;
 use wasmer_runtime::{
     error, func, imports, instantiate, types as wasmer_types, Array, Ctx, ImportObject, Module,
     Value, WasmPtr,
 };
-
-pub use types::*;
 
 #[derive(Clone, Default)]
 /// Structure to support logging of events from smart contracts.
@@ -59,10 +59,8 @@ impl Logs {
 
 // FIXME: Add support for trees, not just accept/reject.
 #[derive(Clone)]
-// FIXME: This allow is only temporary, until we have more outcomes.
 pub struct Outcome {
-    #[allow(clippy::mutex_atomic)]
-    pub cur_state: Arc<Mutex<bool>>,
+    pub cur_state: Arc<Mutex<Vec<Action>>>,
 }
 
 impl Outcome {
@@ -70,31 +68,84 @@ impl Outcome {
     #[allow(clippy::mutex_atomic)]
     pub fn init() -> Outcome {
         Self {
-            cur_state: Arc::new(Mutex::new(true)),
+            cur_state: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
     // FIXME: This is not how it should be.
-    pub fn accept(&self) {
+    pub fn accept(&self) -> u32 {
         if let Ok(mut guard) = self.cur_state.lock() {
-            *guard = true;
+            let response = guard.len();
+            guard.push(Action::Accept);
+            response as u32
         } else {
             unreachable!("Failed to acquire lock.")
         }
     }
 
-    // FIXME: This is not how it should be.
-    pub fn fail(&self) {
+    pub fn simple_transfer(
+        &self,
+        bytes: &[Cell<u8>],
+        amount: u64,
+    ) -> Result<u32, error::RuntimeError> {
         if let Ok(mut guard) = self.cur_state.lock() {
-            *guard = false;
+            let response = guard.len();
+            if bytes.len() != 32 {
+                Err(error::RuntimeError::User(Box::new("simple-transfer: Bytes length not 32.")))
+            } else {
+                let mut addr = [0u8; 32];
+                for (place, byte) in addr.iter_mut().zip(bytes) {
+                    *place = byte.get();
+                }
+                let to_addr = AccountAddress(addr);
+                guard.push(Action::SimpleTransfer {
+                    to_addr,
+                    amount,
+                });
+                Ok(response as u32)
+            }
         } else {
             unreachable!("Failed to acquire lock.")
         }
     }
 
-    pub fn get(&self) -> bool {
+    pub fn combine_and(&self, l: u32, r: u32) -> Result<u32, error::RuntimeError> {
+        if let Ok(mut guard) = self.cur_state.lock() {
+            let response = guard.len() as u32;
+            if l < response && r < response {
+                guard.push(Action::And {
+                    l,
+                    r,
+                });
+                Ok(response)
+            } else {
+                Err(error::RuntimeError::User(Box::new("Actions not known already.")))
+            }
+        } else {
+            unreachable!("Failed to acquire lock.")
+        }
+    }
+
+    pub fn combine_or(&self, l: u32, r: u32) -> Result<u32, error::RuntimeError> {
+        if let Ok(mut guard) = self.cur_state.lock() {
+            let response = guard.len() as u32;
+            if l < response && r < response {
+                guard.push(Action::Or {
+                    l,
+                    r,
+                });
+                Ok(response)
+            } else {
+                Err(error::RuntimeError::User(Box::new("Actions not known already.")))
+            }
+        } else {
+            unreachable!("Failed to acquire lock.")
+        }
+    }
+
+    pub fn get(&self) -> Vec<Action> {
         if let Ok(guard) = self.cur_state.lock() {
-            *guard
+            guard.clone()
         } else {
             unreachable!("Failed to acquire lock.")
         }
@@ -201,7 +252,7 @@ impl State {
     }
 }
 
-pub fn make_imports(which: Which) -> (ImportObject, Logs, State, Outcome) {
+pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, State, Outcome) {
     let logs = Logs::new();
     let state = match which {
         Which::Init {
@@ -245,67 +296,157 @@ pub fn make_imports(which: Which) -> (ImportObject, Logs, State, Outcome) {
     let resize_state = move |new_size: u32| g_state.resize_state(new_size);
     let state_size = move || s_state.len();
 
-    let sender_bytes = match which {
-        Which::Init {
-            init_ctx,
-        } => init_ctx.init_origin,
-        Which::Receive {
-            receive_ctx,
-            ..
-        } => receive_ctx.invoker,
-    };
+    let outcome = Outcome::init();
+    let a_outcome = outcome.clone();
+    let s_outcome = a_outcome.clone();
+    let and_outcome = a_outcome.clone();
+    let accept = move || a_outcome.accept();
 
-    // Get the sender of the transaction.
-    let sender = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
+    let parameter_size = parameter.len() as u32;
+    let get_parameter_size = move |_ctx: &mut Ctx| parameter_size;
+    let get_parameter = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
         let memory = ctx.memory(0);
-        match unsafe { ptr.deref_mut(memory, 0, 32) } {
+        match unsafe { ptr.deref_mut(memory, 0, parameter_size) } {
             Some(cells) => {
-                for (place, byte) in cells.iter_mut().zip(sender_bytes.as_ref()) {
+                for (place, byte) in cells.iter_mut().zip(&parameter) {
                     place.set(*byte);
                 }
                 Ok(())
             }
-            None => Err(()),
+            None => Err(error::RuntimeError::User(Box::new("Cannot get parameter."))),
         }
     };
 
-    let outcome = Outcome::init();
-    let a_outcome = outcome.clone();
-    let f_outcome = a_outcome.clone();
-    let accept = move || a_outcome.accept();
-    let fail = move || f_outcome.fail();
-
-    let imps = imports! {
-        "concordium" => {
-            "get_sender" => func!(sender),
-            "accept" => func!(accept),
-            "fail" => func!(fail),
-            "log_event" => func!(log_event),
-            "write_state" => func!(write_state),
-            "load_state" => func!(load_state),
-            "resize_state" => func!(resize_state),
-            "state_size" => func!(state_size),
-        },
+    let simple_transfer = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, amount: u64| {
+        let memory = ctx.memory(0);
+        match unsafe { ptr.deref_mut(memory, 0, 32) } {
+            Some(cells) => s_outcome.simple_transfer(cells, amount),
+            None => {
+                Err(error::RuntimeError::User(Box::new("Cannot read address for simple transfer.")))
+            }
+        }
     };
-    (imps, logs, state, outcome)
+
+    let or_outcome = and_outcome.clone();
+
+    let combine_and =
+        move |l: u32, r: u32| -> Result<u32, error::RuntimeError> { and_outcome.combine_and(l, r) };
+
+    let combine_or =
+        move |l: u32, r: u32| -> Result<u32, error::RuntimeError> { or_outcome.combine_or(l, r) };
+
+    match which {
+        Which::Init {
+            ref init_ctx,
+        } => {
+            // Get the init context.
+            let init_bytes = to_bytes(init_ctx);
+            let init_bytes_len = init_bytes.len() as u32;
+            let get_init_ctx = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
+                let memory = ctx.memory(0);
+                match unsafe { ptr.deref_mut(memory, 0, init_bytes_len) } {
+                    Some(cells) => {
+                        for (place, byte) in cells.iter_mut().zip(&init_bytes) {
+                            place.set(*byte);
+                        }
+                        Ok(())
+                    }
+                    None => Err(()),
+                }
+            };
+            let get_receive_ctx =
+                |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<(), ()> { Err(()) };
+            let get_receive_ctx_size = || -> Result<u32, ()> { Err(()) };
+
+            let imps = imports! {
+                "concordium" => {
+                    "get_init_ctx" => func!(get_init_ctx),
+                    "get_receive_ctx" => func!(get_receive_ctx),
+                    "get_receive_ctx_size" => func!(get_receive_ctx_size),
+                    "get_parameter" => func!(get_parameter),
+                    "get_parameter_size" => func!(get_parameter_size),
+                    "combine_and" => func!(combine_and),
+                    "combine_or" => func!(combine_or),
+                    "accept" => func!(accept),
+                    "simple_transfer" => func!(simple_transfer),
+                    "log_event" => func!(log_event),
+                    "write_state" => func!(write_state),
+                    "load_state" => func!(load_state),
+                    "resize_state" => func!(resize_state),
+                    "state_size" => func!(state_size),
+                },
+            };
+            (imps, logs, state, outcome)
+        }
+        Which::Receive {
+            ref receive_ctx,
+            ..
+        } => {
+            let receive_bytes = to_bytes(receive_ctx);
+            let receive_bytes_len = receive_bytes.len() as u32;
+            let get_receive_ctx = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
+                let memory = ctx.memory(0);
+                match unsafe { ptr.deref_mut(memory, 0, receive_bytes_len) } {
+                    Some(cells) => {
+                        for (place, byte) in cells.iter_mut().zip(&receive_bytes) {
+                            place.set(*byte);
+                        }
+                        Ok(())
+                    }
+                    None => Err(error::RuntimeError::User(Box::new(
+                        "Cannot acquire memory to write receive context into.",
+                    ))),
+                }
+            };
+            let get_receive_ctx_size = move || -> u32 { receive_bytes_len };
+            let get_init_ctx =
+                |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<(), ()> { Err(()) };
+
+            let imps = imports! {
+                "concordium" => {
+                    "get_init_ctx" => func!(get_init_ctx),
+                    "get_receive_ctx" => func!(get_receive_ctx),
+                    "get_receive_ctx_size" => func!(get_receive_ctx_size),
+                    "get_parameter" => func!(get_parameter),
+                    "get_parameter_size" => func!(get_parameter_size),
+                    "combine_and" => func!(combine_and),
+                    "combine_or" => func!(combine_or),
+                    "accept" => func!(accept),
+                    "simple_transfer" => func!(simple_transfer),
+                    "log_event" => func!(log_event),
+                    "write_state" => func!(write_state),
+                    "load_state" => func!(load_state),
+                    "resize_state" => func!(resize_state),
+                    "state_size" => func!(state_size),
+                },
+            };
+            (imps, logs, state, outcome)
+        }
+    }
 }
+
+type Parameter = Vec<u8>;
 
 pub fn invoke_init(
     wasm: &[u8],
     amount: Amount,
     init_ctx: InitContext,
     init_name: &str,
+    parameter: Parameter,
 ) -> Result<InitResult, error::CallError> {
-    let (import_obj, logs, state, outcome) = make_imports(Which::Init {
-        init_ctx,
-    });
+    let (import_obj, logs, state, _) = make_imports(
+        Which::Init {
+            init_ctx,
+        },
+        parameter,
+    );
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
     // Wasmer supports cacheing of modules into Artifacts.
     let inst = instantiate(wasm, &import_obj)
         .expect("Instantiation should always succeed for well-formed modules.");
-    let _ = inst.call(init_name, &[Value::I64(amount as i64)])?;
-    if outcome.get() {
+    let res = inst.call(init_name, &[Value::I64(amount as i64)])?;
+    if let Some(wasmer_runtime::Value::I32(0)) = res.first() {
         Ok(InitResult::Success {
             logs,
             state,
@@ -323,27 +464,40 @@ pub fn invoke_receive(
     receive_ctx: ReceiveContext,
     current_state: &[u8],
     receive_name: &str,
+    parameter: Parameter,
 ) -> Result<ReceiveResult, error::CallError> {
-    let (import_obj, logs, state, outcome) = make_imports(Which::Receive {
-        receive_ctx,
-        current_state,
-    });
+    let (import_obj, logs, state, outcome) = make_imports(
+        Which::Receive {
+            receive_ctx,
+            current_state,
+        },
+        parameter,
+    );
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
     // Wasmer supports cacheing of modules into Artifacts.
     let inst = instantiate(wasm, &import_obj)
         .expect("Instantiation should always succeed for well-formed modules.");
-    let _ = inst.call(receive_name, &[Value::I64(amount as i64)])?;
-    if outcome.get() {
-        Ok(ReceiveResult::Success {
-            logs,
-            state,
-            actions: vec![],
-        })
+    let res = inst.call(receive_name, &[Value::I64(amount as i64)])?;
+    if let Some(wasmer_runtime::Value::I32(n)) = res.first() {
+        let mut actions = outcome.get();
+        if *n >= 0 && (*n as usize) < actions.len() {
+            let n = *n as usize;
+            actions.truncate(n + 1);
+            Ok(ReceiveResult::Success {
+                logs,
+                state,
+                actions,
+            })
+        } else if *n >= 0 {
+            Err(error::CallError::Runtime(error::RuntimeError::User(Box::new("Invalid return."))))
+        } else {
+            Ok(ReceiveResult::Reject {
+                logs,
+            })
+        }
     } else {
-        Ok(ReceiveResult::Reject {
-            logs,
-        })
+        Err(error::CallError::Runtime(error::RuntimeError::User(Box::new("Invalid return."))))
     }
 }
 

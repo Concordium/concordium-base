@@ -36,16 +36,24 @@ fn abort_panic(_info: &core::panic::PanicInfo) -> ! { loop {} }
 pub use core::result::*;
 
 #[cfg(not(feature = "std"))]
+pub use alloc::collections;
+#[cfg(not(feature = "std"))]
 pub use alloc::{vec, vec::Vec};
-
-pub use concordium_sc_derive::{init, receive};
+#[cfg(not(feature = "std"))]
+pub use core::convert;
+#[cfg(feature = "std")]
+pub use std::collections;
+#[cfg(feature = "std")]
+pub use std::convert;
 
 mod impls;
 mod prims;
-mod traits;
 mod types;
-pub use prims::{actions::*, events, internal};
-pub use traits::*;
+/// Re-export for ease of use.
+pub use concordium_sc_derive::{init, receive};
+pub use contracts_common::*;
+pub use impls::{Create, HasParameter};
+pub use prims::{actions::*, events};
 pub use types::*;
 
 extern crate wee_alloc;

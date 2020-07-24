@@ -83,6 +83,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
+name = "contracts-common"
+version = "0.1.0"
+
+[[package]]
 name = "cranelift-bforest"
 version = "0.59.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -712,6 +716,7 @@ dependencies = [
 name = "wasmer-interp"
 version = "0.1.0"
 dependencies = [
+ "contracts-common",
  "libc",
  "wasmer-runtime",
 ]

@@ -1,47 +1,10 @@
-use crate::{prims::*, traits::*, types::*};
+use crate::{prims::*, types::*};
+use contracts_common::*;
 
 #[cfg(not(feature = "std"))]
 use alloc::{vec, vec::Vec};
 
-// Implementations of Serialize
-
-impl<X: Serialize, Y: Serialize> Serialize for (X, Y) {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> {
-        self.0.serial(out)?;
-        self.1.serial(out)
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
-        let x = X::deserial(source)?;
-        let y = Y::deserial(source)?;
-        Some((x, y))
-    }
-}
-
-impl Serialize for u8 {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> { out.write_u8(*self).ok() }
-
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> { source.read_u8().ok() }
-}
-
-impl Serialize for u32 {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> { out.write_u32(*self).ok() }
-
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> { source.read_u32().ok() }
-}
-
-impl Serialize for AccountAddress {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> { out.write_all(&self.0).ok() }
-
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
-        let mut bytes = [0u8; 32];
-        source.read_exact(&mut bytes).ok()?;
-        Some(AccountAddress(bytes))
-    }
-}
-
 // Implementations of seek/read/write
-
 impl Seek for ContractState {
     type Err = ();
 
@@ -140,13 +103,15 @@ impl Write for ContractState {
 
 // Implementations of non-trait functionality for defined types.
 
-impl ContractState {
-    pub fn new() -> Self {
+impl Create for ContractState {
+    fn new() -> Self {
         ContractState {
             current_position: 0,
         }
     }
+}
 
+impl ContractState {
     /// Make sure that the memory size is at least that many bytes in size.
     /// Returns true iff this was successful.
     pub fn reserve(&self, len: u32) -> bool {
@@ -173,40 +138,59 @@ impl ContractState {
     pub fn size(&self) -> u32 { unsafe { state_size() } }
 }
 
-impl InitContext {
-    pub fn sender(&self) -> AccountAddress {
-        let mut sender_bytes = [0u8; 32];
-        unsafe {
-            get_sender(sender_bytes.as_mut_ptr());
-        }
-        AccountAddress(sender_bytes)
-    }
-
-    pub fn parameter_bytes(&self) -> Vec<u8> {
-        let len = unsafe { get_parameter_size() };
-        let mut bytes = vec![0u8; len as usize];
-        unsafe { get_parameter(bytes.as_mut_ptr()) };
-        bytes
-    }
-
-    pub fn parameter<S: Serialize>(&self) -> Option<S> { todo!("Implement.") }
+pub trait Create {
+    fn new() -> Self;
 }
 
-impl ReceiveContext {
-    pub fn sender(&self) -> AccountAddress {
-        let mut sender_bytes = [0u8; 32];
-        unsafe {
-            get_sender(sender_bytes.as_mut_ptr());
-        }
-        AccountAddress(sender_bytes)
-    }
-
-    pub fn parameter_bytes(&self) -> Vec<u8> {
+pub trait HasParameter: private::Sealed {
+    fn parameter_bytes(&self) -> Vec<u8> {
         let len = unsafe { get_parameter_size() };
         let mut bytes = vec![0u8; len as usize];
         unsafe { get_parameter(bytes.as_mut_ptr()) };
         bytes
     }
 
-    pub fn parameter<S: Serialize>(&self) -> Option<S> { todo!("Implement.") }
+    fn parameter<S: Serialize>(&self) -> Option<S> {
+        let params = self.parameter_bytes();
+        let mut cursor = Cursor::<&[u8]>::new(&params);
+        cursor.get()
+    }
+}
+
+impl Create for InitContext {
+    /// Create a new init context by using an external call.
+    fn new() -> Self {
+        let mut bytes = [0u8; 4 * 8 + 32];
+        // unsafe { get_chain_context(bytes.as_mut_ptr()) }
+        // unsafe { get_init_ctx(bytes[4 * 8..].as_mut_ptr()) };
+        unsafe { get_init_ctx(bytes.as_mut_ptr()) };
+        let mut cursor = Cursor::<&[u8]>::new(&bytes);
+        cursor.get().expect(
+            "Invariant violation, host did not provide valid init context and chain metadata.",
+        )
+    }
+}
+
+impl Create for ReceiveContext {
+    /// Create a new receive context by using an external call.
+    fn new() -> Self {
+        let metadata_size = 4 * 8;
+        let size = unsafe { get_receive_ctx_size() };
+        let mut bytes = vec![0u8; metadata_size + size as usize];
+        // unsafe { get_chain_context(bytes.as_mut_ptr()) }
+        // unsafe { get_receive_ctx(bytes[metadata_size..].as_mut_ptr()) };
+        unsafe { get_receive_ctx(bytes.as_mut_ptr()) };
+        let mut cursor = Cursor::<&[u8]>::new(&bytes);
+        let ctx = cursor.get();
+        ctx.expect("Invariant violation: environment did not provide valid receive context.")
+    }
+}
+
+impl HasParameter for InitContext {}
+impl HasParameter for ReceiveContext {}
+
+mod private {
+    pub trait Sealed {}
+    impl Sealed for super::InitContext {}
+    impl Sealed for super::ReceiveContext {}
 }
