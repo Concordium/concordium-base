@@ -42,6 +42,9 @@ versionIpInfos = Version 0
 versionArInfos :: Version
 versionArInfos = Version 0
 
+versionExportedBlocks :: Version
+versionExportedBlocks = Version 0
+
 instance Bounded Version where
   minBound = (Version 0)
   maxBound = (Version (maxBound :: Word32))
