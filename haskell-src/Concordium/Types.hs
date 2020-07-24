@@ -350,6 +350,16 @@ data ChainMetadata =
                 , slotTime :: Timestamp
                 }
 
+-- |Encode chain metadata for passing over FFI. Uses little-endian encoding
+-- for integral values since that is what is expected on the other side of FFI.
+encodeChainMeta :: ChainMetadata -> ByteString
+encodeChainMeta ChainMetadata{..} = S.runPut encoder
+  where encoder =
+          P.putWord64le (fromIntegral slotNumber) <>
+          P.putWord64le (fromIntegral blockHeight) <>
+          P.putWord64le (fromIntegral finalizedHeight) <>
+          P.putWord64le (tsMillis slotTime)
+
 -- |The hash of a transaction which is then signed.
 -- (Naturally, this does not include the transaction signature.)
 newtype TransactionSignHashV0 = TransactionSignHashV0 {v0TransactionSignHash :: Hash.Hash}
