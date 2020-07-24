@@ -50,5 +50,5 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
     );
     events::log(&(1u8, state.step));
     state.current_count += u32::from(state.step);
-    Ok(ReceiveActions::Accept)
+    Ok(Action::accept())
 }

@@ -53,7 +53,7 @@ mod types;
 pub use concordium_sc_derive::{init, receive};
 pub use contracts_common::*;
 pub use impls::{Create, HasParameter};
-pub use prims::{actions::*, events, internal};
+pub use prims::{actions::*, events};
 pub use types::*;
 
 extern crate wee_alloc;

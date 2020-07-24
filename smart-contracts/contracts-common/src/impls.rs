@@ -2,6 +2,8 @@ use crate::{traits::*, types::*};
 
 #[cfg(not(feature = "std"))]
 use alloc::collections;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use std::collections;
 
@@ -52,8 +54,7 @@ impl Serialize for AccountAddress {
     fn serial<W: Write>(&self, out: &mut W) -> Option<()> { out.write_all(&self.0).ok() }
 
     fn deserial<R: Read>(source: &mut R) -> Option<Self> {
-        let mut bytes = [0u8; 32];
-        source.read_exact(&mut bytes).ok()?;
+        let bytes = source.get()?;
         Some(AccountAddress(bytes))
     }
 }
@@ -182,7 +183,9 @@ impl<K: Serialize + Ord, V: Serialize> Serialize for collections::BTreeMap<K, V>
         for _ in 0..len {
             let k = source.get()?;
             let v = source.get()?;
-            map.insert(k, v)?;
+            if map.insert(k, v).is_some() {
+                return None;
+            }
         }
         Some(map)
     }
@@ -190,6 +193,9 @@ impl<K: Serialize + Ord, V: Serialize> Serialize for collections::BTreeMap<K, V>
 
 impl InitContext {
     pub fn init_origin(&self) -> &AccountAddress { &self.init_origin }
+
+    /// Get time in miliseconds at the beginning of this block.
+    pub fn get_time(&self) -> u64 { self.metadata.slot_time }
 }
 
 impl Address {
@@ -212,6 +218,9 @@ impl Address {
 
 impl ReceiveContext {
     pub fn sender(&self) -> &Address { &self.sender }
+
+    /// Who invoked this transaction.
+    pub fn invoker(&self) -> &AccountAddress { &self.invoker }
 
     /// Get time in miliseconds at the beginning of this block.
     pub fn get_time(&self) -> u64 { self.metadata.slot_time }

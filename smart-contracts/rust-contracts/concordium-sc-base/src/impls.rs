@@ -161,8 +161,9 @@ impl Create for InitContext {
     /// Create a new init context by using an external call.
     fn new() -> Self {
         let mut bytes = [0u8; 4 * 8 + 32];
-        unsafe { get_chain_context(bytes.as_mut_ptr()) }
-        unsafe { get_init_ctx(bytes[4 * 8..].as_mut_ptr()) };
+        // unsafe { get_chain_context(bytes.as_mut_ptr()) }
+        // unsafe { get_init_ctx(bytes[4 * 8..].as_mut_ptr()) };
+        unsafe { get_init_ctx(bytes.as_mut_ptr()) };
         let mut cursor = Cursor::<&[u8]>::new(&bytes);
         cursor.get().expect(
             "Invariant violation, host did not provide valid init context and chain metadata.",
@@ -176,8 +177,9 @@ impl Create for ReceiveContext {
         let metadata_size = 4 * 8;
         let size = unsafe { get_receive_ctx_size() };
         let mut bytes = vec![0u8; metadata_size + size as usize];
-        unsafe { get_chain_context(bytes.as_mut_ptr()) }
-        unsafe { get_receive_ctx(bytes[metadata_size..].as_mut_ptr()) };
+        // unsafe { get_chain_context(bytes.as_mut_ptr()) }
+        // unsafe { get_receive_ctx(bytes[metadata_size..].as_mut_ptr()) };
+        unsafe { get_receive_ctx(bytes.as_mut_ptr()) };
         let mut cursor = Cursor::<&[u8]>::new(&bytes);
         let ctx = cursor.get();
         ctx.expect("Invariant violation: environment did not provide valid receive context.")

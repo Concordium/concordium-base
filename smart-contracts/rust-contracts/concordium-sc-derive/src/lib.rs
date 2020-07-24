@@ -52,7 +52,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_name = &ast.sig.ident;
     let mut out = quote! {
         #[no_mangle]
-        pub extern "C" fn #name(amount: Amount) {
+        pub extern "C" fn #name(amount: Amount) -> i32 {
             use concordium_sc_base::Create;
             let ctx = InitContext::new();
             let mut state_bytes = ContractState::new();
@@ -60,9 +60,10 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
                 Ok(state) => {
                     if state.serial(&mut state_bytes).is_none() {
                         panic!("Could not initialize contract.");
-                    }
+                    };
+                    0
                 }
-                Err(_) => internal::fail(),
+                Err(_) => -1
             }
         }
     };
@@ -94,13 +95,13 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_name = &ast.sig.ident;
     let mut out = quote! {
         #[no_mangle]
-        pub extern "C" fn #name(amount: Amount) {
-            use concordium_sc_base::{internal, SeekFrom, ContractState, Create};
+        pub extern "C" fn #name(amount: Amount) -> i32 {
+            use concordium_sc_base::{SeekFrom, ContractState, Create};
             let ctx = ReceiveContext::new();
             let mut state_bytes = ContractState::new();
             if let Some(mut state) = State::deserial(&mut state_bytes) {
                 match #fn_name(ctx, amount, &mut state) {
-                    Ok(_) => {
+                    Ok(act) => {
                         let res = state_bytes
                             .seek(SeekFrom::Start(0))
                             .ok()
@@ -108,10 +109,10 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
                         if res.is_none() {
                             panic!("Could not write state.")
                         } else {
-                            internal::accept()
+                            act.tag() as i32
                         }
                     }
-                    Err(_) => internal::fail(),
+                    Err(_) => -1,
                 }
             }
             else {

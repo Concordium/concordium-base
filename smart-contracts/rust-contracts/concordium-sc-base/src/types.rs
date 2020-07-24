@@ -13,15 +13,11 @@ pub struct ContractState {
 /// values of the type are effectful.
 #[must_use]
 pub struct Action {
-    pub(crate) _private: (),
+    pub(crate) _private: u32,
 }
 
-/// Result of a successful smart contract execution receive method.
-pub enum ReceiveActions {
-    /// Simply accept the invocation, with no additional actions.
-    Accept,
-    /// Accept with the given action tree.
-    AcceptWith(Action),
+impl Action {
+    pub fn tag(&self) -> u32 { self._private }
 }
 
 /// A non-descript error message, signalling rejection of a smart contract
@@ -62,7 +58,7 @@ macro_rules! ensure {
 }
 
 /// The expected return type of the receive method of a smart contract.
-pub type ReceiveResult = Result<ReceiveActions, Reject>;
+pub type ReceiveResult = Result<Action, Reject>;
 
 /// The expected return type of the init method of the smart contract,
 /// parametrized by the state type of the smart contract.

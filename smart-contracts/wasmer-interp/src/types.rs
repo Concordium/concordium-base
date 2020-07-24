@@ -35,6 +35,7 @@ impl InitResult {
     }
 }
 
+#[derive(Clone)]
 pub enum Action {
     Send {
         to_addr:   ContractAddress,
@@ -46,8 +47,15 @@ pub enum Action {
         to_addr: AccountAddress,
         amount:  Amount,
     },
-    And,
-    Or,
+    And {
+        l: u32,
+        r: u32,
+    },
+    Or {
+        l: u32,
+        r: u32,
+    },
+    Accept,
 }
 
 // This is not implementing serialize because that is currently set-up for
@@ -57,8 +65,26 @@ impl Action {
     pub fn to_bytes(&self) -> Vec<u8> {
         use Action::*;
         match self {
-            Or => vec![2],
-            And => vec![3],
+            Or {
+                l,
+                r,
+            } => {
+                let mut out = Vec::with_capacity(9);
+                out.push(2);
+                out.extend_from_slice(&l.to_be_bytes());
+                out.extend_from_slice(&r.to_be_bytes());
+                out
+            }
+            And {
+                l,
+                r,
+            } => {
+                let mut out = Vec::with_capacity(9);
+                out.push(3);
+                out.extend_from_slice(&l.to_be_bytes());
+                out.extend_from_slice(&r.to_be_bytes());
+                out
+            }
             Send {
                 to_addr,
                 name,
@@ -86,6 +112,7 @@ impl Action {
                 out.extend_from_slice(&amount.to_be_bytes());
                 out
             }
+            Accept => vec![4],
         }
     }
 }

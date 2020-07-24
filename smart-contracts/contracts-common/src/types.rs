@@ -37,7 +37,7 @@ pub struct ContractAddress {
 #[cfg_attr(
     feature = "derive-serde",
     derive(SerdeSerialize, SerdeDeserialize),
-    serde(rename = "camelCase")
+    serde(rename_all = "camelCase")
 )]
 pub struct InitContext {
     pub(crate) metadata:    ChainMetadata,
@@ -62,7 +62,7 @@ pub enum Address {
 #[cfg_attr(
     feature = "derive-serde",
     derive(SerdeSerialize, SerdeDeserialize),
-    serde(rename = "camelCase")
+    serde(rename_all = "camelCase")
 )]
 pub struct ReceiveContext {
     pub(crate) metadata:     ChainMetadata,
@@ -77,7 +77,7 @@ pub struct ReceiveContext {
 #[cfg_attr(
     feature = "derive-serde",
     derive(SerdeSerialize, SerdeDeserialize),
-    serde(rename = "camelCase")
+    serde(rename_all = "camelCase")
 )]
 pub struct ChainMetadata {
     pub(crate) slot_number:      u64,

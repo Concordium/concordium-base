@@ -9,11 +9,9 @@ use contracts_common::*;
 /// the scheduler with relevant primitives.
 #[cfg_attr(target_arch = "wasm32", link(wasm_import_module = "concordium"))]
 extern "C" {
-    // Signal failure.
-    fn fail();
-    fn accept();
+    fn accept() -> u32;
     // Basic action to send tokens to an account.
-    fn simple_transfer(addr_bytes: *const u8, amount: u64);
+    fn simple_transfer(addr_bytes: *const u8, amount: u64) -> u32;
     // Send a message to a smart contract.
     fn send(
         addr_index: u64,
@@ -23,19 +21,19 @@ extern "C" {
         amount: u64,
         parameter: *const u8,
         parameter_len: u32,
-    );
+    ) -> u32;
     // Combine two actions using normal sequencing. This is using the stack of
     // actions already produced.
-    fn combine_and();
+    fn combine_and(l: u32, r: u32) -> u32;
     // Combine two actions using or. This is using the stack of actions already
     // produced.
-    fn combine_or();
+    fn combine_or(l: u32, r: u32) -> u32;
     // Get the size of the parameter to the method (either init or receive).
     pub(crate) fn get_parameter_size() -> u32;
     // Write the parameter to the given location. The location is assumed to contain
     // enough memory to write the parameter into (as returned by the previous
     // method).
-    pub(crate) fn get_parameter(param_bytes: *mut u8) -> u32;
+    pub(crate) fn get_parameter(param_bytes: *mut u8);
     // Add a log item.
     fn log_event(start: *const u8, length: u32);
     // returns how many bytes were read.
@@ -54,7 +52,7 @@ extern "C" {
     // - blockHeight
     // - finalizedHeight
     // - slotTime (in milliseconds)
-    pub(crate) fn get_chain_context(start: *mut u8);
+    // pub(crate) fn get_chain_context(start: *mut u8);
     // Get the init context (without the chain context).
     // This consists of
     // - address of the sender, 32 bytes
@@ -79,12 +77,19 @@ pub mod actions {
     use contracts_common::{AccountAddress, Amount, ContractAddress};
 
     impl Action {
+        /// Default accept action.
+        pub fn accept() -> Self {
+            Action {
+                _private: unsafe { super::accept() },
+            }
+        }
+
         /// Send a given amount to an account.
         #[inline(always)]
         pub fn simple_transfer(acc: &AccountAddress, amount: Amount) -> Self {
-            unsafe { super::simple_transfer(acc.0.as_ptr(), amount) };
+            let res = unsafe { super::simple_transfer(acc.0.as_ptr(), amount) };
             Action {
-                _private: (),
+                _private: res,
             }
         }
 
@@ -97,7 +102,7 @@ pub mod actions {
             parameter: &[u8],
         ) -> Self {
             let receive_bytes = receive_name.as_bytes();
-            unsafe {
+            let res = unsafe {
                 super::send(
                     ca.index,
                     ca.subindex,
@@ -109,41 +114,29 @@ pub mod actions {
                 )
             };
             Action {
-                _private: (),
+                _private: res,
             }
         }
 
         /// If the execution of the first action succeeds, run the second action
         /// as well.
         #[inline(always)]
-        pub fn and_then(self, _then: Self) -> Self {
-            unsafe { super::combine_and() };
+        pub fn and_then(self, then: Self) -> Self {
+            let res = unsafe { super::combine_and(self._private, then._private) };
             Action {
-                _private: (),
+                _private: res,
             }
         }
 
         /// If the execution of the first action fails, try the second.
         #[inline(always)]
-        pub fn or_else(self, _el: Self) -> Self {
-            unsafe { super::combine_or() }
+        pub fn or_else(self, el: Self) -> Self {
+            let res = unsafe { super::combine_or(self._private, el._private) };
             Action {
-                _private: (),
+                _private: res,
             }
         }
     }
-}
-
-pub mod internal {
-    //! Internal functions that should not be used in most cases, but could be
-    //! necessary in some cases to improve efficiency.
-    #[inline(always)]
-    /// Signal that the contract wishes to reject the invocation.
-    pub fn fail() { unsafe { super::fail() } }
-
-    #[inline(always)]
-    /// Signal that the contract accepts the invocation.
-    pub fn accept() { unsafe { super::accept() } }
 }
 
 pub mod events {
