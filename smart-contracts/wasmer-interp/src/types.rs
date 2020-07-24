@@ -65,26 +65,6 @@ impl Action {
     pub fn to_bytes(&self) -> Vec<u8> {
         use Action::*;
         match self {
-            Or {
-                l,
-                r,
-            } => {
-                let mut out = Vec::with_capacity(9);
-                out.push(2);
-                out.extend_from_slice(&l.to_be_bytes());
-                out.extend_from_slice(&r.to_be_bytes());
-                out
-            }
-            And {
-                l,
-                r,
-            } => {
-                let mut out = Vec::with_capacity(9);
-                out.push(3);
-                out.extend_from_slice(&l.to_be_bytes());
-                out.extend_from_slice(&r.to_be_bytes());
-                out
-            }
             Send {
                 to_addr,
                 name,
@@ -110,6 +90,26 @@ impl Action {
                 out.push(1);
                 out.extend_from_slice(&to_addr.0);
                 out.extend_from_slice(&amount.to_be_bytes());
+                out
+            }
+            Or {
+                l,
+                r,
+            } => {
+                let mut out = Vec::with_capacity(9);
+                out.push(2);
+                out.extend_from_slice(&l.to_be_bytes());
+                out.extend_from_slice(&r.to_be_bytes());
+                out
+            }
+            And {
+                l,
+                r,
+            } => {
+                let mut out = Vec::with_capacity(9);
+                out.push(3);
+                out.extend_from_slice(&l.to_be_bytes());
+                out.extend_from_slice(&r.to_be_bytes());
                 out
             }
             Accept => vec![4],
