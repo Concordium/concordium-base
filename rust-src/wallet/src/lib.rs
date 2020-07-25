@@ -192,8 +192,8 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let id_use_data = IdObjectUseData { aci, randomness };
 
     let response = json!({
-        "idObjectRequest": Versioned::new(VERSION_PRE_IDENTITY_OBJECT, pio),
-        "privateIdObjectData": Versioned::new(VERSION_ID_OBJECT_USE_DATA, id_use_data),
+        "idObjectRequest": Versioned::new(Version::from(0u32), pio),
+        "privateIdObjectData": Versioned::new(Version::from(0u32), id_use_data),
     });
 
     Ok(to_string(&response)?)
@@ -297,7 +297,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     };
 
     let response = json!({
-        "credential": Versioned::new(VERSION_CREDENTIAL, cdi),
+        "credential": Versioned::new(Version::from(0u32), cdi),
         "accountData": acc_data,
         "accountAddress": address,
     });

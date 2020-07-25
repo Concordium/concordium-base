@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings, ScopedTypeVariables, DerivingVia #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings, ScopedTypeVariables, DerivingStrategies #-}
 module Concordium.Common.Version where
 
 import Data.Word
@@ -9,51 +9,11 @@ import Data.Aeson ((.:), (.=))
 import Data.Hashable
 import Control.Monad
 
-
-
--- |Constants
-versionBlock :: Version
-versionBlock = Version 0
-
-versionBareBlockItem :: Version
-versionBareBlockItem = Version 0
-
-versionGenesisData :: Version
-versionGenesisData = Version 0
-
-versionGenesisParameters :: Version
-versionGenesisParameters = Version 0
-
-versionGlobalParameters :: Version
-versionGlobalParameters = Version 0
-
-versionCredential :: Version
-versionCredential = Version 0
-
-versionFinalizationMessage :: Version
-versionFinalizationMessage = Version 0
-
-versionFinalizationRecord :: Version
-versionFinalizationRecord = Version 0
-
-versionIpInfos :: Version
-versionIpInfos = Version 0
-
-versionArInfos :: Version
-versionArInfos = Version 0
-
-versionExportedBlocks :: Version
-versionExportedBlocks = Version 0
-
-instance Bounded Version where
-  minBound = (Version 0)
-  maxBound = (Version (maxBound :: Word32))
-
 -- |Version of a data structure. Binary coded as a variable integer represented by
 -- bytes, where MSB=1 indicates more bytes follow, and the 7 lower bits in a byte
--- is Big Endian data bits for the value. A version number is bounded by u32 max.
+-- is Big Endian data bits for the value. A version number can be at most 2^32-1.
 newtype Version = Version Word32
-    deriving (Eq, Ord, Num, Enum, Integral, Real, Hashable, Show, AE.FromJSON, AE.ToJSON) via Word32
+    deriving newtype (Eq, Ord, Num, Enum, Integral, Real, Hashable, Show, AE.FromJSON, AE.ToJSON, Bounded)
 
 instance S.Serialize Version where
   put (Version v) = mapM_ S.putWord8 (encode7 v)
@@ -72,14 +32,10 @@ instance S.Serialize Version where
           byte <- S.getWord8
           if testBit byte 7
             then decode7 (128 * acc + fromIntegral (clearBit byte 7)) (left-1)
-            else
-              let
-                value = 128 * acc + fromIntegral byte
-              in do
-                unless (value <= fromIntegral (maxBound :: Version)) $ fail "Version number value overflow"
-                return $ Version (fromIntegral value)
-
-
+          else do
+            let value = 128 * acc + fromIntegral byte
+            unless (value <= fromIntegral (maxBound :: Version)) $ fail "Version number value overflow"
+            return $ Version (fromIntegral value)
 
 -- |Versioned data structure
 data Versioned a = Versioned {

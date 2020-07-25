@@ -206,11 +206,10 @@ fn wrap_return_tuple(env: &JNIEnv, code: u8, message: &str) -> jobject {
         }
     };
 
-    match env.new_object_unchecked(
-        class,
-        method_id,
-        &[JValue::Int(code as jint), JValue::Object(*jstr_value)],
-    ) {
+    match env.new_object_unchecked(class, method_id, &[
+        JValue::Int(code as jint),
+        JValue::Object(*jstr_value),
+    ]) {
         Ok(res) => res.into_inner(),
         Err(e) => {
             return wrap_return_tuple(

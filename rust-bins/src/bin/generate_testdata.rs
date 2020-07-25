@@ -268,7 +268,7 @@ fn main() {
 
         // We also output a versioned CDI in JSON and binary, to test compatiblity with
         // the haskell serialization
-        let ver_cdi_1 = Versioned::new(VERSION_CREDENTIAL, cdi_1);
+        let ver_cdi_1 = Versioned::new(VERSION_0, cdi_1);
         if let Err(err) = write_json_to_file("cdi.json", &ver_cdi_1) {
             eprintln!("Could not output JSON file cdi.json, because {}.", err);
         } else {
@@ -309,7 +309,7 @@ fn main() {
         )
         .expect("We should have generated valid data.");
         let acc_addr = AccountAddress::new(&cdi.values.reg_id);
-        let versioned_cdi = Versioned::new(VERSION_CREDENTIAL, cdi);
+        let versioned_cdi = Versioned::new(VERSION_0, cdi);
 
         if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &versioned_cdi) {
             eprintln!("Could not output credential = {}, because {}.", idx, err);
