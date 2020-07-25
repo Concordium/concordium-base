@@ -364,7 +364,17 @@ getCDWM time = do
     let wmdSignHash = transactionSignHashForCDI wmdHash
     return WithMetadata{wmdArrivalTime=time,..}
 
-getExactVersionedBlockItem :: TransactionTime -> S.Get BlockItem
+-- |Try to parse a versioned block item, stripping the version, and
+-- reconstructing the block item metadata from the raw data.
+-- The parsing format is determined by the version.
+--
+-- The only supported version at the moment is version 0.
+--
+-- * @SPEC: <$DOCS/Versioning#binary-format>
+getExactVersionedBlockItem :: TransactionTime
+                           -- ^Timestamp for when the item is received, used to
+                           -- construct the metadata.
+                           -> S.Get BlockItem
 getExactVersionedBlockItem time = do
     version <- S.get :: S.Get Version
     a <- case version of
@@ -372,7 +382,9 @@ getExactVersionedBlockItem time = do
       _ -> fail $ "Unsupported block item version " ++ (show version) ++ "."
     return a
 
--- |Get a block item, reconstructing metadata.
+-- |Get a block item according to V0 format, reconstructing metadata.
+--
+-- * @SPEC: <$DOCS/Transactions#v0-format>
 getBlockItemV0 :: TransactionTime -- ^Timestamp of when the item arrived.
              -> S.Get BlockItem
 getBlockItemV0 time =

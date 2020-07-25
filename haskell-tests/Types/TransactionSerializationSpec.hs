@@ -32,6 +32,7 @@ testTransaction size = forAll (resize size genBareTransaction) checkTransaction
 dummyTime :: TransactionTime
 dummyTime = 37
 
+-- |Check V0 serialization of block items.
 checkBlockItem :: BlockItem -> Property
 checkBlockItem bi = 
     case runGet (getBlockItemV0 (wmdArrivalTime bi)) bs of
