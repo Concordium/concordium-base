@@ -239,7 +239,7 @@ fn main() {
 
         let address = AccountAddress::new(&cdi.values.reg_id);
 
-        let versioned_cdi = Versioned::new(VERSION_CREDENTIAL, cdi);
+        let versioned_cdi = Versioned::new(VERSION_0, cdi);
 
         let acc_keys = AccountKeys {
             keys: acc_data
