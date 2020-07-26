@@ -58,6 +58,8 @@ extern "C" {
     // - address of the sender, 32 bytes
     pub(crate) fn get_init_ctx(start: *mut u8);
 
+    // FIXME: Resolve this so the annotation is not needed.
+    #[allow(dead_code)]
     pub(crate) fn get_receive_ctx_size() -> u32;
     // Get the receive context (without the chain context).
     // This consists of
@@ -158,7 +160,7 @@ pub mod events {
     /// Log a serializable event by serializing it with a supplied serializer.
     pub fn log<S: Serialize>(event: &S) {
         let mut out = Vec::new();
-        event.serial(&mut out);
+        event.serial(&mut out).expect("Cannot log, panicking.");
         log_bytes(&out)
     }
 

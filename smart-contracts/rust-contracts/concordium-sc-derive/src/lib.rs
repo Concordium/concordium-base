@@ -27,6 +27,14 @@ fn get_name<'a, I: IntoIterator<Item = &'a Meta>>(iter: I) -> Option<Ident> {
     })
 }
 
+// Return whether the low-level item is present.
+fn get_low_level<'a, I: IntoIterator<Item = &'a Meta>>(iter: I) -> bool {
+    iter.into_iter().any(|attr| match attr {
+        Meta::Path(path) => path.is_ident("low_level"),
+        _ => false,
+    })
+}
+
 /// Derive the appropriate export for an annotated init function.
 ///
 /// This macro requires the following items to be present
@@ -50,20 +58,35 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     let ast: syn::ItemFn = syn::parse(item).expect("Init can only be applied to functions.");
 
     let fn_name = &ast.sig.ident;
-    let mut out = quote! {
-        #[no_mangle]
-        pub extern "C" fn #name(amount: Amount) -> i32 {
-            use concordium_sc_base::Create;
-            let ctx = InitContext::new();
-            let mut state_bytes = ContractState::new();
-            match #fn_name(ctx, amount) {
-                Ok(state) => {
-                    if state.serial(&mut state_bytes).is_none() {
-                        panic!("Could not initialize contract.");
-                    };
-                    0
+    let mut out = if get_low_level(attrs.iter()) {
+        quote! {
+            #[no_mangle]
+            pub extern "C" fn #name(amount: Amount) -> i32 {
+                use concordium_sc_base::Create;
+                let ctx = InitContext::new();
+                let mut state = ContractState::new();
+                match #fn_name(ctx, amount, &mut state) {
+                    Ok(()) => 0,
+                    Err(_) => -1,
                 }
-                Err(_) => -1
+            }
+        }
+    } else {
+        quote! {
+            #[no_mangle]
+            pub extern "C" fn #name(amount: Amount) -> i32 {
+                use concordium_sc_base::Create;
+                let ctx = InitContext::new();
+                let mut state_bytes = ContractState::new();
+                match #fn_name(ctx, amount) {
+                    Ok(state) => {
+                        if state.serial(&mut state_bytes).is_err() {
+                            panic!("Could not initialize contract.");
+                        };
+                        0
+                    }
+                    Err(_) => -1
+                }
             }
         }
     };
@@ -93,30 +116,46 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let ast: syn::ItemFn = syn::parse(item).expect("Receive can only be applied to functions.");
     let fn_name = &ast.sig.ident;
-    let mut out = quote! {
+    let mut out = if get_low_level(attrs.iter()) {
+        quote! {
         #[no_mangle]
         pub extern "C" fn #name(amount: Amount) -> i32 {
             use concordium_sc_base::{SeekFrom, ContractState, Create};
             let ctx = ReceiveContext::new();
-            let mut state_bytes = ContractState::new();
-            if let Some(mut state) = State::deserial(&mut state_bytes) {
-                match #fn_name(ctx, amount, &mut state) {
-                    Ok(act) => {
-                        let res = state_bytes
-                            .seek(SeekFrom::Start(0))
-                            .ok()
-                            .and_then(|_| state.serial(&mut state_bytes));
-                        if res.is_none() {
-                            panic!("Could not write state.")
-                        } else {
-                            act.tag() as i32
-                        }
-                    }
-                    Err(_) => -1,
+            let mut state = ContractState::new();
+            match #fn_name(ctx, amount, &mut state) {
+                Ok(act) => {
+                    act.tag() as i32
                 }
+                Err(_) => -1,
             }
-            else {
-                panic!("Could not read state fully.")
+        }
+        }
+    } else {
+        quote! {
+            #[no_mangle]
+            pub extern "C" fn #name(amount: Amount) -> i32 {
+                use concordium_sc_base::{SeekFrom, ContractState, Create};
+                let ctx = ReceiveContext::new();
+                let mut state_bytes = ContractState::new();
+                if let Ok(mut state) = State::deserial(&mut state_bytes) {
+                    match #fn_name(ctx, amount, &mut state) {
+                        Ok(act) => {
+                            let res = state_bytes
+                                .seek(SeekFrom::Start(0))
+                                .and_then(|_| state.serial(&mut state_bytes));
+                            if res.is_err() {
+                                panic!("Could not write state.")
+                            } else {
+                                act.tag() as i32
+                            }
+                        }
+                        Err(_) => -1,
+                    }
+                }
+                else {
+                    panic!("Could not read state fully.")
+                }
             }
         }
     };
