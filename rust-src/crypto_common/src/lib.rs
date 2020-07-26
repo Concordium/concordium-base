@@ -1,8 +1,9 @@
 pub mod helpers;
 pub mod impls;
 pub mod serialize;
+pub mod version;
 
-pub use crate::{helpers::*, impls::*, serialize::*};
+pub use crate::{helpers::*, impls::*, serialize::*, version::*};
 
 // Reexport for ease of use.
 pub use byteorder::{ReadBytesExt, WriteBytesExt};

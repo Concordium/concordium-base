@@ -161,7 +161,7 @@ getKeyIndices keys = Map.keysSet $ akKeys keys
 -- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32
     deriving (Eq, Hashable)
-    deriving Show via Word32
+    deriving newtype (Show, FromJSONKey)
 
 instance Serialize IdentityProviderIdentity where
   put (IP_ID w) = S.putWord32be w
@@ -177,6 +177,10 @@ instance ToJSON IdentityProviderIdentity where
 
 instance FromJSON IdentityProviderIdentity where
   parseJSON v = IP_ID <$> parseJSON v
+
+-- NB: This instance relies on the show instance being the one of Word32.
+instance ToJSONKey IdentityProviderIdentity where
+  toJSONKey = toJSONKeyText (Text.pack . show)
 
 -- Account signatures (eddsa key)
 type AccountSignature = Signature
@@ -208,7 +212,6 @@ newtype CredentialRegistrationID = RegIdCred (FBS.FixedByteString RegIdSize)
 instance ToJSON CredentialRegistrationID where
   toJSON v = String (Text.pack (show v))
 
--- Data (serializes with `putByteString :: Bytestring -> Put`)
 instance FromJSON CredentialRegistrationID where
   parseJSON = withText "Credential registration ID in base16" deserializeBase16
 
@@ -404,7 +407,7 @@ instance FromJSONKey ArIdentity where
       where arIdFromText t = do
               when (Text.length t > 10) $ fail "Out of bounds."
               case Text.readMaybe (Text.unpack t) of
-                Nothing -> fail "Not an integral value."
+                Nothing -> fail "ArIdentity not an integral value."
                 Just i -> do
                   when (i <= 0) $ fail "ArIdentity must be positive."
                   when (i > toInteger (maxBound :: Word32)) $ fail "ArIdentity out of bounds."
@@ -644,8 +647,12 @@ instance Eq CredentialDeploymentInformation where
   cdi1 == cdi2 = cdiValues cdi1 == cdiValues cdi2
 
 instance FromJSON CredentialDeploymentInformation where
-  parseJSON = withObject "CredentialDeploymentInformation" $ \v -> do
-    cdiValues <- parseJSON (Object v)
-    proofsText <- v .: "proofs"
-    return CredentialDeploymentInformation{cdiProofs = Proofs (BSS.toShort . fst . BS16.decode . Text.encodeUtf8 $ proofsText),
-                                           ..}
+  parseJSON = withObject "CredentialDeploymentInformation" $ \x -> do
+    cdiValues <- parseJSON (Object x)
+    proofsText <- x .: "proofs"
+    let (bs, rest) = BS16.decode . Text.encodeUtf8 $ proofsText
+    unless (BS.null rest) $ fail "\"proofs\" is not a valid base16 string."
+    return CredentialDeploymentInformation {
+        cdiProofs = Proofs (BSS.toShort bs),
+        ..
+      }

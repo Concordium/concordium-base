@@ -56,7 +56,7 @@ fn main() {
 
     // all known anonymity revokers.
     let ars_infos = {
-        if let Some(ars) = read_anonymity_revokers(args.anonymity_revokers) {
+        if let Ok(ars) = read_anonymity_revokers(args.anonymity_revokers) {
             ars
         } else {
             eprintln!("Cannot read anonymity revokers from the database. Terminating.");
@@ -116,10 +116,14 @@ fn main() {
         _phantom: Default::default(),
     };
 
-    let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
+    let context = IPContext::new(&ip_info, &ars_infos.anonymity_revokers, &global_ctx);
     // Threshold is all anonymity revokers.
-    let (pio, randomness) = generate_pio(&context, Threshold(ars_infos.len() as u8), &aci)
-        .expect("Generating the pre-identity object should succeed.");
+    let (pio, randomness) = generate_pio(
+        &context,
+        Threshold(ars_infos.anonymity_revokers.len() as u8),
+        &aci,
+    )
+    .expect("Generating the pre-identity object should succeed.");
 
     let sig_ok = verify_credentials(&pio, context, &attributes, &ip_secret_key);
 
@@ -211,9 +215,9 @@ fn main() {
         let ip_info_bytes = to_bytes(&ip_info);
         out.put(&(ip_info_bytes.len() as u32));
         out.write_all(&ip_info_bytes).unwrap();
-        let ars_len = ars_infos.len();
+        let ars_len = ars_infos.anonymity_revokers.len();
         out.put(&(ars_len as u64)); // length of the list, expected big-endian in Haskell.
-        for ar in ars_infos.values() {
+        for ar in ars_infos.anonymity_revokers.values() {
             let ar_bytes = to_bytes(ar);
             out.put(&(ar_bytes.len() as u32));
             out.write_all(&ar_bytes).unwrap();
@@ -262,17 +266,17 @@ fn main() {
             println!("Output binary file testdata.bin.");
         }
 
-        // We also output the cdi in JSON and binary, to test compatiblity with
+        // We also output a versioned CDI in JSON and binary, to test compatiblity with
         // the haskell serialization
-
-        if let Err(err) = write_json_to_file("cdi.json", &cdi_1) {
+        let ver_cdi_1 = Versioned::new(VERSION_0, cdi_1);
+        if let Err(err) = write_json_to_file("cdi.json", &ver_cdi_1) {
             eprintln!("Could not output JSON file cdi.json, because {}.", err);
         } else {
             println!("Output cdi.json.");
         }
 
         let cdi_file = File::create("cdi.bin");
-        if let Err(err) = cdi_file.unwrap().write_all(&to_bytes(&cdi_1)) {
+        if let Err(err) = cdi_file.unwrap().write_all(&to_bytes(&ver_cdi_1)) {
             eprintln!("Could not output binary file cdi.bin, because {}.", err);
         } else {
             println!("Output binary file cdi.bin.");
@@ -304,8 +308,10 @@ fn main() {
             &acc_data,
         )
         .expect("We should have generated valid data.");
+        let acc_addr = AccountAddress::new(&cdi.values.reg_id);
+        let versioned_cdi = Versioned::new(VERSION_0, cdi);
 
-        if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &cdi) {
+        if let Err(err) = write_json_to_file(&format!("credential-{}.json", idx), &versioned_cdi) {
             eprintln!("Could not output credential = {}, because {}.", idx, err);
         } else {
             println!("Output credential {}.", idx);
@@ -313,7 +319,7 @@ fn main() {
         // return the account data that can be used to deploy more credentials
         // to the same account.
         AccountData {
-            existing: Right(AccountAddress::new(&cdi.values.reg_id)),
+            existing: Right(acc_addr),
             ..acc_data
         }
     };

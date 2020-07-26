@@ -831,6 +831,15 @@ pub struct IpInfo<P: Pairing> {
     pub ip_verify_key: pssig::PublicKey<P>,
 }
 
+/// Collection of identity providers.
+#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "P: Pairing", deserialize = "P: Pairing"))]
+#[serde(transparent)]
+pub struct IpInfos<P: Pairing> {
+    #[serde(rename = "idps")]
+    pub identity_providers: BTreeMap<IpIdentity, IpInfo<P>>,
+}
+
 /// Public key of an anonymity revoker.
 pub type ArPublicKey<C> = elgamal::PublicKey<C>;
 
@@ -848,6 +857,14 @@ pub struct ArInfo<C: Curve> {
     /// elgamal encryption key of the anonymity revoker
     #[serde(rename = "arPublicKey")]
     pub ar_public_key: ArPublicKey<C>,
+}
+
+/// Collection of anonymity revokers.
+#[derive(Debug, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+#[serde(transparent)]
+pub struct ArInfos<C: Curve> {
+    pub anonymity_revokers: BTreeMap<ArIdentity, ArInfo<C>>,
 }
 
 /// A helper trait to access only the public key of the ArInfo structure.
@@ -1335,7 +1352,7 @@ pub struct IPContext<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> {
 
 impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IPContext<'a, P, C> {}
 
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct GlobalContext<C: Curve> {
     /// Generator of the curve C, used for, e.g., elgamal encryption.
