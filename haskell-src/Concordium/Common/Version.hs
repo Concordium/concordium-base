@@ -37,6 +37,15 @@ instance S.Serialize Version where
             unless (value <= fromIntegral (maxBound :: Version)) $ fail "Version number value overflow"
             return $ Version (fromIntegral value)
 
+-- |Aliases for get and put methods that fix the type. This makes them more
+-- convenient to use in some cases since one does not have to provide type
+-- annotations.
+getVersion :: S.Get Version
+getVersion = S.get
+
+putVersion :: Version -> S.Put
+putVersion = S.put
+
 -- |Versioned data structure
 data Versioned a = Versioned {
   -- |Version of the data
