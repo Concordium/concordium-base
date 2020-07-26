@@ -121,10 +121,13 @@ impl Write for Vec<u8> {
 pub trait Serialize: Sized {
     /// Attempt to write the structure into the provided writer, failing if
     /// only part of the structure could be written.
-    fn serial<W: Write>(&self, _out: &mut W) -> Option<()>;
+    ///
+    /// NB: We use Result instead of Option for better composability with other
+    /// constructs.
+    fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err>;
     /// Attempt to read a structure from a given source, failing if an error
     /// occurs during deserialization or reading.
-    fn deserial<R: Read>(_source: &mut R) -> Option<Self>;
+    fn deserial<R: Read>(_source: &mut R) -> Result<Self, R::Err>;
 }
 
 /// A more convenient wrapper around `Serialize` that makes it easier to write
@@ -139,10 +142,13 @@ pub trait Serialize: Sized {
 /// ```
 /// where `source` is any type that implements `Read`.
 pub trait Get<T> {
-    fn get(&mut self) -> Option<T>;
+    type Err;
+    fn get(&mut self) -> Result<T, Self::Err>;
 }
 
 impl<R: Read, T: Serialize> Get<T> for R {
+    type Err = R::Err;
+
     #[inline(always)]
-    fn get(&mut self) -> Option<T> { T::deserial(self) }
+    fn get(&mut self) -> Result<T, R::Err> { T::deserial(self) }
 }

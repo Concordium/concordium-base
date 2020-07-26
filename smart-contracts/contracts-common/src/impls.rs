@@ -10,65 +10,65 @@ use std::collections;
 // Implementations of Serialize
 
 impl<X: Serialize, Y: Serialize> Serialize for (X, Y) {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.0.serial(out)?;
         self.1.serial(out)
     }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let x = X::deserial(source)?;
         let y = Y::deserial(source)?;
-        Some((x, y))
+        Ok((x, y))
     }
 }
 
 impl Serialize for u8 {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> { out.write_u8(*self).ok() }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u8(*self) }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> { source.read_u8().ok() }
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> { source.read_u8() }
 }
 
 impl Serialize for u32 {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> { out.write_u32(*self).ok() }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u32(*self) }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> { source.read_u32().ok() }
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> { source.read_u32() }
 }
 
 impl Serialize for u64 {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> { out.write_u64(*self).ok() }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u64(*self) }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> { source.read_u64().ok() }
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> { source.read_u64() }
 }
 
 impl Serialize for [u8; 32] {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> { out.write_all(self).ok() }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_all(self) }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let mut bytes = [0u8; 32];
-        source.read_exact(&mut bytes).ok()?;
-        Some(bytes)
+        source.read_exact(&mut bytes)?;
+        Ok(bytes)
     }
 }
 
 impl Serialize for AccountAddress {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> { out.write_all(&self.0).ok() }
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_all(&self.0) }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let bytes = source.get()?;
-        Some(AccountAddress(bytes))
+        Ok(AccountAddress(bytes))
     }
 }
 
 impl Serialize for ContractAddress {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> {
-        out.write_u64(self.index).ok()?;
-        out.write_u64(self.subindex).ok()
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_u64(self.index)?;
+        out.write_u64(self.subindex)
     }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let index = source.get()?;
         let subindex = source.get()?;
-        Some(ContractAddress {
+        Ok(ContractAddress {
             index,
             subindex,
         })
@@ -76,39 +76,39 @@ impl Serialize for ContractAddress {
 }
 
 impl Serialize for Address {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         match self {
             Address::Account(ref acc) => {
-                out.write_u8(0).ok()?;
+                out.write_u8(0)?;
                 acc.serial(out)
             }
             Address::Contract(ref cnt) => {
-                out.write_u8(0).ok()?;
+                out.write_u8(0)?;
                 cnt.serial(out)
             }
         }
     }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let tag = u8::deserial(source)?;
         match tag {
-            0 => Some(Address::Account(source.get()?)),
-            1 => Some(Address::Contract(source.get()?)),
-            _ => None,
+            0 => Ok(Address::Account(source.get()?)),
+            1 => Ok(Address::Contract(source.get()?)),
+            _ => Err(R::Err::default()),
         }
     }
 }
 
 impl Serialize for InitContext {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.metadata.serial(out)?;
         self.init_origin.serial(out)
     }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let metadata = source.get()?;
         let init_origin = source.get()?;
-        Some(Self {
+        Ok(Self {
             metadata,
             init_origin,
         })
@@ -116,7 +116,7 @@ impl Serialize for InitContext {
 }
 
 impl Serialize for ReceiveContext {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.metadata.serial(out)?;
         self.invoker.serial(out)?;
         self.self_address.serial(out)?;
@@ -125,14 +125,14 @@ impl Serialize for ReceiveContext {
         self.owner.serial(out)
     }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let metadata = source.get()?;
         let invoker = source.get()?;
         let self_address = source.get()?;
         let self_balance = source.get()?;
         let sender = source.get()?;
         let owner = source.get()?;
-        Some(ReceiveContext {
+        Ok(ReceiveContext {
             metadata,
             invoker,
             self_address,
@@ -144,19 +144,19 @@ impl Serialize for ReceiveContext {
 }
 
 impl Serialize for ChainMetadata {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.slot_number.serial(out)?;
         self.block_height.serial(out)?;
         self.finalized_height.serial(out)?;
         self.slot_time.serial(out)
     }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let slot_number = source.get()?;
         let block_height = source.get()?;
         let finalized_height = source.get()?;
         let slot_time = source.get()?;
-        Some(Self {
+        Ok(Self {
             slot_number,
             block_height,
             finalized_height,
@@ -166,17 +166,17 @@ impl Serialize for ChainMetadata {
 }
 
 impl<K: Serialize + Ord, V: Serialize> Serialize for collections::BTreeMap<K, V> {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;
         len.serial(out)?;
         for (k, v) in self.iter() {
             k.serial(out)?;
             v.serial(out)?;
         }
-        Some(())
+        Ok(())
     }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let len: u32 = source.get()?;
         // FIXME: Ensure order.
         let mut map = collections::BTreeMap::<K, V>::new();
@@ -184,10 +184,10 @@ impl<K: Serialize + Ord, V: Serialize> Serialize for collections::BTreeMap<K, V>
             let k = source.get()?;
             let v = source.get()?;
             if map.insert(k, v).is_some() {
-                return None;
+                return Err(R::Err::default());
             }
         }
-        Some(map)
+        Ok(map)
     }
 }
 
@@ -293,7 +293,7 @@ pub fn to_bytes<S: Serialize>(x: &S) -> Vec<u8> {
     out
 }
 
-pub fn from_bytes<S: Serialize>(source: &[u8]) -> Option<S> {
+pub fn from_bytes<S: Serialize>(source: &[u8]) -> Result<S, ()> {
     let mut cursor = Cursor::new(source);
     cursor.get()
 }

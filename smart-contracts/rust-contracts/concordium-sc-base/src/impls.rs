@@ -1,8 +1,13 @@
-use crate::{prims::*, types::*};
+use crate::{convert, prims::*, types::*};
 use contracts_common::*;
 
 #[cfg(not(feature = "std"))]
 use alloc::{vec, vec::Vec};
+
+impl convert::From<()> for Reject {
+    #[inline(always)]
+    fn from(_: ()) -> Self { Reject {} }
+}
 
 // Implementations of seek/read/write
 impl Seek for ContractState {
@@ -114,7 +119,7 @@ impl Create for ContractState {
 impl ContractState {
     /// Make sure that the memory size is at least that many bytes in size.
     /// Returns true iff this was successful.
-    pub fn reserve(&self, len: u32) -> bool {
+    pub fn reserve(&mut self, len: u32) -> bool {
         let cur_size = unsafe { state_size() };
         if cur_size < len {
             let res = unsafe { resize_state(len) };
@@ -135,7 +140,21 @@ impl ContractState {
         out
     }
 
+    /// Return current size of contract state.
     pub fn size(&self) -> u32 { unsafe { state_size() } }
+
+    /// Truncate the state to the given size. If the given size is more than the
+    /// current state size this operation does nothing. The new position is at
+    /// most at the end of the stream.
+    pub fn truncate(&mut self, new_size: u32) {
+        let cur_size = self.size();
+        if cur_size > new_size {
+            unsafe { resize_state(new_size) };
+        }
+        if new_size < self.current_position {
+            self.current_position = new_size
+        }
+    }
 }
 
 pub trait Create {
@@ -143,6 +162,8 @@ pub trait Create {
 }
 
 pub trait HasParameter: private::Sealed {
+    // TODO: Add functions where a user can supply a buffer
+    // for getting the parameters to avoid vector allocations.
     fn parameter_bytes(&self) -> Vec<u8> {
         let len = unsafe { get_parameter_size() };
         let mut bytes = vec![0u8; len as usize];
@@ -150,7 +171,7 @@ pub trait HasParameter: private::Sealed {
         bytes
     }
 
-    fn parameter<S: Serialize>(&self) -> Option<S> {
+    fn parameter<S: Serialize>(&self) -> Result<S, ()> {
         let params = self.parameter_bytes();
         let mut cursor = Cursor::<&[u8]>::new(&params);
         cursor.get()
@@ -174,9 +195,11 @@ impl Create for InitContext {
 impl Create for ReceiveContext {
     /// Create a new receive context by using an external call.
     fn new() -> Self {
-        let metadata_size = 4 * 8;
-        let size = unsafe { get_receive_ctx_size() };
-        let mut bytes = vec![0u8; metadata_size + size as usize];
+        // let metadata_size = 4 * 8;
+        // We reduce this to a purely stack-based allocation
+        // by overapproximating the size of the context.
+        // unsafe { get_receive_ctx_size() };
+        let mut bytes = [0u8; 4 * 8 + 121];
         // unsafe { get_chain_context(bytes.as_mut_ptr()) }
         // unsafe { get_receive_ctx(bytes[metadata_size..].as_mut_ptr()) };
         unsafe { get_receive_ctx(bytes.as_mut_ptr()) };
@@ -190,6 +213,9 @@ impl HasParameter for InitContext {}
 impl HasParameter for ReceiveContext {}
 
 mod private {
+    // A trick to not allow anybody else to implement HasParameter.
+    // This module is not exported, hence nobody else can implement the Sealed
+    // trait.
     pub trait Sealed {}
     impl Sealed for super::InitContext {}
     impl Sealed for super::ReceiveContext {}

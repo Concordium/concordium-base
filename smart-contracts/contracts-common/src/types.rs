@@ -66,11 +66,11 @@ pub enum Address {
 )]
 pub struct ReceiveContext {
     pub(crate) metadata:     ChainMetadata,
-    pub(crate) invoker:      AccountAddress,
-    pub(crate) self_address: ContractAddress,
-    pub self_balance:        Amount,
-    pub(crate) sender:       Address,
-    pub(crate) owner:        AccountAddress,
+    pub(crate) invoker:      AccountAddress,  //32 bytes
+    pub(crate) self_address: ContractAddress, // 16 bytes
+    pub self_balance:        Amount,          // 8 bytes
+    pub(crate) sender:       Address,         // 9 or 33 bytes
+    pub(crate) owner:        AccountAddress,  // 32 bytes
 }
 
 /// Chain metadata accessible to both receive and init methods.

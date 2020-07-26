@@ -8,17 +8,17 @@ pub struct State {
 }
 
 impl Serialize for State {
-    fn serial<W: Write>(&self, out: &mut W) -> Option<()> {
-        out.write_u8(self.step).ok()?;
-        out.write_u32(self.current_count).ok()?;
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_u8(self.step)?;
+        out.write_u32(self.current_count)?;
         self.initializer.serial(out)
     }
 
-    fn deserial<R: Read>(source: &mut R) -> Option<Self> {
-        let step = source.read_u8().ok()?;
-        let current_count = source.read_u32().ok()?;
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
+        let step = source.read_u8()?;
+        let current_count = source.read_u32()?;
         let initializer = AccountAddress::deserial(source)?;
-        Some(State {
+        Ok(State {
             step,
             current_count,
             initializer,
