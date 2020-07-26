@@ -371,6 +371,7 @@ getCDWM time = do
 -- The only supported version at the moment is version 0.
 --
 -- * @SPEC: <$DOCS/Versioning#binary-format>
+-- * @SPEC: <$DOCS/Versioning>
 getExactVersionedBlockItem :: TransactionTime
                            -- ^Timestamp for when the item is received, used to
                            -- construct the metadata.
@@ -385,6 +386,7 @@ getExactVersionedBlockItem time = do
 -- |Get a block item according to V0 format, reconstructing metadata.
 --
 -- * @SPEC: <$DOCS/Transactions#v0-format>
+-- * @SPEC: <$DOCS/Versioning>
 getBlockItemV0 :: TransactionTime -- ^Timestamp of when the item arrived.
              -> S.Get BlockItem
 getBlockItemV0 time =
