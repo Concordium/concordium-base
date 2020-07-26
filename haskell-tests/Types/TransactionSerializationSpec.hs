@@ -32,9 +32,10 @@ testTransaction size = forAll (resize size genBareTransaction) checkTransaction
 dummyTime :: TransactionTime
 dummyTime = 37
 
+-- |Check V0 serialization of block items.
 checkBlockItem :: BlockItem -> Property
 checkBlockItem bi = 
-    case runGet (getBlockItem (wmdArrivalTime bi)) bs of
+    case runGet (getBlockItemV0 (wmdArrivalTime bi)) bs of
       Left err -> counterexample err False
       Right bi' -> QC.label (groupIntoSize (BS.length bs)) $ bi === bi'
   where
