@@ -480,6 +480,8 @@ pub fn invoke_receive(
         .expect("Instantiation should always succeed for well-formed modules.");
     let res = inst.call(receive_name, &[Value::I64(amount as i64)])?;
     if let Some(wasmer_runtime::Value::I32(n)) = res.first() {
+        // FIXME: We should filter out to only return the ones reachable from
+        // the root.
         let mut actions = outcome.get();
         if *n >= 0 && (*n as usize) < actions.len() {
             let n = *n as usize;

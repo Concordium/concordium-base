@@ -3,6 +3,8 @@ use std::{slice, str};
 
 use crate::*;
 
+// FIXME: Ensure memory safety of from-raw-parts usage.
+// Sometimes we pass in empty arrays, via pointers which are arbitrary.
 #[no_mangle]
 pub unsafe extern "C" fn call_init(
     wasm_bytes: *const u8,
@@ -39,6 +41,8 @@ pub unsafe extern "C" fn call_init(
     }
 }
 
+// FIXME: Ensure memory safety of from-raw-parts usage.
+// Sometimes we pass in empty arrays, via pointers which are arbitrary.
 #[no_mangle]
 pub unsafe extern "C" fn call_receive(
     wasm_bytes: *const u8,
