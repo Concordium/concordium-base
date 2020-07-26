@@ -42,9 +42,9 @@ Library
                    Concordium.Crypto.ByteStringHelpers
                    Concordium.Crypto.Proofs
                    Concordium.Crypto.DummyData
+                   Concordium.Crypto.FFIHelpers
 
-
-  Other-modules:  Concordium.Crypto.FFIHelpers
+  Other-modules:
                   Data.Base58Encoding.TH
 
   Build-depends:  base >=4.7
