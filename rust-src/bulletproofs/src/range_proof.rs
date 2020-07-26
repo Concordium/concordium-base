@@ -19,7 +19,8 @@ pub struct RangeProof<C: Curve> {
     ip_proof: InnerProductProof<C>,
 }
 
-#[allow(non_snake_case)]
+// Determine whether the i-th bit (counting from least significant) is set in
+// the given u64 value.
 fn ith_bit_bool(v: u64, i: u8) -> bool { v & (1 << i) != 0 }
 
 #[allow(non_snake_case)]
@@ -40,6 +41,9 @@ fn a_L_a_R<F: Field>(v: u64, n: u8) -> (Vec<F>, Vec<F>) {
 
 /// This function takes one argument n and returns the
 /// vector (1, 2, ..., 2^{n-1}) in F^n for any field F
+///
+/// This could use the next `z_vec` function, but for efficiency it implements
+/// the special-case logic for doubling directly.
 #[allow(non_snake_case)]
 fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
     let mut two_n = Vec::with_capacity(usize::from(n));
@@ -56,8 +60,7 @@ fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
 /// The arguments are
 /// - z - the field element z
 /// - first_power - the first power j
-/// - n - the integer n
-#[allow(non_snake_case)]
+/// - n - the integer n.
 fn z_vec<F: Field>(z: F, first_power: usize, n: usize) -> Vec<F> {
     let mut z_n = Vec::with_capacity(n);
     let mut z_i = F::one();
@@ -80,8 +83,8 @@ pub struct Generators<C> {
 
 /// This function produces a range proof given scalars in a prime field
 /// instead of integers. It invokes prove(), documented below.
-#[allow(clippy::many_single_char_names)]
-#[allow(non_snake_case)]
+///
+/// See the documentation of `prove` below for the meaning of arguments.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_given_scalars<C: Curve, T: Rng>(
     transcript: &mut Transcript,
@@ -379,11 +382,15 @@ pub fn prove<C: Curve, T: Rng>(
 }
 
 /// The verifier does two checks. In case verification fails, it can be useful
-/// to know which of the checks that lead to failure.
+/// to know which of the checks led to failure.
 #[derive(Debug, PartialEq)]
 pub enum VerificationError {
+    /// Choice of randomness led to verification failure.
     DivisionError,
-    False(bool, bool),
+    /// The first check failed (see function below for what this means)
+    First,
+    /// The second check failed.
+    Second,
 }
 
 /// This function verifies a range proof, i.e. a proof of knowledge
@@ -395,6 +402,7 @@ pub enum VerificationError {
 /// - proof - the range proof
 /// - gens - generators containing vectors G and H both of length nm
 /// - v_keys - commitment keys B and B_tilde
+///
 /// This function is more efficient than the naive_verify since it
 /// unfolds what the inner product proof verifier does using the verification
 /// scalars.
@@ -483,6 +491,10 @@ pub fn verify_efficient<C: Curve>(
     RHS = RHS.plus_point(&multiexp(&[B, T_1, T_2], &[delta_yz, x, x2]));
 
     let first = LHS.minus_point(&RHS).is_zero_point();
+    if !first {
+        // Terminate early to avoid wasted effort.
+        return Err(VerificationError::First);
+    }
 
     let ip_proof = &proof.ip_proof;
     let mut H_scalars: Vec<C::Scalar> = Vec::with_capacity(G.len());
@@ -558,12 +570,12 @@ pub fn verify_efficient<C: Curve>(
         .plus_point(&R_term);
 
     let second = sum.is_zero_point();
-    // println!("Second check = {:?}", second);
-    // sum.is_zero_point()
     if first && second {
         Ok(())
     } else {
-        Err(VerificationError::False(first, second))
+        // We know now the second check failed since we would have terminated
+        // early if the first one had failed.
+        Err(VerificationError::Second)
     }
 }
 
@@ -1152,8 +1164,11 @@ mod tests {
         let b1 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
         let mut transcript = Transcript::new(&[]);
         let b2 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
-        assert!(!b1.is_ok());
-        assert!(b1.err().unwrap() == VerificationError::False(true, false));
+        assert_eq!(
+            b1,
+            Err(VerificationError::Second),
+            "The first check should have succeeded, and the second one failed."
+        );
         assert!(!b2);
     }
 }
