@@ -256,12 +256,12 @@ credentialDeployment :: WithMetadata CredentialDeploymentInformation -> BlockIte
 credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeployment wmdData, ..}
 
 -- |Size of the block item when full serialized (including metadata).
-blockItemSize :: BlockItem -> Int
-blockItemSize bi = metaDataSize + biSize bi
+blockItemSizeV0 :: BlockItem -> Int
+blockItemSizeV0 bi = metaDataSize + biSize bi
 
--- |Serialize a block item without metadata.
-putBlockItem :: BlockItem -> S.Put
-putBlockItem = S.put . wmdData
+-- |Serialize a block item according to V0 format, without the metadata.
+putBlockItemV0 :: BlockItem -> S.Put
+putBlockItemV0 = S.put . wmdData
 
 -- * 'TransactionSignHash' functions
 
@@ -392,6 +392,11 @@ getBlockItemV0 time =
       0 -> normalTransaction <$> getUnverifiedTransaction time
       1 -> credentialDeployment <$> getCDWM time
       _ -> fail "Block item must be either normal transaction or credential deployment."
+
+-- |Serialize a block item with version according to the V0 format, prepending the version.
+putVersionedBlockItemV0 :: BlockItem -> S.Put
+putVersionedBlockItemV0 bi = putVersion 0 <> putBlockItemV0 bi
+
 
 -- |Make a transaction out of minimal data needed.
 -- This computes the derived fields, in particular the hash of the transaction.
