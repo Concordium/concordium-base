@@ -61,6 +61,4 @@ pub unsafe extern "C" fn check_account_address(input_ptr: *const c_char) -> u8 {
 /// # Safety
 /// This function is unsafe in the sense that if the argument pointer was not
 /// Constructed via CString::into_raw its behaviour is undefined.
-pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) {
-    free_response_string_ext(ptr)
-}
+pub unsafe extern "C" fn free_response_string(ptr: *mut c_char) { free_response_string_ext(ptr) }
