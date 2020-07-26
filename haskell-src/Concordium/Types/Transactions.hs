@@ -261,7 +261,11 @@ blockItemSizeV0 bi = metaDataSize + biSize bi
 
 -- |Serialize a block item according to V0 format, without the metadata.
 putBlockItemV0 :: BlockItem -> S.Put
-putBlockItemV0 = S.put . wmdData
+putBlockItemV0 = putBareBlockItemV0 . wmdData
+
+-- |Serialize a bare block item according to the V0 format, without the metadata.
+putBareBlockItemV0 :: BareBlockItem -> S.Put
+putBareBlockItemV0 = S.put
 
 -- * 'TransactionSignHash' functions
 
@@ -399,6 +403,9 @@ getBlockItemV0 time =
 putVersionedBlockItemV0 :: BlockItem -> S.Put
 putVersionedBlockItemV0 bi = putVersion 0 <> putBlockItemV0 bi
 
+-- |Serialize a bare block item with version according to the V0 format, prepending the version.
+putVersionedBareBlockItemV0 :: BareBlockItem -> S.Put
+putVersionedBareBlockItemV0 bi = putVersion 0 <> putBareBlockItemV0 bi
 
 -- |Make a transaction out of minimal data needed.
 -- This computes the derived fields, in particular the hash of the transaction.
