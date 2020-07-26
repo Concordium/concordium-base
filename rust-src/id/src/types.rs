@@ -864,7 +864,6 @@ pub struct ArInfo<C: Curve> {
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 #[serde(transparent)]
 pub struct ArInfos<C: Curve> {
-    #[serde(rename = "ars")]
     pub anonymity_revokers: BTreeMap<ArIdentity, ArInfo<C>>,
 }
 
