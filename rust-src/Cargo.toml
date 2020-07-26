@@ -15,5 +15,6 @@ members=[
    "crypto_common",
    "crypto_common_derive",
    "random_oracle",
-   "wallet"
+   "wallet",
+   "bulletproofs",
 ]
