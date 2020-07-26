@@ -7,6 +7,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Concordium.Types.Transactions where
 
+import Concordium.Common.Version
 import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Control.Exception
@@ -255,12 +256,16 @@ credentialDeployment :: WithMetadata CredentialDeploymentInformation -> BlockIte
 credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeployment wmdData, ..}
 
 -- |Size of the block item when full serialized (including metadata).
-blockItemSize :: BlockItem -> Int
-blockItemSize bi = metaDataSize + biSize bi
+blockItemSizeV0 :: BlockItem -> Int
+blockItemSizeV0 bi = metaDataSize + biSize bi
 
--- |Serialize a block item without metadata.
-putBlockItem :: BlockItem -> S.Put
-putBlockItem = S.put . wmdData
+-- |Serialize a block item according to V0 format, without the metadata.
+putBlockItemV0 :: BlockItem -> S.Put
+putBlockItemV0 = putBareBlockItemV0 . wmdData
+
+-- |Serialize a bare block item according to the V0 format, without the metadata.
+putBareBlockItemV0 :: BareBlockItem -> S.Put
+putBareBlockItemV0 = S.put
 
 -- * 'TransactionSignHash' functions
 
@@ -363,14 +368,44 @@ getCDWM time = do
     let wmdSignHash = transactionSignHashForCDI wmdHash
     return WithMetadata{wmdArrivalTime=time,..}
 
--- |Get a block item, reconstructing metadata.
-getBlockItem :: TransactionTime -- ^Timestamp of when the item arrived.
+-- |Try to parse a versioned block item, stripping the version, and
+-- reconstructing the block item metadata from the raw data.
+-- The parsing format is determined by the version.
+--
+-- The only supported version at the moment is version 0.
+--
+-- * @SPEC: <$DOCS/Versioning#binary-format>
+-- * @SPEC: <$DOCS/Versioning>
+getExactVersionedBlockItem :: TransactionTime
+                           -- ^Timestamp for when the item is received, used to
+                           -- construct the metadata.
+                           -> S.Get BlockItem
+getExactVersionedBlockItem time = do
+    version <- S.get :: S.Get Version
+    a <- case version of
+      0 -> getBlockItemV0 time
+      _ -> fail $ "Unsupported block item version " ++ (show version) ++ "."
+    return a
+
+-- |Get a block item according to V0 format, reconstructing metadata.
+--
+-- * @SPEC: <$DOCS/Transactions#v0-format>
+-- * @SPEC: <$DOCS/Versioning>
+getBlockItemV0 :: TransactionTime -- ^Timestamp of when the item arrived.
              -> S.Get BlockItem
-getBlockItem time =
+getBlockItemV0 time =
     S.getWord8 >>= \case
       0 -> normalTransaction <$> getUnverifiedTransaction time
       1 -> credentialDeployment <$> getCDWM time
       _ -> fail "Block item must be either normal transaction or credential deployment."
+
+-- |Serialize a block item with version according to the V0 format, prepending the version.
+putVersionedBlockItemV0 :: BlockItem -> S.Put
+putVersionedBlockItemV0 bi = putVersion 0 <> putBlockItemV0 bi
+
+-- |Serialize a bare block item with version according to the V0 format, prepending the version.
+putVersionedBareBlockItemV0 :: BareBlockItem -> S.Put
+putVersionedBareBlockItemV0 bi = putVersion 0 <> putBareBlockItemV0 bi
 
 -- |Make a transaction out of minimal data needed.
 -- This computes the derived fields, in particular the hash of the transaction.
