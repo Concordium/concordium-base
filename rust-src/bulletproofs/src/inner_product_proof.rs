@@ -62,7 +62,6 @@ pub fn prove_inner_product<C: Curve>(
 /// G_slice, H_slice, a_slice and b_slice should all be of the same length, and
 /// this length must be a power of 2.
 #[allow(non_snake_case)]
-#[allow(dead_code)]
 pub fn prove_inner_product_with_scalars<C: Curve>(
     transcript: &mut Transcript,
     G_slice: &[C],
@@ -284,7 +283,6 @@ pub fn verify_scalars<C: Curve>(
 /// Precondictions:
 /// G_vec, H_vec should all be of the same length, and this length must a power
 /// of 2.
-#[allow(dead_code)]
 #[allow(non_snake_case)]
 pub fn verify_inner_product<C: Curve>(
     transcript: &mut Transcript,
@@ -301,11 +299,10 @@ pub fn verify_inner_product<C: Curve>(
     let mut ab = a;
     ab.mul_assign(&b);
 
-    let verification_scalars = verify_scalars(transcript, n, &proof);
-    if verification_scalars.is_none() {
-        return false;
-    }
-    let verification_scalars = verification_scalars.unwrap();
+    let verification_scalars = match verify_scalars(transcript, n, &proof) {
+        None => return false,
+        Some(scalars) => scalars,
+    };
     let (u_sq, u_inv_sq, s) = (
         verification_scalars.u_sq,
         verification_scalars.u_inv_sq,
@@ -339,14 +336,18 @@ pub fn verify_inner_product<C: Curve>(
 /// field F. The arguments are
 /// - a - the first vector
 /// - b - the second vector
+///
 /// Precondition:
-/// a and b should have the same length.
+/// a and b should have the same length. In case they don't have the same length
+/// the result is the inner product of the initial segments determined by the
+/// length of the shorter vector.
 #[allow(non_snake_case)]
 pub fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
-    let n = a.len();
-    if b.len() != n {
-        panic!("a and b should have the same length");
-    }
+    debug_assert_eq!(
+        a.len(),
+        b.len(),
+        "inner_product: lengths of vectors differ."
+    );
     let mut sum = F::zero();
     for (a, b) in a.iter().zip(b) {
         let mut ab = *a;
@@ -359,17 +360,17 @@ pub fn inner_product<F: Field>(a: &[F], b: &[F]) -> F {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ff::PrimeField;
-    use pairing::bls12_381::{Fr, G1};
+    use curve_arithmetic::Curve;
+    use pairing::bls12_381::G1;
     use rand::thread_rng;
     type SomeCurve = G1;
 
     #[test]
     fn testinner() {
-        let one = Fr::from_str("1").unwrap();
-        let two = Fr::from_str("2").unwrap();
-        let three = Fr::from_str("3").unwrap();
-        let eleven = Fr::from_str("11").unwrap();
+        let one = SomeCurve::scalar_from_u64(1);
+        let two = SomeCurve::scalar_from_u64(2);
+        let three = SomeCurve::scalar_from_u64(3);
+        let eleven = SomeCurve::scalar_from_u64(11);
 
         let v = vec![one, two, three];
         let u = vec![three, one, two];
