@@ -100,7 +100,6 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
     for &v in v_vec {
         let rep = v.into_repr();
         let r = rep.as_ref()[0];
-        println!("{:?}", r);
         v_integers.push(r);
     }
 

@@ -313,7 +313,7 @@ mod tests {
         // println!("{:?}", u64_to_chunks::<u32>(j));
         // println!("{:?}", u64_to_chunks::<u16>(j));
 
-        println!("Integration test");
+        // println!("Integration test");
 
         let n = 32;
         let m: u8 = 8;
@@ -323,7 +323,7 @@ mod tests {
         let huge_number_ref = huge_number_repr.as_ref();
         let sum = Value::<G1>::new(huge_number);
         let chunks = u64_chunks_to_chunks::<u32>(huge_number_ref);
-        println!("{:?}", chunks);
+        // println!("{:?}", chunks);
         let xs_scalars: Vec<Fr> = chunks
             .iter()
             .map(|&x| G1::scalar_from_u64(u64::from(x)))
