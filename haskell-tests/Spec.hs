@@ -2,6 +2,7 @@ module Main where
 
 import Test.Hspec
 
+import qualified ConcordiumTests.Common.Version
 import qualified ConcordiumTests.Crypto.SHA256
 import qualified ConcordiumTests.Crypto.Ed25519Signature
 import qualified ConcordiumTests.Crypto.VRF
@@ -14,6 +15,7 @@ import qualified ConcordiumTests.Crypto.Ed25519DlogProofs
 
 main :: IO  ()
 main = hspec $ parallel $ do
+    ConcordiumTests.Common.Version.tests
     ConcordiumTests.Crypto.FFIVerify.tests
     ConcordiumTests.Crypto.FFIDataTypes.tests
     ConcordiumTests.Crypto.SHA256.tests

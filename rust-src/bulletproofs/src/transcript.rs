@@ -10,12 +10,15 @@ pub trait TranscriptProtocol {
 }
 
 impl TranscriptProtocol for Transcript {
+    // FIXME: This needs to be updated once we unify the random oracles.
     fn domain_sep(&mut self) { self.append_message(b"dom-sep", b"TranscriptProtocol Example"); }
 
     fn append_point<C: Curve>(&mut self, label: &'static [u8], point: &C) {
         self.append_message(label, &to_bytes(point));
     }
 
+    // FIXME: Avoid using to_bytes and the associated vector allocation.
+    // Scalar bytes size is statically known.
     fn append_scalar<C: Curve>(&mut self, label: &'static [u8], scalar: &C::Scalar) {
         self.append_message(label, &to_bytes(scalar));
     }

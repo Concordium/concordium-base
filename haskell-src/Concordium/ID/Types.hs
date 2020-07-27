@@ -20,6 +20,7 @@ import Data.Text.Encoding as Text
 import Data.Aeson hiding (encode, decode)
 import Data.Aeson.Types(toJSONKeyText)
 import Data.Maybe(fromMaybe)
+import qualified Data.Set as Set
 import Control.Monad
 import Control.Monad.Except
 import qualified Data.Text as Text
@@ -109,8 +110,8 @@ newtype KeyIndex = KeyIndex Word8
     deriving (Hashable, Show, Read, S.Serialize, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Word8
 
 data AccountKeys = AccountKeys {
-  akKeys :: Map.Map KeyIndex VerifyKey,
-  akThreshold :: SignatureThreshold
+  akKeys :: !(Map.Map KeyIndex VerifyKey),
+  akThreshold :: !SignatureThreshold
   } deriving(Eq, Show, Ord)
 
 makeAccountKeys :: [VerifyKey] -> SignatureThreshold -> AccountKeys
@@ -154,10 +155,13 @@ instance FromJSON AccountKeys where
 getAccountKey :: KeyIndex -> AccountKeys -> Maybe VerifyKey
 getAccountKey idx keys = Map.lookup idx (akKeys keys)
 
+getKeyIndices :: AccountKeys -> Set.Set KeyIndex
+getKeyIndices keys = Map.keysSet $ akKeys keys
+
 -- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32
     deriving (Eq, Hashable)
-    deriving Show via Word32
+    deriving newtype (Show, FromJSONKey)
 
 instance Serialize IdentityProviderIdentity where
   put (IP_ID w) = S.putWord32be w
@@ -173,6 +177,10 @@ instance ToJSON IdentityProviderIdentity where
 
 instance FromJSON IdentityProviderIdentity where
   parseJSON v = IP_ID <$> parseJSON v
+
+-- NB: This instance relies on the show instance being the one of Word32.
+instance ToJSONKey IdentityProviderIdentity where
+  toJSONKey = toJSONKeyText (Text.pack . show)
 
 -- Account signatures (eddsa key)
 type AccountSignature = Signature
@@ -204,7 +212,6 @@ newtype CredentialRegistrationID = RegIdCred (FBS.FixedByteString RegIdSize)
 instance ToJSON CredentialRegistrationID where
   toJSON v = String (Text.pack (show v))
 
--- Data (serializes with `putByteString :: Bytestring -> Put`)
 instance FromJSON CredentialRegistrationID where
   parseJSON = withText "Credential registration ID in base16" deserializeBase16
 
@@ -244,7 +251,7 @@ instance Serialize AttributeValue where
       else fail "Attribute malformed. Must fit into 31 bytes."
 
 instance ToJSON AttributeValue where
-  -- this is safe because the bytestring should contain 
+  -- this is safe because the bytestring should contain
   toJSON (AttributeValue v) = String (Text.decodeUtf8 (BSS.fromShort v))
 
 instance FromJSON AttributeValue where
@@ -273,7 +280,7 @@ instance Show YearMonth where
   show YearMonth{..} = show ymYear ++ (if ymMonth < 10 then ("0" ++ show ymMonth) else (show ymMonth))
 
 instance Serialize YearMonth where
-  put YearMonth{..} = 
+  put YearMonth{..} =
     S.putWord16be ymYear <>
     S.putWord8 ymMonth
   get = do
@@ -371,7 +378,7 @@ instance FromJSON Policy where
 -- |Unique identifier of the anonymity revoker.
 newtype ArIdentity = ArIdentity Word32
     deriving(Eq, Ord)
-    deriving Show via Word32
+    deriving (Show, Hashable) via Word32
 
 instance Serialize ArIdentity where
   put (ArIdentity n) = S.putWord32be n
@@ -400,7 +407,7 @@ instance FromJSONKey ArIdentity where
       where arIdFromText t = do
               when (Text.length t > 10) $ fail "Out of bounds."
               case Text.readMaybe (Text.unpack t) of
-                Nothing -> fail "Not an integral value."
+                Nothing -> fail "ArIdentity not an integral value."
                 Just i -> do
                   when (i <= 0) $ fail "ArIdentity must be positive."
                   when (i > toInteger (maxBound :: Word32)) $ fail "ArIdentity out of bounds."
@@ -473,7 +480,17 @@ type AccountVerificationKey = VerifyKey
 -- The value is at least 1 and at most 255.
 newtype SignatureThreshold = SignatureThreshold Word8
     deriving(Eq, Ord, Show, Enum, Num, Real, Integral)
-    deriving Serialize via Word8
+
+instance Serialize SignatureThreshold where
+  get = do
+    w <- getWord8
+    when (w == 0) $ fail "0 is not a valid signature threshold."
+    return (SignatureThreshold w)
+  put (SignatureThreshold w) = putWord8 w
+
+instance Read SignatureThreshold where
+  -- filter out the 0 values
+  readsPrec parsePrec input = [(SignatureThreshold w, rest) | (w, rest) <- readsPrec parsePrec input, w /= 0]
 
 instance ToJSON SignatureThreshold where
   toJSON (SignatureThreshold x) = toJSON x
@@ -630,8 +647,12 @@ instance Eq CredentialDeploymentInformation where
   cdi1 == cdi2 = cdiValues cdi1 == cdiValues cdi2
 
 instance FromJSON CredentialDeploymentInformation where
-  parseJSON = withObject "CredentialDeploymentInformation" $ \v -> do
-    cdiValues <- parseJSON (Object v)
-    proofsText <- v .: "proofs"
-    return CredentialDeploymentInformation{cdiProofs = Proofs (BSS.toShort . fst . BS16.decode . Text.encodeUtf8 $ proofsText),
-                                           ..}
+  parseJSON = withObject "CredentialDeploymentInformation" $ \x -> do
+    cdiValues <- parseJSON (Object x)
+    proofsText <- x .: "proofs"
+    let (bs, rest) = BS16.decode . Text.encodeUtf8 $ proofsText
+    unless (BS.null rest) $ fail "\"proofs\" is not a valid base16 string."
+    return CredentialDeploymentInformation {
+        cdiProofs = Proofs (BSS.toShort bs),
+        ..
+      }

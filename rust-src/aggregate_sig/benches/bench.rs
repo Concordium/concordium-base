@@ -1,9 +1,6 @@
-#[macro_use]
-extern crate criterion;
-
 use aggregate_sig::aggregate_sig::*;
 
-use criterion::Criterion;
+use criterion::*;
 use pairing::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 
@@ -97,32 +94,30 @@ fn bench_verify_aggregate_sig(c: &mut Criterion) {
 
 fn bench_verify_aggregate_sig_trusted_keys(c: &mut Criterion) {
     let mut csprng = thread_rng();
-    let n = 200;
-    let (sks, pks) = get_sks_pks!(n, csprng);
-    let m = rand_m_of_length!(1000, csprng);
 
-    let mut agg_sig = sks[0].sign(&m);
-    for i in 1..n {
-        let new_sig = sks[i].sign(&m);
-        agg_sig = new_sig.aggregate(agg_sig);
+    let mut group = c.benchmark_group("verify_aggregate_sig_trusted_keys");
+
+    // performance varies from the sequential version to the parallel version around
+    // size = 150
+    let sizes = vec![50, 100, 150, 200, 250, 300, 350, 400, 600, 1000, 1500, 3000];
+
+    for s in sizes {
+        let (sks, pks) = get_sks_pks!(s, csprng);
+        let m = rand_m_of_length!(1000, csprng);
+
+        let mut agg_sig = sks[0].sign(&m);
+        for i in 1..s {
+            let new_sig = sks[i].sign(&m);
+            agg_sig = new_sig.aggregate(agg_sig);
+        }
+
+        group.bench_function(
+            format!("verify_aggregate_sig_trusted_keys_{}", s),
+            move |b| b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig)),
+        );
     }
 
-    c.bench_function("verify_aggregate_sig_trusted_keys_200", move |b| {
-        b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
-    });
-
-    let n = 3000;
-    let (sks, pks) = get_sks_pks!(n, csprng);
-    let m = rand_m_of_length!(1000, csprng);
-
-    let mut agg_sig = sks[0].sign(&m);
-    for i in 1..n {
-        let new_sig = sks[i].sign(&m);
-        agg_sig = new_sig.aggregate(agg_sig);
-    }
-    c.bench_function("verify_aggregate_sig_trusted_keys_3000", move |b| {
-        b.iter(|| verify_aggregate_sig_trusted_keys(&m, &pks, agg_sig))
-    });
+    group.finish();
 }
 
 // to bench has_duplicates, expose it in aggregate_sig.rs by making it public
