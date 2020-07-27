@@ -181,11 +181,11 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use ff::PrimeField;
-    use pairing::bls12_381::G1;
+    use ff::PrimeField;
+    use pairing::bls12_381::{Fr, G1};
     // use pairing::bls12_381::G1;
+    use merlin::Transcript;
     use rand::thread_rng;
-    // use merlin::Transcript;
     // use std::convert::TryInto;
 
     #[test]
@@ -242,5 +242,150 @@ mod tests {
                 assert!(!verify(ro.split(), &wrong_cmm, &proof))
             })
         }
+    }
+
+    #[test]
+    pub fn test_linear_relation_of_chunks() {
+        let rng = &mut thread_rng();
+        let g = G1::generate(rng);
+        let h = G1::generate(rng);
+        let cmm_key = CommitmentKey(g, h);
+
+        trait ToChunks {
+            type Integer: Sized + Clone;
+            fn to_chunks(bytes: [u8; 8]) -> Vec<Self::Integer>;
+        }
+
+        impl ToChunks for u64 {
+            type Integer = u64;
+
+            fn to_chunks(bytes: [u8; 8]) -> Vec<Self::Integer> { vec![u64::from_le_bytes(bytes)] }
+        }
+
+        impl ToChunks for u32 {
+            type Integer = u32;
+
+            fn to_chunks(bytes: [u8; 8]) -> Vec<Self::Integer> {
+                let byte_chunk_1 = [bytes[0], bytes[1], bytes[2], bytes[3]];
+                let byte_chunk_2 = [bytes[4], bytes[5], bytes[6], bytes[7]];
+
+                vec![
+                    u32::from_le_bytes(byte_chunk_1),
+                    u32::from_le_bytes(byte_chunk_2),
+                ]
+            }
+        }
+
+        impl ToChunks for u16 {
+            type Integer = u16;
+
+            fn to_chunks(bytes: [u8; 8]) -> Vec<Self::Integer> {
+                let byte_chunk_1 = [bytes[0], bytes[1]];
+                let byte_chunk_2 = [bytes[2], bytes[3]];
+                let byte_chunk_3 = [bytes[4], bytes[5]];
+                let byte_chunk_4 = [bytes[6], bytes[7]];
+
+                vec![
+                    u16::from_le_bytes(byte_chunk_1),
+                    u16::from_le_bytes(byte_chunk_2),
+                    u16::from_le_bytes(byte_chunk_3),
+                    u16::from_le_bytes(byte_chunk_4),
+                ]
+            }
+        }
+
+        fn u64_to_chunks<T: ToChunks>(n: u64) -> Vec<T::Integer> {
+            let bytes = n.to_le_bytes();
+            T::to_chunks(bytes)
+        }
+
+        fn u64_chunks_to_chunks<T: ToChunks>(u64_chunks: &[u64]) -> Vec<T::Integer> {
+            let mut vec = vec![];
+            for &v in u64_chunks {
+                let chunk = u64_to_chunks::<T>(v);
+                vec.extend_from_slice(&chunk);
+            }
+            vec
+        }
+
+        // let j : u64 = 2*4294967296+65536 + 65535;
+        // println!("{:?}", u64_to_chunks::<u64>(j));
+        // println!("{:?}", u64_to_chunks::<u32>(j));
+        // println!("{:?}", u64_to_chunks::<u16>(j));
+
+        println!("Integration test");
+
+        let n = 32;
+        let m: u8 = 8;
+        let nm = 256;
+        let huge_number = Fr::from_str("18446744073709551618").unwrap();
+        let huge_number_repr = huge_number.into_repr();
+        let huge_number_ref = huge_number_repr.as_ref();
+        let sum = Value::<G1>::new(huge_number);
+        let chunks = u64_chunks_to_chunks::<u32>(huge_number_ref);
+        println!("{:?}", chunks);
+        let xs_scalars: Vec<Fr> = chunks
+            .iter()
+            .map(|&x| G1::scalar_from_u64(u64::from(x)))
+            .collect();
+        let xs_values: Vec<Value<G1>> = xs_scalars.iter().map(|&x| Value::<G1>::new(x)).collect();
+        let two_32 = Fr::from_str("4294967296").unwrap();
+        let u1 = Fr::from_str("1").unwrap();
+        let mut us = Vec::with_capacity(usize::from(m));
+        let mut ui = u1;
+        let r = Randomness::<G1>::generate(rng);
+        let mut rs = Vec::with_capacity(usize::from(m));
+        let mut cmms = Vec::with_capacity(usize::from(m));
+        let cmm = cmm_key.hide(&sum, &r);
+        for i in 0..usize::from(m) {
+            us.push(ui);
+            ui.mul_assign(&two_32);
+            let ri = Randomness::<G1>::generate(rng);
+            cmms.push(cmm_key.hide(&xs_values[i], &ri));
+            rs.push(ri);
+        }
+        let rs_copy = rs.clone();
+        let xs = xs_values;
+        let cmms_copy = cmms.clone();
+        let com_lin = ComLin {
+            us,
+            cmms,
+            cmm,
+            cmm_key,
+        };
+        let secret = ComLinSecret { xs, rs, r };
+        let challenge_prefix = generate_challenge_prefix(rng);
+        let ro = RandomOracle::domain(&challenge_prefix);
+        let proof = prove(ro.split(), &com_lin, secret, rng).expect("Proving should succeed.");
+        assert!(verify(ro, &com_lin, &proof));
+
+        let mut transcript = Transcript::new(&[]);
+        let mut G_H = Vec::with_capacity(nm);
+        for _i in 0..(nm) {
+            let g = G1::generate(rng);
+            let h = G1::generate(rng);
+            G_H.push((g, h));
+        }
+        let gens = bulletproofs::range_proof::Generators { G_H };
+        let proof = bulletproofs::range_proof::prove_given_scalars(
+            &mut transcript,
+            rng,
+            n,
+            m,
+            &xs_scalars,
+            &gens,
+            &cmm_key,
+            &rs_copy,
+        );
+        let mut transcript = Transcript::new(&[]);
+        assert!(bulletproofs::range_proof::verify_efficient(
+            &mut transcript,
+            n,
+            &cmms_copy,
+            &proof.unwrap(),
+            &gens,
+            &cmm_key
+        )
+        .is_ok());
     }
 }
