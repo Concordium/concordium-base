@@ -24,7 +24,7 @@ default = ["std"]
 std = ["contracts-common/std"]
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [profile.release]
 # Tell `rustc` to optimize for small code size.

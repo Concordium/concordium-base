@@ -160,7 +160,10 @@ pub mod events {
     /// Log a serializable event by serializing it with a supplied serializer.
     pub fn log<S: Serialize>(event: &S) {
         let mut out = Vec::new();
-        event.serial(&mut out).expect("Cannot log, panicking.");
+        if event.serial(&mut out).is_err() {
+            panic!();
+            // should not happen
+        }
         log_bytes(&out)
     }
 
