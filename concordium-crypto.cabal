@@ -32,23 +32,26 @@ Library
                    Concordium.Crypto.VRF
                    Data.FixedByteString
                    Data.Base58Encoding
+                   Concordium.Common.Version
                    Concordium.ID.Types
                    Concordium.ID.Account
                    Concordium.ID.Parameters
                    Concordium.ID.IdentityProvider
+                   Concordium.ID.AnonymityRevoker
                    Concordium.ID.DummyData
                    Concordium.Crypto.FFIDataTypes
                    Concordium.Crypto.ByteStringHelpers
                    Concordium.Crypto.Proofs
                    Concordium.Crypto.DummyData
+                   Concordium.Crypto.FFIHelpers
 
-
-  Other-modules:  Concordium.Crypto.FFIHelpers
+  Other-modules:
                   Data.Base58Encoding.TH
 
   Build-depends:  base >=4.7
                 , aeson >= 1.4.2
-                , aeson-pretty >= 0.8
+                -- binary is used by aeson and we need for a couple of instances
+                , binary >= 0.8
                 , scientific >= 0.3.6
                 , bytestring >=0.10
                 , base16-bytestring
@@ -100,6 +103,7 @@ Test-Suite tests
 
   other-modules:
    ConcordiumTests.Data.Base58Encoding
+   ConcordiumTests.Common.Version
    ConcordiumTests.Crypto.SHA256
    ConcordiumTests.Crypto.Ed25519Signature
    ConcordiumTests.Crypto.VRF

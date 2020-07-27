@@ -1,6 +1,6 @@
 use pairing::bls12_381::{Bls12, G1};
 
-use crypto_common::base16_decode_string;
+use crypto_common::{base16_decode_string, version::*};
 
 use curve_arithmetic::*;
 use id::{
@@ -9,7 +9,7 @@ use id::{
     types::*,
 };
 
-use serde_json::{from_str, from_value, ser::to_string, Value};
+use serde_json::{error::Error, from_str, from_value, ser::to_string, Value};
 
 use wasm_bindgen::prelude::*;
 
@@ -18,17 +18,24 @@ use std::fmt::Display;
 type ExampleCurve = G1;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
 
-fn parse_ip_info(ip_info_str: &str) -> Result<IpInfo<Bls12, ExampleCurve>, JsValue> {
+// Parse an IpInfo taking into account the version.
+// For now only version 0 is supported.
+fn parse_exact_versioned_ip_info(ip_info_str: &str) -> Result<IpInfo<Bls12>, JsValue> {
     let v: Value = from_str(ip_info_str).map_err(show_err)?;
     let ip_info_v = v
         .get("ipInfo")
         .ok_or_else(|| show_err("Field 'ipInfo' must be present."))?;
-    from_value(ip_info_v.clone()).map_err(show_err)
+    let res: Result<Versioned<IpInfo<Bls12, ExampleCurve>>, Error> = from_value(ip_info_v.clone());
+    match res {
+        Ok(vip) if vip.version == VERSION_0 => Ok(vip.value),
+        Ok(_) => Err(show_err("Unsupported IpInfo version")),
+        Err(e) => Err(show_err(e)),
+    }
 }
 
 #[wasm_bindgen]
 pub fn validate_request(ip_info_str: &str, request_str: &str) -> bool {
-    let ip_info = match parse_ip_info(ip_info_str) {
+    let ip_info = match parse_exact_versioned_ip_info(ip_info_str) {
         Ok(v) => v,
         Err(_) => return false,
     };
@@ -56,9 +63,7 @@ pub fn validate_request(ip_info_str: &str, request_str: &str) -> bool {
     vf.is_ok()
 }
 
-fn show_err<D: Display>(err: D) -> JsValue {
-    JsValue::from_str(&format!("ERROR: {}", err))
-}
+fn show_err<D: Display>(err: D) -> JsValue { JsValue::from_str(&format!("ERROR: {}", err)) }
 
 #[wasm_bindgen]
 pub fn create_identity_object(
@@ -67,7 +72,7 @@ pub fn create_identity_object(
     alist_str: &str,
     ip_private_key_str: &str,
 ) -> Result<String, JsValue> {
-    let ip_info = parse_ip_info(ip_info_str)?;
+    let ip_info = parse_exact_versioned_ip_info(ip_info_str)?;
 
     let request: PreIdentityObject<Bls12, ExampleCurve> = {
         let v: Value = from_str(request_str).map_err(show_err)?;
@@ -85,12 +90,13 @@ pub fn create_identity_object(
     let signature =
         sign_identity_object(&request, &ip_info, &alist, &ip_private_key).map_err(show_err)?;
 
-    let ret = IdentityObject {
+    let id = IdentityObject {
         pre_identity_object: request,
         alist,
         signature,
     };
-    Ok(to_string(&ret).expect("JSON serialization of identity objects should not fail."))
+    let vid = Versioned::new(VERSION_0, id);
+    Ok(to_string(&vid).expect("JSON serialization of versioned identity objects should not fail."))
 }
 
 #[wasm_bindgen]
@@ -104,7 +110,7 @@ pub fn create_anonymity_revocation_record(request_str: &str) -> Result<String, J
     };
     let ar_record = AnonymityRevocationRecord {
         id_cred_pub: request.id_cred_pub,
-        ar_data: request.ip_ar_data,
+        ar_data:     request.ip_ar_data,
     };
     Ok(to_string(&ar_record)
         .expect("JSON serialization of anonymity revocation records should not fail."))

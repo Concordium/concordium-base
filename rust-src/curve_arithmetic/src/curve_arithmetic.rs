@@ -66,11 +66,6 @@ pub trait Curve:
     fn hash_to_group(m: &[u8]) -> Self;
 }
 
-#[allow(non_snake_case)]
-pub fn multiscalar_multiplication<C: Curve, X: Borrow<C>>(a: &[C::Scalar], G: &[X]) -> C {
-    multiexp(G, a)
-}
-
 pub trait Pairing: Sized + 'static + Clone {
     type ScalarField: PrimeField + Serialize;
     type G1: Curve<Base = Self::BaseField, Scalar = Self::ScalarField>;
@@ -160,6 +155,7 @@ pub fn multiexp<C: Curve, X: Borrow<C>>(gs: &[X], exps: &[C::Scalar]) -> C {
 /// https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf
 /// Assumes:
 /// - the lengths of inputs are the same
+/// - window size at least 1
 /// - window_size < 62
 pub fn multiexp_worker<C: Curve, X: Borrow<C>>(
     gs: &[X],
@@ -178,6 +174,12 @@ pub fn multiexp_worker<C: Curve, X: Borrow<C>>(
     multiexp_worker_given_table(exps, &table, window_size)
 }
 
+/// This function assumes the same properties about the inputs as
+/// `multiexp_worker`, as well as the fact that the table corresponds to the
+/// window-size and the given inputs.
+///
+/// See https://link.springer.com/content/pdf/10.1007%2F3-540-45537-X_13.pdf for what it means
+/// for the table to be computed correctly.
 pub fn multiexp_worker_given_table<C: Curve>(
     exps: &[C::Scalar],
     table: &[Vec<C>],
@@ -245,6 +247,7 @@ pub fn multiexp_worker_given_table<C: Curve>(
     a
 }
 
+/// Compute the table of powers that can be used `multiexp_worker_given_table`.
 pub fn multiexp_table<C: Curve, X: Borrow<C>>(gs: &[X], window_size: usize) -> Vec<Vec<C>> {
     let k = gs.len();
     let mut table = Vec::with_capacity(k);
