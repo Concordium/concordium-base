@@ -26,4 +26,3 @@ crate-type = ["cdylib", "rlib"]
 opt-level = 3
 # Don't unwind on panics, just trap.
 panic = "abort"
-lto = true
