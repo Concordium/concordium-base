@@ -9,7 +9,7 @@ Everything in this repository should build with stable rust at the moment (at le
 ```
  cargo +nightly-2019-11-13 fmt
 ```
-(the exact version used by the CI can be found in [.gitlab-ci.yml](./.gitlab-ci.yml) file). You will need to have the right nightly version installed, which can be done via
+(the exact version used by the CI can be found in [.gitlab-ci.yml](./.gitlab-ci.yml) file). You will need to have a recent enough nightly version installed, which can be done via
 ```
 rustup toolchain install nightly-2019-11-13
 ```
@@ -25,6 +25,7 @@ Currently it consists of the following parts
 - [rust-contracts](./rust-contracts) which is the collection of base libraries and example smart contracts written in Rust.
 - [wasmer-interp](./wasmer-interp) which is a wrapper around the [wasmer](https://github.com/wasmerio/wasmer) interpreter providing the functionality needed by the scheduler to execute smart contracts.
 - [wasmer-runner](./wasmer-runner) which is a small tool that uses the API exposed in wasmer-interp to execute smart contracts directly. It can initialize and update smart contracts, in a desired state. See the `--help` option of the tool for details on how to invoke it.
+- [contracts-common](./contracts-common) which contains common functionality used by smart contracts as well as the host environment to provide data for smart contracts. It defines common datatypes that need to cross boundaries, and common serialization formats.
 
 ## Rust-contracts
 
@@ -119,3 +120,5 @@ some performance in some cases is
 opt-level = "s"
 ```
 or even `opt-level = "z"`.
+
+In some cases using `opt-level=3` actually leads to smaller code sizes, presumably due to more inlining and dead code removal as a result.
