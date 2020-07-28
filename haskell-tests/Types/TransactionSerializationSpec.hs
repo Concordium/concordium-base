@@ -9,6 +9,8 @@ import Data.Serialize
 import qualified Data.ByteString as  BS
 
 import Types.TransactionGen
+import Types.CoreAllGen
+import Concordium.Types
 import Concordium.Types.Transactions
 
 groupIntoSize :: (Show a, Integral a) => a -> String
@@ -44,8 +46,18 @@ checkBlockItem bi =
 testBlockItem :: Property
 testBlockItem = forAll genBlockItem checkBlockItem
 
+checkAmountString :: Amount -> Property
+checkAmountString s = let ma = maybeAmount (amountToString s)
+                      in case ma of
+                        Just a -> a === s
+                        Nothing -> QC.property False
+
+testAmountString :: Property
+testAmountString = forAll genAmount checkAmountString
+
 tests :: Spec
 tests = parallel $ do
+  specify "Amount string parsing" $ withMaxSuccess 10000 $ testAmountString
   specify "Transaction serialization with size = 100." $ withMaxSuccess 10000 $ testTransaction 100
   specify "Transaction serialization with size = 1000." $ withMaxSuccess 10000 $ testTransaction 1000
   specify "BlockItem serialization." $ withMaxSuccess 10000 $ testBlockItem
