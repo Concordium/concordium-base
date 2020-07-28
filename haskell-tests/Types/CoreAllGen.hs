@@ -15,6 +15,12 @@ import qualified Concordium.Crypto.SHA256 as SHA256
 
 import Test.QuickCheck
 
+genAmount :: Gen Amount
+genAmount = Amount <$> arbitrary
+
+genAmountString :: Gen Amount
+genAmountString = genAmount `suchThat` (\a -> a < 10)
+
 genName :: Gen Name
 genName = Name <$> arbitrary
 

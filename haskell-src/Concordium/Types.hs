@@ -12,6 +12,7 @@ module Concordium.Types (module Concordium.Types, AccountAddress(..), SchemeId, 
 
 import GHC.Generics
 import Data.Data(Typeable, Data)
+import Text.Read
 
 import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
@@ -236,8 +237,7 @@ isTimestampBefore ts ym =
 
 
 -- |Type representing the amount unit which is defined as the smallest
--- meaningful amount of GTUs.
--- Currently this unit is 10^-4 GTU and doesn't have a proper name.
+-- meaningful amount of GTUs. This unit is 10^-6 GTUs and denoted microGTU.
 type AmountUnit = Word64
 newtype Amount = Amount { _amount :: AmountUnit }
     deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, FromJSON, ToJSON) via AmountUnit
@@ -247,6 +247,38 @@ instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
   {-# INLINE put #-}
   put (Amount v) = P.putWord64be v
+
+-- |Converts a dot-separated string (xx.yy) to an amount with 0 <= xx <= 18446744073709
+-- and yy <= 0 <= 1000000 where 18446744073709 = floor(2^64/1000000), or return Nothing.
+maybeAmount :: String -> Maybe Amount
+maybeAmount t = if length parts /= 2 then Nothing
+                  else
+                    let
+                      high = readMaybe $ parts !! 0 :: Maybe Word64
+                      low = readMaybe $ parts !! 1 :: Maybe Word64
+                    in partsToAmount high low
+  where parts = splitDot t
+        partsToAmount high low =
+                      case (high, low) of
+                        (Just h, Just l) -> if h < 0 || h > 18446744073709 || l < 0 || l > 1000000 then Nothing
+                                            else Just (Amount $ (h * 1000000) + l)
+                        _ -> Nothing
+
+-- |Converts a dot-separated string (xx.yy) to an amount with 0 <= xx <= 18446744073709
+-- and yy <= 0 <= 1000000 where 18446744073709 = floor(2^64/1000000), or return Nothing.
+amountToString :: Amount -> String
+amountToString t = let
+                     high = t `div` 1000000
+                     low = t `mod` 1000000
+                   in
+                     (show high) ++ "." ++ (show low)
+
+
+splitDot :: String -> [String]
+splitDot s = case dropWhile (=='.') s of
+               "" -> []
+               s' -> w : splitDot s''
+                     where (w, s'') = break (=='.') s'
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
