@@ -80,6 +80,21 @@ type LotteryPower = Ratio Amount
 -- The value must be in the range [0,1).
 type ElectionDifficulty = Double
 type FinalizationCommitteeSize = Word32
+-- |An exchange rate (e.g. uGTU/Euro or Euro/Energy).
+type ExchangeRate = Ratio Word64
+-- |Energy to GTU conversion rate in microGTU per Energy.
+type EnergyRate = Rational
+
+-- |Compute the exchange rate of microGTU per Energy from the 
+-- rate of microGTU per Euro and the rate of Euros per Energy.
+computeEnergyRate
+  :: ExchangeRate
+  -- ^microGTU per Euro
+  -> ExchangeRate
+  -- ^Euros per Energy 
+  -> EnergyRate
+computeEnergyRate microGTUPerEuro euroPerEnergy = toRational microGTUPerEuro * toRational euroPerEnergy
+
 
 isValidElectionDifficulty :: ElectionDifficulty -> Bool
 isValidElectionDifficulty d = d >= 0 && d < 1
@@ -181,6 +196,16 @@ instance Show Address where
 -- | Time in milliseconds since the epoch
 newtype Timestamp = Timestamp { tsMillis :: Word64 }
   deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON, PersistField) via Word64
+
+-- |Time in seconds since the unix epoch.
+type TransactionTime = Word64
+
+-- |Get time in seconds since the unix epoch.
+getTransactionTime :: IO TransactionTime
+getTransactionTime = utcTimeToTransactionTime <$> getCurrentTime
+
+utcTimeToTransactionTime :: UTCTime -> TransactionTime
+utcTimeToTransactionTime = floor . utcTimeToPOSIXSeconds
 
 instance PersistFieldSql Timestamp where
     sqlType _ = SqlInt64

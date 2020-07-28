@@ -7,8 +7,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Concordium.Types.Transactions where
 
-import Data.Time.Clock
-import Data.Time.Clock.POSIX
 import Control.Exception
 import Control.Monad
 import Data.Aeson.TH
@@ -22,6 +20,7 @@ import qualified Data.Map.Strict as Map
 import Lens.Micro.Platform
 import Lens.Micro.Internal
 import Concordium.Utils
+import Concordium.Utils.Serialization
 
 import Data.List
 import qualified Concordium.Crypto.SHA256 as H
@@ -35,6 +34,7 @@ import Concordium.Types.Utils
 import Concordium.ID.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Execution
+import Concordium.Types.Updates
 
 -- |A signature is an association list of index of the key, and the actual signature.
 -- The index is relative to the account address, and the indices should be distinct.
@@ -72,15 +72,6 @@ signatureSize TransactionSignature{..} =
     1 -- length
     + length tsSignature -- key indices
     + foldl' (\acc (_, sig) -> acc + signatureSerializedSize sig) 0 (Map.toList tsSignature) -- signatures
-
-type TransactionTime = Word64
-
--- |Get time in seconds since the unix epoch.
-getTransactionTime :: IO TransactionTime
-getTransactionTime = utcTimeToTransactionTime <$> getCurrentTime
-
-utcTimeToTransactionTime :: UTCTime -> TransactionTime
-utcTimeToTransactionTime = floor . utcTimeToPOSIXSeconds
 
 -- | Data common to all transaction types.
 --
@@ -223,6 +214,24 @@ fromCDI wmdArrivalTime wmdData =
       wmdSignHash = TransactionSignHashV0 (v0TransactionHash wmdHash)
   in WithMetadata{..}
 
+data BlockItemKind
+  = AccountTransactionKind
+  | CredentialDeploymentKind
+  | UpdateInstructionKind
+  deriving (Eq, Ord, Show)
+
+instance S.Serialize BlockItemKind where
+  put AccountTransactionKind = S.putWord8 0
+  put CredentialDeploymentKind = S.putWord8 1
+  put UpdateInstructionKind = S.putWord8 2
+  {-# INLINE put #-}
+  get = S.getWord8 >>= \case
+    0 -> return AccountTransactionKind
+    1 -> return CredentialDeploymentKind
+    2 -> return UpdateInstructionKind
+    _ -> fail "unknown block item kind"
+  {-# INLINE get #-}
+
 -- |Data that can go onto a block.
 data BareBlockItem =
   NormalTransaction {
@@ -230,23 +239,29 @@ data BareBlockItem =
   }
   | CredentialDeployment {
       biCred :: !CredentialDeploymentInformation
-  } deriving(Eq, Show)
+  }
+  | ChainUpdate {
+    biUpdate :: !UpdateInstruction
+  }
+  deriving(Eq, Show)
 
 instance HashableTo TransactionHash BareBlockItem where
   getHash NormalTransaction{..} = transactionHashFromBareTransaction biTransaction
   getHash CredentialDeployment{..} = transactionHashFromCDI biCred
+  getHash ChainUpdate{..} = transactionHashFromUpdateInstruction biUpdate
 
 type BlockItem = WithMetadata BareBlockItem
 
 instance S.Serialize BareBlockItem  where
-  put NormalTransaction{..} = S.putWord8 0 <> S.put biTransaction
-  put CredentialDeployment{..} = S.putWord8 1 <> S.put biCred
+  put NormalTransaction{..} = S.put AccountTransactionKind <> S.put biTransaction
+  put CredentialDeployment{..} = S.put CredentialDeploymentKind <> S.put biCred
+  put ChainUpdate{..} = S.put UpdateInstructionKind <> S.put biUpdate
 
   get =
-    S.getWord8 >>= \case
-    0 -> NormalTransaction <$> S.get
-    1 -> CredentialDeployment <$> S.get
-    _ -> fail "Unknown bare block item."
+    S.get >>= \case
+    AccountTransactionKind -> NormalTransaction <$> S.get
+    CredentialDeploymentKind -> CredentialDeployment <$> S.get
+    UpdateInstructionKind -> ChainUpdate <$> S.get
 
 normalTransaction :: Transaction -> BlockItem
 normalTransaction WithMetadata{..} = WithMetadata{wmdData = NormalTransaction wmdData, ..}
@@ -295,7 +310,7 @@ transactionHashFromBareTransactionBytes ::
   -> BS.ByteString
   -- ^Serialized header and payload
   -> TransactionHashV0
-transactionHashFromBareTransactionBytes sigBytes txBytes = TransactionHashV0 $ H.hash $ BS.singleton 0 <> sigBytes <> txBytes
+transactionHashFromBareTransactionBytes sigBytes txBytes = TransactionHashV0 $ H.hash $ S.encode AccountTransactionKind <> sigBytes <> txBytes
 
 transactionHashFromBareTransactionParts ::
   TransactionSignature
@@ -304,7 +319,7 @@ transactionHashFromBareTransactionParts ::
   -> TransactionHashV0
 transactionHashFromBareTransactionParts sig hdr payload
     = TransactionHashV0 $ H.hashLazy $ S.runPutLazy $
-        S.putWord8 0 <> S.put sig <> S.put hdr <> putPayload payload
+        S.put AccountTransactionKind <> S.put sig <> S.put hdr <> putPayload payload
 
 -- |Construct a 'TransactionHash' for a 'BareTransaction'.
 transactionHashFromBareTransaction :: BareTransaction -> TransactionHashV0
@@ -316,11 +331,20 @@ transactionHashFromCDIBytes ::
   BS.ByteString
   -- ^Serialized 'CredentialDeploymentInformation'
   -> TransactionHashV0
-transactionHashFromCDIBytes bytes = TransactionHashV0 $ H.hash $ BS.singleton 1 <> bytes
+transactionHashFromCDIBytes bytes = TransactionHashV0 $ H.hash $ S.encode CredentialDeploymentKind <> bytes
 
 -- |Construct a transaction hash for a 'CredentialDeploymentInformation'.
 transactionHashFromCDI :: CredentialDeploymentInformation -> TransactionHashV0
 transactionHashFromCDI = transactionHashFromCDIBytes . S.encode
+
+-- |Construct a transaction hash for an 'UpdateInstruction' given its serialized
+-- form.
+transactionHashFromUpdateInstructionBytes :: BS.ByteString -> TransactionHashV0
+transactionHashFromUpdateInstructionBytes bytes = TransactionHashV0 $ H.hash $ S.encode UpdateInstructionKind <> bytes
+
+-- |Construct a transaction hash for an 'UpdateInstruction'.
+transactionHashFromUpdateInstruction :: UpdateInstruction -> TransactionHashV0
+transactionHashFromUpdateInstruction = transactionHashFromUpdateInstructionBytes . S.encode
 
 -- * Serialization
 
@@ -352,25 +376,20 @@ getUnverifiedTransaction wmdArrivalTime = do
 -- |Deserialize a 'CredentialDeploymentWithMeta'.
 getCDWM :: TransactionTime -> S.Get CredentialDeploymentWithMeta
 getCDWM time = do
-    start <- S.bytesRead
-    (wmdData, end) <- S.lookAhead $ do
-      cdi <- S.get
-      end <- S.bytesRead
-      return (cdi, end)
-    let wmdSize = end - start
-    bytes <- S.getByteString wmdSize
+    (wmdData, bytes) <- getWithBytes S.get
     let wmdHash = transactionHashFromCDIBytes bytes
     let wmdSignHash = transactionSignHashForCDI wmdHash
-    return WithMetadata{wmdArrivalTime=time,..}
+    return WithMetadata{wmdArrivalTime=time,wmdSize=BS.length bytes,..}
 
 -- |Get a block item, reconstructing metadata.
 getBlockItem :: TransactionTime -- ^Timestamp of when the item arrived.
              -> S.Get BlockItem
 getBlockItem time =
-    S.getWord8 >>= \case
-      0 -> normalTransaction <$> getUnverifiedTransaction time
-      1 -> credentialDeployment <$> getCDWM time
-      _ -> fail "Block item must be either normal transaction or credential deployment."
+    S.get >>= \case
+      AccountTransactionKind -> normalTransaction <$> getUnverifiedTransaction time
+      CredentialDeploymentKind -> credentialDeployment <$> getCDWM time
+      UpdateInstructionKind -> fail "Block item must be either normal transaction or credential deployment."
+      -- FIXME: support UpdateInstructionKind
 
 -- |Make a transaction out of minimal data needed.
 -- This computes the derived fields, in particular the hash of the transaction.
