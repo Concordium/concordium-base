@@ -250,27 +250,26 @@ instance S.Serialize Amount where
 
 -- |Converts a dot-separated string (xx.yy) to an amount returning Nothing if out-of-bounds.
 amountFromGTUString :: String -> Maybe Amount
-amountFromGTUString t = if length parts /= 2 then Nothing
-                  else
-                    let
-                      high = readMaybe $ parts !! 0 :: Maybe Word64
-                      low = readMaybe $ parts !! 1 :: Maybe Word64
-                    in partsToAmount high low
-  where parts = splitDot t
+amountFromGTUString s = if length parts /= 2 then Nothing
+                        else let high = readMaybe $ parts !! 0 :: Maybe Word64
+                                 low = readMaybe $ parts !! 1 :: Maybe Word64
+                             in partsToAmount high low
+  where parts = splitDot s
         partsToAmount high low =
-                      case (high, low) of
-                        (Just h, Just l) -> if h < 0 || h > 18446744073709 || l < 0 || l > 1000000 then Nothing
-                                            else if h ==  18446744073709 && l > 551615 then Nothing
-                                                 else Just (Amount $ (h * 1000000) + l)
-                        _ -> Nothing
+          case (high, low) of
+            (Just h, Just l) -> if h > 18446744073709 || l > 1000000 then Nothing
+                                else if h ==  18446744073709 && l > 551615 then Nothing
+                                      else Just (Amount $ (h * 1000000) + l)
+            _ -> Nothing
 
 -- |Converts an amount to GTU string representation.
 amountToGTUString :: Amount -> String
-amountToGTUString t = let
-                     high = t `div` 1000000
-                     low = t `mod` 1000000
-                   in
-                     (show high) ++ "." ++ (show low)
+amountToGTUString amount =
+  let
+    high = amount `div` 1000000
+    low = amount `mod` 1000000
+  in
+    (show high) ++ "." ++ (show low)
 
 splitDot :: String -> [String]
 splitDot s = case dropWhile (=='.') s of
