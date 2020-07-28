@@ -248,8 +248,7 @@ instance S.Serialize Amount where
   {-# INLINE put #-}
   put (Amount v) = P.putWord64be v
 
--- |Converts a dot-separated string (xx.yy) to an amount with 0 <= xx <= 18446744073709
--- and yy <= 0 <= 1000000 where 18446744073709 = floor(2^64/1000000), or return Nothing.
+-- |Converts a dot-separated string (xx.yy) to an amount returning Nothing if out-of-bounds.
 amountFromGTUString :: String -> Maybe Amount
 amountFromGTUString t = if length parts /= 2 then Nothing
                   else
@@ -261,7 +260,8 @@ amountFromGTUString t = if length parts /= 2 then Nothing
         partsToAmount high low =
                       case (high, low) of
                         (Just h, Just l) -> if h < 0 || h > 18446744073709 || l < 0 || l > 1000000 then Nothing
-                                            else Just (Amount $ (h * 1000000) + l)
+                                            else if h ==  18446744073709 && l > 551615 then Nothing
+                                                 else Just (Amount $ (h * 1000000) + l)
                         _ -> Nothing
 
 -- |Converts an amount to GTU string representation.
@@ -271,7 +271,6 @@ amountToGTUString t = let
                      low = t `mod` 1000000
                    in
                      (show high) ++ "." ++ (show low)
-
 
 splitDot :: String -> [String]
 splitDot s = case dropWhile (=='.') s of
