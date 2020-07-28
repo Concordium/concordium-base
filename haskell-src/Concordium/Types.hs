@@ -252,12 +252,12 @@ instance S.Serialize Amount where
 amountFromGTUString :: String -> Maybe Amount
 amountFromGTUString s = if length parts /= 2 then Nothing
                         else let high = readMaybe $ parts !! 0 :: Maybe Word64
-                                 low = readMaybe $ parts !! 1 :: Maybe Word64
+                                 low = readMaybe $ (padAmountLow (parts !! 1)) :: Maybe Word64
                              in partsToAmount high low
   where parts = splitDot s
         partsToAmount high low =
           case (high, low) of
-            (Just h, Just l) -> if h > 18446744073709 || l > 1000000 then Nothing
+            (Just h, Just l) -> if h > 18446744073709 || l > 999999 then Nothing
                                 else if h ==  18446744073709 && l > 551615 then Nothing
                                       else Just (Amount $ (h * 1000000) + l)
             _ -> Nothing
@@ -270,6 +270,11 @@ amountToGTUString amount =
     low = amount `mod` 1000000
   in
     (show high) ++ "." ++ (show low)
+
+padAmountLow :: String -> String
+padAmountLow s
+  | length s < 6 = s ++ (replicate (6 - length s) '0')
+  | otherwise = s
 
 splitDot :: String -> [String]
 splitDot s = case dropWhile (=='.') s of
