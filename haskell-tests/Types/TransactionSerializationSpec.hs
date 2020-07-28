@@ -9,6 +9,7 @@ import Data.Serialize
 import qualified Data.ByteString as  BS
 
 import Types.TransactionGen
+import Concordium.Types
 import Concordium.Types.Transactions
 
 groupIntoSize :: (Show a, Integral a) => a -> String
