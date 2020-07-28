@@ -47,7 +47,7 @@ testBlockItem :: Property
 testBlockItem = forAll genBlockItem checkBlockItem
 
 checkAmountString :: Amount -> Property
-checkAmountString s = let ma = maybeAmount (amountToString s)
+checkAmountString s = let ma = amountFromGTUString (amountToGTUString s)
                       in case ma of
                         Just a -> a === s
                         Nothing -> QC.property False

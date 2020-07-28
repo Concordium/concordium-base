@@ -250,8 +250,8 @@ instance S.Serialize Amount where
 
 -- |Converts a dot-separated string (xx.yy) to an amount with 0 <= xx <= 18446744073709
 -- and yy <= 0 <= 1000000 where 18446744073709 = floor(2^64/1000000), or return Nothing.
-maybeAmount :: String -> Maybe Amount
-maybeAmount t = if length parts /= 2 then Nothing
+amountFromGTUString :: String -> Maybe Amount
+amountFromGTUString t = if length parts /= 2 then Nothing
                   else
                     let
                       high = readMaybe $ parts !! 0 :: Maybe Word64
@@ -264,10 +264,9 @@ maybeAmount t = if length parts /= 2 then Nothing
                                             else Just (Amount $ (h * 1000000) + l)
                         _ -> Nothing
 
--- |Converts a dot-separated string (xx.yy) to an amount with 0 <= xx <= 18446744073709
--- and yy <= 0 <= 1000000 where 18446744073709 = floor(2^64/1000000), or return Nothing.
-amountToString :: Amount -> String
-amountToString t = let
+-- |Converts an amount to GTU string representation.
+amountToGTUString :: Amount -> String
+amountToGTUString t = let
                      high = t `div` 1000000
                      low = t `mod` 1000000
                    in
