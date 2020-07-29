@@ -83,10 +83,35 @@ impl<C: Curve> PublicKey<C> {
         self.encrypt_rand(csprng, &Message { value })
     }
 
+    /// Encrypt as an exponent, and return the randomness used.
+    /// Takes a generator h as an argument and encrypts h^e.
+    pub fn encrypt_exponent_rand_given_generator<T>(
+        &self,
+        csprng: &mut T,
+        e: &Value<C>,
+        h: &C,
+    ) -> (Cipher<C>, Randomness<C>)
+    where
+        T: Rng, {
+        let value = h.mul_by_scalar(e);
+        self.encrypt_rand(csprng, &Message { value })
+    }
+
     pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &Value<C>) -> Cipher<C>
     where
         T: Rng, {
         self.encrypt_exponent_rand(csprng, e).0
+    }
+
+    pub fn encrypt_exponent_given_generator<T>(
+        &self,
+        csprng: &mut T,
+        e: &Value<C>,
+        h: &C,
+    ) -> Cipher<C>
+    where
+        T: Rng, {
+        self.encrypt_exponent_rand_given_generator(csprng, e, h).0
     }
 
     pub fn encrypt_exponent_vec<T>(&self, csprng: &mut T, e: &[Value<C>]) -> Vec<Cipher<C>>
@@ -94,6 +119,19 @@ impl<C: Curve> PublicKey<C> {
         T: Rng, {
         e.iter()
             .map(|x| self.encrypt_exponent(csprng, &x))
+            .collect()
+    }
+
+    pub fn encrypt_exponent_vec_given_generator<T>(
+        &self,
+        csprng: &mut T,
+        e: &[Value<C>],
+        h: &C,
+    ) -> Vec<Cipher<C>>
+    where
+        T: Rng, {
+        e.iter()
+            .map(|x| self.encrypt_exponent_given_generator(csprng, &x, h))
             .collect()
     }
 }

@@ -55,8 +55,30 @@ pub fn encrypt_in_chunks<C: Curve, R: Rng>(
     pk.encrypt_exponent_vec(csprng, &chunks.as_slice())
 }
 
+pub fn encrypt_in_chunks_given_generator<C: Curve, R: Rng>(
+    pk: &PublicKey<C>,
+    val: &Value<C>,
+    chunk_size: usize,
+    generator: &C,
+    csprng: &mut R,
+) -> Vec<Cipher<C>> {
+    let chunks = value_to_chunks::<C>(val, chunk_size);
+    pk.encrypt_exponent_vec_given_generator(csprng, &chunks.as_slice(), generator)
+}
+
 pub fn decrypt_from_chunks<C: Curve>(sk: &SecretKey<C>, cipher: &[Cipher<C>]) -> Value<C> {
     let scalars = cipher.iter().map(|c| sk.decrypt_exponent(c));
+    chunks_to_value::<C>(scalars.collect())
+}
+
+pub fn decrypt_from_chunks_given_generator<C: Curve>(
+    sk: &SecretKey<C>,
+    cipher: &[Cipher<C>],
+    generator: &C,
+) -> Value<C> {
+    let scalars = cipher
+        .iter()
+        .map(|c| sk.decrypt_exponent_given_generator(c, generator));
     chunks_to_value::<C>(scalars.collect())
 }
 
@@ -104,10 +126,37 @@ mod tests {
     use rand::{rngs::ThreadRng, Rng};
 
     use crate::message::*;
-    use pairing::bls12_381::{G1, G2};
+    use pairing::bls12_381::{Fr, G1, G2};
 
     use super::*;
-    use ff::Field;
+    use ff::{Field, PrimeField};
+
+    #[test]
+    fn test_chunk_enc() {
+        let mut csprng = thread_rng();
+        // let n = Fr::from_str("18446744073709551616").unwrap();
+        // let n = Fr::from_str("4294967295").unwrap();
+        // // let mut n2 = n;
+        // // n2.mul_assign(&n);
+        // let chunks = value_to_chunks::<G1>(&n, 4);
+        // println!("{:?}", chunks);
+        let sk: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
+        let pk = PublicKey::from(&sk);
+        let x = Fr::from_str(
+            "52435875175126190479447740508185965837690552500527637822603658699938581184512",
+        )
+        .unwrap();
+        // let x = Fr::from_str("7").unwrap();
+        let x = Value::new(x);
+        let h = G1::generate(&mut csprng);
+        let enc = encrypt_in_chunks_given_generator(&pk, &x, 4, &h, &mut csprng);
+        println!("{:?}", enc.len());
+        let dec = decrypt_from_chunks_given_generator(&sk, &enc, &h);
+        // let hx = h.mul_by_scalar(&x);
+        // let dec = baby_step_giant_step(&hx, &h, 65536, 65536);
+        println!("{:?}", dec);
+    }
+
     macro_rules! macro_test_encrypt_decrypt_success {
         ($function_name:ident, $curve_type:path) => {
             #[test]
