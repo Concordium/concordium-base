@@ -255,18 +255,7 @@ pub fn main() {
                         }
                     }
                 }
-                ReceiveResult::Reject {
-                    logs,
-                } => {
-                    for (i, item) in logs.iterate().iter().enumerate() {
-                        if let Ok(s) = std::str::from_utf8(item) {
-                            println!("{}: {}", i, s)
-                        } else {
-                            println!("{}: {:?}", i, item)
-                        }
-                    }
-                    println!("Receive call rejected.")
-                }
+                ReceiveResult::Reject => println!("Receive call rejected."),
             }
         }
     }

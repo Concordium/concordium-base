@@ -494,9 +494,7 @@ pub fn invoke_receive(
         } else if *n >= 0 {
             Err(error::CallError::Runtime(error::RuntimeError::User(Box::new("Invalid return."))))
         } else {
-            Ok(ReceiveResult::Reject {
-                logs,
-            })
+            Ok(ReceiveResult::Reject)
         }
     } else {
         Err(error::CallError::Runtime(error::RuntimeError::User(Box::new("Invalid return."))))
