@@ -8,6 +8,7 @@ use crypto_common::*;
 use curve_arithmetic::{Curve, Value};
 
 use ff::Field;
+use std::collections::HashMap;
 
 /// Elgamal secret key packed together with a chosen generator.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -28,6 +29,54 @@ pub struct SecretKey<C: Curve> {
 // }
 // }
 
+/// This function calculates x such that base^x = v,
+/// where x <= m*k
+pub fn baby_step_giant_step<C: Curve>(v: &C, base: &C, m: usize, k: usize) -> usize {
+    let mut table = HashMap::new();
+    let mut base_j = C::zero_point();
+    for j in 0..m {
+        table.insert(to_bytes(&base_j), j);
+        base_j = base_j.plus_point(&base);
+    }
+    let minus_m_base = base_j.inverse_point();
+    let mut y = *v;
+    for i in 0..k {
+        if let Some(j) = table.get(&to_bytes(&y)) {
+            return i * m + j;
+        }
+        y = y.plus_point(&minus_m_base);
+    }
+    0
+}
+
+pub fn baby_step_giant_step_table<C: Curve>(base: &C, m: usize) -> (HashMap<Vec<u8>, usize>, C) {
+    let mut table = HashMap::new();
+    let mut base_j = C::zero_point();
+    for j in 0..m {
+        table.insert(to_bytes(&base_j), j);
+        base_j = base_j.plus_point(&base);
+    }
+    (table, base_j)
+}
+
+pub fn baby_step_giant_step_given_table<C: Curve>(
+    v: &C,
+    base_m: &C,
+    m: usize,
+    k: usize,
+    table: &HashMap<Vec<u8>, usize>,
+) -> usize {
+    let minus_m_base = base_m.inverse_point();
+    let mut y = *v;
+    for i in 0..k {
+        if let Some(j) = table.get(&to_bytes(&y)) {
+            return i * m + j;
+        }
+        y = y.plus_point(&minus_m_base);
+    }
+    0
+}
+
 impl<C: Curve> SecretKey<C> {
     pub fn decrypt(&self, c: &Cipher<C>) -> Message<C> {
         let x = c.0; // k * g
@@ -46,6 +95,13 @@ impl<C: Curve> SecretKey<C> {
             i = i.plus_point(&self.generator);
             a.add_assign(&field_one);
         }
+        Value::new(a)
+    }
+
+    pub fn decrypt_exponent_given_generator(&self, c: &Cipher<C>, generator: &C) -> Value<C> {
+        let m = self.decrypt(c).value;
+        let a = baby_step_giant_step(&m, &generator, 65536, 65536);
+        let a = C::scalar_from_u64(a as u64);
         Value::new(a)
     }
 
