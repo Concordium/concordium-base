@@ -286,7 +286,7 @@ padAmountLowLeft s
   | length s < 6 = (replicate (6 - length s) '0') ++ s
   | otherwise = s
 
-splitDot :: String -> Maybe (String, String)
+splitDot :: String -> (String, String)
 splitDot s = (high, lowWithoutDot)
   where (high, low) = break (=='.') s
         lowWithoutDot = drop 1 low
