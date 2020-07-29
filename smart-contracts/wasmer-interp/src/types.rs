@@ -123,22 +123,14 @@ pub enum ReceiveResult {
         logs:    Logs,
         actions: Vec<Action>,
     },
-    Reject {
-        logs: Logs,
-    },
+    Reject,
 }
 
 impl ReceiveResult {
     pub fn to_bytes(&self) -> Vec<u8> {
         use ReceiveResult::*;
         match self {
-            Reject {
-                logs,
-            } => {
-                let mut out = vec![0];
-                out.extend_from_slice(&logs.to_bytes());
-                out
-            }
+            Reject => vec![0],
             Success {
                 state,
                 logs,
