@@ -352,6 +352,8 @@ data ChainMetadata =
 
 -- |Encode chain metadata for passing over FFI. Uses little-endian encoding
 -- for integral values since that is what is expected on the other side of FFI.
+-- This is deliberately not made into a serialize instance so that it is not accidentally
+-- misused, since it differs in endianess from most other network-related serialization.
 encodeChainMeta :: ChainMetadata -> ByteString
 encodeChainMeta ChainMetadata{..} = S.runPut encoder
   where encoder =
@@ -383,7 +385,6 @@ type BlockHash = Hash.Hash
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
-
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
