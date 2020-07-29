@@ -378,7 +378,7 @@ type TransactionHash = TransactionHashV0
 newtype BlockHashV0 = BlockHashV0 {v0BlockHash :: Hash.Hash}
   deriving newtype (Eq, Ord, Show, S.Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
 
-newtype TransactionOutcomeHashV0 = TransactionOutcomeHashV0 {v0TransactionOutcomeHash :: Hash.Hash}
+newtype TransactionOutcomesHashV0 = TransactionOutcomesHashV0 {v0TransactionOutcomeHash :: Hash.Hash}
   deriving newtype (Eq, Ord, Show, S.Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
 
 newtype StateHashV0 = StateHashV0 {v0StateHash :: Hash.Hash}
@@ -388,7 +388,7 @@ newtype StateHashV0 = StateHashV0 {v0StateHash :: Hash.Hash}
 
 type BlockHash = BlockHashV0
 type StateHash = StateHashV0
-type TransactionOutcomeHash = TransactionOutcomeHashV0
+type TransactionOutcomesHash = TransactionOutcomesHashV0
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
