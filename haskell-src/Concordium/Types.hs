@@ -247,19 +247,24 @@ instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
   {-# INLINE put #-}
   put (Amount v) = P.putWord64be v
-
+  
 -- |Converts a dot-separated string (xx.yy) to an amount returning Nothing if out-of-bounds.
 amountFromGTUString :: String -> Maybe Amount
-amountFromGTUString s = if length parts /= 2 then Nothing
-                        else let high = readMaybe $ parts !! 0 :: Maybe Word64
-                                 low = readMaybe $ (padAmountLow (parts !! 1)) :: Maybe Word64
-                             in partsToAmount high low
+amountFromGTUString s = let high = readMaybe $ fst parts :: Maybe Word64
+                            low = readMaybe $ (padAmountLowRight (snd parts)) :: Maybe Word64
+                        in partsToAmount high low
   where parts = splitDot s
+        maxHigh = (maxBound :: Word64) `div` 1000000 -- 18446744073709
+        maxLowIfMaxHigh = (maxBound :: Word64) `mod` 1000000 -- 551615
         partsToAmount high low =
           case (high, low) of
-            (Just h, Just l) -> if h > 18446744073709 || l > 999999 then Nothing
-                                else if h ==  18446744073709 && l > 551615 then Nothing
-                                      else Just (Amount $ (h * 1000000) + l)
+            (Just h, Nothing) -> if h > maxHigh then Nothing
+                                 else Just (Amount (h * 1000000))
+            (Nothing, Just l) -> if l > 999999 then Nothing
+                                 else Just (Amount $ l)
+            (Just h, Just l) -> if h > maxHigh || l > 999999 then Nothing
+                                else if h ==  maxHigh && l > maxLowIfMaxHigh then Nothing
+                                     else Just (Amount $ (h * 1000000) + l)
             _ -> Nothing
 
 -- |Converts an amount to GTU string representation.
@@ -269,18 +274,22 @@ amountToGTUString amount =
     high = amount `div` 1000000
     low = amount `mod` 1000000
   in
-    (show high) ++ "." ++ (show low)
+    (show high) ++ "." ++ padAmountLowLeft (show low)
 
-padAmountLow :: String -> String
-padAmountLow s
+padAmountLowRight :: String -> String
+padAmountLowRight s
   | length s < 6 = s ++ (replicate (6 - length s) '0')
   | otherwise = s
 
-splitDot :: String -> [String]
-splitDot s = case dropWhile (=='.') s of
-               "" -> []
-               s' -> w : splitDot s''
-                     where (w, s'') = break (=='.') s'
+padAmountLowLeft :: String -> String
+padAmountLowLeft s
+  | length s < 6 = (replicate (6 - length s) '0') ++ s
+  | otherwise = s
+
+splitDot :: String -> Maybe (String, String)
+splitDot s = (high, lowWithoutDot)
+  where (high, low) = break (=='.') s
+        lowWithoutDot = drop 1 low
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
