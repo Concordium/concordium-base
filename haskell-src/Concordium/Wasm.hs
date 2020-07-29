@@ -53,7 +53,12 @@ newtype Parameter = Parameter { parameter :: ShortByteString }
     deriving(AE.ToJSON, AE.FromJSON) via ByteStringHex
 
 -- |Web assembly module in binary format, instrumented with whatever it needs to
--- be instrumented with. To be determined.
+-- be instrumented with, and preprocessed to an executable format, ready to be instantiated
+-- and run.
+-- 
+-- TODO: In the current POC the module is in Wasm binary format, but that will
+-- change to a different format when the interpreter is changed. Processing Wat directly
+-- can be expensive for certain interpreters.
 data InstrumentedModule = InstrumentedWasmModule {
   -- |Version of the Wasm standard and on-chain API this module corresponds to.
   imWasmVersion :: Word32,
@@ -67,10 +72,10 @@ data ModuleInterface = ModuleInterface {
   -- |Reference of the module on the chain.
   miModuleRef :: !ModuleRef,
   -- |Init methods exposed by this module.
-  -- They should each be exposed with a type Amount -> ()
+  -- They should each be exposed with a type Amount -> Word32
   miExposedInit :: !(Set.Set InitName),
   -- |Receive methods exposed by this module.
-  -- They should each be exposed with a type Amount -> ()
+  -- They should each be exposed with a type Amount -> Word32
   miExposedReceive :: !(Set.Set ReceiveName),
   -- |Module source in binary format, instrumented with whatever it needs to be instrumented with.
   miModule :: !InstrumentedModule,
@@ -79,8 +84,10 @@ data ModuleInterface = ModuleInterface {
   } deriving(Eq, Show, Generic)
 
 -- |Additional data needed specifically by the init method of the contract.
-data InitContext = InitContext
-    {initOrigin :: !AccountAddress}
+data InitContext = InitContext{
+  -- |Origin of the transaction; who is initializing the contract.
+  initOrigin :: !AccountAddress
+  }
 
 -- |Additional data needed specifically by the receive method of the contract.
 data ReceiveContext = ReceiveContext
@@ -107,14 +114,20 @@ newtype InterpreterEnergy = InterpreterEnergy { iEnergy :: Word64 }
 data ActionsTree =
   -- |Send a message to a smart contract.
   TSend {
+      -- |Address to send to.
       erAddr :: !ContractAddress,
+      -- |The receive method to invoke.
       erName :: !ReceiveName,
+      -- |The amount to send together with the message.
       erAmount :: !Amount,
+      -- |The message to send.
       erParameter :: !Parameter
       }
   -- |Transfer this many tokens to an account.
   | TSimpleTransfer {
+      -- |The address to send to.
       erTo :: !AccountAddress,
+      -- |The amount to send.
       erAmount :: !Amount
       }
   -- |Both left and right subtrees must succeed.
@@ -122,6 +135,7 @@ data ActionsTree =
   -- |Try to execute events in the left subtree, if that
   -- fails try the right.
   | Or !ActionsTree !ActionsTree
+  -- |Simply accept the invocation.
   | Accept
   deriving(Eq, Show)
 
@@ -185,7 +199,7 @@ data SuccessfulResultData a = SuccessfulResultData {
 
 -- |Reason for failure of contract execution.
 data ContractExecutionFailure =
-  ContractReject ![ContractEvent]-- ^Contract decided to terminate execution.
+  ContractReject -- ^Contract decided to terminate execution.
   | RuntimeFailure -- ^A trap was triggered.
   deriving(Eq, Show)
 
