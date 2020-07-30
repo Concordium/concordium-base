@@ -705,7 +705,8 @@ instance S.Serialize SpecialTransactionOutcome where
 data TransactionOutcomes = TransactionOutcomes {
     outcomeValues :: !(Vec.Vector TransactionSummary),
     _outcomeSpecial :: ![SpecialTransactionOutcome]
-}
+    } 
+  deriving(Eq)
 
 makeLenses ''TransactionOutcomes
 
@@ -718,6 +719,10 @@ instance S.Serialize TransactionOutcomes where
         S.put (Vec.toList outcomeValues)
         S.put _outcomeSpecial
     get = TransactionOutcomes <$> (Vec.fromList <$> S.get) <*> S.get
+
+-- Does this need to be domain seperated? (Would require serialisation changes?)
+instance HashableTo TransactionOutcomesHash TransactionOutcomes where
+    getHash transactionoutcomes = TransactionOutcomesHashV0 $ H.hash $ S.encode transactionoutcomes
 
 emptyTransactionOutcomes :: TransactionOutcomes
 emptyTransactionOutcomes = TransactionOutcomes Vec.empty []
