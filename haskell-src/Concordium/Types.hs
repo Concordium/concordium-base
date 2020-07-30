@@ -276,7 +276,6 @@ amountParser = decimalAmount RP.<++ noDecimalAmount
     fitInWord64 v = v <= (toInteger (maxBound :: Word64))
     noDecimalAmount = do
       (_, num) <- readNumber True
-      RP.eof
       let value = num * 1000000
       if fitInWord64 value then return $ fromIntegral value
       else RP.pfail
