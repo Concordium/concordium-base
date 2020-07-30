@@ -62,37 +62,37 @@ pub fn baby_step_giant_step_table_bench(c: &mut Criterion) {
     });
     c.bench_function("reuse table 8 times, m=k=2^16", move |b| {
         b.iter(|| {
-            let (table, base_m) = baby_step_giant_step_table(&h, m);
+            let (table, base_m_inverse) = baby_step_giant_step_table(&h, m);
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
         })
@@ -108,37 +108,37 @@ pub fn baby_step_giant_step_table_bench(c: &mut Criterion) {
     let k = 16384;
     c.bench_function("reuse table 8 times using m = 2^18, k = 2^14", move |b| {
         b.iter(|| {
-            let (table, base_m) = baby_step_giant_step_table(&h, m);
+            let (table, base_m_inverse) = baby_step_giant_step_table(&h, m);
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
             assert_eq!(
-                baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                 x
             );
         })
@@ -150,37 +150,37 @@ pub fn baby_step_giant_step_table_bench(c: &mut Criterion) {
         "reuse table 8 times using m = 185363, k = 23171",
         move |b| {
             b.iter(|| {
-                let (table, base_m) = baby_step_giant_step_table(&h, m);
+                let (table, base_m_inverse) = baby_step_giant_step_table(&h, m);
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
             })
@@ -193,37 +193,37 @@ pub fn baby_step_giant_step_table_bench(c: &mut Criterion) {
         "reuse table 8 times using m = 180000, k = 23861",
         move |b| {
             b.iter(|| {
-                let (table, base_m) = baby_step_giant_step_table(&h, m);
+                let (table, base_m_inverse) = baby_step_giant_step_table(&h, m);
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
             })
@@ -236,37 +236,37 @@ pub fn baby_step_giant_step_table_bench(c: &mut Criterion) {
         "reuse table 8 times using m = 170000, k = 25265",
         move |b| {
             b.iter(|| {
-                let (table, base_m) = baby_step_giant_step_table(&h, m);
+                let (table, base_m_inverse) = baby_step_giant_step_table(&h, m);
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
                 assert_eq!(
-                    baby_step_giant_step_given_table(&hx, &base_m, m, k, &table),
+                    baby_step_giant_step_given_table(&hx, &base_m_inverse, m, k, &table),
                     x
                 );
             })

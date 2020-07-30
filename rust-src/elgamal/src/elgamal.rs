@@ -75,10 +75,13 @@ pub fn decrypt_from_chunks_given_generator<C: Curve>(
     sk: &SecretKey<C>,
     cipher: &[Cipher<C>],
     generator: &C,
+    m: usize,
+    k: usize,
 ) -> Value<C> {
+    let (table, generator_m_inverse) = baby_step_giant_step_table(generator, m); // Possibly the table could be given as a paramater instead
     let scalars = cipher
         .iter()
-        .map(|c| sk.decrypt_exponent_given_generator(c, generator));
+        .map(|c| sk.decrypt_exponent_given_generator(c, &generator_m_inverse, m, k, &table));
     chunks_to_value::<C>(scalars.collect())
 }
 
@@ -151,7 +154,9 @@ mod tests {
         let h = G1::generate(&mut csprng);
         let enc = encrypt_in_chunks_given_generator(&pk, &x, 4, &h, &mut csprng);
         println!("{:?}", enc.len());
-        let dec = decrypt_from_chunks_given_generator(&sk, &enc, &h);
+        let m = 185364;
+        let k = 23171;
+        let dec = decrypt_from_chunks_given_generator(&sk, &enc, &h, m, k);
         // let hx = h.mul_by_scalar(&x);
         // let dec = baby_step_giant_step(&hx, &h, 65536, 65536);
         println!("{:?}", dec);

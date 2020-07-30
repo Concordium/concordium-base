@@ -30,25 +30,15 @@ pub struct SecretKey<C: Curve> {
 // }
 
 /// This function calculates x such that base^x = v,
-/// where x <= m*k
+/// where x <= m*k, i.e. it calculates the discrete log.
 pub fn baby_step_giant_step<C: Curve>(v: &C, base: &C, m: usize, k: usize) -> usize {
-    let mut table = HashMap::with_capacity(m);
-    let mut base_j = C::zero_point();
-    for j in 0..m {
-        table.insert(to_bytes(&base_j), j);
-        base_j = base_j.plus_point(&base);
-    }
-    let minus_m_base = base_j.inverse_point();
-    let mut y = *v;
-    for i in 0..k {
-        if let Some(j) = table.get(&to_bytes(&y)) {
-            return i * m + j;
-        }
-        y = y.plus_point(&minus_m_base);
-    }
-    0
+    let (table, base_m_inverse) = baby_step_giant_step_table(base, m);
+    baby_step_giant_step_given_table(v, &base_m_inverse, m, k, &table)
 }
 
+/// This function can be used to precompute the table needed for the baby step
+/// giant step algorithm. The table can be used by
+/// baby_step_giant_step_given_table() to calculate the discrete log.
 pub fn baby_step_giant_step_table<C: Curve>(base: &C, m: usize) -> (HashMap<Vec<u8>, usize>, C) {
     let mut table = HashMap::with_capacity(m);
     let mut base_j = C::zero_point();
@@ -56,23 +46,24 @@ pub fn baby_step_giant_step_table<C: Curve>(base: &C, m: usize) -> (HashMap<Vec<
         table.insert(to_bytes(&base_j), j);
         base_j = base_j.plus_point(&base);
     }
-    (table, base_j)
+    (table, base_j.inverse_point())
 }
 
+/// This function calculates the discrete log given a table, cf.
+/// baby_step_giant_step_table() above.
 pub fn baby_step_giant_step_given_table<C: Curve>(
     v: &C,
-    base_m: &C,
+    base_m_inverse: &C,
     m: usize,
     k: usize,
     table: &HashMap<Vec<u8>, usize>,
 ) -> usize {
-    let minus_m_base = base_m.inverse_point();
     let mut y = *v;
     for i in 0..k {
         if let Some(j) = table.get(&to_bytes(&y)) {
             return i * m + j;
         }
-        y = y.plus_point(&minus_m_base);
+        y = y.plus_point(&base_m_inverse);
     }
     0
 }
@@ -98,9 +89,16 @@ impl<C: Curve> SecretKey<C> {
         Value::new(a)
     }
 
-    pub fn decrypt_exponent_given_generator(&self, c: &Cipher<C>, generator: &C) -> Value<C> {
-        let m = self.decrypt(c).value;
-        let a = baby_step_giant_step(&m, &generator, 65536, 65536);
+    pub fn decrypt_exponent_given_generator(
+        &self,
+        c: &Cipher<C>,
+        generator_m: &C,
+        m: usize,
+        k: usize,
+        table: &HashMap<Vec<u8>, usize>,
+    ) -> Value<C> {
+        let dec = self.decrypt(c).value;
+        let a = baby_step_giant_step_given_table(&dec, &generator_m, m, k, &table);
         let a = C::scalar_from_u64(a as u64);
         Value::new(a)
     }
