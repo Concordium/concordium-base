@@ -250,7 +250,18 @@ instance S.Serialize Amount where
   {-# INLINE put #-}
   put (Amount v) = P.putWord64be v
 
--- |Try to parse an amount from a string
+-- |Converts an amount to GTU decimal representation.
+amountToString :: Amount -> String
+amountToString amount =
+  let
+    high = show $ amount `div` 1000000
+    low = show $ amount `mod` 1000000
+    pad = if length low < 6 then (replicate (6 - length low) '0')
+          else ""
+  in
+    high ++ "." ++ pad ++ low
+
+-- |Parse an amount from GTU decimal representation.
 amountFromString :: String -> Maybe Amount
 amountFromString s =
     if length s == 0 || length parsed /= 1 then Nothing
@@ -262,18 +273,19 @@ amountFromString s =
 amountParser :: RP.ReadP Word64
 amountParser = decimalAmount RP.<++ noDecimalAmount
   where
+    fitInWord64 v = v <= (toInteger (maxBound :: Word64))
     noDecimalAmount = do
       (_, num) <- readNumber
       RP.eof
       let value = num * 1000000
-      if value <= (toInteger (maxBound :: Word64)) then return $ fromIntegral value
+      if fitInWord64 value then return $ fromIntegral value
       else RP.pfail
     decimalAmount = do
       (_, num) <- readNumber
       (mLen, mantissa) <- readNumber
       if mLen <= 6 then do
         let value = num * 1000000 + (mantissa * 10 ^ (6-mLen))
-        if value <= (toInteger (maxBound :: Word64)) then return $ fromIntegral value
+        if fitInWord64 value then return $ fromIntegral value
         else RP.pfail
       else RP.pfail
 
@@ -290,17 +302,6 @@ readDigit = do
   c <- RP.get
   if isDigit c then return $ toInteger (digitToInt c)
   else RP.pfail
-
--- |Converts an amount to GTU string representation.
-amountToString :: Amount -> String
-amountToString amount =
-  let
-    high = show $ amount `div` 1000000
-    low = show $ amount `mod` 1000000
-    pad = if length low < 6 then (replicate (6 - length low) '0')
-          else ""
-  in
-    high ++ "." ++ pad ++ low
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
