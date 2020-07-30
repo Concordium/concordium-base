@@ -13,7 +13,7 @@ module Concordium.Types (module Concordium.Types, AccountAddress(..), SchemeId, 
 import GHC.Generics
 import Data.Data(Typeable, Data)
 
-import Text.ParserCombinators.ReadP
+import qualified Text.ParserCombinators.ReadP as RP
 
 import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
@@ -255,43 +255,41 @@ amountFromString :: String -> Maybe Amount
 amountFromString s =
     if length s == 0 || length parsed /= 1 then Nothing
     else Just $ Amount (fst (head parsed))
-  where parsed = readP_to_S amountParser s
+  where parsed = RP.readP_to_S amountParser s
 
 -- |Parse a Word64 as a decimal number with scale 10^6
 -- i.e. between 0 and 18446744073709.551615
-amountParser :: ReadP Word64
-amountParser = decimalAmount Text.ParserCombinators.ReadP.<++ noDecimalAmount
+amountParser :: RP.ReadP Word64
+amountParser = decimalAmount RP.<++ noDecimalAmount
   where
     noDecimalAmount = do
       (_, num) <- readNumber
-      Text.ParserCombinators.ReadP.eof
-      let value = num * 10^6
+      RP.eof
+      let value = num * 1000000
       if value <= (toInteger (maxBound :: Word64)) then return $ fromIntegral value
-      else Text.ParserCombinators.ReadP.pfail
+      else RP.pfail
     decimalAmount = do
       (_, num) <- readNumber
       (mLen, mantissa) <- readNumber
       if mLen <= 6 then do
-        let value = num * 10^6 + (mantissa * 10^(6-mLen))
+        let value = num * 1000000 + (mantissa * 10 ^ (6-mLen))
         if value <= (toInteger (maxBound :: Word64)) then return $ fromIntegral value
-        else Text.ParserCombinators.ReadP.pfail
-      else Text.ParserCombinators.ReadP.pfail
+        else RP.pfail
+      else RP.pfail
 
 -- |Reads a number by reading digits, returning (#digits,number)
-readNumber :: ReadP (Int, Integer)
+readNumber :: RP.ReadP (Int, Integer)
 readNumber = do
-    digits <- Text.ParserCombinators.ReadP.manyTill readDigit terminal
+    digits <- RP.manyTill readDigit terminal
     return $ (length digits, (foldl (\acc v -> (acc*10+v)) 0 digits))
-  where terminal = (Text.ParserCombinators.ReadP.eof)
-                   Text.ParserCombinators.ReadP.+++
-                   (Text.ParserCombinators.ReadP.char '.' >> return ())
+  where terminal = RP.eof RP.+++ (RP.char '.' >> return ())
 
 -- |Read a single digit or fail
-readDigit :: ReadP Integer
+readDigit :: RP.ReadP Integer
 readDigit = do
-  c <- Text.ParserCombinators.ReadP.get
+  c <- RP.get
   if isDigit c then return $ toInteger (digitToInt c)
-  else Text.ParserCombinators.ReadP.pfail
+  else RP.pfail
 
 -- |Converts an amount to GTU string representation.
 amountToString :: Amount -> String
