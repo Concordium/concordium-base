@@ -32,7 +32,7 @@ pub struct SecretKey<C: Curve> {
 /// This function calculates x such that base^x = v,
 /// where x <= m*k
 pub fn baby_step_giant_step<C: Curve>(v: &C, base: &C, m: usize, k: usize) -> usize {
-    let mut table = HashMap::new();
+    let mut table = HashMap::with_capacity(m);
     let mut base_j = C::zero_point();
     for j in 0..m {
         table.insert(to_bytes(&base_j), j);
@@ -50,7 +50,7 @@ pub fn baby_step_giant_step<C: Curve>(v: &C, base: &C, m: usize, k: usize) -> us
 }
 
 pub fn baby_step_giant_step_table<C: Curve>(base: &C, m: usize) -> (HashMap<Vec<u8>, usize>, C) {
-    let mut table = HashMap::new();
+    let mut table = HashMap::with_capacity(m);
     let mut base_j = C::zero_point();
     for j in 0..m {
         table.insert(to_bytes(&base_j), j);
