@@ -160,7 +160,7 @@ getKeyIndices keys = Map.keysSet $ akKeys keys
 
 -- |Name of Identity Provider
 newtype IdentityProviderIdentity  = IP_ID Word32
-    deriving (Eq, Hashable)
+    deriving (Eq, Hashable, Ord)
     deriving newtype (Show, FromJSONKey)
 
 instance Serialize IdentityProviderIdentity where
