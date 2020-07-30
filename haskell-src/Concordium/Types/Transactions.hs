@@ -706,7 +706,6 @@ data TransactionOutcomes = TransactionOutcomes {
     outcomeValues :: !(Vec.Vector TransactionSummary),
     _outcomeSpecial :: ![SpecialTransactionOutcome]
     } 
-  deriving(Eq)
 
 makeLenses ''TransactionOutcomes
 
