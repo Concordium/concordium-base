@@ -275,14 +275,14 @@ amountParser = decimalAmount RP.<++ noDecimalAmount
   where
     fitInWord64 v = v <= (toInteger (maxBound :: Word64))
     noDecimalAmount = do
-      (_, num) <- readNumber
+      (_, num) <- readNumber True
       RP.eof
       let value = num * 1000000
       if fitInWord64 value then return $ fromIntegral value
       else RP.pfail
     decimalAmount = do
-      (_, num) <- readNumber
-      (mLen, mantissa) <- readNumber
+      (_, num) <- readNumber False
+      (mLen, mantissa) <- readNumber True
       if mLen <= 6 then do
         let value = num * 1000000 + (mantissa * 10 ^ (6-mLen))
         if fitInWord64 value then return $ fromIntegral value
@@ -290,18 +290,16 @@ amountParser = decimalAmount RP.<++ noDecimalAmount
       else RP.pfail
 
 -- |Reads a number by reading digits, returning (#digits,number)
-readNumber :: RP.ReadP (Int, Integer)
-readNumber = do
+readNumber :: Bool -> RP.ReadP (Int, Integer)
+readNumber eof = do
     digits <- RP.manyTill readDigit terminal
     return $ (length digits, (foldl (\acc v -> (acc*10+v)) 0 digits))
-  where terminal = RP.eof RP.+++ (RP.char '.' >> return ())
-
--- |Read a single digit or fail
-readDigit :: RP.ReadP Integer
-readDigit = do
-  c <- RP.get
-  if isDigit c then return $ toInteger (digitToInt c)
-  else RP.pfail
+  where terminal = if eof then RP.eof
+                   else (RP.char '.' >> return ())
+        readDigit = do
+          c <- RP.get
+          if isDigit c then return $ toInteger (digitToInt c)
+          else RP.pfail
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
