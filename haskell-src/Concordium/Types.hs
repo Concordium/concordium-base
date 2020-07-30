@@ -12,7 +12,8 @@ module Concordium.Types (module Concordium.Types, AccountAddress(..), SchemeId, 
 
 import GHC.Generics
 import Data.Data(Typeable, Data)
-import Text.Read
+
+import Text.ParserCombinators.ReadP
 
 import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
@@ -32,6 +33,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.ByteString.Builder(toLazyByteString, byteStringHex)
 import Data.Bits
 import Data.Ratio
+import Data.Char(digitToInt,isDigit)
 
 import Data.Aeson as AE
 import Data.Aeson.TH
@@ -247,49 +249,60 @@ instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
   {-# INLINE put #-}
   put (Amount v) = P.putWord64be v
-  
--- |Converts a dot-separated string (xx.yy) to an amount returning Nothing if out-of-bounds.
-amountFromGTUString :: String -> Maybe Amount
-amountFromGTUString s = let high = readMaybe $ fst parts :: Maybe Word64
-                            low = readMaybe $ (padAmountLowRight (snd parts)) :: Maybe Word64
-                        in partsToAmount high low
-  where parts = splitDot s
-        maxHigh = (maxBound :: Word64) `div` 1000000 -- 18446744073709
-        maxLowIfMaxHigh = (maxBound :: Word64) `mod` 1000000 -- 551615
-        partsToAmount high low =
-          case (high, low) of
-            (Just h, Nothing) -> if h > maxHigh then Nothing
-                                 else Just (Amount (h * 1000000))
-            (Nothing, Just l) -> if l > 999999 then Nothing
-                                 else Just (Amount $ l)
-            (Just h, Just l) -> if h > maxHigh || l > 999999 then Nothing
-                                else if h ==  maxHigh && l > maxLowIfMaxHigh then Nothing
-                                     else Just (Amount $ (h * 1000000) + l)
-            _ -> Nothing
+
+-- |Try to parse an amount from a string
+amountFromString :: String -> Maybe Amount
+amountFromString s =
+    if length s == 0 || length parsed /= 1 then Nothing
+    else Just $ Amount (fst (head parsed))
+  where parsed = readP_to_S amountParser s
+
+-- |Parse a Word64 as a decimal number with scale 10^6
+-- i.e. between 0 and 18446744073709.551615
+amountParser :: ReadP Word64
+amountParser = decimalAmount Text.ParserCombinators.ReadP.<++ noDecimalAmount
+  where
+    noDecimalAmount = do
+      (_, num) <- readNumber
+      Text.ParserCombinators.ReadP.eof
+      let value = num * 10^6
+      if value <= (toInteger (maxBound :: Word64)) then return $ fromIntegral value
+      else Text.ParserCombinators.ReadP.pfail
+    decimalAmount = do
+      (_, num) <- readNumber
+      (mLen, mantissa) <- readNumber
+      if mLen <= 6 then do
+        let value = num * 10^6 + (mantissa * 10^(6-mLen))
+        if value <= (toInteger (maxBound :: Word64)) then return $ fromIntegral value
+        else Text.ParserCombinators.ReadP.pfail
+      else Text.ParserCombinators.ReadP.pfail
+
+-- |Reads a number by reading digits, returning (#digits,number)
+readNumber :: ReadP (Int, Integer)
+readNumber = do
+    digits <- Text.ParserCombinators.ReadP.manyTill readDigit terminal
+    return $ (length digits, (foldl (\acc v -> (acc*10+v)) 0 digits))
+  where terminal = (Text.ParserCombinators.ReadP.eof)
+                   Text.ParserCombinators.ReadP.+++
+                   (Text.ParserCombinators.ReadP.char '.' >> return ())
+
+-- |Read a single digit or fail
+readDigit :: ReadP Integer
+readDigit = do
+  c <- Text.ParserCombinators.ReadP.get
+  if isDigit c then return $ toInteger (digitToInt c)
+  else Text.ParserCombinators.ReadP.pfail
 
 -- |Converts an amount to GTU string representation.
-amountToGTUString :: Amount -> String
-amountToGTUString amount =
+amountToString :: Amount -> String
+amountToString amount =
   let
-    high = amount `div` 1000000
-    low = amount `mod` 1000000
+    high = show $ amount `div` 1000000
+    low = show $ amount `mod` 1000000
+    pad = if length low < 6 then (replicate (6 - length low) '0')
+          else ""
   in
-    (show high) ++ "." ++ padAmountLowLeft (show low)
-
-padAmountLowRight :: String -> String
-padAmountLowRight s
-  | length s < 6 = s ++ (replicate (6 - length s) '0')
-  | otherwise = s
-
-padAmountLowLeft :: String -> String
-padAmountLowLeft s
-  | length s < 6 = (replicate (6 - length s) '0') ++ s
-  | otherwise = s
-
-splitDot :: String -> (String, String)
-splitDot s = (high, lowWithoutDot)
-  where (high, low) = break (=='.') s
-        lowWithoutDot = drop 1 low
+    high ++ "." ++ pad ++ low
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
