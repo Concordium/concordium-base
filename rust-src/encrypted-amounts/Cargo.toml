@@ -1,0 +1,13 @@
+[package]
+name = "encrypted-amounts"
+version = "0.1.0"
+authors = ["Concordium AG <contact@concordium.com>"]
+edition = "2018"
+
+[lib]
+name = "encrypted-amounts"
+crate-type = ["rlib", "staticlib", "cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]

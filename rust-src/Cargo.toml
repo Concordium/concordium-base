@@ -17,4 +17,5 @@ members=[
    "random_oracle",
    "wallet",
    "bulletproofs",
+   "encrypted-amounts"
 ]
