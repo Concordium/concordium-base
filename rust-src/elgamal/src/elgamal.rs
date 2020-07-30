@@ -4,6 +4,7 @@ use rayon::prelude::*;
 
 use crypto_common::*;
 use curve_arithmetic::{Curve, Value};
+use std::collections::HashMap;
 
 use std::io::Cursor;
 
@@ -78,7 +79,18 @@ pub fn decrypt_from_chunks_given_generator<C: Curve>(
     m: usize,
     k: usize,
 ) -> Value<C> {
-    let (table, generator_m_inverse) = baby_step_giant_step_table(generator, m); // Possibly the table could be given as a paramater instead
+    let (table, generator_m_inverse) = baby_step_giant_step_table(generator, m);
+    decrypt_from_chunks_given_table(sk, cipher, &generator_m_inverse, m, k, &table)
+}
+
+pub fn decrypt_from_chunks_given_table<C: Curve>(
+    sk: &SecretKey<C>,
+    cipher: &[Cipher<C>],
+    generator_m_inverse: &C,
+    m: usize,
+    k: usize,
+    table: &HashMap<Vec<u8>, usize>,
+) -> Value<C> {
     let scalars = cipher
         .iter()
         .map(|c| sk.decrypt_exponent_given_generator(c, &generator_m_inverse, m, k, &table));
