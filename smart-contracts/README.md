@@ -122,3 +122,60 @@ opt-level = "s"
 or even `opt-level = "z"`.
 
 In some cases using `opt-level=3` actually leads to smaller code sizes, presumably due to more inlining and dead code removal as a result.
+
+# Example inputs to the wasmer-runner
+
+The following are some example invocations of the `wasmer-runner` binary.
+
+```shell
+./wasmer-runner init --context init-context.json --parameter parameter.bin --source ./simple_game.wasm --out state.bin --amount 123
+```
+
+with input files
+
+```json
+{
+    "metadata": {
+        "slotNumber": 1,
+        "blockHeight": 1,
+        "finalizedHeight": 1,
+        "slotTime": 123000
+    },
+    "initOrigin": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
+}
+```
+
+and `parameter.bin` as
+
+```
+00001111aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+```
+
+(as a text file without a newline).
+
+```shell
+./wasmer-runner update --context receive-context.json --parameter parameter-receive.bin --source ./simple_game.wasm --state state-in.bin --amount 0 --name "receive_help_yourself" --balance 13 --out state-out.bin
+```
+
+where an example receive context is
+
+```json
+{
+    "metadata": {
+        "slotNumber": 1,
+        "blockHeight": 1,
+        "finalizedHeight": 1,
+        "slotTime": 12312312312312312312
+    },
+    "invoker": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF",
+    "selfAddress": {"index": 0, "subindex": 0},
+    "selfBalance": 0,
+    "sender": {
+        "type": "Account",
+        "address": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
+    },
+    "owner": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
+}
+```
+
+See `--help` or `help` option to `wasmer-runner` for an explanation of the options.
