@@ -43,7 +43,6 @@ checkBlockItem bi =
 
 testBlockItem :: Property
 testBlockItem = forAll genBlockItem checkBlockItem
-
 tests :: Spec
 tests = parallel $ do
   specify "Transaction serialization with size = 100." $ withMaxSuccess 10000 $ testTransaction 100
