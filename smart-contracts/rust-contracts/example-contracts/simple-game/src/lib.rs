@@ -108,7 +108,7 @@ fn contract_init(ctx: InitContext, amount: Amount, state: &mut ContractState) ->
     // Log who the initializer was.
     events::log(initializer);
     // And the initial hash
-    events::log_str(&hex::encode(&hash.0));
+    events::log_bytes(&hex::encode(&hash.0).as_bytes());
     let num_contributions: u32 = 1;
     // Manually write the state without any intermediate allocation.
     // We could instead construct the `State` value and then returned it.
@@ -164,7 +164,7 @@ fn contribute(ctx: ReceiveContext, amount: Amount, state: &mut ContractState) ->
                 Hash(hasher.finalize().into())
             };
             // Log the new contribution in base16, just because we can.
-            events::log_str(&hex::encode(&hash.0));
+            events::log_bytes(&hex::encode(&hash.0).as_bytes());
             // Now try to find the contributor in the map. If it does not exist
             // we'll add a new item, otherwise we'll update an existing entry,
             // only updating a small portion of the contract state.

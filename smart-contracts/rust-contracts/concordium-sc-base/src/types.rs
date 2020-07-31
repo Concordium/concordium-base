@@ -35,7 +35,8 @@ macro_rules! bail {
         return Err(Reject {})
     };
     ($e:expr) => {{
-        $crate::events::log_str($e);
+        // logs are not retained in case of rejection.
+        // $crate::events::log_bytes($e);
         return Err(Reject {});
     }};
 }

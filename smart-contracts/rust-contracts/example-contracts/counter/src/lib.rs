@@ -37,7 +37,7 @@ fn contract_init(_ctx: InitContext, amount: Amount) -> InitResult<State> {
 #[receive(name = "receive")]
 #[inline(always)]
 fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> ReceiveResult {
-    ensure!(amount > 10, "Amount too small, not increasing.");
+    ensure!(amount > 10, r#"Amount too small, not increasing."#);
     ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can increment.");
     events::log(&(1u8, state.step));
     state.current_count += u32::from(state.step);
@@ -57,7 +57,7 @@ fn contract_receive_optimized(
     amount: Amount,
     state_cursor: &mut ContractState,
 ) -> ReceiveResult {
-    ensure!(amount > 10, "Amount too small, not increasing.");
+    ensure!(amount > 10, r#"Amount too small, not increasing."#);
     ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can increment.");
     let state: State = state_cursor.get()?;
     events::log(&(1u8, state.step));

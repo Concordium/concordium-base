@@ -166,8 +166,4 @@ pub mod events {
         }
         log_bytes(&out)
     }
-
-    #[inline(always)]
-    /// Log the given string, encoded as utf-8.
-    pub fn log_str(event: &str) { log_bytes(event.as_bytes()) }
 }
