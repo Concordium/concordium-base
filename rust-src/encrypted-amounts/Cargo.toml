@@ -11,6 +11,7 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+merlin = { version = "2", default-features = false }
 pairing = "0.15"
 ff = "0.5"
 rand    = "=0.7"
