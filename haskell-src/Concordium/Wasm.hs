@@ -8,6 +8,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.ByteString(ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Short(ShortByteString)
+import qualified Data.ByteString.Base16 as BS16
 import qualified Data.ByteString.Short as BSS
 import Data.Serialize
 import qualified Data.Aeson as AE
@@ -208,6 +209,9 @@ data ContractExecutionFailure =
 -- FIXME: In the future this should be more structured allowing for more sharing.
 newtype ContractState = ContractState {contractState :: BS.ByteString }
     deriving(Eq)
+
+instance AE.ToJSON ContractState where
+  toJSON ContractState{..} = AE.String (Text.decodeUtf8 (BS16.encode contractState))
 
 -- The show instance just displays the bytes directly.
 instance Show ContractState where
