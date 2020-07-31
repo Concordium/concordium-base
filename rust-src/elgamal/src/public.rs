@@ -134,6 +134,19 @@ impl<C: Curve> PublicKey<C> {
             .map(|x| self.encrypt_exponent_given_generator(csprng, &x, h))
             .collect()
     }
+
+    pub fn encrypt_exponent_vec_rand_given_generator<T>(
+        &self,
+        csprng: &mut T,
+        e: &[Value<C>],
+        h: &C,
+    ) -> Vec<(Cipher<C>, Randomness<C>)>
+    where
+        T: Rng, {
+        e.iter()
+            .map(|x| self.encrypt_exponent_rand_given_generator(csprng, &x, h))
+            .collect()
+    }
 }
 
 #[cfg(test)]
