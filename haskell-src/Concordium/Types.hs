@@ -252,12 +252,11 @@ instance S.Serialize Amount where
 
 -- |Converts an amount to GTU decimal representation.
 amountToString :: Amount -> String
-amountToString amount =
+amountToString (Amount amount) =
   let
     high = show $ amount `div` 1000000
     low = show $ amount `mod` 1000000
-    pad = if length low < 6 then (replicate (6 - length low) '0')
-          else ""
+    pad = replicate (6 - length low) '0'
   in
     high ++ "." ++ pad ++ low
 
