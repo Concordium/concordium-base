@@ -266,7 +266,7 @@ amountFromString s =
     if length s == 0 || length parsed /= 1 then Nothing
     else Just $ Amount (fst (head parsed))
   where parsed = RP.readP_to_S amountParser s
-
+  
 -- |Parse a Word64 as a decimal number with scale 10^6
 -- i.e. between 0 and 18446744073709.551615
 amountParser :: RP.ReadP Word64
@@ -279,9 +279,9 @@ amountParser = decimalAmount RP.<++ noDecimalAmount
       if fitInWord64 value then return $ fromIntegral value
       else RP.pfail
     decimalAmount = do
-      (_, num) <- readNumber False
+      (sLen, num) <- readNumber False
       (mLen, mantissa) <- readNumber True
-      if mLen <= 6 then do
+      if sLen > 0 && mLen > 0 && mLen <= 6 then do
         let value = num * 1000000 + (mantissa * 10 ^ (6-mLen))
         if fitInWord64 value then return $ fromIntegral value
         else RP.pfail
