@@ -15,6 +15,9 @@ import qualified Concordium.Crypto.SHA256 as SHA256
 
 import Test.QuickCheck
 
+genAmount :: Gen Amount
+genAmount = Amount <$> arbitrary
+
 genName :: Gen Name
 genName = Name <$> arbitrary
 

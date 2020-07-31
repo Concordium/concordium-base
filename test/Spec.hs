@@ -2,6 +2,7 @@ module Main where
 
 import qualified Types.PayloadSerializationSpec(tests)
 import qualified Types.SerializationSpec(testExpr, testModule, testContractAddress)
+import qualified Types.AmountSpec(tests)
 import qualified Types.ArithmeticSpec(tests)
 import qualified Types.TypesSpec(tests)
 import qualified Types.TransactionSerializationSpec(tests)
@@ -26,6 +27,8 @@ main = hspec $ parallel $ do
          Types.PayloadSerializationSpec.tests
 
          Types.TypesSpec.tests
+
+         Types.AmountSpec.tests
 
          Types.ArithmeticSpec.tests
 
