@@ -20,6 +20,10 @@ pub struct Randomness<C: Curve> {
     pub randomness: Rc<Secret<C::Scalar>>,
 }
 
+impl<C: Curve> AsRef<C::Scalar> for Randomness<C> {
+    fn as_ref(&self) -> &C::Scalar { &self.randomness }
+}
+
 /// This trait allows automatic conversion of &Randomness<C> to &C::Scalar.
 impl<C: Curve> Deref for Randomness<C> {
     type Target = C::Scalar;
