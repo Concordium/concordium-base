@@ -4,6 +4,12 @@ pub struct ContractState {
     pub(crate) current_position: u32,
 }
 
+#[derive(Default)]
+/// A type representing the parameter to init and receive methods.
+pub struct Parameter {
+    pub(crate) current_position: u32,
+}
+
 /// Actions that can be produced at the end of a contract execution. This
 /// type is deliberately not cloneable so that we can enforce that
 /// `and_then` and `or_else` can only be used when more than one event is

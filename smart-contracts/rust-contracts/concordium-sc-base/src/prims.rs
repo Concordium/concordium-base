@@ -30,10 +30,10 @@ extern "C" {
     fn combine_or(l: u32, r: u32) -> u32;
     // Get the size of the parameter to the method (either init or receive).
     pub(crate) fn get_parameter_size() -> u32;
-    // Write the parameter to the given location. The location is assumed to contain
-    // enough memory to write the parameter into (as returned by the previous
-    // method).
-    pub(crate) fn get_parameter(param_bytes: *mut u8);
+    // Write a section of the parameter to the given location. Return the number
+    // of bytes written. The location is assumed to contain enough memory to
+    // write the requested length into.
+    pub(crate) fn get_parameter_section(param_bytes: *mut u8, length: u32, offset: u32) -> u32;
     // Add a log item.
     fn log_event(start: *const u8, length: u32);
     // returns how many bytes were read.
