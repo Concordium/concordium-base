@@ -106,7 +106,33 @@ impl Write for ContractState {
     }
 }
 
+impl Read for Parameter {
+    type Err = ();
+
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Err> {
+        use core::convert::TryInto;
+        let len: u32 = {
+            match buf.len().try_into() {
+                Ok(v) => v,
+                _ => return Err(()),
+            }
+        };
+        let num_read =
+            unsafe { get_parameter_section(buf.as_mut_ptr(), len, self.current_position) };
+        self.current_position += num_read;
+        Ok(num_read as usize)
+    }
+}
+
 // Implementations of non-trait functionality for defined types.
+
+impl Create for Parameter {
+    fn new() -> Self {
+        Parameter {
+            current_position: 0,
+        }
+    }
+}
 
 impl Create for ContractState {
     fn new() -> Self {
@@ -167,15 +193,18 @@ pub trait HasParameter: private::Sealed {
     fn parameter_bytes(&self) -> Vec<u8> {
         let len = unsafe { get_parameter_size() };
         let mut bytes = vec![0u8; len as usize];
-        unsafe { get_parameter(bytes.as_mut_ptr()) };
+        unsafe { get_parameter_section(bytes.as_mut_ptr(), len, 0) };
         bytes
     }
 
-    fn parameter<S: Serialize>(&self) -> Result<S, ()> {
-        let params = self.parameter_bytes();
-        let mut cursor = Cursor::<&[u8]>::new(&params);
-        cursor.get()
-    }
+    #[inline]
+    /// Attempt to deserialize the parameter into a structured value.
+    fn parameter<S: Serialize>(&self) -> Result<S, ()> { Parameter::new().get() }
+
+    /// Get the cursor to the parameter that allows more fine-grained access
+    /// to the user-supplied parameter.
+    #[inline]
+    fn parameter_cursor(&self) -> Parameter { Parameter::new() }
 }
 
 impl Create for InitContext {

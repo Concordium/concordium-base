@@ -304,18 +304,25 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
 
     let parameter_size = parameter.len() as u32;
     let get_parameter_size = move |_ctx: &mut Ctx| parameter_size;
-    let get_parameter = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
-        let memory = ctx.memory(0);
-        match unsafe { ptr.deref_mut(memory, 0, parameter_size) } {
-            Some(cells) => {
-                for (place, byte) in cells.iter_mut().zip(&parameter) {
-                    place.set(*byte);
-                }
-                Ok(())
+    let get_parameter_section =
+        move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, len: u32, offset: u32| -> Result<u32, _> {
+            let memory = ctx.memory(0);
+            if offset as usize >= parameter.len() {
+                return Ok(0u32);
             }
-            None => Err(error::RuntimeError::User(Box::new("Cannot get parameter."))),
-        }
-    };
+            match unsafe { ptr.deref_mut(memory, 0, len) } {
+                Some(cells) => {
+                    // at this point offset < parameter.len()
+                    let offset = offset as usize;
+                    let end = std::cmp::min(offset + len as usize, parameter.len());
+                    for (place, byte) in cells.iter_mut().zip(&parameter[offset..end]) {
+                        place.set(*byte);
+                    }
+                    Ok((end - offset) as u32)
+                }
+                None => Err(error::RuntimeError::User(Box::new("Cannot get parameter."))),
+            }
+        };
 
     let simple_transfer = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, amount: u64| {
         let memory = ctx.memory(0);
@@ -363,7 +370,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
                     "get_init_ctx" => func!(get_init_ctx),
                     "get_receive_ctx" => func!(get_receive_ctx),
                     "get_receive_ctx_size" => func!(get_receive_ctx_size),
-                    "get_parameter" => func!(get_parameter),
+                    "get_parameter_section" => func!(get_parameter_section),
                     "get_parameter_size" => func!(get_parameter_size),
                     "combine_and" => func!(combine_and),
                     "combine_or" => func!(combine_or),
@@ -407,7 +414,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
                     "get_init_ctx" => func!(get_init_ctx),
                     "get_receive_ctx" => func!(get_receive_ctx),
                     "get_receive_ctx_size" => func!(get_receive_ctx_size),
-                    "get_parameter" => func!(get_parameter),
+                    "get_parameter_section" => func!(get_parameter_section),
                     "get_parameter_size" => func!(get_parameter_size),
                     "combine_and" => func!(combine_and),
                     "combine_or" => func!(combine_or),
