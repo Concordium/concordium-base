@@ -40,8 +40,8 @@ pub struct ContractAddress {
     serde(rename_all = "camelCase")
 )]
 pub struct InitContext {
-    pub(crate) metadata:    ChainMetadata,
-    pub(crate) init_origin: AccountAddress,
+    pub metadata:    ChainMetadata,
+    pub init_origin: AccountAddress,
 }
 
 /// Either an address of an account, or contract.
@@ -80,10 +80,10 @@ pub struct ReceiveContext {
     serde(rename_all = "camelCase")
 )]
 pub struct ChainMetadata {
-    pub(crate) slot_number:      u64,
-    pub(crate) block_height:     u64,
-    pub(crate) finalized_height: u64,
-    pub(crate) slot_time:        u64,
+    pub slot_number:      u64,
+    pub block_height:     u64,
+    pub finalized_height: u64,
+    pub slot_time:        u64,
 }
 
 /// Add offset tracking inside a data structure.
