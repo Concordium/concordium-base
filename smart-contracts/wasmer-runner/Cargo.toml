@@ -12,11 +12,17 @@ structopt = "0.3"
 hex = "0.4"
 serde_json="1.0.56"
 
+[features]
+default = ["cranelift"]
+
+cranelift = ["wasmer-interp/cranelift"]
+
+singlepass = ["wasmer-interp/singlepass"]
+
 [dependencies.wasmer-interp]
 version = "0.1"
 path = "../wasmer-interp"
-# default-features = false
-# features = ["singlepass"]
+default-features = false
 
 [dev-dependencies]
 criterion = "0.3"
@@ -30,7 +36,6 @@ features = ["derive-serde"]
 [dev-dependencies.wasmer-runtime]
 version="0.17.1"
 default-features = false
-features = ["default-backend-cranelift"]
 
 [[bench]]
 name = "wasm"
