@@ -97,10 +97,10 @@ pub fn bench_instantiate(c: &mut Criterion) {
 
 /// Benchmark calling a trivial host function.
 pub fn bench_call_host(c: &mut Criterion) {
-    let add_one = |x: u32| criterion::black_box(x + 1);
+    let sub_one = |x: u32| criterion::black_box(x - 1);
     let import_obj = imports! {
         "test" => {
-            "add_one" => func!(add_one)
+            "sub_one" => func!(sub_one)
         }
     };
 
@@ -108,16 +108,39 @@ pub fn bench_call_host(c: &mut Criterion) {
 
     let instance = instantiate(bytes, &import_obj).unwrap();
 
-    c.bench_function("call_add_one", move |b| {
+    c.bench_function("Wasm function invocation", move |b| {
         b.iter(|| {
             assert_eq!(
-                instance.call("just_call", &[wasmer_runtime::Value::I32(0)]).unwrap()[0],
+                instance.call("id", &[wasmer_runtime::Value::I32(1)]).unwrap()[0],
                 wasmer_runtime::Value::I32(1)
             )
         })
     });
 
-    c.bench_function("call_add_one_natively", move |b| b.iter(|| assert_eq!(add_one(0), 1)));
+    let mut group = c.benchmark_group("Sub-one benchmarks.");
+
+    let instance = instantiate(bytes, &import_obj).unwrap();
+    group.bench_function("doing 1 host call", move |b| {
+        b.iter(|| {
+            assert_eq!(
+                instance.call("just_call", &[wasmer_runtime::Value::I32(1)]).unwrap()[0],
+                wasmer_runtime::Value::I32(0)
+            )
+        })
+    });
+
+    for i in 1..10 {
+        let instance = instantiate(bytes, &import_obj).unwrap();
+        group.bench_function(&format!("doing {} host calls", i * 10000), move |b| {
+            b.iter(|| {
+                assert_eq!(
+                    instance.call("just_call", &[wasmer_runtime::Value::I32(i * 10000)]).unwrap()
+                        [0],
+                    wasmer_runtime::Value::I32(0)
+                )
+            })
+        });
+    }
 }
 
 criterion_group!(wasm, bench_call_host, bench_instantiate);
