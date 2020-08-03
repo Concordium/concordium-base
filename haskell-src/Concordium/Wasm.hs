@@ -289,20 +289,17 @@ instance Serialize InitContext where
   put (InitContext origin) = put origin
   get = InitContext <$> get
 
-instance Serialize ReceiveContext where
-  put ReceiveContext{..} =
-      put invoker <>
-      put selfAddress <>
-      put selfBalance <>
-      put sender <>
-      put owner
-  get = do
-    invoker <- get
-    selfAddress <- get
-    selfBalance <- get
-    sender <- get
-    owner <- get
-    return ReceiveContext{..}
+-- |Encode into a bytestring, using little endian serialization where
+-- appropriate.
+encodeReceiveContext :: ReceiveContext -> ByteString
+encodeReceiveContext ReceiveContext{..} = runPut encoder
+  where encoder =
+          put invoker <>
+          putWord64le (_contractIndex (contractIndex selfAddress)) <>
+          putWord64le (_contractSubindex (contractSubindex selfAddress)) <>
+          putWord64le (_amount selfBalance) <>
+          put sender <>
+          put owner
 
 instance Serialize a => Serialize (SuccessfulResultData a) where
   put SuccessfulResultData{..} =

@@ -100,7 +100,7 @@ newtype VoterPower = VoterPower AmountUnit
 -- Eventually these will be replaced by types given by the global store.
 -- For now they are placeholders
 
-newtype ContractIndex = ContractIndex Word64
+newtype ContractIndex = ContractIndex { _contractIndex :: Word64 }
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Bits, Integral)
     deriving (Typeable, Data)
 
@@ -108,7 +108,7 @@ instance S.Serialize ContractIndex where
     get = ContractIndex <$> G.getWord64be
     put (ContractIndex i) = P.putWord64be i
 
-newtype ContractSubindex = ContractSubindex Word64
+newtype ContractSubindex = ContractSubindex { _contractSubindex :: Word64 }
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
     deriving (Typeable, Data)
 
