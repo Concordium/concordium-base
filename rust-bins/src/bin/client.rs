@@ -346,7 +346,7 @@ fn handle_extend_ip_list(eil: ExtendIpList) {
         }
     };
 
-    let ip_info = match read_json_from_file(eil.ip) {
+    let ip_info = match read_identity_provider(eil.ip) {
         Ok(v) => v,
         Err(x) => {
             eprintln!("Could not decode identity provider because {}", x);
@@ -354,14 +354,13 @@ fn handle_extend_ip_list(eil: ExtendIpList) {
         }
     };
 
-    let all_ars_infos: BTreeMap<ArIdentity, ArInfo<G1>> =
-        match read_json_from_file(eil.anonymity_revokers) {
-            Ok(v) => v,
-            Err(x) => {
-                eprintln!("Could not decode anonymity revokers file because {}", x);
-                return;
-            }
-        };
+    let all_ars_infos = match read_anonymity_revokers(eil.anonymity_revokers) {
+        Ok(v) => v,
+        Err(x) => {
+            eprintln!("Could not decode anonymity revokers file because {}", x);
+            return;
+        }
+    };
 
     let mut selected_ars = BTreeMap::new();
     for ar_id in eil.selected_ars {
@@ -371,7 +370,7 @@ fn handle_extend_ip_list(eil: ExtendIpList) {
                 return;
             }
             Ok(ar_id) => {
-                if let Some(ar) = all_ars_infos.get(&ar_id) {
+                if let Some(ar) = all_ars_infos.anonymity_revokers.get(&ar_id) {
                     let _ = selected_ars.insert(ar_id, ar.clone());
                 } else {
                     eprintln!("Selected AR {} not found.", ar_id);
