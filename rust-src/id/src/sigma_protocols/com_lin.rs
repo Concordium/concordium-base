@@ -1,3 +1,8 @@
+//! This module implements the com-lin sigma protocol, which allows
+//! the prover to prove knowledge of pairs (s_i, r_i) and (s, r) such that
+//! \sum_{i} u_i * s_i = u * s for some public constants u_i and u.
+//! The r's are randomness in commitments to s_i's and s'.
+
 use crate::sigma_protocols::common::*;
 use crypto_common::*;
 use crypto_common_derive::*;
@@ -7,26 +12,40 @@ use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::{Challenge, RandomOracle};
 
 pub struct ComLinSecret<C: Curve> {
+    /// The secret values, s's above.
     xs: Vec<Value<C>>,
+    /// The randomness used in commitments to s_i's.
     rs: Vec<Randomness<C>>,
-    r:  Randomness<C>,
+    /// The randomness used in commitment to the linear combination
+    /// of s_i's.
+    r: Randomness<C>,
 }
 
 pub struct ComLin<C: Curve> {
-    pub us:      Vec<C::Scalar>,
-    pub cmms:    Vec<Commitment<C>>,
-    pub cmm:     Commitment<C>,
+    /// The coefficients u_i.
+    pub us: Vec<C::Scalar>,
+    /// The commitments to s_i's.
+    pub cmms: Vec<Commitment<C>>,
+    /// The commitment to the linear combination.
+    pub cmm: Commitment<C>,
+    /// The commitment key used to generate all the commitments.
     pub cmm_key: CommitmentKey<C>,
 }
 
+// TODO: What if u = 0?
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct Witness<C: Curve> {
+    /// Randomized s_i's
+    #[size_length = 4]
+    /// Randomized r_i's.
     zs: Vec<C::Scalar>,
+    #[size_length = 4]
     ss: Vec<C::Scalar>,
-    s:  C::Scalar,
+    /// Randomized commitment randomness r.
+    s: C::Scalar,
 }
 
-#[allow(clippy::needless_range_loop)]
 impl<C: Curve> SigmaProtocol for ComLin<C> {
     type CommitMessage = (Vec<Commitment<C>>, Commitment<C>);
     type ProtocolChallenge = C::Scalar;
@@ -50,6 +69,11 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let n = self.cmms.len();
+        // We have to have the same number of linear coefficients as the number of
+        // commitments.
+        if self.us.len() != n {
+            return None;
+        }
         let mut ais = Vec::with_capacity(n);
         let mut alphas: Vec<Value<C>> = Vec::with_capacity(n);
         let mut r_i_tildes = Vec::with_capacity(n);
@@ -63,9 +87,9 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
         }
 
         let mut sum_ui_alphai = C::Scalar::zero();
-        for i in 0..alphas.len() {
-            let mut ualpha = self.us[i];
-            ualpha.mul_assign(&alphas[i]);
+        for (ualpha, alpha) in izip!(&self.us, &alphas) {
+            let mut ualpha = *ualpha;
+            ualpha.mul_assign(&alpha);
             sum_ui_alphai.add_assign(&ualpha);
         }
         let sum_ui_alphai: Value<C> = Value::new(sum_ui_alphai);
@@ -85,20 +109,27 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
     ) -> Option<Self::ProverWitness> {
         let (alphas, r_i_tildes, r_tilde) = state;
         let n = alphas.len();
+        if self.cmms.len() != n
+            || self.us.len() != n
+            || secret.xs.len() != n
+            || secret.rs.len() != n
+        {
+            return None;
+        }
         let mut zs = Vec::with_capacity(n);
         let mut ss = Vec::with_capacity(n);
         let c = *challenge;
-        for i in 0..n {
+        for (s, alpha, r, r_i_tilda) in izip!(&secret.xs, &alphas, &secret.rs, &r_i_tildes) {
             let mut zi = c;
-            zi.mul_assign(&secret.xs[i]);
+            zi.mul_assign(s);
             zi.negate();
-            zi.add_assign(&alphas[i]);
+            zi.add_assign(alpha);
             zs.push(zi);
 
             let mut si = c;
-            si.mul_assign(&secret.rs[i]);
+            si.mul_assign(r);
             si.negate();
-            si.add_assign(&r_i_tildes[i]);
+            si.add_assign(r_i_tilda);
             ss.push(si);
         }
         let mut s = c;
@@ -118,22 +149,26 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
     ) -> Option<Self::CommitMessage> {
         let zs = &witness.zs;
         let ss = &witness.ss;
-        let s = witness.s;
         let c = *challenge;
         let n = zs.len();
+        if ss.len() != n || self.us.len() != n || self.cmms.len() != n {
+            return None;
+        }
+
         let mut ais = Vec::with_capacity(n);
         let mut sum = C::Scalar::zero();
         let g = self.cmm_key.0;
         let h = self.cmm_key.1;
-        for i in 0..n {
-            let Ci = self.cmms[i].0;
-            let ai = Commitment(multiexp(&[g, h, Ci], &[zs[i], ss[i], c]));
+        for (Ci, z_i, s_i, u_i) in izip!(&self.cmms, zs, ss, &self.us) {
+            let ai = Commitment(multiexp(&[g, h, Ci.0], &[*z_i, *s_i, c]));
             ais.push(ai);
-            let mut uizi = self.us[i];
-            uizi.mul_assign(&zs[i]);
+            let mut uizi = *u_i;
+            uizi.mul_assign(z_i);
             sum.add_assign(&uizi);
         }
-        let a = Commitment(multiexp(&[g, h, self.cmm.0], &[sum, s, c]));
+        // TODO: The g, h are the same in this, and the loop above.
+        // We could partially precompute the table to speed-up the multiexp
+        let a = Commitment(multiexp(&[g, h, self.cmm.0], &[sum, witness.s, c]));
         let cm = (ais, a);
         Some(cm)
     }
@@ -197,8 +232,10 @@ mod tests {
                 let ro = RandomOracle::domain(&challenge_prefix);
                 let proof =
                     prove(ro.split(), &com_lin, secret, csprng).expect("Proving should succeed.");
-                // println!("{}", verify(ro, &com_lin, &proof));
-                assert!(verify(ro, &com_lin, &proof));
+                assert!(
+                    verify(ro, &com_lin, &proof),
+                    "Produced proof did not verify."
+                );
             })
         }
     }
