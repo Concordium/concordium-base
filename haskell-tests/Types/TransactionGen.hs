@@ -10,15 +10,12 @@ import Concordium.Crypto.FFIDataTypes
 import Data.Time.Clock
 
 import Concordium.Types
-import Concordium.Types.HashableTo
 import Concordium.ID.Types
 
 import Control.Monad
 import qualified Data.Map.Strict as Map
 import qualified Data.FixedByteString as FBS
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
-import Data.Serialize(encode)
 import System.IO.Unsafe (unsafePerformIO)
 import qualified Data.Vector as Vec
 
@@ -37,6 +34,7 @@ genElgamalCipher = do
 
 verifyKeys :: Vec.Vector VerifyKey
 verifyKeys = unsafePerformIO $ Vec.replicateM 200 (correspondingVerifyKey <$> newKeyPair Ed25519)
+{-# NOINLINE verifyKeys #-}
 
 genVerifyKey :: Gen VerifyKey
 genVerifyKey = do
@@ -58,8 +56,8 @@ genTransactionHeader = do
   thExpiry <- TransactionExpiryTime <$> arbitrary
   return $ TransactionHeader{..}
 
-genBareTransaction :: Gen BareTransaction
-genBareTransaction = do
+genAccountTransaction :: Gen AccountTransaction
+genAccountTransaction = do
   btrHeader <- genTransactionHeader
   btrPayload <- EncodedPayload . BSS.pack <$> vector (fromIntegral (thPayloadSize btrHeader))
   numKeys <- choose (1, 255)
@@ -68,20 +66,16 @@ genBareTransaction = do
     sLen <- choose (50,70)
     sig <- Signature . BSS.pack <$> vector sLen
     return (idx, sig))
-  return $! BareTransaction{..}
+  return $! makeAccountTransaction btrSignature btrHeader btrPayload
 
 baseTime :: UTCTime
 baseTime = read "2019-09-23 13:27:13.257285424 UTC"
 
 genTransaction :: Gen Transaction
 genTransaction = do
-  wmdData <- genBareTransaction
+  wmdData <- genAccountTransaction
   wmdArrivalTime <- arbitrary
-  let body = encode wmdData
-  let wmdSignHash = getHash wmdData
-  let wmdHash = getHash wmdData
-  let wmdSize = BS.length body
-  return $ WithMetadata{..}
+  return $ addMetadata NormalTransaction wmdArrivalTime wmdData
 
 genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
 genCredentialDeploymentInformation = do
@@ -90,7 +84,7 @@ genCredentialDeploymentInformation = do
   let arbitraryExisting = ExistingAccount <$> genAccountAddress
   let arbitraryNew = do
         nacc <- choose (1,255)
-        keys <- replicateM nacc $ genVerifyKey
+        keys <- replicateM nacc genVerifyKey
         threshold <- choose (1, nacc)
         return $ NewAccount keys (SignatureThreshold $ fromIntegral threshold)
   cdvAccount <- oneof [
@@ -99,7 +93,7 @@ genCredentialDeploymentInformation = do
     ]
   cdvRegId <- RegIdCred . FBS.pack <$> vector (FBS.fixedLength (undefined :: RegIdSize))
   cdvIpId <- IP_ID <$> arbitrary
-  cdvArData <- Map.fromList <$> (listOf $ do
+  cdvArData <- Map.fromList <$> listOf (do
     ardName <- do
       n <- arbitrary
       if n == 0 then return (ArIdentity 1) else return (ArIdentity n)
@@ -121,11 +115,7 @@ genCredentialDeploymentWithMeta :: Gen CredentialDeploymentWithMeta
 genCredentialDeploymentWithMeta = do
   wmdData <- genCredentialDeploymentInformation
   wmdArrivalTime <- arbitrary
-  let body = encode wmdData
-  let wmdHash = transactionHashFromCDI wmdData
-  let wmdSignHash = transactionSignHashForCDI wmdHash
-  let wmdSize = BS.length body
-  return $ WithMetadata{..}
+  return $ addMetadata CredentialDeployment wmdArrivalTime wmdData
 
 genBlockItem :: Gen BlockItem
 genBlockItem = oneof [

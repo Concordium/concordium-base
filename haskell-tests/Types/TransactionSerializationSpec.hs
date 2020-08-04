@@ -21,21 +21,23 @@ groupIntoSize s =
               ub = 10^(nd+1) :: Integer
           in show lb ++ " -- " ++ show ub ++ "B"
 
-checkTransaction :: BareTransaction -> Property
+-- |Check that a transaction can be serialized and deserialized.
+checkTransaction :: AccountTransaction -> Property
 checkTransaction tx = let bs = encode tx
               in  case decode bs of
                     Left err -> counterexample err False
                     Right tx' -> QC.label (groupIntoSize (BS.length bs)) $ tx === tx'
 
 testTransaction :: Int -> Property
-testTransaction size = forAll (resize size genBareTransaction) checkTransaction
+testTransaction size = forAll (resize size genAccountTransaction) checkTransaction
 
 dummyTime :: TransactionTime
 dummyTime = 37
 
+-- |Check V0 serialization of block items.
 checkBlockItem :: BlockItem -> Property
 checkBlockItem bi = 
-    case runGet (getBlockItem (wmdArrivalTime bi)) bs of
+    case runGet (getBlockItemV0 (wmdArrivalTime bi)) bs of
       Left err -> counterexample err False
       Right bi' -> QC.label (groupIntoSize (BS.length bs)) $ bi === bi'
   where

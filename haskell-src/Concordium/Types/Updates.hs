@@ -1,15 +1,16 @@
-{-# LANGUAGE BangPatterns, DerivingStrategies #-}
+{-# LANGUAGE BangPatterns, DerivingStrategies, OverloadedStrings, ScopedTypeVariables #-}
 -- |Types for chain update instructions.
 module Concordium.Types.Updates where
 
 import qualified Data.Aeson as AE
+import Data.Aeson ((.:))
 import Data.Bits
 import Data.ByteString (ByteString)
 import Data.Hashable (Hashable)
 import qualified Data.Map as Map
 import Data.Serialize
 import qualified Data.Set as Set
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 import qualified Data.Vector as Vec
 import Data.Word
 import Control.Exception
@@ -21,6 +22,7 @@ import qualified Concordium.Crypto.SHA256 as SHA256
 import Concordium.Utils.Serialization
 import Concordium.Types
 
+-- TODO: Remove UpdateType
 -- |Types of updates to the chain.
 data UpdateType
     = UpdateAuthorization
@@ -64,6 +66,9 @@ checkKeySet AccessStructure{..} ks = Set.size (ks `Set.intersection` accessPubli
 -- |Sequence number for updates of a given type.
 type UpdateSequenceNumber = Nonce
 
+minUpdateSequenceNumber :: UpdateSequenceNumber
+minUpdateSequenceNumber = minNonce
+
 -- |Payload of an update to authorization.
 data Authorizations = Authorizations {
         asKeys :: !(Vec.Vector UpdatePublicKey),
@@ -96,18 +101,40 @@ instance Serialize Authorizations where
         keyCount <- getWord16be
         asKeys <- Vec.replicateM (fromIntegral keyCount) get
         let getChecked = do
-            r <- get
-            case Set.lookupMax (accessPublicKeys r) of
-                Just v
-                    | v < keyCount -> return r
-                    | otherwise -> fail "invalid key index"
-                Nothing -> return r
+                r <- get
+                case Set.lookupMax (accessPublicKeys r) of
+                    Just v
+                        | v < keyCount -> return r
+                        | otherwise -> fail "invalid key index"
+                    Nothing -> return r
         asEmergency <- getChecked
         asAuthorization <- getChecked
         asProtocol <- getChecked
         asParamElectionDifficulty <- getChecked
         asParamEuroPerEnergy <- getChecked
         asParamMicroGTUPerEuro <- getChecked
+        return Authorizations{..}
+
+instance AE.FromJSON Authorizations where
+    parseJSON = AE.withObject "Authorizations" $ \v -> do
+        asKeys <- Vec.fromList <$> v .: "keys"
+        let
+            parseAS x = v .: x >>= AE.withObject (unpack x) (\o -> do
+                accessPublicKeys :: Set.Set UpdateKeyIndex <- o .: "authorizedKeys"
+                accessThreshold :: Word16 <- o .: "threshold"
+                when (fromIntegral accessThreshold > Set.size accessPublicKeys) $
+                    fail "invalid threshold"
+                case Set.lookupMax accessPublicKeys of
+                    Just maxKeyIndex
+                        | fromIntegral maxKeyIndex >= Vec.length asKeys -> fail "invalid key index"
+                    _ -> return AccessStructure{..}
+                )
+        asEmergency <- parseAS "emergency"
+        asAuthorization <- parseAS "authorization"
+        asProtocol <- parseAS "protocol"
+        asParamElectionDifficulty <- parseAS "electionDifficulty"
+        asParamEuroPerEnergy <- parseAS "euroPerEnergy"
+        asParamMicroGTUPerEuro <- parseAS "microGTUPerEuro"
         return Authorizations{..}
 
 -- |Payload of a protocol update.
@@ -334,6 +361,8 @@ makeUpdateInstructionSignHash body = UpdateInstructionSignHashV0 (SHA256.hash bo
 signUpdateInstruction :: UpdateInstructionSignHash -> Map.Map UpdateKeyIndex KeyPair -> UpdateInstructionSignatures
 signUpdateInstruction sh = UpdateInstructionSignatures . fmap (\kp -> sign kp (encode sh))
 
+-- |Check if the signatures on an 'UpdateInstruction' are valid with respect
+-- to the given 'Authorizations'.
 checkUpdateInstructionSignatures
     :: Authorizations
     -- ^Current authorizations
