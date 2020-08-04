@@ -109,6 +109,45 @@ impl Outcome {
         }
     }
 
+    pub fn send(
+        &self,
+        addr_index: u64,
+        addr_subindex: u64,
+        receive_name_bytes: &[Cell<u8>],
+        amount: u64,
+        parameter_bytes: &[Cell<u8>],
+    ) -> Result<u32, error::RuntimeError> {
+        if let Ok(mut guard) = self.cur_state.lock() {
+            let response = guard.len();
+
+            let mut name = Vec::with_capacity(receive_name_bytes.len());
+            for cell in receive_name_bytes.iter() {
+                name.push(cell.get());
+            }
+
+            let mut parameter = Vec::with_capacity(parameter_bytes.len());
+            for cell in parameter_bytes.iter() {
+                parameter.push(cell.get());
+            }
+
+            let to_addr = ContractAddress {
+                index:    addr_index,
+                subindex: addr_subindex,
+            };
+
+            guard.push(Action::Send {
+                to_addr,
+                name,
+                amount,
+                parameter,
+            });
+
+            Ok(response as u32)
+        } else {
+            unreachable!("Failed to acquire lock.")
+        }
+    }
+
     pub fn combine_and(&self, l: u32, r: u32) -> Result<u32, error::RuntimeError> {
         if let Ok(mut guard) = self.cur_state.lock() {
             let response = guard.len() as u32;
@@ -298,7 +337,8 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
 
     let outcome = Outcome::init();
     let a_outcome = outcome.clone();
-    let s_outcome = a_outcome.clone();
+    let simple_transfer_outcome = a_outcome.clone();
+    let send_outcome = a_outcome.clone();
     let and_outcome = a_outcome.clone();
     let accept = move || a_outcome.accept();
 
@@ -327,10 +367,38 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
     let simple_transfer = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, amount: u64| {
         let memory = ctx.memory(0);
         match unsafe { ptr.deref_mut(memory, 0, 32) } {
-            Some(cells) => s_outcome.simple_transfer(cells, amount),
+            Some(cells) => simple_transfer_outcome.simple_transfer(cells, amount),
             None => {
                 Err(error::RuntimeError::User(Box::new("Cannot read address for simple transfer.")))
             }
+        }
+    };
+
+    let send = move |ctx: &mut Ctx,
+                     addr_index: u64,
+                     addr_subindex: u64,
+                     receive_name_ptr: WasmPtr<u8, Array>,
+                     receive_name_len: u32,
+                     amount: u64,
+                     parameter_ptr: WasmPtr<u8, Array>,
+                     parameter_len: u32| {
+        let memory = ctx.memory(0);
+        match unsafe { receive_name_ptr.deref_mut(memory, 0, receive_name_len) } {
+            Some(receive_name_bytes) => match unsafe {
+                parameter_ptr.deref_mut(memory, 0, parameter_len)
+            } {
+                Some(parameter_bytes) => send_outcome.send(
+                    addr_index,
+                    addr_subindex,
+                    receive_name_bytes,
+                    amount,
+                    parameter_bytes,
+                ),
+                None => Err(error::RuntimeError::User(Box::new("Cannot read parameter for send."))),
+            },
+            None => Err(error::RuntimeError::User(Box::new(
+                "Cannot read receive function name for send.",
+            ))),
         }
     };
 
@@ -376,6 +444,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
                     "combine_or" => func!(combine_or),
                     "accept" => func!(accept),
                     "simple_transfer" => func!(simple_transfer),
+                    "send" => func!(send),
                     "log_event" => func!(log_event),
                     "write_state" => func!(write_state),
                     "load_state" => func!(load_state),
@@ -420,6 +489,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
                     "combine_or" => func!(combine_or),
                     "accept" => func!(accept),
                     "simple_transfer" => func!(simple_transfer),
+                    "send" => func!(send),
                     "log_event" => func!(log_event),
                     "write_state" => func!(write_state),
                     "load_state" => func!(load_state),
