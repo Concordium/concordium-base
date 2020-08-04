@@ -19,7 +19,7 @@ let
     config = { android_sdk.accept_license = true; };
   };
   rustStableChannel =
-    (nixpkgs.rustChannelOf { channel = "1.44.1"; }).rust.override {
+    (nixpkgs.rustChannelOf { channel = "1.45.2"; }).rust.override {
       targets = [
         "x86_64-unknown-linux-gnu"
         "wasm32-unknown-unknown"
