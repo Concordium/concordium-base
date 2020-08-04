@@ -123,13 +123,15 @@ getSafeMapOf getKey getVal = do
 -- * Utility
 
 -- |Run a getter, but also return the 'ByteString' that was parsed.
+-- FIXME: using 'remaining' may not be robust with respect to 'runGetPartial'.
+--        However, the current approach is a work-around for the fact that
+--        'lookAhead' updates 'bytesRead'.
 getWithBytes :: Get a -> Get (a, BS.ByteString)
 getWithBytes g = do
-        start <- bytesRead
-        (v, end) <- lookAhead $ do
+        (v, size) <- lookAhead $ do
+            startRemain <- remaining
             v <- g
-            end <- bytesRead
-            return (v, end)
-        let size = end - start
-        bytes <- getByteString size
+            endRemain <- remaining
+            return (v, startRemain - endRemain)
+        bytes <- label ("getting " ++ show size ++ " bytes") $ getByteString size
         return (v, bytes)

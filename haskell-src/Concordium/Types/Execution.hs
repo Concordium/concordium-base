@@ -180,12 +180,6 @@ data Payload =
       }
   -- |Undelegate stake.
   | UndelegateStake
-  -- |Update the election difficulty birk parameter.
-  -- Will only be accepted if sent from one of the special beta accounts.
-  | UpdateElectionDifficulty {
-      -- |The new election difficulty. Must be in the range [0,1).
-      uedDifficulty :: !ElectionDifficulty
-      }
   -- |Update the aggregation verification key of the baker
   | UpdateBakerAggregationVerifyKey {
       -- |Id of the baker to update
@@ -278,9 +272,6 @@ instance S.Serialize Payload where
     S.put dsID
   put UndelegateStake =
     P.putWord8 9
-  put UpdateElectionDifficulty{..} =
-    P.putWord8 10 <>
-    S.put uedDifficulty
   put UpdateBakerAggregationVerifyKey{..} =
     P.putWord8 11 <>
     S.put ubavkId <>
@@ -351,11 +342,6 @@ instance S.Serialize Payload where
               return UpdateBakerSignKey{..}
             8 -> DelegateStake <$> S.get
             9 -> return UndelegateStake
-            10 -> do
-              uedDifficulty <- S.get
-              unless (isValidElectionDifficulty uedDifficulty) $
-                fail $ "Illegal election difficulty: " ++ show uedDifficulty
-              return UpdateElectionDifficulty{..}
             11 -> do
               ubavkId <- S.get
               ubavkKey <- S.get
