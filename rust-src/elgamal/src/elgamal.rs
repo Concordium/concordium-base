@@ -31,6 +31,12 @@ impl From<ChunkSize> for u8 {
 }
 
 impl ChunkSize {
+    /// Compute the "mask" from chunk size. The mask can be used
+    /// to obtain the lowest (least significant) bits of a `u64` value.
+    ///
+    /// Concoretely, if ChunkSize is n, then this function returns
+    /// a u64 value whose n least significant bits are 1, and all other bits are
+    /// 0.
     pub fn mask(self) -> u64 {
         use ChunkSize::*;
         match self {
