@@ -19,7 +19,7 @@ impl InitResult {
                 logs,
                 remaining_energy,
             } => {
-                let mut out = vec![0]; // TODO initialize size?
+                let mut out = vec![0];
                 out.extend_from_slice(&logs.to_bytes());
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out
@@ -130,22 +130,30 @@ pub enum ReceiveResult {
         actions:          Vec<Action>,
         remaining_energy: u64,
     },
-    // TODO Add fields: logs and remaining_energy
-    Reject,
+    Reject {
+        remaining_energy: u64,
+    },
 }
 
 impl ReceiveResult {
     pub fn to_bytes(&self) -> Vec<u8> {
         use ReceiveResult::*;
         match self {
-            Reject => vec![0],
+            Reject {
+                remaining_energy,
+            } => {
+                let mut out = Vec::with_capacity(9);
+                out.push(0);
+                out.extend_from_slice(&remaining_energy.to_be_bytes());
+                out
+            }
             Success {
                 state,
                 logs,
                 actions,
                 remaining_energy,
             } => {
-                let mut out = vec![1]; // TODO initialize size?
+                let mut out = vec![1];
                 let state = state.get();
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state);

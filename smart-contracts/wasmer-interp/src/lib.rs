@@ -5,7 +5,10 @@ use contracts_common::*;
 use std::{
     cell::Cell,
     collections::LinkedList,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
 };
 pub use types::*;
 use wasmer_runtime::{
@@ -59,49 +62,28 @@ impl Logs {
 
 #[derive(Clone)]
 pub struct Energy {
-    // Energy left to use
-    pub energy: Arc<Mutex<u64>>,
+    /// Energy left to use
+    pub energy: Arc<AtomicU64>,
 }
 
 impl Energy {
     pub fn new(initial_energy: u64) -> Self {
         Self {
-            energy: Arc::new(Mutex::new(initial_energy)),
+            energy: Arc::new(AtomicU64::new(initial_energy)),
         }
     }
 
     pub fn tick_energy(&self, e: u32) -> Result<(), error::RuntimeError> {
-        if let Ok(mut energy) = self.energy.lock() {
-            // TODO is the following cheaper?
-            // let e_u64 = u64::from(e);
-            // if e_u64 > *energy {
-            //     Err(error::RuntimeError::User(Box::new("out of energy")))
-            // } else {
-            //     *energy -= e_u64;
-            //     Ok{()}
-            // }
-            match energy.checked_sub(u64::from(e)) {
-                None => {
-                    println!("Out of energy!");
-                    Err(error::RuntimeError::User(Box::new("out of energy")))
-                }
-                Some(energy_new) => {
-                    *energy = energy_new;
-                    Ok(())
-                }
-            }
+        let e = u64::from(e);
+        let old_val = self.energy.fetch_sub(e, Ordering::SeqCst);
+        if old_val >= e {
+            Ok(())
         } else {
-            Err(error::RuntimeError::User(Box::new("should not happen: locking failed")))
+            Err(error::RuntimeError::User(Box::new("out of energy")))
         }
     }
 
-    pub fn get_remaining_energy(&self) -> u64 {
-        if let Ok(e) = self.energy.lock() {
-            *e
-        } else {
-            unreachable!("Failed to acquire lock.")
-        }
-    }
+    pub fn get_remaining_energy(&self) -> u64 { self.energy.load(Ordering::Acquire) }
 }
 
 // FIXME: Add support for trees, not just accept/reject.
@@ -341,11 +323,13 @@ impl State {
 pub fn make_imports(
     which: Which,
     parameter: Parameter,
+    energy: u64,
 ) -> (ImportObject, Logs, Energy, State, Outcome) {
     let logs = Logs::new();
-    let energy = Energy::new(10000); // TODO pass initial energy
-    let energy_ = energy.clone();
-    let tick_energy = move |e: u32| -> Result<(), error::RuntimeError> { energy_.tick_energy(e) };
+    let energy = Energy::new(energy);
+    let energy_clone = energy.clone();
+    let tick_energy =
+        move |e: u32| -> Result<(), error::RuntimeError> { energy_clone.tick_energy(e) };
     let state = match which {
         Which::Init {
             ..
@@ -566,12 +550,14 @@ pub fn invoke_init(
     init_ctx: InitContext,
     init_name: &str,
     parameter: Parameter,
+    energy: u64,
 ) -> Result<InitResult, error::CallError> {
     let (import_obj, logs, energy, state, _) = make_imports(
         Which::Init {
             init_ctx,
         },
         parameter,
+        energy,
     );
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
@@ -580,7 +566,6 @@ pub fn invoke_init(
         .expect("Instantiation should always succeed for well-formed modules.");
     let res = inst.call(init_name, &[Value::I64(amount as i64)])?;
     let remaining_energy = energy.get_remaining_energy();
-    println!("Remaining energy: {}", remaining_energy);
     if let Some(wasmer_runtime::Value::I32(0)) = res.first() {
         Ok(InitResult::Success {
             logs,
@@ -602,6 +587,7 @@ pub fn invoke_receive(
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
+    energy: u64,
 ) -> Result<ReceiveResult, error::CallError> {
     // Make the imports (host functions), with shared variables for logs, energy,
     // state, outcome
@@ -611,6 +597,7 @@ pub fn invoke_receive(
             current_state,
         },
         parameter,
+        energy,
     );
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
@@ -619,7 +606,6 @@ pub fn invoke_receive(
         .expect("Instantiation should always succeed for well-formed modules.");
     let res = inst.call(receive_name, &[Value::I64(amount as i64)])?;
     let remaining_energy = energy.get_remaining_energy();
-    println!("Remaining energy: {}", remaining_energy);
     if let Some(wasmer_runtime::Value::I32(n)) = res.first() {
         // FIXME: We should filter out to only return the ones reachable from
         // the root.
@@ -636,7 +622,9 @@ pub fn invoke_receive(
         } else if *n >= 0 {
             Err(error::CallError::Runtime(error::RuntimeError::User(Box::new("Invalid return."))))
         } else {
-            Ok(ReceiveResult::Reject)
+            Ok(ReceiveResult::Reject {
+                remaining_energy,
+            })
         }
     } else {
         Err(error::CallError::Runtime(error::RuntimeError::User(Box::new("Invalid return."))))

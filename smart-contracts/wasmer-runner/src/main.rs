@@ -48,6 +48,14 @@ struct WasmerRunner {
                 an empty array if this is not given."
     )]
     parameter: Option<PathBuf>,
+    #[structopt(
+        name = "energy",
+        long = "energy",
+        global = true,
+        help = "Initial amount of energy to invoke the contract call with.",
+        default_value = "1000000"
+    )]
+    energy: u64,
     #[structopt(flatten)]
     command: Command,
 }
@@ -175,7 +183,7 @@ pub fn main() {
                 logs,
                 state,
                 remaining_energy: 10000,
-            } = invoke_init(&source, runner.amount, init_ctx, &name, parameter)
+            } = invoke_init(&source, runner.amount, init_ctx, &name, parameter, runner.energy)
                 .expect("Invocation failed.")
             {
                 println!("Init call succeeded. The following logs were produced.");
@@ -207,9 +215,16 @@ pub fn main() {
                 file.read_to_end(&mut init_state).expect("Reading the state file failed.");
                 init_state
             };
-            let res =
-                invoke_receive(&source, runner.amount, receive_ctx, &init_state, &name, parameter)
-                    .expect("Calling receive failed.");
+            let res = invoke_receive(
+                &source,
+                runner.amount,
+                receive_ctx,
+                &init_state,
+                &name,
+                parameter,
+                runner.energy,
+            )
+            .expect("Calling receive failed.");
             match res {
                 ReceiveResult::Success {
                     logs,
@@ -256,7 +271,12 @@ pub fn main() {
                         }
                     }
                 }
-                ReceiveResult::Reject => println!("Receive call rejected."),
+                ReceiveResult::Reject {
+                    remaining_energy,
+                } => {
+                    println!("Receive call rejected.");
+                    println!("Remaining energy is {}.", remaining_energy)
+                }
             }
         }
     }
