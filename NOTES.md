@@ -236,7 +236,7 @@ Martin is the best person to contact when new version of these need to be built 
 
 # TODO: Other stuff for Mjolner
 
-- They want to be able to compute the transaction fee. This depends on the GTU to ENERGY conversion rate which is at the moment 1, but the intent is that it is going to be adjustable.
+- They want to be able to compute the transaction fee. This depends on the GTU to ENERGY conversion rate which is at the moment 1 NRG = 100 µGTU, but the intent is that it is going to be adjustable.
 There needs to be some way for the wallet to obtain this and estimate the fee so that it can display it to the user.
 
 - In the identity provider that is supplied as part of the mock server the `IpMetadata` should include the proper Notabene logo image and proper name (as opposed to the current automatically generated "Identity provider 0"). Moreover issuanceStart should be the correct Notabene URL https://app.notabene.id/idiss/authorize
