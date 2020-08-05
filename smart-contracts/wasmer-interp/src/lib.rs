@@ -5,7 +5,10 @@ use contracts_common::*;
 use std::{
     cell::Cell,
     collections::LinkedList,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
 };
 pub use types::*;
 use wasmer_runtime::{
@@ -55,6 +58,32 @@ impl Logs {
             unreachable!("Failed to acquire lock.")
         }
     }
+}
+
+#[derive(Clone)]
+pub struct Energy {
+    /// Energy left to use
+    pub energy: Arc<AtomicU64>,
+}
+
+impl Energy {
+    pub fn new(initial_energy: u64) -> Self {
+        Self {
+            energy: Arc::new(AtomicU64::new(initial_energy)),
+        }
+    }
+
+    pub fn tick_energy(&self, e: u32) -> Result<(), error::RuntimeError> {
+        let e = u64::from(e);
+        let old_val = self.energy.fetch_sub(e, Ordering::SeqCst);
+        if old_val >= e {
+            Ok(())
+        } else {
+            Err(error::RuntimeError::User(Box::new("out of energy")))
+        }
+    }
+
+    pub fn get_remaining_energy(&self) -> u64 { self.energy.load(Ordering::Acquire) }
 }
 
 // FIXME: Add support for trees, not just accept/reject.
@@ -291,8 +320,16 @@ impl State {
     }
 }
 
-pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, State, Outcome) {
+pub fn make_imports(
+    which: Which,
+    parameter: Parameter,
+    energy: u64,
+) -> (ImportObject, Logs, Energy, State, Outcome) {
     let logs = Logs::new();
+    let energy = Energy::new(energy);
+    let energy_clone = energy.clone();
+    let tick_energy =
+        move |e: u32| -> Result<(), error::RuntimeError> { energy_clone.tick_energy(e) };
     let state = match which {
         Which::Init {
             ..
@@ -435,6 +472,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
 
             let imps = imports! {
                 "concordium" => {
+                    // NOTE: validation will only allow access to a given list of these functions (check to be added)
                     "get_init_ctx" => func!(get_init_ctx),
                     "get_receive_ctx" => func!(get_receive_ctx),
                     "get_receive_ctx_size" => func!(get_receive_ctx_size),
@@ -445,6 +483,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
                     "accept" => func!(accept),
                     "simple_transfer" => func!(simple_transfer),
                     "send" => func!(send),
+                    "tick_energy" => func!(tick_energy),
                     "log_event" => func!(log_event),
                     "write_state" => func!(write_state),
                     "load_state" => func!(load_state),
@@ -452,7 +491,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
                     "state_size" => func!(state_size),
                 },
             };
-            (imps, logs, state, outcome)
+            (imps, logs, energy, state, outcome)
         }
         Which::Receive {
             ref receive_ctx,
@@ -490,6 +529,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
                     "accept" => func!(accept),
                     "simple_transfer" => func!(simple_transfer),
                     "send" => func!(send),
+                    "tick_energy" => func!(tick_energy),
                     "log_event" => func!(log_event),
                     "write_state" => func!(write_state),
                     "load_state" => func!(load_state),
@@ -497,7 +537,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
                     "state_size" => func!(state_size),
                 },
             };
-            (imps, logs, state, outcome)
+            (imps, logs, energy, state, outcome)
         }
     }
 }
@@ -510,12 +550,14 @@ pub fn invoke_init(
     init_ctx: InitContext,
     init_name: &str,
     parameter: Parameter,
+    energy: u64,
 ) -> Result<InitResult, error::CallError> {
-    let (import_obj, logs, state, _) = make_imports(
+    let (import_obj, logs, energy, state, _) = make_imports(
         Which::Init {
             init_ctx,
         },
         parameter,
+        energy,
     );
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
@@ -523,14 +565,17 @@ pub fn invoke_init(
     let inst = instantiate(wasm, &import_obj)
         .expect("Instantiation should always succeed for well-formed modules.");
     let res = inst.call(init_name, &[Value::I64(amount as i64)])?;
+    let remaining_energy = energy.get_remaining_energy();
     if let Some(wasmer_runtime::Value::I32(0)) = res.first() {
         Ok(InitResult::Success {
             logs,
             state,
+            remaining_energy,
         })
     } else {
         Ok(InitResult::Reject {
             logs,
+            remaining_energy,
         })
     }
 }
@@ -542,13 +587,17 @@ pub fn invoke_receive(
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
+    energy: u64,
 ) -> Result<ReceiveResult, error::CallError> {
-    let (import_obj, logs, state, outcome) = make_imports(
+    // Make the imports (host functions), with shared variables for logs, energy,
+    // state, outcome
+    let (import_obj, logs, energy, state, outcome) = make_imports(
         Which::Receive {
             receive_ctx,
             current_state,
         },
         parameter,
+        energy,
     );
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
@@ -556,6 +605,7 @@ pub fn invoke_receive(
     let inst = instantiate(wasm, &import_obj)
         .expect("Instantiation should always succeed for well-formed modules.");
     let res = inst.call(receive_name, &[Value::I64(amount as i64)])?;
+    let remaining_energy = energy.get_remaining_energy();
     if let Some(wasmer_runtime::Value::I32(n)) = res.first() {
         // FIXME: We should filter out to only return the ones reachable from
         // the root.
@@ -567,11 +617,14 @@ pub fn invoke_receive(
                 logs,
                 state,
                 actions,
+                remaining_energy,
             })
         } else if *n >= 0 {
             Err(error::CallError::Runtime(error::RuntimeError::User(Box::new("Invalid return."))))
         } else {
-            Ok(ReceiveResult::Reject)
+            Ok(ReceiveResult::Reject {
+                remaining_energy,
+            })
         }
     } else {
         Err(error::CallError::Runtime(error::RuntimeError::User(Box::new("Invalid return."))))
