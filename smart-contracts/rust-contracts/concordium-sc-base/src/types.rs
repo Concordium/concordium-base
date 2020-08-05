@@ -28,7 +28,7 @@ impl Action {
 
 /// A non-descript error message, signalling rejection of a smart contract
 /// invocation.
-#[derive(Default)]
+#[derive(Default, Eq, PartialEq)]
 pub struct Reject {}
 
 #[macro_export]
@@ -38,11 +38,16 @@ pub struct Reject {}
 /// message will be logged before the function terminates.
 macro_rules! bail {
     () => {
-        return Err(Reject {})
+        return Err(Reject {});
     };
     ($e:expr) => {{
         // logs are not retained in case of rejection.
         // $crate::events::log_bytes($e);
+        return Err(Reject {});
+    }};
+    ($fmt:expr, $($arg:tt)+) => {{
+        // format_err!-like formatting
+        // logs are not retained in case of rejection.
         return Err(Reject {});
     }};
 }
