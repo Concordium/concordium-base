@@ -58,7 +58,6 @@ pub struct State {
     arbiter:          AccountAddress,
 }
 
-
 // Contract implementation
 
 #[init(name = "init")]
@@ -96,7 +95,7 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
                 "Amount given does not match the required deposit and arbiter fee."
             );
             state.mode = Mode::AwaitingDelivery;
-            return Ok(Action::accept())
+            Ok(Action::accept())
         }
 
         (Mode::AwaitingDelivery, Message::AcceptDelivery) => {
@@ -108,7 +107,7 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
             let release_payment_to_seller =
                 Action::simple_transfer(&state.seller, state.required_deposit);
             let pay_arbiter = Action::simple_transfer(&state.arbiter, state.arbiter_fee);
-            return Ok(try_send_both(release_payment_to_seller, pay_arbiter));
+            Ok(try_send_both(release_payment_to_seller, pay_arbiter))
         }
 
         (Mode::AwaitingDelivery, Message::Contest) => {
@@ -118,14 +117,14 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
                 "Only the designated buyer or seller can contest delivery."
             );
             state.mode = Mode::AwaitingArbitration;
-            return Ok(Action::accept());
+            Ok(Action::accept())
         }
 
         (Mode::AwaitingArbitration, Message::Arbitrate(Arbitration::ReturnDepositToBuyer)) => {
             state.mode = Mode::Done;
             let return_deposit = Action::simple_transfer(&state.buyer, state.required_deposit);
             let pay_arbiter = Action::simple_transfer(&state.arbiter, state.arbiter_fee);
-            return Ok(try_send_both(return_deposit, pay_arbiter));
+            Ok(try_send_both(return_deposit, pay_arbiter))
         }
 
         (Mode::AwaitingArbitration, Message::Arbitrate(Arbitration::ReleaseFundsToSeller)) => {
@@ -133,12 +132,12 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
             let release_payment_to_seller =
                 Action::simple_transfer(&state.seller, state.required_deposit);
             let pay_arbiter = Action::simple_transfer(&state.arbiter, state.arbiter_fee);
-            return Ok(try_send_both(release_payment_to_seller, pay_arbiter));
+            Ok(try_send_both(release_payment_to_seller, pay_arbiter))
         }
 
         (Mode::AwaitingArbitration, Message::Arbitrate(Arbitration::ReawaitDelivery)) => {
             state.mode = Mode::AwaitingDelivery;
-            return Ok(Action::accept());
+            Ok(Action::accept())
         }
 
         (Mode::Done, _) => {
@@ -153,7 +152,7 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
 fn try_send_both(a: Action, b: Action) -> Action {
     let best_effort_a = a.or_else(Action::accept());
     let best_effort_b = b.or_else(Action::accept());
-    return best_effort_a.and_then(best_effort_b);
+    best_effort_a.and_then(best_effort_b)
 }
 
 // (De)serialization
@@ -294,20 +293,17 @@ pub mod tests {
     #[test]
     #[no_mangle]
     fn test_init_rejects_non_zero_amounts() {
-        let metadata =
-            ChainMetadata {
-                slot_number: 1172,
-                block_height: 1150,
-                finalized_height: 1148,
-                slot_time: 43578934,
-            };
-        let init_origin =
-            AccountAddress([4;ACCOUNT_ADDRESS_SIZE]);
-        let init_context =
-            InitContext {
-                metadata,
-                init_origin,
-            };
+        let metadata = ChainMetadata {
+            slot_number:      1172,
+            block_height:     1150,
+            finalized_height: 1148,
+            slot_time:        43578934,
+        };
+        let init_origin = AccountAddress([4; ACCOUNT_ADDRESS_SIZE]);
+        let init_context = InitContext {
+            metadata,
+            init_origin,
+        };
         let amount = 200;
         let result = contract_init(init_context, amount);
         let expected = Err(Reject {});
