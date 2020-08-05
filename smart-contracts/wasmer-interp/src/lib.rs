@@ -57,6 +57,52 @@ impl Logs {
     }
 }
 
+#[derive(Clone)]
+pub struct Energy {
+    // Energy left to use
+    pub energy: Arc<Mutex<u64>>
+}
+
+impl Energy {
+    pub fn new(initial_energy: u64) -> Self {
+        Self {
+            energy: Arc::new(Mutex::new(initial_energy))
+        }
+    }
+    pub fn tick_energy(&self, e: u32) -> Result<(), error::RuntimeError> {
+        if let Ok(mut energy) = self.energy.lock() {
+            // TODO is the following cheaper?
+            // let e_u64 = u64::from(e);
+            // if e_u64 > *energy {
+            //     Err(error::RuntimeError::User(Box::new("out of energy")))
+            // } else {
+            //     *energy -= e_u64;
+            //     Ok{()}
+            // }
+            match energy.checked_sub(u64::from(e)) {
+                None => {
+                    println!("Out of energy!");
+                    Err(error::RuntimeError::User(Box::new("out of energy")))
+                }
+                Some(energy_new) => {
+                    *energy = energy_new;
+                    Ok(())
+                }
+            }
+        } else {
+            Err(error::RuntimeError::User(Box::new("should not happen: locking failed")))
+        }
+    }
+
+    pub fn get_remaining_energy(&self) -> u64 {
+        if let Ok(e) = self.energy.lock() {
+            *e
+        } else {
+            unreachable!("Failed to acquire lock.")
+        }
+    }
+}
+
 // FIXME: Add support for trees, not just accept/reject.
 #[derive(Clone)]
 pub struct Outcome {
@@ -291,8 +337,13 @@ impl State {
     }
 }
 
-pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, State, Outcome) {
+pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, Energy, State, Outcome) {
     let logs = Logs::new();
+    let energy = Energy::new(10000); // TODO pass initial energy
+    let energy_ = energy.clone();
+    let tick_energy = move |e: u32| -> Result<(), error::RuntimeError> {
+        energy_.tick_energy(e)
+    };
     let state = match which {
         Which::Init {
             ..
@@ -435,6 +486,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
 
             let imps = imports! {
                 "concordium" => {
+                    // NOTE: validation will only allow access to a given list of these functions (check to be added)
                     "get_init_ctx" => func!(get_init_ctx),
                     "get_receive_ctx" => func!(get_receive_ctx),
                     "get_receive_ctx_size" => func!(get_receive_ctx_size),
@@ -445,6 +497,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
                     "accept" => func!(accept),
                     "simple_transfer" => func!(simple_transfer),
                     "send" => func!(send),
+                    "tick_energy" => func!(tick_energy),
                     "log_event" => func!(log_event),
                     "write_state" => func!(write_state),
                     "load_state" => func!(load_state),
@@ -452,7 +505,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
                     "state_size" => func!(state_size),
                 },
             };
-            (imps, logs, state, outcome)
+            (imps, logs, energy, state, outcome)
         }
         Which::Receive {
             ref receive_ctx,
@@ -490,6 +543,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
                     "accept" => func!(accept),
                     "simple_transfer" => func!(simple_transfer),
                     "send" => func!(send),
+                    "tick_energy" => func!(tick_energy),
                     "log_event" => func!(log_event),
                     "write_state" => func!(write_state),
                     "load_state" => func!(load_state),
@@ -497,7 +551,7 @@ pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, 
                     "state_size" => func!(state_size),
                 },
             };
-            (imps, logs, state, outcome)
+            (imps, logs, energy, state, outcome)
         }
     }
 }
@@ -511,7 +565,7 @@ pub fn invoke_init(
     init_name: &str,
     parameter: Parameter,
 ) -> Result<InitResult, error::CallError> {
-    let (import_obj, logs, state, _) = make_imports(
+    let (import_obj, logs, energy, state, _) = make_imports(
         Which::Init {
             init_ctx,
         },
@@ -523,14 +577,18 @@ pub fn invoke_init(
     let inst = instantiate(wasm, &import_obj)
         .expect("Instantiation should always succeed for well-formed modules.");
     let res = inst.call(init_name, &[Value::I64(amount as i64)])?;
+    let remaining_energy = energy.get_remaining_energy();
+    println!("Remaining energy: {}", remaining_energy);
     if let Some(wasmer_runtime::Value::I32(0)) = res.first() {
         Ok(InitResult::Success {
             logs,
             state,
+            remaining_energy,
         })
     } else {
         Ok(InitResult::Reject {
             logs,
+            remaining_energy,
         })
     }
 }
@@ -543,7 +601,8 @@ pub fn invoke_receive(
     receive_name: &str,
     parameter: Parameter,
 ) -> Result<ReceiveResult, error::CallError> {
-    let (import_obj, logs, state, outcome) = make_imports(
+    // Make the imports (host functions), with shared variables for logs, energy, state, outcome
+    let (import_obj, logs, energy, state, outcome) = make_imports(
         Which::Receive {
             receive_ctx,
             current_state,
@@ -556,6 +615,8 @@ pub fn invoke_receive(
     let inst = instantiate(wasm, &import_obj)
         .expect("Instantiation should always succeed for well-formed modules.");
     let res = inst.call(receive_name, &[Value::I64(amount as i64)])?;
+    let remaining_energy = energy.get_remaining_energy();
+    println!("Remaining energy: {}", remaining_energy);
     if let Some(wasmer_runtime::Value::I32(n)) = res.first() {
         // FIXME: We should filter out to only return the ones reachable from
         // the root.
@@ -567,6 +628,7 @@ pub fn invoke_receive(
                 logs,
                 state,
                 actions,
+                remaining_energy,
             })
         } else if *n >= 0 {
             Err(error::CallError::Runtime(error::RuntimeError::User(Box::new("Invalid return."))))

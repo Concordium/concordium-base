@@ -4,9 +4,11 @@ pub enum InitResult {
     Success {
         state: State,
         logs:  Logs,
+        remaining_energy: u64,
     },
     Reject {
         logs: Logs,
+        remaining_energy: u64,
     },
 }
 
@@ -15,20 +17,24 @@ impl InitResult {
         match self {
             InitResult::Reject {
                 logs,
+                remaining_energy,
             } => {
-                let mut out = vec![0];
+                let mut out = vec![0]; // TODO initialize size?
                 out.extend_from_slice(&logs.to_bytes());
+                out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out
             }
             InitResult::Success {
                 state,
                 logs,
+                remaining_energy,
             } => {
-                let mut out = Vec::with_capacity(5 + state.len() as usize);
+                let mut out = Vec::with_capacity(5 + state.len() as usize + 8);
                 out.push(1);
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state.get());
                 out.extend_from_slice(&logs.to_bytes());
+                out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out
             }
         }
@@ -122,7 +128,9 @@ pub enum ReceiveResult {
         state:   State,
         logs:    Logs,
         actions: Vec<Action>,
+        remaining_energy: u64,
     },
+    // TODO Add fields: logs and remaining_energy
     Reject,
 }
 
@@ -135,8 +143,9 @@ impl ReceiveResult {
                 state,
                 logs,
                 actions,
+                remaining_energy,
             } => {
-                let mut out = vec![1];
+                let mut out = vec![1]; // TODO initialize size?
                 let state = state.get();
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state);
@@ -145,6 +154,7 @@ impl ReceiveResult {
                 for a in actions.iter() {
                     out.extend_from_slice(&a.to_bytes());
                 }
+                out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out
             }
         }
