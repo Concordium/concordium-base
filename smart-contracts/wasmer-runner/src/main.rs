@@ -174,6 +174,7 @@ pub fn main() {
             if let InitResult::Success {
                 logs,
                 state,
+                remaining_energy: 10000,
             } = invoke_init(&source, runner.amount, init_ctx, &name, parameter)
                 .expect("Invocation failed.")
             {
