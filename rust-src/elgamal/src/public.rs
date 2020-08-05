@@ -7,7 +7,7 @@ use crate::{cipher::*, message::*, secret::*};
 
 use crypto_common::*;
 use crypto_common_derive::*;
-use curve_arithmetic::{Curve, Value};
+use curve_arithmetic::{multiexp, Curve, Value};
 
 /// Elgamal public key .
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, SerdeBase16Serialize)]
@@ -32,7 +32,6 @@ impl<'a, C: Curve> From<&'a SecretKey<C>> for PublicKey<C> {
 }
 
 impl<C: Curve> PublicKey<C> {
-    #[inline]
     /// Encrypt and returned the randomness used. NB: Randomness must be kept
     /// private.
     pub fn encrypt_rand<T>(&self, csprng: &mut T, m: &Message<C>) -> (Cipher<C>, Randomness<C>)
@@ -47,6 +46,7 @@ impl<C: Curve> PublicKey<C> {
     }
 
     #[inline]
+    /// Wrapper around `encrypt_rand` that forgets the randomness.
     pub fn encrypt<T>(&self, csprng: &mut T, m: &Message<C>) -> Cipher<C>
     where
         T: Rng, {
@@ -59,19 +59,9 @@ impl<C: Curve> PublicKey<C> {
         Cipher(t, s)
     }
 
-    pub fn hide_binary_exp(&self, h: &C::Scalar, e: bool) -> Cipher<C> {
-        if !e {
-            self.hide(h, &Message {
-                value: C::zero_point(),
-            })
-        } else {
-            self.hide(h, &Message {
-                value: self.generator,
-            })
-        }
-    }
-
-    /// Encrypt as an exponent, and return the randomness used.
+    /// Encrypt a value in the exponent, using the generator of the public key
+    /// as the base.
+    #[inline]
     pub fn encrypt_exponent_rand<T>(
         &self,
         csprng: &mut T,
@@ -79,11 +69,12 @@ impl<C: Curve> PublicKey<C> {
     ) -> (Cipher<C>, Randomness<C>)
     where
         T: Rng, {
-        let value = self.generator.mul_by_scalar(e);
-        self.encrypt_rand(csprng, &Message { value })
+        self.encrypt_exponent_rand_given_generator(csprng, e, &self.generator)
     }
 
-    /// Encrypt as an exponent, and return the randomness used.
+    /// Encrypt the value "in the exponent", using the supplied generator as the
+    /// base. Return the randomness used in encryption.
+    ///
     /// Takes a generator h as an argument and encrypts h^e.
     pub fn encrypt_exponent_rand_given_generator<T>(
         &self,
@@ -93,16 +84,22 @@ impl<C: Curve> PublicKey<C> {
     ) -> (Cipher<C>, Randomness<C>)
     where
         T: Rng, {
-        let value = h.mul_by_scalar(e);
-        self.encrypt_rand(csprng, &Message { value })
+        let randomness = C::generate_scalar(csprng);
+        let g = self.generator.mul_by_scalar(&randomness);
+        let s = multiexp(&[self.key, *h], &[randomness, *e.as_ref()]);
+        let randomness = Randomness::new(randomness);
+        (Cipher(g, s), randomness)
     }
 
+    /// Wrapper around `encrypt_exponent_rand` that forgets the randomness.
     pub fn encrypt_exponent<T>(&self, csprng: &mut T, e: &Value<C>) -> Cipher<C>
     where
         T: Rng, {
         self.encrypt_exponent_rand(csprng, e).0
     }
 
+    /// Wrapper around `encrypt_exponent_rand_given_generator` that forgets the
+    /// randomness.
     pub fn encrypt_exponent_given_generator<T>(
         &self,
         csprng: &mut T,
@@ -114,25 +111,33 @@ impl<C: Curve> PublicKey<C> {
         self.encrypt_exponent_rand_given_generator(csprng, e, h).0
     }
 
-    pub fn encrypt_exponent_vec<T>(&self, csprng: &mut T, e: &[Value<C>]) -> Vec<Cipher<C>>
+    /// Variant of `encrypt_exponent_vec_given_generator` using generator of the
+    /// public key as the base.
+    pub fn encrypt_exponent_vec<'a, T, I>(&self, csprng: &mut T, es: I) -> Vec<Cipher<C>>
     where
-        T: Rng, {
-        e.iter()
-            .map(|x| self.encrypt_exponent(csprng, &x))
-            .collect()
+        T: Rng,
+        I: IntoIterator<Item = &'a Value<C>>, {
+        self.encrypt_exponent_vec_given_generator(csprng, es, &self.generator)
     }
 
-    pub fn encrypt_exponent_vec_given_generator<T>(
+    /// Encrypt a sequence of values in the exponent, and return the list of
+    /// encryptions.
+    ///
+    /// The generator `h` that serves the base of encryption in the exponent is
+    /// given.
+    pub fn encrypt_exponent_vec_given_generator<'a, T, I>(
         &self,
         csprng: &mut T,
-        e: &[Value<C>],
+        es: I,
         h: &C,
     ) -> Vec<Cipher<C>>
     where
-        T: Rng, {
-        e.iter()
-            .map(|x| self.encrypt_exponent_given_generator(csprng, &x, h))
-            .collect()
+        T: Rng,
+        I: IntoIterator<Item = &'a Value<C>>, {
+        let f = move |x: &'a Value<C>| -> Cipher<C> {
+            self.encrypt_exponent_given_generator(csprng, x, h)
+        };
+        es.into_iter().map(f).collect()
     }
 }
 
