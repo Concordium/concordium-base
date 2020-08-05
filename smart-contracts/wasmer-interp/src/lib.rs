@@ -60,15 +60,16 @@ impl Logs {
 #[derive(Clone)]
 pub struct Energy {
     // Energy left to use
-    pub energy: Arc<Mutex<u64>>
+    pub energy: Arc<Mutex<u64>>,
 }
 
 impl Energy {
     pub fn new(initial_energy: u64) -> Self {
         Self {
-            energy: Arc::new(Mutex::new(initial_energy))
+            energy: Arc::new(Mutex::new(initial_energy)),
         }
     }
+
     pub fn tick_energy(&self, e: u32) -> Result<(), error::RuntimeError> {
         if let Ok(mut energy) = self.energy.lock() {
             // TODO is the following cheaper?
@@ -337,13 +338,14 @@ impl State {
     }
 }
 
-pub fn make_imports(which: Which, parameter: Parameter) -> (ImportObject, Logs, Energy, State, Outcome) {
+pub fn make_imports(
+    which: Which,
+    parameter: Parameter,
+) -> (ImportObject, Logs, Energy, State, Outcome) {
     let logs = Logs::new();
     let energy = Energy::new(10000); // TODO pass initial energy
     let energy_ = energy.clone();
-    let tick_energy = move |e: u32| -> Result<(), error::RuntimeError> {
-        energy_.tick_energy(e)
-    };
+    let tick_energy = move |e: u32| -> Result<(), error::RuntimeError> { energy_.tick_energy(e) };
     let state = match which {
         Which::Init {
             ..
@@ -601,7 +603,8 @@ pub fn invoke_receive(
     receive_name: &str,
     parameter: Parameter,
 ) -> Result<ReceiveResult, error::CallError> {
-    // Make the imports (host functions), with shared variables for logs, energy, state, outcome
+    // Make the imports (host functions), with shared variables for logs, energy,
+    // state, outcome
     let (import_obj, logs, energy, state, outcome) = make_imports(
         Which::Receive {
             receive_ctx,

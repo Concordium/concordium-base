@@ -2,12 +2,12 @@ use crate::*;
 
 pub enum InitResult {
     Success {
-        state: State,
-        logs:  Logs,
+        state:            State,
+        logs:             Logs,
         remaining_energy: u64,
     },
     Reject {
-        logs: Logs,
+        logs:             Logs,
         remaining_energy: u64,
     },
 }
@@ -125,9 +125,9 @@ impl Action {
 
 pub enum ReceiveResult {
     Success {
-        state:   State,
-        logs:    Logs,
-        actions: Vec<Action>,
+        state:            State,
+        logs:             Logs,
+        actions:          Vec<Action>,
         remaining_energy: u64,
     },
     // TODO Add fields: logs and remaining_energy
