@@ -93,10 +93,10 @@ data Payload =
       -- |Message to invoke the receive method with.
       uMessage :: !Wasm.Parameter
       }
-  -- |Simple transfer from an account to either a contract or an account.
+  -- |Simple transfer from an account to an account.
   | Transfer {
       -- |Recepient.
-      tToAddress :: !Address,
+      tToAddress :: !AccountAddress,
       -- |Amount to transfer.
       tAmount :: !Amount
       }

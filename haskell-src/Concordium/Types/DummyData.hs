@@ -79,4 +79,4 @@ makeTransferTransaction (fromKP, fromAddress) toAddress amount n =
             thExpiry = dummyMaxTransactionExpiryTime,
             thPayloadSize = payloadSize payload
         }
-        payload = encodePayload (Transfer (AddressAccount toAddress) amount)
+        payload = encodePayload (Transfer toAddress amount)
