@@ -12,9 +12,9 @@ use std::rc::Rc;
 
 pub struct AggregateDlog<C: Curve> {
     /// Evaluated point.
-    public: C,
+    pub public: C,
     /// The points G_i references in the module description, in the given order.
-    coeff: Vec<C>,
+    pub coeff: Vec<C>,
 }
 
 /// Aggregate dlog witness. We deliberately make it opaque.
