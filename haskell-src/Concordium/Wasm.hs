@@ -1,4 +1,4 @@
-{-# LANGUAGE DerivingVia, DeriveGeneric, DeriveFunctor, ScopedTypeVariables #-}
+{-# LANGUAGE DerivingVia, DeriveGeneric, ScopedTypeVariables #-}
 module Concordium.Wasm where
 
 import GHC.Generics

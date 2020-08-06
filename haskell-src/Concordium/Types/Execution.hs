@@ -4,7 +4,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE CPP #-}
@@ -391,9 +390,7 @@ putMaybe Nothing = S.putWord8 0
 getMaybe :: S.Serialize a => S.Get (Maybe a)
 getMaybe = G.getWord8 >>=
     \case 0 -> return Nothing
-          1 -> do
-              v <- S.get
-              return (Just v)
+          1 -> Just <$> S.get
           n -> fail $ "encountered invalid tag when deserializing a Maybe '" ++ show n ++ "'"
 
 -- |Builds a set from a list of ascending elements.
