@@ -133,7 +133,7 @@ genPayload = oneof [genDeployModule,
           return Update{..}
 
         genTransfer = do
-          a <- oneof [AddressContract <$> genCAddress, AddressAccount <$> genAddress]
+          a <- genAddress
           amnt <- Amount <$> arbitrary
           return $ Transfer a amnt
 
