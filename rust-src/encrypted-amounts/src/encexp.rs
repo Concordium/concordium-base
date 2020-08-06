@@ -4,13 +4,12 @@ use elgamal::{
     cipher::{Cipher, Randomness as ElgamalRandomness},
     public::PublicKey,
 };
-use id::sigma_protocols::{com_eq::*, common::*};
+use id::sigma_protocols::{com_eq::Witness as ComEqWitness, com_eq::*, common::*, dlog::*, aggregate_dlog::*};
 use merlin::Transcript;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness as PedersenRandomness};
 use random_oracle::*;
 
-// First attempt implementing protocol genEncExpInfo documented in the
-// Cryptoprim Bluepaper
+// For testing
 #[allow(clippy::many_single_char_names)]
 #[allow(dead_code)]
 #[allow(clippy::type_complexity)]
@@ -27,7 +26,7 @@ fn enc_exp<C: Curve, R: rand::Rng>(
     s: u8,
 ) -> Option<(
     ReplicateAdapter<ComEq<C, C>>,
-    SigmaProof<ReplicateWitness<Witness<C>>>,
+    SigmaProof<ReplicateWitness<ComEqWitness<C>>>,
     RangeProof<C>,
 )> {
     let (g, h) = (cmm_key.0, cmm_key.1);
@@ -88,6 +87,106 @@ fn enc_exp<C: Curve, R: rand::Rng>(
         },
         _ => None,
     }
+}
+
+// First attempt implementing protocol genEncExpInfo documented in the
+// Cryptoprim Bluepaper, maybe without bulletproof part.
+#[allow(clippy::many_single_char_names)]
+#[allow(dead_code)]
+#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
+fn gen_enc_exp_info<C: Curve/*, R: rand::Rng*/>(
+    // ro: RandomOracle,
+    // transcript: &mut Transcript,
+    // csprng: &mut R,
+    cmm_key: &CommitmentKey<C>,
+    pk: &PublicKey<C>,
+    cipher: &[Cipher<C>],
+    // generators: &Generators<C>,
+    // s: u8,
+) -> //Option<
+    ReplicateAdapter<ComEq<C, C>>
+    // RangeProof<C>> 
+{
+    let (g, h) = (cmm_key.0, cmm_key.1);
+    let pk_eg = pk.key;
+    // let sigma_proofs = Vec::with_capacity(cipher.len());
+    let mut sigma_protocols = Vec::with_capacity(cipher.len());
+    for i in 0..cipher.len() {
+        // let commitment =
+        // Commitment(h.mul_by_scalar(&x).plus_point(&pk_eg.mul_by_scalar(&r)));
+        let commitment = Commitment(cipher[i].1);
+        // let y = g.mul_by_scalar(&r);
+        let y = cipher[i].0;
+        let cmm_key_comeq = CommitmentKey(pk_eg, h);
+        let comeq = ComEq {
+            commitment,
+            y,
+            cmm_key: cmm_key_comeq,
+            g,
+        };
+        sigma_protocols.push(comeq);
+        // sigma_proofs.push(sigma_proof);
+        // let sigma_proof = prove(ro, &comeq, comeq_secret, csprng);
+    }
+    let sigma_protocol = ReplicateAdapter {
+        protocols: sigma_protocols,
+    };
+    // let cmm_key_bulletproof = CommitmentKey(h, pk_eg);
+    // let bulletproof_randomness: Vec<PedersenRandomness<C>> = rs
+    //     .iter()
+    //     .map(|&x| PedersenRandomness::<C>::new(x))
+    //     .collect();
+    // let bulletproof = bulletprove(
+    //     transcript,
+    //     csprng,
+    //     s,
+    //     value.len() as u8,
+    //     &xs,
+    //     generators,
+    //     &cmm_key_bulletproof,
+    //     &bulletproof_randomness,
+    // );
+    sigma_protocol
+}
+
+//Implementation of genEncTransProofInfo in the Cryptoprim Bluepaper
+pub fn gen_enc_trans_proof_info<C: Curve>(pk_sender: &PublicKey<C>, pk_receiver: &PublicKey<C>, S: &[Cipher<C>], A: &[Cipher<C>], S_prime: &[Cipher<C>], h: &C) -> impl SigmaProtocol{
+    let t = S.len();
+    let sigma_1 = Dlog {
+        public: pk_sender.key,
+        coeff: pk_sender.generator
+    };
+    let mut elg_dec_protocols = Vec::with_capacity(t);
+    for j in 0..t {
+        let (e1, e2) = (S[j].0, S[j].1);
+        let elg_dec = AggregateDlog{
+            public: e2,
+            coeff: vec![*h, e1]
+        };
+        elg_dec_protocols.push(elg_dec);
+    }
+    let sigma_2 = ReplicateAdapter {
+        protocols: elg_dec_protocols,
+    };
+    let cmm_key = CommitmentKey(pk_sender.generator, *h);
+    let mut sigma_3_4_protocols = gen_enc_exp_info(&cmm_key, pk_receiver, A).protocols;
+    let mut sigma_4_protocols = gen_enc_exp_info(&cmm_key, pk_sender, S_prime).protocols;
+    sigma_3_4_protocols.append(&mut sigma_4_protocols);
+    let sigma_3_4 = ReplicateAdapter {
+        protocols: sigma_3_4_protocols,
+    };
+
+    let sigma = AndAdapter {
+        first: sigma_1,
+        second: sigma_2
+    };
+    let sigma = AndAdapter {
+        first: sigma,
+        second: sigma_3_4
+    };
+
+    sigma
 }
 
 #[cfg(test)]
