@@ -40,6 +40,7 @@ The reason these macros are in a separate crate is because such macros must be i
 The second, [example-contracts](./rust-contracts/example-contracts) is meant for, well, example contracts using the aforementioned API.
 The list of currently implemented contracts is as follows:
 - [counter](./rust-contracts/example-contracts/counter) a counter contract with a simple logic on who can increment the counter. This is the minimal example.
+- [fib](./rust-contracts/example-contracts/fib) a contract calculating the requested fibonacci number, either directly or with recursive contract invocations; this is useful to demonstrate cost accounting.
 - [simple-game](./rust-contracts/example-contracts/simple-game) a more complex smart contract which allows users to submit strings that are then hashed, and
   the lowest one wins after the game is over (which is determined by timeout).
   This contract uses
