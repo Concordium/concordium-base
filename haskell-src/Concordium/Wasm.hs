@@ -58,8 +58,9 @@ newtype Parameter = Parameter { parameter :: ShortByteString }
 -- and run.
 -- 
 -- TODO: In the current POC the module is in Wasm binary format, but that will
--- change to a different format when the interpreter is changed. Processing Wat directly
--- can be expensive for certain interpreters.
+-- change to a different format when the interpreter is changed. Processing Wasm directly
+-- can be expensive, and any implementation we use will likely have some intermediate format
+-- to speed up invocations.
 data InstrumentedModule = InstrumentedWasmModule {
   -- |Version of the Wasm standard and on-chain API this module corresponds to.
   imWasmVersion :: Word32,
@@ -102,7 +103,7 @@ data ReceiveContext = ReceiveContext
   -- |Address of the account or contract who sent a message to the contract.
   , sender :: !Address
   -- |Owner of this smart contract instance.
-  , owner :: AccountAddress
+  , owner :: !AccountAddress
   }
 
 -- |Energy used by the Wasm interpreter.
@@ -140,15 +141,15 @@ data ActionsTree =
   | Accept
   deriving(Eq, Show)
 
--- FIXME: Make this a bit more principled. This verison
--- is just to get the integration working.
-instance Serialize ActionsTree where
-  put = error "Put ActionsTree: Unimplemented"
-  get = getWord32be >>= getActionsTree
+-- |Process the actions tree as returned by the Interpreter.
+-- This is deliberately not made into a serialize instance at the moment since (1) serialization is not needed
+-- and (2) it is complicated.
+getActionsTree :: Get ActionsTree
+getActionsTree = getWord32be >>= getActionsTree'
 
-getActionsTree :: Word32 -> Get ActionsTree
-getActionsTree 0 = fail "Empty list of events."
-getActionsTree size = go HM.empty 0
+getActionsTree' :: Word32 -> Get ActionsTree
+getActionsTree' 0 = fail "Empty list of events."
+getActionsTree' size = go HM.empty 0
     where go acc n | n == size = return (acc HM.! (size-1))
                    | otherwise = do
                        getWord8 >>= \case
@@ -301,19 +302,16 @@ encodeReceiveContext ReceiveContext{..} = runPut encoder
           put sender <>
           put owner
 
-instance Serialize a => Serialize (SuccessfulResultData a) where
-  put SuccessfulResultData{..} =
-    put newState <>
-    putWord32be (fromIntegral (length logs)) <>
-    mapM_ put logs <>
-    put messages
-
-  get = do
-    newState <- get
-    len <- fromIntegral <$> getWord32be
-    logs <- replicateM len get
-    messages <- get
-    return SuccessfulResultData{..}
+-- |Specialized deserializer for processing FFI data.
+--
+-- If we replace update the integration, we should also update this deserializer.
+getSuccessfulResultData :: Get a -> Get (SuccessfulResultData a)
+getSuccessfulResultData messagesDecoder = do
+  newState <- get
+  len <- fromIntegral <$> getWord32be
+  logs <- replicateM len get
+  messages <- messagesDecoder
+  return SuccessfulResultData{..}
 
 -- |Get a bytestring with length serialized as big-endian 4 bytes.
 getByteStringWord32 :: Get ByteString
