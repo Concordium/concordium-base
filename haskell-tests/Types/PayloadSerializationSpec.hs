@@ -75,7 +75,7 @@ genAggregationVerifyKeyAndProof = do
   return (Bls.derivePublicKey sk, Bls.proveKnowledgeOfSK (BS.pack c) sk)
 
 genAddress :: Gen AccountAddress
-genAddress = AccountAddress . FBS.fromByteString . BS.pack <$> (vector 21)
+genAddress = AccountAddress . FBS.fromByteString . BS.pack <$> (vector accountAddressSize)
 
 genCAddress :: Gen ContractAddress
 genCAddress = ContractAddress <$> (ContractIndex <$> arbitrary) <*> (ContractSubindex <$> arbitrary)
