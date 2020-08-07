@@ -179,18 +179,27 @@ pub fn main() {
                 serde_json::from_reader(std::io::BufReader::new(ctx_file))
                     .expect("Could not parse init context")
             };
-            if let InitResult::Success {
-                logs,
-                state,
-                remaining_energy: 10000,
-            } = invoke_init(&source, runner.amount, init_ctx, &name, parameter, runner.energy)
-                .expect("Invocation failed.")
-            {
-                println!("Init call succeeded. The following logs were produced.");
-                print_result(state, logs)
-            } else {
-                println!("Init call rejected.")
-            }
+            let res =
+                invoke_init(&source, runner.amount, init_ctx, &name, parameter, runner.energy)
+                    .expect("Invocation failed.");
+            match res {
+                InitResult::Success {
+                    logs,
+                    state,
+                    remaining_energy,
+                } => {
+                    println!("Init call succeeded. The following logs were produced.");
+                    print_result(state, logs);
+                    println!("Remaining energy is {}", remaining_energy)
+                }
+                InitResult::Reject {
+                    remaining_energy,
+                } => {
+                    println!("Init call rejected.");
+                    println!("Remaining energy is {}", remaining_energy)
+                }
+                InitResult::OutOfEnergy => println!("Init call terminated with out of energy."),
+            };
         }
         Command::Receive {
             ref name,
@@ -230,7 +239,7 @@ pub fn main() {
                     logs,
                     state,
                     actions,
-                    ..
+                    remaining_energy,
                 } => {
                     println!("Receive method succeeded. The following logs were produced.");
                     print_result(state, logs);
@@ -270,12 +279,17 @@ pub fn main() {
                             Action::Accept => println!("{}: ACCEPT", i),
                         }
                     }
+
+                    println!("Remaining energy is {}.", remaining_energy)
                 }
                 ReceiveResult::Reject {
                     remaining_energy,
                 } => {
                     println!("Receive call rejected.");
                     println!("Remaining energy is {}.", remaining_energy)
+                }
+                ReceiveResult::OutOfEnergy => {
+                    println!("Receive call terminated with out of energy.")
                 }
             }
         }

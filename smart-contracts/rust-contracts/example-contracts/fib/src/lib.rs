@@ -44,9 +44,13 @@ fn contract_receive(ctx: ReceiveContext, _amount: Amount, state: &mut State) -> 
 
 // Calculates the nth Fibonacci number where n is the given amount and sets the
 // state to that number.
-#[receive(name = "calc_fib")]
+#[receive(name = "receive_calc_fib")]
 #[inline(always)]
-fn receive_calc_fib(_ctx: ReceiveContext, amount: Amount, state: &mut State) -> ReceiveResult {
+fn contract_receive_calc_fib(
+    _ctx: ReceiveContext,
+    amount: Amount,
+    state: &mut State,
+) -> ReceiveResult {
     state.result = fib(amount);
     Ok(Action::accept())
 }
