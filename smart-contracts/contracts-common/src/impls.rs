@@ -165,6 +165,27 @@ impl Serialize for ChainMetadata {
     }
 }
 
+impl<T: Serialize> Serialize for Vec<T> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let len = self.len() as u32;
+        len.serial(out)?;
+        for elem in self.iter() {
+            elem.serial(out)?;
+        }
+        Ok(())
+    }
+
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
+        let len: u32 = source.get()?;
+        let mut vec: Vec<T> = vec![];
+        for _ in 0..len {
+            let elem = source.get()?;
+            vec.push(elem);
+        }
+        Ok(vec)
+    }
+}
+
 impl<K: Serialize + Ord, V: Serialize> Serialize for collections::BTreeMap<K, V> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;

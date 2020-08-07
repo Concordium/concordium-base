@@ -47,6 +47,8 @@ The list of currently implemented contracts is as follows:
   - sending tokens to accounts
   - bringing in complex dependencies (containers, sha2, hex encoding)
   - more complex state, that is only partially updated.
+- [escrow](./rust-contracts/example-contracts/escrow) a toy escrow contract which allows a buyer to submit a deposit which is held until the buyer is satisfied that they have received their goods, or an arbiter makes a judgement as a result of either the buyer or seller raising a dispute.
+- [lockup](./rust-contracts/example-contracts/lockup) a contract which implements a GTU lockup, where those GTU vest over a pre-determined schedule, and vested GTU can be withdrawn by any one of potentially several account holders. The contract also allows for a set of accounts to have the power to veto the vesting of future GTU, e.g. for cases where an employee's vesting schedule is contingent on their continued employment.
 
 
 ## Compiling smart contracts to Wasm
