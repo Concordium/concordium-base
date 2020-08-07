@@ -574,7 +574,6 @@ pub fn invoke_init(
         })
     } else {
         Ok(InitResult::Reject {
-            logs,
             remaining_energy,
         })
     }

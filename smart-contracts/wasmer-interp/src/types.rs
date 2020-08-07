@@ -7,20 +7,20 @@ pub enum InitResult {
         remaining_energy: u64,
     },
     Reject {
-        logs:             Logs,
         remaining_energy: u64,
     },
+    OutOfEnergy,
 }
 
 impl InitResult {
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
+            InitResult::OutOfEnergy => vec![0],
             InitResult::Reject {
-                logs,
                 remaining_energy,
             } => {
-                let mut out = vec![0];
-                out.extend_from_slice(&logs.to_bytes());
+                let mut out = Vec::with_capacity(9);
+                out.push(1);
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out
             }
@@ -30,7 +30,7 @@ impl InitResult {
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(5 + state.len() as usize + 8);
-                out.push(1);
+                out.push(2);
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state.get());
                 out.extend_from_slice(&logs.to_bytes());
@@ -133,17 +133,19 @@ pub enum ReceiveResult {
     Reject {
         remaining_energy: u64,
     },
+    OutOfEnergy,
 }
 
 impl ReceiveResult {
     pub fn to_bytes(&self) -> Vec<u8> {
         use ReceiveResult::*;
         match self {
+            OutOfEnergy => vec![0],
             Reject {
                 remaining_energy,
             } => {
                 let mut out = Vec::with_capacity(9);
-                out.push(0);
+                out.push(1);
                 out.extend_from_slice(&remaining_energy.to_be_bytes());
                 out
             }
@@ -153,7 +155,7 @@ impl ReceiveResult {
                 actions,
                 remaining_energy,
             } => {
-                let mut out = vec![1];
+                let mut out = vec![2];
                 let state = state.get();
                 out.extend_from_slice(&(state.len() as u32).to_be_bytes());
                 out.extend_from_slice(&state);
