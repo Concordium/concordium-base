@@ -41,10 +41,15 @@ pub use alloc::collections;
 pub use alloc::{vec, vec::Vec};
 #[cfg(not(feature = "std"))]
 pub use core::convert;
+#[cfg(not(feature = "std"))]
+pub use core::mem;
+
 #[cfg(feature = "std")]
 pub use std::collections;
 #[cfg(feature = "std")]
 pub use std::convert;
+#[cfg(feature = "std")]
+pub use std::mem;
 
 mod impls;
 mod prims;

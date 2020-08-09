@@ -4,8 +4,10 @@ use crate::{traits::*, types::*};
 use alloc::collections;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
+use core::{mem::MaybeUninit, slice};
 #[cfg(feature = "std")]
-use std::collections;
+use std::{collections, mem::MaybeUninit, slice};
 
 // Implementations of Serialize
 
@@ -44,9 +46,14 @@ impl Serialize for [u8; 32] {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_all(self) }
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let mut bytes = [0u8; 32];
-        source.read_exact(&mut bytes)?;
-        Ok(bytes)
+        // This deliberately does not initialize the array up-front.
+        // Initialization is not needed, and costs quite a bit of code space.
+        // FIXME: Put this behind a feature flag to only enable for Wasm.
+        // I don't think it has any meaningful effect on normal platforms.
+        let mut bytes: MaybeUninit<[u8; 32]> = MaybeUninit::uninit();
+        let write_bytes = unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, 32) };
+        source.read_exact(write_bytes)?;
+        Ok(unsafe { bytes.assume_init() })
     }
 }
 
@@ -177,7 +184,9 @@ impl<T: Serialize> Serialize for Vec<T> {
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let len: u32 = source.get()?;
-        let mut vec: Vec<T> = vec![];
+        // FIXME: Vector deserialization should not allocate blindly, but
+        // have a safe upper bound.
+        let mut vec: Vec<T> = Vec::with_capacity(len as usize);
         for _ in 0..len {
             let elem = source.get()?;
             vec.push(elem);
