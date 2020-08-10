@@ -46,8 +46,8 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: IPContext<P, C>,
 ) -> Result<(), Reason> {
     let ip_info = &context.ip_info;
-    let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.ys[0], ip_info.ip_verify_key.g);
-    let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.ys[1], ip_info.ip_verify_key.g);
+    let commitment_key_sc = CommitmentKey{g: ip_info.ip_verify_key.ys[0], h: ip_info.ip_verify_key.g};
+    let commitment_key_prf = CommitmentKey{g: ip_info.ip_verify_key.ys[1], h: ip_info.ip_verify_key.g};
 
     let ro = RandomOracle::empty();
 

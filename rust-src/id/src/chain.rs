@@ -88,7 +88,7 @@ fn verify_cdi_worker<
         cmms:    [
             commitments.cmm_prf.combine(&commitments.cmm_cred_counter),
             Commitment(cdi.values.reg_id),
-            Commitment(on_chain_commitment_key.0),
+            Commitment(on_chain_commitment_key.g),
         ],
         cmm_key: *on_chain_commitment_key,
     };

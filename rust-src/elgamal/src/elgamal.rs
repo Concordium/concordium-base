@@ -65,7 +65,7 @@ impl ChunkSize {
     }
 
     /// Reconstruct from little endian limbs, given chunk size.
-    pub fn chunks_to_u64(self, xs: impl Iterator<Item = u64>) -> u64 {
+    pub fn chunks_to_u64(self, xs: impl IntoIterator<Item = u64>) -> u64 {
         let size = u8::from(self);
         let mut factor = 0;
         let mut out = 0;
@@ -131,7 +131,7 @@ pub fn encrypt_in_chunks<C: Curve, R: Rng>(
     val: &Value<C>,
     chunk_size: ChunkSize,
     csprng: &mut R,
-) -> Vec<Cipher<C>> {
+) -> Vec<(Cipher<C>, Randomness<C>)> {
     encrypt_in_chunks_given_generator(pk, val, chunk_size, &pk.generator, csprng)
 }
 
@@ -141,10 +141,23 @@ pub fn encrypt_in_chunks_given_generator<C: Curve, R: Rng>(
     chunk_size: ChunkSize,
     generator: &C,
     csprng: &mut R,
-) -> Vec<Cipher<C>> {
+) -> Vec<(Cipher<C>, Randomness<C>)> {
     let chunks = value_to_chunks::<C>(val, chunk_size);
     pk.encrypt_exponent_vec_given_generator(csprng, &chunks, generator)
 }
+
+/// Encrypt a single `u64` value in chunks in the exponent of the given generator.
+pub fn encrypt_u64_in_chunks_given_generator<C: Curve, R: Rng>(
+    pk: &PublicKey<C>,
+    val: u64,
+    chunk_size: ChunkSize,
+    generator: &C,
+    csprng: &mut R,
+) -> Vec<(Cipher<C>, Randomness<C>)> {
+    let chunks = chunk_size.u64_to_chunks(val).into_iter().map(Value::from_u64).collect::<Vec<_>>();
+    pk.encrypt_exponent_vec_given_generator(csprng, &chunks, generator)
+}
+
 
 /// Wrapper around `decrypt_from_chunks_given_generator` that uses the generator
 /// that is part of the key.
@@ -152,10 +165,9 @@ pub fn decrypt_from_chunks<C: Curve>(
     sk: &SecretKey<C>,
     cipher: &[Cipher<C>],
     m: u64,
-    k: u64,
     chunk_size: ChunkSize,
-) -> Option<Value<C>> {
-    decrypt_from_chunks_given_generator(sk, cipher, &sk.generator, m, k, chunk_size)
+) -> Value<C> {
+    decrypt_from_chunks_given_generator(sk, cipher, &sk.generator, m, chunk_size)
 }
 
 pub fn decrypt_from_chunks_given_generator<C: Curve>(
@@ -163,25 +175,23 @@ pub fn decrypt_from_chunks_given_generator<C: Curve>(
     cipher: &[Cipher<C>],
     generator: &C,
     m: u64,
-    k: u64,
     chunk_size: ChunkSize,
-) -> Option<Value<C>> {
+) -> Value<C> {
     let bsgs = BabyStepGiantStep::new(generator, m);
-    decrypt_from_chunks_given_table(sk, cipher, k, &bsgs, chunk_size)
+    decrypt_from_chunks_given_table(sk, cipher, &bsgs, chunk_size)
 }
 
 pub fn decrypt_from_chunks_given_table<C: Curve>(
     sk: &SecretKey<C>,
     ciphers: &[Cipher<C>],
-    k: u64,
     table: &BabyStepGiantStep<C>,
     chunk_size: ChunkSize,
-) -> Option<Value<C>> {
+) -> Value<C> {
     let scalars = ciphers
         .iter()
-        .map(|cipher| sk.decrypt_exponent(cipher, k, table))
-        .collect::<Option<Vec<_>>>()?;
-    Some(chunks_to_value::<C>(&scalars, chunk_size))
+        .map(|cipher| Value::from_u64(sk.decrypt_exponent(cipher, table)))
+        .collect::<Vec<_>>();
+    chunks_to_value::<C>(&scalars, chunk_size)
 }
 
 #[cfg(test)]

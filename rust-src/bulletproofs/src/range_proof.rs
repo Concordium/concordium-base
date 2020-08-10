@@ -138,8 +138,8 @@ pub fn prove<C: Curve, T: Rng>(
     randomness: &[Randomness<C>],
 ) -> Option<RangeProof<C>> {
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
-    let B = v_keys.0;
-    let B_tilde = v_keys.1;
+    let B = v_keys.g;
+    let B_tilde = v_keys.h;
     let nm = G.len();
     let mut a_L: Vec<C::Scalar> = Vec::with_capacity(usize::from(n));
     let mut a_R: Vec<C::Scalar> = Vec::with_capacity(usize::from(n));
@@ -417,8 +417,8 @@ pub fn verify_efficient<C: Curve>(
     v_keys: &CommitmentKey<C>,
 ) -> Result<(), VerificationError> {
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
-    let B = v_keys.0;
-    let B_tilde = v_keys.1;
+    let B = v_keys.g;
+    let B_tilde = v_keys.h;
     let m = commitments.len();
     for V in commitments {
         transcript.append_point(b"Vj", &V.0);

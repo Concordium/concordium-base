@@ -275,20 +275,20 @@ macro_derive_to_bytes!(Box elgamal_pub_key_to_bytes, elgamal::PublicKey<G1>);
 macro_free_ffi!(Box elgamal_pub_key_free, elgamal::PublicKey<G1>);
 #[no_mangle]
 pub extern "C" fn elgamal_pub_key_gen() -> *mut elgamal::PublicKey<G1> {
-    let sk = elgamal::secret::SecretKey::generate_all(&mut thread_rng());
+    let sk = elgamal::SecretKey::generate_all(&mut thread_rng());
     Box::into_raw(Box::new(elgamal::PublicKey::from(&sk)))
 }
 
 macro_derive_from_bytes!(
     Box elgamal_cipher_from_bytes,
-    elgamal::cipher::Cipher<G1>
+    elgamal::Cipher<G1>
 );
-macro_derive_to_bytes!(Box elgamal_cipher_to_bytes, elgamal::cipher::Cipher<G1>);
-macro_free_ffi!(Box elgamal_cipher_free, elgamal::cipher::Cipher<G1>);
+macro_derive_to_bytes!(Box elgamal_cipher_to_bytes, elgamal::Cipher<G1>);
+macro_free_ffi!(Box elgamal_cipher_free, elgamal::Cipher<G1>);
 #[no_mangle]
-pub extern "C" fn elgamal_cipher_gen() -> *mut elgamal::cipher::Cipher<G1> {
+pub extern "C" fn elgamal_cipher_gen() -> *mut elgamal::Cipher<G1> {
     let mut csprng = thread_rng();
-    Box::into_raw(Box::new(elgamal::cipher::Cipher::generate(&mut csprng)))
+    Box::into_raw(Box::new(elgamal::Cipher::generate(&mut csprng)))
 }
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
-use elgamal::{public::PublicKey, secret::SecretKey};
+use elgamal::{PublicKey, SecretKey};
 use id::{account_holder::*, identity_provider::*, secret_sharing::*, types::*};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;

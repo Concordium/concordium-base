@@ -72,9 +72,13 @@ impl<C: Curve> AsRef<C::Scalar> for Value<C> {
 
 impl<C: Curve> Value<C> {
     pub fn new(secret: C::Scalar) -> Self {
-        Value {
+        Self {
             value: Rc::new(Secret::new(secret)),
         }
+    }
+
+    pub fn from_u64(secret: u64) -> Self {
+        Value::new(C::scalar_from_u64(secret))
     }
 
     /// Generate a single `Value` from a `csprng`.
