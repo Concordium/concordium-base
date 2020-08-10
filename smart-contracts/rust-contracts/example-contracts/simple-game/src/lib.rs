@@ -93,10 +93,15 @@ pub struct State {
 /// prefix.
 #[init(name = "init", low_level)]
 #[inline(always)]
-fn contract_init(ctx: InitContext, amount: Amount, state: &mut ContractState) -> InitResult<()> {
+fn contract_init<I: HasInitContext<()>, L: HasLogger>(
+    ctx: I,
+    amount: Amount,
+    logger: &mut L,
+    state: &mut ContractState,
+) -> InitResult<()> {
     let initializer = ctx.init_origin();
-    let (expiry, prefix): (u64, Prefix) = ctx.parameter()?;
-    let ct = ctx.get_time();
+    let (expiry, prefix): (u64, Prefix) = ctx.parameter_cursor().get()?;
+    let ct = ctx.metadata().slot_time();
     ensure!(expiry > ct, "Expiry must be strictly in the future.");
     // Compute the initial hash contribution.
     let hash = {
@@ -106,9 +111,9 @@ fn contract_init(ctx: InitContext, amount: Amount, state: &mut ContractState) ->
         Hash(hasher.finalize().into())
     };
     // Log who the initializer was.
-    events::log(initializer);
+    logger.log(initializer);
     // And the initial hash
-    events::log_bytes(&hex::encode(&hash.0).as_bytes());
+    logger.log_bytes(&hex::encode(&hash.0).as_bytes());
     let num_contributions: u32 = 1;
     // Manually write the state without any intermediate allocation.
     // We could instead construct the `State` value and then returned it.
@@ -130,7 +135,12 @@ fn contract_init(ctx: InitContext, amount: Amount, state: &mut ContractState) ->
 /// of length 32.
 #[receive(name = "receive_contribute", low_level)]
 #[inline(always)]
-fn contribute(ctx: ReceiveContext, amount: Amount, state: &mut ContractState) -> ReceiveResult {
+fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+    ctx: R,
+    amount: Amount,
+    logger: &mut L,
+    state: &mut ContractState,
+) -> ReceiveResult<A> {
     // Current number of contributions.
     let num_contributions: u32 = state.get()?;
     // Ensure that you have to contribute more tokens the later you are to the
@@ -141,7 +151,7 @@ fn contribute(ctx: ReceiveContext, amount: Amount, state: &mut ContractState) ->
     );
     // Try to get the parameter (which should be exactly 32-bytes for this to
     // succeed).
-    let cont: Contribution = ctx.parameter()?;
+    let cont: Contribution = ctx.parameter_cursor().get()?;
 
     // The main logic of the function. If the the sender is an account then we
     // try to accept the contribution, but otherwise we reject.
@@ -164,7 +174,7 @@ fn contribute(ctx: ReceiveContext, amount: Amount, state: &mut ContractState) ->
                 Hash(hasher.finalize().into())
             };
             // Log the new contribution in base16, just because we can.
-            events::log_bytes(&hex::encode(&hash.0).as_bytes());
+            logger.log_bytes(&hex::encode(&hash.0).as_bytes());
             // Now try to find the contributor in the map. If it does not exist
             // we'll add a new item, otherwise we'll update an existing entry,
             // only updating a small portion of the contract state.
@@ -220,7 +230,7 @@ fn contribute(ctx: ReceiveContext, amount: Amount, state: &mut ContractState) ->
             // Finally bump the number of contributions.
             state.seek(SeekFrom::Start(0))?;
             (num_contributions + 1).serial(state)?;
-            Ok(Action::accept())
+            Ok(A::accept())
         }
         _ => bail!("Only accounts can contribute."),
     }
@@ -230,17 +240,18 @@ fn contribute(ctx: ReceiveContext, amount: Amount, state: &mut ContractState) ->
 /// all the contributors.
 #[receive(name = "receive_finalize", low_level)]
 #[inline(always)]
-fn finalize(
-    ctx: ReceiveContext,
+fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+    ctx: R,
     amount: Amount,
+    logger: &mut L,
     state_cursor: &mut ContractState,
-) -> ReceiveResult {
+) -> ReceiveResult<A> {
     // We deserialize the whole state here for now.
     // This is not the most efficient way to do it, but is the simplest.
     // If we stored the map better we would be able to reduce the amount of
     // memory we use, as well as the cost of this. We would not have to sort.
     let state: State = state_cursor.get()?;
-    let ct = ctx.get_time();
+    let ct = ctx.metadata().slot_time();
     ensure!(amount == 0, "Ending the game should not transfer any tokens.");
     ensure!(ct >= state.expiry, "Cannot finalize before expiry time.");
     ensure!(!state.contributions.is_empty(), "Already finalized.");
@@ -257,27 +268,26 @@ fn finalize(
     match v.split_first() {
         // The first case should not happen since there will always be at least
         // one contribution, but we just terminate cleanly in that case.
-        None => Ok(Action::accept()),
+        None => Ok(A::accept()),
         Some(((addr, _), rest)) => {
             let mut total: Amount = v.iter().map(|triple| (triple.1).0).sum();
             // Try to send, but if sending to a particular account fails the other
             // actions should still be attempted.
-            let try_send = |addr, to_transfer| {
-                Action::simple_transfer(addr, to_transfer).or_else(Action::accept())
-            };
+            let try_send =
+                |addr, to_transfer| A::simple_transfer(addr, to_transfer).or_else(A::accept());
 
             // Transfer by decreasing amounts.
             // The first account gets 1/2 of the total balance, the second 1/4, third 1/8
             // ...
             let to_transfer = total / 2;
             let send = try_send(addr, to_transfer);
-            events::log::<AccountAddress>(addr);
+            logger.log::<AccountAddress>(addr);
             total -= to_transfer;
             // Send to each account in the list until there is something to send.
             let send = rest.iter().rev().try_fold(send, |acc, (addr, _)| {
                 if total > 0 {
                     let to_transfer = total / 2;
-                    events::log::<AccountAddress>(addr);
+                    logger.log::<AccountAddress>(addr);
                     total -= to_transfer;
                     Some(acc.and_then(try_send(addr, to_transfer)))
                 } else {
@@ -290,7 +300,7 @@ fn finalize(
             // And send the action. The unwrap should always be safe here since there is
             // always at least one action, but we do the safe thing anyhow and just accept
             // in the mythical case with no contributions.
-            Ok(send.unwrap_or_else(Action::accept))
+            Ok(send.unwrap_or_else(A::accept))
         }
     }
 }
@@ -305,11 +315,16 @@ fn finalize(
 /// invoked the top-level transaction this invocation is a part of.
 #[receive(name = "receive_help_yourself", low_level)]
 #[inline(always)]
-fn help_yourself(ctx: ReceiveContext, amount: Amount, state: &mut ContractState) -> ReceiveResult {
+fn help_yourself<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+    ctx: R,
+    amount: Amount,
+    _logger: &mut L,
+    state: &mut ContractState,
+) -> ReceiveResult<A> {
     ensure!(amount == 0, "Helping yourself should not add tokens.");
     ensure!(
         state.size() == 0,
         "Helping yourself only allowed after normal contributions are sent.."
     );
-    Ok(Action::simple_transfer(ctx.invoker(), ctx.self_balance()))
+    Ok(A::simple_transfer(ctx.invoker(), ctx.self_balance()))
 }

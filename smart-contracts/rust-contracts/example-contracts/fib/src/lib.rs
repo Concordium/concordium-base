@@ -18,7 +18,11 @@ impl Serialize for State {
 
 #[init(name = "init")]
 #[inline(always)]
-fn contract_init(_ctx: InitContext, _amount: Amount) -> InitResult<State> {
+fn contract_init<L: HasLogger>(
+    _ctx: InitContext,
+    _amount: Amount,
+    _logger: &mut L,
+) -> InitResult<State> {
     let state = State {
         result: 0,
     };
@@ -30,15 +34,24 @@ fn contract_init(_ctx: InitContext, _amount: Amount) -> InitResult<State> {
 // corresponding to the recursive evaluation F(n) = F(n-1) + F(n-2) (for n>1).
 #[receive(name = "receive")]
 #[inline(always)]
-fn contract_receive(ctx: ReceiveContext, _amount: Amount, state: &mut State) -> ReceiveResult {
+fn contract_receive<A: HasActions, R: HasReceiveContext<()>, L: HasLogger>(
+    ctx: R,
+    _amount: Amount,
+    _logger: &mut L,
+    state: &mut State,
+) -> ReceiveResult<A> {
     // Try to get the parameter (64bit unsigned integer).
-    let n: u64 = ctx.parameter()?;
+    let n: u64 = ctx.parameter_cursor().get()?;
     if n <= 1 {
         state.result += 1;
-        Ok(Action::accept())
+        Ok(A::accept())
     } else {
-        Ok(Action::send(ctx.self_address(), "receive", 0, &(n - 1).to_le_bytes())
-            .and_then(Action::send(ctx.self_address(), "receive", 0, &(n - 2).to_le_bytes())))
+        Ok(A::send(ctx.self_address(), "receive", 0, &(n - 1).to_le_bytes()).and_then(A::send(
+            ctx.self_address(),
+            "receive",
+            0,
+            &(n - 2).to_le_bytes(),
+        )))
     }
 }
 
@@ -46,13 +59,14 @@ fn contract_receive(ctx: ReceiveContext, _amount: Amount, state: &mut State) -> 
 // state to that number.
 #[receive(name = "receive_calc_fib")]
 #[inline(always)]
-fn contract_receive_calc_fib(
+fn contract_receive_calc_fib<A: HasActions, L: HasLogger>(
     _ctx: ReceiveContext,
     amount: Amount,
+    _logger: &mut L,
     state: &mut State,
-) -> ReceiveResult {
+) -> ReceiveResult<A> {
     state.result = fib(amount);
-    Ok(Action::accept())
+    Ok(A::accept())
 }
 
 // Recursively and naively calculate the nth Fibonacci number.

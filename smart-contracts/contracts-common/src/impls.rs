@@ -274,16 +274,16 @@ impl<T> Cursor<T> {
     }
 }
 
-impl Read for Cursor<&[u8]> {
+impl<T: AsRef<[u8]>> Read for Cursor<T> {
     type Err = ();
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Err> {
-        let mut len = self.data.len() - self.offset;
+        let mut len = self.data.as_ref().len() - self.offset;
         if len > buf.len() {
             len = buf.len();
         }
         if len > 0 {
-            buf[0..len].copy_from_slice(&self.data[self.offset..self.offset + len]);
+            buf[0..len].copy_from_slice(&self.data.as_ref()[self.offset..self.offset + len]);
             self.offset += len;
             Ok(len)
         } else {

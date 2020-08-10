@@ -53,15 +53,17 @@ pub use std::mem;
 
 mod impls;
 mod prims;
+mod traits;
 mod types;
 /// Re-export for ease of use.
 pub use concordium_sc_derive::{init, receive};
 pub use contracts_common::*;
-pub use impls::{Create, HasParameter};
-pub use prims::{actions::*, events};
+pub use traits::*;
 pub use types::*;
 
 extern crate wee_alloc;
 // Use `wee_alloc` as the global allocator to reduce code size.
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
+pub mod test_infrastructure;

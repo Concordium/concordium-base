@@ -109,6 +109,8 @@ enum Command {
         )]
         context: PathBuf,
     },
+    /* #[structopt(name = "test", about = "Run tests.")]
+     * Test, */
 }
 
 pub fn main() {
@@ -292,6 +294,12 @@ pub fn main() {
                     println!("Receive call terminated with out of energy.")
                 }
             }
-        }
+        } /* Command::Test => {
+           *     if let Err(e) = invoke_main(&source) {
+           *         println!("Tests failed {:?}", e);
+           *     } else {
+           *         println!("All tests passed.")
+           *     }
+           * } */
     }
 }

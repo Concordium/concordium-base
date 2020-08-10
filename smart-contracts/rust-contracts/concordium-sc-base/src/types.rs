@@ -10,6 +10,12 @@ pub struct Parameter {
     pub(crate) current_position: u32,
 }
 
+/// A type representing the logger.
+#[derive(Default)]
+pub struct Logger {
+    pub(crate) _private: (),
+}
+
 /// Actions that can be produced at the end of a contract execution. This
 /// type is deliberately not cloneable so that we can enforce that
 /// `and_then` and `or_else` can only be used when more than one event is
@@ -62,15 +68,38 @@ macro_rules! ensure {
             return Err(Reject {});
         }
     };
-    ($p:expr, $e:expr) => {{
+    ($p:expr, $($arg:tt)+) => {{
         if !$p {
-            $crate::bail!($e)
+            $crate::bail!($($arg:tt)+)
         }
     }};
 }
 
+/// ## Variants of `ensure` for ease of use in certain contexts.
+#[macro_export]
+/// Ensure the first two arguments are equal, using `bail` otherwise.
+macro_rules! ensure_eq {
+    ($l:expr, $r:expr) => {
+        $crate::ensure!($l == $r)
+    };
+    ($l:expr, $r:expr, $($arg:tt)+) => {
+        $crate::ensure!($l == $r, $($arg:tt)+)
+    };
+}
+
+#[macro_export]
+/// Ensure the first two arguments are __not__ equal, using `bail` otherwise.
+macro_rules! ensure_ne {
+    ($l:expr, $r:expr) => {
+        $crate::ensure!($l != $r)
+    };
+    ($l:expr, $r:expr, $($arg:tt)+) => {
+        $crate::ensure!($l != $r, $($arg:tt)+)
+    };
+}
+
 /// The expected return type of the receive method of a smart contract.
-pub type ReceiveResult = Result<Action, Reject>;
+pub type ReceiveResult<A> = Result<A, Reject>;
 
 /// The expected return type of the init method of the smart contract,
 /// parametrized by the state type of the smart contract.

@@ -62,9 +62,13 @@ pub struct State {
 
 #[init(name = "init")]
 #[inline(always)]
-fn contract_init(ctx: InitContext, amount: Amount) -> InitResult<State> {
+fn contract_init<I: HasInitContext<()>, L: HasLogger>(
+    ctx: I,
+    amount: Amount,
+    _logger: &mut L,
+) -> InitResult<State> {
     ensure!(amount == 0, "This escrow contract must be initialised with a 0 amount.");
-    let init_params: InitParams = ctx.parameter()?;
+    let init_params: InitParams = ctx.parameter_cursor().get()?;
     ensure!(
         init_params.buyer != init_params.seller,
         "Buyer and seller must have different accounts."
@@ -82,8 +86,13 @@ fn contract_init(ctx: InitContext, amount: Amount) -> InitResult<State> {
 
 #[receive(name = "receive")]
 #[inline(always)]
-fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> ReceiveResult {
-    let msg: Message = ctx.parameter()?;
+fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+    ctx: R,
+    amount: Amount,
+    _logger: &mut L,
+    state: &mut State,
+) -> ReceiveResult<A> {
+    let msg: Message = ctx.parameter_cursor().get()?;
     match (state.mode, msg) {
         (Mode::AwaitingDeposit, Message::SubmitDeposit) => {
             ensure!(
@@ -95,7 +104,7 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
                 "Amount given does not match the required deposit and arbiter fee."
             );
             state.mode = Mode::AwaitingDelivery;
-            Ok(Action::accept())
+            Ok(A::accept())
         }
 
         (Mode::AwaitingDelivery, Message::AcceptDelivery) => {
@@ -105,8 +114,8 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
             );
             state.mode = Mode::Done;
             let release_payment_to_seller =
-                Action::simple_transfer(&state.seller, state.required_deposit);
-            let pay_arbiter = Action::simple_transfer(&state.arbiter, state.arbiter_fee);
+                A::simple_transfer(&state.seller, state.required_deposit);
+            let pay_arbiter = A::simple_transfer(&state.arbiter, state.arbiter_fee);
             Ok(try_send_both(release_payment_to_seller, pay_arbiter))
         }
 
@@ -117,27 +126,27 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
                 "Only the designated buyer or seller can contest delivery."
             );
             state.mode = Mode::AwaitingArbitration;
-            Ok(Action::accept())
+            Ok(A::accept())
         }
 
         (Mode::AwaitingArbitration, Message::Arbitrate(Arbitration::ReturnDepositToBuyer)) => {
             state.mode = Mode::Done;
-            let return_deposit = Action::simple_transfer(&state.buyer, state.required_deposit);
-            let pay_arbiter = Action::simple_transfer(&state.arbiter, state.arbiter_fee);
+            let return_deposit = A::simple_transfer(&state.buyer, state.required_deposit);
+            let pay_arbiter = A::simple_transfer(&state.arbiter, state.arbiter_fee);
             Ok(try_send_both(return_deposit, pay_arbiter))
         }
 
         (Mode::AwaitingArbitration, Message::Arbitrate(Arbitration::ReleaseFundsToSeller)) => {
             state.mode = Mode::Done;
             let release_payment_to_seller =
-                Action::simple_transfer(&state.seller, state.required_deposit);
-            let pay_arbiter = Action::simple_transfer(&state.arbiter, state.arbiter_fee);
+                A::simple_transfer(&state.seller, state.required_deposit);
+            let pay_arbiter = A::simple_transfer(&state.arbiter, state.arbiter_fee);
             Ok(try_send_both(release_payment_to_seller, pay_arbiter))
         }
 
         (Mode::AwaitingArbitration, Message::Arbitrate(Arbitration::ReawaitDelivery)) => {
             state.mode = Mode::AwaitingDelivery;
-            Ok(Action::accept())
+            Ok(A::accept())
         }
 
         (Mode::Done, _) => {
@@ -149,9 +158,9 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
 }
 
 // Try to send a, and whether it succeeds or fails, try to send b
-fn try_send_both(a: Action, b: Action) -> Action {
-    let best_effort_a = a.or_else(Action::accept());
-    let best_effort_b = b.or_else(Action::accept());
+fn try_send_both<A: HasActions>(a: A, b: A) -> A {
+    let best_effort_a = a.or_else(A::accept());
+    let best_effort_b = b.or_else(A::accept());
     best_effort_a.and_then(best_effort_b)
 }
 

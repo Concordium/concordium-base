@@ -589,7 +589,7 @@ pub fn invoke_receive(
     energy: u64,
 ) -> Result<ReceiveResult, error::CallError> {
     // Make the imports (host functions), with shared variables for logs, energy,
-    // state, outcome
+    // state, outcome.
     let (import_obj, logs, energy, state, outcome) = make_imports(
         Which::Receive {
             receive_ctx,

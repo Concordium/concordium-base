@@ -12,7 +12,7 @@ use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 pub type Amount = u64;
 
 /// Address of an account, as raw bytes.
-#[derive(Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
+#[derive(Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Debug)]
 pub struct AccountAddress(pub [u8; ACCOUNT_ADDRESS_SIZE]);
 
 impl convert::AsRef<[u8; 32]> for AccountAddress {
@@ -24,7 +24,7 @@ impl convert::AsRef<[u8]> for AccountAddress {
 }
 
 /// Address of a contract.
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "derive-serde", derive(SerdeSerialize, SerdeDeserialize))]
 pub struct ContractAddress {
     pub index:    u64,
@@ -65,13 +65,27 @@ pub enum Address {
     serde(rename_all = "camelCase")
 )]
 pub struct ReceiveContext {
-    pub(crate) metadata:     ChainMetadata,
-    pub(crate) invoker:      AccountAddress,  //32 bytes
-    pub(crate) self_address: ContractAddress, // 16 bytes
-    pub self_balance:        Amount,          // 8 bytes
-    pub(crate) sender:       Address,         // 9 or 33 bytes
-    pub(crate) owner:        AccountAddress,  // 32 bytes
+    pub metadata:     ChainMetadata,
+    pub invoker:      AccountAddress,  //32 bytes
+    pub self_address: ContractAddress, // 16 bytes
+    pub self_balance: Amount,          // 8 bytes
+    pub sender:       Address,         // 9 or 33 bytes
+    pub owner:        AccountAddress,  // 32 bytes
 }
+
+/// Sequential slot number
+pub type SlotNumber = u64;
+
+/// Height of the block.
+pub type BlockHeight = u64;
+
+/// Finalized height. In the context of chain metadata this is the height of the
+/// block which is explicitly recorded as the last finalized block in the block
+/// under consideration.
+pub type FinalizedHeight = u64;
+
+/// Time at the beginning of the current slot, in miliseconds.
+pub type SlotTime = u64;
 
 /// Chain metadata accessible to both receive and init methods.
 #[cfg_attr(
@@ -80,10 +94,10 @@ pub struct ReceiveContext {
     serde(rename_all = "camelCase")
 )]
 pub struct ChainMetadata {
-    pub slot_number:      u64,
-    pub block_height:     u64,
-    pub finalized_height: u64,
-    pub slot_time:        u64,
+    pub slot_number:      SlotNumber,
+    pub block_height:     BlockHeight,
+    pub finalized_height: FinalizedHeight,
+    pub slot_time:        SlotTime,
 }
 
 /// Add offset tracking inside a data structure.
