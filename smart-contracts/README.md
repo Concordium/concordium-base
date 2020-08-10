@@ -185,7 +185,7 @@ See `--help` or `help` option to `wasmer-runner` for an explanation of the optio
 
 # Testing smart contracts
 
-Testing of smart contracts should be done at many different levels, from immediate unit testing of functionality that is used in smart contracts, through testing individual invocations of `init` and `receive` methods, to end-to-end testing in the scheduler
+Testing of smart contracts should be done at many different levels, from immediate unit testing of functionality that is used in smart contracts, through testing individual invocations of `init` and `receive` methods, to end-to-end testing in the scheduler.
 
 The first and second can be done directly in the module the contract is written in. This relies on the contract's init and receive methods being written with a generic enough signature so that the host functions, normally provided by the scheduler, can be replaced by a test harness.
 
