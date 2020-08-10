@@ -1,8 +1,9 @@
-use crate::{convert, prims::*, types::*};
+use crate::{convert, mem, prims::*, types::*};
 use contracts_common::*;
 
 #[cfg(not(feature = "std"))]
 use alloc::{vec, vec::Vec};
+use mem::MaybeUninit;
 
 impl convert::From<()> for Reject {
     #[inline(always)]
@@ -83,6 +84,45 @@ impl Read for ContractState {
         let num_read = unsafe { load_state(buf.as_mut_ptr(), len, self.current_position) };
         self.current_position += num_read;
         Ok(num_read as usize)
+    }
+
+    /// Read a `u32` in little-endian format. This is optimized to not
+    /// initialize a dummy value before calling an external function.
+    fn read_u64(&mut self) -> Result<u64, Self::Err> {
+        let mut bytes: MaybeUninit<[u8; 8]> = MaybeUninit::uninit();
+        let num_read =
+            unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 8, self.current_position) };
+        if num_read == 8 {
+            unsafe { Ok(u64::from_le_bytes(bytes.assume_init())) }
+        } else {
+            Err(())
+        }
+    }
+
+    /// Read a `u32` in little-endian format. This is optimized to not
+    /// initialize a dummy value before calling an external function.
+    fn read_u32(&mut self) -> Result<u32, Self::Err> {
+        let mut bytes: MaybeUninit<[u8; 4]> = MaybeUninit::uninit();
+        let num_read =
+            unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 4, self.current_position) };
+        if num_read == 4 {
+            unsafe { Ok(u32::from_le_bytes(bytes.assume_init())) }
+        } else {
+            Err(())
+        }
+    }
+
+    /// Read a `u8` in little-endian format. This is optimized to not
+    /// initialize a dummy value before calling an external function.
+    fn read_u8(&mut self) -> Result<u8, Self::Err> {
+        let mut bytes: MaybeUninit<[u8; 1]> = MaybeUninit::uninit();
+        let num_read =
+            unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 1, self.current_position) };
+        if num_read == 1 {
+            unsafe { Ok(bytes.assume_init()[0]) }
+        } else {
+            Err(())
+        }
     }
 }
 
