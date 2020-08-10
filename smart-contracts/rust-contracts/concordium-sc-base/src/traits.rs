@@ -8,6 +8,12 @@ use alloc::vec::Vec;
 use contracts_common::*;
 
 /// Objects which can access parameters to contracts.
+///
+/// This trait has a Read supertrait which means that structured parameters can
+/// be directly deserialized by using `.get()` function from the `Get` trait.
+///
+/// The reuse of `Read` methods is the reason for the slightly strange choice of
+/// methods of this trait.
 pub trait HasParameter: Read {
     /// Get the size of the parameter to the method.
     fn size(&self) -> u32;
