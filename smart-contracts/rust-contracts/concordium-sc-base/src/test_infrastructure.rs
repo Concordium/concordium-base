@@ -164,10 +164,51 @@ impl<'a> Write for ContractStateWrapper<'a> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Err> { self.cursor.write(buf) }
 }
 
+// TODO: This is not tested.
 impl<'a> Seek for ContractStateWrapper<'a> {
     type Err = ();
 
-    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Err> { todo!() }
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Err> {
+        match pos {
+            SeekFrom::Start(x) => {
+                if x <= u64::from(self.size()) {
+                    self.cursor.offset = x as usize; // safe because of <= check
+                    Ok(x)
+                } else {
+                    Err(())
+                }
+            }
+            SeekFrom::End(x) => {
+                // cannot seek beyond end, nor before beginning
+                if x > 0 || (-x) as u64 > u64::from(self.size()) {
+                    Err(())
+                } else {
+                    use convert::TryInto;
+                    let new_pos = u64::from(self.size()) - ((-x) as u64);
+                    self.cursor.offset = new_pos.try_into().map_err(|_| ())?;
+                    Ok(new_pos)
+                }
+            }
+            SeekFrom::Current(x) => {
+                use convert::TryInto;
+                if x >= 0 {
+                    let x = x.try_into().map_err(|_| ())?;
+                    let new_pos = self.cursor.offset.checked_add(x).ok_or(())?;
+                    if new_pos <= self.cursor.data.len() {
+                        self.cursor.offset = new_pos;
+                        Ok(new_pos as u64)
+                    } else {
+                        Err(())
+                    }
+                } else {
+                    let x = (-x).try_into().map_err(|_| ())?;
+                    let new_pos = self.cursor.offset.checked_sub(x).ok_or(())?;
+                    self.cursor.offset = new_pos;
+                    Ok(new_pos as u64)
+                }
+            }
+        }
+    }
 }
 
 impl<'a> HasContractState<()> for ContractStateWrapper<'a> {

@@ -19,6 +19,8 @@ pub enum SeekFrom {
 /// increase.
 pub trait Seek {
     type Err;
+    /// Seek to the new position. If successful, return the new position from
+    /// the beginning of the stream.
     fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Err>;
 }
 

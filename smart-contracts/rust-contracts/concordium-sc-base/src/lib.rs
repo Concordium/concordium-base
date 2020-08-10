@@ -38,7 +38,7 @@ pub use core::result::*;
 #[cfg(not(feature = "std"))]
 pub use alloc::collections;
 #[cfg(not(feature = "std"))]
-pub use alloc::{vec, vec::Vec};
+pub use alloc::{string, string::String, string::ToString, vec, vec::Vec};
 #[cfg(not(feature = "std"))]
 pub use core::convert;
 #[cfg(not(feature = "std"))]
