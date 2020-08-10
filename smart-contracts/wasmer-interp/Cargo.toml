@@ -24,4 +24,4 @@ version="0.17.1"
 default-features = false
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "staticlib", "rlib"]
