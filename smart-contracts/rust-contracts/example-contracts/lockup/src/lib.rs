@@ -65,8 +65,12 @@ pub struct State {
 
 #[init(name = "init")]
 #[inline(always)]
-fn contract_init(ctx: InitContext, amount: Amount) -> InitResult<State> {
-    let init_params: InitParams = ctx.parameter()?;
+fn contract_init<I: HasInitContext<()>, L: HasLogger>(
+    ctx: I,
+    amount: Amount,
+    _logger: &mut L,
+) -> InitResult<State> {
+    let init_params: InitParams = ctx.parameter_cursor().get()?;
     ensure!(
         !init_params.account_holders.is_empty(),
         "No account holders given, but we need at least one."
@@ -94,7 +98,12 @@ fn contract_init(ctx: InitContext, amount: Amount) -> InitResult<State> {
 
 #[receive(name = "receive")]
 #[inline(always)]
-fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> ReceiveResult {
+fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+    ctx: R,
+    amount: Amount,
+    _logger: &mut L,
+    state: &mut State,
+) -> ReceiveResult<A> {
     ensure!(amount == 0, "Depositing into a running lockup account is not allowed.");
     let sender = match ctx.sender() {
         Address::Account(acc) => acc,
@@ -103,8 +112,8 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
         }
     };
 
-    make_vested_funds_available(ctx.get_time(), state);
-    let msg: Message = ctx.parameter()?;
+    make_vested_funds_available(ctx.metadata().slot_time(), state);
+    let msg: Message = ctx.parameter_cursor().get()?;
 
     match msg {
         Message::WithdrawFunds(withdrawal_amount) => {
@@ -120,7 +129,7 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
             // We have checked that the avaiable balance is high enough, so underflow
             // should not be possible
             state.available_balance -= withdrawal_amount;
-            Ok(Action::simple_transfer(sender, withdrawal_amount))
+            Ok(A::simple_transfer(sender, withdrawal_amount))
         }
 
         Message::CancelFutureVesting => {
@@ -140,7 +149,7 @@ fn contract_receive(ctx: ReceiveContext, amount: Amount, state: &mut State) -> R
             state.remaining_vesting_schedule = vec![];
 
             // Return unvested funds to the contract owner
-            Ok(Action::simple_transfer(ctx.owner(), cancelled_vesting_amount))
+            Ok(A::simple_transfer(ctx.owner(), cancelled_vesting_amount))
         }
     }
 }

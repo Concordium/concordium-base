@@ -18,6 +18,10 @@ byteorder = "1.3"
 path="../../concordium-sc-base"
 default-features = false
 
+[dev-dependencies.concordium-sc-base]
+path="../../concordium-sc-base"
+features = ["std"] # std is needed because testing depends on std.
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
@@ -25,4 +29,4 @@ crate-type = ["cdylib", "rlib"]
 # Tell `rustc` to optimize for small code size.
 opt-level = 3
 # Don't unwind on panics, just trap.
-panic = "abort"
+# panic = "abort"

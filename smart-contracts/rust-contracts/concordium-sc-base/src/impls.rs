@@ -1,8 +1,6 @@
-use crate::{convert, mem, prims::*, types::*};
+use crate::{convert, mem, prims::*, traits::*, types::*};
 use contracts_common::*;
 
-#[cfg(not(feature = "std"))]
-use alloc::{vec, vec::Vec};
 use mem::MaybeUninit;
 
 impl convert::From<()> for Reject {
@@ -10,7 +8,7 @@ impl convert::From<()> for Reject {
     fn from(_: ()) -> Self { Reject {} }
 }
 
-// Implementations of seek/read/write
+/// # Contract state trait implementations.
 impl Seek for ContractState {
     type Err = ();
 
@@ -146,6 +144,41 @@ impl Write for ContractState {
     }
 }
 
+impl HasContractState<()> for ContractState {
+    type ContractStateData = ();
+
+    #[inline(always)]
+    fn open(_: Self::ContractStateData) -> Self {
+        ContractState {
+            current_position: 0,
+        }
+    }
+
+    fn reserve(&mut self, len: u32) -> bool {
+        let cur_size = unsafe { state_size() };
+        if cur_size < len {
+            let res = unsafe { resize_state(len) };
+            res == 1
+        } else {
+            true
+        }
+    }
+
+    #[inline(always)]
+    fn size(&self) -> u32 { unsafe { state_size() } }
+
+    fn truncate(&mut self, new_size: u32) {
+        let cur_size = self.size();
+        if cur_size > new_size {
+            unsafe { resize_state(new_size) };
+        }
+        if new_size < self.current_position {
+            self.current_position = new_size
+        }
+    }
+}
+
+/// # Trait implementations for Parameter
 impl Read for Parameter {
     type Err = ();
 
@@ -164,92 +197,34 @@ impl Read for Parameter {
     }
 }
 
-// Implementations of non-trait functionality for defined types.
-
-impl Create for Parameter {
-    fn new() -> Self {
-        Parameter {
-            current_position: 0,
-        }
-    }
+impl HasParameter for Parameter {
+    #[inline(always)]
+    fn size(&self) -> u32 { unsafe { get_parameter_size() } }
 }
 
-impl Create for ContractState {
-    fn new() -> Self {
-        ContractState {
-            current_position: 0,
-        }
-    }
+/// # Trait implementations for the chain metadata.
+impl HasChainMetadata for ChainMetadata {
+    #[inline(always)]
+    fn slot_time(&self) -> SlotTime { self.slot_time }
+
+    #[inline(always)]
+    fn block_height(&self) -> BlockHeight { self.block_height }
+
+    #[inline(always)]
+    fn finalized_height(&self) -> FinalizedHeight { self.finalized_height }
+
+    #[inline(always)]
+    fn slot_number(&self) -> SlotNumber { self.slot_number }
 }
 
-impl ContractState {
-    /// Make sure that the memory size is at least that many bytes in size.
-    /// Returns true iff this was successful.
-    pub fn reserve(&mut self, len: u32) -> bool {
-        let cur_size = unsafe { state_size() };
-        if cur_size < len {
-            let res = unsafe { resize_state(len) };
-            res == 1
-        } else {
-            true
-        }
-    }
+/// # Trait implementations for the init context
+impl HasInitContext<()> for InitContext {
+    type InitData = ();
+    type MetadataType = ChainMetadata;
+    type ParamType = Parameter;
 
-    /// Get the full contract state as a byte array.
-    pub fn get_all(&self) -> Vec<u8> {
-        let len = unsafe { state_size() };
-        let mut out: Vec<u8> = vec![0u8; len as usize];
-        let res = unsafe { load_state(out.as_mut_ptr(), len, 0u32) };
-        if res != len {
-            panic!()
-        }
-        out
-    }
-
-    /// Return current size of contract state.
-    pub fn size(&self) -> u32 { unsafe { state_size() } }
-
-    /// Truncate the state to the given size. If the given size is more than the
-    /// current state size this operation does nothing. The new position is at
-    /// most at the end of the stream.
-    pub fn truncate(&mut self, new_size: u32) {
-        let cur_size = self.size();
-        if cur_size > new_size {
-            unsafe { resize_state(new_size) };
-        }
-        if new_size < self.current_position {
-            self.current_position = new_size
-        }
-    }
-}
-
-pub trait Create {
-    fn new() -> Self;
-}
-
-pub trait HasParameter: private::Sealed {
-    // TODO: Add functions where a user can supply a buffer
-    // for getting the parameters to avoid vector allocations.
-    fn parameter_bytes(&self) -> Vec<u8> {
-        let len = unsafe { get_parameter_size() };
-        let mut bytes = vec![0u8; len as usize];
-        unsafe { get_parameter_section(bytes.as_mut_ptr(), len, 0) };
-        bytes
-    }
-
-    #[inline]
-    /// Attempt to deserialize the parameter into a structured value.
-    fn parameter<S: Serialize>(&self) -> Result<S, ()> { Parameter::new().get() }
-
-    /// Get the cursor to the parameter that allows more fine-grained access
-    /// to the user-supplied parameter.
-    #[inline]
-    fn parameter_cursor(&self) -> Parameter { Parameter::new() }
-}
-
-impl Create for InitContext {
     /// Create a new init context by using an external call.
-    fn new() -> Self {
+    fn open(_: Self::InitData) -> Self {
         let mut bytes = [0u8; 4 * 8 + 32];
         // unsafe { get_chain_context(bytes.as_mut_ptr()) }
         // unsafe { get_init_ctx(bytes[4 * 8..].as_mut_ptr()) };
@@ -262,11 +237,29 @@ impl Create for InitContext {
             // Host did not provide valid init context and chain metadata.
         }
     }
+
+    #[inline(always)]
+    fn init_origin(&self) -> &AccountAddress { &self.init_origin }
+
+    #[inline(always)]
+    fn parameter_cursor(&self) -> Self::ParamType {
+        Parameter {
+            current_position: 0,
+        }
+    }
+
+    #[inline(always)]
+    fn metadata(&self) -> &Self::MetadataType { &self.metadata }
 }
 
-impl Create for ReceiveContext {
+/// # Trait implementations for the receive context
+impl HasReceiveContext<()> for ReceiveContext {
+    type MetadataType = ChainMetadata;
+    type ParamType = Parameter;
+    type ReceiveData = ();
+
     /// Create a new receive context by using an external call.
-    fn new() -> Self {
+    fn open(_: Self::ReceiveData) -> Self {
         // let metadata_size = 4 * 8;
         // We reduce this to a purely stack-based allocation
         // by overapproximating the size of the context.
@@ -284,16 +277,101 @@ impl Create for ReceiveContext {
             // not happen and cannot be recovered.
         }
     }
+
+    #[inline(always)]
+    fn invoker(&self) -> &AccountAddress { &self.invoker }
+
+    #[inline(always)]
+    fn self_address(&self) -> &ContractAddress { &self.self_address }
+
+    #[inline(always)]
+    fn self_balance(&self) -> Amount { self.self_balance }
+
+    #[inline(always)]
+    fn sender(&self) -> &Address { &self.sender }
+
+    #[inline(always)]
+    fn owner(&self) -> &AccountAddress { &self.owner }
+
+    #[inline(always)]
+    fn parameter_cursor(&self) -> Self::ParamType {
+        Parameter {
+            current_position: 0,
+        }
+    }
+
+    #[inline(always)]
+    fn metadata(&self) -> &Self::MetadataType { &self.metadata }
 }
 
-impl HasParameter for InitContext {}
-impl HasParameter for ReceiveContext {}
+/// #Implementations of the logger.
 
-mod private {
-    // A trick to not allow anybody else to implement HasParameter.
-    // This module is not exported, hence nobody else can implement the Sealed
-    // trait.
-    pub trait Sealed {}
-    impl Sealed for super::InitContext {}
-    impl Sealed for super::ReceiveContext {}
+impl HasLogger for Logger {
+    #[inline(always)]
+    fn init() -> Self {
+        Self {
+            _private: (),
+        }
+    }
+
+    #[inline(always)]
+    fn log_bytes(&mut self, event: &[u8]) {
+        unsafe {
+            log_event(event.as_ptr(), event.len() as u32);
+        }
+    }
+}
+
+/// #Implementation of actions.
+/// These actions are implemented by direct calls to host functions.
+impl HasActions for Action {
+    #[inline(always)]
+    fn accept() -> Self {
+        Action {
+            _private: unsafe { accept() },
+        }
+    }
+
+    #[inline(always)]
+    fn simple_transfer(acc: &AccountAddress, amount: Amount) -> Self {
+        let res = unsafe { simple_transfer(acc.0.as_ptr(), amount) };
+        Action {
+            _private: res,
+        }
+    }
+
+    #[inline(always)]
+    fn send(ca: &ContractAddress, receive_name: &str, amount: Amount, parameter: &[u8]) -> Self {
+        let receive_bytes = receive_name.as_bytes();
+        let res = unsafe {
+            send(
+                ca.index,
+                ca.subindex,
+                receive_bytes.as_ptr(),
+                receive_bytes.len() as u32,
+                amount,
+                parameter.as_ptr(),
+                parameter.len() as u32,
+            )
+        };
+        Action {
+            _private: res,
+        }
+    }
+
+    #[inline(always)]
+    fn and_then(self, then: Self) -> Self {
+        let res = unsafe { combine_and(self._private, then._private) };
+        Action {
+            _private: res,
+        }
+    }
+
+    #[inline(always)]
+    fn or_else(self, el: Self) -> Self {
+        let res = unsafe { combine_or(self._private, el._private) };
+        Action {
+            _private: res,
+        }
+    }
 }

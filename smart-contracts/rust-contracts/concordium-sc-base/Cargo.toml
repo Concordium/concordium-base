@@ -30,4 +30,4 @@ crate-type = ["rlib"]
 # Tell `rustc` to optimize for small code size.
 opt-level = "s"
 # Don't unwind on panics, just trap.
-panic = "abort"
+# panic = "abort"

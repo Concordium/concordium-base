@@ -38,7 +38,7 @@ pub use core::result::*;
 #[cfg(not(feature = "std"))]
 pub use alloc::collections;
 #[cfg(not(feature = "std"))]
-pub use alloc::{vec, vec::Vec};
+pub use alloc::{string, string::String, string::ToString, vec, vec::Vec};
 #[cfg(not(feature = "std"))]
 pub use core::convert;
 #[cfg(not(feature = "std"))]
@@ -53,15 +53,17 @@ pub use std::mem;
 
 mod impls;
 mod prims;
+mod traits;
 mod types;
 /// Re-export for ease of use.
 pub use concordium_sc_derive::{init, receive};
 pub use contracts_common::*;
-pub use impls::{Create, HasParameter};
-pub use prims::{actions::*, events};
+pub use traits::*;
 pub use types::*;
 
 extern crate wee_alloc;
 // Use `wee_alloc` as the global allocator to reduce code size.
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
+pub mod test_infrastructure;

@@ -182,3 +182,27 @@ where an example receive context is
 ```
 
 See `--help` or `help` option to `wasmer-runner` for an explanation of the options.
+
+# Testing smart contracts
+
+Testing of smart contracts should be done at many different levels, from immediate unit testing of functionality that is used in smart contracts, through testing individual invocations of `init` and `receive` methods, to end-to-end testing in the scheduler.
+
+The first and second can be done directly in the module the contract is written in. This relies on the contract's init and receive methods being written with a generic enough signature so that the host functions, normally provided by the scheduler, can be replaced by a test harness.
+
+The design is as follows. 
+
+- Each of the host-provided parameters to the init and receive methods has its own trait. 
+These are defined in [concordium-sc-base/src/traits.rs](./rust-contracts/concordium-sc-base/src/traits.rs).
+- The traits have implementations that are used when the contract is invoked with host functions. These are defined in [concordium-sc-base/src/impls.rs](./rust-contracts/concordium-sc-base/src/impls.rs).
+- Additionally, there are implementations of these traits that allow calling of smart contracts in a way that is easy to specify parameters, run the contract, and inspect the result, all entirely inside `Rust`. These are defined in [concordium-sc-base/src/test_infrastructure.rs](./rust-contracts/concordium-sc-base/src/test_infrastructure.rs), together with the wrappers that can be used for testing.
+- The intended use of this functionality is exemplified in the tests in the [counter-smart-contract](./rust-contracts/example-contracts/counter/src/lib.rs).
+
+Currently the only way to run tests is to compile to native code. This can be done by explicitly specifying the target as 
+```
+cargo test --release --target=x86_64-unknown-linux-gnu
+```
+or similar, depending on the platform (alternatively just comment out the default target in `.cargo/config`).
+
+This kind of testing is perfectly adequate for a large amount of functional correctness testing, however ultimately we also want to test code as it will be deployed to the chain. For this, the intention is to update the `wasmer-runner` with a `test` command that will be able to execute smart contracts in a given state and parameters.
+
+We might hook into the default testing infrastructure of Rust by specifying a binary runner in `.cargo/config` as well for this, although the best user-experience needs to be determined.

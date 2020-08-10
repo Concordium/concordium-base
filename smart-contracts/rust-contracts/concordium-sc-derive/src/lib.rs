@@ -62,10 +62,10 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[no_mangle]
             pub extern "C" fn #name(amount: Amount) -> i32 {
-                use concordium_sc_base::Create;
-                let ctx = InitContext::new();
-                let mut state = ContractState::new();
-                match #fn_name(ctx, amount, &mut state) {
+                let ctx = InitContext::open(());
+                let mut state = ContractState::open(());
+                let mut logger = Logger::init();
+                match #fn_name(ctx, amount, &mut logger, &mut state) {
                     Ok(()) => 0,
                     Err(_) => -1,
                 }
@@ -75,11 +75,11 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[no_mangle]
             pub extern "C" fn #name(amount: Amount) -> i32 {
-                use concordium_sc_base::Create;
-                let ctx = InitContext::new();
-                let mut state_bytes = ContractState::new();
-                match #fn_name(ctx, amount) {
+                let ctx = InitContext::open(());
+                let mut logger = Logger::init();
+                match #fn_name(ctx, amount, &mut logger) {
                     Ok(state) => {
+                        let mut state_bytes = ContractState::open(());
                         if state.serial(&mut state_bytes).is_err() {
                             panic!("Could not initialize contract.");
                         };
@@ -120,10 +120,12 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
         #[no_mangle]
         pub extern "C" fn #name(amount: Amount) -> i32 {
-            use concordium_sc_base::{SeekFrom, ContractState, Create};
-            let ctx = ReceiveContext::new();
-            let mut state = ContractState::new();
-            match #fn_name(ctx, amount, &mut state) {
+            use concordium_sc_base::{SeekFrom, ContractState, Logger};
+            let ctx = ReceiveContext::open(());
+            let mut state = ContractState::open(());
+            let mut logger = Logger::init();
+            let res: ReceiveResult<Action> = #fn_name(ctx, amount, &mut logger, &mut state);
+            match res {
                 Ok(act) => {
                     act.tag() as i32
                 }
@@ -135,11 +137,13 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[no_mangle]
             pub extern "C" fn #name(amount: Amount) -> i32 {
-                use concordium_sc_base::{SeekFrom, ContractState, Create};
-                let ctx = ReceiveContext::new();
-                let mut state_bytes = ContractState::new();
-                if let Ok(mut state) = State::deserial(&mut state_bytes) {
-                    match #fn_name(ctx, amount, &mut state) {
+                use concordium_sc_base::{SeekFrom, ContractState, Logger};
+                let ctx = ReceiveContext::open(());
+                let mut logger = Logger::init();
+                let mut state_bytes = ContractState::open(());
+                if let Ok(mut state) = (&mut state_bytes).get() {
+                    let res: ReceiveResult<Action> = #fn_name(ctx, amount, &mut logger, &mut state);
+                    match res {
                         Ok(act) => {
                             let res = state_bytes
                                 .seek(SeekFrom::Start(0))
