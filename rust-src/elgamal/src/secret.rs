@@ -108,11 +108,7 @@ impl<C: Curve> SecretKey<C> {
     ///
     /// This function takes an auxiliary instance of BabyStepGiantStep to speed
     /// up decryption.
-    pub fn decrypt_exponent(
-        &self,
-        c: &Cipher<C>,
-        bsgs: &BabyStepGiantStep<C>,
-    ) -> u64 {
+    pub fn decrypt_exponent(&self, c: &Cipher<C>, bsgs: &BabyStepGiantStep<C>) -> u64 {
         let dec = self.decrypt(c).value;
         bsgs.discrete_log(&dec)
     }

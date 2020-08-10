@@ -64,7 +64,10 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         let (v_2, cR_2) = self.cmm_key.commit(&alpha_2, csprng);
         let (v_3, cR_3) = self.cmm_key.commit(&alpha_3, csprng);
 
-        let cmm_key_1 = CommitmentKey{g: self.cmms[0].0, h: self.cmm_key.h};
+        let cmm_key_1 = CommitmentKey {
+            g: self.cmms[0].0,
+            h: self.cmm_key.h,
+        };
         let (v, cR) = cmm_key_1.commit(&alpha_2, csprng);
         Some((
             ([v_1, v_2, v_3], v),

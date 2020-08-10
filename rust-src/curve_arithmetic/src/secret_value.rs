@@ -77,9 +77,7 @@ impl<C: Curve> Value<C> {
         }
     }
 
-    pub fn from_u64(secret: u64) -> Self {
-        Value::new(C::scalar_from_u64(secret))
-    }
+    pub fn from_u64(secret: u64) -> Self { Value::new(C::scalar_from_u64(secret)) }
 
     /// Generate a single `Value` from a `csprng`.
     pub fn generate<T: Rng>(csprng: &mut T) -> Value<C> { Value::new(C::generate_scalar(csprng)) }

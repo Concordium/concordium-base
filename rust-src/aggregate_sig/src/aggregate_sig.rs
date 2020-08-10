@@ -391,7 +391,7 @@ mod test {
     fn test_to_from_bytes_identity() {
         let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
 
-        for _ in 0..1000 {
+        for _ in 0..100 {
             let m = rng.gen::<[u8; 32]>();
             let mut c = Vec::new();
             c.push(rng.gen::<u8>());
@@ -426,7 +426,7 @@ mod test {
     fn test_to_bytes_correct_length() {
         let mut rng: StdRng = SeedableRng::from_rng(thread_rng()).unwrap();
 
-        for _ in 0..1000 {
+        for _ in 0..100 {
             let m = rng.gen::<[u8; 32]>();
             let mut c = Vec::new();
             c.push(rng.gen::<u8>());
@@ -452,7 +452,7 @@ mod test {
     #[test]
     fn test_proof_of_knowledge() {
         let mut csprng = thread_rng();
-        for i in 0..1000 {
+        for i in 0..100 {
             let n = (i % 32) + 1;
             let mut c1: Vec<u8>;
             let mut c2: Vec<u8>;
