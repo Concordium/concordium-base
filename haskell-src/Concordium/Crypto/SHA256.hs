@@ -152,3 +152,7 @@ hashToByteString (Hash h) = FBS.toByteString h
 -- This is much more efficient than 'hashToByteString'. It involves no copying.
 hashToShortByteString :: Hash -> ShortByteString
 hashToShortByteString (Hash h) = FBS.toShortByteString h
+
+-- | Hash the concatenation of two hashes
+hashOfHashes :: Hash -> Hash -> Hash
+hashOfHashes a b = Concordium.Crypto.SHA256.hash (hashToByteString a <> hashToByteString b)
