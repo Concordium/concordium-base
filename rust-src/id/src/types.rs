@@ -16,7 +16,7 @@ use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
 use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
 use either::Either;
-use elgamal::{cipher::Cipher, message::Message, secret::SecretKey as ElgamalSecretKey};
+use elgamal::{Cipher, Message, SecretKey as ElgamalSecretKey};
 use ff::Field;
 use hex::{decode, encode};
 use pedersen_scheme::{
@@ -1379,6 +1379,12 @@ impl<C: Curve> GlobalContext<C> {
             generator:               C::generate(csprng),
             on_chain_commitment_key: PedersenKey::generate(csprng),
         }
+    }
+
+    /// The generator for encryption in the exponent is the second component of
+    /// the commitment key, the 'h'.
+    pub fn encryption_in_exponent_generator(&self) -> &C {
+        &self.on_chain_commitment_key.h
     }
 }
 

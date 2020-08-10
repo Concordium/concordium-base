@@ -60,6 +60,16 @@ impl<C: Curve> Cipher<C> {
         T: Rng, {
         Cipher(C::generate(csprng), C::generate(csprng))
     }
+
+    /// Combine two ciphers together by adding the individual components.
+    ///
+    /// This does not check that both ciphers were produced with the same public
+    /// key, that is the responsibility of the caller. In case ciphers were
+    /// produced with different public keys, their combination is still
+    /// mathematically valid, however it is semantically meaningless.
+    pub fn combine(&self, other: &Self) -> Self {
+        Self(self.0.plus_point(&other.0), self.1.plus_point(&other.1))
+    }
 }
 
 #[cfg(test)]

@@ -157,8 +157,8 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
 
         let mut ais = Vec::with_capacity(n);
         let mut sum = C::Scalar::zero();
-        let g = self.cmm_key.0;
-        let h = self.cmm_key.1;
+        let g = self.cmm_key.g;
+        let h = self.cmm_key.h;
         for (Ci, z_i, s_i, u_i) in izip!(&self.cmms, zs, ss, &self.us) {
             let ai = Commitment(multiexp(&[g, h, Ci.0], &[*z_i, *s_i, c]));
             ais.push(ai);
