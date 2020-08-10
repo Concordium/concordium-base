@@ -10,13 +10,13 @@ use rand::*;
 
 /// A commitment  key.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
-pub struct CommitmentKey<C: Curve>{
+pub struct CommitmentKey<C: Curve> {
     pub g: C,
     pub h: C,
 }
 
 impl<C: Curve> CommitmentKey<C> {
-    pub fn new(g: C, h: C) -> Self { CommitmentKey{g,h} }
+    pub fn new(g: C, h: C) -> Self { CommitmentKey { g, h } }
 
     pub fn commit<T, V: AsRef<C::Scalar>>(
         &self,
@@ -55,7 +55,7 @@ impl<C: Curve> CommitmentKey<C> {
         T: Rng, {
         let h = C::generate(csprng);
         let g = C::generate(csprng);
-        CommitmentKey{g, h}
+        CommitmentKey { g, h }
     }
 }
 

@@ -607,7 +607,7 @@ mod tests {
         let v_copy = v_vec.clone();
         let mut V_vec: Vec<Commitment<C>> = Vec::with_capacity(usize::from(m));
         let mut v_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
-        let v_keys = CommitmentKey(B, B_tilde);
+        let v_keys = CommitmentKey { g: B, h: B_tilde };
         for v in v_vec {
             let v_scalar = C::scalar_from_u64(v);
             let v_value = Value::<C>::new(v_scalar);
@@ -722,8 +722,8 @@ mod tests {
         v_keys: &CommitmentKey<C>,
     ) -> bool {
         let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
-        let B = v_keys.0;
-        let B_tilde = v_keys.1;
+        let B = v_keys.g;
+        let B_tilde = v_keys.h;
         let m = commitments.len();
         for V in commitments.clone() {
             transcript.append_point(b"Vj", &V.0);
@@ -870,8 +870,8 @@ mod tests {
         v_keys: &CommitmentKey<C>,
     ) -> bool {
         let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
-        let B = v_keys.0;
-        let B_tilde = v_keys.1;
+        let B = v_keys.g;
+        let B_tilde = v_keys.h;
         let m = commitments.len();
         for V in commitments {
             transcript.append_point(b"Vj", &V.0);
@@ -1061,7 +1061,7 @@ mod tests {
         let gens = Generators { G_H };
         let B = SomeCurve::generate(rng);
         let B_tilde = SomeCurve::generate(rng);
-        let keys = CommitmentKey(B, B_tilde);
+        let keys = CommitmentKey { g: B, h: B_tilde };
 
         // Some numbers in [0, 2^n):
         let v_vec: Vec<u64> = vec![
@@ -1131,7 +1131,7 @@ mod tests {
         let gens = Generators { G_H };
         let B = SomeCurve::generate(rng);
         let B_tilde = SomeCurve::generate(rng);
-        let keys = CommitmentKey(B, B_tilde);
+        let keys = CommitmentKey { g: B, h: B_tilde };
 
         // Some numbers in [0, 2^n):
         let v_vec: Vec<u64> = vec![

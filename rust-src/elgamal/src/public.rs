@@ -113,7 +113,11 @@ impl<C: Curve> PublicKey<C> {
 
     /// Variant of `encrypt_exponent_vec_given_generator` using generator of the
     /// public key as the base.
-    pub fn encrypt_exponent_vec<'a, T, I>(&self, csprng: &mut T, es: I) -> Vec<(Cipher<C>, Randomness<C>)>
+    pub fn encrypt_exponent_vec<'a, T, I>(
+        &self,
+        csprng: &mut T,
+        es: I,
+    ) -> Vec<(Cipher<C>, Randomness<C>)>
     where
         T: Rng,
         I: IntoIterator<Item = &'a Value<C>>, {

@@ -146,7 +146,8 @@ pub fn encrypt_in_chunks_given_generator<C: Curve, R: Rng>(
     pk.encrypt_exponent_vec_given_generator(csprng, &chunks, generator)
 }
 
-/// Encrypt a single `u64` value in chunks in the exponent of the given generator.
+/// Encrypt a single `u64` value in chunks in the exponent of the given
+/// generator.
 pub fn encrypt_u64_in_chunks_given_generator<C: Curve, R: Rng>(
     pk: &PublicKey<C>,
     val: u64,
@@ -154,10 +155,13 @@ pub fn encrypt_u64_in_chunks_given_generator<C: Curve, R: Rng>(
     generator: &C,
     csprng: &mut R,
 ) -> Vec<(Cipher<C>, Randomness<C>)> {
-    let chunks = chunk_size.u64_to_chunks(val).into_iter().map(Value::from_u64).collect::<Vec<_>>();
+    let chunks = chunk_size
+        .u64_to_chunks(val)
+        .into_iter()
+        .map(Value::from_u64)
+        .collect::<Vec<_>>();
     pk.encrypt_exponent_vec_given_generator(csprng, &chunks, generator)
 }
-
 
 /// Wrapper around `decrypt_from_chunks_given_generator` that uses the generator
 /// that is part of the key.
@@ -296,10 +300,10 @@ mod tests {
             let chunk_size_index: usize = csprng.gen_range(0, possible_chunk_sizes.len());
             let chunk_size = possible_chunk_sizes[chunk_size_index];
             let m = 1 << (u8::from(chunk_size) - 1);
-            let k = m;
-            let cipher = encrypt_in_chunks::<C, ThreadRng>(&pk, &scalar, chunk_size, &mut csprng);
-            let retrieved_scalar = decrypt_from_chunks::<C>(&sk, &cipher, m, k, chunk_size)
-                .expect("Incorrectly produced chunks; could not decrypt.");
+            let cipher_pairs =
+                encrypt_in_chunks::<C, ThreadRng>(&pk, &scalar, chunk_size, &mut csprng);
+            let cipher = cipher_pairs.into_iter().map(|(x, _)| x).collect::<Vec<_>>();
+            let retrieved_scalar = decrypt_from_chunks::<C>(&sk, &cipher, m, chunk_size);
             assert_eq!(
                 scalar, retrieved_scalar,
                 "Encrypted and retrieved scalars differ."

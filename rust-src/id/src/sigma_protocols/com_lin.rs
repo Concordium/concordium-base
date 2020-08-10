@@ -286,7 +286,7 @@ mod tests {
         let rng = &mut thread_rng();
         let g = G1::generate(rng);
         let h = G1::generate(rng);
-        let cmm_key = CommitmentKey(g, h);
+        let cmm_key = CommitmentKey { g, h };
 
         trait ToChunks {
             type Integer: Sized + Clone;

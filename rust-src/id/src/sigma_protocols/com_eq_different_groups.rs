@@ -104,8 +104,8 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
         let y = self.commitment_1;
         let cC = self.commitment_2;
 
-        let CommitmentKey{g: cG1, h: cG2} = self.cmm_key_1;
-        let CommitmentKey{g, h} = self.cmm_key_2;
+        let CommitmentKey { g: cG1, h: cG2 } = self.cmm_key_1;
+        let CommitmentKey { g, h } = self.cmm_key_2;
 
         let (s_1, s_2, t) = witness.witness;
 

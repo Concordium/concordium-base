@@ -1383,9 +1383,7 @@ impl<C: Curve> GlobalContext<C> {
 
     /// The generator for encryption in the exponent is the second component of
     /// the commitment key, the 'h'.
-    pub fn encryption_in_exponent_generator(&self) -> &C {
-        &self.on_chain_commitment_key.h
-    }
+    pub fn encryption_in_exponent_generator(&self) -> &C { &self.on_chain_commitment_key.h }
 }
 
 /// Make a context in which the account holder can produce a pre-identity object

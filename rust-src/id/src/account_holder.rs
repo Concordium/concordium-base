@@ -54,7 +54,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     // Commit and prove knowledge of id_cred_sec
     let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-    let sc_ck = PedersenKey{
+    let sc_ck = PedersenKey {
         g: context.ip_info.ip_verify_key.ys[0],
         h: context.ip_info.ip_verify_key.g,
     };
@@ -93,7 +93,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     // Commit to the PRF key for the IP and prove equality for the secret-shared PRF
     // key
-    let commitment_key_prf = PedersenKey{
+    let commitment_key_prf = PedersenKey {
         g: context.ip_info.ip_verify_key.ys[1],
         h: context.ip_info.ip_verify_key.g,
     };
