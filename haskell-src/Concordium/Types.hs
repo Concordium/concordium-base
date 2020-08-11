@@ -374,7 +374,7 @@ genesisSlot = 0
 type EpochLength = Slot
 
 newtype BlockHeight = BlockHeight {theBlockHeight :: Word64}
-  deriving (Eq, Ord, Num, Real, Enum, Integral, Show, Hashable, FromJSON, ToJSON, PersistField) via Word64
+  deriving (Eq, Ord, Num, Real, Enum, Integral, Read, Show, Hashable, FromJSON, ToJSON, PersistField) via Word64
 
 instance PersistFieldSql BlockHeight where
   sqlType _ = SqlInt64
