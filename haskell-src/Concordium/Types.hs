@@ -55,6 +55,8 @@ data Hashed a = Hashed {_unhashed :: a, _hashed :: Hash.Hash}
 instance HashableTo Hash.Hash (Hashed a) where
     getHash = _hashed
 
+-- |This lens allows for getting and setting the value inside a Hashed structure.
+-- If a value is updated the new hash is recomputed automatically.
 unhashed :: (HashableTo Hash.Hash a) => Lens' (Hashed a) a
 unhashed f h = makeHashed <$> f (_unhashed h)
 
@@ -64,11 +66,11 @@ makeHashed v = Hashed v (getHash v)
 instance Eq (Hashed a) where
     a == b = _hashed a == _hashed b
 
-instance Ord (Hashed a) where
-    compare a b = compare (_hashed a) (_hashed b)
+instance Ord a => Ord (Hashed a) where
+    compare a b = compare (_unhashed a) (_unhashed b)
 
 instance (Show a) => Show (Hashed a) where
-    show = show . _unhashed
+    show = show . _hashed
 
 -- * Types releated to bakers.
 newtype BakerId = BakerId Word64
