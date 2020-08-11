@@ -31,7 +31,8 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
     type SecretData = (Rc<C::Scalar>, Vec<Vec<Rc<C::Scalar>>>);
 
     fn public(&self, ro: RandomOracle) -> RandomOracle {
-        let ro1 = self.aggregate_dlogs
+        let ro1 = self
+            .aggregate_dlogs
             .iter()
             .fold(ro, |running_ro, p| p.public(running_ro));
         self.dlog.public(ro1)
@@ -51,7 +52,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
         let mut point_vec = Vec::with_capacity(self.aggregate_dlogs.len());
         for aggregate_dlog in &self.aggregate_dlogs {
             let n = aggregate_dlog.coeff.len();
-    
+
             let mut rands = Vec::with_capacity(n);
             let mut point = C::zero_point();
             let mut first = true;
@@ -64,10 +65,10 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
                 }
                 // FIXME: Multiexponentiation would be useful in this case.
                 point = point.plus_point(&g.mul_by_scalar(&rand));
-                
+
                 if !first {
                     rands.push(rand); // Maybe not do this one for the first
-                } 
+                }
                 first = false;
             }
             rands_vec.push(rands);
@@ -102,7 +103,10 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
             }
             witnesses.push(witness);
         }
-        Some(Witness{witnesses, witness_common})
+        Some(Witness {
+            witnesses,
+            witness_common,
+        })
         // None
     }
 
@@ -114,13 +118,14 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
         // let p1 = self.dlog1.extract_point(&challenge, &witness)?;
         // let p2 = self.dlog2.extract_point(&challenge, &witness)?;
         // Some((p1, p2))
-        let dlog_point = self.dlog
-        .coeff
-        .mul_by_scalar(&witness.witness_common)
-        .plus_point(&self.dlog.public.mul_by_scalar(challenge));
+        let dlog_point = self
+            .dlog
+            .coeff
+            .mul_by_scalar(&witness.witness_common)
+            .plus_point(&self.dlog.public.mul_by_scalar(challenge));
         let mut agg_points = vec![];
         for (aggregate_dlog, w) in izip!(&self.aggregate_dlogs, &witness.witnesses) {
-            if w.len()+1 != aggregate_dlog.coeff.len() {
+            if w.len() + 1 != aggregate_dlog.coeff.len() {
                 return None;
             }
             let mut point = aggregate_dlog.public.mul_by_scalar(challenge);
@@ -129,9 +134,9 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
             let product = multiexp(&aggregate_dlog.coeff, &exps);
             point = point.plus_point(&product);
             agg_points.push(point);
-            // for (ref w, ref g) in izip!(witness.witness.iter(), self.coeff.iter()) {
-            //     point = point.plus_point(&g.mul_by_scalar(w));
-            // }
+            // for (ref w, ref g) in izip!(witness.witness.iter(),
+            // self.coeff.iter()) {     point =
+            // point.plus_point(&g.mul_by_scalar(w)); }
         }
         let res = Some((dlog_point, agg_points));
         res
