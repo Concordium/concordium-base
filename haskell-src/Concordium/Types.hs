@@ -29,6 +29,8 @@ import Data.Hashable(Hashable)
 import Data.Word
 import Data.ByteString.Char8(ByteString)
 import qualified Data.ByteString.Short as BSS
+import qualified Data.ByteString.Lazy.Char8 as BSL
+import Data.ByteString.Builder(toLazyByteString, byteStringHex)
 import Data.Bits
 import Data.Ratio
 import Data.Char(digitToInt,isDigit)
@@ -326,6 +328,12 @@ instance S.Serialize Nonce where
 
 minNonce :: Nonce
 minNonce = 1
+
+newtype EncryptedAmount = EncryptedAmount ByteString
+    deriving(Eq, S.Serialize)
+
+instance Show EncryptedAmount where
+  show (EncryptedAmount amnt) = BSL.unpack . toLazyByteString . byteStringHex $ amnt
 
 -- |Size of the transaction payload.
 newtype PayloadSize = PayloadSize Word32
