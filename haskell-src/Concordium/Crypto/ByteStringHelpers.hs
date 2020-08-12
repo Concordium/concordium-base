@@ -163,7 +163,7 @@ serializeBase16 = Text.decodeUtf8 . BS16.encode . encode
 serializeBase16WithLength4 :: (Serialize a) => a -> Text.Text
 serializeBase16WithLength4 = Text.decodeUtf8 . BS16.encode . BS.drop 4 . encode
 
--- |Newtype wrapper for deriving JSON instances off of binary serialization.
+-- |Newtype wrapper for deriving JSON and Show instances off of binary serialization.
 newtype Base16JSONSerialize a = Base16JSONSerialize a
 
 instance Serialize a => AE.ToJSON (Base16JSONSerialize a) where
@@ -171,3 +171,6 @@ instance Serialize a => AE.ToJSON (Base16JSONSerialize a) where
 
 instance Serialize a => AE.FromJSON (Base16JSONSerialize a) where
   parseJSON = fmap Base16JSONSerialize . AE.withText "Base16JSONSerialize" deserializeBase16
+
+instance Serialize a => Show (Base16JSONSerialize a) where
+  show (Base16JSONSerialize x) = Text.unpack $ serializeBase16 x
