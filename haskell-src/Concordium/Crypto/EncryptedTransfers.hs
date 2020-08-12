@@ -28,7 +28,8 @@ data EncryptedAmount = EncryptedAmount{
   -- | Encryption of the high-chunk (lowest 32 bits).
   encryptionLow :: ElgamalCipher
   }
-  deriving (FromJSON, ToJSON) via Base16JSONSerialize EncryptedAmount
+  deriving (Show, FromJSON, ToJSON) via Base16JSONSerialize EncryptedAmount
+  deriving(Eq)
 
 instance Serialize EncryptedAmount where
   put EncryptedAmount{..} = put encryptionHi <> put encryptionLow
