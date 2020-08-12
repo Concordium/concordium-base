@@ -2,7 +2,8 @@
 module Concordium.Crypto.FFIDataTypes
   (PedersenKey, PsSigKey, ElgamalGen, ElgamalPublicKey, ElgamalCipher,
   generatePedersenKey, generatePsSigKey, generateElgamalGen, generateElgamalPublicKey, generateElgamalCipher,
-  withPedersenKey, withPsSigKey, withElgamalGen, withElgamalPublicKey)
+  withPedersenKey, withPsSigKey, withElgamalGen, withElgamalPublicKey,
+  unsafeMakeCipher)
   where
 
 import Concordium.Crypto.ByteStringHelpers
@@ -21,6 +22,7 @@ import Control.DeepSeq
 
 newtype PedersenKey = PedersenKey (ForeignPtr PedersenKey)
 newtype PsSigKey = PsSigKey (ForeignPtr PsSigKey)
+-- FIXME: This does not seem to be used.
 newtype ElgamalGen = ElgamalGen (ForeignPtr ElgamalGen)
 newtype ElgamalPublicKey = ElgamalPublicKey (ForeignPtr ElgamalPublicKey)
 newtype ElgamalCipher = ElgamalCipher (ForeignPtr ElgamalCipher)
@@ -226,4 +228,12 @@ instance AE.FromJSON ElgamalCipher where
 generateElgamalCipher :: IO ElgamalCipher
 generateElgamalCipher = do
   ptr <- generateElgamalCipherPtr
-  ElgamalCipher <$> newForeignPtr freeElgamalCipher ptr
+  unsafeMakeCipher ptr
+
+-- |Construct an Elgamal cipher from a pointer to it.
+-- This is unsafe in two different ways
+--
+-- - if the pointer is Null or does not point to an `ElgamalCipher` structure the behaviour is undefined.
+-- - if this function is called twice on the same value it will lead to a double free.
+unsafeMakeCipher :: Ptr ElgamalCipher -> IO ElgamalCipher
+unsafeMakeCipher ptr = ElgamalCipher <$> newForeignPtr freeElgamalCipher ptr
