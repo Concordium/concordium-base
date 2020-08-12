@@ -3,7 +3,7 @@
 #[macro_use]
 extern crate crypto_common_derive;
 
-mod ffi;
+pub mod ffi;
 
 use crypto_common::*;
 use curve_arithmetic::*;
@@ -12,7 +12,8 @@ use id::types::*;
 use rand::*;
 
 #[derive(Clone, Serialize, SerdeBase16Serialize)]
-/// An encrypted amount, in two chunks.
+/// An encrypted amount, in two chunks. The JSON serialization of this is just
+/// base16 encoded serialized chunks.
 pub struct EncryptedAmount<C: Curve> {
     /// Encryption of the high-chunk (highest 32 bits).
     pub encryption_hi: Cipher<C>,

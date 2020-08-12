@@ -57,6 +57,7 @@ fbsGet = FBS.fromShortByteString <$> getShortByteString (FBS.fixedLength (undefi
 -- |Wrapper used to automatically derive Show instances in base16 for types
 -- simply wrapping bytestrings.
 newtype ByteStringHex = ByteStringHex ShortByteString
+  deriving(Eq)
 
 instance Show ByteStringHex where
   show (ByteStringHex s) = byteStringToHex (BSS.fromShort s)
@@ -161,3 +162,12 @@ serializeBase16 = Text.decodeUtf8 . BS16.encode . encode
 -- The length is 4 bytes and is cut off by this function.
 serializeBase16WithLength4 :: (Serialize a) => a -> Text.Text
 serializeBase16WithLength4 = Text.decodeUtf8 . BS16.encode . BS.drop 4 . encode
+
+-- |Newtype wrapper for deriving JSON instances off of binary serialization.
+newtype Base16JSONSerialize a = Base16JSONSerialize a
+
+instance Serialize a => AE.ToJSON (Base16JSONSerialize a) where
+  toJSON (Base16JSONSerialize a) = AE.String (serializeBase16 a)
+
+instance Serialize a => AE.FromJSON (Base16JSONSerialize a) where
+  parseJSON = fmap Base16JSONSerialize . AE.withText "Base16JSONSerialize" deserializeBase16
