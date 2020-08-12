@@ -207,6 +207,8 @@ genPayload = oneof [genDeployModule,
           let rakIndices = Set.fromList indices
           return RemoveAccountKeys{..}
 
+-- FIXME: Add new transaction types after proofs are settled.
+
 groupIntoSize :: Int64 -> [Char]
 groupIntoSize s =
   let kb = s `div` 1000

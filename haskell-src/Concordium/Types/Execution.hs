@@ -36,6 +36,7 @@ import Concordium.Types.Execution.TH
 import Concordium.ID.Types
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs
+import Concordium.Crypto.EncryptedTransfers
 
 -- |We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
@@ -175,7 +176,7 @@ data Payload =
       -- |The new election difficulty. Must be in the range [0,1).
       uedDifficulty :: !ElectionDifficulty
       }
-  -- |Update the aggregation verification key of the baker
+  -- | Update the aggregation verification key of the baker
   | UpdateBakerAggregationVerifyKey {
       -- |Id of the baker to update
       ubavkId :: !BakerId,
@@ -184,6 +185,7 @@ data Payload =
       -- |Proof of knowledge of the signing key corresponding to the new verification key
       ubavkProof :: !BakerAggregationProof
       }
+  -- | Update the election key of the baker
   | UpdateBakerElectionKey {
       -- |Id of the baker to update
       ubekId :: !BakerId,
@@ -192,25 +194,56 @@ data Payload =
       -- |Proof of knowledge of the secret key corresponding to the new election key
       ubekProof :: !Dlog25519Proof
       }
-  -- Updates existing keys used for signing transactions for the sender's account
+  -- | Updates existing keys used for signing transactions for the sender's account
   | UpdateAccountKeys {
       -- |Update the account keys with to the ones in this map.
       uakKeys :: !(Map.Map KeyIndex AccountVerificationKey)
     }
-  -- Adds additional keys to the sender's account, optionally updating the signature threshold too
+  -- | Adds additional keys to the sender's account, optionally updating the signature threshold too
   | AddAccountKeys {
       -- |Map of key indices and the associated key to add
       aakKeys :: !(Map.Map KeyIndex AccountVerificationKey),
       -- |Optional value for updating the threshold of the signature scheme
       aakThreshold :: !(Maybe SignatureThreshold)
     }
-  -- Remove keys from the sender's account, optionally updating the signature threshold too
+  -- | Remove keys from the sender's account, optionally updating the signature threshold too
   | RemoveAccountKeys {
       -- |List of indices of keys to remove
       rakIndices :: !(Set.Set KeyIndex),
       -- |Optional value for updating the threshold of the signature scheme
       rakThreshold :: !(Maybe SignatureThreshold)
     }
+  -- | Send an encrypted amount to an account.
+  | EncryptedAmountTransfer {
+      -- | Receiver account address.
+      eatTo :: !AccountAddress,
+      -- | Encryption of the remaining amount on the account.
+      eatRemainingAmount :: !EncryptedAmount,
+      -- | Encrypted amount to send.
+      eatTransferAmount :: !EncryptedAmount,
+      -- | Index indicating which amounts were used in the transfer.
+      eatIndex :: !EncryptedAmountAggIndex,
+      -- | Proof of well-formedness of the transaction.
+      eatProof :: !EncryptedAmountTransferProof
+  }
+  -- | Transfer some amount from public to encrypted balance.
+  | TransferToEncrypted {
+      -- | The plaintext that will be deducted from the public balance.
+      tteAmount :: !Amount,
+      -- | Encryption of the amount to transfer
+      tteTransferAmount :: !EncryptedAmount,
+      -- | Proof that the encrypted amount corresponds to the stated amount.
+      tteProof :: !EncryptAmountProof
+      }
+  -- | Decrypt a portion of the encrypted balance.
+  | TransferToPublic {
+      -- | Encryption of the remaining amount on the account.
+      ttpRemainingAmount :: !EncryptedAmount,
+      -- | The amount to transfer to public balance.
+      ttpAmount :: !Amount,
+      -- | The index indicating which encrypted amounts were used.
+      ttpIndex :: EncryptedAmountAggIndex
+      }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -295,6 +328,23 @@ instance S.Serialize Payload where
     P.putWord8 (fromIntegral (length rakIndices))
     forM_ (Set.toAscList rakIndices) S.put
     putMaybe rakThreshold
+  put EncryptedAmountTransfer{..} =
+    S.putWord8 16 <>
+    S.put eatTo <>
+    S.put eatRemainingAmount <>
+    S.put eatTransferAmount <>
+    S.put eatIndex <>
+    S.put eatProof
+  put TransferToEncrypted{..} =
+    S.putWord8 17 <>
+    S.put tteAmount <>
+    S.put tteTransferAmount <>
+    S.put tteProof
+  put TransferToPublic{..} =
+    S.putWord8 18 <>
+    S.put ttpRemainingAmount <>
+    S.put ttpAmount <>
+    S.put ttpIndex
 
   get =
     G.getWord8 >>=
@@ -371,7 +421,23 @@ instance S.Serialize Payload where
               rakIndices <- safeSetFromAscList =<< replicateM (fromIntegral len) S.get
               rakThreshold <- getMaybe
               return RemoveAccountKeys{..}
-
+            16 -> do
+              eatTo <- S.get
+              eatRemainingAmount <- S.get
+              eatTransferAmount <- S.get
+              eatIndex <- S.get
+              eatProof <- S.get
+              return EncryptedAmountTransfer{..}
+            17 -> do
+              tteAmount <- S.get
+              tteTransferAmount <- S.get
+              tteProof <- S.get
+              return TransferToEncrypted{..}
+            18 -> do
+              ttpRemainingAmount <- S.get
+              ttpAmount <- S.get
+              ttpIndex <- S.get
+              return TransferToPublic{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 -- |Serialize a Maybe value
