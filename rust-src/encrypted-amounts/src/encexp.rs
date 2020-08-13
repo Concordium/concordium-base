@@ -389,10 +389,16 @@ mod test {
             "22435875175126190479447740508185965837690552500527637822603658699938581184400",
         )
         .unwrap();
+        // let a = Fr::from_str(
+        //     // Amount to send
+        //     "5",
+        // )
+        // .unwrap();
         let mut s_prime = s;
         s_prime.sub_assign(&a);
         let s_prime_chunks = value_to_chunks::<G1>(&s_prime, 4);
         let a_chunks = value_to_chunks::<G1>(&a, 4);
+        println!("a = {:?}\n\n a_chunks = {:?}", a, a_chunks);
         // let s_chunks = value_to_chunks::<G1>(&a, 4);
 
         // let m = xs.len();
@@ -447,7 +453,7 @@ mod test {
             .iter()
             .map(|x| Value::new(*(x.as_ref())))
             .collect();
-        let s_prime_chunks_as_rand: Vec<PedersenRandomness<_>> = a_chunks
+        let s_prime_chunks_as_rand: Vec<PedersenRandomness<_>> = s_prime_chunks
             .iter()
             .map(|x| PedersenRandomness::new(*(x.as_ref())))
             .collect();
