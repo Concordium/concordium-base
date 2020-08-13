@@ -14,13 +14,13 @@ import Concordium.Crypto.ByteStringHelpers
 -- | Aggregate two encrypted amounts together.
 foreign import ccall unsafe "aggregate_encrypted_amounts"
   aggregate_encrypted_amounts ::
-     Ptr ElgamalCipher -> -- ^ High chunk of the first amount.
-     Ptr ElgamalCipher -> -- ^ Low chunk of the first amount.
-     Ptr ElgamalCipher -> -- ^ High chunk of the second amount.
-     Ptr ElgamalCipher -> -- ^ Low chunk of the second amount.
-     Ptr (Ptr ElgamalCipher) -> -- ^Place to write the pointer to the high chunk of the result.
-     Ptr (Ptr ElgamalCipher) -> -- ^Place to write the pointer to the low chunk of the result.
-     IO ()
+     Ptr ElgamalCipher -- ^ High chunk of the first amount.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the first amount.
+     -> Ptr ElgamalCipher -- ^ High chunk of the second amount.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the second amount.
+     -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the high chunk of the result.
+     -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the low chunk of the result.
+     -> IO ()
 
 data EncryptedAmount = EncryptedAmount{
   -- | Encryption of the high-chunk (highest 32 bits).
@@ -45,6 +45,21 @@ newtype EncryptedAmountAggIndex = EncryptedAmountAggIndex Word64
 instance Serialize EncryptedAmountAggIndex where
   put (EncryptedAmountAggIndex i) = putWord64be i
   get = EncryptedAmountAggIndex <$> getWord64be
+
+-- |An individual index of an encrypted amount. This is used when assigning
+-- indices for encrypted amounts added to an account.
+newtype EncryptedAmountIndex = EncryptedAmountIndex Word64
+    deriving newtype (Eq, Show, Ord, FromJSON, ToJSON, Num, Integral, Real, Enum)
+
+instance Serialize EncryptedAmountIndex where
+  put (EncryptedAmountIndex i) = putWord64be i
+  get = EncryptedAmountIndex <$> getWord64be
+
+-- |Add an offset to an encrypted amount aggregation index to obtain a new encrypted amount index.
+-- It is assume that this will not overflow. The function is still safe in case of overflow,
+-- but it will wrap around.
+addToAggIndex :: EncryptedAmountAggIndex -> Word -> EncryptedAmountIndex
+addToAggIndex (EncryptedAmountAggIndex aggIdx) len = EncryptedAmountIndex (aggIdx + fromIntegral len)
 
 -- FIXME: Serialization here is probably wrong, and needs to be fixed once the proof
 -- is known.
