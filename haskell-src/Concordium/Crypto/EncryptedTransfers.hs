@@ -10,6 +10,7 @@ import Foreign.Ptr
 
 import Concordium.Crypto.FFIDataTypes
 import Concordium.Crypto.ByteStringHelpers
+import Concordium.ID.Parameters
 
 -- | Aggregate two encrypted amounts together.
 foreign import ccall unsafe "aggregate_encrypted_amounts"
@@ -39,7 +40,7 @@ instance Serialize EncryptedAmount where
     return EncryptedAmount{..}
 
 -- |An indexed used to determine which encryped amounts were used in a transaction.
-newtype EncryptedAmountAggIndex = EncryptedAmountAggIndex Word64
+newtype EncryptedAmountAggIndex = EncryptedAmountAggIndex {theAggIndex :: Word64}
     deriving newtype (Eq, Show, Ord, FromJSON, ToJSON, Num, Integral, Real, Enum)
 
 instance Serialize EncryptedAmountAggIndex where
@@ -48,7 +49,7 @@ instance Serialize EncryptedAmountAggIndex where
 
 -- |An individual index of an encrypted amount. This is used when assigning
 -- indices for encrypted amounts added to an account.
-newtype EncryptedAmountIndex = EncryptedAmountIndex Word64
+newtype EncryptedAmountIndex = EncryptedAmountIndex {theIndex :: Word64}
     deriving newtype (Eq, Show, Ord, FromJSON, ToJSON, Num, Integral, Real, Enum)
 
 instance Serialize EncryptedAmountIndex where
@@ -78,3 +79,19 @@ newtype EncryptAmountProof = EncryptAmountProof ShortByteString
 newtype DecryptAmountProof = DecryptAmountProof ShortByteString
     deriving(Eq, Show, FromJSON, ToJSON) via ByteStringHex
     deriving Serialize via Short65K
+
+-- * Functions for verifying proofs, used from the scheduler.
+
+verifyEncryptedTransferProof ::
+  -- |Global context with parameters
+  GlobalContext ->
+  -- |Aggregated encrypted amount on the sender's account that was used.
+  EncryptedAmount ->
+  -- |Remaining amount on the sender's account after the transfer.
+  EncryptedAmount ->
+  -- |Amount to transfer
+  EncryptedAmount ->
+  -- |Proof of validity of the transfer.
+  EncryptedAmountTransferProof ->
+  Bool
+verifyEncryptedTransferProof = undefined
