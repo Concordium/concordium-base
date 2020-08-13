@@ -179,7 +179,7 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
     };
     // elg_dec_protocols.push(elg_dec);
     // }
-    let sigma_2 = vec![elg_dec]; //_protocols;
+    let sigma_2 = elg_dec; //_protocols;
     let cmm_key = CommitmentKey(pk_sender.generator, *h);
     let sigma_3_protocols = gen_enc_exp_info(&cmm_key, pk_receiver, A);
     let sigma_4_protocols = gen_enc_exp_info(&cmm_key, pk_sender, S_prime);
@@ -197,10 +197,10 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
     //     second: sigma_3_4
     // };
     EncTrans {
-        dlog:            sigma_1,
-        aggregate_dlogs: sigma_2,
-        encexp1:         sigma_3_protocols,
-        encexp2:         sigma_4_protocols,
+        dlog:    sigma_1,
+        elg_dec: sigma_2,
+        encexp1: sigma_3_protocols,
+        encexp2: sigma_4_protocols,
     }
 
     // sigma
