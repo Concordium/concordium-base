@@ -63,6 +63,20 @@ pub struct EncTransState<C: Curve> {
     encexp2: Vec<(Value<C>, Randomness<C>)>,
 }
 
+fn linear_combination_with_powers_of_two<C: Curve>(scalars: &[C::Scalar]) -> C::Scalar{
+    let two_32 = C::scalar_from_u64(1 << 32);
+    let mut power_of_two = C::Scalar::one();
+    let mut sum = C::Scalar::zero();
+    for i in 0..scalars.len(){
+        let i = scalars.len()-i-1;
+        let mut term = scalars[i];
+        term.mul_assign(&power_of_two);
+        sum.add_assign(&term);
+        power_of_two.mul_assign(&two_32);
+    }
+    sum
+}
+
 impl<C: Curve> SigmaProtocol for EncTrans<C> {
     type CommitMessage = EncTransCommit<C>;
     type ProtocolChallenge = C::Scalar;
@@ -86,39 +100,13 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
-        let rand_scalar_common = C::generate_non_zero_scalar(csprng);
-        let commit_dlog = self.dlog.coeff.mul_by_scalar(&rand_scalar_common);
-        let mut rands_vec = Vec::with_capacity(self.aggregate_dlogs.len());
-        let mut point_vec = Vec::with_capacity(self.aggregate_dlogs.len());
-        for aggregate_dlog in &self.aggregate_dlogs {
-            let n = aggregate_dlog.coeff.len();
-
-            let mut rands = Vec::with_capacity(n);
-            let mut point = C::zero_point();
-            let mut first = true;
-            for g in aggregate_dlog.coeff.iter() {
-                let rand;
-                if first {
-                    rand = rand_scalar_common;
-                } else {
-                    rand = C::generate_non_zero_scalar(csprng);
-                }
-                // FIXME: Multiexponentiation would be useful in this case.
-                point = point.plus_point(&g.mul_by_scalar(&rand));
-
-                if !first {
-                    rands.push(rand); // Maybe not do this one for the first
-                }
-                first = false;
-            }
-            rands_vec.push(rands);
-            point_vec.push(point);
-        }
         // For enc_exps:
         let mut commit_encexp_1 = vec![];
         let mut rands_encexp_1 = vec![];
         let mut commit_encexp_2 = vec![];
         let mut rands_encexp_2 = vec![];
+        let mut Rs_a = vec![];
+        let mut Rs_s_prime = vec![];
         for comeq in &self.encexp1 {
             let mut u = C::zero_point();
 
@@ -126,7 +114,8 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             let (v, R_i) = comeq.cmm_key.commit(&alpha, csprng);
             u = u.plus_point(&comeq.g.mul_by_scalar(&alpha));
             commit_encexp_1.push(CommittedPoints { u, v });
-            rands_encexp_1.push((alpha, R_i));
+            rands_encexp_1.push((alpha, R_i.clone()));
+            Rs_a.push(*R_i);
         }
         for comeq in &self.encexp2 {
             let mut u = C::zero_point();
@@ -135,7 +124,43 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             let (v, R_i) = comeq.cmm_key.commit(&alpha, csprng);
             u = u.plus_point(&comeq.g.mul_by_scalar(&alpha));
             commit_encexp_2.push(CommittedPoints { u, v });
-            rands_encexp_2.push((alpha, R_i));
+            rands_encexp_2.push((alpha, R_i.clone()));
+            Rs_s_prime.push(*R_i);
+        }
+        // For dlog and elcdec:
+        let rand_scalar_common = C::generate_non_zero_scalar(csprng);
+        let commit_dlog = self.dlog.coeff.mul_by_scalar(&rand_scalar_common);
+        let mut rands_vec = Vec::with_capacity(self.aggregate_dlogs.len());
+        let mut point_vec = Vec::with_capacity(self.aggregate_dlogs.len());
+        let rand_lin_a = linear_combination_with_powers_of_two::<C>(&Rs_a);
+        let rand_lin_s_prime = linear_combination_with_powers_of_two::<C>(&Rs_s_prime);
+        let mut rand_lin = rand_lin_a;
+        rand_lin.add_assign(&rand_lin_s_prime);
+        for aggregate_dlog in &self.aggregate_dlogs { // Contains only one element
+            let n = aggregate_dlog.coeff.len();
+
+            let mut rands = Vec::with_capacity(n);
+            let mut point = C::zero_point();
+            let mut first = true;
+            for g in aggregate_dlog.coeff.iter() { // Contains e1 and h
+                let rand;
+                if first {
+                    rand = rand_scalar_common;
+                } else {
+                    // This should instead be a linear combination of the other rands
+                    // rand = C::generate_non_zero_scalar(csprng);
+                    rand = rand_lin;
+                }
+                // FIXME: Multiexponentiation would be useful in this case.
+                point = point.plus_point(&g.mul_by_scalar(&rand));
+
+                if !first {
+                    rands.push(rand);
+                }
+                first = false;
+            }
+            rands_vec.push(rands);
+            point_vec.push(point);
         }
 
         // let commit = (commit_dlog, point_vec, commit_encexp_1, commit_encexp_2);
@@ -143,7 +168,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             dlog:      commit_dlog,
             agg_dlogs: point_vec,
             encexp1:   commit_encexp_1,
-            encexp2:   vec![], // commit_encexp_2,
+            encexp2:   commit_encexp_2,
         };
         // let rand = (rand_scalar_common, rands_vec, rands_encexp_1, rands_encexp_2);
         let rand = EncTransState {
@@ -170,10 +195,14 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         for (secret_vec, state_vec) in izip!(secret.agg_dlog_secret, state.agg_dlogs) {
             let mut witness = vec![];
             for (ref s, ref r) in izip!(secret_vec, state_vec) {
+                // The first element in secret_vec for the first secret_vec in the outer 
+                // loop is s (the value inside S) 
+                
                 let mut wit = *challenge;
-                wit.mul_assign(s);
+                wit.mul_assign(s); // This s is actually s
                 wit.negate();
-                wit.add_assign(r);
+                wit.add_assign(r); // And this r should be a linear combination of the below
+                // R's when used in commit_point
                 witness.push(wit);
             }
             witnesses.push(witness);
@@ -182,7 +211,9 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         let mut witness_encexp1 = vec![];
         let mut witness_encexp2 = vec![];
         for i in 0..secret.r_a.len() {
-            let (ref alpha, ref R) = state.encexp1[i];
+            // The R is the randomness
+            // that is used together with the secret a_j's 
+            let (ref alpha, ref R) = state.encexp1[i]; 
             // compute alpha_i - a_i * c
             let mut s = *challenge;
             s.mul_assign(&secret.a[i]);
@@ -190,12 +221,14 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             s.add_assign(alpha);
             // compute R_i - r_i * c
             let mut t: C::Scalar = *challenge;
-            t.mul_assign(&secret.r_a[i]);
+            t.mul_assign(&secret.r_a[i]); // secret a_j's used here
             t.negate();
-            t.add_assign(R);
+            t.add_assign(R); // R used here
             witness_encexp1.push((s, t));
+            // It means that the randomness used for s should be the corresponding
+            // linear combination of the R's
         }
-        for i in 0..secret.r_a.len() {
+        for i in 0..secret.r_s.len() {
             let (ref alpha, ref R) = state.encexp2[i];
             // compute alpha_i - a_i * c
             let mut s = *challenge;
@@ -204,7 +237,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             s.add_assign(alpha);
             // compute R_i - r_i * c
             let mut t: C::Scalar = *challenge;
-            t.mul_assign(&secret.r_s[i]);
+            t.mul_assign(&secret.r_s[i]); // secret s'_j's used here
             t.negate();
             t.add_assign(R);
             witness_encexp2.push((s, t));
@@ -224,32 +257,11 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         challenge: &Self::ProtocolChallenge,
         witness: &Self::ProverWitness,
     ) -> Option<Self::CommitMessage> {
-        // let p1 = self.dlog1.extract_point(&challenge, &witness)?;
-        // let p2 = self.dlog2.extract_point(&challenge, &witness)?;
-        // Some((p1, p2))
-        let dlog_point = self
-            .dlog
-            .coeff
-            .mul_by_scalar(&witness.witness_common)
-            .plus_point(&self.dlog.public.mul_by_scalar(challenge));
-        let mut agg_points = vec![];
-        for (aggregate_dlog, w) in izip!(&self.aggregate_dlogs, &witness.witnesses) {
-            if w.len() + 1 != aggregate_dlog.coeff.len() {
-                return None;
-            }
-            let mut point = aggregate_dlog.public.mul_by_scalar(challenge);
-            let mut exps = vec![witness.witness_common];
-            exps.extend_from_slice(&w);
-            let product = multiexp(&aggregate_dlog.coeff, &exps);
-            point = point.plus_point(&product);
-            agg_points.push(point);
-            // for (ref w, ref g) in izip!(witness.witness.iter(),
-            // self.coeff.iter()) {     point =
-            // point.plus_point(&g.mul_by_scalar(w)); }
-        }
         // For enc_exps:
         let mut commit_encexp1 = vec![];
         let mut commit_encexp2 = vec![];
+        let mut w_a_vec = vec![];
+        let mut w_s_prime_vec = vec![];
         for (comeq, witness) in izip!(&self.encexp1, &witness.witness_encexp1) {
             let u = multiexp(&[comeq.y, comeq.g], &[*challenge, witness.0]);
 
@@ -261,6 +273,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
                 u,
                 v: Commitment(v),
             });
+            w_a_vec.push(witness.1);
         }
         for (comeq, witness) in izip!(&self.encexp2, &witness.witness_encexp2) {
             let u = multiexp(&[comeq.y, comeq.g], &[*challenge, witness.0]);
@@ -273,6 +286,38 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
                 u,
                 v: Commitment(v),
             });
+            w_s_prime_vec.push(witness.1);
+        }
+
+        // For dlog and elcdec:
+        let w_lin_a = linear_combination_with_powers_of_two::<C>(&w_a_vec);
+        let w_lin_s_prime = linear_combination_with_powers_of_two::<C>(&w_s_prime_vec);
+        let mut w_lin = w_lin_a;
+        w_lin.add_assign(&w_lin_s_prime);
+        println!("w_lin = {:?}", w_lin);
+        let dlog_point = self
+            .dlog
+            .coeff
+            .mul_by_scalar(&witness.witness_common)
+            .plus_point(&self.dlog.public.mul_by_scalar(challenge));
+        let mut agg_points = vec![];
+        for (aggregate_dlog, w) in izip!(&self.aggregate_dlogs, &witness.witnesses) {
+            // println!("loop iteration");
+            if w.len() + 1 != aggregate_dlog.coeff.len() {
+                return None;
+            }
+            let mut point = aggregate_dlog.public.mul_by_scalar(challenge);
+            let mut exps = vec![witness.witness_common];
+            // Instead of w we should actually use the linear combination of
+            // the other witnesses
+            println!("w used before = {:?}", w);
+            exps.extend_from_slice(&w);
+            let product = multiexp(&aggregate_dlog.coeff, &exps);
+            point = point.plus_point(&product);
+            agg_points.push(point);
+            // for (ref w, ref g) in izip!(witness.witness.iter(),
+            // self.coeff.iter()) {     point =
+            // point.plus_point(&g.mul_by_scalar(w)); }
         }
 
         // let res = Some((dlog_point, agg_points));
@@ -280,7 +325,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             dlog:      dlog_point,
             agg_dlogs: agg_points,
             encexp1:   commit_encexp1,
-            encexp2:   vec![], // commit_encexp2,
+            encexp2:   commit_encexp2,
         })
         // None
     }
