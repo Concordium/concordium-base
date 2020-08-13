@@ -625,6 +625,19 @@ data Event =
            | AccountKeysAdded
            | AccountKeysRemoved
            | AccountKeysSignThresholdUpdated
+           -- | New encrypted amount added to an account, with a given index
+           | NewEncryptedAmount{
+               neaAccount :: !AccountAddress,
+               -- | Index of the new amount.
+               neaNewIndex :: !EncryptedAmountIndex,
+               -- | The actual amount.
+               neaEncryptedAmount :: !EncryptedAmount
+           }
+           -- | A number of encrypted amounts were removed from an account, up-to, but not including
+           -- the aggregation index.
+           | EncryptedAmountsRemoved{
+               earUpToIndex :: !EncryptedAmountAggIndex
+            }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -696,6 +709,10 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | KeyIndexAlreadyInUse
                   -- |When the account key threshold is updated, it must not exceed the amount of existing keys
                   | InvalidAccountKeySignThreshold
+                  -- |In encrypted amount transfers, the index claimed to be used is not valid.
+                  | InvalidEncryptedAmountIndex !EncryptedAmountAggIndex
+                  -- |Proof for an encrypted amount transfer did not validate.
+                  | InvalidEncryptedAmountTransferProof
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReason :: Wasm.ContractExecutionFailure -> RejectReason
