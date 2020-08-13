@@ -3,28 +3,12 @@ import Distribution.Simple
 import Distribution.Simple.LocalBuildInfo
 import Distribution.Simple.Setup
 import Distribution.Simple.Utils
+import Distribution.System
 
 import System.Directory
 import System.Environment
 
 import Data.Maybe
-
-updateExtraLibDirs :: LocalBuildInfo -> IO LocalBuildInfo
-updateExtraLibDirs localBuildInfo = do
-    let packageDescription = localPkgDescr localBuildInfo
-        lib = fromJust $ library packageDescription
-        libBuild = libBuildInfo lib
-    dir <- getCurrentDirectory
-    return localBuildInfo {
-        localPkgDescr = packageDescription {
-            library = Just $ lib {
-                libBuildInfo = libBuild {
-                    extraLibDirs = (dir ++ "/rust-src/target/release") :
-                        extraLibDirs libBuild
-                }
-            }
-        }
-    }
 
 -- copyExtLib :: Args -> CopyFlags -> PackageDescription -> LocalBuildInfo -> IO ()
 -- copyExtLib args flags pkg_descr lbi = do
@@ -43,11 +27,34 @@ makeRust args flags = do
     rawSystemExitWithEnv verbosity "cargo"
         ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"]
         (("CARGO_NET_GIT_FETCH_WITH_CLI", "true") : env)
+    let libs = [
+                "ec_vrf_ed25519",
+                "sha_2",
+                "eddsa_ed25519",
+                "ffi_helpers",
+                "id",
+                "aggregate_sig"
+            ]
+    _ <- rawSystemExitCode verbosity "mkdir" ["./lib"]
+    -- On Windows, copy the static libraries and DLLs. (The DLLs should not be used by the
+    -- linker, but seem to be needed sometimes by TemplateHaskell at compile time.)
+    -- On other platforms, copy the shared libraries.
+    case buildOS of
+        Windows -> do
+            let copyLib lib = do
+                rawSystemExit verbosity "cp" ["rust-src/target/release/lib" ++ lib ++ ".a", "./lib/"]
+                rawSystemExit verbosity "cp" ["rust-src/target/release/" ++ lib ++ ".dll", "./lib/"]
+            mapM_ copyLib libs
+        OSX -> do
+            let copyLib lib = rawSystemExit verbosity "cp" ["rust-src/target/release/lib" ++ lib ++ ".dylib", "./lib/"]
+            mapM_ copyLib libs
+        _ -> do
+            let copyLib lib = rawSystemExit verbosity "cp" ["rust-src/target/release/lib" ++ lib ++ ".so", "./lib/"]
+            mapM_ copyLib libs
     return emptyHookedBuildInfo
 
 main = defaultMainWithHooks simpleUserHooks
   {
     preConf = makeRust
-  , confHook = \a f -> confHook simpleUserHooks a f >>= updateExtraLibDirs
   }
 
