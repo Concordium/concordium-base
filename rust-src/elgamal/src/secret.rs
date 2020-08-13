@@ -8,6 +8,7 @@ use crypto_common::*;
 use curve_arithmetic::{Curve, Value};
 
 use ff::Field;
+use std::collections::HashMap;
 
 /// Elgamal secret key packed together with a chosen generator.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -28,6 +29,56 @@ pub struct SecretKey<C: Curve> {
 // }
 // }
 
+pub type BabyStepGiantStepTable = HashMap<Vec<u8>, u64>;
+
+pub struct BabyStepGiantStep<C: Curve> {
+    /// Precomputed table of powers.
+    table: BabyStepGiantStepTable,
+    /// Point base^{-m}
+    inverse_point: C,
+    /// Size of the table.
+    m: u64,
+}
+
+impl<C: Curve> BabyStepGiantStep<C> {
+    /// Generate a new instance, precomputing the table.
+    pub fn new(base: &C, m: u64) -> Self {
+        let mut table = HashMap::with_capacity(m as usize);
+        let mut base_j = C::zero_point();
+        for j in 0..m {
+            table.insert(to_bytes(&base_j), j);
+            base_j = base_j.plus_point(&base);
+        }
+        Self {
+            table,
+            m,
+            inverse_point: base_j.inverse_point(),
+        }
+    }
+
+    /// Compute the discrete log using the instance.
+    /// It is expected that the discrete log is less than m * k.
+    ///
+    /// If not, the method returns None.
+    pub fn discrete_log(&self, k: u64, v: &C) -> Option<u64> {
+        let mut y = *v;
+        for i in 0..k {
+            if let Some(j) = self.table.get(&to_bytes(&y)) {
+                return Some(i * self.m + j);
+            }
+            y = y.plus_point(&self.inverse_point);
+        }
+        None
+    }
+
+    /// Composition of `new` nad `discrete_log` methods for convenience.
+    ///
+    /// Less efficient than reusing the table.
+    pub fn discrete_log_full(base: &C, m: u64, k: u64, v: &C) -> Option<u64> {
+        BabyStepGiantStep::new(base, m).discrete_log(k, v)
+    }
+}
+
 impl<C: Curve> SecretKey<C> {
     pub fn decrypt(&self, c: &Cipher<C>) -> Message<C> {
         let x = c.0; // k * g
@@ -37,7 +88,7 @@ impl<C: Curve> SecretKey<C> {
         Message { value }
     }
 
-    pub fn decrypt_exponent(&self, c: &Cipher<C>) -> Value<C> {
+    pub fn decrypt_exponent_slow(&self, c: &Cipher<C>) -> Value<C> {
         let m = self.decrypt(c).value;
         let mut a = <C::Scalar as Field>::zero();
         let mut i = C::zero_point();
@@ -49,8 +100,21 @@ impl<C: Curve> SecretKey<C> {
         Value::new(a)
     }
 
-    pub fn decrypt_exponent_vec(&self, v: &[Cipher<C>]) -> Vec<Value<C>> {
-        v.iter().map(|y| self.decrypt_exponent(y)).collect()
+    /// Decrypt the value in the exponent. It is assumed the encrypted value can
+    /// be represented in 64 bits, otherwise this function returns `None`.
+    ///
+    /// This function takes an auxiliary instance of BabyStepGiantStep to speed
+    /// up decryption.
+    pub fn decrypt_exponent(
+        &self,
+        c: &Cipher<C>,
+        k: u64,
+        bsgs: &BabyStepGiantStep<C>,
+    ) -> Option<Value<C>> {
+        let dec = self.decrypt(c).value;
+        let a = bsgs.discrete_log(k, &dec)?;
+        let a = C::scalar_from_u64(a);
+        Some(Value::new(a))
     }
 
     /// Generate a `SecretKey` from a `csprng`.
