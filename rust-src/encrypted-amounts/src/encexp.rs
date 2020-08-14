@@ -1,111 +1,23 @@
 #![allow(non_snake_case)]
-use crate::{dlogaggequal::*,enc_trans::Witness as EncTransWitness, enc_trans::*};
-use bulletproofs::range_proof::{prove_given_scalars as bulletprove, Generators, RangeProof};
-use curve_arithmetic::{multiexp, Curve, Value};
-use elgamal::{
-    cipher::{Cipher, Randomness as ElgamalRandomness},
-    public::PublicKey,
+use crate::enc_trans::{Witness as EncTransWitness, *};
+use bulletproofs::range_proof::{
+    prove_given_scalars as bulletprove, verify_efficient, Generators, RangeProof,
+    VerificationError as BulletproofVerificationError,
 };
+use curve_arithmetic::{Curve, Value};
+use elgamal::{cipher::Cipher, public::PublicKey, secret::SecretKey, value_to_chunks};
 use ff::Field;
 use id::sigma_protocols::{
     aggregate_dlog::*,
-    com_eq::{Witness as ComEqWitness, *},
+    com_eq::*,
     common::*,
     dlog::{Witness as DlogWitness, *},
 };
 use merlin::Transcript;
-use pedersen_scheme::{
-    Commitment, CommitmentKey,
-    Randomness as PedersenRandomness,
-    Value as PedersenValue
-
-};
-use random_oracle::*;
-use elgamal::{secret::SecretKey, value_to_chunks};
-use ff::PrimeField;
+use pedersen_scheme::{Commitment, CommitmentKey, Randomness as PedersenRandomness};
 use rand::*;
-use bulletproofs::range_proof::verify_efficient;
+use random_oracle::*;
 use std::rc::Rc;
-
-// For testing
-#[allow(clippy::many_single_char_names)]
-#[allow(dead_code)]
-#[allow(clippy::type_complexity)]
-#[allow(clippy::too_many_arguments)]
-fn enc_exp<C: Curve, R: rand::Rng>(
-    ro: RandomOracle,
-    transcript: &mut Transcript,
-    csprng: &mut R,
-    cmm_key: &CommitmentKey<C>,
-    pk: &PublicKey<C>,
-    cipher_randomness: &[(Cipher<C>, ElgamalRandomness<C>)],
-    value: &[Value<C>],
-    generators: &Generators<C>,
-    s: u8,
-) -> Option<(
-    ReplicateAdapter<ComEq<C, C>>,
-    SigmaProof<ReplicateWitness<ComEqWitness<C>>>,
-    RangeProof<C>,
-)> {
-    let (g, h) = (cmm_key.0, cmm_key.1);
-    let pk_eg = pk.key;
-    // let sigma_proofs = Vec::with_capacity(cipher.len());
-    let mut sigma_protocols = Vec::with_capacity(value.len());
-    let mut sigma_secrets = Vec::with_capacity(value.len());
-    let xs: Vec<C::Scalar> = value.iter().map(|x| *x.as_ref()).collect();
-    let rs: Vec<C::Scalar> = cipher_randomness.iter().map(|x| *(x.1.as_ref())).collect();
-    for i in 0..value.len() {
-        let x = xs[i];
-        let r = rs[i];
-        // let commitment =
-        // Commitment(h.mul_by_scalar(&x).plus_point(&pk_eg.mul_by_scalar(&r)));
-        let commitment = Commitment((cipher_randomness[i].0).1);
-        let y = g.mul_by_scalar(&r);
-        let cmm_key_comeq = CommitmentKey(pk_eg, h);
-        let comeq = ComEq {
-            commitment,
-            y,
-            cmm_key: cmm_key_comeq,
-            g,
-        };
-        let secret_r = PedersenRandomness::<C>::new(x);
-        let secret_a = Value::new(r);
-        let comeq_secret = ComEqSecret {
-            r: secret_r,
-            a: secret_a,
-        };
-        sigma_protocols.push(comeq);
-        sigma_secrets.push(comeq_secret);
-        // sigma_proofs.push(sigma_proof);
-        // let sigma_proof = prove(ro, &comeq, comeq_secret, csprng);
-    }
-    let sigma_protocol = ReplicateAdapter {
-        protocols: sigma_protocols,
-    };
-    let sigma_proof = prove(ro, &sigma_protocol, sigma_secrets, csprng);
-    let cmm_key_bulletproof = CommitmentKey(h, pk_eg);
-    let bulletproof_randomness: Vec<PedersenRandomness<C>> = rs
-        .iter()
-        .map(|&x| PedersenRandomness::<C>::new(x))
-        .collect();
-    let bulletproof = bulletprove(
-        transcript,
-        csprng,
-        s,
-        value.len() as u8,
-        &xs,
-        generators,
-        &cmm_key_bulletproof,
-        &bulletproof_randomness,
-    );
-    match sigma_proof {
-        Some(proof1) => match bulletproof {
-            Some(proof2) => Some((sigma_protocol, proof1, proof2)),
-            _ => None,
-        },
-        _ => None,
-    }
-}
 
 // First attempt implementing protocol genEncExpInfo documented in the
 // Cryptoprim Bluepaper, maybe without bulletproof part.
@@ -113,28 +25,17 @@ fn enc_exp<C: Curve, R: rand::Rng>(
 #[allow(dead_code)]
 #[allow(clippy::type_complexity)]
 #[allow(clippy::too_many_arguments)]
-fn gen_enc_exp_info<C: Curve /* , R: rand::Rng */>(
-    // ro: RandomOracle,
-    // transcript: &mut Transcript,
-    // csprng: &mut R,
+fn gen_enc_exp_info<C: Curve>(
     cmm_key: &CommitmentKey<C>,
     pk: &PublicKey<C>,
     cipher: &[Cipher<C>],
-    /* generators: &Generators<C>,
-     * s: u8, */
-) -> Vec<ComEq<C, C>>
-// RangeProof<C>>
-{
+) -> Vec<ComEq<C, C>> {
     let (g, h) = (cmm_key.0, cmm_key.1);
     let pk_eg = pk.key;
-    // let sigma_proofs = Vec::with_capacity(cipher.len());
     let mut sigma_protocols = Vec::with_capacity(cipher.len());
-    for i in 0..cipher.len() {
-        // let commitment =
-        // Commitment(h.mul_by_scalar(&x).plus_point(&pk_eg.mul_by_scalar(&r)));
-        let commitment = Commitment(cipher[i].1);
-        // let y = g.mul_by_scalar(&r);
-        let y = cipher[i].0;
+    for cipher in cipher {
+        let commitment = Commitment(cipher.1);
+        let y = cipher.0;
         let cmm_key_comeq = CommitmentKey(pk_eg, h);
         let comeq = ComEq {
             commitment,
@@ -143,27 +44,7 @@ fn gen_enc_exp_info<C: Curve /* , R: rand::Rng */>(
             g,
         };
         sigma_protocols.push(comeq);
-        // sigma_proofs.push(sigma_proof);
-        // let sigma_proof = prove(ro, &comeq, comeq_secret, csprng);
     }
-    // let sigma_protocol = ReplicateAdapter {
-    //     protocols: sigma_protocols,
-    // };
-    // let cmm_key_bulletproof = CommitmentKey(h, pk_eg);
-    // let bulletproof_randomness: Vec<PedersenRandomness<C>> = rs
-    //     .iter()
-    //     .map(|&x| PedersenRandomness::<C>::new(x))
-    //     .collect();
-    // let bulletproof = bulletprove(
-    //     transcript,
-    //     csprng,
-    //     s,
-    //     value.len() as u8,
-    //     &xs,
-    //     generators,
-    //     &cmm_key_bulletproof,
-    //     &bulletproof_randomness,
-    // );
     sigma_protocols
 }
 
@@ -176,118 +57,62 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
     S_prime: &[Cipher<C>],
     h: &C,
 ) -> EncTrans<C> {
-    // let t = S.len();
     let sigma_1 = Dlog {
         public: pk_sender.key,
         coeff:  pk_sender.generator,
     };
-    // let mut elg_dec_protocols = Vec::with_capacity(t);
-    // for j in 0..t {
     let (e1, e2) = (S.0, S.1);
     let elg_dec = AggregateDlog {
+        // Elcdec could have its own type instead
         public: e2,
-        coeff:  vec![e1, *h],
+        coeff:  vec![e1, *h], // It is important that we do *not* provide more than 2 elements here
     };
-    // elg_dec_protocols.push(elg_dec);
-    // }
-    let sigma_2 = elg_dec; //_protocols;
+    let sigma_2 = elg_dec;
     let cmm_key = CommitmentKey(pk_sender.generator, *h);
     let sigma_3_protocols = gen_enc_exp_info(&cmm_key, pk_receiver, A);
     let sigma_4_protocols = gen_enc_exp_info(&cmm_key, pk_sender, S_prime);
-    // sigma_3_4_protocols.append(&mut sigma_4_protocols);
-    // let sigma_3_4 = ReplicateAdapter {
-    //     protocols: sigma_3_4_protocols,
-    // };
-
-    // let sigma = AndAdapter {
-    //     first: sigma_1,
-    //     second: sigma_2
-    // };
-    // let sigma = AndAdapter {
-    //     first: sigma,
-    //     second: sigma_3_4
-    // };
     EncTrans {
         dlog:    sigma_1,
         elg_dec: sigma_2,
         encexp1: sigma_3_protocols,
         encexp2: sigma_4_protocols,
     }
-
-    // sigma
 }
 
-pub struct EncryptedTransaction<C: Curve>{
-    sigma_proof: SigmaProof<EncTransWitness<C>>,
-    bulletproof_a: RangeProof<C>,
+pub struct EncryptedTransaction<C: Curve> {
+    sigma_proof:         SigmaProof<EncTransWitness<C>>,
+    bulletproof_a:       RangeProof<C>,
     bulletproof_s_prime: RangeProof<C>,
-    A: Vec<Cipher<C>>,
-    S_prime: Vec<Cipher<C>>,
+    A:                   Vec<Cipher<C>>,
+    S_prime:             Vec<Cipher<C>>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn gen_enc_trans<C: Curve, R: Rng>(
     ro: RandomOracle,
     transcript: &mut Transcript,
-    csprng: &mut R, 
-    pk_sender:   &PublicKey<C>,
-    sk_sender:   &SecretKey<C>,
+    csprng: &mut R,
+    pk_sender: &PublicKey<C>,
+    sk_sender: &SecretKey<C>,
     pk_receiver: &PublicKey<C>,
-    S:           &Cipher<C>,
-    s:           C::Scalar,
-    a:           C::Scalar,
-    generator:   C,
-    gens: &Generators<C> // For Bulletproofs
-) -> EncryptedTransaction<C>{
+    S: &Cipher<C>,
+    s: C::Scalar,
+    a: C::Scalar,
+    generator: C,
+    gens: &Generators<C>, // For Bulletproofs
+) -> EncryptedTransaction<C> {
     let mut s_prime = s;
     s_prime.sub_assign(&a);
     let s_prime_chunks = value_to_chunks::<C>(&s_prime, 4);
     let a_chunks = value_to_chunks::<C>(&a, 4);
-
-    let m = a_chunks.len();
-    let n = 32;
-    let nm = n * m;
-
-    // let mut G_H = Vec::with_capacity(nm);
-
-    // for _i in 0..(nm) {
-    //     let g = C::generate(csprng);
-    //     let h = C::generate(csprng);
-    //     G_H.push((g, h));
-    // }
-    // let gens = Generators { G_H }; //Should be given as a parameter
-
-    let g = pk_sender.generator;
-    let pk_eg = pk_sender.key;
-    // let generator = C::generate(csprng); // h; should be given as a parameter
-    let A_enc_randomness = pk_receiver.encrypt_exponent_vec_rand_given_generator(
-        csprng,
-        &a_chunks,
-        &generator,
-    );
+    let A_enc_randomness =
+        pk_receiver.encrypt_exponent_vec_rand_given_generator(csprng, &a_chunks, &generator);
     let (A, A_rand): (Vec<_>, Vec<_>) = A_enc_randomness.iter().cloned().unzip();
-    let S_prime_enc_randomness = pk_sender.encrypt_exponent_vec_rand_given_generator(
-        csprng,
-        &s_prime_chunks,
-        &generator,
-    );
-    let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) =
-        S_prime_enc_randomness.iter().cloned().unzip();
-    let mut commitments_a = Vec::with_capacity(A.len());
-    for i in 0..A.len() {
-        commitments_a.push(Commitment((A[i]).1));
-    }
-    let mut commitments_s_prime = Vec::with_capacity(S_prime.len());
-    for i in 0..S_prime.len() {
-        commitments_s_prime.push(Commitment((S_prime[i]).1));
-    }
-    // let challenge_prefix = generate_challenge_prefix(&mut csprng);
-    // let ro = RandomOracle::domain(&challenge_prefix);
-    // let mut transcript = Transcript::new(&[]);
-    let cmm_key = CommitmentKey(g, generator);
-    let protocol =
-        gen_enc_trans_proof_info(&pk_sender, &pk_receiver, &S, &A, &S_prime, &generator);
-    let A_rand_as_value: Vec<Value<_>> =
-        A_rand.iter().map(|x| Value::new(*(x.as_ref()))).collect();
+    let S_prime_enc_randomness =
+        pk_sender.encrypt_exponent_vec_rand_given_generator(csprng, &s_prime_chunks, &generator);
+    let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) = S_prime_enc_randomness.iter().cloned().unzip();
+    let protocol = gen_enc_trans_proof_info(&pk_sender, &pk_receiver, &S, &A, &S_prime, &generator);
+    let A_rand_as_value: Vec<Value<_>> = A_rand.iter().map(|x| Value::new(*(x.as_ref()))).collect();
     let a_chunks_as_rand: Vec<PedersenRandomness<_>> = a_chunks
         .iter()
         .map(|x| PedersenRandomness::new(*(x.as_ref())))
@@ -301,28 +126,27 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         .map(|x| PedersenRandomness::new(*(x.as_ref())))
         .collect();
     let secret = EncTransSecret {
-        dlog_secret:     Rc::new(sk_sender.scalar),
-        r_a:             a_chunks_as_rand,
-        a:               A_rand_as_value,
-        r_s:             s_prime_chunks_as_rand,
-        s:               S_prime_rand_as_value,
+        // Bad naming of r_a, a, r_s and s
+        dlog_secret: Rc::new(sk_sender.scalar),
+        r_a:         a_chunks_as_rand,
+        a:           A_rand_as_value,
+        r_s:         s_prime_chunks_as_rand,
+        s:           S_prime_rand_as_value,
     };
     let sigma_proof = prove(ro.split(), &protocol, secret, csprng).unwrap();
     let cmm_key_bulletproof_a = CommitmentKey(generator, pk_receiver.key);
     let cmm_key_bulletproof_s_prime = CommitmentKey(generator, pk_sender.key);
-    let a_chunks_as_scalars : Vec<_> = a_chunks
-    .iter()
-    .map(|x| *(x.as_ref()))
-    .collect();
-    let A_rand_as_pedrand: Vec<PedersenRandomness<_>> =
-        A_rand.iter().map(|x| PedersenRandomness::new(*(x.as_ref()))).collect();
-    let s_prime_chunks_as_scalars : Vec<_> = s_prime_chunks
-    .iter()
-    .map(|x| *(x.as_ref()))
-    .collect();
-    let S_prime_rand_as_pedrand: Vec<PedersenRandomness<_>> =
-        S_prime_rand.iter().map(|x| PedersenRandomness::new(*(x.as_ref()))).collect();
-    
+    let a_chunks_as_scalars: Vec<_> = a_chunks.iter().map(|x| *(x.as_ref())).collect();
+    let A_rand_as_pedrand: Vec<PedersenRandomness<_>> = A_rand
+        .iter()
+        .map(|x| PedersenRandomness::new(*(x.as_ref())))
+        .collect();
+    let s_prime_chunks_as_scalars: Vec<_> = s_prime_chunks.iter().map(|x| *(x.as_ref())).collect();
+    let S_prime_rand_as_pedrand: Vec<PedersenRandomness<_>> = S_prime_rand
+        .iter()
+        .map(|x| PedersenRandomness::new(*(x.as_ref())))
+        .collect();
+
     let bulletproof_a = bulletprove(
         transcript,
         csprng,
@@ -331,8 +155,9 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         &a_chunks_as_scalars,
         &gens,
         &cmm_key_bulletproof_a,
-        &A_rand_as_pedrand
-    ).unwrap();
+        &A_rand_as_pedrand,
+    )
+    .unwrap();
     let bulletproof_s_prime = bulletprove(
         transcript,
         csprng,
@@ -341,38 +166,51 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         &s_prime_chunks_as_scalars,
         &gens,
         &cmm_key_bulletproof_s_prime,
-        &S_prime_rand_as_pedrand
-    ).unwrap();
-    EncryptedTransaction{
+        &S_prime_rand_as_pedrand,
+    )
+    .unwrap();
+    EncryptedTransaction {
         sigma_proof,
         bulletproof_a,
         bulletproof_s_prime,
         A,
-        S_prime
+        S_prime,
     }
 }
 
+/// The verifier does two checks. In case verification fails, it can be useful
+/// to know which of the checks led to failure.
+#[derive(Debug, PartialEq)]
+pub enum VerificationError {
+    SigmaProofError,
+    /// The first check failed (see function below for what this means)
+    FirstBulletproofError(BulletproofVerificationError),
+    /// The second check failed.
+    SecondBulletproofError(BulletproofVerificationError),
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn verify_enc_trans<C: Curve>(
     ro: RandomOracle,
-    transcript:  &mut Transcript,
+    transcript: &mut Transcript,
     transaction: &EncryptedTransaction<C>,
-    pk_sender:   &PublicKey<C>,
+    pk_sender: &PublicKey<C>,
     pk_receiver: &PublicKey<C>,
-    S:           &Cipher<C>,
-    generator:   C,
-    gens: &Generators<C> // For Bulletproofs
-) -> bool {
-
-    let protocol =
-        gen_enc_trans_proof_info(
-            &pk_sender,
-            &pk_receiver, 
-            &S, 
-            &transaction.A, 
-            &transaction.S_prime, 
-            &generator,
-        );
-    println!("{:?}", verify(ro, &protocol, &transaction.sigma_proof));
+    S: &Cipher<C>,
+    generator: C,
+    gens: &Generators<C>, // For Bulletproofs
+) -> Result<(), VerificationError> {
+    let protocol = gen_enc_trans_proof_info(
+        &pk_sender,
+        &pk_receiver,
+        &S,
+        &transaction.A,
+        &transaction.S_prime,
+        &generator,
+    );
+    if !verify(ro, &protocol, &transaction.sigma_proof) {
+        return Err(VerificationError::SigmaProofError);
+    }
     let mut commitments_a = Vec::with_capacity(transaction.A.len());
     for i in 0..transaction.A.len() {
         commitments_a.push(Commitment((transaction.A[i]).1));
@@ -383,28 +221,30 @@ pub fn verify_enc_trans<C: Curve>(
     }
     let cmm_key_bulletproof_a = CommitmentKey(generator, pk_receiver.key);
     let cmm_key_bulletproof_s_prime = CommitmentKey(generator, pk_sender.key);
-    
 
-
-    println!("{:?}",verify_efficient(
+    let first_bulletproof = verify_efficient(
         transcript,
         32,
         &commitments_a,
         &transaction.bulletproof_a,
         &gens,
-        &cmm_key_bulletproof_a
-    )
-    .is_ok());
-    println!("{:?}",verify_efficient(
+        &cmm_key_bulletproof_a,
+    );
+    if let Err(err) = first_bulletproof {
+        return Err(VerificationError::FirstBulletproofError(err));
+    }
+    let second_bulletproof = verify_efficient(
         transcript,
         32,
         &commitments_s_prime,
         &transaction.bulletproof_s_prime,
         &gens,
-        &cmm_key_bulletproof_s_prime
-    )
-    .is_ok());
-    true
+        &cmm_key_bulletproof_s_prime,
+    );
+    if let Err(err) = second_bulletproof {
+        return Err(VerificationError::FirstBulletproofError(err));
+    }
+    Ok(())
 }
 
 struct DlogEqual<C: Curve> {
@@ -432,11 +272,6 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
         &self,
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
-        // Ideally we want to do the below for the same randomness, but
-        // that is not possible for the moment.
-        // let (m1, s1) = self.dlog.first.commit_point(csprng)?;
-        // let (m2, s2) = self.dlog.second.commit_point(csprng)?;
-        // Some(((m1, m2), (s1, s2)))
         let rand_scalar = C::generate_non_zero_scalar(csprng);
         let randomized_point_1 = self.dlog1.coeff.mul_by_scalar(&rand_scalar);
         let randomized_point_2 = self.dlog2.coeff.mul_by_scalar(&rand_scalar);
@@ -450,11 +285,7 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
     ) -> Option<Self::ProverWitness> {
-        // let mut witness = *challenge;
-        // witness.mul_assign(&secret.secret);
-        // witness.add_assign(&state);
-        // Some(DlogEqualWitness { witness })
-        let w1 = self.dlog1.generate_witness(secret, state, &challenge)?; // The witnesses are the same, so does not matter which one
+        let w1 = self.dlog1.generate_witness(secret, state, &challenge)?;
         Some(w1)
     }
 
@@ -481,6 +312,9 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::dlogaggequal::*;
+    use curve_arithmetic::multiexp;
+    use ff::PrimeField;
     use pairing::bls12_381::{Fr, G1};
     // use rand::{rngs::ThreadRng, Rng};
 
@@ -504,8 +338,8 @@ mod test {
         let x_secret = Value::<G1>::new(x);
         let g1 = G1::generate(&mut csprng);
         let g2 = G1::generate(&mut csprng);
-        let mut g1x = g1.mul_by_scalar(&x);
-        let mut g2x = g2.mul_by_scalar(&x);
+        let g1x = g1.mul_by_scalar(&x);
+        let g2x = g2.mul_by_scalar(&x);
         let dlog1 = Dlog {
             public: g1x,
             coeff:  g1,
@@ -537,7 +371,7 @@ mod test {
         let g2 = G1::generate(&mut csprng);
         let h2 = G1::generate(&mut csprng);
         let f2 = G1::generate(&mut csprng);
-        let mut gx = g.mul_by_scalar(&x);
+        let gx = g.mul_by_scalar(&x);
         let dlog = Dlog {
             public: gx,
             coeff:  g,
@@ -585,22 +419,10 @@ mod test {
             "22435875175126190479447740508185965837690552500527637822603658699938581184400",
         )
         .unwrap();
-        // let a = Fr::from_str(
-        //     // Amount to send
-        //     "5",
-        // )
-        // .unwrap();
-        let mut s_prime = s;
-        s_prime.sub_assign(&a);
-        let s_prime_chunks = value_to_chunks::<G1>(&s_prime, 4);
-        let a_chunks = value_to_chunks::<G1>(&a, 4);
-        println!("a = {:?}\n\n a_chunks = {:?}", a, a_chunks);
-        // let s_chunks = value_to_chunks::<G1>(&a, 4);
 
-        let m = a_chunks.len();
+        let m = 8; // 8 chunks - should be 2 instead
         let n = 32;
         let nm = n * m;
-        // println!("{:?}", a_chunks);
 
         let mut G_H = Vec::with_capacity(nm);
 
@@ -610,52 +432,17 @@ mod test {
             G_H.push((g, h));
         }
         let gens = Generators { G_H };
-        let g = pk_sender.generator;
-        let pk_eg = pk_sender.key;
         let generator = SomeCurve::generate(&mut csprng); // h
-        let A_enc_randomness = pk_receiver.encrypt_exponent_vec_rand_given_generator(
-            &mut csprng,
-            &a_chunks,
-            &generator,
-        );
-        let (A, A_rand): (Vec<_>, Vec<_>) = A_enc_randomness.iter().cloned().unzip();
-        let S_prime_enc_randomness = pk_sender.encrypt_exponent_vec_rand_given_generator(
-            &mut csprng,
-            &s_prime_chunks,
-            &generator,
-        );
-        let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) =
-            S_prime_enc_randomness.iter().cloned().unzip();
         let s_value = Value::new(s);
         let S = pk_sender.encrypt_exponent_given_generator(&mut csprng, &s_value, &generator);
-        
+
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
         let ro = RandomOracle::domain(&challenge_prefix);
+        // Somewhere there should be some kind of connection
+        // between the transcript and the RO,
+        // maybe inside the functions used below?
+
         let mut transcript = Transcript::new(&[]);
-        // let cmm_key = CommitmentKey(g, generator);
-        // let protocol =
-        //     gen_enc_trans_proof_info(&pk_sender, &pk_receiver, &S, &A, &S_prime, &generator);
-        // let A_rand_as_value: Vec<Value<_>> =
-        //     A_rand.iter().map(|x| Value::new(*(x.as_ref()))).collect();
-        // let a_chunks_as_rand: Vec<PedersenRandomness<_>> = a_chunks
-        //     .iter()
-        //     .map(|x| PedersenRandomness::new(*(x.as_ref())))
-        //     .collect();
-        // let S_prime_rand_as_value: Vec<Value<_>> = S_prime_rand
-        //     .iter()
-        //     .map(|x| Value::new(*(x.as_ref())))
-        //     .collect();
-        // let s_prime_chunks_as_rand: Vec<PedersenRandomness<_>> = s_prime_chunks
-        //     .iter()
-        //     .map(|x| PedersenRandomness::new(*(x.as_ref())))
-        //     .collect();
-        // let secret = EncTransSecret {
-        //     dlog_secret:     Rc::new(sk_sender.scalar),
-        //     r_a:             a_chunks_as_rand,
-        //     a:               A_rand_as_value,
-        //     r_s:             s_prime_chunks_as_rand,
-        //     s:               S_prime_rand_as_value,
-        // };
         let transaction = gen_enc_trans(
             ro.split(),
             &mut transcript,
@@ -667,127 +454,20 @@ mod test {
             s,
             a,
             generator,
-            &gens
+            &gens,
         );
 
         let mut transcript = Transcript::new(&[]);
 
-        verify_enc_trans(
-            ro, 
-            &mut transcript, 
-            &transaction, 
-            &pk_sender, 
-            &pk_receiver, 
-            &S, 
-            generator, 
+        assert!(verify_enc_trans(
+            ro,
+            &mut transcript,
+            &transaction,
+            &pk_sender,
+            &pk_receiver,
+            &S,
+            generator,
             &gens
-        );
-        // let protocol =
-        //     gen_enc_trans_proof_info(
-        //         &pk_sender,
-        //         &pk_receiver, 
-        //         &S, 
-        //         &transaction.A, 
-        //         &transaction.S_prime, 
-        //         &generator
-        //     );
-        // println!("{:?}", verify(ro, &protocol, &transaction.sigma_proof));
-        // let mut commitments_a = Vec::with_capacity(transaction.A.len());
-        // for i in 0..A.len() {
-        //     commitments_a.push(Commitment((transaction.A[i]).1));
-        // }
-        // let mut commitments_s_prime = Vec::with_capacity(transaction.S_prime.len());
-        // for i in 0..S_prime.len() {
-        //     commitments_s_prime.push(Commitment((transaction.S_prime[i]).1));
-        // }
-        // let cmm_key_bulletproof_a = CommitmentKey(generator, pk_receiver.key);
-        // let cmm_key_bulletproof_s_prime = CommitmentKey(generator, pk_sender.key);
-        
-
-        // let mut transcript = Transcript::new(&[]);
-
-        // println!("{:?}",verify_efficient(
-        //     &mut transcript,
-        //     32,
-        //     &commitments_a,
-        //     &transaction.bulletproof_a,
-        //     &gens,
-        //     &cmm_key_bulletproof_a
-        // )
-        // .is_ok());
-        // println!("{:?}",verify_efficient(
-        //     &mut transcript,
-        //     32,
-        //     &commitments_s_prime,
-        //     &transaction.bulletproof_s_prime,
-        //     &gens,
-        //     &cmm_key_bulletproof_s_prime
-        // )
-        // .is_ok());
-    }
-
-    #[allow(non_snake_case)]
-    #[test]
-    fn test_enc_exp() {
-        let mut csprng = thread_rng();
-        let sk: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
-        let pk = PublicKey::from(&sk);
-        let x = Fr::from_str(
-            "52435875175126190479447740508185965837690552500527637822603658699938581184512",
-        )
-        .unwrap();
-        let xs = value_to_chunks::<G1>(&x, 4);
-        let m = xs.len();
-        let n = 32;
-        let nm = n * m;
-        // println!("{:?}", xs);
-
-        let mut G_H = Vec::with_capacity(nm);
-
-        for _i in 0..(nm) {
-            let g = SomeCurve::generate(&mut csprng);
-            let h = SomeCurve::generate(&mut csprng);
-            G_H.push((g, h));
-        }
-        let gens = Generators { G_H };
-        let g = pk.generator;
-        let pk_eg = pk.key;
-        let generator = SomeCurve::generate(&mut csprng);
-        let enc_randomness =
-            pk.encrypt_exponent_vec_rand_given_generator(&mut csprng, &xs.as_slice(), &generator);
-        let mut commitments = Vec::with_capacity(enc_randomness.len());
-        for i in 0..enc_randomness.len() {
-            commitments.push(Commitment((enc_randomness[i].0).1));
-        }
-        let challenge_prefix = generate_challenge_prefix(&mut csprng);
-        let ro = RandomOracle::domain(&challenge_prefix);
-        let mut transcript = Transcript::new(&[]);
-        let cmm_key = CommitmentKey(g, generator);
-        let cmm_key_bulletproof = CommitmentKey(generator, pk_eg);
-        let (sigma_protocol, sigma_proof, bulletproof) = enc_exp(
-            ro.split(),
-            &mut transcript,
-            &mut csprng,
-            &cmm_key,
-            &pk,
-            &enc_randomness,
-            &xs,
-            &gens,
-            n as u8,
-        )
-        .unwrap();
-
-        assert!(verify(ro, &sigma_protocol, &sigma_proof));
-
-        let mut transcript = Transcript::new(&[]);
-
-        assert!(verify_efficient(
-            &mut transcript,
-            n as u8,
-            &commitments,
-            &bulletproof,
-            &gens,
-            &cmm_key_bulletproof
         )
         .is_ok());
     }

@@ -2,12 +2,7 @@ use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
-use id::sigma_protocols::{
-    aggregate_dlog::*,
-    com_eq::{Witness as ComEqWitness, *},
-    common::*,
-    dlog::{Witness as DlogWitness, *},
-};
+use id::sigma_protocols::{aggregate_dlog::*, common::*, dlog::*};
 use random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;
 
@@ -23,6 +18,7 @@ pub struct Witness<C: Curve> {
     witness_common: C::Scalar, // For equality
 }
 
+#[allow(clippy::type_complexity)]
 impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
     type CommitMessage = (C, Vec<C>);
     type ProtocolChallenge = C::Scalar;
@@ -78,7 +74,6 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
         let commit = (commit_dlog, point_vec);
         let rand = (rand_scalar_common, rands_vec);
         Some((commit, rand))
-        // None
     }
 
     fn generate_witness(
@@ -107,7 +102,6 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
             witnesses,
             witness_common,
         })
-        // None
     }
 
     fn extract_point(
@@ -115,9 +109,6 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
         challenge: &Self::ProtocolChallenge,
         witness: &Self::ProverWitness,
     ) -> Option<Self::CommitMessage> {
-        // let p1 = self.dlog1.extract_point(&challenge, &witness)?;
-        // let p2 = self.dlog2.extract_point(&challenge, &witness)?;
-        // Some((p1, p2))
         let dlog_point = self
             .dlog
             .coeff
@@ -134,11 +125,7 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
             let product = multiexp(&aggregate_dlog.coeff, &exps);
             point = point.plus_point(&product);
             agg_points.push(point);
-            // for (ref w, ref g) in izip!(witness.witness.iter(),
-            // self.coeff.iter()) {     point =
-            // point.plus_point(&g.mul_by_scalar(w)); }
         }
-        let res = Some((dlog_point, agg_points));
-        res
+        Some((dlog_point, agg_points))
     }
 }
