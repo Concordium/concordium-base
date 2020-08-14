@@ -21,18 +21,29 @@ You'll also need an extension for the cargo tool to build linking against the An
 cargo install cargo-ndk
 ```
 
-Compiling for Android requires the NDK to be available, and having an environment variable set pointing to the location of it. The NDK and SDK can be installed using Android Studio. On my machine this environment variable is set to
+Compiling for Android requires the NDK to be available, and having an environment variable set pointing to the location of it. The SDK and NDK can be installed using Android Studio (using the SDK Manager).
+
+Set the following variables, adjusted appropriately for the specific install:
 ```
-export ANDROID_NDK_HOME=$HOME/Android/Sdk/ndk/21.0.6113669
+NDK_VERSION=21.3.6528147                         # Adjust to version in ~/Android/Sdk/ndk
+export ANDROID_SDK_ROOT=$HOME/Android/Sdk
+export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/$NDK_VERSION
 ```
 
 ### Building
 You should now be able to build the libraries using the script `build-android.sh` located in `crypto/mobile_wallet/android`.
 ```
+cd android
 ./build-android.sh
 ```
 
-This script builds the Rust libraries for the various Android architectures, and copies the libraries into the Android library folder `mobile_wallet_lib` which can be assembled into an AAR archive with gradle. 
+This script builds the Rust libraries for the various Android architectures, and copies the libraries into the folder `mobile_wallet_lib` which can be assembled into an AAR archive using Gradle:
+```
+cd mobile_wallet_lib
+./gradlew build
+```
+
+This command invokes Gradle via the [Gradle Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html) and writes AAR files for debug/release targets to `build/outputs/aar`.
 
 ## iOS
 ### First time usage
