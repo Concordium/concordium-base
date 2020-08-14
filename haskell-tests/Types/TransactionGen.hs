@@ -53,7 +53,7 @@ genTransactionHeader = do
   thPayloadSize <- PayloadSize . fromIntegral <$> sized (\n -> choose (n, 10*(n+1)))
   thNonce <- Nonce <$> arbitrary
   thEnergyAmount <- Energy <$> arbitrary
-  thExpiry <- TransactionExpiryTime <$> arbitrary
+  thExpiry <- TransactionTime <$> arbitrary
   return $ TransactionHeader{..}
 
 genAccountTransaction :: Gen AccountTransaction
@@ -74,7 +74,7 @@ baseTime = read "2019-09-23 13:27:13.257285424 UTC"
 genTransaction :: Gen Transaction
 genTransaction = do
   wmdData <- genAccountTransaction
-  wmdArrivalTime <- arbitrary
+  wmdArrivalTime <- TransactionTime <$> arbitrary
   return $ addMetadata NormalTransaction wmdArrivalTime wmdData
 
 genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
@@ -114,7 +114,7 @@ genCredentialDeploymentInformation = do
 genCredentialDeploymentWithMeta :: Gen CredentialDeploymentWithMeta
 genCredentialDeploymentWithMeta = do
   wmdData <- genCredentialDeploymentInformation
-  wmdArrivalTime <- arbitrary
+  wmdArrivalTime <- TransactionTime <$> arbitrary
   return $ addMetadata CredentialDeployment wmdArrivalTime wmdData
 
 genBlockItem :: Gen BlockItem

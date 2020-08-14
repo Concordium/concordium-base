@@ -197,8 +197,13 @@ instance Show Address where
 newtype Timestamp = Timestamp { tsMillis :: Word64 }
   deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON, PersistField) via Word64
 
--- |Time in seconds since the unix epoch.
-type TransactionTime = Word64
+-- | Time in seconds since the unix epoch
+newtype TransactionTime = TransactionTime { ttsSeconds :: Word64 }
+    deriving (Show, Read, Eq, Num, Ord, FromJSON, ToJSON, Real, Enum, Integral) via Word64
+
+instance S.Serialize TransactionTime where
+  put = P.putWord64be . ttsSeconds
+  get = TransactionTime <$> G.getWord64be
 
 -- |Get time in seconds since the unix epoch.
 getTransactionTime :: IO TransactionTime
@@ -234,15 +239,16 @@ addDuration :: Timestamp -> Duration -> Timestamp
 addDuration (Timestamp ts) (Duration d) = Timestamp (ts + d)
 
 -- | Expiry time of a transaction in seconds since the epoch
-newtype TransactionExpiryTime = TransactionExpiryTime { expiry :: Word64 }
-    deriving (Show, Read, Eq, Num, Ord, FromJSON, ToJSON) via Word64
+type TransactionExpiryTime = TransactionTime
 
-instance S.Serialize TransactionExpiryTime where
-  put = P.putWord64be . expiry
-  get = TransactionExpiryTime <$> G.getWord64be
+-- | Convert a 'TransactionTime' (seconds since epoch) to a
+-- 'Timestamp' (milliseconds since epoch).
+transactionTimeToTimestamp :: TransactionTime -> Timestamp
+transactionTimeToTimestamp (TransactionTime x) = Timestamp (1000 * x)
 
+-- |Check if a transaction expiry time precedes a given timestamp.
 transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
-transactionExpired (TransactionExpiryTime x) (Timestamp t) = 1000*x < t
+transactionExpired (TransactionTime x) (Timestamp t) = 1000*x < t
 
 -- |Check if whether the given timestamp is no greater than the end of the day
 -- of the given year and month.
