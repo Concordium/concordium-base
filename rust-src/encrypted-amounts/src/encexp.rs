@@ -1,4 +1,4 @@
-use crate::{dlogaggequal::*, enc_trans::*};
+use crate::{dlogaggequal::*,enc_trans::Witness as EncTransWitness, enc_trans::*};
 use bulletproofs::range_proof::{prove_given_scalars as bulletprove, Generators, RangeProof};
 use curve_arithmetic::{multiexp, Curve, Value};
 use elgamal::{
@@ -13,8 +13,17 @@ use id::sigma_protocols::{
     dlog::{Witness as DlogWitness, *},
 };
 use merlin::Transcript;
-use pedersen_scheme::{Commitment, CommitmentKey, Randomness as PedersenRandomness};
+use pedersen_scheme::{
+    Commitment, CommitmentKey,
+    Randomness as PedersenRandomness,
+    Value as PedersenValue
+
+};
 use random_oracle::*;
+use elgamal::{secret::SecretKey, value_to_chunks};
+use ff::PrimeField;
+use rand::*;
+use std::rc::Rc;
 
 // For testing
 #[allow(clippy::many_single_char_names)]
@@ -206,6 +215,141 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
     // sigma
 }
 
+pub struct EncryptedTransaction<C: Curve>{
+    sigma_proof: SigmaProof<EncTransWitness<C>>,
+    bulletproof_a: RangeProof<C>,
+    bulletproof_s_prime: RangeProof<C>,
+    A: Vec<Cipher<C>>,
+    S_prime: Vec<Cipher<C>>,
+}
+
+pub fn gen_enc_trans<C: Curve, R: Rng>(
+    ro: RandomOracle,
+    transcript: &mut Transcript,
+    csprng: &mut R, 
+    pk_sender:   &PublicKey<C>,
+    sk_sender:   &SecretKey<C>,
+    pk_receiver: &PublicKey<C>,
+    S:           &Cipher<C>,
+    s:           C::Scalar,
+    a:           C::Scalar,
+    generator:   C,
+    gens: &Generators<C> // For Bulletproofs
+) -> EncryptedTransaction<C>{
+    let mut s_prime = s;
+    s_prime.sub_assign(&a);
+    let s_prime_chunks = value_to_chunks::<C>(&s_prime, 4);
+    let a_chunks = value_to_chunks::<C>(&a, 4);
+
+    let m = a_chunks.len();
+    let n = 32;
+    let nm = n * m;
+
+    // let mut G_H = Vec::with_capacity(nm);
+
+    // for _i in 0..(nm) {
+    //     let g = C::generate(csprng);
+    //     let h = C::generate(csprng);
+    //     G_H.push((g, h));
+    // }
+    // let gens = Generators { G_H }; //Should be given as a parameter
+
+    let g = pk_sender.generator;
+    let pk_eg = pk_sender.key;
+    // let generator = C::generate(csprng); // h; should be given as a parameter
+    let A_enc_randomness = pk_receiver.encrypt_exponent_vec_rand_given_generator(
+        csprng,
+        &a_chunks,
+        &generator,
+    );
+    let (A, A_rand): (Vec<_>, Vec<_>) = A_enc_randomness.iter().cloned().unzip();
+    let S_prime_enc_randomness = pk_sender.encrypt_exponent_vec_rand_given_generator(
+        csprng,
+        &s_prime_chunks,
+        &generator,
+    );
+    let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) =
+        S_prime_enc_randomness.iter().cloned().unzip();
+    let mut commitments_a = Vec::with_capacity(A.len());
+    for i in 0..A.len() {
+        commitments_a.push(Commitment((A[i]).1));
+    }
+    let mut commitments_s_prime = Vec::with_capacity(S_prime.len());
+    for i in 0..S_prime.len() {
+        commitments_s_prime.push(Commitment((S_prime[i]).1));
+    }
+    // let challenge_prefix = generate_challenge_prefix(&mut csprng);
+    // let ro = RandomOracle::domain(&challenge_prefix);
+    // let mut transcript = Transcript::new(&[]);
+    let cmm_key = CommitmentKey(g, generator);
+    let protocol =
+        gen_enc_trans_proof_info(&pk_sender, &pk_receiver, &S, &A, &S_prime, &generator);
+    let A_rand_as_value: Vec<Value<_>> =
+        A_rand.iter().map(|x| Value::new(*(x.as_ref()))).collect();
+    let a_chunks_as_rand: Vec<PedersenRandomness<_>> = a_chunks
+        .iter()
+        .map(|x| PedersenRandomness::new(*(x.as_ref())))
+        .collect();
+    let S_prime_rand_as_value: Vec<Value<_>> = S_prime_rand
+        .iter()
+        .map(|x| Value::new(*(x.as_ref())))
+        .collect();
+    let s_prime_chunks_as_rand: Vec<PedersenRandomness<_>> = s_prime_chunks
+        .iter()
+        .map(|x| PedersenRandomness::new(*(x.as_ref())))
+        .collect();
+    let secret = EncTransSecret {
+        dlog_secret:     Rc::new(sk_sender.scalar),
+        r_a:             a_chunks_as_rand,
+        a:               A_rand_as_value,
+        r_s:             s_prime_chunks_as_rand,
+        s:               S_prime_rand_as_value,
+    };
+    let sigma_proof = prove(ro.split(), &protocol, secret, csprng).unwrap();
+    let cmm_key_bulletproof_a = CommitmentKey(generator, pk_receiver.key);
+    let cmm_key_bulletproof_s_prime = CommitmentKey(generator, pk_sender.key);
+    let a_chunks_as_scalars : Vec<_> = a_chunks
+    .iter()
+    .map(|x| *(x.as_ref()))
+    .collect();
+    let A_rand_as_pedrand: Vec<PedersenRandomness<_>> =
+        A_rand.iter().map(|x| PedersenRandomness::new(*(x.as_ref()))).collect();
+    let s_prime_chunks_as_scalars : Vec<_> = s_prime_chunks
+    .iter()
+    .map(|x| *(x.as_ref()))
+    .collect();
+    let S_prime_rand_as_pedrand: Vec<PedersenRandomness<_>> =
+        S_prime_rand.iter().map(|x| PedersenRandomness::new(*(x.as_ref()))).collect();
+    
+    let bulletproof_a = bulletprove(
+        transcript,
+        csprng,
+        32,
+        a_chunks.len() as u8,
+        &a_chunks_as_scalars,
+        &gens,
+        &cmm_key_bulletproof_a,
+        &A_rand_as_pedrand
+    ).unwrap();
+    let bulletproof_s_prime = bulletprove(
+        transcript,
+        csprng,
+        32,
+        s_prime_chunks.len() as u8,
+        &s_prime_chunks_as_scalars,
+        &gens,
+        &cmm_key_bulletproof_s_prime,
+        &S_prime_rand_as_pedrand
+    ).unwrap();
+    EncryptedTransaction{
+        sigma_proof,
+        bulletproof_a,
+        bulletproof_s_prime,
+        A,
+        S_prime
+    }
+}
+
 struct DlogEqual<C: Curve> {
     dlog1: Dlog<C>,
     dlog2: Dlog<C>,
@@ -283,10 +427,6 @@ mod test {
     use pairing::bls12_381::{Fr, G1};
     // use rand::{rngs::ThreadRng, Rng};
     use bulletproofs::range_proof::verify_efficient;
-    use elgamal::{secret::SecretKey, value_to_chunks};
-    use ff::PrimeField;
-    use rand::*;
-    use std::rc::Rc;
 
     type SomeCurve = G1;
     // Copied from common.rs in sigma_protocols since apparently it is not available
@@ -401,73 +541,135 @@ mod test {
         println!("a = {:?}\n\n a_chunks = {:?}", a, a_chunks);
         // let s_chunks = value_to_chunks::<G1>(&a, 4);
 
-        // let m = xs.len();
-        // let n = 32;
-        // let nm = n * m;
-        // println!("{:?}", xs);
+        let m = a_chunks.len();
+        let n = 32;
+        let nm = n * m;
+        // println!("{:?}", a_chunks);
 
-        // let mut G_H = Vec::with_capacity(nm);
+        let mut G_H = Vec::with_capacity(nm);
 
-        // for _i in 0..(nm) {
-        //     let g = SomeCurve::generate(&mut csprng);
-        //     let h = SomeCurve::generate(&mut csprng);
-        //     G_H.push((g, h));
-        // }
-        // let gens = Generators { G_H };
+        for _i in 0..(nm) {
+            let g = SomeCurve::generate(&mut csprng);
+            let h = SomeCurve::generate(&mut csprng);
+            G_H.push((g, h));
+        }
+        let gens = Generators { G_H };
         let g = pk_sender.generator;
         let pk_eg = pk_sender.key;
         let generator = SomeCurve::generate(&mut csprng); // h
         let A_enc_randomness = pk_receiver.encrypt_exponent_vec_rand_given_generator(
             &mut csprng,
-            &a_chunks.as_slice(),
+            &a_chunks,
             &generator,
         );
         let (A, A_rand): (Vec<_>, Vec<_>) = A_enc_randomness.iter().cloned().unzip();
         let S_prime_enc_randomness = pk_sender.encrypt_exponent_vec_rand_given_generator(
             &mut csprng,
-            &s_prime_chunks.as_slice(),
+            &s_prime_chunks,
             &generator,
         );
         let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) =
             S_prime_enc_randomness.iter().cloned().unzip();
         let s_value = Value::new(s);
         let S = pk_sender.encrypt_exponent_given_generator(&mut csprng, &s_value, &generator);
-        // let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) =
-        // S_prime_enc_randomness.iter().cloned().unzip(); let mut commitments =
-        // Vec::with_capacity(enc_randomness.len()); for i in 0..enc_randomness.
-        // len() {     commitments.push(Commitment((enc_randomness[i].0).1));
-        // }
+        
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
         let ro = RandomOracle::domain(&challenge_prefix);
-        // let mut transcript = Transcript::new(&[]);
-        let cmm_key = CommitmentKey(g, generator);
+        let mut transcript = Transcript::new(&[]);
+        // let cmm_key = CommitmentKey(g, generator);
+        // let protocol =
+        //     gen_enc_trans_proof_info(&pk_sender, &pk_receiver, &S, &A, &S_prime, &generator);
+        // let A_rand_as_value: Vec<Value<_>> =
+        //     A_rand.iter().map(|x| Value::new(*(x.as_ref()))).collect();
+        // let a_chunks_as_rand: Vec<PedersenRandomness<_>> = a_chunks
+        //     .iter()
+        //     .map(|x| PedersenRandomness::new(*(x.as_ref())))
+        //     .collect();
+        // let S_prime_rand_as_value: Vec<Value<_>> = S_prime_rand
+        //     .iter()
+        //     .map(|x| Value::new(*(x.as_ref())))
+        //     .collect();
+        // let s_prime_chunks_as_rand: Vec<PedersenRandomness<_>> = s_prime_chunks
+        //     .iter()
+        //     .map(|x| PedersenRandomness::new(*(x.as_ref())))
+        //     .collect();
+        // let secret = EncTransSecret {
+        //     dlog_secret:     Rc::new(sk_sender.scalar),
+        //     r_a:             a_chunks_as_rand,
+        //     a:               A_rand_as_value,
+        //     r_s:             s_prime_chunks_as_rand,
+        //     s:               S_prime_rand_as_value,
+        // };
+        let transaction = gen_enc_trans(
+            ro.split(),
+            &mut transcript,
+            &mut csprng,
+            &pk_sender,
+            &sk_sender,
+            &pk_receiver,
+            &S,
+            s,
+            a,
+            generator,
+            &gens
+        );
+
         let protocol =
-            gen_enc_trans_proof_info(&pk_sender, &pk_receiver, &S, &A, &S_prime, &generator);
-        let A_rand_as_value: Vec<Value<_>> =
-            A_rand.iter().map(|x| Value::new(*(x.as_ref()))).collect();
-        let a_chunks_as_rand: Vec<PedersenRandomness<_>> = a_chunks
-            .iter()
-            .map(|x| PedersenRandomness::new(*(x.as_ref())))
-            .collect();
-        let S_prime_rand_as_value: Vec<Value<_>> = S_prime_rand
-            .iter()
-            .map(|x| Value::new(*(x.as_ref())))
-            .collect();
-        let s_prime_chunks_as_rand: Vec<PedersenRandomness<_>> = s_prime_chunks
-            .iter()
-            .map(|x| PedersenRandomness::new(*(x.as_ref())))
-            .collect();
-        let secret = EncTransSecret {
-            dlog_secret:     Rc::new(sk_sender.scalar),
-            agg_dlog_secret: vec![vec![Rc::new(s)]], // s is here
-            r_a:             a_chunks_as_rand,
-            a:               A_rand_as_value,
-            r_s:             s_prime_chunks_as_rand,
-            s:               S_prime_rand_as_value,
-        };
-        let proof = prove(ro.split(), &protocol, secret, &mut csprng).unwrap();
-        println!("{:?}", verify(ro, &protocol, &proof));
-        // let cmm_key_bulletproof = CommitmentKey(generator, pk_eg);
+            gen_enc_trans_proof_info(
+                &pk_sender,
+                &pk_receiver, 
+                &S, 
+                &transaction.A, 
+                &transaction.S_prime, 
+                &generator
+            );
+        println!("{:?}", verify(ro, &protocol, &transaction.sigma_proof));
+        let mut commitments_a = Vec::with_capacity(transaction.A.len());
+        for i in 0..A.len() {
+            commitments_a.push(Commitment((transaction.A[i]).1));
+        }
+        let mut commitments_s_prime = Vec::with_capacity(transaction.S_prime.len());
+        for i in 0..S_prime.len() {
+            commitments_s_prime.push(Commitment((transaction.S_prime[i]).1));
+        }
+        let cmm_key_bulletproof_a = CommitmentKey(generator, pk_receiver.key);
+        let cmm_key_bulletproof_s_prime = CommitmentKey(generator, pk_sender.key);
+        // let a_chunks_as_scalars : Vec<_> = a_chunks
+        // .iter()
+        // .map(|x| *(x.as_ref()))
+        // .collect();
+        // let A_rand_as_pedrand: Vec<PedersenRandomness<_>> =
+        //     A_rand.iter().map(|x| PedersenRandomness::new(*(x.as_ref()))).collect();
+        // let s_prime_chunks_as_scalars : Vec<_> = s_prime_chunks
+        // .iter()
+        // .map(|x| *(x.as_ref()))
+        // .collect();
+        // let S_prime_rand_as_pedrand: Vec<PedersenRandomness<_>> =
+        //     S_prime_rand.iter().map(|x| PedersenRandomness::new(*(x.as_ref()))).collect();
+        
+        // println!("len = {:?}", a_chunks.len());
+        // println!("len = {:?}", s_prime_chunks.len());
+        // let mut transcript = Transcript::new(&[]);
+        // let bulletproof_a = bulletprove(
+        //     &mut transcript,
+        //     &mut csprng,
+        //     32,
+        //     a_chunks.len() as u8,
+        //     &a_chunks_as_scalars,
+        //     &gens,
+        //     &cmm_key_bulletproof_a,
+        //     &A_rand_as_pedrand
+        // ).unwrap();
+        // let bulletproof_s_prime = bulletprove(
+        //     &mut transcript,
+        //     &mut csprng,
+        //     32,
+        //     s_prime_chunks.len() as u8,
+        //     &s_prime_chunks_as_scalars,
+        //     &gens,
+        //     &cmm_key_bulletproof_s_prime,
+        //     &S_prime_rand_as_pedrand
+        // ).unwrap();
         // let (sigma_protocol, sigma_proof, bulletproof) = enc_exp(
         //     ro.split(),
         //     &mut transcript,
@@ -483,17 +685,26 @@ mod test {
 
         // assert!(verify(ro, &sigma_protocol, &sigma_proof));
 
-        // let mut transcript = Transcript::new(&[]);
+        let mut transcript = Transcript::new(&[]);
 
-        // assert!(verify_efficient(
-        //     &mut transcript,
-        //     n as u8,
-        //     &commitments,
-        //     &bulletproof,
-        //     &gens,
-        //     &cmm_key_bulletproof
-        // )
-        // .is_ok());
+        println!("{:?}",verify_efficient(
+            &mut transcript,
+            32,
+            &commitments_a,
+            &transaction.bulletproof_a,
+            &gens,
+            &cmm_key_bulletproof_a
+        )
+        .is_ok());
+        println!("{:?}",verify_efficient(
+            &mut transcript,
+            32,
+            &commitments_s_prime,
+            &transaction.bulletproof_s_prime,
+            &gens,
+            &cmm_key_bulletproof_s_prime
+        )
+        .is_ok());
     }
 
     #[allow(non_snake_case)]
