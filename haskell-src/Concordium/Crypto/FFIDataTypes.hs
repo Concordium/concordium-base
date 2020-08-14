@@ -2,7 +2,7 @@
 module Concordium.Crypto.FFIDataTypes
   (PedersenKey, PsSigKey, ElgamalGen, ElgamalPublicKey, ElgamalCipher,
   generatePedersenKey, generatePsSigKey, generateElgamalGen, generateElgamalPublicKey, generateElgamalCipher,
-  withPedersenKey, withPsSigKey, withElgamalGen, withElgamalPublicKey,
+  withPedersenKey, withPsSigKey, withElgamalGen, withElgamalPublicKey, withElgamalCipher,
   unsafeMakeCipher)
   where
 
@@ -72,6 +72,9 @@ withPsSigKey (PsSigKey fp) = withForeignPtr fp
 
 withElgamalGen :: ElgamalGen -> (Ptr ElgamalGen -> IO b) -> IO b
 withElgamalGen (ElgamalGen fp) = withForeignPtr fp
+
+withElgamalCipher :: ElgamalCipher -> (Ptr ElgamalCipher -> IO b) -> IO b
+withElgamalCipher (ElgamalCipher fp) = withForeignPtr fp
 
 withElgamalPublicKey :: ElgamalPublicKey -> (Ptr ElgamalPublicKey -> IO b) -> IO b
 withElgamalPublicKey (ElgamalPublicKey fp) = withForeignPtr fp

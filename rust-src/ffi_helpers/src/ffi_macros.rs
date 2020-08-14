@@ -198,10 +198,10 @@ macro_rules! slice_from_c_bytes_worker {
 #[macro_export]
 macro_rules! slice_from_c_bytes {
     ($cstr:expr, $length:expr) => {
-        slice_from_c_bytes_worker!($cstr, $length, "Null pointer.", slice::from_raw_parts)
+        slice_from_c_bytes_worker!($cstr, $length, "Null pointer.", std::slice::from_raw_parts)
     };
     ($cstr:expr, $length:expr, $null_ptr_error:expr) => {
-        slice_from_c_bytes_worker!($cstr, $length, $null_ptr_error, slice::from_raw_parts)
+        slice_from_c_bytes_worker!($cstr, $length, $null_ptr_error, std::slice::from_raw_parts)
     };
 }
 
@@ -220,10 +220,20 @@ macro_rules! mut_slice_from_c_bytes_worker {
 #[macro_export]
 macro_rules! mut_slice_from_c_bytes {
     ($cstr:expr, $length:expr) => {
-        mut_slice_from_c_bytes_worker!($cstr, $length, "Null pointer.", slice::from_raw_parts_mut)
+        mut_slice_from_c_bytes_worker!(
+            $cstr,
+            $length,
+            "Null pointer.",
+            std::slice::from_raw_parts_mut
+        )
     };
     ($cstr:expr, $length:expr, $null_ptr_error:expr) => {
-        mut_slice_from_c_bytes_worker!($cstr, $length, $null_ptr_error, slice::from_raw_parts_mut)
+        mut_slice_from_c_bytes_worker!(
+            $cstr,
+            $length,
+            $null_ptr_error,
+            std::slice::from_raw_parts_mut
+        )
     };
 }
 
