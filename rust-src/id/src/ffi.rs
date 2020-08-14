@@ -13,7 +13,7 @@ use serde::{
     de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
     Serializer,
 };
-use std::{collections::BTreeMap, fmt, io::Cursor, slice, str::FromStr};
+use std::{collections::BTreeMap, fmt, io::Cursor, str::FromStr};
 
 /// Concrete attribute kinds
 #[derive(Clone, PartialEq, Eq, Debug)]

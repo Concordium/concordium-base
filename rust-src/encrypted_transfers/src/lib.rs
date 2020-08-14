@@ -315,7 +315,7 @@ impl<C: Curve> AggregatedDecryptedAmount<C> {
 
 /// Combine many decrypted amounts into a single aggregated decrypted amount.
 /// This function will return `None` if there are gaps in decrypted amount
-/// indices, as well as if there are no decrypted amounts to
+/// indices, as well as if there are no decrypted amounts to decrypt.
 ///
 /// The mutable slice will be reordered.
 pub fn combine<C: Curve>(

@@ -7,6 +7,10 @@ import Data.Word
 import Data.Aeson
 import Data.ByteString.Short
 import Foreign.Ptr
+import Foreign.Marshal (alloca)
+import Foreign.Storable (peek)
+import Foreign.C.Types
+import System.IO.Unsafe (unsafeDupablePerformIO)
 
 import Concordium.Crypto.FFIDataTypes
 import Concordium.Crypto.ByteStringHelpers
@@ -23,9 +27,24 @@ foreign import ccall unsafe "aggregate_encrypted_amounts"
      -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the low chunk of the result.
      -> IO ()
 
+
+-- | Verify an encrypted transfer proof.
+foreign import ccall unsafe "verify_encrypted_transfer"
+  verify_encrypted_transfer ::
+       Ptr GlobalContext -- ^Pointer to the global context needed to validate the proof.
+     -> Ptr ElgamalCipher -- ^ High chunk of the current balance.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
+     -> Ptr ElgamalCipher -- ^ High chunk of the remaining balance.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the remaining balance.
+     -> Ptr ElgamalCipher -- ^ High chunk of the transfer amount.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the transfer amount.
+     -> CSize  -- ^ Length of the proof bytes.
+     -> Ptr Word8 -- ^ Pointer to the proof bytes.
+     -> IO Word8 -- ^ Return either 0 if proof checking failed, or non-zero in case of success.
+
 data EncryptedAmount = EncryptedAmount{
   -- | Encryption of the high-chunk (highest 32 bits).
-  encryptionHi :: ElgamalCipher,
+  encryptionHigh :: ElgamalCipher,
   -- | Encryption of the high-chunk (lowest 32 bits).
   encryptionLow :: ElgamalCipher
   }
@@ -33,9 +52,9 @@ data EncryptedAmount = EncryptedAmount{
   deriving(Eq)
 
 instance Serialize EncryptedAmount where
-  put EncryptedAmount{..} = put encryptionHi <> put encryptionLow
+  put EncryptedAmount{..} = put encryptionHigh <> put encryptionLow
   get = do
-    encryptionHi <- get
+    encryptionHigh <- get
     encryptionLow <- get
     return EncryptedAmount{..}
 
@@ -64,13 +83,13 @@ addToAggIndex (EncryptedAmountAggIndex aggIdx) len = EncryptedAmountIndex (aggId
 
 -- FIXME: Serialization here is probably wrong, and needs to be fixed once the proof
 -- is known.
-newtype EncryptedAmountTransferProof = EncryptedAmountTransferProof ShortByteString
+newtype EncryptedAmountTransferProof = EncryptedAmountTransferProof { theEncryptedTransferProof :: ShortByteString }
     deriving(Eq, Show, FromJSON, ToJSON) via ByteStringHex
     deriving Serialize via Short65K
 
 -- FIXME: Serialization here is probably wrong, and needs to be fixed once the proof
 -- is known.
-newtype EncryptAmountProof = EncryptAmountProof ShortByteString
+newtype EncryptAmountProof = EncryptAmountProof { theEncryptProof :: ShortByteString }
     deriving(Eq, Show, FromJSON, ToJSON) via ByteStringHex
     deriving Serialize via Short65K
 
@@ -80,7 +99,22 @@ newtype DecryptAmountProof = DecryptAmountProof ShortByteString
     deriving(Eq, Show, FromJSON, ToJSON) via ByteStringHex
     deriving Serialize via Short65K
 
--- * Functions for verifying proofs, used from the scheduler.
+-- * Functions for verifying proofs, and aggregating amounts, used from the scheduler.
+
+-- |Aggregate two encrypted amounts together. This operation is strict and
+-- associative.
+aggregateAmounts :: EncryptedAmount -> EncryptedAmount -> EncryptedAmount
+aggregateAmounts left right = unsafeDupablePerformIO $ do
+  withElgamalCipher (encryptionHigh left) $ \leftHighPtr ->
+    withElgamalCipher (encryptionLow left) $ \leftLowPtr ->
+      withElgamalCipher (encryptionHigh right) $ \rightHighPtr ->
+        withElgamalCipher (encryptionLow right) $ \rightLowPtr ->
+          alloca $ \outHighPtr ->
+            alloca $ \outLowPtr -> do
+              aggregate_encrypted_amounts leftHighPtr leftLowPtr rightHighPtr rightLowPtr outHighPtr outLowPtr
+              outHigh <- unsafeMakeCipher =<< peek outHighPtr
+              outLow <- unsafeMakeCipher =<< peek outLowPtr
+              return EncryptedAmount{encryptionHigh = outHigh, encryptionLow = outLow}
 
 verifyEncryptedTransferProof ::
   -- |Global context with parameters
@@ -94,4 +128,24 @@ verifyEncryptedTransferProof ::
   -- |Proof of validity of the transfer.
   EncryptedAmountTransferProof ->
   Bool
-verifyEncryptedTransferProof = undefined
+verifyEncryptedTransferProof gc initialAmount remainingAmount transferAmount proof = unsafeDupablePerformIO $ do
+  withGlobalContext gc $ \gcPtr ->
+    withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
+      withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
+        withElgamalCipher (encryptionHigh remainingAmount) $ \remainingHighPtr ->
+          withElgamalCipher (encryptionLow remainingAmount) $ \remainingLowPtr ->
+            withElgamalCipher (encryptionHigh transferAmount) $ \transferHighPtr ->
+              withElgamalCipher (encryptionLow transferAmount) $ \transferLowPtr ->
+                -- this is safe since the called function handles the 0 length case correctly.
+                useAsCStringLen (theEncryptedTransferProof proof) $ \(bytesPtr, len) -> do
+                  res <- verify_encrypted_transfer
+                          gcPtr
+                          initialHighPtr
+                          initialLowPtr
+                          remainingHighPtr
+                          remainingLowPtr
+                          transferHighPtr
+                          transferLowPtr
+                          (fromIntegral len)
+                          (castPtr bytesPtr)
+                  return (res /= 0)
