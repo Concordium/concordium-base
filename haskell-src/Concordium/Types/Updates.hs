@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, DerivingStrategies, OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns, DerivingStrategies, OverloadedStrings, ScopedTypeVariables, DeriveFunctor #-}
 -- |Types for chain update instructions.
 module Concordium.Types.Updates where
 
@@ -22,7 +22,6 @@ import qualified Concordium.Crypto.SHA256 as SHA256
 import Concordium.Utils.Serialization
 import Concordium.Types
 
--- TODO: Remove UpdateType
 -- |Types of updates to the chain.
 data UpdateType
     = UpdateAuthorization
@@ -32,6 +31,16 @@ data UpdateType
     | UpdateParameters
     -- ^Update chain parameters
     deriving (Eq, Ord, Show)
+
+instance Serialize UpdateType where
+    put UpdateAuthorization = putWord8 0
+    put UpdateProtocol = putWord8 1
+    put UpdateParameters = putWord8 2
+    get = getWord8 >>= \case
+        0 -> return UpdateAuthorization
+        1 -> return UpdateProtocol
+        2 -> return UpdateParameters
+        n -> fail $ "invalid update type: " ++ show n
 
 -- |Key type for update authorization.
 type UpdatePublicKey = VerifyKey
@@ -268,16 +277,18 @@ data UpdatePayload
     deriving (Eq, Show)
 
 instance Serialize UpdatePayload where
-    put (AuthorizationUpdatePayload u) = putWord8 0 >> put u
-    put (ProtocolUpdatePayload u) = putWord8 1 >> put u
-    put (ParameterUpdatePayload u) = putWord8 2 >> put u
-    get = do
-        updateType <- getWord8
-        case updateType of
-            0 -> AuthorizationUpdatePayload <$> get
-            1 -> ProtocolUpdatePayload <$> get
-            2 -> ParameterUpdatePayload <$> get
-            _ -> fail "invalid update type"
+    put (AuthorizationUpdatePayload u) = put UpdateAuthorization >> put u
+    put (ProtocolUpdatePayload u) = put UpdateProtocol >> put u
+    put (ParameterUpdatePayload u) = put UpdateParameters >> put u
+    get = get >>= \case
+            UpdateAuthorization -> AuthorizationUpdatePayload <$> get
+            UpdateProtocol -> ProtocolUpdatePayload <$> get
+            UpdateParameters -> ParameterUpdatePayload <$> get
+
+updateType :: UpdatePayload -> UpdateType
+updateType AuthorizationUpdatePayload{} = UpdateAuthorization
+updateType ProtocolUpdatePayload{} = UpdateProtocol
+updateType ParameterUpdatePayload{} = UpdateParameters
 
 -- |Determine if signatures from the given set of keys would be
 -- sufficient to authorize the given update.

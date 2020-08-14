@@ -41,7 +41,7 @@ dummyLowTransactionExpiryTime = 0
 
 {-# WARNING dummyMaxTransactionExpiryTime "Do not use in production." #-}
 dummyMaxTransactionExpiryTime :: TransactionExpiryTime
-dummyMaxTransactionExpiryTime = TransactionExpiryTime maxBound
+dummyMaxTransactionExpiryTime = TransactionTime maxBound
 
 {-# WARNING dummySlotTime "Do not use in production." #-}
 dummySlotTime :: Timestamp
