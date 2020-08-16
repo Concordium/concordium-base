@@ -7,6 +7,7 @@ use crate::{
     },
 };
 use base58check::*;
+use bulletproofs::range_proof::Generators;
 use byteorder::ReadBytesExt;
 use crypto_common::*;
 use crypto_common_derive::*;
@@ -39,6 +40,10 @@ use std::{
 }; // only for account addresses
 
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
+
+/// This is currently the number required, since the only
+/// place these are used is for encrypted amounts.
+pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 2;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct AccountAddress([u8; ACCOUNT_ADDRESS_SIZE]);
@@ -1356,6 +1361,9 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IPContext<'a, P
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct GlobalContext<C: Curve> {
     /// Generator of the curve C, used for, e.g., elgamal encryption.
+    /// FIXME: This will be just the second part of the commitment key,
+    /// should be removed and its usages replaced dwith
+    /// `encryption_in_the_exponent_generator` function.
     #[serde(
         rename = "generator",
         serialize_with = "base16_encode",
@@ -1365,19 +1373,31 @@ pub struct GlobalContext<C: Curve> {
     /// A shared commitment key known to the chain and the account holder (and
     /// therefore it is public). The account holder uses this commitment key to
     /// generate commitments to values in the attribute list.
-    /// This key should presumably be generated at genesis time via some shared
-    /// multi-party computation since none of the parties should know anything
-    /// special about it, so that the commitment is binding.
     #[serde(rename = "onChainCommitmentKey")]
     pub on_chain_commitment_key: PedersenKey<C>,
+    /// Generators for the bulletproofs.
+    /// It is unclear what length we will require here, or whether we'll allow
+    /// dynamic generation.
+    #[serde(rename = "bulletproofGenerators")]
+    bulletproof_generators: Generators<C>,
 }
 
 impl<C: Curve> GlobalContext<C> {
     /// Generate a new global context.
     pub fn generate(csprng: &mut impl rand::Rng) -> Self {
+        Self::generate_size(NUM_BULLETPROOF_GENERATORS, csprng)
+    }
+
+    /// Generate a new global context with the given number of
+    /// bulletproof generators.
+    ///
+    /// This is intended mostly for testing, on-chain there will be a fixed
+    /// amount.
+    pub fn generate_size(n: usize, csprng: &mut impl rand::Rng) -> Self {
         GlobalContext {
             generator:               C::generate(csprng),
             on_chain_commitment_key: PedersenKey::generate(csprng),
+            bulletproof_generators:  Generators::generate(n, csprng),
         }
     }
 
@@ -1387,6 +1407,10 @@ impl<C: Curve> GlobalContext<C> {
 
     /// The generator used as the base for elgamal public keys.
     pub fn elgamal_generator(&self) -> &C { &self.on_chain_commitment_key.g }
+
+    /// A wrapper function to support changes in internal structure of the
+    /// context in the future, e.g., lazy generation of generators.
+    pub fn bulletproof_generators(&self) -> &Generators<C> { &self.bulletproof_generators }
 }
 
 /// Make a context in which the account holder can produce a pre-identity object
