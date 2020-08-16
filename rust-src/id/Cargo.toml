@@ -5,6 +5,7 @@ authors = ["Concordium AG <contact@concordium.com>"]
 edition = "2018"
 
 [dependencies]
+merlin = { version = "2", default-features = false }
 ff = "0.5"
 sha3      = "0.8"
 sha2      = "0.8"
@@ -56,6 +57,9 @@ path = "../crypto_common_derive"
 version = "0"
 [dependencies.random_oracle]
 path = "../random_oracle"
+version = "0"
+[dependencies.bulletproofs]
+path = "../bulletproofs"
 version = "0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

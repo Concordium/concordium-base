@@ -100,6 +100,19 @@ pub fn read_identity_providers<P: AsRef<Path> + Debug>(filename: P) -> io::Resul
     }
 }
 
+/// Read a single identity provider versioned with a single version at the
+/// top-level. All values are parsed according to that version.
+pub fn read_identity_provider<P: AsRef<Path> + Debug>(filename: P) -> io::Result<IpInfo<Bls12>> {
+    let vips: Versioned<serde_json::Value> = read_json_from_file(filename)?;
+    match vips.version {
+        Version { value: 0 } => Ok(serde_json::from_value(vips.value)?),
+        other => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid identity provider version {}.", other),
+        )),
+    }
+}
+
 /// Read anonymity revokers from a file, determining how to parse them from the
 /// version number.
 pub fn read_anonymity_revokers<P: AsRef<Path> + Debug>(

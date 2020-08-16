@@ -29,43 +29,54 @@ pub struct SecretKey<C: Curve> {
 // }
 // }
 
-/// This function calculates x such that base^x = v,
-/// where x <= m*k, i.e. it calculates the discrete log.
-pub fn baby_step_giant_step<C: Curve>(v: &C, base: &C, m: usize, k: usize) -> usize {
-    let (table, base_m_inverse) = baby_step_giant_step_table(base, m);
-    baby_step_giant_step_given_table(v, &base_m_inverse, m, k, &table)
+pub type BabyStepGiantStepTable = HashMap<Vec<u8>, u64>;
+
+pub struct BabyStepGiantStep<C: Curve> {
+    /// Precomputed table of powers.
+    table: BabyStepGiantStepTable,
+    /// Point base^{-m}
+    inverse_point: C,
+    /// Size of the table.
+    m: u64,
 }
 
-/// This function can be used to precompute the table needed for the baby step
-/// giant step algorithm. The table can be used by
-/// baby_step_giant_step_given_table() to calculate the discrete log.
-pub fn baby_step_giant_step_table<C: Curve>(base: &C, m: usize) -> (HashMap<Vec<u8>, usize>, C) {
-    let mut table = HashMap::with_capacity(m);
-    let mut base_j = C::zero_point();
-    for j in 0..m {
-        table.insert(to_bytes(&base_j), j);
-        base_j = base_j.plus_point(&base);
-    }
-    (table, base_j.inverse_point())
-}
-
-/// This function calculates the discrete log given a table, cf.
-/// baby_step_giant_step_table() above.
-pub fn baby_step_giant_step_given_table<C: Curve>(
-    v: &C,
-    base_m_inverse: &C,
-    m: usize,
-    k: usize,
-    table: &HashMap<Vec<u8>, usize>,
-) -> usize {
-    let mut y = *v;
-    for i in 0..k {
-        if let Some(j) = table.get(&to_bytes(&y)) {
-            return i * m + j;
+impl<C: Curve> BabyStepGiantStep<C> {
+    /// Generate a new instance, precomputing the table.
+    pub fn new(base: &C, m: u64) -> Self {
+        let mut table = HashMap::with_capacity(m as usize);
+        let mut base_j = C::zero_point();
+        for j in 0..m {
+            table.insert(to_bytes(&base_j), j);
+            base_j = base_j.plus_point(&base);
         }
-        y = y.plus_point(&base_m_inverse);
+        Self {
+            table,
+            m,
+            inverse_point: base_j.inverse_point(),
+        }
     }
-    0
+
+    /// Compute the discrete log using the instance.
+    /// It is expected that the discrete log is less than m * k.
+    ///
+    /// If not, the method returns None.
+    pub fn discrete_log(&self, k: u64, v: &C) -> Option<u64> {
+        let mut y = *v;
+        for i in 0..k {
+            if let Some(j) = self.table.get(&to_bytes(&y)) {
+                return Some(i * self.m + j);
+            }
+            y = y.plus_point(&self.inverse_point);
+        }
+        None
+    }
+
+    /// Composition of `new` nad `discrete_log` methods for convenience.
+    ///
+    /// Less efficient than reusing the table.
+    pub fn discrete_log_full(base: &C, m: u64, k: u64, v: &C) -> Option<u64> {
+        BabyStepGiantStep::new(base, m).discrete_log(k, v)
+    }
 }
 
 impl<C: Curve> SecretKey<C> {
@@ -77,7 +88,7 @@ impl<C: Curve> SecretKey<C> {
         Message { value }
     }
 
-    pub fn decrypt_exponent(&self, c: &Cipher<C>) -> Value<C> {
+    pub fn decrypt_exponent_slow(&self, c: &Cipher<C>) -> Value<C> {
         let m = self.decrypt(c).value;
         let mut a = <C::Scalar as Field>::zero();
         let mut i = C::zero_point();
@@ -89,22 +100,21 @@ impl<C: Curve> SecretKey<C> {
         Value::new(a)
     }
 
-    pub fn decrypt_exponent_given_generator(
+    /// Decrypt the value in the exponent. It is assumed the encrypted value can
+    /// be represented in 64 bits, otherwise this function returns `None`.
+    ///
+    /// This function takes an auxiliary instance of BabyStepGiantStep to speed
+    /// up decryption.
+    pub fn decrypt_exponent(
         &self,
         c: &Cipher<C>,
-        generator_m: &C,
-        m: usize,
-        k: usize,
-        table: &HashMap<Vec<u8>, usize>,
-    ) -> Value<C> {
+        k: u64,
+        bsgs: &BabyStepGiantStep<C>,
+    ) -> Option<Value<C>> {
         let dec = self.decrypt(c).value;
-        let a = baby_step_giant_step_given_table(&dec, &generator_m, m, k, &table);
-        let a = C::scalar_from_u64(a as u64);
-        Value::new(a)
-    }
-
-    pub fn decrypt_exponent_vec(&self, v: &[Cipher<C>]) -> Vec<Value<C>> {
-        v.iter().map(|y| self.decrypt_exponent(y)).collect()
+        let a = bsgs.discrete_log(k, &dec)?;
+        let a = C::scalar_from_u64(a);
+        Some(Value::new(a))
     }
 
     /// Generate a `SecretKey` from a `csprng`.
