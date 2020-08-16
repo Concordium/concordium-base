@@ -291,6 +291,14 @@ pub extern "C" fn elgamal_cipher_gen() -> *mut elgamal::Cipher<G1> {
     Box::into_raw(Box::new(elgamal::Cipher::generate(&mut csprng)))
 }
 
+#[no_mangle]
+pub extern "C" fn elgamal_cipher_zero() -> *mut elgamal::Cipher<G1> {
+    Box::into_raw(Box::new(elgamal::Cipher(
+        G1::zero_point(),
+        G1::zero_point(),
+    )))
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

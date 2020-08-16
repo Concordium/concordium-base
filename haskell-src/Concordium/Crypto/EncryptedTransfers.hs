@@ -11,6 +11,7 @@ import Foreign.Marshal (alloca)
 import Foreign.Storable (peek)
 import Foreign.C.Types
 import System.IO.Unsafe (unsafeDupablePerformIO)
+import Data.Foldable(foldl')
 
 import Concordium.Crypto.FFIDataTypes
 import Concordium.Crypto.ByteStringHelpers
@@ -115,6 +116,17 @@ aggregateAmounts left right = unsafeDupablePerformIO $ do
               outHigh <- unsafeMakeCipher =<< peek outHighPtr
               outLow <- unsafeMakeCipher =<< peek outLowPtr
               return EncryptedAmount{encryptionHigh = outHigh, encryptionLow = outLow}
+
+instance Semigroup EncryptedAmount where
+  (<>) = aggregateAmounts
+
+instance Monoid EncryptedAmount where
+  mempty = EncryptedAmount zeroElgamalCipher zeroElgamalCipher
+  -- mconcat is redefined for efficiency reasons. The default implemenation uses
+  -- foldr, which is bad in this case since `aggregateAmounts` is strict in the
+  -- second argument.
+  mconcat [] = mempty
+  mconcat (x:xs) = foldl' aggregateAmounts x xs
 
 verifyEncryptedTransferProof ::
   -- |Global context with parameters

@@ -2,6 +2,7 @@
 extern crate failure;
 #[macro_use]
 extern crate serde_json;
+use crypto_common::*;
 
 use std::convert::TryInto;
 
@@ -22,53 +23,74 @@ use std::ffi::{CStr, CString};
 
 use failure::Fallible;
 use rand::thread_rng;
-use serde_json::{from_str, from_value, to_string, Value};
+use serde_json::{from_str, from_value, to_string, Map, Value};
 
 use sha2::{Digest, Sha256};
 
 type ExampleCurve = G1;
 
+/// Context for a transaction to send.
+#[derive(SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+struct TransferContext {
+    pub from:   AccountAddress,
+    pub to:     AccountAddress,
+    pub expiry: u64,
+    pub nonce:  u64,
+    pub keys:   Map<String, Value>,
+}
+
+fn make_signatures<H: AsRef<[u8]>>(
+    keys: &Map<String, Value>,
+    hash: &H,
+) -> Fallible<BTreeMap<u8, String>> {
+    let mut out = BTreeMap::new();
+    for (key_index_str, value) in keys.iter() {
+        let key_index = key_index_str.parse::<u8>()?;
+        match value.as_object() {
+            None => bail!("Malformed keys."),
+            Some(value) => {
+                let public = match value.get("verifyKey").and_then(Value::as_str) {
+                    None => bail!("Malformed keys: missing verifyKey."),
+                    Some(x) => base16_decode_string(&x)?,
+                };
+                let secret = match value.get("signKey").and_then(Value::as_str) {
+                    None => bail!("Malformed keys: missing signKey."),
+                    Some(x) => base16_decode_string(&x)?,
+                };
+                out.insert(
+                    key_index,
+                    base16_encode_string(&ed25519::Keypair { secret, public }.sign(hash.as_ref())),
+                );
+            }
+        }
+    }
+    Ok(out)
+}
+
+// fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
+//     let v: Value = from_str(input)?;
+
+//     let ctx: TransferContext = from_value(v.clone())?;
+
+// }
+
 fn create_transfer_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
 
-    let from_address: AccountAddress = {
-        match v.get("from") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'from' not present, but should be."),
-        }
-    };
+    let ctx: TransferContext = from_value(v.clone())?;
 
-    let to_address: AccountAddress = {
-        match v.get("to") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'to' not present, but should be."),
-        }
-    };
+    let from_address: AccountAddress = ctx.from;
+    let to_address: AccountAddress = ctx.to;
+    let expiry: u64 = ctx.expiry;
+    let nonce: u64 = ctx.nonce;
+    let keys_object = ctx.keys;
 
     let amount: u64 = {
         match v.get("amount") {
             Some(v) => from_value(v.clone())?,
             None => bail!("Field 'amount' not present, but should be."),
         }
-    };
-
-    let expiry: u64 = {
-        match v.get("expiry") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'expiry' not present, but should be."),
-        }
-    };
-
-    let nonce: u64 = {
-        match v.get("nonce") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'nonce' not present, but should be."),
-        }
-    };
-
-    let keys_object = match v.get("keys").and_then(Value::as_object) {
-        Some(v) => v,
-        None => bail!("Field 'keys' not present or not an object, but should be."),
     };
 
     // NB: This needs to be consistent with scheduler assigned cost.
@@ -97,36 +119,11 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
         (hasher.result(), body)
     };
 
-    let signatures = {
-        let mut out = BTreeMap::new();
-        for (key_index_str, value) in keys_object.iter() {
-            let key_index = key_index_str.parse::<u8>()?;
-            match value.as_object() {
-                None => bail!("Malformed keys."),
-                Some(value) => {
-                    let public = match value.get("verifyKey").and_then(Value::as_str) {
-                        None => bail!("Malformed keys: missing verifyKey."),
-                        Some(x) => base16_decode_string(&x)?,
-                    };
-                    let secret = match value.get("signKey").and_then(Value::as_str) {
-                        None => bail!("Malformed keys: missing signKey."),
-                        Some(x) => base16_decode_string(&x)?,
-                    };
-                    out.insert(
-                        key_index,
-                        base16_encode_string(&ed25519::Keypair { secret, public }.sign(&hash)),
-                    );
-                }
-            }
-        }
-        out
-    };
-
-    use hex::encode;
+    let signatures = make_signatures(&keys_object, &hash)?;
 
     let response = json!({
         "signatures": signatures,
-        "transaction": encode(&body)
+        "transaction": hex::encode(&body)
     });
 
     Ok(to_string(&response)?)
