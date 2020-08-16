@@ -10,7 +10,7 @@ type Group = pairing::bls12_381::G1;
 /// This function is safe if the pointers are all non-null, and produced
 /// by `Box::into_raw` for the input pointers.
 #[no_mangle]
-pub unsafe extern "C" fn aggregate_encrypted_amounts(
+unsafe extern "C" fn aggregate_encrypted_amounts(
     first_high_ptr: *const Cipher<Group>,
     first_low_ptr: *const Cipher<Group>,
     second_high_ptr: *const Cipher<Group>,
@@ -33,7 +33,7 @@ pub unsafe extern "C" fn aggregate_encrypted_amounts(
 /// produced by `Box::into_raw`. The `transfer_proof_ptr` can be null in case
 /// the length is 0, but otherwise it must be non-null and dereferenceable.
 #[no_mangle]
-pub unsafe extern "C" fn verify_encrypted_tranfer(
+unsafe extern "C" fn verify_encrypted_transfer(
     ctx_ptr: *const GlobalContext<Group>,
     initial_high_ptr: *const Cipher<Group>,
     initial_low_ptr: *const Cipher<Group>,

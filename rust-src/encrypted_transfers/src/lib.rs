@@ -96,7 +96,8 @@ pub struct DecryptAmountData<C: Curve> {
 /// Since decryption is an expensive process, we only do it once, and then store
 /// the data.
 ///
-/// Moreover these decryptions can be aggregated.
+/// Moreover these decryptions can be aggregated into
+/// `AggregatedDecryptedAmount`s.
 #[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 #[serde(rename_all = "camelCase")]

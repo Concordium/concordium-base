@@ -2,7 +2,7 @@
 module Concordium.Crypto.FFIDataTypes
   (PedersenKey, PsSigKey, ElgamalGen, ElgamalPublicKey, ElgamalCipher,
   generatePedersenKey, generatePsSigKey, generateElgamalGen, generateElgamalPublicKey, generateElgamalCipher,
-  withPedersenKey, withPsSigKey, withElgamalGen, withElgamalPublicKey, withElgamalCipher,
+  withPedersenKey, withPsSigKey, withElgamalGen, withElgamalPublicKey, withElgamalCipher, zeroElgamalCipher,
   unsafeMakeCipher)
   where
 
@@ -15,10 +15,10 @@ import Foreign.C.Types
 import Data.Word
 import Data.ByteString as BS
 import Data.Serialize
+import System.IO.Unsafe (unsafeDupablePerformIO)
+import Control.DeepSeq
 
 import qualified Data.Aeson as AE
-
-import Control.DeepSeq
 
 newtype PedersenKey = PedersenKey (ForeignPtr PedersenKey)
 newtype PsSigKey = PsSigKey (ForeignPtr PsSigKey)
@@ -63,6 +63,7 @@ foreign import ccall unsafe "&elgamal_cipher_free" freeElgamalCipher :: FunPtr (
 foreign import ccall unsafe "elgamal_cipher_to_bytes" toBytesElgamalCipher :: Ptr ElgamalCipher -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "elgamal_cipher_from_bytes" fromBytesElgamalCipher :: Ptr Word8 -> CSize -> IO (Ptr ElgamalCipher)
 foreign import ccall unsafe "elgamal_cipher_gen" generateElgamalCipherPtr :: IO (Ptr ElgamalCipher)
+foreign import ccall unsafe "elgamal_cipher_zero" zeroElgamalCipherPtr :: IO (Ptr ElgamalCipher)
 
 withPedersenKey :: PedersenKey -> (Ptr PedersenKey -> IO b) -> IO b
 withPedersenKey (PedersenKey fp) = withForeignPtr fp
@@ -231,6 +232,12 @@ instance AE.FromJSON ElgamalCipher where
 generateElgamalCipher :: IO ElgamalCipher
 generateElgamalCipher = do
   ptr <- generateElgamalCipherPtr
+  unsafeMakeCipher ptr
+
+-- |Encryption of 0 in the exponent, with randomness 0.
+zeroElgamalCipher :: ElgamalCipher
+zeroElgamalCipher = unsafeDupablePerformIO $ do
+  ptr <- zeroElgamalCipherPtr
   unsafeMakeCipher ptr
 
 -- |Construct an Elgamal cipher from a pointer to it.
