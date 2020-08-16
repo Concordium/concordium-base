@@ -13,6 +13,7 @@ use crate::types::*;
 use curve_arithmetic::*;
 use elgamal::*;
 use id::types::*;
+use merlin::Transcript;
 use proofs::*;
 use rand::*;
 use random_oracle::*;
@@ -51,8 +52,8 @@ fn aggregate<C: Curve>(
     left: &EncryptedAmount<C>,
     right: &EncryptedAmount<C>,
 ) -> EncryptedAmount<C> {
-    let encryption_hi = left.encryptions[1].combine(&right.encryptions[1]);
-    let encryption_low = left.encryptions[0].combine(&right.encryptions[0]);
+    let encryption_hi = left.encryptions[0].combine(&right.encryptions[0]);
+    let encryption_low = left.encryptions[1].combine(&right.encryptions[1]);
     EncryptedAmount {
         encryptions: [encryption_hi, encryption_low],
     }
@@ -72,9 +73,21 @@ fn decrypt_amount<C: Curve>(
     sk: &SecretKey<C>,
     amount: &EncryptedAmount<C>,
 ) -> Amount {
-    let hi_chunk = sk.decrypt_exponent(&amount.encryptions[1], table);
-    let low_chunk = sk.decrypt_exponent(&amount.encryptions[0], table);
+    let hi_chunk = sk.decrypt_exponent(&amount.encryptions[0], table);
+    let low_chunk = sk.decrypt_exponent(&amount.encryptions[1], table);
     CHUNK_SIZE.chunks_to_u64([low_chunk, hi_chunk].iter().copied())
+}
+
+impl<C: Curve> EncryptedAmount<C> {
+    /// Join chunks of an encrypted amount into a single ciphertext.
+    /// The resulting ciphertext will in general not be easily decryptable.
+    pub fn join(&self) -> Cipher<C> {
+        let scale = 1u64 << u8::from(CHUNK_SIZE);
+        // NB: This relies on chunks being big-endian
+        self.encryptions[0]
+            .scale_u64(scale)
+            .combine(&self.encryptions[1])
+    }
 }
 
 /// # Public API intended for use by the wallet.
@@ -102,20 +115,22 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
 ) -> Option<EncryptedAmountTransferData<C>> {
     // FIXME: Put context into random oracle
     let ro = RandomOracle::domain("EncryptedTransfer");
-    let transcript = todo!();
+    // FIXME: Put context into the transcript.
+    let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
     let pk_sender = &PublicKey::from(sender_sk);
     // FIXME: Make arguments more in line between gen_enc_trans and this.
     encexp::gen_enc_trans(
         ctx,
         ro,
-        transcript,
+        &mut transcript,
         pk_sender,
         sender_sk,
         receiver_pk,
         input_amount.agg_index,
-        input_amount.agg_encrypted_amount, // FIXME: This needs to changed to a single encryption.
+        &input_amount.agg_encrypted_amount.join(),
         input_amount.agg_amount,
         to_transfer,
+        csprng,
     )
 }
 
@@ -305,6 +320,32 @@ mod tests {
             amount_1 + amount_2 + amount_3,
             decrypted,
             "Decrypted aggregated encrypted amount differs from expected."
+        );
+    }
+
+    // Test that aggregation works, and resulting data can be decrypted.
+    // This test can be a bit slow, taking a few seconds.
+    #[test]
+    fn test_scale() {
+        let mut csprng = thread_rng();
+        let context = GlobalContext::<G1>::generate(&mut csprng);
+
+        let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
+        let pk = PublicKey::from(&sk);
+
+        // we divide here by 3 to avoid overflow when summing them together.
+        let amount_1 = u64::from(csprng.gen::<u32>());
+        let amount_1 = amount_1 << 2;
+
+        let (enc_amount_1, _) = encrypt_amount(&context, &pk, amount_1, &mut csprng);
+
+        let m = 1 << 16;
+        let table = BabyStepGiantStep::new(context.encryption_in_exponent_generator(), m);
+
+        let decrypted_1 = sk.decrypt_exponent(&enc_amount_1.join(), &table);
+        assert_eq!(
+            amount_1, decrypted_1,
+            "Decrypted combined encrypted amount differs from expected."
         );
     }
 }

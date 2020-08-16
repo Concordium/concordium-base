@@ -62,9 +62,8 @@ fn linear_combination_with_powers_of_two<C: Curve>(scalars: &[C::Scalar]) -> C::
     let two_32 = C::scalar_from_u64(1 << 32);
     let mut power_of_two = C::Scalar::one();
     let mut sum = C::Scalar::zero();
-    for i in 0..scalars.len() {
-        let i = scalars.len() - i - 1;
-        let mut term = scalars[i];
+    for term in scalars.iter().rev() {
+        let mut term = *term;
         term.mul_assign(&power_of_two);
         sum.add_assign(&term);
         power_of_two.mul_assign(&two_32);

@@ -66,6 +66,7 @@ fn two_n_vec<F: Field>(n: u8) -> Vec<F> {
 fn z_vec<F: Field>(z: F, first_power: usize, n: usize) -> Vec<F> {
     let mut z_n = Vec::with_capacity(n);
     let mut z_i = F::one();
+    // FIXME: This should would be better to do with `pow`.
     for _ in 0..first_power {
         z_i.mul_assign(&z);
     }
@@ -78,9 +79,23 @@ fn z_vec<F: Field>(z: F, first_power: usize, n: usize) -> Vec<F> {
 
 /// Struct containing generators G and H needed for range proofs
 #[allow(non_snake_case)]
-#[derive(Clone)]
-pub struct Generators<C> {
+#[derive(Clone, Serialize, SerdeBase16Serialize)]
+pub struct Generators<C: Curve> {
+    #[size_length = 4]
     pub G_H: Vec<(C, C)>,
+}
+
+impl<C: Curve> Generators<C> {
+    /// Generate a list of generators of a given size.
+    pub fn generate(n: usize, csprng: &mut impl Rng) -> Self {
+        let mut gh = Vec::with_capacity(n);
+        for _ in 0..n {
+            let x = C::generate(csprng);
+            let y = C::generate(csprng);
+            gh.push((x, y));
+        }
+        Self { G_H: gh }
+    }
 }
 
 /// This function produces a range proof given scalars in a prime field
@@ -223,6 +238,15 @@ pub fn prove<C: Curve, T: Rng>(
 
     let z_m = z_vec(z, 0, usize::from(m));
 
+    // z squared
+    let z_sq = if z_m.len() > 2 {
+        z_m[2]
+    } else {
+        let mut z_sq = z;
+        z_sq.mul_assign(&z);
+        z_sq
+    };
+
     // r_0 and r_1
     for i in 0..a_R.len() {
         let mut r_0_i = a_R[i];
@@ -231,7 +255,7 @@ pub fn prove<C: Curve, T: Rng>(
         let j = i / (usize::from(n));
         let mut z_jz_2_2_n = z_m[j];
         let two_i = two_n[i % (usize::from(n))];
-        z_jz_2_2_n.mul_assign(&z_m[2]);
+        z_jz_2_2_n.mul_assign(&z_sq);
         z_jz_2_2_n.mul_assign(&two_i);
         r_0_i.add_assign(&z_jz_2_2_n);
         r_0.push(r_0_i);
@@ -328,7 +352,7 @@ pub fn prove<C: Curve, T: Rng>(
         tx.add_assign(&tjx);
 
         // tx tilde:
-        let mut z2vj_tilde = z_m[2];
+        let mut z2vj_tilde = z_sq;
         z2vj_tilde.mul_assign(&z_m[j]); // This line is MISSING in the Bulletproof documentation
         z2vj_tilde.mul_assign(&v_tilde_vec[j]);
         let mut xt1j_tilde = x;
@@ -626,6 +650,16 @@ mod tests {
         let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
         let z: C::Scalar = transcript.challenge_scalar::<C>(b"z");
         let z_m = z_vec(z, 0, usize::from(m));
+
+        // z squared
+        let z_sq = if z_m.len() > 2 {
+            z_m[2]
+        } else {
+            let mut z_sq = z;
+            z_sq.mul_assign(&z);
+            z_sq
+        };
+
         let T_1 = C::zero_point();
         let T_2 = C::zero_point();
 
@@ -638,7 +672,7 @@ mod tests {
         // println!("Cheating prover's x = {}", x);
         for j in 0..usize::from(m) {
             // tx:
-            let mut z2vj = z_m[2];
+            let mut z2vj = z_sq;
             z2vj.mul_assign(&z_m[j]); // This line is MISSING in the Bulletproof documentation
             let v_value = C::scalar_from_u64(v_copy[j]);
             z2vj.mul_assign(&v_value);
@@ -646,7 +680,7 @@ mod tests {
             tx.add_assign(&tjx);
 
             // tx tilde:
-            let mut z2vj_tilde = z_m[2];
+            let mut z2vj_tilde = z_sq;
             z2vj_tilde.mul_assign(&z_m[j]); // This line is MISSING in the Bulletproof documentation
             z2vj_tilde.mul_assign(&v_tilde_vec[j]);
             let txj_tilde = z2vj_tilde;
@@ -666,14 +700,20 @@ mod tests {
             two_i.double();
         }
         let mut sum = C::Scalar::zero();
-        let mut zj3 = z_m[3];
+        let mut zj3 = if z_m.len() > 3 {
+            z_m[3]
+        } else {
+            let mut zj3 = z_sq;
+            zj3.mul_assign(&z);
+            zj3
+        };
         for _ in 0..m {
             sum.add_assign(&zj3);
             zj3.mul_assign(&z);
         }
         sum.mul_assign(&ip_1_2_n);
         let mut delta_yz = z;
-        delta_yz.sub_assign(&z_m[2]);
+        delta_yz.sub_assign(&z_sq);
         delta_yz.mul_assign(&ip_1_y_nm);
         delta_yz.sub_assign(&sum);
         tx.add_assign(&delta_yz);

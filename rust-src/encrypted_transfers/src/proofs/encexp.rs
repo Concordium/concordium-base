@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 use crate::{proofs::enc_trans::*, types::*};
 use bulletproofs::range_proof::{
-    prove_given_scalars as bulletprove, verify_efficient, Generators,
+    prove_given_scalars as bulletprove, verify_efficient,
     VerificationError as BulletproofVerificationError,
 };
 use curve_arithmetic::{Curve, Value};
@@ -94,23 +94,22 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     sk_sender: &SecretKey<C>,
     pk_receiver: &PublicKey<C>,
     index: u64,    // indicates which amounts were used
-    S: &Cipher<C>, // encryption of the input amount up to the index
-    // FIXME: Why is this just a single encryption? Where is it specified how we get it from
-    // chunks? Just do linear combination in the exponent?
-    s: Amount,            // input amount
-    a: Amount,            // amount to send
-    gens: &Generators<C>, // For Bulletproofs
+    S: &Cipher<C>, // encryption of the input amount up to the index, combined into one encryption
+    s: Amount,     // input amount
+    a: Amount,     // amount to send
     csprng: &mut R,
 ) -> Option<EncryptedAmountTransferData<C>> {
     if s < a {
         return None;
     }
 
+    // For Bulletproofs
+    let gens = context.bulletproof_generators();
     let generator = context.encryption_in_exponent_generator();
 
     let s_prime = s - a;
-    let s_prime_chunks = CHUNK_SIZE.u64_to_chunks(s_prime);
-    let a_chunks = CHUNK_SIZE.u64_to_chunks(a);
+    let s_prime_chunks = CHUNK_SIZE.u64_to_big_endian_chunks(s_prime);
+    let a_chunks = CHUNK_SIZE.u64_to_big_endian_chunks(a);
     let A_enc_randomness = a_chunks
         .iter()
         .map(|&x| {
@@ -134,6 +133,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         .collect::<Vec<_>>();
 
     let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) = S_prime_enc_randomness.iter().cloned().unzip();
+
     let protocol = gen_enc_trans_proof_info(&pk_sender, &pk_receiver, &S, &A, &S_prime, &generator);
     let A_rand_as_value: Vec<Value<_>> = A_rand.iter().map(Randomness::to_value).collect();
     let a_chunks_as_rand: Vec<PedersenRandomness<_>> = a_chunks
@@ -190,6 +190,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         &cmm_key_bulletproof_a,
         &A_rand_as_pedrand,
     )?;
+
     let bulletproof_s_prime = bulletprove(
         transcript,
         csprng,
@@ -222,7 +223,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     })
 }
 
-/// The verifier does two checks. In case verification fails, it can be useful
+/// The verifier does three checks. In case verification fails, it can be useful
 /// to know which of the checks led to failure.
 #[derive(Debug, PartialEq)]
 pub enum VerificationError {
@@ -241,10 +242,11 @@ pub fn verify_enc_trans<C: Curve>(
     transaction: &EncryptedAmountTransferData<C>,
     pk_sender: &PublicKey<C>,
     pk_receiver: &PublicKey<C>,
-    S: &Cipher<C>,        // encryption of the amount on the account
-    gens: &Generators<C>, // For Bulletproofs
+    S: &Cipher<C>, // encryption of the amount on the account
 ) -> Result<(), VerificationError> {
     let generator = context.encryption_in_exponent_generator();
+    // For Bulletproofs
+    let gens = context.bulletproof_generators();
 
     let protocol = gen_enc_trans_proof_info(
         &pk_sender,
@@ -305,7 +307,7 @@ pub fn verify_enc_trans<C: Curve>(
         &cmm_key_bulletproof_s_prime,
     );
     if let Err(err) = second_bulletproof {
-        return Err(VerificationError::FirstBulletproofError(err));
+        return Err(VerificationError::SecondBulletproofError(err));
     }
     Ok(())
 }
@@ -480,15 +482,7 @@ mod test {
         let n = 32;
         let nm = n * m;
 
-        let mut G_H = Vec::with_capacity(nm);
-
-        for _i in 0..(nm) {
-            let g = SomeCurve::generate(&mut csprng);
-            let h = SomeCurve::generate(&mut csprng);
-            G_H.push((g, h));
-        }
-        let gens = Generators { G_H };
-        let context = GlobalContext::<SomeCurve>::generate(&mut csprng);
+        let context = GlobalContext::<SomeCurve>::generate_size(nm, &mut csprng);
         let generator = context.encryption_in_exponent_generator(); // h
         let s_value = Value::from_u64(s);
         let S = pk_sender.encrypt_exponent_given_generator(&mut csprng, &s_value, generator);
@@ -512,23 +506,23 @@ mod test {
             &S,
             s,
             a,
-            &gens,
             &mut csprng,
         )
         .expect("Could not produce proof.");
 
         let mut transcript = Transcript::new(&[]);
 
-        assert!(verify_enc_trans(
-            &context,
-            ro,
-            &mut transcript,
-            &transaction,
-            &pk_sender,
-            &pk_receiver,
-            &S,
-            &gens
+        assert_eq!(
+            verify_enc_trans(
+                &context,
+                ro,
+                &mut transcript,
+                &transaction,
+                &pk_sender,
+                &pk_receiver,
+                &S,
+            ),
+            Ok(())
         )
-        .is_ok());
     }
 }
