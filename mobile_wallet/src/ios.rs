@@ -2,8 +2,8 @@
 
 use libc::c_char;
 use wallet::{
-    check_account_address as check_account_address_ext, create_credential_ext,
-    create_id_request_and_private_data_ext, create_transfer_ext, free_response_string_ext,
+    check_account_address_ext, create_credential_ext, create_id_request_and_private_data_ext,
+    create_transfer_ext, free_response_string_ext,
 };
 
 #[no_mangle]
