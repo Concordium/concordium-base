@@ -5,7 +5,7 @@ extern crate criterion;
 
 use criterion::Criterion;
 
-use elgamal::secret::*;
+use elgamal::*;
 
 use curve_arithmetic::Curve;
 use ff::PrimeField;

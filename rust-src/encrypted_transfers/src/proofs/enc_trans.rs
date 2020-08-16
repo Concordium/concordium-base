@@ -58,6 +58,7 @@ pub struct EncTransState<C: Curve> {
 // encrypted_amounts was created. It might need some adjustment to fit with
 // master
 fn linear_combination_with_powers_of_two<C: Curve>(scalars: &[C::Scalar]) -> C::Scalar {
+    // FIXME: This should use ChunkSize
     let two_32 = C::scalar_from_u64(1 << 32);
     let mut power_of_two = C::Scalar::one();
     let mut sum = C::Scalar::zero();

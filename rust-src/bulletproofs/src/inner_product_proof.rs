@@ -5,12 +5,12 @@ use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use merlin::Transcript;
 
-#[allow(non_snake_case)]
 #[derive(Clone, Serialize)]
 pub struct InnerProductProof<C: Curve> {
+    #[size_length = 4]
     pub lr_vec: Vec<(C, C)>,
-    pub a:      C::Scalar,
-    pub b:      C::Scalar,
+    pub a: C::Scalar,
+    pub b: C::Scalar,
 }
 
 /// This function computes an inner product proof,

@@ -2,7 +2,7 @@
 
 use rand::{thread_rng, CryptoRng, Rng, RngCore};
 
-use std::{slice, sync::Arc};
+use std::sync::Arc;
 
 use crypto_common::size_t;
 use ffi_helpers::*;

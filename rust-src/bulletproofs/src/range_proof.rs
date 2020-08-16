@@ -1,4 +1,6 @@
 use crate::{inner_product_proof::*, transcript::TranscriptProtocol};
+use crypto_common::*;
+use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Value};
 use ff::{Field, PrimeField};
 use merlin::Transcript;
@@ -6,8 +8,8 @@ use pedersen_scheme::*;
 use rand::*;
 use std::iter::once;
 
+#[derive(Clone, Serialize, SerdeBase16Serialize)]
 #[allow(non_snake_case)]
-#[derive(Clone)]
 pub struct RangeProof<C: Curve> {
     A:        C,
     S:        C,
@@ -19,8 +21,8 @@ pub struct RangeProof<C: Curve> {
     ip_proof: InnerProductProof<C>,
 }
 
-// Determine whether the i-th bit (counting from least significant) is set in
-// the given u64 value.
+/// Determine whether the i-th bit (counting from least significant) is set in
+/// the given u64 value.
 fn ith_bit_bool(v: u64, i: u8) -> bool { v & (1 << i) != 0 }
 
 #[allow(non_snake_case)]
@@ -138,8 +140,8 @@ pub fn prove<C: Curve, T: Rng>(
     randomness: &[Randomness<C>],
 ) -> Option<RangeProof<C>> {
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
-    let B = v_keys.0;
-    let B_tilde = v_keys.1;
+    let B = v_keys.g;
+    let B_tilde = v_keys.h;
     let nm = G.len();
     let mut a_L: Vec<C::Scalar> = Vec::with_capacity(usize::from(n));
     let mut a_R: Vec<C::Scalar> = Vec::with_capacity(usize::from(n));
@@ -417,8 +419,8 @@ pub fn verify_efficient<C: Curve>(
     v_keys: &CommitmentKey<C>,
 ) -> Result<(), VerificationError> {
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
-    let B = v_keys.0;
-    let B_tilde = v_keys.1;
+    let B = v_keys.g;
+    let B_tilde = v_keys.h;
     let m = commitments.len();
     for V in commitments {
         transcript.append_point(b"Vj", &V.0);
@@ -607,7 +609,7 @@ mod tests {
         let v_copy = v_vec.clone();
         let mut V_vec: Vec<Commitment<C>> = Vec::with_capacity(usize::from(m));
         let mut v_tilde_vec: Vec<C::Scalar> = Vec::with_capacity(usize::from(m));
-        let v_keys = CommitmentKey(B, B_tilde);
+        let v_keys = CommitmentKey { g: B, h: B_tilde };
         for v in v_vec {
             let v_scalar = C::scalar_from_u64(v);
             let v_value = Value::<C>::new(v_scalar);
@@ -722,8 +724,8 @@ mod tests {
         v_keys: &CommitmentKey<C>,
     ) -> bool {
         let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
-        let B = v_keys.0;
-        let B_tilde = v_keys.1;
+        let B = v_keys.g;
+        let B_tilde = v_keys.h;
         let m = commitments.len();
         for V in commitments.clone() {
             transcript.append_point(b"Vj", &V.0);
@@ -870,8 +872,8 @@ mod tests {
         v_keys: &CommitmentKey<C>,
     ) -> bool {
         let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
-        let B = v_keys.0;
-        let B_tilde = v_keys.1;
+        let B = v_keys.g;
+        let B_tilde = v_keys.h;
         let m = commitments.len();
         for V in commitments {
             transcript.append_point(b"Vj", &V.0);
@@ -1061,7 +1063,7 @@ mod tests {
         let gens = Generators { G_H };
         let B = SomeCurve::generate(rng);
         let B_tilde = SomeCurve::generate(rng);
-        let keys = CommitmentKey(B, B_tilde);
+        let keys = CommitmentKey { g: B, h: B_tilde };
 
         // Some numbers in [0, 2^n):
         let v_vec: Vec<u64> = vec![
@@ -1131,7 +1133,7 @@ mod tests {
         let gens = Generators { G_H };
         let B = SomeCurve::generate(rng);
         let B_tilde = SomeCurve::generate(rng);
-        let keys = CommitmentKey(B, B_tilde);
+        let keys = CommitmentKey { g: B, h: B_tilde };
 
         // Some numbers in [0, 2^n):
         let v_vec: Vec<u64> = vec![
