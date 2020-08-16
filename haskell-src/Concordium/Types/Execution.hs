@@ -625,7 +625,9 @@ data Event =
            | AccountKeysAdded
            | AccountKeysRemoved
            | AccountKeysSignThresholdUpdated
-           -- | New encrypted amount added to an account, with a given index
+           -- | New encrypted amount added to an account, with a given index.
+           --
+           -- This is used on the receiver's account when they get an encrypted amount transfer.
            | NewEncryptedAmount{
                neaAccount :: !AccountAddress,
                -- | Index of the new amount.
@@ -634,10 +636,25 @@ data Event =
                neaEncryptedAmount :: !EncryptedAmount
            }
            -- | A number of encrypted amounts were removed from an account, up-to, but not including
-           -- the aggregation index.
+           -- the aggregation index. And a new encrypted amount has appeared that is the difference
+           -- between what was sent, and what was used. This is the new self-amount after the transfer.
+           --
+           -- This is used on the sender's account when making an encrypted
+           -- transfer, or transfer from the encrypted balance to public
+           -- balance.
            | EncryptedAmountsRemoved{
+               earAccount :: !AccountAddress,
+               -- |The newly added amount.
+               earNewAmount :: !EncryptedAmount,
+               -- |Index up to (but not including) which the amounts were removed.
                earUpToIndex :: !EncryptedAmountAggIndex
             }
+           -- | A new encrypted amount was added to the self-encrypted-balance of the account.
+           -- The amount given is the newly added one.
+           | EncryptedSelfAmountAdded{
+               eaaAccount :: !AccountAddress,
+               eaaNewAmount :: !EncryptedAmount
+               }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -709,10 +726,10 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | KeyIndexAlreadyInUse
                   -- |When the account key threshold is updated, it must not exceed the amount of existing keys
                   | InvalidAccountKeySignThreshold
-                  -- |In encrypted amount transfers, the index claimed to be used is not valid.
-                  | InvalidEncryptedAmountIndex !EncryptedAmountAggIndex
                   -- |Proof for an encrypted amount transfer did not validate.
                   | InvalidEncryptedAmountTransferProof
+                  -- |Account tried to transfer an encrypted amount to itself, that's not allowed.
+                  | EncryptedAmountSelfTransfer !AccountAddress
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReason :: Wasm.ContractExecutionFailure -> RejectReason
