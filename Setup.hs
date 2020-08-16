@@ -27,6 +27,7 @@ makeRust args flags = do
     rawSystemExitWithEnv verbosity "cargo"
         ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"]
         (("CARGO_NET_GIT_FETCH_WITH_CLI", "true") : env)
+    -- NB: This list must be updated when new libraries are added to dependencies.
     let libs = [
                 "ec_vrf_ed25519",
                 "sha_2",
@@ -35,7 +36,6 @@ makeRust args flags = do
                 "id",
                 "aggregate_sig"
             ]
-    _ <- rawSystemExitCode verbosity "mkdir" ["./lib"]
     -- On Windows, copy the static libraries and DLLs. (The DLLs should not be used by the
     -- linker, but seem to be needed sometimes by TemplateHaskell at compile time.)
     -- On other platforms, symlink the shared libraries.
@@ -44,12 +44,27 @@ makeRust args flags = do
             let copyLib lib = do
                 rawSystemExit verbosity "cp" ["rust-src/target/release/lib" ++ lib ++ ".a", "./lib/"]
                 rawSystemExit verbosity "cp" ["rust-src/target/release/" ++ lib ++ ".dll", "./lib/"]
+                notice verbosity $ "Copied " ++ lib ++ "."
+            _ <- rawSystemExitCode verbosity "mkdir" ["./lib"]
+            notice verbosity "Copying libraries to ./lib"
             mapM_ copyLib libs
         OSX -> do
-            let copyLib lib = rawSystemExit verbosity "ln" ["-s", "-f", "../rust-src/target/release/lib" ++ lib ++ ".dylib", "./lib/lib" ++ lib ++ ".dylib"]
+            let copyLib lib = do
+                  let source = "../rust-src/target/release/lib" ++ lib ++ ".dylib"
+                  let target = "./lib/lib" ++ lib ++ ".dylib"
+                  rawSystemExit verbosity "ln" ["-s", "-f", source, target]
+                  noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ target
+            _ <- rawSystemExitCode verbosity "mkdir" ["-p", "./lib"]
+            notice verbosity "Linking libraries to ./lib"
             mapM_ copyLib libs
         _ -> do
-            let copyLib lib = rawSystemExit verbosity "ln" ["-s", "-f", "../rust-src/target/release/lib" ++ lib ++ ".so", "./lib/lib" ++ lib ++ ".so"]
+            let copyLib lib = do
+                  let source = "../rust-src/target/release/lib" ++ lib ++ ".so"
+                  let target = "./lib/lib" ++ lib ++ ".so"
+                  rawSystemExit verbosity "ln" ["-s", "-f", source, target]
+                  noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
+            _ <- rawSystemExitCode verbosity "mkdir" ["-p", "./lib"]
+            notice verbosity "Linking libraries to ./lib"
             mapM_ copyLib libs
     return emptyHookedBuildInfo
 
