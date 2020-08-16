@@ -1,7 +1,7 @@
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use client_server_helpers::*;
 use crypto_common::*;
-use elgamal::message::Message;
+use elgamal::Message;
 use id::{anonymity_revoker::reveal_id_cred_pub, types::*};
 use serde_json::json;
 use std::convert::TryFrom;

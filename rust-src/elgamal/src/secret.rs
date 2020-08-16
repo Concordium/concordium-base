@@ -56,26 +56,28 @@ impl<C: Curve> BabyStepGiantStep<C> {
         }
     }
 
-    /// Compute the discrete log using the instance.
-    /// It is expected that the discrete log is less than m * k.
+    /// Compute the discrete log using the instance. This function's performance
+    /// is linear in `l / m` where `l` is the value stored in the exponent of
+    /// `v`, and `m` is the size of the table.
     ///
-    /// If not, the method returns None.
-    pub fn discrete_log(&self, k: u64, v: &C) -> Option<u64> {
+    /// The function will panic if `l` is not less than `u64::MAX`, although
+    /// practically it will appear to loop well-before that value is reached.
+    pub fn discrete_log(&self, v: &C) -> u64 {
         let mut y = *v;
-        for i in 0..k {
+        for i in 0..=u64::MAX {
             if let Some(j) = self.table.get(&to_bytes(&y)) {
-                return Some(i * self.m + j);
+                return i * self.m + j;
             }
             y = y.plus_point(&self.inverse_point);
         }
-        None
+        unreachable!()
     }
 
     /// Composition of `new` nad `discrete_log` methods for convenience.
     ///
     /// Less efficient than reusing the table.
-    pub fn discrete_log_full(base: &C, m: u64, k: u64, v: &C) -> Option<u64> {
-        BabyStepGiantStep::new(base, m).discrete_log(k, v)
+    pub fn discrete_log_full(base: &C, m: u64, v: &C) -> u64 {
+        BabyStepGiantStep::new(base, m).discrete_log(v)
     }
 }
 
@@ -101,20 +103,14 @@ impl<C: Curve> SecretKey<C> {
     }
 
     /// Decrypt the value in the exponent. It is assumed the encrypted value can
-    /// be represented in 64 bits, otherwise this function returns `None`.
+    /// be represented in 64 bits, and are small enough. Otherwise this function
+    /// will appear to not terminate.
     ///
     /// This function takes an auxiliary instance of BabyStepGiantStep to speed
     /// up decryption.
-    pub fn decrypt_exponent(
-        &self,
-        c: &Cipher<C>,
-        k: u64,
-        bsgs: &BabyStepGiantStep<C>,
-    ) -> Option<Value<C>> {
+    pub fn decrypt_exponent(&self, c: &Cipher<C>, bsgs: &BabyStepGiantStep<C>) -> u64 {
         let dec = self.decrypt(c).value;
-        let a = bsgs.discrete_log(k, &dec)?;
-        let a = C::scalar_from_u64(a);
-        Some(Value::new(a))
+        bsgs.discrete_log(&dec)
     }
 
     /// Generate a `SecretKey` from a `csprng`.

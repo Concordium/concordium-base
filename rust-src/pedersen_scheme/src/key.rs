@@ -10,10 +10,13 @@ use rand::*;
 
 /// A commitment  key.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
-pub struct CommitmentKey<C: Curve>(pub C, pub C);
+pub struct CommitmentKey<C: Curve> {
+    pub g: C,
+    pub h: C,
+}
 
 impl<C: Curve> CommitmentKey<C> {
-    pub fn new(v: C, r: C) -> Self { CommitmentKey(v, r) }
+    pub fn new(g: C, h: C) -> Self { CommitmentKey { g, h } }
 
     pub fn commit<T, V: AsRef<C::Scalar>>(
         &self,
@@ -30,8 +33,8 @@ impl<C: Curve> CommitmentKey<C> {
     /// The interface is not very type-safe, hence the availability of other
     /// functions.
     pub fn hide_worker(&self, value: &C::Scalar, randomness: &C::Scalar) -> Commitment<C> {
-        let h = self.1;
-        let g = self.0;
+        let h = self.h;
+        let g = self.g;
         let cmm = multiexp(&[g, h], &[*value, *randomness]);
         // let hr = h.mul_by_scalar(randomness);
         // let gm = g.mul_by_scalar(value);
@@ -52,7 +55,7 @@ impl<C: Curve> CommitmentKey<C> {
         T: Rng, {
         let h = C::generate(csprng);
         let g = C::generate(csprng);
-        CommitmentKey(g, h)
+        CommitmentKey { g, h }
     }
 }
 
