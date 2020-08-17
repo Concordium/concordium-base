@@ -1,14 +1,14 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-deprecations #-}
 -- |
 
 module Concordium.ID.DummyData where
 
 import qualified Data.Map.Strict as OrdMap
 import qualified Data.Hashable as IntHash
-import qualified Data.FixedByteString as FBS
 import qualified Data.ByteString.Lazy as BSL
-import System.Random
 import Concordium.ID.Types as ID
+import Concordium.Crypto.FFIDataTypes
 import qualified Data.Aeson as AE
 
 -- Derive a dummy registration id from an account address. This hashes the
@@ -16,8 +16,7 @@ import qualified Data.Aeson as AE
 -- random number generator.
 {-# WARNING dummyRegId "Invalid credential Registration ID, only for testing." #-}
 dummyRegId :: AccountAddress -> ID.CredentialRegistrationID
-dummyRegId addr = ID.RegIdCred . FBS.pack $ bytes
-  where bytes = take (FBS.fixedLength (undefined :: ID.RegIdSize)) . randoms . mkStdGen $ IntHash.hash addr
+dummyRegId addr = ID.RegIdCred (generateElgamalPublicKeyFromSeed (fromIntegral (IntHash.hash addr)))
 
 -- This credential value is invalid and does not satisfy the invariants normally expected of credentials.
 -- Should only be used when only the existence of a credential is needed in testing, but the credential

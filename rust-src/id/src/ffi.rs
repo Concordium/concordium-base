@@ -8,7 +8,7 @@ use curve_arithmetic::*;
 use ffi_helpers::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
-use rand::thread_rng;
+use rand::{prelude::StdRng, thread_rng, SeedableRng};
 use serde::{
     de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
     Serializer,
@@ -277,6 +277,17 @@ macro_free_ffi!(Box elgamal_pub_key_free, elgamal::PublicKey<G1>);
 pub extern "C" fn elgamal_pub_key_gen() -> *mut elgamal::PublicKey<G1> {
     let sk = elgamal::SecretKey::generate_all(&mut thread_rng());
     Box::into_raw(Box::new(elgamal::PublicKey::from(&sk)))
+}
+
+/// This is used for testing in haskell, providing deterministic key generation
+/// from seed.
+///
+/// # Safety
+/// The input point must point to a
+#[no_mangle]
+pub extern "C" fn elgamal_pub_key_gen_seed(seed: u64) -> *mut elgamal::SecretKey<G1> {
+    let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
+    Box::into_raw(Box::new(elgamal::SecretKey::generate_all(&mut rng)))
 }
 
 macro_derive_from_bytes!(

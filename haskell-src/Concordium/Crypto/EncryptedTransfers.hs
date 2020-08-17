@@ -18,6 +18,7 @@ import Data.Foldable(foldl')
 import Concordium.Crypto.FFIDataTypes
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.ID.Parameters
+import Concordium.ID.Types
 
 -- | Aggregate two encrypted amounts together.
 foreign import ccall unsafe "aggregate_encrypted_amounts"
@@ -145,8 +146,8 @@ prepareEncryptedAmountTransferBytes ::
   EncryptedAmount ->
   -- |Amount to transfer
   EncryptedAmount ->
-  -- |Index of the encrypted amount.
-  EncryptedAmountIndex ->
+  -- |Index of the encrypted amounts used as input.
+  EncryptedAmountAggIndex ->
   -- |Proof of validity of transaction.
   EncryptedAmountTransferProof ->
   -- |Serialized data
@@ -162,9 +163,9 @@ verifyEncryptedTransferProof ::
   -- |Global context with parameters
   GlobalContext ->
   -- |Public key of the receiver.
-  ElgamalPublicKey ->
+  AccountEncryptionKey ->
   -- |Public key of the sender.
-  ElgamalPublicKey ->
+  AccountEncryptionKey ->
   -- |Aggregated encrypted amount on the sender's account that was used.
   EncryptedAmount ->
   -- |Proof of validity of the transfer.
@@ -172,8 +173,8 @@ verifyEncryptedTransferProof ::
   Bool
 verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData = unsafeDupablePerformIO $ do
   withGlobalContext gc $ \gcPtr ->
-    withElgamalPublicKey receiverPK $ \receiverPKPtr ->
-      withElgamalPublicKey senderPK $ \senderPKPtr ->
+    withElgamalPublicKey receiverPK' $ \receiverPKPtr ->
+      withElgamalPublicKey senderPK' $ \senderPKPtr ->
         withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
           withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
             -- this is safe since the called function handles the 0 length case correctly.
@@ -187,3 +188,5 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
                        (castPtr bytesPtr)
                        (fromIntegral len)
                return (res /= 0)
+  where AccountEncryptionKey (RegIdCred receiverPK') = receiverPK
+        AccountEncryptionKey (RegIdCred senderPK') = senderPK

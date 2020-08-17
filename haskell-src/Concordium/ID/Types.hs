@@ -27,8 +27,10 @@ import qualified Data.Text as Text
 import Control.DeepSeq
 import System.Random
 import qualified Data.Map.Strict as Map
+import Data.Function
 
 import Data.Base58Encoding
+
 import qualified Data.FixedByteString as FBS
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Crypto.FFIDataTypes
@@ -99,8 +101,7 @@ addressFromBytes bs =
 
 addressFromRegId :: CredentialRegistrationID -> AccountAddress
 addressFromRegId (RegIdCred fbs) = AccountAddress (FBS.FixedByteString addr) -- NB: This only works because the sizes are the same
-  where SHA256.Hash (FBS.FixedByteString addr) = SHA256.hashShort (FBS.toShortByteString fbs)
-
+  where SHA256.Hash (FBS.FixedByteString addr) = SHA256.hash (encode fbs)
 
 
 -- |Index of the account key needed to determine what key the signature should
@@ -204,14 +205,14 @@ instance FBS.FixedLength RegIdSize where
   fixedLength _ = 48
 
 -- |Credential Registration ID (48 bytes)
-newtype CredentialRegistrationID = RegIdCred (FBS.FixedByteString RegIdSize)
-    deriving (Eq, Ord)
-    deriving Show via (FBSHex RegIdSize)
-    deriving Serialize via (FBSHex RegIdSize)
+newtype CredentialRegistrationID = RegIdCred ElgamalPublicKey
+    deriving newtype (Eq, Show, Serialize, ToJSON)
 
-instance ToJSON CredentialRegistrationID where
-  toJSON v = String (Text.pack (show v))
+-- Ord instance based on serialization
+instance Ord CredentialRegistrationID where
+  compare = compare `on` encode
 
+-- This is duplicated from ElgamalPublicKey for better error messages.
 instance FromJSON CredentialRegistrationID where
   parseJSON = withText "Credential registration ID in base16" deserializeBase16
 
