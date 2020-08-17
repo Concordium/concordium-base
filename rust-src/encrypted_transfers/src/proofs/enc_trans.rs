@@ -53,16 +53,13 @@ pub struct EncTransState<C: Curve> {
     encexp2: Vec<(Value<C>, Randomness<C>)>,
 }
 
-// This is meant to use on scalars that are chunks of number written in big
-// endian this that was the case for the value_to_chunks function when the
-// encrypted_amounts was created. It might need some adjustment to fit with
-// master
+// This is meant to use on scalars that are chunks of number
 fn linear_combination_with_powers_of_two<C: Curve>(scalars: &[C::Scalar]) -> C::Scalar {
     // FIXME: This should use ChunkSize
     let two_32 = C::scalar_from_u64(1 << 32);
     let mut power_of_two = C::Scalar::one();
     let mut sum = C::Scalar::zero();
-    for term in scalars.iter().rev() {
+    for term in scalars.iter() {
         let mut term = *term;
         term.mul_assign(&power_of_two);
         sum.add_assign(&term);
