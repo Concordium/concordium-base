@@ -6,7 +6,7 @@ extern crate crypto_common_derive;
 extern crate itertools;
 
 mod ffi;
-mod proofs;
+pub mod proofs;
 mod types;
 
 use crate::types::*;
