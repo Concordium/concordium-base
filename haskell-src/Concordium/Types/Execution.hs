@@ -33,6 +33,7 @@ import qualified Concordium.Types.Acorn.Core as Core
 import Concordium.Types
 import Concordium.Types.Utils
 import Concordium.Types.Execution.TH
+import Concordium.Types.Updates
 import Concordium.ID.Types
 import Concordium.Types.Acorn.Interfaces
 import qualified Concordium.ID.Types as IDTypes
@@ -543,15 +544,15 @@ data Event =
                -- are not delegating to anyone at the time.
                esuBaker :: !(Maybe BakerId)
                }
-           | ElectionDifficultyUpdated {
-               -- |The new election difficulty.
-               eeduDifficulty :: !Double
-               }
            -- |Keys at existing indexes were updated, no new indexes were added, threshold is unchanged
            | AccountKeysUpdated
            | AccountKeysAdded
            | AccountKeysRemoved
            | AccountKeysSignThresholdUpdated
+           | UpdateEnqueued {
+             ueEffectiveTime :: TransactionTime,
+             uePayload :: UpdatePayload
+           }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -589,6 +590,8 @@ data TransactionSummary' a = TransactionSummary {
   tsHash :: !TransactionHash,
   tsCost :: !Amount,
   tsEnergyCost :: !Energy,
+  -- FIXME: transaction type should be changed to differentiate parameter updates from credential deployments.
+  -- Currently, these are both represented by 'Nothing'.
   tsType :: !(Maybe TransactionType),
   tsResult :: !a,
   tsIndex :: !TransactionIndex
@@ -674,6 +677,7 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
                  | NonExistentAccount !AccountAddress -- ^Cannot deploy credential onto a non-existing account.
                  | AccountCredentialInvalid -- ^Account credential verification failed, the proofs were invalid or malformed.
                  | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
+                 | InvalidUpdateTime -- ^The update timeout is later than the effective time
       deriving(Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind

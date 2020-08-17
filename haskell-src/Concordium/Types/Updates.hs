@@ -1,16 +1,21 @@
-{-# LANGUAGE BangPatterns, DerivingStrategies, OverloadedStrings, ScopedTypeVariables, DeriveFunctor #-}
+{-# LANGUAGE BangPatterns, DerivingStrategies, OverloadedStrings, ScopedTypeVariables, TemplateHaskell #-}
 -- |Types for chain update instructions.
 module Concordium.Types.Updates where
 
 import qualified Data.Aeson as AE
+import Data.Aeson.TH
 import Data.Aeson ((.:))
 import Data.Bits
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as BS16
+import Data.Char
 import Data.Hashable (Hashable)
 import qualified Data.Map as Map
 import Data.Serialize
 import qualified Data.Set as Set
 import Data.Text (Text, unpack)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Vector as Vec
 import Data.Word
 import Control.Exception
@@ -19,6 +24,7 @@ import Control.Monad
 import Concordium.Crypto.SignatureScheme
 import qualified Concordium.Crypto.SHA256 as SHA256
 
+import Concordium.Types.Utils
 import Concordium.Utils.Serialization
 import Concordium.Types
 
@@ -146,6 +152,22 @@ instance AE.FromJSON Authorizations where
         asParamMicroGTUPerEuro <- parseAS "microGTUPerEuro"
         return Authorizations{..}
 
+instance AE.ToJSON Authorizations where
+    toJSON Authorizations{..} = AE.object [
+                "keys" AE..= Vec.toList asKeys,
+                "emergency" AE..= t asEmergency,
+                "authorization" AE..= t asAuthorization,
+                "protocol" AE..= t asProtocol,
+                "electionDifficulty" AE..= t asParamElectionDifficulty,
+                "euroPerEnergy" AE..= t asParamEuroPerEnergy,
+                "microGTUPerEuro" AE..= t asParamMicroGTUPerEuro
+            ]
+        where
+            t AccessStructure{..} = AE.object [
+                    "authorizedKeys" AE..= accessPublicKeys,
+                    "threshold" AE..= accessThreshold
+                ]
+
 -- |Payload of a protocol update.
 data ProtocolUpdate = ProtocolUpdate {
         -- |A brief message about the update
@@ -180,7 +202,23 @@ instance Serialize ProtocolUpdate where
             puSpecificationHash <- get
             puSpecificationAuxiliaryData <- getByteString =<< remaining
             return ProtocolUpdate{..}
-            
+
+instance AE.ToJSON ProtocolUpdate where
+    toJSON ProtocolUpdate{..} = AE.object [
+            "message" AE..= puMessage,
+            "specificationURL" AE..= puSpecificationURL,
+            "specificationHash" AE..= puSpecificationHash,
+            "specificationAuxiliaryData" AE..= decodeUtf8 (BS16.encode puSpecificationAuxiliaryData)
+        ]
+
+instance AE.FromJSON ProtocolUpdate where
+    parseJSON = AE.withObject "ProtocolUpdate" $ \v -> do
+            puMessage <- v AE..: "message"
+            puSpecificationURL <- v AE..: "specificationURL"
+            puSpecificationHash <- v AE..: "specificationHash"
+            (puSpecificationAuxiliaryData, garbage) <- BS16.decode . encodeUtf8 <$> v AE..: "specificationAuxiliaryData"
+            unless (BS.null garbage) $ fail "Unable to parse \"specificationAuxiliaryData\" as Base-16"
+            return ProtocolUpdate{..}
 
 -- |Chain parameter updates.  A parameter update __must__ update
 -- at least one parameter.
@@ -249,10 +287,12 @@ instance Serialize ParameterUpdate where
             puMicroGTUPerEuro <- mget 2
             return ParameterUpdate{..}
 
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower, omitNothingFields=True} ''ParameterUpdate)
+
 data UpdateHeader = UpdateHeader {
         updateSeqNumber :: UpdateSequenceNumber,
         updateEffectiveTime :: TransactionTime,
-        updateTimeout :: TransactionTime,
+        updateTimeout :: TransactionExpiryTime,
         updatePayloadSize :: PayloadSize
     }
     deriving (Eq, Show)
@@ -284,6 +324,8 @@ instance Serialize UpdatePayload where
             UpdateAuthorization -> AuthorizationUpdatePayload <$> get
             UpdateProtocol -> ProtocolUpdatePayload <$> get
             UpdateParameters -> ParameterUpdatePayload <$> get
+
+$(deriveJSON defaultOptions{constructorTagModifier = takeWhile isLower . firstLower, sumEncoding = TaggedObject {tagFieldName = "updateType", contentsFieldName = "update"}} ''UpdatePayload)
 
 updateType :: UpdatePayload -> UpdateType
 updateType AuthorizationUpdatePayload{} = UpdateAuthorization
