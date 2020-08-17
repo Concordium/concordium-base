@@ -109,6 +109,7 @@ pub struct DecryptedAmount<C: Curve> {
     /// The plaintext corresponding to the encrypted amount.
     pub amount: Amount,
     /// The index of the encrypted amount as listed on the account.
+    #[serde(default)]
     pub index: u64,
 }
 
@@ -125,6 +126,7 @@ pub struct AggregatedDecryptedAmount<C: Curve> {
     pub agg_amount: Amount,
     /// Index such that the `agg_amount` is the sum of all encrypted amounts
     /// on an account with indices strictly below `agg_index`.
+    #[serde(default)]
     pub agg_index: u64,
 }
 
