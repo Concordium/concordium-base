@@ -223,8 +223,6 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     })
 }
 
-
-
 /// The verifier does three checks. In case verification fails, it can be useful
 /// to know which of the checks led to failure.
 #[derive(Debug, PartialEq)]

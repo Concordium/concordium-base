@@ -3,15 +3,15 @@ use rand::*;
 #[macro_use]
 extern crate criterion;
 
-use elgamal::{PublicKey, SecretKey};
 use criterion::Criterion;
 use curve_arithmetic::Value;
-use pairing::bls12_381::{G1};
-use id::types::GlobalContext;
-use std::time::Duration;
-use random_oracle::*;
-use merlin::Transcript;
+use elgamal::{PublicKey, SecretKey};
 use encrypted_transfers::proofs::encexp::*;
+use id::types::GlobalContext;
+use merlin::Transcript;
+use pairing::bls12_381::G1;
+use random_oracle::*;
+use std::time::Duration;
 
 pub fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
     // length of the challenge
@@ -51,7 +51,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     let index = csprng.gen();
 
     let context_clone = context.clone();
-    let sk_clone = sk_sender.clone(); 
+    let sk_clone = sk_sender.clone();
     c.bench_function("Create transaction with proofs", move |b| {
         b.iter(|| {
             gen_enc_trans(
@@ -109,7 +109,6 @@ pub fn enc_trans_bench(c: &mut Criterion) {
             )
         })
     });
-
 }
 
 criterion_group! {
