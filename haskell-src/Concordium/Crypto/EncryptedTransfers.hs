@@ -84,7 +84,14 @@ addToAggIndex (EncryptedAmountAggIndex aggIdx) len = EncryptedAmountIndex (aggId
 -- is known.
 newtype EncryptedAmountTransferProof = EncryptedAmountTransferProof { theEncryptedTransferProof :: ShortByteString }
     deriving(Eq, Show, FromJSON, ToJSON) via ByteStringHex
-    deriving Serialize via Short65K
+
+getEncryptedAmountTransferProof :: Word32 -> Get EncryptedAmountTransferProof
+getEncryptedAmountTransferProof len = EncryptedAmountTransferProof <$> getShortByteString (fromIntegral len)
+
+-- |Put the proof directly without the length.
+-- The proof can be deserialized in the right contexts using 'getEncryptedAmountTransferProof'
+putEncryptedAmountTransferProof :: EncryptedAmountTransferProof -> Put
+putEncryptedAmountTransferProof = putShortByteString . theEncryptedTransferProof
 
 -- FIXME: Serialization here is probably wrong, and needs to be fixed once the proof
 -- is known.
