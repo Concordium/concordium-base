@@ -1,9 +1,9 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.FFIDataTypes
   (PedersenKey, PsSigKey, ElgamalGen, ElgamalPublicKey, ElgamalCipher,
-  generatePedersenKey, generatePsSigKey, generateElgamalGen, generateElgamalPublicKey, generateElgamalCipher,
-  withPedersenKey, withPsSigKey, withElgamalGen, withElgamalPublicKey, withElgamalCipher, zeroElgamalCipher,
-  unsafeMakeCipher)
+  generatePedersenKey, generatePsSigKey, generateElgamalGen, generateElgamalPublicKey, generateElgamalPublicKeyFromSeed,
+  generateElgamalCipher,withPedersenKey, withPsSigKey, withElgamalGen, withElgamalPublicKey, withElgamalCipher,
+  zeroElgamalCipher, unsafeMakeCipher)
   where
 
 import Concordium.Crypto.ByteStringHelpers
@@ -58,6 +58,7 @@ foreign import ccall unsafe "&elgamal_pub_key_free" freeElgamalPublicKey :: FunP
 foreign import ccall unsafe "elgamal_pub_key_to_bytes" toBytesElgamalPublicKey :: Ptr ElgamalPublicKey -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "elgamal_pub_key_from_bytes" fromBytesElgamalPublicKey :: Ptr Word8 -> CSize -> IO (Ptr ElgamalPublicKey)
 foreign import ccall unsafe "elgamal_pub_key_gen" generateElgamalPublicKeyPtr :: IO (Ptr ElgamalPublicKey)
+foreign import ccall unsafe "elgamal_pub_key_gen_seed" generateElgamalPublicKeyFromSeedPtr :: Word64 -> IO (Ptr ElgamalPublicKey)
 
 foreign import ccall unsafe "&elgamal_cipher_free" freeElgamalCipher :: FunPtr (Ptr ElgamalCipher -> IO ())
 foreign import ccall unsafe "elgamal_cipher_to_bytes" toBytesElgamalCipher :: Ptr ElgamalCipher -> Ptr CSize -> IO (Ptr Word8)
@@ -204,6 +205,13 @@ generateElgamalPublicKey :: IO ElgamalPublicKey
 generateElgamalPublicKey = do
   ptr <- generateElgamalPublicKeyPtr
   ElgamalPublicKey <$> newForeignPtr freeElgamalPublicKey ptr
+
+{-# WARNING generateElgamalPublicKeyFromSeed "Not cryptographically secure, do not use in production." #-}
+generateElgamalPublicKeyFromSeed :: Word64 -> ElgamalPublicKey
+generateElgamalPublicKeyFromSeed seed = unsafeDupablePerformIO $ do
+  ptr <- generateElgamalPublicKeyFromSeedPtr seed
+  ElgamalPublicKey <$> newForeignPtr freeElgamalPublicKey ptr
+
 
 instance Serialize ElgamalCipher where
   get = do
