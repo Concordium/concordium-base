@@ -35,7 +35,8 @@ unsafe extern "C" fn aggregate_encrypted_amounts(
 /// produced by `Box::into_raw`. The `transfer_bytes_ptr` can be null in case
 /// the length is 0, but otherwise it must be non-null and dereferenceable.
 ///
-/// Return 0 in case verification was unsuccesful, and a non-zero value otherwise.
+/// Return 0 in case verification was unsuccesful, and a non-zero value
+/// otherwise.
 #[no_mangle]
 unsafe extern "C" fn verify_encrypted_transfer(
     ctx_ptr: *const GlobalContext<Group>,
