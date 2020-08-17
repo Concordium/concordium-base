@@ -344,12 +344,12 @@ newtype EncodedPayload = EncodedPayload { _spayload :: BSS.ShortByteString }
 
 -- |There is no corresponding getter (to fit into the Serialize instance) since
 -- encoded payload does not encode its own length. See 'getPayload' below.
-putPayload :: P.Putter EncodedPayload
-putPayload = P.putShortByteString . _spayload
+putEncodedPayload :: P.Putter EncodedPayload
+putEncodedPayload = P.putShortByteString . _spayload
 
 -- |Get payload with given length.
-getPayload :: PayloadSize -> G.Get EncodedPayload
-getPayload (PayloadSize n) = EncodedPayload <$> G.getShortByteString (fromIntegral n)
+getEncodedPayload :: PayloadSize -> G.Get EncodedPayload
+getEncodedPayload (PayloadSize n) = EncodedPayload <$> G.getShortByteString (fromIntegral n)
 
 payloadSize :: EncodedPayload -> PayloadSize
 payloadSize = fromIntegral . BSS.length . _spayload

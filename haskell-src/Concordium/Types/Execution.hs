@@ -253,27 +253,27 @@ instance S.Serialize TransactionType
 -- |Payload serialization according to
 --
 --  * @SPEC: <$DOCS/Transactions#transaction-body>
-instance S.Serialize Payload where
-  put DeployModule{..} =
+putPayload :: Payload -> P.Put
+putPayload DeployModule{..} =
     P.putWord8 0 <>
     S.put dmMod
-  put InitContract{..} =
+putPayload InitContract{..} =
       P.putWord8 1 <>
       S.put icAmount <>
       S.put icModRef <>
       S.put icInitName <>
       S.put icParam
-  put Update{..} =
+putPayload Update{..} =
     P.putWord8 2 <>
     S.put uAmount <>
     S.put uAddress <>
     S.put uReceiveName <>
     S.put uMessage
-  put Transfer{..} =
+putPayload Transfer{..} =
     P.putWord8 3 <>
     S.put tToAddress <>
     S.put tAmount
-  put AddBaker{..} =
+putPayload AddBaker{..} =
     P.putWord8 4 <>
     S.put abElectionVerifyKey <>
     S.put abSignatureVerifyKey <>
@@ -283,72 +283,75 @@ instance S.Serialize Payload where
     S.put abProofElection <>
     S.put abProofAccount <>
     S.put abProofAggregation
-  put RemoveBaker{..} =
+putPayload RemoveBaker{..} =
     P.putWord8 5 <>
     S.put rbId
-  put UpdateBakerAccount{..} =
+putPayload UpdateBakerAccount{..} =
     P.putWord8 6 <>
     S.put ubaId <>
     S.put ubaAddress <>
     S.put ubaProof
-  put UpdateBakerSignKey{..} =
+putPayload UpdateBakerSignKey{..} =
     P.putWord8 7 <>
     S.put ubsId <>
     S.put ubsKey <>
     S.put ubsProof
-  put DelegateStake{..} =
+putPayload DelegateStake{..} =
     P.putWord8 8 <>
     S.put dsID
-  put UndelegateStake =
+putPayload UndelegateStake =
     P.putWord8 9
-  put UpdateElectionDifficulty{..} =
+putPayload UpdateElectionDifficulty{..} =
     P.putWord8 10 <>
     S.put uedDifficulty
-  put UpdateBakerAggregationVerifyKey{..} =
+putPayload UpdateBakerAggregationVerifyKey{..} =
     P.putWord8 11 <>
     S.put ubavkId <>
     S.put ubavkKey <>
     S.put ubavkProof
-  put UpdateBakerElectionKey{..} =
+putPayload UpdateBakerElectionKey{..} =
     P.putWord8 12 <>
     S.put ubekId <>
     S.put ubekKey <>
     S.put ubekProof
-  put UpdateAccountKeys{..} = do
+putPayload UpdateAccountKeys{..} = do
     P.putWord8 13
     P.putWord8 (fromIntegral (length uakKeys))
     forM_ (Map.toAscList uakKeys) $ \(idx, key) -> S.put idx <> S.put key
-  put AddAccountKeys{..} = do
+putPayload AddAccountKeys{..} = do
     P.putWord8 14
     P.putWord8 (fromIntegral (length aakKeys))
     forM_ (Map.toAscList aakKeys) $ \(idx, key) -> S.put idx <> S.put key
     putMaybe aakThreshold
-  put RemoveAccountKeys{..} = do
+putPayload RemoveAccountKeys{..} = do
     P.putWord8 15
     P.putWord8 (fromIntegral (length rakIndices))
     forM_ (Set.toAscList rakIndices) S.put
     putMaybe rakThreshold
-  put EncryptedAmountTransfer{..} =
+putPayload EncryptedAmountTransfer{..} =
     S.putWord8 16 <>
     S.put eatTo <>
     S.put eatRemainingAmount <>
     S.put eatTransferAmount <>
     S.put eatIndex <>
-    S.put eatProof
-  put TransferToEncrypted{..} =
+    putEncryptedAmountTransferProof eatProof
+putPayload TransferToEncrypted{..} =
     S.putWord8 17 <>
     S.put tteAmount <>
     S.put tteTransferAmount <>
     S.put tteProof
-  put TransferToPublic{..} =
+putPayload TransferToPublic{..} =
     S.putWord8 18 <>
     S.put ttpRemainingAmount <>
     S.put ttpAmount <>
     S.put ttpIndex
 
-  get =
-    G.getWord8 >>=
-      \case 0 -> do
+-- |Get the payload of the given size.
+getPayload :: PayloadSize -> S.Get Payload
+getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
+  -- isolate is required to consume all the bytes it is meant to.
+  where go start = G.getWord8 >>= \case
+            0 -> do
               dmMod <- S.get
               return DeployModule{..}
             1 -> do
@@ -426,7 +429,8 @@ instance S.Serialize Payload where
               eatRemainingAmount <- S.get
               eatTransferAmount <- S.get
               eatIndex <- S.get
-              eatProof <- S.get
+              cur <- S.bytesRead
+              eatProof <- getEncryptedAmountTransferProof (fromIntegral $ cur - start)
               return EncryptedAmountTransfer{..}
             17 -> do
               tteAmount <- S.get
@@ -472,20 +476,11 @@ safeSetFromAscList = go Set.empty Nothing
 
 {-# INLINE encodePayload #-}
 encodePayload :: Payload -> EncodedPayload
-encodePayload = EncodedPayload . BSS.toShort . S.encode
-
--- |Like 'S.decode', but make sure to consume all the input
-decodeAll :: S.Serialize a => BS.ByteString -> Either String a
-decodeAll bs =  S.runGet getter bs
-  where getter = do
-          r <- S.get
-          br <- S.bytesRead
-          unless (br == BS.length bs) $ fail "Payload size incorrect."  -- make sure to use up all the data
-          return r
+encodePayload = EncodedPayload . BSS.toShort . S.runPut . putPayload
 
 #ifdef DISABLE_SMART_CONTRACTS
 $(reportWarning "Disabling smart contract related transactions." >> return [])
-decodePayload (EncodedPayload s) =
+decodePayload size (EncodedPayload s) =
   let bs = BSS.fromShort s
   in case BS.uncons bs of
        Nothing -> Left "Empty string not a valid payload."
@@ -494,12 +489,12 @@ decodePayload (EncodedPayload s) =
             ttype == 1 ||
             ttype == 2 then
            Left "Unsupported transaction type."
-         else decodeAll bs
+         else S.runGet (getPayload size) bs
 #else
 $(reportWarning "All transaction types allowed." >> return [])
-decodePayload (EncodedPayload s) = decodeAll . BSS.fromShort $ s
+decodePayload size (EncodedPayload s) = S.runGet (getPayload size) . BSS.fromShort $ s
 #endif
-decodePayload :: EncodedPayload -> Either String Payload
+decodePayload :: PayloadSize -> EncodedPayload -> Either String Payload
 {-# INLINE decodePayload #-}
 
 {-# INLINE payloadBodyBytes #-}

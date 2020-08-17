@@ -97,7 +97,7 @@ genCredentialDeploymentInformation = do
       arbitraryExisting,
       arbitraryNew
     ]
-  cdvRegId <- RegIdCred . FBS.pack <$> vector (FBS.fixedLength (undefined :: RegIdSize))
+  cdvRegId <- RegIdCred . generateElgamalPublicKeyFromSeed <$> arbitrary
   cdvIpId <- IP_ID <$> arbitrary
   cdvArData <- Map.fromList <$> (listOf $ do
     ardName <- do
