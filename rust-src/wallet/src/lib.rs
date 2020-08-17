@@ -140,7 +140,8 @@ fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
 
     let response = json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body)
+        "transaction": hex::encode(&body),
+        "remaining": payload.remaining_amount,
     });
 
     Ok(to_string(&response)?)
@@ -194,7 +195,7 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
 
     let response = json!({
         "signatures": signatures,
-        "transaction": hex::encode(&body)
+        "transaction": hex::encode(&body),
     });
 
     Ok(to_string(&response)?)
@@ -364,9 +365,18 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         Right(addr) => addr,
     };
 
+    // unwrap is safe here since we've generated the credential already, and that
+    // does the same computation.
+    let enc_key = id_use_data.aci.prf_key.prf_exponent(acc_num).unwrap();
+    let secret_key = elgamal::SecretKey {
+        generator: *global_context.elgamal_generator(),
+        scalar:    enc_key,
+    };
+
     let response = json!({
         "credential": Versioned::new(Version::from(0u32), cdi),
         "accountData": acc_data,
+        "encryptionSecretKey": secret_key,
         "accountAddress": address,
     });
     Ok(to_string(&response)?)
