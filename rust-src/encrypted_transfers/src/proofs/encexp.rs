@@ -62,7 +62,7 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
         public: pk_sender.key,
         coeff:  pk_sender.generator,
     };
-    // FIXME: It seems that something is missing here, we are not proving
+    // DOCUMENT THIS: It seems that something is missing here, we are not proving
     // that S' + A = S anywhere that I can see.
     let (e1, e2) = (S.0, S.1);
     let elg_dec = AggregateDlog {
@@ -108,8 +108,8 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     let generator = context.encryption_in_exponent_generator();
 
     let s_prime = s - a;
-    let s_prime_chunks = CHUNK_SIZE.u64_to_big_endian_chunks(s_prime);
-    let a_chunks = CHUNK_SIZE.u64_to_big_endian_chunks(a);
+    let s_prime_chunks = CHUNK_SIZE.u64_to_chunks(s_prime);
+    let a_chunks = CHUNK_SIZE.u64_to_chunks(a);
     let A_enc_randomness = a_chunks
         .iter()
         .map(|&x| {
@@ -208,11 +208,11 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     };
 
     let transfer_amount = EncryptedAmount {
-        encryptions: [A[1], A[0]],
+        encryptions: [A[0], A[1]],
     };
 
     let remaining_amount = EncryptedAmount {
-        encryptions: [S_prime[1], S_prime[0]],
+        encryptions: [S_prime[0], S_prime[1]],
     };
 
     Some(EncryptedAmountTransferData {
