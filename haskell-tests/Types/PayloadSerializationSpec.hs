@@ -7,7 +7,6 @@ import Test.Hspec.QuickCheck
 
 import Test.QuickCheck
 
-import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import qualified Data.Map as Map
@@ -219,10 +218,10 @@ groupIntoSize s =
           in show lb ++ " -- " ++ show ub ++ "kB"
 
 checkPayload :: Payload -> Property
-checkPayload e = let bs = S.encodeLazy e
-               in  case S.decodeLazy bs of
-                     Left err -> counterexample err False
-                     Right e' -> label (groupIntoSize (BSL.length bs)) $ e === e'
+checkPayload e = let bs = S.runPut $ putPayload e
+                 in case S.runGet (getPayload (fromIntegral (BS.length bs))) bs of
+                      Left err -> counterexample err False
+                      Right e' -> label (groupIntoSize (fromIntegral (BS.length bs))) $ e === e'
 
 tests :: Spec
 tests = describe "Payload serialization tests" $ do
