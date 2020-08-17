@@ -33,14 +33,12 @@ foreign import ccall unsafe "aggregate_encrypted_amounts"
 foreign import ccall unsafe "verify_encrypted_transfer"
   verify_encrypted_transfer ::
        Ptr GlobalContext -- ^Pointer to the global context needed to validate the proof.
+     -> Ptr ElgamalPublicKey -- ^ Public key of the receiver.
+     -> Ptr ElgamalPublicKey -- ^ Public key of the sender.
      -> Ptr ElgamalCipher -- ^ High chunk of the current balance.
      -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
-     -> Ptr ElgamalCipher -- ^ High chunk of the remaining balance.
-     -> Ptr ElgamalCipher -- ^ Low chunk of the remaining balance.
-     -> Ptr ElgamalCipher -- ^ High chunk of the transfer amount.
-     -> Ptr ElgamalCipher -- ^ Low chunk of the transfer amount.
-     -> CSize  -- ^ Length of the proof bytes.
-     -> Ptr Word8 -- ^ Pointer to the proof bytes.
+     -> Ptr Word8 -- ^ Pointer to the transfer data bytes.
+     -> CSize  -- ^ Length of the transfer data bytes.
      -> IO Word8 -- ^ Return either 0 if proof checking failed, or non-zero in case of success.
 
 data EncryptedAmount = EncryptedAmount{
@@ -128,36 +126,34 @@ instance Monoid EncryptedAmount where
   mconcat [] = mempty
   mconcat (x:xs) = foldl' aggregateAmounts x xs
 
+type EncryptedAmountTransferBytes = ShortByteString
+
 verifyEncryptedTransferProof ::
   -- |Global context with parameters
   GlobalContext ->
+  -- |Public key of the receiver.
+  ElgamalPublicKey ->
+  -- |Public key of the sender.
+  ElgamalPublicKey ->
   -- |Aggregated encrypted amount on the sender's account that was used.
   EncryptedAmount ->
-  -- |Remaining amount on the sender's account after the transfer.
-  EncryptedAmount ->
-  -- |Amount to transfer
-  EncryptedAmount ->
   -- |Proof of validity of the transfer.
-  EncryptedAmountTransferProof ->
+  EncryptedAmountTransferBytes ->
   Bool
-verifyEncryptedTransferProof gc initialAmount remainingAmount transferAmount proof = unsafeDupablePerformIO $ do
+verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData = unsafeDupablePerformIO $ do
   withGlobalContext gc $ \gcPtr ->
-    withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
-      withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
-        withElgamalCipher (encryptionHigh remainingAmount) $ \remainingHighPtr ->
-          withElgamalCipher (encryptionLow remainingAmount) $ \remainingLowPtr ->
-            withElgamalCipher (encryptionHigh transferAmount) $ \transferHighPtr ->
-              withElgamalCipher (encryptionLow transferAmount) $ \transferLowPtr ->
-                -- this is safe since the called function handles the 0 length case correctly.
-                useAsCStringLen (theEncryptedTransferProof proof) $ \(bytesPtr, len) -> do
-                  res <- verify_encrypted_transfer
-                          gcPtr
-                          initialHighPtr
-                          initialLowPtr
-                          remainingHighPtr
-                          remainingLowPtr
-                          transferHighPtr
-                          transferLowPtr
-                          (fromIntegral len)
-                          (castPtr bytesPtr)
-                  return (res /= 0)
+    withElgamalPublicKey receiverPK $ \receiverPKPtr ->
+      withElgamalPublicKey senderPK $ \senderPKPtr ->
+        withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
+          withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
+            -- this is safe since the called function handles the 0 length case correctly.
+            useAsCStringLen transferData $ \(bytesPtr, len) -> do
+               res <- verify_encrypted_transfer
+                       gcPtr
+                       receiverPKPtr
+                       senderPKPtr
+                       initialHighPtr
+                       initialLowPtr
+                       (castPtr bytesPtr)
+                       (fromIntegral len)
+               return (res /= 0)

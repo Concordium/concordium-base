@@ -85,7 +85,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             .iter()
             .fold(ro, |running_ro, p| p.public(running_ro));
         let ro2 = self
-            .encexp1
+            .encexp2
             .iter()
             .fold(ro1, |running_ro, p| p.public(running_ro));
         self.dlog.public(ro2)
