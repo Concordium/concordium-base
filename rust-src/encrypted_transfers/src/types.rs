@@ -12,6 +12,7 @@ use id::sigma_protocols::common::*;
 /// base16 encoded serialized chunks.
 ///
 /// The chunks are in big-endian order.
+/// FIXME: They should be in little endian order.
 pub struct EncryptedAmount<C: Curve> {
     pub encryptions: [Cipher<C>; 2],
 }
