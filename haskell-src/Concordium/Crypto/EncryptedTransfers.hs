@@ -6,6 +6,8 @@ import Data.Serialize
 import Data.Word
 import Data.Aeson
 import Data.ByteString.Short
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Unsafe as BS
 import Foreign.Ptr
 import Foreign.Marshal (alloca)
 import Foreign.Storable (peek)
@@ -80,11 +82,11 @@ instance Serialize EncryptedAmountIndex where
 addToAggIndex :: EncryptedAmountAggIndex -> Word -> EncryptedAmountIndex
 addToAggIndex (EncryptedAmountAggIndex aggIdx) len = EncryptedAmountIndex (aggIdx + fromIntegral len)
 
--- FIXME: Serialization here is probably wrong, and needs to be fixed once the proof
--- is known.
 newtype EncryptedAmountTransferProof = EncryptedAmountTransferProof { theEncryptedTransferProof :: ShortByteString }
     deriving(Eq, Show, FromJSON, ToJSON) via ByteStringHex
 
+-- | Custom serialization functions for proofs which allow us to have the same
+-- serialization as in rust, provided enough context, i.e., length.
 getEncryptedAmountTransferProof :: Word32 -> Get EncryptedAmountTransferProof
 getEncryptedAmountTransferProof len = EncryptedAmountTransferProof <$> getShortByteString (fromIntegral len)
 
@@ -133,7 +135,28 @@ instance Monoid EncryptedAmount where
   mconcat [] = mempty
   mconcat (x:xs) = foldl' aggregateAmounts x xs
 
-type EncryptedAmountTransferBytes = ShortByteString
+type EncryptedAmountTransferBytes = BS.ByteString
+
+-- |Prepare encrypted amount transfer bytes to send through FFI. This implements
+-- the right serialization to match that defined in Rust for the
+-- @EncryptedAmountTransferData@.
+prepareEncryptedAmountTransferBytes ::
+  -- |Remaining amount on the account
+  EncryptedAmount ->
+  -- |Amount to transfer
+  EncryptedAmount ->
+  -- |Index of the encrypted amount.
+  EncryptedAmountIndex ->
+  -- |Proof of validity of transaction.
+  EncryptedAmountTransferProof ->
+  -- |Serialized data
+  EncryptedAmountTransferBytes
+prepareEncryptedAmountTransferBytes remainingAmount transferAmount idx proof = runPut putter
+  where putter =
+          put remainingAmount <>
+          put transferAmount <>
+          put idx <>
+          putEncryptedAmountTransferProof proof
 
 verifyEncryptedTransferProof ::
   -- |Global context with parameters
@@ -154,7 +177,7 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
         withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
           withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
             -- this is safe since the called function handles the 0 length case correctly.
-            useAsCStringLen transferData $ \(bytesPtr, len) -> do
+            BS.unsafeUseAsCStringLen transferData $ \(bytesPtr, len) -> do
                res <- verify_encrypted_transfer
                        gcPtr
                        receiverPKPtr
