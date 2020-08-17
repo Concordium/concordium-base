@@ -223,6 +223,8 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     })
 }
 
+
+
 /// The verifier does three checks. In case verification fails, it can be useful
 /// to know which of the checks led to failure.
 #[derive(Debug, PartialEq)]
@@ -468,7 +470,6 @@ mod test {
     #[allow(non_snake_case)]
     #[test]
     fn test_enc_trans() {
-        // Minus bulletproofs
         let mut csprng = thread_rng();
         let sk_sender: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
         let pk_sender = PublicKey::from(&sk_sender);
