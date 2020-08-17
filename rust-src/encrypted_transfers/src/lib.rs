@@ -134,6 +134,31 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     )
 }
 
+pub fn verify_transfer_data<C: Curve>(
+    ctx: &GlobalContext<C>,
+    receiver_pk: &PublicKey<C>,
+    sender_pk: &PublicKey<C>,
+    before_amount: &EncryptedAmount<C>,
+    transfer_data: &EncryptedAmountTransferData<C>,
+) -> bool {
+    // Fixme: Put context into the random oracle.
+    let ro = RandomOracle::domain("EncryptedTransfer");
+    let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
+
+    // FIXME: Revise order of arguments in verify_enc_trans to be more consistent
+    // with the rest.
+    encexp::verify_enc_trans(
+        ctx,
+        ro,
+        &mut transcript,
+        transfer_data,
+        sender_pk,
+        receiver_pk,
+        &before_amount.join(),
+    )
+    .is_ok()
+}
+
 /// Produce payload for the transaction to encrypt a portion of the public
 /// balance. The arguments are
 ///
