@@ -926,8 +926,9 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// the commitments to the sharing coefficients
     pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
     /// Witnesses for proof of knowledge of signature of Identity Provider on
-    /// the list (idCredSec, prfKey, attributes[0], attributes[1],...,
-    /// attributes[n], AR[1], ..., AR[m])
+    /// the list
+    /// ```(idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n],
+    /// AR[1], ..., AR[m])```
     pub proof_ip_sig: com_eq_sig::Witness<P, C>,
     /// Proof that reg_id = prf_K(x). Also establishes that reg_id is computed
     /// from the prf key signed by the identity provider.

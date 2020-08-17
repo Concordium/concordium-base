@@ -57,6 +57,10 @@ version = "0"
 path = "../ffi_helpers"
 version = "0"
 
+[dependencies.encrypted_transfers]
+path = "../encrypted_transfers"
+version = "0"
+
 [lib]
 name = "wallet"
 crate-type = ["rlib", "cdylib", "staticlib"]

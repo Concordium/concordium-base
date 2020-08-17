@@ -11,7 +11,7 @@ use ff::Field;
 use std::collections::HashMap;
 
 /// Elgamal secret key packed together with a chosen generator.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize)]
 pub struct SecretKey<C: Curve> {
     /// Generator of the group, not secret but convenient to have here.
     pub generator: C,

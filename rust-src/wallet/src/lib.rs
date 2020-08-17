@@ -4,12 +4,11 @@ extern crate failure;
 extern crate serde_json;
 use crypto_common::*;
 
-use std::convert::TryInto;
-
-use crypto_common::{base16_decode_string, base16_encode_string, c_char, version::*, Put};
+use crypto_common::{base16_decode_string, base16_encode_string, c_char, Put};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
+use failure::Fallible;
 use id::{
     account_holder::{create_credential, generate_pio},
     ffi::AttributeKind,
@@ -17,15 +16,15 @@ use id::{
     types::*,
 };
 use pairing::bls12_381::{Bls12, G1};
-use std::{cmp::max, collections::BTreeMap};
-
-use std::ffi::{CStr, CString};
-
-use failure::Fallible;
 use rand::thread_rng;
 use serde_json::{from_str, from_value, to_string, Map, Value};
-
 use sha2::{Digest, Sha256};
+use std::{
+    cmp::max,
+    collections::BTreeMap,
+    convert::TryInto,
+    ffi::{CStr, CString},
+};
 
 type ExampleCurve = G1;
 
@@ -38,6 +37,7 @@ struct TransferContext {
     pub expiry: u64,
     pub nonce:  u64,
     pub keys:   Map<String, Value>,
+    pub energy: u64, // FIXME: This was added, needs to be updated.
 }
 
 fn make_signatures<H: AsRef<[u8]>>(
@@ -68,23 +68,108 @@ fn make_signatures<H: AsRef<[u8]>>(
     Ok(out)
 }
 
-// fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
-//     let v: Value = from_str(input)?;
+/// Create a JSON encoding of an encrypted transfer transaction.
+fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
+    let v: Value = from_str(input)?;
+    let ctx: TransferContext = from_value(v.clone())?;
 
-//     let ctx: TransferContext = from_value(v.clone())?;
+    // context with parameters
+    let global_context: GlobalContext<ExampleCurve> = {
+        match v.get("global") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'global' not present, but should be."),
+        }
+    };
 
-// }
+    // plaintext amount to transfer
+    let amount: u64 = {
+        match v.get("amount") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'amount' not present, but should be."),
+        }
+    };
+
+    let sender_sk: elgamal::SecretKey<ExampleCurve> = {
+        match v.get("senderSecretKey") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'senderSecretKey' not present, but should be."),
+        }
+    };
+
+    let receiver_pk = {
+        match v.get("receiverPublicKey") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'receiverPublicKey' not present, but should be."),
+        }
+    };
+
+    let input_amount = {
+        match v.get("inputEncryptedAmount") {
+            Some(v) => from_value(v.clone())?,
+            None => bail!("Field 'inputEncryptedAmount' not present, but should be."),
+        }
+    };
+
+    // Should be safe on iOS and Android, by calling SecRandomCopyBytes/getrandom,
+    // respectively.
+    let mut csprng = thread_rng();
+
+    let payload = encrypted_transfers::make_transfer_data(
+        &global_context,
+        &receiver_pk,
+        &sender_sk,
+        &input_amount,
+        amount,
+        &mut csprng,
+    );
+    let payload = match payload {
+        Some(payload) => payload,
+        None => bail!("Could not produce payload."),
+    };
+
+    let (hash, body) = {
+        let mut payload_bytes = Vec::new();
+        payload_bytes.put(&16u8); // transaction type is encrypted transfer
+        payload_bytes.put(&ctx.to);
+        payload_bytes.extend_from_slice(&to_bytes(&payload));
+
+        make_transaction_bytes(&ctx, &payload_bytes)
+    };
+
+    let signatures = make_signatures(&ctx.keys, &hash)?;
+
+    let response = json!({
+        "signatures": signatures,
+        "transaction": hex::encode(&body)
+    });
+
+    Ok(to_string(&response)?)
+}
+
+/// Given payload bytes, make a full transaction (minus the signature) together
+/// with its hash.
+fn make_transaction_bytes(
+    ctx: &TransferContext,
+    payload_bytes: &[u8],
+) -> (impl AsRef<[u8]>, Vec<u8>) {
+    let payload_size: u32 = payload_bytes.len() as u32;
+    let mut body = Vec::new();
+    // this needs to match with what is in Transactions.hs
+    body.put(&ctx.from);
+    body.put(&ctx.nonce);
+    body.put(&ctx.energy);
+    body.put(&payload_size);
+    body.put(&ctx.expiry);
+    body.extend_from_slice(payload_bytes);
+
+    let hasher = Sha256::new().chain(&body);
+    (hasher.result(), body)
+}
 
 fn create_transfer_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
 
     let ctx: TransferContext = from_value(v.clone())?;
-
-    let from_address: AccountAddress = ctx.from;
-    let to_address: AccountAddress = ctx.to;
-    let expiry: u64 = ctx.expiry;
-    let nonce: u64 = ctx.nonce;
-    let keys_object = ctx.keys;
 
     let amount: u64 = {
         match v.get("amount") {
@@ -93,33 +178,19 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
         }
     };
 
-    // NB: This needs to be consistent with scheduler assigned cost.
-    let energy: u64 = 6 + 53 * keys_object.len() as u64;
-
     let (hash, body) = {
         let mut payload = Vec::new();
         payload.put(&3u8); // transaction type is transfer
-        payload.put(&0u8); // account address to send to
-        payload.put(&to_address);
+        payload.put(&ctx.to);
         payload.put(&amount);
 
         let payload_size: u32 = payload.len() as u32;
-        assert_eq!(payload_size, 42);
+        assert_eq!(payload_size, 41);
 
-        let mut body = Vec::new();
-        // this needs to match with what is in Transactions.hs
-        body.put(&from_address);
-        body.put(&nonce);
-        body.put(&energy);
-        body.put(&payload_size);
-        body.put(&expiry);
-        body.extend_from_slice(&payload);
-
-        let hasher = Sha256::new().chain(&body);
-        (hasher.result(), body)
+        make_transaction_bytes(&ctx, &payload)
     };
 
-    let signatures = make_signatures(&keys_object, &hash)?;
+    let signatures = make_signatures(&ctx.keys, &hash)?;
 
     let response = json!({
         "signatures": signatures,
@@ -301,6 +372,9 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     Ok(to_string(&response)?)
 }
 
+/// Set the flag to 0, and return a newly allocated string containing
+/// the error message.
+///
 /// # Safety
 /// This function does not check that the flag pointer is not null.
 unsafe fn signal_error(flag: *mut u8, err_msg: String) -> *mut c_char {
@@ -310,143 +384,111 @@ unsafe fn signal_error(flag: *mut u8, err_msg: String) -> *mut c_char {
         .into_raw()
 }
 
-/// # Safety
-/// The input pointer must point to a null-terminated buffer, otherwise this
-/// function will fail in unspecified ways.
-pub unsafe fn create_transfer_ext(input_ptr: *const c_char, success: *mut u8) -> *mut c_char {
-    if input_ptr.is_null() {
-        return signal_error(success, "Null pointer input.".to_owned());
-    }
-    let input_str = {
-        match CStr::from_ptr(input_ptr).to_str() {
-            Ok(s) => s,
-            Err(e) => return signal_error(success, format!("Could not decode JSON: {}", e)),
-        }
-    };
-    let response = create_transfer_aux(input_str);
-    match response {
-        Ok(s) => {
-            let cstr: CString = {
-                match CString::new(s) {
+/// Make a wrapper for a function of the form
+///
+/// ```
+///    f(input_ptr: *const c_char, success: *mut u8) -> *mut c_char
+/// ```
+macro_rules! make_wrapper {
+    ($(#[$attr:meta])* => $f:ident -> $call:expr) => {
+        $(#[$attr])*
+        #[no_mangle]
+        pub unsafe fn $f(input_ptr: *const c_char, success: *mut u8) -> *mut c_char {
+            if input_ptr.is_null() {
+                return signal_error(success, "Null pointer input.".to_owned());
+            }
+            let input_str = {
+                match CStr::from_ptr(input_ptr).to_str() {
                     Ok(s) => s,
                     Err(e) => {
-                        return signal_error(success, format!("Could not encode response: {}", e))
+                        return signal_error(success, format!("Could not decode JSON: {}", e))
                     }
                 }
             };
-            *success = 1;
-            cstr.into_raw()
-        }
-        Err(e) => signal_error(success, format!("Could not produce response: {}", e)),
-    }
-}
-
-/// # Safety
-/// The input pointer must point to a null-terminated buffer, otherwise this
-/// function will fail in unspecified ways.
-pub unsafe fn create_id_request_and_private_data_ext(
-    input_ptr: *const c_char,
-    success: *mut u8,
-) -> *mut c_char {
-    if input_ptr.is_null() {
-        return signal_error(success, "Null pointer input.".to_owned());
-    }
-    let input_str = {
-        match CStr::from_ptr(input_ptr).to_str() {
-            Ok(s) => s,
-            Err(e) => return signal_error(success, format!("Could not decode JSON: {}", e)),
+            let response = $call(input_str);
+            match response {
+                Ok(s) => {
+                    let cstr: CString = {
+                        match CString::new(s) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                return signal_error(
+                                    success,
+                                    format!("Could not encode response: {}", e),
+                                )
+                            }
+                        }
+                    };
+                    *success = 1;
+                    cstr.into_raw()
+                }
+                Err(e) => signal_error(success, format!("Could not produce response: {}", e)),
+            }
         }
     };
-    let response = create_id_request_and_private_data_aux(input_str);
-    match response {
-        Ok(s) => {
-            let cstr: CString = {
-                match CString::new(s) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        return signal_error(success, format!("Could not encode response: {}", e))
-                    }
-                }
-            };
-            *success = 1;
-            cstr.into_raw()
-        }
-        Err(e) => signal_error(success, format!("Could not produce response: {}", e)),
-    }
 }
 
-#[no_mangle]
-/// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
-/// UTF8-encoded string. The input string should contain the JSON payload of an
-/// attribute list, name of id object, and the identity provider public
-/// information. The return value contains a JSON object with two values, one is
-/// the request for the identity object that is public, and the other is the
-/// private keys and other secret values that must be kept by the user.
-/// These secret values will be needed later to use the identity object.
-///
-/// The returned string must be freed by the caller by calling the function
-/// 'free_response_string'. In case of failure the function returns an error
-/// message as the response, and sets the 'success' flag to 0.
-///
-/// # Safety
-/// The input pointer must point to a null-terminated buffer, otherwise this
-/// function will fail in unspecified ways.
-pub unsafe extern "C" fn create_id_request_and_private_data_c(
-    input_ptr: *const c_char,
-    success: *mut u8,
-) -> *mut c_char {
-    create_id_request_and_private_data_ext(input_ptr, success)
-}
+// Make external wrappers that can be used in android and iOS libraries.
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => create_transfer_ext -> create_transfer_aux);
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The input string should contain the JSON payload of an
+    /// attribute list, name of id object, and the identity provider public
+    /// information.
+    ///
+    /// The return value contains a JSON object with two values, one is
+    /// the request for the identity object that is public, and the other is the
+    /// private keys and other secret values that must be kept by the user.
+    /// These secret values will be needed later to use the identity object.
+    ///
+    /// The returned string must be freed by the caller by calling the function
+    /// 'free_response_string'. In case of failure the function returns an error
+    /// message as the response, and sets the 'success' flag to 0.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => create_id_request_and_private_data_ext -> create_id_request_and_private_data_aux);
 
-/// # Safety
-/// The input pointer must point to a null-terminated buffer, otherwise this
-/// function will fail in unspecified ways.
-pub unsafe fn create_credential_ext(input_ptr: *const c_char, success: *mut u8) -> *mut c_char {
-    if input_ptr.is_null() {
-        return signal_error(success, "Null pointer input.".to_owned());
-    }
-    let input_str = {
-        match CStr::from_ptr(input_ptr).to_str() {
-            Ok(s) => s,
-            Err(e) => return signal_error(success, format!("Could not decode JSON: {}", e)),
-        }
-    };
-    let response = create_credential_aux(input_str);
-    match response {
-        Ok(s) => {
-            let cstr: CString = {
-                match CString::new(s) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        return signal_error(success, format!("Could not encode response: {}", e))
-                    }
-                }
-            };
-            *success = 1;
-            cstr.into_raw()
-        }
-        Err(e) => signal_error(success, format!("Could not produce response: {}", e)),
-    }
-}
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => create_credential_ext -> create_credential_aux);
 
-#[no_mangle]
-/// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
-/// UTF8-encoded string. The returned string must be freed by the caller by
-/// calling the function 'free_response_string'. In case of failure the function
-/// returns an error message as the response, and sets the 'success' flag to 0.
-///
-/// See rust-bins/wallet-notes/README.md for the description of input and output
-/// formats.
-///
-/// # Safety
-/// The input pointer must point to a null-terminated buffer, otherwise this
-/// function will fail in unspecified ways.
-pub unsafe extern "C" fn create_credential_c(
-    input_ptr: *const c_char,
-    success: *mut u8,
-) -> *mut c_char {
-    create_credential_ext(input_ptr, success)
-}
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats for encrypted transfers.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => create_encrypted_transfer_ext -> create_encrypted_transfer_aux);
 
 #[no_mangle]
 /// # Safety
@@ -465,36 +507,6 @@ pub unsafe fn check_account_address_ext(input_ptr: *const c_char) -> u8 {
     }
 }
 
-#[no_mangle]
-/// Take a pointer to a NUL-terminated UTF8-string and return whether this is
-/// a correct format for a concordium address.
-/// A non-zero return value signals success.
-///
-/// # Safety
-/// The input must be NUL-terminated.
-pub unsafe extern "C" fn check_account_address_c(input_ptr: *const c_char) -> u8 {
-    check_account_address_ext(input_ptr)
-}
-
-#[no_mangle]
-/// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
-/// UTF8-encoded string. The returned string must be freed by the caller by
-/// calling the function 'free_response_string'. In case of failure the function
-/// returns an error message as the response, and sets the 'success' flag to 0.
-///
-/// See rust-bins/wallet-notes/README.md for the description of input and output
-/// formats.
-///
-/// # Safety
-/// The input pointer must point to a null-terminated buffer, otherwise this
-/// function will fail in unspecified ways.
-pub unsafe extern "C" fn create_transfer_c(
-    input_ptr: *const c_char,
-    success: *mut u8,
-) -> *mut c_char {
-    create_transfer_ext(input_ptr, success)
-}
-
 /// # Safety
 /// This function is unsafe in the sense that if the argument pointer was not
 /// Constructed via CString::into_raw its behaviour is undefined.
@@ -503,12 +515,3 @@ pub unsafe fn free_response_string_ext(ptr: *mut c_char) {
         let _ = CString::from_raw(ptr);
     }
 }
-
-#[no_mangle]
-/// # Safety
-/// This function is unsafe in the sense that if the argument pointer was not
-/// Constructed via CString::into_raw its behaviour is undefined.
-pub unsafe extern "C" fn free_response_string_c(ptr: *mut c_char) { free_response_string_ext(ptr) }
-
-#[cfg(test)]
-mod test {}
