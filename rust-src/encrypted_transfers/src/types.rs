@@ -10,11 +10,14 @@ use id::sigma_protocols::common::*;
 #[derive(Clone, Serialize, SerdeBase16Serialize)]
 /// An encrypted amount, in two chunks. The JSON serialization of this is just
 /// base16 encoded serialized chunks.
-///
-/// The chunks are in big-endian order.
-/// FIXME: They should be in little endian order.
 pub struct EncryptedAmount<C: Curve> {
     pub encryptions: [Cipher<C>; 2],
+}
+
+#[derive(Clone, Serialize, SerdeBase16Serialize)]
+/// An encrypted amount, in one chunk.
+pub struct EncryptedAmountNoSplit<C: Curve> {
+    pub encryption: Cipher<C>,
 }
 
 impl<C: Curve> AsRef<[Cipher<C>; 2]> for EncryptedAmount<C> {
@@ -56,6 +59,24 @@ pub struct EncryptedAmountTransferData<C: Curve> {
     pub remaining_amount: EncryptedAmount<C>,
     /// Amount that will be sent.
     pub transfer_amount: EncryptedAmount<C>,
+    /// The index such that the encrypted amount used in the transfer represents
+    /// the aggregate of all encrypted amounts with indices < `index` existing
+    /// on the account at the time. New encrypted amounts can only add new
+    /// indices.
+    pub index: u64,
+    /// A collection of all the proofs.
+    pub proof: EncryptedAmountTransferProof<C>,
+}
+
+/// Data that will go onto a secret to public amount transfer.
+#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+#[serde(rename_all = "camelCase")]
+pub struct SecToPubAmountTransferData<C: Curve> {
+    /// Encryption of the remaining amount.
+    pub remaining_amount: EncryptedAmount<C>,
+    /// Amount that will be sent.
+    pub transfer_amount: Amount,
     /// The index such that the encrypted amount used in the transfer represents
     /// the aggregate of all encrypted amounts with indices < `index` existing
     /// on the account at the time. New encrypted amounts can only add new
