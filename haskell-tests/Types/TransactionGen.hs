@@ -97,7 +97,7 @@ genCredentialDeploymentInformation = do
       arbitraryExisting,
       arbitraryNew
     ]
-  cdvRegId <- RegIdCred . generateElgamalPublicKeyFromSeed <$> arbitrary
+  cdvRegId <- RegIdCred . generateElgamalSecondFromSeed <$> arbitrary
   cdvIpId <- IP_ID <$> arbitrary
   cdvArData <- Map.fromList <$> (listOf $ do
     ardName <- do
