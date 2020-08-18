@@ -48,7 +48,7 @@ fn encrypt_amount<C: Curve, R: Rng>(
 }
 
 /// Combine two encrypted amounts into one.
-fn aggregate<C: Curve>(
+pub fn aggregate<C: Curve>(
     left: &EncryptedAmount<C>,
     right: &EncryptedAmount<C>,
 ) -> EncryptedAmount<C> {

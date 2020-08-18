@@ -74,41 +74,16 @@ fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
     let ctx: TransferContext = from_value(v.clone())?;
 
     // context with parameters
-    let global_context: GlobalContext<ExampleCurve> = {
-        match v.get("global") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'global' not present, but should be."),
-        }
-    };
+    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
 
     // plaintext amount to transfer
-    let amount: u64 = {
-        match v.get("amount") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'amount' not present, but should be."),
-        }
-    };
+    let amount: u64 = try_get(&v, "amount")?;
 
-    let sender_sk: elgamal::SecretKey<ExampleCurve> = {
-        match v.get("senderSecretKey") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'senderSecretKey' not present, but should be."),
-        }
-    };
+    let sender_sk: elgamal::SecretKey<ExampleCurve> = try_get(&v, "senderSecretKey")?;
 
-    let receiver_pk = {
-        match v.get("receiverPublicKey") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'receiverPublicKey' not present, but should be."),
-        }
-    };
+    let receiver_pk = try_get(&v, "receiverPublicKey")?;
 
-    let input_amount = {
-        match v.get("inputEncryptedAmount") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'inputEncryptedAmount' not present, but should be."),
-        }
-    };
+    let input_amount = try_get(&v, "inputEncryptedAmount")?;
 
     // Should be safe on iOS and Android, by calling SecRandomCopyBytes/getrandom,
     // respectively.
@@ -147,8 +122,8 @@ fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
     Ok(to_string(&response)?)
 }
 
-/// Given payload bytes, make a full transaction (minus the signature) together
-/// with its hash.
+/// Given payload bytes, make a full transaction body (that is, transaction
+/// minus the signature) together with its hash.
 fn make_transaction_bytes(
     ctx: &TransferContext,
     payload_bytes: &[u8],
@@ -172,12 +147,7 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
 
     let ctx: TransferContext = from_value(v.clone())?;
 
-    let amount: u64 = {
-        match v.get("amount") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'amount' not present, but should be."),
-        }
-    };
+    let amount: u64 = try_get(&v, "amount")?;
 
     let (hash, body) = {
         let mut payload = Vec::new();
@@ -203,29 +173,30 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
 
 fn check_account_address_aux(input: &str) -> bool { input.parse::<AccountAddress>().is_ok() }
 
+/// Aggregate two encrypted amounts together into one.
+fn combine_encrypted_amounts_aux(left: &str, right: &str) -> Fallible<String> {
+    let left = from_str(left)?;
+    let right = from_str(right)?;
+    Ok(to_string(&encrypted_transfers::aggregate::<ExampleCurve>(
+        &left, &right,
+    ))?)
+}
+
+/// Try to extract a field with a given name from the JSON value.
+fn try_get<A: serde::de::DeserializeOwned>(v: &Value, fname: &str) -> Fallible<A> {
+    match v.get(fname) {
+        Some(v) => Ok(from_value(v.clone())?),
+        None => bail!(format!("Field {} not present, but should be.", fname)),
+    }
+}
+
 fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
 
-    let ip_info: IpInfo<Bls12> = {
-        match v.get("ipInfo") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'ipInfo' not present, but should be."),
-        }
-    };
+    let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
+    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
 
-    let global_context: GlobalContext<ExampleCurve> = {
-        match v.get("global") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'global' not present, but should be."),
-        }
-    };
-
-    let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = {
-        match v.get("arsInfos") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'arsInfos' not present, but should be."),
-        }
-    };
+    let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = try_get(&v, "arsInfos")?;
 
     // FIXME: IP defined threshold
     let threshold = {
@@ -270,47 +241,20 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
 fn create_credential_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
-    let ip_info: IpInfo<Bls12> = {
-        match v.get("ipInfo") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'ipInfo' not present, but should be."),
-        }
-    };
+    let ip_info: IpInfo<Bls12> = try_get(&v, "ipInfo")?;
 
-    let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = {
-        match v.get("arsInfos") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'arsInfos' not present, but should be."),
-        }
-    };
+    let ars_infos: BTreeMap<ArIdentity, ArInfo<ExampleCurve>> = try_get(&v, "arsInfos")?;
 
-    let global_context: GlobalContext<ExampleCurve> = {
-        match v.get("global") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'global' not present, but should be."),
-        }
-    };
+    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
 
     let id_object: IdentityObject<Bls12, ExampleCurve, AttributeKind> =
-        match v.get("identityObject") {
-            Some(v) => from_value(v.clone())?,
-            None => bail!("Field 'identityObject' not present, but should be."),
-        };
+        try_get(&v, "identityObject")?;
 
-    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = match v.get("privateIdObjectData") {
-        Some(v) => from_value(v.clone())?,
-        None => bail!("Field 'privateIdObjectData' not present, but should be."),
-    };
+    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = try_get(&v, "privateIdObjectData")?;
 
-    let tags: Vec<AttributeTag> = match v.get("revealedAttributes") {
-        Some(v) => from_value(v.clone())?,
-        None => vec![],
-    };
+    let tags: Vec<AttributeTag> = try_get(&v, "revealedAttributes")?;
 
-    let acc_num: u8 = match v.get("accountNumber") {
-        Some(v) => from_value(v.clone())?,
-        None => bail!("Account number must be present."),
-    };
+    let acc_num: u8 = try_get(&v, "accountNumber")?;
 
     // if account data is present then use it, otherwise generate new.
     let acc_data = {
@@ -383,7 +327,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 }
 
 /// Set the flag to 0, and return a newly allocated string containing
-/// the error message.
+/// the error message. The returned string is NUL terminated.
 ///
 /// # Safety
 /// This function does not check that the flag pointer is not null.
@@ -394,46 +338,68 @@ unsafe fn signal_error(flag: *mut u8, err_msg: String) -> *mut c_char {
         .into_raw()
 }
 
-/// Make a wrapper for a function of the form
+unsafe fn encode_response(response: Fallible<String>, success: *mut u8) -> *mut c_char {
+    match response {
+        Ok(s) => {
+            let cstr: CString = {
+                match CString::new(s) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return signal_error(success, format!("Could not encode response: {}", e))
+                    }
+                }
+            };
+            *success = 1;
+            cstr.into_raw()
+        }
+        Err(e) => signal_error(success, format!("Could not produce response: {}", e)),
+    }
+}
+
+/// Try to get a normal string from a `*const c_char`.
+///
+/// This needs to be a macro due to early return.
+macro_rules! get_string {
+    ($input_ptr:expr, $success:expr) => {{
+        if $input_ptr.is_null() {
+            return signal_error($success, "Null pointer input.".to_owned());
+        }
+        match CStr::from_ptr($input_ptr).to_str() {
+            Ok(s) => s,
+            Err(e) => {
+                return signal_error($success, format!("Could not decode input string: {}", e))
+            }
+        }
+    }};
+}
+
+/// Make a wrapper for functions of the form
 ///
 /// ```
 ///    f(input_ptr: *const c_char, success: *mut u8) -> *mut c_char
+/// ```
+/// or
+/// ```
+///    f(input_ptr_1: *const c_char, input_ptr_2: *const c_char, success: *mut u8) -> *mut c_char
 /// ```
 macro_rules! make_wrapper {
     ($(#[$attr:meta])* => $f:ident -> $call:expr) => {
         $(#[$attr])*
         #[no_mangle]
         pub unsafe fn $f(input_ptr: *const c_char, success: *mut u8) -> *mut c_char {
-            if input_ptr.is_null() {
-                return signal_error(success, "Null pointer input.".to_owned());
-            }
-            let input_str = {
-                match CStr::from_ptr(input_ptr).to_str() {
-                    Ok(s) => s,
-                    Err(e) => {
-                        return signal_error(success, format!("Could not decode JSON: {}", e))
-                    }
-                }
-            };
+            let input_str = get_string!(input_ptr, success);
             let response = $call(input_str);
-            match response {
-                Ok(s) => {
-                    let cstr: CString = {
-                        match CString::new(s) {
-                            Ok(s) => s,
-                            Err(e) => {
-                                return signal_error(
-                                    success,
-                                    format!("Could not encode response: {}", e),
-                                )
-                            }
-                        }
-                    };
-                    *success = 1;
-                    cstr.into_raw()
-                }
-                Err(e) => signal_error(success, format!("Could not produce response: {}", e)),
-            }
+            encode_response(response, success)
+        }
+    };
+    ($(#[$attr:meta])* => $f:ident --> $call:expr) => {
+        $(#[$attr])*
+        #[no_mangle]
+        pub unsafe fn $f(input_ptr_1: *const c_char, input_ptr_2: *const c_char, success: *mut u8) -> *mut c_char {
+            let input_str_1 = get_string!(input_ptr_1, success);
+            let input_str_2 = get_string!(input_ptr_2, success);
+            let response = $call(input_str_1, input_str_2);
+            encode_response(response, success)
         }
     };
 }
@@ -499,6 +465,22 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => create_encrypted_transfer_ext -> create_encrypted_transfer_aux);
+
+make_wrapper!(
+    /// Take pointers to NUL-terminated UTF8-strings and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// The input strings must contain base16 encoded encrypted amounts. If they can be
+    /// decoded then the result is also a string of the same form, and the success flag is 1.
+    /// If there is failure decoding input arguments the return value is a string
+    /// describing the error.
+    ///
+    /// # Safety
+    /// The input pointers must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => combine_encrypted_amounts_ext --> combine_encrypted_amounts_aux);
 
 #[no_mangle]
 /// # Safety
