@@ -4,6 +4,7 @@
 
 module Concordium.ID.DummyData where
 
+import Concordium.Common.Version
 import qualified Data.Map.Strict as OrdMap
 import qualified Data.Hashable as IntHash
 import qualified Data.ByteString.Lazy as BSL
@@ -55,4 +56,4 @@ readCredential fp = do
   bs <- BSL.readFile fp
   case AE.eitherDecode bs of
     Left err -> fail $ "Cannot read credential from file " ++ fp ++ " because " ++ err
-    Right d -> return d
+    Right d -> if vVersion == 0 then return (vValue d) else fail "Incorrect credential version."
