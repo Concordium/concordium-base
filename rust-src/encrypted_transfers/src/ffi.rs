@@ -2,8 +2,9 @@
 //! scheduler, and the mobile wallet.
 
 use crate::*;
-use crypto_common::{size_t, Get};
+use crypto_common::*;
 use ffi_helpers::*;
+use prelude::StdRng;
 use std::io::Cursor;
 
 type Group = pairing::bls12_381::G1;
@@ -30,6 +31,37 @@ unsafe extern "C" fn aggregate_encrypted_amounts(
     *out_low_ptr = Box::into_raw(Box::new(out_low));
 }
 
+#[derive(Serialize)]
+/// Second component of the elgamal public key, i.e., the public key
+/// minus the generator.
+/// FIXME: We should probably change the elgamal struct to have a fixed
+/// generator, globally defined, instead of this way of doing it.
+pub struct ElgamalPublicKeySecond(Group);
+
+impl ElgamalPublicKeySecond {
+    pub fn generate() -> Self { ElgamalPublicKeySecond(Group::generate(&mut thread_rng())) }
+}
+
+macro_derive_from_bytes!(
+    Box elgamal_second_from_bytes,
+    ElgamalPublicKeySecond
+);
+macro_derive_to_bytes!(Box elgamal_second_to_bytes, ElgamalPublicKeySecond);
+macro_free_ffi!(Box elgamal_second_free, ElgamalPublicKeySecond);
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn elgamal_second_gen() -> *mut ElgamalPublicKeySecond {
+    Box::into_raw(Box::new(ElgamalPublicKeySecond::generate()))
+}
+
+/// This is used for testing in haskell, providing deterministic key generation
+/// from seed.
+#[no_mangle]
+pub extern "C" fn elgamal_second_gen_seed(seed: u64) -> *mut ElgamalPublicKeySecond {
+    let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
+    Box::into_raw(Box::new(ElgamalPublicKeySecond(Group::generate(&mut rng))))
+}
+
 /// # Safety
 /// This function is safe if the pointers to structures are all non-null, and
 /// produced by `Box::into_raw`. The `transfer_bytes_ptr` can be null in case
@@ -40,8 +72,8 @@ unsafe extern "C" fn aggregate_encrypted_amounts(
 #[no_mangle]
 unsafe extern "C" fn verify_encrypted_transfer(
     ctx_ptr: *const GlobalContext<Group>,
-    receiver_pk_ptr: *const PublicKey<Group>,
-    sender_pk_ptr: *const PublicKey<Group>,
+    receiver_pk_ptr: *const ElgamalPublicKeySecond,
+    sender_pk_ptr: *const ElgamalPublicKeySecond,
     initial_high_ptr: *const Cipher<Group>,
     initial_low_ptr: *const Cipher<Group>,
     transfer_bytes_ptr: *const u8,
@@ -55,6 +87,16 @@ unsafe extern "C" fn verify_encrypted_transfer(
     let receiver_pk = from_ptr!(receiver_pk_ptr);
     let sender_pk = from_ptr!(sender_pk_ptr);
 
+    let receiver_pk = elgamal::PublicKey {
+        generator: *ctx.elgamal_generator(),
+        key:       receiver_pk.0,
+    };
+
+    let sender_pk = elgamal::PublicKey {
+        generator: *ctx.elgamal_generator(),
+        key:       sender_pk.0,
+    };
+
     let initial = EncryptedAmount {
         encryptions: [*initial_high, *initial_low],
     };
@@ -65,7 +107,7 @@ unsafe extern "C" fn verify_encrypted_transfer(
         return 0;
     };
 
-    if verify_transfer_data(ctx, receiver_pk, sender_pk, &initial, &transfer_data) {
+    if verify_transfer_data(ctx, &receiver_pk, &sender_pk, &initial, &transfer_data) {
         1
     } else {
         0

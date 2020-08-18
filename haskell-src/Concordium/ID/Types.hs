@@ -205,7 +205,7 @@ instance FBS.FixedLength RegIdSize where
   fixedLength _ = 48
 
 -- |Credential Registration ID (48 bytes)
-newtype CredentialRegistrationID = RegIdCred ElgamalPublicKey
+newtype CredentialRegistrationID = RegIdCred ElgamalSecond
     deriving newtype (Eq, Show, Serialize, ToJSON)
 
 -- Ord instance based on serialization

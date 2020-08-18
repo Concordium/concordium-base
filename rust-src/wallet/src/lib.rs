@@ -4,7 +4,7 @@ extern crate failure;
 extern crate serde_json;
 use crypto_common::*;
 
-use crypto_common::{base16_decode_string, base16_encode_string, c_char, Put};
+use crypto_common::{base16_decode_string, base16_encode_string, c_char, types::Amount, Put};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
@@ -78,7 +78,7 @@ fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
     let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
 
     // plaintext amount to transfer
-    let amount: u64 = try_get(&v, "amount")?;
+    let amount: Amount = try_get(&v, "amount")?;
 
     let sender_sk: elgamal::SecretKey<ExampleCurve> = try_get(&v, "senderSecretKey")?;
 
@@ -148,7 +148,7 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
 
     let ctx: TransferContext = from_value(v.clone())?;
 
-    let amount: u64 = try_get(&v, "amount")?;
+    let amount: Amount = try_get(&v, "amount")?;
 
     let (hash, body) = {
         let mut payload = Vec::new();
@@ -331,7 +331,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 /// It is unfortunate that this is pure bytes, b
 static TABLE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/table_bytes.bin"));
 
-fn decrypt_encrypted_amount_aux(input: &str) -> Fallible<u64> {
+fn decrypt_encrypted_amount_aux(input: &str) -> Fallible<Amount> {
     let v: Value = from_str(input)?;
     let encrypted_amount = try_get(&v, "encryptedAmount")?;
     let secret = try_get(&v, "encryptionSecretKey")?;
@@ -531,7 +531,7 @@ pub unsafe fn decrypt_encrypted_amount_ext(input_ptr: *const c_char, success: *m
     };
     if let Ok(v) = decrypt_encrypted_amount_aux(input_str) {
         *success = 1;
-        v
+        u64::from(v)
     } else {
         *success = 0;
         0
