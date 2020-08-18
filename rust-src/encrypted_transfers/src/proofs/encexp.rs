@@ -481,7 +481,7 @@ mod test {
         let n = 32;
         let nm = n * m;
 
-        let context = GlobalContext::<SomeCurve>::generate_size(nm, &mut csprng);
+        let context = GlobalContext::<SomeCurve>::generate_size(nm);
         let generator = context.encryption_in_exponent_generator(); // h
         let s_value = Value::from_u64(s);
         let S = pk_sender.encrypt_exponent_given_generator(&mut csprng, &s_value, generator);

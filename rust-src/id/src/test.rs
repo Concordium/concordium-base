@@ -151,7 +151,7 @@ pub fn test_pipeline() {
         ..
     } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
 
-    let global_ctx = GlobalContext::generate(&mut csprng);
+    let global_ctx = GlobalContext::generate();
 
     let (ars_infos, ars_secret) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
 
