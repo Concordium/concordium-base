@@ -10,6 +10,7 @@ pub mod proofs;
 mod types;
 
 use crate::types::*;
+use crypto_common::types::Amount;
 use curve_arithmetic::*;
 use elgamal::*;
 use id::types::*;
@@ -31,7 +32,8 @@ fn encrypt_amount<C: Curve, R: Rng>(
     // The generator for encryption in the exponent is the second component of the
     // commitment key, the 'h'.
     let h = context.encryption_in_exponent_generator();
-    let mut ciphers = encrypt_u64_in_chunks_given_generator(pk, amount, CHUNK_SIZE, h, csprng);
+    let mut ciphers =
+        encrypt_u64_in_chunks_given_generator(pk, u64::from(amount), CHUNK_SIZE, h, csprng);
     // these two are guaranteed to exist because we used `ChunkSize::ThirtyTwo`. The
     // encryptions are in little-endian limbs, so the last one is the encryption
     // of the high bits.
@@ -75,7 +77,7 @@ pub fn decrypt_amount<C: Curve>(
 ) -> Amount {
     let hi_chunk = sk.decrypt_exponent(&amount.encryptions[0], table);
     let low_chunk = sk.decrypt_exponent(&amount.encryptions[1], table);
-    CHUNK_SIZE.chunks_to_u64([low_chunk, hi_chunk].iter().copied())
+    Amount::from(CHUNK_SIZE.chunks_to_u64([low_chunk, hi_chunk].iter().copied()))
 }
 
 impl<C: Curve> EncryptedAmount<C> {
@@ -197,14 +199,18 @@ pub fn make_decrypt_data<C: Curve, R: Rng>(
     if to_decrypt > input_amount.agg_amount {
         return None;
     }
-    let remaining_amount = input_amount.agg_amount - to_decrypt;
-    let (remaining_amount, _remaining_rand) =
-        encrypt_amount(ctx, &PublicKey::from(sender_sk), remaining_amount, csprng);
+    let remaining_amount = u64::from(input_amount.agg_amount) - u64::from(to_decrypt);
+    let (remaining_amount, _remaining_rand) = encrypt_amount(
+        ctx,
+        &PublicKey::from(sender_sk),
+        Amount::from(remaining_amount),
+        csprng,
+    );
     // FIXME: A proof would come here
     Some(DecryptAmountData {
         remaining_amount,
         reveal_amount: to_decrypt,
-        index: input_amount.agg_amount,
+        index: input_amount.agg_index,
     })
 }
 
@@ -235,7 +241,8 @@ impl<C: Curve> AggregatedDecryptedAmount<C> {
         if self.agg_index == addition.index {
             self.agg_encrypted_amount =
                 aggregate(&self.agg_encrypted_amount, &addition.encrypted_chunks);
-            self.agg_amount = self.agg_amount.checked_add(addition.amount)?;
+            self.agg_amount =
+                Amount::from(u64::from(self.agg_amount).checked_add(u64::from(addition.amount))?);
             self.agg_index = self.agg_index.checked_add(1)?;
             Some(())
         } else {
@@ -282,7 +289,7 @@ mod tests {
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let pk = PublicKey::from(&sk);
 
-        let amount = csprng.gen();
+        let amount = Amount::from(csprng.gen::<u64>());
 
         let (enc_amount, _) = encrypt_amount(&context, &pk, amount, &mut csprng);
 
@@ -307,9 +314,9 @@ mod tests {
         let pk = PublicKey::from(&sk);
 
         // we divide here by 3 to avoid overflow when summing them together.
-        let amount_1 = csprng.gen::<u64>() / 3;
-        let amount_2 = csprng.gen::<u64>() / 3;
-        let amount_3 = csprng.gen::<u64>() / 3;
+        let amount_1 = Amount::from(csprng.gen::<u64>() / 3);
+        let amount_2 = Amount::from(csprng.gen::<u64>() / 3);
+        let amount_3 = Amount::from(csprng.gen::<u64>() / 3);
 
         let (enc_amount_1, _) = encrypt_amount(&context, &pk, amount_1, &mut csprng);
         let (enc_amount_2, _) = encrypt_amount(&context, &pk, amount_2, &mut csprng);
@@ -342,8 +349,8 @@ mod tests {
         let agg = combine(&mut dec_amounts).expect("Could not combine decrypted amounts.");
         let decrypted = decrypt_amount(&table, &sk, &agg.agg_encrypted_amount);
         assert_eq!(
-            amount_1 + amount_2 + amount_3,
-            decrypted,
+            amount_1 + (amount_2 + amount_3),
+            Some(decrypted),
             "Decrypted aggregated encrypted amount differs from expected."
         );
     }
@@ -360,7 +367,7 @@ mod tests {
 
         // we divide here by 3 to avoid overflow when summing them together.
         let amount_1 = u64::from(csprng.gen::<u32>());
-        let amount_1 = amount_1 << 2;
+        let amount_1 = Amount::from(amount_1 << 2);
 
         let (enc_amount_1, _) = encrypt_amount(&context, &pk, amount_1, &mut csprng);
 
@@ -369,7 +376,8 @@ mod tests {
 
         let decrypted_1 = sk.decrypt_exponent(&enc_amount_1.join(), &table);
         assert_eq!(
-            amount_1, decrypted_1,
+            amount_1,
+            Amount::from(decrypted_1),
             "Decrypted combined encrypted amount differs from expected."
         );
     }

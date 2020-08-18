@@ -16,7 +16,7 @@ import qualified Data.Aeson as AE
 -- random number generator.
 {-# WARNING dummyRegId "Invalid credential Registration ID, only for testing." #-}
 dummyRegId :: AccountAddress -> ID.CredentialRegistrationID
-dummyRegId addr = ID.RegIdCred (generateElgamalPublicKeyFromSeed (fromIntegral (IntHash.hash addr)))
+dummyRegId addr = ID.RegIdCred (generateElgamalSecondFromSeed (fromIntegral (IntHash.hash addr)))
 
 -- This credential value is invalid and does not satisfy the invariants normally expected of credentials.
 -- Should only be used when only the existence of a credential is needed in testing, but the credential

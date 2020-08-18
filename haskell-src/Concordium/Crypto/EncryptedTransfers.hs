@@ -36,8 +36,8 @@ foreign import ccall unsafe "aggregate_encrypted_amounts"
 foreign import ccall unsafe "verify_encrypted_transfer"
   verify_encrypted_transfer ::
        Ptr GlobalContext -- ^Pointer to the global context needed to validate the proof.
-     -> Ptr ElgamalPublicKey -- ^ Public key of the receiver.
-     -> Ptr ElgamalPublicKey -- ^ Public key of the sender.
+     -> Ptr ElgamalSecond -- ^ Public key of the receiver.
+     -> Ptr ElgamalSecond -- ^ Public key of the sender.
      -> Ptr ElgamalCipher -- ^ High chunk of the current balance.
      -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
      -> Ptr Word8 -- ^ Pointer to the transfer data bytes.
@@ -173,8 +173,8 @@ verifyEncryptedTransferProof ::
   Bool
 verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData = unsafeDupablePerformIO $ do
   withGlobalContext gc $ \gcPtr ->
-    withElgamalPublicKey receiverPK' $ \receiverPKPtr ->
-      withElgamalPublicKey senderPK' $ \senderPKPtr ->
+    withElgamalSecond receiverPK' $ \receiverPKPtr ->
+      withElgamalSecond senderPK' $ \senderPKPtr ->
         withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
           withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
             -- this is safe since the called function handles the 0 length case correctly.

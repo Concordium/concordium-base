@@ -248,25 +248,6 @@ pub extern "C" fn ar_info_ar_identity(ar_info_ptr: *const ArInfo<G1>) -> u32 {
     ar_info.ar_identity.into()
 }
 
-#[derive(Serialize)]
-pub struct ElgamalGenerator(G1);
-
-impl ElgamalGenerator {
-    pub fn generate() -> Self { ElgamalGenerator(G1::generate(&mut thread_rng())) }
-}
-
-macro_derive_from_bytes!(
-    Box elgamal_gen_from_bytes,
-    ElgamalGenerator
-);
-macro_derive_to_bytes!(Box elgamal_gen_to_bytes, ElgamalGenerator);
-macro_free_ffi!(Box elgamal_gen_free, ElgamalGenerator);
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn elgamal_gen_gen() -> *mut ElgamalGenerator {
-    Box::into_raw(Box::new(ElgamalGenerator::generate()))
-}
-
 macro_derive_from_bytes!(
     Box elgamal_pub_key_from_bytes,
     elgamal::PublicKey<G1>

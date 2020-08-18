@@ -4,6 +4,7 @@ use rand::*;
 extern crate criterion;
 
 use criterion::Criterion;
+use crypto_common::types::Amount;
 use curve_arithmetic::Value;
 use elgamal::{PublicKey, SecretKey};
 use encrypted_transfers::proofs::encexp::*;
@@ -63,8 +64,8 @@ pub fn enc_trans_bench(c: &mut Criterion) {
                 &pk_receiver,
                 index,
                 &S,
-                s,
-                a,
+                Amount::from(s),
+                Amount::from(a),
                 &mut csprng,
             )
             .expect("Could not produce proof.");
@@ -86,8 +87,8 @@ pub fn enc_trans_bench(c: &mut Criterion) {
         &pk_receiver,
         index,
         &S,
-        s,
-        a,
+        Amount::from(s),
+        Amount::from(a),
         &mut csprng,
     )
     .expect("Could not produce proof.");
