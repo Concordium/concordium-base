@@ -24,6 +24,7 @@ use std::{
     collections::BTreeMap,
     convert::TryInto,
     ffi::{CStr, CString},
+    io::Cursor,
 };
 
 type ExampleCurve = G1;
@@ -326,6 +327,25 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     Ok(to_string(&response)?)
 }
 
+/// Embed the precomputed table for decryption.
+/// It is unfortunate that this is pure bytes, b
+static TABLE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/table_bytes.bin"));
+
+fn decrypt_encrypted_amount_aux(input: &str) -> Fallible<u64> {
+    let v: Value = from_str(input)?;
+    let encrypted_amount = try_get(&v, "encryptedAmount")?;
+    let secret = try_get(&v, "encryptionSecretKey")?;
+
+    let table = (&mut Cursor::new(TABLE_BYTES)).get()?;
+    Ok(
+        encrypted_transfers::decrypt_amount::<id::constants::ArCurve>(
+            &table,
+            &secret,
+            &encrypted_amount,
+        ),
+    )
+}
+
 /// Set the flag to 0, and return a newly allocated string containing
 /// the error message. The returned string is NUL terminated.
 ///
@@ -481,6 +501,42 @@ make_wrapper!(
     /// The input pointers must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => combine_encrypted_amounts_ext --> combine_encrypted_amounts_aux);
+
+/// Take pointers to a NUL-terminated UTF8-string and return a u64.
+///
+/// In case of failure to decode the input the function will
+/// set the `success` flag to `0`, and the return value should not be used.
+/// If `success` is set to `1` the return value is the decryption of the input
+/// amount.
+///
+/// The input string should encode a JSON object with two fields "global" and
+/// "encryptedAmount".
+///
+/// # Safety
+/// The input pointer must point to a null-terminated buffer, otherwise this
+/// function will fail in unspecified ways.
+#[no_mangle]
+pub unsafe fn decrypt_encrypted_amount_ext(input_ptr: *const c_char, success: *mut u8) -> u64 {
+    let input_str = if input_ptr.is_null() {
+        *success = 0;
+        return 0;
+    } else {
+        match CStr::from_ptr(input_ptr).to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                *success = 0;
+                return 0;
+            }
+        }
+    };
+    if let Ok(v) = decrypt_encrypted_amount_aux(input_str) {
+        *success = 1;
+        v
+    } else {
+        *success = 0;
+        0
+    }
+}
 
 #[no_mangle]
 /// # Safety

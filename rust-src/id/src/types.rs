@@ -39,6 +39,10 @@ use std::{
     str::FromStr,
 }; // only for account addresses
 
+/// NB: This includes digits of PI (starting with 14...) as ASCII characters
+/// this could be what is desired, but it is important to be aware of it.
+pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-10million.txt");
+
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
 /// This is currently the number required, since the only
@@ -1385,20 +1389,32 @@ pub struct GlobalContext<C: Curve> {
 
 impl<C: Curve> GlobalContext<C> {
     /// Generate a new global context.
-    pub fn generate(csprng: &mut impl rand::Rng) -> Self {
-        Self::generate_size(NUM_BULLETPROOF_GENERATORS, csprng)
-    }
+    pub fn generate() -> Self { Self::generate_size(NUM_BULLETPROOF_GENERATORS) }
 
     /// Generate a new global context with the given number of
     /// bulletproof generators.
     ///
     /// This is intended mostly for testing, on-chain there will be a fixed
     /// amount.
-    pub fn generate_size(n: usize, csprng: &mut impl rand::Rng) -> Self {
+    /// FIXME: Make sure the parameters are bounded and this does not panic.
+    pub fn generate_size(n: usize) -> Self {
+        assert!(n <= (PI_DIGITS.len() - 200) / 200);
+        let cmm_key = PedersenKey {
+            g: C::hash_to_group(&PI_DIGITS[0..100]),
+            h: C::hash_to_group(&PI_DIGITS[100..200]),
+        };
+
+        let mut generators = Vec::with_capacity(n);
+        for bytes in PI_DIGITS[200..].chunks(200).take(n) {
+            let g = C::hash_to_group(&bytes[..100]);
+            let h = C::hash_to_group(&bytes[100..]);
+            generators.push((g, h));
+        }
+
         GlobalContext {
-            generator:               C::generate(csprng),
-            on_chain_commitment_key: PedersenKey::generate(csprng),
-            bulletproof_generators:  Generators::generate(n, csprng),
+            generator:               C::hash_to_group(&PI_DIGITS[0..100]),
+            on_chain_commitment_key: cmm_key,
+            bulletproof_generators:  Generators { G_H: generators },
         }
     }
 

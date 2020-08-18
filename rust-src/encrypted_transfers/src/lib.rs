@@ -68,7 +68,7 @@ pub fn aggregate<C: Curve>(
 /// one that is used to contruct the table.
 ///
 /// If not, this function will (almost certainly) appear not to terminate.
-fn decrypt_amount<C: Curve>(
+pub fn decrypt_amount<C: Curve>(
     table: &BabyStepGiantStep<C>,
     sk: &SecretKey<C>,
     amount: &EncryptedAmount<C>,
@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt() {
         let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate(&mut csprng);
+        let context = GlobalContext::<G1>::generate();
 
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let pk = PublicKey::from(&sk);
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn test_combine() {
         let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate(&mut csprng);
+        let context = GlobalContext::<G1>::generate();
 
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let pk = PublicKey::from(&sk);
@@ -353,7 +353,7 @@ mod tests {
     #[test]
     fn test_scale() {
         let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate(&mut csprng);
+        let context = GlobalContext::<G1>::generate();
 
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let pk = PublicKey::from(&sk);
