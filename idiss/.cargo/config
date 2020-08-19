@@ -1,0 +1,7 @@
+# Default build target is wasm
+[build]
+target = "wasm32-unknown-unknown"
+
+[provile.release]
+opt-level = 3
+lto = true

@@ -233,8 +233,8 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let id_use_data = IdObjectUseData { aci, randomness };
 
     let response = json!({
-        "idObjectRequest": Versioned::new(Version::from(0u32), pio),
-        "privateIdObjectData": Versioned::new(Version::from(0u32), id_use_data),
+        "idObjectRequest": Versioned::new(VERSION_0, pio),
+        "privateIdObjectData": Versioned::new(VERSION_0, id_use_data),
     });
 
     Ok(to_string(&response)?)
