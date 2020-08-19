@@ -1,16 +1,13 @@
-{-# LANGUAGE BangPatterns, DerivingStrategies, OverloadedStrings, ScopedTypeVariables, TemplateHaskell #-}
+{-# LANGUAGE BangPatterns, DerivingStrategies, OverloadedStrings, ScopedTypeVariables, TemplateHaskell, StandaloneDeriving, DeriveTraversable, RankNTypes #-}
 -- |Types for chain update instructions.
 module Concordium.Types.Updates where
 
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
 import Data.Aeson ((.:))
-import qualified Data.Array as Array
-import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BS16
-import Data.Char
 import Data.Hashable (Hashable)
 import Data.Ix
 import qualified Data.Map as Map
@@ -20,7 +17,6 @@ import Data.Text (Text, unpack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Vector as Vec
 import Data.Word
-import Control.Exception
 import Control.Monad
 
 import Concordium.Crypto.SignatureScheme
@@ -57,9 +53,6 @@ instance Serialize UpdateType where
         3 -> return UpdateEuroPerEnergy
         4 -> return UpdateMicroGTUPerEuro
         n -> fail $ "invalid update type: " ++ show n
-
-newtype UpdateTypeArray v = UpdateTypeArray {utArray :: Array.Array UpdateType v}
-    deriving (Functor, Foldable, Traversable)
 
 -- |Key type for update authorization.
 type UpdatePublicKey = VerifyKey
