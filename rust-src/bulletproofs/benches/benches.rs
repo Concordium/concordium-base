@@ -40,7 +40,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let B = SomeCurve::generate(rng);
     let B_tilde = SomeCurve::generate(rng);
     let gens = Generators { G_H };
-    let keys = CommitmentKey(B, B_tilde);
+    let keys = CommitmentKey { g: B, h: B_tilde };
 
     // Some numbers in [0, 2^n):
     let v_vec: Vec<u64> = vec![
