@@ -5,12 +5,14 @@ module Concordium.Types.Updates where
 import qualified Data.Aeson as AE
 import Data.Aeson.TH
 import Data.Aeson ((.:))
+import qualified Data.Array as Array
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BS16
 import Data.Char
 import Data.Hashable (Hashable)
+import Data.Ix
 import qualified Data.Map as Map
 import Data.Serialize
 import qualified Data.Set as Set
@@ -34,19 +36,30 @@ data UpdateType
     -- ^Update the access structures that authorize updates
     | UpdateProtocol
     -- ^Update the chain protocol
-    | UpdateParameters
-    -- ^Update chain parameters
-    deriving (Eq, Ord, Show)
+    | UpdateElectionDifficulty
+    -- ^Update the election difficulty
+    | UpdateEuroPerEnergy
+    -- ^Update the euro per energy exchange rate
+    | UpdateMicroGTUPerEuro
+    -- ^Update the microGTU per euro exchange rate
+    deriving (Eq, Ord, Show, Ix, Bounded, Enum)
 
 instance Serialize UpdateType where
     put UpdateAuthorization = putWord8 0
     put UpdateProtocol = putWord8 1
-    put UpdateParameters = putWord8 2
+    put UpdateElectionDifficulty = putWord8 2
+    put UpdateEuroPerEnergy = putWord8 3
+    put UpdateMicroGTUPerEuro = putWord8 4
     get = getWord8 >>= \case
         0 -> return UpdateAuthorization
         1 -> return UpdateProtocol
-        2 -> return UpdateParameters
+        2 -> return UpdateElectionDifficulty
+        3 -> return UpdateEuroPerEnergy
+        4 -> return UpdateMicroGTUPerEuro
         n -> fail $ "invalid update type: " ++ show n
+
+newtype UpdateTypeArray v = UpdateTypeArray {utArray :: Array.Array UpdateType v}
+    deriving (Functor, Foldable, Traversable)
 
 -- |Key type for update authorization.
 type UpdatePublicKey = VerifyKey
@@ -220,75 +233,6 @@ instance AE.FromJSON ProtocolUpdate where
             unless (BS.null garbage) $ fail "Unable to parse \"specificationAuxiliaryData\" as Base-16"
             return ProtocolUpdate{..}
 
--- |Chain parameter updates.  A parameter update __must__ update
--- at least one parameter.
-data ParameterUpdate = ParameterUpdate {
-        puElectionDifficulty :: Maybe ElectionDifficulty,
-        puEuroPerEnergy :: Maybe ExchangeRate,
-        puMicroGTUPerEuro :: Maybe ExchangeRate
-    }
-    deriving (Eq, Show)
-
-makeUpdateElectionDifficulty :: ElectionDifficulty -> ParameterUpdate
-makeUpdateElectionDifficulty !diff = assert (isValidElectionDifficulty diff) $ ParameterUpdate {
-        puElectionDifficulty = Just diff,
-        puEuroPerEnergy = Nothing,
-        puMicroGTUPerEuro = Nothing
-    }
-
-makeUpdateEuroPerEnergy :: ExchangeRate -> ParameterUpdate
-makeUpdateEuroPerEnergy !rate = ParameterUpdate {
-        puElectionDifficulty = Nothing,
-        puEuroPerEnergy = Just rate,
-        puMicroGTUPerEuro = Nothing
-    }
-
-makeUpdateMicroGTUPerEuro :: ExchangeRate -> ParameterUpdate
-makeUpdateMicroGTUPerEuro !rate = ParameterUpdate {
-        puElectionDifficulty = Nothing,
-        puEuroPerEnergy = Nothing,
-        puMicroGTUPerEuro = Just rate
-    }
-
--- |Combine paramter updates in a left-biased fashion.
-instance Semigroup ParameterUpdate where
-    l <> r = ParameterUpdate {
-                puElectionDifficulty = c puElectionDifficulty,
-                puEuroPerEnergy = c puEuroPerEnergy,
-                puMicroGTUPerEuro = c puMicroGTUPerEuro
-            }
-        where
-            c f = case f l of
-                fl@(Just _) -> fl
-                Nothing -> f r
-
-instance Serialize ParameterUpdate where
-    put ParameterUpdate{..} = do
-            assert (bitmap /= 0) $ putWord8 bitmap
-            mapM_ put puElectionDifficulty
-            mapM_ put puEuroPerEnergy
-            mapM_ put puMicroGTUPerEuro
-        where
-            mBit _ Nothing = 0
-            mBit b (Just _) = bit b
-            bitmap =
-                mBit 0 puElectionDifficulty .|.
-                mBit 1 puEuroPerEnergy .|.
-                mBit 2 puMicroGTUPerEuro
-    get = do
-            bitmap <- getWord8
-            when (bitmap == 0) $ fail "parameter update must update at least one parameter"
-            let mget b = if testBit bitmap b then Just <$> get else return Nothing
-            puElectionDifficulty <- mget 0
-            forM_ puElectionDifficulty $
-                \ed -> unless (isValidElectionDifficulty ed) $
-                    fail "invalid election difficulty"
-            puEuroPerEnergy <- mget 1
-            puMicroGTUPerEuro <- mget 2
-            return ParameterUpdate{..}
-
-$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . dropWhile isLower, omitNothingFields=True} ''ParameterUpdate)
-
 data UpdateHeader = UpdateHeader {
         updateSeqNumber :: UpdateSequenceNumber,
         updateEffectiveTime :: TransactionTime,
@@ -313,37 +257,45 @@ instance Serialize UpdateHeader where
 data UpdatePayload
     = AuthorizationUpdatePayload !Authorizations
     | ProtocolUpdatePayload !ProtocolUpdate
-    | ParameterUpdatePayload !ParameterUpdate
+    | ElectionDifficultyUpdatePayload !ElectionDifficulty
+    | EuroPerEnergyUpdatePayload !ExchangeRate
+    | MicroGTUPerEuroUpdatePayload !ExchangeRate
     deriving (Eq, Show)
 
 instance Serialize UpdatePayload where
     put (AuthorizationUpdatePayload u) = put UpdateAuthorization >> put u
     put (ProtocolUpdatePayload u) = put UpdateProtocol >> put u
-    put (ParameterUpdatePayload u) = put UpdateParameters >> put u
+    put (ElectionDifficultyUpdatePayload u) = put UpdateElectionDifficulty >> put u
+    put (EuroPerEnergyUpdatePayload u) = put UpdateEuroPerEnergy >> put u
+    put (MicroGTUPerEuroUpdatePayload u) = put UpdateMicroGTUPerEuro >> put u
     get = get >>= \case
             UpdateAuthorization -> AuthorizationUpdatePayload <$> get
             UpdateProtocol -> ProtocolUpdatePayload <$> get
-            UpdateParameters -> ParameterUpdatePayload <$> get
+            UpdateElectionDifficulty -> ElectionDifficultyUpdatePayload <$> get
+            UpdateEuroPerEnergy -> EuroPerEnergyUpdatePayload <$> get
+            UpdateMicroGTUPerEuro -> MicroGTUPerEuroUpdatePayload <$> get
 
-$(deriveJSON defaultOptions{constructorTagModifier = takeWhile isLower . firstLower, sumEncoding = TaggedObject {tagFieldName = "updateType", contentsFieldName = "update"}} ''UpdatePayload)
+$(deriveJSON defaultOptions{
+    constructorTagModifier = firstLower . reverse . drop (length ("UpdatePayload" :: String)) . reverse,
+    sumEncoding = TaggedObject {tagFieldName = "updateType", contentsFieldName = "update"}
+    }
+    ''UpdatePayload)
 
 updateType :: UpdatePayload -> UpdateType
 updateType AuthorizationUpdatePayload{} = UpdateAuthorization
 updateType ProtocolUpdatePayload{} = UpdateProtocol
-updateType ParameterUpdatePayload{} = UpdateParameters
+updateType ElectionDifficultyUpdatePayload{} = UpdateElectionDifficulty
+updateType EuroPerEnergyUpdatePayload{} = UpdateEuroPerEnergy
+updateType MicroGTUPerEuroUpdatePayload{} = UpdateMicroGTUPerEuro
 
 -- |Determine if signatures from the given set of keys would be
 -- sufficient to authorize the given update.
 checkUpdateAuthorizationKeys :: Authorizations -> UpdatePayload -> Set.Set UpdateKeyIndex -> Bool
 checkUpdateAuthorizationKeys Authorizations{..} (AuthorizationUpdatePayload _) ks = checkKeySet asAuthorization ks
 checkUpdateAuthorizationKeys Authorizations{..} (ProtocolUpdatePayload _) ks = checkKeySet asProtocol ks
-checkUpdateAuthorizationKeys Authorizations{..} (ParameterUpdatePayload ParameterUpdate{..}) ks = 
-        checkMaybe puElectionDifficulty asParamElectionDifficulty
-        && checkMaybe puEuroPerEnergy asParamEuroPerEnergy
-        && checkMaybe puMicroGTUPerEuro asParamMicroGTUPerEuro
-    where
-        checkMaybe Nothing _ = True
-        checkMaybe (Just _) a = checkKeySet a ks
+checkUpdateAuthorizationKeys Authorizations{..} (ElectionDifficultyUpdatePayload _) ks = checkKeySet asParamElectionDifficulty ks
+checkUpdateAuthorizationKeys Authorizations{..} (EuroPerEnergyUpdatePayload _) ks = checkKeySet asParamEuroPerEnergy ks
+checkUpdateAuthorizationKeys Authorizations{..} (MicroGTUPerEuroUpdatePayload _) ks = checkKeySet asParamMicroGTUPerEuro ks
 
 newtype UpdateInstructionSignatures = UpdateInstructionSignatures {updateInstructionSignatures :: Map.Map UpdateKeyIndex Signature}
     deriving newtype (Eq, Show)
