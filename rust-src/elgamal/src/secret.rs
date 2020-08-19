@@ -2,12 +2,11 @@
 
 //! Elgamal secret key types
 use crate::{cipher::*, message::*};
-use rand::*;
-
 use crypto_common::*;
 use curve_arithmetic::{Curve, Value};
-
+use failure::bail;
 use ff::Field;
+use rand::*;
 use std::collections::HashMap;
 
 /// Elgamal secret key packed together with a chosen generator.
@@ -38,6 +37,38 @@ pub struct BabyStepGiantStep<C: Curve> {
     inverse_point: C,
     /// Size of the table.
     m: u64,
+}
+
+impl<C: Curve> Serial for BabyStepGiantStep<C> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.put(&self.m);
+        out.put(&self.inverse_point);
+        for (k, v) in self.table.iter() {
+            out.write_all(k).expect("Writing to puffer should succeed.");
+            out.put(v)
+        }
+    }
+}
+
+impl<C: Curve> Deserial for BabyStepGiantStep<C> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let m: u64 = source.get()?;
+        let inverse_point = source.get()?;
+        let mut table = HashMap::with_capacity(std::cmp::min(1 << 16, m as usize));
+        for _ in 0..m {
+            let mut k = vec![0; C::GROUP_ELEMENT_LENGTH];
+            source.read_exact(&mut k)?;
+            let v = source.get()?;
+            if table.insert(k, v).is_some() {
+                bail!("Duplicate element found during deserialization.")
+            }
+        }
+        Ok(Self {
+            m,
+            inverse_point,
+            table,
+        })
+    }
 }
 
 impl<C: Curve> BabyStepGiantStep<C> {

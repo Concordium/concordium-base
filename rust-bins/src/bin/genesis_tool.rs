@@ -1,7 +1,7 @@
 use aggregate_sig as agg;
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{base16_encode_string, *};
+use crypto_common::{base16_encode_string, types::Amount, *};
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ec_vrf_ed25519 as vrf;
@@ -38,10 +38,10 @@ enum GenesisTool {
         num_finalizers: Option<usize>,
         #[structopt(
             long = "balance",
-            help = "Balance on each of the baker accounts.",
-            default_value = "35000000000"
+            help = "Balance on each of the baker accounts, in GTU.",
+            default_value = "350000000"
         )]
-        balance: u64,
+        balance: Amount,
         #[structopt(flatten)]
         common: CommonOptions,
     },
@@ -58,10 +58,10 @@ enum GenesisTool {
         template: String,
         #[structopt(
             long = "balance",
-            help = "Initial balance on each of the accounts.",
-            default_value = "1000000000000"
+            help = "Initial balance on each of the accounts, in GTU.",
+            default_value = "100000000"
         )]
-        balance: u64,
+        balance: Amount,
         #[structopt(flatten)]
         common: CommonOptions,
     },

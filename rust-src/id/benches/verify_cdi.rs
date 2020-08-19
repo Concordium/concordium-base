@@ -37,7 +37,7 @@ fn bench_parts(c: &mut Criterion) {
         id_cred: IdCredentials::generate(&mut csprng),
     };
 
-    let global_context = GlobalContext::generate(&mut csprng);
+    let global_context = GlobalContext::generate();
     let ar_base = global_context.generator;
 
     let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);

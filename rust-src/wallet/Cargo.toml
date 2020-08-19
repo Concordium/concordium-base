@@ -61,7 +61,20 @@ version = "0"
 path = "../encrypted_transfers"
 version = "0"
 
+[build-dependencies.elgamal]
+path = "../elgamal"
+version = "0"
+
+[build-dependencies.id]
+path = "../id"
+version = "0"
+
+[build-dependencies.crypto_common]
+path = "../crypto_common"
+version = "0"
+
 [lib]
 name = "wallet"
 crate-type = ["rlib", "cdylib", "staticlib"]
 path = "src/lib.rs"
+

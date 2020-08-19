@@ -2,7 +2,7 @@
 
 use crate::proofs::*;
 use bulletproofs::range_proof::*;
-use crypto_common::*;
+use crypto_common::{types::Amount, *};
 use curve_arithmetic::*;
 use elgamal::*;
 use id::sigma_protocols::common::*;
@@ -43,9 +43,6 @@ pub struct IndexedEncryptedAmount<C: Curve> {
     /// Index of the amount on the account.
     pub index: u64,
 }
-
-/// The type of public amounts on the chain.
-pub type Amount = u64;
 
 /// Size of the chunk for encrypted amounts.
 pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
