@@ -161,30 +161,20 @@ impl std::fmt::Display for Amount {
     }
 }
 
+/// JSON instance serializes and deserializes in microgtu units.
 impl SerdeSerialize for Amount {
     fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_str(&self.to_string())
+        ser.serialize_str(&self.microgtu.to_string())
     }
 }
 
 impl<'de> SerdeDeserialize<'de> for Amount {
     fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
-        des.deserialize_str(AmountVisitor)
-    }
-}
-
-struct AmountVisitor;
-
-impl<'de> serde::de::Visitor<'de> for AmountVisitor {
-    type Value = Amount;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(formatter, "A base58 string, version 1.")
-    }
-
-    fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        v.parse::<Amount>()
-            .map_err(|_| serde::de::Error::custom("Incorrect amount format."))
+        let s = String::deserialize(des)?;
+        let microgtu = s
+            .parse::<u64>()
+            .map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
+        Ok(Amount { microgtu })
     }
 }
 
@@ -257,6 +247,37 @@ mod tests {
             "".parse::<Amount>(),
             Err(AmountParseError::ExpectedMore),
             "Empty string is not a valid amount."
+        );
+    }
+
+    #[test]
+    fn amount_json_serialization() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..1000 {
+            let amount = Amount::from(rng.gen::<u64>());
+            let s = serde_json::to_string(&amount).expect("Could not serialize");
+            assert_eq!(
+                amount,
+                serde_json::from_str(&s).unwrap(),
+                "Could not deserialize amount."
+            );
+        }
+
+        let amount = Amount::from(12345);
+        let s = serde_json::to_string(&amount).expect("Could not serialize");
+        assert_eq!(s, r#""12345""#, "Could not deserialize amount.");
+
+        assert!(
+            serde_json::from_str::<Amount>(r#""""#).is_err(),
+            "Parsed empty string, but should not."
+        );
+        assert!(
+            serde_json::from_str::<Amount>(r#""12f""#).is_err(),
+            "Parsed string with corrupt data at end, but should not."
+        );
+        assert!(
+            serde_json::from_str::<Amount>(r#""12345612312315415123123""#).is_err(),
+            "Parsed overflowing amount, but should not."
         );
     }
 }

@@ -1,43 +1,37 @@
 {
-  "idObjectRequest": {
-    "choiceArData": {
-      "arIdentities": [
-        0,
-        1,
-        2
-      ],
-      "threshold": 2
-    },
-    "idCredPub": "8c30950e4391f6e48e18414650d6e1449f0c2f801909ff3497c4ce87350d84332b0723c65c571f2c6d56630a2abaff89",
-    "idCredSecCommitment": "a057a1e725f654ec5b192e05dfa36704b857b51e1d00806386de6e3e2bec7b2ea75bd55344a2e3d207697aefc40be21b",
-    "ipArData": [
-      {
-        "arIdentity": 0,
-        "encPrfKeyShare": "870f3a78c138766d1ea82dd31000883dc7e408a2a51647bfffc63c9fc31f7492f4926887e80e498c528eb89c8c657f629182e783a2bfd072e5ee88b04552bd83313ea31623db98b75122a878ee2b96f8c080d1861c4520df6c72fa397ab8d277",
-        "prfKeyShareNumber": 1,
-        "proofComEncEq": "689cb975aee2484eba1bd77299c0be947b84cc790a575a442130c0fd9e770d4814cddc4a1d711254fd96ecb806f88f87eafd4efd308a5109b679894e08490146076d6e159b348f5d57cdd61069b374d4e7561944fea140241cfcf9737504c3cf0c384e2a79b9faea7f1ef25302d38acf0a00c086adb8851e34ea50c03ed0c71c"
-      },
-      {
-        "arIdentity": 1,
-        "encPrfKeyShare": "b2a3485bbe0a08989a491a6d6cad63bee582535bd604de933d22259ae01ada677802caab28f1ec30d3c67d4e0a2c62b08ad5b55ac43fd0bfcd14d843fe2a90fa4092f901c6d791f51da4b5381a51b788375bb88b4a3be6f78f3147b30092f006",
-        "prfKeyShareNumber": 2,
-        "proofComEncEq": "3607222090afbadf29dcca36d2117fe1ec5f60cc3ae2e94cb8d0c2b136973ea465c26dc03e6e1b9de6eec564262c70028e5ba0f6f653c5dd6e1ee5a90179842c4332b3db1f02cb0f6e88374094d148e1ec986e3e5ac7bb2a606980250dc325595c8d04346a73598c99ac2aa8e00ec5597e3baa881cd470d4a0afaa00ab74a2ec"
-      },
-      {
-        "arIdentity": 2,
-        "encPrfKeyShare": "8554b4ab9d57d1890915ab646e1d78bc730fece52db6d5d60035eeeea38a62611e491e31ae9b619b636dbab73d6bb7239277ac9f0b44d648fc0f4f701752a5075b1a374eaef01a538db61e1f9c871e7538b51091a7a9716e5716b787d9cd8fb6",
-        "prfKeyShareNumber": 3,
-        "proofComEncEq": "00b3f1594a7ba67ea90d092a626e3cf708efba527b8be594cfec4b9bbebe666d5b5775aa99e94a4444bb21b4f7a17c3d60aa526e81339399ad8c9c51863d2abb192b5d82e506d025189ca8fffac91de82ad1e49e2e11eaf0f165e2ca82db22432a62fcd1c2d5e57651a5a70d615a2daccd9ff61ec2677608627e247e541dd3a6"
-      }
-    ],
-    "pokSecCred": "1f5f1bc82296fe2ddb4e90464195901c14e7351a4d172905a78856763a713f58562e96131e1020cbd93bd51cc462d39699cae54cdd75e31a7b37a01b33535f09",
-    "prfKeyCommitmentWithIP": "b1e8143180911840d1fa9523f51184fb7c4753ee4da04d8a1aa13e08940b560752cfea01a0b4889a7ad2ba73bfa9105b",
-    "prfKeySharingCoeffCommitments": [
-      "843e34a45659323b9d79af6a17fc3f0ba0d8fe44b7cc50caa768ebe5d71c1fcf118f7cdde04b0680b7178cb128c90fc9",
-      "b875b78fb0b271b5f15e72fdfb9c51fb3f6327325924b5891715a6c5d65d90c40ffa456561f92c0a0954bcc479e0bb11"
-    ],
-    "proofCommitmentsSame": "1361177c1f8d83d9430a2d07116beea41ab2f11be277d1c946f16a02dd8bec0a5793a491a135cd24b6857b93455fe9c13c4c6034ce666aeca73e337ec093d46e1cc38ec4d84fd8cec00b7643d4e774565cd2615e497192db16389361a138aab33f4d2e62500afc4269e430bae38c8c5b0a3cee0bef1506ebceb8c1d6afb59bf8",
-    "proofCommitmentsToIdCredSecSame": "618c1b1a808ea9f6d94dbb284f2565f3c0b54962aeba2a85e22eb52430cb56310000000103699a10d2a97f97165f53968cb59ee174532ba485cdc891634e8984498652d75f709a94d24f0058daca3c31b05059f1eb2a9f893ae345413db8990aea9eff91"
-  }
+    "idObjectRequest": {
+        "value": {
+            "proofsOfKnowledge": "b7cfd5a1d633ee1bb4faa42c7b0fc9d8dace18f23c298777bce0efd8147ee88e42d00c8c4da9077463812d8b813855b62274d414b52dfde40e862308b51db6b15098c007a0c58e5504d9326edd5c830ad9aa511587e6ee5f805f28a0b7499c89726561776cb35ac1690baa214573da2a361d698a04343be2744159bf225aee7955e7ba3eb806044e31f876b7c1e493401218af232d8a3e292c9c396ca13d1db95ca87659ab711f95baebca368115e9ed6148a93aa3205213b3f216542befef93549647aa57426af8c1f35edecbba141bbfedf17f68edf4e3e4411d2ab058680e",
+            "prfKeySharingCoeffCommitments": [
+                "b5aa9201d172e7903d577ce3bd9e7f439c997df92a46a0e681f35909ea194be7624b01f289f9d987b6f89428c3c36f2a",
+                "b5f1abd438a7d529b59b36dcde49db8acd7498b60f2d3e1ae8fc36bdee6b8aa7025194023001c0e92147b119b0e53cd4"
+            ],
+            "prfKeyCommitmentWithIP": "a97553f3cb8b846118e79d5d97f95b293bd0f7f73cf72abc7b57bee613ee0cbd3d48f931347f912aaf583df87ea26281",
+            "idCredSecCommitment": "999727331e5439d1384eaf2e7b4f16fbc44fc8e64151685bf66270e0b1d0e4ffc09531ff589fd85d320232f9d0c07db4",
+            "choiceArData": {
+                "threshold": 2,
+                "arIdentities": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "ipArData": {
+                "3": {
+                    "proofComEncEq": "5e8b2d9618485ded1f017635f8c21e27c800aff0bddf63fe4a13533fa04607b41ab41f777cb1a302757ff4d12e4ee033db56f46a37e53d17b62137a3ab3cf3860cc00634a87d30a30cc5b21870b2db19a1d31b5c13f33bf4eb4f4a9e52c59c5f",
+                    "encPrfKeyShare": "8f10375841fb811bc8614b72b0c9ea4c321449ae0024077a76aac8ea70806bb50f4d6c9dfeae4790f01147611c2cdee298d4f0bc4eb80395cd6119c77b75295bee7494ff0bee1b357e4da11b7e8db2c3c42e50a8d39bfb9849ac4d30464b390f"
+                },
+                "2": {
+                    "proofComEncEq": "1a501987fe7814740e9b5f9a4e18fd5067f296813dbee5f87e8c2d95f166edee49a89e95d1ebc3a13c94b87d8076b120caf0b21b40623661ced5107ae722cc2743cea09dd8d6de4217fb93ec182db0eee20a42b8cd8a3eafe8aa08c9cb5c0c3b",
+                    "encPrfKeyShare": "96e711ee84f9753d09406126ef2cdb72c8d1d89b1848e783dfbeb56b449662ac017b3fc6868dae787e95721f42db357190e192face26f30890a7868d9f7ca8f5baa9a992f53e5d3cd41561d1ce3952eedbfa9fa516f8ae90b95335f937fcee2b"
+                },
+                "1": {
+                    "proofComEncEq": "22cdf9d92cb978bf016cafcc256671f46b1fadc473bdf7a638f912b05e889ef206b0e03ee50013271c608aa65747ce2a502ca72c9adc16dbfb39ce95099acaf3553c0b1db16ee678f1f888b4c0c4da73f36b747aa3fc5e8a8da8b77f79506d75",
+                    "encPrfKeyShare": "954e1692de62f578dad16046839b522cda3ba1069160fe370d601dbcc8a1046deb5e7de842ff26c1373b3f7c8ab27b40a141af8174ef8363194d3960dd39df20afb79f46e52176f4c943e7c91fe1075e9ff5cfaf94a56220b9d6ac4b45d5b45e"
+                }
+            },
+            "idCredPub": "857fa03c039478dba57751f16482672f1cf93c113e79832264008a970c9140657393089e0a2b04f8c4efaec1a18fee80"
+        },
+        "v": 0
+    }
 }
-
