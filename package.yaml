@@ -40,7 +40,9 @@ flags:
 
 dependencies:
 - base >= 4.7 && < 5
+- array >= 0.5
 - bytestring >= 0.10
+- base16-bytestring >= 0.1
 - unordered-containers >= 0.2
 - containers >= 0.6
 - hashable >= 1.2
