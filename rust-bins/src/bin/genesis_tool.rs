@@ -1,7 +1,7 @@
 use aggregate_sig as agg;
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{base16_encode_string, *, types::Amount};
+use crypto_common::{base16_encode_string, types::Amount, *};
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ec_vrf_ed25519 as vrf;
