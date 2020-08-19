@@ -13,6 +13,8 @@ module Concordium.Types (module Concordium.Types, AccountAddress(..), SchemeId, 
 import GHC.Generics
 import Data.Data(Typeable, Data)
 
+import qualified Text.ParserCombinators.ReadP as RP
+
 import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
@@ -31,6 +33,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.ByteString.Builder(toLazyByteString, byteStringHex)
 import Data.Bits
 import Data.Ratio
+import Data.Char(digitToInt,isDigit)
 
 import Data.Aeson as AE
 import Data.Aeson.TH
@@ -97,7 +100,7 @@ newtype VoterPower = VoterPower AmountUnit
 -- Eventually these will be replaced by types given by the global store.
 -- For now they are placeholders
 
-newtype ContractIndex = ContractIndex Word64
+newtype ContractIndex = ContractIndex { _contractIndex :: Word64 }
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Bits, Integral)
     deriving (Typeable, Data)
 
@@ -105,7 +108,7 @@ instance S.Serialize ContractIndex where
     get = ContractIndex <$> G.getWord64be
     put (ContractIndex i) = P.putWord64be i
 
-newtype ContractSubindex = ContractSubindex Word64
+newtype ContractSubindex = ContractSubindex { _contractSubindex :: Word64 }
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
     deriving (Typeable, Data)
 
@@ -147,15 +150,8 @@ instance Show ModuleRef where
   show (ModuleRef m) = show m
 
 instance S.Serialize ModuleRef where
-  get = getModuleRef
-  put = putModuleRef
-
-getModuleRef :: G.Get ModuleRef
-getModuleRef = ModuleRef <$> S.get
-
-putModuleRef :: P.Putter ModuleRef
-putModuleRef (ModuleRef mref) =
-  S.put mref
+  get = ModuleRef <$> S.get
+  put (ModuleRef mref) = S.put mref
 
 -- |An address is either a contract or account.
 data Address = AddressAccount !AccountAddress
@@ -236,8 +232,7 @@ isTimestampBefore ts ym =
 
 
 -- |Type representing the amount unit which is defined as the smallest
--- meaningful amount of GTUs.
--- Currently this unit is 10^-4 GTU and doesn't have a proper name.
+-- meaningful amount of GTUs. This unit is 10^-6 GTUs and denoted microGTU.
 type AmountUnit = Word64
 newtype Amount = Amount { _amount :: AmountUnit }
     deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, FromJSON, ToJSON) via AmountUnit
@@ -247,6 +242,55 @@ instance S.Serialize Amount where
   get = Amount <$> G.getWord64be
   {-# INLINE put #-}
   put (Amount v) = P.putWord64be v
+
+-- |Converts an amount to GTU decimal representation.
+amountToString :: Amount -> String
+amountToString (Amount amount) =
+  let
+    high = show $ amount `div` 1000000
+    low = show $ amount `mod` 1000000
+    pad = replicate (6 - length low) '0'
+  in
+    high ++ "." ++ pad ++ low
+
+-- |Parse an amount from GTU decimal representation.
+amountFromString :: String -> Maybe Amount
+amountFromString s =
+    if length s == 0 || length parsed /= 1 then Nothing
+    else Just $ Amount (fst (head parsed))
+  where parsed = RP.readP_to_S amountParser s
+  
+-- |Parse a Word64 as a decimal number with scale 10^6
+-- i.e. between 0 and 18446744073709.551615
+amountParser :: RP.ReadP Word64
+amountParser = decimalAmount RP.<++ noDecimalAmount
+  where
+    fitInWord64 v = v <= (toInteger (maxBound :: Word64))
+    noDecimalAmount = do
+      (_, num) <- readNumber True
+      let value = num * 1000000
+      if fitInWord64 value then return $ fromIntegral value
+      else RP.pfail
+    decimalAmount = do
+      (sLen, num) <- readNumber False
+      (mLen, mantissa) <- readNumber True
+      if sLen > 0 && mLen > 0 && mLen <= 6 then do
+        let value = num * 1000000 + (mantissa * 10 ^ (6-mLen))
+        if fitInWord64 value then return $ fromIntegral value
+        else RP.pfail
+      else RP.pfail
+
+-- |Reads a number by reading digits, returning (#digits,number)
+readNumber :: Bool -> RP.ReadP (Int, Integer)
+readNumber eof = do
+    digits <- RP.manyTill readDigit terminal
+    return $ (length digits, (foldl (\acc v -> (acc*10+v)) 0 digits))
+  where terminal = if eof then RP.eof
+                   else (RP.char '.' >> return ())
+        readDigit = do
+          c <- RP.get
+          if isDigit c then return $ toInteger (digitToInt c)
+          else RP.pfail
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
@@ -330,7 +374,7 @@ genesisSlot = 0
 type EpochLength = Slot
 
 newtype BlockHeight = BlockHeight {theBlockHeight :: Word64}
-  deriving (Eq, Ord, Num, Real, Enum, Integral, Show, Hashable, FromJSON, ToJSON, PersistField) via Word64
+  deriving (Eq, Ord, Num, Real, Enum, Integral, Read, Show, Hashable, FromJSON, ToJSON, PersistField) via Word64
 
 instance PersistFieldSql BlockHeight where
   sqlType _ = SqlInt64
@@ -356,6 +400,18 @@ data ChainMetadata =
                 -- |Time at the beginning of the slot.
                 , slotTime :: Timestamp
                 }
+
+-- |Encode chain metadata for passing over FFI. Uses little-endian encoding
+-- for integral values since that is what is expected on the other side of FFI.
+-- This is deliberately not made into a serialize instance so that it is not accidentally
+-- misused, since it differs in endianess from most other network-related serialization.
+encodeChainMeta :: ChainMetadata -> ByteString
+encodeChainMeta ChainMetadata{..} = S.runPut encoder
+  where encoder =
+          P.putWord64le (fromIntegral slotNumber) <>
+          P.putWord64le (fromIntegral blockHeight) <>
+          P.putWord64le (fromIntegral finalizedHeight) <>
+          P.putWord64le (tsMillis slotTime)
 
 -- |The hash of a transaction which is then signed.
 -- (Naturally, this does not include the transaction signature.)
@@ -392,7 +448,6 @@ type TransactionOutcomesHash = TransactionOutcomesHashV0
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
-
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
