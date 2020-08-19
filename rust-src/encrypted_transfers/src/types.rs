@@ -83,7 +83,7 @@ pub struct SecToPubAmountTransferData<C: Curve> {
     /// indices.
     pub index: u64,
     /// A collection of all the proofs.
-    pub proof: EncryptedAmountTransferProof<C>,
+    pub proof: SecToPubAmountTransferProof<C>,
 }
 
 /// Data that will go into a "transfer to encrypted balance" transaction.
@@ -162,6 +162,17 @@ pub struct EncryptedAmountTransferProof<C: Curve> {
     /// Proof that the transfered amount is correctly encrypted, i.e., chunks
     /// small enough.
     pub transfer_amount_correct_encryption: RangeProof<C>,
+    /// Proof that the remaining amount is correctly encrypted, i.e, chunks
+    /// small enough.
+    pub remaining_amount_correct_encryption: RangeProof<C>,
+}
+
+/// Proof that an encrypted transfer data is well-formed
+#[derive(Serialize, SerdeBase16Serialize)]
+pub struct SecToPubAmountTransferProof<C: Curve> {
+    /// Proof that accounting is done correctly, i.e., remaining + transfer is
+    /// the original amount.
+    pub accounting: SigmaProof<enc_trans::Witness<C>>,
     /// Proof that the remaining amount is correctly encrypted, i.e, chunks
     /// small enough.
     pub remaining_amount_correct_encryption: RangeProof<C>,
