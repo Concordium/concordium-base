@@ -4,7 +4,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE CPP #-}
@@ -29,25 +28,14 @@ import Data.Word
 import GHC.Generics
 import Language.Haskell.TH
 
-import qualified Concordium.Types.Acorn.Core as Core
+import qualified Concordium.Wasm as Wasm
 import Concordium.Types
-import Concordium.Types.Utils
+import Concordium.Utils
 import Concordium.Types.Execution.TH
+
 import Concordium.ID.Types
-import Concordium.Types.Acorn.Interfaces
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs
-
--- | Messages or transfers generated as part of contract execution, each to be sent to a contract or an account.
-data InternalMessage annot
-  -- | A message (Acorn value) to be sent to the given contract, together with an amount to be
-  -- transferred to it from the sender of the message.
-  = TSend !ContractAddress !Amount !(Value annot)
-  -- | A transfer to be made to the given address.
-  | TSimpleTransfer !Address !Amount
-  deriving(Show)
-
-type Proof = BS.ByteString
 
 -- |We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
@@ -80,19 +68,19 @@ instance AE.ToJSON AccountOwnershipProof where
 data Payload =
   -- |Put module on the chain.
   DeployModule {
-    -- |Module source.
-    dmMod :: !(Core.Module Core.UA)
+    -- |A wasm module in binary format.
+    dmMod :: !Wasm.WasmModule
     }
   -- |Initialize a new contract instance.
   | InitContract {
       -- |Initial amount on the contract's account.
       icAmount :: !Amount,
       -- |Reference of the module (on-chain) in which the contract exist.
-      icModRef :: !Core.ModuleRef,
-      -- |Name of the contract (relative to the module) to initialize.
-      icContractName :: !Core.TyName,
-      -- |Parameter to the init method. Relative to the module (as if it were a term at the end of the module).
-      icParam :: !(Core.Expr Core.UA Core.ModuleName)
+      icModRef :: !ModuleRef,
+      -- |Name of the init function to call in that module.
+      icInitName :: !Wasm.InitName,
+      -- |Parameter to the init method, 
+      icParam :: !Wasm.Parameter
       }
   -- |Update an existing contract instance.
   | Update {
@@ -100,13 +88,14 @@ data Payload =
       uAmount :: !Amount,
       -- |The address of the contract to invoke.
       uAddress :: !ContractAddress,
+      uReceiveName :: !Wasm.ReceiveName,
       -- |Message to invoke the receive method with.
-      uMessage :: !(Core.Expr Core.UA Core.ModuleName)
+      uMessage :: !Wasm.Parameter
       }
-  -- |Simple transfer from an account to either a contract or an account.
+  -- |Simple transfer from an account to an account.
   | Transfer {
       -- |Recepient.
-      tToAddress :: !Address,
+      tToAddress :: !AccountAddress,
       -- |Amount to transfer.
       tAmount :: !Amount
       }
@@ -234,18 +223,19 @@ instance S.Serialize TransactionType
 instance S.Serialize Payload where
   put DeployModule{..} =
     P.putWord8 0 <>
-    Core.putModule dmMod
+    S.put dmMod
   put InitContract{..} =
       P.putWord8 1 <>
       S.put icAmount <>
-      putModuleRef icModRef <>
-      Core.putTyName icContractName <>
-      Core.putExpr icParam
+      S.put icModRef <>
+      S.put icInitName <>
+      S.put icParam
   put Update{..} =
     P.putWord8 2 <>
     S.put uAmount <>
     S.put uAddress <>
-    Core.putExpr uMessage
+    S.put uReceiveName <>
+    S.put uMessage
   put Transfer{..} =
     P.putWord8 3 <>
     S.put tToAddress <>
@@ -309,18 +299,19 @@ instance S.Serialize Payload where
   get =
     G.getWord8 >>=
       \case 0 -> do
-              dmMod <- Core.getModule
+              dmMod <- S.get
               return DeployModule{..}
             1 -> do
               icAmount <- S.get
-              icModRef <- getModuleRef
-              icContractName <- Core.getTyName
-              icParam <- Core.getExpr
+              icModRef <- S.get
+              icInitName <- S.get
+              icParam <- S.get
               return InitContract{..}
             2 -> do
               uAmount <- S.get
               uAddress <- S.get
-              uMessage <- Core.getExpr
+              uReceiveName <- S.get
+              uMessage <- S.get
               return Update{..}
             3 -> do
               tToAddress <- S.get
@@ -399,9 +390,7 @@ putMaybe Nothing = S.putWord8 0
 getMaybe :: S.Serialize a => S.Get (Maybe a)
 getMaybe = G.getWord8 >>=
     \case 0 -> return Nothing
-          1 -> do
-              v <- S.get
-              return (Just v)
+          1 -> Just <$> S.get
           n -> fail $ "encountered invalid tag when deserializing a Maybe '" ++ show n ++ "'"
 
 -- |Builds a set from a list of ascending elements.
@@ -472,17 +461,18 @@ data BlockEvents =
 -- Must be kept in sync with 'showEvents' in concordium-client (Output.hs).
 data Event =
            -- |Module with the given address was deployed.
-           ModuleDeployed !Core.ModuleRef
+           ModuleDeployed !ModuleRef
            -- |The contract was deployed.
            | ContractInitialized {
                -- |Module in which the contract source resides.
-               ecRef :: !Core.ModuleRef,
-               -- |Name of the contract relative to the module.
-               ecName :: !Core.TyName,
+               ecRef :: !ModuleRef,
                -- |Reference to the contract as deployed.
                ecAddress :: !ContractAddress,
                -- |Initial amount transferred to the contract.
-               ecAmount :: !Amount
+               ecAmount :: !Amount,
+               -- |Events as reported by the contract via the log method, in the
+               -- order they were reported.
+               ecEvents :: [Wasm.ContractEvent]
                -- TODO: We could include initial state hash here.
                -- Including the whole state is likely not a good idea.
                }
@@ -495,7 +485,10 @@ data Event =
                -- |Amount which was transferred to the contract.
                euAmount :: !Amount,
                -- |The message which was sent to the contract.
-               euMessage :: !MessageFormat
+               euMessage :: !Wasm.Parameter,
+               -- |Events as reported by the contract via the log method, in the
+               -- order they were reported.
+               euEvents :: [Wasm.ContractEvent]
                -- TODO: We could include input/output state hashes here
                -- Including the whole state pre/post run is likely not a good idea.
                }
@@ -570,29 +563,6 @@ data Event =
 
 instance S.Serialize Event
 
--- |Used internally by the scheduler since internal messages are sent as values,
--- and top-level messages are acorn expressions.
-data MessageFormat = ValueMessage !(Value Core.NoAnnot) | ExprMessage !(LinkedExpr Core.NoAnnot)
-    deriving(Show, Generic, Eq)
-
--- FIXME: ToJSON instance based on a show instance.
-instance AE.ToJSON MessageFormat where
-  toJSON fmt = AE.toJSON (show fmt)
-
--- FIXME: Contracts not supported.
-instance AE.FromJSON MessageFormat where
-  parseJSON _ = fail "FIXME: Unsupported."
-
-instance S.Serialize MessageFormat where
-    put (ValueMessage v) = S.putWord8 0 >> putStorable v
-    put (ExprMessage e) = S.putWord8 1 >> S.put e
-    get = do
-        tag <- S.getWord8
-        case tag of
-            0 -> ValueMessage <$> getStorable
-            1 -> ExprMessage <$> S.get
-            _ -> fail "Invalid MessageFormat tag"
-
 -- |Index of the transaction in a block, starting from 0.
 newtype TransactionIndex = TransactionIndex Word64
     deriving(Eq, Ord, Enum, Num, Show, Read, Real, Integral, S.Serialize, AE.ToJSON, AE.FromJSON) via Word64
@@ -621,15 +591,14 @@ instance S.Serialize TransactionSummary
 
 -- |Ways a single transaction can fail. Values of this type are only used for reporting of rejected transactions.
 -- Must be kept in sync with 'showRejectReason' in concordium-client (Output.hs).
-data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module has failed.
-                  | MissingImports  -- ^Error when there were missing imports (determined before typechecking).
-                  | ModuleHashAlreadyExists !Core.ModuleRef  -- ^As the name says.
-                  | MessageTypeError -- ^Message to the receive method is of the wrong type.
-                  | ParamsTypeError -- ^Parameters of the init method are of the wrong type.
+data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module.
+                  | ModuleHashAlreadyExists !ModuleRef  -- ^As the name says.
                   | InvalidAccountReference !AccountAddress -- ^Account does not exist.
-                  | InvalidContractReference !Core.ModuleRef !Core.TyName -- ^Reference to a non-existing contract.
-                  | InvalidModuleReference !Core.ModuleRef   -- ^Reference to a non-existing module.
+                  | InvalidInitMethod !ModuleRef !Wasm.InitName -- ^Reference to a non-existing contract init method.
+                  | InvalidReceiveMethod !ModuleRef !Wasm.ReceiveName -- ^Reference to a non-existing contract receive method.
+                  | InvalidModuleReference !ModuleRef   -- ^Reference to a non-existing module.
                   | InvalidContractAddress !ContractAddress -- ^Contract instance does not exist.
+                  | RuntimeFailure -- ^Runtime exception occurred when running either the init or receive method.
                   | ReceiverAccountNoCredential !AccountAddress
                   -- ^The receiver account does not have a valid credential.
                   | ReceiverContractNoCredential !ContractAddress
@@ -662,6 +631,10 @@ data RejectReason = ModuleNotWF -- ^Error raised when typechecking of the module
                   -- |When the account key threshold is updated, it must not exceed the amount of existing keys
                   | InvalidAccountKeySignThreshold
     deriving (Show, Eq, Generic)
+
+wasmRejectToRejectReason :: Wasm.ContractExecutionFailure -> RejectReason
+wasmRejectToRejectReason Wasm.ContractReject = Rejected
+wasmRejectToRejectReason Wasm.RuntimeFailure = RuntimeFailure
 
 instance S.Serialize RejectReason
 instance AE.ToJSON RejectReason
