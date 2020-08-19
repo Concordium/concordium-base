@@ -460,9 +460,6 @@ type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
 
--- * Types related to state hashing
-
-type StateHash = Hash.Hash
 
 
 -- Template haskell derivations. At the end to get around staging restrictions.
