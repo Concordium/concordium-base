@@ -7,6 +7,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# OPTIONS_GHC -Wall #-}
 module Concordium.Types (module Concordium.Types, AccountAddress(..), SchemeId, AccountVerificationKey) where
 
@@ -47,19 +48,29 @@ import qualified Data.Serialize.Get as G
 import Database.Persist.Class
 import Database.Persist.Sql
 
-data Hashed a = Hashed {unhashed :: a, hashed :: Hash.Hash}
+import Lens.Micro.Platform
+
+data Hashed a = Hashed {_unhashed :: a, _hashed :: Hash.Hash}
 
 instance HashableTo Hash.Hash (Hashed a) where
-    getHash = hashed
+    getHash = _hashed
+
+-- |This lens allows for getting and setting the value inside a Hashed structure.
+-- If a value is updated the new hash is recomputed automatically.
+unhashed :: (HashableTo Hash.Hash a) => Lens' (Hashed a) a
+unhashed f h = makeHashed <$> f (_unhashed h)
 
 makeHashed :: HashableTo Hash.Hash a => a -> Hashed a
 makeHashed v = Hashed v (getHash v)
 
 instance Eq (Hashed a) where
-    a == b = hashed a == hashed b
+    a == b = _hashed a == _hashed b
 
-instance Ord (Hashed a) where
-    compare a b = compare (hashed a) (hashed b)
+instance Ord a => Ord (Hashed a) where
+    compare a b = compare (_unhashed a) (_unhashed b)
+
+instance (Show a) => Show (Hashed a) where
+    show = show . _hashed
 
 -- * Types releated to bakers.
 newtype BakerId = BakerId Word64
@@ -259,7 +270,7 @@ amountFromString s =
     if length s == 0 || length parsed /= 1 then Nothing
     else Just $ Amount (fst (head parsed))
   where parsed = RP.readP_to_S amountParser s
-  
+
 -- |Parse a Word64 as a decimal number with scale 10^6
 -- i.e. between 0 and 18446744073709.551615
 amountParser :: RP.ReadP Word64
@@ -448,6 +459,11 @@ type TransactionOutcomesHash = TransactionOutcomesHashV0
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
+
+-- * Types related to state hashing
+
+type StateHash = Hash.Hash
+
 
 -- Template haskell derivations. At the end to get around staging restrictions.
 $(deriveJSON defaultOptions{sumEncoding = TaggedObject{tagFieldName = "type", contentsFieldName = "address"}} ''Address)
