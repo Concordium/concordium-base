@@ -349,9 +349,8 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         &cmm_key_bulletproof_s_prime,
         &S_prime_rand_as_pedrand,
     )?;
-    let proof = EncryptedAmountTransferProof {
+    let proof = SecToPubAmountTransferProof {
         accounting: sigma_proof,
-        transfer_amount_correct_encryption: bulletproof_s_prime.clone(),
         remaining_amount_correct_encryption: bulletproof_s_prime,
     };
 
@@ -368,9 +367,6 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         index,
         proof,
     })
-
-
-    // None
 }
 
 /// The verifier does three checks. In case verification fails, it can be useful
@@ -477,7 +473,6 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
     let a = transaction.transfer_amount;
     let A_dummy_encryption = {
         let ha = generator.mul_by_scalar(&C::scalar_from_u64(a));
-        // Cipher(pk.generator, ha)
         Cipher(C::zero_point(), ha)
     };
     let A = [A_dummy_encryption];
@@ -492,6 +487,34 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
     );
     if !verify(ro, &protocol, &transaction.proof.accounting) {
         return Err(VerificationError::SigmaProofError);
+    }
+    
+    let num_chunks = 64 / usize::from(u8::from(CHUNK_SIZE));
+
+    let commitments_s_prime = {
+        let mut commitments_s_prime = Vec::with_capacity(num_chunks);
+        let ts_prime: &[Cipher<C>; 2] = transaction.remaining_amount.as_ref();
+        for cipher in ts_prime {
+            commitments_s_prime.push(Commitment(cipher.1));
+        }
+        commitments_s_prime
+    };
+    
+    let cmm_key_bulletproof_s_prime = CommitmentKey {
+        g: *generator,
+        h: pk.key,
+    };
+    let bulletproof = verify_efficient(
+        transcript,
+        32,
+        &commitments_s_prime,
+        &transaction.proof.remaining_amount_correct_encryption,
+        &gens,
+        &cmm_key_bulletproof_s_prime,
+    );
+    if let Err(err) = bulletproof {
+        // Maybe introduce yet another error type for this type of transaction
+        return Err(VerificationError::SecondBulletproofError(err));
     }
     Ok(())
 }
