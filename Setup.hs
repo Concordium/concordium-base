@@ -36,6 +36,7 @@ makeRust args flags = do
                 "id",
                 "aggregate_sig"
             ]
+    rawSystemExit verbosity "mkdir" ["-p", "./lib"]
     -- On Windows, copy the static libraries and DLLs. (The DLLs should not be used by the
     -- linker, but seem to be needed sometimes by TemplateHaskell at compile time.)
     -- On other platforms, symlink the shared libraries.
@@ -45,7 +46,6 @@ makeRust args flags = do
                 rawSystemExit verbosity "cp" ["rust-src/target/release/lib" ++ lib ++ ".a", "./lib/"]
                 rawSystemExit verbosity "cp" ["rust-src/target/release/" ++ lib ++ ".dll", "./lib/"]
                 notice verbosity $ "Copied " ++ lib ++ "."
-            _ <- rawSystemExitCode verbosity "mkdir" ["./lib"]
             notice verbosity "Copying libraries to ./lib"
             mapM_ copyLib libs
         OSX -> do
@@ -53,8 +53,7 @@ makeRust args flags = do
                   let source = "../rust-src/target/release/lib" ++ lib ++ ".dylib"
                   let target = "./lib/lib" ++ lib ++ ".dylib"
                   rawSystemExit verbosity "ln" ["-s", "-f", source, target]
-                  noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ target
-            _ <- rawSystemExitCode verbosity "mkdir" ["-p", "./lib"]
+                  noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
             notice verbosity "Linking libraries to ./lib"
             mapM_ copyLib libs
         _ -> do
@@ -63,7 +62,6 @@ makeRust args flags = do
                   let target = "./lib/lib" ++ lib ++ ".so"
                   rawSystemExit verbosity "ln" ["-s", "-f", source, target]
                   noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
-            _ <- rawSystemExitCode verbosity "mkdir" ["-p", "./lib"]
             notice verbosity "Linking libraries to ./lib"
             mapM_ copyLib libs
     return emptyHookedBuildInfo
