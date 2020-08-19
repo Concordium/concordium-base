@@ -6,7 +6,7 @@ use bulletproofs::range_proof::{
 };
 use crypto_common::types::Amount;
 use curve_arithmetic::{Curve, Value};
-use elgamal::{Cipher, PublicKey, Randomness, SecretKey, ChunkSize};
+use elgamal::{Cipher, PublicKey, Randomness, SecretKey};
 use id::{
     sigma_protocols::{
         aggregate_dlog::*,
@@ -243,51 +243,24 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         return None;
     }
 
-    // For Bulletproofs
     let gens = context.bulletproof_generators();
     let generator = context.encryption_in_exponent_generator();
-
-    let CHUNK_SIZE_ONE : ChunkSize = ChunkSize::SixtyFour;
-    let s_prime = s - a;
+    let s_prime = u64::from(s) - u64::from(a);
     let s_prime_chunks = CHUNK_SIZE.u64_to_chunks(s_prime);
-    // let a_chunks = CHUNK_SIZE_ONE.u64_to_chunks(a);
-    // let A_enc_randomness = a_chunks
-    //     .iter()
-    //     .map(|&x| {
-    //         pk.encrypt_exponent_rand_given_generator(
-    //             csprng,
-    //             &Value::<C>::from_u64(x),
-    //             generator,
-    //         )
-    //     })
-    //     .collect::<Vec<_>>();
-    // let (A, A_rand): (Vec<_>, Vec<_>) = A_enc_randomness.iter().cloned().unzip();
     let S_prime_enc_randomness = s_prime_chunks
         .iter()
         .map(|&x| {
-            pk.encrypt_exponent_rand_given_generator(
-                csprng,
-                &Value::<C>::from_u64(x),
-                generator,
-            )
+            pk.encrypt_exponent_rand_given_generator(csprng, &Value::<C>::from_u64(x), generator)
         })
         .collect::<Vec<_>>();
     let A_dummy_encryption = {
-        let ha = generator.mul_by_scalar(&C::scalar_from_u64(a));
-        // Cipher(pk.generator, ha)
+        let ha = generator.mul_by_scalar(&C::scalar_from_u64(u64::from(a)));
         Cipher(C::zero_point(), ha)
     };
     let A = vec![A_dummy_encryption];
 
     let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) = S_prime_enc_randomness.iter().cloned().unzip();
     let protocol = gen_enc_trans_proof_info(&pk, &pk, &S, &A, &S_prime, &generator);
-    
-    // let A_rand_as_value: Vec<Value<_>> = A_rand.iter().map(Randomness::to_value).collect();
-    // let a_chunks_as_rand: Vec<PedersenRandomness<_>> = a_chunks
-    //     .iter()
-    //     .copied()
-    //     .map(PedersenRandomness::from_u64)
-    //     .collect();
     let S_prime_rand_as_value: Vec<Value<_>> =
         S_prime_rand.iter().map(Randomness::to_value).collect();
     let s_prime_chunks_as_rand: Vec<PedersenRandomness<_>> = s_prime_chunks
@@ -295,8 +268,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         .copied()
         .map(PedersenRandomness::from_u64)
         .collect();
-    // println!("len = {}", a_chunks_as_rand.len());
-    let a_chunks_as_rand = vec![PedersenRandomness::from_u64(a)];
+    let a_chunks_as_rand = vec![PedersenRandomness::from_u64(u64::from(a))];
     let A_rand_as_value = vec![Value::from_u64(0)];
     let secret = EncTransSecret {
         dlog_secret: Rc::new(sk.scalar),
@@ -306,19 +278,10 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         s:           S_prime_rand_as_value,
     };
     let sigma_proof = prove(ro.split(), &protocol, secret, csprng)?;
-    // let cmm_key_bulletproof_a = CommitmentKey {
-    //     g: *generator,
-    //     h: pk.key,
-    // };
     let cmm_key_bulletproof_s_prime = CommitmentKey {
         g: *generator,
         h: pk.key,
     };
-    // let a_chunks_as_scalars: Vec<_> = a_chunks.iter().copied().map(C::scalar_from_u64).collect();
-    // let A_rand_as_pedrand: Vec<PedersenRandomness<_>> = A_rand
-    //     .iter()
-    //     .map(|x| PedersenRandomness::from_value(&x.to_value()))
-    //     .collect();
     let s_prime_chunks_as_scalars: Vec<_> = s_prime_chunks
         .iter()
         .copied()
@@ -328,17 +291,6 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         .iter()
         .map(|x| PedersenRandomness::new(*(x.as_ref())))
         .collect();
-
-    // let bulletproof_a = bulletprove(
-    //     transcript,
-    //     csprng,
-    //     32,
-    //     a_chunks.len() as u8,
-    //     &a_chunks_as_scalars,
-    //     &gens,
-    //     &cmm_key_bulletproof_a,
-    //     &A_rand_as_pedrand,
-    // )?;
 
     let bulletproof_s_prime = bulletprove(
         transcript,
@@ -356,7 +308,6 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
     };
 
     let transfer_amount = a;
-    println!("S prime len = {:?}", S_prime.len());
 
     let remaining_amount = EncryptedAmount {
         encryptions: [S_prime[0], S_prime[1]],
@@ -473,11 +424,11 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
     // let S_prime = &transaction.remaining_amount;
     let a = transaction.transfer_amount;
     let A_dummy_encryption = {
-        let ha = generator.mul_by_scalar(&C::scalar_from_u64(a));
+        let ha = generator.mul_by_scalar(&C::scalar_from_u64(u64::from(a)));
         Cipher(C::zero_point(), ha)
     };
     let A = [A_dummy_encryption];
-    
+
     let protocol = gen_enc_trans_proof_info(
         &pk,
         &pk,
@@ -489,7 +440,7 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
     if !verify(ro, &protocol, &transaction.proof.accounting) {
         return Err(VerificationError::SigmaProofError);
     }
-    
+
     let num_chunks = 64 / usize::from(u8::from(CHUNK_SIZE));
 
     let commitments_s_prime = {
@@ -500,7 +451,7 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
         }
         commitments_s_prime
     };
-    
+
     let cmm_key_bulletproof_s_prime = CommitmentKey {
         g: *generator,
         h: pk.key,
@@ -733,7 +684,6 @@ mod test {
         )
     }
 
-    
     #[allow(non_snake_case)]
     #[test]
     fn test_sec_to_pub() {
@@ -748,16 +698,13 @@ mod test {
         let n = 32;
         let nm = n * m;
 
-        let context = GlobalContext::<SomeCurve>::generate_size(nm, &mut csprng);
+        let context = GlobalContext::<SomeCurve>::generate_size(nm);
         let generator = context.encryption_in_exponent_generator(); // h
         let s_value = Value::from_u64(s);
         let S = pk.encrypt_exponent_given_generator(&mut csprng, &s_value, generator);
 
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
         let ro = RandomOracle::domain(&challenge_prefix);
-        // Somewhere there should be some kind of connection
-        // between the transcript and the RO,
-        // maybe inside the functions used below?
 
         let mut transcript = Transcript::new(&[]);
         let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
@@ -769,21 +716,15 @@ mod test {
             &sk,
             index,
             &S,
-            s,
-            a,
+            Amount::from(s),
+            Amount::from(a),
             &mut csprng,
-        ).unwrap();
+        )
+        .unwrap();
         let mut transcript = Transcript::new(&[]);
 
         assert_eq!(
-            verify_sec_to_pub_trans(
-                &context,
-                ro,
-                &mut transcript,
-                &transaction,
-                &pk,
-                &S,
-            ),
+            verify_sec_to_pub_trans(&context, ro, &mut transcript, &transaction, &pk, &S,),
             Ok(())
         )
     }
