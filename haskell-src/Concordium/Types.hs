@@ -74,7 +74,7 @@ instance (Show a) => Show (Hashed a) where
 
 -- * Types releated to bakers.
 newtype BakerId = BakerId Word64
-    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON) via Word64
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits) via Word64
 
 instance S.Serialize BakerId where
     get = BakerId <$> G.getWord64be
