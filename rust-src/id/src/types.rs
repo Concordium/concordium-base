@@ -1697,7 +1697,7 @@ pub struct AnonymityRevocationRecord<C: Curve> {
     /// Data that contains encryptions of the prf key that supports additional
     /// anonymity revocation.
     #[serde(rename = "arData")]
-    pub ar_data: Vec<IpArData<C>>,
+    pub ar_data: BTreeMap<ArIdentity, IpArData<C>>,
 }
 
 #[cfg(test)]
