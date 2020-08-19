@@ -21,8 +21,8 @@ testSerializePedersenKey = testSerialize generatePedersenKey
 testSerializePsSigKey :: Property
 testSerializePsSigKey = testSerialize generatePsSigKey
 
-testSerializeElgamalGen :: Property
-testSerializeElgamalGen = testSerialize (const generateElgamalGen)
+testSerializeElgamalSecond :: Property
+testSerializeElgamalSecond = testSerialize (const generateElgamalSecond)
 
 testSerializeElgamalPublicKey :: Property
 testSerializeElgamalPublicKey = testSerialize (const generateElgamalPublicKey)
@@ -36,6 +36,6 @@ tests = describe "Concordium.Crypto.FFIDataTypes" $ do
     describe "serialization" $ do
         it "pedersen key" testSerializePedersenKey
         it "ps sig key key" testSerializePsSigKey
-        it "elgamal gen key" testSerializeElgamalGen
+        it "elgamal key second" testSerializeElgamalSecond
         it "elgamal public key" testSerializeElgamalPublicKey
         it "elgamal cipher" testSerializeElgamalCipher

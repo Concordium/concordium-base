@@ -4,6 +4,7 @@ use bulletproofs::range_proof::{
     prove_given_scalars as bulletprove, verify_efficient,
     VerificationError as BulletproofVerificationError,
 };
+use crypto_common::types::Amount;
 use curve_arithmetic::{Curve, Value};
 use elgamal::{Cipher, PublicKey, Randomness, SecretKey, ChunkSize};
 use id::{
@@ -107,9 +108,9 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     let gens = context.bulletproof_generators();
     let generator = context.encryption_in_exponent_generator();
 
-    let s_prime = s - a;
+    let s_prime = u64::from(s) - u64::from(a);
     let s_prime_chunks = CHUNK_SIZE.u64_to_chunks(s_prime);
-    let a_chunks = CHUNK_SIZE.u64_to_chunks(a);
+    let a_chunks = CHUNK_SIZE.u64_to_chunks(u64::from(a));
     let A_enc_randomness = a_chunks
         .iter()
         .map(|&x| {
@@ -688,7 +689,7 @@ mod test {
         let n = 32;
         let nm = n * m;
 
-        let context = GlobalContext::<SomeCurve>::generate_size(nm, &mut csprng);
+        let context = GlobalContext::<SomeCurve>::generate_size(nm);
         let generator = context.encryption_in_exponent_generator(); // h
         let s_value = Value::from_u64(s);
         let S = pk_sender.encrypt_exponent_given_generator(&mut csprng, &s_value, generator);
@@ -710,8 +711,8 @@ mod test {
             &pk_receiver,
             index,
             &S,
-            s,
-            a,
+            Amount::from(s),
+            Amount::from(a),
             &mut csprng,
         )
         .expect("Could not produce proof.");
