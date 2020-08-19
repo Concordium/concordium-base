@@ -56,4 +56,4 @@ readCredential fp = do
   bs <- BSL.readFile fp
   case AE.eitherDecode bs of
     Left err -> fail $ "Cannot read credential from file " ++ fp ++ " because " ++ err
-    Right d -> if vVersion == 0 then return (vValue d) else fail "Incorrect credential version."
+    Right d -> if vVersion d == 0 then return (vValue d) else fail "Incorrect credential version."
