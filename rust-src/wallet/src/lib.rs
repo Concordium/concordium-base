@@ -34,7 +34,7 @@ type ExampleCurve = G1;
 #[serde(rename_all = "camelCase")]
 struct TransferContext {
     pub from:   AccountAddress,
-    pub to:     AccountAddress,
+    pub to:     Option<AccountAddress>,
     pub expiry: u64,
     pub nonce:  u64,
     pub keys:   Map<String, Value>,
@@ -73,6 +73,11 @@ fn make_signatures<H: AsRef<[u8]>>(
 fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
     let ctx: TransferContext = from_value(v.clone())?;
+    let ctx_to = match ctx.to {
+        Some(to) => to,
+        None => bail!("to account should be present")
+    };
+    
 
     // context with parameters
     let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
@@ -106,7 +111,7 @@ fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
     let (hash, body) = {
         let mut payload_bytes = Vec::new();
         payload_bytes.put(&16u8); // transaction type is encrypted transfer
-        payload_bytes.put(&ctx.to);
+        payload_bytes.put(&ctx_to);
         payload_bytes.extend_from_slice(&to_bytes(&payload));
 
         make_transaction_bytes(&ctx, &payload_bytes)
@@ -147,13 +152,17 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
 
     let ctx: TransferContext = from_value(v.clone())?;
+    let ctx_to = match ctx.to {
+        Some(to) => to,
+        None => bail!("to account should be present")
+    };
 
     let amount: Amount = try_get(&v, "amount")?;
 
     let (hash, body) = {
         let mut payload = Vec::new();
         payload.put(&3u8); // transaction type is transfer
-        payload.put(&ctx.to);
+        payload.put(&ctx_to);
         payload.put(&amount);
 
         let payload_size: u32 = payload.len() as u32;
@@ -171,6 +180,87 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
 
     Ok(to_string(&response)?)
 }
+
+fn create_pub_to_sec_transfer_aux(input: &str) -> Fallible<String> {
+    let v: Value = from_str(input)?;
+
+    let ctx: TransferContext = from_value(v.clone())?;
+
+    let amount: Amount = try_get(&v, "amount")?;
+
+    let (hash, body) = {
+        let mut payload = Vec::new();
+        payload.put(&17u8); // transaction type is public to secret transfer
+        payload.put(&amount);
+
+        let payload_size: u32 = payload.len() as u32;
+        // assert_eq!(payload_size, 41);
+
+        make_transaction_bytes(&ctx, &payload)
+    };
+
+    let signatures = make_signatures(&ctx.keys, &hash)?;
+
+    let response = json!({
+        "signatures": signatures,
+        "transaction": hex::encode(&body),
+    });
+
+    Ok(to_string(&response)?)
+}
+
+/// Create a JSON encoding of an encrypted transfer transaction.
+fn create_sec_to_pub_transfer_aux(input: &str) -> Fallible<String> {
+    let v: Value = from_str(input)?;
+    let ctx: TransferContext = from_value(v.clone())?;
+    
+
+    // context with parameters
+    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+
+    // plaintext amount to transfer
+    let amount: Amount = try_get(&v, "amount")?;
+
+    let sender_sk: elgamal::SecretKey<ExampleCurve> = try_get(&v, "senderSecretKey")?;
+
+    let input_amount = try_get(&v, "inputEncryptedAmount")?;
+
+    // Should be safe on iOS and Android, by calling SecRandomCopyBytes/getrandom,
+    // respectively.
+    let mut csprng = thread_rng();
+
+    let payload = encrypted_transfers::make_sec_to_pub_transfer_data(
+        &global_context,
+        &sender_sk,
+        &input_amount,
+        amount,
+        &mut csprng,
+    );
+    let payload = match payload {
+        Some(payload) => payload,
+        None => bail!("Could not produce payload."),
+    };
+
+    let (hash, body) = {
+        let mut payload_bytes = Vec::new();
+        payload_bytes.put(&18u8); // transaction type is secret to public transfer
+        payload_bytes.extend_from_slice(&to_bytes(&payload));
+        // assert_eq!(payload_size, 41);
+
+        make_transaction_bytes(&ctx, &payload_bytes)
+    };
+
+    let signatures = make_signatures(&ctx.keys, &hash)?;
+
+    let response = json!({
+        "signatures": signatures,
+        "transaction": hex::encode(&body),
+        "remaining": payload.remaining_amount,
+    });
+
+    Ok(to_string(&response)?)
+}
+
 
 fn check_account_address_aux(input: &str) -> bool { input.parse::<AccountAddress>().is_ok() }
 
@@ -486,6 +576,34 @@ make_wrapper!(
     /// The input pointer must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => create_encrypted_transfer_ext -> create_encrypted_transfer_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats for encrypted transfers.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => create_pub_to_sec_transfer_ext -> create_pub_to_sec_transfer_aux);
+
+make_wrapper!(
+    /// Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// See rust-bins/wallet-notes/README.md for the description of input and output
+    /// formats for encrypted transfers.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => create_sec_to_pub_transfer_ext -> create_sec_to_pub_transfer_aux);
 
 make_wrapper!(
     /// Take pointers to NUL-terminated UTF8-strings and return a NUL-terminated
