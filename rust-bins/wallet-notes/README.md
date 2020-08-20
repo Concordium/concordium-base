@@ -52,8 +52,8 @@ The output of this function is a JSON object with two keys
 - "privateIdObjectData" - this is the __private__ information that the user must
   keep in order to be able to use the returned identity object.
 
-An example of input is in the file [create_id_request_and_private_data-input.json](create_id_request_and_private_data-input.json).
-An example of output is in the file [create_id_request_and_private_data-output.json](create_id_request_and_private_data-output.json).
+An example of input is in the file [create_id_request_and_private_data-input.json](files/create_id_request_and_private_data-input.json).
+An example of output is in the file [create_id_request_and_private_data-output.json](files/create_id_request_and_private_data-output.json).
 
 ### Performance
 
@@ -121,8 +121,8 @@ The returned value is a JSON object with the following fields.
 
 - `"encryptionSecretKey"` - the account private key for encrypted transfers.
 
-An example input to this request is in the file [create_credential-input.json](create_credential-input.json).
-An example output to this request is in the file [create_credential-output.json](create_credential-output.json).
+An example input to this request is in the file [create_credential-input.json](files/create_credential-input.json).
+An example output to this request is in the file [create_credential-output.json](files/create_credential-output.json).
 
 ## create_transfer_ext
 
@@ -149,8 +149,8 @@ The returned value is a JSON object with the following fields:
 
 - `"transaction"` ... the serialized transaction that can be sent to the chain.
 
-An example input to this request is in the file [create_transfer-input.json](create_transfer-input.json).
-An example output to this request is in the file [create_transfer-output.json](create_transfer-output.json).
+An example input to this request is in the file [create_transfer-input.json](files/create_transfer-input.json).
+An example output to this request is in the file [create_transfer-output.json](files/create_transfer-output.json).
 
 ## create_encrypted_transfer_ext
 
@@ -191,8 +191,8 @@ The returned value is a JSON object with the following fields:
 
 - `"remaining"` ... the remaining encrypted balance.
 
-An example input to this request is in the file [create_encrypted_transfer-input.json](create_encrypted_transfer-input.json).
-An example output to this request is in the file [create_encrypted_transfer-output.json](create_encrypted_transfer-output.json).
+An example input to this request is in the file [create_encrypted_transfer-input.json](files/create_encrypted_transfer-input.json).
+An example output to this request is in the file [create_encrypted_transfer-output.json](files/create_encrypted_transfer-output.json).
 
 ## combine_encrypted_amounts_ext
 
@@ -229,8 +229,8 @@ must be a valid JSON object with fields
 
 The output will show the decrypted amount.
 
-An example input to this request is in the file [decrypt_encrypted_amount-input.json](decrypt_encrypted_amount-input.json).
-An example output to this request is in the file [decrypt_encrypted_amount-output.json](decrypt_encrypted_amount-output.json).
+An example input to this request is in the file [decrypt_encrypted_amount-input.json](files/decrypt_encrypted_amount-input.json).
+An example output to this request is in the file [decrypt_encrypted_amount-output.json](files/decrypt_encrypted_amount-output.json).
 
 ## Example
 The [Example C program](example.c) that uses the library is available. This
@@ -268,10 +268,10 @@ The binary can then be run with the following inputs:
 
 # Example JSON input/output files mapping.
 
-|                                      | input                                                                                            | output                                                                                             |
-|--------------------------------------|--------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
-| `create_id_request_and_private_data` | [`create_id_request_and_private_data-input.json`](create_id_request_and_private_data-input.json) | [`create_id_request_and_private_data-output.json`](create_id_request_and_private_data-output.json) |
-| `create_credential`                  | [`create_credential-input.json`](create_credential-input.json)                                   | [`create_credential-output.json`](create_credential-output.json)                                   |
-| `create_transfer_ext`                | [`create_transfer-input.json`](create_transfer-input.json)                                       | [`create_transfer-output.json`](create_transfer-output.json)                                       |
-| `create_encrypted_transfer_ext`      | [`create_encrypted_transfer-input.json`](create_encrypted_transfer-input.json)                   | [`create_encrypted_transfer-output.json`](create_encrypted_transfer-output.json)                   |
-| `decrypt_encrypted_amount_ext`       | [`decrypt_encrypted_amount-input.json`](decrypt_encrypted_amount-input.json)                     | [`decrypt_encrypted_amount-output.json`](decrypt_encrypted_amount-output.json)                     |
+|                                      | input                                                                                                  | output                                                                                                   |
+|--------------------------------------|--------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| `create_id_request_and_private_data` | [`create_id_request_and_private_data-input.json`](files/create_id_request_and_private_data-input.json) | [`create_id_request_and_private_data-output.json`](files/create_id_request_and_private_data-output.json) |
+| `create_credential`                  | [`create_credential-input.json`](files/create_credential-input.json)                                   | [`create_credential-output.json`](files/create_credential-output.json)                                   |
+| `create_transfer_ext`                | [`create_transfer-input.json`](files/create_transfer-input.json)                                       | [`create_transfer-output.json`](files/create_transfer-output.json)                                       |
+| `create_encrypted_transfer_ext`      | [`create_encrypted_transfer-input.json`](files/create_encrypted_transfer-input.json)                   | [`create_encrypted_transfer-output.json`](files/create_encrypted_transfer-output.json)                   |
+| `decrypt_encrypted_amount_ext`       | [`decrypt_encrypted_amount-input.json`](files/decrypt_encrypted_amount-input.json)                     | [`decrypt_encrypted_amount-output.json`](files/decrypt_encrypted_amount-output.json)                     |
