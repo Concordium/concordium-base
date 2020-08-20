@@ -161,6 +161,56 @@ pub fn verify_transfer_data<C: Curve>(
     .is_ok()
 }
 
+pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
+    ctx: &GlobalContext<C>,
+    sk: &SecretKey<C>,
+    input_amount: &AggregatedDecryptedAmount<C>,
+    to_transfer: Amount,
+    csprng: &mut R,
+) -> Option<SecToPubAmountTransferData<C>> {
+    // FIXME: Put context into random oracle
+    let ro = RandomOracle::domain("SecToPubTransfer");
+    // FIXME: Put context into the transcript.
+    let mut transcript = Transcript::new(r"SecToPubTransfer".as_ref());
+    let pk = &PublicKey::from(sk);
+    // FIXME: Make arguments more in line between gen_sec_to_pub_trans and this.
+    encexp::gen_sec_to_pub_trans(
+        ctx,
+        ro,
+        &mut transcript,
+        pk,
+        sk,
+        input_amount.agg_index,
+        &input_amount.agg_encrypted_amount.join(),
+        input_amount.agg_amount,
+        to_transfer,
+        csprng,
+    )
+}
+
+pub fn verify_sec_to_pub_transfer_data<C: Curve>(
+    ctx: &GlobalContext<C>,
+    pk: &PublicKey<C>,
+    before_amount: &EncryptedAmount<C>,
+    transfer_data: &SecToPubAmountTransferData<C>,
+) -> bool {
+    // Fixme: Put context into the random oracle.
+    let ro = RandomOracle::domain("SecToPubTransfer");
+    let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
+
+    // FIXME: Revise order of arguments in verify_sec_to_pub_trans to be more consistent
+    // with the rest.
+    encexp::verify_sec_to_pub_trans(
+        ctx,
+        ro,
+        &mut transcript,
+        transfer_data,
+        pk,
+        &before_amount.join(),
+    )
+    .is_ok()
+}
+
 /// Produce payload for the transaction to encrypt a portion of the public
 /// balance. The arguments are
 ///
