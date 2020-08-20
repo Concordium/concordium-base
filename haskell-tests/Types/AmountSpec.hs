@@ -1,7 +1,10 @@
 {-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Types.AmountSpec where
 
 import Control.Monad
+import qualified Data.Aeson as AE
 import Test.Hspec
 import Test.QuickCheck as QC
 
@@ -53,7 +56,16 @@ testAmountFromStringExamples = mapM_ testEx amountExamples
         unless (p == e) $ expectationFailure $
           "Parsing " ++ show s ++ " expected " ++ show e ++ " but got " ++ show p
 
+testAmountToAndFromJson :: Spec
+testAmountToAndFromJson = describe "Amount to and from JSON" $ do
+  specify "Can decode valid format" $ AE.decode "\"1234\"" `shouldBe` Just Amount { _amount = 1234 }
+  specify "Cannot decode invalid format" $ AE.decode "\"1.\"" `shouldBe` (Nothing :: Maybe Amount)
+  specify "Cannot decode invalid type" $ AE.decode "12.34" `shouldBe` (Nothing :: Maybe Amount)
+  specify "Cannot decode overflowing value" $ AE.decode "\"123123145131252352352312415\"" `shouldBe` (Nothing :: Maybe Amount)
+  specify "Can encode amount" $ AE.encode Amount { _amount = 1234567890 } `shouldBe` "\"1234567890\""
+
 tests :: Spec
 tests = parallel $ do
   specify "Amount string parsing" $ withMaxSuccess 10000 $ testAmountString
   specify "Amount parsing examples" testAmountFromStringExamples
+  testAmountToAndFromJson
