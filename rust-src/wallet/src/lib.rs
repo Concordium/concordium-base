@@ -75,9 +75,8 @@ fn create_encrypted_transfer_aux(input: &str) -> Fallible<String> {
     let ctx: TransferContext = from_value(v.clone())?;
     let ctx_to = match ctx.to {
         Some(to) => to,
-        None => bail!("to account should be present")
+        None => bail!("to account should be present"),
     };
-    
 
     // context with parameters
     let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
@@ -154,7 +153,7 @@ fn create_transfer_aux(input: &str) -> Fallible<String> {
     let ctx: TransferContext = from_value(v.clone())?;
     let ctx_to = match ctx.to {
         Some(to) => to,
-        None => bail!("to account should be present")
+        None => bail!("to account should be present"),
     };
 
     let amount: Amount = try_get(&v, "amount")?;
@@ -193,7 +192,7 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> Fallible<String> {
         payload.put(&17u8); // transaction type is public to secret transfer
         payload.put(&amount);
 
-        let payload_size: u32 = payload.len() as u32;
+        // let payload_size: u32 = payload.len() as u32;
         // assert_eq!(payload_size, 41);
 
         make_transaction_bytes(&ctx, &payload)
@@ -213,7 +212,6 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> Fallible<String> {
 fn create_sec_to_pub_transfer_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
     let ctx: TransferContext = from_value(v.clone())?;
-    
 
     // context with parameters
     let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
@@ -245,7 +243,6 @@ fn create_sec_to_pub_transfer_aux(input: &str) -> Fallible<String> {
         let mut payload_bytes = Vec::new();
         payload_bytes.put(&18u8); // transaction type is secret to public transfer
         payload_bytes.extend_from_slice(&to_bytes(&payload));
-        // assert_eq!(payload_size, 41);
 
         make_transaction_bytes(&ctx, &payload_bytes)
     };
@@ -260,7 +257,6 @@ fn create_sec_to_pub_transfer_aux(input: &str) -> Fallible<String> {
 
     Ok(to_string(&response)?)
 }
-
 
 fn check_account_address_aux(input: &str) -> bool { input.parse::<AccountAddress>().is_ok() }
 

@@ -198,8 +198,8 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
     let ro = RandomOracle::domain("SecToPubTransfer");
     let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
 
-    // FIXME: Revise order of arguments in verify_sec_to_pub_trans to be more consistent
-    // with the rest.
+    // FIXME: Revise order of arguments in verify_sec_to_pub_trans to be more
+    // consistent with the rest.
     encexp::verify_sec_to_pub_trans(
         ctx,
         ro,
