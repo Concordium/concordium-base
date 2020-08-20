@@ -208,7 +208,7 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> Fallible<String> {
     Ok(to_string(&response)?)
 }
 
-/// Create a JSON encoding of an encrypted transfer transaction.
+/// Create a JSON encoding of a secret to public amount transaction.
 fn create_sec_to_pub_transfer_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
     let ctx: TransferContext = from_value(v.clone())?;
