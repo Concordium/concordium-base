@@ -11,7 +11,7 @@
 module Concordium.Types (module Concordium.Types, AccountAddress(..), SchemeId, AccountVerificationKey) where
 
 import GHC.Generics
-import Data.Data(Typeable, Data)
+import Data.Data (Typeable, Data)
 
 import qualified Text.ParserCombinators.ReadP as RP
 
@@ -20,24 +20,25 @@ import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
 import qualified Concordium.Crypto.BlsSignature as Bls
 import Concordium.ID.Types
-import Concordium.Crypto.SignatureScheme(SchemeId)
+import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
 
-import Control.Exception(assert)
+import Control.Exception (assert)
 
-import Data.Hashable(Hashable)
+import Data.Hashable (Hashable)
 import Data.Word
-import Data.ByteString.Char8(ByteString)
+import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Lazy.Char8 as BSL
-import Data.ByteString.Builder(toLazyByteString, byteStringHex)
+import Data.ByteString.Builder (toLazyByteString, byteStringHex)
 import Data.Bits
 import Data.Ratio
-import Data.Char(digitToInt,isDigit)
+import Data.Char (digitToInt,isDigit)
 
 import Data.Aeson as AE
 import Data.Aeson.TH
 
+import Data.Text (pack)
 import Data.Time
 import Data.Time.Clock.POSIX
 
@@ -232,16 +233,22 @@ isTimestampBefore ts ym =
 
 
 -- |Type representing the amount unit which is defined as the smallest
--- meaningful amount of GTUs. This unit is 10^-6 GTUs and denoted microGTU.
+-- meaningful amount of GTU. This unit is 10^-6 GTU and denoted microGTU.
 type AmountUnit = Word64
 newtype Amount = Amount { _amount :: AmountUnit }
-    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, FromJSON, ToJSON) via AmountUnit
+    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable) via AmountUnit
 
 instance S.Serialize Amount where
   {-# INLINE get #-}
   get = Amount <$> G.getWord64be
   {-# INLINE put #-}
   put (Amount v) = P.putWord64be v
+
+instance FromJSON Amount where
+  parseJSON = fmap Amount . withEmbeddedJSON "Amount" parseJSON
+
+instance ToJSON Amount where
+  toJSON = AE.String . pack . show . _amount
 
 -- |Converts an amount to GTU decimal representation.
 amountToString :: Amount -> String
@@ -256,10 +263,11 @@ amountToString (Amount amount) =
 -- |Parse an amount from GTU decimal representation.
 amountFromString :: String -> Maybe Amount
 amountFromString s =
-    if length s == 0 || length parsed /= 1 then Nothing
+    if length s == 0 || length parsed /= 1
+    then Nothing
     else Just $ Amount (fst (head parsed))
   where parsed = RP.readP_to_S amountParser s
-  
+
 -- |Parse a Word64 as a decimal number with scale 10^6
 -- i.e. between 0 and 18446744073709.551615
 amountParser :: RP.ReadP Word64
