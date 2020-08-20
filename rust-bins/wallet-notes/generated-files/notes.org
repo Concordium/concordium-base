@@ -1,0 +1,38 @@
+#+TITLE: Generated files
+
+1. Global
+   #+begin_src
+   client generate-global --out-file global.json
+   #+end_src
+
+2. IPS and ARS
+   #+begin_src
+   client generate-ips --global global.json --key-capacity 30 --num 10 --num-ars 5 --out-dir database
+   #+end_src
+
+3. create_id_request_and_private_data
+
+   1. Get the anonymity revokers and put them into ~"arInfos"~. (from #2)
+   2. Put the global values into ~"global"~ (from #1)
+   3. Put the chosen IP into ~"ipInfo"~ {from #2)
+
+   Using ~example.c~ call ~create_id_request_and_private_data_ext~ generating a json with ~"idObjectRequest"~ and ~"privateIdObjectData"~.
+
+4. identity_object.json
+
+   Split the output from #4 into aci.json with the ~privateIdObjectData~ item and pio.json with the ~idObjectRequest~ item.
+
+   #+begin_src
+   client ip-sign-pio --pio pio.json --ip-data database/identity_provider-0.json --out identity-object.json
+   #+end_src
+
+5. Credential + account
+
+   Craft a json file that contains:
+   1. ~"ipInfo"~, ~"arsInfos"~ and ~"global"~ the same as in #3
+   2. ~"identityObject"~ containing the output of #4
+   3. ~"privateIdObjectData"~ containing the private part of the output of #3
+   4. ~"revealedAttributes"~ containing a list with the names of the attributes that want to be revealed
+   5. ~"accountNumber"~ nonce for the identityProvider
+
+   Using ~example.c~ call ~create_credential_ext~ generating a json with ~"accountAddress"~, ~"accountData"~, ~"credential"~ and ~"encryptionSecretKey"~.

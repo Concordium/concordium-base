@@ -7,20 +7,28 @@ preconditions that are specified.
 
 The library currently exposes the following methods with the following
 c-compatible signatures.
-- ```char* create_id_request_and_private_data(const char*, uint8_t*)```
-- ```char* create_credential(const char*, uint8_t*)```
-- ```void free_response_string(char*)```
+- Identity layer
+    - `char* create_id_request_and_private_data(const char*, uint8_t*)`
+    - `char* create_credential(const char*, uint8_t*)`
+    - `uint8_t check_account_address_ext(const char*)`
+- Regular transactions
+    - `char* create_transfer_ext(const char*, uint8_t*)`
+- Encrypted transactions
+    - `char* create_encrypted_transfer_ext(const char*, uint8_t*)`
+    - `char* combine_encrypted_amounts_ext(const char*, const char*, uint8_t*)`
+    - `uint64_t decrypt_encrypted_amount_ext(const char*, uint8_t*)`
+- `void free_response_string(char*)`
 
-After calling the `create_id_request_and_private_data` function it is the
+After calling a function that returns a `char*` value, it is the
 __caller's__ responsibility to free the returned string via the
 `free_response_string` function.
 
-The  `create_id_request_and_private_data` will either
+The functions that take an `uint8_t*` parameter will either
 - successfully generate the required information (see below for the format) and
-  set the second parameter to `1`. In this case the returned string is a JSON value.
-- or fail and set the second parameter to `0`. In this case the returned string
+  set the `uint8_t` parameter to `1`. In this case the returned string is a JSON value.
+- or fail and set the `uint8_t` parameter to `0`. In this case the returned string
   is a description of the error.
-  
+
 In all cases the precondition is that the input string is a NUL-terminated
 UTF8-string, and the returned string is likewise a NUL-terminated UTF8-encoded string.
 
@@ -29,21 +37,28 @@ UTF8-string, and the returned string is likewise a NUL-terminated UTF8-encoded s
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
 
-- "ipInfo" ... is a JSON object that describes the identity provider. This 
-  data is the one obtained from the server by making a GET request to /ip_info,
-  e.g.,
-  
-  ```curl -XGET localhost:8000/ip_info```
-  
-  See below for the description of the server.
+- `"ipInfo"` ... is a JSON object that describes the identity provider. This
+  data is the one obtained from the server by making a GET request to /ip_info.
+
+- `"global"` ... is a JSON object that can describes global cryptographic parameters.
+   This data is obtained from the server by making a GET request to /global.
+
+- `"arsInfos"` ... is a JSON mapping from `"arIdentity"` to `"arInfo"` where `"arInfo"` being
+  a JSON object with fields `"arIdentity"`, `"arDescription"` and `"arPublicKey"`.
 
 The output of this function is a JSON object with two keys
 - "idObjectRequest" - this is the identity object request that should be sent to
   the identity provider
 - "privateIdObjectData" - this is the __private__ information that the user must
   keep in order to be able to use the returned identity object.
-  
-An example returned value is in the file [example-id-object-data.json](example-id-object-data.json).
+
+An example of input is in the file [create_id_request_and_private_data-input.json](create_id_request_and_private_data-input.json).
+An example of output is in the file [create_id_request_and_private_data-output.json](create_id_request_and_private_data-output.json).
+
+### Performance
+
+At the moment the `create_id_request_and_private_data` call takes about 30ms on
+a AMD Ryzen 7 3700X. Memory consumption is on the order of a few kB.
 
 ## check_account_address
 
@@ -53,127 +68,210 @@ returns a uint8.
   format then 1 is returned
 - in all other cases 0 is returned.
 
-An example of a valid address is 
+An example of a valid address is
 `4MzQSgx2A7PwAyfu54yxZS3NjDUjX6HpisQMBJtzL7B6dbodrh`
 
-An example of an invalid address is 
+An example of an invalid address is
 `3MzQSgx2A7PwAyfu54yxZS3NjDUjX6HpisQMBJtzL7B6dbodrh`.
-
-### Performance
-
-At the moment the `create_id_request_and_private_data` call takes about 30ms on
-a AMD Ryzen 7 3700X. Memory consumption is on the order of a few kB.
 
 ## create_credential
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
-- "identityObject" ... this must contain the value returned by the identity provider.
-- "privateIdObjectData" ... this is the value that was returned by the
+
+- `"ipInfo"` ... same as in the `create_id_request_and_private_data` call
+
+- `"arsInfos"` ... same as in the `create_id_request_and_private_data` call
+
+- `"global"` ... same as in the `create_id_request_and_private_data` call
+
+- `"identityObject"` ... this must contain the value returned by the identity provider.
+
+- `"privateIdObjectData"` ... this is the value that was returned by the
   `create_id_request_and_private_data` function and stored locally
-- "global" ... this are the global parameters with a number of cryptographic
-  keys. They can be retrieved from the server, see below.
-- "ipInfo" ... same as in the `create_id_request_and_private_data` call
-- "revealedAttributes" ... attributes which the user wishes to reveal. This is
+
+- `"revealedAttributes"` ... attributes which the user wishes to reveal. This is
   an array of attribute names. The user should select these from among the
   attributes in the identityObject field. The key "revealedAttributes" is
   optional. If not present we take it as the empty set.
-- "accountNumber" ... this must be a number between 0 and 255 (inclusive).
+
+- `"accountNumber"` ... this must be a number between 0 and 255 (inclusive).
   Multiple credentials can be generated from the same identity object, and this
   number is essentially a nonce. It __must__ be different for different
   credentials from the same id object, otherwise the credential will not be
   accepted by the chain.
-- "accountData" ... this is an optional field describing the account to which
+
+- `"accountData"` ... this is an optional field describing the account to which
   the generated credential should be attached. If not present we assume that a
   fresh account is to be created, which means the library will generate an
   account key for this account.
 
 The returned value is a JSON object with the following fields.
-- "credential" - this is the credential that is to be deployed on the chain. All
+
+- `"credential"` - this is the credential that is to be deployed on the chain. All
   data here is public.
-- "accountData" - contains the public and __private__ keys of the account the
+
+- `"accountData"` - contains the public and __private__ keys of the account the
   credential belongs to. This is very sensitive and must be kept protected.
-- "accountAddress" - the address of the account this credential belongs to. This
+
+- `"accountAddress"` - the address of the account this credential belongs to. This
   will either be a new account or existing account, depending on the input "accountData".
 
-An example input to this request is in the file [credential-input.json](credential-input.json).
+- `"encryptionPublicKey"` - the account public key for encrypted transfers.
+
+- `"encryptionSecretKey"` - the account private key for encrypted transfers.
+
+An example input to this request is in the file [create_credential-input.json](create_credential-input.json).
+An example output to this request is in the file [create_credential-output.json](create_credential-output.json).
+
+## create_transfer_ext
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"from"` ... address of the sender account.
+
+- `"to"` ... address of the receiver account.
+
+- `"expiry"` ... unix timestamp of the expiry date of the transaction.
+
+- `"nonce"` ... nonce of the sender account.
+
+- `"keys"` ... mapping with the keys of the sender account.
+
+- `"energy"` ... max energy wanted for the transfer.
+
+- `"amount"` ... string containing the amount wanted to be transferred.
+
+The returned value is a JSON object with the following fields:
+
+- `"signatures"` ... list with signatures of the transaction with the provided keys.
+
+- `"transaction"` ... the serialized transaction that can be sent to the chain.
+
+An example input to this request is in the file [create_transfer-input.json](create_transfer-input.json).
+An example output to this request is in the file [create_transfer-output.json](create_transfer-output.json).
+
+## create_encrypted_transfer_ext
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"from"` ... address of the sender account.
+
+- `"to"` ... address of the receiver account.
+
+- `"expiry"` ... unix timestamp of the expiry date of the transaction.
+
+- `"nonce"` ... nonce of the sender account.
+
+- `"keys"` ... mapping with the keys of the sender account.
+
+- `"energy"` ... max energy wanted for the transfer.
+
+- `"amount"` ... string containing the amount wanted to be transferred.
+
+- `"global"` ... same as in the `create_id_request_and_private_data` call
+
+- `"senderSecretKey"` ... the secret key of the sender account.
+
+- `"receiverPublicKey"` ... the private key of the receiver account.
+
+- `"inputEncryptedAmount"` ... the encrypted amount generated when transferring an amount to the shielded balance
+  or directly received from another account in another transfer. It must be a JSON object with the fields:
+      - `"aggEncryptedAmount"` ... the ciphered amount
+      - `"aggAmount"` ... the amount on plaintext
+      - `"index"` ... the index up to which the encrypted amounts on the account have been combined.
+
+The returned value is a JSON object with the following fields:
+
+- `"signatures"` ... list with signatures of the transaction with the provided keys.
+
+- `"transaction"` ... the serialized transaction that can be sent to the chain.
+
+- `"remaining"` ... the remaining encrypted balance.
+
+An example input to this request is in the file [create_encrypted_transfer-input.json](create_encrypted_transfer-input.json).
+An example output to this request is in the file [create_encrypted_transfer-output.json](create_encrypted_transfer-output.json).
+
+## combine_encrypted_amounts_ext
+
+This function takes as input two NUL-terminated UTF8-encoded strings. The inputted strings must be
+ciphertexts of encrypted amounts. The function will return a NUL-terminated UTF8-encoded string
+containing the sum of both encrypted amounts.
+
+For example, if using encrypted amounts that expect to be decrypted with the key:
+```
+a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd51008c7a9b2805954be902db14e6aec6643fadf88398490bd67ec8df6c1c72e3f
+```
+, combining `Encrypted(1000000)`:
+
+```
+800e19f1086f51d62788bb64a6624596c017a40e66bce195d1bee963a2d09f68301d1372d41dffda4ac89a41536919d890b357021e6889fd0fdb1f1754d4f552194912262794a50ef7c63cd4478b9bb6247f80c9a40023b620e2d763a68026ed88c2a0834fa2471560800234093b74164ea30f46fe05c53e6fbb356902b21e23e21d07d21c854488082ea8b493cdbfd6a4674fed444ebd7213bc56f9e8fa6edef22fb38039d477cb239a8041e6957ad68c86be179c335c1771f2741edf141002
+```
+and `Encrypted(2000000)`:
+```
+94a011e5597bf35d161d837c1798b3fea7dba281c23d764706a26e3a510cff2d82784fdc13455650f67f5a4bba1fc92089cd754c9520a56ab6da2b520691d167a89f6c422ed44d68c8a3c93e0589d80a3ee84df78a207311ff0b9477f87b10b9aaacb8f1a1028d19ba37a6e0a9ccfe47dae2f0aaed79b9fa23eb9108bc19fb0cf8e8e9efa1c50521233f2e3c5b041577a3421353c2d8a042b792bc0f147746a28f4da28ad17e7f4d9e140af82384edfaa2d11c2a1fe1301da450be23c04b3ffa
+```
+would output `Encrypted(3000000)`:
+```
+8280233813ce7c0c6f7a4e152928e31e51b1b0ad2e0cef2a3d75a7366ed93eaa77a0c5b20634a6b7e3f3133c8c65e1838023aaa7be1913eac2efc8985f73fd435f3081a3ded830c0c047fef53427229dba644363513ad0af7538c3e97b3d4fe985ccf96b79633e3844601320b82ede794915510a2f1c522e57590c2d13ab966a1fbc3603fe79c33efa90312ea0f863b7999fb67c0d088e059bda4ae692c9022fd2f0d0844ba83e8f70f0a535c953eba7cc86b6f431e3c8aa9f4429014c86b7d2
+```
+
+## decrypt_encrypted_amount_ext
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"encryptedAmount"` ... the ciphertext of an encrypted amount.
+
+- `"encryptionSecretKey"` ... the secret key of the owner of the amount.
+
+The output will show the decrypted amount.
+
+An example input to this request is in the file [decrypt_encrypted_amount-input.json](decrypt_encrypted_amount-input.json).
+An example output to this request is in the file [decrypt_encrypted_amount-output.json](decrypt_encrypted_amount-output.json).
 
 ## Example
 The [Example C program](example.c) that uses the library is available. This
 program reads a JSON file and passes it to the library, retrieving and printing
 the result. On a linux system the program can be compiled and run like so.
-  - First compile the libraries in [../rust-src](../rust-src) by running 
-    ```cargo build --release```. 
+  - First compile the libraries in [../rust-src](../rust-src) by running
+    ```cargo build --release```.
   - Next from this directory run
     ```gcc example.c -lwallet -L ../../rust-src/target/release/ -o example```
-    or 
+    or
     ```clang example.c -lwallet -L ../../rust-src/target/release/ -o example```
     depending on what C compiler is preffered.
 
-The binary can then be run as something like the following
-- ```LD_LIBRARY_PATH=../../rust-src/target/release ./example input.json``` 
-  which will try to call `create_id_request_and_private_data` with the contents
-  of [input.json](input.json)
-- ```LD_LIBRARY_PATH=../../rust-src/target/release ./example credential-input.json``` 
-  which will try to call `create_credential` with the contents
-  of [credential-input.json](credential-input.json)
+The binary can then be run with the following inputs:
+- `LD_LIBRARY_PATH=../../rust-src/target/release ./example create_transfer-input.json`:
+   calls `create_transfer_ext` with the contents of `create_transfer-input.json`.
 
-# Simple server acting as the identity provider
+- `LD_LIBRARY_PATH=../../rust-src/target/release ./example create_id_request_and_private_data-input.json`:
+   calls `create_id_request_and_private_data_ext` with the contents of `create_id_request_and_private_data-input.json`.
 
-To enable testing of the wallet with respect to the identity provider while the
-details are being resolved with our partners.
+- `LD_LIBRARY_PATH=../../rust-src/target/release ./example create_credential-input.json`:
+   calls `create_credential_ext` with the contents of `create_credential-input.json`.
 
-The server is a minimal server which (by default) listens on `localhost:8000`
-and accepts `GET` requests. At the moment two requests are supported.
+- `LD_LIBRARY_PATH=../../rust-src/target/release ./example create_encrypted_transfer-input.json`:
+   calls `create_encrypted_transfer_ext` with with the contents of `create_encrypted_transfer-input.json`.
 
-- get the public information about the identity provider needed to construct the
-  request. The request can be made as
-  ```curl -XGET localhost:8000/ip_info```
-  or equivalent. This returns a single JSON object in the format which can be
-  passed as part of the request to the library.
-  
-- get the global parameters that will be needed for the deployment of
-  credential. This is a number of public keys, etc.
-  ```curl -XGET localhost:8000/global```
-  This returns a single JSON in the format which can be passed as part of a
-  request to create a credential.
+- `LD_LIBRARY_PATH=../../rust-src/target/release ./example combine-amounts <encryptedAmount1> <encryptedAmount2>`:
+   calls `combine_encrypted_amounts_ext` with the two amounts.
 
-- Get the identity object based on the request returned from a library call.
-  The request must be encoded in a URL parameter with key `id_request`. The
-  value must be in the format returned by the library.
-  
-  The small python script [example-request.py](example-request.py) illustrates
-  how a request should be done. This script reads the file
-  [id-request.json](id_request.json) which should contain the content returned
-  from the call to the library minus the `privateIdObjectData`.
+- `LD_LIBRARY_PATH=../../rust-src/target/release ./example decrypt_encrypted_amount-input.json`:
+   calls `decrypt_encrypted_amount_ext` with the contents of `decrypt_encrypted_amount-input.json`.
 
-  At the moment the server will immeditely reply with the signed identity object
-  which the wallet must store. How this will proceed in the future will be
-  worked out over the next few weeks with our partner. Regardless of how the
-  identity verification is going to proceed, what is returned is going to stay
-  similar to what it now, with perhaps the format being change a little.
-
-  The returned object is the Identity Object which the wallet must store
-  securely, and back up.
+- `LD_LIBRARY_PATH=../../rust-src/target/release ./example check-address <address>`:
+   calls `check_account_address_ext` with the given address.
 
 # Example JSON input/output files mapping.
 
-- [input.json](input.json) the input to the library call to create id request.
-- [example-id-object-data.json](example-id-object-data.json) response from the
-  library call to create id request.
-- [id-request.json](id-request.json) data to be sent to the identity provider to
-  request the identity object
-- [example-id-object-response.json](example-id-object-response.json) response
-  from the identity provider, the identity object.
-- [credential-input.json](credential-input.json) input to the creation of the
-  credential library call.
-- [credential-response.json](credential.json) the response from credential creation call.
-- [transfer-input.json](transfer-input.json) input to the create transfer call.
-- [transfer-output.json](transfer-output.json) the response from create transfer call.
-
-
-# How to run the server
-  From the current directory, the easiest way to run the server is to have
-  `cargo` installed and run
-
-  ```cargo run --release --bin wallet_server -- --ip-data database/identity_provider-0.json --global database/global.json```
+|                                      | input                                                                                            | output                                                                                             |
+|--------------------------------------|--------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| `create_id_request_and_private_data` | [`create_id_request_and_private_data-input.json`](create_id_request_and_private_data-input.json) | [`create_id_request_and_private_data-output.json`](create_id_request_and_private_data-output.json) |
+| `create_credential`                  | [`create_credential-input.json`](create_credential-input.json)                                   | [`create_credential-output.json`](create_credential-output.json)                                   |
+| `create_transfer_ext`                | [`create_transfer-input.json`](create_transfer-input.json)                                       | [`create_transfer-output.json`](create_transfer-output.json)                                       |
+| `create_encrypted_transfer_ext`      | [`create_encrypted_transfer-input.json`](create_encrypted_transfer-input.json)                   | [`create_encrypted_transfer-output.json`](create_encrypted_transfer-output.json)                   |
+| `decrypt_encrypted_amount_ext`       | [`decrypt_encrypted_amount-input.json`](decrypt_encrypted_amount-input.json)                     | [`decrypt_encrypted_amount-output.json`](decrypt_encrypted_amount-output.json)                     |

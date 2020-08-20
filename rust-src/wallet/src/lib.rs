@@ -670,6 +670,7 @@ pub unsafe fn check_account_address_ext(input_ptr: *const c_char) -> u8 {
     }
 }
 
+#[no_mangle]
 /// # Safety
 /// This function is unsafe in the sense that if the argument pointer was not
 /// Constructed via CString::into_raw its behaviour is undefined.
