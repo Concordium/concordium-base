@@ -229,11 +229,7 @@ data Payload =
   -- | Transfer some amount from public to encrypted balance.
   | TransferToEncrypted {
       -- | The plaintext that will be deducted from the public balance.
-      tteAmount :: !Amount,
-      -- | Encryption of the amount to transfer
-      tteTransferAmount :: !EncryptedAmount,
-      -- | Proof that the encrypted amount corresponds to the stated amount.
-      tteProof :: !EncryptAmountProof
+      tteAmount :: !Amount
       }
   -- | Decrypt a portion of the encrypted balance.
   | TransferToPublic {
@@ -337,9 +333,7 @@ putPayload EncryptedAmountTransfer{..} =
     putEncryptedAmountTransferProof eatProof
 putPayload TransferToEncrypted{..} =
     S.putWord8 17 <>
-    S.put tteAmount <>
-    S.put tteTransferAmount <>
-    S.put tteProof
+    S.put tteAmount
 putPayload TransferToPublic{..} =
     S.putWord8 18 <>
     S.put ttpRemainingAmount <>
@@ -434,8 +428,6 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               return EncryptedAmountTransfer{..}
             17 -> do
               tteAmount <- S.get
-              tteTransferAmount <- S.get
-              tteProof <- S.get
               return TransferToEncrypted{..}
             18 -> do
               ttpRemainingAmount <- S.get
