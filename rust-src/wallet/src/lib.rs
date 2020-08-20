@@ -322,6 +322,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
         "credential": Versioned::new(Version::from(0u32), cdi),
         "accountData": acc_data,
         "encryptionSecretKey": secret_key,
+        "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
         "accountAddress": address,
     });
     Ok(to_string(&response)?)
