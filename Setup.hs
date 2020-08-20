@@ -34,7 +34,8 @@ makeRust args flags = do
                 "eddsa_ed25519",
                 "ffi_helpers",
                 "id",
-                "aggregate_sig"
+                "aggregate_sig",
+                "encrypted_transfers"
             ]
     rawSystemExit verbosity "mkdir" ["-p", "./lib"]
     -- On Windows, copy the static libraries and DLLs. (The DLLs should not be used by the
