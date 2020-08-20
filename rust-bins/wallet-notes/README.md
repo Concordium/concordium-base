@@ -40,11 +40,12 @@ must be a valid JSON object with fields
 - `"ipInfo"` ... is a JSON object that describes the identity provider. This
   data is the one obtained from the server by making a GET request to /ip_info.
 
+- `"arsInfos"` ... is a JSON mapping from `"arIdentity"` to `"arInfo"` where `"arInfo"` being
+  a JSON object with fields `"arIdentity"`, `"arDescription"` and `"arPublicKey"`.
+
 - `"global"` ... is a JSON object that can describes global cryptographic parameters.
    This data is obtained from the server by making a GET request to /global.
 
-- `"arsInfos"` ... is a JSON mapping from `"arIdentity"` to `"arInfo"` where `"arInfo"` being
-  a JSON object with fields `"arIdentity"`, `"arDescription"` and `"arPublicKey"`.
 
 The output of this function is a JSON object with two keys
 - "idObjectRequest" - this is the identity object request that should be sent to
@@ -54,11 +55,6 @@ The output of this function is a JSON object with two keys
 
 An example of input is in the file [create_id_request_and_private_data-input.json](files/create_id_request_and_private_data-input.json).
 An example of output is in the file [create_id_request_and_private_data-output.json](files/create_id_request_and_private_data-output.json).
-
-### Performance
-
-At the moment the `create_id_request_and_private_data` call takes about 30ms on
-a AMD Ryzen 7 3700X. Memory consumption is on the order of a few kB.
 
 ## check_account_address
 
@@ -275,3 +271,16 @@ The binary can then be run with the following inputs:
 | `create_transfer_ext`                | [`create_transfer-input.json`](files/create_transfer-input.json)                                       | [`create_transfer-output.json`](files/create_transfer-output.json)                                       |
 | `create_encrypted_transfer_ext`      | [`create_encrypted_transfer-input.json`](files/create_encrypted_transfer-input.json)                   | [`create_encrypted_transfer-output.json`](files/create_encrypted_transfer-output.json)                   |
 | `decrypt_encrypted_amount_ext`       | [`decrypt_encrypted_amount-input.json`](files/decrypt_encrypted_amount-input.json)                     | [`decrypt_encrypted_amount-output.json`](files/decrypt_encrypted_amount-output.json)                     |
+
+
+# Other change set from the previous version
+
+1. all Amounts are now expected to be strings in JSON. The wallet-proxy will
+   serve amounts in this format, and the library will expect them. 
+2. All Wallet-proxy endpoints are now versioned, concretely this means that they
+   are renamed from `/X` to `/v0/X`
+3. The `create_id_request_and_private_data` now expects an additional field
+   `arsInfos` in the input. This field is obtained in the same way as `ipInfo`,
+   via the `GET /v0/ip_info` call.
+4. The `create_credential` call has an equivalent change.
+
