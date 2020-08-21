@@ -19,6 +19,8 @@ char* create_sec_to_pub_transfer_ext(char*, uint8_t*);
 
 void free_response_string_ext(char*);
 
+char* id_object_response_ext(char*, uint8_t*);
+
 /*
 $ ./example create_transfer-input.json
   calls create_transfer_ext with the contents of create_transfer-input.json
@@ -90,6 +92,9 @@ int main(int argc, char *argv[]) {
         printStr(out, flag);
       } else if (strcmp(argv[1], "create_sec_to_pub_transfer-input.json") == 0) {
         out = create_sec_to_pub_transfer_ext(buffer, &flag);
+        printStr(out, flag);
+      } else if (strcmp(argv[1], "id_request-input.json") == 0) {
+        out = id_object_response_ext(buffer, &flag);
         printStr(out, flag);
       } else if (strcmp(argv[1], "decrypt_encrypted_amount-input.json") == 0) {
         decrypted = decrypt_encrypted_amount_ext(buffer, &flag);

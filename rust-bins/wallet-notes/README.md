@@ -378,3 +378,23 @@ The binary can then be run with the following inputs:
 4. The `create_credential` call has an equivalent change.
 5. The `create_transfer`, `create_encrypted_transfer`, `create_pub_to_sec` and `create_sec_to_pub` calls have an additional parameter "energy". This can be
    obtained via a GET request to `/v0/transactionCost?type="simpleTransfer"` or replacing `simpleTransfer` with `encryptedTransfer`, `transferToSecret` or `transferToPublic`.
+6. The identity object response will now be wrapped into a version object, i.e.,
+   it is of the form
+```json
+{
+  "v": 0,
+  "value": {...}
+}
+```
+where {...} is the response as it used to be.
+
+
+# Temporary functionality for testing until Notabene libraries are available on a new endpoint
+
+The library currently provides a
+`char* id_object_response_ext(char*, uint8_t*);`
+
+function that accepts a single JSON string that has the same format as the
+request to the identity provider (example at
+[id_request-input.json](files/id_request-input.json)), and the same response,
+exemplified in [id_request-output.json](files/id_request-output.json)
