@@ -36,6 +36,8 @@ UTF8-string, and the returned string is likewise a NUL-terminated UTF8-encoded s
 
 ## create_id_request_and_private_data
 
+Semantics: Generates an IdentityObject request, used to request an indentity to a IdentityProvider.
+
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
 
@@ -73,6 +75,8 @@ An example of an invalid address is
 `3MzQSgx2A7PwAyfu54yxZS3NjDUjX6HpisQMBJtzL7B6dbodrh`.
 
 ## create_credential
+
+Semantics: Using the identityObject provided by the IdentityProvider, create a credential and account.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
@@ -124,6 +128,8 @@ An example output to this request is in the file [create_credential-output.json]
 
 ## create_transfer_ext
 
+Semantics: Creates a transfer transaction with the provided values.
+
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
 
@@ -151,6 +157,8 @@ An example input to this request is in the file [create_transfer-input.json](fil
 An example output to this request is in the file [create_transfer-output.json](files/create_transfer-output.json).
 
 ## create_encrypted_transfer_ext
+
+Semantics: Create an encrypted transfer transaction with the provided values.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
@@ -194,6 +202,8 @@ An example output to this request is in the file [create_encrypted_transfer-outp
 
 ## combine_encrypted_amounts_ext
 
+Semantics: Sums two encrypted amounts.
+
 This function takes as input two NUL-terminated UTF8-encoded strings. The inputted strings must be
 ciphertexts of encrypted amounts. The function will return a NUL-terminated UTF8-encoded string
 containing the sum of both encrypted amounts.
@@ -218,6 +228,8 @@ would output `Encrypted(3000000)`:
 
 ## decrypt_encrypted_amount_ext
 
+Semantics: Decrypts an encrypted amount.
+
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
 
@@ -231,6 +243,8 @@ An example input to this request is in the file [decrypt_encrypted_amount-input.
 An example output to this request is in the file [decrypt_encrypted_amount-output.json](files/decrypt_encrypted_amount-output.json).
 
 ## create_pub_to_sec_transfer_ext
+
+Semantics: Creates a transaction that transfers an amount from the public balance to the shielded balance of an account.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
@@ -257,6 +271,8 @@ An example input to this request is in the file [create_pub_to_sec_transfer-inpu
 An example output to this request is in the file [create_pub_to_sec_transfer-output.json](files/create_pub_to_sec_transfer-output.json).
 
 ## create_sec_to_pub_transfer_ext
+
+Semantics: Creates a transaction that transfers an amount from the shielded balance to the public balance of an account.
 
 This function takes as input a NUL-terminated UTF8-encoded string. The string
 must be a valid JSON object with fields
@@ -325,6 +341,12 @@ The binary can then be run with the following inputs:
 - `LD_LIBRARY_PATH=../../rust-src/target/release ./example decrypt_encrypted_amount-input.json`:
    calls `decrypt_encrypted_amount_ext` with the contents of `decrypt_encrypted_amount-input.json`.
 
+- `LD_LIBRARY_PATH=../../rust-src/target/release ./example create_sec_to_pub-input.json`:
+   calls `create_sec_to_pub_ext` with the contents of `create_sec_to_pub-input.json`.
+
+- `LD_LIBRARY_PATH=../../rust-src/target/release ./example create_pub_to_sec-input.json`:
+   calls `create_pub_to_sec_ext` with the contents of `create_pub_to_sec-input.json`.
+
 - `LD_LIBRARY_PATH=../../rust-src/target/release ./example check-address <address>`:
    calls `check_account_address_ext` with the given address.
 
@@ -337,17 +359,19 @@ The binary can then be run with the following inputs:
 | `create_transfer_ext`                | [`create_transfer-input.json`](files/create_transfer-input.json)                                       | [`create_transfer-output.json`](files/create_transfer-output.json)                                       |
 | `create_encrypted_transfer_ext`      | [`create_encrypted_transfer-input.json`](files/create_encrypted_transfer-input.json)                   | [`create_encrypted_transfer-output.json`](files/create_encrypted_transfer-output.json)                   |
 | `decrypt_encrypted_amount_ext`       | [`decrypt_encrypted_amount-input.json`](files/decrypt_encrypted_amount-input.json)                     | [`decrypt_encrypted_amount-output.json`](files/decrypt_encrypted_amount-output.json)                     |
+| `create_sec_to_pub_ext`              | [`create_sec_to_pub-input.json`](files/create_sec_to_pub-input.json)                                   | [`create_sec_to_pub-output.json`](files/create_sec_to_pub-output.json)                                   |
+| `create_pub_to_sec_ext`              | [`create_pub_to_sec-input.json`](files/create_pub_to_sec-input.json)                                   | [`create_pub_to_sec-output.json`](files/create_pub_to_sec-output.json)                                   |
 
 
 # Other change set from the previous version
 
 1. All Amounts are now expected to be strings in JSON. The wallet-proxy will
-   serve amounts in this format, and the library will expect them. 
+   serve amounts in this format, and the library will expect them.
 2. All Wallet-proxy endpoints are now versioned, concretely this means that they
    are renamed from `/X` to `/v0/X`
 3. The `create_id_request_and_private_data` now expects an additional field
    `arsInfos` in the input. This field is obtained in the same way as `ipInfo`,
    via the `GET /v0/ip_info` call.
 4. The `create_credential` call has an equivalent change.
-5. The `create_transfer` call has an additional parameter "energy". This can be
-   obtained via a GET request to `/v0/transactionCost?type="simpleTransfer"`.
+5. The `create_transfer`, `create_encrypted_transfer`, `create_pub_to_sec` and `create_sec_to_pub` calls have an additional parameter "energy". This can be
+   obtained via a GET request to `/v0/transactionCost?type="simpleTransfer"` or replacing `simpleTransfer` with `encryptedTransfer`, `transferToSecret` or `transferToPublic`.
