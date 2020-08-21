@@ -61,6 +61,7 @@ impl AsRef<[u8]> for PublicKey {
 
 impl<'a> From<&'a SecretKey> for PublicKey {
     /// Derive this public key from its corresponding `SecretKey`.
+    /// Implements https://tools.ietf.org/html/rfc8032#section-5.1.5
     fn from(secret_key: &SecretKey) -> PublicKey {
         let mut h: Sha512 = Sha512::new();
         let mut hash: [u8; 64] = [0u8; 64];
@@ -95,9 +96,9 @@ impl PublicKey {
     fn mangle_scalar_bits_and_multiply_by_basepoint_to_produce_public_key(
         bits: &mut [u8; 32],
     ) -> PublicKey {
-        bits[0] &= 248;
-        bits[31] &= 127;
-        bits[31] |= 64;
+        bits[0] &= 0b_1111_1000;
+        bits[31] &= 0b_0111_1111;
+        bits[31] |= 0b_0100_0000;
 
         let point = &Scalar::from_bits(*bits) * &constants::ED25519_BASEPOINT_TABLE;
         let compressed = point.compress();
@@ -105,19 +106,25 @@ impl PublicKey {
         PublicKey(compressed, point)
     }
 
-    /// This implements the protocol as in https://tools.ietf.org/html/draft-goldbe-vrf-01#page-13
+    /// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.1.1
     /// The failure should not happen in practice, expected number of iterations
     /// is 2.
     pub fn hash_to_curve(&self, message: &[u8]) -> Option<EdwardsPoint> {
         let mut p_candidate_bytes = [0u8; 32];
-        let mut h: Sha256 = Sha256::new();
-        h.input(&self.as_bytes());
-        h.input(&message);
+        let mut h: Sha512 = Sha512::new();
+        h.input(SUITE_STRING);
+        h.input(ONE_STRING);
+        h.input(&self.as_bytes()); // PK_string
+        h.input(&message); // alpha_string
         for ctr in 0..=u8::max_value() {
+            // Each iteration fails, indpendent of other iterations, with probability about
+            // a half. This happens if the digest does not represent a point on
+            // the curve when decoded as in https://tools.ietf.org/html/rfc8032#section-5.1.3
             let mut attempt_h = h.clone();
-            attempt_h.input(ctr.to_be_bytes());
+            attempt_h.input(ctr.to_le_bytes()); // ctr_string
+            attempt_h.input(ZERO_STRING);
             let hash = attempt_h.result();
-            p_candidate_bytes.copy_from_slice(&hash);
+            p_candidate_bytes.copy_from_slice(&hash[..32]);
             let p_candidate = CompressedEdwardsY(p_candidate_bytes);
             if let Some(ed_point) = p_candidate.decompress() {
                 // Make sure the point is not of small order, i.e., it will
@@ -132,27 +139,27 @@ impl PublicKey {
 
     pub fn verify_key(&self) -> bool { !self.1.is_small_order() }
 
+    /// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.3
     #[allow(clippy::many_single_char_names)]
     pub fn verify(&self, pi: &Proof, message: &[u8]) -> bool {
-        let Proof(point, c, s) = pi; // s should be equal k- c x, where k is random and x is secret key
-                                     // self should be equal g^x
-        let g_to_s = s * &constants::ED25519_BASEPOINT_TABLE; // should be equal to g^(k-c x)
-        let self_to_c = c * self.1; // self_to_c should be equal to g^(cx)
-        let u = self_to_c + g_to_s; // should equal g^k
-        match self.hash_to_curve(message) {
-            None => false,
-            Some(h) => {
-                let v = (c * point) + (s * h); // should equal h^cs * h^(k-cx) = h^k
-                let derivable_c = hash_points(&[
-                    constants::ED25519_BASEPOINT_COMPRESSED,
-                    h.compress(),
-                    self.0,
-                    point.compress(),
-                    u.compress(),
-                    v.compress(),
-                ]);
-                *c == derivable_c
-            }
+        if let Some(h) = self.hash_to_curve(message) {
+            let Proof(gamma, c, s) = pi; // s should be equal k + cx, where k is a deterministically
+                                         // generated nonce and x is the secret key
+                                         // self should be equal y=b^x
+
+            let b_to_s = s * &constants::ED25519_BASEPOINT_TABLE; // should be equal to b^(k+cx)
+            let y_to_c = c * self.1; // y_to_c should be equal to b^(cx)
+            let u = b_to_s - y_to_c; // should equal b^k
+
+            let h_to_s = s * h; // should equal h^(k + cx)
+            let gamma_to_c = c * gamma; // should equal h^cx
+            let v = h_to_s - gamma_to_c; // should equal h^k
+
+            let derivable_c =
+                hash_points(&[h.compress(), gamma.compress(), u.compress(), v.compress()]);
+            *c == derivable_c
+        } else {
+            false
         }
     }
 }
