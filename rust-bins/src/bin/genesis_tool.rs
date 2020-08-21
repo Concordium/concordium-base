@@ -4,7 +4,7 @@ use client_server_helpers::*;
 use crypto_common::{base16_encode_string, *};
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
-use ec_vrf_ed25519 as vrf;
+use ecvrf as vrf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
 use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};

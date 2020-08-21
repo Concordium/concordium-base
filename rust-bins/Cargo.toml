@@ -58,8 +58,8 @@ version = "0"
 path = "../rust-src/eddsa_ed25519"
 version = "0"
 
-[dependencies.ec_vrf_ed25519_sha256]
-path = "../rust-src/ec_vrf_ed25519_sha256"
+[dependencies.ecvrf]
+path = "../rust-src/ecvrf"
 version = "0"
 
 [dependencies.wallet]
