@@ -296,6 +296,9 @@ normalTransaction WithMetadata{..} = WithMetadata{wmdData = NormalTransaction wm
 credentialDeployment :: WithMetadata CredentialDeploymentInformation -> BlockItem
 credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeployment wmdData, ..}
 
+chainUpdate :: WithMetadata UpdateInstruction -> BlockItem
+chainUpdate WithMetadata{..} = WithMetadata{wmdData = ChainUpdate wmdData, ..}
+
 -- |Serialize a block item according to V0 format, without the metadata.
 putBlockItemV0 :: BlockItem -> S.Put
 putBlockItemV0 = putBareBlockItemV0 . wmdData
