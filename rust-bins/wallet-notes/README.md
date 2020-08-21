@@ -261,11 +261,14 @@ must be a valid JSON object with fields
 
 - `"amount"` ... string containing the amount wanted to be transferred.
 
+- `"global"` ... same as in the `create_id_request_and_private_data` call
+
 The returned value is a JSON object with the following fields:
 
 - `"signatures"` ... list with signatures of the transaction with the provided keys.
 
 - `"transaction"` ... the serialized transaction that can be sent to the chain.
+- `"addedSelfEncryptedAmount"` ... encryption of the amount wanted to be transferred.
 
 An example input to this request is in the file [create_pub_to_sec_transfer-input.json](files/create_pub_to_sec_transfer-input.json).
 An example output to this request is in the file [create_pub_to_sec_transfer-output.json](files/create_pub_to_sec_transfer-output.json).
