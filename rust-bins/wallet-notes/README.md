@@ -275,7 +275,7 @@ The binary can then be run with the following inputs:
 
 # Other change set from the previous version
 
-1. all Amounts are now expected to be strings in JSON. The wallet-proxy will
+1. All Amounts are now expected to be strings in JSON. The wallet-proxy will
    serve amounts in this format, and the library will expect them. 
 2. All Wallet-proxy endpoints are now versioned, concretely this means that they
    are renamed from `/X` to `/v0/X`
@@ -283,4 +283,5 @@ The binary can then be run with the following inputs:
    `arsInfos` in the input. This field is obtained in the same way as `ipInfo`,
    via the `GET /v0/ip_info` call.
 4. The `create_credential` call has an equivalent change.
-
+5. The `create_transfer` call has an additional parameter "energy". This can be
+   obtained via a GET request to `/v0/transactionCost?type="simpleTransfer"`.
