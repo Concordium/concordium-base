@@ -14,9 +14,10 @@ char* create_encrypted_transfer_ext(char*, uint8_t*); //
 char* combine_encrypted_amounts_ext(char*, char*, uint8_t*);
 uint64_t decrypt_encrypted_amount_ext(char*, uint8_t*);
 
-void free_response_string_ext(char*);
+char* create_pub_to_sec_transfer_ext(char*, uint8_t*);
+char* create_sec_to_pub_transfer_ext(char*, uint8_t*);
 
-char* create_encrypted_amount_ext(char*, uint8_t*);
+void free_response_string_ext(char*);
 
 /*
 $ ./example create_transfer-input.json
@@ -84,10 +85,13 @@ int main(int argc, char *argv[]) {
       } else if (strcmp(argv[1], "create_encrypted_transfer-input.json") == 0) {
         out = create_encrypted_transfer_ext(buffer, &flag);
         printStr(out, flag);
-      } else if (strcmp(argv[1], "create_encrypted_amount-input2.json") == 0) {
-        out = create_encrypted_amount_ext(buffer, &flag);
+      } else if (strcmp(argv[1], "create_pub_to_sec_transfer-input.json") == 0) {
+        out = create_pub_to_sec_transfer_ext(buffer, &flag);
         printStr(out, flag);
-      } else if (strcmp(argv[1], "decrypt_encrypted_amount-input2.json") == 0) {
+      } else if (strcmp(argv[1], "create_sec_to_pub_transfer-input.json") == 0) {
+        out = create_sec_to_pub_transfer_ext(buffer, &flag);
+        printStr(out, flag);
+      } else if (strcmp(argv[1], "decrypt_encrypted_amount-input.json") == 0) {
         decrypted = decrypt_encrypted_amount_ext(buffer, &flag);
         if (flag) {
           printf("Decrypted amount: %" PRIu64 "\n", decrypted);
