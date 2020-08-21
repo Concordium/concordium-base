@@ -10,7 +10,7 @@ cargo build --release
 
 This will build the following rust libraries
 
--VRF : libec_vrf_ed25519_sha256
+-VRF : libecvrf
 
 -SHA-2: libsha_2
 

@@ -71,7 +71,7 @@ Library
                 , constraints >= 0.10
                 , mtl >= 2.2.2
 
-  extra-libraries: ec_vrf_ed25519
+  extra-libraries: ecvrf
                    sha_2,
                    eddsa_ed25519,
                    ffi_helpers,
