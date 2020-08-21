@@ -49,6 +49,34 @@ fn encrypt_amount<C: Curve, R: Rng>(
     (enc, rand)
 }
 
+/// Make a dummy encryption of a single amount using the given public key and
+/// randomness 0
+pub fn dummy_encrypt_amount<C: Curve>(
+    context: &GlobalContext<C>,
+    amount: Amount,
+) -> EncryptedAmount<C> {
+    // The generator for encryption in the exponent is the second component of the
+    // commitment key, the 'h'.
+    let h = context.encryption_in_exponent_generator();
+    let val = u64::from(amount);
+    let chunks = CHUNK_SIZE
+        .u64_to_chunks(val)
+        .into_iter()
+        .map(Value::<C>::from_u64)
+        .collect::<Vec<_>>();
+    let mut ciphers = Vec::with_capacity(chunks.len());
+    for x in chunks {
+        let cipher = Cipher(C::zero_point(), h.mul_by_scalar(&x));
+        ciphers.push(cipher);
+    }
+    let encryption_hi = ciphers.pop().unwrap();
+    let encryption_low = ciphers.pop().unwrap();
+
+    EncryptedAmount {
+        encryptions: [encryption_hi, encryption_low],
+    }
+}
+
 /// Combine two encrypted amounts into one.
 pub fn aggregate<C: Curve>(
     left: &EncryptedAmount<C>,
@@ -429,6 +457,24 @@ mod tests {
             amount_1,
             Amount::from(decrypted_1),
             "Decrypted combined encrypted amount differs from expected."
+        );
+    }
+
+    // Test that the dummy encryption can be decrypted
+    #[test]
+    fn test_dummy_encryption() {
+        let mut csprng = thread_rng();
+        let context = GlobalContext::<G1>::generate();
+        let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
+        let amount = Amount::from(csprng.gen::<u64>());
+        let dummy_encryption = dummy_encrypt_amount(&context, amount);
+        let m = 1 << 16;
+        let table = BabyStepGiantStep::new(context.encryption_in_exponent_generator(), m);
+
+        let decrypted = decrypt_amount(&table, &sk, &dummy_encryption);
+        assert_eq!(
+            amount, decrypted,
+            "Decrypted amount differs from the original."
         );
     }
 }
