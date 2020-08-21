@@ -113,3 +113,44 @@ unsafe extern "C" fn verify_encrypted_transfer(
         0
     }
 }
+
+#[no_mangle]
+unsafe extern "C" fn verify_sec_to_pub_transfer(
+    ctx_ptr: *const GlobalContext<Group>,
+    sender_pk_ptr: *const ElgamalPublicKeySecond,
+    initial_high_ptr: *const Cipher<Group>,
+    initial_low_ptr: *const Cipher<Group>,
+    transfer_bytes_ptr: *const u8,
+    transfer_bytes_len: size_t,
+) -> u8 {
+    let ctx = from_ptr!(ctx_ptr);
+    let initial_high = from_ptr!(initial_high_ptr);
+    let initial_low = from_ptr!(initial_low_ptr);
+    let transfer_bytes = slice_from_c_bytes!(transfer_bytes_ptr, transfer_bytes_len as usize);
+
+    let sender_pk = from_ptr!(sender_pk_ptr);
+
+    let sender_pk = elgamal::PublicKey {
+        generator: *ctx.elgamal_generator(),
+        key:       sender_pk.0,
+    };
+
+    let initial = EncryptedAmount {
+        encryptions: [*initial_high, *initial_low],
+    };
+
+    let transfer_data = if let Ok(td) = (&mut Cursor::new(transfer_bytes)).get() {
+        td
+    } else {
+        return 0;
+    };
+
+    if verify_sec_to_pub_transfer_data(ctx, &sender_pk, &initial, &transfer_data) {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+unsafe extern "C" fn create_pub_to_sec_transfer_data() {}

@@ -1,6 +1,6 @@
 {-| This module provides the necessary primitives for encrypted amount transfers. -}
 {-# LANGUAGE DerivingStrategies, DerivingVia, StandaloneDeriving #-}
-module Concordium.Crypto.EncryptedTransfers where 
+module Concordium.Crypto.EncryptedTransfers where
 
 import Data.Serialize
 import Data.Word
@@ -37,6 +37,16 @@ foreign import ccall unsafe "verify_encrypted_transfer"
   verify_encrypted_transfer ::
        Ptr GlobalContext -- ^Pointer to the global context needed to validate the proof.
      -> Ptr ElgamalSecond -- ^ Public key of the receiver.
+     -> Ptr ElgamalSecond -- ^ Public key of the sender.
+     -> Ptr ElgamalCipher -- ^ High chunk of the current balance.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
+     -> Ptr Word8 -- ^ Pointer to the transfer data bytes.
+     -> CSize  -- ^ Length of the transfer data bytes.
+     -> IO Word8 -- ^ Return either 0 if proof checking failed, or non-zero in case of success.
+
+foreign import ccall unsafe "verify_sec_to_pub_transfer"
+  verify_sec_to_pub_transfer ::
+       Ptr GlobalContext -- ^Pointer to the global context needed to validate the proof.
      -> Ptr ElgamalSecond -- ^ Public key of the sender.
      -> Ptr ElgamalCipher -- ^ High chunk of the current balance.
      -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
@@ -190,3 +200,30 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
                return (res /= 0)
   where AccountEncryptionKey (RegIdCred receiverPK') = receiverPK
         AccountEncryptionKey (RegIdCred senderPK') = senderPK
+
+verifySecretToPublicTransferProof ::
+  -- |Global context with parameters
+  GlobalContext ->
+  -- |Public key of the sender.
+  AccountEncryptionKey ->
+  -- |Aggregated encrypted amount on the sender's account that was used.
+  EncryptedAmount ->
+  -- |Proof of validity of the transfer.
+  EncryptedAmountTransferBytes ->
+  Bool
+verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsafeDupablePerformIO $ do
+  withGlobalContext gc $ \gcPtr ->
+    withElgamalSecond senderPK' $ \senderPKPtr ->
+      withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
+        withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
+          -- this is safe since the called function handles the 0 length case correctly.
+          BS.unsafeUseAsCStringLen transferData $ \(bytesPtr, len) -> do
+             res <- verify_sec_to_pub_transfer
+                     gcPtr
+                     senderPKPtr
+                     initialHighPtr
+                     initialLowPtr
+                     (castPtr bytesPtr)
+                     (fromIntegral len)
+             return (res /= 0)
+  where AccountEncryptionKey (RegIdCred senderPK') = senderPK
