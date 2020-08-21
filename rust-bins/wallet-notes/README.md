@@ -17,6 +17,8 @@ c-compatible signatures.
     - `char* create_encrypted_transfer_ext(const char*, uint8_t*)`
     - `char* combine_encrypted_amounts_ext(const char*, const char*, uint8_t*)`
     - `uint64_t decrypt_encrypted_amount_ext(const char*, uint8_t*)`
+    - `char* create_pub_to_sec_transfer_ext(char*, uint8_t*)`
+    - `char* create_sec_to_pub_transfer_ext(char*, uint8_t*)`
 - `void free_response_string(char*)`
 
 After calling a function that returns a `char*` value, it is the
@@ -227,6 +229,70 @@ The output will show the decrypted amount.
 
 An example input to this request is in the file [decrypt_encrypted_amount-input.json](files/decrypt_encrypted_amount-input.json).
 An example output to this request is in the file [decrypt_encrypted_amount-output.json](files/decrypt_encrypted_amount-output.json).
+
+## create_pub_to_sec_transfer_ext
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"from"` ... address of the sender account.
+
+- `"expiry"` ... unix timestamp of the expiry date of the transaction.
+
+- `"nonce"` ... nonce of the sender account.
+
+- `"keys"` ... mapping with the keys of the sender account.
+
+- `"energy"` ... max energy wanted for the transfer.
+
+- `"amount"` ... string containing the amount wanted to be transferred.
+
+The returned value is a JSON object with the following fields:
+
+- `"signatures"` ... list with signatures of the transaction with the provided keys.
+
+- `"transaction"` ... the serialized transaction that can be sent to the chain.
+
+An example input to this request is in the file [create_pub_to_sec_transfer-input.json](files/create_pub_to_sec_transfer-input.json).
+An example output to this request is in the file [create_pub_to_sec_transfer-output.json](files/create_pub_to_sec_transfer-output.json).
+
+## create_sec_to_pub_transfer_ext
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string
+must be a valid JSON object with fields
+
+- `"from"` ... address of the sender account.
+
+- `"expiry"` ... unix timestamp of the expiry date of the transaction.
+
+- `"nonce"` ... nonce of the sender account.
+
+- `"keys"` ... mapping with the keys of the sender account.
+
+- `"energy"` ... max energy wanted for the transfer.
+
+- `"amount"` ... string containing the amount wanted to be transferred.
+
+- `"global"` ... same as in the `create_id_request_and_private_data` call
+
+- `"senderSecretKey"` ... the secret key of the sender account.
+
+- `"inputEncryptedAmount"` ... the encrypted amount generated when transferring an amount to the shielded balance
+  or directly received from another account in another transfer. It must be a JSON object with the fields:
+      - `"aggEncryptedAmount"` ... the ciphered amount
+      - `"aggAmount"` ... the amount on plaintext
+      - `"index"` ... the index up to which the encrypted amounts on the account have been combined.
+
+The returned value is a JSON object with the following fields:
+
+- `"signatures"` ... list with signatures of the transaction with the provided keys.
+
+- `"transaction"` ... the serialized transaction that can be sent to the chain.
+
+- `"remaining"` ... the remaining encrypted balance.
+
+An example input to this request is in the file [create_sec_to_pub-input.json](files/create_sec_to_pub-input.json).
+An example output to this request is in the file [create_sec_to_pub-output.json](files/create_sec_to_pub-output.json).
 
 ## Example
 The [Example C program](example.c) that uses the library is available. This
