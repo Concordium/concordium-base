@@ -1,5 +1,5 @@
 [package]
-name="ec_vrf_ed25519_sha256"
+name="ecvrf"
 authors = ["Concordium AG <contact@concordium.com>"]
 version="0.0.1"
 edition = "2018"
@@ -35,5 +35,5 @@ path = "../crypto_common_derive"
 version = "0"
 
 [lib]
-name = "ec_vrf_ed25519"
+name = "ecvrf"
 crate-type = ["rlib", "staticlib", "cdylib"]
