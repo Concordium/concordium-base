@@ -151,6 +151,3 @@ unsafe extern "C" fn verify_sec_to_pub_transfer(
         0
     }
 }
-
-#[no_mangle]
-unsafe extern "C" fn create_pub_to_sec_transfer_data() {}
