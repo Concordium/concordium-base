@@ -118,6 +118,20 @@ newtype DecryptAmountProof = DecryptAmountProof ShortByteString
     deriving(Eq, Show, FromJSON, ToJSON) via ByteStringHex
     deriving Serialize via Short65K
 
+newtype TransferToPublicProof = TransferToPublicProof { theTransferToPublicProof :: ShortByteString }
+  deriving (Eq, Show, FromJSON, ToJSON) via ByteStringHex
+  deriving Serialize via Short65K
+
+-- | Custom serialization functions for proofs which allow us to have the same
+-- serialization as in rust, provided enough context, i.e., length.
+getTrasnferToPublicProof :: Word32 -> Get TransferToPublicProof
+getTrasnferToPublicProof len = TransferToPublicProof <$> getShortByteString (fromIntegral len)
+
+-- |Put the proof directly without the length.
+-- The proof can be deserialized in the right contexts using 'getEncryptedAmountTransferProof'
+putTransferToPublicProof :: TransferToPublicProof -> Put
+putTransferToPublicProof = putShortByteString . theTransferToPublicProof
+
 -- * Functions for verifying proofs, and aggregating amounts, used from the scheduler.
 
 -- |Aggregate two encrypted amounts together. This operation is strict and
@@ -145,6 +159,24 @@ instance Monoid EncryptedAmount where
   -- second argument.
   mconcat [] = mempty
   mconcat (x:xs) = foldl' aggregateAmounts x xs
+
+dummy_encrypt_amount ::
+  Ptr GlobalContext -- ^Global context
+  -> Word64 -- ^Amount to be encrypted
+  -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the high chunk of the result.
+  -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the low chunk of the result.
+  -> IO ()
+dummy_encrypt_amount = undefined
+
+encryptAmount :: GlobalContext -> Word64 -> EncryptedAmount
+encryptAmount gc amount = unsafeDupablePerformIO $
+  withGlobalContext gc $ \gcPtr ->
+  alloca $ \outHighPtr ->
+  alloca $ \outLowPtr -> do
+      dummy_encrypt_amount gcPtr amount outHighPtr outLowPtr
+      outHigh <- unsafeMakeCipher =<< peek outHighPtr
+      outLow <- unsafeMakeCipher =<< peek outLowPtr
+      return EncryptedAmount{encryptionHigh = outHigh, encryptionLow = outLow}
 
 type EncryptedAmountTransferBytes = BS.ByteString
 
@@ -201,6 +233,29 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
   where AccountEncryptionKey (RegIdCred receiverPK') = receiverPK
         AccountEncryptionKey (RegIdCred senderPK') = senderPK
 
+type TransferToPublicBytes = BS.ByteString
+
+-- |Prepare encrypted amount transfer bytes to send through FFI. This implements
+-- the right serialization to match that defined in Rust for the
+-- @EncryptedAmountTransferData@.
+prepareTransferToPublicBytes ::
+  -- |Remaining amount on the account
+  EncryptedAmount ->
+  -- |Amount to transfer
+  Word64 ->
+  -- |Index of the encrypted amounts used as input.
+  EncryptedAmountAggIndex ->
+  -- |Proof of validity of transaction.
+  TransferToPublicProof ->
+  -- |Serialized data
+  TransferToPublicBytes
+prepareTransferToPublicBytes remainingAmount transferAmount idx proof = runPut putter
+  where putter =
+          put remainingAmount <>
+          put transferAmount <>
+          put idx <>
+          putTransferToPublicProof proof
+
 verifySecretToPublicTransferProof ::
   -- |Global context with parameters
   GlobalContext ->
@@ -209,7 +264,7 @@ verifySecretToPublicTransferProof ::
   -- |Aggregated encrypted amount on the sender's account that was used.
   EncryptedAmount ->
   -- |Proof of validity of the transfer.
-  EncryptedAmountTransferBytes ->
+  TransferToPublicBytes ->
   Bool
 verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsafeDupablePerformIO $ do
   withGlobalContext gc $ \gcPtr ->
