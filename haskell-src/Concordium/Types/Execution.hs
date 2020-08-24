@@ -80,7 +80,7 @@ data Payload =
       icModRef :: !ModuleRef,
       -- |Name of the init function to call in that module.
       icInitName :: !Wasm.InitName,
-      -- |Parameter to the init method, 
+      -- |Parameter to the init method,
       icParam :: !Wasm.Parameter
       }
   -- |Update an existing contract instance.
@@ -238,7 +238,9 @@ data Payload =
       -- | The amount to transfer to public balance.
       ttpAmount :: !Amount,
       -- | The index indicating which encrypted amounts were used.
-      ttpIndex :: EncryptedAmountAggIndex
+      ttpIndex :: !EncryptedAmountAggIndex,
+      -- | Proof of well-formedness of the transaction
+      ttpProof :: !TransferToPublicProof
       }
   deriving(Eq, Show)
 
@@ -433,6 +435,7 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               ttpRemainingAmount <- S.get
               ttpAmount <- S.get
               ttpIndex <- S.get
+              ttpProof <- S.get
               return TransferToPublic{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
@@ -715,6 +718,8 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | InvalidAccountKeySignThreshold
                   -- |Proof for an encrypted amount transfer did not validate.
                   | InvalidEncryptedAmountTransferProof
+                  -- |Proof for a secret to public transfer did not validate.
+                  | InvalidTransferToPublicProof
                   -- |Account tried to transfer an encrypted amount to itself, that's not allowed.
                   | EncryptedAmountSelfTransfer !AccountAddress
     deriving (Show, Eq, Generic)
