@@ -22,7 +22,7 @@ import Control.Monad
 import Concordium.Crypto.SignatureScheme
 import qualified Concordium.Crypto.SHA256 as SHA256
 
-import Concordium.Types.Utils
+import Concordium.Utils
 import Concordium.Utils.Serialization
 import Concordium.Types
 
