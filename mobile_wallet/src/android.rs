@@ -11,8 +11,8 @@ use std::ffi::CString;
 use wallet::{
     check_account_address_ext, combine_encrypted_amounts_ext, create_credential_ext,
     create_encrypted_transfer_ext, create_id_request_and_private_data_ext,
-    create_pub_to_sec_transfer_ext, create_sec_to_pub_transfer_etx, create_transfer_ext,
-    decrypt_encrypted_amount_ext, free_response_string_ext, id_object_response_ext,
+    create_pub_to_sec_transfer_ext, create_sec_to_pub_transfer_ext, create_transfer_ext,
+    decrypt_encrypted_amount_ext, id_object_response_ext,
 };
 
 #[no_mangle]
@@ -396,14 +396,7 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_decrypt_
     let decrypted_amount_res: String =
         unsafe { decrypt_encrypted_amount_ext(input_str.as_ptr(), &mut success) }.to_string();
 
-    match decrypted_amount_res.to_str() {
-        Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
-        Err(e) => wrap_return_tuple(
-            &env,
-            127,
-            &format!("Could not read CString from crypto library {:?}", e),
-        ),
-    }
+    wrap_return_tuple(&env, success, &decrypted_amount_res)
 }
 
 #[no_mangle]
