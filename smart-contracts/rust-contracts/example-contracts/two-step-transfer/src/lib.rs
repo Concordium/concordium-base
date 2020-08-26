@@ -15,11 +15,18 @@ use concordium_sc_base::*;
  * making them not-quite fungible (e.g. for accounting purposes it might be
  * necessary for account holders to track a particular named withdrawal).
  *
- * Deposits: Allowed at any time from anyone
- * Withdrawals: Only by accounts named at initialization, and only with the agreement of at least n of those accounts
+ * Depositing funds:
+ *   Allowed at any time from anyone.
  *
- * TODO Generalise to sending to _any_ account with the agreement of the named accounts (e.g. to
- * pay someone as a group)?
+ * Sending funds:
+ *   Only requestable by accounts named at initialization, and only with the
+ *   agreement of at least n of those accounts, but can send to any account.
+ *
+ * Withdrawing funds:
+ *   Only requestable by accounts named at initialization, and only with the
+ *   agreement of at least n of those accounts, and always sends funds to the
+ *   _requesting_ account - i.e. this is a convenience for the case where
+ *   the requester wants to send funds directly to their own account.
  */
 
 // Types
@@ -27,7 +34,14 @@ use concordium_sc_base::*;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Message {
     // Indicates that the user sending the message would like to make a request
-    // with the given ID and amount.
+    // to send funds to the given address with the given ID and amount.
+    // This is a no-op if the given ID already exists and has not timed out.
+    RequestSendFunds(WithdrawalRequestId, Amount, AccountAddress),
+
+    // Indicates that the user sending the message would like to make a request
+    // to withdrawal funds with the given ID and amount. Equivalent to
+    // a user requesting to send funds to themselves - purely for convenience and
+    // safety against getting one's own address wrong.
     // This is a no-op if the given ID already exists and has not timed out.
     RequestWithdrawFunds(WithdrawalRequestId, Amount),
 
@@ -35,7 +49,10 @@ enum Message {
     // withdrawal with the given ID and amount to the given account address.
     // This is a no-op if the given ID does not exist (potentially due to timing
     // out), or exists with a different amount or address.
-    AgreeWithdrawFunds(WithdrawalRequestId, Amount, AccountAddress),
+    AgreeSendFunds(WithdrawalRequestId, Amount, AccountAddress),
+
+    // Just put the funds sent with this message into this contract
+    Deposit,
 }
 
 type WithdrawalRequestId = u64;
@@ -117,8 +134,12 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     let msg: Message = ctx.parameter_cursor().get()?;
 
     match msg {
-        Message::RequestWithdrawFunds(req_id, withdrawal_amount, _, withdrawer_account) => {
+        Message::RequestSendFunds(req_id, send_amount, target_account) => {
             // TODO
+            unimplemented!();
+        }
+        Message::RequestWithdrawFunds(req_id, withdrawal_amount) => {
+            // TODO Just like sending funds
             unimplemented!();
             /*
             ensure!(
@@ -137,7 +158,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             */
         }
 
-        Message::AcceptWithdrawFunds(req_id, withdrawal_amount, _, withdrawer_account) => {
+        Message::AcceptSendFunds(req_id, withdrawal_amount, _, withdrawer_account) => {
             // TODO
             unimplemented!();
             /*
