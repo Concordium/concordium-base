@@ -10,6 +10,11 @@ use concordium_sc_base::*;
  * Withdrawal requests time out if not agreed to within the contract's
  * specified time-to-live for withdrawal requests
  *
+ * Withdrawal requests are given IDs to disambiguate otherwise identical
+ * requests, since they might have different motivations behind the scenes,
+ * making them not-quite fungible (e.g. for accounting purposes it might be
+ * necessary for account holders to track a particular named withdrawal).
+ *
  * Deposits: Allowed at any time from anyone
  * Withdrawals: Only by accounts named at initialization, and only with the agreement of at least n of those accounts
  *
@@ -21,8 +26,16 @@ use concordium_sc_base::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Message {
-    RequestWithdrawFunds(WithdrawalRequestId, Amount, Reason),
-    AgreeWithdrawFunds(WithdrawalRequestId, Amount),
+    // Indicates that the user sending the message would like to make a request
+    // with the given ID and amount.
+    // This is a no-op if the given ID already exists and has not timed out.
+    RequestWithdrawFunds(WithdrawalRequestId, Amount),
+
+    // Indicates that the user sending the message votes in favour of the
+    // withdrawal with the given ID and amount to the given account address.
+    // This is a no-op if the given ID does not exist (potentially due to timing
+    // out), or exists with a different amount or address.
+    AgreeWithdrawFunds(WithdrawalRequestId, Amount, AccountAddress),
 }
 
 type WithdrawalRequestId = u64;
@@ -30,7 +43,7 @@ type Reason = &str;
 
 // TODO Is seconds the correct unit?
 type WithdrawalRequestTimeToLiveSeconds = u64;
-type SlotTimeSeconds = u64;
+type TimeoutSlotTimeSeconds = u64;
 
 pub struct InitParams {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
@@ -40,19 +53,24 @@ pub struct InitParams {
     withdrawal_agreement_threshold: u32
 
     // How long to wait before dropping a request due to lack of support
+    // N.B. If this is set too long, in practice the chain might become busy
+    //      enough that requests time out before they can be agreed to by all
+    //      parties, so be wary of setting this too low. On the otherhand,
+    //      if this is set too high, a bunch of pending requests can get into
+    //      a murky state where some account holders may consider the request obsolete,
+    //      only for another account holder to "resurrect" it, so having _some_
+    //      time out gives some security against old requests being surprisingly
+    //      accepted.
     withdrawal_request_ttl: WithdrawalRequestTimeToLiveSeconds
 }
 
 pub struct State {
-    // Who is authorised to withdraw funds from this lockup (must be non-empty)
-    account_holders: Vec<AccountAddress>,
-
-    // How many of the account holders need to agree before funds are released
-    withdrawal_agreement_threshold: u32
+    // The initial configuration of the contract
+    init_params: InitParams,
 
     // Requests which have not been dropped due to timing out or due to being agreed to yet
-    // The request ID, the associated amount and when it times out
-    outstanding_withdrawal_requests: Vec<(WithdrawalRequestId, Amount, SlotTime)>,
+    // The request ID, the associated amount, when it times out and who is making the withdrawal
+    outstanding_withdrawal_requests: Vec<(WithdrawalRequestId, Amount, TimeoutSlotTimeSeconds, AccountAddress)>,
 }
 
 // Contract implementation
@@ -66,17 +84,24 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 ) -> InitResult<State> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
     ensure!(
-        !init_params.account_holders.is_empty(),
-        "No account holders given, but we need at least one."
+        init_params.account_holders.dedup().len() >= 2,
+        "Not enough account holders: At least two are needed for this contract to be valid."
+    );
+    ensure!(
+        init_params.withdrawal_agreement_threshold <= init_params.account_holders.dedup().len(),
+        "The threshold for agreeing account holders to allow a withdrawal must be " +
+        "less than or equal to the number of unique account holders, else a withdrawal can never be made!"
+    );
+    ensure!(
+        init_params.withdrawal_agreement_threshold >= 2,
+        "The number of account holders required to accept a withdrawal must be two or more else you would be better off with a normal account!"
     );
 
-    // TODO
     let state = State {
-        account_holders:              init_params.account_holders,
-        future_vesting_veto_accounts: init_params.future_vesting_veto_accounts,
-        available_balance:            0,
-        remaining_vesting_schedule:   init_params.vesting_schedule,
+        init_params:                init_params,
+        remaining_vesting_schedule: vec![],
     };
+
     Ok(state)
 }
 
@@ -88,20 +113,14 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
-    ensure!(amount == 0, "Depositing into a running lockup account is not allowed.");
-    let sender = match ctx.sender() {
-        Address::Account(acc) => acc,
-        Address::Contract(_) => {
-            bail!("This contract only allows interaction with accounts, not contracts.")
-        }
-    };
-
-    // TODO Change this to timing out old requests
-    make_vested_funds_available(ctx.metadata().slot_time(), state);
+    remove_timed_out_requests(ctx.metadata().slot_time(), state);
     let msg: Message = ctx.parameter_cursor().get()?;
 
     match msg {
-        Message::WithdrawFunds(withdrawal_amount) => {
+        Message::RequestWithdrawFunds(req_id, withdrawal_amount, _, withdrawer_account) => {
+            // TODO
+            unimplemented!();
+            /*
             ensure!(
                 state.account_holders.iter().any(|account_holder| sender == account_holder),
                 "Only account holders can make a withdrawal."
@@ -115,9 +134,13 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             // should not be possible
             state.available_balance -= withdrawal_amount;
             Ok(A::simple_transfer(sender, withdrawal_amount))
+            */
         }
 
-        Message::CancelFutureVesting => {
+        Message::AcceptWithdrawFunds(req_id, withdrawal_amount, _, withdrawer_account) => {
+            // TODO
+            unimplemented!();
+            /*
             ensure!(
                 state
                     .future_vesting_veto_accounts
@@ -135,31 +158,29 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 
             // Return unvested funds to the contract owner
             Ok(A::simple_transfer(ctx.owner(), cancelled_vesting_amount))
+            */
         }
     }
 }
 
-// TODO Change this to timing out old requests
-// Updates the available balance with any funds which have now vested
-fn make_vested_funds_available(time_now: u64, state: &mut State) {
-    let (newly_vested, not_vested_yet): (Vec<VestingEvent>, Vec<VestingEvent>) =
-        state.remaining_vesting_schedule.iter().partition(|(when, _how_much)| when < &time_now);
-    let newly_vested_amount: Amount = newly_vested.iter().map(|(_, how_much)| how_much).sum();
+// Update the state to purge requests which have sat too long without being
+// agreed to by the relevant parties
+fn remove_timed_out_requests(time_now: u64, state: &mut State) {
+    let live_requests: Vec<(WithdrawalRequestId, Amount, TimeoutSlotTimeSeconds)> =
+        state
+          .outstanding_withdrawal_requests
+          .iter()
+          .filter(|(_, _, expiry)| expiry > &time_now)
+          .collect();
 
-    state.remaining_vesting_schedule = not_vested_yet;
-
-    // It shouldn't be possible to overflow because when we init we sum all
-    // vesting events and check for no overflow, and this sum here should
-    // always be less than or equal to that (the difference being due to
-    // withrawn funds), but greater than or equal to zero (since you can't
-    // withdraw funds you don't have).
-    state.available_balance += newly_vested_amount;
+    state.outstanding_withdrawal_requests = live_requests;
 }
 
 // (De)serialization
 
 impl Serialize for Message {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        // TODO
         match self {
             Message::WithdrawFunds(how_much) => {
                 out.write_u8(0)?;
@@ -173,6 +194,7 @@ impl Serialize for Message {
     }
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
+        // TODO
         match source.read_u8()? {
             0 => {
                 let how_much = source.read_u64()?;
@@ -188,6 +210,7 @@ impl Serialize for Message {
 
 impl Serialize for InitParams {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        // TODO
         self.account_holders.serial(out)?;
         self.future_vesting_veto_accounts.serial(out)?;
         self.vesting_schedule.serial(out)?;
@@ -195,6 +218,7 @@ impl Serialize for InitParams {
     }
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
+        // TODO
         let account_holders = source.get()?;
         let future_vesting_veto_accounts = source.get()?;
         let vesting_schedule = source.get()?;
@@ -208,6 +232,7 @@ impl Serialize for InitParams {
 
 impl Serialize for State {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        // TODO
         self.account_holders.serial(out)?;
         self.future_vesting_veto_accounts.serial(out)?;
         self.available_balance.serial(out)?;
@@ -216,6 +241,7 @@ impl Serialize for State {
     }
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
+        // TODO
         let account_holders = source.get()?;
         let future_vesting_veto_accounts = source.get()?;
         let available_balance = source.get()?;

@@ -314,7 +314,7 @@ pub mod tests {
             init_origin,
         };
         let amount = 200;
-        let result = contract_init(init_context, amount);
+        let result = contract_init(init_context, amount, LogRecorder(vec![]));
         let expected = Err(Reject {});
         if !(result == expected) {
             panic!("init failed to reject a non-zero amount")
