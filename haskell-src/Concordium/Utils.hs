@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, RankNTypes, LambdaCase #-}
+{-# LANGUAGE BangPatterns, RankNTypes #-}
 module Concordium.Utils where
 
 import qualified Data.HashMap.Strict as H
