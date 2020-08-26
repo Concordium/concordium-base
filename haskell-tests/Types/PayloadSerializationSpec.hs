@@ -75,7 +75,7 @@ genAggregationVerifyKeyAndProof = do
   return (Bls.derivePublicKey sk, Bls.proveKnowledgeOfSK (BS.pack c) sk)
 
 genAddress :: Gen AccountAddress
-genAddress = AccountAddress . FBS.fromByteString . BS.pack <$> (vector 21)
+genAddress = AccountAddress . FBS.fromByteString . BS.pack <$> (vector accountAddressSize)
 
 genCAddress :: Gen ContractAddress
 genCAddress = ContractAddress <$> (ContractIndex <$> arbitrary) <*> (ContractSubindex <$> arbitrary)
@@ -133,7 +133,7 @@ genPayload = oneof [genDeployModule,
           return Update{..}
 
         genTransfer = do
-          a <- oneof [AddressContract <$> genCAddress, AddressAccount <$> genAddress]
+          a <- genAddress
           amnt <- Amount <$> arbitrary
           return $ Transfer a amnt
 

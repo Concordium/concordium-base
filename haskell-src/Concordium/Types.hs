@@ -111,7 +111,7 @@ newtype VoterPower = VoterPower AmountUnit
 -- Eventually these will be replaced by types given by the global store.
 -- For now they are placeholders
 
-newtype ContractIndex = ContractIndex Word64
+newtype ContractIndex = ContractIndex { _contractIndex :: Word64 }
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Bits, Integral)
     deriving (Typeable, Data)
 
@@ -119,7 +119,7 @@ instance S.Serialize ContractIndex where
     get = ContractIndex <$> G.getWord64be
     put (ContractIndex i) = P.putWord64be i
 
-newtype ContractSubindex = ContractSubindex Word64
+newtype ContractSubindex = ContractSubindex { _contractSubindex :: Word64 }
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
     deriving (Typeable, Data)
 
@@ -385,7 +385,7 @@ genesisSlot = 0
 type EpochLength = Slot
 
 newtype BlockHeight = BlockHeight {theBlockHeight :: Word64}
-  deriving (Eq, Ord, Num, Real, Enum, Integral, Show, Hashable, FromJSON, ToJSON, PersistField) via Word64
+  deriving (Eq, Ord, Num, Real, Enum, Integral, Read, Show, Hashable, FromJSON, ToJSON, PersistField) via Word64
 
 instance PersistFieldSql BlockHeight where
   sqlType _ = SqlInt64
