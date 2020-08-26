@@ -18,6 +18,16 @@ source-repository head
   type: git
   location: https://gitlab.com/Concordium/crypto
 
+Flag forced-static-linking
+    Description: Enable forced static linking
+    Manual: True
+    Default: False
+
+Flag link-with-musl
+    Description: Enable linking against Rust libraries built with Musl
+    Manual: True
+    Default: False
+
 Library
   default-language: Haskell2010
   default-extensions:
