@@ -20,3 +20,5 @@ pkg
 *.iml
 *.state-*
 *.state
+
+wasmer-interp/Cargo.lock
