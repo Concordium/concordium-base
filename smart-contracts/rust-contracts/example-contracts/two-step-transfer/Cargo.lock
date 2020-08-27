@@ -41,14 +41,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a9f8082297d534141b30c8d39e9b1773713ab50fdbe4ff30f750d063b3bfd701"
 
 [[package]]
-name = "lockup"
-version = "0.1.0"
-dependencies = [
- "byteorder",
- "concordium-sc-base",
-]
-
-[[package]]
 name = "memory_units"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -81,6 +73,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-xid",
+]
+
+[[package]]
+name = "two-step-transfer"
+version = "0.1.0"
+dependencies = [
+ "byteorder",
+ "concordium-sc-base",
 ]
 
 [[package]]

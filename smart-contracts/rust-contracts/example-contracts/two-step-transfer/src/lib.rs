@@ -57,6 +57,14 @@ type Reason = &str;
 type TransferRequestTimeToLiveSeconds = u64;
 type TimeoutSlotTimeSeconds = u64;
 
+pub struct OutstandingTransferRequest {
+    id:              TransferRequestId,
+    transfer_amount: Amount,
+    target_account:  AccountAddress
+    times_out_at:    TimeoutSlotTimeSeconds,
+    supporters:      Vec<AccountAddress>
+}
+
 pub struct InitParams {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
     account_holders: Vec<AccountAddress>,
@@ -86,7 +94,7 @@ pub struct State {
     // Requests which have not been dropped due to timing out or due to being agreed to yet
     // The request ID, the associated amount, when it times out, who is making the transfer and
     // which account holders support this transfer
-    outstanding_transfer_requests: Vec<(TransferRequestId, Amount, TimeoutSlotTimeSeconds, AccountAddress, Vec(AccountAddress))>,
+    outstanding_transfer_requests: Vec<OutstandingTransferRequest>,
 }
 
 // Contract implementation
@@ -130,53 +138,76 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
+
+    let sender = ctx.sender();
+    ensure!(
+        state.account_holders.iter().any(|account_holder| sender == account_holder),
+        "Only account holders can interact with this contract."
+    );
     let now = ctx.metadata().slot_time();
 
-    remove_timed_out_requests(now, state);
+    // Drop requests which have gone too long without getting the support they need
+    state
+      .outstanding_transfer_requests
+      .retain(|outstanding| outstanding.times_out_at > now);
 
     let msg: Message = ctx.parameter_cursor().get()?;
     match msg {
         Message::RequestTransferFunds(req_id, transfer_amount, target_account) => {
             ensure!(
-                state.account_holders.iter().any(|account_holder| sender == account_holder),
-                "Only account holders can request that funds be transferred."
-            );
-            ensure!(
                 state.available_balance >= transfer_amount,
                 "Not enough available funds to for this transfer."
             );
+            ensure!(
+                !state.outstanding_transfer_requests.iter().any(|existing| existing.id == req_id),
+                "A request with this ID already exists."
+            );
             state.available_balance -= transfer_amount;
-            let stored_request = (req_id, transfer_amount, now + state.init_params.transfer_request_ttl, target_account, vec![sender]);
-            state.outstanding_transfer_requests.push(stored_request);
+            let new_request = OutstandingTransferRequest {
+                id:              req_id,
+                transfer_amount: transfer_amount,
+                target_account:  target_account,
+                times_out_at:    now + state.init_params.transfer_request_ttl,
+                supporters:      vec![sender]
+            };
+            state.outstanding_transfer_requests.push(new_request);
             Ok(Action::Accept)
         }
 
-        Message::SupportTransfer(req_id, transfer_amount, _, withdrawer_account) => {
-            // TODO
-            // TODO Needs to be an account holder
-            // TODO Needs to exactly match an existing transfer's description
-            // TODO Can't have already supported this transfer
-            // TODO Iff, the support threshold has been reached, make the transfer and clear the
-            // entry, else update the entry with the new support
-            unimplemented!();
-            /*
-            Ok(A::simple_transfer(ctx.owner(), cancelled_vesting_amount))
-            */
+        Message::SupportTransfer(req_id, transfer_amount, target_account, withdrawer_account, existing_supporters) => {
+            // Need to find an existing, matching transfer
+            let matching_requests =
+                state
+                    .outstanding_transfer_requests
+                    .iter()
+                    .filter(|existing|
+                            existing.req_id == req_id &&
+                            existing.transfer_amount == transfer_amount &&
+                            existing.target_account == target_account)
+            let matching_request =
+                match matching_requests {
+                    [] => bail!("No such transfer to support.");
+                    [matching] => matching
+                    _ => impossible!();
+                }
+            // Can't have already supported this transfer
+            ensure!(
+                !matching_request.supporters.contains(sender),
+                "You have already supported this transfer."
+            );
+            matching_request.supporters.push(sender);
+            if (matching_request.supporters.len() >= state.init_params.transfer_agreement_threshold) {
+                // Remove the transfer fron the list of outstanding transfers and send it
+                state
+                    .outstanding_transfer_requests
+                    .retain(|outstanding| outstanding.id != req_id)
+                Ok(A::simple_transfer(matching_request.target_account, matching_request.transfer_amount))
+            } else {
+                // Keep the updated support and accept
+                Ok(Action::Accept)
+            }
         }
     }
-}
-
-// Update the state to purge requests which have sat too long without being
-// agreed to by the relevant parties
-fn remove_timed_out_requests(time_now: u64, state: &mut State) {
-    let live_requests: Vec<(TransferRequestId, Amount, TimeoutSlotTimeSeconds)> =
-        state
-          .outstanding_transfer_requests
-          .iter()
-          .filter(|(_, _, expiry)| expiry > &time_now)
-          .collect();
-
-    state.outstanding_transfer_requests = live_requests;
 }
 
 // (De)serialization
