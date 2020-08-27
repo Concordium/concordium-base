@@ -7,26 +7,28 @@ use concordium_sc_base::*;
  * accepted. This is useful for storing GTU where the security of just one account
  * isn’t considered high enough.
  *
- * Withdrawal requests time out if not agreed to within the contract's
- * specified time-to-live for withdrawal requests
+ * Transfer requests time out if not agreed to within the contract's
+ * specified time-to-live for transfer requests
  *
- * Withdrawal requests are given IDs to disambiguate otherwise identical
+ * Transfer requests are given IDs to disambiguate otherwise identical
  * requests, since they might have different motivations behind the scenes,
  * making them not-quite fungible (e.g. for accounting purposes it might be
- * necessary for account holders to track a particular named withdrawal).
+ * necessary for account holders to track a particular named transfer).
  *
  * Depositing funds:
  *   Allowed at any time from anyone.
  *
- * Sending funds:
+ * Transfering funds:
  *   Only requestable by accounts named at initialization, and only with the
  *   agreement of at least n of those accounts, but can send to any account.
  *
- * Withdrawing funds:
- *   Only requestable by accounts named at initialization, and only with the
- *   agreement of at least n of those accounts, and always sends funds to the
- *   _requesting_ account - i.e. this is a convenience for the case where
- *   the requester wants to send funds directly to their own account.
+ * At the point when a transfer/withdrawal is requested, the account balance is
+ * checked. Either there are not enough funds and the request is rejected, or
+ * there are enough funds and the requested sum is set aside (and can be
+ * re-added to the balance if the request times out).
+ *
+ * TODO Consider allowing the person who initially made the request to cancel it, iff it is still
+ * outstanding
  */
 
 // Types
@@ -36,30 +38,23 @@ enum Message {
     // Indicates that the user sending the message would like to make a request
     // to send funds to the given address with the given ID and amount.
     // This is a no-op if the given ID already exists and has not timed out.
-    RequestSendFunds(WithdrawalRequestId, Amount, AccountAddress),
-
-    // Indicates that the user sending the message would like to make a request
-    // to withdrawal funds with the given ID and amount. Equivalent to
-    // a user requesting to send funds to themselves - purely for convenience and
-    // safety against getting one's own address wrong.
-    // This is a no-op if the given ID already exists and has not timed out.
-    RequestWithdrawFunds(WithdrawalRequestId, Amount),
+    RequestTransferFunds(TransferRequestId, Amount, AccountAddress),
 
     // Indicates that the user sending the message votes in favour of the
-    // withdrawal with the given ID and amount to the given account address.
+    // transfer with the given ID and amount to the given account address.
     // This is a no-op if the given ID does not exist (potentially due to timing
     // out), or exists with a different amount or address.
-    AgreeSendFunds(WithdrawalRequestId, Amount, AccountAddress),
+    SupportTransfer(TransferRequestId, Amount, AccountAddress),
 
     // Just put the funds sent with this message into this contract
     Deposit,
 }
 
-type WithdrawalRequestId = u64;
+type TransferRequestId = u64;
 type Reason = &str;
 
 // TODO Is seconds the correct unit?
-type WithdrawalRequestTimeToLiveSeconds = u64;
+type TransferRequestTimeToLiveSeconds = u64;
 type TimeoutSlotTimeSeconds = u64;
 
 pub struct InitParams {
@@ -67,7 +62,7 @@ pub struct InitParams {
     account_holders: Vec<AccountAddress>,
 
     // How many of the account holders need to agree before funds are released
-    withdrawal_agreement_threshold: u32
+    transfer_agreement_threshold: u32
 
     // How long to wait before dropping a request due to lack of support
     // N.B. If this is set too long, in practice the chain might become busy
@@ -78,16 +73,20 @@ pub struct InitParams {
     //      only for another account holder to "resurrect" it, so having _some_
     //      time out gives some security against old requests being surprisingly
     //      accepted.
-    withdrawal_request_ttl: WithdrawalRequestTimeToLiveSeconds
+    transfer_request_ttl: TransferRequestTimeToLiveSeconds
 }
 
 pub struct State {
     // The initial configuration of the contract
     init_params: InitParams,
 
+    // Current balance that has not already been reserved for an outstanding transfer request
+    available_balance: Amount,
+
     // Requests which have not been dropped due to timing out or due to being agreed to yet
-    // The request ID, the associated amount, when it times out and who is making the withdrawal
-    outstanding_withdrawal_requests: Vec<(WithdrawalRequestId, Amount, TimeoutSlotTimeSeconds, AccountAddress)>,
+    // The request ID, the associated amount, when it times out, who is making the transfer and
+    // which account holders support this transfer
+    outstanding_transfer_requests: Vec<(TransferRequestId, Amount, TimeoutSlotTimeSeconds, AccountAddress, Vec(AccountAddress))>,
 }
 
 // Contract implementation
@@ -105,17 +104,18 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
         "Not enough account holders: At least two are needed for this contract to be valid."
     );
     ensure!(
-        init_params.withdrawal_agreement_threshold <= init_params.account_holders.dedup().len(),
-        "The threshold for agreeing account holders to allow a withdrawal must be " +
-        "less than or equal to the number of unique account holders, else a withdrawal can never be made!"
+        init_params.transfer_agreement_threshold <= init_params.account_holders.dedup().len(),
+        "The threshold for agreeing account holders to allow a transfer must be " +
+        "less than or equal to the number of unique account holders, else a transfer can never be made!"
     );
     ensure!(
-        init_params.withdrawal_agreement_threshold >= 2,
-        "The number of account holders required to accept a withdrawal must be two or more else you would be better off with a normal account!"
+        init_params.transfer_agreement_threshold >= 2,
+        "The number of account holders required to accept a transfer must be two or more else you would be better off with a normal account!"
     );
 
     let state = State {
         init_params:                init_params,
+        available_balance:          0,
         remaining_vesting_schedule: vec![],
     };
 
@@ -130,54 +130,36 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
-    remove_timed_out_requests(ctx.metadata().slot_time(), state);
-    let msg: Message = ctx.parameter_cursor().get()?;
+    let now = ctx.metadata().slot_time();
 
+    remove_timed_out_requests(now, state);
+
+    let msg: Message = ctx.parameter_cursor().get()?;
     match msg {
-        Message::RequestSendFunds(req_id, send_amount, target_account) => {
-            // TODO
-            unimplemented!();
-        }
-        Message::RequestWithdrawFunds(req_id, withdrawal_amount) => {
-            // TODO Just like sending funds
-            unimplemented!();
-            /*
+        Message::RequestTransferFunds(req_id, transfer_amount, target_account) => {
             ensure!(
                 state.account_holders.iter().any(|account_holder| sender == account_holder),
-                "Only account holders can make a withdrawal."
+                "Only account holders can request that funds be transferred."
             );
             ensure!(
-                state.available_balance >= withdrawal_amount,
-                "Not enough available funds to make withdrawal."
+                state.available_balance >= transfer_amount,
+                "Not enough available funds to for this transfer."
             );
-
-            // We have checked that the avaiable balance is high enough, so underflow
-            // should not be possible
-            state.available_balance -= withdrawal_amount;
-            Ok(A::simple_transfer(sender, withdrawal_amount))
-            */
+            state.available_balance -= transfer_amount;
+            let stored_request = (req_id, transfer_amount, now + state.init_params.transfer_request_ttl, target_account, vec![sender]);
+            state.outstanding_transfer_requests.push(stored_request);
+            Ok(Action::Accept)
         }
 
-        Message::AcceptSendFunds(req_id, withdrawal_amount, _, withdrawer_account) => {
+        Message::SupportTransfer(req_id, transfer_amount, _, withdrawer_account) => {
             // TODO
+            // TODO Needs to be an account holder
+            // TODO Needs to exactly match an existing transfer's description
+            // TODO Can't have already supported this transfer
+            // TODO Iff, the support threshold has been reached, make the transfer and clear the
+            // entry, else update the entry with the new support
             unimplemented!();
             /*
-            ensure!(
-                state
-                    .future_vesting_veto_accounts
-                    .iter()
-                    .any(|veto_account| sender == veto_account),
-                "Only veto accounts can cancel future vesting."
-            );
-
-            // Should not overflow since the sum is positive but less than
-            // or equal to the checked sum of the initial vesting schedule
-            // computed at init time
-            let cancelled_vesting_amount: Amount =
-                state.remaining_vesting_schedule.iter().map(|(_, how_much)| *how_much).sum();
-            state.remaining_vesting_schedule = vec![];
-
-            // Return unvested funds to the contract owner
             Ok(A::simple_transfer(ctx.owner(), cancelled_vesting_amount))
             */
         }
@@ -187,14 +169,14 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 // Update the state to purge requests which have sat too long without being
 // agreed to by the relevant parties
 fn remove_timed_out_requests(time_now: u64, state: &mut State) {
-    let live_requests: Vec<(WithdrawalRequestId, Amount, TimeoutSlotTimeSeconds)> =
+    let live_requests: Vec<(TransferRequestId, Amount, TimeoutSlotTimeSeconds)> =
         state
-          .outstanding_withdrawal_requests
+          .outstanding_transfer_requests
           .iter()
           .filter(|(_, _, expiry)| expiry > &time_now)
           .collect();
 
-    state.outstanding_withdrawal_requests = live_requests;
+    state.outstanding_transfer_requests = live_requests;
 }
 
 // (De)serialization
