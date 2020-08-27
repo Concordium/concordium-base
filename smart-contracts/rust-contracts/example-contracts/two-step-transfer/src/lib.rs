@@ -51,7 +51,6 @@ enum Message {
 }
 
 type TransferRequestId = u64;
-type Reason = &str;
 
 // TODO Is seconds the correct unit?
 type TransferRequestTimeToLiveSeconds = u64;
@@ -60,7 +59,7 @@ type TimeoutSlotTimeSeconds = u64;
 pub struct OutstandingTransferRequest {
     id:              TransferRequestId,
     transfer_amount: Amount,
-    target_account:  AccountAddress
+    target_account:  AccountAddress,
     times_out_at:    TimeoutSlotTimeSeconds,
     supporters:      Vec<AccountAddress>
 }
@@ -70,7 +69,7 @@ pub struct InitParams {
     account_holders: Vec<AccountAddress>,
 
     // How many of the account holders need to agree before funds are released
-    transfer_agreement_threshold: u32
+    transfer_agreement_threshold: u32,
 
     // How long to wait before dropping a request due to lack of support
     // N.B. If this is set too long, in practice the chain might become busy
@@ -107,14 +106,15 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     _logger: &mut L,
 ) -> InitResult<State> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
+    init_params.account_holders.dedup():
     ensure!(
-        init_params.account_holders.dedup().len() >= 2,
+        init_params.account_holders.len() >= 2,
         "Not enough account holders: At least two are needed for this contract to be valid."
     );
     ensure!(
-        init_params.transfer_agreement_threshold <= init_params.account_holders.dedup().len(),
-        "The threshold for agreeing account holders to allow a transfer must be " +
-        "less than or equal to the number of unique account holders, else a transfer can never be made!"
+        init_params.transfer_agreement_threshold <= init_params.account_holders.len(),
+        ("The threshold for agreeing account holders to allow a transfer must be " +
+         "less than or equal to the number of unique account holders, else a transfer can never be made!")
     );
     ensure!(
         init_params.transfer_agreement_threshold >= 2,
@@ -122,9 +122,9 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     );
 
     let state = State {
-        init_params:                init_params,
-        available_balance:          0,
-        remaining_vesting_schedule: vec![],
+        init_params:                   init_params,
+        available_balance:             0,
+        outstanding_transfer_requests: vec![],
     };
 
     Ok(state)
@@ -183,28 +183,28 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
                     .filter(|existing|
                             existing.req_id == req_id &&
                             existing.transfer_amount == transfer_amount &&
-                            existing.target_account == target_account)
+                            existing.target_account == target_account);
             let matching_request =
                 match matching_requests {
-                    [] => bail!("No such transfer to support.");
-                    [matching] => matching
-                    _ => impossible!();
-                }
+                    [] => bail!("No such transfer to support."),
+                    [matching] => matching,
+                    _ => bail!()
+                };
             // Can't have already supported this transfer
             ensure!(
                 !matching_request.supporters.contains(sender),
                 "You have already supported this transfer."
             );
             matching_request.supporters.push(sender);
-            if (matching_request.supporters.len() >= state.init_params.transfer_agreement_threshold) {
+            if matching_request.supporters.len() >= state.init_params.transfer_agreement_threshold {
                 // Remove the transfer fron the list of outstanding transfers and send it
                 state
                     .outstanding_transfer_requests
-                    .retain(|outstanding| outstanding.id != req_id)
-                Ok(A::simple_transfer(matching_request.target_account, matching_request.transfer_amount))
+                    .retain(|outstanding| outstanding.id != req_id);
+                Ok(A::simple_transfer(matching_request.target_account, matching_request.transfer_amount));
             } else {
                 // Keep the updated support and accept
-                Ok(Action::Accept)
+                Ok(Action::Accept);
             }
         }
     }
