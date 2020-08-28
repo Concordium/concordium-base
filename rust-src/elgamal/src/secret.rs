@@ -44,7 +44,7 @@ impl<C: Curve> Serial for BabyStepGiantStep<C> {
         out.put(&self.m);
         out.put(&self.inverse_point);
         for (k, v) in self.table.iter() {
-            out.write_all(k).expect("Writing to puffer should succeed.");
+            out.write_all(k).expect("Writing to buffer should succeed.");
             out.put(v)
         }
     }
