@@ -104,7 +104,7 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
     let sigma_4_protocols = gen_enc_exp_info(&cmm_key, pk_sender, S_prime);
     // The EncTrans implements the SigmaProtocol trait, and by
     // its implementation it is guaranteed that the secret
-    // sk in the dlog, and the secret sk in elg_dec are the same, 
+    // sk in the dlog, and the secret sk in elg_dec are the same,
     // while it is also guaranteed that the secret s in elg_dec
     // is equal to \sum_{j=1}^t 2^{(chunk_size)*(j-1)} a_j
     //            +\sum_{j=1}^(t') 2^{(chunk_size)*(j-1)} s_j'
@@ -126,14 +126,15 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
 /// - public key and secret key of sender
 /// - public key of receiver
 /// - index indicating which amounts where used
-/// - S - encryption of the input amount up to the index, combined into one encryption
+/// - S - encryption of the input amount up to the index, combined into one
+///   encryption
 /// - s - input amount
 /// - a - amount to send
 /// The proof contained in the transfer data produced
 /// by this function is a combination a proof produced by the
 /// EncTrans sigma protocol and a rangeproof (Bulletproofs), i.e.
 /// additonally showing that all a_j and s_j' are in [0, 2^chunk_size)
-/// It returns None if s < a or if it fails to produce one of the bulletproofs. 
+/// It returns None if s < a or if it fails to produce one of the bulletproofs.
 #[allow(clippy::too_many_arguments)]
 pub fn gen_enc_trans<C: Curve, R: Rng>(
     context: &GlobalContext<C>,
@@ -142,10 +143,10 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     pk_sender: &PublicKey<C>,
     sk_sender: &SecretKey<C>,
     pk_receiver: &PublicKey<C>,
-    index: u64,    
-    S: &Cipher<C>, 
-    s: Amount,     
-    a: Amount,     
+    index: u64,
+    S: &Cipher<C>,
+    s: Amount,
+    a: Amount,
     csprng: &mut R,
 ) -> Option<EncryptedAmountTransferData<C>> {
     if s < a {
@@ -282,18 +283,19 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
 /// - a transcript for Bulletproofs
 /// - public key and secret key of sender (who is also the receiver)
 /// - index indicating which amounts where used
-/// - S - encryption of the input amount up to the index, combined into one encryption
+/// - S - encryption of the input amount up to the index, combined into one
+///   encryption
 /// - s - input amount
 /// - a - amount to send
 /// The proof contained in the transfer data produced
 /// by this function is a combination a proof produced by the
 /// EncTrans sigma protocol and a rangeproof (Bulletproofs), i.e.
-/// additonally showing that all s_j' are in [0, 2^chunk_size). 
+/// additonally showing that all s_j' are in [0, 2^chunk_size).
 /// Here, the A that is given to gen_enc_trans_proof_info is an encryption
-/// of a with randomness 0, in one chunk. The produced EncTrans is then used to prove
-/// that s = a + \sum_{j=1}^(t') 2^{(chunk_size)*(j-1)} s_j', where
-/// the s_j' denote the chunks of s' := s-a. 
-/// It returns None if s < a or if it fails to produce the bulletproofs. 
+/// of a with randomness 0, in one chunk. The produced EncTrans is then used to
+/// prove that s = a + \sum_{j=1}^(t') 2^{(chunk_size)*(j-1)} s_j', where
+/// the s_j' denote the chunks of s' := s-a.
+/// It returns None if s < a or if it fails to produce the bulletproofs.
 #[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case)]
 pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
@@ -402,8 +404,8 @@ pub enum VerificationError {
 }
 
 /// This function is for verifying that an encrypted transfer
-/// has been done corretly. 
-/// The arguments are 
+/// has been done corretly.
+/// The arguments are
 /// - global context with parameters for generating proofs, and generators for
 ///   encrypting amounts.
 /// - a random oracle needed for the sigma protocol
@@ -412,8 +414,8 @@ pub enum VerificationError {
 /// - public keys of both sender and receiver
 /// - S - Encryption of amount on account
 /// It either returns Ok() indicating that the transfer has been done
-/// correctly or a VerificationError indicating what failed (the EncTrans protocol or one
-/// of the bulletproofs)
+/// correctly or a VerificationError indicating what failed (the EncTrans
+/// protocol or one of the bulletproofs)
 #[allow(clippy::too_many_arguments)]
 pub fn verify_enc_trans<C: Curve>(
     context: &GlobalContext<C>,
@@ -422,7 +424,7 @@ pub fn verify_enc_trans<C: Curve>(
     transaction: &EncryptedAmountTransferData<C>,
     pk_sender: &PublicKey<C>,
     pk_receiver: &PublicKey<C>,
-    S: &Cipher<C>, 
+    S: &Cipher<C>,
 ) -> Result<(), VerificationError> {
     let generator = context.encryption_in_exponent_generator();
     // For Bulletproofs
@@ -493,8 +495,8 @@ pub fn verify_enc_trans<C: Curve>(
 }
 
 /// This function is for verifying that an encrypted transfer
-/// has been done corretly. 
-/// The arguments are 
+/// has been done corretly.
+/// The arguments are
 /// - global context with parameters for generating proofs, and generators for
 ///   encrypting amounts.
 /// - a random oracle needed for the sigma protocol
@@ -503,8 +505,8 @@ pub fn verify_enc_trans<C: Curve>(
 /// - public key of both sender (who is also the receiver)
 /// - S - Encryption of amount on account
 /// It either returns Ok() indicating that the transfer has been done
-/// correctly or a VerificationError indicating what failed (the EncTrans protocol or 
-/// the bulletproof)
+/// correctly or a VerificationError indicating what failed (the EncTrans
+/// protocol or the bulletproof)
 #[allow(clippy::too_many_arguments)]
 pub fn verify_sec_to_pub_trans<C: Curve>(
     context: &GlobalContext<C>,

@@ -8,7 +8,7 @@ use crypto_common::{base16_decode_string, base16_encode_string, c_char, types::A
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
-use encrypted_transfers::dummy_encrypt_amount;
+use encrypted_transfers::encrypt_amount_with_fixed_randomness;
 use failure::Fallible;
 use id::{
     account_holder::{create_credential, generate_pio},
@@ -203,7 +203,7 @@ fn create_pub_to_sec_transfer_aux(input: &str) -> Fallible<String> {
     };
 
     let signatures = make_signatures(&ctx.keys, &hash)?;
-    let encryption = dummy_encrypt_amount(&global_context, amount);
+    let encryption = encrypt_amount_with_fixed_randomness(&global_context, amount);
     let response = json!({
         "signatures": signatures,
         "transaction": hex::encode(&body),

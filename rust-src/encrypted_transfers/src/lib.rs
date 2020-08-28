@@ -50,8 +50,8 @@ fn encrypt_amount<C: Curve, R: Rng>(
 }
 
 /// Make a dummy encryption of a single amount using the given public key and
-/// randomness 0
-pub fn dummy_encrypt_amount<C: Curve>(
+/// fixed randomness 0
+pub fn encrypt_amount_with_fixed_randomness<C: Curve>(
     context: &GlobalContext<C>,
     amount: Amount,
 ) -> EncryptedAmount<C> {
@@ -164,6 +164,20 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     )
 }
 
+/// # Public API intended for use by the wallet.
+
+/// Verify an encrypted amount transaction.
+/// The arguments are
+///
+/// - global context with parameters for generating proofs, and generators for
+///   encrypting amounts.
+/// - public key of the receiver of the transfer
+/// - public key of the sender of the transfer
+/// - encryption of amount on sender account before transfer
+/// - encrypted amount transaction,
+///
+/// The return value is going to be `true` if verification succeeds and `false`
+/// if not.
 pub fn verify_transfer_data<C: Curve>(
     ctx: &GlobalContext<C>,
     receiver_pk: &PublicKey<C>,
@@ -188,6 +202,21 @@ pub fn verify_transfer_data<C: Curve>(
     )
     .is_ok()
 }
+
+/// # Public API intended for use by the wallet.
+
+/// Produce the payload of an secret to public amount transaction.
+/// The arguments are
+///
+/// - global context with parameters for generating proofs, and generators for
+///   encrypting amounts.
+/// - secret key of the sender (who is also the receiver)
+/// - input amount from which to send
+/// - amount to send
+///
+/// The return value is going to be `None` if a transfer could not be produced.
+/// This could be because the `to_transfer` is too large, or because of some
+/// other data inconsistency that means a proof could not be produced.
 
 pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
     ctx: &GlobalContext<C>,
@@ -215,6 +244,20 @@ pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
         csprng,
     )
 }
+
+/// # Public API intended for use by the wallet.
+
+/// Verify an secret to public amount transaction.
+/// The arguments are
+///
+/// - global context with parameters for generating proofs, and generators for
+///   encrypting amounts.
+/// - public key of the sender (who is also the receiver) of the transfer
+/// - encryption of amount on sender account before transfer
+/// - secret to public amount transaction
+///
+/// The return value is going to be `true` if verification succeeds and `false`
+/// if not.
 
 pub fn verify_sec_to_pub_transfer_data<C: Curve>(
     ctx: &GlobalContext<C>,
@@ -460,14 +503,14 @@ mod tests {
         );
     }
 
-    // Test that the dummy encryption can be decrypted
+    // Test that the encryption with fixed randomness = 0 can be decrypted
     #[test]
-    fn test_dummy_encryption() {
+    fn test_encryption_randomness_zero() {
         let mut csprng = thread_rng();
         let context = GlobalContext::<G1>::generate();
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let amount = Amount::from(csprng.gen::<u64>());
-        let dummy_encryption = dummy_encrypt_amount(&context, amount);
+        let dummy_encryption = encrypt_amount_with_fixed_randomness(&context, amount);
         let m = 1 << 16;
         let table = BabyStepGiantStep::new(context.encryption_in_exponent_generator(), m);
 
@@ -475,6 +518,92 @@ mod tests {
         assert_eq!(
             amount, decrypted,
             "Decrypted amount differs from the original."
+        );
+    }
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn test_make_and_verify_transfer_data() {
+        let mut csprng = thread_rng();
+        let sk_sender: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
+        let pk_sender = PublicKey::from(&sk_sender);
+        let sk_receiver: SecretKey<G1> = SecretKey::generate(&pk_sender.generator, &mut csprng);
+        let pk_receiver = PublicKey::from(&sk_receiver);
+        let s: u64 = csprng.gen(); // amount on account.
+
+        let a = csprng.gen_range(0, s); // amount to send
+
+        let m = 2; // 2 chunks
+        let n = 32;
+        let nm = n * m;
+
+        let context = GlobalContext::<G1>::generate_size(nm);
+        let S_in_chunks = encrypt_amount(&context, &pk_sender, Amount::from(s), &mut csprng);
+
+        let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
+        let input_amount = AggregatedDecryptedAmount {
+            agg_amount:           Amount::from(s),
+            agg_encrypted_amount: S_in_chunks.0.clone(),
+            agg_index:            index,
+        };
+        let transfer_data = make_transfer_data(
+            &context,
+            &pk_receiver,
+            &sk_sender,
+            &input_amount,
+            Amount::from(a),
+            &mut csprng,
+        )
+        .unwrap();
+
+        assert_eq!(
+            verify_transfer_data(
+                &context,
+                &pk_receiver,
+                &pk_sender,
+                &S_in_chunks.0,
+                &transfer_data
+            ),
+            true
+        );
+    }
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn test_make_and_verify_sec_to_pub_transfer_data() {
+        let mut csprng = thread_rng();
+        let sk_sender: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
+        let pk_sender = PublicKey::from(&sk_sender);
+        let s: u64 = csprng.gen(); // amount on account.
+
+        let a = csprng.gen_range(0, s); // amount to send
+
+        let m = 2; // 2 chunks
+        let n = 32;
+        let nm = n * m;
+
+        let context = GlobalContext::<G1>::generate_size(nm);
+        let S_in_chunks = encrypt_amount(&context, &pk_sender, Amount::from(s), &mut csprng);
+
+        let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
+        let input_amount = AggregatedDecryptedAmount {
+            agg_amount:           Amount::from(s),
+            agg_encrypted_amount: S_in_chunks.0.clone(),
+            agg_index:            index,
+        };
+
+        let transfer_data = make_sec_to_pub_transfer_data(
+            &context,
+            &sk_sender,
+            &input_amount,
+            Amount::from(a),
+            &mut csprng,
+        )
+        .unwrap();
+
+        assert_eq!(
+            verify_sec_to_pub_transfer_data(&context, &pk_sender, &S_in_chunks.0, &transfer_data),
+            true
         );
     }
 }
