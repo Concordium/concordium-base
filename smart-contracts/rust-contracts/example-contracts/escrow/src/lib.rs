@@ -1,11 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use concordium_sc_base::*;
 
-/* This Escrow contract is more a code sample that a real-world contract that
+/* This Escrow contract is more a code sample than a real-world contract that
  * someone might want to use in production.
  *
  * The semantics of this contract have been chosen somewhat arbitrarily.
- * The contract utilised an arbitrator account to resolve disputes between
+ * The contract utilises an arbitrator account to resolve disputes between
  * a buyer and seller, and that arbitrator gets paid when the contract is
  * completed (either in favour of the buyer or the seller).
  *
