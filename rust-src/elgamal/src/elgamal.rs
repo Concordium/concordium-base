@@ -64,12 +64,6 @@ impl ChunkSize {
         out
     }
 
-    pub fn u64_to_big_endian_chunks(self, x: u64) -> Vec<u64> {
-        let mut little = self.u64_to_chunks(x);
-        little.reverse();
-        little
-    }
-
     /// Reconstruct from little endian limbs, given chunk size.
     pub fn chunks_to_u64(self, xs: impl IntoIterator<Item = u64>) -> u64 {
         let size = u8::from(self);

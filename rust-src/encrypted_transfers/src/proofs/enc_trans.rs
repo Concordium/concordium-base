@@ -1,69 +1,128 @@
 #![allow(non_snake_case)]
+use crate::types::CHUNK_SIZE;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
-use id::sigma_protocols::{aggregate_dlog::*, com_eq::*, common::*, dlog::*};
+use id::sigma_protocols::{com_eq::*, common::*, dlog::*};
 use pedersen_scheme::{Commitment, Randomness, Value};
 use random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;
 
+/// This module provides an implementation of the sigma protocol used for
+/// encrypted transfers. It enables one to prove knowledge of a secret key `sk`,
+/// exponent `s` and chunks a_1, ..., a_t, s_1', ..., s_(t')', r_1, ..., r_t,
+/// r_1', ..., r_(t')' such that pk_sender = g^sk, S_2 = S_1^sk h^s , and
+/// c_{i,1} = g^{r_i}, c_{i,2} = h^{a_i} pk_receiver^{r_i} for all i in {1,..,
+/// t},
+/// d_{i,1} = g^{r_i'}, d_{i,2} = h^{s_i'} pk_sender^{r_i'} for all i in {1,..,
+/// t'}, and s = \sum_{j=1}^t 2^{(chunk_size)*(j-1)} (a_j)
+///             +\sum_{j=1}^(t') 2^{(chunk_size)*(j-1)} s_j',
+///
+/// This is done using the subprotocols Dlog, Elgdec and EncExp (EncExp is
+/// basically just several ComEq's (can be found in
+/// sigma_protocols in the id crate)) as described in Id Layer Bluepaper, see
+/// genEncTransProofInfo and genEncTrans. The resulting sigma protocol is
+/// contructed using the sigma protocols for equality and linear relations
+/// described in the Cryptoprim Bluepaper. The trait Sigmaprotocol is
+/// implemented directly for the EncTrans struct below, and it is not used that
+/// the Sigmaprotocol trait is already implemented for both Dlog and ComEq.
+
+pub struct ElgDec<C: Curve> {
+    /// S_2 above
+    pub public: C,
+    /// The points S_1 and h.
+    pub coeff: [C; 2],
+}
+
+impl<C: Curve> ElgDec<C> {
+    fn public(&self, ro: RandomOracle) -> RandomOracle {
+        ro.append(&self.public).extend_from(&self.coeff)
+    }
+}
+
 pub struct EncTrans<C: Curve> {
-    pub dlog:    Dlog<C>,
-    pub elg_dec: AggregateDlog<C>,
+    pub dlog: Dlog<C>,
+    /// elg_dec contains the publicly known values S_1, S_2 and h
+    pub elg_dec: ElgDec<C>,
+    /// encexp1 contains the publicly known values c_{i,j}'s, g, h, pk_receiver
     pub encexp1: Vec<ComEq<C, C>>,
+    /// encexp2 contains the publicly known values d_{i,j}'s, g, h, pk_sender
     pub encexp2: Vec<ComEq<C, C>>,
 }
 
+/// The elc_dec protocol actually has two witnesses, one involving sk and one
+/// involving s, but since sk is also the secret for the dlog, and since
+/// s is a linear combination of the secrets for the EncExp/ComEq's,
+/// we calculate the same linear combination, but of the witnesses, in
+/// the extract_point function. We do therefore not need to transfer/send
+/// those witnesses, since they are determined by the ones below.
 #[derive(Debug, Serialize)]
 pub struct Witness<C: Curve> {
-    witness_common: C::Scalar, // For equality
-    // For enc_exps:
+    /// The common witness for both dlog and elc-dec
+    witness_common: C::Scalar,
+    /// For EncExp/ComEq's involving a_i
     #[size_length = 4]
     witness_encexp1: Vec<(C::Scalar, C::Scalar)>,
+    /// For EncExp/ComEq's involving s_i'
     #[size_length = 4]
     witness_encexp2: Vec<(C::Scalar, C::Scalar)>,
 }
 
 pub struct EncTransSecret<C: Curve> {
+    /// dlog_secret contains the secret key `sk`
     pub dlog_secret: Rc<C::Scalar>,
-    // For enc_exps:
+    /// The chunks a_i:
     pub r_a: Vec<Randomness<C>>,
-    pub a:   Vec<Value<C>>,
+    /// The r_i:
+    pub a: Vec<Value<C>>,
+    /// The chunks s_i':
     pub r_s: Vec<Randomness<C>>,
-    pub s:   Vec<Value<C>>,
+    /// The r_i':
+    pub s: Vec<Value<C>>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct EncTransCommit<C: Curve> {
+    /// Commitmessage for dlog
     dlog: C,
+    /// Commitmessage for elg_dec
     elg_dec: C,
+    /// Commitmessages for EncExp/ComEq's involving a_i
     #[size_length = 4]
     encexp1: Vec<CommittedPoints<C, C>>,
+    /// Commitmessages for EncExp/ComEq's involving s_i'
     #[size_length = 4]
     encexp2: Vec<CommittedPoints<C, C>>,
 }
 
+/// As for the witness, we don't need the state for elc_dec
 #[derive(Debug, Serialize)]
 pub struct EncTransState<C: Curve> {
+    /// Randomness used for dlog
     dlog: C::Scalar,
+    /// Randomness used for EncExp/ComEq's involving a_i
     #[size_length = 4]
     encexp1: Vec<(Value<C>, Randomness<C>)>,
+    /// Randomness used for EncExp/ComEq's involving s_i'
     #[size_length = 4]
     encexp2: Vec<(Value<C>, Randomness<C>)>,
 }
 
-// This is meant to use on scalars that are chunks of number
+/// This function takes scalars x_1, ..., x_n and returns
+/// \sum_{i=1}^n 2^{(chunk_size)*(i-1)} (x_i)
 fn linear_combination_with_powers_of_two<C: Curve>(scalars: &[C::Scalar]) -> C::Scalar {
     // FIXME: This should use ChunkSize
-    let two_32 = C::scalar_from_u64(1 << 32);
+    // TODO: Use the constant or take it as parameter?
+    let u8_chunk_size = u8::from(CHUNK_SIZE);
+    let two_chunksize = C::scalar_from_u64(1 << u8_chunk_size);
     let mut power_of_two = C::Scalar::one();
     let mut sum = C::Scalar::zero();
     for term in scalars.iter() {
         let mut term = *term;
         term.mul_assign(&power_of_two);
         sum.add_assign(&term);
-        power_of_two.mul_assign(&two_32);
+        power_of_two.mul_assign(&two_chunksize);
     }
     sum
 }
