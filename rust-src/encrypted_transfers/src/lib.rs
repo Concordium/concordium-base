@@ -10,7 +10,7 @@ pub mod proofs;
 mod types;
 
 use crate::types::*;
-use crypto_common::types::Amount;
+use crypto_common::{to_bytes, types::Amount};
 use curve_arithmetic::*;
 use elgamal::*;
 use id::types::*;
@@ -143,17 +143,24 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     to_transfer: Amount,
     csprng: &mut R,
 ) -> Option<EncryptedAmountTransferData<C>> {
+    let sender_pk = &PublicKey::from(sender_sk);
     // FIXME: Put context into random oracle
-    let ro = RandomOracle::domain("EncryptedTransfer");
+    let ro = RandomOracle::domain("EncryptedTransfer")
+    .append_bytes(&to_bytes(&ctx))
+    .append_bytes(&to_bytes(&receiver_pk))
+    .append_bytes(&to_bytes(&sender_pk));
     // FIXME: Put context into the transcript.
     let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
-    let pk_sender = &PublicKey::from(sender_sk);
+    transcript.append_message(b"ctx", &to_bytes(&ctx));
+    transcript.append_message(b"receiver_pk", &to_bytes(&receiver_pk));
+    transcript.append_message(b"sender_pk", &to_bytes(&sender_pk));
+
     // FIXME: Make arguments more in line between gen_enc_trans and this.
     encexp::gen_enc_trans(
         ctx,
         ro,
         &mut transcript,
-        pk_sender,
+        sender_pk,
         sender_sk,
         receiver_pk,
         input_amount.agg_index,
@@ -186,8 +193,14 @@ pub fn verify_transfer_data<C: Curve>(
     transfer_data: &EncryptedAmountTransferData<C>,
 ) -> bool {
     // Fixme: Put context into the random oracle.
-    let ro = RandomOracle::domain("EncryptedTransfer");
+    let ro = RandomOracle::domain("EncryptedTransfer")
+    .append_bytes(&to_bytes(&ctx))
+    .append_bytes(&to_bytes(&receiver_pk))
+    .append_bytes(&to_bytes(&sender_pk));
     let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
+    transcript.append_message(b"ctx", &to_bytes(&ctx));
+    transcript.append_message(b"receiver_pk", &to_bytes(&receiver_pk));
+    transcript.append_message(b"sender_pk", &to_bytes(&sender_pk));
 
     // FIXME: Revise order of arguments in verify_enc_trans to be more consistent
     // with the rest.
@@ -225,11 +238,16 @@ pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
     to_transfer: Amount,
     csprng: &mut R,
 ) -> Option<SecToPubAmountTransferData<C>> {
+    let pk = &PublicKey::from(sk);
     // FIXME: Put context into random oracle
-    let ro = RandomOracle::domain("SecToPubTransfer");
+    let ro = RandomOracle::domain("SecToPubTransfer")
+    .append_bytes(&to_bytes(&ctx))
+    .append_bytes(&to_bytes(&pk));
     // FIXME: Put context into the transcript.
     let mut transcript = Transcript::new(r"SecToPubTransfer".as_ref());
-    let pk = &PublicKey::from(sk);
+    transcript.append_message(b"ctx", &to_bytes(&ctx));
+    transcript.append_message(b"pk", &to_bytes(&pk));
+
     // FIXME: Make arguments more in line between gen_sec_to_pub_trans and this.
     encexp::gen_sec_to_pub_trans(
         ctx,
@@ -266,8 +284,12 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
     transfer_data: &SecToPubAmountTransferData<C>,
 ) -> bool {
     // Fixme: Put context into the random oracle.
-    let ro = RandomOracle::domain("SecToPubTransfer");
+    let ro = RandomOracle::domain("SecToPubTransfer")
+    .append_bytes(&to_bytes(&ctx))
+    .append_bytes(&to_bytes(&pk));
     let mut transcript = Transcript::new(r"SecToPubTransfer".as_ref());
+    transcript.append_message(b"ctx", &to_bytes(&ctx));
+    transcript.append_message(b"pk", &to_bytes(&pk));
 
     // FIXME: Revise order of arguments in verify_sec_to_pub_trans to be more
     // consistent with the rest.
@@ -372,30 +394,6 @@ impl<C: Curve> AggregatedDecryptedAmount<C> {
     }
 }
 
-/// Combine many decrypted amounts into a single aggregated decrypted amount.
-/// This function will return `None` if there are gaps in decrypted amount
-/// indices, as well as if there are no decrypted amounts to decrypt.
-///
-/// The mutable slice will be reordered.
-// pub fn combine<C: Curve>(
-//     dec_amounts: &mut [DecryptedAmount<C>],
-// ) -> Option<AggregatedDecryptedAmount<C>> {
-//     // First sort all the given amounts by indices, so we can easily make sure
-//     // that there are no duplicates, and none skipped.
-//     dec_amounts.sort_unstable_by_key(|x| x.index);
-//     let (first, rest) = dec_amounts.split_first()?;
-//     let next_index = first.index.checked_add(1)?;
-//     let mut agg = AggregatedDecryptedAmount {
-//         agg_encrypted_amount: first.encrypted_chunks.clone(),
-//         agg_index:            next_index,
-//         agg_amount:           first.amount,
-//     };
-//     for dec_amount in rest {
-//         agg.add(dec_amount)?
-//     }
-//     Some(agg)
-// }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,62 +422,6 @@ mod tests {
         );
     }
 
-    // Test that aggregation works, and resulting data can be decrypted.
-    // This test can be a bit slow, taking a few seconds.
-    // #[test]
-    // fn test_combine() {
-    //     let mut csprng = thread_rng();
-    //     let context = GlobalContext::<G1>::generate();
-
-    //     let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
-    //     let pk = PublicKey::from(&sk);
-
-    //     // we divide here by 3 to avoid overflow when summing them together.
-    //     let amount_1 = Amount::from(csprng.gen::<u64>() / 3);
-    //     let amount_2 = Amount::from(csprng.gen::<u64>() / 3);
-    //     let amount_3 = Amount::from(csprng.gen::<u64>() / 3);
-
-    //     let (enc_amount_1, _) = encrypt_amount(&context, &pk, amount_1, &mut
-    // csprng);     let (enc_amount_2, _) = encrypt_amount(&context, &pk,
-    // amount_2, &mut csprng);     let (enc_amount_3, _) =
-    // encrypt_amount(&context, &pk, amount_3, &mut csprng);
-
-    //     let m = 1 << 16;
-    //     let table =
-    // BabyStepGiantStep::new(context.encryption_in_exponent_generator(), m);
-
-    //     let decrypted_1 = decrypt_amount(&table, &sk, &enc_amount_1);
-    //     let decrypted_2 = decrypt_amount(&table, &sk, &enc_amount_2);
-    //     let decrypted_3 = decrypt_amount(&table, &sk, &enc_amount_3);
-
-    //     let dec_1 = DecryptedAmount {
-    //         encrypted_chunks: enc_amount_1,
-    //         amount:           decrypted_1,
-    //         index:            0,
-    //     };
-    //     let dec_2 = DecryptedAmount {
-    //         encrypted_chunks: enc_amount_2,
-    //         amount:           decrypted_2,
-    //         index:            1,
-    //     };
-    //     let dec_3 = DecryptedAmount {
-    //         encrypted_chunks: enc_amount_3,
-    //         amount:           decrypted_3,
-    //         index:            2,
-    //     };
-
-    //     let mut dec_amounts = [dec_1, dec_2, dec_3];
-    //     let agg = combine(&mut dec_amounts).expect("Could not combine decrypted
-    // amounts.");     let decrypted = decrypt_amount(&table, &sk,
-    // &agg.agg_encrypted_amount);     assert_eq!(
-    //         amount_1 + (amount_2 + amount_3),
-    //         Some(decrypted),
-    //         "Decrypted aggregated encrypted amount differs from expected."
-    //     );
-    // }
-
-    // Test that aggregation works, and resulting data can be decrypted.
-    // This test can be a bit slow, taking a few seconds.
     #[test]
     fn test_scale() {
         let mut csprng = thread_rng();
