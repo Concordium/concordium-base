@@ -82,8 +82,8 @@ pub fn aggregate<C: Curve>(
     left: &EncryptedAmount<C>,
     right: &EncryptedAmount<C>,
 ) -> EncryptedAmount<C> {
-    let encryption_hi = left.encryptions[0].combine(&right.encryptions[0]);
-    let encryption_low = left.encryptions[1].combine(&right.encryptions[1]);
+    let encryption_hi = left.encryptions[1].combine(&right.encryptions[1]);
+    let encryption_low = left.encryptions[0].combine(&right.encryptions[0]);
     EncryptedAmount {
         encryptions: [encryption_low, encryption_hi],
     }
@@ -113,7 +113,7 @@ impl<C: Curve> EncryptedAmount<C> {
     /// The resulting ciphertext will in general not be easily decryptable.
     pub fn join(&self) -> Cipher<C> {
         let scale = 1u64 << u8::from(CHUNK_SIZE);
-        // NB: This relies on chunks being big-endian
+        // NB: This relies on chunks being little-endian
         self.encryptions[1]
             .scale_u64(scale)
             .combine(&self.encryptions[0])
