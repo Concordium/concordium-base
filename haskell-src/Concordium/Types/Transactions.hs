@@ -31,7 +31,6 @@ import Concordium.ID.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Execution
 import Concordium.Types.Updates
-import Concordium.Utils
 
 -- * Account transactions
 
