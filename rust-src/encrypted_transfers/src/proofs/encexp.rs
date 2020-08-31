@@ -4,7 +4,7 @@ use bulletproofs::range_proof::{
     prove_given_scalars as bulletprove, verify_efficient,
     VerificationError as BulletproofVerificationError,
 };
-use crypto_common::types::Amount;
+use crypto_common::{to_bytes, types::Amount};
 use curve_arithmetic::{Curve, Value};
 use elgamal::{Cipher, PublicKey, Randomness, SecretKey};
 use id::{
@@ -229,7 +229,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         .iter()
         .map(|x| PedersenRandomness::new(*(x.as_ref())))
         .collect();
-
+    transcript.append_message(b"sigmaproof", &to_bytes(&sigma_proof));
     let bulletproof_a = bulletprove(
         transcript,
         csprng,
@@ -468,7 +468,7 @@ pub fn verify_enc_trans<C: Curve>(
         g: *generator,
         h: pk_sender.key,
     };
-
+    transcript.append_message(b"sigmaproof", &to_bytes(&transaction.proof.accounting));
     let first_bulletproof = verify_efficient(
         transcript,
         u8::from(CHUNK_SIZE),
@@ -618,15 +618,6 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
         let p2 = self.dlog2.extract_point(&challenge, &witness)?;
         Some((p1, p2))
     }
-
-    // #[cfg(test)]
-    // fn with_valid_data<R: rand::Rng>(
-    //     data_size: usize,
-    //     csprng: &mut R,
-    //     f: impl FnOnce(Self, Self::SecretData, &mut R) -> (),
-    // ) {
-    //     ()
-    // }
 }
 
 #[cfg(test)]
