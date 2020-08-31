@@ -10,26 +10,27 @@ import Test.QuickCheck
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
+import qualified Data.Map as Map
+import qualified Data.Set as Set
+import qualified Data.Serialize as S
+import qualified Data.Text as Text
+import Data.Int
+import System.Random
 import Control.Monad
 
-import Concordium.Types
 import qualified Concordium.Crypto.BlockSignature as BlockSig
 import qualified Concordium.Crypto.BlsSignature as Bls
 import Concordium.Crypto.SignatureScheme
-import Concordium.Types.Execution
 import Concordium.ID.Types
 import qualified Concordium.Crypto.VRF as VRF
+import qualified Data.FixedByteString as FBS
+import qualified Concordium.Crypto.SHA256 as SHA256
 
-import qualified Data.Serialize as S
+import Concordium.Types.Execution
+import Concordium.Types
+import Concordium.Wasm
 
-import Types.CoreAllGen
-
-import Data.Int
-import qualified Data.Map as Map
-import qualified Data.Set as Set
-import System.Random
 import Concordium.Crypto.Proofs
-
 import Concordium.Crypto.DummyData
 
 -- genCredentialDeploymentInformation :: Gen CredentialDeploymentInformation
@@ -73,6 +74,15 @@ genAggregationVerifyKeyAndProof = do
   sk <- secretBlsKeyGen
   return (Bls.derivePublicKey sk, Bls.proveKnowledgeOfSK (BS.pack c) sk)
 
+genAddress :: Gen AccountAddress
+genAddress = AccountAddress . FBS.fromByteString . BS.pack <$> (vector accountAddressSize)
+
+genCAddress :: Gen ContractAddress
+genCAddress = ContractAddress <$> (ContractIndex <$> arbitrary) <*> (ContractSubindex <$> arbitrary)
+
+genModuleRef :: Gen ModuleRef
+genModuleRef = ModuleRef . SHA256.hash . BS.pack <$> vector 32
+
 genPayload :: Gen Payload
 genPayload = oneof [genDeployModule,
                     genInit,
@@ -92,23 +102,38 @@ genPayload = oneof [genDeployModule,
   where
 --        genCredential = DeployCredential <$> genCredentialDeploymentInformation
 
-        genDeployModule = DeployModule <$> genModule
+        genByteString = do
+          n <- choose (0,1000)
+          BS.pack <$> vector n
+
+        genText = do
+          n <- choose (0,1000)
+          Text.pack <$> vector n
+
+        genInitName = InitName <$> genText
+        genReceiveName = ReceiveName <$> genText
+        genParameter = do
+          n <- choose (0,1000)
+          Parameter . BSS.pack <$> vector n
+
+        genDeployModule = DeployModule <$> (WasmModule <$> arbitrary <*> genByteString)
 
         genInit = do
-          amnt <- Amount <$> arbitrary
-          mref <- genModuleRef
-          name <- genTyName
-          param <- genExpr
-          return $! InitContract amnt mref name param
+          icAmount <- Amount <$> arbitrary
+          icModRef <- genModuleRef
+          icInitName <- genInitName
+          icParam <- genParameter
+          return InitContract{..}
 
         genUpdate = do
-          amnt <- Amount <$> arbitrary
-          cref <- genCAddress
-          msg <- genExpr
-          return $! Update amnt cref msg
+          uAmount <- Amount <$> arbitrary
+          uAddress <- genCAddress
+          uMessage <- genParameter
+          uReceiveName <- genReceiveName
+          return Update{..}
 
         genTransfer = do
-          a <- oneof [AddressContract <$> genCAddress, AddressAccount <$> genAddress]
+          a <- genAddress
           amnt <- Amount <$> arbitrary
           return $ Transfer a amnt
 

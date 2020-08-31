@@ -7,34 +7,39 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# OPTIONS_GHC -Wall #-}
 module Concordium.Types (module Concordium.Types, AccountAddress(..), SchemeId, AccountVerificationKey) where
 
 import GHC.Generics
-import Data.Data(Typeable, Data)
+import Data.Data (Typeable, Data)
+
+import qualified Text.ParserCombinators.ReadP as RP
 
 import qualified Concordium.Crypto.BlockSignature as Sig
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
 import qualified Concordium.Crypto.BlsSignature as Bls
 import Concordium.ID.Types
-import Concordium.Crypto.SignatureScheme(SchemeId)
+import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
 
-import Control.Exception(assert)
+import Control.Exception (assert)
 
-import Data.Hashable(Hashable)
+import Data.Hashable (Hashable)
 import Data.Word
-import Data.ByteString.Char8(ByteString)
+import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Short as BSS
 import qualified Data.ByteString.Lazy.Char8 as BSL
-import Data.ByteString.Builder(toLazyByteString, byteStringHex)
+import Data.ByteString.Builder (toLazyByteString, byteStringHex)
 import Data.Bits
 import Data.Ratio
+import Data.Char (digitToInt,isDigit)
 
 import Data.Aeson as AE
 import Data.Aeson.TH
 
+import Data.Text (pack)
 import Data.Time
 import Data.Time.Clock.POSIX
 
@@ -44,23 +49,33 @@ import qualified Data.Serialize.Get as G
 import Database.Persist.Class
 import Database.Persist.Sql
 
-data Hashed a = Hashed {unhashed :: a, hashed :: Hash.Hash}
+import Lens.Micro.Platform
+
+data Hashed a = Hashed {_unhashed :: a, _hashed :: Hash.Hash}
 
 instance HashableTo Hash.Hash (Hashed a) where
-    getHash = hashed
+    getHash = _hashed
+
+-- |This lens allows for getting and setting the value inside a Hashed structure.
+-- If a value is updated the new hash is recomputed automatically.
+unhashed :: (HashableTo Hash.Hash a) => Lens' (Hashed a) a
+unhashed f h = makeHashed <$> f (_unhashed h)
 
 makeHashed :: HashableTo Hash.Hash a => a -> Hashed a
 makeHashed v = Hashed v (getHash v)
 
 instance Eq (Hashed a) where
-    a == b = hashed a == hashed b
+    a == b = _hashed a == _hashed b
 
-instance Ord (Hashed a) where
-    compare a b = compare (hashed a) (hashed b)
+instance Ord a => Ord (Hashed a) where
+    compare a b = compare (_unhashed a) (_unhashed b)
+
+instance (Show a) => Show (Hashed a) where
+    show = show . _hashed
 
 -- * Types releated to bakers.
 newtype BakerId = BakerId Word64
-    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON) via Word64
+    deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits) via Word64
 
 instance S.Serialize BakerId where
     get = BakerId <$> G.getWord64be
@@ -112,7 +127,7 @@ newtype VoterPower = VoterPower AmountUnit
 -- Eventually these will be replaced by types given by the global store.
 -- For now they are placeholders
 
-newtype ContractIndex = ContractIndex Word64
+newtype ContractIndex = ContractIndex { _contractIndex :: Word64 }
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Bits, Integral)
     deriving (Typeable, Data)
 
@@ -120,7 +135,7 @@ instance S.Serialize ContractIndex where
     get = ContractIndex <$> G.getWord64be
     put (ContractIndex i) = P.putWord64be i
 
-newtype ContractSubindex = ContractSubindex Word64
+newtype ContractSubindex = ContractSubindex { _contractSubindex :: Word64 }
     deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
     deriving (Typeable, Data)
 
@@ -162,15 +177,8 @@ instance Show ModuleRef where
   show (ModuleRef m) = show m
 
 instance S.Serialize ModuleRef where
-  get = getModuleRef
-  put = putModuleRef
-
-getModuleRef :: G.Get ModuleRef
-getModuleRef = ModuleRef <$> S.get
-
-putModuleRef :: P.Putter ModuleRef
-putModuleRef (ModuleRef mref) =
-  S.put mref
+  get = ModuleRef <$> S.get
+  put (ModuleRef mref) = S.put mref
 
 -- |An address is either a contract or account.
 data Address = AddressAccount !AccountAddress
@@ -267,17 +275,72 @@ isTimestampBefore ts ym =
 
 
 -- |Type representing the amount unit which is defined as the smallest
--- meaningful amount of GTUs.
--- Currently this unit is 10^-4 GTU and doesn't have a proper name.
+-- meaningful amount of GTU. This unit is 10^-6 GTU and denoted microGTU.
 type AmountUnit = Word64
 newtype Amount = Amount { _amount :: AmountUnit }
-    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, FromJSON, ToJSON) via AmountUnit
+    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable) via AmountUnit
 
 instance S.Serialize Amount where
   {-# INLINE get #-}
   get = Amount <$> G.getWord64be
   {-# INLINE put #-}
   put (Amount v) = P.putWord64be v
+
+instance FromJSON Amount where
+  parseJSON = fmap Amount . withEmbeddedJSON "Amount" parseJSON
+
+instance ToJSON Amount where
+  toJSON = AE.String . pack . show . _amount
+
+-- |Converts an amount to GTU decimal representation.
+amountToString :: Amount -> String
+amountToString (Amount amount) =
+  let
+    high = show $ amount `div` 1000000
+    low = show $ amount `mod` 1000000
+    pad = replicate (6 - length low) '0'
+  in
+    high ++ "." ++ pad ++ low
+
+-- |Parse an amount from GTU decimal representation.
+amountFromString :: String -> Maybe Amount
+amountFromString s =
+    if length s == 0 || length parsed /= 1
+    then Nothing
+    else Just $ Amount (fst (head parsed))
+  where parsed = RP.readP_to_S amountParser s
+
+-- |Parse a Word64 as a decimal number with scale 10^6
+-- i.e. between 0 and 18446744073709.551615
+amountParser :: RP.ReadP Word64
+amountParser = decimalAmount RP.<++ noDecimalAmount
+  where
+    fitInWord64 v = v <= (toInteger (maxBound :: Word64))
+    noDecimalAmount = do
+      (_, num) <- readNumber True
+      let value = num * 1000000
+      if fitInWord64 value then return $ fromIntegral value
+      else RP.pfail
+    decimalAmount = do
+      (sLen, num) <- readNumber False
+      (mLen, mantissa) <- readNumber True
+      if sLen > 0 && mLen > 0 && mLen <= 6 then do
+        let value = num * 1000000 + (mantissa * 10 ^ (6-mLen))
+        if fitInWord64 value then return $ fromIntegral value
+        else RP.pfail
+      else RP.pfail
+
+-- |Reads a number by reading digits, returning (#digits,number)
+readNumber :: Bool -> RP.ReadP (Int, Integer)
+readNumber eof = do
+    digits <- RP.manyTill readDigit terminal
+    return $ (length digits, (foldl (\acc v -> (acc*10+v)) 0 digits))
+  where terminal = if eof then RP.eof
+                   else (RP.char '.' >> return ())
+        readDigit = do
+          c <- RP.get
+          if isDigit c then return $ toInteger (digitToInt c)
+          else RP.pfail
 
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
@@ -361,7 +424,7 @@ genesisSlot = 0
 type EpochLength = Slot
 
 newtype BlockHeight = BlockHeight {theBlockHeight :: Word64}
-  deriving (Eq, Ord, Num, Real, Enum, Integral, Show, Hashable, FromJSON, ToJSON, PersistField) via Word64
+  deriving (Eq, Ord, Num, Real, Enum, Integral, Read, Show, Hashable, FromJSON, ToJSON, PersistField) via Word64
 
 instance PersistFieldSql BlockHeight where
   sqlType _ = SqlInt64
@@ -388,6 +451,18 @@ data ChainMetadata =
                 , slotTime :: Timestamp
                 }
 
+-- |Encode chain metadata for passing over FFI. Uses little-endian encoding
+-- for integral values since that is what is expected on the other side of FFI.
+-- This is deliberately not made into a serialize instance so that it is not accidentally
+-- misused, since it differs in endianess from most other network-related serialization.
+encodeChainMeta :: ChainMetadata -> ByteString
+encodeChainMeta ChainMetadata{..} = S.runPut encoder
+  where encoder =
+          P.putWord64le (fromIntegral slotNumber) <>
+          P.putWord64le (fromIntegral blockHeight) <>
+          P.putWord64le (fromIntegral finalizedHeight) <>
+          P.putWord64le (tsMillis slotTime)
+
 -- |The hash of a transaction which is then signed.
 -- (Naturally, this does not include the transaction signature.)
 newtype TransactionSignHashV0 = TransactionSignHashV0 {v0TransactionSignHash :: Hash.Hash}
@@ -411,6 +486,10 @@ type BlockHash = Hash.Hash
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
+
+-- * Types related to state hashing
+
+type StateHash = Hash.Hash
 
 
 -- Template haskell derivations. At the end to get around staging restrictions.
