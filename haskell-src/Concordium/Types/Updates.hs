@@ -359,6 +359,22 @@ makeUpdateInstructionSignHash body = UpdateInstructionSignHashV0 (SHA256.hash bo
 signUpdateInstruction :: UpdateInstructionSignHash -> Map.Map UpdateKeyIndex KeyPair -> UpdateInstructionSignatures
 signUpdateInstruction sh = UpdateInstructionSignatures . fmap (\kp -> sign kp (encode sh))
 
+-- |Make an 'UpdateInstruction' by signing a 'RawUpdateInstruction' with the given keys.
+makeUpdateInstruction :: RawUpdateInstruction -> Map.Map UpdateKeyIndex KeyPair -> UpdateInstruction
+makeUpdateInstruction rui@RawUpdateInstruction{..} keys = UpdateInstruction {
+            uiHeader = UpdateHeader {
+                    updateSeqNumber = ruiSeqNumber,
+                    updateEffectiveTime = ruiEffectiveTime,
+                    updateTimeout = ruiTimeout,
+                    updatePayloadSize = fromIntegral (BS.length (encode ruiPayload))
+                },
+            uiPayload = ruiPayload,
+            ..
+        }
+    where
+        uiSignHash = makeUpdateInstructionSignHash (runPut $ putRawUpdateInstruction rui)
+        uiSignatures = signUpdateInstruction uiSignHash keys
+
 -- |Check if the signatures on an 'UpdateInstruction' are valid with respect
 -- to the given 'Authorizations'.
 checkUpdateInstructionSignatures
