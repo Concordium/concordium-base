@@ -41,10 +41,10 @@ fn encrypt_amount<C: Curve, R: Rng>(
     let (encryption_low, randomness_low) = ciphers.pop().unwrap();
 
     let enc = EncryptedAmount {
-        encryptions: [encryption_hi, encryption_low],
+        encryptions: [encryption_low, encryption_hi],
     };
     let rand = EncryptedAmountRandomness {
-        randomness: [randomness_hi, randomness_low],
+        randomness: [randomness_low, randomness_hi],
     };
     (enc, rand)
 }
@@ -73,7 +73,7 @@ pub fn encrypt_amount_with_fixed_randomness<C: Curve>(
     let encryption_low = ciphers.pop().unwrap();
 
     EncryptedAmount {
-        encryptions: [encryption_hi, encryption_low],
+        encryptions: [encryption_low, encryption_hi],
     }
 }
 
@@ -85,7 +85,7 @@ pub fn aggregate<C: Curve>(
     let encryption_hi = left.encryptions[0].combine(&right.encryptions[0]);
     let encryption_low = left.encryptions[1].combine(&right.encryptions[1]);
     EncryptedAmount {
-        encryptions: [encryption_hi, encryption_low],
+        encryptions: [encryption_low, encryption_hi],
     }
 }
 
@@ -103,8 +103,8 @@ pub fn decrypt_amount<C: Curve>(
     sk: &SecretKey<C>,
     amount: &EncryptedAmount<C>,
 ) -> Amount {
-    let hi_chunk = sk.decrypt_exponent(&amount.encryptions[0], table);
-    let low_chunk = sk.decrypt_exponent(&amount.encryptions[1], table);
+    let low_chunk = sk.decrypt_exponent(&amount.encryptions[0], table);
+    let hi_chunk = sk.decrypt_exponent(&amount.encryptions[1], table);
     Amount::from(CHUNK_SIZE.chunks_to_u64([low_chunk, hi_chunk].iter().copied()))
 }
 
@@ -114,9 +114,9 @@ impl<C: Curve> EncryptedAmount<C> {
     pub fn join(&self) -> Cipher<C> {
         let scale = 1u64 << u8::from(CHUNK_SIZE);
         // NB: This relies on chunks being big-endian
-        self.encryptions[0]
+        self.encryptions[1]
             .scale_u64(scale)
-            .combine(&self.encryptions[1])
+            .combine(&self.encryptions[0])
     }
 }
 
@@ -377,24 +377,24 @@ impl<C: Curve> AggregatedDecryptedAmount<C> {
 /// indices, as well as if there are no decrypted amounts to decrypt.
 ///
 /// The mutable slice will be reordered.
-pub fn combine<C: Curve>(
-    dec_amounts: &mut [DecryptedAmount<C>],
-) -> Option<AggregatedDecryptedAmount<C>> {
-    // First sort all the given amounts by indices, so we can easily make sure
-    // that there are no duplicates, and none skipped.
-    dec_amounts.sort_unstable_by_key(|x| x.index);
-    let (first, rest) = dec_amounts.split_first()?;
-    let next_index = first.index.checked_add(1)?;
-    let mut agg = AggregatedDecryptedAmount {
-        agg_encrypted_amount: first.encrypted_chunks.clone(),
-        agg_index:            next_index,
-        agg_amount:           first.amount,
-    };
-    for dec_amount in rest {
-        agg.add(dec_amount)?
-    }
-    Some(agg)
-}
+// pub fn combine<C: Curve>(
+//     dec_amounts: &mut [DecryptedAmount<C>],
+// ) -> Option<AggregatedDecryptedAmount<C>> {
+//     // First sort all the given amounts by indices, so we can easily make sure
+//     // that there are no duplicates, and none skipped.
+//     dec_amounts.sort_unstable_by_key(|x| x.index);
+//     let (first, rest) = dec_amounts.split_first()?;
+//     let next_index = first.index.checked_add(1)?;
+//     let mut agg = AggregatedDecryptedAmount {
+//         agg_encrypted_amount: first.encrypted_chunks.clone(),
+//         agg_index:            next_index,
+//         agg_amount:           first.amount,
+//     };
+//     for dec_amount in rest {
+//         agg.add(dec_amount)?
+//     }
+//     Some(agg)
+// }
 
 #[cfg(test)]
 mod tests {
@@ -426,55 +426,57 @@ mod tests {
 
     // Test that aggregation works, and resulting data can be decrypted.
     // This test can be a bit slow, taking a few seconds.
-    #[test]
-    fn test_combine() {
-        let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate();
+    // #[test]
+    // fn test_combine() {
+    //     let mut csprng = thread_rng();
+    //     let context = GlobalContext::<G1>::generate();
 
-        let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
-        let pk = PublicKey::from(&sk);
+    //     let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
+    //     let pk = PublicKey::from(&sk);
 
-        // we divide here by 3 to avoid overflow when summing them together.
-        let amount_1 = Amount::from(csprng.gen::<u64>() / 3);
-        let amount_2 = Amount::from(csprng.gen::<u64>() / 3);
-        let amount_3 = Amount::from(csprng.gen::<u64>() / 3);
+    //     // we divide here by 3 to avoid overflow when summing them together.
+    //     let amount_1 = Amount::from(csprng.gen::<u64>() / 3);
+    //     let amount_2 = Amount::from(csprng.gen::<u64>() / 3);
+    //     let amount_3 = Amount::from(csprng.gen::<u64>() / 3);
 
-        let (enc_amount_1, _) = encrypt_amount(&context, &pk, amount_1, &mut csprng);
-        let (enc_amount_2, _) = encrypt_amount(&context, &pk, amount_2, &mut csprng);
-        let (enc_amount_3, _) = encrypt_amount(&context, &pk, amount_3, &mut csprng);
+    //     let (enc_amount_1, _) = encrypt_amount(&context, &pk, amount_1, &mut
+    // csprng);     let (enc_amount_2, _) = encrypt_amount(&context, &pk,
+    // amount_2, &mut csprng);     let (enc_amount_3, _) =
+    // encrypt_amount(&context, &pk, amount_3, &mut csprng);
 
-        let m = 1 << 16;
-        let table = BabyStepGiantStep::new(context.encryption_in_exponent_generator(), m);
+    //     let m = 1 << 16;
+    //     let table =
+    // BabyStepGiantStep::new(context.encryption_in_exponent_generator(), m);
 
-        let decrypted_1 = decrypt_amount(&table, &sk, &enc_amount_1);
-        let decrypted_2 = decrypt_amount(&table, &sk, &enc_amount_2);
-        let decrypted_3 = decrypt_amount(&table, &sk, &enc_amount_3);
+    //     let decrypted_1 = decrypt_amount(&table, &sk, &enc_amount_1);
+    //     let decrypted_2 = decrypt_amount(&table, &sk, &enc_amount_2);
+    //     let decrypted_3 = decrypt_amount(&table, &sk, &enc_amount_3);
 
-        let dec_1 = DecryptedAmount {
-            encrypted_chunks: enc_amount_1,
-            amount:           decrypted_1,
-            index:            0,
-        };
-        let dec_2 = DecryptedAmount {
-            encrypted_chunks: enc_amount_2,
-            amount:           decrypted_2,
-            index:            1,
-        };
-        let dec_3 = DecryptedAmount {
-            encrypted_chunks: enc_amount_3,
-            amount:           decrypted_3,
-            index:            2,
-        };
+    //     let dec_1 = DecryptedAmount {
+    //         encrypted_chunks: enc_amount_1,
+    //         amount:           decrypted_1,
+    //         index:            0,
+    //     };
+    //     let dec_2 = DecryptedAmount {
+    //         encrypted_chunks: enc_amount_2,
+    //         amount:           decrypted_2,
+    //         index:            1,
+    //     };
+    //     let dec_3 = DecryptedAmount {
+    //         encrypted_chunks: enc_amount_3,
+    //         amount:           decrypted_3,
+    //         index:            2,
+    //     };
 
-        let mut dec_amounts = [dec_1, dec_2, dec_3];
-        let agg = combine(&mut dec_amounts).expect("Could not combine decrypted amounts.");
-        let decrypted = decrypt_amount(&table, &sk, &agg.agg_encrypted_amount);
-        assert_eq!(
-            amount_1 + (amount_2 + amount_3),
-            Some(decrypted),
-            "Decrypted aggregated encrypted amount differs from expected."
-        );
-    }
+    //     let mut dec_amounts = [dec_1, dec_2, dec_3];
+    //     let agg = combine(&mut dec_amounts).expect("Could not combine decrypted
+    // amounts.");     let decrypted = decrypt_amount(&table, &sk,
+    // &agg.agg_encrypted_amount);     assert_eq!(
+    //         amount_1 + (amount_2 + amount_3),
+    //         Some(decrypted),
+    //         "Decrypted aggregated encrypted amount differs from expected."
+    //     );
+    // }
 
     // Test that aggregation works, and resulting data can be decrypted.
     // This test can be a bit slow, taking a few seconds.
