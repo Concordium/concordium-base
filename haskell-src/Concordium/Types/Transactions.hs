@@ -26,11 +26,11 @@ import qualified Data.Vector as Vec
 import Data.Word
 
 import Concordium.Types
-import Concordium.Types.Utils
 import Concordium.ID.Types
 import Concordium.Types.HashableTo
 import Concordium.Types.Execution
 import Concordium.Types.Updates
+import Concordium.Utils
 
 -- * Account transactions
 

@@ -1,13 +1,19 @@
 {-# OPTIONS_GHC -Wno-deprecations #-}
 module Concordium.Types.DummyData where
 
-import Concordium.Types
-import Concordium.Crypto.DummyData
-import Concordium.ID.Types
-import System.Random
-import Concordium.Crypto.SHA256
 import Data.FixedByteString as FBS
+import System.Random
+
 import Concordium.Crypto.VRF as VRF
+import qualified Concordium.Crypto.SignatureScheme as Sig
+import Concordium.Crypto.DummyData
+import Concordium.Crypto.SHA256
+
+import Concordium.Types
+import Concordium.Types.Transactions
+import Concordium.Types.Execution
+import Concordium.ID.Types
+
 
 {-# WARNING dummyblockPointer "Do not use in production." #-}
 dummyblockPointer :: BlockHash
@@ -58,3 +64,19 @@ bakerSignKey n = fst (randomBlockKeyPair (mkStdGen n))
 {-# WARNING bakerAggregationKey "Do not use in production." #-}
 bakerAggregationKey :: Int -> BakerAggregationPrivateKey
 bakerAggregationKey n = fst (randomBlsSecretKey (mkStdGen n))
+
+{-# WARNING makeTransferTransaction "Dummy transaction, only use for testing." #-}
+-- NB: The cost needs to be in-line with that defined in the scheduler.
+makeTransferTransaction :: (Sig.KeyPair, AccountAddress) -> AccountAddress -> Amount -> Nonce -> BlockItem
+makeTransferTransaction (fromKP, fromAddress) toAddress amount n =
+  normalTransaction . fromAccountTransaction 0 . signTransactionSingle fromKP header $ payload
+    where
+        header = TransactionHeader{
+            thNonce = n,
+            thSender = fromAddress,
+            -- The cost needs to be in-line with that in the scheduler
+            thEnergyAmount = 6 + 1 * 53 + 0,
+            thExpiry = dummyMaxTransactionExpiryTime,
+            thPayloadSize = payloadSize payload
+        }
+        payload = encodePayload (Transfer toAddress amount)
