@@ -93,7 +93,32 @@ type LotteryPower = Ratio Amount
 
 -- | The type of the birk parameter "election difficulty".
 -- The value must be in the range [0,1).
-type ElectionDifficulty = Double
+newtype ElectionDifficulty = ElectionDifficulty {electionDifficulty :: Double}
+  deriving newtype (Eq, Ord, Show, ToJSON)
+
+instance S.Serialize ElectionDifficulty where
+    get = do
+        d <- ElectionDifficulty <$> S.get
+        if isValidElectionDifficulty d then
+          return d
+        else
+          fail "Invalid election difficulty (must be in the range [0,1))."
+    put = S.put . electionDifficulty
+
+instance FromJSON ElectionDifficulty where
+    parseJSON v = do
+        d <- ElectionDifficulty <$> parseJSON v
+        if isValidElectionDifficulty d then
+          return d
+        else
+          fail "Invalid election difficulty (must be in the range [0,1))."
+
+makeElectionDifficulty :: Double -> ElectionDifficulty
+makeElectionDifficulty d = assert (d >= 0 && d < 1) $ ElectionDifficulty d
+
+isValidElectionDifficulty :: ElectionDifficulty -> Bool
+isValidElectionDifficulty (ElectionDifficulty d) = d >= 0 && d < 1
+
 type FinalizationCommitteeSize = Word32
 -- |An exchange rate (e.g. uGTU/Euro or Euro/Energy).
 type ExchangeRate = Ratio Word64
@@ -109,10 +134,6 @@ computeEnergyRate
   -- ^Euros per Energy 
   -> EnergyRate
 computeEnergyRate microGTUPerEuro euroPerEnergy = toRational microGTUPerEuro * toRational euroPerEnergy
-
-
-isValidElectionDifficulty :: ElectionDifficulty -> Bool
-isValidElectionDifficulty d = d >= 0 && d < 1
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey

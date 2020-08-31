@@ -25,6 +25,7 @@ import Concordium.Crypto.SignatureScheme as SigScheme
 import qualified Data.Vector as Vec
 import Data.Word
 
+import Concordium.Utils
 import Concordium.Types
 import Concordium.ID.Types
 import Concordium.Types.HashableTo
