@@ -38,28 +38,51 @@ unsafe extern "C" fn aggregate_encrypted_amounts(
 /// generator, globally defined, instead of this way of doing it.
 pub struct ElgamalPublicKeySecond(Group);
 
-impl ElgamalPublicKeySecond {
-    pub fn generate() -> Self { ElgamalPublicKeySecond(Group::generate(&mut thread_rng())) }
-}
-
 macro_derive_from_bytes!(
     Box elgamal_second_from_bytes,
     ElgamalPublicKeySecond
 );
 macro_derive_to_bytes!(Box elgamal_second_to_bytes, ElgamalPublicKeySecond);
 macro_free_ffi!(Box elgamal_second_free, ElgamalPublicKeySecond);
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn elgamal_second_gen() -> *mut ElgamalPublicKeySecond {
-    Box::into_raw(Box::new(ElgamalPublicKeySecond::generate()))
-}
+
+#[derive(Serialize)]
+/// Analogue of the above, should be removed once we revise the secret keys of
+/// elgamal with a fixed generator.
+pub struct ElgamalSecretKeySecond(<Group as Curve>::Scalar);
+
+macro_derive_from_bytes!(
+    Box elgamal_second_secret_from_bytes,
+    ElgamalSecretKeySecond
+);
+macro_derive_to_bytes!(Box elgamal_second_secret_to_bytes, ElgamalSecretKeySecond);
+macro_free_ffi!(Box elgamal_second_secret_free, ElgamalSecretKeySecond);
 
 /// This is used for testing in haskell, providing deterministic key generation
 /// from seed.
 #[no_mangle]
-pub extern "C" fn elgamal_second_gen_seed(seed: u64) -> *mut ElgamalPublicKeySecond {
+extern "C" fn elgamal_second_secret_gen_seed(seed: u64) -> *mut ElgamalSecretKeySecond {
     let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
-    Box::into_raw(Box::new(ElgamalPublicKeySecond(Group::generate(&mut rng))))
+    Box::into_raw(Box::new(ElgamalSecretKeySecond(Group::generate_scalar(
+        &mut rng,
+    ))))
+}
+
+/// Derive public key, only meant for testing.
+/// FIXME: Should be replaced and optimized once the elgamal public and secret
+/// keys do not have an explicit generator attached to them.
+///
+/// # Safety
+///
+/// This function assumes the pointer is safe to dereference with the given
+/// type, i.e., it is non-null and produced via Box::into_raw.
+#[no_mangle]
+unsafe extern "C" fn derive_elgamal_second_public(
+    sec: *mut ElgamalSecretKeySecond,
+) -> *mut ElgamalPublicKeySecond {
+    let gc = GlobalContext::<Group>::generate();
+    Box::into_raw(Box::new(ElgamalPublicKeySecond(
+        gc.elgamal_generator().mul_by_scalar(&from_ptr!(sec).0),
+    )))
 }
 
 /// # Safety

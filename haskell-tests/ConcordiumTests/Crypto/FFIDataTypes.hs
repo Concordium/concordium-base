@@ -22,7 +22,7 @@ testSerializePsSigKey :: Property
 testSerializePsSigKey = testSerialize generatePsSigKey
 
 testSerializeElgamalSecond :: Property
-testSerializeElgamalSecond = testSerialize (const generateElgamalSecond)
+testSerializeElgamalSecond = testSerialize (return . generateElgamalSecondFromSeed . fromIntegral)
 
 testSerializeElgamalPublicKey :: Property
 testSerializeElgamalPublicKey = testSerialize (const generateElgamalPublicKey)

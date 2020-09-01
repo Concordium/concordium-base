@@ -19,6 +19,12 @@ import qualified Data.Aeson as AE
 dummyRegId :: AccountAddress -> ID.CredentialRegistrationID
 dummyRegId addr = ID.RegIdCred (generateElgamalSecondFromSeed (fromIntegral (IntHash.hash addr)))
 
+-- Derive a dummy encryption secret key corresponding to the dummyRegId above.
+{-# WARNING dummyEncryptionSecretKey "Only use for testing, do not use in production." #-}
+dummyEncryptionSecretKey :: AccountAddress -> ElgamalSecondSecret
+dummyEncryptionSecretKey addr = generateElgamalSecondSecretFromSeed (fromIntegral (IntHash.hash addr))
+
+
 -- This credential value is invalid and does not satisfy the invariants normally expected of credentials.
 -- Should only be used when only the existence of a credential is needed in testing, but the credential
 -- will neither be serialized, nor inspected.
