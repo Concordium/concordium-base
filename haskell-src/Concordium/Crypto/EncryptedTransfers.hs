@@ -54,20 +54,27 @@ foreign import ccall unsafe "verify_sec_to_pub_transfer"
      -> CSize  -- ^ Length of the transfer data bytes.
      -> IO Word8 -- ^ Return either 0 if proof checking failed, or non-zero in case of success.
 
+foreign import ccall unsafe "encrypt_amount_with_zero_randomness" encrypt_amount_with_zero_randomness ::
+  Ptr GlobalContext -- ^Global context
+  -> Word64 -- ^Amount to be encrypted
+  -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the high chunk of the result.
+  -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the low chunk of the result.
+  -> IO ()
+
 data EncryptedAmount = EncryptedAmount{
   -- | Encryption of the high-chunk (highest 32 bits).
   encryptionHigh :: ElgamalCipher,
-  -- | Encryption of the high-chunk (lowest 32 bits).
+  -- | Encryption of the low-chunk (lowest 32 bits).
   encryptionLow :: ElgamalCipher
   }
   deriving (Show, FromJSON, ToJSON) via Base16JSONSerialize EncryptedAmount
   deriving(Eq)
 
 instance Serialize EncryptedAmount where
-  put EncryptedAmount{..} = put encryptionHigh <> put encryptionLow
+  put EncryptedAmount{..} = put encryptionLow <> put encryptionHigh
   get = do
-    encryptionHigh <- get
     encryptionLow <- get
+    encryptionHigh <- get
     return EncryptedAmount{..}
 
 -- |An indexed used to determine which encryped amounts were used in a transaction.
@@ -160,20 +167,12 @@ instance Monoid EncryptedAmount where
   mconcat [] = mempty
   mconcat (x:xs) = foldl' aggregateAmounts x xs
 
-dummy_encrypt_amount ::
-  Ptr GlobalContext -- ^Global context
-  -> Word64 -- ^Amount to be encrypted
-  -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the high chunk of the result.
-  -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the low chunk of the result.
-  -> IO ()
-dummy_encrypt_amount = undefined
-
 encryptAmount :: GlobalContext -> Word64 -> EncryptedAmount
 encryptAmount gc amount = unsafeDupablePerformIO $
   withGlobalContext gc $ \gcPtr ->
   alloca $ \outHighPtr ->
   alloca $ \outLowPtr -> do
-      dummy_encrypt_amount gcPtr amount outHighPtr outLowPtr
+      encrypt_amount_with_zero_randomness gcPtr amount outHighPtr outLowPtr
       outHigh <- unsafeMakeCipher =<< peek outHighPtr
       outLow <- unsafeMakeCipher =<< peek outLowPtr
       return EncryptedAmount{encryptionHigh = outHigh, encryptionLow = outLow}
