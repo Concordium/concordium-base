@@ -639,11 +639,20 @@ data Event =
                -- |Index up to (but not including) which the amounts were removed.
                earUpToIndex :: !EncryptedAmountAggIndex
             }
+           -- | An encrypted amount was decrypted and added to the public balance of an account.
+           -- This is used on an account when it makes a transfer to public transaction.
+           | AmountAddedByDecryption {
+               aabdAccount :: !AccountAddress,
+               -- | The amount that was added to the public balance.
+               aabdAmount :: !Amount
+            }
            -- | A new encrypted amount was added to the self-encrypted-balance of the account.
            -- The amount given is the newly added one.
            | EncryptedSelfAmountAdded{
                eaaAccount :: !AccountAddress,
-               eaaNewAmount :: !EncryptedAmount
+               eaaNewAmount :: !EncryptedAmount,
+                -- | The amount that was subtracted from the public balance.
+               eaaAmount :: !Amount
                }
   deriving (Show, Generic, Eq)
 
