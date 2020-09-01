@@ -151,3 +151,15 @@ unsafe extern "C" fn verify_sec_to_pub_transfer(
         0
     }
 }
+
+#[no_mangle]
+unsafe extern "C" fn encrypt_amount_with_zero_randomness(
+    ctx_ptr: *const GlobalContext<Group>,
+    microgtu: u64,
+    out_high_ptr: *mut *const Cipher<Group>,
+    out_low_ptr: *mut *const Cipher<Group>,
+) {
+    let encrypted = encrypt_amount_with_fixed_randomness(from_ptr!(ctx_ptr), Amount { microgtu });
+    *out_high_ptr = Box::into_raw(Box::new(encrypted.encryptions[1]));
+    *out_low_ptr = Box::into_raw(Box::new(encrypted.encryptions[0]));
+}
