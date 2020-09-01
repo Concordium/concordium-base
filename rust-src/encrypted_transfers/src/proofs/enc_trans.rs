@@ -214,7 +214,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
     ) -> Option<Self::ProverWitness> {
         let mut witness_common = *challenge;
         witness_common.mul_assign(&secret.dlog_secret);
-        witness_common.negate(); 
+        witness_common.negate();
         witness_common.add_assign(&state.dlog);
         // For encexps:
         let mut witness_encexp1 = vec![];

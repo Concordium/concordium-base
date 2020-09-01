@@ -146,9 +146,9 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     let sender_pk = &PublicKey::from(sender_sk);
     // FIXME: Put context into random oracle
     let ro = RandomOracle::domain("EncryptedTransfer")
-    .append_bytes(&to_bytes(&ctx))
-    .append_bytes(&to_bytes(&receiver_pk))
-    .append_bytes(&to_bytes(&sender_pk));
+        .append_bytes(&to_bytes(&ctx))
+        .append_bytes(&to_bytes(&receiver_pk))
+        .append_bytes(&to_bytes(&sender_pk));
     // FIXME: Put context into the transcript.
     let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
     transcript.append_message(b"ctx", &to_bytes(&ctx));
@@ -194,9 +194,9 @@ pub fn verify_transfer_data<C: Curve>(
 ) -> bool {
     // Fixme: Put context into the random oracle.
     let ro = RandomOracle::domain("EncryptedTransfer")
-    .append_bytes(&to_bytes(&ctx))
-    .append_bytes(&to_bytes(&receiver_pk))
-    .append_bytes(&to_bytes(&sender_pk));
+        .append_bytes(&to_bytes(&ctx))
+        .append_bytes(&to_bytes(&receiver_pk))
+        .append_bytes(&to_bytes(&sender_pk));
     let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
     transcript.append_message(b"ctx", &to_bytes(&ctx));
     transcript.append_message(b"receiver_pk", &to_bytes(&receiver_pk));
@@ -241,8 +241,8 @@ pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
     let pk = &PublicKey::from(sk);
     // FIXME: Put context into random oracle
     let ro = RandomOracle::domain("SecToPubTransfer")
-    .append_bytes(&to_bytes(&ctx))
-    .append_bytes(&to_bytes(&pk));
+        .append_bytes(&to_bytes(&ctx))
+        .append_bytes(&to_bytes(&pk));
     // FIXME: Put context into the transcript.
     let mut transcript = Transcript::new(r"SecToPubTransfer".as_ref());
     transcript.append_message(b"ctx", &to_bytes(&ctx));
@@ -285,8 +285,8 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
 ) -> bool {
     // Fixme: Put context into the random oracle.
     let ro = RandomOracle::domain("SecToPubTransfer")
-    .append_bytes(&to_bytes(&ctx))
-    .append_bytes(&to_bytes(&pk));
+        .append_bytes(&to_bytes(&ctx))
+        .append_bytes(&to_bytes(&pk));
     let mut transcript = Transcript::new(r"SecToPubTransfer".as_ref());
     transcript.append_message(b"ctx", &to_bytes(&ctx));
     transcript.append_message(b"pk", &to_bytes(&pk));
