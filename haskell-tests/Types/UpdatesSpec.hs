@@ -5,8 +5,8 @@ import qualified Data.Aeson as AE
 import Test.Hspec
 import Test.QuickCheck as QC
 
-import Concordium.Updates
-
+import Concordium.Types.Updates
+{-
 genUpdatePayload :: Gen UpdatePayload
 genUpdatePayload = oneof [
         AuthorizationUpdatePayload <$> genAuthorizations,
@@ -17,3 +17,4 @@ genUpdateInstruction :: Gen UpdateInstruction
 genUpdateInstruction = do
         uiPayload <- genUpdatePayload
         return UpdateInstruction{..}
+        -}
