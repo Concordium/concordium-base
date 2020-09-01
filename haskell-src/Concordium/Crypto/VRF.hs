@@ -1,8 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ForeignFunctionInterface,
              DerivingVia, RecordWildCards, OverloadedStrings, DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 -- | This module is a prototype implementantion of  verifiable random function.
--- draft-irtf-cfrg-vrf-01
+-- draft-irtf-cfrg-vrf-07
 
 
 module Concordium.Crypto.VRF(
@@ -198,7 +198,9 @@ instance Eq SecretKey where
 data KeyPair = KeyPair {
     privateKey :: !SecretKey,
     publicKey :: !PublicKey
-} deriving (Eq, Show, Generic, NFData)
+} deriving (Eq, Show, Generic)
+
+instance NFData KeyPair
 
 instance Serialize KeyPair where
     put (KeyPair priv pub) = put priv <> put pub
