@@ -19,47 +19,12 @@ import Concordium.Crypto.FFIDataTypes
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.ID.Parameters
 import Concordium.ID.Types
+import Foreign (newForeignPtr, withForeignPtr, ForeignPtr)
+import Foreign (Storable)
 
--- | Aggregate two encrypted amounts together.
-foreign import ccall unsafe "aggregate_encrypted_amounts"
-  aggregate_encrypted_amounts ::
-     Ptr ElgamalCipher -- ^ High chunk of the first amount.
-     -> Ptr ElgamalCipher -- ^ Low chunk of the first amount.
-     -> Ptr ElgamalCipher -- ^ High chunk of the second amount.
-     -> Ptr ElgamalCipher -- ^ Low chunk of the second amount.
-     -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the high chunk of the result.
-     -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the low chunk of the result.
-     -> IO ()
-
-
--- | Verify an encrypted transfer proof.
-foreign import ccall unsafe "verify_encrypted_transfer"
-  verify_encrypted_transfer ::
-       Ptr GlobalContext -- ^Pointer to the global context needed to validate the proof.
-     -> Ptr ElgamalSecond -- ^ Public key of the receiver.
-     -> Ptr ElgamalSecond -- ^ Public key of the sender.
-     -> Ptr ElgamalCipher -- ^ High chunk of the current balance.
-     -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
-     -> Ptr Word8 -- ^ Pointer to the transfer data bytes.
-     -> CSize  -- ^ Length of the transfer data bytes.
-     -> IO Word8 -- ^ Return either 0 if proof checking failed, or non-zero in case of success.
-
-foreign import ccall unsafe "verify_sec_to_pub_transfer"
-  verify_sec_to_pub_transfer ::
-       Ptr GlobalContext -- ^Pointer to the global context needed to validate the proof.
-     -> Ptr ElgamalSecond -- ^ Public key of the sender.
-     -> Ptr ElgamalCipher -- ^ High chunk of the current balance.
-     -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
-     -> Ptr Word8 -- ^ Pointer to the transfer data bytes.
-     -> CSize  -- ^ Length of the transfer data bytes.
-     -> IO Word8 -- ^ Return either 0 if proof checking failed, or non-zero in case of success.
-
-foreign import ccall unsafe "encrypt_amount_with_zero_randomness" encrypt_amount_with_zero_randomness ::
-  Ptr GlobalContext -- ^Global context
-  -> Word64 -- ^Amount to be encrypted
-  -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the high chunk of the result.
-  -> Ptr (Ptr ElgamalCipher) -- ^Place to write the pointer to the low chunk of the result.
-  -> IO ()
+--------------------------------------------------------------------------------
+------------------------------- EncryptedAmount --------------------------------
+--------------------------------------------------------------------------------
 
 data EncryptedAmount = EncryptedAmount{
   -- | Encryption of the high-chunk (highest 32 bits).
@@ -77,69 +42,27 @@ instance Serialize EncryptedAmount where
     encryptionHigh <- get
     return EncryptedAmount{..}
 
--- |An indexed used to determine which encryped amounts were used in a transaction.
-newtype EncryptedAmountAggIndex = EncryptedAmountAggIndex {theAggIndex :: Word64}
-    deriving newtype (Eq, Show, Ord, FromJSON, ToJSON, Num, Integral, Real, Enum)
+instance Semigroup EncryptedAmount where
+  (<>) = aggregateAmounts
 
-instance Serialize EncryptedAmountAggIndex where
-  put (EncryptedAmountAggIndex i) = putWord64be i
-  get = EncryptedAmountAggIndex <$> getWord64be
+instance Monoid EncryptedAmount where
+  mempty = EncryptedAmount zeroElgamalCipher zeroElgamalCipher
+  -- mconcat is redefined for efficiency reasons. The default implemenation uses
+  -- foldr, which is bad in this case since `aggregateAmounts` is strict in the
+  -- second argument.
+  mconcat [] = mempty
+  mconcat (x:xs) = foldl' aggregateAmounts x xs
 
--- |An individual index of an encrypted amount. This is used when assigning
--- indices for encrypted amounts added to an account.
-newtype EncryptedAmountIndex = EncryptedAmountIndex {theIndex :: Word64}
-    deriving newtype (Eq, Show, Ord, FromJSON, ToJSON, Num, Integral, Real, Enum)
-
-instance Serialize EncryptedAmountIndex where
-  put (EncryptedAmountIndex i) = putWord64be i
-  get = EncryptedAmountIndex <$> getWord64be
-
--- |Add an offset to an encrypted amount aggregation index to obtain a new encrypted amount index.
--- It is assume that this will not overflow. The function is still safe in case of overflow,
--- but it will wrap around.
-addToAggIndex :: EncryptedAmountAggIndex -> Word -> EncryptedAmountIndex
-addToAggIndex (EncryptedAmountAggIndex aggIdx) len = EncryptedAmountIndex (aggIdx + fromIntegral len)
-
-newtype EncryptedAmountTransferProof = EncryptedAmountTransferProof { theEncryptedTransferProof :: ShortByteString }
-    deriving(Eq, Show, FromJSON, ToJSON) via ByteStringHex
-
--- | Custom serialization functions for proofs which allow us to have the same
--- serialization as in rust, provided enough context, i.e., length.
-getEncryptedAmountTransferProof :: Word32 -> Get EncryptedAmountTransferProof
-getEncryptedAmountTransferProof len = EncryptedAmountTransferProof <$> getShortByteString (fromIntegral len)
-
--- |Put the proof directly without the length.
--- The proof can be deserialized in the right contexts using 'getEncryptedAmountTransferProof'
-putEncryptedAmountTransferProof :: EncryptedAmountTransferProof -> Put
-putEncryptedAmountTransferProof = putShortByteString . theEncryptedTransferProof
-
--- FIXME: Serialization here is probably wrong, and needs to be fixed once the proof
--- is known.
-newtype EncryptAmountProof = EncryptAmountProof { theEncryptProof :: ShortByteString }
-    deriving(Eq, Show, FromJSON, ToJSON) via ByteStringHex
-    deriving Serialize via Short65K
-
--- FIXME: Serialization here is probably wrong, and needs to be fixed once the proof
--- is known.
-newtype DecryptAmountProof = DecryptAmountProof ShortByteString
-    deriving(Eq, Show, FromJSON, ToJSON) via ByteStringHex
-    deriving Serialize via Short65K
-
-newtype TransferToPublicProof = TransferToPublicProof { theTransferToPublicProof :: ShortByteString }
-  deriving (Eq, Show, FromJSON, ToJSON) via ByteStringHex
-  deriving Serialize via Short65K
-
--- | Custom serialization functions for proofs which allow us to have the same
--- serialization as in rust, provided enough context, i.e., length.
-getTrasnferToPublicProof :: Word32 -> Get TransferToPublicProof
-getTrasnferToPublicProof len = TransferToPublicProof <$> getShortByteString (fromIntegral len)
-
--- |Put the proof directly without the length.
--- The proof can be deserialized in the right contexts using 'getEncryptedAmountTransferProof'
-putTransferToPublicProof :: TransferToPublicProof -> Put
-putTransferToPublicProof = putShortByteString . theTransferToPublicProof
-
--- * Functions for verifying proofs, and aggregating amounts, used from the scheduler.
+-- | Aggregate two encrypted amounts together.
+foreign import ccall unsafe "aggregate_encrypted_amounts"
+  aggregate_encrypted_amounts ::
+     Ptr ElgamalCipher -- ^ High chunk of the first amount.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the first amount.
+     -> Ptr ElgamalCipher -- ^ High chunk of the second amount.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the second amount.
+     -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the pointer to the high chunk of the result.
+     -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the pointer to the low chunk of the result.
+     -> IO ()
 
 -- |Aggregate two encrypted amounts together. This operation is strict and
 -- associative.
@@ -156,17 +79,66 @@ aggregateAmounts left right = unsafeDupablePerformIO $ do
               outLow <- unsafeMakeCipher =<< peek outLowPtr
               return EncryptedAmount{encryptionHigh = outHigh, encryptionLow = outLow}
 
-instance Semigroup EncryptedAmount where
-  (<>) = aggregateAmounts
+--------------------------------------------------------------------------------
+-------------------------- Encrypted aggregated index --------------------------
+--------------------------------------------------------------------------------
 
-instance Monoid EncryptedAmount where
-  mempty = EncryptedAmount zeroElgamalCipher zeroElgamalCipher
-  -- mconcat is redefined for efficiency reasons. The default implemenation uses
-  -- foldr, which is bad in this case since `aggregateAmounts` is strict in the
-  -- second argument.
-  mconcat [] = mempty
-  mconcat (x:xs) = foldl' aggregateAmounts x xs
+-- |An indexed used to determine which encryped amounts were used in a transaction.
+newtype EncryptedAmountAggIndex = EncryptedAmountAggIndex {theAggIndex :: Word64}
+    deriving newtype (Eq, Show, Ord, FromJSON, ToJSON, Num, Integral, Real, Enum, Storable, Serialize)
 
+--------------------------------------------------------------------------------
+---------------------------- Encrypted amount index ----------------------------
+--------------------------------------------------------------------------------
+
+-- |An individual index of an encrypted amount. This is used when assigning
+-- indices for encrypted amounts added to an account.
+newtype EncryptedAmountIndex = EncryptedAmountIndex {theIndex :: Word64}
+    deriving newtype (Eq, Show, Ord, FromJSON, ToJSON, Num, Integral, Real, Enum, Serialize)
+
+-- |Add an offset to an encrypted amount aggregation index to obtain a new encrypted amount index.
+-- It is assume that this will not overflow. The function is still safe in case of overflow,
+-- but it will wrap around.
+addToAggIndex :: EncryptedAmountAggIndex -> Word -> EncryptedAmountIndex
+addToAggIndex (EncryptedAmountAggIndex aggIdx) len = EncryptedAmountIndex (aggIdx + fromIntegral len)
+
+--------------------------------------------------------------------------------
+------------------------- Aggregated Encrypted Amount --------------------------
+--------------------------------------------------------------------------------
+
+foreign import ccall unsafe "make_aggregated_decrypted_amount" make_aggregated_decrypted_amount ::
+  Ptr ElgamalCipher -- ^ High chunk of the encrypted amount
+  -> Ptr ElgamalCipher -- ^ Low chunk of the encrypted amount
+  -> Word64 -- ^ Amount in plaintext
+  -> EncryptedAmountAggIndex -- ^ Index up to which amounts have been aggregated
+  -> IO (Ptr AggregatedDecryptedAmount)
+
+foreign import ccall unsafe "&free_aggregated_decrypted_amount" free_aggregated_decrypted_amount ::
+  FunPtr (Ptr AggregatedDecryptedAmount -> IO ())
+
+newtype AggregatedDecryptedAmount = AggregatedDecryptedAmount (ForeignPtr AggregatedDecryptedAmount)
+withAggregatedDecryptedAmount :: AggregatedDecryptedAmount -> (Ptr AggregatedDecryptedAmount -> IO b) -> IO b
+withAggregatedDecryptedAmount (AggregatedDecryptedAmount ptr) = withForeignPtr ptr
+
+makeAggregatedDecryptedAmount :: EncryptedAmount -> Word64 -> EncryptedAmountAggIndex -> IO AggregatedDecryptedAmount
+makeAggregatedDecryptedAmount encAmount amount idx =
+  withElgamalCipher (encryptionHigh encAmount) $ \enc_hi ->
+    withElgamalCipher (encryptionLow encAmount) $ \enc_lo ->
+    AggregatedDecryptedAmount <$> (newForeignPtr free_aggregated_decrypted_amount =<< make_aggregated_decrypted_amount enc_hi enc_lo amount idx)
+
+--------------------------------------------------------------------------------
+-------------------------- Public to secret transfer ---------------------------
+--------------------------------------------------------------------------------
+
+foreign import ccall unsafe "encrypt_amount_with_zero_randomness"
+  encrypt_amount_with_zero_randomness ::
+    Ptr GlobalContext -- ^ Global context
+    -> Word64 -- ^ Amount to be encrypted
+    -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the pointer to the high chunk of the result.
+    -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the pointer to the low chunk of the result.
+    -> IO ()
+
+-- | Encrypt the given amount with zero randomness. To be used in transfer to secret
 encryptAmount :: GlobalContext -> Word64 -> EncryptedAmount
 encryptAmount gc amount = unsafeDupablePerformIO $
   withGlobalContext gc $ \gcPtr ->
@@ -177,28 +149,93 @@ encryptAmount gc amount = unsafeDupablePerformIO $
       outLow <- unsafeMakeCipher =<< peek outLowPtr
       return EncryptedAmount{encryptionHigh = outHigh, encryptionLow = outLow}
 
-type EncryptedAmountTransferBytes = BS.ByteString
+--------------------------------------------------------------------------------
+--------------------------- Encrypted transfer data ----------------------------
+--------------------------------------------------------------------------------
 
--- |Prepare encrypted amount transfer bytes to send through FFI. This implements
--- the right serialization to match that defined in Rust for the
--- @EncryptedAmountTransferData@.
-prepareEncryptedAmountTransferBytes ::
-  -- |Remaining amount on the account
-  EncryptedAmount ->
-  -- |Amount to transfer
-  EncryptedAmount ->
-  -- |Index of the encrypted amounts used as input.
-  EncryptedAmountAggIndex ->
-  -- |Proof of validity of transaction.
-  EncryptedAmountTransferProof ->
-  -- |Serialized data
-  EncryptedAmountTransferBytes
-prepareEncryptedAmountTransferBytes remainingAmount transferAmount idx proof = runPut putter
-  where putter =
-          put remainingAmount <>
-          put transferAmount <>
-          put idx <>
-          putEncryptedAmountTransferProof proof
+foreign import ccall unsafe "make_encrypted_transfer_data" make_encrypted_transfer_data ::
+  Ptr GlobalContext -- ^ Pointer to the global context
+  -> Ptr ElgamalSecond  -- ^ Public key of the receiver
+  -> Ptr ElgamalSecondSecret -- ^ Secret key of the sender
+  -> Ptr AggregatedDecryptedAmount -- ^ Encrypted amount placed for the transfer
+  -> Word64 -- ^ Amount that want to be transferred
+  -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the high chunk of the remaining amount
+  -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the low chunk of the remaining amount
+  -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the high chunk of the transfer amount
+  -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the low chunk of the transfer amount
+  -> Ptr EncryptedAmountAggIndex -- ^ Place to write the index
+  -> IO (Ptr EncryptedAmountTransferProof)
+
+foreign import ccall unsafe "&free_encrypted_amount_transfer_proof" free_encrypted_amount_transfer_proof ::
+  FunPtr (Ptr EncryptedAmountTransferProof -> IO ())
+
+newtype EncryptedAmountTransferProof = EncryptedAmountTransferProof (ForeignPtr EncryptedAmountTransferProof)
+withEncryptedAmountTransferProof :: EncryptedAmountTransferProof -> (Ptr EncryptedAmountTransferProof -> IO b) -> IO b
+withEncryptedAmountTransferProof (EncryptedAmountTransferProof ptr) = withForeignPtr ptr
+
+data EncryptedAmountTransferData = EncryptedAmountTransferData {
+  eatdRemainingAmount :: EncryptedAmount,
+  eatdTransferAmount :: EncryptedAmount,
+  eatdIndex :: EncryptedAmountAggIndex,
+  eatdProof :: EncryptedAmountTransferProof
+  }
+
+withEncryptedAmountTransferData :: EncryptedAmountTransferData
+                                -> (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> EncryptedAmountAggIndex -> Ptr EncryptedAmountTransferProof -> IO a)
+                                -> IO a
+withEncryptedAmountTransferData EncryptedAmountTransferData{..} f =
+  withElgamalCipher (encryptionHigh eatdRemainingAmount) $ \remaining_high ->
+  withElgamalCipher (encryptionLow eatdRemainingAmount) $ \remaining_low ->
+  withElgamalCipher (encryptionHigh eatdTransferAmount) $ \transfer_high ->
+  withElgamalCipher (encryptionLow eatdTransferAmount) $ \transfer_low ->
+  withEncryptedAmountTransferProof eatdProof $ \proof ->
+    f remaining_high remaining_low transfer_high transfer_low eatdIndex proof
+
+makeEncryptedAmountTransferData :: GlobalContext
+                                    -> ElgamalSecond
+                                    -> ElgamalSecondSecret
+                                    -> AggregatedDecryptedAmount
+                                    -> Word64
+                                    -> IO EncryptedAmountTransferData
+makeEncryptedAmountTransferData gc receiverPk senderSk aggAmount desiredAmount =
+  withGlobalContext gc $ \gcPtr ->
+  withElgamalSecond receiverPk $ \receiverPkPtr ->
+  withElgamalSecondSecret senderSk $ \senderSkPtr ->
+  withAggregatedDecryptedAmount aggAmount $ \aggAmountPtr ->
+    alloca $ \rem_hi_ptr ->
+    alloca $ \rem_lo_ptr ->
+    alloca $ \trans_hi_ptr ->
+    alloca $ \trans_lo_ptr ->
+    alloca $ \idx_ptr -> do
+      proof_ptr <- make_encrypted_transfer_data gcPtr receiverPkPtr senderSkPtr aggAmountPtr desiredAmount rem_hi_ptr rem_lo_ptr trans_hi_ptr trans_lo_ptr idx_ptr
+      rem_hi <- unsafeMakeCipher =<< peek rem_hi_ptr
+      rem_lo <- unsafeMakeCipher =<< peek rem_hi_ptr
+      trans_hi <- unsafeMakeCipher =<< peek trans_hi_ptr
+      trans_lo <- unsafeMakeCipher =<< peek trans_hi_ptr
+      idx <- peek idx_ptr
+      proof <- EncryptedAmountTransferProof <$> newForeignPtr free_encrypted_amount_transfer_proof proof_ptr
+      return EncryptedAmountTransferData {
+        eatdRemainingAmount = EncryptedAmount rem_hi rem_lo,
+        eatdTransferAmount = EncryptedAmount trans_hi trans_lo,
+        eatdIndex = idx,
+        eatdProof = proof
+        }
+
+-- | Verify an encrypted transfer proof.
+foreign import ccall unsafe "verify_encrypted_transfer"
+  verify_encrypted_transfer ::
+       Ptr GlobalContext -- ^ Pointer to the global context needed to validate the proof.
+     -> Ptr ElgamalSecond -- ^ Public key of the receiver.
+     -> Ptr ElgamalSecond -- ^ Public key of the sender.
+     -> Ptr ElgamalCipher -- ^ High chunk of the current balance.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
+     -> Ptr ElgamalCipher -- ^ High chunk of the remaining amount.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the remaining amount.
+     -> Ptr ElgamalCipher -- ^ High chunk of the transfer amount.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the transfer amount.
+     -> EncryptedAmountAggIndex -- ^ Index up to which amounts have been aggregated
+     -> Ptr EncryptedAmountTransferProof -- ^ Pointer to the proof
+     -> IO Word8 -- ^ Return either 0 if proof checking failed, or non-zero in case of success.
 
 verifyEncryptedTransferProof ::
   -- |Global context with parameters
@@ -210,7 +247,7 @@ verifyEncryptedTransferProof ::
   -- |Aggregated encrypted amount on the sender's account that was used.
   EncryptedAmount ->
   -- |Proof of validity of the transfer.
-  EncryptedAmountTransferBytes ->
+  EncryptedAmountTransferData ->
   Bool
 verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData = unsafeDupablePerformIO $ do
   withGlobalContext gc $ \gcPtr ->
@@ -219,41 +256,107 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
         withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
           withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
             -- this is safe since the called function handles the 0 length case correctly.
-            BS.unsafeUseAsCStringLen transferData $ \(bytesPtr, len) -> do
+            withEncryptedAmountTransferData transferData $ \rem_hi rem_lo trans_hi trans_lo idx proof -> do
                res <- verify_encrypted_transfer
                        gcPtr
                        receiverPKPtr
                        senderPKPtr
                        initialHighPtr
                        initialLowPtr
-                       (castPtr bytesPtr)
-                       (fromIntegral len)
+                       rem_hi
+                       rem_lo
+                       trans_hi
+                       trans_lo
+                       idx
+                       proof
                return (res /= 0)
   where AccountEncryptionKey (RegIdCred receiverPK') = receiverPK
         AccountEncryptionKey (RegIdCred senderPK') = senderPK
 
-type TransferToPublicBytes = BS.ByteString
+--------------------------------------------------------------------------------
+--------------------------- Sec to pub transfer data ---------------------------
+--------------------------------------------------------------------------------
 
--- |Prepare encrypted amount transfer bytes to send through FFI. This implements
--- the right serialization to match that defined in Rust for the
--- @EncryptedAmountTransferData@.
-prepareTransferToPublicBytes ::
-  -- |Remaining amount on the account
-  EncryptedAmount ->
-  -- |Amount to transfer
-  Word64 ->
-  -- |Index of the encrypted amounts used as input.
-  EncryptedAmountAggIndex ->
-  -- |Proof of validity of transaction.
-  TransferToPublicProof ->
-  -- |Serialized data
-  TransferToPublicBytes
-prepareTransferToPublicBytes remainingAmount transferAmount idx proof = runPut putter
-  where putter =
-          put remainingAmount <>
-          put transferAmount <>
-          put idx <>
-          putTransferToPublicProof proof
+foreign import ccall unsafe "make_sec_to_pub_transfer_data"
+  make_sec_to_pub_transfer_data ::
+       Ptr GlobalContext
+     -> Ptr ElgamalSecondSecret
+     -> Ptr AggregatedDecryptedAmount
+     -> Word64
+     -> Ptr (Ptr ElgamalCipher)
+     -> Ptr (Ptr ElgamalCipher)
+     -> Ptr (Ptr ElgamalCipher)
+     -> Ptr (Ptr ElgamalCipher)
+     -> Ptr EncryptedAmountAggIndex
+     -> IO (Ptr SecToPubAmountTransferProof)
+
+foreign import ccall unsafe "&free_sec_to_pub_amount_transfer_proof"
+     free_sec_to_pub_amount_transfer_proof ::
+     FunPtr (Ptr SecToPubAmountTransferProof -> IO ())
+
+newtype SecToPubAmountTransferProof = SecToPubAmountTransferProof (ForeignPtr SecToPubAmountTransferProof)
+withSecToPubAmountTransferProof :: SecToPubAmountTransferProof -> (Ptr SecToPubAmountTransferProof -> IO b) -> IO b
+withSecToPubAmountTransferProof (SecToPubAmountTransferProof ptr) = withForeignPtr ptr
+
+data SecToPubAmountTransferData = SecToPubAmountTransferData {
+  stpatdRemainingAmount :: EncryptedAmount,
+  stpatdTransferAmount :: EncryptedAmount,
+  stpatdIndex :: EncryptedAmountAggIndex,
+  stpatdProof :: SecToPubAmountTransferProof
+  }
+
+withSecToPubAmountTransferData :: SecToPubAmountTransferData
+                               -> (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> EncryptedAmountAggIndex -> Ptr SecToPubAmountTransferProof -> IO a)
+                               -> IO a
+withSecToPubAmountTransferData SecToPubAmountTransferData{..} f = do
+  withElgamalCipher (encryptionHigh stpatdRemainingAmount) $ \remaining_high ->
+    withElgamalCipher (encryptionLow stpatdRemainingAmount) $ \remaining_low ->
+    withElgamalCipher (encryptionHigh stpatdTransferAmount) $ \transfer_high ->
+    withElgamalCipher (encryptionLow stpatdTransferAmount) $ \transfer_low ->
+    withSecToPubAmountTransferProof stpatdProof $ \proof ->
+    f remaining_high remaining_low transfer_high transfer_low stpatdIndex proof
+
+makeSecToPubAmountTransferData :: GlobalContext
+                               -> ElgamalSecondSecret
+                               -> AggregatedDecryptedAmount
+                               -> Word64
+                               -> IO SecToPubAmountTransferData
+makeSecToPubAmountTransferData gc sk aggAmount amount =
+  withGlobalContext gc $ \gcPtr ->
+  withElgamalSecondSecret sk $ \skPtr ->
+  withAggregatedDecryptedAmount aggAmount $ \aggAmountPtr ->
+    alloca $ \rem_hi_ptr ->
+    alloca $ \rem_lo_ptr ->
+    alloca $ \trans_hi_ptr ->
+    alloca $ \trans_lo_ptr ->
+    alloca $ \idx_ptr -> do
+      proof_ptr <- make_sec_to_pub_transfer_data gcPtr skPtr aggAmountPtr amount rem_hi_ptr rem_lo_ptr trans_hi_ptr trans_lo_ptr idx_ptr
+      rem_hi <- unsafeMakeCipher =<< peek rem_hi_ptr
+      rem_lo <- unsafeMakeCipher =<< peek rem_hi_ptr
+      trans_hi <- unsafeMakeCipher =<< peek trans_hi_ptr
+      trans_lo <- unsafeMakeCipher =<< peek trans_hi_ptr
+      idx <- peek idx_ptr
+      proof <- SecToPubAmountTransferProof <$> newForeignPtr free_sec_to_pub_amount_transfer_proof proof_ptr
+      return SecToPubAmountTransferData {
+        stpatdRemainingAmount = EncryptedAmount rem_hi rem_lo,
+        stpatdTransferAmount = EncryptedAmount trans_hi trans_lo,
+        stpatdIndex = idx,
+        stpatdProof = proof
+        }
+
+foreign import ccall unsafe "verify_sec_to_pub_transfer"
+  verify_sec_to_pub_transfer ::
+       Ptr GlobalContext -- ^ Pointer to the global context needed to validate the proof.
+     -> Ptr ElgamalSecond -- ^ Public key of the sender.
+     -> Ptr ElgamalCipher -- ^ High chunk of the current balance.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
+     -> Ptr ElgamalCipher -- ^ High chunk of the remaining amount.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the remaining amount.
+     -> Ptr ElgamalCipher -- ^ High chunk of the transfer amount.
+     -> Ptr ElgamalCipher -- ^ Low chunk of the transfer amount.
+     -> EncryptedAmountAggIndex -- ^ Index up to which amounts have been aggregated
+     -> Ptr SecToPubAmountTransferProof -- ^ Pointer to the proof
+     -> IO Word8 -- ^ Return either 0 if proof checking failed, or non-zero in case of success.
 
 verifySecretToPublicTransferProof ::
   -- |Global context with parameters
@@ -263,7 +366,7 @@ verifySecretToPublicTransferProof ::
   -- |Aggregated encrypted amount on the sender's account that was used.
   EncryptedAmount ->
   -- |Proof of validity of the transfer.
-  TransferToPublicBytes ->
+  SecToPubAmountTransferData ->
   Bool
 verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsafeDupablePerformIO $ do
   withGlobalContext gc $ \gcPtr ->
@@ -271,13 +374,17 @@ verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsaf
       withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
         withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
           -- this is safe since the called function handles the 0 length case correctly.
-          BS.unsafeUseAsCStringLen transferData $ \(bytesPtr, len) -> do
+          withSecToPubAmountTransferData transferData $ \rem_hi rem_lo trans_hi trans_lo idx proof -> do
              res <- verify_sec_to_pub_transfer
                      gcPtr
                      senderPKPtr
                      initialHighPtr
                      initialLowPtr
-                     (castPtr bytesPtr)
-                     (fromIntegral len)
+                     rem_hi
+                     rem_lo
+                     trans_hi
+                     trans_lo
+                     idx
+                     proof
              return (res /= 0)
   where AccountEncryptionKey (RegIdCred senderPK') = senderPK

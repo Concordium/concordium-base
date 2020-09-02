@@ -2,7 +2,7 @@
 module Concordium.Crypto.FFIDataTypes
   (PedersenKey, PsSigKey, ElgamalSecond, ElgamalSecondSecret, ElgamalPublicKey, ElgamalCipher,
   generatePedersenKey, generatePsSigKey, generateElgamalPublicKey, generateElgamalPublicKeyFromSeed, generateElgamalSecondSecretFromSeed,
-  generateElgamalCipher,withPedersenKey, withPsSigKey, withElgamalSecond, withElgamalPublicKey, withElgamalCipher,
+  generateElgamalCipher ,withPedersenKey, withPsSigKey, withElgamalSecond, withElgamalSecondSecret, withElgamalPublicKey, withElgamalCipher,
   zeroElgamalCipher, unsafeMakeCipher, generateElgamalSecondFromSeed)
   where
 
@@ -220,7 +220,7 @@ generateElgamalPublicKeyFromSeed seed = unsafeDupablePerformIO $ do
 
 {-# WARNING generateElgamalSecondFromSeed "Not cryptographically secure, do not use in production." #-}
 generateElgamalSecondFromSeed :: Word64 -> ElgamalSecond
-generateElgamalSecondFromSeed = deriveElgamalSecondPublic . generateElgamalSecondSecretFromSeed 
+generateElgamalSecondFromSeed = deriveElgamalSecondPublic . generateElgamalSecondSecretFromSeed
 
 instance Serialize ElgamalSecondSecret where
   get = do
