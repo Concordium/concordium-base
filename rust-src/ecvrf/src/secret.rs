@@ -4,9 +4,9 @@ use core::fmt::Debug;
 
 use zeroize::Zeroize;
 
-use curve25519_dalek::{constants, digest::Digest, edwards::EdwardsPoint, scalar::Scalar};
+use curve25519_dalek::{constants, digest::Digest, scalar::Scalar};
 
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, Rng};
 
 use sha2::Sha512;
 
@@ -30,9 +30,7 @@ impl Serial for SecretKey {
     }
 }
 
-/// Construct a `PublicKey` from a slice of bytes. This function always
-/// results in a valid public key, in particular the curve point is not of
-/// small order (and hence also not a point at infinity).
+/// Construct a `SecretKey` from a slice of bytes.
 impl Deserial for SecretKey {
     #[inline]
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
@@ -85,13 +83,8 @@ impl SecretKey {
     }
 
     #[allow(non_snake_case)]
-    pub fn prove<R: RngCore + CryptoRng>(
-        &self,
-        public_key: &PublicKey,
-        message: &[u8],
-        rng: &mut R,
-    ) -> Proof {
-        ExpandedSecretKey::from(self).prove(&public_key, &message, rng)
+    pub fn prove(&self, public_key: &PublicKey, message: &[u8]) -> Proof {
+        ExpandedSecretKey::from(self).prove(&public_key, &message)
     }
 
     /// Generate a `SecretKey` from a `csprng`.
@@ -189,8 +182,9 @@ impl Drop for ExpandedSecretKey {
 
 impl<'a> From<&'a SecretKey> for ExpandedSecretKey {
     /// Construct an `ExpandedSecretKey` from a `SecretKey`.
+    /// Implements https://tools.ietf.org/html/rfc8032#section-5.1.5
     fn from(secret_key: &'a SecretKey) -> ExpandedSecretKey {
-        let mut h: Sha512 = Sha512::default();
+        let mut h: Sha512 = Sha512::new();
         let mut hash: [u8; 64] = [0u8; 64];
         let mut lower: [u8; 32] = [0u8; 32];
         let mut upper: [u8; 32] = [0u8; 32];
@@ -201,9 +195,9 @@ impl<'a> From<&'a SecretKey> for ExpandedSecretKey {
         lower.copy_from_slice(&hash[00..32]);
         upper.copy_from_slice(&hash[32..64]);
 
-        lower[0] &= 248;
-        lower[31] &= 63;
-        lower[31] |= 64;
+        lower[0] &= 0b_1111_1000;
+        lower[31] &= 0b_0111_1111;
+        lower[31] |= 0b_0100_0000;
 
         ExpandedSecretKey {
             key:   Scalar::from_bits(lower),
@@ -252,30 +246,32 @@ impl ExpandedSecretKey {
     }
 
     /// VRF proof with expanded secret key
-    pub fn prove<R: RngCore + CryptoRng>(
-        &self,
-        public_key: &PublicKey,
-        message: &[u8],
-        rng: &mut R,
-    ) -> Proof {
-        let h: EdwardsPoint = public_key
-            .hash_to_curve(message)
-            .expect("Failure should not happen for non-maliciously crafted input.");
+    /// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.1
+    pub fn prove(&self, public_key: &PublicKey, alpha: &[u8]) -> Proof {
         let x = self.key;
-        let h_to_x = x * h; // h^x
-        let k = Scalar::random(rng); // nonce
-        let h_to_k = k * h; // h^k
-        let g_to_k = &k * &constants::ED25519_BASEPOINT_TABLE; // g^k
-        let c = hash_points(&[
-            constants::ED25519_BASEPOINT_COMPRESSED,
-            h.compress(),
-            public_key.0,
-            h_to_x.compress(),
-            g_to_k.compress(),
-            h_to_k.compress(),
-        ]);
-        let k_minus_cx = k - (c * x);
+        let h = public_key
+            .hash_to_curve(alpha)
+            .expect("Failure should not happen for non-maliciously crafted input.");
+        let h_string = h.compress().to_bytes();
+        let k = self.nonce_generation(&h_string);
 
-        Proof(h_to_x, c, k_minus_cx)
+        let gamma = x * h;
+
+        let c = hash_points(&[
+            h.compress(),
+            gamma.compress(),
+            (k * constants::ED25519_BASEPOINT_POINT).compress(), // b^k
+            (k * h).compress(),                                  // h^k
+        ]);
+
+        let k_plus_cx = k + c * x;
+
+        Proof(gamma, c, k_plus_cx)
+    }
+
+    /// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.2.2
+    fn nonce_generation(&self, h_string: &[u8]) -> Scalar {
+        let h: Sha512 = Sha512::new().chain(self.nonce).chain(h_string);
+        Scalar::from_hash(h)
     }
 }

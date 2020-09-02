@@ -1,8 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ForeignFunctionInterface,
-             DerivingVia, RecordWildCards, OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
+             DerivingVia, RecordWildCards, OverloadedStrings, DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
 -- | This module is a prototype implementantion of  verifiable random function.
--- draft-irtf-cfrg-vrf-01
+-- draft-irtf-cfrg-vrf-07
 
 
 module Concordium.Crypto.VRF(
@@ -36,7 +36,8 @@ import           Data.Word
 import           System.IO.Unsafe
 import           Data.Serialize
 import           Foreign.C.Types
-import           Concordium.Crypto.SHA256
+import Data.Data(Typeable, Data)
+import           Data.Bits
 import           System.Random
 import           Test.QuickCheck (Arbitrary(..))
 import qualified Data.Aeson as AE
@@ -56,29 +57,29 @@ instance NFData PublicKey where
 instance NFData SecretKey where
   rnf x = rwhnf x
 
-foreign import ccall unsafe "&ec_vrf_proof_free" freeProof :: FunPtr (Ptr Proof -> IO ())
-foreign import ccall unsafe "&ec_vrf_public_key_free" freePublicKey :: FunPtr (Ptr PublicKey -> IO ())
-foreign import ccall unsafe "&ec_vrf_secret_key_free" freeSecretKey :: FunPtr (Ptr SecretKey -> IO ())
-foreign import ccall unsafe "ec_vrf_proof_to_bytes" toBytesProof :: Ptr Proof -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "ec_vrf_public_key_to_bytes" toBytesPublicKey :: Ptr PublicKey -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "ec_vrf_secret_key_to_bytes" toBytesSecretKey :: Ptr SecretKey -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "ec_vrf_proof_from_bytes" fromBytesProof :: Ptr Word8 -> CSize -> IO (Ptr Proof)
-foreign import ccall unsafe "ec_vrf_public_key_from_bytes" fromBytesPublicKey :: Ptr Word8 -> CSize -> IO (Ptr PublicKey)
-foreign import ccall unsafe "ec_vrf_secret_key_from_bytes" fromBytesSecretKey :: Ptr Word8 -> CSize -> IO (Ptr SecretKey)
-foreign import ccall unsafe "ec_vrf_priv_key" generateSecretKey :: IO (Ptr SecretKey)
+foreign import ccall unsafe "&ecvrf_proof_free" freeProof :: FunPtr (Ptr Proof -> IO ())
+foreign import ccall unsafe "&ecvrf_public_key_free" freePublicKey :: FunPtr (Ptr PublicKey -> IO ())
+foreign import ccall unsafe "&ecvrf_secret_key_free" freeSecretKey :: FunPtr (Ptr SecretKey -> IO ())
+foreign import ccall unsafe "ecvrf_proof_to_bytes" toBytesProof :: Ptr Proof -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ecvrf_public_key_to_bytes" toBytesPublicKey :: Ptr PublicKey -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ecvrf_secret_key_to_bytes" toBytesSecretKey :: Ptr SecretKey -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "ecvrf_proof_from_bytes" fromBytesProof :: Ptr Word8 -> CSize -> IO (Ptr Proof)
+foreign import ccall unsafe "ecvrf_public_key_from_bytes" fromBytesPublicKey :: Ptr Word8 -> CSize -> IO (Ptr PublicKey)
+foreign import ccall unsafe "ecvrf_secret_key_from_bytes" fromBytesSecretKey :: Ptr Word8 -> CSize -> IO (Ptr SecretKey)
+foreign import ccall unsafe "ecvrf_priv_key" generateSecretKey :: IO (Ptr SecretKey)
 
-foreign import ccall unsafe "ec_vrf_proof_eq" proofEq :: Ptr Proof -> Ptr Proof -> IO Word8
-foreign import ccall unsafe "ec_vrf_public_key_eq" publicKeyEq :: Ptr PublicKey -> Ptr PublicKey -> IO Word8
-foreign import ccall unsafe "ec_vrf_secret_key_eq" secretKeyEq :: Ptr SecretKey -> Ptr SecretKey -> IO Word8
+foreign import ccall unsafe "ecvrf_proof_eq" proofEq :: Ptr Proof -> Ptr Proof -> IO Word8
+foreign import ccall unsafe "ecvrf_public_key_eq" publicKeyEq :: Ptr PublicKey -> Ptr PublicKey -> IO Word8
+foreign import ccall unsafe "ecvrf_secret_key_eq" secretKeyEq :: Ptr SecretKey -> Ptr SecretKey -> IO Word8
 
-foreign import ccall unsafe "ec_vrf_proof_cmp" proofOrd :: Ptr Proof -> Ptr Proof -> IO Int32
-foreign import ccall unsafe "ec_vrf_public_key_cmp" publicKeyOrd :: Ptr PublicKey -> Ptr PublicKey -> IO Int32
+foreign import ccall unsafe "ecvrf_proof_cmp" proofOrd :: Ptr Proof -> Ptr Proof -> IO Int32
+foreign import ccall unsafe "ecvrf_public_key_cmp" publicKeyOrd :: Ptr PublicKey -> Ptr PublicKey -> IO Int32
 
-foreign import ccall "ec_vrf_pub_key" rs_public_key :: Ptr SecretKey -> IO (Ptr PublicKey)
-foreign import ccall "ec_vrf_prove" rs_prove :: Ptr PublicKey -> Ptr SecretKey -> Ptr Word8 -> CSize -> IO (Ptr Proof)
-foreign import ccall "ec_vrf_proof_to_hash" rs_proof_to_hash :: Ptr Word8 -> Ptr Proof -> IO ()
-foreign import ccall "ec_vrf_verify_key" rs_verify_key :: Ptr PublicKey -> IO Bool
-foreign import ccall "ec_vrf_verify" rs_verify :: Ptr PublicKey -> Ptr Proof -> Ptr Word8 -> CSize -> IO Int32
+foreign import ccall "ecvrf_pub_key" rs_public_key :: Ptr SecretKey -> IO (Ptr PublicKey)
+foreign import ccall "ecvrf_prove" rs_prove :: Ptr PublicKey -> Ptr SecretKey -> Ptr Word8 -> CSize -> IO (Ptr Proof)
+foreign import ccall "ecvrf_proof_to_hash" rs_proof_to_hash :: Ptr Word8 -> Ptr Proof -> IO ()
+foreign import ccall "ecvrf_verify_key" rs_verify_key :: Ptr PublicKey -> IO Bool
+foreign import ccall "ecvrf_verify" rs_verify :: Ptr PublicKey -> Ptr Proof -> Ptr Word8 -> CSize -> IO Int32
 
 -- |As a wrapper over `withForeignPtr` this allows temporary access
 -- to the underlying `ForeignPtr` inside a `Proof`. The internally
@@ -197,7 +198,9 @@ instance Eq SecretKey where
 data KeyPair = KeyPair {
     privateKey :: !SecretKey,
     publicKey :: !PublicKey
-} deriving (Eq, Show, Generic, NFData)
+} deriving (Eq, Show, Generic)
+
+instance NFData KeyPair
 
 instance Serialize KeyPair where
     put (KeyPair priv pub) = put priv <> put pub
@@ -208,6 +211,38 @@ instance AE.FromJSON KeyPair where
       privateKey <- obj AE..: "electionPrivateKey"
       publicKey <- obj AE..: "electionVerifyKey"
       return KeyPair{..}
+
+-- |A SHA512 hash.  64 bytes.
+digestSize :: Int
+digestSize = 64
+
+data DigestSize
+  deriving(Typeable, Data)
+
+instance FBS.FixedLength DigestSize where
+    fixedLength _ = digestSize
+
+newtype Hash = Hash (FBS.FixedByteString DigestSize)
+  deriving (Eq, Ord, Bits, Bounded, Enum, Typeable, Data)
+  deriving Serialize via FBSHex DigestSize
+  deriving Show via FBSHex DigestSize
+  deriving (AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey) via FBSHex DigestSize
+
+
+-- |Convert a 'Hash' into a 'Double' value in the range [0,1].
+-- This implementation takes the first 64-bit word (big-endian) and uses it
+-- as the significand, with an exponent of -64.  Since the precision of a
+-- 'Double' is only 53 bits, there is inevitably some loss.  This also means
+-- that the outcome 1 is not possible.
+hashToDouble :: Hash -> Double
+hashToDouble (Hash h) =
+    let w = FBS.readWord64be h in
+    encodeFloat (toInteger w) (-64)
+
+-- |Convert a 'Hash' to an 'Int'.
+hashToInt :: Hash -> Int
+hashToInt (Hash h) = fromIntegral . FBS.readWord64be $ h
+
 
 -- |Generate a key pair using a given random generator.
 -- Useful for generating deterministic pseudo-random keys.

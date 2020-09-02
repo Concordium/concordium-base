@@ -85,7 +85,7 @@ Library
                 , constraints >= 0.10
                 , mtl >= 2.2.2
 
-  extra-libraries: ec_vrf_ed25519
+  extra-libraries: ecvrf
                    sha_2,
                    eddsa_ed25519,
                    ffi_helpers,
@@ -134,8 +134,6 @@ benchmark ed25519-perf
   main-is: PerformanceTests/Ed25519Perf.hs
   hs-source-dirs: haskell-tests
   ghc-options: -Wall -O2
-  if os(linux)
-     ld-options: -static
   build-depends: base >= 4.7
                , concordium-crypto
                , bytestring >= 0.10
@@ -148,8 +146,6 @@ benchmark ed25519dlog-perf
   main-is: PerformanceTests/Ed25519DlogPerf.hs
   hs-source-dirs: haskell-tests
   ghc-options: -Wall -O2
-  if os(linux)
-     ld-options: -static
   build-depends: base >= 4.7
                , concordium-crypto
                , bytestring >= 0.10
@@ -162,8 +158,6 @@ benchmark bls-perf
   main-is: PerformanceTests/BlsPerf.hs
   hs-source-dirs: haskell-tests
   ghc-options: -Wall -O2
-  if os(linux)
-     ld-options: -static
   build-depends: base >= 4.7
                , concordium-crypto
                , bytestring >= 0.10
@@ -176,8 +170,6 @@ benchmark sha256-perf
   main-is: PerformanceTests/SHA256Perf.hs
   hs-source-dirs: haskell-tests
   ghc-options: -Wall -O2
-  if os(linux)
-     ld-options: -static
   build-depends: base >= 4.7
                , concordium-crypto
                , bytestring >= 0.10
@@ -190,8 +182,6 @@ benchmark verify-credential-perf
   main-is: PerformanceTests/VerifyCredentialPerf.hs
   hs-source-dirs: haskell-tests
   ghc-options: -Wall -O2
-  if os(linux)
-     ld-options: -static
   build-depends: base >= 4.7
                , concordium-crypto
                , bytestring >= 0.10

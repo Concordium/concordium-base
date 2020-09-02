@@ -2,7 +2,7 @@
 
 members=[
    "curve_arithmetic",
-   "ec_vrf_ed25519_sha256",
+   "ecvrf",
    "eddsa_ed25519",
    "sha_2",
    "dodis_yampolskiy_prf",
