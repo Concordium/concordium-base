@@ -358,10 +358,10 @@ unsafe extern "C" fn make_aggregated_decrypted_amount(
     microgtu: u64,
     agg_index: u64,
 ) -> *mut AggregatedDecryptedAmount<Group> {
-    let encrypted_high = from_ptr!(encrypted_high_ptr).clone();
-    let encrypted_low = from_ptr!(encrypted_low_ptr).clone();
+    let encrypted_high = from_ptr!(encrypted_high_ptr);
+    let encrypted_low = from_ptr!(encrypted_low_ptr);
     let agg_encrypted_amount = EncryptedAmount {
-        encryptions: [encrypted_low, encrypted_high],
+        encryptions: [*encrypted_low, *encrypted_high],
     };
     Box::into_raw(Box::new(AggregatedDecryptedAmount {
         agg_encrypted_amount,
