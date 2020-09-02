@@ -1,13 +1,11 @@
 {-# OPTIONS_GHC -Wno-deprecations #-}
 module Concordium.Types.DummyData where
 
-import Data.FixedByteString as FBS
 import System.Random
 
 import Concordium.Crypto.VRF as VRF
 import qualified Concordium.Crypto.SignatureScheme as Sig
 import Concordium.Crypto.DummyData
-import Concordium.Crypto.SHA256
 
 import Concordium.Types
 import Concordium.Types.Transactions
