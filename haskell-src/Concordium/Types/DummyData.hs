@@ -17,7 +17,7 @@ import Concordium.ID.Types
 
 {-# WARNING dummyblockPointer "Do not use in production." #-}
 dummyblockPointer :: BlockHash
-dummyblockPointer = Hash (FBS.pack (replicate 32 (fromIntegral (0 :: Word))))
+dummyblockPointer = BlockHashV0 (Hash (FBS.pack (replicate 32 (fromIntegral (0 :: Word)))))
 
 {-# WARNING mateuszAccount "Do not use in production." #-}
 mateuszAccount :: AccountAddress
