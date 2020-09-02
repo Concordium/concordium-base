@@ -1,6 +1,39 @@
 {-| This module provides the necessary primitives for encrypted amount transfers. -}
 {-# LANGUAGE DerivingStrategies, DerivingVia, StandaloneDeriving #-}
-module Concordium.Crypto.EncryptedTransfers where
+module Concordium.Crypto.EncryptedTransfers (
+  -- * Encrypted amount
+  EncryptedAmount(..),
+  aggregateAmounts,
+
+  -- * Encrypted indices
+  EncryptedAmountAggIndex(..),
+  EncryptedAmountIndex(..),
+  addToAggIndex,
+
+  -- * Aggregated decrypted amount
+  AggregatedDecryptedAmount,
+  makeAggregatedDecryptedAmount,
+
+  -- * Public to secret transfer
+  encryptAmount,
+
+  -- * Encrypted transfer
+  EncryptedAmountTransferData(..),
+  EncryptedAmountTransferProof,
+  getEncryptedAmountTransferProof,
+  putEncryptedAmountTransferProof,
+  makeEncryptedAmountTransferData,
+  verifyEncryptedTransferProof,
+
+  -- * Secret to public transfer
+  SecToPubAmountTransferData(..),
+  SecToPubAmountTransferProof,
+  getSecToPubAmountTransferProof,
+  putSecToPubAmountTransferProof,
+  makeSecToPubAmountTransferData,
+  verifySecretToPublicTransferProof
+
+  ) where
 
 import Data.Serialize
 import Data.Word
@@ -163,8 +196,8 @@ foreign import ccall unsafe "make_encrypted_transfer_data" make_encrypted_transf
   -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the high chunk of the transfer amount
   -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the low chunk of the transfer amount
   -> Ptr EncryptedAmountAggIndex -- ^ Place to write the index
-  -> Ptr Word64
-  -> IO (Ptr CChar)
+  -> Ptr Word64 -- ^ Place to write the length of the proof
+  -> IO (Ptr CChar) -- ^ Pointer to the proof
 
 newtype EncryptedAmountTransferProof = EncryptedAmountTransferProof { theEncryptedAmountTransferProof :: ShortByteString }
   deriving (Eq, Show, FromJSON, ToJSON) via ByteStringHex
@@ -176,9 +209,13 @@ withEncryptedAmountTransferProof (EncryptedAmountTransferProof s) = useAsCString
 makeEncryptedAmountTransferProof :: CStringLen -> IO EncryptedAmountTransferProof
 makeEncryptedAmountTransferProof c = EncryptedAmountTransferProof <$> packCStringLen c
 
+-- | Custom serialization functions for proofs which allow us to have the same
+-- serialization as in rust, provided enough context, i.e., length.
 getEncryptedAmountTransferProof :: Word32 -> Get EncryptedAmountTransferProof
 getEncryptedAmountTransferProof len = EncryptedAmountTransferProof <$> getShortByteString (fromIntegral len)
 
+-- |Put the proof directly without the length.
+-- The proof can be deserialized in the right contexts using 'getEncryptedAmountTransferProof'
 putEncryptedAmountTransferProof :: EncryptedAmountTransferProof -> Put
 putEncryptedAmountTransferProof = putShortByteString . theEncryptedAmountTransferProof
 
@@ -246,7 +283,7 @@ foreign import ccall unsafe "verify_encrypted_transfer"
      -> Ptr ElgamalCipher -- ^ Low chunk of the transfer amount.
      -> EncryptedAmountAggIndex -- ^ Index up to which amounts have been aggregated
      -> Ptr CChar -- ^ Pointer to the proof
-     -> Word64
+     -> Word64 -- ^ Length of the proof
      -> IO Word8 -- ^ Return either 0 if proof checking failed, or non-zero in case of success.
 
 verifyEncryptedTransferProof ::
@@ -292,16 +329,16 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
 
 foreign import ccall unsafe "make_sec_to_pub_transfer_data"
   make_sec_to_pub_transfer_data ::
-       Ptr GlobalContext
-     -> Ptr ElgamalSecondSecret
-     -> Ptr AggregatedDecryptedAmount
-     -> Word64
-     -> Ptr (Ptr ElgamalCipher)
-     -> Ptr (Ptr ElgamalCipher)
-     -> Ptr Word64
-     -> Ptr EncryptedAmountAggIndex
-     -> Ptr Word64
-     -> IO (Ptr CChar)
+       Ptr GlobalContext -- ^ Pointer to the global context
+     -> Ptr ElgamalSecondSecret -- ^ Secret key of the sender
+     -> Ptr AggregatedDecryptedAmount -- ^ Input encrypted amount for the transaction
+     -> Word64 -- ^ Input plaintext amount
+     -> Ptr (Ptr ElgamalCipher) -- ^ High chunk of the remaining amount
+     -> Ptr (Ptr ElgamalCipher) -- ^ Low chunk of the remaining amount
+     -> Ptr Word64 -- ^ Place to write the amount that is being transferred
+     -> Ptr EncryptedAmountAggIndex -- ^ Place to write the index
+     -> Ptr Word64 -- ^ Place to write the length of the proof
+     -> IO (Ptr CChar) -- ^ The proof
 
 newtype SecToPubAmountTransferProof = SecToPubAmountTransferProof { theSecToPubAmountTransferProof :: ShortByteString }
   deriving (Eq, Show, FromJSON, ToJSON) via ByteStringHex
@@ -313,9 +350,13 @@ withSecToPubAmountTransferProof (SecToPubAmountTransferProof s) = useAsCStringLe
 makeSecToPubAmountTransferProof :: CStringLen -> IO SecToPubAmountTransferProof
 makeSecToPubAmountTransferProof c = SecToPubAmountTransferProof <$> packCStringLen c
 
+-- | Custom serialization functions for proofs which allow us to have the same
+-- serialization as in rust, provided enough context, i.e., length.
 getSecToPubAmountTransferProof :: Word32 -> Get SecToPubAmountTransferProof
 getSecToPubAmountTransferProof len = SecToPubAmountTransferProof <$> getShortByteString (fromIntegral len)
 
+-- |Put the proof directly without the length.
+-- The proof can be deserialized in the right contexts using 'getSecToPubAmountTransferProof'
 putSecToPubAmountTransferProof :: SecToPubAmountTransferProof -> Put
 putSecToPubAmountTransferProof = putShortByteString . theSecToPubAmountTransferProof
 
@@ -371,7 +412,7 @@ foreign import ccall unsafe "verify_sec_to_pub_transfer"
      -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
      -> Ptr ElgamalCipher -- ^ High chunk of the remaining amount.
      -> Ptr ElgamalCipher -- ^ Low chunk of the remaining amount.
-     -> Word64
+     -> Word64 -- ^ Plaintext amount that is to be transferred
      -> EncryptedAmountAggIndex -- ^ Index up to which amounts have been aggregated
      -> Ptr CChar -- ^ Pointer to the proof
      -> Word64
