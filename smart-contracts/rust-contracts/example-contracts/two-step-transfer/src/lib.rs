@@ -38,7 +38,7 @@ enum Message {
     // Indicates that the user sending the message would like to make a request
     // to send funds to the given address with the given ID and amount.
     // This is a no-op if the given ID already exists and has not timed out.
-    RequestTransferFunds(TransferRequestId, Amount, AccountAddress),
+    RequestTransfer(TransferRequestId, Amount, AccountAddress),
 
     // Indicates that the user sending the message votes in favour of the
     // transfer with the given ID and amount to the given account address.
@@ -47,7 +47,7 @@ enum Message {
     SupportTransfer(TransferRequestId, Amount, AccountAddress),
 
     // Just put the funds sent with this message into this contract
-    Deposit,
+   Deposit
 }
 
 type TransferRequestId = u64;
@@ -56,15 +56,16 @@ type TransferRequestId = u64;
 type TransferRequestTimeToLiveSeconds = u64;
 type TimeoutSlotTimeSeconds = u64;
 
-pub struct OutstandingTransferRequest {
+#[derive(Clone)]
+struct OutstandingTransferRequest {
     id:              TransferRequestId,
     transfer_amount: Amount,
     target_account:  AccountAddress,
     times_out_at:    TimeoutSlotTimeSeconds,
-    supporters:      Vec<AccountAddress>
+    supporters:      Vec<AccountAddress> // TODO use a Set instead
 }
 
-pub struct InitParams {
+struct InitParams {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
     account_holders: Vec<AccountAddress>,
 
@@ -94,6 +95,7 @@ pub struct State {
     // The request ID, the associated amount, when it times out, who is making the transfer and
     // which account holders support this transfer
     outstanding_transfer_requests: Vec<OutstandingTransferRequest>,
+    // TODO Use a Map from the id instead
 }
 
 // Contract implementation
@@ -102,17 +104,17 @@ pub struct State {
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: I,
-    amount: Amount,
+    _amount: Amount,
     _logger: &mut L,
 ) -> InitResult<State> {
-    let init_params: InitParams = ctx.parameter_cursor().get()?;
-    init_params.account_holders.dedup():
+    let mut init_params: InitParams = ctx.parameter_cursor().get()?;
+    init_params.account_holders.dedup();
     ensure!(
         init_params.account_holders.len() >= 2,
         "Not enough account holders: At least two are needed for this contract to be valid."
     );
     ensure!(
-        init_params.transfer_agreement_threshold <= init_params.account_holders.len(),
+        init_params.transfer_agreement_threshold <= init_params.account_holders.len() as u32,
         ("The threshold for agreeing account holders to allow a transfer must be " +
          "less than or equal to the number of unique account holders, else a transfer can never be made!")
     );
@@ -141,9 +143,13 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 
     let sender = ctx.sender();
     ensure!(
-        state.account_holders.iter().any(|account_holder| sender == account_holder),
+        state.init_params.account_holders.iter().any(|account_holder| sender.matches_account(account_holder)),
         "Only account holders can interact with this contract."
     );
+    let sender_address = match sender {
+        Address::Contract(_) => bail!("Sender cannot be a contract"),
+        Address::Account(account_address) => account_address
+    };
     let now = ctx.metadata().slot_time();
 
     // Drop requests which have gone too long without getting the support they need
@@ -153,7 +159,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 
     let msg: Message = ctx.parameter_cursor().get()?;
     match msg {
-        Message::RequestTransferFunds(req_id, transfer_amount, target_account) => {
+        Message::RequestTransfer(req_id, transfer_amount, target_account) => {
             ensure!(
                 state.available_balance >= transfer_amount,
                 "Not enough available funds to for this transfer."
@@ -168,44 +174,50 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
                 transfer_amount: transfer_amount,
                 target_account:  target_account,
                 times_out_at:    now + state.init_params.transfer_request_ttl,
-                supporters:      vec![sender]
+                supporters:      vec![*sender_address]
             };
             state.outstanding_transfer_requests.push(new_request);
-            Ok(Action::Accept)
+            Ok(A::accept())
         }
 
-        Message::SupportTransfer(req_id, transfer_amount, target_account, withdrawer_account, existing_supporters) => {
+        Message::SupportTransfer(transfer_request_id, transfer_amount, target_account) => {
             // Need to find an existing, matching transfer
-            let matching_requests =
+            let matching_request_result =
                 state
                     .outstanding_transfer_requests
-                    .iter()
-                    .filter(|existing|
-                            existing.req_id == req_id &&
+                    .iter_mut()
+                    .find(|existing|
+                            existing.id == transfer_request_id &&
                             existing.transfer_amount == transfer_amount &&
                             existing.target_account == target_account);
-            let matching_request =
-                match matching_requests {
-                    [] => bail!("No such transfer to support."),
-                    [matching] => matching,
-                    _ => bail!()
-                };
+            let matching_request = match matching_request_result {
+                None => bail!("No such transfer to support."),
+                Some(matching) => matching
+            };
+                
             // Can't have already supported this transfer
             ensure!(
-                !matching_request.supporters.contains(sender),
+                !matching_request.supporters.contains(sender_address),
                 "You have already supported this transfer."
             );
-            matching_request.supporters.push(sender);
-            if matching_request.supporters.len() >= state.init_params.transfer_agreement_threshold {
-                // Remove the transfer fron the list of outstanding transfers and send it
+            matching_request.supporters.push(*sender_address);
+            
+            if matching_request.supporters.len() as u32 >= state.init_params.transfer_agreement_threshold {
+                let matching_request = matching_request.clone();
+                // Remove the transfer from the list of outstanding transfers and send it
                 state
                     .outstanding_transfer_requests
-                    .retain(|outstanding| outstanding.id != req_id);
-                Ok(A::simple_transfer(matching_request.target_account, matching_request.transfer_amount));
+                    .retain(|outstanding| outstanding.id != transfer_request_id);
+                Ok(A::simple_transfer(&matching_request.target_account, matching_request.transfer_amount))
             } else {
                 // Keep the updated support and accept
-                Ok(Action::Accept);
+                Ok(A::accept())
             }
+        }
+
+        Message::Deposit => {
+            state.available_balance += amount;
+            Ok(A::accept())
         }
     }
 }
@@ -214,16 +226,25 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 
 impl Serialize for Message {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        // TODO
         match self {
-            Message::WithdrawFunds(how_much) => {
-                out.write_u8(0)?;
-                out.write_u64(*how_much)?;
+            Message::RequestTransfer(transfer_request_id, amount, account_address) => {
+              out.write_u8(0)?;
+                out.write_u64(*transfer_request_id)?;
+                out.write_u64(*amount)?;
+                account_address.serial(out)?;
             }
-            Message::CancelFutureVesting => {
+            Message::SupportTransfer(transfer_request_id, amount, account_address) => {
                 out.write_u8(1)?;
+                out.write_u64(*transfer_request_id)?;
+                out.write_u64(*amount)?;
+                account_address.serial(out)?;
             }
+            Message::Deposit => {
+                out.write_u8(2)?;
+            }
+
         }
+
         Ok(())
     }
 
@@ -231,11 +252,22 @@ impl Serialize for Message {
         // TODO
         match source.read_u8()? {
             0 => {
-                let how_much = source.read_u64()?;
-                Ok(Message::WithdrawFunds(how_much))
+                let transfer_request_id = source.read_u64()?;
+                let amount = source.read_u64()?;
+                let account_address = AccountAddress::deserial(source)?;
+                Ok(Message::RequestTransfer(transfer_request_id, amount, account_address))
             }
 
-            1 => Ok(Message::CancelFutureVesting),
+            1 => {
+                let transfer_request_id = source.read_u64()?;
+                let amount = source.read_u64()?;
+                let account_address = AccountAddress::deserial(source)?;
+                Ok(Message::SupportTransfer(transfer_request_id, amount, account_address))
+            }
+
+            2 => {
+                Ok(Message::Deposit)
+            }
 
             _ => Err(R::Err::default()),
         }
@@ -244,47 +276,68 @@ impl Serialize for Message {
 
 impl Serialize for InitParams {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        // TODO
         self.account_holders.serial(out)?;
-        self.future_vesting_veto_accounts.serial(out)?;
-        self.vesting_schedule.serial(out)?;
+        out.write_u32(self.transfer_agreement_threshold)?;
+        out.write_u64(self.transfer_request_ttl)?;
         Ok(())
     }
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        // TODO
-        let account_holders = source.get()?;
-        let future_vesting_veto_accounts = source.get()?;
-        let vesting_schedule = source.get()?;
+        let account_holders = Vec::deserial(source)?;
+        let transfer_agreement_threshold = source.read_u32()?;
+        let transfer_request_ttl = source.read_u64()?;
         Ok(InitParams {
             account_holders,
-            future_vesting_veto_accounts,
-            vesting_schedule,
+            transfer_agreement_threshold,
+            transfer_request_ttl,
+        })
+    }
+}
+
+impl Serialize for OutstandingTransferRequest {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.id.serial(out)?;
+        self.transfer_amount.serial(out)?;
+        self.target_account.serial(out)?;
+        self.times_out_at.serial(out)?;
+        self.supporters.serial(out)?;
+        Ok(())
+    }
+
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
+        let id = TransferRequestId::deserial(source)?;
+        let transfer_amount = Amount::deserial(source)?;
+        let target_account = AccountAddress::deserial(source)?;
+        let times_out_at = TimeoutSlotTimeSeconds::deserial(source)?;
+        let supporters = Vec::deserial(source)?;
+        Ok(OutstandingTransferRequest {
+            id,
+            transfer_amount,
+            target_account,
+            times_out_at,
+            supporters
         })
     }
 }
 
 impl Serialize for State {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        // TODO
-        self.account_holders.serial(out)?;
-        self.future_vesting_veto_accounts.serial(out)?;
+        self.init_params.serial(out)?;
         self.available_balance.serial(out)?;
-        self.remaining_vesting_schedule.serial(out)?;
+        self.outstanding_transfer_requests.serial(out)?;
         Ok(())
     }
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         // TODO
-        let account_holders = source.get()?;
-        let future_vesting_veto_accounts = source.get()?;
-        let available_balance = source.get()?;
-        let remaining_vesting_schedule = source.get()?;
+        let init_params = InitParams::deserial(source)?;
+        let available_balance = Amount::deserial(source)?;
+        let outstanding_transfer_requests = Vec::deserial(source)?;
+
         Ok(State {
-            account_holders,
-            future_vesting_veto_accounts,
+            init_params,
             available_balance,
-            remaining_vesting_schedule,
+            outstanding_transfer_requests
         })
     }
 }
