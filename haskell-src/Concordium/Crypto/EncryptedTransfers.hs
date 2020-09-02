@@ -229,7 +229,7 @@ data EncryptedAmountTransferData = EncryptedAmountTransferData {
   eatdTransferAmount :: EncryptedAmount,
   eatdIndex :: EncryptedAmountAggIndex,
   eatdProof :: EncryptedAmountTransferProof
-  }
+  } deriving (Eq, Show)
 
 withEncryptedAmountTransferData :: EncryptedAmountTransferData
                                 -> (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> EncryptedAmountAggIndex -> Word64 -> Ptr CChar -> IO a)
@@ -332,7 +332,7 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
 --------------------------- Sec to pub transfer data ---------------------------
 --------------------------------------------------------------------------------
 
-foreign import ccall unsafe "make_sec_to_pub_transfer_data"
+foreign import ccall unsafe "make_sec_to_pub_data"
   make_sec_to_pub_transfer_data ::
        Ptr GlobalContext -- ^ Pointer to the global context
      -> Ptr ElgamalSecondSecret -- ^ Secret key of the sender
@@ -372,7 +372,7 @@ data SecToPubAmountTransferData = SecToPubAmountTransferData {
   stpatdTransferAmount :: Word64,
   stpatdIndex :: EncryptedAmountAggIndex,
   stpatdProof :: SecToPubAmountTransferProof
-  }
+  } deriving (Eq, Show)
 
 withSecToPubAmountTransferData :: SecToPubAmountTransferData
                                -> (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Word64 -> EncryptedAmountAggIndex -> Word64 -> Ptr CChar -> IO a)
