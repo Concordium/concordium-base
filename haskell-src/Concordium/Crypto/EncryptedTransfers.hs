@@ -54,10 +54,13 @@ import Foreign (Storable)
 import Foreign.C.Types (CChar)
 import Foreign.C (CStringLen)
 
+-- Note: The FFI functions imported in this file are defined in encrypted_transfers/src/ffi.rs
+
 --------------------------------------------------------------------------------
 ------------------------------- EncryptedAmount --------------------------------
 --------------------------------------------------------------------------------
 
+-- | See `EncryptedAmounts` in encrypted_transfers/src/types.rs
 data EncryptedAmount = EncryptedAmount{
   -- | Encryption of the high-chunk (highest 32 bits).
   encryptionHigh :: ElgamalCipher,
@@ -199,6 +202,7 @@ foreign import ccall unsafe "make_encrypted_transfer_data" make_encrypted_transf
   -> Ptr Word64 -- ^ Place to write the length of the proof
   -> IO (Ptr CChar) -- ^ Pointer to the proof
 
+-- | Serialized version of `EncryptedAmountTransferProof` in encrypted_transfers/src/types.rs
 newtype EncryptedAmountTransferProof = EncryptedAmountTransferProof { theEncryptedAmountTransferProof :: ShortByteString }
   deriving (Eq, Show, FromJSON, ToJSON) via ByteStringHex
   deriving Serialize via Short65K
@@ -219,6 +223,7 @@ getEncryptedAmountTransferProof len = EncryptedAmountTransferProof <$> getShortB
 putEncryptedAmountTransferProof :: EncryptedAmountTransferProof -> Put
 putEncryptedAmountTransferProof = putShortByteString . theEncryptedAmountTransferProof
 
+-- | Haskell counterpart of `EncryptedAmountTransferData` in encrypted_transfers/src/types.rs
 data EncryptedAmountTransferData = EncryptedAmountTransferData {
   eatdRemainingAmount :: EncryptedAmount,
   eatdTransferAmount :: EncryptedAmount,
@@ -340,6 +345,7 @@ foreign import ccall unsafe "make_sec_to_pub_transfer_data"
      -> Ptr Word64 -- ^ Place to write the length of the proof
      -> IO (Ptr CChar) -- ^ The proof
 
+-- | Serialized version of `SecToPubAmountTransferProof` in encrypted_transfers/src/types.rs
 newtype SecToPubAmountTransferProof = SecToPubAmountTransferProof { theSecToPubAmountTransferProof :: ShortByteString }
   deriving (Eq, Show, FromJSON, ToJSON) via ByteStringHex
   deriving Serialize via Short65K
@@ -360,6 +366,7 @@ getSecToPubAmountTransferProof len = SecToPubAmountTransferProof <$> getShortByt
 putSecToPubAmountTransferProof :: SecToPubAmountTransferProof -> Put
 putSecToPubAmountTransferProof = putShortByteString . theSecToPubAmountTransferProof
 
+-- | Haskell counterpart of `SecToPubAmountTransferData` in encrypted_transfers/src/types.rs
 data SecToPubAmountTransferData = SecToPubAmountTransferData {
   stpatdRemainingAmount :: EncryptedAmount,
   stpatdTransferAmount :: Word64,
