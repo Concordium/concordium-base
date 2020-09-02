@@ -370,9 +370,4 @@ unsafe extern "C" fn make_aggregated_decrypted_amount(
     }))
 }
 
-#[no_mangle]
-unsafe extern "C" fn free_aggregated_decrypted_amount(
-    amount: *mut AggregatedDecryptedAmount<Group>,
-) {
-    Box::from_raw(amount);
-}
+macro_free_ffi!(Box free_aggregated_decrypted_amount, AggregatedDecryptedAmount<Group>);
