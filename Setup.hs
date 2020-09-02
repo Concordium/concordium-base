@@ -11,7 +11,8 @@ import Data.Maybe
 -- copyExtLib args flags pkg_descr lbi = do
 --     let libPref = dynlibdir (configInstallDirs . configFlags $ lbi)
 --     let verbosity = fromFlag $ copyVerbosity flags
---     -- rawSystemExit verbosity "cp" ["rust-src/target/release/libec_vrf_ed25519.so",
+    
+--     -- rawSystemExit verbosity "cp" ["rust-src/target/release/libecvrf.so",
 -- --                                  "rust-src/target/release/libeddsa_ed25519.so",
 -- --                                  "rust-src/target/release/libsha_2.so",
 -- --                                  libPref]
@@ -28,7 +29,7 @@ makeRust args flags _ lbi = do
         (("CARGO_NET_GIT_FETCH_WITH_CLI", "true") : env)
     -- NB: This list must be updated when new libraries are added to dependencies.
     let libs = [
-                "ec_vrf_ed25519",
+                "ecvrf",
                 "sha_2",
                 "eddsa_ed25519",
                 "ffi_helpers",

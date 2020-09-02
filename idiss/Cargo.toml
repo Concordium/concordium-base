@@ -50,12 +50,17 @@ version = "0"
 path = "../rust-src/eddsa_ed25519"
 version = "0"
 
+<<<<<<< HEAD
 [build-dependencies.crypto_common]
 path = "../rust-src/crypto_common"
 version = "0"
 
 [build-dependencies.id]
 path = "../rust-src/id"
+=======
+[dependencies.ecvrf]
+path = "../rust-src/ecvrf"
+>>>>>>> master
 version = "0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
