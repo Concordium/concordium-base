@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 module Concordium.ID.Parameters
-  (GlobalContext, globalContextToJSON, jsonToGlobalContext, withGlobalContext)
+  (GlobalContext, globalContextToJSON, jsonToGlobalContext, withGlobalContext, globalContext)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -16,6 +16,7 @@ import Data.Serialize
 import Control.DeepSeq
 
 import qualified Data.Aeson as AE
+import System.IO.Unsafe
 
 -- |Cryptographic parameters needed to verify on-chain proofs, e.g.,
 -- group parameters (generators), commitment keys, in the future also
@@ -23,6 +24,7 @@ import qualified Data.Aeson as AE
 newtype GlobalContext = GlobalContext (ForeignPtr GlobalContext)
 
 foreign import ccall unsafe "&global_context_free" freeGlobalContext :: FunPtr (Ptr GlobalContext -> IO ())
+foreign import ccall unsafe "generate_global_context" generateGlobalContextPtr :: IO (Ptr GlobalContext)
 foreign import ccall unsafe "global_context_to_bytes" globalContextToBytes :: Ptr GlobalContext -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "global_context_from_bytes" globalContextFromBytes :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
 foreign import ccall unsafe "global_context_to_json" globalContextToJSONFFI :: Ptr GlobalContext -> Ptr CSize -> IO (Ptr Word8)
@@ -61,6 +63,10 @@ jsonToGlobalContext bs = GlobalContext <$> fromJSONHelper freeGlobalContext glob
 globalContextToJSON :: GlobalContext -> BS.ByteString
 globalContextToJSON (GlobalContext ip) = toJSONHelper globalContextToJSONFFI ip
 
+-- |Create a global context structure. This is a constant value, but quite expensive to generate.
+{-# NOINLINE globalContext #-}
+globalContext :: GlobalContext
+globalContext = GlobalContext $ unsafeDupablePerformIO (newForeignPtr freeGlobalContext =<< generateGlobalContextPtr)
 
 -- These JSON instances are very inefficient and should not be used in
 -- performance critical contexts, however they are fine for loading

@@ -33,7 +33,8 @@ Library
   default-extensions:
     ForeignFunctionInterface,
     RecordWildCards,
-    GeneralizedNewtypeDeriving
+    GeneralizedNewtypeDeriving,
+    RecordWildCards
 
   ghc-options: -Wall -O2
   hs-source-dirs: haskell-src
@@ -100,6 +101,11 @@ Library
 
 Test-Suite tests
   default-language: Haskell2010
+  default-extensions:
+    ForeignFunctionInterface,
+    RecordWildCards,
+    GeneralizedNewtypeDeriving,
+    RecordWildCards
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs: haskell-tests
@@ -123,6 +129,7 @@ Test-Suite tests
    ConcordiumTests.Crypto.Ed25519Signature
    ConcordiumTests.Crypto.VRF
    ConcordiumTests.Crypto.FFIDataTypes
+   ConcordiumTests.Crypto.EncryptedTransfers
    ConcordiumTests.Crypto.FFIVerify
    ConcordiumTests.Crypto.BlsSignature
    ConcordiumTests.ID.Types

@@ -13,6 +13,7 @@ module Concordium.Crypto.EncryptedTransfers (
   -- * Aggregated decrypted amount
   AggregatedDecryptedAmount,
   makeAggregatedDecryptedAmount,
+  withAggregatedDecryptedAmount,
 
   -- * Public to secret transfer
   encryptAmount,
@@ -46,6 +47,7 @@ import System.IO.Unsafe (unsafeDupablePerformIO)
 import Data.Foldable(foldl')
 
 import Concordium.Crypto.FFIDataTypes
+import Concordium.Crypto.FFIHelpers
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.ID.Parameters
 import Concordium.ID.Types
@@ -155,8 +157,8 @@ newtype AggregatedDecryptedAmount = AggregatedDecryptedAmount (ForeignPtr Aggreg
 withAggregatedDecryptedAmount :: AggregatedDecryptedAmount -> (Ptr AggregatedDecryptedAmount -> IO b) -> IO b
 withAggregatedDecryptedAmount (AggregatedDecryptedAmount ptr) = withForeignPtr ptr
 
-makeAggregatedDecryptedAmount :: EncryptedAmount -> Word64 -> EncryptedAmountAggIndex -> IO AggregatedDecryptedAmount
-makeAggregatedDecryptedAmount encAmount amount idx =
+makeAggregatedDecryptedAmount :: EncryptedAmount -> Word64 -> EncryptedAmountAggIndex -> AggregatedDecryptedAmount
+makeAggregatedDecryptedAmount encAmount amount idx = unsafeDupablePerformIO $
   withElgamalCipher (encryptionHigh encAmount) $ \enc_hi ->
     withElgamalCipher (encryptionLow encAmount) $ \enc_lo ->
     AggregatedDecryptedAmount <$> (newForeignPtr free_aggregated_decrypted_amount =<< make_aggregated_decrypted_amount enc_hi enc_lo amount idx)
@@ -211,7 +213,10 @@ withEncryptedAmountTransferProof :: EncryptedAmountTransferProof -> (CStringLen 
 withEncryptedAmountTransferProof (EncryptedAmountTransferProof s) = useAsCStringLen s
 
 makeEncryptedAmountTransferProof :: CStringLen -> IO EncryptedAmountTransferProof
-makeEncryptedAmountTransferProof c = EncryptedAmountTransferProof <$> packCStringLen c
+makeEncryptedAmountTransferProof c = do
+  res <- EncryptedAmountTransferProof <$> packCStringLen c
+  rs_free_array_len (castPtr (fst c)) (fromIntegral (snd c))
+  return res
 
 -- | Custom serialization functions for proofs which allow us to have the same
 -- serialization as in rust, provided enough context, i.e., length.
@@ -225,10 +230,10 @@ putEncryptedAmountTransferProof = putShortByteString . theEncryptedAmountTransfe
 
 -- | Haskell counterpart of `EncryptedAmountTransferData` in encrypted_transfers/src/types.rs
 data EncryptedAmountTransferData = EncryptedAmountTransferData {
-  eatdRemainingAmount :: EncryptedAmount,
-  eatdTransferAmount :: EncryptedAmount,
-  eatdIndex :: EncryptedAmountAggIndex,
-  eatdProof :: EncryptedAmountTransferProof
+  eatdRemainingAmount :: !EncryptedAmount,
+  eatdTransferAmount :: !EncryptedAmount,
+  eatdIndex :: !EncryptedAmountAggIndex,
+  eatdProof :: !EncryptedAmountTransferProof
   } deriving (Eq, Show)
 
 withEncryptedAmountTransferData :: EncryptedAmountTransferData
@@ -247,7 +252,7 @@ makeEncryptedAmountTransferData :: GlobalContext
                                     -> ElgamalSecondSecret
                                     -> AggregatedDecryptedAmount
                                     -> Word64
-                                    -> IO EncryptedAmountTransferData
+                                    -> IO (Maybe EncryptedAmountTransferData)
 makeEncryptedAmountTransferData gc receiverPk senderSk aggAmount desiredAmount =
   withGlobalContext gc $ \gcPtr ->
   withElgamalSecond receiverPk $ \receiverPkPtr ->
@@ -260,19 +265,21 @@ makeEncryptedAmountTransferData gc receiverPk senderSk aggAmount desiredAmount =
     alloca $ \idx_ptr ->
     alloca $ \len_ptr -> do
       proof_ptr <- make_encrypted_transfer_data gcPtr receiverPkPtr senderSkPtr aggAmountPtr desiredAmount rem_hi_ptr rem_lo_ptr trans_hi_ptr trans_lo_ptr idx_ptr len_ptr
-      rem_hi <- unsafeMakeCipher =<< peek rem_hi_ptr
-      rem_lo <- unsafeMakeCipher =<< peek rem_hi_ptr
-      trans_hi <- unsafeMakeCipher =<< peek trans_hi_ptr
-      trans_lo <- unsafeMakeCipher =<< peek trans_hi_ptr
-      idx <- peek idx_ptr
-      len <- peek len_ptr
-      proof <- makeEncryptedAmountTransferProof (proof_ptr, fromIntegral len)
-      return EncryptedAmountTransferData {
-        eatdRemainingAmount = EncryptedAmount rem_hi rem_lo,
-        eatdTransferAmount = EncryptedAmount trans_hi trans_lo,
-        eatdIndex = idx,
-        eatdProof = proof
-        }
+      if proof_ptr /= nullPtr then do
+        rem_hi <- unsafeMakeCipher =<< peek rem_hi_ptr
+        rem_lo <- unsafeMakeCipher =<< peek rem_lo_ptr
+        trans_hi <- unsafeMakeCipher =<< peek trans_hi_ptr
+        trans_lo <- unsafeMakeCipher =<< peek trans_lo_ptr
+        idx <- peek idx_ptr
+        len <- peek len_ptr
+        proof <- makeEncryptedAmountTransferProof (proof_ptr, fromIntegral len)
+        return $ Just (EncryptedAmountTransferData {
+          eatdRemainingAmount = EncryptedAmount rem_hi rem_lo,
+          eatdTransferAmount = EncryptedAmount trans_hi trans_lo,
+          eatdIndex = idx,
+          eatdProof = proof
+          })
+      else return Nothing
 
 -- | Verify an encrypted transfer proof.
 foreign import ccall unsafe "verify_encrypted_transfer"
@@ -368,10 +375,10 @@ putSecToPubAmountTransferProof = putShortByteString . theSecToPubAmountTransferP
 
 -- | Haskell counterpart of `SecToPubAmountTransferData` in encrypted_transfers/src/types.rs
 data SecToPubAmountTransferData = SecToPubAmountTransferData {
-  stpatdRemainingAmount :: EncryptedAmount,
-  stpatdTransferAmount :: Word64,
-  stpatdIndex :: EncryptedAmountAggIndex,
-  stpatdProof :: SecToPubAmountTransferProof
+  stpatdRemainingAmount :: !EncryptedAmount,
+  stpatdTransferAmount :: !Word64,
+  stpatdIndex :: !EncryptedAmountAggIndex,
+  stpatdProof :: !SecToPubAmountTransferProof
   } deriving (Eq, Show)
 
 withSecToPubAmountTransferData :: SecToPubAmountTransferData
