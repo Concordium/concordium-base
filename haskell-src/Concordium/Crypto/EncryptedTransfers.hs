@@ -394,7 +394,7 @@ makeSecToPubAmountTransferData :: GlobalContext
                                -> ElgamalSecondSecret
                                -> AggregatedDecryptedAmount
                                -> Word64
-                               -> IO SecToPubAmountTransferData
+                               -> IO (Maybe SecToPubAmountTransferData)
 makeSecToPubAmountTransferData gc sk aggAmount amount =
   withGlobalContext gc $ \gcPtr ->
   withElgamalSecondSecret sk $ \skPtr ->
@@ -405,18 +405,21 @@ makeSecToPubAmountTransferData gc sk aggAmount amount =
     alloca $ \idx_ptr ->
     alloca $ \len_ptr -> do
       proof_ptr <- make_sec_to_pub_transfer_data gcPtr skPtr aggAmountPtr amount rem_hi_ptr rem_lo_ptr amount_ptr idx_ptr len_ptr
-      rem_hi <- unsafeMakeCipher =<< peek rem_hi_ptr
-      rem_lo <- unsafeMakeCipher =<< peek rem_hi_ptr
-      amount_val <- peek amount_ptr
-      idx <- peek idx_ptr
-      len <- peek len_ptr
-      proof <- makeSecToPubAmountTransferProof (proof_ptr, fromIntegral len)
-      return SecToPubAmountTransferData {
-        stpatdRemainingAmount = EncryptedAmount rem_hi rem_lo,
-        stpatdTransferAmount = amount_val,
-        stpatdIndex = idx,
-        stpatdProof = proof
-        }
+      if proof_ptr == nullPtr
+      then return Nothing
+      else do
+        rem_hi <- unsafeMakeCipher =<< peek rem_hi_ptr
+        rem_lo <- unsafeMakeCipher =<< peek rem_hi_ptr
+        amount_val <- peek amount_ptr
+        idx <- peek idx_ptr
+        len <- peek len_ptr
+        proof <- makeSecToPubAmountTransferProof (proof_ptr, fromIntegral len)
+        return $ Just SecToPubAmountTransferData {
+          stpatdRemainingAmount = EncryptedAmount rem_hi rem_lo,
+          stpatdTransferAmount = amount_val,
+          stpatdIndex = idx,
+          stpatdProof = proof
+          }
 
 foreign import ccall unsafe "verify_sec_to_pub_transfer"
   verify_sec_to_pub_transfer ::
