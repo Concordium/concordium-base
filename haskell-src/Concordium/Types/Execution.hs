@@ -217,14 +217,7 @@ data Payload =
   | EncryptedAmountTransfer {
       -- | Receiver account address.
       eatTo :: !AccountAddress,
-      -- | Encryption of the remaining amount on the account.
-      eatRemainingAmount :: !EncryptedAmount,
-      -- | Encrypted amount to send.
-      eatTransferAmount :: !EncryptedAmount,
-      -- | Index indicating which amounts were used in the transfer.
-      eatIndex :: !EncryptedAmountAggIndex,
-      -- | Proof of well-formedness of the transaction.
-      eatProof :: !EncryptedAmountTransferProof
+      eatData :: !EncryptedAmountTransferData
   }
   -- | Transfer some amount from public to encrypted balance.
   | TransferToEncrypted {
@@ -233,14 +226,7 @@ data Payload =
       }
   -- | Decrypt a portion of the encrypted balance.
   | TransferToPublic {
-      -- | Encryption of the remaining amount on the account.
-      ttpRemainingAmount :: !EncryptedAmount,
-      -- | The amount to transfer to public balance.
-      ttpAmount :: !Amount,
-      -- | The index indicating which encrypted amounts were used.
-      ttpIndex :: !EncryptedAmountAggIndex,
-      -- | Proof of well-formedness of the transaction
-      ttpProof :: !TransferToPublicProof
+      ttpData :: !SecToPubAmountTransferData
       }
   deriving(Eq, Show)
 
@@ -326,21 +312,22 @@ putPayload RemoveAccountKeys{..} = do
     P.putWord8 (fromIntegral (length rakIndices))
     forM_ (Set.toAscList rakIndices) S.put
     putMaybe rakThreshold
-putPayload EncryptedAmountTransfer{..} =
+putPayload EncryptedAmountTransfer{eatData = EncryptedAmountTransferData{..}, ..} =
     S.putWord8 16 <>
     S.put eatTo <>
-    S.put eatRemainingAmount <>
-    S.put eatTransferAmount <>
-    S.put eatIndex <>
-    putEncryptedAmountTransferProof eatProof
+    S.put eatdRemainingAmount <>
+    S.put eatdTransferAmount <>
+    S.put eatdIndex <>
+    putEncryptedAmountTransferProof eatdProof
 putPayload TransferToEncrypted{..} =
     S.putWord8 17 <>
     S.put tteAmount
-putPayload TransferToPublic{..} =
+putPayload TransferToPublic{ttpData = SecToPubAmountTransferData{..}, ..} =
     S.putWord8 18 <>
-    S.put ttpRemainingAmount <>
-    S.put ttpAmount <>
-    S.put ttpIndex
+    S.put stpatdRemainingAmount <>
+    S.put stpatdTransferAmount <>
+    S.put stpatdIndex <>
+    putSecToPubAmountTransferProof stpatdProof
 
 -- |Get the payload of the given size.
 getPayload :: PayloadSize -> S.Get Payload
@@ -422,21 +409,21 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               return RemoveAccountKeys{..}
             16 -> do
               eatTo <- S.get
-              eatRemainingAmount <- S.get
-              eatTransferAmount <- S.get
-              eatIndex <- S.get
+              eatdRemainingAmount <- S.get
+              eatdTransferAmount <- S.get
+              eatdIndex <- S.get
               cur <- S.bytesRead
-              eatProof <- getEncryptedAmountTransferProof (fromIntegral $ cur - start)
-              return EncryptedAmountTransfer{..}
+              eatdProof <- getEncryptedAmountTransferProof (fromIntegral $ cur - start)
+              return EncryptedAmountTransfer{eatData = EncryptedAmountTransferData{..}, ..}
             17 -> do
               tteAmount <- S.get
               return TransferToEncrypted{..}
             18 -> do
-              ttpRemainingAmount <- S.get
-              ttpAmount <- S.get
-              ttpIndex <- S.get
-              ttpProof <- S.get
-              return TransferToPublic{..}
+              stpatdRemainingAmount <- S.get
+              stpatdTransferAmount <- S.get
+              stpatdIndex <- S.get
+              stpatdProof <- S.get
+              return TransferToPublic{ttpData = SecToPubAmountTransferData{..}, ..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 -- |Serialize a Maybe value
