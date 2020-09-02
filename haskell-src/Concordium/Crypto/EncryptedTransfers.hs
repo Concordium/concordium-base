@@ -5,13 +5,10 @@ module Concordium.Crypto.EncryptedTransfers where
 import Data.Serialize
 import Data.Word
 import Data.Aeson
-import Data.ByteString.Short
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Unsafe as BS
 import Foreign.Ptr
+import Data.ByteString.Short
 import Foreign.Marshal (alloca)
 import Foreign.Storable (peek)
-import Foreign.C.Types
 import System.IO.Unsafe (unsafeDupablePerformIO)
 import Data.Foldable(foldl')
 
@@ -21,6 +18,8 @@ import Concordium.ID.Parameters
 import Concordium.ID.Types
 import Foreign (newForeignPtr, withForeignPtr, ForeignPtr)
 import Foreign (Storable)
+import Foreign.C.Types (CChar)
+import Foreign.C (CStringLen)
 
 --------------------------------------------------------------------------------
 ------------------------------- EncryptedAmount --------------------------------
@@ -164,14 +163,24 @@ foreign import ccall unsafe "make_encrypted_transfer_data" make_encrypted_transf
   -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the high chunk of the transfer amount
   -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the low chunk of the transfer amount
   -> Ptr EncryptedAmountAggIndex -- ^ Place to write the index
-  -> IO (Ptr EncryptedAmountTransferProof)
+  -> Ptr Word64
+  -> IO (Ptr CChar)
 
-foreign import ccall unsafe "&free_encrypted_amount_transfer_proof" free_encrypted_amount_transfer_proof ::
-  FunPtr (Ptr EncryptedAmountTransferProof -> IO ())
+newtype EncryptedAmountTransferProof = EncryptedAmountTransferProof { theEncryptedAmountTransferProof :: ShortByteString }
+  deriving (Eq, Show, FromJSON, ToJSON) via ByteStringHex
+  deriving Serialize via Short65K
 
-newtype EncryptedAmountTransferProof = EncryptedAmountTransferProof (ForeignPtr EncryptedAmountTransferProof)
-withEncryptedAmountTransferProof :: EncryptedAmountTransferProof -> (Ptr EncryptedAmountTransferProof -> IO b) -> IO b
-withEncryptedAmountTransferProof (EncryptedAmountTransferProof ptr) = withForeignPtr ptr
+withEncryptedAmountTransferProof :: EncryptedAmountTransferProof -> (CStringLen -> IO a) -> IO a
+withEncryptedAmountTransferProof (EncryptedAmountTransferProof s) = useAsCStringLen s
+
+makeEncryptedAmountTransferProof :: CStringLen -> IO EncryptedAmountTransferProof
+makeEncryptedAmountTransferProof c = EncryptedAmountTransferProof <$> packCStringLen c
+
+getEncryptedAmountTransferProof :: Word32 -> Get EncryptedAmountTransferProof
+getEncryptedAmountTransferProof len = EncryptedAmountTransferProof <$> getShortByteString (fromIntegral len)
+
+putEncryptedAmountTransferProof :: EncryptedAmountTransferProof -> Put
+putEncryptedAmountTransferProof = putShortByteString . theEncryptedAmountTransferProof
 
 data EncryptedAmountTransferData = EncryptedAmountTransferData {
   eatdRemainingAmount :: EncryptedAmount,
@@ -181,15 +190,15 @@ data EncryptedAmountTransferData = EncryptedAmountTransferData {
   }
 
 withEncryptedAmountTransferData :: EncryptedAmountTransferData
-                                -> (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> EncryptedAmountAggIndex -> Ptr EncryptedAmountTransferProof -> IO a)
+                                -> (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> EncryptedAmountAggIndex -> Word64 -> Ptr CChar -> IO a)
                                 -> IO a
 withEncryptedAmountTransferData EncryptedAmountTransferData{..} f =
   withElgamalCipher (encryptionHigh eatdRemainingAmount) $ \remaining_high ->
   withElgamalCipher (encryptionLow eatdRemainingAmount) $ \remaining_low ->
   withElgamalCipher (encryptionHigh eatdTransferAmount) $ \transfer_high ->
   withElgamalCipher (encryptionLow eatdTransferAmount) $ \transfer_low ->
-  withEncryptedAmountTransferProof eatdProof $ \proof ->
-    f remaining_high remaining_low transfer_high transfer_low eatdIndex proof
+  withEncryptedAmountTransferProof eatdProof $ \(bytesPtr, len) -> do
+    f remaining_high remaining_low transfer_high transfer_low eatdIndex (fromIntegral len) bytesPtr
 
 makeEncryptedAmountTransferData :: GlobalContext
                                     -> ElgamalSecond
@@ -206,14 +215,16 @@ makeEncryptedAmountTransferData gc receiverPk senderSk aggAmount desiredAmount =
     alloca $ \rem_lo_ptr ->
     alloca $ \trans_hi_ptr ->
     alloca $ \trans_lo_ptr ->
-    alloca $ \idx_ptr -> do
-      proof_ptr <- make_encrypted_transfer_data gcPtr receiverPkPtr senderSkPtr aggAmountPtr desiredAmount rem_hi_ptr rem_lo_ptr trans_hi_ptr trans_lo_ptr idx_ptr
+    alloca $ \idx_ptr ->
+    alloca $ \len_ptr -> do
+      proof_ptr <- make_encrypted_transfer_data gcPtr receiverPkPtr senderSkPtr aggAmountPtr desiredAmount rem_hi_ptr rem_lo_ptr trans_hi_ptr trans_lo_ptr idx_ptr len_ptr
       rem_hi <- unsafeMakeCipher =<< peek rem_hi_ptr
       rem_lo <- unsafeMakeCipher =<< peek rem_hi_ptr
       trans_hi <- unsafeMakeCipher =<< peek trans_hi_ptr
       trans_lo <- unsafeMakeCipher =<< peek trans_hi_ptr
       idx <- peek idx_ptr
-      proof <- EncryptedAmountTransferProof <$> newForeignPtr free_encrypted_amount_transfer_proof proof_ptr
+      len <- peek len_ptr
+      proof <- makeEncryptedAmountTransferProof (proof_ptr, fromIntegral len)
       return EncryptedAmountTransferData {
         eatdRemainingAmount = EncryptedAmount rem_hi rem_lo,
         eatdTransferAmount = EncryptedAmount trans_hi trans_lo,
@@ -234,7 +245,8 @@ foreign import ccall unsafe "verify_encrypted_transfer"
      -> Ptr ElgamalCipher -- ^ High chunk of the transfer amount.
      -> Ptr ElgamalCipher -- ^ Low chunk of the transfer amount.
      -> EncryptedAmountAggIndex -- ^ Index up to which amounts have been aggregated
-     -> Ptr EncryptedAmountTransferProof -- ^ Pointer to the proof
+     -> Ptr CChar -- ^ Pointer to the proof
+     -> Word64
      -> IO Word8 -- ^ Return either 0 if proof checking failed, or non-zero in case of success.
 
 verifyEncryptedTransferProof ::
@@ -256,7 +268,7 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
         withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
           withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
             -- this is safe since the called function handles the 0 length case correctly.
-            withEncryptedAmountTransferData transferData $ \rem_hi rem_lo trans_hi trans_lo idx proof -> do
+            withEncryptedAmountTransferData transferData $ \rem_hi rem_lo trans_hi trans_lo idx proof_len proof_ptr -> do
                res <- verify_encrypted_transfer
                        gcPtr
                        receiverPKPtr
@@ -268,7 +280,8 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
                        trans_hi
                        trans_lo
                        idx
-                       proof
+                       proof_ptr
+                       proof_len
                return (res /= 0)
   where AccountEncryptionKey (RegIdCred receiverPK') = receiverPK
         AccountEncryptionKey (RegIdCred senderPK') = senderPK
@@ -285,36 +298,42 @@ foreign import ccall unsafe "make_sec_to_pub_transfer_data"
      -> Word64
      -> Ptr (Ptr ElgamalCipher)
      -> Ptr (Ptr ElgamalCipher)
-     -> Ptr (Ptr ElgamalCipher)
-     -> Ptr (Ptr ElgamalCipher)
+     -> Ptr Word64
      -> Ptr EncryptedAmountAggIndex
-     -> IO (Ptr SecToPubAmountTransferProof)
+     -> Ptr Word64
+     -> IO (Ptr CChar)
 
-foreign import ccall unsafe "&free_sec_to_pub_amount_transfer_proof"
-     free_sec_to_pub_amount_transfer_proof ::
-     FunPtr (Ptr SecToPubAmountTransferProof -> IO ())
+newtype SecToPubAmountTransferProof = SecToPubAmountTransferProof { theSecToPubAmountTransferProof :: ShortByteString }
+  deriving (Eq, Show, FromJSON, ToJSON) via ByteStringHex
+  deriving Serialize via Short65K
 
-newtype SecToPubAmountTransferProof = SecToPubAmountTransferProof (ForeignPtr SecToPubAmountTransferProof)
-withSecToPubAmountTransferProof :: SecToPubAmountTransferProof -> (Ptr SecToPubAmountTransferProof -> IO b) -> IO b
-withSecToPubAmountTransferProof (SecToPubAmountTransferProof ptr) = withForeignPtr ptr
+withSecToPubAmountTransferProof :: SecToPubAmountTransferProof -> (CStringLen -> IO a) -> IO a
+withSecToPubAmountTransferProof (SecToPubAmountTransferProof s) = useAsCStringLen s
+
+makeSecToPubAmountTransferProof :: CStringLen -> IO SecToPubAmountTransferProof
+makeSecToPubAmountTransferProof c = SecToPubAmountTransferProof <$> packCStringLen c
+
+getSecToPubAmountTransferProof :: Word32 -> Get SecToPubAmountTransferProof
+getSecToPubAmountTransferProof len = SecToPubAmountTransferProof <$> getShortByteString (fromIntegral len)
+
+putSecToPubAmountTransferProof :: SecToPubAmountTransferProof -> Put
+putSecToPubAmountTransferProof = putShortByteString . theSecToPubAmountTransferProof
 
 data SecToPubAmountTransferData = SecToPubAmountTransferData {
   stpatdRemainingAmount :: EncryptedAmount,
-  stpatdTransferAmount :: EncryptedAmount,
+  stpatdTransferAmount :: Word64,
   stpatdIndex :: EncryptedAmountAggIndex,
   stpatdProof :: SecToPubAmountTransferProof
   }
 
 withSecToPubAmountTransferData :: SecToPubAmountTransferData
-                               -> (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> EncryptedAmountAggIndex -> Ptr SecToPubAmountTransferProof -> IO a)
+                               -> (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Word64 -> EncryptedAmountAggIndex -> Word64 -> Ptr CChar -> IO a)
                                -> IO a
 withSecToPubAmountTransferData SecToPubAmountTransferData{..} f = do
   withElgamalCipher (encryptionHigh stpatdRemainingAmount) $ \remaining_high ->
     withElgamalCipher (encryptionLow stpatdRemainingAmount) $ \remaining_low ->
-    withElgamalCipher (encryptionHigh stpatdTransferAmount) $ \transfer_high ->
-    withElgamalCipher (encryptionLow stpatdTransferAmount) $ \transfer_low ->
-    withSecToPubAmountTransferProof stpatdProof $ \proof ->
-    f remaining_high remaining_low transfer_high transfer_low stpatdIndex proof
+    withSecToPubAmountTransferProof stpatdProof $ \(proof, proof_len) ->
+    f remaining_high remaining_low stpatdTransferAmount stpatdIndex (fromIntegral proof_len) proof
 
 makeSecToPubAmountTransferData :: GlobalContext
                                -> ElgamalSecondSecret
@@ -327,19 +346,19 @@ makeSecToPubAmountTransferData gc sk aggAmount amount =
   withAggregatedDecryptedAmount aggAmount $ \aggAmountPtr ->
     alloca $ \rem_hi_ptr ->
     alloca $ \rem_lo_ptr ->
-    alloca $ \trans_hi_ptr ->
-    alloca $ \trans_lo_ptr ->
-    alloca $ \idx_ptr -> do
-      proof_ptr <- make_sec_to_pub_transfer_data gcPtr skPtr aggAmountPtr amount rem_hi_ptr rem_lo_ptr trans_hi_ptr trans_lo_ptr idx_ptr
+    alloca $ \amount_ptr ->
+    alloca $ \idx_ptr ->
+    alloca $ \len_ptr -> do
+      proof_ptr <- make_sec_to_pub_transfer_data gcPtr skPtr aggAmountPtr amount rem_hi_ptr rem_lo_ptr amount_ptr idx_ptr len_ptr
       rem_hi <- unsafeMakeCipher =<< peek rem_hi_ptr
       rem_lo <- unsafeMakeCipher =<< peek rem_hi_ptr
-      trans_hi <- unsafeMakeCipher =<< peek trans_hi_ptr
-      trans_lo <- unsafeMakeCipher =<< peek trans_hi_ptr
+      amount_val <- peek amount_ptr
       idx <- peek idx_ptr
-      proof <- SecToPubAmountTransferProof <$> newForeignPtr free_sec_to_pub_amount_transfer_proof proof_ptr
+      len <- peek len_ptr
+      proof <- makeSecToPubAmountTransferProof (proof_ptr, fromIntegral len)
       return SecToPubAmountTransferData {
         stpatdRemainingAmount = EncryptedAmount rem_hi rem_lo,
-        stpatdTransferAmount = EncryptedAmount trans_hi trans_lo,
+        stpatdTransferAmount = amount_val,
         stpatdIndex = idx,
         stpatdProof = proof
         }
@@ -352,10 +371,10 @@ foreign import ccall unsafe "verify_sec_to_pub_transfer"
      -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
      -> Ptr ElgamalCipher -- ^ High chunk of the remaining amount.
      -> Ptr ElgamalCipher -- ^ Low chunk of the remaining amount.
-     -> Ptr ElgamalCipher -- ^ High chunk of the transfer amount.
-     -> Ptr ElgamalCipher -- ^ Low chunk of the transfer amount.
+     -> Word64
      -> EncryptedAmountAggIndex -- ^ Index up to which amounts have been aggregated
-     -> Ptr SecToPubAmountTransferProof -- ^ Pointer to the proof
+     -> Ptr CChar -- ^ Pointer to the proof
+     -> Word64
      -> IO Word8 -- ^ Return either 0 if proof checking failed, or non-zero in case of success.
 
 verifySecretToPublicTransferProof ::
@@ -374,7 +393,7 @@ verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsaf
       withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
         withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
           -- this is safe since the called function handles the 0 length case correctly.
-          withSecToPubAmountTransferData transferData $ \rem_hi rem_lo trans_hi trans_lo idx proof -> do
+          withSecToPubAmountTransferData transferData $ \rem_hi rem_lo amount idx proof_len proof_ptr -> do
              res <- verify_sec_to_pub_transfer
                      gcPtr
                      senderPKPtr
@@ -382,9 +401,9 @@ verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsaf
                      initialLowPtr
                      rem_hi
                      rem_lo
-                     trans_hi
-                     trans_lo
+                     amount
                      idx
-                     proof
+                     proof_ptr
+                     proof_len
              return (res /= 0)
   where AccountEncryptionKey (RegIdCred senderPK') = senderPK

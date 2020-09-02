@@ -87,7 +87,82 @@ unsafe extern "C" fn derive_elgamal_second_public(
 
 /// # Safety
 /// This function is safe if the pointers to structures are all non-null, and
-/// produced by `Box::into_raw`. The `transfer_bytes_ptr` can be null in case
+/// produced by `Box::into_raw`.
+#[no_mangle]
+unsafe extern "C" fn encrypt_amount_with_zero_randomness(
+    ctx_ptr: *const GlobalContext<Group>,
+    microgtu: u64,
+    out_high_ptr: *mut *const Cipher<Group>,
+    out_low_ptr: *mut *const Cipher<Group>,
+) {
+    let encrypted = encrypt_amount_with_fixed_randomness(from_ptr!(ctx_ptr), Amount { microgtu });
+    *out_high_ptr = Box::into_raw(Box::new(encrypted.encryptions[1]));
+    *out_low_ptr = Box::into_raw(Box::new(encrypted.encryptions[0]));
+}
+
+/// # Safety
+/// This function is safe if the pointers to structures are all non-null, and
+/// produced by `Box::into_raw`.
+#[no_mangle]
+unsafe extern "C" fn make_encrypted_transfer_data(
+    ctx_ptr: *const GlobalContext<Group>,
+    receiver_pk_ptr: *const ElgamalPublicKeySecond,
+    sender_sk_ptr: *const ElgamalSecretKeySecond,
+    input_amount_ptr: *const AggregatedDecryptedAmount<Group>,
+    microgtu: u64,
+    high_remaining: *mut *const Cipher<Group>,
+    low_remaining: *mut *const Cipher<Group>,
+    high_transfer: *mut *const Cipher<Group>,
+    low_transfer: *mut *const Cipher<Group>,
+    out_index: *mut u64,
+    proof_len: *mut u64,
+) -> *mut u8 {
+    let ctx = from_ptr!(ctx_ptr);
+
+    let receiver_pk = from_ptr!(receiver_pk_ptr);
+    let receiver_pk = elgamal::PublicKey {
+        generator: *ctx.elgamal_generator(),
+        key:       receiver_pk.0,
+    };
+
+    let sender_sk = from_ptr!(sender_sk_ptr);
+    let sender_sk = elgamal::SecretKey {
+        generator: *ctx.elgamal_generator(),
+        scalar:    sender_sk.0,
+    };
+
+    let input_amount = from_ptr!(input_amount_ptr);
+
+    let mut csprng = thread_rng();
+
+    let data = match make_transfer_data(
+        &ctx,
+        &receiver_pk,
+        &sender_sk,
+        &input_amount,
+        Amount { microgtu },
+        &mut csprng,
+    ) {
+        Some(it) => it,
+        _ => return std::ptr::null_mut(),
+    };
+
+    *high_remaining = Box::into_raw(Box::new(data.remaining_amount.encryptions[1]));
+    *low_remaining = Box::into_raw(Box::new(data.remaining_amount.encryptions[0]));
+    *high_transfer = Box::into_raw(Box::new(data.transfer_amount.encryptions[1]));
+    *low_transfer = Box::into_raw(Box::new(data.transfer_amount.encryptions[0]));
+    *out_index = data.index;
+
+    let mut bytes = to_bytes(&data.proof);
+    *proof_len = bytes.len() as u64;
+    let ptr = bytes.as_mut_ptr();
+    std::mem::forget(bytes);
+    ptr
+}
+
+/// # Safety
+/// This function is safe if the pointers to structures are all non-null, and
+/// produced by `Box::into_raw`. The `transfer_proof_ptr` can be null in case
 /// the length is 0, but otherwise it must be non-null and dereferenceable.
 ///
 /// Return 0 in case verification was unsuccesful, and a non-zero value
@@ -99,35 +174,58 @@ unsafe extern "C" fn verify_encrypted_transfer(
     sender_pk_ptr: *const ElgamalPublicKeySecond,
     initial_high_ptr: *const Cipher<Group>,
     initial_low_ptr: *const Cipher<Group>,
-    transfer_bytes_ptr: *const u8,
-    transfer_bytes_len: size_t,
+    remaining_high_ptr: *const Cipher<Group>,
+    remaining_low_ptr: *const Cipher<Group>,
+    transfer_high_ptr: *const Cipher<Group>,
+    transfer_low_ptr: *const Cipher<Group>,
+    encrypted_agg_index: u64,
+    transfer_proof_ptr: *const u8,
+    transfer_proof_len: size_t,
 ) -> u8 {
     let ctx = from_ptr!(ctx_ptr);
-    let initial_high = from_ptr!(initial_high_ptr);
-    let initial_low = from_ptr!(initial_low_ptr);
-    let transfer_bytes = slice_from_c_bytes!(transfer_bytes_ptr, transfer_bytes_len as usize);
 
     let receiver_pk = from_ptr!(receiver_pk_ptr);
-    let sender_pk = from_ptr!(sender_pk_ptr);
-
     let receiver_pk = elgamal::PublicKey {
         generator: *ctx.elgamal_generator(),
         key:       receiver_pk.0,
     };
 
+    let sender_pk = from_ptr!(sender_pk_ptr);
     let sender_pk = elgamal::PublicKey {
         generator: *ctx.elgamal_generator(),
         key:       sender_pk.0,
     };
 
+    let initial_high = from_ptr!(initial_high_ptr);
+    let initial_low = from_ptr!(initial_low_ptr);
     let initial = EncryptedAmount {
         encryptions: [*initial_high, *initial_low],
     };
 
-    let transfer_data = if let Ok(td) = (&mut Cursor::new(transfer_bytes)).get() {
+    let remaining_high = from_ptr!(remaining_high_ptr);
+    let remaining_low = from_ptr!(remaining_low_ptr);
+    let remaining_amount = EncryptedAmount {
+        encryptions: [*remaining_high, *remaining_low],
+    };
+
+    let transfer_high = from_ptr!(transfer_high_ptr);
+    let transfer_low = from_ptr!(transfer_low_ptr);
+    let transfer_amount = EncryptedAmount {
+        encryptions: [*transfer_high, *transfer_low],
+    };
+
+    let transfer_proof = slice_from_c_bytes!(transfer_proof_ptr, transfer_proof_len as usize);
+    let proof = if let Ok(td) = (&mut Cursor::new(transfer_proof)).get() {
         td
     } else {
         return 0;
+    };
+
+    let transfer_data = EncryptedAmountTransferData {
+        remaining_amount,
+        transfer_amount,
+        index: encrypted_agg_index,
+        proof,
     };
 
     if verify_transfer_data(ctx, &receiver_pk, &sender_pk, &initial, &transfer_data) {
@@ -137,35 +235,110 @@ unsafe extern "C" fn verify_encrypted_transfer(
     }
 }
 
+/// # Safety
+/// This function is safe if the pointers to structures are all non-null, and
+/// produced by `Box::into_raw`.
+#[no_mangle]
+unsafe extern "C" fn make_sec_to_pub_data(
+    ctx_ptr: *const GlobalContext<Group>,
+    sender_sk_ptr: *const ElgamalSecretKeySecond,
+    input_amount_ptr: *const AggregatedDecryptedAmount<Group>,
+    microgtu: u64,
+    high_remaining: *mut *const Cipher<Group>,
+    low_remaining: *mut *const Cipher<Group>,
+    out_amount: *mut u64,
+    out_index: *mut u64,
+    proof_len: *mut u64,
+) -> *mut u8 {
+    let ctx = from_ptr!(ctx_ptr);
+
+    let sender_sk = from_ptr!(sender_sk_ptr);
+    let sender_sk = elgamal::SecretKey {
+        generator: *ctx.elgamal_generator(),
+        scalar:    sender_sk.0,
+    };
+
+    let input_amount = from_ptr!(input_amount_ptr);
+
+    let mut csprng = thread_rng();
+
+    let data = match make_sec_to_pub_transfer_data(
+        &ctx,
+        &sender_sk,
+        &input_amount,
+        Amount { microgtu },
+        &mut csprng,
+    ) {
+        Some(it) => it,
+        _ => return std::ptr::null_mut(),
+    };
+
+    *high_remaining = Box::into_raw(Box::new(data.remaining_amount.encryptions[1]));
+    *low_remaining = Box::into_raw(Box::new(data.remaining_amount.encryptions[0]));
+    *out_amount = data.transfer_amount.microgtu;
+    *out_index = data.index;
+
+    let mut bytes = to_bytes(&data.proof);
+    *proof_len = bytes.len() as u64;
+    let ptr = bytes.as_mut_ptr();
+    std::mem::forget(bytes);
+    ptr
+}
+
+/// # Safety
+/// This function is safe if the pointers to structures are all non-null, and
+/// produced by `Box::into_raw`. The `transfer_proof_ptr` can be null in case
+/// the length is 0, but otherwise it must be non-null and dereferenceable.
+///
+/// Return 0 in case verification was unsuccesful, and a non-zero value
+/// otherwise.
 #[no_mangle]
 unsafe extern "C" fn verify_sec_to_pub_transfer(
     ctx_ptr: *const GlobalContext<Group>,
     sender_pk_ptr: *const ElgamalPublicKeySecond,
     initial_high_ptr: *const Cipher<Group>,
     initial_low_ptr: *const Cipher<Group>,
-    transfer_bytes_ptr: *const u8,
-    transfer_bytes_len: size_t,
+    remaining_high_ptr: *const Cipher<Group>,
+    remaining_low_ptr: *const Cipher<Group>,
+    microgtu: u64,
+    encrypted_agg_index: u64,
+    transfer_proof_ptr: *const u8,
+    transfer_proof_len: size_t,
 ) -> u8 {
     let ctx = from_ptr!(ctx_ptr);
-    let initial_high = from_ptr!(initial_high_ptr);
-    let initial_low = from_ptr!(initial_low_ptr);
-    let transfer_bytes = slice_from_c_bytes!(transfer_bytes_ptr, transfer_bytes_len as usize);
 
     let sender_pk = from_ptr!(sender_pk_ptr);
-
     let sender_pk = elgamal::PublicKey {
         generator: *ctx.elgamal_generator(),
         key:       sender_pk.0,
     };
 
+    let initial_high = from_ptr!(initial_high_ptr);
+    let initial_low = from_ptr!(initial_low_ptr);
     let initial = EncryptedAmount {
         encryptions: [*initial_high, *initial_low],
     };
 
-    let transfer_data = if let Ok(td) = (&mut Cursor::new(transfer_bytes)).get() {
+    let remaining_high = from_ptr!(remaining_high_ptr);
+    let remaining_low = from_ptr!(remaining_low_ptr);
+    let remaining_amount = EncryptedAmount {
+        encryptions: [*remaining_high, *remaining_low],
+    };
+
+    let transfer_proof = slice_from_c_bytes!(transfer_proof_ptr, transfer_proof_len as usize);
+    let proof = if let Ok(td) = (&mut Cursor::new(transfer_proof)).get() {
         td
     } else {
         return 0;
+    };
+
+    let transfer_amount = Amount { microgtu };
+
+    let transfer_data = SecToPubAmountTransferData {
+        remaining_amount,
+        transfer_amount,
+        index: encrypted_agg_index,
+        proof,
     };
 
     if verify_sec_to_pub_transfer_data(ctx, &sender_pk, &initial, &transfer_data) {
@@ -175,14 +348,31 @@ unsafe extern "C" fn verify_sec_to_pub_transfer(
     }
 }
 
+/// # Safety
+/// This function is safe if the pointers to structures are all non-null, and
+/// produced by `Box::into_raw`.
 #[no_mangle]
-unsafe extern "C" fn encrypt_amount_with_zero_randomness(
-    ctx_ptr: *const GlobalContext<Group>,
+unsafe extern "C" fn make_aggregated_decrypted_amount(
+    encrypted_high_ptr: *const Cipher<Group>,
+    encrypted_low_ptr: *const Cipher<Group>,
     microgtu: u64,
-    out_high_ptr: *mut *const Cipher<Group>,
-    out_low_ptr: *mut *const Cipher<Group>,
+    agg_index: u64,
+) -> *mut AggregatedDecryptedAmount<Group> {
+    let encrypted_high = from_ptr!(encrypted_high_ptr).clone();
+    let encrypted_low = from_ptr!(encrypted_low_ptr).clone();
+    let agg_encrypted_amount = EncryptedAmount {
+        encryptions: [encrypted_low, encrypted_high],
+    };
+    Box::into_raw(Box::new(AggregatedDecryptedAmount {
+        agg_encrypted_amount,
+        agg_amount: Amount { microgtu },
+        agg_index,
+    }))
+}
+
+#[no_mangle]
+unsafe extern "C" fn free_aggregated_decrypted_amount(
+    amount: *mut AggregatedDecryptedAmount<Group>,
 ) {
-    let encrypted = encrypt_amount_with_fixed_randomness(from_ptr!(ctx_ptr), Amount { microgtu });
-    *out_high_ptr = Box::into_raw(Box::new(encrypted.encryptions[1]));
-    *out_low_ptr = Box::into_raw(Box::new(encrypted.encryptions[0]));
+    Box::from_raw(amount);
 }
