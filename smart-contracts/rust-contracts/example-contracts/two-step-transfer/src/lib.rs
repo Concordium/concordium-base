@@ -345,12 +345,277 @@ impl Serialize for State {
 // Tests
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
 
     #[test]
-    #[no_mangle]
-    fn test() {
-        todo!("implement tests");
+    /// Initialise contract with account holders
+    fn test_init() {
+        // Setup our example state the contract is to be run in.
+        // First the context.
+        let metadata = ChainMetadata {
+            slot_number:      0,
+            block_height:     0,
+            finalized_height: 0,
+            slot_time:        0,
+        };
+        let init_origin = AccountAddress([0u8; 32]);
+        let account1 = AccountAddress([1u8; 32]);
+        let account2 = AccountAddress([2u8; 32]);
+        let init_ctx = InitContext {
+            metadata,
+            init_origin,
+        };
+        // The init function does not expect a parameter, so empty will do.
+        let parameter = InitParams {
+            account_holders: vec![account1, account2],
+            transfer_agreement_threshold: 2,
+            transfer_request_ttl: 10
+        };
+        
+        let ctx = test_infrastructure::InitContextWrapper {
+            init_ctx,
+            parameter: &to_bytes(&parameter),
+        };
+        // set up the logger so we can intercept and analyze them at the end.
+        let mut logger = test_infrastructure::LogRecorder::init();
+
+        // call the init function
+        let out = contract_init(ctx, 13, &mut logger);
+
+        // and inspect the result.
+        if let Ok(state) = out {
+            assert!(state.init_params.account_holders.contains(&account1), "Should contain the first account holder");
+            assert!(state.init_params.account_holders.contains(&account2), "Should contain the second account holder");
+            assert_eq!(state.init_params.account_holders.len(), 2, "Should not contain more account holders");
+            assert_eq!(state.outstanding_transfer_requests.len(), 0, "No transfer request at initialisation");
+        } else {
+            assert!(false, "Contract initialization failed.");
+        }
+        // and make sure the correct logs were produced.
+        // assert_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
+        // assert_eq!(&logger.logs[0], &[0, 13], "Incorrect log produced.");
+    }
+
+    #[test]
+    /// Creates the request
+    /// 
+    /// - Mutates the state with the request
+    /// - Sets the right amount aside for the request
+    /// - Only have the sender support the request
+    fn test_receive_request() {
+        // Setup
+        let metadata = ChainMetadata {
+            slot_number:      0,
+            block_height:     0,
+            finalized_height: 0,
+            slot_time:        0,
+        };
+        let account1 = AccountAddress([1u8; 32]);
+        let account2 = AccountAddress([2u8; 32]);
+        let target_account = AccountAddress([3u8; 32]);
+        let receive_ctx = ReceiveContext {
+            metadata,
+            invoker: account1,
+            self_address: ContractAddress {
+                index:    0,
+                subindex: 0,
+            },
+            self_balance: 0,
+            sender: Address::Account(account1),
+            owner: account1
+        };
+        let request_id = 0;
+        // Create Request with id 0, to transfer 50 to target_account
+        let parameter = Message::RequestTransfer(request_id, 50, target_account);
+        let ctx = test_infrastructure::ReceiveContextWrapper {
+            receive_ctx,
+            parameter: &to_bytes(&parameter),
+        };
+        let init_params = InitParams {
+            account_holders: vec![account1, account2],
+            transfer_agreement_threshold: 2,
+            transfer_request_ttl: 10
+        };
+        // set up the logger so we can intercept and analyze them at the end.
+        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut state = State {
+            available_balance: 100,
+            init_params,
+            outstanding_transfer_requests: Vec::new(),
+        };
+
+        // Execution
+        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+            contract_receive(ctx, 17, &mut logger, &mut state);
+        
+        // Test
+        match res {
+            Err(_) => assert!(false, "Contract receive failed, but it should not have."),
+            Ok(actions) => {
+                assert_eq!(
+                    actions,
+                    test_infrastructure::ActionsTree::Accept,
+                    "Contract receive produced incorrect actions."
+                );
+                assert_eq!(state.outstanding_transfer_requests.len(), 1, "Contract receive did not create transfer request");
+                assert_eq!(state.available_balance, 50, "Contract receive did not lock requested amount");
+                let request = state.outstanding_transfer_requests.get(0).unwrap();
+                assert_eq!(request.id, request_id, "Contract receive created transfer request with wrong id");
+                assert_eq!(request.supporters.len(), 1, "Only one is supporting the request from start");
+                assert!(account1 == *request.supporters.get(0).unwrap(), "The request sender supports the request");
+            }
+        }
+    }
+
+    #[test]
+    /// Support a request without entering the threshold
+    /// 
+    /// - Mutates the request in the state by adding the supporter
+    fn test_receive_support_no_transfer() {
+        // Setup
+        let metadata = ChainMetadata {
+            slot_number:      0,
+            block_height:     0,
+            finalized_height: 0,
+            slot_time:        0,
+        };
+        let account1 = AccountAddress([1u8; 32]);
+        let account2 = AccountAddress([2u8; 32]);
+        let account3 = AccountAddress([3u8; 32]);
+        let target_account = AccountAddress([3u8; 32]);
+        let receive_ctx = ReceiveContext {
+            metadata,
+            invoker: account1,
+            self_address: ContractAddress {
+                index:    0,
+                subindex: 0,
+            },
+            self_balance: 0,
+            sender: Address::Account(account2),
+            owner: account1
+        };
+        let request_id = 0;
+        let parameter = Message::SupportTransfer(request_id, 50, target_account);
+        let ctx = test_infrastructure::ReceiveContextWrapper {
+            receive_ctx,
+            parameter: &to_bytes(&parameter),
+        };
+        let init_params = InitParams {
+            account_holders: vec![account1, account2, account3],
+            transfer_agreement_threshold: 3,
+            transfer_request_ttl: 10
+        };
+        let request = OutstandingTransferRequest {
+            id: request_id,
+            supporters: vec![account1],
+            target_account,
+            times_out_at: 10,
+            transfer_amount: 50
+        };
+        // set up the logger so we can intercept and analyze them at the end.
+        let mut logger = test_infrastructure::LogRecorder::init();
+        
+        let mut state = State {
+            available_balance: 50,
+            init_params,
+            outstanding_transfer_requests: vec![request],
+        };
+        
+        // Execution
+        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+            contract_receive(ctx, 17, &mut logger, &mut state);
+        
+        // Test
+        match res {
+            Err(_) => assert!(false, "Contract receive support failed, but it should not have."),
+            Ok(actions) => {
+                assert_eq!(
+                    actions,
+                    test_infrastructure::ActionsTree::Accept,
+                    "Contract receive support produced incorrect actions."
+                );
+                assert_eq!(state.outstanding_transfer_requests.len(), 1, "Contract receive support should not mutate the outstanding requests");
+                assert_eq!(state.available_balance, 50, "Contract receive did not lock requested amount");
+                let request = state.outstanding_transfer_requests.get(0).unwrap();
+                assert_eq!(request.id, request_id, "Contract receive created transfer request with wrong id");
+                assert_eq!(request.supporters.len(), 2, "Two should support the transfer request");
+                assert!(request.supporters.contains(&account2), "The support sender supports the request");
+            }
+        }
+    }
+
+
+    #[test]
+    /// Support a request triggering the transfer
+    /// 
+    /// - Results in the transfer
+    /// - Removes the request from state
+    fn test_receive_support_transfer() {
+        // Setup
+        let metadata = ChainMetadata {
+            slot_number:      0,
+            block_height:     0,
+            finalized_height: 0,
+            slot_time:        0,
+        };
+        let account1 = AccountAddress([1u8; 32]);
+        let account2 = AccountAddress([2u8; 32]);
+        let account3 = AccountAddress([3u8; 32]);
+        let target_account = AccountAddress([3u8; 32]);
+        let receive_ctx = ReceiveContext {
+            metadata,
+            invoker: account2,
+            self_address: ContractAddress {
+                index:    0,
+                subindex: 0,
+            },
+            self_balance: 0,
+            sender: Address::Account(account2),
+            owner: account2
+        };
+        let request_id = 0;
+        let parameter = Message::SupportTransfer(request_id, 50, target_account);
+        let ctx = test_infrastructure::ReceiveContextWrapper {
+            receive_ctx,
+            parameter: &to_bytes(&parameter),
+        };
+        let init_params = InitParams {
+            account_holders: vec![account1, account2, account3],
+            transfer_agreement_threshold: 2,
+            transfer_request_ttl: 10
+        };
+        let request = OutstandingTransferRequest {
+            id: request_id,
+            supporters: vec![account1],
+            target_account,
+            times_out_at: 10,
+            transfer_amount: 50
+        };
+        let mut logger = test_infrastructure::LogRecorder::init();
+        
+        let mut state = State {
+            available_balance: 50,
+            init_params,
+            outstanding_transfer_requests: vec![request],
+        };
+        
+        // Execution
+        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+            contract_receive(ctx, 17, &mut logger, &mut state);
+        
+        // Test
+        match res {
+            Err(_) => assert!(false, "Contract receive support failed, but it should not have."),
+            Ok(actions) => {
+                assert_eq!(
+                    actions,
+                    test_infrastructure::ActionsTree::simple_transfer(&target_account, 50),
+                    "Supporting the transfer did not result in the right transfer"
+                );
+                assert_eq!(state.outstanding_transfer_requests.len(), 0, "The request should be removed");
+                assert_eq!(state.available_balance, 50, "The available amount should be unchanged");
+            }
+        }
     }
 }
