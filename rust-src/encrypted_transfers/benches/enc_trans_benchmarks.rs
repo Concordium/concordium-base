@@ -181,14 +181,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
             let ro = RandomOracle::domain(&challenge_prefix);
             let mut transcript = Transcript::new(&[]);
             assert_eq!(
-                verify_sec_to_pub_trans(
-                    &context,
-                    ro,
-                    &mut transcript,
-                    &transaction,
-                    &pk,
-                    &S,
-                ),
+                verify_sec_to_pub_trans(&context, ro, &mut transcript, &transaction, &pk, &S,),
                 Ok(())
             )
         })
