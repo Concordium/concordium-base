@@ -3,6 +3,7 @@ module ConcordiumTests.Crypto.EncryptedTransfers where
 
 import Concordium.Crypto.EncryptedTransfers
 import Concordium.ID.Parameters
+import Concordium.ID.Types
 import Concordium.Crypto.FFIDataTypes
 
 import qualified Data.ByteString as BS
@@ -48,6 +49,19 @@ testSerializeEncryptedAmountTransferData = property $ \gen seed1 seed2 -> monadi
           }
   return (Right eatd === runGet getEncrypted bytes)
 
+testTransferProofVerify :: Property
+testTransferProofVerify = property $ \gen seed1 seed2 -> monadicIO $ do
+  let public = generateElgamalSecondFromSeed seed1
+  let receiverPK = AccountEncryptionKey (RegIdCred public)
+  let private = generateElgamalSecondSecretFromSeed seed2
+  let senderPK = AccountEncryptionKey (RegIdCred (deriveElgamalSecondPublic private))
+  let inputAmount = encryptAmount globalContext gen
+  let agg = makeAggregatedDecryptedAmount inputAmount gen (EncryptedAmountAggIndex gen)
+  let amount = gen `div` 2
+  Just eatd <- run (makeEncryptedAmountTransferData globalContext public private agg amount)
+  return $ verifyEncryptedTransferProof globalContext receiverPK senderPK inputAmount eatd
+
+
 tests :: Spec
 tests = describe "Concordium.Crypto.EncryptedTransfers" $ do
   describe "serialization" $ do
@@ -55,3 +69,5 @@ tests = describe "Concordium.Crypto.EncryptedTransfers" $ do
     it "serialize encrypted amount transfer data" testSerializeEncryptedAmountTransferData
   describe "Make encrypted transfer." $ do
     it "make aggregated encrypted amount" testMakeAggregatedEncryptedAmount
+  describe "Test proof verification." $ do
+    it "encrypted transfer proof verify" testTransferProofVerify

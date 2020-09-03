@@ -199,19 +199,19 @@ unsafe extern "C" fn verify_encrypted_transfer(
     let initial_high = from_ptr!(initial_high_ptr);
     let initial_low = from_ptr!(initial_low_ptr);
     let initial = EncryptedAmount {
-        encryptions: [*initial_high, *initial_low],
+        encryptions: [*initial_low, *initial_high],
     };
 
     let remaining_high = from_ptr!(remaining_high_ptr);
     let remaining_low = from_ptr!(remaining_low_ptr);
     let remaining_amount = EncryptedAmount {
-        encryptions: [*remaining_high, *remaining_low],
+        encryptions: [*remaining_low, *remaining_high],
     };
 
     let transfer_high = from_ptr!(transfer_high_ptr);
     let transfer_low = from_ptr!(transfer_low_ptr);
     let transfer_amount = EncryptedAmount {
-        encryptions: [*transfer_high, *transfer_low],
+        encryptions: [*transfer_low, *transfer_high],
     };
 
     let transfer_proof = slice_from_c_bytes!(transfer_proof_ptr, transfer_proof_len as usize);

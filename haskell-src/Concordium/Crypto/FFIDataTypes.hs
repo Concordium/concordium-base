@@ -1,9 +1,39 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.FFIDataTypes
-  (PedersenKey, PsSigKey, ElgamalSecond, ElgamalSecondSecret, ElgamalPublicKey, ElgamalCipher,
-  generatePedersenKey, generatePsSigKey, generateElgamalPublicKey, generateElgamalPublicKeyFromSeed, generateElgamalSecondSecretFromSeed,
-  generateElgamalCipher ,withPedersenKey, withPsSigKey, withElgamalSecond, withElgamalSecondSecret, withElgamalPublicKey, withElgamalCipher,
-  zeroElgamalCipher, unsafeMakeCipher, generateElgamalSecondFromSeed)
+  (
+    -- * Pedersen commitment keys.
+    PedersenKey,
+    generatePedersenKey,
+    withPedersenKey,
+
+    -- * PointCheval-Sanders public keys.
+    PsSigKey,
+    generatePsSigKey,
+    withPsSigKey,
+
+    -- * Elgamal public and private keys.
+    ElgamalPublicKey,
+    generateElgamalPublicKey,
+    generateElgamalPublicKeyFromSeed,
+    withElgamalPublicKey,
+
+    -- * Second components of Elgamal keys (without the generator).
+    -- FIXME: This will change once the revision of these is done in Rust, so that
+    -- the generator is no longer part of the key, but is globally defined.
+    ElgamalSecond,
+    ElgamalSecondSecret,
+    generateElgamalSecondSecretFromSeed,
+    withElgamalSecond,
+    withElgamalSecondSecret,
+    generateElgamalSecondFromSeed,
+    deriveElgamalSecondPublic,
+
+    -- * Elgamal ciphers in Bls12 G1 group.
+    ElgamalCipher,
+    generateElgamalCipher,
+    withElgamalCipher,
+    zeroElgamalCipher,
+    unsafeMakeCipher)
   where
 
 import Concordium.Crypto.ByteStringHelpers
