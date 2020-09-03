@@ -8,7 +8,7 @@ use crate::{
 };
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
+use ed25519_dalek as ed25519;
 use either::Either;
 use elgamal::cipher::Cipher;
 use failure::Fallible;
@@ -504,19 +504,19 @@ where
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
-    // Proof of knowledge of the secret keys of the account.
-    // TODO: This might be replaced by just signatures.
-    // What we do now is take all the keys in acc_data and provide a proof of
-    // knowledge of the key.
-    // FIXME: This should be integrated into the other proofs.
-    let proof_acc_sk = AccountOwnershipProof {
-        proofs: acc_data
-            .keys
+    // A list signature on the challenge used by the other proofs using the account keys
+    // all the public account keys
+    // TODO: check if this challenge is sufficient. The challenge at this point already includes
+    // either all the keys or the address of the account to which we deplay the credential.
+    let to_sign = ro.split().get_challenge();
+    let proof_acc_sk = AccountOwnershipProof{
+        proofs: acc_data.keys
             .iter()
             .map(|(&idx, kp)| {
+                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
                 (
                     idx,
-                    eddsa_dlog::prove_dlog_ed25519(ro.split(), &kp.public, &kp.secret),
+                    expanded_sk.sign(to_sign.as_ref(), &kp.public),
                 )
             })
             .collect(),
@@ -532,7 +532,7 @@ where
             .collect(),
         proof_reg_id: proof.witness.w1.w1,
         proof_ip_sig: proof.witness.w1.w2,
-        proof_acc_sk,
+        proof_acc_sk: proof_acc_sk,
     };
 
     let info = CredentialDeploymentInfo {
@@ -1000,7 +1000,7 @@ mod tests {
 
         // Check cred_account
         let cred_account_ok = match cdi.values.cred_account {
-            CredentialAccount::NewAccount(k, t) => k.len() == 3 && t == sigthres,
+            CredentialAccount::NewAccount(ref k, t) => k.len() == 3 && t == sigthres,
             _ => false,
         };
         assert!(cred_account_ok, "CDI cred_account is invalid");
@@ -1038,6 +1038,15 @@ mod tests {
 
         // Check policy
         assert_eq!(cdi.values.policy, policy, "CDI policy is invalid");
+
+        // Check account key signatures
+        let sig_msg = RandomOracle::domain("credential").append(&cdi.values).get_challenge();
+        cdi.proofs.proof_acc_sk.proofs.iter().for_each(|(idx, sig)| {
+            match acc_data.keys.get(idx).unwrap().verify(sig_msg.as_ref(), &sig) {
+                Ok(_) => (),
+                _ => panic!("account key signature is invalid")
+            }
+        });
 
         // Add checks for proofs
     }

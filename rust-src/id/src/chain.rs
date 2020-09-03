@@ -6,7 +6,7 @@ use crate::{
 };
 use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
-use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
+use ed25519_dalek as ed25519;
 use either::Either;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
@@ -157,12 +157,13 @@ fn verify_cdi_worker<
                 }
                 // we at least have enough proofs now, if they are all valid and have valid
                 // indices
+                let signature_message = ro.split().get_challenge();
                 for (&idx, proof) in proofs.proof_acc_sk.proofs.iter() {
                     if let Some(key) = acc_keys.get(idx) {
                         let VerifyKey::Ed25519VerifyKey(ref key) = key;
-                        let verify_dlog = eddsa_dlog::verify_dlog_ed25519(ro.split(), key, proof);
-                        if !verify_dlog {
-                            return Err(CDIVerificationError::AccountOwnership);
+                        match key.verify(signature_message.as_ref(), &proof) {
+                            Ok(_) => (),
+                            _ => return Err(CDIVerificationError::AccountOwnership)
                         }
                     } else {
                         return Err(CDIVerificationError::AccountOwnership);
@@ -190,6 +191,7 @@ fn verify_cdi_worker<
             // set of processed keys already
             let mut processed = BTreeSet::new();
             // the new keys get indices 0, 1, ..
+            let signature_message = ro.split().get_challenge();
             for (idx, key) in (0u8..).zip(keys.iter()) {
                 let idx = KeyIndex(idx);
                 // insert returns true if key was __not__ present
@@ -198,9 +200,9 @@ fn verify_cdi_worker<
                 }
                 if let Some(proof) = proofs.proof_acc_sk.proofs.get(&idx) {
                     let VerifyKey::Ed25519VerifyKey(ref key) = key;
-                    let verify_dlog = eddsa_dlog::verify_dlog_ed25519(ro.split(), key, proof);
-                    if !verify_dlog {
-                        return Err(CDIVerificationError::AccountOwnership);
+                    match key.verify(signature_message.as_ref(), &proof) {
+                        Ok(_) => (),
+                        _ => return Err(CDIVerificationError::AccountOwnership)
                     }
                 } else {
                     return Err(CDIVerificationError::AccountOwnership);
