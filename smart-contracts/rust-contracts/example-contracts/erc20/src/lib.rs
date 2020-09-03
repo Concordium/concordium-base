@@ -5,20 +5,20 @@ use concordium_sc_base::{collections::*, *};
  * This is an implementation of ERC-20 Token Standard used on the Ethereum
  * network.
  * It provides standard functionality for transfering tokens and allowing
- * other accounts to transfer an limited amount from ones account.
+ * other accounts to transfer a certain amount from ones account.
  *
  * https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20.md
  *
  */
 
 // Types
-type U999 = u32; // spec says u256 but we only have u64 at most
+type U999 = u64; // spec says u256 but we only have u64 at most
 
 struct InitParams {
-    name:         String,
-    symbol:       String,
-    decimals:     u32,
-    total_supply: U999,
+    name:         String, // Name of the token
+    symbol:       String, // Symbol of the token
+    decimals:     u32,    // Number of decimals to show when displayed
+    total_supply: U999,   // Total supply of tokens created
 }
 
 pub struct State {
@@ -29,12 +29,26 @@ pub struct State {
 }
 
 enum Request {
-    // (receive_account, amount)
+    // (receive_account, amount) - Transfers 'amount' tokens from the sender account to
+    // 'receive_account'
     TransferTo(AccountAddress, U999),
-    // (send_account, receive_account, amount)
+    // (owner_account, receive_account, amount) - Transfers 'amount' tokens from the
+    // 'owner_account' to 'receive_account' if allowed
     TransferFromTo(AccountAddress, AccountAddress, U999),
-    // called Approve in the erc20 spec. TODO: this request is insecure af wrt tx ordering.
+    // (allowed_account, amount) - Allowes 'allowed_account' to send up to 'amount' tokens from
+    // the sender account. Called Approve in the erc20 spec. TODO: this request is insecure af
+    // wrt tx ordering.
     AllowTransfer(AccountAddress, U999),
+}
+
+// Event printed in the log
+enum Event {
+    // `amount` of tokens are tranfered `from_account` to `to_account`
+    // (from_account, to_account, amount)
+    Transfer(AccountAddress, AccountAddress, U999),
+    // `amount` of tokens are allowed to be tranfered by `spender_account` from `owner_account`
+    // (owner_account, spender_account, amount)
+    Approval(AccountAddress, AccountAddress, U999),
 }
 
 // Contract
@@ -44,13 +58,15 @@ enum Request {
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: I,
     _amount: Amount,
-    _logger: &mut L,
+    logger: &mut L,
 ) -> InitResult<State> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
 
     // Let the creator have all the tokens
+    let creator = *ctx.init_origin();
+    logger.log(&Event::Transfer(AccountAddress([0u8; 32]), creator, init_params.total_supply));
     let mut balances = BTreeMap::new();
-    balances.insert(*ctx.init_origin(), init_params.total_supply);
+    balances.insert(creator, init_params.total_supply);
 
     let state = State {
         init_params,
@@ -65,7 +81,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: R,
     _: Amount,
-    _: &mut L,
+    logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
     let msg: Request = ctx.parameter_cursor().get()?;
@@ -76,19 +92,20 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     };
 
     match msg {
-        Request::TransferTo(account_address, amount) => {
+        Request::TransferTo(receiver_address, amount) => {
             let sender_balance = match state.balances.get(&sender_address) {
                 None => 0,
                 Some(balance) => *balance,
             };
             ensure!(sender_balance >= amount, "Insufficient funds");
 
-            let receiver_balance = match state.balances.get(&account_address) {
+            let receiver_balance = match state.balances.get(&receiver_address) {
                 None => 0,
                 Some(balance) => *balance,
             };
             state.balances.insert(sender_address, sender_balance - amount);
-            state.balances.insert(account_address, receiver_balance + amount);
+            state.balances.insert(receiver_address, receiver_balance + amount);
+            logger.log(&Event::Transfer(sender_address, receiver_address, amount));
         }
         Request::TransferFromTo(owner_address, receiver_address, amount) => {
             let allowed_amount = match state.allowed.get(&(owner_address, sender_address)) {
@@ -113,9 +130,11 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             state.allowed.insert((owner_address, sender_address), allowed_amount - amount);
             state.balances.insert(owner_address, owner_balance - amount);
             state.balances.insert(receiver_address, receiver_balance + amount);
+            logger.log(&Event::Transfer(owner_address, receiver_address, amount));
         }
         Request::AllowTransfer(spender_address, amount) => {
             state.allowed.insert((sender_address, spender_address), amount);
+            logger.log(&Event::Approval(sender_address, spender_address, amount));
         }
     }
     Ok(A::accept())
@@ -211,6 +230,45 @@ impl Serialize for Request {
     }
 }
 
+impl Serialize for Event {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        match self {
+            Event::Transfer(from_account, to_account, amount) => {
+                out.write_u8(0)?;
+                from_account.serial(out)?;
+                to_account.serial(out)?;
+                amount.serial(out)?;
+            }
+            Event::Approval(owner_account, spender_account, amount) => {
+                out.write_u8(0)?;
+                owner_account.serial(out)?;
+                spender_account.serial(out)?;
+                amount.serial(out)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
+        let idx = source.read_u8()?;
+        match idx {
+            0 => {
+                let from_account = AccountAddress::deserial(source)?;
+                let to_account = AccountAddress::deserial(source)?;
+                let amount = U999::deserial(source)?;
+                Ok(Event::Transfer(from_account, to_account, amount))
+            }
+            1 => {
+                let owner_account = AccountAddress::deserial(source)?;
+                let spender_account = AccountAddress::deserial(source)?;
+                let amount = U999::deserial(source)?;
+                Ok(Event::Approval(owner_account, spender_account, amount))
+            }
+            _ => Err(Default::default()),
+        }
+    }
+}
+
 impl Serialize for State {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.balances.serial(out)?;
@@ -247,7 +305,7 @@ pub mod tests {
             finalized_height: 0,
             slot_time:        0,
         };
-        let init_origin = AccountAddress([0u8; 32]);
+        let init_origin = AccountAddress([1u8; 32]);
         let init_ctx = InitContext {
             metadata,
             init_origin,
@@ -284,6 +342,13 @@ pub mod tests {
                 )
             }
         }
+        // and make sure the correct logs were produced.
+        assert_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
+        assert_eq!(
+            logger.logs[0],
+            to_bytes(&Event::Transfer(AccountAddress([0u8; 32]), init_origin, 100)),
+            "Should log an initial transfer, when creating the token"
+        );
     }
 
     #[test]
@@ -357,6 +422,12 @@ pub mod tests {
                 );
             }
         }
+        assert_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
+        assert_eq!(
+            logger.logs[0],
+            to_bytes(&Event::Transfer(from_account, to_account, 70)),
+            "Should log the transfer"
+        );
     }
 
     #[test]
@@ -441,6 +512,12 @@ pub mod tests {
                 );
             }
         }
+        assert_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
+        assert_eq!(
+            logger.logs[0],
+            to_bytes(&Event::Transfer(from_account, to_account, 60)),
+            "Should log the transfer"
+        );
     }
 }
 
