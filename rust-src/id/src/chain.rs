@@ -164,7 +164,7 @@ fn verify_cdi_worker<
                         let VerifyKey::Ed25519VerifyKey(ref key) = key;
                         match key.verify(signed.as_ref(), &proof) {
                             Ok(_) => (),
-                            _ => return Err(CDIVerificationError::AccountOwnership)
+                            _ => return Err(CDIVerificationError::AccountOwnership),
                         }
                     } else {
                         return Err(CDIVerificationError::AccountOwnership);
@@ -204,7 +204,7 @@ fn verify_cdi_worker<
                     let VerifyKey::Ed25519VerifyKey(ref key) = key;
                     match key.verify(signed.as_ref(), &sig) {
                         Ok(_) => (),
-                        _ => return Err(CDIVerificationError::AccountOwnership)
+                        _ => return Err(CDIVerificationError::AccountOwnership),
                     }
                 } else {
                     return Err(CDIVerificationError::AccountOwnership);

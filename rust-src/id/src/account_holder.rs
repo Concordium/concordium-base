@@ -504,24 +504,24 @@ where
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
-    // A list signature on the challenge used by the other proofs using the account keys
+    // A list signature on the challenge used by the other proofs using the account
+    // keys
     //
-    // Signature on this message should be sufficient as the account keys are included in
-    // this challenge (through the hash). In case of an existing account, the account address
-    // is included in the challenge.
-    // The key indices are not included directly in the challenge in case of a new account,
-    // but they are entirely determined by the order of the keys in the cred_account entry
-    // of the CredentialInformationValues struct, which suffices.
+    // Signature on this message should be sufficient as the account keys are
+    // included in this challenge (through the hash). In case of an existing
+    // account, the account address is included in the challenge.
+    // The key indices are not included directly in the challenge in case of a new
+    // account, but they are entirely determined by the order of the keys in the
+    // cred_account entry of the CredentialInformationValues struct, which
+    // suffices.
     let to_sign = ro.split().get_challenge();
-    let proof_acc_sk = AccountOwnershipProof{
-        sigs: acc_data.keys
+    let proof_acc_sk = AccountOwnershipProof {
+        sigs: acc_data
+            .keys
             .iter()
             .map(|(&idx, kp)| {
                 let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-                (
-                    idx,
-                    expanded_sk.sign(to_sign.as_ref(), &kp.public),
-                )
+                (idx, expanded_sk.sign(to_sign.as_ref(), &kp.public))
             })
             .collect(),
     };
@@ -536,7 +536,7 @@ where
             .collect(),
         proof_reg_id: proof.witness.w1.w1,
         proof_ip_sig: proof.witness.w1.w2,
-        proof_acc_sk: proof_acc_sk,
+        proof_acc_sk,
     };
 
     let info = CredentialDeploymentInfo {
@@ -1046,13 +1046,22 @@ mod tests {
         // Check account key signatures
         match cdi.values.cred_account {
             CredentialAccount::ExistingAccount(_) => (),
-            CredentialAccount::NewAccount(ref ks, _) => assert_eq!(ks.len(), cdi.proofs.proof_acc_sk.sigs.len())
+            CredentialAccount::NewAccount(ref ks, _) => {
+                assert_eq!(ks.len(), cdi.proofs.proof_acc_sk.sigs.len())
+            }
         };
-        let sig_msg = RandomOracle::domain("credential").append(&cdi.values).get_challenge();
+        let sig_msg = RandomOracle::domain("credential")
+            .append(&cdi.values)
+            .get_challenge();
         cdi.proofs.proof_acc_sk.sigs.iter().for_each(|(idx, sig)| {
-            match acc_data.keys.get(idx).unwrap().verify(sig_msg.as_ref(), &sig) {
+            match acc_data
+                .keys
+                .get(idx)
+                .unwrap()
+                .verify(sig_msg.as_ref(), &sig)
+            {
                 Ok(_) => (),
-                _ => panic!("account key signature is invalid")
+                _ => panic!("account key signature is invalid"),
             }
         });
 
