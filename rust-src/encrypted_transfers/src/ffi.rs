@@ -316,13 +316,13 @@ unsafe extern "C" fn verify_sec_to_pub_transfer(
     let initial_high = from_ptr!(initial_high_ptr);
     let initial_low = from_ptr!(initial_low_ptr);
     let initial = EncryptedAmount {
-        encryptions: [*initial_high, *initial_low],
+        encryptions: [*initial_low, *initial_high],
     };
 
     let remaining_high = from_ptr!(remaining_high_ptr);
     let remaining_low = from_ptr!(remaining_low_ptr);
     let remaining_amount = EncryptedAmount {
-        encryptions: [*remaining_high, *remaining_low],
+        encryptions: [*remaining_low, *remaining_high],
     };
 
     let transfer_proof = slice_from_c_bytes!(transfer_proof_ptr, transfer_proof_len as usize);

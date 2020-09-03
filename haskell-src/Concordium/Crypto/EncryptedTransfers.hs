@@ -409,7 +409,7 @@ makeSecToPubAmountTransferData gc sk aggAmount amount =
       then return Nothing
       else do
         rem_hi <- unsafeMakeCipher =<< peek rem_hi_ptr
-        rem_lo <- unsafeMakeCipher =<< peek rem_hi_ptr
+        rem_lo <- unsafeMakeCipher =<< peek rem_lo_ptr
         amount_val <- peek amount_ptr
         idx <- peek idx_ptr
         len <- peek len_ptr
