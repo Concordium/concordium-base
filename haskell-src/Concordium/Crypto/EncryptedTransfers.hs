@@ -16,7 +16,7 @@ module Concordium.Crypto.EncryptedTransfers (
   withAggregatedDecryptedAmount,
 
   -- * Public to secret transfer
-  encryptAmount,
+  encryptAmountZeroRandomness,
 
   -- * Encrypted transfer
   EncryptedAmountTransferData(..),
@@ -32,8 +32,12 @@ module Concordium.Crypto.EncryptedTransfers (
   getSecToPubAmountTransferProof,
   putSecToPubAmountTransferProof,
   makeSecToPubAmountTransferData,
-  verifySecretToPublicTransferProof
+  verifySecretToPublicTransferProof,
 
+  -- * Decryption of encrypted amounts.
+  computeTable,
+  decryptAmount,
+  encryptAmount
   ) where
 
 import Data.Serialize
@@ -176,8 +180,8 @@ foreign import ccall unsafe "encrypt_amount_with_zero_randomness"
     -> IO ()
 
 -- | Encrypt the given amount with zero randomness. To be used in transfer to secret
-encryptAmount :: GlobalContext -> Word64 -> EncryptedAmount
-encryptAmount gc amount = unsafeDupablePerformIO $
+encryptAmountZeroRandomness :: GlobalContext -> Word64 -> EncryptedAmount
+encryptAmountZeroRandomness gc amount = unsafeDupablePerformIO $
   withGlobalContext gc $ \gcPtr ->
   alloca $ \outHighPtr ->
   alloca $ \outLowPtr -> do
@@ -465,3 +469,69 @@ verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsaf
                      proof_len
              return (res /= 0)
   where AccountEncryptionKey (RegIdCred senderPK') = senderPK
+
+-- |Decrypt an encrypted amount.
+
+newtype Table = Table (ForeignPtr Table)
+
+withTable :: Table -> (Ptr Table -> IO b) -> IO b
+withTable (Table fp) = withForeignPtr fp
+
+-- Precompute the baby step giant step table
+foreign import ccall unsafe "compute_table"
+  computeTablePtr :: Ptr GlobalContext -> Word64 -> IO (Ptr Table)
+
+foreign import ccall unsafe "&free_table"
+  freeTable :: FunPtr (Ptr Table -> IO ())
+
+foreign import ccall unsafe "decrypt_amount"
+  decryptAmountPtr ::
+   Ptr GlobalContext
+   -> Ptr Table
+   -> Ptr ElgamalSecondSecret
+   -> Ptr ElgamalCipher -- ^Pointer to high bits of the amount
+   -> Ptr ElgamalCipher -- ^Pointer to low bits of the amount
+   -> IO Word64
+
+computeTable :: GlobalContext -> Word64 -> Table
+computeTable gc m = Table . unsafeDupablePerformIO $ do
+    r <- withGlobalContext gc (flip computeTablePtr m)
+    newForeignPtr freeTable r
+
+-- |Decrypt an encrypted amount that is assumed to have been encrypted with the
+-- public key corresponding to the given secret key, as well as parameters in
+-- global context and table. If this is not the case this function is almost
+-- certainly going to appear to loop.
+decryptAmount :: GlobalContext -> Table -> ElgamalSecondSecret -> EncryptedAmount -> Word64
+decryptAmount gc table sec EncryptedAmount{..} = unsafeDupablePerformIO $
+  withGlobalContext gc $ \gcPtr ->
+    withTable table $ \tablePtr ->
+      withElgamalSecondSecret sec $ \secPtr ->
+        withElgamalCipher encryptionHigh $ \highPtr ->
+          withElgamalCipher encryptionLow $ decryptAmountPtr gcPtr tablePtr secPtr highPtr
+
+--------------------------------------------------------------------------------
+-------------------------- Helper mostly for testing ---------------------------
+--------------------------------------------------------------------------------
+
+foreign import ccall unsafe "encrypt_amount"
+  encrypt_amount ::
+    Ptr GlobalContext -- ^ Global context
+    -> Ptr ElgamalSecond -- ^ Public key with which to encrypt.
+    -> Word64 -- ^ Amount to be encrypted
+    -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the pointer to the high chunk of the result.
+    -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the pointer to the low chunk of the result.
+    -> IO ()
+
+-- | Encrypt the given amount. This is non-deterministic since it samples
+-- randomness to encrypt with.
+encryptAmount :: GlobalContext -> ElgamalSecond -> Word64 -> IO EncryptedAmount
+encryptAmount gc pub amount =
+  withGlobalContext gc $ \gcPtr ->
+  withElgamalSecond pub $ \pubPtr ->
+    alloca $ \outHighPtr ->
+    alloca $ \outLowPtr -> do
+        encrypt_amount gcPtr pubPtr amount outHighPtr outLowPtr
+        outHigh <- unsafeMakeCipher =<< peek outHighPtr
+        outLow <- unsafeMakeCipher =<< peek outLowPtr
+        return EncryptedAmount{encryptionHigh = outHigh, encryptionLow = outLow}
