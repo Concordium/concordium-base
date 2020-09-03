@@ -6,7 +6,6 @@ use crate::{
 };
 use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
-use ed25519_dalek as ed25519;
 use either::Either;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
@@ -158,7 +157,7 @@ fn verify_cdi_worker<
                 // we at least have enough proofs now, if they are all valid and have valid
                 // indices
                 let signature_message = ro.split().get_challenge();
-                for (&idx, proof) in proofs.proof_acc_sk.proofs.iter() {
+                for (&idx, proof) in proofs.proof_acc_sk.sigs.iter() {
                     if let Some(key) = acc_keys.get(idx) {
                         let VerifyKey::Ed25519VerifyKey(ref key) = key;
                         match key.verify(signature_message.as_ref(), &proof) {
@@ -198,9 +197,9 @@ fn verify_cdi_worker<
                 if !processed.insert(key) {
                     return Err(CDIVerificationError::AccountOwnership);
                 }
-                if let Some(proof) = proofs.proof_acc_sk.proofs.get(&idx) {
+                if let Some(sig) = proofs.proof_acc_sk.sigs.get(&idx) {
                     let VerifyKey::Ed25519VerifyKey(ref key) = key;
-                    match key.verify(signature_message.as_ref(), &proof) {
+                    match key.verify(signature_message.as_ref(), &sig) {
                         Ok(_) => (),
                         _ => return Err(CDIVerificationError::AccountOwnership)
                     }
