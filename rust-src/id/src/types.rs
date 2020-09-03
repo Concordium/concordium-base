@@ -12,9 +12,7 @@ use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
-use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
-use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
 use either::Either;
 use elgamal::{cipher::Cipher, message::Message, secret::SecretKey as ElgamalSecretKey};
 use ff::Field;
@@ -171,15 +169,10 @@ impl<'de> Visitor<'de> for SignatureThresholdVisitor {
 pub struct KeyIndex(pub u8);
 
 #[derive(Debug, PartialEq, Eq)]
-/// List of pairs of index of key and proof.
-/// The list should be non-empty and at most 255 elements long, and have no
-/// duplicates. The current choice of data structure disallows duplicates by
-/// design.
+/// A list of at most 255 Ed25519 signatures
 #[serde(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
-pub struct AccountOwnershipProof {
-    pub proofs: BTreeMap<KeyIndex, Ed25519DlogProof>,
-}
+pub struct AccountOwnershipProof{pub proofs: BTreeMap<KeyIndex, ed25519::Signature>}
 
 // Manual implementation to be able to encode length as 1, as well as to
 // make sure there is at least one proof.
@@ -1035,7 +1028,7 @@ pub enum SchemeId {
 
 #[derive(Debug, Eq)]
 pub enum VerifyKey {
-    Ed25519VerifyKey(acc_sig_scheme::PublicKey),
+    Ed25519VerifyKey(ed25519::PublicKey),
 }
 
 impl SerdeSerialize for VerifyKey {
@@ -1106,8 +1099,8 @@ impl<'de> Visitor<'de> for VerifyKeyVisitor {
     }
 }
 
-impl From<acc_sig_scheme::PublicKey> for VerifyKey {
-    fn from(pk: acc_sig_scheme::PublicKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
+impl From<ed25519::PublicKey> for VerifyKey {
+    fn from(pk: ed25519::PublicKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
 }
 
 impl From<&ed25519::Keypair> for VerifyKey {
