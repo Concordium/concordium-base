@@ -420,7 +420,9 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
 }
 
 /// Embed the precomputed table for decryption.
-/// It is unfortunate that this is pure bytes, b
+/// It is unfortunate that this is pure bytes, but not enough of data is marked
+/// as const, and in any case a HashMap relies on an allocator, so will never be
+/// const.
 static TABLE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/table_bytes.bin"));
 
 fn decrypt_encrypted_amount_aux(input: &str) -> Fallible<Amount> {
