@@ -176,7 +176,9 @@ pub struct KeyIndex(pub u8);
 /// design.
 #[serde(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
-pub struct AccountOwnershipProof{pub sigs: BTreeMap<KeyIndex, ed25519::Signature>}
+pub struct AccountOwnershipProof {
+    pub sigs: BTreeMap<KeyIndex, ed25519::Signature>,
+}
 
 // Manual implementation to be able to encode length as 1, as well as to
 // make sure there is at least one proof.
