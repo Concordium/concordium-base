@@ -505,8 +505,13 @@ where
     };
 
     // A list signature on the challenge used by the other proofs using the account keys
-    // TODO: check if this challenge is sufficient. The challenge at this point already includes
-    // either all the keys or the address of the account to which we deplay the credential.
+    //
+    // Signature on this message should be sufficient as the account keys are included in
+    // this challenge (through the hash). In case of an existing account, the account address
+    // is included in the challenge.
+    // The key indices are not included directly in the challenge in case of a new account,
+    // but they are entirely determined by the order of the keys in the cred_account entry
+    // of the CredentialInformationValues struct, which suffices.
     let to_sign = ro.split().get_challenge();
     let proof_acc_sk = AccountOwnershipProof{
         sigs: acc_data.keys
