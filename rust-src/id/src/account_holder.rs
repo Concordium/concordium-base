@@ -505,12 +505,11 @@ where
     };
 
     // A list signature on the challenge used by the other proofs using the account keys
-    // all the public account keys
     // TODO: check if this challenge is sufficient. The challenge at this point already includes
     // either all the keys or the address of the account to which we deplay the credential.
     let to_sign = ro.split().get_challenge();
     let proof_acc_sk = AccountOwnershipProof{
-        proofs: acc_data.keys
+        sigs: acc_data.keys
             .iter()
             .map(|(&idx, kp)| {
                 let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
@@ -1040,8 +1039,12 @@ mod tests {
         assert_eq!(cdi.values.policy, policy, "CDI policy is invalid");
 
         // Check account key signatures
+        match cdi.values.cred_account {
+            CredentialAccount::ExistingAccount(_) => (),
+            CredentialAccount::NewAccount(ref ks, _) => assert_eq!(ks.len(), cdi.proofs.proof_acc_sk.sigs.len())
+        };
         let sig_msg = RandomOracle::domain("credential").append(&cdi.values).get_challenge();
-        cdi.proofs.proof_acc_sk.proofs.iter().for_each(|(idx, sig)| {
+        cdi.proofs.proof_acc_sk.sigs.iter().for_each(|(idx, sig)| {
             match acc_data.keys.get(idx).unwrap().verify(sig_msg.as_ref(), &sig) {
                 Ok(_) => (),
                 _ => panic!("account key signature is invalid")

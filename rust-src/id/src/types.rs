@@ -172,15 +172,15 @@ pub struct KeyIndex(pub u8);
 /// A list of at most 255 Ed25519 signatures
 #[serde(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
-pub struct AccountOwnershipProof{pub proofs: BTreeMap<KeyIndex, ed25519::Signature>}
+pub struct AccountOwnershipProof{pub sigs: BTreeMap<KeyIndex, ed25519::Signature>}
 
 // Manual implementation to be able to encode length as 1, as well as to
 // make sure there is at least one proof.
 impl Serial for AccountOwnershipProof {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let len = self.proofs.len() as u8;
+        let len = self.sigs.len() as u8;
         out.put(&len);
-        serial_map_no_length(&self.proofs, out)
+        serial_map_no_length(&self.sigs, out)
     }
 }
 
@@ -190,16 +190,16 @@ impl Deserial for AccountOwnershipProof {
         if len == 0 {
             bail!("Need at least one proof.")
         }
-        let proofs = deserial_map_no_length(source, usize::from(len))?;
-        Ok(AccountOwnershipProof { proofs })
+        let sigs = deserial_map_no_length(source, usize::from(len))?;
+        Ok(AccountOwnershipProof { sigs })
     }
 }
 
 impl AccountOwnershipProof {
-    /// Number of individual proofs in this proof.
-    /// NB: This method relies on the invariant that proofs should not
+    /// Number of individual sigs in this proof.
+    /// NB: This method relies on the invariant that sigs should not
     /// have more than 255 elements.
-    pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.proofs.len() as u8) }
+    pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.sigs.len() as u8) }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
