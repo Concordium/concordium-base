@@ -2,13 +2,14 @@
 use concordium_sc_base::{collections::*, *};
 
 /*
- * This is an implementation of ERC-20 Token Standard used on the Ethereum
- * network.
+ * An implementation of ERC-20 Token Standard used on the Ethereum network.
  * It provides standard functionality for transfering tokens and allowing
  * other accounts to transfer a certain amount from ones account.
  *
  * https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20.md
  *
+ * Instead of getter functions the information can be read directly from the
+ * state. Events can be tracked in the log.
  */
 
 // Types
@@ -93,10 +94,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 
     match msg {
         Request::TransferTo(receiver_address, amount) => {
-            let sender_balance = match state.balances.get(&sender_address) {
-                None => 0,
-                Some(balance) => *balance,
-            };
+            let sender_balance = *state.balances.get(&sender_address).unwrap_or(&0);
             ensure!(sender_balance >= amount, "Insufficient funds");
 
             let receiver_balance = match state.balances.get(&receiver_address) {
@@ -108,25 +106,16 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             logger.log(&Event::Transfer(sender_address, receiver_address, amount));
         }
         Request::TransferFromTo(owner_address, receiver_address, amount) => {
-            let allowed_amount = match state.allowed.get(&(owner_address, sender_address)) {
-                None => 0,
-                Some(allowed_amount) => *allowed_amount,
-            };
+            let allowed_amount = *state.allowed.get(&(owner_address, sender_address)).unwrap_or(&0);
             ensure!(
                 allowed_amount >= amount,
                 "The account owner is not allowing you to send this much"
             );
 
-            let owner_balance = match state.balances.get(&owner_address) {
-                None => 0,
-                Some(balance) => *balance,
-            };
+            let owner_balance = *state.balances.get(&owner_address).unwrap_or(&0);
             ensure!(owner_balance >= amount, "Insufficient funds");
 
-            let receiver_balance = match state.balances.get(&receiver_address) {
-                None => 0,
-                Some(balance) => *balance,
-            };
+            let receiver_balance = *state.balances.get(&receiver_address).unwrap_or(&0);
             state.allowed.insert((owner_address, sender_address), allowed_amount - amount);
             state.balances.insert(owner_address, owner_balance - amount);
             state.balances.insert(receiver_address, receiver_balance + amount);
@@ -399,7 +388,7 @@ pub mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(ctx, 17, &mut logger, &mut state);
+            contract_receive(ctx, 0, &mut logger, &mut state);
 
         // Test
         match res {
@@ -483,7 +472,7 @@ pub mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(ctx, 17, &mut logger, &mut state);
+            contract_receive(ctx, 0, &mut logger, &mut state);
 
         // Test
         match res {
