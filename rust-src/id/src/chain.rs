@@ -156,11 +156,13 @@ fn verify_cdi_worker<
                 }
                 // we at least have enough proofs now, if they are all valid and have valid
                 // indices
-                let signature_message = ro.split().get_challenge();
+
+                // message signed in proofs.proofs_acc_sk.sigs
+                let signed = ro.split().get_challenge();
                 for (&idx, proof) in proofs.proof_acc_sk.sigs.iter() {
                     if let Some(key) = acc_keys.get(idx) {
                         let VerifyKey::Ed25519VerifyKey(ref key) = key;
-                        match key.verify(signature_message.as_ref(), &proof) {
+                        match key.verify(signed.as_ref(), &proof) {
                             Ok(_) => (),
                             _ => return Err(CDIVerificationError::AccountOwnership)
                         }
@@ -187,10 +189,11 @@ fn verify_cdi_worker<
             {
                 return Err(CDIVerificationError::AccountOwnership);
             }
+            // message signed in proofs.proofs_acc_sk.sigs
+            let signed = ro.split().get_challenge();
             // set of processed keys already
             let mut processed = BTreeSet::new();
             // the new keys get indices 0, 1, ..
-            let signature_message = ro.split().get_challenge();
             for (idx, key) in (0u8..).zip(keys.iter()) {
                 let idx = KeyIndex(idx);
                 // insert returns true if key was __not__ present
@@ -199,7 +202,7 @@ fn verify_cdi_worker<
                 }
                 if let Some(sig) = proofs.proof_acc_sk.sigs.get(&idx) {
                     let VerifyKey::Ed25519VerifyKey(ref key) = key;
-                    match key.verify(signature_message.as_ref(), &sig) {
+                    match key.verify(signed.as_ref(), &sig) {
                         Ok(_) => (),
                         _ => return Err(CDIVerificationError::AccountOwnership)
                     }

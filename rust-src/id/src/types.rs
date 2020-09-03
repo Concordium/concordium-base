@@ -169,7 +169,11 @@ impl<'de> Visitor<'de> for SignatureThresholdVisitor {
 pub struct KeyIndex(pub u8);
 
 #[derive(Debug, PartialEq, Eq)]
-/// A list of at most 255 Ed25519 signatures
+/// A list of pairs of index of key and Ed25519 signatures on the challenge
+/// of the proofs of the credential
+/// The list should be non-empty and at most 255 elements long, and have no
+/// duplicates. The current choice of data structure disallows duplicates by
+/// design.
 #[serde(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct AccountOwnershipProof{pub sigs: BTreeMap<KeyIndex, ed25519::Signature>}
