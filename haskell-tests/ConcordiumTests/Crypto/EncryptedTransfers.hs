@@ -19,11 +19,11 @@ testSerializeDet f = property $ \g ->
         in Right val === runGet get (runPut $ put val)
 
 testSerializeEncryptedAmount :: Property
-testSerializeEncryptedAmount = testSerializeDet (encryptAmount globalContext)
+testSerializeEncryptedAmount = testSerializeDet (encryptAmountZeroRandomness globalContext)
 
 testMakeAggregatedEncryptedAmount :: Property
 testMakeAggregatedEncryptedAmount = property $ \gen -> monadicIO $ do
-  let agg = makeAggregatedDecryptedAmount (encryptAmount globalContext gen) gen (EncryptedAmountAggIndex gen)
+  let agg = makeAggregatedDecryptedAmount (encryptAmountZeroRandomness globalContext gen) gen (EncryptedAmountAggIndex gen)
   res <- run (withAggregatedDecryptedAmount agg $ return)
   return (res =/= nullPtr)
 
@@ -31,7 +31,7 @@ testSerializeEncryptedAmountTransferData :: Property
 testSerializeEncryptedAmountTransferData = property $ \gen seed1 seed2 -> monadicIO $ do
   let public = generateElgamalSecondFromSeed seed1
   let private = generateElgamalSecondSecretFromSeed seed2
-  let agg = makeAggregatedDecryptedAmount (encryptAmount globalContext gen) gen (EncryptedAmountAggIndex gen)
+  let agg = makeAggregatedDecryptedAmount (encryptAmountZeroRandomness globalContext gen) gen (EncryptedAmountAggIndex gen)
   let amount = gen `div` 2
   Just eatd@EncryptedAmountTransferData{..} <- run (makeEncryptedAmountTransferData globalContext public private agg amount)
   let bytes = runPut (put eatdRemainingAmount <> put eatdTransferAmount <> put eatdIndex <> putEncryptedAmountTransferProof eatdProof)
@@ -55,7 +55,7 @@ testTransferProofVerify = property $ \gen seed1 seed2 -> monadicIO $ do
   let receiverPK = AccountEncryptionKey (RegIdCred public)
   let private = generateElgamalSecondSecretFromSeed seed2
   let senderPK = AccountEncryptionKey (RegIdCred (deriveElgamalSecondPublic private))
-  let inputAmount = encryptAmount globalContext gen
+  let inputAmount = encryptAmountZeroRandomness globalContext gen
   let agg = makeAggregatedDecryptedAmount inputAmount gen (EncryptedAmountAggIndex gen)
   let amount = gen `div` 2
   Just eatd <- run (makeEncryptedAmountTransferData globalContext public private agg amount)
@@ -65,11 +65,20 @@ testSecToPubTransferProofVerify :: Property
 testSecToPubTransferProofVerify = property $ \gen seed1-> monadicIO $ do
   let private = generateElgamalSecondSecretFromSeed  seed1
   let receiverPK = AccountEncryptionKey (RegIdCred (deriveElgamalSecondPublic private))
-  let inputAmount = encryptAmount globalContext gen
+  let inputAmount = encryptAmountZeroRandomness globalContext gen
   let agg = makeAggregatedDecryptedAmount inputAmount gen (EncryptedAmountAggIndex gen)
   let amount = gen `div` 2
   Just eatd <- run (makeSecToPubAmountTransferData globalContext private agg amount)
   return $ verifySecretToPublicTransferProof globalContext receiverPK inputAmount eatd
+
+testEncryptDecrypt :: Property
+testEncryptDecrypt =
+  let table = computeTable globalContext (2^(16::Int))
+  in property $ \gen amnt -> monadicIO $ do
+    let private = generateElgamalSecondSecretFromSeed gen
+    let pk = deriveElgamalSecondPublic private
+    encAmnt <- run (encryptAmount globalContext pk amnt)
+    return (amnt === decryptAmount globalContext table private encAmnt)
 
 tests :: Spec
 tests = describe "Concordium.Crypto.EncryptedTransfers" $ do
@@ -81,3 +90,5 @@ tests = describe "Concordium.Crypto.EncryptedTransfers" $ do
   describe "Test proof verification." $ do
     it "encrypted transfer proof verify" testTransferProofVerify
     it "sec to pub transfer proof verify" testSecToPubTransferProofVerify
+  describe "Test decryption." $ do
+    it "encrypt + decrypt is identity" testEncryptDecrypt

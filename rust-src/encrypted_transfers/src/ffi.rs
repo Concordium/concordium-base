@@ -371,3 +371,61 @@ unsafe extern "C" fn make_aggregated_decrypted_amount(
 }
 
 macro_free_ffi!(Box free_aggregated_decrypted_amount, AggregatedDecryptedAmount<Group>);
+
+/// # Safety
+/// This function is safe if the input pointers are all non-null, and produce by
+/// `Box::into_raw`.
+#[no_mangle]
+unsafe extern "C" fn compute_table(
+    gc_ptr: *const GlobalContext<Group>,
+    m: u64,
+) -> *mut BabyStepGiantStep<Group> {
+    Box::into_raw(Box::new(BabyStepGiantStep::new(
+        from_ptr!(gc_ptr).encryption_in_exponent_generator(),
+        m,
+    )))
+}
+macro_free_ffi!(Box free_table, BabyStepGiantStep<Group>);
+
+/// # Safety
+/// This function is safe if the input pointers are all non-null, and produce by
+/// `Box::into_raw`.
+#[no_mangle]
+unsafe extern "C" fn decrypt_amount(
+    gc_ptr: *const GlobalContext<Group>,
+    table_ptr: *const BabyStepGiantStep<Group>,
+    sec_ptr: *const ElgamalSecretKeySecond,
+    high_ptr: *const elgamal::Cipher<Group>,
+    low_ptr: *const elgamal::Cipher<Group>,
+) -> u64 {
+    let gc = from_ptr!(gc_ptr);
+    let sk = elgamal::SecretKey {
+        generator: *gc.elgamal_generator(),
+        scalar:    from_ptr!(sec_ptr).0,
+    };
+    let amount = EncryptedAmount {
+        encryptions: [*from_ptr!(low_ptr), *from_ptr!(high_ptr)],
+    };
+    crate::decrypt_amount(from_ptr!(table_ptr), &sk, &amount).microgtu
+}
+
+/// # Safety
+/// This function is safe if the pointers to structures are all non-null, and
+/// produced by `Box::into_raw`.
+#[no_mangle]
+unsafe extern "C" fn encrypt_amount(
+    ctx_ptr: *const GlobalContext<Group>,
+    pub_ptr: *const ElgamalPublicKeySecond,
+    microgtu: u64,
+    out_high_ptr: *mut *const Cipher<Group>,
+    out_low_ptr: *mut *const Cipher<Group>,
+) {
+    let gc = from_ptr!(ctx_ptr);
+    let pk = elgamal::PublicKey {
+        generator: *gc.elgamal_generator(),
+        key:       from_ptr!(pub_ptr).0,
+    };
+    let encrypted = crate::encrypt_amount(gc, &pk, Amount { microgtu }, &mut rand::thread_rng()).0;
+    *out_high_ptr = Box::into_raw(Box::new(encrypted.encryptions[1]));
+    *out_low_ptr = Box::into_raw(Box::new(encrypted.encryptions[0]));
+}
