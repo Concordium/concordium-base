@@ -2,6 +2,6 @@
 [build]
 target = "wasm32-unknown-unknown"
 
-[provile.release]
+[profile.release]
 opt-level = 3
 lto = true

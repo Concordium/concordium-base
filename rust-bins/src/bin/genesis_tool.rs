@@ -39,7 +39,7 @@ enum GenesisTool {
         #[structopt(
             long = "balance",
             help = "Balance on each of the baker accounts, in GTU.",
-            default_value = "350000000"
+            default_value = "3500000"
         )]
         balance: Amount,
         #[structopt(flatten)]
@@ -59,7 +59,7 @@ enum GenesisTool {
         #[structopt(
             long = "balance",
             help = "Initial balance on each of the accounts, in GTU.",
-            default_value = "100000000"
+            default_value = "1000000"
         )]
         balance: Amount,
         #[structopt(flatten)]
