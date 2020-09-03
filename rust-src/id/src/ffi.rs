@@ -234,6 +234,10 @@ macro_derive_from_bytes!(Box global_context_from_bytes, GlobalContext<G1>);
 macro_derive_to_bytes!(Box global_context_to_bytes, GlobalContext<G1>);
 macro_derive_from_json!(global_context_from_json, GlobalContext<G1>);
 macro_derive_to_json!(global_context_to_json, GlobalContext<G1>);
+#[no_mangle]
+extern "C" fn generate_global_context() -> *mut GlobalContext<G1> {
+    Box::into_raw(Box::new(GlobalContext::generate()))
+}
 
 // derive conversion methods for ArInfo to be used in Haskell
 macro_free_ffi!(Box ar_info_free, ArInfo<G1>);
