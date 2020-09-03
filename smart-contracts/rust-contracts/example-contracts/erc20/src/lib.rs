@@ -508,6 +508,278 @@ pub mod tests {
             "Should log the transfer"
         );
     }
-}
 
-// TODO Test failing cases
+    #[test]
+    #[no_mangle]
+    /// Fail when attempting to transfer from account, without being allowed to
+    /// the full amount
+    fn test_receive_allow_transfer() {
+        // Setup
+        let metadata = ChainMetadata {
+            slot_number:      0,
+            block_height:     0,
+            finalized_height: 0,
+            slot_time:        0,
+        };
+        let spender_account = AccountAddress([1u8; 32]);
+        let owner_account = AccountAddress([2u8; 32]);
+        let receive_ctx = ReceiveContext {
+            metadata,
+            invoker: owner_account,
+            self_address: ContractAddress {
+                index:    0,
+                subindex: 0,
+            },
+            self_balance: 0,
+            sender: Address::Account(owner_account),
+            owner: owner_account,
+        };
+        let parameter = Request::AllowTransfer(spender_account, 100);
+        let ctx = test_infrastructure::ReceiveContextWrapper {
+            receive_ctx,
+            parameter: &to_bytes(&parameter),
+        };
+        let init_params = InitParams {
+            name:         "Dollars".to_string(),
+            symbol:       "$".to_string(),
+            decimals:     0,
+            total_supply: 200,
+        };
+        let balances = BTreeMap::new();
+        let allowed = BTreeMap::new();
+
+        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut state = State {
+            init_params,
+            balances,
+            allowed,
+        };
+
+        // Execution
+        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+            contract_receive(ctx, 0, &mut logger, &mut state);
+
+        // Test
+        match res {
+            Ok(actions) => assert_eq!(
+                actions,
+                test_infrastructure::ActionsTree::accept(),
+                "Should accept the message"
+            ),
+            Err(_) => assert!(false, "The message is not expected to fail"),
+        }
+        let owner_spender_allowed =
+            *state.allowed.get(&(owner_account, spender_account)).unwrap_or(&0);
+        assert_eq!(owner_spender_allowed, 100, "The allowed amount is not changed correctly");
+        assert_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
+        assert_eq!(
+            logger.logs[0],
+            to_bytes(&Event::Approval(owner_account, spender_account, 100)),
+            "Should log the approval"
+        );
+    }
+
+    #[test]
+    #[no_mangle]
+    /// Fail when attempting to transfer from account, without being allowed to
+    /// the full amount
+    fn test_receive_transfer_to_not_allowed() {
+        // Setup
+        let metadata = ChainMetadata {
+            slot_number:      0,
+            block_height:     0,
+            finalized_height: 0,
+            slot_time:        0,
+        };
+        let spender_account = AccountAddress([1u8; 32]);
+        let from_account = AccountAddress([2u8; 32]);
+        let to_account = AccountAddress([3u8; 32]);
+        let receive_ctx = ReceiveContext {
+            metadata,
+            invoker: spender_account,
+            self_address: ContractAddress {
+                index:    0,
+                subindex: 0,
+            },
+            self_balance: 0,
+            sender: Address::Account(spender_account),
+            owner: spender_account,
+        };
+        let parameter = Request::TransferFromTo(from_account, to_account, 110);
+        let ctx = test_infrastructure::ReceiveContextWrapper {
+            receive_ctx,
+            parameter: &to_bytes(&parameter),
+        };
+        let init_params = InitParams {
+            name:         "Dollars".to_string(),
+            symbol:       "$".to_string(),
+            decimals:     0,
+            total_supply: 200,
+        };
+        let mut balances = BTreeMap::new();
+        balances.insert(from_account, 200);
+        let mut allowed = BTreeMap::new();
+        allowed.insert((from_account, spender_account), 100);
+
+        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut state = State {
+            init_params,
+            balances,
+            allowed,
+        };
+
+        // Execution
+        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+            contract_receive(ctx, 0, &mut logger, &mut state);
+
+        // Test
+        match res {
+            Err(_) => {}
+            Ok(_) => assert!(false, "The message is expected to fail"),
+        }
+        let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
+        let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
+        let from_spender_allowed = *state.allowed.get(&(from_account, spender_account)).unwrap();
+        assert_eq!(from_balance, 200, "The balance of the owner account should be unchanged");
+        assert_eq!(to_balance, 0, "The balance of the receiving account should be unchanged");
+        assert_eq!(
+            from_spender_allowed, 100,
+            "The allowed amount of the spender account should be unchanged"
+        );
+        assert_eq!(logger.logs.len(), 0, "Incorrect number of logs produced.");
+    }
+
+    #[test]
+    #[no_mangle]
+    /// Fail when attempting to transfer from account, without being allowed to
+    /// the full amount
+    fn test_receive_transfer_to_insufficient() {
+        // Setup
+        let metadata = ChainMetadata {
+            slot_number:      0,
+            block_height:     0,
+            finalized_height: 0,
+            slot_time:        0,
+        };
+        let from_account = AccountAddress([2u8; 32]);
+        let to_account = AccountAddress([3u8; 32]);
+        let receive_ctx = ReceiveContext {
+            metadata,
+            invoker: from_account,
+            self_address: ContractAddress {
+                index:    0,
+                subindex: 0,
+            },
+            self_balance: 0,
+            sender: Address::Account(from_account),
+            owner: from_account,
+        };
+        let parameter = Request::TransferTo(to_account, 110);
+        let ctx = test_infrastructure::ReceiveContextWrapper {
+            receive_ctx,
+            parameter: &to_bytes(&parameter),
+        };
+        let init_params = InitParams {
+            name:         "Dollars".to_string(),
+            symbol:       "$".to_string(),
+            decimals:     0,
+            total_supply: 100,
+        };
+        let mut balances = BTreeMap::new();
+        balances.insert(from_account, 100);
+        let allowed = BTreeMap::new();
+
+        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut state = State {
+            init_params,
+            balances,
+            allowed,
+        };
+
+        // Execution
+        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+            contract_receive(ctx, 0, &mut logger, &mut state);
+
+        // Test
+        match res {
+            Ok(_) => assert!(false, "The message is expected to fail"),
+            Err(_) => {}
+        }
+        let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
+        let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
+        assert_eq!(from_balance, 100, "The balance of the owner account should be unchanged");
+        assert_eq!(to_balance, 0, "The balance of the receiving account should be unchanged");
+        assert_eq!(logger.logs.len(), 0, "Incorrect number of logs produced.");
+    }
+
+    #[test]
+    #[no_mangle]
+    /// Fail when attempting to transfer from account with allowed amount, but
+    /// insufficient funds
+    fn test_receive_transfer_from_to_insufficient() {
+        // Setup
+        let metadata = ChainMetadata {
+            slot_number:      0,
+            block_height:     0,
+            finalized_height: 0,
+            slot_time:        0,
+        };
+        let from_account = AccountAddress([2u8; 32]);
+        let to_account = AccountAddress([3u8; 32]);
+        let spender_account = AccountAddress([4u8; 32]);
+        let receive_ctx = ReceiveContext {
+            metadata,
+            invoker: spender_account,
+            self_address: ContractAddress {
+                index:    0,
+                subindex: 0,
+            },
+            self_balance: 0,
+            sender: Address::Account(spender_account),
+            owner: spender_account,
+        };
+        let parameter = Request::TransferFromTo(from_account, to_account, 110);
+        let ctx = test_infrastructure::ReceiveContextWrapper {
+            receive_ctx,
+            parameter: &to_bytes(&parameter),
+        };
+        let init_params = InitParams {
+            name:         "Dollars".to_string(),
+            symbol:       "$".to_string(),
+            decimals:     0,
+            total_supply: 100,
+        };
+        let mut balances = BTreeMap::new();
+        balances.insert(from_account, 100);
+        let mut allowed = BTreeMap::new();
+        allowed.insert((from_account, spender_account), 110);
+
+        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut state = State {
+            init_params,
+            balances,
+            allowed,
+        };
+
+        // Execution
+        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+            contract_receive(ctx, 0, &mut logger, &mut state);
+
+        // Test
+        match res {
+            Ok(_) => assert!(false, "The message is expected to fail"),
+            Err(_) => {}
+        }
+        let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
+        let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
+        let from_spender_allowed =
+            *state.allowed.get(&(from_account, spender_account)).unwrap_or(&0);
+        assert_eq!(from_balance, 100, "The balance of the owner account should be unchanged");
+        assert_eq!(to_balance, 0, "The balance of the receiving account should be unchanged");
+        assert_eq!(
+            from_spender_allowed, 110,
+            "The balance of the receiving account should be unchanged"
+        );
+        assert_eq!(logger.logs.len(), 0, "Incorrect number of logs produced.");
+    }
+}
