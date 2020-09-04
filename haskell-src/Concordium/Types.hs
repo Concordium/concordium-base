@@ -7,7 +7,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# OPTIONS_GHC -Wall #-}
 module Concordium.Types (module Concordium.Types, AccountAddress(..), SchemeId, AccountVerificationKey) where
 
@@ -73,7 +72,7 @@ instance Ord a => Ord (Hashed a) where
 instance (Show a) => Show (Hashed a) where
     show = show . _hashed
 
--- * Types releated to bakers.
+-- * Types related to bakers.
 newtype BakerId = BakerId Word64
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits) via Word64
 
@@ -105,6 +104,11 @@ instance S.Serialize ElectionDifficulty where
           fail "Invalid election difficulty (must be in the range [0,1))."
     put = S.put . electionDifficulty
 
+instance HashableTo Hash.Hash ElectionDifficulty where
+    getHash e = Hash.hash $ S.encode e
+
+instance Monad m => MHashableTo m Hash.Hash ElectionDifficulty
+
 instance FromJSON ElectionDifficulty where
     parseJSON v = do
         d <- ElectionDifficulty <$> parseJSON v
@@ -121,7 +125,36 @@ isValidElectionDifficulty (ElectionDifficulty d) = d >= 0 && d < 1
 
 type FinalizationCommitteeSize = Word32
 -- |An exchange rate (e.g. uGTU/Euro or Euro/Energy).
-type ExchangeRate = Ratio Word64
+-- Infinity and zero are disallowed.
+newtype ExchangeRate = ExchangeRate (Ratio Word64)
+    deriving newtype (Eq, Ord, Num, Real, Show, Fractional, ToJSON)
+
+-- |We require the serialization to be in reduced form to ensure
+-- that an exchange rate has a unique serialized representation.
+instance S.Serialize ExchangeRate where
+    put (ExchangeRate r) = assert (numerator r /= 0 && denominator r /= 0) $
+        S.put (numerator r) >> S.put (denominator r)
+    get = do
+        num <- S.get
+        den <- S.get
+        if num == 0 || den == 0 || gcd num den /= 1 then
+            fail "Invalid exchange rate"
+        else
+            return $ ExchangeRate (num % den)
+
+instance FromJSON ExchangeRate where
+    parseJSON v = do
+        r <- parseJSON v
+        if numerator r == 0 || denominator r == 0 then
+            fail "Invalid exchange rate"
+        else
+            return $ ExchangeRate r
+
+instance HashableTo Hash.Hash ExchangeRate where
+    getHash = Hash.hash . S.encode
+
+instance Monad m => MHashableTo m Hash.Hash ExchangeRate
+
 -- |Energy to GTU conversion rate in microGTU per Energy.
 type EnergyRate = Rational
 

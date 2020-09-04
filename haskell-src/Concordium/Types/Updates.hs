@@ -25,6 +25,7 @@ import qualified Concordium.Crypto.SHA256 as SHA256
 import Concordium.Utils
 import Concordium.Utils.Serialization
 import Concordium.Types
+import Concordium.Types.HashableTo
 
 -- |Types of updates to the chain.
 data UpdateType
@@ -103,7 +104,7 @@ data Authorizations = Authorizations {
         asParamElectionDifficulty :: !AccessStructure,
         -- |Parameter keys: Euro:NRG
         asParamEuroPerEnergy :: !AccessStructure,
-        -- |Parameter keys: mircoGTU:Euro
+        -- |Parameter keys: microGTU:Euro
         asParamMicroGTUPerEuro :: !AccessStructure
     }
     deriving (Eq, Show)
@@ -135,6 +136,11 @@ instance Serialize Authorizations where
         asParamEuroPerEnergy <- getChecked
         asParamMicroGTUPerEuro <- getChecked
         return Authorizations{..}
+
+instance HashableTo SHA256.Hash Authorizations where
+    getHash a = SHA256.hash $ "Authorizations" <> encode a
+
+instance Monad m => MHashableTo m SHA256.Hash Authorizations
 
 instance AE.FromJSON Authorizations where
     parseJSON = AE.withObject "Authorizations" $ \v -> do
@@ -208,6 +214,11 @@ instance Serialize ProtocolUpdate where
             puSpecificationHash <- get
             puSpecificationAuxiliaryData <- getByteString =<< remaining
             return ProtocolUpdate{..}
+
+instance HashableTo SHA256.Hash ProtocolUpdate where
+    getHash pu = SHA256.hash $ "ProtocolUpdate" <> encode pu
+
+instance Monad m => MHashableTo m SHA256.Hash ProtocolUpdate
 
 instance AE.ToJSON ProtocolUpdate where
     toJSON ProtocolUpdate{..} = AE.object [
