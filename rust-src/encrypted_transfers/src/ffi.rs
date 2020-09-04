@@ -246,7 +246,6 @@ unsafe extern "C" fn make_sec_to_pub_data(
     microgtu: u64,
     high_remaining: *mut *const Cipher<Group>,
     low_remaining: *mut *const Cipher<Group>,
-    out_amount: *mut u64,
     out_index: *mut u64,
     proof_len: *mut u64,
 ) -> *mut u8 {
@@ -275,7 +274,6 @@ unsafe extern "C" fn make_sec_to_pub_data(
 
     *high_remaining = Box::into_raw(Box::new(data.remaining_amount.encryptions[1]));
     *low_remaining = Box::into_raw(Box::new(data.remaining_amount.encryptions[0]));
-    *out_amount = data.transfer_amount.microgtu;
     *out_index = data.index;
 
     let mut bytes = to_bytes(&data.proof);
