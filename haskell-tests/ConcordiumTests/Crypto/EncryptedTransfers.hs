@@ -5,6 +5,7 @@ import Concordium.Crypto.EncryptedTransfers
 import Concordium.ID.Parameters
 import Concordium.ID.Types
 import Concordium.Crypto.FFIDataTypes
+import Concordium.Common.Amount
 
 import qualified Data.ByteString as BS
 import Data.Serialize
@@ -67,7 +68,7 @@ testSecToPubTransferProofVerify = property $ \gen seed1-> monadicIO $ do
   let receiverPK = AccountEncryptionKey (RegIdCred (deriveElgamalSecondPublic private))
   let inputAmount = encryptAmountZeroRandomness globalContext gen
   let agg = makeAggregatedDecryptedAmount inputAmount gen (EncryptedAmountAggIndex gen)
-  let amount = gen `div` 2
+  let amount = Amount (gen `div` 2)
   Just eatd <- run (makeSecToPubAmountTransferData globalContext private agg amount)
   return $ verifySecretToPublicTransferProof globalContext receiverPK inputAmount eatd
 
