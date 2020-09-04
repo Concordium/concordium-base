@@ -269,6 +269,79 @@ pub fn compute_sharing_data<'a, C: Curve>(
     (ar_data, cmm_sharing_coefficients, cmm_coeff_randomness)
 }
 
+pub struct SingleArDataPrf<'a, C: Curve> {
+    ar: &'a ArInfo<C>,
+    share: Value<C>,
+    encrypted_share: [Cipher<C>; 8],
+    encryption_randomness: elgamal::Randomness<C>,
+    cmm_to_share: Commitment<C>,
+    randomness_cmm_to_share: PedersenRandomness<C>,
+    ar_public_key: elgamal::PublicKey<C>,
+}
+
+type SharingDataPrf<'a, C> = (
+    Vec<SingleArDataPrf<'a, C>>,
+    Vec<Commitment<C>>, /* Commitments to the coefficients of sharing polynomial S + b1 X + b2
+                         * X^2... */
+    Vec<PedersenRandomness<C>>,
+);
+
+/// A function to compute sharing data for a single value.
+pub fn compute_sharing_data_prf<'a, C: Curve>(
+    shared_scalar: &Value<C>,                           // Value to be shared.
+    ar_parameters: &'a BTreeMap<ArIdentity, ArInfo<C>>, // Chosen anonimity revokers.
+    threshold: Threshold,                               // Anonymity revocation threshold.
+    commitment_key: &PedersenKey<C>,                    // commitment key
+) -> SharingDataPrf<'a, C> {
+    let n = ar_parameters.len() as u32;
+    let mut csprng = thread_rng();
+    // first commit to the scalar
+    let (cmm_scalar, cmm_scalar_rand) = commitment_key.commit(&shared_scalar, &mut csprng);
+    // We evaluate the polynomial at ar_identities.
+    let share_points = ar_parameters.keys().copied();
+    // share the scalar on ar_identity points.
+    let sharing_data = share::<C, _, _, _>(&shared_scalar, share_points, threshold, &mut csprng);
+    // commitments to the sharing coefficients
+    let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(threshold.into());
+    // first coefficient is the shared scalar
+    cmm_sharing_coefficients.push(cmm_scalar);
+    // randomness values corresponding to the commitments
+    let mut cmm_coeff_randomness = Vec::with_capacity(threshold.into());
+    // first randomness is the one used in commiting to the scalar
+    cmm_coeff_randomness.push(cmm_scalar_rand);
+    // fill the rest
+    for coeff in sharing_data.coefficients.iter() {
+        let (cmm, rnd) = commitment_key.commit(coeff, &mut csprng);
+        cmm_sharing_coefficients.push(cmm);
+        cmm_coeff_randomness.push(rnd);
+    }
+    // a vector of Ar data
+    let mut ar_data: Vec<SingleArDataPrf<C>> = Vec::with_capacity(n as usize);
+    // The correctness of this relies on the invariant that the map of anonymity
+    // revokers has an anonymity revoker with ArIdentity = x at key x.
+    for (ar, share) in izip!(ar_parameters.values(), sharing_data.shares.into_iter()) {
+        let si = ar.ar_identity;
+        let pk = ar.ar_public_key;
+        // encrypt the share
+        let (cipher, rnd2) = pk.encrypt_exponent_rand(&mut csprng, &share);
+        // compute the commitment to this share from the commitment to the coeff
+        let (cmm, rnd) =
+            commitment_to_share_and_rand(si, &cmm_sharing_coefficients, &cmm_coeff_randomness);
+        // fill Ar data
+        let single_ar_data = SingleArDataPrf {
+            ar,
+            share,
+            encrypted_share: [cipher;8],
+            encryption_randomness: rnd2,
+            cmm_to_share: cmm,
+            randomness_cmm_to_share: rnd,
+            ar_public_key: pk,
+        };
+        ar_data.push(single_ar_data)
+    }
+    (ar_data, cmm_sharing_coefficients, cmm_coeff_randomness)
+}
+
 /// Computing the commitment to single share from the commitments to
 /// the coefficients of the polynomial.
 pub fn commitment_to_share_and_rand<C: Curve>(
