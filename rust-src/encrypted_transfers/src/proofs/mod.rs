@@ -1,3 +1,4 @@
 mod dlogaggequal;
+mod dlogeq;
 pub mod enc_trans;
-pub mod encexp;
+pub mod generate_proofs;
