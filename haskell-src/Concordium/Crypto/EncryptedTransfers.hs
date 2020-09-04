@@ -163,8 +163,8 @@ newtype AggregatedDecryptedAmount = AggregatedDecryptedAmount (ForeignPtr Aggreg
 withAggregatedDecryptedAmount :: AggregatedDecryptedAmount -> (Ptr AggregatedDecryptedAmount -> IO b) -> IO b
 withAggregatedDecryptedAmount (AggregatedDecryptedAmount ptr) = withForeignPtr ptr
 
-makeAggregatedDecryptedAmount :: EncryptedAmount -> Word64 -> EncryptedAmountAggIndex -> AggregatedDecryptedAmount
-makeAggregatedDecryptedAmount encAmount amount idx = unsafeDupablePerformIO $
+makeAggregatedDecryptedAmount :: EncryptedAmount -> Amount -> EncryptedAmountAggIndex -> AggregatedDecryptedAmount
+makeAggregatedDecryptedAmount encAmount (Amount amount) idx = unsafeDupablePerformIO $
   withElgamalCipher (encryptionHigh encAmount) $ \enc_hi ->
     withElgamalCipher (encryptionLow encAmount) $ \enc_lo ->
     AggregatedDecryptedAmount <$> (newForeignPtr free_aggregated_decrypted_amount =<< make_aggregated_decrypted_amount enc_hi enc_lo amount idx)
@@ -182,8 +182,8 @@ foreign import ccall unsafe "encrypt_amount_with_zero_randomness"
     -> IO ()
 
 -- | Encrypt the given amount with zero randomness. To be used in transfer to secret
-encryptAmountZeroRandomness :: GlobalContext -> Word64 -> EncryptedAmount
-encryptAmountZeroRandomness gc amount = unsafeDupablePerformIO $
+encryptAmountZeroRandomness :: GlobalContext -> Amount -> EncryptedAmount
+encryptAmountZeroRandomness gc (Amount amount) = unsafeDupablePerformIO $
   withGlobalContext gc $ \gcPtr ->
   alloca $ \outHighPtr ->
   alloca $ \outLowPtr -> do
@@ -257,9 +257,9 @@ makeEncryptedAmountTransferData :: GlobalContext
                                     -> ElgamalSecond
                                     -> ElgamalSecondSecret
                                     -> AggregatedDecryptedAmount
-                                    -> Word64
+                                    -> Amount
                                     -> IO (Maybe EncryptedAmountTransferData)
-makeEncryptedAmountTransferData gc receiverPk senderSk aggAmount desiredAmount =
+makeEncryptedAmountTransferData gc receiverPk senderSk aggAmount (Amount desiredAmount) =
   withGlobalContext gc $ \gcPtr ->
   withElgamalSecond receiverPk $ \receiverPkPtr ->
   withElgamalSecondSecret senderSk $ \senderSkPtr ->
@@ -501,8 +501,8 @@ computeTable gc m = Table . unsafeDupablePerformIO $ do
 -- public key corresponding to the given secret key, as well as parameters in
 -- global context and table. If this is not the case this function is almost
 -- certainly going to appear to loop.
-decryptAmount :: GlobalContext -> Table -> ElgamalSecondSecret -> EncryptedAmount -> Word64
-decryptAmount gc table sec EncryptedAmount{..} = unsafeDupablePerformIO $
+decryptAmount :: GlobalContext -> Table -> ElgamalSecondSecret -> EncryptedAmount -> Amount
+decryptAmount gc table sec EncryptedAmount{..} = Amount . unsafeDupablePerformIO $
   withGlobalContext gc $ \gcPtr ->
     withTable table $ \tablePtr ->
       withElgamalSecondSecret sec $ \secPtr ->
@@ -524,8 +524,8 @@ foreign import ccall unsafe "encrypt_amount"
 
 -- | Encrypt the given amount. This is non-deterministic since it samples
 -- randomness to encrypt with.
-encryptAmount :: GlobalContext -> ElgamalSecond -> Word64 -> IO EncryptedAmount
-encryptAmount gc pub amount =
+encryptAmount :: GlobalContext -> ElgamalSecond -> Amount -> IO EncryptedAmount
+encryptAmount gc pub (Amount amount) =
   withGlobalContext gc $ \gcPtr ->
   withElgamalSecond pub $ \pubPtr ->
     alloca $ \outHighPtr ->
