@@ -350,10 +350,9 @@ foreign import ccall unsafe "make_sec_to_pub_data"
        Ptr GlobalContext -- ^ Pointer to the global context
      -> Ptr ElgamalSecondSecret -- ^ Secret key of the sender
      -> Ptr AggregatedDecryptedAmount -- ^ Input encrypted amount for the transaction
-     -> Word64 -- ^ Input plaintext amount
+     -> Word64 -- ^ Amount to transfer.
      -> Ptr (Ptr ElgamalCipher) -- ^ High chunk of the remaining amount
      -> Ptr (Ptr ElgamalCipher) -- ^ Low chunk of the remaining amount
-     -> Ptr Word64 -- ^ Place to write the amount that is being transferred
      -> Ptr EncryptedAmountAggIndex -- ^ Place to write the index
      -> Ptr Word64 -- ^ Place to write the length of the proof
      -> IO (Ptr CChar) -- ^ The proof
@@ -399,30 +398,28 @@ withSecToPubAmountTransferData SecToPubAmountTransferData{..} f = do
 makeSecToPubAmountTransferData :: GlobalContext
                                -> ElgamalSecondSecret
                                -> AggregatedDecryptedAmount
-                               -> Word64
+                               -> Amount
                                -> IO (Maybe SecToPubAmountTransferData)
-makeSecToPubAmountTransferData gc sk aggAmount amount =
+makeSecToPubAmountTransferData gc sk aggAmount (Amount amount) =
   withGlobalContext gc $ \gcPtr ->
   withElgamalSecondSecret sk $ \skPtr ->
   withAggregatedDecryptedAmount aggAmount $ \aggAmountPtr ->
     alloca $ \rem_hi_ptr ->
     alloca $ \rem_lo_ptr ->
-    alloca $ \amount_ptr ->
     alloca $ \idx_ptr ->
     alloca $ \len_ptr -> do
-      proof_ptr <- make_sec_to_pub_transfer_data gcPtr skPtr aggAmountPtr amount rem_hi_ptr rem_lo_ptr amount_ptr idx_ptr len_ptr
+      proof_ptr <- make_sec_to_pub_transfer_data gcPtr skPtr aggAmountPtr amount rem_hi_ptr rem_lo_ptr idx_ptr len_ptr
       if proof_ptr == nullPtr
       then return Nothing
       else do
         rem_hi <- unsafeMakeCipher =<< peek rem_hi_ptr
         rem_lo <- unsafeMakeCipher =<< peek rem_lo_ptr
-        _amount <- peek amount_ptr
         idx <- peek idx_ptr
         len <- peek len_ptr
         proof <- makeSecToPubAmountTransferProof (proof_ptr, fromIntegral len)
         return $ Just SecToPubAmountTransferData {
           stpatdRemainingAmount = EncryptedAmount rem_hi rem_lo,
-          stpatdTransferAmount = Amount _amount,
+          stpatdTransferAmount = Amount amount,
           stpatdIndex = idx,
           stpatdProof = proof
           }
