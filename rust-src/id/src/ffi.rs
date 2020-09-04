@@ -8,7 +8,7 @@ use curve_arithmetic::*;
 use ffi_helpers::*;
 use pairing::bls12_381::{Bls12, G1};
 use pedersen_scheme::key::CommitmentKey as PedersenKey;
-use rand::{prelude::StdRng, thread_rng, SeedableRng};
+use rand::thread_rng;
 use serde::{
     de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
     Serializer,
@@ -250,49 +250,6 @@ macro_derive_to_json!(ar_info_to_json, ArInfo<G1>);
 pub extern "C" fn ar_info_ar_identity(ar_info_ptr: *const ArInfo<G1>) -> u32 {
     let ar_info = from_ptr!(ar_info_ptr);
     ar_info.ar_identity.into()
-}
-
-macro_derive_from_bytes!(
-    Box elgamal_pub_key_from_bytes,
-    elgamal::PublicKey<G1>
-);
-macro_derive_to_bytes!(Box elgamal_pub_key_to_bytes, elgamal::PublicKey<G1>);
-macro_free_ffi!(Box elgamal_pub_key_free, elgamal::PublicKey<G1>);
-#[no_mangle]
-pub extern "C" fn elgamal_pub_key_gen() -> *mut elgamal::PublicKey<G1> {
-    let sk = elgamal::SecretKey::generate_all(&mut thread_rng());
-    Box::into_raw(Box::new(elgamal::PublicKey::from(&sk)))
-}
-
-/// This is used for testing in haskell, providing deterministic key generation
-/// from seed.
-///
-/// # Safety
-/// The input point must point to a
-#[no_mangle]
-pub extern "C" fn elgamal_pub_key_gen_seed(seed: u64) -> *mut elgamal::SecretKey<G1> {
-    let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
-    Box::into_raw(Box::new(elgamal::SecretKey::generate_all(&mut rng)))
-}
-
-macro_derive_from_bytes!(
-    Box elgamal_cipher_from_bytes,
-    elgamal::Cipher<G1>
-);
-macro_derive_to_bytes!(Box elgamal_cipher_to_bytes, elgamal::Cipher<G1>);
-macro_free_ffi!(Box elgamal_cipher_free, elgamal::Cipher<G1>);
-#[no_mangle]
-pub extern "C" fn elgamal_cipher_gen() -> *mut elgamal::Cipher<G1> {
-    let mut csprng = thread_rng();
-    Box::into_raw(Box::new(elgamal::Cipher::generate(&mut csprng)))
-}
-
-#[no_mangle]
-pub extern "C" fn elgamal_cipher_zero() -> *mut elgamal::Cipher<G1> {
-    Box::into_raw(Box::new(elgamal::Cipher(
-        G1::zero_point(),
-        G1::zero_point(),
-    )))
 }
 
 #[cfg(test)]

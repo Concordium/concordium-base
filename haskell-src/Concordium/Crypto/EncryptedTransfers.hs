@@ -198,8 +198,8 @@ encryptAmountZeroRandomness gc (Amount amount) = unsafeDupablePerformIO $
 
 foreign import ccall unsafe "make_encrypted_transfer_data" make_encrypted_transfer_data ::
   Ptr GlobalContext -- ^ Pointer to the global context
-  -> Ptr ElgamalSecond  -- ^ Public key of the receiver
-  -> Ptr ElgamalSecondSecret -- ^ Secret key of the sender
+  -> Ptr ElgamalPublicKey  -- ^ Public key of the receiver
+  -> Ptr ElgamalSecretKey -- ^ Secret key of the sender
   -> Ptr AggregatedDecryptedAmount -- ^ Encrypted amount placed for the transfer
   -> Word64 -- ^ Amount that want to be transferred
   -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the high chunk of the remaining amount
@@ -254,15 +254,15 @@ withEncryptedAmountTransferData EncryptedAmountTransferData{..} f =
     f remaining_high remaining_low transfer_high transfer_low eatdIndex (fromIntegral len) bytesPtr
 
 makeEncryptedAmountTransferData :: GlobalContext
-                                    -> ElgamalSecond
-                                    -> ElgamalSecondSecret
+                                    -> ElgamalPublicKey
+                                    -> ElgamalSecretKey
                                     -> AggregatedDecryptedAmount
                                     -> Amount
                                     -> IO (Maybe EncryptedAmountTransferData)
 makeEncryptedAmountTransferData gc receiverPk senderSk aggAmount (Amount desiredAmount) =
   withGlobalContext gc $ \gcPtr ->
-  withElgamalSecond receiverPk $ \receiverPkPtr ->
-  withElgamalSecondSecret senderSk $ \senderSkPtr ->
+  withElgamalPublicKey receiverPk $ \receiverPkPtr ->
+  withElgamalSecretKey senderSk $ \senderSkPtr ->
   withAggregatedDecryptedAmount aggAmount $ \aggAmountPtr ->
     alloca $ \rem_hi_ptr ->
     alloca $ \rem_lo_ptr ->
@@ -291,8 +291,8 @@ makeEncryptedAmountTransferData gc receiverPk senderSk aggAmount (Amount desired
 foreign import ccall unsafe "verify_encrypted_transfer"
   verify_encrypted_transfer ::
        Ptr GlobalContext -- ^ Pointer to the global context needed to validate the proof.
-     -> Ptr ElgamalSecond -- ^ Public key of the receiver.
-     -> Ptr ElgamalSecond -- ^ Public key of the sender.
+     -> Ptr ElgamalPublicKey -- ^ Public key of the receiver.
+     -> Ptr ElgamalPublicKey -- ^ Public key of the sender.
      -> Ptr ElgamalCipher -- ^ High chunk of the current balance.
      -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
      -> Ptr ElgamalCipher -- ^ High chunk of the remaining amount.
@@ -318,8 +318,8 @@ verifyEncryptedTransferProof ::
   Bool
 verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData = unsafeDupablePerformIO $ do
   withGlobalContext gc $ \gcPtr ->
-    withElgamalSecond receiverPK' $ \receiverPKPtr ->
-      withElgamalSecond senderPK' $ \senderPKPtr ->
+    withElgamalPublicKey receiverPK' $ \receiverPKPtr ->
+      withElgamalPublicKey senderPK' $ \senderPKPtr ->
         withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
           withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
             -- this is safe since the called function handles the 0 length case correctly.
@@ -338,8 +338,8 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
                        proof_ptr
                        proof_len
                return (res /= 0)
-  where AccountEncryptionKey (RegIdCred receiverPK') = receiverPK
-        AccountEncryptionKey (RegIdCred senderPK') = senderPK
+  where AccountEncryptionKey receiverPK' = receiverPK
+        AccountEncryptionKey senderPK' = senderPK
 
 --------------------------------------------------------------------------------
 --------------------------- Sec to pub transfer data ---------------------------
@@ -348,7 +348,7 @@ verifyEncryptedTransferProof gc receiverPK senderPK initialAmount transferData =
 foreign import ccall unsafe "make_sec_to_pub_data"
   make_sec_to_pub_transfer_data ::
        Ptr GlobalContext -- ^ Pointer to the global context
-     -> Ptr ElgamalSecondSecret -- ^ Secret key of the sender
+     -> Ptr ElgamalSecretKey -- ^ Secret key of the sender
      -> Ptr AggregatedDecryptedAmount -- ^ Input encrypted amount for the transaction
      -> Word64 -- ^ Amount to transfer.
      -> Ptr (Ptr ElgamalCipher) -- ^ High chunk of the remaining amount
@@ -396,13 +396,13 @@ withSecToPubAmountTransferData SecToPubAmountTransferData{..} f = do
     f remaining_high remaining_low (_amount stpatdTransferAmount) stpatdIndex (fromIntegral proof_len) proof
 
 makeSecToPubAmountTransferData :: GlobalContext
-                               -> ElgamalSecondSecret
+                               -> ElgamalSecretKey
                                -> AggregatedDecryptedAmount
                                -> Amount
                                -> IO (Maybe SecToPubAmountTransferData)
 makeSecToPubAmountTransferData gc sk aggAmount (Amount amount) =
   withGlobalContext gc $ \gcPtr ->
-  withElgamalSecondSecret sk $ \skPtr ->
+  withElgamalSecretKey sk $ \skPtr ->
   withAggregatedDecryptedAmount aggAmount $ \aggAmountPtr ->
     alloca $ \rem_hi_ptr ->
     alloca $ \rem_lo_ptr ->
@@ -427,7 +427,7 @@ makeSecToPubAmountTransferData gc sk aggAmount (Amount amount) =
 foreign import ccall unsafe "verify_sec_to_pub_transfer"
   verify_sec_to_pub_transfer ::
        Ptr GlobalContext -- ^ Pointer to the global context needed to validate the proof.
-     -> Ptr ElgamalSecond -- ^ Public key of the sender.
+     -> Ptr ElgamalPublicKey -- ^ Public key of the sender.
      -> Ptr ElgamalCipher -- ^ High chunk of the current balance.
      -> Ptr ElgamalCipher -- ^ Low chunk of the current balance.
      -> Ptr ElgamalCipher -- ^ High chunk of the remaining amount.
@@ -450,7 +450,7 @@ verifySecretToPublicTransferProof ::
   Bool
 verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsafeDupablePerformIO $ do
   withGlobalContext gc $ \gcPtr ->
-    withElgamalSecond senderPK' $ \senderPKPtr ->
+    withElgamalPublicKey senderPK' $ \senderPKPtr ->
       withElgamalCipher (encryptionHigh initialAmount) $ \initialHighPtr ->
         withElgamalCipher (encryptionLow initialAmount) $ \initialLowPtr ->
           -- this is safe since the called function handles the 0 length case correctly.
@@ -467,7 +467,7 @@ verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsaf
                      proof_ptr
                      proof_len
              return (res /= 0)
-  where AccountEncryptionKey (RegIdCred senderPK') = senderPK
+  where AccountEncryptionKey senderPK' = senderPK
 
 -- |Decrypt an encrypted amount.
 
@@ -485,9 +485,8 @@ foreign import ccall unsafe "&free_table"
 
 foreign import ccall unsafe "decrypt_amount"
   decryptAmountPtr ::
-   Ptr GlobalContext
-   -> Ptr Table
-   -> Ptr ElgamalSecondSecret
+   Ptr Table
+   -> Ptr ElgamalSecretKey
    -> Ptr ElgamalCipher -- ^Pointer to high bits of the amount
    -> Ptr ElgamalCipher -- ^Pointer to low bits of the amount
    -> IO Word64
@@ -501,13 +500,12 @@ computeTable gc m = Table . unsafeDupablePerformIO $ do
 -- public key corresponding to the given secret key, as well as parameters in
 -- global context and table. If this is not the case this function is almost
 -- certainly going to appear to loop.
-decryptAmount :: GlobalContext -> Table -> ElgamalSecondSecret -> EncryptedAmount -> Amount
-decryptAmount gc table sec EncryptedAmount{..} = Amount . unsafeDupablePerformIO $
-  withGlobalContext gc $ \gcPtr ->
+decryptAmount :: Table -> ElgamalSecretKey -> EncryptedAmount -> Amount
+decryptAmount table sec EncryptedAmount{..} = Amount . unsafeDupablePerformIO $
     withTable table $ \tablePtr ->
-      withElgamalSecondSecret sec $ \secPtr ->
+      withElgamalSecretKey sec $ \secPtr ->
         withElgamalCipher encryptionHigh $ \highPtr ->
-          withElgamalCipher encryptionLow $ decryptAmountPtr gcPtr tablePtr secPtr highPtr
+          withElgamalCipher encryptionLow $ decryptAmountPtr tablePtr secPtr highPtr
 
 --------------------------------------------------------------------------------
 -------------------------- Helper mostly for testing ---------------------------
@@ -516,7 +514,7 @@ decryptAmount gc table sec EncryptedAmount{..} = Amount . unsafeDupablePerformIO
 foreign import ccall unsafe "encrypt_amount"
   encrypt_amount ::
     Ptr GlobalContext -- ^ Global context
-    -> Ptr ElgamalSecond -- ^ Public key with which to encrypt.
+    -> Ptr ElgamalPublicKey -- ^ Public key with which to encrypt.
     -> Word64 -- ^ Amount to be encrypted
     -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the pointer to the high chunk of the result.
     -> Ptr (Ptr ElgamalCipher) -- ^ Place to write the pointer to the low chunk of the result.
@@ -524,10 +522,10 @@ foreign import ccall unsafe "encrypt_amount"
 
 -- | Encrypt the given amount. This is non-deterministic since it samples
 -- randomness to encrypt with.
-encryptAmount :: GlobalContext -> ElgamalSecond -> Amount -> IO EncryptedAmount
+encryptAmount :: GlobalContext -> ElgamalPublicKey -> Amount -> IO EncryptedAmount
 encryptAmount gc pub (Amount amount) =
   withGlobalContext gc $ \gcPtr ->
-  withElgamalSecond pub $ \pubPtr ->
+  withElgamalPublicKey pub $ \pubPtr ->
     alloca $ \outHighPtr ->
     alloca $ \outLowPtr -> do
         encrypt_amount gcPtr pubPtr amount outHighPtr outLowPtr

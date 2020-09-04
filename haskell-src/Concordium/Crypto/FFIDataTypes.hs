@@ -13,20 +13,16 @@ module Concordium.Crypto.FFIDataTypes
 
     -- * Elgamal public and private keys.
     ElgamalPublicKey,
-    generateElgamalPublicKey,
-    generateElgamalPublicKeyFromSeed,
+    ElgamalSecretKey,
     withElgamalPublicKey,
+    withElgamalSecretKey,
+    generateElgamalSecretKeyFromSeed,
 
-    -- * Second components of Elgamal keys (without the generator).
-    -- FIXME: This will change once the revision of these is done in Rust, so that
-    -- the generator is no longer part of the key, but is globally defined.
-    ElgamalSecond,
-    ElgamalSecondSecret,
-    generateElgamalSecondSecretFromSeed,
-    withElgamalSecond,
-    withElgamalSecondSecret,
-    generateElgamalSecondFromSeed,
-    deriveElgamalSecondPublic,
+    -- * G1 group elements.
+    GroupElement,
+    withGroupElement,
+    generateGroupElementFromSeed,
+    deriveElgamalPublicKey,
 
     -- * Elgamal ciphers in Bls12 G1 group.
     ElgamalCipher,
@@ -38,6 +34,7 @@ module Concordium.Crypto.FFIDataTypes
 
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Crypto.FFIHelpers
+import Concordium.ID.Parameters
 
 import Foreign.ForeignPtr
 import Foreign.Ptr
@@ -47,16 +44,16 @@ import Data.ByteString as BS
 import Data.Serialize
 import System.IO.Unsafe (unsafeDupablePerformIO)
 import Control.DeepSeq
-
 import qualified Data.Aeson as AE
 
 newtype PedersenKey = PedersenKey (ForeignPtr PedersenKey)
 newtype PsSigKey = PsSigKey (ForeignPtr PsSigKey)
--- | Second component of the elgamal public key (i.e., public key minus the
--- generator).
-newtype ElgamalSecond = ElgamalSecond (ForeignPtr ElgamalSecond)
-newtype ElgamalSecondSecret = ElgamalSecondSecret (ForeignPtr ElgamalSecondSecret)
+-- | Element of the G1 group of the Bls curve
+newtype GroupElement = GroupElement (ForeignPtr GroupElement)
+
 newtype ElgamalPublicKey = ElgamalPublicKey (ForeignPtr ElgamalPublicKey)
+newtype ElgamalSecretKey = ElgamalSecretKey (ForeignPtr ElgamalSecretKey)
+
 newtype ElgamalCipher = ElgamalCipher (ForeignPtr ElgamalCipher)
 
 -- |Instances for benchmarking
@@ -64,9 +61,9 @@ instance NFData PedersenKey where
     rnf = (`seq` ())
 instance NFData PsSigKey where
     rnf = (`seq` ())
-instance NFData ElgamalSecond where
-    rnf = (`seq` ())
 instance NFData ElgamalPublicKey where
+    rnf = (`seq` ())
+instance NFData ElgamalSecretKey where
     rnf = (`seq` ())
 instance NFData ElgamalCipher where
     rnf = (`seq` ())
@@ -81,22 +78,21 @@ foreign import ccall unsafe "ps_sig_key_to_bytes" toBytesPsSigKey :: Ptr PsSigKe
 foreign import ccall unsafe "ps_sig_key_from_bytes" fromBytesPsSigKey :: Ptr Word8 -> CSize -> IO (Ptr PsSigKey)
 foreign import ccall unsafe "ps_sig_key_gen" generatePsSigKeyPtr :: CSize -> IO (Ptr PsSigKey)
 
-foreign import ccall unsafe "&elgamal_second_free" freeElgamalSecond :: FunPtr (Ptr ElgamalSecond -> IO ())
-foreign import ccall unsafe "elgamal_second_to_bytes" toBytesElgamalSecond :: Ptr ElgamalSecond -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "elgamal_second_from_bytes" fromBytesElgamalSecond :: Ptr Word8 -> CSize -> IO (Ptr ElgamalSecond)
-
-foreign import ccall unsafe "&elgamal_second_secret_free" freeElgamalSecondSecret :: FunPtr (Ptr ElgamalSecondSecret -> IO ())
-foreign import ccall unsafe "elgamal_second_secret_to_bytes" toBytesElgamalSecondSecret :: Ptr ElgamalSecondSecret -> Ptr CSize -> IO (Ptr Word8)
-foreign import ccall unsafe "elgamal_second_secret_from_bytes" fromBytesElgamalSecondSecret :: Ptr Word8 -> CSize -> IO (Ptr ElgamalSecondSecret)
-foreign import ccall unsafe "elgamal_second_secret_gen_seed" generateElgamalSecondSecretFromSeedPtr :: Word64 -> IO (Ptr ElgamalSecondSecret)
-
-foreign import ccall unsafe "derive_elgamal_second_public" deriveElgamalSecondPublicPtr :: Ptr ElgamalSecondSecret -> IO (Ptr ElgamalSecond)
+foreign import ccall unsafe "&group_element_free" freeGroupElement :: FunPtr (Ptr GroupElement -> IO ())
+foreign import ccall unsafe "group_element_to_bytes" toBytesGroupElement :: Ptr GroupElement -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "group_element_from_bytes" fromBytesGroupElement :: Ptr Word8 -> CSize -> IO (Ptr GroupElement)
+foreign import ccall unsafe "group_element_from_seed" generateGroupElementFromSeedPtr :: Ptr GlobalContext -> Word64 -> IO (Ptr GroupElement)
 
 foreign import ccall unsafe "&elgamal_pub_key_free" freeElgamalPublicKey :: FunPtr (Ptr ElgamalPublicKey -> IO ())
 foreign import ccall unsafe "elgamal_pub_key_to_bytes" toBytesElgamalPublicKey :: Ptr ElgamalPublicKey -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "elgamal_pub_key_from_bytes" fromBytesElgamalPublicKey :: Ptr Word8 -> CSize -> IO (Ptr ElgamalPublicKey)
-foreign import ccall unsafe "elgamal_pub_key_gen" generateElgamalPublicKeyPtr :: IO (Ptr ElgamalPublicKey)
-foreign import ccall unsafe "elgamal_pub_key_gen_seed" generateElgamalPublicKeyFromSeedPtr :: Word64 -> IO (Ptr ElgamalPublicKey)
+
+foreign import ccall unsafe "&elgamal_sec_key_free" freeElgamalSecretKey :: FunPtr (Ptr ElgamalSecretKey -> IO ())
+foreign import ccall unsafe "elgamal_sec_key_to_bytes" toBytesElgamalSecretKey :: Ptr ElgamalSecretKey -> Ptr CSize -> IO (Ptr Word8)
+foreign import ccall unsafe "elgamal_sec_key_from_bytes" fromBytesElgamalSecretKey :: Ptr Word8 -> CSize -> IO (Ptr ElgamalSecretKey)
+foreign import ccall unsafe "elgamal_sec_key_gen_seed" generateElgamalSecretKeyFromSeedPtr :: Ptr GlobalContext -> Word64 -> IO (Ptr ElgamalSecretKey)
+
+foreign import ccall unsafe "derive_public_key" deriveElgamalPublicKeyPtr :: Ptr GlobalContext -> Ptr GroupElement -> IO (Ptr ElgamalPublicKey)
 
 foreign import ccall unsafe "&elgamal_cipher_free" freeElgamalCipher :: FunPtr (Ptr ElgamalCipher -> IO ())
 foreign import ccall unsafe "elgamal_cipher_to_bytes" toBytesElgamalCipher :: Ptr ElgamalCipher -> Ptr CSize -> IO (Ptr Word8)
@@ -110,11 +106,11 @@ withPedersenKey (PedersenKey fp) = withForeignPtr fp
 withPsSigKey :: PsSigKey -> (Ptr PsSigKey -> IO b) -> IO b
 withPsSigKey (PsSigKey fp) = withForeignPtr fp
 
-withElgamalSecond :: ElgamalSecond -> (Ptr ElgamalSecond -> IO b) -> IO b
-withElgamalSecond (ElgamalSecond fp) = withForeignPtr fp
+withGroupElement :: GroupElement -> (Ptr GroupElement -> IO b) -> IO b
+withGroupElement (GroupElement fp) = withForeignPtr fp
 
-withElgamalSecondSecret :: ElgamalSecondSecret -> (Ptr ElgamalSecondSecret -> IO b) -> IO b
-withElgamalSecondSecret (ElgamalSecondSecret fp) = withForeignPtr fp
+withElgamalSecretKey :: ElgamalSecretKey -> (Ptr ElgamalSecretKey -> IO b) -> IO b
+withElgamalSecretKey (ElgamalSecretKey fp) = withForeignPtr fp
 
 withElgamalCipher :: ElgamalCipher -> (Ptr ElgamalCipher -> IO b) -> IO b
 withElgamalCipher (ElgamalCipher fp) = withForeignPtr fp
@@ -189,29 +185,32 @@ generatePsSigKey n = do
 elgamalGroupLen :: Int
 elgamalGroupLen = 48
 
-instance Serialize ElgamalSecond where
+scalarLen :: Int
+scalarLen = 32
+
+instance Serialize GroupElement where
   get = do
     bs <- getByteString elgamalGroupLen
-    case fromBytesHelper freeElgamalSecond fromBytesElgamalSecond bs of
+    case fromBytesHelper freeGroupElement fromBytesGroupElement bs of
       Nothing -> fail "Cannot decode second component of the elgamal public key."
-      Just x -> return $ ElgamalSecond  x
+      Just x -> return $ GroupElement  x
 
-  put (ElgamalSecond e) =
-    let bs = toBytesHelper toBytesElgamalSecond $ e
+  put (GroupElement e) =
+    let bs = toBytesHelper toBytesGroupElement $ e
     in putByteString bs
 
-instance Show ElgamalSecond where
+instance Show GroupElement where
   show = byteStringToHex . encode
 
 -- |This instance should only be used for testing
-instance Eq ElgamalSecond where
+instance Eq GroupElement where
   key == key' = encode key == encode key'
 
-instance AE.ToJSON ElgamalSecond where
+instance AE.ToJSON GroupElement where
   toJSON v = AE.String (serializeBase16 v)
 
-instance AE.FromJSON ElgamalSecond where
-  parseJSON = AE.withText "Elgamal generator in base16" deserializeBase16
+instance AE.FromJSON GroupElement where
+  parseJSON = AE.withText "Group element in base16" deserializeBase16
 
 instance Serialize ElgamalPublicKey where
   get = do
@@ -237,57 +236,52 @@ instance AE.ToJSON ElgamalPublicKey where
 instance AE.FromJSON ElgamalPublicKey where
   parseJSON = AE.withText "Elgamal public key in base16" deserializeBase16
 
-generateElgamalPublicKey :: IO ElgamalPublicKey
-generateElgamalPublicKey = do
-  ptr <- generateElgamalPublicKeyPtr
-  ElgamalPublicKey <$> newForeignPtr freeElgamalPublicKey ptr
-
-{-# WARNING generateElgamalPublicKeyFromSeed "Not cryptographically secure, do not use in production." #-}
-generateElgamalPublicKeyFromSeed :: Word64 -> ElgamalPublicKey
-generateElgamalPublicKeyFromSeed seed = unsafeDupablePerformIO $ do
-  ptr <- generateElgamalPublicKeyFromSeedPtr seed
-  ElgamalPublicKey <$> newForeignPtr freeElgamalPublicKey ptr
-
-{-# WARNING generateElgamalSecondFromSeed "Not cryptographically secure, do not use in production." #-}
-generateElgamalSecondFromSeed :: Word64 -> ElgamalSecond
-generateElgamalSecondFromSeed = deriveElgamalSecondPublic . generateElgamalSecondSecretFromSeed
-
-instance Serialize ElgamalSecondSecret where
+instance Serialize ElgamalSecretKey where
   get = do
-    bs <- getByteString 32 -- 32 is the scalar size
-    case fromBytesHelper freeElgamalSecondSecret fromBytesElgamalSecondSecret bs of
-      Nothing -> fail "Cannot decode second component of the elgamal public key."
-      Just x -> return $ ElgamalSecondSecret  x
+    bs <- getByteString (scalarLen + elgamalGroupLen)
+    case fromBytesHelper freeElgamalSecretKey fromBytesElgamalSecretKey bs of
+      Nothing -> fail "Cannot decode cipher."
+      Just x -> return $ ElgamalSecretKey x
 
-  put (ElgamalSecondSecret e) =
-    let bs = toBytesHelper toBytesElgamalSecondSecret $ e
+  put (ElgamalSecretKey e) =
+    let bs = toBytesHelper toBytesElgamalSecretKey e
     in putByteString bs
 
-instance Show ElgamalSecondSecret where
+instance Show ElgamalSecretKey where
   show = byteStringToHex . encode
 
--- |This instance should only be used for testing
-instance Eq ElgamalSecondSecret where
+-- |NB: This instance should only be used for testing.
+instance Eq ElgamalSecretKey where
   key == key' = encode key == encode key'
 
-instance AE.ToJSON ElgamalSecondSecret where
+instance AE.ToJSON ElgamalSecretKey where
   toJSON v = AE.String (serializeBase16 v)
 
-instance AE.FromJSON ElgamalSecondSecret where
-  parseJSON = AE.withText "Elgamal generator in base16" deserializeBase16
+instance AE.FromJSON ElgamalSecretKey where
+  parseJSON = AE.withText "Elgamal secret key in base16" deserializeBase16
 
-{-# WARNING deriveElgamalSecondPublic "Only intended for testing." #-}
-deriveElgamalSecondPublic :: ElgamalSecondSecret -> ElgamalSecond
-deriveElgamalSecondPublic s = unsafeDupablePerformIO $ withElgamalSecondSecret s $ \sPtr -> do
-  ptr <- deriveElgamalSecondPublicPtr sPtr
-  ElgamalSecond <$> newForeignPtr freeElgamalSecond ptr
+{-# WARNING generateGroupElementFromSeed "Not cryptographically secure, do not use in production." #-}
+generateGroupElementFromSeed :: GlobalContext -> Word64 -> GroupElement
+generateGroupElementFromSeed gc seed = GroupElement . unsafeDupablePerformIO $
+  withGlobalContext gc $ \gcPtr -> 
+    newForeignPtr freeGroupElement =<< generateGroupElementFromSeedPtr gcPtr seed
 
-{-# WARNING generateElgamalSecondSecretFromSeed "Not cryptographically secure, do not use in production." #-}
-generateElgamalSecondSecretFromSeed :: Word64 -> ElgamalSecondSecret
-generateElgamalSecondSecretFromSeed seed = unsafeDupablePerformIO $ do
-  ptr <- generateElgamalSecondSecretFromSeedPtr seed
-  ElgamalSecondSecret <$> newForeignPtr freeElgamalSecondSecret ptr
+deriveElgamalPublicKey :: GlobalContext -> GroupElement -> ElgamalPublicKey
+deriveElgamalPublicKey gc ge = unsafeDupablePerformIO $
+    withGlobalContext gc $ \gcPtr ->
+      withGroupElement ge $ \gePtr -> do
+        ptr <- deriveElgamalPublicKeyPtr gcPtr gePtr
+        ElgamalPublicKey <$> newForeignPtr freeElgamalPublicKey ptr
 
+{-# WARNING generateElgamalSecretKeyFromSeed "Not cryptographically secure, do not use in production." #-}
+generateElgamalSecretKeyFromSeed :: GlobalContext -> Word64 -> ElgamalSecretKey
+generateElgamalSecretKeyFromSeed gc seed = unsafeDupablePerformIO $
+    withGlobalContext gc $ \gcPtr -> do
+      ptr <- generateElgamalSecretKeyFromSeedPtr gcPtr seed
+      ElgamalSecretKey <$> newForeignPtr freeElgamalSecretKey ptr
+
+
+-- * Elgamal cipher related definitions.
 
 instance Serialize ElgamalCipher where
   get = do

@@ -32,57 +32,30 @@ unsafe extern "C" fn aggregate_encrypted_amounts(
 }
 
 #[derive(Serialize)]
-/// Second component of the elgamal public key, i.e., the public key
-/// minus the generator.
-/// FIXME: We should probably change the elgamal struct to have a fixed
-/// generator, globally defined, instead of this way of doing it.
-pub struct ElgamalPublicKeySecond(Group);
+/// A group element needed in FFI.
+pub struct GroupElement(Group);
 
 macro_derive_from_bytes!(
-    Box elgamal_second_from_bytes,
-    ElgamalPublicKeySecond
+    Box group_element_from_bytes,
+    GroupElement
 );
-macro_derive_to_bytes!(Box elgamal_second_to_bytes, ElgamalPublicKeySecond);
-macro_free_ffi!(Box elgamal_second_free, ElgamalPublicKeySecond);
+macro_derive_to_bytes!(Box group_element_to_bytes, GroupElement);
+macro_free_ffi!(Box group_element_free, GroupElement);
 
-#[derive(Serialize)]
-/// Analogue of the above, should be removed once we revise the secret keys of
-/// elgamal with a fixed generator.
-pub struct ElgamalSecretKeySecond(<Group as Curve>::Scalar);
-
-macro_derive_from_bytes!(
-    Box elgamal_second_secret_from_bytes,
-    ElgamalSecretKeySecond
-);
-macro_derive_to_bytes!(Box elgamal_second_secret_to_bytes, ElgamalSecretKeySecond);
-macro_free_ffi!(Box elgamal_second_secret_free, ElgamalSecretKeySecond);
-
-/// This is used for testing in haskell, providing deterministic key generation
-/// from seed.
 #[no_mangle]
-extern "C" fn elgamal_second_secret_gen_seed(seed: u64) -> *mut ElgamalSecretKeySecond {
+/// Generate a new group element, using the
+/// elgamal generator from the global context.
+unsafe extern "C" fn group_element_from_seed(
+    gc_ptr: *const GlobalContext<Group>,
+    seed: u64,
+) -> *mut GroupElement {
     let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
-    Box::into_raw(Box::new(ElgamalSecretKeySecond(Group::generate_scalar(
+    let gc = from_ptr!(gc_ptr);
+    let pk = elgamal::PublicKey::from(&elgamal::SecretKey::generate(
+        gc.elgamal_generator(),
         &mut rng,
-    ))))
-}
-
-/// Derive public key, only meant for testing.
-/// FIXME: Should be replaced and optimized once the elgamal public and secret
-/// keys do not have an explicit generator attached to them.
-///
-/// # Safety
-///
-/// This function assumes the pointer is safe to dereference with the given
-/// type, i.e., it is non-null and produced via Box::into_raw.
-#[no_mangle]
-unsafe extern "C" fn derive_elgamal_second_public(
-    sec: *mut ElgamalSecretKeySecond,
-) -> *mut ElgamalPublicKeySecond {
-    let gc = GlobalContext::<Group>::generate();
-    Box::into_raw(Box::new(ElgamalPublicKeySecond(
-        gc.elgamal_generator().mul_by_scalar(&from_ptr!(sec).0),
-    )))
+    ));
+    Box::into_raw(Box::new(GroupElement(pk.key)))
 }
 
 /// # Safety
@@ -106,8 +79,8 @@ unsafe extern "C" fn encrypt_amount_with_zero_randomness(
 #[no_mangle]
 unsafe extern "C" fn make_encrypted_transfer_data(
     ctx_ptr: *const GlobalContext<Group>,
-    receiver_pk_ptr: *const ElgamalPublicKeySecond,
-    sender_sk_ptr: *const ElgamalSecretKeySecond,
+    receiver_pk_ptr: *const elgamal::PublicKey<Group>,
+    sender_sk_ptr: *const elgamal::SecretKey<Group>,
     input_amount_ptr: *const AggregatedDecryptedAmount<Group>,
     microgtu: u64,
     high_remaining: *mut *const Cipher<Group>,
@@ -120,16 +93,8 @@ unsafe extern "C" fn make_encrypted_transfer_data(
     let ctx = from_ptr!(ctx_ptr);
 
     let receiver_pk = from_ptr!(receiver_pk_ptr);
-    let receiver_pk = elgamal::PublicKey {
-        generator: *ctx.elgamal_generator(),
-        key:       receiver_pk.0,
-    };
 
     let sender_sk = from_ptr!(sender_sk_ptr);
-    let sender_sk = elgamal::SecretKey {
-        generator: *ctx.elgamal_generator(),
-        scalar:    sender_sk.0,
-    };
 
     let input_amount = from_ptr!(input_amount_ptr);
 
@@ -170,8 +135,8 @@ unsafe extern "C" fn make_encrypted_transfer_data(
 #[no_mangle]
 unsafe extern "C" fn verify_encrypted_transfer(
     ctx_ptr: *const GlobalContext<Group>,
-    receiver_pk_ptr: *const ElgamalPublicKeySecond,
-    sender_pk_ptr: *const ElgamalPublicKeySecond,
+    receiver_pk_ptr: *const elgamal::PublicKey<Group>,
+    sender_pk_ptr: *const elgamal::PublicKey<Group>,
     initial_high_ptr: *const Cipher<Group>,
     initial_low_ptr: *const Cipher<Group>,
     remaining_high_ptr: *const Cipher<Group>,
@@ -185,16 +150,8 @@ unsafe extern "C" fn verify_encrypted_transfer(
     let ctx = from_ptr!(ctx_ptr);
 
     let receiver_pk = from_ptr!(receiver_pk_ptr);
-    let receiver_pk = elgamal::PublicKey {
-        generator: *ctx.elgamal_generator(),
-        key:       receiver_pk.0,
-    };
 
     let sender_pk = from_ptr!(sender_pk_ptr);
-    let sender_pk = elgamal::PublicKey {
-        generator: *ctx.elgamal_generator(),
-        key:       sender_pk.0,
-    };
 
     let initial_high = from_ptr!(initial_high_ptr);
     let initial_low = from_ptr!(initial_low_ptr);
@@ -241,7 +198,7 @@ unsafe extern "C" fn verify_encrypted_transfer(
 #[no_mangle]
 unsafe extern "C" fn make_sec_to_pub_data(
     ctx_ptr: *const GlobalContext<Group>,
-    sender_sk_ptr: *const ElgamalSecretKeySecond,
+    sender_sk_ptr: *const elgamal::SecretKey<Group>,
     input_amount_ptr: *const AggregatedDecryptedAmount<Group>,
     microgtu: u64,
     high_remaining: *mut *const Cipher<Group>,
@@ -252,10 +209,6 @@ unsafe extern "C" fn make_sec_to_pub_data(
     let ctx = from_ptr!(ctx_ptr);
 
     let sender_sk = from_ptr!(sender_sk_ptr);
-    let sender_sk = elgamal::SecretKey {
-        generator: *ctx.elgamal_generator(),
-        scalar:    sender_sk.0,
-    };
 
     let input_amount = from_ptr!(input_amount_ptr);
 
@@ -293,7 +246,7 @@ unsafe extern "C" fn make_sec_to_pub_data(
 #[no_mangle]
 unsafe extern "C" fn verify_sec_to_pub_transfer(
     ctx_ptr: *const GlobalContext<Group>,
-    sender_pk_ptr: *const ElgamalPublicKeySecond,
+    sender_pk_ptr: *const elgamal::PublicKey<Group>,
     initial_high_ptr: *const Cipher<Group>,
     initial_low_ptr: *const Cipher<Group>,
     remaining_high_ptr: *const Cipher<Group>,
@@ -306,10 +259,6 @@ unsafe extern "C" fn verify_sec_to_pub_transfer(
     let ctx = from_ptr!(ctx_ptr);
 
     let sender_pk = from_ptr!(sender_pk_ptr);
-    let sender_pk = elgamal::PublicKey {
-        generator: *ctx.elgamal_generator(),
-        key:       sender_pk.0,
-    };
 
     let initial_high = from_ptr!(initial_high_ptr);
     let initial_low = from_ptr!(initial_low_ptr);
@@ -390,17 +339,12 @@ macro_free_ffi!(Box free_table, BabyStepGiantStep<Group>);
 /// `Box::into_raw`.
 #[no_mangle]
 unsafe extern "C" fn decrypt_amount(
-    gc_ptr: *const GlobalContext<Group>,
     table_ptr: *const BabyStepGiantStep<Group>,
-    sec_ptr: *const ElgamalSecretKeySecond,
+    sec_ptr: *const elgamal::SecretKey<Group>,
     high_ptr: *const elgamal::Cipher<Group>,
     low_ptr: *const elgamal::Cipher<Group>,
 ) -> u64 {
-    let gc = from_ptr!(gc_ptr);
-    let sk = elgamal::SecretKey {
-        generator: *gc.elgamal_generator(),
-        scalar:    from_ptr!(sec_ptr).0,
-    };
+    let sk = from_ptr!(sec_ptr);
     let amount = EncryptedAmount {
         encryptions: [*from_ptr!(low_ptr), *from_ptr!(high_ptr)],
     };
@@ -413,17 +357,80 @@ unsafe extern "C" fn decrypt_amount(
 #[no_mangle]
 unsafe extern "C" fn encrypt_amount(
     ctx_ptr: *const GlobalContext<Group>,
-    pub_ptr: *const ElgamalPublicKeySecond,
+    pk_ptr: *const elgamal::PublicKey<Group>,
     microgtu: u64,
     out_high_ptr: *mut *const Cipher<Group>,
     out_low_ptr: *mut *const Cipher<Group>,
 ) {
     let gc = from_ptr!(ctx_ptr);
-    let pk = elgamal::PublicKey {
-        generator: *gc.elgamal_generator(),
-        key:       from_ptr!(pub_ptr).0,
-    };
+    let pk = from_ptr!(pk_ptr);
     let encrypted = crate::encrypt_amount(gc, &pk, Amount { microgtu }, &mut rand::thread_rng()).0;
     *out_high_ptr = Box::into_raw(Box::new(encrypted.encryptions[1]));
     *out_low_ptr = Box::into_raw(Box::new(encrypted.encryptions[0]));
+}
+
+macro_derive_from_bytes!(
+    Box elgamal_pub_key_from_bytes,
+    elgamal::PublicKey<Group>
+);
+macro_derive_to_bytes!(Box elgamal_pub_key_to_bytes, elgamal::PublicKey<Group>);
+macro_free_ffi!(Box elgamal_pub_key_free, elgamal::PublicKey<Group>);
+#[no_mangle]
+
+macro_derive_from_bytes!(
+    Box elgamal_sec_key_from_bytes,
+    elgamal::SecretKey<Group>
+);
+macro_derive_to_bytes!(Box elgamal_sec_key_to_bytes, elgamal::SecretKey<Group>);
+macro_free_ffi!(Box elgamal_sec_key_free, elgamal::SecretKey<Group>);
+
+/// This is used for testing in haskell, providing deterministic key generation
+/// from seed.
+///
+/// # Safety
+/// The input point must point to a valid global context.
+#[no_mangle]
+unsafe extern "C" fn elgamal_sec_key_gen_seed(
+    gc_ptr: *const GlobalContext<Group>,
+    seed: u64,
+) -> *mut elgamal::SecretKey<Group> {
+    let gc = from_ptr!(gc_ptr);
+    let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
+    Box::into_raw(Box::new(elgamal::SecretKey::generate(
+        gc.elgamal_generator(),
+        &mut rng,
+    )))
+}
+
+macro_derive_from_bytes!(
+    Box elgamal_cipher_from_bytes,
+    elgamal::Cipher<Group>
+);
+macro_derive_to_bytes!(Box elgamal_cipher_to_bytes, elgamal::Cipher<Group>);
+macro_free_ffi!(Box elgamal_cipher_free, elgamal::Cipher<Group>);
+#[no_mangle]
+pub extern "C" fn elgamal_cipher_gen() -> *mut elgamal::Cipher<Group> {
+    let mut csprng = thread_rng();
+    Box::into_raw(Box::new(elgamal::Cipher::generate(&mut csprng)))
+}
+
+#[no_mangle]
+pub extern "C" fn elgamal_cipher_zero() -> *mut elgamal::Cipher<Group> {
+    Box::into_raw(Box::new(elgamal::Cipher(
+        Group::zero_point(),
+        Group::zero_point(),
+    )))
+}
+
+#[no_mangle]
+/// Convert from Group element to a valid public key, in a given global context.
+unsafe extern "C" fn derive_public_key(
+    gc_ptr: *const GlobalContext<Group>,
+    group_ptr: *const GroupElement,
+) -> *mut elgamal::PublicKey<Group> {
+    let pk = elgamal::PublicKey {
+        generator: *from_ptr!(gc_ptr).elgamal_generator(),
+        key:       from_ptr!(group_ptr).0,
+    };
+    Box::into_raw(Box::new(pk))
 }

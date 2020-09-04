@@ -9,6 +9,7 @@ import qualified Data.Map.Strict as OrdMap
 import qualified Data.Hashable as IntHash
 import qualified Data.ByteString.Lazy as BSL
 import Concordium.ID.Types as ID
+import Concordium.ID.Parameters
 import Concordium.Crypto.FFIDataTypes
 import qualified Data.Aeson as AE
 
@@ -17,12 +18,12 @@ import qualified Data.Aeson as AE
 -- random number generator.
 {-# WARNING dummyRegId "Invalid credential Registration ID, only for testing." #-}
 dummyRegId :: AccountAddress -> ID.CredentialRegistrationID
-dummyRegId addr = ID.RegIdCred (generateElgamalSecondFromSeed (fromIntegral (IntHash.hash addr)))
+dummyRegId addr = ID.RegIdCred (generateGroupElementFromSeed globalContext (fromIntegral (IntHash.hash addr)))
 
 -- Derive a dummy encryption secret key corresponding to the dummyRegId above.
 {-# WARNING dummyEncryptionSecretKey "Only use for testing, do not use in production." #-}
-dummyEncryptionSecretKey :: AccountAddress -> ElgamalSecondSecret
-dummyEncryptionSecretKey addr = generateElgamalSecondSecretFromSeed (fromIntegral (IntHash.hash addr))
+dummyEncryptionSecretKey :: AccountAddress -> ElgamalSecretKey
+dummyEncryptionSecretKey addr = generateElgamalSecretKeyFromSeed globalContext (fromIntegral (IntHash.hash addr))
 
 
 -- This credential value is invalid and does not satisfy the invariants normally expected of credentials.

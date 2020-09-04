@@ -7,6 +7,7 @@ import Concordium.ID.Types
 import Concordium.Crypto.FFIDataTypes
 import Concordium.Common.Amount
 
+import Data.Word
 import qualified Data.ByteString as BS
 import Data.Serialize
 import Test.QuickCheck.Monadic
@@ -30,11 +31,11 @@ testMakeAggregatedEncryptedAmount = property $ \gen gen1 -> monadicIO $ do
 
 testSerializeEncryptedAmountTransferData :: Property
 testSerializeEncryptedAmountTransferData = property $ \gen gen1 seed1 seed2 -> monadicIO $ do
-  let public = generateElgamalSecondFromSeed seed1
-  let private = generateElgamalSecondSecretFromSeed seed2
+  let public = accEncKeyFromSeed seed1
+  let private = generateElgamalSecretKeyFromSeed globalContext seed2
   let agg = makeAggregatedDecryptedAmount (encryptAmountZeroRandomness globalContext gen) gen (EncryptedAmountAggIndex gen1)
   let amount = gen `div` 2
-  Just eatd@EncryptedAmountTransferData{..} <- run (makeEncryptedAmountTransferData globalContext public private agg amount)
+  Just eatd@EncryptedAmountTransferData{..} <- run (makeEncryptedAmountTransferData globalContext (_elgamalPublicKey public) private agg amount)
   let bytes = runPut (put eatdRemainingAmount <> put eatdTransferAmount <> put eatdIndex <> putEncryptedAmountTransferProof eatdProof)
   let len = BS.length (runPut (putEncryptedAmountTransferProof eatdProof))
   let getEncrypted = do
@@ -50,22 +51,24 @@ testSerializeEncryptedAmountTransferData = property $ \gen gen1 seed1 seed2 -> m
           }
   return (Right eatd === runGet getEncrypted bytes)
 
+accEncKeyFromSeed :: Word64 -> AccountEncryptionKey
+accEncKeyFromSeed = AccountEncryptionKey . deriveElgamalPublicKey globalContext . generateGroupElementFromSeed globalContext
+
 testTransferProofVerify :: Property
 testTransferProofVerify = property $ \gen gen1 seed1 seed2 -> monadicIO $ do
-  let public = generateElgamalSecondFromSeed seed1
-  let receiverPK = AccountEncryptionKey (RegIdCred public)
-  let private = generateElgamalSecondSecretFromSeed seed2
-  let senderPK = AccountEncryptionKey (RegIdCred (deriveElgamalSecondPublic private))
+  let receiverPK = accEncKeyFromSeed seed1
+  let private = generateElgamalSecretKeyFromSeed globalContext seed2
+  let senderPK = accEncKeyFromSeed seed2
   let inputAmount = encryptAmountZeroRandomness globalContext gen
   let agg = makeAggregatedDecryptedAmount inputAmount gen (EncryptedAmountAggIndex gen1)
   let amount = gen `div` 2
-  Just eatd <- run (makeEncryptedAmountTransferData globalContext public private agg amount)
+  Just eatd <- run (makeEncryptedAmountTransferData globalContext (_elgamalPublicKey receiverPK) private agg amount)
   return $ verifyEncryptedTransferProof globalContext receiverPK senderPK inputAmount eatd
 
 testSecToPubTransferProofVerify :: Property
 testSecToPubTransferProofVerify = property $ \gen gen1 seed1-> monadicIO $ do
-  let private = generateElgamalSecondSecretFromSeed  seed1
-  let receiverPK = AccountEncryptionKey (RegIdCred (deriveElgamalSecondPublic private))
+  let private = generateElgamalSecretKeyFromSeed globalContext seed1
+  let receiverPK = accEncKeyFromSeed seed1
   let inputAmount = encryptAmountZeroRandomness globalContext gen
   let agg = makeAggregatedDecryptedAmount inputAmount gen (EncryptedAmountAggIndex gen1)
   let amount = gen `div` 2
@@ -76,10 +79,10 @@ testEncryptDecrypt :: Property
 testEncryptDecrypt =
   let table = computeTable globalContext (2^(16::Int))
   in property $ \gen amnt -> monadicIO $ do
-    let private = generateElgamalSecondSecretFromSeed gen
-    let pk = deriveElgamalSecondPublic private
+    let private = generateElgamalSecretKeyFromSeed globalContext gen
+    let pk = _elgamalPublicKey . accEncKeyFromSeed $ gen
     encAmnt <- run (encryptAmount globalContext pk (Amount amnt))
-    return (Amount amnt === decryptAmount globalContext table private encAmnt)
+    return (Amount amnt === decryptAmount table private encAmnt)
 
 tests :: Spec
 tests = describe "Concordium.Crypto.EncryptedTransfers" $ do
