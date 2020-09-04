@@ -6,6 +6,10 @@ use id::sigma_protocols::{aggregate_dlog::*, common::*, dlog::*};
 use random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;
 
+/// This sigma protocol can be used to prove knowledge of x and x_{ij}'s such
+/// that y = g^x and y_i = \prod_{j=1}^{n_i} g_{ij}^{x_ij} for all i
+/// and x_{1,j} = x for all j. The public values are y, y_i's, g and g_{ij}'s
+
 pub struct DlogAndAggregateDlogsEqual<C: Curve> {
     pub dlog:            Dlog<C>,
     pub aggregate_dlogs: Vec<AggregateDlog<C>>,
@@ -127,5 +131,68 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
             agg_points.push(point);
         }
         Some((dlog_point, agg_points))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use curve_arithmetic::multiexp;
+    use ff::PrimeField;
+    use pairing::bls12_381::{Fr, G1};
+    use rand::*;
+
+    pub fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
+        // length of the challenge
+        let l = csprng.gen_range(0, 1000);
+        let mut challenge_prefix = vec![0; l];
+        for v in challenge_prefix.iter_mut() {
+            *v = csprng.gen();
+        }
+        challenge_prefix
+    }
+
+    #[test]
+    fn test_dlog_agg_eq() {
+        let mut csprng = thread_rng();
+        let x = Fr::from_str("3").unwrap();
+        let x1 = Fr::from_str("5").unwrap();
+        let x2 = Fr::from_str("7").unwrap();
+        let y1 = Fr::from_str("70").unwrap();
+        let y2 = Fr::from_str("75").unwrap();
+        let g = G1::generate(&mut csprng);
+        let g1 = G1::generate(&mut csprng);
+        let h1 = G1::generate(&mut csprng);
+        let f1 = G1::generate(&mut csprng);
+        let g2 = G1::generate(&mut csprng);
+        let h2 = G1::generate(&mut csprng);
+        let f2 = G1::generate(&mut csprng);
+        let gx = g.mul_by_scalar(&x);
+        let dlog = Dlog {
+            public: gx,
+            coeff:  g,
+        };
+        let g1xh1x1f1y1 = multiexp(&[g1, h1, f1], &[x, x1, y1]);
+        let g2xh2x2f2y2 = multiexp(&[g2, h2, f2], &[x, x2, y2]);
+        let agg1 = AggregateDlog {
+            public: g1xh1x1f1y1,
+            coeff:  vec![g1, h1, f1],
+        };
+        let agg2 = AggregateDlog {
+            public: g2xh2x2f2y2,
+            coeff:  vec![g2, h2, f2],
+        };
+        let protocol = DlogAndAggregateDlogsEqual {
+            dlog,
+            aggregate_dlogs: vec![agg1, agg2],
+        };
+        let secret = (Rc::new(x), vec![vec![Rc::new(x1), Rc::new(y1)], vec![
+            Rc::new(x2),
+            Rc::new(y2),
+        ]]);
+        let challenge_prefix = generate_challenge_prefix(&mut csprng);
+        let ro = RandomOracle::domain(&challenge_prefix);
+        let proof = prove(ro.split(), &protocol, secret, &mut csprng).unwrap();
+        assert!(verify(ro, &protocol, &proof));
     }
 }

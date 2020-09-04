@@ -156,7 +156,7 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     transcript.append_message(b"sender_pk", &to_bytes(&sender_pk));
 
     // FIXME: Make arguments more in line between gen_enc_trans and this.
-    encexp::gen_enc_trans(
+    generate_proofs::gen_enc_trans(
         ctx,
         ro,
         &mut transcript,
@@ -204,7 +204,7 @@ pub fn verify_transfer_data<C: Curve>(
 
     // FIXME: Revise order of arguments in verify_enc_trans to be more consistent
     // with the rest.
-    encexp::verify_enc_trans(
+    generate_proofs::verify_enc_trans(
         ctx,
         ro,
         &mut transcript,
@@ -249,7 +249,7 @@ pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
     transcript.append_message(b"pk", &to_bytes(&pk));
 
     // FIXME: Make arguments more in line between gen_sec_to_pub_trans and this.
-    encexp::gen_sec_to_pub_trans(
+    generate_proofs::gen_sec_to_pub_trans(
         ctx,
         ro,
         &mut transcript,
@@ -293,7 +293,7 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
 
     // FIXME: Revise order of arguments in verify_sec_to_pub_trans to be more
     // consistent with the rest.
-    encexp::verify_sec_to_pub_trans(
+    generate_proofs::verify_sec_to_pub_trans(
         ctx,
         ro,
         &mut transcript,
