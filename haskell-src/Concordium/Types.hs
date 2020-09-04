@@ -19,6 +19,7 @@ import Data.Data (Typeable, Data)
 
 import Concordium.Common.Amount
 import qualified Concordium.Crypto.BlockSignature as Sig
+import Concordium.Crypto.EncryptedTransfers
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
 import qualified Concordium.Crypto.BlsSignature as Bls
@@ -27,9 +28,11 @@ import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
 
 import Control.Exception (assert)
+import Control.Monad
 
 import Data.Hashable (Hashable)
 import Data.Word
+import qualified Data.Sequence as Seq
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Bits
@@ -277,6 +280,86 @@ instance S.Serialize Nonce where
 
 minNonce :: Nonce
 minNonce = 1
+
+-- * Account encrypted amount.
+
+-- | Encrypted amounts stored on an account.
+data AccountEncryptedAmount = AccountEncryptedAmount {
+  -- | Encrypted amount that is a result of this accounts' actions.
+  -- In particular this list includes the aggregate of
+  --
+  -- - remaining amounts that result when transfering to public balance
+  -- - remaining amounts when transfering to another account
+  -- - encrypted amounts that are transfered from public balance
+  --
+  -- When a transfer is made all of these must always be used.
+  _selfAmount :: !EncryptedAmount,
+  -- | Starting index for incoming encrypted amounts.
+  _startIndex :: !EncryptedAmountAggIndex,
+  -- | Amounts starting at @startIndex@. They are assumed to be numbered sequentially.
+  -- FIXME: Limit the number of amounts that can be in this list.
+  -- If a new amount is added that exceeds the limit, the first two amounts should be aggregated
+  -- into one, and start-index increased.
+  -- The limit should be a genesis parameter.
+  _incomingEncryptedAmounts :: !(Seq.Seq EncryptedAmount),
+  -- |If 'Just', the number of incoming amounts that have been aggregated. In
+  -- that case the number is always >= 2.
+  _numAggregated :: !(Maybe Word32)
+} deriving(Eq, Show)
+
+instance AE.ToJSON AccountEncryptedAmount where
+  toJSON AccountEncryptedAmount{..} = AE.object $ [
+    "selfAmount" AE..= _selfAmount,
+    "startIndex" AE..= _startIndex,
+    "incomingAmounts" AE..= _incomingEncryptedAmounts
+    ] ++ aggregated
+    where aggregated = case _numAggregated of
+            Nothing -> []
+            Just n -> ["numAggregated" AE..= n]
+
+instance AE.FromJSON AccountEncryptedAmount where
+  parseJSON = AE.withObject "AccountEncryptedAmount" $ \obj -> do
+    _selfAmount <- obj AE..: "selfAmount"
+    _startIndex <- obj AE..: "startIndex"
+    _incomingEncryptedAmounts <- obj AE..: "incomingAmounts"
+    _numAggregated <- obj AE..:? "numAggregated"
+    case _numAggregated of
+      Nothing -> return ()
+      Just n -> unless (n >= 2) $ fail "numAggregated must be at least 2, if present."
+    return AccountEncryptedAmount{..}
+
+-- |Initial encrypted amount on a newly created account.
+initialAccountEncryptedAmount :: AccountEncryptedAmount
+initialAccountEncryptedAmount = AccountEncryptedAmount{
+  _selfAmount = mempty,
+  _startIndex = 0,
+  _incomingEncryptedAmounts = Seq.empty,
+  _numAggregated = Nothing
+}
+
+instance S.Serialize AccountEncryptedAmount where
+  put AccountEncryptedAmount{..} =
+    S.put _selfAmount <>
+    S.put _startIndex <>
+    S.putWord32be (fromIntegral (Seq.length _incomingEncryptedAmounts)) <>
+    mapM_ S.put _incomingEncryptedAmounts <>
+    case _numAggregated of
+      Nothing -> S.putWord32be 0
+      Just n -> S.putWord32be n
+
+  get = do
+    _selfAmount <- S.get
+    _startIndex <- S.get
+    len <- S.getWord32be
+    _incomingEncryptedAmounts <- Seq.fromList <$> replicateM (fromIntegral len) S.get
+    mNumAggregated <- S.getWord32be
+    case mNumAggregated of
+      0 -> return AccountEncryptedAmount{_numAggregated = Nothing,..}
+      n | n >= 2 -> return AccountEncryptedAmount{_numAggregated = Just n,..}
+      _ -> fail "numAggregated must be at least 2, if non-zero."
+
+makeLenses ''AccountEncryptedAmount
+
 
 -- |Size of the transaction payload.
 newtype PayloadSize = PayloadSize Word32
