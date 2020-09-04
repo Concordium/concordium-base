@@ -3,6 +3,7 @@ use crate::types::CHUNK_SIZE;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
+use elgamal::ChunkSize;
 use ff::Field;
 use id::sigma_protocols::{com_eq::*, common::*, dlog::*};
 use pedersen_scheme::{Commitment, Randomness, Value};
@@ -111,10 +112,11 @@ pub struct EncTransState<C: Curve> {
 
 /// This function takes scalars x_1, ..., x_n and returns
 /// \sum_{i=1}^n 2^{(chunk_size)*(i-1)} (x_i)
-fn linear_combination_with_powers_of_two<C: Curve>(scalars: &[C::Scalar]) -> C::Scalar {
-    // FIXME: This should use ChunkSize
-    // TODO: Use the constant or take it as parameter?
-    let u8_chunk_size = u8::from(CHUNK_SIZE);
+fn linear_combination_with_powers_of_two<C: Curve>(
+    scalars: &[C::Scalar],
+    chunk_size: ChunkSize,
+) -> C::Scalar {
+    let u8_chunk_size = u8::from(chunk_size);
     let two_chunksize = C::scalar_from_u64(1 << u8_chunk_size);
     let mut power_of_two = C::Scalar::one();
     let mut sum = C::Scalar::zero();
@@ -185,8 +187,8 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         // For dlog and elcdec:
         let rand_scalar_common = C::generate_non_zero_scalar(csprng);
         let commit_dlog = self.dlog.coeff.mul_by_scalar(&rand_scalar_common);
-        let rand_lin_a = linear_combination_with_powers_of_two::<C>(&Rs_a);
-        let rand_lin_s_prime = linear_combination_with_powers_of_two::<C>(&Rs_s_prime);
+        let rand_lin_a = linear_combination_with_powers_of_two::<C>(&Rs_a, CHUNK_SIZE);
+        let rand_lin_s_prime = linear_combination_with_powers_of_two::<C>(&Rs_s_prime, CHUNK_SIZE);
         let mut rand_lin = rand_lin_a;
         rand_lin.add_assign(&rand_lin_s_prime);
         let rands = [rand_scalar_common, rand_lin];
@@ -297,8 +299,8 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         }
 
         // For dlog and elcdec:
-        let w_lin_a = linear_combination_with_powers_of_two::<C>(&w_a_vec);
-        let w_lin_s_prime = linear_combination_with_powers_of_two::<C>(&w_s_prime_vec);
+        let w_lin_a = linear_combination_with_powers_of_two::<C>(&w_a_vec, CHUNK_SIZE);
+        let w_lin_s_prime = linear_combination_with_powers_of_two::<C>(&w_s_prime_vec, CHUNK_SIZE);
         let mut w_lin = w_lin_a;
         w_lin.add_assign(&w_lin_s_prime);
         let dlog_point = self
