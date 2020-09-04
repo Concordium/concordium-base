@@ -34,6 +34,7 @@ import Data.Base58Encoding
 import qualified Data.FixedByteString as FBS
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Crypto.FFIDataTypes
+import Concordium.ID.Parameters
 import qualified Concordium.Crypto.SHA256 as SHA256
 
 accountAddressSize :: Int
@@ -186,18 +187,12 @@ instance ToJSONKey IdentityProviderIdentity where
 -- Account signatures (eddsa key)
 type AccountSignature = Signature
 
--- decryption key for accounts (Elgamal?)
-newtype AccountDecryptionKey = DecKeyAcc ShortByteString
-    deriving(Eq)
-    deriving Show via Short65K
-    deriving Serialize via Short65K
-
 -- encryption key for accounts (Elgamal?)
-newtype AccountEncryptionKey = AccountEncryptionKey CredentialRegistrationID
-    deriving (Eq, Show, Serialize, FromJSON, ToJSON) via CredentialRegistrationID
+newtype AccountEncryptionKey = AccountEncryptionKey {_elgamalPublicKey :: ElgamalPublicKey}
+    deriving (Eq, Show, Serialize, FromJSON, ToJSON) via ElgamalPublicKey
 
-makeEncryptionKey :: CredentialRegistrationID -> AccountEncryptionKey
-makeEncryptionKey = AccountEncryptionKey
+makeEncryptionKey :: GlobalContext -> CredentialRegistrationID -> AccountEncryptionKey
+makeEncryptionKey gc (RegIdCred ge) = AccountEncryptionKey (deriveElgamalPublicKey gc ge)
 
 data RegIdSize
 
@@ -205,7 +200,7 @@ instance FBS.FixedLength RegIdSize where
   fixedLength _ = 48
 
 -- |Credential Registration ID (48 bytes)
-newtype CredentialRegistrationID = RegIdCred ElgamalSecond
+newtype CredentialRegistrationID = RegIdCred GroupElement
     deriving newtype (Eq, Show, Serialize, ToJSON)
 
 -- Ord instance based on serialization
