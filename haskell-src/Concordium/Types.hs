@@ -535,15 +535,24 @@ newtype TransactionHashV0 = TransactionHashV0 {v0TransactionHash :: Hash.Hash}
 type TransactionHash = TransactionHashV0
 
 -- * Types related to blocks
+newtype BlockHashV0 = BlockHashV0 {v0BlockHash :: Hash.Hash}
+  deriving newtype (Eq, Ord, Show, S.Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
 
-type BlockHash = Hash.Hash
+newtype TransactionOutcomesHashV0 = TransactionOutcomesHashV0 {v0TransactionOutcomesHash :: Hash.Hash}
+  deriving newtype (Eq, Ord, Show, S.Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
+
+newtype StateHashV0 = StateHashV0 {v0StateHash :: Hash.Hash}
+  deriving newtype (Eq, Ord, Show, S.Serialize, AE.ToJSON, AE.FromJSON, AE.FromJSONKey, AE.ToJSONKey, Read, Hashable)
+
+
+
+type BlockHash = BlockHashV0
+type StateHash = StateHashV0
+type TransactionOutcomesHash = TransactionOutcomesHashV0
 type BlockProof = VRF.Proof
 type BlockSignature = Sig.Signature
 type BlockNonce = VRF.Proof
 
--- * Types related to state hashing
-
-type StateHash = Hash.Hash
 
 
 -- Template haskell derivations. At the end to get around staging restrictions.

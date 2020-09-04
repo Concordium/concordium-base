@@ -1,13 +1,11 @@
 {-# OPTIONS_GHC -Wno-deprecations #-}
 module Concordium.Types.DummyData where
 
-import Data.FixedByteString as FBS
 import System.Random
 
 import Concordium.Crypto.VRF as VRF
 import qualified Concordium.Crypto.SignatureScheme as Sig
 import Concordium.Crypto.DummyData
-import Concordium.Crypto.SHA256
 
 import Concordium.Types
 import Concordium.Types.Transactions
@@ -17,7 +15,7 @@ import Concordium.ID.Types
 
 {-# WARNING dummyblockPointer "Do not use in production." #-}
 dummyblockPointer :: BlockHash
-dummyblockPointer = Hash (FBS.pack (replicate 32 (fromIntegral (0 :: Word))))
+dummyblockPointer = BlockHashV0 minBound
 
 {-# WARNING mateuszAccount "Do not use in production." #-}
 mateuszAccount :: AccountAddress
