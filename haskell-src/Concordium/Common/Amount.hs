@@ -7,6 +7,7 @@ import Data.Aeson
 import Data.Hashable
 import qualified Data.Text as Text
 import Data.Char
+import Test.QuickCheck
 
 import qualified Text.ParserCombinators.ReadP as RP
 
@@ -15,7 +16,7 @@ import qualified Text.ParserCombinators.ReadP as RP
 -- meaningful amount of GTU. This unit is 10^-6 GTU and denoted microGTU.
 type AmountUnit = Word64
 newtype Amount = Amount { _amount :: AmountUnit }
-    deriving newtype (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable)
+    deriving newtype (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable, Arbitrary)
 
 instance S.Serialize Amount where
   {-# INLINE get #-}
