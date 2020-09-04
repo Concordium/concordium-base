@@ -47,6 +47,7 @@ Library
                    Data.FixedByteString
                    Data.Base58Encoding
                    Concordium.Common.Version
+                   Concordium.Common.Amount
                    Concordium.ID.Types
                    Concordium.ID.Account
                    Concordium.ID.Parameters
