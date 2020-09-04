@@ -50,15 +50,17 @@ import Foreign.Storable (peek)
 import System.IO.Unsafe (unsafeDupablePerformIO)
 import Data.Foldable(foldl')
 
+import Foreign (newForeignPtr, withForeignPtr, ForeignPtr)
+import Foreign (Storable)
+import Foreign.C.Types (CChar)
+import Foreign.C (CStringLen)
+
 import Concordium.Crypto.FFIDataTypes
 import Concordium.Crypto.FFIHelpers
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.ID.Parameters
 import Concordium.ID.Types
-import Foreign (newForeignPtr, withForeignPtr, ForeignPtr)
-import Foreign (Storable)
-import Foreign.C.Types (CChar)
-import Foreign.C (CStringLen)
+import Concordium.Common.Amount
 
 -- Note: The FFI functions imported in this file are defined in encrypted_transfers/src/ffi.rs
 
@@ -380,7 +382,7 @@ putSecToPubAmountTransferProof = putShortByteString . theSecToPubAmountTransferP
 -- | Haskell counterpart of `SecToPubAmountTransferData` in encrypted_transfers/src/types.rs
 data SecToPubAmountTransferData = SecToPubAmountTransferData {
   stpatdRemainingAmount :: !EncryptedAmount,
-  stpatdTransferAmount :: !Word64,
+  stpatdTransferAmount :: !Amount,
   stpatdIndex :: !EncryptedAmountAggIndex,
   stpatdProof :: !SecToPubAmountTransferProof
   } deriving (Eq, Show)
@@ -392,7 +394,7 @@ withSecToPubAmountTransferData SecToPubAmountTransferData{..} f = do
   withElgamalCipher (encryptionHigh stpatdRemainingAmount) $ \remaining_high ->
     withElgamalCipher (encryptionLow stpatdRemainingAmount) $ \remaining_low ->
     withSecToPubAmountTransferProof stpatdProof $ \(proof, proof_len) ->
-    f remaining_high remaining_low stpatdTransferAmount stpatdIndex (fromIntegral proof_len) proof
+    f remaining_high remaining_low (_amount stpatdTransferAmount) stpatdIndex (fromIntegral proof_len) proof
 
 makeSecToPubAmountTransferData :: GlobalContext
                                -> ElgamalSecondSecret
@@ -414,13 +416,13 @@ makeSecToPubAmountTransferData gc sk aggAmount amount =
       else do
         rem_hi <- unsafeMakeCipher =<< peek rem_hi_ptr
         rem_lo <- unsafeMakeCipher =<< peek rem_lo_ptr
-        amount_val <- peek amount_ptr
+        _amount <- peek amount_ptr
         idx <- peek idx_ptr
         len <- peek len_ptr
         proof <- makeSecToPubAmountTransferProof (proof_ptr, fromIntegral len)
         return $ Just SecToPubAmountTransferData {
           stpatdRemainingAmount = EncryptedAmount rem_hi rem_lo,
-          stpatdTransferAmount = amount_val,
+          stpatdTransferAmount = Amount _amount,
           stpatdIndex = idx,
           stpatdProof = proof
           }
