@@ -8,11 +8,7 @@ use crypto_common::{to_bytes, types::Amount};
 use curve_arithmetic::{Curve, Value};
 use elgamal::{Cipher, PublicKey, Randomness, SecretKey};
 use id::{
-    sigma_protocols::{
-        com_eq::*,
-        common::*,
-        dlog::{Witness as DlogWitness, *},
-    },
+    sigma_protocols::{com_eq::*, common::*, dlog::*},
     types::GlobalContext,
 };
 use merlin::Transcript;
@@ -567,67 +563,10 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
     Ok(())
 }
 
-struct DlogEqual<C: Curve> {
-    dlog1: Dlog<C>,
-    dlog2: Dlog<C>,
-}
-
-impl<C: Curve> SigmaProtocol for DlogEqual<C> {
-    type CommitMessage = (C, C);
-    type ProtocolChallenge = C::Scalar;
-    type ProverState = C::Scalar;
-    type ProverWitness = DlogWitness<C>;
-    type SecretData = DlogSecret<C>;
-
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        let ro1 = self.dlog1.public(ro);
-        self.dlog2.public(ro1)
-    }
-
-    fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
-        C::scalar_from_bytes(challenge)
-    }
-
-    fn commit_point<R: rand::Rng>(
-        &self,
-        csprng: &mut R,
-    ) -> Option<(Self::CommitMessage, Self::ProverState)> {
-        let rand_scalar = C::generate_non_zero_scalar(csprng);
-        let randomized_point_1 = self.dlog1.coeff.mul_by_scalar(&rand_scalar);
-        let randomized_point_2 = self.dlog2.coeff.mul_by_scalar(&rand_scalar);
-        let commit = (randomized_point_1, randomized_point_2);
-        Some((commit, rand_scalar))
-    }
-
-    fn generate_witness(
-        &self,
-        secret: Self::SecretData,
-        state: Self::ProverState,
-        challenge: &Self::ProtocolChallenge,
-    ) -> Option<Self::ProverWitness> {
-        let w1 = self.dlog1.generate_witness(secret, state, &challenge)?;
-        Some(w1)
-    }
-
-    fn extract_point(
-        &self,
-        challenge: &Self::ProtocolChallenge,
-        witness: &Self::ProverWitness,
-    ) -> Option<Self::CommitMessage> {
-        let p1 = self.dlog1.extract_point(&challenge, &witness)?;
-        let p2 = self.dlog2.extract_point(&challenge, &witness)?;
-        Some((p1, p2))
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::proofs::dlogaggequal::*;
-    use curve_arithmetic::multiexp;
-    use ff::PrimeField;
-    use id::sigma_protocols::aggregate_dlog::*;
-    use pairing::bls12_381::{Fr, G1};
+    use pairing::bls12_381::G1;
     // use rand::{rngs::ThreadRng, Rng};
 
     type SomeCurve = G1;
@@ -640,76 +579,6 @@ mod test {
             *v = csprng.gen();
         }
         challenge_prefix
-    }
-
-    #[allow(non_snake_case)]
-    #[test]
-    fn test_gen_eq() {
-        let mut csprng = thread_rng();
-        let x = Fr::from_str("3").unwrap();
-        let x_secret = Value::<G1>::new(x);
-        let g1 = G1::generate(&mut csprng);
-        let g2 = G1::generate(&mut csprng);
-        let g1x = g1.mul_by_scalar(&x);
-        let g2x = g2.mul_by_scalar(&x);
-        let dlog1 = Dlog {
-            public: g1x,
-            coeff:  g1,
-        };
-        let dlog2 = Dlog {
-            public: g2x,
-            coeff:  g2,
-        };
-        let equal = DlogEqual { dlog1, dlog2 };
-        let secret = DlogSecret { secret: x_secret };
-        let challenge_prefix = generate_challenge_prefix(&mut csprng);
-        let ro = RandomOracle::domain(&challenge_prefix);
-        let proof = prove(ro.split(), &equal, secret, &mut csprng).unwrap();
-        assert!(verify(ro, &equal, &proof));
-    }
-
-    #[test]
-    fn test_dlog_agg_eq() {
-        let mut csprng = thread_rng();
-        let x = Fr::from_str("3").unwrap();
-        let x1 = Fr::from_str("5").unwrap();
-        let x2 = Fr::from_str("7").unwrap();
-        let y1 = Fr::from_str("70").unwrap();
-        let y2 = Fr::from_str("75").unwrap();
-        let g = G1::generate(&mut csprng);
-        let g1 = G1::generate(&mut csprng);
-        let h1 = G1::generate(&mut csprng);
-        let f1 = G1::generate(&mut csprng);
-        let g2 = G1::generate(&mut csprng);
-        let h2 = G1::generate(&mut csprng);
-        let f2 = G1::generate(&mut csprng);
-        let gx = g.mul_by_scalar(&x);
-        let dlog = Dlog {
-            public: gx,
-            coeff:  g,
-        };
-        let g1xh1x1f1y1 = multiexp(&[g1, h1, f1], &[x, x1, y1]);
-        let g2xh2x2f2y2 = multiexp(&[g2, h2, f2], &[x, x2, y2]);
-        let agg1 = AggregateDlog {
-            public: g1xh1x1f1y1,
-            coeff:  vec![g1, h1, f1],
-        };
-        let agg2 = AggregateDlog {
-            public: g2xh2x2f2y2,
-            coeff:  vec![g2, h2, f2],
-        };
-        let protocol = DlogAndAggregateDlogsEqual {
-            dlog,
-            aggregate_dlogs: vec![agg1, agg2],
-        };
-        let secret = (Rc::new(x), vec![vec![Rc::new(x1), Rc::new(y1)], vec![
-            Rc::new(x2),
-            Rc::new(y2),
-        ]]);
-        let challenge_prefix = generate_challenge_prefix(&mut csprng);
-        let ro = RandomOracle::domain(&challenge_prefix);
-        let proof = prove(ro.split(), &protocol, secret, &mut csprng).unwrap();
-        assert!(verify(ro, &protocol, &proof));
     }
 
     #[allow(non_snake_case)]
