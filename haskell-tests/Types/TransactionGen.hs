@@ -12,6 +12,7 @@ import Data.Time.Clock
 import Concordium.Types
 import Concordium.Types.HashableTo
 import Concordium.ID.Types
+import Concordium.ID.Parameters
 
 import Control.Monad
 import qualified Data.Map.Strict as Map
@@ -97,7 +98,7 @@ genCredentialDeploymentInformation = do
       arbitraryExisting,
       arbitraryNew
     ]
-  cdvRegId <- RegIdCred . generateElgamalSecondFromSeed <$> arbitrary
+  cdvRegId <- RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
   cdvIpId <- IP_ID <$> arbitrary
   cdvArData <- Map.fromList <$> (listOf $ do
     ardName <- do
