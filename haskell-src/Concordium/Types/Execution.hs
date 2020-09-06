@@ -331,9 +331,9 @@ putPayload TransferToPublic{ttpData = SecToPubAmountTransferData{..}, ..} =
 
 -- |Get the payload of the given size.
 getPayload :: PayloadSize -> S.Get Payload
-getPayload size = S.isolate (fromIntegral size) go
+getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
   -- isolate is required to consume all the bytes it is meant to.
-  where go = G.getWord8 >>= \case
+  where go start = G.getWord8 >>= \case
             0 -> do
               dmMod <- S.get
               return DeployModule{..}
@@ -412,8 +412,10 @@ getPayload size = S.isolate (fromIntegral size) go
               eatdRemainingAmount <- S.get
               eatdTransferAmount <- S.get
               eatdIndex <- S.get
-              cur <- S.remaining
-              eatdProof <- getEncryptedAmountTransferProof (fromIntegral cur)
+              cur <- S.bytesRead
+              -- in the subtraction below overflow cannot happen because of guarantees and invariants of isolate
+              -- and bytesRead
+              eatdProof <- getEncryptedAmountTransferProof (thePayloadSize size - (fromIntegral $ cur - start))
               return EncryptedAmountTransfer{eatData = EncryptedAmountTransferData{..}, ..}
             17 -> do
               tteAmount <- S.get
@@ -422,8 +424,10 @@ getPayload size = S.isolate (fromIntegral size) go
               stpatdRemainingAmount <- S.get
               stpatdTransferAmount <- S.get
               stpatdIndex <- S.get
-              cur <- S.remaining
-              stpatdProof <- getSecToPubAmountTransferProof (fromIntegral cur)
+              cur <- S.bytesRead
+              -- in the subtraction below overflow cannot happen because of guarantees and invariants of isolate
+              -- and bytesRead
+              stpatdProof <- getSecToPubAmountTransferProof (thePayloadSize size - (fromIntegral $ cur - start))
               return TransferToPublic{ttpData = SecToPubAmountTransferData{..}}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 

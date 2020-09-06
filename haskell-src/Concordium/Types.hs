@@ -359,7 +359,7 @@ makeLenses ''AccountEncryptedAmount
 
 
 -- |Size of the transaction payload.
-newtype PayloadSize = PayloadSize Word32
+newtype PayloadSize = PayloadSize {thePayloadSize :: Word32}
     deriving (Eq, Show, Ord, Num, Real, Enum, Integral, FromJSON, ToJSON) via Word32
 
 -- |Serialization format as specified
