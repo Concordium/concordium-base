@@ -253,12 +253,19 @@ withEncryptedAmountTransferData EncryptedAmountTransferData{..} f =
   withEncryptedAmountTransferProof eatdProof $ \(bytesPtr, len) -> do
     f remaining_high remaining_low transfer_high transfer_low eatdIndex (fromIntegral len) bytesPtr
 
-makeEncryptedAmountTransferData :: GlobalContext
-                                    -> ElgamalPublicKey
-                                    -> ElgamalSecretKey
-                                    -> AggregatedDecryptedAmount
-                                    -> Amount
-                                    -> IO (Maybe EncryptedAmountTransferData)
+-- | Produce the payload of the encrypted amount transfer transaction.
+makeEncryptedAmountTransferData ::
+  GlobalContext -- ^ Global cryptographic parameters as they are on the chain
+                -- where the transaction will be sent.
+  -> ElgamalPublicKey -- ^ Public key of the receiver of the transfer
+  -> ElgamalSecretKey -- ^ Secret key of the sender.
+  -> AggregatedDecryptedAmount -- ^ Input amount that is used in the transfer
+                              -- (i.e., amount on the sender's account).
+  -> Amount -- ^ Amount to send.
+  -> IO (Maybe EncryptedAmountTransferData)
+  -- ^ This function samples randomness to produce encryptions and zero-knowledge proofs.
+  -- In rare cases it can fail to produce the data, although this should not happen in practice.
+  -- If it does, retrying should resolve the issue.
 makeEncryptedAmountTransferData gc receiverPk senderSk aggAmount (Amount desiredAmount) =
   withGlobalContext gc $ \gcPtr ->
   withElgamalPublicKey receiverPk $ \receiverPkPtr ->
@@ -287,7 +294,7 @@ makeEncryptedAmountTransferData gc receiverPk senderSk aggAmount (Amount desired
           })
       else return Nothing
 
--- | Verify an encrypted transfer proof.
+-- * Verify an encrypted transfer proof.
 foreign import ccall unsafe "verify_encrypted_transfer"
   verify_encrypted_transfer ::
        Ptr GlobalContext -- ^ Pointer to the global context needed to validate the proof.
@@ -395,11 +402,19 @@ withSecToPubAmountTransferData SecToPubAmountTransferData{..} f = do
     withSecToPubAmountTransferProof stpatdProof $ \(proof, proof_len) ->
     f remaining_high remaining_low (_amount stpatdTransferAmount) stpatdIndex (fromIntegral proof_len) proof
 
-makeSecToPubAmountTransferData :: GlobalContext
-                               -> ElgamalSecretKey
-                               -> AggregatedDecryptedAmount
-                               -> Amount
-                               -> IO (Maybe SecToPubAmountTransferData)
+-- | Make the payload of encrypted to public transfer transaction.
+makeSecToPubAmountTransferData ::
+  GlobalContext -- ^ Global cryptographic parameters as they are on the chain
+                -- where the transaction will be sent.
+  -> ElgamalSecretKey -- ^ Secret key of the account
+  -> AggregatedDecryptedAmount -- ^ Input amount that is used in the transfer
+                              -- (i.e., amount on the sender's account).
+  -> Amount -- ^ Amount to transfer to public balance.
+  -> IO (Maybe SecToPubAmountTransferData)
+  -- ^ This function samples randomness to produce zero-knowledge proofs. In
+  -- some cases it might sample randomness that makes it fail, returning
+  -- 'Nothing'. This should not happen in practice (the probability is
+  -- negligible), but if it does retrying is the best remedy.
 makeSecToPubAmountTransferData gc sk aggAmount (Amount amount) =
   withGlobalContext gc $ \gcPtr ->
   withElgamalSecretKey sk $ \skPtr ->
@@ -471,6 +486,7 @@ verifySecretToPublicTransferProof gc senderPK initialAmount transferData = unsaf
 
 -- |Decrypt an encrypted amount.
 
+-- |Baby-step-giant-step table to speed-up decryption.
 newtype Table = Table (ForeignPtr Table)
 
 withTable :: Table -> (Ptr Table -> IO b) -> IO b
@@ -491,6 +507,10 @@ foreign import ccall unsafe "decrypt_amount"
    -> Ptr ElgamalCipher -- ^Pointer to low bits of the amount
    -> IO Word64
 
+-- |Compute the table in the context of the global context. The 'Word64'
+-- arguments determines the size of the table, a good number to choose is 2^16,
+-- although a bigger table might be better if many decryptions are going to be
+-- performed.
 computeTable :: GlobalContext -> Word64 -> Table
 computeTable gc m = Table . unsafeDupablePerformIO $ do
     r <- withGlobalContext gc (flip computeTablePtr m)
