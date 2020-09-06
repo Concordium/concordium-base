@@ -37,6 +37,7 @@ data LogSource
   | BlockState
   | TreeState
   | LMDB
+  | Scheduler
   deriving (Eq, Ord, Show, Enum)
 
 -- | Convert a 'LogSource' value to the representation required by the

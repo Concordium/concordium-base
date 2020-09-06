@@ -147,12 +147,12 @@ instance S.Serialize BareTransaction where
   put BareTransaction{..} =
     S.put btrSignature <>
     S.put btrHeader <>
-    putPayload btrPayload
+    putEncodedPayload btrPayload
 
   get = do
     btrSignature <- S.get
     btrHeader <- S.get
-    btrPayload <- getPayload (thPayloadSize btrHeader)
+    btrPayload <- getEncodedPayload (thPayloadSize btrHeader)
     return $! BareTransaction{..}
 
 instance HashableTo TransactionHashV0 BareTransaction where
@@ -275,7 +275,7 @@ transactionSignHashFromBareTransactionBytes = TransactionSignHashV0 . H.hash
 
 -- |Construct a 'TransactionSignHash' from a 'TransactionHeader' and 'EncodedPayload'.
 transactionSignHashFromHeaderPayload :: TransactionHeader -> EncodedPayload -> TransactionSignHashV0
-transactionSignHashFromHeaderPayload btrHeader btrPayload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy $ S.put btrHeader <> putPayload btrPayload
+transactionSignHashFromHeaderPayload btrHeader btrPayload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy $ S.put btrHeader <> putEncodedPayload btrPayload
 
 -- |Construct a 'TransactionSignHash' from a 'BareTransaction'.
 transactionSignHashFromBareTransaction :: BareTransaction -> TransactionSignHashV0
@@ -308,7 +308,7 @@ transactionHashFromBareTransactionParts ::
   -> TransactionHashV0
 transactionHashFromBareTransactionParts sig hdr payload
     = TransactionHashV0 $ H.hashLazy $ S.runPutLazy $
-        S.putWord8 0 <> S.put sig <> S.put hdr <> putPayload payload
+        S.putWord8 0 <> S.put sig <> S.put hdr <> putEncodedPayload payload
 
 -- |Construct a 'TransactionHash' for a 'BareTransaction'.
 transactionHashFromBareTransaction :: BareTransaction -> TransactionHashV0
@@ -344,7 +344,7 @@ getUnverifiedTransaction wmdArrivalTime = do
   (btrHeader, btrPayload, bodySize) <- S.lookAhead $! do
     start <- S.bytesRead
     trHeader <- S.get
-    trPayload <- getPayload (thPayloadSize trHeader)
+    trPayload <- getEncodedPayload (thPayloadSize trHeader)
     end <- S.bytesRead
     return (trHeader, trPayload, end - start)
   txBytes <- S.getBytes bodySize
@@ -410,7 +410,7 @@ putVersionedBareBlockItemV0 bi = putVersion 0 <> putBareBlockItemV0 bi
 -- This computes the derived fields, in particular the hash of the transaction.
 makeTransaction :: TransactionTime -> TransactionSignature -> TransactionHeader -> EncodedPayload -> Transaction
 makeTransaction wmdArrivalTime btrSignature btrHeader btrPayload =
-    let txBodyBytes = S.runPut $ S.put btrHeader <> putPayload btrPayload
+    let txBodyBytes = S.runPut $ S.put btrHeader <> putEncodedPayload btrPayload
         -- transaction hash only refers to the body, not the signature of the transaction
         wmdSignHash = transactionSignHashFromBareTransactionBytes txBodyBytes
         sigBytes = S.encode btrSignature
