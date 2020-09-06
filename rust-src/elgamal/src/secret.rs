@@ -30,6 +30,7 @@ pub struct SecretKey<C: Curve> {
 
 pub type BabyStepGiantStepTable = HashMap<Vec<u8>, u64>;
 
+#[derive(Eq, PartialEq, Debug)]
 pub struct BabyStepGiantStep<C: Curve> {
     /// Precomputed table of powers.
     table: BabyStepGiantStepTable,
@@ -101,7 +102,7 @@ impl<C: Curve> BabyStepGiantStep<C> {
             }
             y = y.plus_point(&self.inverse_point);
         }
-        unreachable!()
+        unreachable!("It should not be feasible to do 2^64 group additions.")
     }
 
     /// Composition of `new` nad `discrete_log` methods for convenience.
@@ -185,4 +186,24 @@ mod tests {
 
     macro_test_secret_key_to_byte_conversion!(secret_key_to_byte_conversion_g1, G1);
     macro_test_secret_key_to_byte_conversion!(secret_key_to_byte_conversion_g2, G2);
+
+    // Test serialiation of baby-step-giant-step since it is implemented manually.
+    #[test]
+    fn test_bsgs_serialize() {
+        let mut csprng = thread_rng();
+        let m = 1 << 16;
+        for _ in 0..10 {
+            let bsgs = BabyStepGiantStep::<G1>::new(&G1::generate(&mut csprng), m);
+            let res = serialize_deserialize(&bsgs);
+            assert!(
+                res.is_ok(),
+                "Failed to deserialize baby step giant step table."
+            );
+            assert_eq!(
+                res.unwrap(),
+                bsgs,
+                "Deserialized table is different from original."
+            );
+        }
+    }
 }
