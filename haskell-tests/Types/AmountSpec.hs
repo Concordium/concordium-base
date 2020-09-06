@@ -65,7 +65,7 @@ testAmountToAndFromJson = describe "Amount to and from JSON" $ do
   specify "Can encode amount" $ AE.encode Amount { _amount = 1234567890 } `shouldBe` "\"1234567890\""
 
 tests :: Spec
-tests = parallel $ do
+tests = do
   specify "Amount string parsing" $ withMaxSuccess 10000 $ testAmountString
   specify "Amount parsing examples" testAmountFromStringExamples
   testAmountToAndFromJson

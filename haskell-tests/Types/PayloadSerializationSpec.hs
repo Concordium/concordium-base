@@ -4,7 +4,7 @@ module Types.PayloadSerializationSpec where
 
 import Test.Hspec
 import Test.Hspec.QuickCheck
-
+import Test.QuickCheck.Monadic
 import Test.QuickCheck
 
 import qualified Data.ByteString as BS
@@ -21,7 +21,10 @@ import qualified Concordium.Crypto.BlockSignature as BlockSig
 import qualified Concordium.Crypto.BlsSignature as Bls
 import Concordium.Crypto.SignatureScheme
 import Concordium.ID.Types
+import Concordium.ID.Parameters
 import qualified Concordium.Crypto.VRF as VRF
+import Concordium.Crypto.EncryptedTransfers
+import Concordium.Crypto.FFIDataTypes
 import qualified Data.FixedByteString as FBS
 import qualified Concordium.Crypto.SHA256 as SHA256
 
@@ -96,7 +99,8 @@ genPayload = oneof [genDeployModule,
                     genUndelegateStake,
                     genUpdateAccountKeys,
                     genAddAccountKeys,
-                    genRemoveAccountKeys
+                    genRemoveAccountKeys,
+                    genTransferToEncrypted
                     ]
   where
 --        genCredential = DeployCredential <$> genCredentialDeploymentInformation
@@ -206,7 +210,26 @@ genPayload = oneof [genDeployModule,
           let rakIndices = Set.fromList indices
           return RemoveAccountKeys{..}
 
--- FIXME: Add new transaction types after proofs are settled.
+        genTransferToEncrypted =
+           TransferToEncrypted . Amount <$> arbitrary
+
+testSerializeEncryptedTransfer :: Property
+testSerializeEncryptedTransfer = property $ \gen gen1 seed1 seed2 -> forAll genAddress $ \addr -> monadicIO $ do
+  let public = AccountEncryptionKey . deriveElgamalPublicKey globalContext . generateGroupElementFromSeed globalContext $ seed1
+  let private = generateElgamalSecretKeyFromSeed globalContext seed2
+  let agg = makeAggregatedDecryptedAmount (encryptAmountZeroRandomness globalContext gen) gen (EncryptedAmountAggIndex gen1)
+  let amount = gen `div` 2
+  Just eatd <- run (makeEncryptedAmountTransferData globalContext (_elgamalPublicKey public) private agg amount)
+  return (checkPayload (EncryptedAmountTransfer addr eatd))
+
+testSecToPubTransfer :: Property
+testSecToPubTransfer = property $ \gen gen1 seed1 -> monadicIO $ do
+  let private = generateElgamalSecretKeyFromSeed globalContext seed1
+  let agg = makeAggregatedDecryptedAmount (encryptAmountZeroRandomness globalContext gen) gen (EncryptedAmountAggIndex gen1)
+  let amount = gen `div` 2
+  Just eatd <- run (makeSecToPubAmountTransferData globalContext private agg amount)
+  return (checkPayload (TransferToPublic eatd))
+
 
 groupIntoSize :: Int64 -> [Char]
 groupIntoSize s =
@@ -224,9 +247,13 @@ checkPayload e = let bs = S.runPut $ putPayload e
                       Right e' -> label (groupIntoSize (fromIntegral (BS.length bs))) $ e === e'
 
 tests :: Spec
-tests = describe "Payload serialization tests" $ do
-           test 25 1000
-           test 50 500
+tests = do
+  describe "Payload serialization tests" $ do
+    test 25 1000
+    test 50 500
+  describe "Encrypted transfer payloads" $ do
+    specify "Encrypted transfer" $ testSerializeEncryptedTransfer
+    specify "Transfer to public" $ testSecToPubTransfer
  where test size num =
          modifyMaxSuccess (const num) $
            specify ("Payload serialization with size = " ++ show size ++ ":") $
