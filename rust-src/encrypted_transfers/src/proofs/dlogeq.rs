@@ -1,3 +1,9 @@
+//! This sigma protocol can be used to prove knowledge of x such that y_1 =
+//! g_1^x and y_2=g_2^x
+//!
+//! NB: This module is not used by the rest of the project and is only here for
+//! demonstration purposes.
+//! If it becomes necessary to use it, the code needs to be thoroughly reviewed.
 use curve_arithmetic::Curve;
 use id::sigma_protocols::{
     common::*,
@@ -5,8 +11,6 @@ use id::sigma_protocols::{
 };
 use random_oracle::{Challenge, RandomOracle};
 
-/// This sigma protocol can be used to prove knowledge of x such that y_1 =
-/// g_1^x and y_2=g_2^x
 struct DlogEqual<C: Curve> {
     dlog1: Dlog<C>,
     dlog2: Dlog<C>,

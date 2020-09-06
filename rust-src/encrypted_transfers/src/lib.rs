@@ -49,8 +49,11 @@ fn encrypt_amount<C: Curve, R: Rng>(
     (enc, rand)
 }
 
-/// Make a dummy encryption of a single amount using the given public key and
-/// fixed randomness 0
+/// Make an encryption of a single amount using a fixed randomness.
+///
+/// Since randomness is 0 this method does not depend on the public key,
+/// only on the global context that defines the relevant generators for
+/// encryption in the exponent.
 pub fn encrypt_amount_with_fixed_randomness<C: Curve>(
     context: &GlobalContext<C>,
     amount: Amount,
@@ -78,6 +81,8 @@ pub fn encrypt_amount_with_fixed_randomness<C: Curve>(
 }
 
 /// Combine two encrypted amounts into one.
+/// This is only meaningful if both encrypted amounts are encrypted with the
+/// same public key, otherwise the result is meaningless.
 pub fn aggregate<C: Curve>(
     left: &EncryptedAmount<C>,
     right: &EncryptedAmount<C>,
@@ -171,8 +176,6 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     )
 }
 
-/// # Public API intended for use by the wallet.
-
 /// Verify an encrypted amount transaction.
 /// The arguments are
 ///
@@ -215,8 +218,6 @@ pub fn verify_transfer_data<C: Curve>(
     )
     .is_ok()
 }
-
-/// # Public API intended for use by the wallet.
 
 /// Produce the payload of an secret to public amount transaction.
 /// The arguments are
@@ -302,96 +303,6 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
         &before_amount.join(),
     )
     .is_ok()
-}
-
-/// Produce payload for the transaction to encrypt a portion of the public
-/// balance. The arguments are
-///
-/// - global context with parameters for generating proofs
-/// - secret key of the account (to produce a proof)
-/// - amount to transfer to encrypted balance
-pub fn make_encrypt_data<C: Curve, R: Rng>(
-    ctx: &GlobalContext<C>,
-    sender_sk: &SecretKey<C>,
-    to_encrypt: Amount,
-    csprng: &mut R,
-) -> Option<EncryptAmountData<C>> {
-    let (transfer_amount, _transfer_rand) =
-        encrypt_amount(ctx, &PublicKey::from(sender_sk), to_encrypt, csprng);
-    // FIXME: Now would come the proofs.
-    Some(EncryptAmountData {
-        transfer_amount,
-        to_encrypt,
-    })
-}
-
-/// Produce payload for the transaction to decrypt a portion of the secret
-/// balance. The arguments are
-///
-/// - global context with parameters for generating proofs
-/// - secret key of the account (to produce a proof)
-/// - current encrypted balance
-/// - amount to transfer to public balance
-pub fn make_decrypt_data<C: Curve, R: Rng>(
-    ctx: &GlobalContext<C>,
-    sender_sk: &SecretKey<C>,
-    input_amount: &AggregatedDecryptedAmount<C>,
-    to_decrypt: Amount,
-    csprng: &mut R,
-) -> Option<DecryptAmountData<C>> {
-    if to_decrypt > input_amount.agg_amount {
-        return None;
-    }
-    let remaining_amount = u64::from(input_amount.agg_amount) - u64::from(to_decrypt);
-    let (remaining_amount, _remaining_rand) = encrypt_amount(
-        ctx,
-        &PublicKey::from(sender_sk),
-        Amount::from(remaining_amount),
-        csprng,
-    );
-    // FIXME: A proof would come here
-    Some(DecryptAmountData {
-        remaining_amount,
-        reveal_amount: to_decrypt,
-        index: input_amount.agg_index,
-    })
-}
-
-/// Decrypt a given encrypted amount with a known index.
-///
-/// This function assumes that the encryption of the amount was done correctly,
-/// and that the chunks are therefore small enough.
-///
-/// It also assumes that the generator used to encrypt the amount is the same
-/// one that is used to contruct the table.
-///
-/// If not, this function will (almost certainly) appear not to terminate.
-pub fn decrypt_single<C: Curve>(
-    table: &BabyStepGiantStep<C>,
-    sk: &SecretKey<C>,
-    enc_amount: IndexedEncryptedAmount<C>,
-) -> DecryptedAmount<C> {
-    let amount = decrypt_amount(table, sk, &enc_amount.encrypted_chunks);
-    DecryptedAmount {
-        encrypted_chunks: enc_amount.encrypted_chunks,
-        amount,
-        index: enc_amount.index,
-    }
-}
-
-impl<C: Curve> AggregatedDecryptedAmount<C> {
-    pub fn add(&mut self, addition: &DecryptedAmount<C>) -> Option<()> {
-        if self.agg_index == addition.index {
-            self.agg_encrypted_amount =
-                aggregate(&self.agg_encrypted_amount, &addition.encrypted_chunks);
-            self.agg_amount =
-                Amount::from(u64::from(self.agg_amount).checked_add(u64::from(addition.amount))?);
-            self.agg_index = self.agg_index.checked_add(1)?;
-            Some(())
-        } else {
-            None
-        }
-    }
 }
 
 #[cfg(test)]
@@ -512,8 +423,8 @@ mod tests {
         );
     }
 
-    #[allow(non_snake_case)]
     #[test]
+    #[allow(non_snake_case)]
     fn test_make_and_verify_sec_to_pub_transfer_data() {
         let mut csprng = thread_rng();
         let sk_sender: SecretKey<G1> = SecretKey::generate_all(&mut csprng);

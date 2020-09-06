@@ -1,5 +1,4 @@
 #[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 /// Free an array that was converted to a pointer from a vector.
 /// This assumes the vector's capacity and length were the same.
 extern "C" fn free_array_len(ptr: *mut u8, len: u64) {

@@ -33,7 +33,7 @@ unsafe extern "C" fn aggregate_encrypted_amounts(
 
 #[derive(Serialize)]
 /// A group element needed in FFI.
-pub struct GroupElement(Group);
+struct GroupElement(Group);
 
 macro_derive_from_bytes!(
     Box group_element_from_bytes,

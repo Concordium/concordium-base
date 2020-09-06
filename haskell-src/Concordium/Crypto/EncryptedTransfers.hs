@@ -1,5 +1,5 @@
 {-| This module provides the necessary primitives for encrypted amount transfers. -}
-{-# LANGUAGE DerivingStrategies, DerivingVia, StandaloneDeriving #-}
+{-# LANGUAGE DerivingVia #-}
 module Concordium.Crypto.EncryptedTransfers (
   -- * Encrypted amount
   EncryptedAmount(..),
@@ -45,15 +45,12 @@ import Data.Word
 import Data.Aeson
 import Foreign.Ptr
 import Data.ByteString.Short
-import Foreign.Marshal (alloca)
-import Foreign.Storable (peek)
-import System.IO.Unsafe (unsafeDupablePerformIO)
 import Data.Foldable(foldl')
-
-import Foreign (newForeignPtr, withForeignPtr, ForeignPtr)
-import Foreign (Storable)
-import Foreign.C.Types (CChar)
-import Foreign.C (CStringLen)
+import System.IO.Unsafe(unsafeDupablePerformIO)
+import Foreign.Marshal(alloca)
+import Foreign(peek, Storable, newForeignPtr, withForeignPtr, ForeignPtr)
+import Foreign.C.Types(CChar)
+import Foreign.C(CStringLen)
 
 import Concordium.Crypto.FFIDataTypes
 import Concordium.Crypto.FFIHelpers

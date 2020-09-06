@@ -2,9 +2,7 @@
 extern crate failure;
 #[macro_use]
 extern crate serde_json;
-use crypto_common::*;
-
-use crypto_common::{base16_decode_string, base16_encode_string, c_char, types::Amount, Put};
+use crypto_common::{types::Amount, *};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either::{Left, Right};
@@ -39,9 +37,11 @@ struct TransferContext {
     pub expiry: u64,
     pub nonce:  u64,
     pub keys:   Map<String, Value>,
-    pub energy: u64, // FIXME: This was added, needs to be updated.
+    pub energy: u64,
 }
 
+/// Sign the given hash. This method will try to recover secret keys from the
+/// map and sign the given hash with each of the keys.
 fn make_signatures<H: AsRef<[u8]>>(
     keys: &Map<String, Value>,
     hash: &H,
