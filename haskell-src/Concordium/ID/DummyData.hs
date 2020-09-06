@@ -1,7 +1,5 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, TemplateHaskell #-}
 {-# OPTIONS_GHC -Wno-deprecations #-}
--- |
-
 module Concordium.ID.DummyData where
 
 import Concordium.Common.Version
@@ -58,9 +56,8 @@ dummyCreatedAt :: ID.YearMonth
 dummyCreatedAt = YearMonth 2020 3
 
 {-# WARNING readCredential "Do not use in production." #-}
-readCredential :: FilePath -> IO ID.CredentialDeploymentInformation
-readCredential fp = do
-  bs <- BSL.readFile fp
+readCredential :: BSL.ByteString -> ID.CredentialDeploymentInformation
+readCredential bs = 
   case AE.eitherDecode bs of
-    Left err -> fail $ "Cannot read credential from file " ++ fp ++ " because " ++ err
-    Right d -> if vVersion d == 0 then return (vValue d) else fail "Incorrect credential version."
+    Left err -> error $ "Cannot read credential because " ++ err
+    Right d -> if vVersion d == 0 then vValue d else error "Incorrect credential version."
