@@ -10,7 +10,7 @@ use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use either::Either;
-use elgamal::cipher::Cipher;
+use elgamal::Cipher;
 use failure::Fallible;
 use ff::Field;
 use pedersen_scheme::{
@@ -54,10 +54,10 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     // Commit and prove knowledge of id_cred_sec
     let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
-    let sc_ck = PedersenKey(
-        context.ip_info.ip_verify_key.ys[0],
-        context.ip_info.ip_verify_key.g,
-    );
+    let sc_ck = PedersenKey {
+        g: context.ip_info.ip_verify_key.ys[0],
+        h: context.ip_info.ip_verify_key.g,
+    };
 
     let (cmm_sc, cmm_sc_rand) = sc_ck.commit(&id_cred_sec, &mut csprng);
     let cmm_sc_rand = cmm_sc_rand;
@@ -93,10 +93,10 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     // Commit to the PRF key for the IP and prove equality for the secret-shared PRF
     // key
-    let commitment_key_prf = PedersenKey(
-        context.ip_info.ip_verify_key.ys[1],
-        context.ip_info.ip_verify_key.g,
-    );
+    let commitment_key_prf = PedersenKey {
+        g: context.ip_info.ip_verify_key.ys[1],
+        h: context.ip_info.ip_verify_key.g,
+    };
     let (cmm_prf, rand_cmm_prf) = commitment_key_prf.commit(prf_key, &mut csprng);
     let rand_cmm_prf = rand_cmm_prf;
     let snd_cmm_prf = cmm_prf_sharing_coeff.first()?;
@@ -950,7 +950,7 @@ mod tests {
             ip_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let aci = test_create_aci(&mut csprng);
-        let global_ctx = GlobalContext::generate(&mut csprng);
+        let global_ctx = GlobalContext::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
         let (context, pio, randomness) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);

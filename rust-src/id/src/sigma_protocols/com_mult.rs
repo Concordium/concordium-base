@@ -64,7 +64,10 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         let (v_2, cR_2) = self.cmm_key.commit(&alpha_2, csprng);
         let (v_3, cR_3) = self.cmm_key.commit(&alpha_3, csprng);
 
-        let cmm_key_1 = CommitmentKey(self.cmms[0].0, self.cmm_key.1);
+        let cmm_key_1 = CommitmentKey {
+            g: self.cmms[0].0,
+            h: self.cmm_key.h,
+        };
         let (v, cR) = cmm_key_1.commit(&alpha_2, csprng);
         Some((
             ([v_1, v_2, v_3], v),
@@ -119,7 +122,7 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         let mut points = [Commitment(C::zero_point()); 3];
         for (i, (s_i, t_i)) in izip!(witness.ss.iter(), witness.ts.iter()).enumerate() {
             points[i] = {
-                let bases = [self.cmms[i].0, self.cmm_key.0, self.cmm_key.1];
+                let bases = [self.cmms[i].0, self.cmm_key.g, self.cmm_key.h];
                 let powers = [*challenge, *s_i, *t_i];
                 let cmm = multiexp(&bases, &powers);
                 Commitment(cmm)
@@ -129,7 +132,7 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
               //         .plus_point(&self.cmm_key.hide_worker(s_i, t_i)),
               // );
         }
-        let h = &self.cmm_key.1;
+        let h = &self.cmm_key.h;
         let s_2 = &witness.ss[1];
         let cC_3 = self.cmms[2];
         let cC_1 = self.cmms[0];

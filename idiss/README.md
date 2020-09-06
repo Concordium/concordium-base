@@ -15,9 +15,15 @@ In order to build you need the following
 # Building
   In order to build you should first build the `wasm` libraries via cargo as
   ```
-  cargo build --release --target=wasm32-unknown-unknown
+  cargo build --release
   ```
-  
+
+  The default target is set to `wasm32-unknown-unknown` in
+  [./cargo/config](./cargo/config), the full invocation otherwise would be
+   ```
+   cargo build --target=wasm32-unknown-unknown
+   ```
+
   After that you should run the `wasm-pack` tool to prepare the generated code
   for inclusion into your project. Here we assume that the code is going to be
   used from `nodejs`, in which case you should run
@@ -43,3 +49,10 @@ In order to build you need the following
 # Typescript
   Running the `wasm-pack` tool also generates a file `idiss.d.ts` which contains
   the typescript types of the exposed functions.
+
+# Changes
+
+The changes from the previous version are in the way identity providers and
+anonymity revokers are handled. Concretely this means that `validate_request`
+requires an additional argument with a list of anonymity revokers supported by
+the chain, and the identity provider.

@@ -1,5 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia, OverloadedStrings, LambdaCase, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia, OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 module Concordium.Crypto.SignatureScheme where
 import Data.Word

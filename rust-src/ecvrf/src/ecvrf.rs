@@ -1,21 +1,13 @@
 //! ed25519 VRF
 
-use rand::{thread_rng, CryptoRng, Rng};
-
-use std::{slice, sync::Arc};
-
-use crypto_common::size_t;
-use ffi_helpers::*;
-use std::cmp::Ordering;
-use subtle::ConstantTimeEq;
-
-pub use sha2::Sha512;
-
-pub use curve25519_dalek::digest::Digest;
-
 pub use crate::{errors::*, proof::*, public::*, secret::*};
-
-use crypto_common::*;
+use crypto_common::{size_t, *};
+pub use curve25519_dalek::digest::Digest;
+use ffi_helpers::*;
+use rand::{thread_rng, CryptoRng, Rng};
+pub use sha2::Sha512;
+use std::{cmp::Ordering, sync::Arc};
+use subtle::ConstantTimeEq;
 
 /// An ed25519 keypair.
 #[derive(Debug, Serialize)]

@@ -1,7 +1,7 @@
 use aggregate_sig as agg;
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::{base16_encode_string, *};
+use crypto_common::{base16_encode_string, types::Amount, *};
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ecvrf as vrf;
@@ -38,10 +38,10 @@ enum GenesisTool {
         num_finalizers: Option<usize>,
         #[structopt(
             long = "balance",
-            help = "Balance on each of the baker accounts.",
-            default_value = "35000000000"
+            help = "Balance on each of the baker accounts, in GTU.",
+            default_value = "3500000"
         )]
-        balance: u64,
+        balance: Amount,
         #[structopt(flatten)]
         common: CommonOptions,
     },
@@ -58,10 +58,10 @@ enum GenesisTool {
         template: String,
         #[structopt(
             long = "balance",
-            help = "Initial balance on each of the accounts.",
-            default_value = "1000000000000"
+            help = "Initial balance on each of the accounts, in GTU.",
+            default_value = "1000000"
         )]
-        balance: u64,
+        balance: Amount,
         #[structopt(flatten)]
         common: CommonOptions,
     },
@@ -227,11 +227,13 @@ fn main() {
 
         let id_object_use_data = IdObjectUseData { aci, randomness };
 
+        let acc_num = 53;
+
         let cdi = create_credential(
             context,
             &id_object,
             &id_object_use_data,
-            53,
+            acc_num,
             policy,
             &acc_data,
         )
@@ -250,9 +252,23 @@ fn main() {
             threshold,
         };
 
+        // unwrap is safe here since we've generated the credential already, and that
+        // does the same computation.
+        let enc_key = id_object_use_data
+            .aci
+            .prf_key
+            .prf_exponent(acc_num)
+            .unwrap();
+        let secret_key = elgamal::SecretKey {
+            generator: *global_ctx.elgamal_generator(),
+            scalar:    enc_key,
+        };
+
         // output private account data
         let account_data_json = json!({
             "address": address,
+            "encryptionSecretKey": secret_key,
+            "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
             "accountData": acc_data,
             "credential": versioned_cdi,
             "aci": id_object_use_data.aci,
