@@ -1,6 +1,6 @@
 use crate::{secret_sharing::*, types::*};
 use curve_arithmetic::*;
-use elgamal::message::Message;
+use elgamal::Message;
 
 pub fn reveal_id_cred_pub<C: Curve>(shares: &[(ArIdentity, Message<C>)]) -> C {
     reveal_in_group(

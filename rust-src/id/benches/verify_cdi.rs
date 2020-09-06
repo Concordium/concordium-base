@@ -2,7 +2,7 @@ use crypto_common::*;
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
-use elgamal::{public::PublicKey, secret::SecretKey};
+use elgamal::{PublicKey, SecretKey};
 use id::{
     account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*,
     secret_sharing::Threshold, types::*,
@@ -37,7 +37,7 @@ fn bench_parts(c: &mut Criterion) {
         id_cred: IdCredentials::generate(&mut csprng),
     };
 
-    let global_context = GlobalContext::generate(&mut csprng);
+    let global_context = GlobalContext::generate();
     let ar_base = global_context.generator;
 
     let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);

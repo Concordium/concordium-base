@@ -1,4 +1,5 @@
 .stack-work/
+.idea
 Concordium.cabal
 *~
 *.swp
@@ -32,3 +33,4 @@ pkg
 idiss/target
 *.hie
 *.iml
+lib/

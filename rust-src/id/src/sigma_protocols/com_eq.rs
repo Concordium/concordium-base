@@ -26,8 +26,8 @@ pub struct Witness<T: Curve> {
 
 #[derive(Debug, Serialize)]
 pub struct CommittedPoints<C: Curve, D: Curve> {
-    pub(crate) u: C,
-    pub(crate) v: Commitment<D>,
+    pub u: C,
+    pub v: Commitment<D>,
 }
 
 pub struct ComEq<C: Curve, D: Curve<Scalar = C::Scalar>> {

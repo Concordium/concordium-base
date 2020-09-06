@@ -1,6 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, ForeignFunctionInterface,
-             DerivingVia, RecordWildCards, OverloadedStrings, DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingVia, OverloadedStrings, DeriveDataTypeable, DeriveGeneric #-}
 -- | This module is a prototype implementantion of  verifiable random function.
 -- draft-irtf-cfrg-vrf-07
 
