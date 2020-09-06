@@ -1,4 +1,3 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.FFIDataTypes
   (
     -- * Pedersen commitment keys.
