@@ -160,9 +160,9 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         .iter()
         .map(|&x| {
             pk_receiver.encrypt_exponent_rand_given_generator(
-                csprng,
-                &Value::<C>::from_u64(x),
+                &Value::<C>::from(x),
                 generator,
+                csprng,
             )
         })
         .collect::<Vec<_>>();
@@ -170,11 +170,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     let S_prime_enc_randomness = s_prime_chunks
         .iter()
         .map(|&x| {
-            pk_sender.encrypt_exponent_rand_given_generator(
-                csprng,
-                &Value::<C>::from_u64(x),
-                generator,
-            )
+            pk_sender.encrypt_exponent_rand_given_generator(&Value::<C>::from(x), generator, csprng)
         })
         .collect::<Vec<_>>();
 
@@ -316,9 +312,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
     let s_prime_chunks = CHUNK_SIZE.u64_to_chunks(s_prime);
     let S_prime_enc_randomness = s_prime_chunks
         .iter()
-        .map(|&x| {
-            pk.encrypt_exponent_rand_given_generator(csprng, &Value::<C>::from_u64(x), generator)
-        })
+        .map(|&x| pk.encrypt_exponent_rand_given_generator(&Value::<C>::from(x), generator, csprng))
         .collect::<Vec<_>>();
     let A_dummy_encryption = {
         let ha = generator.mul_by_scalar(&C::scalar_from_u64(u64::from(a)));
@@ -336,7 +330,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         .map(PedersenRandomness::from_u64)
         .collect();
     let a_chunks_as_rand = vec![PedersenRandomness::from_u64(u64::from(a))];
-    let A_rand_as_value = vec![Value::from_u64(0)];
+    let A_rand_as_value = vec![Value::from(0u64)];
     let secret = EncTransSecret {
         dlog_secret: Rc::new(sk.scalar),
         r_a:         a_chunks_as_rand,
@@ -589,7 +583,7 @@ mod test {
         let pk_sender = PublicKey::from(&sk_sender);
         let sk_receiver: SecretKey<G1> = SecretKey::generate(&pk_sender.generator, &mut csprng);
         let pk_receiver = PublicKey::from(&sk_receiver);
-        let s = csprng.gen(); // amount on account.
+        let s = csprng.gen::<u64>(); // amount on account.
 
         let a = csprng.gen_range(0, s); // amount to send
 
@@ -599,8 +593,8 @@ mod test {
 
         let context = GlobalContext::<SomeCurve>::generate_size(nm);
         let generator = context.encryption_in_exponent_generator(); // h
-        let s_value = Value::from_u64(s);
-        let S = pk_sender.encrypt_exponent_given_generator(&mut csprng, &s_value, generator);
+        let s_value = Value::from(s);
+        let S = pk_sender.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
 
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
         let ro = RandomOracle::domain(&challenge_prefix);
@@ -647,7 +641,7 @@ mod test {
         let mut csprng = thread_rng();
         let sk: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
         let pk = PublicKey::from(&sk);
-        let s = csprng.gen(); // amount on account.
+        let s = csprng.gen::<u64>(); // amount on account.
 
         let a = csprng.gen_range(0, s); // amount to send
 
@@ -657,8 +651,8 @@ mod test {
 
         let context = GlobalContext::<SomeCurve>::generate_size(nm);
         let generator = context.encryption_in_exponent_generator(); // h
-        let s_value = Value::from_u64(s);
-        let S = pk.encrypt_exponent_given_generator(&mut csprng, &s_value, generator);
+        let s_value = Value::from(s);
+        let S = pk.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
 
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
         let ro = RandomOracle::domain(&challenge_prefix);

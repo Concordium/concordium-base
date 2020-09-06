@@ -1,5 +1,4 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE LambdaCase #-}
 module Concordium.ID.IdentityProvider
   (IpInfo, ipInfoToJSON, jsonToIpInfo, withIpInfo, ipIdentity)
   where

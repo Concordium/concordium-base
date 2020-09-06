@@ -69,7 +69,7 @@ impl<C: Curve> PublicKey<C> {
     ) -> (Cipher<C>, Randomness<C>)
     where
         T: Rng, {
-        self.encrypt_exponent_rand_given_generator(csprng, e, &self.generator)
+        self.encrypt_exponent_rand_given_generator(e, &self.generator, csprng)
     }
 
     /// Encrypt the value "in the exponent", using the supplied generator as the
@@ -78,9 +78,9 @@ impl<C: Curve> PublicKey<C> {
     /// Takes a generator h as an argument and encrypts h^e.
     pub fn encrypt_exponent_rand_given_generator<T>(
         &self,
-        csprng: &mut T,
         e: &Value<C>,
         h: &C,
+        csprng: &mut T,
     ) -> (Cipher<C>, Randomness<C>)
     where
         T: Rng, {
@@ -102,26 +102,26 @@ impl<C: Curve> PublicKey<C> {
     /// randomness.
     pub fn encrypt_exponent_given_generator<T>(
         &self,
-        csprng: &mut T,
         e: &Value<C>,
         h: &C,
+        csprng: &mut T,
     ) -> Cipher<C>
     where
         T: Rng, {
-        self.encrypt_exponent_rand_given_generator(csprng, e, h).0
+        self.encrypt_exponent_rand_given_generator(e, h, csprng).0
     }
 
     /// Variant of `encrypt_exponent_vec_given_generator` using generator of the
     /// public key as the base.
     pub fn encrypt_exponent_vec<'a, T, I>(
         &self,
-        csprng: &mut T,
         es: I,
+        csprng: &mut T,
     ) -> Vec<(Cipher<C>, Randomness<C>)>
     where
         T: Rng,
         I: IntoIterator<Item = &'a Value<C>>, {
-        self.encrypt_exponent_vec_given_generator(csprng, es, &self.generator)
+        self.encrypt_exponent_vec_given_generator(es, &self.generator, csprng)
     }
 
     /// Encrypt a sequence of values in the exponent, and return the list of
@@ -131,15 +131,15 @@ impl<C: Curve> PublicKey<C> {
     /// given.
     pub fn encrypt_exponent_vec_given_generator<'a, T, I>(
         &self,
-        csprng: &mut T,
         es: I,
         h: &C,
+        csprng: &mut T,
     ) -> Vec<(Cipher<C>, Randomness<C>)>
     where
         T: Rng,
         I: IntoIterator<Item = &'a Value<C>>, {
         let f = move |x: &'a Value<C>| -> (Cipher<C>, Randomness<C>) {
-            self.encrypt_exponent_rand_given_generator(csprng, x, h)
+            self.encrypt_exponent_rand_given_generator(x, h, csprng)
         };
         es.into_iter().map(f).collect()
     }

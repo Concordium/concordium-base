@@ -68,13 +68,18 @@ amountParser = decimalAmount RP.<++ noDecimalAmount
         else RP.pfail
       else RP.pfail
 
--- |Reads a number by reading digits, returning (#digits,number)
+-- | Reads a number in decimal by reading digits until a terminal lexeme is
+-- encountered, returning (#digits,number)
+-- 
+-- The boolean argument signals how the sequence should be terminated.
+-- If 'True' the sequence should be terminated by 'RP.eof', otherwise
+-- by a dot @.@.
 readNumber :: Bool -> RP.ReadP (Int, Integer)
 readNumber eof = do
     digits <- RP.manyTill readDigit terminal
     return $ (length digits, (foldl (\acc v -> (acc*10+v)) 0 digits))
   where terminal = if eof then RP.eof
-                   else (RP.char '.' >> return ())
+                   else () <$ RP.char '.'
         readDigit = do
           c <- RP.get
           if isDigit c then return $ toInteger (digitToInt c)

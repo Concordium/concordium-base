@@ -70,14 +70,17 @@ impl<C: Curve> AsRef<C::Scalar> for Value<C> {
     fn as_ref(&self) -> &C::Scalar { &self.value }
 }
 
+/// Any 64-bit value can be converted (by-value) to a scalar.
+impl<C: Curve> From<u64> for Value<C> {
+    fn from(secret: u64) -> Self { Self::new(C::scalar_from_u64(secret)) }
+}
+
 impl<C: Curve> Value<C> {
     pub fn new(secret: C::Scalar) -> Self {
         Self {
             value: Rc::new(Secret::new(secret)),
         }
     }
-
-    pub fn from_u64(secret: u64) -> Self { Value::new(C::scalar_from_u64(secret)) }
 
     /// Generate a single `Value` from a `csprng`.
     pub fn generate<T: Rng>(csprng: &mut T) -> Value<C> { Value::new(C::generate_scalar(csprng)) }

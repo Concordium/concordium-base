@@ -143,7 +143,7 @@ pub fn encrypt_in_chunks_given_generator<C: Curve, R: Rng>(
     csprng: &mut R,
 ) -> Vec<(Cipher<C>, Randomness<C>)> {
     let chunks = value_to_chunks::<C>(val, chunk_size);
-    pk.encrypt_exponent_vec_given_generator(csprng, &chunks, generator)
+    pk.encrypt_exponent_vec_given_generator(&chunks, generator, csprng)
 }
 
 /// Encrypt a single `u64` value in chunks in the exponent of the given
@@ -158,9 +158,9 @@ pub fn encrypt_u64_in_chunks_given_generator<C: Curve, R: Rng>(
     let chunks = chunk_size
         .u64_to_chunks(val)
         .into_iter()
-        .map(Value::from_u64)
+        .map(Value::from)
         .collect::<Vec<_>>();
-    pk.encrypt_exponent_vec_given_generator(csprng, &chunks, generator)
+    pk.encrypt_exponent_vec_given_generator(&chunks, generator, csprng)
 }
 
 /// Wrapper around `decrypt_from_chunks_given_generator` that uses the generator
@@ -193,7 +193,7 @@ pub fn decrypt_from_chunks_given_table<C: Curve>(
 ) -> Value<C> {
     let scalars = ciphers
         .iter()
-        .map(|cipher| Value::from_u64(sk.decrypt_exponent(cipher, table)))
+        .map(|cipher| Value::from(sk.decrypt_exponent(cipher, table)))
         .collect::<Vec<_>>();
     chunks_to_value::<C>(&scalars, chunk_size)
 }
