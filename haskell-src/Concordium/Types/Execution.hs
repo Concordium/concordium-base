@@ -36,6 +36,7 @@ import Concordium.Types.Execution.TH
 import Concordium.ID.Types
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs
+import Concordium.Crypto.EncryptedTransfers
 
 -- |We assume that the list is non-empty and at most 255 elements long.
 newtype AccountOwnershipProof = AccountOwnershipProof [(KeyIndex, Dlog25519Proof)]
@@ -79,7 +80,7 @@ data Payload =
       icModRef :: !ModuleRef,
       -- |Name of the init function to call in that module.
       icInitName :: !Wasm.InitName,
-      -- |Parameter to the init method, 
+      -- |Parameter to the init method,
       icParam :: !Wasm.Parameter
       }
   -- |Update an existing contract instance.
@@ -175,7 +176,7 @@ data Payload =
       -- |The new election difficulty. Must be in the range [0,1).
       uedDifficulty :: !ElectionDifficulty
       }
-  -- |Update the aggregation verification key of the baker
+  -- | Update the aggregation verification key of the baker
   | UpdateBakerAggregationVerifyKey {
       -- |Id of the baker to update
       ubavkId :: !BakerId,
@@ -184,6 +185,7 @@ data Payload =
       -- |Proof of knowledge of the signing key corresponding to the new verification key
       ubavkProof :: !BakerAggregationProof
       }
+  -- | Update the election key of the baker
   | UpdateBakerElectionKey {
       -- |Id of the baker to update
       ubekId :: !BakerId,
@@ -192,25 +194,40 @@ data Payload =
       -- |Proof of knowledge of the secret key corresponding to the new election key
       ubekProof :: !Dlog25519Proof
       }
-  -- Updates existing keys used for signing transactions for the sender's account
+  -- | Updates existing keys used for signing transactions for the sender's account
   | UpdateAccountKeys {
       -- |Update the account keys with to the ones in this map.
       uakKeys :: !(Map.Map KeyIndex AccountVerificationKey)
     }
-  -- Adds additional keys to the sender's account, optionally updating the signature threshold too
+  -- | Adds additional keys to the sender's account, optionally updating the signature threshold too
   | AddAccountKeys {
       -- |Map of key indices and the associated key to add
       aakKeys :: !(Map.Map KeyIndex AccountVerificationKey),
       -- |Optional value for updating the threshold of the signature scheme
       aakThreshold :: !(Maybe SignatureThreshold)
     }
-  -- Remove keys from the sender's account, optionally updating the signature threshold too
+  -- | Remove keys from the sender's account, optionally updating the signature threshold too
   | RemoveAccountKeys {
       -- |List of indices of keys to remove
       rakIndices :: !(Set.Set KeyIndex),
       -- |Optional value for updating the threshold of the signature scheme
       rakThreshold :: !(Maybe SignatureThreshold)
     }
+  -- | Send an encrypted amount to an account.
+  | EncryptedAmountTransfer {
+      -- | Receiver account address.
+      eatTo :: !AccountAddress,
+      eatData :: !EncryptedAmountTransferData
+  }
+  -- | Transfer some amount from public to encrypted balance.
+  | TransferToEncrypted {
+      -- | The plaintext that will be deducted from the public balance.
+      tteAmount :: !Amount
+      }
+  -- | Decrypt a portion of the encrypted balance.
+  | TransferToPublic {
+      ttpData :: !SecToPubAmountTransferData
+      }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -220,27 +237,27 @@ instance S.Serialize TransactionType
 -- |Payload serialization according to
 --
 --  * @SPEC: <$DOCS/Transactions#transaction-body>
-instance S.Serialize Payload where
-  put DeployModule{..} =
+putPayload :: Payload -> P.Put
+putPayload DeployModule{..} =
     P.putWord8 0 <>
     S.put dmMod
-  put InitContract{..} =
+putPayload InitContract{..} =
       P.putWord8 1 <>
       S.put icAmount <>
       S.put icModRef <>
       S.put icInitName <>
       S.put icParam
-  put Update{..} =
+putPayload Update{..} =
     P.putWord8 2 <>
     S.put uAmount <>
     S.put uAddress <>
     S.put uReceiveName <>
     S.put uMessage
-  put Transfer{..} =
+putPayload Transfer{..} =
     P.putWord8 3 <>
     S.put tToAddress <>
     S.put tAmount
-  put AddBaker{..} =
+putPayload AddBaker{..} =
     P.putWord8 4 <>
     S.put abElectionVerifyKey <>
     S.put abSignatureVerifyKey <>
@@ -250,55 +267,74 @@ instance S.Serialize Payload where
     S.put abProofElection <>
     S.put abProofAccount <>
     S.put abProofAggregation
-  put RemoveBaker{..} =
+putPayload RemoveBaker{..} =
     P.putWord8 5 <>
     S.put rbId
-  put UpdateBakerAccount{..} =
+putPayload UpdateBakerAccount{..} =
     P.putWord8 6 <>
     S.put ubaId <>
     S.put ubaAddress <>
     S.put ubaProof
-  put UpdateBakerSignKey{..} =
+putPayload UpdateBakerSignKey{..} =
     P.putWord8 7 <>
     S.put ubsId <>
     S.put ubsKey <>
     S.put ubsProof
-  put DelegateStake{..} =
+putPayload DelegateStake{..} =
     P.putWord8 8 <>
     S.put dsID
-  put UndelegateStake =
+putPayload UndelegateStake =
     P.putWord8 9
-  put UpdateElectionDifficulty{..} =
+putPayload UpdateElectionDifficulty{..} =
     P.putWord8 10 <>
     S.put uedDifficulty
-  put UpdateBakerAggregationVerifyKey{..} =
+putPayload UpdateBakerAggregationVerifyKey{..} =
     P.putWord8 11 <>
     S.put ubavkId <>
     S.put ubavkKey <>
     S.put ubavkProof
-  put UpdateBakerElectionKey{..} =
+putPayload UpdateBakerElectionKey{..} =
     P.putWord8 12 <>
     S.put ubekId <>
     S.put ubekKey <>
     S.put ubekProof
-  put UpdateAccountKeys{..} = do
+putPayload UpdateAccountKeys{..} = do
     P.putWord8 13
     P.putWord8 (fromIntegral (length uakKeys))
     forM_ (Map.toAscList uakKeys) $ \(idx, key) -> S.put idx <> S.put key
-  put AddAccountKeys{..} = do
+putPayload AddAccountKeys{..} = do
     P.putWord8 14
     P.putWord8 (fromIntegral (length aakKeys))
     forM_ (Map.toAscList aakKeys) $ \(idx, key) -> S.put idx <> S.put key
     putMaybe aakThreshold
-  put RemoveAccountKeys{..} = do
+putPayload RemoveAccountKeys{..} = do
     P.putWord8 15
     P.putWord8 (fromIntegral (length rakIndices))
     forM_ (Set.toAscList rakIndices) S.put
     putMaybe rakThreshold
+putPayload EncryptedAmountTransfer{eatData = EncryptedAmountTransferData{..}, ..} =
+    S.putWord8 16 <>
+    S.put eatTo <>
+    S.put eatdRemainingAmount <>
+    S.put eatdTransferAmount <>
+    S.put eatdIndex <>
+    putEncryptedAmountTransferProof eatdProof
+putPayload TransferToEncrypted{..} =
+    S.putWord8 17 <>
+    S.put tteAmount
+putPayload TransferToPublic{ttpData = SecToPubAmountTransferData{..}, ..} =
+    S.putWord8 18 <>
+    S.put stpatdRemainingAmount <>
+    S.put stpatdTransferAmount <>
+    S.put stpatdIndex <>
+    putSecToPubAmountTransferProof stpatdProof
 
-  get =
-    G.getWord8 >>=
-      \case 0 -> do
+-- |Get the payload of the given size.
+getPayload :: PayloadSize -> S.Get Payload
+getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
+  -- isolate is required to consume all the bytes it is meant to.
+  where go start = G.getWord8 >>= \case
+            0 -> do
               dmMod <- S.get
               return DeployModule{..}
             1 -> do
@@ -371,7 +407,28 @@ instance S.Serialize Payload where
               rakIndices <- safeSetFromAscList =<< replicateM (fromIntegral len) S.get
               rakThreshold <- getMaybe
               return RemoveAccountKeys{..}
-
+            16 -> do
+              eatTo <- S.get
+              eatdRemainingAmount <- S.get
+              eatdTransferAmount <- S.get
+              eatdIndex <- S.get
+              cur <- S.bytesRead
+              -- in the subtraction below overflow cannot happen because of guarantees and invariants of isolate
+              -- and bytesRead
+              eatdProof <- getEncryptedAmountTransferProof (thePayloadSize size - (fromIntegral $ cur - start))
+              return EncryptedAmountTransfer{eatData = EncryptedAmountTransferData{..}, ..}
+            17 -> do
+              tteAmount <- S.get
+              return TransferToEncrypted{..}
+            18 -> do
+              stpatdRemainingAmount <- S.get
+              stpatdTransferAmount <- S.get
+              stpatdIndex <- S.get
+              cur <- S.bytesRead
+              -- in the subtraction below overflow cannot happen because of guarantees and invariants of isolate
+              -- and bytesRead
+              stpatdProof <- getSecToPubAmountTransferProof (thePayloadSize size - (fromIntegral $ cur - start))
+              return TransferToPublic{ttpData = SecToPubAmountTransferData{..}}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 -- |Serialize a Maybe value
@@ -406,20 +463,11 @@ safeSetFromAscList = go Set.empty Nothing
 
 {-# INLINE encodePayload #-}
 encodePayload :: Payload -> EncodedPayload
-encodePayload = EncodedPayload . BSS.toShort . S.encode
-
--- |Like 'S.decode', but make sure to consume all the input
-decodeAll :: S.Serialize a => BS.ByteString -> Either String a
-decodeAll bs =  S.runGet getter bs
-  where getter = do
-          r <- S.get
-          br <- S.bytesRead
-          unless (br == BS.length bs) $ fail "Payload size incorrect."  -- make sure to use up all the data
-          return r
+encodePayload = EncodedPayload . BSS.toShort . S.runPut . putPayload
 
 #ifdef DISABLE_SMART_CONTRACTS
 $(reportWarning "Disabling smart contract related transactions." >> return [])
-decodePayload (EncodedPayload s) =
+decodePayload size (EncodedPayload s) =
   let bs = BSS.fromShort s
   in case BS.uncons bs of
        Nothing -> Left "Empty string not a valid payload."
@@ -428,12 +476,12 @@ decodePayload (EncodedPayload s) =
             ttype == 1 ||
             ttype == 2 then
            Left "Unsupported transaction type."
-         else decodeAll bs
+         else S.runGet (getPayload size) bs
 #else
 $(reportWarning "All transaction types allowed." >> return [])
-decodePayload (EncodedPayload s) = decodeAll . BSS.fromShort $ s
+decodePayload size (EncodedPayload s) = S.runGet (getPayload size) . BSS.fromShort $ s
 #endif
-decodePayload :: EncodedPayload -> Either String Payload
+decodePayload :: PayloadSize -> EncodedPayload -> Either String Payload
 {-# INLINE decodePayload #-}
 
 {-# INLINE payloadBodyBytes #-}
@@ -559,6 +607,45 @@ data Event =
            | AccountKeysAdded
            | AccountKeysRemoved
            | AccountKeysSignThresholdUpdated
+           -- | New encrypted amount added to an account, with a given index.
+           --
+           -- This is used on the receiver's account when they get an encrypted amount transfer.
+           | NewEncryptedAmount{
+               neaAccount :: !AccountAddress,
+               -- | Index of the new amount.
+               neaNewIndex :: !EncryptedAmountIndex,
+               -- | The actual amount.
+               neaEncryptedAmount :: !EncryptedAmount
+           }
+           -- | A number of encrypted amounts were removed from an account, up-to, but not including
+           -- the aggregation index. And a new encrypted amount has appeared that is the difference
+           -- between what was sent, and what was used. This is the new self-amount after the transfer.
+           --
+           -- This is used on the sender's account when making an encrypted
+           -- transfer, or transfer from the encrypted balance to public
+           -- balance.
+           | EncryptedAmountsRemoved{
+               earAccount :: !AccountAddress,
+               -- |The newly added amount.
+               earNewAmount :: !EncryptedAmount,
+               -- |Index up to (but not including) which the amounts were removed.
+               earUpToIndex :: !EncryptedAmountAggIndex
+            }
+           -- | An encrypted amount was decrypted and added to the public balance of an account.
+           -- This is used on an account when it makes a transfer to public transaction.
+           | AmountAddedByDecryption {
+               aabdAccount :: !AccountAddress,
+               -- | The amount that was added to the public balance.
+               aabdAmount :: !Amount
+            }
+           -- | A new encrypted amount was added to the self-encrypted-balance of the account.
+           -- The amount given is the newly added one.
+           | EncryptedSelfAmountAdded{
+               eaaAccount :: !AccountAddress,
+               eaaNewAmount :: !EncryptedAmount,
+                -- | The amount that was subtracted from the public balance.
+               eaaAmount :: !Amount
+               }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -630,6 +717,12 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | KeyIndexAlreadyInUse
                   -- |When the account key threshold is updated, it must not exceed the amount of existing keys
                   | InvalidAccountKeySignThreshold
+                  -- |Proof for an encrypted amount transfer did not validate.
+                  | InvalidEncryptedAmountTransferProof
+                  -- |Proof for a secret to public transfer did not validate.
+                  | InvalidTransferToPublicProof
+                  -- |Account tried to transfer an encrypted amount to itself, that's not allowed.
+                  | EncryptedAmountSelfTransfer !AccountAddress
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReason :: Wasm.ContractExecutionFailure -> RejectReason

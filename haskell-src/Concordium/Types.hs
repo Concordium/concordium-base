@@ -9,14 +9,17 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# OPTIONS_GHC -Wall #-}
-module Concordium.Types (module Concordium.Types, AccountAddress(..), SchemeId, AccountVerificationKey) where
+module Concordium.Types (module Concordium.Types,
+                         AccountAddress(..),
+                         SchemeId, AccountVerificationKey,
+                         module Concordium.Common.Amount) where
 
 import GHC.Generics
 import Data.Data (Typeable, Data)
 
-import qualified Text.ParserCombinators.ReadP as RP
-
+import Concordium.Common.Amount
 import qualified Concordium.Crypto.BlockSignature as Sig
+import Concordium.Crypto.EncryptedTransfers
 import qualified Concordium.Crypto.SHA256 as Hash
 import qualified Concordium.Crypto.VRF as VRF
 import qualified Concordium.Crypto.BlsSignature as Bls
@@ -25,21 +28,19 @@ import Concordium.Crypto.SignatureScheme (SchemeId)
 import Concordium.Types.HashableTo
 
 import Control.Exception (assert)
+import Control.Monad
 
 import Data.Hashable (Hashable)
 import Data.Word
+import qualified Data.Sequence as Seq
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Short as BSS
-import qualified Data.ByteString.Lazy.Char8 as BSL
-import Data.ByteString.Builder (toLazyByteString, byteStringHex)
 import Data.Bits
 import Data.Ratio
-import Data.Char (digitToInt,isDigit)
 
 import Data.Aeson as AE
 import Data.Aeson.TH
 
-import Data.Text (pack)
 import Data.Time
 import Data.Time.Clock.POSIX
 
@@ -243,74 +244,6 @@ isTimestampBefore ts ym =
         expiryDay = fromGregorian expiryYear expiryMonth 1 -- unchecked, always valid
 
 
--- |Type representing the amount unit which is defined as the smallest
--- meaningful amount of GTU. This unit is 10^-6 GTU and denoted microGTU.
-type AmountUnit = Word64
-newtype Amount = Amount { _amount :: AmountUnit }
-    deriving (Show, Read, Eq, Ord, Enum, Bounded, Num, Integral, Real, Hashable) via AmountUnit
-
-instance S.Serialize Amount where
-  {-# INLINE get #-}
-  get = Amount <$> G.getWord64be
-  {-# INLINE put #-}
-  put (Amount v) = P.putWord64be v
-
-instance FromJSON Amount where
-  parseJSON = fmap Amount . withEmbeddedJSON "Amount" parseJSON
-
-instance ToJSON Amount where
-  toJSON = AE.String . pack . show . _amount
-
--- |Converts an amount to GTU decimal representation.
-amountToString :: Amount -> String
-amountToString (Amount amount) =
-  let
-    high = show $ amount `div` 1000000
-    low = show $ amount `mod` 1000000
-    pad = replicate (6 - length low) '0'
-  in
-    high ++ "." ++ pad ++ low
-
--- |Parse an amount from GTU decimal representation.
-amountFromString :: String -> Maybe Amount
-amountFromString s =
-    if length s == 0 || length parsed /= 1
-    then Nothing
-    else Just $ Amount (fst (head parsed))
-  where parsed = RP.readP_to_S amountParser s
-
--- |Parse a Word64 as a decimal number with scale 10^6
--- i.e. between 0 and 18446744073709.551615
-amountParser :: RP.ReadP Word64
-amountParser = decimalAmount RP.<++ noDecimalAmount
-  where
-    fitInWord64 v = v <= (toInteger (maxBound :: Word64))
-    noDecimalAmount = do
-      (_, num) <- readNumber True
-      let value = num * 1000000
-      if fitInWord64 value then return $ fromIntegral value
-      else RP.pfail
-    decimalAmount = do
-      (sLen, num) <- readNumber False
-      (mLen, mantissa) <- readNumber True
-      if sLen > 0 && mLen > 0 && mLen <= 6 then do
-        let value = num * 1000000 + (mantissa * 10 ^ (6-mLen))
-        if fitInWord64 value then return $ fromIntegral value
-        else RP.pfail
-      else RP.pfail
-
--- |Reads a number by reading digits, returning (#digits,number)
-readNumber :: Bool -> RP.ReadP (Int, Integer)
-readNumber eof = do
-    digits <- RP.manyTill readDigit terminal
-    return $ (length digits, (foldl (\acc v -> (acc*10+v)) 0 digits))
-  where terminal = if eof then RP.eof
-                   else (RP.char '.' >> return ())
-        readDigit = do
-          c <- RP.get
-          if isDigit c then return $ toInteger (digitToInt c)
-          else RP.pfail
-
 -- |Type representing a difference between amounts.
 newtype AmountDelta = AmountDelta { amountDelta :: Integer }
     deriving (Eq, Ord, Enum, Num, Integral, Real)
@@ -348,14 +281,85 @@ instance S.Serialize Nonce where
 minNonce :: Nonce
 minNonce = 1
 
-newtype EncryptedAmount = EncryptedAmount ByteString
-    deriving(Eq, S.Serialize)
+-- * Account encrypted amount.
 
-instance Show EncryptedAmount where
-  show (EncryptedAmount amnt) = BSL.unpack . toLazyByteString . byteStringHex $ amnt
+-- | Encrypted amounts stored on an account.
+data AccountEncryptedAmount = AccountEncryptedAmount {
+  -- | Encrypted amount that is a result of this accounts' actions.
+  -- In particular this list includes the aggregate of
+  --
+  -- - remaining amounts that result when transfering to public balance
+  -- - remaining amounts when transfering to another account
+  -- - encrypted amounts that are transfered from public balance
+  --
+  -- When a transfer is made all of these must always be used.
+  _selfAmount :: !EncryptedAmount,
+  -- | Starting index for incoming encrypted amounts.
+  _startIndex :: !EncryptedAmountAggIndex,
+  -- | Amounts starting at @startIndex@. They are assumed to be numbered sequentially.
+  -- This list will never contain more than 'maxNumIncoming' values.
+  _incomingEncryptedAmounts :: !(Seq.Seq EncryptedAmount),
+  -- |If 'Just', the number of incoming amounts that have been aggregated. In
+  -- that case the number is always >= 2.
+  _numAggregated :: !(Maybe Word32)
+} deriving(Eq, Show)
+
+instance AE.ToJSON AccountEncryptedAmount where
+  toJSON AccountEncryptedAmount{..} = AE.object $ [
+    "selfAmount" AE..= _selfAmount,
+    "startIndex" AE..= _startIndex,
+    "incomingAmounts" AE..= _incomingEncryptedAmounts
+    ] ++ aggregated
+    where aggregated = case _numAggregated of
+            Nothing -> []
+            Just n -> ["numAggregated" AE..= n]
+
+instance AE.FromJSON AccountEncryptedAmount where
+  parseJSON = AE.withObject "AccountEncryptedAmount" $ \obj -> do
+    _selfAmount <- obj AE..: "selfAmount"
+    _startIndex <- obj AE..: "startIndex"
+    _incomingEncryptedAmounts <- obj AE..: "incomingAmounts"
+    _numAggregated <- obj AE..:? "numAggregated"
+    case _numAggregated of
+      Nothing -> return ()
+      Just n -> unless (n >= 2) $ fail "numAggregated must be at least 2, if present."
+    return AccountEncryptedAmount{..}
+
+-- |Initial encrypted amount on a newly created account.
+initialAccountEncryptedAmount :: AccountEncryptedAmount
+initialAccountEncryptedAmount = AccountEncryptedAmount{
+  _selfAmount = mempty,
+  _startIndex = 0,
+  _incomingEncryptedAmounts = Seq.empty,
+  _numAggregated = Nothing
+}
+
+instance S.Serialize AccountEncryptedAmount where
+  put AccountEncryptedAmount{..} =
+    S.put _selfAmount <>
+    S.put _startIndex <>
+    S.putWord32be (fromIntegral (Seq.length _incomingEncryptedAmounts)) <>
+    mapM_ S.put _incomingEncryptedAmounts <>
+    case _numAggregated of
+      Nothing -> S.putWord32be 0
+      Just n -> S.putWord32be n
+
+  get = do
+    _selfAmount <- S.get
+    _startIndex <- S.get
+    len <- S.getWord32be
+    _incomingEncryptedAmounts <- Seq.fromList <$> replicateM (fromIntegral len) S.get
+    mNumAggregated <- S.getWord32be
+    case mNumAggregated of
+      0 -> return AccountEncryptedAmount{_numAggregated = Nothing,..}
+      n | n >= 2 -> return AccountEncryptedAmount{_numAggregated = Just n,..}
+      _ -> fail "numAggregated must be at least 2, if non-zero."
+
+makeLenses ''AccountEncryptedAmount
+
 
 -- |Size of the transaction payload.
-newtype PayloadSize = PayloadSize Word32
+newtype PayloadSize = PayloadSize {thePayloadSize :: Word32}
     deriving (Eq, Show, Ord, Num, Real, Enum, Integral, FromJSON, ToJSON) via Word32
 
 -- |Serialization format as specified
@@ -371,12 +375,12 @@ newtype EncodedPayload = EncodedPayload { _spayload :: BSS.ShortByteString }
 
 -- |There is no corresponding getter (to fit into the Serialize instance) since
 -- encoded payload does not encode its own length. See 'getPayload' below.
-putPayload :: P.Putter EncodedPayload
-putPayload = P.putShortByteString . _spayload
+putEncodedPayload :: P.Putter EncodedPayload
+putEncodedPayload = P.putShortByteString . _spayload
 
 -- |Get payload with given length.
-getPayload :: PayloadSize -> G.Get EncodedPayload
-getPayload (PayloadSize n) = EncodedPayload <$> G.getShortByteString (fromIntegral n)
+getEncodedPayload :: PayloadSize -> G.Get EncodedPayload
+getEncodedPayload (PayloadSize n) = EncodedPayload <$> G.getShortByteString (fromIntegral n)
 
 payloadSize :: EncodedPayload -> PayloadSize
 payloadSize = fromIntegral . BSS.length . _spayload
