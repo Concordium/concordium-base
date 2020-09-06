@@ -1,4 +1,3 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.FFIHelpers where
 
 import Foreign.ForeignPtr

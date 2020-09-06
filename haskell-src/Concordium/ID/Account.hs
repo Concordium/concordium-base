@@ -1,6 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.ID.Account(CredentialDeploymentInformationBytes, verifyCredential) where
 
 import GHC.Word
