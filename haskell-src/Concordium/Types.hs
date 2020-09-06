@@ -297,10 +297,7 @@ data AccountEncryptedAmount = AccountEncryptedAmount {
   -- | Starting index for incoming encrypted amounts.
   _startIndex :: !EncryptedAmountAggIndex,
   -- | Amounts starting at @startIndex@. They are assumed to be numbered sequentially.
-  -- FIXME: Limit the number of amounts that can be in this list.
-  -- If a new amount is added that exceeds the limit, the first two amounts should be aggregated
-  -- into one, and start-index increased.
-  -- The limit should be a genesis parameter.
+  -- This list will never contain more than 'maxNumIncoming' values.
   _incomingEncryptedAmounts :: !(Seq.Seq EncryptedAmount),
   -- |If 'Just', the number of incoming amounts that have been aggregated. In
   -- that case the number is always >= 2.
