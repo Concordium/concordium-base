@@ -32,7 +32,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     let pk_sender = PublicKey::from(&sk_sender);
     let sk_receiver: SecretKey<G1> = SecretKey::generate(&pk_sender.generator, &mut csprng);
     let pk_receiver = PublicKey::from(&sk_receiver);
-    let s = csprng.gen(); // amount on account.
+    let s = csprng.gen::<u64>(); // amount on account.
 
     let a = csprng.gen_range(0, s); // amount to send
 
@@ -42,8 +42,8 @@ pub fn enc_trans_bench(c: &mut Criterion) {
 
     let context = GlobalContext::<SomeCurve>::generate_size(nm);
     let generator = context.encryption_in_exponent_generator(); // h
-    let s_value = Value::from_u64(s);
-    let S = pk_sender.encrypt_exponent_given_generator(&mut csprng, &s_value, generator);
+    let s_value = Value::from(s);
+    let S = pk_sender.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
 
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
     let ro = RandomOracle::domain(&challenge_prefix);
@@ -118,7 +118,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     let mut csprng = thread_rng();
     let sk: SecretKey<G1> = SecretKey::generate_all(&mut csprng);
     let pk = PublicKey::from(&sk);
-    let s = csprng.gen(); // amount on account.
+    let s = csprng.gen::<u64>(); // amount on account.
 
     let a = csprng.gen_range(0, s); // amount to send
 
@@ -128,8 +128,8 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
 
     let context = GlobalContext::<SomeCurve>::generate_size(nm);
     let generator = context.encryption_in_exponent_generator(); // h
-    let s_value = Value::from_u64(s);
-    let S = pk.encrypt_exponent_given_generator(&mut csprng, &s_value, generator);
+    let s_value = Value::from(s);
+    let S = pk.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
 
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
     let ro = RandomOracle::domain(&challenge_prefix);

@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 module Concordium.ID.Parameters
   (GlobalContext, globalContextToJSON, jsonToGlobalContext, withGlobalContext, globalContext)
   where

@@ -76,7 +76,13 @@ impl std::fmt::Display for AmountParseError {
     }
 }
 
-/// Parse from string in GTU units.
+/// Parse from string in GTU units. The input string must be of the form
+/// `n[.m]` where `n` and `m` are both digits. The notation `[.m]` indicates
+/// that that part is optional.
+///
+/// - if `n` starts with 0 then it must be 0l
+/// - `m` can have at most 6 digits, and must have at least 1
+/// - both `n` and `m` must be non-negative.
 impl std::str::FromStr for Amount {
     type Err = AmountParseError;
 

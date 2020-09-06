@@ -32,7 +32,8 @@ Library
   default-language: Haskell2010
   default-extensions:
     RecordWildCards,
-    GeneralizedNewtypeDeriving
+    GeneralizedNewtypeDeriving,
+    LambdaCase
 
   ghc-options: -Wall -O2
   hs-source-dirs: haskell-src
@@ -102,7 +103,8 @@ Test-Suite tests
   default-language: Haskell2010
   default-extensions:
     RecordWildCards,
-    GeneralizedNewtypeDeriving
+    GeneralizedNewtypeDeriving,
+    LambdaCase
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs: haskell-tests

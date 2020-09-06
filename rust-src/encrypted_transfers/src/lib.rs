@@ -62,7 +62,7 @@ pub fn encrypt_amount_with_fixed_randomness<C: Curve>(
     let chunks = CHUNK_SIZE
         .u64_to_chunks(val)
         .into_iter()
-        .map(Value::<C>::from_u64)
+        .map(Value::<C>::from)
         .collect::<Vec<_>>();
     let mut ciphers = Vec::with_capacity(chunks.len());
     for x in chunks {
