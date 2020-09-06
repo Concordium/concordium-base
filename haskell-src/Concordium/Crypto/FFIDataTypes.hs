@@ -64,6 +64,8 @@ instance NFData ElgamalPublicKey where
     rnf = (`seq` ())
 instance NFData ElgamalSecretKey where
     rnf = (`seq` ())
+instance NFData GroupElement where
+    rnf = (`seq` ())
 instance NFData ElgamalCipher where
     rnf = (`seq` ())
 

@@ -1,3 +1,24 @@
+//! This module provides an implementation of the sigma protocol used for
+//! encrypted transfers. It enables one to prove knowledge of a secret key `sk`,
+//! exponent `s` and chunks a_1, ..., a_t, s_1', ..., s_(t')', r_1, ..., r_t,
+//! r_1', ..., r_(t')' such that pk_sender = g^sk, S_2 = S_1^sk h^s , and
+//! c_{i,1} = g^{r_i}, c_{i,2} = h^{a_i} pk_receiver^{r_i} for all i in {1,..,
+//! t},
+//! d_{i,1} = g^{r_i'}, d_{i,2} = h^{s_i'} pk_sender^{r_i'} for all i in {1,..,
+//! t'}, and s = \sum_{j=1}^t 2^{(chunk_size)*(j-1)} (a_j)
+//!             +\sum_{j=1}^(t') 2^{(chunk_size)*(j-1)} s_j',
+//!
+//! This is done using the subprotocols Dlog, Elgdec and EncExp (EncExp is
+//! basically just several ComEq's (can be found in
+//! sigma_protocols in the id crate)) as described in Id Layer Bluepaper, see
+//! genEncTransProofInfo and genEncTrans. The resulting sigma protocol is
+//! contructed using the sigma protocols for equality and linear relations
+//! described in the Cryptoprim Bluepaper.
+//!
+//! The trait SigmaProtocol is
+//! implemented directly for the EncTrans struct below, and it is not used that
+//! the Sigmaprotocol trait is already implemented for both Dlog and ComEq.
+
 #![allow(non_snake_case)]
 use crate::types::CHUNK_SIZE;
 use crypto_common::*;
@@ -9,25 +30,6 @@ use id::sigma_protocols::{com_eq::*, common::*, dlog::*};
 use pedersen_scheme::{Commitment, Randomness, Value};
 use random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;
-
-/// This module provides an implementation of the sigma protocol used for
-/// encrypted transfers. It enables one to prove knowledge of a secret key `sk`,
-/// exponent `s` and chunks a_1, ..., a_t, s_1', ..., s_(t')', r_1, ..., r_t,
-/// r_1', ..., r_(t')' such that pk_sender = g^sk, S_2 = S_1^sk h^s , and
-/// c_{i,1} = g^{r_i}, c_{i,2} = h^{a_i} pk_receiver^{r_i} for all i in {1,..,
-/// t},
-/// d_{i,1} = g^{r_i'}, d_{i,2} = h^{s_i'} pk_sender^{r_i'} for all i in {1,..,
-/// t'}, and s = \sum_{j=1}^t 2^{(chunk_size)*(j-1)} (a_j)
-///             +\sum_{j=1}^(t') 2^{(chunk_size)*(j-1)} s_j',
-///
-/// This is done using the subprotocols Dlog, Elgdec and EncExp (EncExp is
-/// basically just several ComEq's (can be found in
-/// sigma_protocols in the id crate)) as described in Id Layer Bluepaper, see
-/// genEncTransProofInfo and genEncTrans. The resulting sigma protocol is
-/// contructed using the sigma protocols for equality and linear relations
-/// described in the Cryptoprim Bluepaper. The trait Sigmaprotocol is
-/// implemented directly for the EncTrans struct below, and it is not used that
-/// the Sigmaprotocol trait is already implemented for both Dlog and ComEq.
 
 pub struct ElgDec<C: Curve> {
     /// S_2 above
@@ -158,28 +160,24 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         // For enc_exps:
-        let mut commit_encexp_1 = vec![];
-        let mut rands_encexp_1 = vec![];
-        let mut commit_encexp_2 = vec![];
-        let mut rands_encexp_2 = vec![];
+        let mut commit_encexp_1 = Vec::with_capacity(self.encexp1.len());
+        let mut rands_encexp_1 = Vec::with_capacity(self.encexp1.len());
+        let mut commit_encexp_2 = Vec::with_capacity(self.encexp2.len());
+        let mut rands_encexp_2 = Vec::with_capacity(self.encexp2.len());
         let mut Rs_a = vec![];
         let mut Rs_s_prime = vec![];
         for comeq in &self.encexp1 {
-            let mut u = C::zero_point();
-
             let alpha = Value::<C>::generate_non_zero(csprng);
             let (v, R_i) = comeq.cmm_key.commit(&alpha, csprng);
-            u = u.plus_point(&comeq.g.mul_by_scalar(&alpha));
+            let u = comeq.g.mul_by_scalar(&alpha);
             commit_encexp_1.push(CommittedPoints { u, v });
             rands_encexp_1.push((alpha, R_i.clone()));
             Rs_a.push(*R_i);
         }
         for comeq in &self.encexp2 {
-            let mut u = C::zero_point();
-
             let alpha = Value::<C>::generate_non_zero(csprng);
             let (v, R_i) = comeq.cmm_key.commit(&alpha, csprng);
-            u = u.plus_point(&comeq.g.mul_by_scalar(&alpha));
+            let u = comeq.g.mul_by_scalar(&alpha);
             commit_encexp_2.push(CommittedPoints { u, v });
             rands_encexp_2.push((alpha, R_i.clone()));
             Rs_s_prime.push(*R_i);
@@ -219,36 +217,43 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         witness_common.negate();
         witness_common.add_assign(&state.dlog);
         // For encexps:
-        let mut witness_encexp1 = vec![];
-        let mut witness_encexp2 = vec![];
-        for i in 0..secret.r_a.len() {
+        let mut witness_encexp1 = Vec::with_capacity(secret.r_a.len());
+        let mut witness_encexp2 = Vec::with_capacity(secret.r_s.len());
+        if secret.r_a.len() != state.encexp1.len() || secret.r_a.len() != secret.a.len() {
+            return None;
+        }
+        for (r_a, a, encexp1) in izip!(secret.r_a.iter(), secret.a.iter(), state.encexp1.iter()) {
             // The R is the randomness
             // that is used together with the secret a_j's
-            let (ref alpha, ref R) = state.encexp1[i];
+            let (ref alpha, ref R) = encexp1;
             // compute alpha_i - a_i * c
             let mut s = *challenge;
-            s.mul_assign(&secret.a[i]);
+            s.mul_assign(a);
             s.negate();
             s.add_assign(alpha);
             // compute R_i - r_i * c
             let mut t: C::Scalar = *challenge;
-            t.mul_assign(&secret.r_a[i]); // secret a_j's used here
+            t.mul_assign(r_a); // secret a_j's used here
             t.negate();
             t.add_assign(R); // R used here
             witness_encexp1.push((s, t));
             // It means that the randomness used for s should be the
             // corresponding linear combination of the R's
         }
-        for i in 0..secret.r_s.len() {
-            let (ref alpha, ref R) = state.encexp2[i];
+        if secret.r_s.len() != state.encexp2.len() || secret.r_s.len() != secret.s.len() {
+            return None;
+        }
+        for (r_s, s_val, encexp2) in izip!(secret.r_s.iter(), secret.s.iter(), state.encexp2.iter())
+        {
+            let (ref alpha, ref R) = encexp2;
             // compute alpha_i - a_i * c
             let mut s = *challenge;
-            s.mul_assign(&secret.s[i]);
+            s.mul_assign(s_val);
             s.negate();
             s.add_assign(alpha);
             // compute R_i - r_i * c
             let mut t: C::Scalar = *challenge;
-            t.mul_assign(&secret.r_s[i]); // secret s'_j's used here
+            t.mul_assign(r_s); // secret s'_j's used here
             t.negate();
             t.add_assign(R);
             witness_encexp2.push((s, t));
@@ -266,11 +271,17 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         challenge: &Self::ProtocolChallenge,
         witness: &Self::ProverWitness,
     ) -> Option<Self::CommitMessage> {
+        if self.encexp1.len() != witness.witness_encexp1.len() {
+            return None;
+        }
+        if self.encexp2.len() != witness.witness_encexp2.len() {
+            return None;
+        }
         // For enc_exps:
-        let mut commit_encexp1 = vec![];
-        let mut commit_encexp2 = vec![];
-        let mut w_a_vec = vec![];
-        let mut w_s_prime_vec = vec![];
+        let mut commit_encexp1 = Vec::with_capacity(self.encexp1.len());
+        let mut commit_encexp2 = Vec::with_capacity(self.encexp2.len());
+        let mut w_a_vec = Vec::with_capacity(self.encexp1.len());
+        let mut w_s_prime_vec = Vec::with_capacity(self.encexp2.len());
         for (comeq, witness) in izip!(&self.encexp1, &witness.witness_encexp1) {
             let u = multiexp(&[comeq.y, comeq.g], &[*challenge, witness.0]);
 

@@ -9,7 +9,7 @@ macro_rules! macro_derive_binary {
     ($function_name:ident, $type:ty, $f:expr, $mod:tt) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(one_ptr: *$mod $type, two_ptr: *$mod $type) -> u8 {
+        extern "C" fn $function_name(one_ptr: *$mod $type, two_ptr: *$mod $type) -> u8 {
             let one = from_ptr!(one_ptr);
             let two = from_ptr!(two_ptr);
             u8::from($f(one, two))
@@ -33,7 +33,7 @@ macro_rules! macro_derive_to_bytes {
     ($function_name:ident, $type:ty, $mod:tt) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(
+        extern "C" fn $function_name(
             input_ptr: *$mod $type,
             output_len: *mut size_t,
         ) -> *mut u8 {
@@ -54,7 +54,7 @@ macro_rules! macro_derive_to_bytes {
     ($function_name:ident, $type:ty, $f:expr, $mod:tt) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(
+        extern "C" fn $function_name(
             input_ptr: *$mod $type,
             output_len: *mut size_t,
         ) -> *mut u8 {
@@ -88,7 +88,7 @@ macro_rules! macro_derive_from_bytes {
     ($function_name:ident, $type:ty, $mod:tt, $val:expr, $fr:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(input_bytes: *const u8,
+        extern "C" fn $function_name(input_bytes: *const u8,
             input_len: size_t,
         ) -> *$mod $type {
             use std::io::Cursor;
@@ -122,7 +122,7 @@ macro_rules! macro_derive_from_bytes_no_cursor {
     ($function_name:ident, $type:ty, $from:expr, $mod:tt, $val:expr, $fr:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(input_bytes: *const u8,
+        extern "C" fn $function_name(input_bytes: *const u8,
             input_len: size_t,
         ) -> *$mod $type {
             let len = input_len as usize;
@@ -141,7 +141,7 @@ macro_rules! macro_generate_commitment_key {
     ($function_name:ident, $type:ty, $generator:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(n: size_t) -> *mut $type {
+        extern "C" fn $function_name(n: size_t) -> *mut $type {
             let mut csprng = thread_rng();
             Box::into_raw(Box::new($generator(n, &mut csprng)))
         }
@@ -164,7 +164,7 @@ macro_rules! macro_free_ffi {
     ($function_name:ident, $t:ty, $mod:tt, $fr:expr) => {
         #[no_mangle]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub extern "C" fn $function_name(ptr: *$mod $t) {
+        extern "C" fn $function_name(ptr: *$mod $t) {
             if ptr.is_null() {
                 return;
             }

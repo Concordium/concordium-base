@@ -1,3 +1,11 @@
+//! This sigma protocol can be used to prove knowledge of x and x_{ij}'s such
+//! that y = g^x and y_i = \prod_{j=1}^{n_i} g_{ij}^{x_ij} for all i
+//! and x_{1,j} = x for all j. The public values are y, y_i's, g and g_{ij}'s
+
+//! NB:
+//! This module is currently not used, and is only here as a reference.
+//! When using the code needs to be thouroughly reviewed.
+
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
@@ -5,10 +13,6 @@ use ff::Field;
 use id::sigma_protocols::{aggregate_dlog::*, common::*, dlog::*};
 use random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;
-
-/// This sigma protocol can be used to prove knowledge of x and x_{ij}'s such
-/// that y = g^x and y_i = \prod_{j=1}^{n_i} g_{ij}^{x_ij} for all i
-/// and x_{1,j} = x for all j. The public values are y, y_i's, g and g_{ij}'s
 
 pub struct DlogAndAggregateDlogsEqual<C: Curve> {
     pub dlog:            Dlog<C>,

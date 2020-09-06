@@ -83,54 +83,6 @@ pub struct SecToPubAmountTransferData<C: Curve> {
     pub proof: SecToPubAmountTransferProof<C>,
 }
 
-/// Data that will go into a "transfer to encrypted balance" transaction.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
-#[serde(rename_all = "camelCase")]
-pub struct EncryptAmountData<C: Curve> {
-    /// Encryption of the amount to be transfered.
-    pub transfer_amount: EncryptedAmount<C>,
-    /// The actual amount to move from public to secret balance.
-    pub to_encrypt: Amount,
-    // TODO: Proofs.
-}
-
-/// Data that will go into a "transfer to public balance" transaction.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
-#[serde(rename_all = "camelCase")]
-pub struct DecryptAmountData<C: Curve> {
-    /// Encryption of the remaining amount.
-    pub remaining_amount: EncryptedAmount<C>,
-    /// Amount to reveal.
-    pub reveal_amount: Amount,
-    /// The index such that the encrypted amount used represents the aggregate
-    /// of all encrypted amounts with indices < `index` existing on the account
-    /// at the time. New encrypted amounts can only add new indices.
-    pub index: u64,
-    // TODO: Proofs.
-}
-
-/// Encrypted amount with a decrypted value.
-///
-/// Since decryption is an expensive process, we only do it once, and then store
-/// the data.
-///
-/// Moreover these decryptions can be aggregated into
-/// `AggregatedDecryptedAmount`s.
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
-#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
-#[serde(rename_all = "camelCase")]
-pub struct DecryptedAmount<C: Curve> {
-    /// The encrypted amount.
-    pub encrypted_chunks: EncryptedAmount<C>,
-    /// The plaintext corresponding to the encrypted amount.
-    pub amount: Amount,
-    /// The index of the encrypted amount as listed on the account.
-    #[serde(default)]
-    pub index: u64,
-}
-
 /// An aggregated encrypted amount with a decrypted plaintext, collecting
 /// encrypted amounts with decryption. The only real difference from the above
 /// is the meaning of the index field.

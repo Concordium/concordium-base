@@ -19,6 +19,7 @@ use std::rc::Rc;
 
 /// This function is an implementation of the genEncExpInfo documented in the
 /// Cryptoprim Bluepaper without bulletproof part.
+///
 /// It produces a list of ComEq sigmaprotocols, i.e. it can be used to
 /// prove knowledge of x_i and r_i such that
 /// c_{i,1} = g^{r_i}, c_{i,2} = h^{x_i} pk_receiver^{r_i} for all i.
@@ -52,6 +53,7 @@ fn gen_enc_exp_info<C: Curve>(
 
 /// Implementation of genEncTransProofInfo in the Cryptoprim Bluepaper
 /// It produces a sigma protocol of type EncTrans (see enc_trans.rs)
+///
 /// Here, both A and S_prime are encrypted amounts that are encrypted
 /// in chunks in the exponent, i.e. A is of the form (A_1, ..., A_t)
 /// where A_i = (g^r_i, h^a_i pk_receiver^r_i) =: (c_{i,1}, c_{i,2}),
@@ -73,10 +75,6 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
         public: pk_sender.key,
         coeff:  pk_sender.generator,
     };
-
-    // DOCUMENT THIS: It seems that something is missing here, we are not proving
-    // that S' + A = S anywhere that I can see.
-    // UPDATE: are the comments below sufficient for documenting this?
 
     // ElgDec is used to prove knowledge of sk and s such that
     // pk_sender = g^sk, S_2 = S_1^sk h^s
@@ -318,7 +316,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         let ha = generator.mul_by_scalar(&C::scalar_from_u64(u64::from(a)));
         Cipher(C::zero_point(), ha)
     };
-    let A = vec![A_dummy_encryption];
+    let A = [A_dummy_encryption];
 
     let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) = S_prime_enc_randomness.iter().cloned().unzip();
     let protocol = gen_enc_trans_proof_info(&pk, &pk, &S, &A, &S_prime, &generator);
@@ -542,9 +540,12 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
         g: *generator,
         h: pk.key,
     };
+    // Number of bits in each chunk, determines the upper bound that needs to be
+    // ensured.
+    let num_bits_in_chunk = (64 / num_chunks) as u8; // as is safe here because the number is < 64
     let bulletproof = verify_efficient(
         transcript,
-        32,
+        num_bits_in_chunk,
         &commitments_s_prime,
         &transaction.proof.remaining_amount_correct_encryption,
         &gens,
@@ -671,7 +672,7 @@ mod test {
             Amount::from(a),
             &mut csprng,
         )
-        .unwrap();
+        .expect("Proving failed, but that is extremely unlikely, which indicates a bug.");
         let mut transcript = Transcript::new(&[]);
 
         assert_eq!(
