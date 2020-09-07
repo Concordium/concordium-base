@@ -9,6 +9,8 @@ use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use rand::*;
 use random_oracle::RandomOracle;
 use std::collections::{BTreeMap, BTreeSet};
+use ff::Field;
+use elgamal::Cipher;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reason {
@@ -193,9 +195,21 @@ fn compute_prf_sharing_verifier<C: Curve>(
     for (ar_id, ar_data) in ip_ar_data.iter() {
         let cmm_share = utils::commitment_to_share(&ar_id.to_scalar::<C>(), cmm_sharing_coeff);
         // finding the right encryption key
+        
+        // Take linear combination of ciphers
+        let u8_chunk_size = u8::from(CHUNK_SIZE);
+        let two_chunksize = C::scalar_from_u64(1 << u8_chunk_size);
+        let mut power_of_two = C::Scalar::one();
+        let mut combined_ciphers = Cipher(C::zero_point(), C::zero_point());
+        for cipher in ar_data.enc_prf_key_share.iter(){ // FIXME: use multiexp instead
+            let scaled_cipher = cipher.scale(&power_of_two);
+            combined_ciphers = combined_ciphers.combine(&scaled_cipher);
+            power_of_two.mul_assign(&two_chunksize); 
+        }
+
         let ar_info = known_ars.get(ar_id)?;
         let verifier = com_enc_eq::ComEncEq {
-            cipher:     ar_data.enc_prf_key_share,
+            cipher:     combined_ciphers,
             commitment: cmm_share,
             pub_key:    ar_info.ar_public_key,
             cmm_key:    *ar_commitment_key,
@@ -223,8 +237,8 @@ pub fn verify_credentials<
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Reason> {
-    validate_request(pre_id_obj, context)?;
-
+    // validate_request(pre_id_obj, context)?;
+    println!("hej {:?}", validate_request(pre_id_obj, context));
     sign_identity_object(pre_id_obj, &context.ip_info, alist, ip_secret_key)
 }
 

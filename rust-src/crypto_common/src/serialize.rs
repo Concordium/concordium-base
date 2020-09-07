@@ -411,6 +411,28 @@ impl<T: Deserial> Deserial for [T; 2] {
     }
 }
 
+impl<T: Serial> Serial for [T; 8] {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        for x in self.iter() {
+            x.serial(out);
+        }
+    }
+}
+
+impl<T: Deserial> Deserial for [T; 8] {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let x_1 = T::deserial(source)?;
+        let x_2 = T::deserial(source)?;
+        let x_3 = T::deserial(source)?;
+        let x_4 = T::deserial(source)?;
+        let x_5 = T::deserial(source)?;
+        let x_6 = T::deserial(source)?;
+        let x_7 = T::deserial(source)?;
+        let x_8 = T::deserial(source)?;
+        Ok([x_1, x_2, x_3, x_4, x_5, x_6, x_7, x_8])
+    }
+}
+
 // Some more generic implementations
 impl<T: Serial + Default> Serial for [T; 32] {
     fn serial<B: Buffer>(&self, out: &mut B) {
