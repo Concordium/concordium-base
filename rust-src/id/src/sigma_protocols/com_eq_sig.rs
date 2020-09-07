@@ -205,7 +205,7 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
             izip!(commitments.iter(), cY_tildas, witness.witness_commit.iter())
         {
             // compute C_i^c * g^mu_i h^R_i
-            let bases = [cC_i.0, cmm_key.0, cmm_key.1];
+            let bases = [cC_i.0, cmm_key.g, cmm_key.h];
             let powers = [*challenge, *wit_m, *wit_r];
             let cP = multiexp(&bases, &powers);
             // let cP = cC_i

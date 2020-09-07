@@ -5,7 +5,7 @@ use dialoguer::{Checkboxes, Input, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
-use elgamal::{public::PublicKey, secret::SecretKey};
+use elgamal::{PublicKey, SecretKey};
 use id::{account_holder::*, identity_provider::*, secret_sharing::*, types::*};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
@@ -1016,8 +1016,7 @@ fn handle_generate_ips(gip: GenerateIps) {
 
 /// Generate the global context.
 fn handle_generate_global(gl: GenerateGlobal) {
-    let mut csprng = thread_rng();
-    let gc = GlobalContext::<ExampleCurve>::generate(&mut csprng);
+    let gc = GlobalContext::<ExampleCurve>::generate();
     let vgc = Versioned::new(VERSION_0, gc);
     if let Err(err) = write_json_to_file(&gl.output_file, &vgc) {
         eprintln!("Could not write global parameters because {}.", err);

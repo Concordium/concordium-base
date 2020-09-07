@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface , GeneralizedNewtypeDeriving, DerivingVia, OverloadedStrings, DeriveDataTypeable #-}
+{-# LANGUAGE DerivingVia, OverloadedStrings, DeriveDataTypeable #-}
 
 module Concordium.Crypto.SHA256 where
 import           Concordium.Crypto.ByteStringHelpers

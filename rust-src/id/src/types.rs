@@ -7,6 +7,7 @@ use crate::{
     },
 };
 use base58check::*;
+use bulletproofs::range_proof::Generators;
 use byteorder::ReadBytesExt;
 use crypto_common::*;
 use crypto_common_derive::*;
@@ -16,7 +17,7 @@ use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
 use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
 use either::Either;
-use elgamal::{cipher::Cipher, message::Message, secret::SecretKey as ElgamalSecretKey};
+use elgamal::{Cipher, Message, SecretKey as ElgamalSecretKey};
 use ff::Field;
 use hex::{decode, encode};
 use pedersen_scheme::{
@@ -38,7 +39,15 @@ use std::{
     str::FromStr,
 }; // only for account addresses
 
+/// NB: This includes digits of PI (starting with 14...) as ASCII characters
+/// this could be what is desired, but it is important to be aware of it.
+pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-10million.txt");
+
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
+
+/// This is currently the number required, since the only
+/// place these are used is for encrypted amounts.
+pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 2;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct AccountAddress([u8; ACCOUNT_ADDRESS_SIZE]);
@@ -921,8 +930,9 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// the commitments to the sharing coefficients
     pub proof_id_cred_pub: BTreeMap<ArIdentity, com_enc_eq::Witness<C>>,
     /// Witnesses for proof of knowledge of signature of Identity Provider on
-    /// the list (idCredSec, prfKey, attributes[0], attributes[1],...,
-    /// attributes[n], AR[1], ..., AR[m])
+    /// the list
+    /// ```(idCredSec, prfKey, attributes[0], attributes[1],..., attributes[n],
+    /// AR[1], ..., AR[m])```
     pub proof_ip_sig: com_eq_sig::Witness<P, C>,
     /// Proof that reg_id = prf_K(x). Also establishes that reg_id is computed
     /// from the prf key signed by the identity provider.
@@ -1356,6 +1366,9 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IPContext<'a, P
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct GlobalContext<C: Curve> {
     /// Generator of the curve C, used for, e.g., elgamal encryption.
+    /// FIXME: This will be just the second part of the commitment key,
+    /// should be removed and its usages replaced dwith
+    /// `encryption_in_the_exponent_generator` function.
     #[serde(
         rename = "generator",
         serialize_with = "base16_encode",
@@ -1365,21 +1378,56 @@ pub struct GlobalContext<C: Curve> {
     /// A shared commitment key known to the chain and the account holder (and
     /// therefore it is public). The account holder uses this commitment key to
     /// generate commitments to values in the attribute list.
-    /// This key should presumably be generated at genesis time via some shared
-    /// multi-party computation since none of the parties should know anything
-    /// special about it, so that the commitment is binding.
     #[serde(rename = "onChainCommitmentKey")]
     pub on_chain_commitment_key: PedersenKey<C>,
+    /// Generators for the bulletproofs.
+    /// It is unclear what length we will require here, or whether we'll allow
+    /// dynamic generation.
+    #[serde(rename = "bulletproofGenerators")]
+    bulletproof_generators: Generators<C>,
 }
 
 impl<C: Curve> GlobalContext<C> {
     /// Generate a new global context.
-    pub fn generate(csprng: &mut impl rand::Rng) -> Self {
+    pub fn generate() -> Self { Self::generate_size(NUM_BULLETPROOF_GENERATORS) }
+
+    /// Generate a new global context with the given number of
+    /// bulletproof generators.
+    ///
+    /// This is intended mostly for testing, on-chain there will be a fixed
+    /// amount.
+    /// FIXME: Make sure the parameters are bounded and this does not panic.
+    pub fn generate_size(n: usize) -> Self {
+        assert!(n <= (PI_DIGITS.len() - 200) / 200);
+        let cmm_key = PedersenKey {
+            g: C::hash_to_group(&PI_DIGITS[0..100]),
+            h: C::hash_to_group(&PI_DIGITS[100..200]),
+        };
+
+        let mut generators = Vec::with_capacity(n);
+        for bytes in PI_DIGITS[200..].chunks(200).take(n) {
+            let g = C::hash_to_group(&bytes[..100]);
+            let h = C::hash_to_group(&bytes[100..]);
+            generators.push((g, h));
+        }
+
         GlobalContext {
-            generator:               C::generate(csprng),
-            on_chain_commitment_key: PedersenKey::generate(csprng),
+            generator:               C::hash_to_group(&PI_DIGITS[0..100]),
+            on_chain_commitment_key: cmm_key,
+            bulletproof_generators:  Generators { G_H: generators },
         }
     }
+
+    /// The generator for encryption in the exponent is the second component of
+    /// the commitment key, the 'h'.
+    pub fn encryption_in_exponent_generator(&self) -> &C { &self.on_chain_commitment_key.h }
+
+    /// The generator used as the base for elgamal public keys.
+    pub fn elgamal_generator(&self) -> &C { &self.on_chain_commitment_key.g }
+
+    /// A wrapper function to support changes in internal structure of the
+    /// context in the future, e.g., lazy generation of generators.
+    pub fn bulletproof_generators(&self) -> &Generators<C> { &self.bulletproof_generators }
 }
 
 /// Make a context in which the account holder can produce a pre-identity object
@@ -1649,7 +1697,7 @@ pub struct AnonymityRevocationRecord<C: Curve> {
     /// Data that contains encryptions of the prf key that supports additional
     /// anonymity revocation.
     #[serde(rename = "arData")]
-    pub ar_data: Vec<IpArData<C>>,
+    pub ar_data: BTreeMap<ArIdentity, IpArData<C>>,
 }
 
 #[cfg(test)]

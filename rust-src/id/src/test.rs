@@ -6,7 +6,7 @@ use crypto_common::*;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
-use elgamal::{public::PublicKey, secret::SecretKey};
+use elgamal::{PublicKey, SecretKey};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
 use std::{collections::BTreeMap, convert::TryFrom};
@@ -151,7 +151,7 @@ pub fn test_pipeline() {
         ..
     } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
 
-    let global_ctx = GlobalContext::generate(&mut csprng);
+    let global_ctx = GlobalContext::generate();
 
     let (ars_infos, ars_secret) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
 

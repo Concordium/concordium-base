@@ -46,8 +46,14 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: IPContext<P, C>,
 ) -> Result<(), Reason> {
     let ip_info = &context.ip_info;
-    let commitment_key_sc = CommitmentKey(ip_info.ip_verify_key.ys[0], ip_info.ip_verify_key.g);
-    let commitment_key_prf = CommitmentKey(ip_info.ip_verify_key.ys[1], ip_info.ip_verify_key.g);
+    let commitment_key_sc = CommitmentKey {
+        g: ip_info.ip_verify_key.ys[0],
+        h: ip_info.ip_verify_key.g,
+    };
+    let commitment_key_prf = CommitmentKey {
+        g: ip_info.ip_verify_key.ys[1],
+        h: ip_info.ip_verify_key.g,
+    };
 
     let ro = RandomOracle::empty();
 
@@ -357,7 +363,7 @@ mod tests {
             public_ip_info: ip_info,
             ip_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let global_ctx = GlobalContext::<G1>::generate(&mut csprng);
+        let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
 
         let aci = test_create_aci(&mut csprng);
@@ -427,14 +433,17 @@ mod tests {
             public_ip_info: ip_info,
             ip_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let global_ctx = GlobalContext::<G1>::generate(&mut csprng);
+        let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
         let (ctx, mut pio, _) = test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
         let attrs = test_create_attributes();
 
         // Act (make cmm_sc be comm. of id_cred_sec but with wrong/fresh randomness)
-        let sc_ck = CommitmentKey(ctx.ip_info.ip_verify_key.ys[0], ctx.ip_info.ip_verify_key.g);
+        let sc_ck = CommitmentKey {
+            g: ctx.ip_info.ip_verify_key.ys[0],
+            h: ctx.ip_info.ip_verify_key.g,
+        };
         let id_cred_sec = aci.cred_holder_info.id_cred.id_cred_sec;
         let (cmm_sc, _) = sc_ck.commit(&id_cred_sec, &mut csprng);
         pio.cmm_sc = cmm_sc;
@@ -459,7 +468,7 @@ mod tests {
             public_ip_info: ip_info,
             ip_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let global_ctx = GlobalContext::<G1>::generate(&mut csprng);
+        let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
         let (context, mut pio, _) =

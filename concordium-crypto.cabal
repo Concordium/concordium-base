@@ -18,9 +18,22 @@ source-repository head
   type: git
   location: https://gitlab.com/Concordium/crypto
 
+Flag forced-static-linking
+    Description: Enable forced static linking
+    Manual: True
+    Default: False
+
+Flag link-with-musl
+    Description: Enable linking against Rust libraries built with Musl
+    Manual: True
+    Default: False
+
 Library
   default-language: Haskell2010
-  default-extensions:      ForeignFunctionInterface
+  default-extensions:
+    RecordWildCards,
+    GeneralizedNewtypeDeriving,
+    LambdaCase
 
   ghc-options: -Wall -O2
   hs-source-dirs: haskell-src
@@ -33,6 +46,7 @@ Library
                    Data.FixedByteString
                    Data.Base58Encoding
                    Concordium.Common.Version
+                   Concordium.Common.Amount
                    Concordium.ID.Types
                    Concordium.ID.Account
                    Concordium.ID.Parameters
@@ -44,6 +58,7 @@ Library
                    Concordium.Crypto.Proofs
                    Concordium.Crypto.DummyData
                    Concordium.Crypto.FFIHelpers
+                   Concordium.Crypto.EncryptedTransfers
 
   Other-modules:
                   Data.Base58Encoding.TH
@@ -76,7 +91,8 @@ Library
                    eddsa_ed25519,
                    ffi_helpers,
                    id,
-                   aggregate_sig
+                   aggregate_sig,
+                   encrypted_transfers
 
   if os(windows)
         extra-libraries: ws2_32
@@ -85,6 +101,10 @@ Library
 
 Test-Suite tests
   default-language: Haskell2010
+  default-extensions:
+    RecordWildCards,
+    GeneralizedNewtypeDeriving,
+    LambdaCase
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs: haskell-tests
@@ -108,6 +128,7 @@ Test-Suite tests
    ConcordiumTests.Crypto.Ed25519Signature
    ConcordiumTests.Crypto.VRF
    ConcordiumTests.Crypto.FFIDataTypes
+   ConcordiumTests.Crypto.EncryptedTransfers
    ConcordiumTests.Crypto.FFIVerify
    ConcordiumTests.Crypto.BlsSignature
    ConcordiumTests.ID.Types

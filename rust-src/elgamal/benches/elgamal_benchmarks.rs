@@ -5,7 +5,7 @@ extern crate criterion;
 
 use criterion::Criterion;
 
-use elgamal::secret::*;
+use elgamal::*;
 
 use curve_arithmetic::Curve;
 use ff::PrimeField;
@@ -21,50 +21,25 @@ pub fn baby_step_giant_step_table_bench(c: &mut Criterion) {
     let hx = h.mul_by_scalar(&x);
     let x = 4294967295;
     let m = 65536;
-    let k = 65536;
 
     c.bench_function("repeat 8 times", move |b| {
         // Takes around 20 sec for sample size = 2
         b.iter(|| {
-            assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, m, k, &hx).expect("Could not decrypt."),
-                x
-            );
-            assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, m, k, &hx).expect("Could not decrypt."),
-                x
-            );
-            assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, m, k, &hx).expect("Could not decrypt."),
-                x
-            );
-            assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, m, k, &hx).expect("Could not decrypt."),
-                x
-            );
-            assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, m, k, &hx).expect("Could not decrypt."),
-                x
-            );
-            assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, m, k, &hx).expect("Could not decrypt."),
-                x
-            );
-            assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, m, k, &hx).expect("Could not decrypt."),
-                x
-            );
-            assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, m, k, &hx).expect("Could not decrypt."),
-                x
-            );
+            assert_eq!(BabyStepGiantStep::discrete_log_full(&h, m, &hx), x);
+            assert_eq!(BabyStepGiantStep::discrete_log_full(&h, m, &hx), x);
+            assert_eq!(BabyStepGiantStep::discrete_log_full(&h, m, &hx), x);
+            assert_eq!(BabyStepGiantStep::discrete_log_full(&h, m, &hx), x);
+            assert_eq!(BabyStepGiantStep::discrete_log_full(&h, m, &hx), x);
+            assert_eq!(BabyStepGiantStep::discrete_log_full(&h, m, &hx), x);
+            assert_eq!(BabyStepGiantStep::discrete_log_full(&h, m, &hx), x);
+            assert_eq!(BabyStepGiantStep::discrete_log_full(&h, m, &hx), x);
         })
     });
     c.bench_function("reuse table 8 times, m=k=2^16", move |b| {
         b.iter(|| {
             let bsgs = BabyStepGiantStep::new(&h, m);
             for _ in 0..8 {
-                assert_eq!(bsgs.discrete_log(k, &hx).expect("Could not decrypt."), x);
+                assert_eq!(bsgs.discrete_log(&hx), x);
             }
         })
     });
@@ -76,53 +51,49 @@ pub fn baby_step_giant_step_table_bench(c: &mut Criterion) {
     // (2^(17,5), 2^(14,5)).
 
     let m = 262144;
-    let k = 16384;
     c.bench_function("reuse table 8 times using m = 2^18, k = 2^14", move |b| {
         b.iter(|| {
             let bsgs = BabyStepGiantStep::new(&h, m);
             for _ in 0..8 {
-                assert_eq!(bsgs.discrete_log(k, &hx).expect("Could not decrypt."), x);
+                assert_eq!(bsgs.discrete_log(&hx), x);
             }
         })
     });
 
     let m = 185364;
-    let k = 23171;
     c.bench_function(
         "reuse table 8 times using m = 185363, k = 23171",
         move |b| {
             b.iter(|| {
                 let bsgs = BabyStepGiantStep::new(&h, m);
                 for _ in 0..8 {
-                    assert_eq!(bsgs.discrete_log(k, &hx).expect("Could not decrypt."), x);
+                    assert_eq!(bsgs.discrete_log(&hx), x);
                 }
             })
         },
     );
 
     let m = 180000;
-    let k = 23861;
     c.bench_function(
         "reuse table 8 times using m = 180000, k = 23861",
         move |b| {
             b.iter(|| {
                 let bsgs = BabyStepGiantStep::new(&h, m);
                 for _ in 0..8 {
-                    assert_eq!(bsgs.discrete_log(k, &hx).expect("Could not decrypt."), x);
+                    assert_eq!(bsgs.discrete_log(&hx), x);
                 }
             })
         },
     );
 
     let m = 170000;
-    let k = 25265;
     c.bench_function(
         "reuse table 8 times using m = 170000, k = 25265",
         move |b| {
             b.iter(|| {
                 let bsgs = BabyStepGiantStep::new(&h, m);
                 for _ in 0..8 {
-                    assert_eq!(bsgs.discrete_log(k, &hx).expect("Could not decrypt."), x);
+                    assert_eq!(bsgs.discrete_log(&hx), x);
                 }
             })
         },
@@ -140,7 +111,7 @@ pub fn baby_step_giant_step_bench(c: &mut Criterion) {
     c.bench_function("baby step giant step m=k=65536", move |b| {
         b.iter(|| {
             assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, 65536, 65536, &hx).unwrap(),
+                BabyStepGiantStep::discrete_log_full(&h, 65536, &hx),
                 4294967295
             )
         })
@@ -152,7 +123,7 @@ pub fn baby_step_giant_step_bench(c: &mut Criterion) {
     c.bench_function("baby step giant step m=32768, k=131072", move |b| {
         b.iter(|| {
             assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, 32768, 131072, &hx).unwrap(),
+                BabyStepGiantStep::discrete_log_full(&h, 32768, &hx),
                 4294967295
             )
         })
@@ -161,7 +132,7 @@ pub fn baby_step_giant_step_bench(c: &mut Criterion) {
     c.bench_function("baby step giant step m=131072, k=32768", move |b| {
         b.iter(|| {
             assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, 131072, 32768, &hx).unwrap(),
+                BabyStepGiantStep::discrete_log_full(&h, 131072, &hx),
                 4294967295
             )
         })
@@ -170,7 +141,7 @@ pub fn baby_step_giant_step_bench(c: &mut Criterion) {
     c.bench_function("baby step giant step m=60000, k=71583", move |b| {
         b.iter(|| {
             assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, 60000, 71583, &hx).unwrap(),
+                BabyStepGiantStep::discrete_log_full(&h, 60000, &hx),
                 4294967295
             )
         })
@@ -178,7 +149,7 @@ pub fn baby_step_giant_step_bench(c: &mut Criterion) {
     c.bench_function("baby step giant step m=71583, k=60000", move |b| {
         b.iter(|| {
             assert_eq!(
-                BabyStepGiantStep::discrete_log_full(&h, 71583, 60000, &hx).unwrap(),
+                BabyStepGiantStep::discrete_log_full(&h, 71583, &hx),
                 4294967295
             )
         })

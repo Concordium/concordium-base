@@ -1,5 +1,4 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE LambdaCase #-}
 module Concordium.ID.AnonymityRevoker
   (ArInfo, arInfoToJSON, jsonToArInfo, withArInfo, arIdentity)
   where
