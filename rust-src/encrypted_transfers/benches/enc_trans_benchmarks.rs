@@ -9,7 +9,6 @@ use curve_arithmetic::Value;
 use elgamal::{PublicKey, SecretKey};
 use encrypted_transfers::proofs::generate_proofs::*;
 use id::types::GlobalContext;
-use merlin::Transcript;
 use pairing::bls12_381::G1;
 use random_oracle::*;
 use std::time::Duration;
@@ -48,7 +47,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
     let ro = RandomOracle::domain(&challenge_prefix);
 
-    let mut transcript = Transcript::new(&[]);
+    let mut transcript = RandomOracle::empty();
     let index = csprng.gen();
 
     let context_clone = context.clone();
@@ -76,7 +75,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     let ro = RandomOracle::domain(&challenge_prefix);
     let ro_copy = ro.split();
 
-    let mut transcript = Transcript::new(&[]);
+    let mut transcript = RandomOracle::empty();
     let index = csprng.gen();
     let transaction = gen_enc_trans(
         &context,
@@ -95,7 +94,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     c.bench_function("Verify transaction and proofs", move |b| {
         b.iter(|| {
             let ro = RandomOracle::domain(&challenge_prefix);
-            let mut transcript = Transcript::new(&[]);
+            let mut transcript = RandomOracle::empty();
             assert_eq!(
                 verify_enc_trans(
                     &context,
@@ -134,7 +133,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
     let ro = RandomOracle::domain(&challenge_prefix);
 
-    let mut transcript = Transcript::new(&[]);
+    let mut transcript = RandomOracle::empty();
     let index = csprng.gen();
 
     let context_clone = context.clone();
@@ -161,7 +160,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     let ro = RandomOracle::domain(&challenge_prefix);
     let ro_copy = ro.split();
 
-    let mut transcript = Transcript::new(&[]);
+    let mut transcript = RandomOracle::empty();
     let index = csprng.gen();
     let transaction = gen_sec_to_pub_trans(
         &context,
@@ -179,7 +178,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     c.bench_function("Verify sec to pub transaction and proofs", move |b| {
         b.iter(|| {
             let ro = RandomOracle::domain(&challenge_prefix);
-            let mut transcript = Transcript::new(&[]);
+            let mut transcript = RandomOracle::empty();
             assert_eq!(
                 verify_sec_to_pub_trans(&context, ro, &mut transcript, &transaction, &pk, &S,),
                 Ok(())

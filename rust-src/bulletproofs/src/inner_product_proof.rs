@@ -1,9 +1,8 @@
-use crate::transcript::TranscriptProtocol;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
-use merlin::Transcript;
+use random_oracle::RandomOracle;
 
 #[derive(Clone, Serialize)]
 pub struct InnerProductProof<C: Curve> {
@@ -31,7 +30,7 @@ pub struct InnerProductProof<C: Curve> {
 /// this length must be a power of 2.
 #[allow(non_snake_case)]
 pub fn prove_inner_product<C: Curve>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     G_slice: &[C],
     H_slice: &[C],
     Q: &C,
@@ -63,7 +62,7 @@ pub fn prove_inner_product<C: Curve>(
 /// this length must be a power of 2.
 #[allow(non_snake_case)]
 pub fn prove_inner_product_with_scalars<C: Curve>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     G_slice: &[C],
     H_slice: &[C],
     H_prime_scalars: &[C::Scalar],
@@ -219,7 +218,7 @@ pub struct VerificationScalars<C: Curve> {
 #[allow(non_snake_case)]
 #[allow(clippy::many_single_char_names)]
 pub fn verify_scalars<C: Curve>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     n: usize,
     proof: &InnerProductProof<C>,
 ) -> Option<VerificationScalars<C>> {
@@ -285,7 +284,7 @@ pub fn verify_scalars<C: Curve>(
 /// of 2.
 #[allow(non_snake_case)]
 pub fn verify_inner_product<C: Curve>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     G_vec: &[C],
     H_vec: &[C],
     P_prime: &C,
@@ -404,13 +403,13 @@ mod tests {
         let P_prime = multiexp(&G_vec, &a_vec)
             .plus_point(&multiexp(&H_vec, &b_vec))
             .plus_point(&Q.mul_by_scalar(&inner_product(&a_vec, &b_vec)));
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
 
         // Producing inner product proof with vector length = n
         let proof = prove_inner_product(&mut transcript, &G_vec, &H_vec, &Q, &a_vec, &b_vec);
         assert!(proof.is_some());
         let proof = proof.unwrap();
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
 
         assert!(verify_inner_product(
             &mut transcript,
