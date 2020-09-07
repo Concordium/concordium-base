@@ -117,8 +117,8 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     ) -> Option<Self::CommitMessage> {
         let g_1 = self.pub_key.generator;
         let h_1 = self.pub_key.key;
-        let g = self.cmm_key.0;
-        let h = self.cmm_key.1;
+        let g = self.cmm_key.g;
+        let h = self.cmm_key.h;
 
         let z_1 = witness.witness.0;
         let z_2 = witness.witness.1;

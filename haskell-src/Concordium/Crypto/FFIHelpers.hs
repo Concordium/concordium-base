@@ -1,4 +1,3 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
 module Concordium.Crypto.FFIHelpers where
 
 import Foreign.ForeignPtr
@@ -13,10 +12,10 @@ import Data.ByteString.Unsafe
 
 import System.IO.Unsafe
 
--- |Utility function shared by all instantations. Free an array that was allocated
--- via Box::into_raw on the rust side.
+-- |Utility function shared by all instantations. Free an array that was
+-- allocated on the heap, of the given size.
 foreign import ccall unsafe "free_array_len"
-   rs_free_array_len :: Ptr Word8 -> IO ()
+   rs_free_array_len :: Ptr Word8 -> Word64 -> IO ()
 
 toBytesHelper ::  (Ptr a -> Ptr CSize -> IO (Ptr Word8)) -> ForeignPtr a -> ByteString
 toBytesHelper f m = unsafeDupablePerformIO $
@@ -25,7 +24,7 @@ toBytesHelper f m = unsafeDupablePerformIO $
         alloca $ \len_ptr -> do
         bytes_ptr <- f m_ptr len_ptr
         len <- peek len_ptr
-        unsafePackCStringFinalizer bytes_ptr (fromIntegral len) (rs_free_array_len bytes_ptr)
+        unsafePackCStringFinalizer bytes_ptr (fromIntegral len) (rs_free_array_len bytes_ptr (fromIntegral len))
 
 -- |NB: The passed function must handle the case of CSize == 0 gracefully without dereferencing the pointer.
 -- since the pointer can be a null-pointer or otherwise a dangling pointer.
