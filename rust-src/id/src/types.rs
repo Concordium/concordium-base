@@ -17,7 +17,7 @@ use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
 use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
 use either::Either;
-use elgamal::{Cipher, Message, SecretKey as ElgamalSecretKey};
+use elgamal::{Cipher, Message, SecretKey as ElgamalSecretKey, ChunkSize};
 use ff::Field;
 use hex::{decode, encode};
 use pedersen_scheme::{
@@ -39,6 +39,7 @@ use std::{
     str::FromStr,
 }; // only for account addresses
 
+
 /// NB: This includes digits of PI (starting with 14...) as ASCII characters
 /// this could be what is desired, but it is important to be aware of it.
 pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-10million.txt");
@@ -48,6 +49,10 @@ pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 /// This is currently the number required, since the only
 /// place these are used is for encrypted amounts.
 pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 2;
+
+/// Chunk size for encryption of prf key
+pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
+
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct AccountAddress([u8; ACCOUNT_ADDRESS_SIZE]);
@@ -625,6 +630,7 @@ pub struct AccCredentialInfo<C: Curve> {
     pub prf_key: prf::SecretKey<C>,
 }
 
+
 /// The data relating to a single anonymity revoker
 /// sent by the account holder to the identity provider
 /// typically the account holder will send a vector of these
@@ -632,7 +638,7 @@ pub struct AccCredentialInfo<C: Curve> {
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
     #[serde(rename = "encPrfKeyShare")]
-    pub enc_prf_key_share: Cipher<C>,
+    pub enc_prf_key_share: [Cipher<C>; 8],
     /// Witness to the proof that the computed commitment to the share
     /// contains the same value as the encryption
     /// the commitment to the share is not sent but computed from
