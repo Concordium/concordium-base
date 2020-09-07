@@ -18,8 +18,8 @@ impl Serialize for State {
 
 #[init(name = "init")]
 #[inline(always)]
-fn contract_init<L: HasLogger>(
-    _ctx: InitContext,
+fn contract_init<I: HasInitContext<()>, L: HasLogger>(
+    _ctx: I,
     _amount: Amount,
     _logger: &mut L,
 ) -> InitResult<State> {

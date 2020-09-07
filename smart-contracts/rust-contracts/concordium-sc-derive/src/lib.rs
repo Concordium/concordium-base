@@ -62,7 +62,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[no_mangle]
             pub extern "C" fn #name(amount: Amount) -> i32 {
-                let ctx = InitContext::open(());
+                let ctx = InitContextLazy::open(());
                 let mut state = ContractState::open(());
                 let mut logger = Logger::init();
                 match #fn_name(ctx, amount, &mut logger, &mut state) {
@@ -75,7 +75,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[no_mangle]
             pub extern "C" fn #name(amount: Amount) -> i32 {
-                let ctx = InitContext::open(());
+                let ctx = InitContextLazy::open(());
                 let mut logger = Logger::init();
                 match #fn_name(ctx, amount, &mut logger) {
                     Ok(state) => {

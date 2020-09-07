@@ -320,6 +320,21 @@ impl State {
     }
 }
 
+#[inline(always)]
+fn put_in_memory(ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, bytes: &Vec<u8>) -> Result<(), ()> {
+    let bytes_len = bytes.len() as u32;
+    let memory = ctx.memory(0);
+    match unsafe { ptr.deref_mut(memory, 0, bytes_len) } {
+        Some(cells) => {
+            for (place, byte) in cells.iter_mut().zip(bytes) {
+                place.set(*byte);
+            }
+            Ok(())
+        }
+        None => Err(()),
+    }
+}
+
 pub fn make_imports(
     which: Which,
     parameter: Parameter,
@@ -449,23 +464,20 @@ pub fn make_imports(
 
     match which {
         Which::Init {
-            ref init_ctx,
+            init_ctx
         } => {
-            // Get the init context.
-            let init_bytes = to_bytes(init_ctx);
-            let init_bytes_len = init_bytes.len() as u32;
-            let get_init_ctx = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
-                let memory = ctx.memory(0);
-                match unsafe { ptr.deref_mut(memory, 0, init_bytes_len) } {
-                    Some(cells) => {
-                        for (place, byte) in cells.iter_mut().zip(&init_bytes) {
-                            place.set(*byte);
-                        }
-                        Ok(())
-                    }
-                    None => Err(()),
-                }
-            };
+            let init_origin_bytes = to_bytes(&init_ctx.init_origin);
+            let get_init_origin = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &init_origin_bytes);
+            
+            let slot_number = init_ctx.metadata.slot_number;
+            let get_slot_number = move || slot_number;
+            let block_height = init_ctx.metadata.block_height;
+            let get_block_height = move || block_height;
+            let finalized_height = init_ctx.metadata.finalized_height;
+            let get_finalized_height = move || finalized_height;
+            let slot_time = init_ctx.metadata.slot_time;
+            let get_slot_time = move || slot_time;
+
             let get_receive_ctx =
                 |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<(), ()> { Err(()) };
             let get_receive_ctx_size = || -> Result<u32, ()> { Err(()) };
@@ -473,7 +485,11 @@ pub fn make_imports(
             let imps = imports! {
                 "concordium" => {
                     // NOTE: validation will only allow access to a given list of these functions (check to be added)
-                    "get_init_ctx" => func!(get_init_ctx),
+                    "get_init_origin" => func!(get_init_origin),
+                    "get_slot_number" => func!(get_slot_number),
+                    "get_block_height" => func!(get_block_height),
+                    "get_finalized_height" => func!(get_finalized_height),
+                    "get_slot_time" => func!(get_slot_time),
                     "get_receive_ctx" => func!(get_receive_ctx),
                     "get_receive_ctx_size" => func!(get_receive_ctx_size),
                     "get_parameter_section" => func!(get_parameter_section),
@@ -513,13 +529,26 @@ pub fn make_imports(
                     ))),
                 }
             };
+            let slot_number = receive_ctx.metadata.slot_number;
+            let get_slot_number = move || slot_number;
+            let block_height = receive_ctx.metadata.block_height;
+            let get_block_height = move || block_height;
+            let finalized_height = receive_ctx.metadata.finalized_height;
+            let get_finalized_height = move || finalized_height;
+            let slot_time = receive_ctx.metadata.slot_time;
+            let get_slot_time = move || slot_time;
+
             let get_receive_ctx_size = move || -> u32 { receive_bytes_len };
-            let get_init_ctx =
+            let get_init_origin =
                 |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<(), ()> { Err(()) };
 
             let imps = imports! {
                 "concordium" => {
-                    "get_init_ctx" => func!(get_init_ctx),
+                    "get_init_origin" => func!(get_init_origin),
+                    "get_slot_number" => func!(get_slot_number),
+                    "get_block_height" => func!(get_block_height),
+                    "get_finalized_height" => func!(get_finalized_height),
+                    "get_slot_time" => func!(get_slot_time),
                     "get_receive_ctx" => func!(get_receive_ctx),
                     "get_receive_ctx_size" => func!(get_receive_ctx_size),
                     "get_parameter_section" => func!(get_parameter_section),
@@ -554,7 +583,7 @@ pub fn invoke_init(
 ) -> Result<InitResult, error::CallError> {
     let (import_obj, logs, energy, state, _) = make_imports(
         Which::Init {
-            init_ctx,
+            init_ctx: &init_ctx,
         },
         parameter,
         energy,

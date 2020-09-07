@@ -111,7 +111,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
         Hash(hasher.finalize().into())
     };
     // Log who the initializer was.
-    logger.log(initializer);
+    logger.log(&initializer);
     // And the initial hash
     logger.log_bytes(&hex::encode(&hash.0).as_bytes());
     let num_contributions: u32 = 1;

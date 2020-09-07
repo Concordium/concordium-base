@@ -173,7 +173,7 @@ impl ReceiveResult {
 
 pub enum Which<'a> {
     Init {
-        init_ctx: InitContext,
+        init_ctx: &'a InitContext,
     },
     Receive {
         receive_ctx:   ReceiveContext,

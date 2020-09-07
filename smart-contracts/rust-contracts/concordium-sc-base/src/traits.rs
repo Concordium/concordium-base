@@ -43,7 +43,7 @@ where
     /// Open the init context for reading and accessing values.
     fn open(data: Self::InitData) -> Self;
     /// Who invoked this init call.
-    fn init_origin(&self) -> &AccountAddress;
+    fn init_origin(&self) -> AccountAddress;
     /// Get the cursor to the parameter.
     fn parameter_cursor(&self) -> Self::ParamType;
     /// Get the reference to chain metadata

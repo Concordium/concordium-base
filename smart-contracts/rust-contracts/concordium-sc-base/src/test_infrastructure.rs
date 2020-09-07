@@ -21,6 +21,21 @@ impl<'a> HasParameter for Cursor<&'a [u8]> {
     fn size(&self) -> u32 { self.data.len() as u32 }
 }
 
+/// # Trait implementations for the chain metadata.
+impl HasChainMetadata for ChainMetadata {
+    #[inline(always)]
+    fn slot_time(&self) -> SlotTime { self.slot_time }
+
+    #[inline(always)]
+    fn block_height(&self) -> BlockHeight { self.block_height }
+
+    #[inline(always)]
+    fn finalized_height(&self) -> FinalizedHeight { self.finalized_height }
+
+    #[inline(always)]
+    fn slot_number(&self) -> SlotNumber { self.slot_number }
+}
+
 impl<'a> HasInitContext<()> for InitContextWrapper<'a> {
     type InitData = (InitContext, &'a [u8]);
     type MetadataType = ChainMetadata;
@@ -33,7 +48,7 @@ impl<'a> HasInitContext<()> for InitContextWrapper<'a> {
         }
     }
 
-    fn init_origin(&self) -> &AccountAddress { &self.init_ctx.init_origin }
+    fn init_origin(&self) -> AccountAddress { self.init_ctx.init_origin }
 
     fn parameter_cursor(&self) -> Self::ParamType { Cursor::new(self.parameter) }
 

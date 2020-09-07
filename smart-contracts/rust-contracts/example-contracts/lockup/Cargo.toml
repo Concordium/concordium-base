@@ -1,5 +1,5 @@
 [package]
-name = "escrow"
+name = "lockup"
 version = "0.1.0"
 authors = ["Concordium AG <info@concordium.com>"]
 edition = "2018"

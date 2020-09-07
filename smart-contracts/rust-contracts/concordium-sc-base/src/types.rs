@@ -104,3 +104,7 @@ pub type ReceiveResult<A> = Result<A, Reject>;
 /// The expected return type of the init method of the smart contract,
 /// parametrized by the state type of the smart contract.
 pub type InitResult<S> = Result<S, Reject>;
+
+pub struct InitContextLazy {}
+
+pub struct ChainMetaLazy {}

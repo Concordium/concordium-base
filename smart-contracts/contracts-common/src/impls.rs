@@ -90,7 +90,7 @@ impl Serialize for Address {
                 acc.serial(out)
             }
             Address::Contract(ref cnt) => {
-                out.write_u8(0)?;
+                out.write_u8(1)?;
                 cnt.serial(out)
             }
         }

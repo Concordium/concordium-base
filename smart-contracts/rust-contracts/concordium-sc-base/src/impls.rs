@@ -205,44 +205,40 @@ impl HasParameter for Parameter {
     fn size(&self) -> u32 { unsafe { get_parameter_size() } }
 }
 
+
 /// # Trait implementations for the chain metadata.
-impl HasChainMetadata for ChainMetadata {
+impl HasChainMetadata for ChainMetaLazy {
     #[inline(always)]
-    fn slot_time(&self) -> SlotTime { self.slot_time }
+    fn slot_time(&self) -> SlotTime { unsafe{ get_slot_time() } }
 
     #[inline(always)]
-    fn block_height(&self) -> BlockHeight { self.block_height }
+    fn block_height(&self) -> BlockHeight { unsafe{ get_block_height() } }
 
     #[inline(always)]
-    fn finalized_height(&self) -> FinalizedHeight { self.finalized_height }
+    fn finalized_height(&self) -> FinalizedHeight { unsafe{  get_finalized_height() } }
 
     #[inline(always)]
-    fn slot_number(&self) -> SlotNumber { self.slot_number }
+    fn slot_number(&self) -> SlotNumber { unsafe{ get_slot_number() } }
 }
 
 /// # Trait implementations for the init context
-impl HasInitContext<()> for InitContext {
+impl HasInitContext<()> for InitContextLazy {
     type InitData = ();
-    type MetadataType = ChainMetadata;
+    type MetadataType = ChainMetaLazy;
     type ParamType = Parameter;
 
     /// Create a new init context by using an external call.
     fn open(_: Self::InitData) -> Self {
-        let mut bytes = [0u8; 4 * 8 + 32];
-        // unsafe { get_chain_context(bytes.as_mut_ptr()) }
-        // unsafe { get_init_ctx(bytes[4 * 8..].as_mut_ptr()) };
-        unsafe { get_init_ctx(bytes.as_mut_ptr()) };
-        let mut cursor = Cursor::<&[u8]>::new(&bytes);
-        if let Ok(v) = cursor.get() {
-            v
-        } else {
-            panic!()
-            // Host did not provide valid init context and chain metadata.
-        }
+        InitContextLazy {}
     }
 
     #[inline(always)]
-    fn init_origin(&self) -> &AccountAddress { &self.init_origin }
+    fn init_origin(&self) -> AccountAddress { 
+        let mut bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let ptr = bytes.as_mut_ptr();
+        unsafe{ get_init_origin(ptr) };
+        AccountAddress(from_bytes(&bytes).unwrap())
+    }
 
     #[inline(always)]
     fn parameter_cursor(&self) -> Self::ParamType {
@@ -252,12 +248,12 @@ impl HasInitContext<()> for InitContext {
     }
 
     #[inline(always)]
-    fn metadata(&self) -> &Self::MetadataType { &self.metadata }
+    fn metadata(&self) -> &Self::MetadataType { &ChainMetaLazy {} }
 }
 
 /// # Trait implementations for the receive context
 impl HasReceiveContext<()> for ReceiveContext {
-    type MetadataType = ChainMetadata;
+    type MetadataType = ChainMetaLazy;
     type ParamType = Parameter;
     type ReceiveData = ();
 
@@ -304,7 +300,7 @@ impl HasReceiveContext<()> for ReceiveContext {
     }
 
     #[inline(always)]
-    fn metadata(&self) -> &Self::MetadataType { &self.metadata }
+    fn metadata(&self) -> &Self::MetadataType { &ChainMetaLazy {} }
 }
 
 /// #Implementations of the logger.

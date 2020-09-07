@@ -1,6 +1,8 @@
 //! This internal module provides the primitive interface to the chain.
 //! Functions here should be wrapped in safer wrappers when used from contracts.
 
+use contracts_common::*;
+
 /// Interface to the chain. These functions are assumed to be instantiated by
 /// the scheduler with relevant primitives.
 #[cfg_attr(target_arch = "wasm32", link(wasm_import_module = "concordium"))]
@@ -42,17 +44,21 @@ extern "C" {
                                                       // get current state size in bytes.
     pub(crate) fn state_size() -> u32;
 
-    // Write the chain context to the given location. Chain context
-    // is fixed-length consisting of
-    // - slotNumber
-    // - blockHeight
-    // - finalizedHeight
-    // - slotTime (in milliseconds)
-    // pub(crate) fn get_chain_context(start: *mut u8);
+    
     // Get the init context (without the chain context).
-    // This consists of
-    // - address of the sender, 32 bytes
-    pub(crate) fn get_init_ctx(start: *mut u8);
+    /// Address of the sender, 32 bytes
+    pub(crate) fn get_init_origin(start: *mut u8);
+    
+    // Chain Meta data getters
+
+    /// Slot number
+    pub(crate) fn get_slot_number() -> SlotNumber;
+    /// Block height
+    pub(crate) fn get_block_height() -> BlockHeight;
+    /// Finalized height
+    pub(crate) fn get_finalized_height() -> FinalizedHeight;
+    /// Slot time (in milliseconds)
+    pub(crate) fn get_slot_time() -> SlotTime;
 
     // FIXME: Resolve this so the annotation is not needed.
     #[allow(dead_code)]
