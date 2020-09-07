@@ -1,7 +1,10 @@
 use crate::{secret_sharing::Threshold, types::*};
-use curve_arithmetic::Curve;
+use curve_arithmetic::{Curve, Value};
 use ff::{Field, PrimeField};
 use pedersen_scheme::Commitment;
+use rand::*;
+use elgamal::PublicKey;
+use elgamal::elgamal::*;
 
 use failure::Fallible;
 use std::collections::BTreeSet;
