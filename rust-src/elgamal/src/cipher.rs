@@ -20,6 +20,10 @@ pub struct Randomness<C: Curve> {
     pub randomness: Rc<Secret<C::Scalar>>,
 }
 
+impl<C: Curve> AsRef<C::Scalar> for Randomness<C> {
+    fn as_ref(&self) -> &C::Scalar { &self.randomness }
+}
+
 /// This trait allows automatic conversion of &Randomness<C> to &C::Scalar.
 impl<C: Curve> Deref for Randomness<C> {
     type Target = C::Scalar;
@@ -31,6 +35,12 @@ impl<C: Curve> Randomness<C> {
     pub fn new(v: C::Scalar) -> Self {
         Randomness {
             randomness: Rc::new(Secret::new(v)),
+        }
+    }
+
+    pub fn to_value(&self) -> Value<C> {
+        Value {
+            value: self.randomness.clone(),
         }
     }
 
@@ -60,6 +70,26 @@ impl<C: Curve> Cipher<C> {
         T: Rng, {
         Cipher(C::generate(csprng), C::generate(csprng))
     }
+
+    /// Combine two ciphers together by adding the individual components.
+    ///
+    /// This does not check that both ciphers were produced with the same public
+    /// key, that is the responsibility of the caller. In case ciphers were
+    /// produced with different public keys, their combination is still
+    /// mathematically valid, however it does not have meaning.
+    pub fn combine(&self, other: &Self) -> Self {
+        Self(self.0.plus_point(&other.0), self.1.plus_point(&other.1))
+    }
+
+    /// Scale the ciphertext by the given scalar. If the input is encryption of
+    /// `m`, then the result is the encryption of `m^e`, where `e` is the given
+    /// exponent.
+    pub fn scale(&self, e: &C::Scalar) -> Self {
+        Self(self.0.mul_by_scalar(e), self.1.mul_by_scalar(e))
+    }
+
+    /// Same as `scale`, but provided for convenience.
+    pub fn scale_u64(&self, e: u64) -> Self { self.scale(&C::scalar_from_u64(e)) }
 }
 
 #[cfg(test)]

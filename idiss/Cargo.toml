@@ -1,8 +1,10 @@
 [package]
 name = "idiss"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Concordium AG <contact@concordium.com>"]
 edition = "2018"
+
+description = "Web-assembly exports of the identity issuance functionality needed by the identity provider."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -48,17 +50,20 @@ version = "0"
 path = "../rust-src/eddsa_ed25519"
 version = "0"
 
+[build-dependencies.crypto_common]
+path = "../rust-src/crypto_common"
+version = "0"
+
+[build-dependencies.id]
+path = "../rust-src/id"
+version = "0"
+
 [dependencies.ecvrf]
 path = "../rust-src/ecvrf"
 version = "0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rand    = "=0.7"
-
-# To generate keys for bakers only
-[dependencies.aggregate_sig]
-path = "../rust-src/aggregate_sig"
-version = "0"
 
 [lib]
 name = "idiss"
@@ -73,8 +78,5 @@ wasm-bindgen = "0.2.8"
 wasm-bindgen-test = "0.2"
 
 [profile.release]
-rustflags = [
-  "-C", "lto=true",
-]
 codegen-units = 1 # better optimizations
 opt-level = 3

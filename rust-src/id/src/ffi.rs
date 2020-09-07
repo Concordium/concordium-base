@@ -13,7 +13,7 @@ use serde::{
     de, de::Visitor, Deserialize as SerdeDeserialize, Deserializer, Serialize as SerdeSerialize,
     Serializer,
 };
-use std::{collections::BTreeMap, fmt, io::Cursor, slice, str::FromStr};
+use std::{collections::BTreeMap, fmt, io::Cursor, str::FromStr};
 
 /// Concrete attribute kinds
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -234,6 +234,10 @@ macro_derive_from_bytes!(Box global_context_from_bytes, GlobalContext<G1>);
 macro_derive_to_bytes!(Box global_context_to_bytes, GlobalContext<G1>);
 macro_derive_from_json!(global_context_from_json, GlobalContext<G1>);
 macro_derive_to_json!(global_context_to_json, GlobalContext<G1>);
+#[no_mangle]
+extern "C" fn generate_global_context() -> *mut GlobalContext<G1> {
+    Box::into_raw(Box::new(GlobalContext::generate()))
+}
 
 // derive conversion methods for ArInfo to be used in Haskell
 macro_free_ffi!(Box ar_info_free, ArInfo<G1>);
@@ -246,49 +250,6 @@ macro_derive_to_json!(ar_info_to_json, ArInfo<G1>);
 pub extern "C" fn ar_info_ar_identity(ar_info_ptr: *const ArInfo<G1>) -> u32 {
     let ar_info = from_ptr!(ar_info_ptr);
     ar_info.ar_identity.into()
-}
-
-#[derive(Serialize)]
-pub struct ElgamalGenerator(G1);
-
-impl ElgamalGenerator {
-    pub fn generate() -> Self { ElgamalGenerator(G1::generate(&mut thread_rng())) }
-}
-
-macro_derive_from_bytes!(
-    Box elgamal_gen_from_bytes,
-    ElgamalGenerator
-);
-macro_derive_to_bytes!(Box elgamal_gen_to_bytes, ElgamalGenerator);
-macro_free_ffi!(Box elgamal_gen_free, ElgamalGenerator);
-#[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn elgamal_gen_gen() -> *mut ElgamalGenerator {
-    Box::into_raw(Box::new(ElgamalGenerator::generate()))
-}
-
-macro_derive_from_bytes!(
-    Box elgamal_pub_key_from_bytes,
-    elgamal::PublicKey<G1>
-);
-macro_derive_to_bytes!(Box elgamal_pub_key_to_bytes, elgamal::PublicKey<G1>);
-macro_free_ffi!(Box elgamal_pub_key_free, elgamal::PublicKey<G1>);
-#[no_mangle]
-pub extern "C" fn elgamal_pub_key_gen() -> *mut elgamal::PublicKey<G1> {
-    let sk = elgamal::secret::SecretKey::generate_all(&mut thread_rng());
-    Box::into_raw(Box::new(elgamal::PublicKey::from(&sk)))
-}
-
-macro_derive_from_bytes!(
-    Box elgamal_cipher_from_bytes,
-    elgamal::cipher::Cipher<G1>
-);
-macro_derive_to_bytes!(Box elgamal_cipher_to_bytes, elgamal::cipher::Cipher<G1>);
-macro_free_ffi!(Box elgamal_cipher_free, elgamal::cipher::Cipher<G1>);
-#[no_mangle]
-pub extern "C" fn elgamal_cipher_gen() -> *mut elgamal::cipher::Cipher<G1> {
-    let mut csprng = thread_rng();
-    Box::into_raw(Box::new(elgamal::cipher::Cipher::generate(&mut csprng)))
 }
 
 #[cfg(test)]
@@ -344,7 +305,7 @@ mod test {
             _phantom: Default::default(),
         };
 
-        let global_ctx = GlobalContext::<G1>::generate(&mut csprng);
+        let global_ctx = GlobalContext::<G1>::generate();
 
         let (ars_infos, _ars_secret) =
             test_create_ars(&global_ctx.generator, num_ars - 1, &mut csprng);

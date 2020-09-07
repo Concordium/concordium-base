@@ -1,7 +1,8 @@
 #[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn free_array_len(ptr: *mut u8, len: usize) {
+/// Free an array that was converted to a pointer from a vector.
+/// This assumes the vector's capacity and length were the same.
+extern "C" fn free_array_len(ptr: *mut u8, len: u64) {
     unsafe {
-        Box::from_raw(std::slice::from_raw_parts_mut(ptr, len));
+        Vec::from_raw_parts(ptr, len as usize, len as usize);
     }
 }

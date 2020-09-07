@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, OverloadedStrings, LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, DeriveGeneric, DerivingVia, DeriveDataTypeable #-}
 module Concordium.ID.Types where
 
@@ -27,11 +27,14 @@ import qualified Data.Text as Text
 import Control.DeepSeq
 import System.Random
 import qualified Data.Map.Strict as Map
+import Data.Function
 
 import Data.Base58Encoding
+
 import qualified Data.FixedByteString as FBS
 import Concordium.Crypto.ByteStringHelpers
 import Concordium.Crypto.FFIDataTypes
+import Concordium.ID.Parameters
 import qualified Concordium.Crypto.SHA256 as SHA256
 
 accountAddressSize :: Int
@@ -99,8 +102,7 @@ addressFromBytes bs =
 
 addressFromRegId :: CredentialRegistrationID -> AccountAddress
 addressFromRegId (RegIdCred fbs) = AccountAddress (FBS.FixedByteString addr) -- NB: This only works because the sizes are the same
-  where SHA256.Hash (FBS.FixedByteString addr) = SHA256.hashShort (FBS.toShortByteString fbs)
-
+  where SHA256.Hash (FBS.FixedByteString addr) = SHA256.hash (encode fbs)
 
 
 -- |Index of the account key needed to determine what key the signature should
@@ -185,18 +187,12 @@ instance ToJSONKey IdentityProviderIdentity where
 -- Account signatures (eddsa key)
 type AccountSignature = Signature
 
--- decryption key for accounts (Elgamal?)
-newtype AccountDecryptionKey = DecKeyAcc ShortByteString
-    deriving(Eq)
-    deriving Show via Short65K
-    deriving Serialize via Short65K
-
 -- encryption key for accounts (Elgamal?)
-newtype AccountEncryptionKey = AccountEncryptionKey CredentialRegistrationID
-    deriving (Eq, Show, Serialize, FromJSON, ToJSON) via CredentialRegistrationID
+newtype AccountEncryptionKey = AccountEncryptionKey {_elgamalPublicKey :: ElgamalPublicKey}
+    deriving (Eq, Show, Serialize, FromJSON, ToJSON) via ElgamalPublicKey
 
-makeEncryptionKey :: CredentialRegistrationID -> AccountEncryptionKey
-makeEncryptionKey = AccountEncryptionKey
+makeEncryptionKey :: GlobalContext -> CredentialRegistrationID -> AccountEncryptionKey
+makeEncryptionKey gc (RegIdCred ge) = AccountEncryptionKey (deriveElgamalPublicKey gc ge)
 
 data RegIdSize
 
@@ -204,14 +200,14 @@ instance FBS.FixedLength RegIdSize where
   fixedLength _ = 48
 
 -- |Credential Registration ID (48 bytes)
-newtype CredentialRegistrationID = RegIdCred (FBS.FixedByteString RegIdSize)
-    deriving (Eq, Ord)
-    deriving Show via (FBSHex RegIdSize)
-    deriving Serialize via (FBSHex RegIdSize)
+newtype CredentialRegistrationID = RegIdCred GroupElement
+    deriving newtype (Eq, Show, Serialize, ToJSON)
 
-instance ToJSON CredentialRegistrationID where
-  toJSON v = String (Text.pack (show v))
+-- Ord instance based on serialization
+instance Ord CredentialRegistrationID where
+  compare = compare `on` encode
 
+-- This is duplicated from ElgamalPublicKey for better error messages.
 instance FromJSON CredentialRegistrationID where
   parseJSON = withText "Credential registration ID in base16" deserializeBase16
 

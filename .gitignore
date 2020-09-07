@@ -1,4 +1,5 @@
 .stack-work/
+.idea
 Concordium.cabal
 *~
 *.swp
@@ -28,6 +29,8 @@ rust-bins/target
 mobile_wallet/target/
 pkg
 /idiss/node
+/idiss/Cargo.lock
 idiss/target
 *.hie
 *.iml
+lib/

@@ -9,8 +9,10 @@ use jni::{
 };
 use std::ffi::CString;
 use wallet::{
-    check_account_address_ext, create_credential_ext, create_id_request_and_private_data_ext,
-    create_transfer_ext,
+    check_account_address_ext, combine_encrypted_amounts_ext, create_credential_ext,
+    create_encrypted_transfer_ext, create_id_request_and_private_data_ext,
+    create_pub_to_sec_transfer_ext, create_sec_to_pub_transfer_ext, create_transfer_ext,
+    decrypt_encrypted_amount_ext, id_object_response_ext,
 };
 
 #[no_mangle]
@@ -139,6 +141,262 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
             &format!("Could not read CString from crypto library {:?}", e),
         ),
     }
+}
+
+#[no_mangle]
+/// The JNI wrapper for the `create_encrypted_transfer` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that
+/// is non-null. The input must be valid JSON according to specified format
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1encrypted_1transfer(
+    env: JNIEnv,
+    _: JClass,
+    input: JString,
+) -> jobject {
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                &env,
+                127,
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
+            )
+        }
+    };
+
+    let mut success: u8 = 127;
+    let cstr_res = unsafe {
+        let unsafe_res_ptr = create_encrypted_transfer_ext(input_str.as_ptr(), &mut success);
+        if unsafe_res_ptr.is_null() {
+            return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
+    }
+}
+
+#[no_mangle]
+/// The JNI wrapper for the `create_pub_to_sec_transfer_ext` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that
+/// is non-null. The input must be valid JSON according to specified format
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1pub_1to_1sec_1transfer(
+    env: JNIEnv,
+    _: JClass,
+    input: JString,
+) -> jobject {
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                &env,
+                127,
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
+            )
+        }
+    };
+
+    let mut success: u8 = 127;
+    let cstr_res = unsafe {
+        let unsafe_res_ptr = create_pub_to_sec_transfer_ext(input_str.as_ptr(), &mut success);
+        if unsafe_res_ptr.is_null() {
+            return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
+    }
+}
+
+#[no_mangle]
+/// The JNI wrapper for the `create_sec_to_pub_transfer_ext` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that
+/// is non-null. The input must be valid JSON according to specified format
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1sec_1to_1pub_1transfer(
+    env: JNIEnv,
+    _: JClass,
+    input: JString,
+) -> jobject {
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                &env,
+                127,
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
+            )
+        }
+    };
+
+    let mut success: u8 = 127;
+    let cstr_res = unsafe {
+        let unsafe_res_ptr = create_sec_to_pub_transfer_ext(input_str.as_ptr(), &mut success);
+        if unsafe_res_ptr.is_null() {
+            return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
+    }
+}
+
+#[no_mangle]
+/// The JNI wrapper for the `combine_encrypted_amounts_ext` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that
+/// is non-null. The input must be valid JSON according to specified format
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_combine_1encrypted_1amounts(
+    env: JNIEnv,
+    _: JClass,
+    input1: JString,
+    input2: JString,
+) -> jobject {
+    let input_str_1 = match env.get_string(input1) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                &env,
+                127,
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
+            )
+        }
+    };
+
+    let input_str_2 = match env.get_string(input2) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                &env,
+                127,
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
+            )
+        }
+    };
+
+    let mut success: u8 = 127;
+    let cstr_res = unsafe {
+        let unsafe_res_ptr =
+            combine_encrypted_amounts_ext(input_str_1.as_ptr(), input_str_2.as_ptr(), &mut success);
+        if unsafe_res_ptr.is_null() {
+            return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
+    }
+}
+
+#[no_mangle]
+/// The JNI wrapper for the `id_object_response_ext` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that
+/// is non-null. The input must be valid JSON according to specified format
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_id_1object_1response(
+    env: JNIEnv,
+    _: JClass,
+    input: JString,
+) -> jobject {
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                &env,
+                127,
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
+            )
+        }
+    };
+
+    let mut success: u8 = 127;
+    let cstr_res = unsafe {
+        let unsafe_res_ptr = id_object_response_ext(input_str.as_ptr(), &mut success);
+        if unsafe_res_ptr.is_null() {
+            return wrap_return_tuple(&env, 127, "Pointer returned from crypto library was NULL");
+        }
+        CString::from_raw(unsafe_res_ptr)
+    };
+
+    match cstr_res.to_str() {
+        Ok(str_ref) => wrap_return_tuple(&env, success, str_ref),
+        Err(e) => wrap_return_tuple(
+            &env,
+            127,
+            &format!("Could not read CString from crypto library {:?}", e),
+        ),
+    }
+}
+
+#[no_mangle]
+/// The JNI wrapper for the `decrypt_encrypted_amount_ext` method.
+/// The `input` parameter must be a properly initalized `java.lang.String` that
+/// is non-null. The input must be valid JSON according to specified format.
+pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_decrypt_1encrypted_1amount(
+    env: JNIEnv,
+    _: JClass,
+    input: JString,
+) -> jobject {
+    let input_str = match env.get_string(input) {
+        Ok(res_str) => res_str,
+        Err(e) => {
+            return wrap_return_tuple(
+                &env,
+                127,
+                &format!(
+                    "Could not read java.lang.String given as input due to {:?}",
+                    e
+                ),
+            )
+        }
+    };
+
+    let mut success: u8 = 127;
+    let decrypted_amount_res: String =
+        unsafe { decrypt_encrypted_amount_ext(input_str.as_ptr(), &mut success) }.to_string();
+
+    wrap_return_tuple(&env, success, &decrypted_amount_res)
 }
 
 #[no_mangle]

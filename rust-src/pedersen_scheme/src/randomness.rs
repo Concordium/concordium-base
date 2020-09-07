@@ -39,6 +39,20 @@ impl<C: Curve> Randomness<C> {
         }
     }
 
+    pub fn as_value(&self) -> Value<C> {
+        Value {
+            value: self.randomness.clone(),
+        }
+    }
+
+    pub fn from_value(x: &Value<C>) -> Self {
+        Self {
+            randomness: x.value.clone(),
+        }
+    }
+
+    pub fn from_u64(x: u64) -> Self { Self::new(C::scalar_from_u64(x)) }
+
     /// Zero randomness.
     #[inline]
     pub fn zero() -> Self { Randomness::new(C::Scalar::zero()) }

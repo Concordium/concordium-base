@@ -57,7 +57,6 @@ pub fn serde_base16_ignore_length_serialize_derive(input: TokenStream) -> TokenS
     let ident_serializer = format_ident!("serializer", span = span);
     let ident_deserializer = format_ident!("deserializer", span = span);
     let gen = quote! {
-        use serde;
         impl #impl_generics SerdeSerialize for #name #ty_generics #where_clauses {
             fn serialize<#ident: serde::Serializer>(&self, #ident_serializer: #ident) -> Result<#ident::Ok, #ident::Error> {
                 base16_ignore_length_encode(self, #ident_serializer)
@@ -168,6 +167,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 quote! {
                     impl #impl_generics Deserial for #name #ty_generics #where_clauses {
+                        #[allow(non_snake_case)]
                         fn deserial<#ident: ReadBytesExt>(#source: &mut #ident) -> Fallible<Self> {
                             use std::convert::TryFrom;
                             #tokens
