@@ -4,7 +4,7 @@ use rand::*;
 use crate::dlog_ed25519::*;
 use crypto_common::*;
 use ffi_helpers::*;
-use std::{io::Cursor, slice};
+use std::io::Cursor;
 
 use random_oracle::RandomOracle;
 

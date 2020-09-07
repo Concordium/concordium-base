@@ -1,6 +1,5 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia, OverloadedStrings, LambdaCase, GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
+{-# LANGUAGE TypeFamilies, ExistentialQuantification, FlexibleContexts, FlexibleInstances, DerivingVia, OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Concordium.Crypto.SignatureScheme where
 import Data.Word
 import Data.Serialize
@@ -32,8 +31,9 @@ signatureSerializedSize (Signature s) = 2 + BSS.length s
 
 -- |The reason for these enumerations is to support multiple different signature
 -- schemes in the future.
-data VerifyKey = VerifyKeyEd25519 !Ed25519.VerifyKey
-    deriving(Eq, Ord, Show, Generic, NFData)
+newtype VerifyKey = VerifyKeyEd25519 Ed25519.VerifyKey
+    deriving (Eq, Ord, Show, Generic)
+    deriving newtype NFData
 
 verifyKeyToJSONPairs :: VerifyKey -> [Pair]
 verifyKeyToJSONPairs (VerifyKeyEd25519 vfKey) =
@@ -65,7 +65,9 @@ data KeyPair = KeyPairEd25519 {
   signKey :: !Ed25519.SignKey,
   verifyKey :: !Ed25519.VerifyKey
   }
-  deriving(Eq, Show, Generic, NFData)
+  deriving(Eq, Show, Generic)
+
+instance NFData KeyPair
 
 correspondingVerifyKey :: KeyPair -> VerifyKey
 correspondingVerifyKey KeyPairEd25519{..} = VerifyKeyEd25519 verifyKey

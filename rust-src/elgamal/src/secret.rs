@@ -2,16 +2,15 @@
 
 //! Elgamal secret key types
 use crate::{cipher::*, message::*};
-use rand::*;
-
 use crypto_common::*;
 use curve_arithmetic::{Curve, Value};
-
+use failure::bail;
 use ff::Field;
+use rand::*;
 use std::collections::HashMap;
 
 /// Elgamal secret key packed together with a chosen generator.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, SerdeBase16Serialize)]
 pub struct SecretKey<C: Curve> {
     /// Generator of the group, not secret but convenient to have here.
     pub generator: C,
@@ -31,6 +30,7 @@ pub struct SecretKey<C: Curve> {
 
 pub type BabyStepGiantStepTable = HashMap<Vec<u8>, u64>;
 
+#[derive(Eq, PartialEq, Debug)]
 pub struct BabyStepGiantStep<C: Curve> {
     /// Precomputed table of powers.
     table: BabyStepGiantStepTable,
@@ -38,6 +38,38 @@ pub struct BabyStepGiantStep<C: Curve> {
     inverse_point: C,
     /// Size of the table.
     m: u64,
+}
+
+impl<C: Curve> Serial for BabyStepGiantStep<C> {
+    fn serial<B: Buffer>(&self, out: &mut B) {
+        out.put(&self.m);
+        out.put(&self.inverse_point);
+        for (k, v) in self.table.iter() {
+            out.write_all(k).expect("Writing to buffer should succeed.");
+            out.put(v)
+        }
+    }
+}
+
+impl<C: Curve> Deserial for BabyStepGiantStep<C> {
+    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
+        let m: u64 = source.get()?;
+        let inverse_point = source.get()?;
+        let mut table = HashMap::with_capacity(std::cmp::min(1 << 16, m as usize));
+        for _ in 0..m {
+            let mut k = vec![0; C::GROUP_ELEMENT_LENGTH];
+            source.read_exact(&mut k)?;
+            let v = source.get()?;
+            if table.insert(k, v).is_some() {
+                bail!("Duplicate element found during deserialization.")
+            }
+        }
+        Ok(Self {
+            m,
+            inverse_point,
+            table,
+        })
+    }
 }
 
 impl<C: Curve> BabyStepGiantStep<C> {
@@ -56,26 +88,28 @@ impl<C: Curve> BabyStepGiantStep<C> {
         }
     }
 
-    /// Compute the discrete log using the instance.
-    /// It is expected that the discrete log is less than m * k.
+    /// Compute the discrete log using the instance. This function's performance
+    /// is linear in `l / m` where `l` is the value stored in the exponent of
+    /// `v`, and `m` is the size of the table.
     ///
-    /// If not, the method returns None.
-    pub fn discrete_log(&self, k: u64, v: &C) -> Option<u64> {
+    /// The function will panic if `l` is not less than `u64::MAX`, although
+    /// practically it will appear to loop well-before that value is reached.
+    pub fn discrete_log(&self, v: &C) -> u64 {
         let mut y = *v;
-        for i in 0..k {
+        for i in 0..=u64::MAX {
             if let Some(j) = self.table.get(&to_bytes(&y)) {
-                return Some(i * self.m + j);
+                return i * self.m + j;
             }
             y = y.plus_point(&self.inverse_point);
         }
-        None
+        unreachable!("It should not be feasible to do 2^64 group additions.")
     }
 
     /// Composition of `new` nad `discrete_log` methods for convenience.
     ///
     /// Less efficient than reusing the table.
-    pub fn discrete_log_full(base: &C, m: u64, k: u64, v: &C) -> Option<u64> {
-        BabyStepGiantStep::new(base, m).discrete_log(k, v)
+    pub fn discrete_log_full(base: &C, m: u64, v: &C) -> u64 {
+        BabyStepGiantStep::new(base, m).discrete_log(v)
     }
 }
 
@@ -101,20 +135,14 @@ impl<C: Curve> SecretKey<C> {
     }
 
     /// Decrypt the value in the exponent. It is assumed the encrypted value can
-    /// be represented in 64 bits, otherwise this function returns `None`.
+    /// be represented in 64 bits, and are small enough. Otherwise this function
+    /// will appear to not terminate.
     ///
     /// This function takes an auxiliary instance of BabyStepGiantStep to speed
     /// up decryption.
-    pub fn decrypt_exponent(
-        &self,
-        c: &Cipher<C>,
-        k: u64,
-        bsgs: &BabyStepGiantStep<C>,
-    ) -> Option<Value<C>> {
+    pub fn decrypt_exponent(&self, c: &Cipher<C>, bsgs: &BabyStepGiantStep<C>) -> u64 {
         let dec = self.decrypt(c).value;
-        let a = bsgs.discrete_log(k, &dec)?;
-        let a = C::scalar_from_u64(a);
-        Some(Value::new(a))
+        bsgs.discrete_log(&dec)
     }
 
     /// Generate a `SecretKey` from a `csprng`.
@@ -158,4 +186,24 @@ mod tests {
 
     macro_test_secret_key_to_byte_conversion!(secret_key_to_byte_conversion_g1, G1);
     macro_test_secret_key_to_byte_conversion!(secret_key_to_byte_conversion_g2, G2);
+
+    // Test serialiation of baby-step-giant-step since it is implemented manually.
+    #[test]
+    fn test_bsgs_serialize() {
+        let mut csprng = thread_rng();
+        let m = 1 << 16;
+        for _ in 0..10 {
+            let bsgs = BabyStepGiantStep::<G1>::new(&G1::generate(&mut csprng), m);
+            let res = serialize_deserialize(&bsgs);
+            assert!(
+                res.is_ok(),
+                "Failed to deserialize baby step giant step table."
+            );
+            assert_eq!(
+                res.unwrap(),
+                bsgs,
+                "Deserialized table is different from original."
+            );
+        }
+    }
 }

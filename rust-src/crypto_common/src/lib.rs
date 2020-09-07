@@ -1,6 +1,7 @@
 pub mod helpers;
 pub mod impls;
 pub mod serialize;
+pub mod types;
 pub mod version;
 
 pub use crate::{helpers::*, impls::*, serialize::*, version::*};
