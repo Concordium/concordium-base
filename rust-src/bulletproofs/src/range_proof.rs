@@ -1,11 +1,11 @@
-use crate::{inner_product_proof::*, transcript::TranscriptProtocol};
+use crate::inner_product_proof::*;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Value};
 use ff::{Field, PrimeField};
-use merlin::Transcript;
 use pedersen_scheme::*;
 use rand::*;
+use random_oracle::RandomOracle;
 use std::iter::once;
 
 #[derive(Clone, Serialize, SerdeBase16Serialize)]
@@ -104,7 +104,7 @@ impl<C: Curve> Generators<C> {
 /// See the documentation of `prove` below for the meaning of arguments.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_given_scalars<C: Curve, T: Rng>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     csprng: &mut T,
     n: u8,
     m: u8,
@@ -145,7 +145,7 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
 #[allow(non_snake_case)]
 #[allow(clippy::too_many_arguments)]
 pub fn prove<C: Curve, T: Rng>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     csprng: &mut T,
     n: u8,
     m: u8,
@@ -435,7 +435,7 @@ pub enum VerificationError {
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::many_single_char_names)]
 pub fn verify_efficient<C: Curve>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     n: u8,
     commitments: &[Commitment<C>],
     proof: &RangeProof<C>,
@@ -627,7 +627,7 @@ mod tests {
         B: C,
         B_tilde: C,
         csprng: &mut T,
-        transcript: &mut Transcript,
+        transcript: &mut RandomOracle,
     ) -> (Vec<Commitment<C>>, Option<RangeProof<C>>) {
         let nm = (usize::from(n)) * (usize::from(m));
         let v_copy = v_vec.clone();
@@ -756,7 +756,7 @@ mod tests {
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::many_single_char_names)]
     fn naive_verify<C: Curve>(
-        transcript: &mut Transcript,
+        transcript: &mut RandomOracle,
         n: u8,
         commitments: &[Commitment<C>],
         proof: &RangeProof<C>,
@@ -904,7 +904,7 @@ mod tests {
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::many_single_char_names)]
     pub fn verify_more_efficient<C: Curve>(
-        transcript: &mut Transcript,
+        transcript: &mut RandomOracle,
         n: u8,
         commitments: &[Commitment<C>],
         proof: &RangeProof<C>,
@@ -1125,7 +1125,7 @@ mod tests {
             randomness.push(r);
             commitments.push(com);
         }
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let proof = prove(
             &mut transcript,
             rng,
@@ -1138,14 +1138,14 @@ mod tests {
         );
         assert!(proof.is_some());
         let proof = proof.unwrap();
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b1 = naive_verify(&mut transcript, n, &commitments, &proof, &gens, &keys);
 
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b2 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
 
         // Testing the even more efficient verifier:
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b3 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
         assert!(b1);
         assert!(b2.is_ok());
@@ -1187,7 +1187,7 @@ mod tests {
                * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
         ];
         // CHEATING prover:
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let (commitments, proof) = cheat_prove(
             n,
             m,
@@ -1201,9 +1201,9 @@ mod tests {
         );
         assert!(proof.is_some());
         let proof = proof.unwrap();
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b1 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b2 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
         assert_eq!(
             b1,

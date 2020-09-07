@@ -14,7 +14,6 @@ use crypto_common::{to_bytes, types::Amount};
 use curve_arithmetic::*;
 use elgamal::*;
 use id::types::*;
-use merlin::Transcript;
 use proofs::*;
 use rand::*;
 use random_oracle::*;
@@ -155,7 +154,7 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
         .append_bytes(&to_bytes(&receiver_pk))
         .append_bytes(&to_bytes(&sender_pk));
     // FIXME: Put context into the transcript.
-    let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
+    let mut transcript = RandomOracle::domain("EncryptedTransfer");
     transcript.append_message(b"ctx", &to_bytes(&ctx));
     transcript.append_message(b"receiver_pk", &to_bytes(&receiver_pk));
     transcript.append_message(b"sender_pk", &to_bytes(&sender_pk));
@@ -200,7 +199,7 @@ pub fn verify_transfer_data<C: Curve>(
         .append_bytes(&to_bytes(&ctx))
         .append_bytes(&to_bytes(&receiver_pk))
         .append_bytes(&to_bytes(&sender_pk));
-    let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
+    let mut transcript = RandomOracle::domain("EncryptedTransfer");
     transcript.append_message(b"ctx", &to_bytes(&ctx));
     transcript.append_message(b"receiver_pk", &to_bytes(&receiver_pk));
     transcript.append_message(b"sender_pk", &to_bytes(&sender_pk));
@@ -245,7 +244,7 @@ pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
         .append_bytes(&to_bytes(&ctx))
         .append_bytes(&to_bytes(&pk));
     // FIXME: Put context into the transcript.
-    let mut transcript = Transcript::new(r"SecToPubTransfer".as_ref());
+    let mut transcript = RandomOracle::domain("SecToPubTransfer");
     transcript.append_message(b"ctx", &to_bytes(&ctx));
     transcript.append_message(b"pk", &to_bytes(&pk));
 
@@ -288,7 +287,7 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
     let ro = RandomOracle::domain("SecToPubTransfer")
         .append_bytes(&to_bytes(&ctx))
         .append_bytes(&to_bytes(&pk));
-    let mut transcript = Transcript::new(r"SecToPubTransfer".as_ref());
+    let mut transcript = RandomOracle::domain("SecToPubTransfer");
     transcript.append_message(b"ctx", &to_bytes(&ctx));
     transcript.append_message(b"pk", &to_bytes(&pk));
 
@@ -297,7 +296,7 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
     generate_proofs::verify_sec_to_pub_trans(
         ctx,
         ro,
-        &mut transcript,
+        &mut transcript, // todo remove either ro or transcript?
         transfer_data,
         pk,
         &before_amount.join(),

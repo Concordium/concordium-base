@@ -138,6 +138,36 @@ impl RandomOracle {
             challenge: self.result().into(),
         }
     }
+
+    pub fn append_point<C: Curve>(&mut self, label: &'static [u8], point: &C) {
+        for elem in label.iter() {
+            self.add(elem)
+        }
+        self.add(point)
+    }
+
+    pub fn append_scalar<C: Curve>(&mut self, label: &'static [u8], scalar: &C::Scalar) {
+        for elem in label.iter() {
+            self.add(elem)
+        }
+        self.add(scalar)
+    }
+
+    pub fn append_message(&mut self, label: &'static [u8], message: &[u8]) {
+        for elem in label.iter() {
+            self.add(elem)
+        }
+        for elem in message.iter() {
+            self.add(elem)
+        }
+    }
+
+    pub fn challenge_scalar<C: Curve>(&mut self, label: &'static [u8]) -> C::Scalar {
+        for elem in label.iter() {
+            self.add(elem)
+        }
+        self.split().result_to_scalar::<C>()
+    }
 }
 
 #[cfg(test)]

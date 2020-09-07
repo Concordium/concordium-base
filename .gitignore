@@ -21,6 +21,7 @@ build/
 dist/
 
 rust-src/target/
+rust-src/*/target/
 *.json
 /.dir-locals.el
 *.bin

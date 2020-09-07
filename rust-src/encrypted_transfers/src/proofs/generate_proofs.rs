@@ -11,7 +11,6 @@ use id::{
     sigma_protocols::{com_eq::*, common::*, dlog::*},
     types::GlobalContext,
 };
-use merlin::Transcript;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness as PedersenRandomness};
 use rand::*;
 use random_oracle::*;
@@ -133,7 +132,7 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
 pub fn gen_enc_trans<C: Curve, R: Rng>(
     context: &GlobalContext<C>,
     ro: RandomOracle,
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     pk_sender: &PublicKey<C>,
     sk_sender: &SecretKey<C>,
     pk_receiver: &PublicKey<C>,
@@ -291,7 +290,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
 pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
     context: &GlobalContext<C>,
     ro: RandomOracle,
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     pk: &PublicKey<C>, // sender and receiver are the same person
     sk: &SecretKey<C>,
     index: u64,    // indicates which amounts were used
@@ -408,7 +407,7 @@ pub enum VerificationError {
 pub fn verify_enc_trans<C: Curve>(
     context: &GlobalContext<C>,
     ro: RandomOracle,
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     transaction: &EncryptedAmountTransferData<C>,
     pk_sender: &PublicKey<C>,
     pk_receiver: &PublicKey<C>,
@@ -499,7 +498,7 @@ pub fn verify_enc_trans<C: Curve>(
 pub fn verify_sec_to_pub_trans<C: Curve>(
     context: &GlobalContext<C>,
     ro: RandomOracle,
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     transaction: &SecToPubAmountTransferData<C>,
     pk: &PublicKey<C>,
     S: &Cipher<C>,
@@ -603,7 +602,7 @@ mod test {
         // between the transcript and the RO,
         // maybe inside the functions used below?
 
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
         let transaction = gen_enc_trans(
             &context,
@@ -620,7 +619,7 @@ mod test {
         )
         .expect("Could not produce proof.");
 
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
 
         assert_eq!(
             verify_enc_trans(
@@ -658,7 +657,7 @@ mod test {
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
         let ro = RandomOracle::domain(&challenge_prefix);
 
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
         let transaction = gen_sec_to_pub_trans(
             &context,
@@ -673,7 +672,7 @@ mod test {
             &mut csprng,
         )
         .expect("Proving failed, but that is extremely unlikely, which indicates a bug.");
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
 
         assert_eq!(
             verify_sec_to_pub_trans(&context, ro, &mut transcript, &transaction, &pk, &S,),
