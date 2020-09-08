@@ -77,15 +77,15 @@ impl<'a> HasReceiveContext<()> for ReceiveContextWrapper<'a> {
 
     fn metadata(&self) -> &Self::MetadataType { &self.receive_ctx.metadata }
 
-    fn invoker(&self) -> &AccountAddress { &self.receive_ctx.invoker }
+    fn invoker(&self) -> AccountAddress { self.receive_ctx.invoker }
 
-    fn self_address(&self) -> &ContractAddress { &self.receive_ctx.self_address }
+    fn self_address(&self) -> ContractAddress { self.receive_ctx.self_address }
 
     fn self_balance(&self) -> Amount { self.receive_ctx.self_balance }
 
-    fn sender(&self) -> &Address { &self.receive_ctx.sender }
+    fn sender(&self) -> Address { self.receive_ctx.sender }
 
-    fn owner(&self) -> &AccountAddress { &self.receive_ctx.owner }
+    fn owner(&self) -> AccountAddress { self.receive_ctx.owner }
 }
 
 /// A logger that simply accumulates all the logged items to be inspected at the

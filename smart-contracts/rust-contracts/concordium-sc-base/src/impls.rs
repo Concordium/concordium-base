@@ -252,45 +252,50 @@ impl HasInitContext<()> for InitContextLazy {
 }
 
 /// # Trait implementations for the receive context
-impl HasReceiveContext<()> for ReceiveContext {
+impl HasReceiveContext<()> for ReceiveContextLazy {
     type MetadataType = ChainMetaLazy;
     type ParamType = Parameter;
     type ReceiveData = ();
 
-    /// Create a new receive context by using an external call.
+    /// Create a new receive context
     fn open(_: Self::ReceiveData) -> Self {
-        // let metadata_size = 4 * 8;
-        // We reduce this to a purely stack-based allocation
-        // by overapproximating the size of the context.
-        // unsafe { get_receive_ctx_size() };
-        let mut bytes = [0u8; 4 * 8 + 121];
-        // unsafe { get_chain_context(bytes.as_mut_ptr()) }
-        // unsafe { get_receive_ctx(bytes[metadata_size..].as_mut_ptr()) };
-        unsafe { get_receive_ctx(bytes.as_mut_ptr()) };
-        let mut cursor = Cursor::<&[u8]>::new(&bytes);
-        if let Ok(v) = cursor.get() {
-            v
-        } else {
-            panic!()
-            // environment did not provide a valid receive context, this should
-            // not happen and cannot be recovered.
-        }
+        ReceiveContextLazy {}
     }
 
     #[inline(always)]
-    fn invoker(&self) -> &AccountAddress { &self.invoker }
+    fn invoker(&self) -> AccountAddress { 
+        let mut bytes = [0u8; mem::size_of::<AccountAddress>()];
+        let ptr = bytes.as_mut_ptr();
+        unsafe{ get_receive_invoker(ptr) };
+        from_bytes(&bytes).unwrap()
+     }
 
     #[inline(always)]
-    fn self_address(&self) -> &ContractAddress { &self.self_address }
+    fn self_address(&self) -> ContractAddress { 
+        let mut bytes = [0u8; mem::size_of::<ContractAddress>()];
+        let ptr = bytes.as_mut_ptr();
+        unsafe{ get_receive_self_address(ptr) };
+        from_bytes(&bytes).unwrap()
+     }
 
     #[inline(always)]
-    fn self_balance(&self) -> Amount { self.self_balance }
+    fn self_balance(&self) -> Amount { unsafe { get_receive_self_balance() } }
 
     #[inline(always)]
-    fn sender(&self) -> &Address { &self.sender }
+    fn sender(&self) -> Address { 
+        let mut bytes = [0u8; mem::size_of::<Address>()];
+        let ptr = bytes.as_mut_ptr();
+        unsafe{ get_receive_sender(ptr) };
+        from_bytes(&bytes).unwrap()
+     }
 
     #[inline(always)]
-    fn owner(&self) -> &AccountAddress { &self.owner }
+    fn owner(&self) -> AccountAddress { 
+        let mut bytes = [0u8; mem::size_of::<AccountAddress>()];
+        let ptr = bytes.as_mut_ptr();
+        unsafe{ get_receive_owner(ptr) };
+        from_bytes(&bytes).unwrap()
+     }
 
     #[inline(always)]
     fn parameter_cursor(&self) -> Self::ParamType {

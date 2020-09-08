@@ -469,6 +469,7 @@ pub fn make_imports(
             let init_origin_bytes = to_bytes(&init_ctx.init_origin);
             let get_init_origin = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &init_origin_bytes);
             
+            // Chain meta data getters
             let slot_number = init_ctx.metadata.slot_number;
             let get_slot_number = move || slot_number;
             let block_height = init_ctx.metadata.block_height;
@@ -478,20 +479,22 @@ pub fn make_imports(
             let slot_time = init_ctx.metadata.slot_time;
             let get_slot_time = move || slot_time;
 
-            let get_receive_ctx =
-                |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<(), ()> { Err(()) };
-            let get_receive_ctx_size = || -> Result<u32, ()> { Err(()) };
-
+            let err_func_u64 = || -> Result<u64, ()> { Err(()) };
+            let err_func_memory = |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>|  -> Result<(), ()> { Err(()) };
+            
             let imps = imports! {
                 "concordium" => {
                     // NOTE: validation will only allow access to a given list of these functions (check to be added)
                     "get_init_origin" => func!(get_init_origin),
+                    "get_receive_invoker" => func!(err_func_memory),
+                    "get_receive_self_address" => func!(err_func_memory),
+                    "get_receive_self_balance" => func!(err_func_u64),
+                    "get_receive_sender" => func!(err_func_memory),
+                    "get_receive_owner" => func!(err_func_memory),
                     "get_slot_number" => func!(get_slot_number),
                     "get_block_height" => func!(get_block_height),
                     "get_finalized_height" => func!(get_finalized_height),
                     "get_slot_time" => func!(get_slot_time),
-                    "get_receive_ctx" => func!(get_receive_ctx),
-                    "get_receive_ctx_size" => func!(get_receive_ctx_size),
                     "get_parameter_section" => func!(get_parameter_section),
                     "get_parameter_size" => func!(get_parameter_size),
                     "combine_and" => func!(combine_and),
@@ -510,25 +513,11 @@ pub fn make_imports(
             (imps, logs, energy, state, outcome)
         }
         Which::Receive {
-            ref receive_ctx,
+            receive_ctx,
             ..
         } => {
-            let receive_bytes = to_bytes(receive_ctx);
-            let receive_bytes_len = receive_bytes.len() as u32;
-            let get_receive_ctx = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
-                let memory = ctx.memory(0);
-                match unsafe { ptr.deref_mut(memory, 0, receive_bytes_len) } {
-                    Some(cells) => {
-                        for (place, byte) in cells.iter_mut().zip(&receive_bytes) {
-                            place.set(*byte);
-                        }
-                        Ok(())
-                    }
-                    None => Err(error::RuntimeError::User(Box::new(
-                        "Cannot acquire memory to write receive context into.",
-                    ))),
-                }
-            };
+
+            // Chain meta data getters
             let slot_number = receive_ctx.metadata.slot_number;
             let get_slot_number = move || slot_number;
             let block_height = receive_ctx.metadata.block_height;
@@ -538,19 +527,31 @@ pub fn make_imports(
             let slot_time = receive_ctx.metadata.slot_time;
             let get_slot_time = move || slot_time;
 
-            let get_receive_ctx_size = move || -> u32 { receive_bytes_len };
-            let get_init_origin =
-                |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<(), ()> { Err(()) };
+            let invoker_bytes = to_bytes(&receive_ctx.invoker);
+            let get_receive_invoker = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &invoker_bytes);
+            let self_address_bytes = to_bytes(&receive_ctx.self_address);
+            let get_receive_self_address = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &self_address_bytes);
+            let receive_self_balance = receive_ctx.self_balance;
+            let get_receive_self_balance = move || receive_self_balance;
+            let sender_bytes = to_bytes(&receive_ctx.sender);
+            let get_receive_sender = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &sender_bytes);
+            let owner_bytes = to_bytes(&receive_ctx.owner);
+            let get_receive_owner = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &owner_bytes);
+
+            let err_func = |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<(), ()> { Err(()) };
 
             let imps = imports! {
                 "concordium" => {
-                    "get_init_origin" => func!(get_init_origin),
+                    "get_init_origin" => func!(err_func),
+                    "get_receive_invoker" => func!(get_receive_invoker),
+                    "get_receive_self_address" => func!(get_receive_self_address),
+                    "get_receive_self_balance" => func!(get_receive_self_balance),
+                    "get_receive_sender" => func!(get_receive_sender),
+                    "get_receive_owner" => func!(get_receive_owner),
                     "get_slot_number" => func!(get_slot_number),
                     "get_block_height" => func!(get_block_height),
                     "get_finalized_height" => func!(get_finalized_height),
                     "get_slot_time" => func!(get_slot_time),
-                    "get_receive_ctx" => func!(get_receive_ctx),
-                    "get_receive_ctx_size" => func!(get_receive_ctx_size),
                     "get_parameter_section" => func!(get_parameter_section),
                     "get_parameter_size" => func!(get_parameter_size),
                     "combine_and" => func!(combine_and),
@@ -621,7 +622,7 @@ pub fn invoke_receive(
     // state, outcome.
     let (import_obj, logs, energy, state, outcome) = make_imports(
         Which::Receive {
-            receive_ctx,
+            receive_ctx: &receive_ctx,
             current_state,
         },
         parameter,

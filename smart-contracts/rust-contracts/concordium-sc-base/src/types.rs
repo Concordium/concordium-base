@@ -107,4 +107,6 @@ pub type InitResult<S> = Result<S, Reject>;
 
 pub struct InitContextLazy {}
 
+pub struct ReceiveContextLazy {}
+
 pub struct ChainMetaLazy {}

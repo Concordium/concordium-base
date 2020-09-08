@@ -187,7 +187,7 @@ fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             // contributor.
             for _ in 0..len {
                 let key: AccountAddress = state.get()?;
-                if key == *addr {
+                if key == addr {
                     // we found the contributor in the existing map.
                     // First read the current contributions.
                     let cur_amount: Amount = state.get()?;
@@ -255,7 +255,7 @@ fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ensure!(amount == 0, "Ending the game should not transfer any tokens.");
     ensure!(ct >= state.expiry, "Cannot finalize before expiry time.");
     ensure!(!state.contributions.is_empty(), "Already finalized.");
-    ensure!(ctx.sender().matches_account(ctx.owner()), "Only the owner can finalize.");
+    ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can finalize.");
     // sort the btreemap by the second key.
     // This would be unnecessary if we swapped the values in the BTreeMap so that
     // the hash would come first, the iterator would then give ordered values
@@ -326,5 +326,5 @@ fn help_yourself<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
         state.size() == 0,
         "Helping yourself only allowed after normal contributions are sent.."
     );
-    Ok(A::simple_transfer(ctx.invoker(), ctx.self_balance()))
+    Ok(A::simple_transfer(&ctx.invoker(), ctx.self_balance()))
 }

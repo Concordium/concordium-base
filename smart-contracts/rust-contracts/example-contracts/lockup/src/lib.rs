@@ -118,7 +118,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     match msg {
         Message::WithdrawFunds(withdrawal_amount) => {
             ensure!(
-                state.account_holders.iter().any(|account_holder| sender == account_holder),
+                state.account_holders.iter().any(|&account_holder| sender == account_holder),
                 "Only account holders can make a withdrawal."
             );
             ensure!(
@@ -129,7 +129,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             // We have checked that the avaiable balance is high enough, so underflow
             // should not be possible
             state.available_balance -= withdrawal_amount;
-            Ok(A::simple_transfer(sender, withdrawal_amount))
+            Ok(A::simple_transfer(&sender, withdrawal_amount))
         }
 
         Message::CancelFutureVesting => {
@@ -137,7 +137,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
                 state
                     .future_vesting_veto_accounts
                     .iter()
-                    .any(|veto_account| sender == veto_account),
+                    .any(|&veto_account| sender == veto_account),
                 "Only veto accounts can cancel future vesting."
             );
 
@@ -149,7 +149,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             state.remaining_vesting_schedule = vec![];
 
             // Return unvested funds to the contract owner
-            Ok(A::simple_transfer(ctx.owner(), cancelled_vesting_amount))
+            Ok(A::simple_transfer(&ctx.owner(), cancelled_vesting_amount))
         }
     }
 }

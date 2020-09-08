@@ -43,14 +43,24 @@ extern "C" {
     pub(crate) fn resize_state(new_size: u32) -> u32; // returns 0 or 1.
                                                       // get current state size in bytes.
     pub(crate) fn state_size() -> u32;
-
     
-    // Get the init context (without the chain context).
+    // Getter for the init context.
     /// Address of the sender, 32 bytes
     pub(crate) fn get_init_origin(start: *mut u8);
     
-    // Chain Meta data getters
+    // Getters for the receive context
+    /// Invoker of the top-level transaction, AccountAddress.
+    pub(crate) fn get_receive_invoker(start: *mut u8);
+    /// Address of the contract itself, ContractAddress.
+    pub(crate) fn get_receive_self_address(start: *mut u8);
+    /// Self-balance of the contract.
+    pub(crate) fn get_receive_self_balance() -> Amount;
+    /// Immediate sender of the message (either contract or account).
+    pub(crate) fn get_receive_sender(start: *mut u8);
+    /// Owner of the contract, AccountAddress.
+    pub(crate) fn get_receive_owner(start: *mut u8);
 
+    // Getters for the chain meta data
     /// Slot number
     pub(crate) fn get_slot_number() -> SlotNumber;
     /// Block height
@@ -60,15 +70,4 @@ extern "C" {
     /// Slot time (in milliseconds)
     pub(crate) fn get_slot_time() -> SlotTime;
 
-    // FIXME: Resolve this so the annotation is not needed.
-    #[allow(dead_code)]
-    pub(crate) fn get_receive_ctx_size() -> u32;
-    // Get the receive context (without the chain context).
-    // This consists of
-    // - invoker of the top-level transaction
-    // - address of the contract itself
-    // - self-balance of the contract
-    // - immediate sender of the message (either contract or account)
-    // - owner of the contract.
-    pub(crate) fn get_receive_ctx(start: *mut u8);
 }

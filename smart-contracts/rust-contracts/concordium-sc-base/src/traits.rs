@@ -62,16 +62,16 @@ where
     fn open(data: Self::ReceiveData) -> Self;
     /// Who is the account that initiated the top-level transaction this
     /// invocation is a part of.
-    fn invoker(&self) -> &AccountAddress;
+    fn invoker(&self) -> AccountAddress;
     /// The address of the contract being invoked.
-    fn self_address(&self) -> &ContractAddress;
+    fn self_address(&self) -> ContractAddress;
     /// Balance on the contract before the call was made.
     fn self_balance(&self) -> Amount;
     /// The immediate sender of the message. In general different from the
     /// invoker.
-    fn sender(&self) -> &Address;
+    fn sender(&self) -> Address;
     /// Account which created the contract instance.
-    fn owner(&self) -> &AccountAddress;
+    fn owner(&self) -> AccountAddress;
     /// Get the cursor to the parameter.
     fn parameter_cursor(&self) -> Self::ParamType;
     /// Get the reference to chain metadata

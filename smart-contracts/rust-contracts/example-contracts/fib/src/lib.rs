@@ -34,7 +34,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 // corresponding to the recursive evaluation F(n) = F(n-1) + F(n-2) (for n>1).
 #[receive(name = "receive")]
 #[inline(always)]
-fn contract_receive<A: HasActions, R: HasReceiveContext<()>, L: HasLogger>(
+fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
     ctx: R,
     _amount: Amount,
     _logger: &mut L,
@@ -46,8 +46,9 @@ fn contract_receive<A: HasActions, R: HasReceiveContext<()>, L: HasLogger>(
         state.result += 1;
         Ok(A::accept())
     } else {
-        Ok(A::send(ctx.self_address(), "receive", 0, &(n - 1).to_le_bytes()).and_then(A::send(
-            ctx.self_address(),
+        let self_address = ctx.self_address();
+        Ok(A::send(&self_address, "receive", 0, &(n - 1).to_le_bytes()).and_then(A::send(
+            &self_address,
             "receive",
             0,
             &(n - 2).to_le_bytes(),
@@ -59,8 +60,8 @@ fn contract_receive<A: HasActions, R: HasReceiveContext<()>, L: HasLogger>(
 // state to that number.
 #[receive(name = "receive_calc_fib")]
 #[inline(always)]
-fn contract_receive_calc_fib<A: HasActions, L: HasLogger>(
-    _ctx: ReceiveContext,
+fn contract_receive_calc_fib<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
+    _ctx: R,
     amount: Amount,
     _logger: &mut L,
     state: &mut State,
