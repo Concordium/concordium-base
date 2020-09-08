@@ -369,28 +369,6 @@ pub fn from_bytes<A: Deserial, R: ReadBytesExt>(source: &mut R) -> Fallible<A> {
 }
 
 // Some more generic implementations
-impl<T: Serial> Serial for [T; 3] {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        for x in self.iter() {
-            x.serial(out);
-        }
-    }
-}
-
-// Some more generic implementations
-impl<T: Deserial> Deserial for [T; 3] {
-    fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
-        // This is a bit stupid, but I can't figure out how to avoid a
-        // Default constraint otherwise (if I allow it, we can preallocate
-        // with let mut out: [T; 3] = Default::default();
-        // and then iterate over it
-        let x_1 = T::deserial(source)?;
-        let x_2 = T::deserial(source)?;
-        let x_3 = T::deserial(source)?;
-        Ok([x_1, x_2, x_3])
-    }
-}
-
 impl<T: Serial> Serial for [T; 2] {
     fn serial<B: Buffer>(&self, out: &mut B) {
         for x in self.iter() {
@@ -399,11 +377,12 @@ impl<T: Serial> Serial for [T; 2] {
     }
 }
 
+// Some more generic implementations
 impl<T: Deserial> Deserial for [T; 2] {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
         // This is a bit stupid, but I can't figure out how to avoid a
         // Default constraint otherwise (if I allow it, we can preallocate
-        // with let mut out: [T; 3] = Default::default();
+        // with let mut out: [T; 2] = Default::default();
         // and then iterate over it
         let x_1 = T::deserial(source)?;
         let x_2 = T::deserial(source)?;
