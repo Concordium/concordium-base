@@ -96,6 +96,10 @@ impl<C: Curve> Generators<C> {
         }
         Self { G_H: gh }
     }
+
+    pub fn take(&self, nm: usize) -> Self {
+        Self {G_H: self.G_H[0..nm].to_vec()}
+    }
 }
 
 /// This function produces a range proof given scalars in a prime field
@@ -154,10 +158,10 @@ pub fn prove<C: Curve, T: Rng>(
     v_keys: &CommitmentKey<C>,
     randomness: &[Randomness<C>],
 ) -> Option<RangeProof<C>> {
-    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
+    let nm = usize::from(n)*usize::from(m);
+    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(nm).cloned().unzip();
     let B = v_keys.g;
     let B_tilde = v_keys.h;
-    let nm = G.len();
     let mut a_L: Vec<C::Scalar> = Vec::with_capacity(usize::from(n));
     let mut a_R: Vec<C::Scalar> = Vec::with_capacity(usize::from(n));
     let mut V_vec: Vec<Commitment<C>> = Vec::with_capacity(usize::from(m));

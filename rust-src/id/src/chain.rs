@@ -248,10 +248,11 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
             .get(ar_id)
             .ok_or(CDIVerificationError::IdCredPub)?;
         let item_prover = com_enc_eq::ComEncEq {
-            cipher:     ar_data.enc_id_cred_pub_share,
+            cipher: ar_data.enc_id_cred_pub_share,
             commitment: cmm_share,
-            pub_key:    *ar_info.get_public_key(),
-            cmm_key:    *commitment_key,
+            pub_key: *ar_info.get_public_key(),
+            cmm_key: *commitment_key,
+            encryption_in_exponent_generator: ar_info.get_public_key().generator,
         };
         provers.push(item_prover);
         witnesses.push(witness.clone());
