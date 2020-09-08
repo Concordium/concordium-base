@@ -1,5 +1,5 @@
 {-| This module provides the necessary primitives for encrypted amount transfers. -}
-{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DerivingVia, OverloadedStrings #-}
 module Concordium.Crypto.EncryptedTransfers (
   -- * Encrypted amount
   EncryptedAmount(..),
@@ -239,6 +239,14 @@ data EncryptedAmountTransferData = EncryptedAmountTransferData {
   eatdProof :: !EncryptedAmountTransferProof
   } deriving (Eq, Show)
 
+instance FromJSON EncryptedAmountTransferData where
+  parseJSON = withObject "Encrypted Amount Transfer Data" $ \v -> do
+    eatdRemainingAmount <- v .: "remainingAmount"
+    eatdTransferAmount <- v .: "transferAmount"
+    eatdIndex <- v .: "index"
+    eatdProof <- v .: "proof"
+    return EncryptedAmountTransferData{..}
+
 withEncryptedAmountTransferData :: EncryptedAmountTransferData
                                 -> (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> Ptr ElgamalCipher -> EncryptedAmountAggIndex -> Word64 -> Ptr CChar -> IO a)
                                 -> IO a
@@ -389,6 +397,14 @@ data SecToPubAmountTransferData = SecToPubAmountTransferData {
   stpatdIndex :: !EncryptedAmountAggIndex,
   stpatdProof :: !SecToPubAmountTransferProof
   } deriving (Eq, Show)
+
+instance FromJSON SecToPubAmountTransferData where
+  parseJSON = withObject "Secret To Public Transfer Data" $ \v -> do
+    stpatdRemainingAmount <- v .: "remainingAmount"
+    stpatdTransferAmount <- v .: "transferAmount"
+    stpatdIndex <- v .: "index"
+    stpatdProof <- v .: "proof"
+    return SecToPubAmountTransferData{..}
 
 withSecToPubAmountTransferData :: SecToPubAmountTransferData
                                -> (Ptr ElgamalCipher -> Ptr ElgamalCipher -> Word64 -> EncryptedAmountAggIndex -> Word64 -> Ptr CChar -> IO a)
