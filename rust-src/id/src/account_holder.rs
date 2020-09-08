@@ -6,13 +6,15 @@ use crate::{
     types::*,
     utils,
 };
+use bulletproofs::range_proof::{prove_given_scalars as bulletprove, Generators};
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use either::Either;
-use elgamal::{Cipher, Message};
+use elgamal::Cipher;
 use failure::Fallible;
 use ff::Field;
+use merlin::Transcript;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey as PedersenKey,
     randomness::Randomness as PedersenRandomness, value::Value,
@@ -47,8 +49,13 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let ar_commitment_key = &context.global_context.on_chain_commitment_key;
 
-    let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) =
-        compute_sharing_data_prf(&prf_value, &context.ars_infos, threshold, ar_commitment_key, &context.global_context);
+    let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data_prf(
+        &prf_value,
+        &context.ars_infos,
+        threshold,
+        ar_commitment_key,
+        &context.global_context,
+    );
     let number_of_ars = context.ars_infos.len();
     let mut ip_ar_data = Vec::with_capacity(number_of_ars);
 
@@ -127,33 +134,38 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let mut replicated_secrets = Vec::with_capacity(prf_key_data.len());
 
     for item in prf_key_data.iter() {
-
         let u8_chunk_size = u8::from(CHUNK_SIZE);
         let two_chunksize = C::scalar_from_u64(1 << u8_chunk_size);
         let mut power_of_two = C::Scalar::one();
         let mut combined_ciphers = Cipher(C::zero_point(), C::zero_point());
-        for cipher in item.encrypted_share.iter(){ // FIXME: use multiexp instead
+        for cipher in item.encrypted_share.iter() {
+            // FIXME: use multiexp instead
             let scaled_cipher = cipher.scale(&power_of_two);
             combined_ciphers = combined_ciphers.combine(&scaled_cipher);
-            power_of_two.mul_assign(&two_chunksize); 
+            power_of_two.mul_assign(&two_chunksize);
         }
         let mut power_of_two = C::Scalar::one();
         let mut combined_rands = C::Scalar::zero();
-        for rand in item.encryption_randomness.iter(){ 
+        for rand in item.encryption_randomness.iter() {
             // FIXME: use linearcombination function from enc_trans instead
             let mut scaled_rand = *(rand.as_ref());
             scaled_rand.mul_assign(&power_of_two);
             combined_rands.add_assign(&scaled_rand);
-            power_of_two.mul_assign(&two_chunksize); 
+            power_of_two.mul_assign(&two_chunksize);
         }
         let combined_encryption_randomness = elgamal::Randomness::new(combined_rands);
 
-        // Sanity check: 
-        let mut hx = context.global_context.encryption_in_exponent_generator().mul_by_scalar(&item.share);
-        let hx = Message{value: hx};
-        let c = item.ar_public_key.hide(&combined_encryption_randomness, &hx);
+        // Sanity check:
+        // let mut hx = context
+        //     .global_context
+        //     .encryption_in_exponent_generator()
+        //     .mul_by_scalar(&item.share);
+        // let hx = Message { value: hx };
+        // let c = item
+        //     .ar_public_key
+        //     .hide(&combined_encryption_randomness, &hx);
 
-        println!("ciphers equal?: {:?}", c == combined_ciphers);
+        // println!("ciphers equal?: {:?}", c == combined_ciphers);
 
         let secret = com_enc_eq::ComEncEqSecret {
             value:         item.share.clone(),
@@ -161,11 +173,13 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             pedersen_rand: item.randomness_cmm_to_share.clone(),
         };
         // FIXME: Need some context in the challenge computation.
+        let h_in_exponent = *context.global_context.encryption_in_exponent_generator();
         let item_prover = com_enc_eq::ComEncEq {
-            cipher:     combined_ciphers,
+            cipher: combined_ciphers,
             commitment: item.cmm_to_share,
-            pub_key:    item.ar_public_key,
-            cmm_key:    *ar_commitment_key,
+            pub_key: item.ar_public_key,
+            cmm_key: *ar_commitment_key,
+            encryption_in_exponent_generator: h_in_exponent,
         };
         replicated_provers.push(item_prover);
         replicated_secrets.push(secret);
@@ -173,6 +187,26 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             enc_prf_key_share: item.encrypted_share,
             proof_com_enc_eq,
         }));
+        let mut transcript = Transcript::new(&[]);
+        let cmm_key_bulletproof = PedersenKey {
+            g: h_in_exponent,
+            h: item.ar_public_key.key,
+        };
+        let rand_bulletproof = item
+            .encryption_randomness
+            .iter()
+            .map(|x| PedersenRandomness::new(*x.as_ref()))
+            .collect::<Vec<_>>();
+        let bulletproof = bulletprove(
+            &mut transcript,
+            &mut csprng,
+            u8::from(CHUNK_SIZE),
+            item.share_in_chunks.len() as u8,
+            &item.share_in_chunks,
+            &context.global_context.bulletproof_generators().take(32*8),
+            &cmm_key_bulletproof,
+            &rand_bulletproof,
+        )?;
     }
 
     // Extract identities of the chosen ARs for use in PIO
@@ -300,6 +334,7 @@ pub fn compute_sharing_data<'a, C: Curve>(
 pub struct SingleArDataPrf<'a, C: Curve> {
     ar: &'a ArInfo<C>,
     share: Value<C>,
+    share_in_chunks: [C::Scalar; 8],
     encrypted_share: [Cipher<C>; 8],
     encryption_randomness: [elgamal::Randomness<C>; 8],
     cmm_to_share: Commitment<C>,
@@ -320,7 +355,7 @@ pub fn compute_sharing_data_prf<'a, C: Curve>(
     ar_parameters: &'a BTreeMap<ArIdentity, ArInfo<C>>, // Chosen anonimity revokers.
     threshold: Threshold,                               // Anonymity revocation threshold.
     commitment_key: &PedersenKey<C>,
-    global_context: &GlobalContext<C>,                    // commitment key
+    global_context: &GlobalContext<C>, // commitment key
 ) -> SharingDataPrf<'a, C> {
     let n = ar_parameters.len() as u32;
     let mut csprng = thread_rng();
@@ -353,7 +388,8 @@ pub fn compute_sharing_data_prf<'a, C: Curve>(
         let pk = ar.ar_public_key;
         // encrypt the share
         // let (cipher, rnd2) = pk.encrypt_exponent_rand(&mut csprng, &share);
-        let (ciphers, rnd2) = utils::encrypt_prf_share(global_context, &pk, &share, &mut csprng);
+        let (ciphers, rnd2, share_in_chunks) =
+            utils::encrypt_prf_share(global_context, &pk, &share, &mut csprng);
         // compute the commitment to this share from the commitment to the coeff
         let (cmm, rnd) =
             commitment_to_share_and_rand(si, &cmm_sharing_coefficients, &cmm_coeff_randomness);
@@ -361,6 +397,7 @@ pub fn compute_sharing_data_prf<'a, C: Curve>(
         let single_ar_data = SingleArDataPrf {
             ar,
             share,
+            share_in_chunks,
             encrypted_share: ciphers,
             encryption_randomness: rnd2,
             cmm_to_share: cmm,
@@ -544,10 +581,11 @@ where
         };
 
         let item_prover = com_enc_eq::ComEncEq {
-            cipher:     item.encrypted_share,
+            cipher: item.encrypted_share,
             commitment: item.cmm_to_share,
-            pub_key:    item.ar.ar_public_key,
-            cmm_key:    context.global_context.on_chain_commitment_key,
+            pub_key: item.ar.ar_public_key,
+            cmm_key: context.global_context.on_chain_commitment_key,
+            encryption_in_exponent_generator: item.ar.ar_public_key.generator,
         };
 
         id_cred_pub_share_numbers.push(item.ar.ar_identity);

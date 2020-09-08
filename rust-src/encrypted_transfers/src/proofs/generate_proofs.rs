@@ -148,7 +148,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     }
 
     // For Bulletproofs
-    let gens = context.bulletproof_generators();
+    let gens = context.bulletproof_generators().take(32*2);
     let generator = context.encryption_in_exponent_generator();
 
     let s_prime = u64::from(s) - u64::from(a);

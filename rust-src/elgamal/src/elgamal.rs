@@ -202,9 +202,8 @@ pub fn decrypt_from_chunks_given_table<C: Curve>(
 mod tests {
     use super::*;
     use crate::message::*;
-    use ff::Field;
-    use ff::PrimeField;
-    use pairing::bls12_381::{G1, G2, Fr};
+    use ff::{Field, PrimeField};
+    use pairing::bls12_381::{Fr, G1, G2};
     use rand::{rngs::ThreadRng, Rng};
 
     // This is a generic helper function that tests encryption/decryption in chunks.
@@ -228,11 +227,10 @@ mod tests {
 
     #[test]
     fn chunk_test() {
-        let val     = Value::<G1>::new(Fr::from_str("15").unwrap());
+        let val = Value::<G1>::new(Fr::from_str("15").unwrap());
         let chunk_size = ChunkSize::ThirtyTwo;
-        let chunks     = value_to_chunks::<G1>(&val, chunk_size);
+        let chunks = value_to_chunks::<G1>(&val, chunk_size);
         println!("{:?}", chunks);
-
     }
 
     #[test]
