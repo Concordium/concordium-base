@@ -321,7 +321,7 @@ impl State {
 }
 
 #[inline(always)]
-fn put_in_memory(ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, bytes: &Vec<u8>) -> Result<(), ()> {
+fn put_in_memory(ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, bytes: &[u8]) -> Result<(), ()> {
     let bytes_len = bytes.len() as u32;
     let memory = ctx.memory(0);
     match unsafe { ptr.deref_mut(memory, 0, bytes_len) } {
@@ -464,11 +464,13 @@ pub fn make_imports(
 
     match which {
         Which::Init {
-            init_ctx
+            init_ctx,
         } => {
             let init_origin_bytes = to_bytes(&init_ctx.init_origin);
-            let get_init_origin = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &init_origin_bytes);
-            
+            let get_init_origin = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
+                put_in_memory(ctx, ptr, &init_origin_bytes)
+            };
+
             // Chain meta data getters
             let slot_number = init_ctx.metadata.slot_number;
             let get_slot_number = move || slot_number;
@@ -480,8 +482,9 @@ pub fn make_imports(
             let get_slot_time = move || slot_time;
 
             let err_func_u64 = || -> Result<u64, ()> { Err(()) };
-            let err_func_memory = |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>|  -> Result<(), ()> { Err(()) };
-            
+            let err_func_memory =
+                |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<(), ()> { Err(()) };
+
             let imps = imports! {
                 "concordium" => {
                     // NOTE: validation will only allow access to a given list of these functions (check to be added)
@@ -516,7 +519,6 @@ pub fn make_imports(
             receive_ctx,
             ..
         } => {
-
             // Chain meta data getters
             let slot_number = receive_ctx.metadata.slot_number;
             let get_slot_number = move || slot_number;
@@ -528,15 +530,22 @@ pub fn make_imports(
             let get_slot_time = move || slot_time;
 
             let invoker_bytes = to_bytes(&receive_ctx.invoker);
-            let get_receive_invoker = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &invoker_bytes);
+            let get_receive_invoker = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
+                put_in_memory(ctx, ptr, &invoker_bytes)
+            };
             let self_address_bytes = to_bytes(&receive_ctx.self_address);
-            let get_receive_self_address = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &self_address_bytes);
+            let get_receive_self_address = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
+                put_in_memory(ctx, ptr, &self_address_bytes)
+            };
             let receive_self_balance = receive_ctx.self_balance;
             let get_receive_self_balance = move || receive_self_balance;
             let sender_bytes = to_bytes(&receive_ctx.sender);
-            let get_receive_sender = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &sender_bytes);
+            let get_receive_sender = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
+                put_in_memory(ctx, ptr, &sender_bytes)
+            };
             let owner_bytes = to_bytes(&receive_ctx.owner);
-            let get_receive_owner = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &owner_bytes);
+            let get_receive_owner =
+                move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &owner_bytes);
 
             let err_func = |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<(), ()> { Err(()) };
 

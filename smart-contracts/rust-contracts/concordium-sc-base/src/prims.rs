@@ -43,11 +43,11 @@ extern "C" {
     pub(crate) fn resize_state(new_size: u32) -> u32; // returns 0 or 1.
                                                       // get current state size in bytes.
     pub(crate) fn state_size() -> u32;
-    
+
     // Getter for the init context.
     /// Address of the sender, 32 bytes
     pub(crate) fn get_init_origin(start: *mut u8);
-    
+
     // Getters for the receive context
     /// Invoker of the top-level transaction, AccountAddress.
     pub(crate) fn get_receive_invoker(start: *mut u8);

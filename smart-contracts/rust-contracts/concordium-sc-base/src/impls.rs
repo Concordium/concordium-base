@@ -83,13 +83,13 @@ impl Read for ContractState {
         self.current_position += num_read;
         Ok(num_read as usize)
     }
-    
+
     /// Read a `u32` in little-endian format. This is optimized to not
     /// initialize a dummy value before calling an external function.
     fn read_u64(&mut self) -> Result<u64, Self::Err> {
         let mut bytes: MaybeUninit<[u8; 8]> = MaybeUninit::uninit();
         let num_read =
-        unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 8, self.current_position) };
+            unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 8, self.current_position) };
         self.current_position += num_read;
         if num_read == 8 {
             unsafe { Ok(u64::from_le_bytes(bytes.assume_init())) }
@@ -103,7 +103,7 @@ impl Read for ContractState {
     fn read_u32(&mut self) -> Result<u32, Self::Err> {
         let mut bytes: MaybeUninit<[u8; 4]> = MaybeUninit::uninit();
         let num_read =
-        unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 4, self.current_position) };
+            unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 4, self.current_position) };
         self.current_position += num_read;
         if num_read == 4 {
             unsafe { Ok(u32::from_le_bytes(bytes.assume_init())) }
@@ -205,20 +205,19 @@ impl HasParameter for Parameter {
     fn size(&self) -> u32 { unsafe { get_parameter_size() } }
 }
 
-
 /// # Trait implementations for the chain metadata.
 impl HasChainMetadata for ChainMetaLazy {
     #[inline(always)]
-    fn slot_time(&self) -> SlotTime { unsafe{ get_slot_time() } }
+    fn slot_time(&self) -> SlotTime { unsafe { get_slot_time() } }
 
     #[inline(always)]
-    fn block_height(&self) -> BlockHeight { unsafe{ get_block_height() } }
+    fn block_height(&self) -> BlockHeight { unsafe { get_block_height() } }
 
     #[inline(always)]
-    fn finalized_height(&self) -> FinalizedHeight { unsafe{  get_finalized_height() } }
+    fn finalized_height(&self) -> FinalizedHeight { unsafe { get_finalized_height() } }
 
     #[inline(always)]
-    fn slot_number(&self) -> SlotNumber { unsafe{ get_slot_number() } }
+    fn slot_number(&self) -> SlotNumber { unsafe { get_slot_number() } }
 }
 
 /// # Trait implementations for the init context
@@ -228,15 +227,13 @@ impl HasInitContext<()> for InitContextLazy {
     type ParamType = Parameter;
 
     /// Create a new init context by using an external call.
-    fn open(_: Self::InitData) -> Self {
-        InitContextLazy {}
-    }
+    fn open(_: Self::InitData) -> Self { InitContextLazy {} }
 
     #[inline(always)]
-    fn init_origin(&self) -> AccountAddress { 
+    fn init_origin(&self) -> AccountAddress {
         let mut bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
         let ptr = bytes.as_mut_ptr();
-        unsafe{ get_init_origin(ptr) };
+        unsafe { get_init_origin(ptr) };
         AccountAddress(from_bytes(&bytes).unwrap())
     }
 
@@ -258,44 +255,42 @@ impl HasReceiveContext<()> for ReceiveContextLazy {
     type ReceiveData = ();
 
     /// Create a new receive context
-    fn open(_: Self::ReceiveData) -> Self {
-        ReceiveContextLazy {}
+    fn open(_: Self::ReceiveData) -> Self { ReceiveContextLazy {} }
+
+    #[inline(always)]
+    fn invoker(&self) -> AccountAddress {
+        let mut bytes = [0u8; mem::size_of::<AccountAddress>()];
+        let ptr = bytes.as_mut_ptr();
+        unsafe { get_receive_invoker(ptr) };
+        from_bytes(&bytes).unwrap()
     }
 
     #[inline(always)]
-    fn invoker(&self) -> AccountAddress { 
-        let mut bytes = [0u8; mem::size_of::<AccountAddress>()];
-        let ptr = bytes.as_mut_ptr();
-        unsafe{ get_receive_invoker(ptr) };
-        from_bytes(&bytes).unwrap()
-     }
-
-    #[inline(always)]
-    fn self_address(&self) -> ContractAddress { 
+    fn self_address(&self) -> ContractAddress {
         let mut bytes = [0u8; mem::size_of::<ContractAddress>()];
         let ptr = bytes.as_mut_ptr();
-        unsafe{ get_receive_self_address(ptr) };
+        unsafe { get_receive_self_address(ptr) };
         from_bytes(&bytes).unwrap()
-     }
+    }
 
     #[inline(always)]
     fn self_balance(&self) -> Amount { unsafe { get_receive_self_balance() } }
 
     #[inline(always)]
-    fn sender(&self) -> Address { 
+    fn sender(&self) -> Address {
         let mut bytes = [0u8; mem::size_of::<Address>()];
         let ptr = bytes.as_mut_ptr();
-        unsafe{ get_receive_sender(ptr) };
+        unsafe { get_receive_sender(ptr) };
         from_bytes(&bytes).unwrap()
-     }
+    }
 
     #[inline(always)]
-    fn owner(&self) -> AccountAddress { 
+    fn owner(&self) -> AccountAddress {
         let mut bytes = [0u8; mem::size_of::<AccountAddress>()];
         let ptr = bytes.as_mut_ptr();
-        unsafe{ get_receive_owner(ptr) };
+        unsafe { get_receive_owner(ptr) };
         from_bytes(&bytes).unwrap()
-     }
+    }
 
     #[inline(always)]
     fn parameter_cursor(&self) -> Self::ParamType {

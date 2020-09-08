@@ -176,7 +176,7 @@ pub enum Which<'a> {
         init_ctx: &'a InitContext,
     },
     Receive {
-        receive_ctx: &'a ReceiveContext,
+        receive_ctx:   &'a ReceiveContext,
         current_state: &'a [u8],
     },
 }
