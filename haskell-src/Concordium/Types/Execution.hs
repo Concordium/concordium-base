@@ -723,7 +723,7 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | InvalidTransferToPublicProof
                   -- |Account tried to transfer an encrypted amount to itself, that's not allowed.
                   | EncryptedAmountSelfTransfer !AccountAddress
-                  -- | The provided index is below the start index or above `startIndex + length incomingAmounts + 1`
+                  -- | The provided index is below the start index or above `startIndex + length incomingAmounts`
                   | InvalidIndexOnEncryptedTransfer
     deriving (Show, Eq, Generic)
 
