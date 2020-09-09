@@ -320,7 +320,6 @@ impl State {
     }
 }
 
-#[inline(always)]
 fn put_in_memory(ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, bytes: &[u8]) -> Result<(), ()> {
     let bytes_len = bytes.len() as u32;
     let memory = ctx.memory(0);

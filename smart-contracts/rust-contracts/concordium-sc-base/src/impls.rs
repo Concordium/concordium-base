@@ -206,7 +206,7 @@ impl HasParameter for Parameter {
 }
 
 /// # Trait implementations for the chain metadata.
-impl HasChainMetadata for ChainMetaLazy {
+impl HasChainMetadata for ChainMetaExtern {
     #[inline(always)]
     fn slot_time(&self) -> SlotTime { unsafe { get_slot_time() } }
 
@@ -221,20 +221,23 @@ impl HasChainMetadata for ChainMetaLazy {
 }
 
 /// # Trait implementations for the init context
-impl HasInitContext<()> for InitContextLazy {
+impl HasInitContext<()> for InitContextExtern {
     type InitData = ();
-    type MetadataType = ChainMetaLazy;
+    type MetadataType = ChainMetaExtern;
     type ParamType = Parameter;
 
     /// Create a new init context by using an external call.
-    fn open(_: Self::InitData) -> Self { InitContextLazy {} }
+    fn open(_: Self::InitData) -> Self { InitContextExtern {} }
 
     #[inline(always)]
     fn init_origin(&self) -> AccountAddress {
-        let mut bytes = [0u8; ACCOUNT_ADDRESS_SIZE];
+        let mut bytes: MaybeUninit<[u8; ACCOUNT_ADDRESS_SIZE]> = MaybeUninit::uninit();
         let ptr = bytes.as_mut_ptr();
-        unsafe { get_init_origin(ptr) };
-        AccountAddress(from_bytes(&bytes).unwrap())
+        let address = unsafe {
+            get_init_origin(ptr as *mut u8);
+            bytes.assume_init()
+        };
+        AccountAddress(address)
     }
 
     #[inline(always)]
@@ -245,32 +248,38 @@ impl HasInitContext<()> for InitContextLazy {
     }
 
     #[inline(always)]
-    fn metadata(&self) -> &Self::MetadataType { &ChainMetaLazy {} }
+    fn metadata(&self) -> &Self::MetadataType { &ChainMetaExtern {} }
 }
 
 /// # Trait implementations for the receive context
-impl HasReceiveContext<()> for ReceiveContextLazy {
-    type MetadataType = ChainMetaLazy;
+impl HasReceiveContext<()> for ReceiveContextExtern {
+    type MetadataType = ChainMetaExtern;
     type ParamType = Parameter;
     type ReceiveData = ();
 
     /// Create a new receive context
-    fn open(_: Self::ReceiveData) -> Self { ReceiveContextLazy {} }
+    fn open(_: Self::ReceiveData) -> Self { ReceiveContextExtern {} }
 
     #[inline(always)]
     fn invoker(&self) -> AccountAddress {
-        let mut bytes = [0u8; mem::size_of::<AccountAddress>()];
+        let mut bytes: MaybeUninit<[u8; ACCOUNT_ADDRESS_SIZE]> = MaybeUninit::uninit();
         let ptr = bytes.as_mut_ptr();
-        unsafe { get_receive_invoker(ptr) };
-        from_bytes(&bytes).unwrap()
+        let address = unsafe {
+            get_receive_invoker(ptr as *mut u8);
+            bytes.assume_init()
+        };
+        AccountAddress(address)
     }
 
     #[inline(always)]
     fn self_address(&self) -> ContractAddress {
-        let mut bytes = [0u8; mem::size_of::<ContractAddress>()];
+        let mut bytes: MaybeUninit<[u8; 16]> = MaybeUninit::uninit();
         let ptr = bytes.as_mut_ptr();
-        unsafe { get_receive_self_address(ptr) };
-        from_bytes(&bytes).unwrap()
+        let address = unsafe {
+            get_receive_self_address(ptr as *mut u8);
+            bytes.assume_init()
+        };
+        from_bytes(&address).unwrap()
     }
 
     #[inline(always)]
@@ -278,18 +287,24 @@ impl HasReceiveContext<()> for ReceiveContextLazy {
 
     #[inline(always)]
     fn sender(&self) -> Address {
-        let mut bytes = [0u8; mem::size_of::<Address>()];
+        let mut bytes: MaybeUninit<[u8; 33]> = MaybeUninit::uninit();
         let ptr = bytes.as_mut_ptr();
-        unsafe { get_receive_sender(ptr) };
-        from_bytes(&bytes).unwrap()
+        let address = unsafe {
+            get_receive_sender(ptr as *mut u8);
+            bytes.assume_init()
+        };
+        from_bytes(&address).unwrap()
     }
 
     #[inline(always)]
     fn owner(&self) -> AccountAddress {
-        let mut bytes = [0u8; mem::size_of::<AccountAddress>()];
+        let mut bytes: MaybeUninit<[u8; ACCOUNT_ADDRESS_SIZE]> = MaybeUninit::uninit();
         let ptr = bytes.as_mut_ptr();
-        unsafe { get_receive_owner(ptr) };
-        from_bytes(&bytes).unwrap()
+        let address = unsafe {
+            get_receive_owner(ptr as *mut u8);
+            bytes.assume_init()
+        };
+        AccountAddress(address)
     }
 
     #[inline(always)]
@@ -300,7 +315,7 @@ impl HasReceiveContext<()> for ReceiveContextLazy {
     }
 
     #[inline(always)]
-    fn metadata(&self) -> &Self::MetadataType { &ChainMetaLazy {} }
+    fn metadata(&self) -> &Self::MetadataType { &ChainMetaExtern {} }
 }
 
 /// #Implementations of the logger.

@@ -105,8 +105,8 @@ pub type ReceiveResult<A> = Result<A, Reject>;
 /// parametrized by the state type of the smart contract.
 pub type InitResult<S> = Result<S, Reject>;
 
-pub struct InitContextLazy {}
+pub struct InitContextExtern {}
 
-pub struct ReceiveContextLazy {}
+pub struct ReceiveContextExtern {}
 
-pub struct ChainMetaLazy {}
+pub struct ChainMetaExtern {}

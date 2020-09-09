@@ -1,8 +1,6 @@
 //! This internal module provides the primitive interface to the chain.
 //! Functions here should be wrapped in safer wrappers when used from contracts.
 
-use contracts_common::*;
-
 /// Interface to the chain. These functions are assumed to be instantiated by
 /// the scheduler with relevant primitives.
 #[cfg_attr(target_arch = "wasm32", link(wasm_import_module = "concordium"))]
@@ -53,21 +51,21 @@ extern "C" {
     pub(crate) fn get_receive_invoker(start: *mut u8);
     /// Address of the contract itself, ContractAddress.
     pub(crate) fn get_receive_self_address(start: *mut u8);
-    /// Self-balance of the contract.
-    pub(crate) fn get_receive_self_balance() -> Amount;
+    /// Self-balance of the contract, returns the amount
+    pub(crate) fn get_receive_self_balance() -> u64;
     /// Immediate sender of the message (either contract or account).
     pub(crate) fn get_receive_sender(start: *mut u8);
     /// Owner of the contract, AccountAddress.
     pub(crate) fn get_receive_owner(start: *mut u8);
 
     // Getters for the chain meta data
-    /// Slot number
-    pub(crate) fn get_slot_number() -> SlotNumber;
-    /// Block height
-    pub(crate) fn get_block_height() -> BlockHeight;
-    /// Finalized height
-    pub(crate) fn get_finalized_height() -> FinalizedHeight;
-    /// Slot time (in milliseconds)
-    pub(crate) fn get_slot_time() -> SlotTime;
+    /// Slot number from chain meta data
+    pub(crate) fn get_slot_number() -> u64;
+    /// Block height from chain meta data
+    pub(crate) fn get_block_height() -> u64;
+    /// Finalized height from chain meta data
+    pub(crate) fn get_finalized_height() -> u64;
+    /// Slot time (in milliseconds) from chain meta data
+    pub(crate) fn get_slot_time() -> u64;
 
 }
