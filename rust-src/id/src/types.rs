@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use base58check::*;
-use bulletproofs::range_proof::Generators;
+use bulletproofs::range_proof::{Generators, RangeProof};
 use byteorder::ReadBytesExt;
 use crypto_common::*;
 use crypto_common_derive::*;
@@ -700,6 +700,9 @@ pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// second commitment to the prf key (hidden in cmm_prf_sharing_coeff)
     /// are hiding the same value.
     pub commitments_prf_same: com_eq_different_groups::Witness<P::G1, C>,
+    /// Bulletproofs for showing that chunks are small so that encryption
+    /// of the prf key can be decrypted
+    pub bulletproofs: Vec<RangeProof<C>>,
 }
 
 /// A type alias for the combined proofs relating to the shared encryption of

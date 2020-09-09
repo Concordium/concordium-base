@@ -132,7 +132,9 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let mut replicated_provers = Vec::with_capacity(prf_key_data.len());
     let mut replicated_secrets = Vec::with_capacity(prf_key_data.len());
-
+    let mut bulletproofs = Vec::with_capacity(prf_key_data.len());
+    let mut transcript = Transcript::new(&[]);
+    
     for item in prf_key_data.iter() {
         let u8_chunk_size = u8::from(CHUNK_SIZE);
         let two_chunksize = C::scalar_from_u64(1 << u8_chunk_size);
@@ -187,7 +189,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             enc_prf_key_share: item.encrypted_share,
             proof_com_enc_eq,
         }));
-        let mut transcript = Transcript::new(&[]);
         let cmm_key_bulletproof = PedersenKey {
             g: h_in_exponent,
             h: item.ar_public_key.key,
@@ -203,10 +204,11 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             u8::from(CHUNK_SIZE),
             item.share_in_chunks.len() as u8,
             &item.share_in_chunks,
-            &context.global_context.bulletproof_generators().take(32*8),
+            &context.global_context.bulletproof_generators().take(32 * 8),
             &cmm_key_bulletproof,
             &rand_bulletproof,
         )?;
+        bulletproofs.push(bulletproof);
     }
 
     // Extract identities of the chosen ARs for use in PIO
@@ -226,10 +228,11 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         .map(|(&(ar_id, f), w)| (ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
     let poks = PreIdentityProof {
-        challenge:              proof.challenge,
-        id_cred_sec_witness:    proof.witness.w1.w1.w1,
+        challenge: proof.challenge,
+        id_cred_sec_witness: proof.witness.w1.w1.w1,
         commitments_same_proof: proof.witness.w1.w1.w2,
-        commitments_prf_same:   proof.witness.w1.w2,
+        commitments_prf_same: proof.witness.w1.w2,
+        bulletproofs,
     };
     // attribute list
     let prio = PreIdentityObject {
