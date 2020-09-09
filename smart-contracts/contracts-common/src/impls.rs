@@ -221,6 +221,27 @@ impl<K: Serialize + Ord, V: Serialize> Serialize for collections::BTreeMap<K, V>
     }
 }
 
+impl<K: Serialize + Ord> Serialize for collections::BTreeSet<K> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let len = self.len() as u32;
+        len.serial(out)?;
+        for k in self.iter() {
+            k.serial(out)?;
+        }
+        Ok(())
+    }
+
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
+        let len: u32 = source.get()?;
+        let mut map = collections::BTreeSet::<K>::new();
+        for _ in 0..len {
+            let k = source.get()?;
+            map.insert(k);
+        }
+        Ok(map)
+    }
+}
+
 impl InitContext {
     pub fn init_origin(&self) -> &AccountAddress { &self.init_origin }
 

@@ -1,5 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-use concordium_sc_base::*;
+use concordium_sc_base::{collections::*, *};
 
 /*
  * A contract that acts like an account (can send, store and accept GTU), but
@@ -49,26 +49,26 @@ enum Message {
 type TransferRequestId = u64;
 
 // TODO Is seconds the correct unit?
-type TransferRequestTimeToLiveSeconds = u64;
-type TimeoutSlotTimeSeconds = u64;
+type TransferRequestTimeToLiveMilliseconds = u64;
+type TimeoutSlotTimeMilliseconds = u64;
 
-struct OutstandingTransferRequest {
-    id:              TransferRequestId,
+#[derive(Clone)]
+struct TransferRequest {
     transfer_amount: Amount,
     target_account:  AccountAddress,
-    times_out_at:    TimeoutSlotTimeSeconds,
-    supporters:      Vec<AccountAddress>, // TODO use a Set instead
+    times_out_at:    TimeoutSlotTimeMilliseconds,
+    supporters:      BTreeSet<AccountAddress>,
 }
 
 struct InitParams {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
-    account_holders: Vec<AccountAddress>,
+    account_holders: BTreeSet<AccountAddress>,
 
     // How many of the account holders need to agree before funds are released
     transfer_agreement_threshold: u32,
 
     // How long to wait before dropping a request due to lack of support
-    // N.B. If this is set too long, in practice the chain might become busy
+    // N.B. If this is set too long, in practice the chain might !ome busy
     //      enough that requests time out before they can be agreed to by all
     //      parties, so be wary of setting this too low. On the otherhand,
     //      if this is set too high, a bunch of pending requests can get into
@@ -76,7 +76,7 @@ struct InitParams {
     //      only for another account holder to "resurrect" it, so having _some_
     //      time out gives some security against old requests being surprisingly
     //      accepted.
-    transfer_request_ttl: TransferRequestTimeToLiveSeconds,
+    transfer_request_ttl: TransferRequestTimeToLiveMilliseconds,
 }
 
 pub struct State {
@@ -86,8 +86,7 @@ pub struct State {
     // Requests which have not been dropped due to timing out or due to being agreed to yet
     // The request ID, the associated amount, when it times out, who is making the transfer and
     // which account holders support this transfer
-    outstanding_transfer_requests: Vec<OutstandingTransferRequest>,
-    // TODO Use a Map from the id instead
+    requests: BTreeMap<TransferRequestId, TransferRequest>,
 }
 
 // Contract implementation
@@ -99,8 +98,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     _amount: Amount,
     _logger: &mut L,
 ) -> InitResult<State> {
-    let mut init_params: InitParams = ctx.parameter_cursor().get()?;
-    init_params.account_holders.dedup();
+    let init_params: InitParams = ctx.parameter_cursor().get()?;
     ensure!(
         init_params.account_holders.len() >= 2,
         "Not enough account holders: At least two are needed for this contract to be valid."
@@ -119,7 +117,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 
     let state = State {
         init_params,
-        outstanding_transfer_requests: vec![],
+        requests: BTreeMap::new(),
     };
 
     Ok(state)
@@ -134,10 +132,6 @@ fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
     _state: &mut State,
 ) -> ReceiveResult<A> {
     Ok(A::accept())
-}
-
-fn sum_reserved_balance(state: &State) -> Amount {
-    state.outstanding_transfer_requests.iter().fold(0, |acc, req| acc + req.transfer_amount)
 }
 
 #[receive(name = "receive")]
@@ -163,58 +157,81 @@ fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
     };
     let now = ctx.metadata().slot_time();
 
-    // Drop requests which have gone too long without getting the support they need
-    state.outstanding_transfer_requests.retain(|outstanding| outstanding.times_out_at > now);
-
     let msg: Message = ctx.parameter_cursor().get()?;
     match msg {
         Message::RequestTransfer(req_id, transfer_amount, target_account) => {
+            // Remove outdated requests and calculate the reserved balance
+            let mut reserved_balance = 0;
+            let mut active_requests: BTreeMap<TransferRequestId, TransferRequest> = BTreeMap::new();
+            for (key, req) in state.requests.iter() {
+                if req.times_out_at > now {
+                    active_requests.insert(*key, req.clone());
+                    reserved_balance += req.transfer_amount;
+                }
+            }
+            state.requests = active_requests;
+
+            // Check if a request already exists
             ensure!(
-                amount - sum_reserved_balance(state) >= transfer_amount,
-                "Not enough available funds to for this transfer."
-            );
-            ensure!(
-                !state.outstanding_transfer_requests.iter().any(|existing| existing.id == req_id),
+                !state.requests.contains_key(&req_id),
                 "A request with this ID already exists."
             );
-            let new_request = OutstandingTransferRequest {
-                id: req_id,
+
+            // Ensure enough funds for the requested transfer
+            let balance = amount + ctx.self_balance();
+            ensure!(
+                balance - reserved_balance >= transfer_amount,
+                "Not enough available funds for the requested transfer."
+            );
+
+            // Create the request with the sender as the only supporter
+            let mut supporters = BTreeSet::new();
+            supporters.insert(*sender_address);
+            let new_request = TransferRequest {
                 transfer_amount,
                 target_account,
                 times_out_at: now + state.init_params.transfer_request_ttl,
-                supporters: vec![*sender_address],
+                supporters,
             };
-            state.outstanding_transfer_requests.push(new_request);
+            state.requests.insert(req_id, new_request);
             Ok(A::accept())
         }
 
         Message::SupportTransfer(transfer_request_id, transfer_amount, target_account) => {
-            // Need to find an existing, matching transfer
-            let matching_request_result =
-                state.outstanding_transfer_requests.iter_mut().find(|existing| {
-                    existing.id == transfer_request_id
-                        && existing.transfer_amount == transfer_amount
-                        && existing.target_account == target_account
-                });
+            // Find the request
+            let matching_request_result = state.requests.get_mut(&transfer_request_id);
+
             let matching_request = match matching_request_result {
                 None => bail!("No such transfer to support."),
                 Some(matching) => matching,
             };
+
+            // Validate the details of the transfer
+            ensure!(matching_request.times_out_at > now, "The request have timed out.");
+            ensure!(
+                matching_request.transfer_amount == transfer_amount,
+                "Transfer amount is different from the amount of the request."
+            );
+            ensure!(
+                matching_request.target_account == target_account,
+                "Target account is different from the target account of the request."
+            );
 
             // Can't have already supported this transfer
             ensure!(
                 !matching_request.supporters.contains(sender_address),
                 "You have already supported this transfer."
             );
-            matching_request.supporters.push(*sender_address);
 
+            // Support the request
+            matching_request.supporters.insert(*sender_address);
+
+            // Check if the have enough supporters to trigger
             if matching_request.supporters.len() as u32
                 >= state.init_params.transfer_agreement_threshold
             {
                 // Remove the transfer from the list of outstanding transfers and send it
-                state
-                    .outstanding_transfer_requests
-                    .retain(|outstanding| outstanding.id != transfer_request_id);
+                state.requests.remove(&transfer_request_id);
                 Ok(A::simple_transfer(&target_account, transfer_amount))
             } else {
                 // Keep the updated support and accept
@@ -277,7 +294,7 @@ impl Serialize for InitParams {
     }
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let account_holders = Vec::deserial(source)?;
+        let account_holders = BTreeSet::deserial(source)?;
         let transfer_agreement_threshold = source.read_u32()?;
         let transfer_request_ttl = source.read_u64()?;
         Ok(InitParams {
@@ -288,9 +305,8 @@ impl Serialize for InitParams {
     }
 }
 
-impl Serialize for OutstandingTransferRequest {
+impl Serialize for TransferRequest {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.id.serial(out)?;
         self.transfer_amount.serial(out)?;
         self.target_account.serial(out)?;
         self.times_out_at.serial(out)?;
@@ -299,13 +315,11 @@ impl Serialize for OutstandingTransferRequest {
     }
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let id = TransferRequestId::deserial(source)?;
         let transfer_amount = Amount::deserial(source)?;
         let target_account = AccountAddress::deserial(source)?;
-        let times_out_at = TimeoutSlotTimeSeconds::deserial(source)?;
-        let supporters = Vec::deserial(source)?;
-        Ok(OutstandingTransferRequest {
-            id,
+        let times_out_at = TimeoutSlotTimeMilliseconds::deserial(source)?;
+        let supporters = BTreeSet::deserial(source)?;
+        Ok(TransferRequest {
             transfer_amount,
             target_account,
             times_out_at,
@@ -317,18 +331,16 @@ impl Serialize for OutstandingTransferRequest {
 impl Serialize for State {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.init_params.serial(out)?;
-        self.outstanding_transfer_requests.serial(out)?;
+        self.requests.serial(out)?;
         Ok(())
     }
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        // TODO
         let init_params = InitParams::deserial(source)?;
-        let outstanding_transfer_requests = Vec::deserial(source)?;
-
+        let requests = BTreeMap::deserial(source)?;
         Ok(State {
             init_params,
-            outstanding_transfer_requests,
+            requests,
         })
     }
 }
@@ -338,6 +350,10 @@ impl Serialize for State {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sum_reserved_balance(state: &State) -> Amount {
+        state.requests.iter().map(|(_, req)| req.transfer_amount).sum()
+    }
 
     #[test]
     /// Initialise contract with account holders
@@ -357,11 +373,13 @@ mod tests {
             metadata,
             init_origin,
         };
-        // The init function does not expect a parameter, so empty will do.
+        let mut account_holders = BTreeSet::new();
+        account_holders.insert(account1);
+        account_holders.insert(account2);
         let parameter = InitParams {
-            account_holders:              vec![account1, account2],
+            account_holders,
             transfer_agreement_threshold: 2,
-            transfer_request_ttl:         10,
+            transfer_request_ttl: 10,
         };
 
         let ctx = test_infrastructure::InitContextWrapper {
@@ -389,11 +407,7 @@ mod tests {
                 2,
                 "Should not contain more account holders"
             );
-            assert_eq!(
-                state.outstanding_transfer_requests.len(),
-                0,
-                "No transfer request at initialisation"
-            );
+            assert_eq!(state.requests.len(), 0, "No transfer request at initialisation");
         } else {
             assert!(false, "Contract initialization failed.");
         }
@@ -435,16 +449,20 @@ mod tests {
             receive_ctx,
             parameter: &to_bytes(&parameter),
         };
+
+        let mut account_holders = BTreeSet::new();
+        account_holders.insert(account1);
+        account_holders.insert(account2);
         let init_params = InitParams {
-            account_holders:              vec![account1, account2],
+            account_holders,
             transfer_agreement_threshold: 2,
-            transfer_request_ttl:         10,
+            transfer_request_ttl: 10,
         };
         // set up the logger so we can intercept and analyze them at the end.
         let mut logger = test_infrastructure::LogRecorder::init();
         let mut state = State {
             init_params,
-            outstanding_transfer_requests: Vec::new(),
+            requests: BTreeMap::new(),
         };
 
         // Execution
@@ -461,7 +479,7 @@ mod tests {
                     "Contract receive produced incorrect actions."
                 );
                 assert_eq!(
-                    state.outstanding_transfer_requests.len(),
+                    state.requests.len(),
                     1,
                     "Contract receive did not create transfer request"
                 );
@@ -470,19 +488,14 @@ mod tests {
                     50,
                     "Contract receive did not reserve requested amount"
                 );
-                let request = state.outstanding_transfer_requests.get(0).unwrap();
-
-                assert_eq!(
-                    request.id, request_id,
-                    "Contract receive created transfer request with wrong id"
-                );
+                let request = state.requests.get(&request_id).unwrap();
                 assert_eq!(
                     request.supporters.len(),
                     1,
                     "Only one is supporting the request from start"
                 );
                 assert!(
-                    account1 == *request.supporters.get(0).unwrap(),
+                    request.supporters.contains(&account1),
                     "The request sender supports the request"
                 );
             }
@@ -499,7 +512,7 @@ mod tests {
             slot_number:      0,
             block_height:     0,
             finalized_height: 0,
-            slot_time:        0,
+            slot_time:        100,
         };
         let account1 = AccountAddress([1u8; 32]);
         let account2 = AccountAddress([2u8; 32]);
@@ -512,7 +525,7 @@ mod tests {
                 index:    0,
                 subindex: 0,
             },
-            self_balance: 0,
+            self_balance: 25,
             sender: Address::Account(account2),
             owner: account1,
         };
@@ -522,29 +535,35 @@ mod tests {
             receive_ctx,
             parameter: &to_bytes(&parameter),
         };
+        let mut account_holders = BTreeSet::new();
+        account_holders.insert(account1);
+        account_holders.insert(account2);
+        account_holders.insert(account3);
         let init_params = InitParams {
-            account_holders:              vec![account1, account2, account3],
+            account_holders,
             transfer_agreement_threshold: 3,
-            transfer_request_ttl:         10,
+            transfer_request_ttl: 10,
         };
-        let request = OutstandingTransferRequest {
-            id: request_id,
-            supporters: vec![account1],
+        let mut supporters = BTreeSet::new();
+        supporters.insert(account1);
+        let request = TransferRequest {
+            supporters,
             target_account,
-            times_out_at: 10,
+            times_out_at: 200,
             transfer_amount: 50,
         };
-        // set up the logger so we can intercept and analyze them at the end.
+        let mut requests = BTreeMap::new();
+        requests.insert(request_id, request);
         let mut logger = test_infrastructure::LogRecorder::init();
 
         let mut state = State {
             init_params,
-            outstanding_transfer_requests: vec![request],
+            requests,
         };
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive_message(ctx, 100, &mut logger, &mut state);
+            contract_receive_message(ctx, 75, &mut logger, &mut state);
 
         // Test
         match res {
@@ -555,28 +574,21 @@ mod tests {
                     test_infrastructure::ActionsTree::Accept,
                     "Contract receive support produced incorrect actions."
                 );
-                assert_eq!(
-                    state.outstanding_transfer_requests.len(),
-                    1,
-                    "Contract receive support should not mutate the outstanding requests"
-                );
-                assert_eq!(
-                    sum_reserved_balance(&state),
-                    50,
-                    "Contract receive did not reserve the requested amount"
-                );
-                let request = state.outstanding_transfer_requests.get(0).unwrap();
-                assert_eq!(
-                    request.id, request_id,
-                    "Contract receive created transfer request with wrong id"
-                );
-                assert_eq!(request.supporters.len(), 2, "Two should support the transfer request");
-                assert!(
-                    request.supporters.contains(&account2),
-                    "The support sender supports the request"
-                );
             }
         }
+        assert_eq!(
+            state.requests.len(),
+            1,
+            "Contract receive support should not mutate the outstanding requests"
+        );
+        assert_eq!(
+            sum_reserved_balance(&state),
+            50,
+            "Contract receive did not reserve the requested amount"
+        );
+        let request = state.requests.get(&request_id).unwrap();
+        assert_eq!(request.supporters.len(), 2, "Two should support the transfer request");
+        assert!(request.supporters.contains(&account2), "The support sender supports the request");
     }
 
     #[test]
@@ -584,6 +596,7 @@ mod tests {
     ///
     /// - Results in the transfer
     /// - Removes the request from state
+    /// - Updates the reserved_balance
     fn test_receive_support_transfer() {
         // Setup
         let metadata = ChainMetadata {
@@ -613,23 +626,30 @@ mod tests {
             receive_ctx,
             parameter: &to_bytes(&parameter),
         };
+        let mut account_holders = BTreeSet::new();
+        account_holders.insert(account1);
+        account_holders.insert(account2);
+        account_holders.insert(account3);
         let init_params = InitParams {
-            account_holders:              vec![account1, account2, account3],
+            account_holders,
             transfer_agreement_threshold: 2,
-            transfer_request_ttl:         10,
+            transfer_request_ttl: 10,
         };
-        let request = OutstandingTransferRequest {
-            id: request_id,
-            supporters: vec![account1],
+        let mut supporters = BTreeSet::new();
+        supporters.insert(account1);
+        let request = TransferRequest {
+            supporters,
             target_account,
             times_out_at: 10,
             transfer_amount: 50,
         };
-        let mut logger = test_infrastructure::LogRecorder::init();
 
+        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut requests = BTreeMap::new();
+        requests.insert(request_id, request);
         let mut state = State {
             init_params,
-            outstanding_transfer_requests: vec![request],
+            requests,
         };
 
         // Execution
@@ -645,19 +665,13 @@ mod tests {
                     test_infrastructure::ActionsTree::simple_transfer(&target_account, 50),
                     "Supporting the transfer did not result in the right transfer"
                 );
-                assert_eq!(
-                    state.outstanding_transfer_requests.len(),
-                    0,
-                    "The request should be removed"
-                );
-                assert_eq!(
-                    sum_reserved_balance(&state),
-                    0,
-                    "The transfer should be subtracted from the reserved balance"
-                );
             }
         }
+        assert_eq!(state.requests.len(), 0, "The request should be removed");
+        assert_eq!(
+            sum_reserved_balance(&state),
+            0,
+            "The transfer should be subtracted from the reserved balance"
+        );
     }
 }
-
-// TODO test failing cases
