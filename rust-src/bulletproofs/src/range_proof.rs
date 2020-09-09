@@ -98,7 +98,9 @@ impl<C: Curve> Generators<C> {
     }
 
     pub fn take(&self, nm: usize) -> Self {
-        Self {G_H: self.G_H[0..nm].to_vec()}
+        Self {
+            G_H: self.G_H[0..nm].to_vec(),
+        }
     }
 }
 
@@ -158,7 +160,7 @@ pub fn prove<C: Curve, T: Rng>(
     v_keys: &CommitmentKey<C>,
     randomness: &[Randomness<C>],
 ) -> Option<RangeProof<C>> {
-    let nm = usize::from(n)*usize::from(m);
+    let nm = usize::from(n) * usize::from(m);
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(nm).cloned().unzip();
     let B = v_keys.g;
     let B_tilde = v_keys.h;

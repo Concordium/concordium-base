@@ -6,7 +6,8 @@ use crate::{
     types::*,
     utils,
 };
-use bulletproofs::range_proof::{prove_given_scalars as bulletprove, Generators};
+use bulletproofs::range_proof::prove_given_scalars as bulletprove;
+use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
@@ -133,8 +134,25 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let mut replicated_provers = Vec::with_capacity(prf_key_data.len());
     let mut replicated_secrets = Vec::with_capacity(prf_key_data.len());
     let mut bulletproofs = Vec::with_capacity(prf_key_data.len());
-    let mut transcript = Transcript::new(&[]);
-    
+    // Extract identities of the chosen ARs for use in PIO
+    let ar_identities = context.ars_infos.keys().copied().collect();
+    let choice_ar_parameters = ChoiceArParameters {
+        ar_identities,
+        threshold,
+    };
+    let mut transcript = Transcript::new(r"PreIdentityProof".as_ref());
+    transcript.append_message(b"ctx", &to_bytes(&context.global_context));
+    transcript.append_message(b"choice_ar_parameters", &to_bytes(&choice_ar_parameters));
+    transcript.append_message(b"cmm_sc", &to_bytes(&cmm_sc));
+    transcript.append_message(b"cmm_prf", &to_bytes(&cmm_prf));
+    transcript.append_message(b"cmm_prf_sharing_coeff", &to_bytes(&cmm_prf_sharing_coeff));
+    let mut ro = RandomOracle::domain("PreIdentityProof")
+        .append_bytes(&to_bytes(&context.global_context))
+        .append_bytes(&to_bytes(&choice_ar_parameters))
+        .append_bytes(&to_bytes(&cmm_sc))
+        .append_bytes(&to_bytes(&cmm_prf))
+        .append_bytes(&to_bytes(&cmm_prf_sharing_coeff));
+
     for item in prf_key_data.iter() {
         let u8_chunk_size = u8::from(CHUNK_SIZE);
         let two_chunksize = C::scalar_from_u64(1 << u8_chunk_size);
@@ -189,6 +207,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             enc_prf_key_share: item.encrypted_share,
             proof_com_enc_eq,
         }));
+        ro = ro.append_bytes(&to_bytes(&item.encrypted_share));
+        transcript.append_message(b"encrypted_share", &to_bytes(&item.encrypted_share));
         let cmm_key_bulletproof = PedersenKey {
             g: h_in_exponent,
             h: item.ar_public_key.key,
@@ -211,16 +231,13 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         bulletproofs.push(bulletproof);
     }
 
-    // Extract identities of the chosen ARs for use in PIO
-    let ar_identities = context.ars_infos.keys().copied().collect();
-
     let prover = prover.add_prover(ReplicateAdapter {
         protocols: replicated_provers,
     });
 
     let secret = (secret, replicated_secrets);
-
-    let proof = prove(RandomOracle::empty(), &prover, secret, &mut csprng)?;
+    ro = ro.append_bytes(&to_bytes(&bulletproofs));
+    let proof = prove(ro, &prover, secret, &mut csprng)?;
 
     let ip_ar_data = ip_ar_data
         .iter()
@@ -238,10 +255,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let prio = PreIdentityObject {
         id_cred_pub,
         ip_ar_data,
-        choice_ar_parameters: ChoiceArParameters {
-            ar_identities,
-            threshold,
-        },
+        choice_ar_parameters,
         cmm_sc,
         cmm_prf,
         cmm_prf_sharing_coeff,
@@ -268,7 +282,7 @@ pub struct SingleArData<'a, C: Curve> {
     encryption_randomness: elgamal::Randomness<C>,
     cmm_to_share: Commitment<C>,
     randomness_cmm_to_share: PedersenRandomness<C>,
-    ar_public_key: elgamal::PublicKey<C>,
+    // ar_public_key: elgamal::PublicKey<C>,
 }
 
 type SharingData<'a, C> = (
@@ -327,7 +341,7 @@ pub fn compute_sharing_data<'a, C: Curve>(
             encryption_randomness: rnd2,
             cmm_to_share: cmm,
             randomness_cmm_to_share: rnd,
-            ar_public_key: pk,
+            // ar_public_key: pk,
         };
         ar_data.push(single_ar_data)
     }
@@ -1071,10 +1085,10 @@ mod tests {
                 &data.cmm_to_share,
             );
             assert!(cmm_ok, "ArData cmm_to_share is not valid");
-            assert_eq!(
-                data.ar_public_key, data.ar_public_key,
-                "ArData ar_public_key is invalid"
-            );
+            // assert_eq!(
+            //     data.ar_public_key, data.ar_public_key,
+            //     "ArData ar_public_key is invalid"
+            // );
         }
 
         // Add check of commitment to polynomial coefficients and randomness
