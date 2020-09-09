@@ -36,7 +36,7 @@ enum Request {
     // (owner_account, receive_account, amount) - Transfers 'amount' tokens from the
     // 'owner_account' to 'receive_account' if allowed
     TransferFromTo(AccountAddress, AccountAddress, U999),
-    // (allowed_account, amount) - Allowes 'allowed_account' to send up to 'amount' tokens from
+    // (allowed_account, amount) - Allows 'allowed_account' to send up to 'amount' tokens from
     // the sender account. Called Approve in the erc20 spec. TODO: this request is insecure af
     // wrt tx ordering.
     AllowTransfer(AccountAddress, U999),
