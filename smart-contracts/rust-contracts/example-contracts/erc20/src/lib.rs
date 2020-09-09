@@ -58,9 +58,11 @@ enum Event {
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: I,
-    _amount: Amount,
+    amount: Amount,
     logger: &mut L,
 ) -> InitResult<State> {
+    ensure!(amount == 0, "The amount must be 0");
+
     let init_params: InitParams = ctx.parameter_cursor().get()?;
 
     // Let the creator have all the tokens
@@ -81,10 +83,12 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: R,
-    _: Amount,
+    receive_amount: Amount,
     logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
+    ensure!(receive_amount == 0, "The amount must be 0");
+
     let msg: Request = ctx.parameter_cursor().get()?;
 
     let sender_address = match ctx.sender() {
@@ -97,10 +101,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             let sender_balance = *state.balances.get(&sender_address).unwrap_or(&0);
             ensure!(sender_balance >= amount, "Insufficient funds");
 
-            let receiver_balance = match state.balances.get(&receiver_address) {
-                None => 0,
-                Some(balance) => *balance,
-            };
+            let receiver_balance = *state.balances.get(&receiver_address).unwrap_or(&0);
             state.balances.insert(sender_address, sender_balance - amount);
             state.balances.insert(receiver_address, receiver_balance + amount);
             logger.log(&Event::Transfer(sender_address, receiver_address, amount));
@@ -131,21 +132,17 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 
 // (de)serialization
 
+// Serializing the string by converting the string to a Vec of bytes, and use
+// `serial` defined for Vec
 fn serial_string<W: Write>(s: &String, out: &mut W) -> Result<(), W::Err> {
-    let bytes = s.bytes();
-    (bytes.len() as u64).serial(out)?;
-    for byte in bytes {
-        out.write_u8(byte)?;
-    }
-    Ok(())
+    let bytes = s.bytes().collect::<Vec<_>>();
+    bytes.serial(out)
 }
+// Deserializing a string using deserial of Vec of bytes, and treat the byte
+// vector as utf8 encoding
 fn deserial_string<R: Read>(source: &mut R) -> Result<String, R::Err> {
-    let len = u64::deserial(source)?;
-    let mut buffer = Vec::new();
-    for _n in 0..len {
-        buffer.push(u8::deserial(source)?);
-    }
-    let res = String::from_utf8(buffer).unwrap();
+    let bytes = Vec::deserial(source)?;
+    let res = String::from_utf8(bytes).unwrap();
     Ok(res)
 }
 
@@ -285,7 +282,6 @@ pub mod tests {
 
     #[test]
     /// Initialise token/contract giving the owner
-    #[no_mangle]
     fn test_init() {
         // Setup
         let metadata = ChainMetadata {
@@ -313,7 +309,7 @@ pub mod tests {
         let mut logger = test_infrastructure::LogRecorder::init();
 
         // Execution
-        let out = contract_init(ctx, 13, &mut logger);
+        let out = contract_init(ctx, 0, &mut logger);
 
         // Tests
         match out {
@@ -341,7 +337,6 @@ pub mod tests {
     }
 
     #[test]
-    #[no_mangle]
     /// Transfers tokens from the sender account
     fn test_receive_transfer_to() {
         // Setup
@@ -420,7 +415,6 @@ pub mod tests {
     }
 
     #[test]
-    #[no_mangle]
     /// Sender transfer tokens between two other accounts
     ///
     /// - The amount is subtracted from the owners allowed funds
@@ -477,30 +471,25 @@ pub mod tests {
         // Test
         match res {
             Err(_) => assert!(false, "Contract receive support failed, but it should not have."),
-            Ok(actions) => {
-                assert_eq!(
-                    actions,
-                    test_infrastructure::ActionsTree::accept(),
-                    "Transfering should result in an Accept action"
-                );
-                let from_balance = *state.balances.get(&from_account).unwrap();
-                let to_balance = *state.balances.get(&to_account).unwrap();
-                let from_spender_allowed =
-                    *state.allowed.get(&(from_account, spender_account)).unwrap();
-                assert_eq!(
-                    from_balance, 140,
-                    "The transfered amount should be subtracted from sender balance"
-                );
-                assert_eq!(
-                    to_balance, 60,
-                    "The transfered amount should be added to receiver balance"
-                );
-                assert_eq!(
-                    from_spender_allowed, 40,
-                    "The transfered amount should be added to receiver balance"
-                );
-            }
+            Ok(actions) => assert_eq!(
+                actions,
+                test_infrastructure::ActionsTree::accept(),
+                "Transfering should result in an Accept action"
+            ),
         }
+        let from_balance = *state.balances.get(&from_account).unwrap();
+        let to_balance = *state.balances.get(&to_account).unwrap();
+        let from_spender_allowed = *state.allowed.get(&(from_account, spender_account)).unwrap();
+        assert_eq!(
+            from_balance, 140,
+            "The transfered amount should be subtracted from sender balance"
+        );
+        assert_eq!(to_balance, 60, "The transfered amount should be added to receiver balance");
+        assert_eq!(
+            from_spender_allowed, 40,
+            "The transfered amount should be added to receiver balance"
+        );
+
         assert_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
         assert_eq!(
             logger.logs[0],
@@ -510,7 +499,6 @@ pub mod tests {
     }
 
     #[test]
-    #[no_mangle]
     /// Fail when attempting to transfer from account, without being allowed to
     /// the full amount
     fn test_receive_allow_transfer() {
@@ -580,7 +568,6 @@ pub mod tests {
     }
 
     #[test]
-    #[no_mangle]
     /// Fail when attempting to transfer from account, without being allowed to
     /// the full amount
     fn test_receive_transfer_to_not_allowed() {
@@ -650,7 +637,6 @@ pub mod tests {
     }
 
     #[test]
-    #[no_mangle]
     /// Fail when attempting to transfer from account, without being allowed to
     /// the full amount
     fn test_receive_transfer_to_insufficient() {
@@ -713,7 +699,6 @@ pub mod tests {
     }
 
     #[test]
-    #[no_mangle]
     /// Fail when attempting to transfer from account with allowed amount, but
     /// insufficient funds
     fn test_receive_transfer_from_to_insufficient() {
