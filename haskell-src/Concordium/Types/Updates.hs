@@ -344,7 +344,7 @@ data RawUpdateInstruction = RawUpdateInstruction {
         ruiEffectiveTime :: TransactionTime,
         ruiTimeout :: TransactionTime,
         ruiPayload :: UpdatePayload
-    }
+    } deriving (Eq, Show)
 
 putRawUpdateInstruction :: Putter RawUpdateInstruction
 putRawUpdateInstruction RawUpdateInstruction{..} = do
@@ -387,7 +387,8 @@ makeUpdateInstruction rui@RawUpdateInstruction{..} keys = UpdateInstruction {
         uiSignatures = signUpdateInstruction uiSignHash keys
 
 -- |Check if the signatures on an 'UpdateInstruction' are valid with respect
--- to the given 'Authorizations'.
+-- to the given 'Authorizations'. This does not check if the keys are the
+-- correct ones to authorize the update.
 checkUpdateInstructionSignatures
     :: Authorizations
     -- ^Current authorizations
@@ -400,3 +401,17 @@ checkUpdateInstructionSignatures auth UpdateInstruction{..} = all checkSig sigs
         checkSig (i, sig) = case asKeys auth Vec.!? fromIntegral i of
             Nothing -> False
             Just verKey -> verify verKey (encode uiSignHash) sig
+
+-- |Check if an update is authorized by the given 'Authorizations'.
+-- That is, it must have signatures from at least the required threshold of
+-- those authorized to perform the given update, and all signatures must be
+-- valid.
+checkAuthorizedUpdate
+    :: Authorizations
+    -- ^Current authorizations
+    -> UpdateInstruction
+    -- ^Instruction to verify
+    -> Bool
+checkAuthorizedUpdate auth ui
+    = checkUpdateAuthorizationKeys auth (uiPayload ui) (Map.keysSet (updateInstructionSignatures (uiSignatures ui)))
+        && checkUpdateInstructionSignatures auth ui
