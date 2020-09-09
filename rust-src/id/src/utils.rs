@@ -40,6 +40,7 @@ pub fn evaluate_poly<F: Field, R: AsRef<F>>(coeffs: &[R], point: &F) -> F {
     eval
 }
 
+#[allow(clippy::type_complexity)]
 pub fn encrypt_prf_share<C: Curve, R: Rng>(
     context: &GlobalContext<C>,
     pk: &PublicKey<C>,

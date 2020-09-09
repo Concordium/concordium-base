@@ -5,6 +5,7 @@ use crate::{
     utils,
 };
 use bulletproofs::range_proof::verify_efficient;
+use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use elgamal::Cipher;
 use ff::Field;
@@ -59,7 +60,26 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         h: ip_info.ip_verify_key.g,
     };
 
-    let ro = RandomOracle::empty();
+    let mut transcript = Transcript::new(r"PreIdentityProof".as_ref());
+    transcript.append_message(b"ctx", &to_bytes(&context.global_context));
+    transcript.append_message(
+        b"choice_ar_parameters",
+        &to_bytes(&pre_id_obj.choice_ar_parameters),
+    );
+    transcript.append_message(b"cmm_sc", &to_bytes(&pre_id_obj.cmm_sc));
+    transcript.append_message(b"cmm_prf", &to_bytes(&pre_id_obj.cmm_prf));
+    transcript.append_message(
+        b"cmm_prf_sharing_coeff",
+        &to_bytes(&pre_id_obj.cmm_prf_sharing_coeff),
+    );
+    let mut ro = RandomOracle::domain("PreIdentityProof")
+        .append_bytes(&to_bytes(&context.global_context))
+        .append_bytes(&to_bytes(&pre_id_obj.choice_ar_parameters))
+        .append_bytes(&to_bytes(&pre_id_obj.cmm_sc))
+        .append_bytes(&to_bytes(&pre_id_obj.cmm_prf))
+        .append_bytes(&to_bytes(&pre_id_obj.cmm_prf_sharing_coeff));
+
+    // let mut ro = RandomOracle::empty();
 
     let id_cred_sec_verifier = dlog::Dlog {
         public: pre_id_obj.id_cred_pub,
@@ -156,8 +176,8 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         challenge: pre_id_obj.poks.challenge,
         witness,
     };
-    let mut transcript = Transcript::new(&[]);
     let bulletproofs = &pre_id_obj.poks.bulletproofs;
+    let mut bp_verification = true;
     for (((_, ar_data), ar_info), proof) in pre_id_obj
         .ip_ar_data
         .iter()
@@ -165,19 +185,20 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         .zip(bulletproofs.iter())
     {
         let ciphers = ar_data.enc_prf_key_share;
-        let pk : C = ar_info.ar_public_key.key;
-        let keys : CommitmentKey<C> = CommitmentKey {
+        let pk: C = ar_info.ar_public_key.key;
+        let keys: CommitmentKey<C> = CommitmentKey {
             g: h_in_exponent,
             h: pk,
         };
         let gens = &context.global_context.bulletproof_generators().take(32 * 8);
         let commitments = ciphers.iter().map(|x| Commitment(x.1)).collect::<Vec<_>>();
-        let bp = verify_efficient(&mut transcript, 32, &commitments, &proof, gens, &keys);
-        println!("{:?}", bp.is_ok());
-        // println!("{:?}", );
+        ro = ro.append_bytes(&to_bytes(&ciphers));
+        transcript.append_message(b"encrypted_share", &to_bytes(&ciphers));
+        bp_verification = bp_verification
+            && verify_efficient(&mut transcript, 32, &commitments, &proof, gens, &keys).is_ok();
     }
-
-    if verify(ro, &verifier, &proof) {
+    ro = ro.append_bytes(&to_bytes(&bulletproofs));
+    if verify(ro, &verifier, &proof) && bp_verification {
         Ok(())
     } else {
         Err(Reason::IncorrectProof)
