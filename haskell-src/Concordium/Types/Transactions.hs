@@ -41,7 +41,7 @@ transactionSignHashFromBytes = TransactionSignHashV0 . H.hash
 
 -- |Construct a 'TransactionSignHash' from a 'TransactionHeader' and 'EncodedPayload'.
 transactionSignHashFromHeaderPayload :: TransactionHeader -> EncodedPayload -> TransactionSignHashV0
-transactionSignHashFromHeaderPayload btrHeader btrPayload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy $ S.put btrHeader <> putPayload btrPayload
+transactionSignHashFromHeaderPayload btrHeader btrPayload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy $ S.put btrHeader <> putEncodedPayload btrPayload
 
 -- |A signature is an association list of index of the key, and the actual signature.
 -- The index is relative to the account address, and the indices should be distinct.
@@ -161,13 +161,13 @@ instance S.Serialize AccountTransaction where
   put AccountTransaction{..} =
     S.put btrSignature <>
     S.put btrHeader <>
-    putPayload btrPayload
+    putEncodedPayload btrPayload
 
   get = S.label "account transaction" $ do
     btrSignature <- S.label "signature" S.get
     ((btrHeader, btrPayload), bodyBytes) <- getWithBytes $ do
       btrHeader <- S.label "header" S.get
-      btrPayload <- S.label "payload" $ getPayload (thPayloadSize btrHeader)
+      btrPayload <- S.label "payload" $ getEncodedPayload (thPayloadSize btrHeader)
       return (btrHeader, btrPayload)
     let btrSignHash = transactionSignHashFromBytes bodyBytes
     return $! AccountTransaction{..}
