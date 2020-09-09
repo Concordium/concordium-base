@@ -4,9 +4,11 @@ use crate::{
     types::*,
     utils,
 };
+use bulletproofs::range_proof::verify_efficient;
 use curve_arithmetic::{Curve, Pairing};
 use elgamal::Cipher;
 use ff::Field;
+use merlin::Transcript;
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use rand::*;
 use random_oracle::RandomOracle;
@@ -120,12 +122,13 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
     let witness_prf_same = pre_id_obj.poks.commitments_prf_same;
 
+    let h_in_exponent = *context.global_context.encryption_in_exponent_generator();
     let prf_verification = compute_prf_sharing_verifier(
         ar_ck,
         &pre_id_obj.cmm_prf_sharing_coeff,
         &pre_id_obj.ip_ar_data,
         &context.ars_infos,
-        *context.global_context.encryption_in_exponent_generator(),
+        h_in_exponent,
     );
     let (prf_sharing_verifier, prf_sharing_witness) = match prf_verification {
         Some(v) => v,
@@ -153,6 +156,27 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         challenge: pre_id_obj.poks.challenge,
         witness,
     };
+    let mut transcript = Transcript::new(&[]);
+    let bulletproofs = &pre_id_obj.poks.bulletproofs;
+    for (((_, ar_data), ar_info), proof) in pre_id_obj
+        .ip_ar_data
+        .iter()
+        .zip(context.ars_infos.values())
+        .zip(bulletproofs.iter())
+    {
+        let ciphers = ar_data.enc_prf_key_share;
+        let pk : C = ar_info.ar_public_key.key;
+        let keys : CommitmentKey<C> = CommitmentKey {
+            g: h_in_exponent,
+            h: pk,
+        };
+        let gens = &context.global_context.bulletproof_generators().take(32 * 8);
+        let commitments = ciphers.iter().map(|x| Commitment(x.1)).collect::<Vec<_>>();
+        let bp = verify_efficient(&mut transcript, 32, &commitments, &proof, gens, &keys);
+        println!("{:?}", bp.is_ok());
+        // println!("{:?}", );
+    }
+
     if verify(ro, &verifier, &proof) {
         Ok(())
     } else {
