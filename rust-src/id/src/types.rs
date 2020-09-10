@@ -950,6 +950,8 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// deploying proofs on own account.
     /// We could consider replacing this proof by just a list of signatures.
     pub proof_acc_sk: AccountOwnershipProof,
+    /// Proof that cred_counter is less than or equal to max_accounts
+    pub cred_counter_less_than_max_accounts: RangeProof<C>,
 }
 
 // This is an unfortunate situation, but we need to manually write a
@@ -966,6 +968,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for CredDeploymentPro
         tmp_out.put(&self.proof_ip_sig);
         tmp_out.put(&self.proof_reg_id);
         tmp_out.put(&self.proof_acc_sk);
+        tmp_out.put(&self.cred_counter_less_than_max_accounts);
         let len: u32 = tmp_out.len() as u32; // safe
         out.put(&len);
         out.write_all(&tmp_out).expect("Writing to buffer is safe.");
@@ -986,6 +989,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
         let proof_ip_sig = limited.get()?;
         let proof_reg_id = limited.get()?;
         let proof_acc_sk = limited.get()?;
+        let cred_counter_less_than_max_accounts = limited.get()?;
         if limited.limit() == 0 {
             Ok(CredDeploymentProofs {
                 sig,
@@ -995,6 +999,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
                 proof_ip_sig,
                 proof_reg_id,
                 proof_acc_sk,
+                cred_counter_less_than_max_accounts,
             })
         } else {
             bail!("Length information is inaccurate. Credential proofs not valid.")

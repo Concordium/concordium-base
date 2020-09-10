@@ -6,7 +6,7 @@ use crate::{
     types::*,
     utils,
 };
-use bulletproofs::range_proof::prove_given_scalars as bulletprove;
+use bulletproofs::range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal};
 use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
@@ -555,6 +555,20 @@ where
         &mut csprng,
     )?;
 
+    let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
+    let cred_counter_less_than_max_accounts = prove_less_than_or_equal(
+        &mut transcript,
+        &mut csprng,
+        32,
+        u64::from(cred_counter),
+        u64::from(alist.max_accounts),
+        &context.global_context.bulletproof_generators(),
+        &context.global_context.on_chain_commitment_key,
+        &commitment_rands.cred_counter_rand,
+        &commitment_rands.max_accounts_rand,
+    )
+    .unwrap(); // TODO: avoid this unwrap()?
+
     let cred_account = match acc_data.existing {
         // we are deploying on a new account
         // take all the keys that
@@ -691,6 +705,7 @@ where
         proof_reg_id: proof.witness.w1.w1,
         proof_ip_sig: proof.witness.w1.w2,
         proof_acc_sk,
+        cred_counter_less_than_max_accounts,
     };
 
     let info = CredentialDeploymentInfo {
