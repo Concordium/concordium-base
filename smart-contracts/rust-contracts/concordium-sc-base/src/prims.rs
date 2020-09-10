@@ -42,27 +42,30 @@ extern "C" {
                                                       // get current state size in bytes.
     pub(crate) fn state_size() -> u32;
 
-    // Write the chain context to the given location. Chain context
-    // is fixed-length consisting of
-    // - slotNumber
-    // - blockHeight
-    // - finalizedHeight
-    // - slotTime (in milliseconds)
-    // pub(crate) fn get_chain_context(start: *mut u8);
-    // Get the init context (without the chain context).
-    // This consists of
-    // - address of the sender, 32 bytes
-    pub(crate) fn get_init_ctx(start: *mut u8);
+    // Getter for the init context.
+    /// Address of the sender, 32 bytes
+    pub(crate) fn get_init_origin(start: *mut u8);
 
-    // FIXME: Resolve this so the annotation is not needed.
-    #[allow(dead_code)]
-    pub(crate) fn get_receive_ctx_size() -> u32;
-    // Get the receive context (without the chain context).
-    // This consists of
-    // - invoker of the top-level transaction
-    // - address of the contract itself
-    // - self-balance of the contract
-    // - immediate sender of the message (either contract or account)
-    // - owner of the contract.
-    pub(crate) fn get_receive_ctx(start: *mut u8);
+    // Getters for the receive context
+    /// Invoker of the top-level transaction, AccountAddress.
+    pub(crate) fn get_receive_invoker(start: *mut u8);
+    /// Address of the contract itself, ContractAddress.
+    pub(crate) fn get_receive_self_address(start: *mut u8);
+    /// Self-balance of the contract, returns the amount
+    pub(crate) fn get_receive_self_balance() -> u64;
+    /// Immediate sender of the message (either contract or account).
+    pub(crate) fn get_receive_sender(start: *mut u8);
+    /// Owner of the contract, AccountAddress.
+    pub(crate) fn get_receive_owner(start: *mut u8);
+
+    // Getters for the chain meta data
+    /// Slot number from chain meta data
+    pub(crate) fn get_slot_number() -> u64;
+    /// Block height from chain meta data
+    pub(crate) fn get_block_height() -> u64;
+    /// Finalized height from chain meta data
+    pub(crate) fn get_finalized_height() -> u64;
+    /// Slot time (in milliseconds) from chain meta data
+    pub(crate) fn get_slot_time() -> u64;
+
 }

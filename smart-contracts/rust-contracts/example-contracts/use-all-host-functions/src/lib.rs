@@ -5,18 +5,18 @@ type State = u8;
 
 #[init(name = "init")]
 #[inline(always)]
-fn contract_init<L: HasLogger>(
-    ctx: InitContext,
+fn contract_init<I: HasInitContext<()>, L: HasLogger>(
+    ctx: I,
     _amount: Amount,
     _logger: &mut L,
 ) -> InitResult<State> {
-    Ok(ctx.get_time().to_be_bytes()[0])
+    Ok(ctx.metadata().slot_time().to_be_bytes()[0])
 }
 
 #[receive(name = "receive", low_level)]
 #[inline(always)]
-fn contract_receive<A: HasActions, L: HasLogger>(
-    ctx: ReceiveContext,
+fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
+    ctx: R,
     _amount: Amount,
     logger: &mut L,
     state: &mut ContractState,
@@ -27,7 +27,7 @@ fn contract_receive<A: HasActions, L: HasLogger>(
     state.write(&state_contents)?; // Exercises write_state()
     state.reserve(0); // Exercises state_size() & resize_state()
                       // get_receive_ctx_size() currently unreachable
-    Ok(A::send(ctx.self_address(), "receive", 100, &[1, 2, 3])
-        .and_then(A::simple_transfer(ctx.owner(), 100).or_else(A::accept())))
+    Ok(A::send(&ctx.self_address(), "receive", 100, &[1, 2, 3])
+        .and_then(A::simple_transfer(&ctx.owner(), 100).or_else(A::accept())))
     // Exercises combine_and, combine_or, send, simple_transfer and accept
 }

@@ -50,7 +50,7 @@ pub struct InitContext {
     derive(SerdeSerialize, SerdeDeserialize),
     serde(tag = "type", content = "address")
 )]
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub enum Address {
     Account(AccountAddress),
     Contract(ContractAddress),

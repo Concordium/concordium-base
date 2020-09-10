@@ -90,6 +90,7 @@ impl Read for ContractState {
         let mut bytes: MaybeUninit<[u8; 8]> = MaybeUninit::uninit();
         let num_read =
             unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 8, self.current_position) };
+        self.current_position += num_read;
         if num_read == 8 {
             unsafe { Ok(u64::from_le_bytes(bytes.assume_init())) }
         } else {
@@ -103,6 +104,7 @@ impl Read for ContractState {
         let mut bytes: MaybeUninit<[u8; 4]> = MaybeUninit::uninit();
         let num_read =
             unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 4, self.current_position) };
+        self.current_position += num_read;
         if num_read == 4 {
             unsafe { Ok(u32::from_le_bytes(bytes.assume_init())) }
         } else {
@@ -116,6 +118,7 @@ impl Read for ContractState {
         let mut bytes: MaybeUninit<[u8; 1]> = MaybeUninit::uninit();
         let num_read =
             unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 1, self.current_position) };
+        self.current_position += num_read;
         if num_read == 1 {
             unsafe { Ok(bytes.assume_init()[0]) }
         } else {
@@ -203,43 +206,39 @@ impl HasParameter for Parameter {
 }
 
 /// # Trait implementations for the chain metadata.
-impl HasChainMetadata for ChainMetadata {
+impl HasChainMetadata for ChainMetaExtern {
     #[inline(always)]
-    fn slot_time(&self) -> SlotTime { self.slot_time }
+    fn slot_time(&self) -> SlotTime { unsafe { get_slot_time() } }
 
     #[inline(always)]
-    fn block_height(&self) -> BlockHeight { self.block_height }
+    fn block_height(&self) -> BlockHeight { unsafe { get_block_height() } }
 
     #[inline(always)]
-    fn finalized_height(&self) -> FinalizedHeight { self.finalized_height }
+    fn finalized_height(&self) -> FinalizedHeight { unsafe { get_finalized_height() } }
 
     #[inline(always)]
-    fn slot_number(&self) -> SlotNumber { self.slot_number }
+    fn slot_number(&self) -> SlotNumber { unsafe { get_slot_number() } }
 }
 
 /// # Trait implementations for the init context
-impl HasInitContext<()> for InitContext {
+impl HasInitContext<()> for InitContextExtern {
     type InitData = ();
-    type MetadataType = ChainMetadata;
+    type MetadataType = ChainMetaExtern;
     type ParamType = Parameter;
 
     /// Create a new init context by using an external call.
-    fn open(_: Self::InitData) -> Self {
-        let mut bytes = [0u8; 4 * 8 + 32];
-        // unsafe { get_chain_context(bytes.as_mut_ptr()) }
-        // unsafe { get_init_ctx(bytes[4 * 8..].as_mut_ptr()) };
-        unsafe { get_init_ctx(bytes.as_mut_ptr()) };
-        let mut cursor = Cursor::<&[u8]>::new(&bytes);
-        if let Ok(v) = cursor.get() {
-            v
-        } else {
-            panic!()
-            // Host did not provide valid init context and chain metadata.
-        }
-    }
+    fn open(_: Self::InitData) -> Self { InitContextExtern {} }
 
     #[inline(always)]
-    fn init_origin(&self) -> &AccountAddress { &self.init_origin }
+    fn init_origin(&self) -> AccountAddress {
+        let mut bytes: MaybeUninit<[u8; ACCOUNT_ADDRESS_SIZE]> = MaybeUninit::uninit();
+        let ptr = bytes.as_mut_ptr();
+        let address = unsafe {
+            get_init_origin(ptr as *mut u8);
+            bytes.assume_init()
+        };
+        AccountAddress(address)
+    }
 
     #[inline(always)]
     fn parameter_cursor(&self) -> Self::ParamType {
@@ -249,49 +248,64 @@ impl HasInitContext<()> for InitContext {
     }
 
     #[inline(always)]
-    fn metadata(&self) -> &Self::MetadataType { &self.metadata }
+    fn metadata(&self) -> &Self::MetadataType { &ChainMetaExtern {} }
 }
 
 /// # Trait implementations for the receive context
-impl HasReceiveContext<()> for ReceiveContext {
-    type MetadataType = ChainMetadata;
+impl HasReceiveContext<()> for ReceiveContextExtern {
+    type MetadataType = ChainMetaExtern;
     type ParamType = Parameter;
     type ReceiveData = ();
 
-    /// Create a new receive context by using an external call.
-    fn open(_: Self::ReceiveData) -> Self {
-        // let metadata_size = 4 * 8;
-        // We reduce this to a purely stack-based allocation
-        // by overapproximating the size of the context.
-        // unsafe { get_receive_ctx_size() };
-        let mut bytes = [0u8; 4 * 8 + 121];
-        // unsafe { get_chain_context(bytes.as_mut_ptr()) }
-        // unsafe { get_receive_ctx(bytes[metadata_size..].as_mut_ptr()) };
-        unsafe { get_receive_ctx(bytes.as_mut_ptr()) };
-        let mut cursor = Cursor::<&[u8]>::new(&bytes);
-        if let Ok(v) = cursor.get() {
-            v
-        } else {
-            panic!()
-            // environment did not provide a valid receive context, this should
-            // not happen and cannot be recovered.
-        }
+    /// Create a new receive context
+    fn open(_: Self::ReceiveData) -> Self { ReceiveContextExtern {} }
+
+    #[inline(always)]
+    fn invoker(&self) -> AccountAddress {
+        let mut bytes: MaybeUninit<[u8; ACCOUNT_ADDRESS_SIZE]> = MaybeUninit::uninit();
+        let ptr = bytes.as_mut_ptr();
+        let address = unsafe {
+            get_receive_invoker(ptr as *mut u8);
+            bytes.assume_init()
+        };
+        AccountAddress(address)
     }
 
     #[inline(always)]
-    fn invoker(&self) -> &AccountAddress { &self.invoker }
+    fn self_address(&self) -> ContractAddress {
+        let mut bytes: MaybeUninit<[u8; 16]> = MaybeUninit::uninit();
+        let ptr = bytes.as_mut_ptr();
+        let address = unsafe {
+            get_receive_self_address(ptr as *mut u8);
+            bytes.assume_init()
+        };
+        from_bytes(&address).unwrap()
+    }
 
     #[inline(always)]
-    fn self_address(&self) -> &ContractAddress { &self.self_address }
+    fn self_balance(&self) -> Amount { unsafe { get_receive_self_balance() } }
 
     #[inline(always)]
-    fn self_balance(&self) -> Amount { self.self_balance }
+    fn sender(&self) -> Address {
+        let mut bytes: MaybeUninit<[u8; 33]> = MaybeUninit::uninit();
+        let ptr = bytes.as_mut_ptr();
+        let address = unsafe {
+            get_receive_sender(ptr as *mut u8);
+            bytes.assume_init()
+        };
+        from_bytes(&address).unwrap()
+    }
 
     #[inline(always)]
-    fn sender(&self) -> &Address { &self.sender }
-
-    #[inline(always)]
-    fn owner(&self) -> &AccountAddress { &self.owner }
+    fn owner(&self) -> AccountAddress {
+        let mut bytes: MaybeUninit<[u8; ACCOUNT_ADDRESS_SIZE]> = MaybeUninit::uninit();
+        let ptr = bytes.as_mut_ptr();
+        let address = unsafe {
+            get_receive_owner(ptr as *mut u8);
+            bytes.assume_init()
+        };
+        AccountAddress(address)
+    }
 
     #[inline(always)]
     fn parameter_cursor(&self) -> Self::ParamType {
@@ -301,7 +315,7 @@ impl HasReceiveContext<()> for ReceiveContext {
     }
 
     #[inline(always)]
-    fn metadata(&self) -> &Self::MetadataType { &self.metadata }
+    fn metadata(&self) -> &Self::MetadataType { &ChainMetaExtern {} }
 }
 
 /// #Implementations of the logger.

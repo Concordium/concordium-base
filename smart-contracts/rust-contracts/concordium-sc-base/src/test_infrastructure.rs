@@ -21,6 +21,21 @@ impl<'a> HasParameter for Cursor<&'a [u8]> {
     fn size(&self) -> u32 { self.data.len() as u32 }
 }
 
+/// # Trait implementations for the chain metadata.
+impl HasChainMetadata for ChainMetadata {
+    #[inline(always)]
+    fn slot_time(&self) -> SlotTime { self.slot_time }
+
+    #[inline(always)]
+    fn block_height(&self) -> BlockHeight { self.block_height }
+
+    #[inline(always)]
+    fn finalized_height(&self) -> FinalizedHeight { self.finalized_height }
+
+    #[inline(always)]
+    fn slot_number(&self) -> SlotNumber { self.slot_number }
+}
+
 impl<'a> HasInitContext<()> for InitContextWrapper<'a> {
     type InitData = (InitContext, &'a [u8]);
     type MetadataType = ChainMetadata;
@@ -33,7 +48,7 @@ impl<'a> HasInitContext<()> for InitContextWrapper<'a> {
         }
     }
 
-    fn init_origin(&self) -> &AccountAddress { &self.init_ctx.init_origin }
+    fn init_origin(&self) -> AccountAddress { self.init_ctx.init_origin }
 
     fn parameter_cursor(&self) -> Self::ParamType { Cursor::new(self.parameter) }
 
@@ -62,15 +77,15 @@ impl<'a> HasReceiveContext<()> for ReceiveContextWrapper<'a> {
 
     fn metadata(&self) -> &Self::MetadataType { &self.receive_ctx.metadata }
 
-    fn invoker(&self) -> &AccountAddress { &self.receive_ctx.invoker }
+    fn invoker(&self) -> AccountAddress { self.receive_ctx.invoker }
 
-    fn self_address(&self) -> &ContractAddress { &self.receive_ctx.self_address }
+    fn self_address(&self) -> ContractAddress { self.receive_ctx.self_address }
 
     fn self_balance(&self) -> Amount { self.receive_ctx.self_balance }
 
-    fn sender(&self) -> &Address { &self.receive_ctx.sender }
+    fn sender(&self) -> Address { self.receive_ctx.sender }
 
-    fn owner(&self) -> &AccountAddress { &self.receive_ctx.owner }
+    fn owner(&self) -> AccountAddress { self.receive_ctx.owner }
 }
 
 /// A logger that simply accumulates all the logged items to be inspected at the

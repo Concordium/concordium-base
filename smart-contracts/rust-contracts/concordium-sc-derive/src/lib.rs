@@ -62,7 +62,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[no_mangle]
             pub extern "C" fn #name(amount: Amount) -> i32 {
-                let ctx = InitContext::open(());
+                let ctx = InitContextExtern::open(());
                 let mut state = ContractState::open(());
                 let mut logger = Logger::init();
                 match #fn_name(ctx, amount, &mut logger, &mut state) {
@@ -75,7 +75,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[no_mangle]
             pub extern "C" fn #name(amount: Amount) -> i32 {
-                let ctx = InitContext::open(());
+                let ctx = InitContextExtern::open(());
                 let mut logger = Logger::init();
                 match #fn_name(ctx, amount, &mut logger) {
                     Ok(state) => {
@@ -121,7 +121,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[no_mangle]
         pub extern "C" fn #name(amount: Amount) -> i32 {
             use concordium_sc_base::{SeekFrom, ContractState, Logger};
-            let ctx = ReceiveContext::open(());
+            let ctx = ReceiveContextExtern::open(());
             let mut state = ContractState::open(());
             let mut logger = Logger::init();
             let res: ReceiveResult<Action> = #fn_name(ctx, amount, &mut logger, &mut state);
@@ -138,7 +138,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
             #[no_mangle]
             pub extern "C" fn #name(amount: Amount) -> i32 {
                 use concordium_sc_base::{SeekFrom, ContractState, Logger};
-                let ctx = ReceiveContext::open(());
+                let ctx = ReceiveContextExtern::open(());
                 let mut logger = Logger::init();
                 let mut state_bytes = ContractState::open(());
                 if let Ok(mut state) = (&mut state_bytes).get() {
