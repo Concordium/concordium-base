@@ -195,6 +195,10 @@ impl<T: Serialize> Serialize for Vec<T> {
     }
 }
 
+/// The serialization of maps encodes their size as a u32. This should be
+/// sufficient for all realistic use cases in smart contracts.
+/// They are serialized in canonical order (increasing) but deserialization
+/// only requirenes key uniqueness, no order.
 impl<K: Serialize + Ord, V: Serialize> Serialize for collections::BTreeMap<K, V> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;
@@ -208,12 +212,38 @@ impl<K: Serialize + Ord, V: Serialize> Serialize for collections::BTreeMap<K, V>
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let len: u32 = source.get()?;
-        // FIXME: Ensure order.
         let mut map = collections::BTreeMap::<K, V>::new();
         for _ in 0..len {
             let k = source.get()?;
             let v = source.get()?;
             if map.insert(k, v).is_some() {
+                return Err(R::Err::default());
+            }
+        }
+        Ok(map)
+    }
+}
+
+/// The serialization of sets encodes their size as a u32. This should be
+/// sufficient for all realistic use cases in smart contracts.
+/// They are serialized in canonical order (increasing), but deserialization
+/// does not require any order, only uniqueness.
+impl<K: Serialize + Ord> Serialize for collections::BTreeSet<K> {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        let len = self.len() as u32;
+        len.serial(out)?;
+        for k in self.iter() {
+            k.serial(out)?;
+        }
+        Ok(())
+    }
+
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
+        let len: u32 = source.get()?;
+        let mut map = collections::BTreeSet::<K>::new();
+        for _ in 0..len {
+            let k = source.get()?;
+            if !map.insert(k) {
                 return Err(R::Err::default());
             }
         }

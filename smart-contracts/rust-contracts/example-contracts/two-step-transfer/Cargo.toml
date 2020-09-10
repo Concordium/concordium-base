@@ -1,5 +1,5 @@
 [package]
-name = "lockup"
+name = "two-step-transfer"
 version = "0.1.0"
 authors = ["Concordium AG <info@concordium.com>"]
 edition = "2018"
