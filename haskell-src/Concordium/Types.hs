@@ -118,9 +118,14 @@ instance FromJSON ElectionDifficulty where
         else
           fail "Invalid election difficulty (must be in the range [0,1))."
 
+-- |Convert a 'Double' to an 'ElectionDifficulty'. This requires
+-- the value to be in the range @[0,1)@.
 makeElectionDifficulty :: Double -> ElectionDifficulty
 makeElectionDifficulty d = assert (d >= 0 && d < 1) $ ElectionDifficulty d
 
+-- |Verify that an 'ElectionDifficulty' is valid, that is, in the range
+-- @[0,1)@. This is checked by 'makeElectionDifficulty' as well as the
+-- 'Serialize' and 'FromJSON' instances of 'ElectionDifficulty'.
 isValidElectionDifficulty :: ElectionDifficulty -> Bool
 isValidElectionDifficulty (ElectionDifficulty d) = d >= 0 && d < 1
 
