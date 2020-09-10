@@ -143,6 +143,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     a: Amount,
     csprng: &mut R,
 ) -> Option<EncryptedAmountTransferData<C>> {
+    // REVIEW: test this
     if s < a {
         return None;
     }
@@ -196,6 +197,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         r_s:         s_prime_chunks_as_rand,
         s:           S_prime_rand_as_value,
     };
+    // REVIEW: ensure that this is a correct implementation of a Sigma protocol for the relation.
     let sigma_proof = prove(ro.split(), &protocol, secret, csprng)?;
     let cmm_key_bulletproof_a = CommitmentKey {
         g: *generator,
