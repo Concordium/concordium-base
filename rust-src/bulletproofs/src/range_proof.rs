@@ -8,7 +8,7 @@ use pedersen_scheme::*;
 use rand::*;
 use std::iter::once;
 
-#[derive(Clone, Serialize, SerdeBase16Serialize)]
+#[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 #[allow(non_snake_case)]
 pub struct RangeProof<C: Curve> {
     A:        C,
@@ -161,6 +161,9 @@ pub fn prove<C: Curve, T: Rng>(
     randomness: &[Randomness<C>],
 ) -> Option<RangeProof<C>> {
     let nm = usize::from(n) * usize::from(m);
+    if gens.G_H.len() < nm {
+        return None;
+    }
     let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(nm).cloned().unzip();
     let B = v_keys.g;
     let B_tilde = v_keys.h;
@@ -422,6 +425,8 @@ pub enum VerificationError {
     First,
     /// The second check failed.
     Second,
+    /// The length of G_H was less than nm, which is too small
+    NotEnoughGenerators,
 }
 
 /// This function verifies a range proof, i.e. a proof of knowledge
@@ -448,10 +453,14 @@ pub fn verify_efficient<C: Curve>(
     gens: &Generators<C>,
     v_keys: &CommitmentKey<C>,
 ) -> Result<(), VerificationError> {
-    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().cloned().unzip();
+    let m = commitments.len();
+    let nm = usize::from(n) * m;
+    if gens.G_H.len() < nm {
+        return Err(VerificationError::NotEnoughGenerators);
+    }
+    let (G, H): (Vec<_>, Vec<_>) = gens.G_H.iter().take(nm).cloned().unzip();
     let B = v_keys.g;
     let B_tilde = v_keys.h;
-    let m = commitments.len();
     for V in commitments {
         transcript.append_point(b"Vj", &V.0);
     }
@@ -610,6 +619,53 @@ pub fn verify_efficient<C: Curve>(
     }
 }
 
+/// For proving that a <= b for integers a,b
+/// It is assumed that a,b \in [0, 2^n)
+#[allow(clippy::too_many_arguments)]
+pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
+    transcript: &mut Transcript,
+    csprng: &mut T,
+    n: u8,
+    a: u64,
+    b: u64,
+    gens: &Generators<C>,
+    key: &CommitmentKey<C>,
+    randomness_a: &Randomness<C>,
+    randomness_b: &Randomness<C>,
+) -> Option<RangeProof<C>> {
+    let mut randomness = **randomness_b;
+    randomness.sub_assign(&randomness_a);
+    prove(transcript, csprng, n, 2, &[b - a, a], gens, key, &[
+        Randomness::new(randomness),
+        Randomness::new(**randomness_a),
+    ])
+}
+
+/// Given commitments to a and b, verify that a <= b
+/// It is assumed that b \in [0, 2^n),
+/// but it should follow that a \in [0, 2^n) if the
+/// proof verifies.
+pub fn verify_less_than_or_equal<C: Curve>(
+    transcript: &mut Transcript,
+    n: u8,
+    commitment_a: &Commitment<C>,
+    commitment_b: &Commitment<C>,
+    proof: &RangeProof<C>,
+    gens: &Generators<C>,
+    key: &CommitmentKey<C>,
+) -> bool {
+    let commitment = Commitment(commitment_b.0.minus_point(&commitment_a.0));
+    verify_efficient(
+        transcript,
+        n,
+        &[commitment, *commitment_a],
+        proof,
+        gens,
+        key,
+    )
+    .is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -619,7 +675,7 @@ mod tests {
     /// check, even if the values are not in the interval.
     /// The second check will fail.
     /// This is tested by checking if the verifier returns
-    /// Err(VerificationError::False(true, false))
+    /// Err(Err(VerificationError::Second))
     type SomeCurve = G1;
     #[allow(non_snake_case)]
     #[allow(clippy::too_many_arguments)]
@@ -1156,6 +1212,130 @@ mod tests {
         assert!(b1);
         assert!(b2.is_ok());
         assert!(b3);
+    }
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn test_single_value() {
+        // Test for nm = 512
+        let rng = &mut thread_rng();
+        let n = 32;
+        let m = 1;
+        let nm = (usize::from(n)) * (usize::from(m));
+        let mut G = Vec::with_capacity(nm);
+        let mut H = Vec::with_capacity(nm);
+        let mut G_H = Vec::with_capacity(nm);
+        let mut randomness = Vec::with_capacity(usize::from(m));
+        let mut commitments = Vec::with_capacity(usize::from(m));
+
+        for _i in 0..(nm) {
+            let g = SomeCurve::generate(rng);
+            let h = SomeCurve::generate(rng);
+            G.push(g);
+            H.push(h);
+            G_H.push((g, h));
+        }
+
+        let gens = Generators { G_H };
+        let B = SomeCurve::generate(rng);
+        let B_tilde = SomeCurve::generate(rng);
+        let keys = CommitmentKey { g: B, h: B_tilde };
+
+        // Some numbers in [0, 2^n):
+        let v_vec: Vec<u64> = vec![
+            4294967295, /* , 4, 255, 15, 2, 15, 4294967295, 4, 4, 5, 6, 8, 12, 13, 10,
+                        * 8, *//* ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8
+                        * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8
+                        * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8
+                        * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8
+                        * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8
+                        * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8
+                        * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
+        ];
+
+        for j in 0..usize::from(m) {
+            let r = Randomness::generate(rng);
+            let v_scalar = SomeCurve::scalar_from_u64(v_vec[j]);
+            let v_value = Value::<SomeCurve>::new(v_scalar);
+            let com = keys.hide(&v_value, &r);
+            randomness.push(r);
+            commitments.push(com);
+        }
+        let mut transcript = Transcript::new(&[]);
+        let proof = prove(
+            &mut transcript,
+            rng,
+            n,
+            m,
+            &v_vec,
+            &gens,
+            &keys,
+            &randomness,
+        );
+        assert!(proof.is_some());
+        let proof = proof.unwrap();
+        let mut transcript = Transcript::new(&[]);
+        let b1 = naive_verify(&mut transcript, n, &commitments, &proof, &gens, &keys);
+
+        let mut transcript = Transcript::new(&[]);
+        let b2 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
+
+        // Testing the even more efficient verifier:
+        let mut transcript = Transcript::new(&[]);
+        let b3 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
+        assert!(b1);
+        assert!(b2.is_ok());
+        assert!(b3);
+    }
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn test_less_than_or_equal_to() {
+        // Test for nm = 512
+        let rng = &mut thread_rng();
+        let n = 16;
+        let m = 10u8;
+        let nm = (usize::from(n)) * (usize::from(m));
+        let mut G = Vec::with_capacity(nm);
+        let mut H = Vec::with_capacity(nm);
+        let mut G_H = Vec::with_capacity(nm);
+
+        for _i in 0..(nm) {
+            let g = SomeCurve::generate(rng);
+            let h = SomeCurve::generate(rng);
+            G.push(g);
+            H.push(h);
+            G_H.push((g, h));
+        }
+
+        let gens = Generators { G_H };
+        let B = SomeCurve::generate(rng);
+        let B_tilde = SomeCurve::generate(rng);
+        let key = CommitmentKey { g: B, h: B_tilde };
+
+        let a = 499;
+        let b = 500;
+
+        let r_a = Randomness::generate(rng);
+        let r_b = Randomness::generate(rng);
+        let a_scalar = SomeCurve::scalar_from_u64(a);
+        let b_scalar = SomeCurve::scalar_from_u64(b);
+        let com_a = key.hide_worker(&a_scalar, &r_a);
+        let com_b = key.hide_worker(&b_scalar, &r_b);
+        let mut transcript = Transcript::new(&[]);
+        let proof =
+            prove_less_than_or_equal(&mut transcript, rng, n, a, b, &gens, &key, &r_a, &r_b)
+                .unwrap();
+        let mut transcript = Transcript::new(&[]);
+        assert!(verify_less_than_or_equal(
+            &mut transcript,
+            n,
+            &com_a,
+            &com_b,
+            &proof,
+            &gens,
+            &key
+        ));
     }
 
     #[allow(non_snake_case)]

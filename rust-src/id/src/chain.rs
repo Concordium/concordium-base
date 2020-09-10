@@ -4,10 +4,12 @@ use crate::{
     types::*,
     utils,
 };
+use bulletproofs::range_proof::{verify_less_than_or_equal, Generators};
 use core::fmt::{self, Display};
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use either::Either;
+use merlin::Transcript;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
@@ -55,6 +57,7 @@ pub fn verify_cdi<
 ) -> Result<(), CDIVerificationError> {
     verify_cdi_worker(
         &global_context.on_chain_commitment_key,
+        &global_context.bulletproof_generators(),
         &ip_info.ip_verify_key,
         &ars_infos,
         acc_keys,
@@ -69,6 +72,7 @@ fn verify_cdi_worker<
     A: HasArPublicKey<C>,
 >(
     on_chain_commitment_key: &CommitmentKey<C>,
+    gens: &Generators<C>,
     ip_verify_key: &ps_sig::PublicKey<P>,
     // NB: The following map only needs to be a superset of the ars
     // in the cdi.
@@ -143,6 +147,19 @@ fn verify_cdi_worker<
         challenge: cdi.proofs.challenge,
         witness,
     };
+
+    let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
+    if !verify_less_than_or_equal(
+        &mut transcript,
+        32,
+        &cdi.proofs.commitments.cmm_cred_counter,
+        &cdi.proofs.commitments.cmm_max_accounts,
+        &cdi.proofs.cred_counter_less_than_max_accounts,
+        &gens,
+        &on_chain_commitment_key,
+    ) {
+        return Err(CDIVerificationError::Proof);
+    }
 
     if !verify(ro.split(), &verifier, &proof) {
         return Err(CDIVerificationError::Proof);
