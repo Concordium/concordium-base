@@ -26,28 +26,12 @@ version = "0"
 path = "../rust-src/curve_arithmetic"
 version = "0"
 
-[dependencies.elgamal]
-path = "../rust-src/elgamal"
-version = "0"
-
-[dependencies.dodis_yampolskiy_prf]
-path = "../rust-src/dodis_yampolskiy_prf"
-version = "0"
-
 [dependencies.id]
 path = "../rust-src/id"
 version = "0"
 
-[dependencies.pedersen_scheme]
-path = "../rust-src/pedersen_scheme"
-version = "0"
-
 [dependencies.ps_sig]
 path = "../rust-src/ps_sig"
-version = "0"
-
-[dependencies.eddsa_ed25519]
-path = "../rust-src/eddsa_ed25519"
 version = "0"
 
 [build-dependencies.crypto_common]
@@ -56,10 +40,6 @@ version = "0"
 
 [build-dependencies.id]
 path = "../rust-src/id"
-version = "0"
-
-[dependencies.ecvrf]
-path = "../rust-src/ecvrf"
 version = "0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -72,7 +52,12 @@ crate-type = ["cdylib", "rlib"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 rand    = { version = "=0.7", features = [ "wasm-bindgen" ] }
-wasm-bindgen = "0.2.8"
+# We need to fix the version to 0.2.65 because the other currently available versions (on 10.9.2020)
+# produce Wasm that is not valid (it relies on the experimental extension mutable-globals). The bundled wasm-opt tool fails
+# to validate and optimize the module, and nodejs 10 fails to run it. mutable-globals are part of the current Wasm standard though
+# so once the wasm-bindgen bundles the appropriate tool version we can update, and document that you need nodejs 12 or use the
+# --experimental-wasm-mut-globals flag.
+wasm-bindgen = "=0.2.65"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.2"
