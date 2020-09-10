@@ -75,10 +75,13 @@ extern "C" {
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(dead_code)]
 pub(crate) mod host_dummy_functions {
+    #[no_mangle]
     pub(crate) extern "C" fn accept() -> u32 { panic!("Dummy function! Not to be executed") }
+    #[no_mangle]
     pub(crate) extern "C" fn simple_transfer(_addr_bytes: *const u8, _amount: u64) -> u32 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn send(
         _addr_index: u64,
         _addr_subindex: u64,
@@ -90,15 +93,19 @@ pub(crate) mod host_dummy_functions {
     ) -> u32 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn combine_and(_l: u32, _r: u32) -> u32 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn combine_or(_l: u32, _r: u32) -> u32 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn get_parameter_size() -> u32 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn get_parameter_section(
         _param_bytes: *mut u8,
         _length: u32,
@@ -106,45 +113,60 @@ pub(crate) mod host_dummy_functions {
     ) -> u32 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn log_event(_start: *const u8, _length: u32) {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn load_state(_start: *mut u8, _length: u32, _offset: u32) -> u32 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn write_state(_start: *const u8, _length: u32, _offset: u32) -> u32 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn resize_state(_new_size: u32) -> u32 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn state_size() -> u32 { panic!("Dummy function! Not to be executed") }
+    #[no_mangle]
     pub(crate) extern "C" fn get_init_origin(_start: *mut u8) {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn get_receive_invoker(_start: *mut u8) {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn get_receive_self_address(_start: *mut u8) {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn get_receive_self_balance() -> u64 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn get_receive_sender(_start: *mut u8) {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn get_receive_owner(_start: *mut u8) {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn get_slot_number() -> u64 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn get_block_height() -> u64 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn get_finalized_height() -> u64 {
         panic!("Dummy function! Not to be executed")
     }
+    #[no_mangle]
     pub(crate) extern "C" fn get_slot_time() -> u64 { panic!("Dummy function! Not to be executed") }
 }
