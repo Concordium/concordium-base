@@ -6,6 +6,7 @@ use crate::{
 };
 use bulletproofs::range_proof::{verify_less_than_or_equal, Generators};
 use core::fmt::{self, Display};
+use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use either::Either;
@@ -81,7 +82,10 @@ fn verify_cdi_worker<
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
     // Compute the challenge prefix by hashing the values.
-    let ro = RandomOracle::domain("credential").append(&cdi.values);
+    let ro = RandomOracle::domain("credential")
+        .append(&cdi.values)
+        .append(&on_chain_commitment_key)
+        .append(&gens);
 
     let commitments = &cdi.proofs.commitments;
 
@@ -149,6 +153,13 @@ fn verify_cdi_worker<
     };
 
     let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
+    transcript.append_message(b"cred_values", &to_bytes(&cdi.values));
+    transcript.append_message(
+        b"on_chain_commitment_key",
+        &to_bytes(&on_chain_commitment_key),
+    );
+    transcript.append_message(b"bulletproof_generators", &to_bytes(&gens));
+    transcript.append_message(b"cred_values", &to_bytes(&proof));
     if !verify_less_than_or_equal(
         &mut transcript,
         32,

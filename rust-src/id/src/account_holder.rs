@@ -555,20 +555,6 @@ where
         &mut csprng,
     )?;
 
-    let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
-    let cred_counter_less_than_max_accounts = prove_less_than_or_equal(
-        &mut transcript,
-        &mut csprng,
-        32,
-        u64::from(cred_counter),
-        u64::from(alist.max_accounts),
-        &context.global_context.bulletproof_generators(),
-        &context.global_context.on_chain_commitment_key,
-        &commitment_rands.cred_counter_rand,
-        &commitment_rands.max_accounts_rand,
-    )
-    .unwrap(); // TODO: avoid this unwrap()?
-
     let cred_account = match acc_data.existing {
         // we are deploying on a new account
         // take all the keys that
@@ -597,7 +583,10 @@ where
     // Compute the challenge prefix by hashing the values.
     // FIXME: We should do something different here.
     // Eventually we'll have to include the genesis hash.
-    let ro = RandomOracle::domain("credential").append(&cred_values);
+    let ro = RandomOracle::domain("credential")
+        .append(&cred_values)
+        .append(&context.global_context.on_chain_commitment_key)
+        .append(&context.global_context.bulletproof_generators());
 
     let mut id_cred_pub_share_numbers = Vec::with_capacity(number_of_ars);
     let mut id_cred_pub_provers = Vec::with_capacity(number_of_ars);
@@ -674,6 +663,32 @@ where
     let proof = match prove(ro.split(), &prover, secret, &mut csprng) {
         Some(x) => x,
         None => bail!("Cannot produce zero knowledge proof."),
+    };
+
+    let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
+    transcript.append_message(b"cred_values", &to_bytes(&cred_values));
+    transcript.append_message(
+        b"on_chain_commitment_key",
+        &to_bytes(&context.global_context.on_chain_commitment_key),
+    );
+    transcript.append_message(
+        b"bulletproof_generators",
+        &to_bytes(&context.global_context.bulletproof_generators()),
+    );
+    transcript.append_message(b"cred_values", &to_bytes(&proof));
+    let cred_counter_less_than_max_accounts = match prove_less_than_or_equal(
+        &mut transcript,
+        &mut csprng,
+        32,
+        u64::from(cred_counter),
+        u64::from(alist.max_accounts),
+        &context.global_context.bulletproof_generators(),
+        &context.global_context.on_chain_commitment_key,
+        &commitment_rands.cred_counter_rand,
+        &commitment_rands.max_accounts_rand,
+    ) {
+        Some(x) => x,
+        None => bail!("Cannot produce proof that cred_counter <= max_accounts."),
     };
 
     // Proof of knowledge of the secret keys of the account.
