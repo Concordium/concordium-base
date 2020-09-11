@@ -59,15 +59,15 @@ genTransactionHeader = do
 
 genAccountTransaction :: Gen AccountTransaction
 genAccountTransaction = do
-  btrHeader <- genTransactionHeader
-  btrPayload <- EncodedPayload . BSS.pack <$> vector (fromIntegral (thPayloadSize btrHeader))
+  atrHeader <- genTransactionHeader
+  atrPayload <- EncodedPayload . BSS.pack <$> vector (fromIntegral (thPayloadSize atrHeader))
   numKeys <- choose (1, 255)
-  btrSignature <- TransactionSignature . Map.fromList <$> replicateM numKeys (do
+  atrSignature <- TransactionSignature . Map.fromList <$> replicateM numKeys (do
     idx <- KeyIndex <$> arbitrary
     sLen <- choose (50,70)
     sig <- Signature . BSS.pack <$> vector sLen
     return (idx, sig))
-  return $! makeAccountTransaction btrSignature btrHeader btrPayload
+  return $! makeAccountTransaction atrSignature atrHeader atrPayload
 
 baseTime :: UTCTime
 baseTime = read "2019-09-23 13:27:13.257285424 UTC"

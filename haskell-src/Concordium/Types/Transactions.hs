@@ -41,7 +41,7 @@ transactionSignHashFromBytes = TransactionSignHashV0 . H.hash
 
 -- |Construct a 'TransactionSignHash' from a 'TransactionHeader' and 'EncodedPayload'.
 transactionSignHashFromHeaderPayload :: TransactionHeader -> EncodedPayload -> TransactionSignHashV0
-transactionSignHashFromHeaderPayload btrHeader btrPayload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy $ S.put btrHeader <> putEncodedPayload btrPayload
+transactionSignHashFromHeaderPayload atrHeader atrPayload = TransactionSignHashV0 $ H.hashLazy $ S.runPutLazy $ S.put atrHeader <> putEncodedPayload atrPayload
 
 -- |A signature is an association list of index of the key, and the actual signature.
 -- The index is relative to the account address, and the indices should be distinct.
@@ -140,36 +140,36 @@ instance S.Serialize TransactionHeader where
 -- payload is considered part of the transaction execution.
 data AccountTransaction = AccountTransaction {
   -- |Signature
-  btrSignature :: !TransactionSignature,
+  atrSignature :: !TransactionSignature,
   -- |Header
-  btrHeader :: !TransactionHeader,
+  atrHeader :: !TransactionHeader,
   -- |Serialized payload
-  btrPayload :: !EncodedPayload,
+  atrPayload :: !EncodedPayload,
   -- |Hash used for signing
-  btrSignHash :: !TransactionSignHashV0
+  atrSignHash :: !TransactionSignHashV0
   } deriving(Eq, Show)
 
 -- |Construct an 'AccountTransaction', computing the correct
 -- 'TransactionSignHash'.
 makeAccountTransaction :: TransactionSignature -> TransactionHeader -> EncodedPayload -> AccountTransaction
-makeAccountTransaction btrSignature btrHeader btrPayload = AccountTransaction{..}
+makeAccountTransaction atrSignature atrHeader atrPayload = AccountTransaction{..}
   where
-    btrSignHash = transactionSignHashFromHeaderPayload btrHeader btrPayload
+    atrSignHash = transactionSignHashFromHeaderPayload atrHeader atrPayload
 
 -- | @SPEC: <$DOCS/Transactions#serialization-format-transactions>
 instance S.Serialize AccountTransaction where
   put AccountTransaction{..} =
-    S.put btrSignature <>
-    S.put btrHeader <>
-    putEncodedPayload btrPayload
+    S.put atrSignature <>
+    S.put atrHeader <>
+    putEncodedPayload atrPayload
 
   get = S.label "account transaction" $ do
-    btrSignature <- S.label "signature" S.get
-    ((btrHeader, btrPayload), bodyBytes) <- getWithBytes $ do
-      btrHeader <- S.label "header" S.get
-      btrPayload <- S.label "payload" $ getEncodedPayload (thPayloadSize btrHeader)
-      return (btrHeader, btrPayload)
-    let btrSignHash = transactionSignHashFromBytes bodyBytes
+    atrSignature <- S.label "signature" S.get
+    ((atrHeader, atrPayload), bodyBytes) <- getWithBytes $ do
+      atrHeader <- S.label "header" S.get
+      atrPayload <- S.label "payload" $ getEncodedPayload (thPayloadSize atrHeader)
+      return (atrHeader, atrPayload)
+    let atrSignHash = transactionSignHashFromBytes bodyBytes
     return $! AccountTransaction{..}
 
 instance HashableTo TransactionHashV0 AccountTransaction where
@@ -177,14 +177,13 @@ instance HashableTo TransactionHashV0 AccountTransaction where
   {-# INLINE getHash #-}
 
 instance HashableTo TransactionSignHashV0 AccountTransaction where
-  getHash = btrSignHash
+  getHash = atrSignHash
 
-fromAccountTransaction :: TransactionTime -> AccountTransaction -> Transaction
-fromAccountTransaction wmdArrivalTime wmdData =
-  let wmdHash = getHash wmdData
-      wmdSize = BS.length (S.encode wmdData)
-  in WithMetadata{..}
+--------------------------
+-- * Transaction metadata
+--------------------------
 
+-- |Metadata for a block item.
 data WithMetadata value = WithMetadata {
   wmdData :: !value,
   -- |Size of the block item in bytes; derived field.
@@ -236,12 +235,22 @@ addMetadata f time a = WithMetadata {
   where
     bs = S.encode (f a)
 
+fromAccountTransaction :: TransactionTime -> AccountTransaction -> Transaction
+fromAccountTransaction wmdArrivalTime wmdData =
+  let wmdHash = getHash wmdData
+      wmdSize = BS.length (S.encode wmdData)
+  in WithMetadata{..}
+
 fromCDI :: TransactionTime -> CredentialDeploymentInformation -> CredentialDeploymentWithMeta
 fromCDI wmdArrivalTime wmdData =
   let cdiBytes = S.encode wmdData
       wmdSize = BS.length cdiBytes
       wmdHash = getHash (CredentialDeployment wmdData)
   in WithMetadata{..}
+
+-----------------
+-- * Block items
+-----------------
 
 data BlockItemKind
   = AccountTransactionKind
@@ -307,7 +316,9 @@ putBlockItemV0 = putBareBlockItemV0 . wmdData
 putBareBlockItemV0 :: BareBlockItem -> S.Put
 putBareBlockItemV0 = S.put
 
+---------------------------------
 -- * 'TransactionHash' functions
+---------------------------------
 
 -- |Construct a hash from a serialized block item.
 transactionHashFromBytes :: BS.ByteString -> TransactionHashV0
@@ -316,8 +327,9 @@ transactionHashFromBytes = TransactionHashV0 . H.hash
 transactionHashFromBareBlockItem :: BareBlockItem -> TransactionHashV0
 transactionHashFromBareBlockItem = transactionHashFromBytes . S.encode
 
-
+-------------------
 -- * Serialization
+-------------------
 
 -- |Try to parse a versioned block item, stripping the version, and
 -- reconstructing the block item metadata from the raw data.
@@ -360,6 +372,10 @@ putVersionedBlockItemV0 bi = putVersion 0 <> putBlockItemV0 bi
 putVersionedBareBlockItemV0 :: BareBlockItem -> S.Put
 putVersionedBareBlockItemV0 bi = putVersion 0 <> putBareBlockItemV0 bi
 
+----------------
+-- * Signatures
+----------------
+
 -- |Sign a transaction with the given header and body, using the given keypair.
 -- This assumes that there is only one key on the account, and that is with index 0.
 --
@@ -373,13 +389,13 @@ signTransactionSingle kp = signTransaction [(0, kp)]
 --
 -- * @SPEC: <$DOCS/Transactions#transaction-signature>
 signTransaction :: [(KeyIndex, KeyPair)] -> TransactionHeader -> EncodedPayload -> AccountTransaction
-signTransaction keys btrHeader btrPayload =
+signTransaction keys atrHeader atrPayload =
   let 
-      btrSignHash = transactionSignHashFromHeaderPayload btrHeader btrPayload
+      atrSignHash = transactionSignHashFromHeaderPayload atrHeader atrPayload
       -- only sign the hash of the transaction
-      bodyHash = transactionSignHashToByteString btrSignHash
+      bodyHash = transactionSignHashToByteString atrSignHash
       tsSignature = Map.fromList $ map (\(idx, key) -> (idx, SigScheme.sign key bodyHash)) keys
-      btrSignature = TransactionSignature{..}
+      atrSignature = TransactionSignature{..}
   in AccountTransaction{..}
 
 -- |Verify that the given transaction was signed by the required number of keys.
@@ -393,6 +409,10 @@ verifyTransaction keys tx =
       numSigs = length sigs
       threshold = akThreshold keys
   in numSigs <= 255 && fromIntegral numSigs >= threshold && keysCheck
+
+-----------------------------------
+-- * 'TransactionData' abstraction
+-----------------------------------
 
 -- |The 'TransactionData' class abstracts away from the particular data
 -- structure. It makes it possible to unify operations on 'Transaction' as well
@@ -412,26 +432,28 @@ transactionSize :: Transaction -> Int
 transactionSize = wmdSize
 
 instance TransactionData AccountTransaction where
-    transactionHeader = btrHeader
-    transactionSender = thSender . btrHeader
-    transactionNonce = thNonce . btrHeader
-    transactionGasAmount = thEnergyAmount . btrHeader
-    transactionPayload = btrPayload
-    transactionSignature = btrSignature
-    transactionSignHash = btrSignHash
+    transactionHeader = atrHeader
+    transactionSender = thSender . atrHeader
+    transactionNonce = thNonce . atrHeader
+    transactionGasAmount = thEnergyAmount . atrHeader
+    transactionPayload = atrPayload
+    transactionSignature = atrSignature
+    transactionSignHash = atrSignHash
     transactionHash = getHash
 
 instance TransactionData Transaction where
-    transactionHeader = btrHeader . wmdData
-    transactionSender = thSender . btrHeader . wmdData
-    transactionNonce = thNonce . btrHeader . wmdData
-    transactionGasAmount = thEnergyAmount . btrHeader . wmdData
-    transactionPayload = btrPayload . wmdData
-    transactionSignature = btrSignature . wmdData
-    transactionSignHash = btrSignHash . wmdData
+    transactionHeader = atrHeader . wmdData
+    transactionSender = thSender . atrHeader . wmdData
+    transactionNonce = thNonce . atrHeader . wmdData
+    transactionGasAmount = thEnergyAmount . atrHeader . wmdData
+    transactionPayload = atrPayload . wmdData
+    transactionSignature = atrSignature . wmdData
+    transactionSignHash = atrSignHash . wmdData
     transactionHash = wmdHash
 
+--------------------------
 -- * Transaction outcomes
+--------------------------
 -- TODO: Move to Execution???
 
 -- |Record special transactions as well for logging purposes.
