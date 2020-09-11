@@ -288,12 +288,17 @@ impl HasReceiveContext<()> for ReceiveContextExtern {
     #[inline(always)]
     fn sender(&self) -> Address {
         let mut bytes: MaybeUninit<[u8; 33]> = MaybeUninit::uninit();
-        let ptr = bytes.as_mut_ptr();
-        let address = unsafe {
-            get_receive_sender(ptr as *mut u8);
-            bytes.assume_init()
-        };
-        from_bytes(&address).unwrap()
+        let ptr = bytes.as_mut_ptr() as *mut u8;
+        unsafe {
+            get_receive_sender(ptr);
+            let tag = *ptr;
+            match tag {
+                0u8 => from_bytes(core::slice::from_raw_parts(ptr.add(1), ACCOUNT_ADDRESS_SIZE))
+                    .unwrap(),
+                1u8 => from_bytes(core::slice::from_raw_parts(ptr.add(1), 16)).unwrap(),
+                _ => unreachable!("Host violated precondition."),
+            }
+        }
     }
 
     #[inline(always)]
