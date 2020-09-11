@@ -73,8 +73,7 @@ extern "C" {
 // For every external function, we must provide a dummy function.
 // This is nescessary to compile to x86_64 during unit tests on Windows and OSX.
 #[cfg(not(target_arch = "wasm32"))]
-#[allow(dead_code)]
-pub(crate) mod host_dummy_functions {
+mod host_dummy_functions {
     #[no_mangle]
     pub(crate) extern "C" fn accept() -> u32 {
         unimplemented!("Dummy function! Not to be executed")
