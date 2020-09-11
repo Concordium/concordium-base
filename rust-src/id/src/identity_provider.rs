@@ -7,7 +7,7 @@ use crate::{
 use bulletproofs::range_proof::verify_efficient;
 use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
-use elgamal::Cipher;
+use elgamal::multicombine;
 use ff::Field;
 use merlin::Transcript;
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
@@ -148,7 +148,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         &pre_id_obj.cmm_prf_sharing_coeff,
         &pre_id_obj.ip_ar_data,
         &context.ars_infos,
-        h_in_exponent,
+        &h_in_exponent,
     );
     let (prf_sharing_verifier, prf_sharing_witness) = match prf_verification {
         Some(v) => v,
@@ -177,7 +177,6 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         witness,
     };
     let bulletproofs = &pre_id_obj.poks.bulletproofs;
-    let mut bp_verification = true;
     for (((_, ar_data), ar_info), proof) in pre_id_obj
         .ip_ar_data
         .iter()
@@ -194,11 +193,12 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         let commitments = ciphers.iter().map(|x| Commitment(x.1)).collect::<Vec<_>>();
         ro = ro.append_bytes(&to_bytes(&ciphers));
         transcript.append_message(b"encrypted_share", &to_bytes(&ciphers));
-        bp_verification = bp_verification
-            && verify_efficient(&mut transcript, 32, &commitments, &proof, gens, &keys).is_ok();
+        if verify_efficient(&mut transcript, 32, &commitments, &proof, gens, &keys).is_err() {
+            return Err(Reason::IncorrectProof);
+        }
     }
     ro = ro.append_bytes(&to_bytes(&bulletproofs));
-    if verify(ro, &verifier, &proof) && bp_verification {
+    if verify(ro, &verifier, &proof) {
         Ok(())
     } else {
         Err(Reason::IncorrectProof)
@@ -234,7 +234,7 @@ fn compute_prf_sharing_verifier<C: Curve>(
     cmm_sharing_coeff: &[Commitment<C>],
     ip_ar_data: &BTreeMap<ArIdentity, IpArData<C>>,
     known_ars: &BTreeMap<ArIdentity, ArInfo<C>>,
-    encryption_in_exponent_generator: C,
+    encryption_in_exponent_generator: &C,
 ) -> Option<IdCredPubVerifiers<C>> {
     let mut verifiers = Vec::with_capacity(ip_ar_data.len());
     let mut witnesses = Vec::with_capacity(ip_ar_data.len());
@@ -247,13 +247,13 @@ fn compute_prf_sharing_verifier<C: Curve>(
         let u8_chunk_size = u8::from(CHUNK_SIZE);
         let two_chunksize = C::scalar_from_u64(1 << u8_chunk_size);
         let mut power_of_two = C::Scalar::one();
-        let mut combined_ciphers = Cipher(C::zero_point(), C::zero_point());
-        for cipher in ar_data.enc_prf_key_share.iter() {
-            // FIXME: use multiexp instead
-            let scaled_cipher = cipher.scale(&power_of_two);
-            combined_ciphers = combined_ciphers.combine(&scaled_cipher);
+
+        let mut scalars = Vec::with_capacity(ar_data.enc_prf_key_share.len());
+        for _ in 0..ar_data.enc_prf_key_share.len() {
+            scalars.push(power_of_two);
             power_of_two.mul_assign(&two_chunksize);
         }
+        let combined_ciphers = multicombine(&ar_data.enc_prf_key_share, &scalars);
 
         let ar_info = known_ars.get(ar_id)?;
         let verifier = com_enc_eq::ComEncEq {
@@ -261,7 +261,7 @@ fn compute_prf_sharing_verifier<C: Curve>(
             commitment: cmm_share,
             pub_key: ar_info.ar_public_key,
             cmm_key: *ar_commitment_key,
-            encryption_in_exponent_generator,
+            encryption_in_exponent_generator: *encryption_in_exponent_generator,
         };
         verifiers.push(verifier);
         // TODO: Figure out whether we can somehow get rid of this clone.
