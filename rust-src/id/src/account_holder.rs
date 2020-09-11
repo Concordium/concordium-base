@@ -585,8 +585,7 @@ where
     // Eventually we'll have to include the genesis hash.
     let ro = RandomOracle::domain("credential")
         .append(&cred_values)
-        .append(&context.global_context.on_chain_commitment_key)
-        .append(&context.global_context.bulletproof_generators());
+        .append(&context.global_context);
 
     let mut id_cred_pub_share_numbers = Vec::with_capacity(number_of_ars);
     let mut id_cred_pub_provers = Vec::with_capacity(number_of_ars);
@@ -667,19 +666,12 @@ where
 
     let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
     transcript.append_message(b"cred_values", &to_bytes(&cred_values));
-    transcript.append_message(
-        b"on_chain_commitment_key",
-        &to_bytes(&context.global_context.on_chain_commitment_key),
-    );
-    transcript.append_message(
-        b"bulletproof_generators",
-        &to_bytes(&context.global_context.bulletproof_generators()),
-    );
+    transcript.append_message(b"global_context",&to_bytes(&context.global_context));
     transcript.append_message(b"cred_values", &to_bytes(&proof));
     let cred_counter_less_than_max_accounts = match prove_less_than_or_equal(
         &mut transcript,
         &mut csprng,
-        32,
+        8,
         u64::from(cred_counter),
         u64::from(alist.max_accounts),
         &context.global_context.bulletproof_generators(),

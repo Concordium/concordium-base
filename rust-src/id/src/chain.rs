@@ -4,7 +4,7 @@ use crate::{
     types::*,
     utils,
 };
-use bulletproofs::range_proof::{verify_less_than_or_equal, Generators};
+use bulletproofs::range_proof::verify_less_than_or_equal;
 use core::fmt::{self, Display};
 use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
@@ -52,40 +52,19 @@ pub fn verify_cdi<
 >(
     global_context: &GlobalContext<C>,
     ip_info: &IpInfo<P>,
-    ars_infos: &BTreeMap<ArIdentity, A>,
-    acc_keys: Option<&AccountKeys>,
-    cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
-) -> Result<(), CDIVerificationError> {
-    verify_cdi_worker(
-        &global_context.on_chain_commitment_key,
-        &global_context.bulletproof_generators(),
-        &ip_info.ip_verify_key,
-        &ars_infos,
-        acc_keys,
-        cdi,
-    )
-}
-
-fn verify_cdi_worker<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-    A: HasArPublicKey<C>,
->(
-    on_chain_commitment_key: &CommitmentKey<C>,
-    gens: &Generators<C>,
-    ip_verify_key: &ps_sig::PublicKey<P>,
     // NB: The following map only needs to be a superset of the ars
     // in the cdi.
     known_ars: &BTreeMap<ArIdentity, A>,
     acc_keys: Option<&AccountKeys>,
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
+    let on_chain_commitment_key = global_context.on_chain_commitment_key;
+    let gens = global_context.bulletproof_generators();
+    let ip_verify_key = &ip_info.ip_verify_key;
     // Compute the challenge prefix by hashing the values.
     let ro = RandomOracle::domain("credential")
         .append(&cdi.values)
-        .append(&on_chain_commitment_key)
-        .append(&gens);
+        .append(&global_context);
 
     let commitments = &cdi.proofs.commitments;
 
@@ -98,7 +77,7 @@ fn verify_cdi_worker<
             Commitment(cdi.values.reg_id),
             Commitment(on_chain_commitment_key.g),
         ],
-        cmm_key: *on_chain_commitment_key,
+        cmm_key: on_chain_commitment_key,
     };
     // FIXME: Figure out a pattern to get rid of these clone's.
     let witness_reg_id = cdi.proofs.proof_reg_id.clone();
@@ -107,7 +86,7 @@ fn verify_cdi_worker<
     let proofs = &cdi.proofs;
 
     let verifier_sig = pok_sig_verifier(
-        on_chain_commitment_key,
+        &on_chain_commitment_key,
         cdi.values.threshold,
         &cdi.values
             .ar_data
@@ -116,7 +95,7 @@ fn verify_cdi_worker<
             .collect::<BTreeSet<ArIdentity>>(),
         &cdi.values.policy,
         &commitments,
-        ip_verify_key,
+        &ip_verify_key,
         &cdi.proofs.sig,
     );
     let verifier_sig = if let Some(v) = verifier_sig {
@@ -128,7 +107,7 @@ fn verify_cdi_worker<
     let witness_sig = cdi.proofs.proof_ip_sig.clone();
 
     let (id_cred_pub_verifier, id_cred_pub_witnesses) = id_cred_pub_verifier(
-        on_chain_commitment_key,
+        &on_chain_commitment_key,
         known_ars,
         &cdi.values.ar_data,
         &commitments.cmm_id_cred_sec_sharing_coeff,
@@ -154,15 +133,11 @@ fn verify_cdi_worker<
 
     let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
     transcript.append_message(b"cred_values", &to_bytes(&cdi.values));
-    transcript.append_message(
-        b"on_chain_commitment_key",
-        &to_bytes(&on_chain_commitment_key),
-    );
-    transcript.append_message(b"bulletproof_generators", &to_bytes(&gens));
+    transcript.append_message(b"global_context", &to_bytes(&global_context));
     transcript.append_message(b"cred_values", &to_bytes(&proof));
     if !verify_less_than_or_equal(
         &mut transcript,
-        32,
+        8,
         &cdi.proofs.commitments.cmm_cred_counter,
         &cdi.proofs.commitments.cmm_max_accounts,
         &cdi.proofs.cred_counter_less_than_max_accounts,
@@ -237,7 +212,7 @@ fn verify_cdi_worker<
         }
     };
 
-    let check_policy = verify_policy(on_chain_commitment_key, &commitments, &cdi.values.policy);
+    let check_policy = verify_policy(&on_chain_commitment_key, &commitments, &cdi.values.policy);
 
     if !check_policy {
         return Err(CDIVerificationError::Policy);
