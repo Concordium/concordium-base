@@ -629,8 +629,8 @@ data Event =
                eaaAmount :: !Amount
                }
            | UpdateEnqueued {
-             ueEffectiveTime :: TransactionTime,
-             uePayload :: UpdatePayload
+             ueEffectiveTime :: !TransactionTime,
+             uePayload :: !UpdatePayload
            }
   deriving (Show, Generic, Eq)
 

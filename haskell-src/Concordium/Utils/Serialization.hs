@@ -19,7 +19,12 @@ putLength = putWord64be . fromIntegral
 
 -- |Get a length as a 64-bit (unsigned) integer.
 getLength :: Get Int
-getLength = fromIntegral <$> getWord64be
+getLength = do
+    l <- fromIntegral <$> getWord64be
+    if l < 0 then
+        fail "Length must be non-negative (as a 64-bit signed value)"
+    else
+        return l
 
 -- * ByteString
 

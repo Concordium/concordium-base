@@ -20,7 +20,7 @@
 --   - GTU to Euro exchange rate
 --
 -- Each parameter has an independent update queue.
--- Sequence numbers for each different parameter are this independent.
+-- Sequence numbers for each different parameter are thus independent.
 -- (Note, where two parameters are tightly coupled, such that one should
 -- not be changed independently of the other, then they should be combined
 -- as a single parameter.)

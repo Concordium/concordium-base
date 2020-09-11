@@ -5,13 +5,117 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wall #-}
-module Concordium.Types (module Concordium.Types,
-                         AccountAddress(..),
-                         SchemeId, AccountVerificationKey,
-                         module Concordium.Common.Amount) where
+-- |Basic blockchain types.
+module Concordium.Types (
+  -- * Cost units
+  module Concordium.Common.Amount,
+  Energy(..),
+  AmountDelta(..),
+  amountToDelta,
+  amountDiff,
+  applyAmountDelta,
+  -- ** Exchange rates
+  ExchangeRate(..),
+  EnergyRate,
+  computeEnergyRate,
+
+  -- * Time units
+  Duration(..),
+  durationToNominalDiffTime,
+  getTransactionTime,
+  Timestamp(..),
+  timestampToUTCTime,
+  utcTimeToTimestamp,
+  timestampToSeconds,
+  addDuration,
+  TransactionTime(..),
+  TransactionExpiryTime,
+  utcTimeToTransactionTime,
+  transactionTimeToTimestamp,
+  transactionExpired,
+  isTimestampBefore,
+
+  -- * Accounts
+  SchemeId,
+  AccountAddress(..),
+  AccountEncryptedAmount(..),
+  initialAccountEncryptedAmount,
+  incomingEncryptedAmounts,
+  numAggregated,
+  selfAmount,
+  startIndex,
+  Nonce(..),
+  minNonce,
+  AccountVerificationKey,
+
+  -- * Smart contracts
+  ModuleRef(..),
+  ContractIndex(..),
+  ContractSubindex(..),
+  ContractAddress(..),
+  -- ** Chain metadata
+  ChainMetadata(..),
+  encodeChainMeta,
+
+  -- * Addresses
+  Address(..),
+
+  -- * Baking
+  ElectionDifficulty(..),
+  makeElectionDifficulty,
+  isValidElectionDifficulty,
+  LotteryPower,
+  BakerAggregationProof,
+  BakerAggregationPrivateKey,
+  BakerAggregationVerifyKey,
+  BakerElectionPrivateKey,
+  BakerElectionVerifyKey,
+  BakerSignPrivateKey,
+  BakerSignVerifyKey,
+  LeadershipElectionNonce,
+  BakerId(..),
+  -- ** Block elements
+  BlockNonce,
+  BlockSignature,
+  BlockProof,
+  TransactionOutcomesHashV0(..),
+  TransactionOutcomesHash,
+  StateHashV0(..),
+  StateHash,
+  BlockHashV0(..),
+  BlockHash,
+  BlockHeight(..),
+  Slot(..),
+  EpochLength,
+  genesisSlot,
+  -- ** Transactions
+  EncodedPayload(..),
+  PayloadSize(..),
+  putEncodedPayload,
+  getEncodedPayload,
+  payloadSize,
+  TransactionSignHashV0(..),
+  TransactionSignHash,
+  transactionSignHashToByteString,
+  TransactionHashV0(..),
+  TransactionHash,
+
+  -- * Finalization
+  VoterId,
+  VoterPower(..),
+  VoterSignKey,
+  VoterVerificationKey,
+  VoterVRFPublicKey,
+  VoterAggregationPrivateKey,
+  VoterAggregationVerifyKey,
+  FinalizationCommitteeSize,
+
+  -- * Hashing
+  Hashed(..),
+  unhashed,
+  makeHashed) where
 
 import GHC.Generics
 import Data.Data (Typeable, Data)
