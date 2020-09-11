@@ -666,7 +666,7 @@ where
 
     let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
     transcript.append_message(b"cred_values", &to_bytes(&cred_values));
-    transcript.append_message(b"global_context",&to_bytes(&context.global_context));
+    transcript.append_message(b"global_context", &to_bytes(&context.global_context));
     transcript.append_message(b"cred_values", &to_bytes(&proof));
     let cred_counter_less_than_max_accounts = match prove_less_than_or_equal(
         &mut transcript,
