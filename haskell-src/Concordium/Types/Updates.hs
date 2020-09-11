@@ -292,10 +292,10 @@ minUpdateSequenceNumber = minNonce
 -- and payload size.  This structure is the same for all
 -- update payload types.
 data UpdateHeader = UpdateHeader {
-        updateSeqNumber :: UpdateSequenceNumber,
-        updateEffectiveTime :: TransactionTime,
-        updateTimeout :: TransactionExpiryTime,
-        updatePayloadSize :: PayloadSize
+        updateSeqNumber :: !UpdateSequenceNumber,
+        updateEffectiveTime :: !TransactionTime,
+        updateTimeout :: !TransactionExpiryTime,
+        updatePayloadSize :: !PayloadSize
     }
     deriving (Eq, Show)
 
