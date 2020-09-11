@@ -6,13 +6,16 @@ use crate::{
     types::*,
     utils,
 };
-use bulletproofs::range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal};
+use bulletproofs::{
+    inner_product_proof::inner_product,
+    range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal},
+};
 use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use either::Either;
-use elgamal::Cipher;
+use elgamal::{multicombine, Cipher};
 use failure::Fallible;
 use ff::Field;
 use merlin::Transcript;
@@ -157,36 +160,19 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         let u8_chunk_size = u8::from(CHUNK_SIZE);
         let two_chunksize = C::scalar_from_u64(1 << u8_chunk_size);
         let mut power_of_two = C::Scalar::one();
-        let mut combined_ciphers = Cipher(C::zero_point(), C::zero_point());
-        for cipher in item.encrypted_share.iter() {
-            // FIXME: use multiexp instead
-            let scaled_cipher = cipher.scale(&power_of_two);
-            combined_ciphers = combined_ciphers.combine(&scaled_cipher);
+        let mut scalars = Vec::with_capacity(item.encrypted_share.len());
+        for _ in 0..item.encrypted_share.len() {
+            scalars.push(power_of_two);
             power_of_two.mul_assign(&two_chunksize);
         }
-        let mut power_of_two = C::Scalar::one();
-        let mut combined_rands = C::Scalar::zero();
-        for rand in item.encryption_randomness.iter() {
-            // FIXME: use linearcombination function from enc_trans instead
-            let mut scaled_rand = *(rand.as_ref());
-            scaled_rand.mul_assign(&power_of_two);
-            combined_rands.add_assign(&scaled_rand);
-            power_of_two.mul_assign(&two_chunksize);
-        }
+        let combined_ciphers = multicombine(&item.encrypted_share, &scalars);
+        let rands_as_scalars: Vec<C::Scalar> = item
+            .encryption_randomness
+            .iter()
+            .map(|x| **x)
+            .collect::<Vec<_>>();
+        let combined_rands = inner_product::<C::Scalar>(&rands_as_scalars, &scalars);
         let combined_encryption_randomness = elgamal::Randomness::new(combined_rands);
-
-        // Sanity check:
-        // let mut hx = context
-        //     .global_context
-        //     .encryption_in_exponent_generator()
-        //     .mul_by_scalar(&item.share);
-        // let hx = Message { value: hx };
-        // let c = item
-        //     .ar_public_key
-        //     .hide(&combined_encryption_randomness, &hx);
-
-        // println!("ciphers equal?: {:?}", c == combined_ciphers);
-
         let secret = com_enc_eq::ComEncEqSecret {
             value:         item.share.clone(),
             elgamal_rand:  combined_encryption_randomness,
@@ -348,14 +334,24 @@ pub fn compute_sharing_data<'a, C: Curve>(
     (ar_data, cmm_sharing_coefficients, cmm_coeff_randomness)
 }
 
+/// Convenient data structure to collect data related to a single AR
+/// when encrypting the prf key in chunks
 pub struct SingleArDataPrf<'a, C: Curve> {
+    /// The relevant AR
     ar: &'a ArInfo<C>,
+    /// The AR's share of the PRF key
     share: Value<C>,
+    /// The share split in 8 chunks (written in little-endian)
     share_in_chunks: [C::Scalar; 8],
+    /// Encryption of the share in chunks
     encrypted_share: [Cipher<C>; 8],
+    /// Encryption randomness used to encrypt the share
     encryption_randomness: [elgamal::Randomness<C>; 8],
+    /// Commitment to the share
     cmm_to_share: Commitment<C>,
+    /// Randomness used in commitment to share
     randomness_cmm_to_share: PedersenRandomness<C>,
+    /// AR's public key used to encrypt share
     ar_public_key: elgamal::PublicKey<C>,
 }
 
