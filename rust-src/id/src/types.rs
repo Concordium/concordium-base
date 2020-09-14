@@ -121,7 +121,7 @@ impl AccountAddress {
     pub fn new<C: Curve>(reg_id: &C) -> Self {
         let mut out = [0; ACCOUNT_ADDRESS_SIZE];
         let hasher = Sha256::new().chain(&to_bytes(reg_id));
-        out.copy_from_slice(&hasher.result());
+        out.copy_from_slice(&hasher.finalize());
         AccountAddress(out)
     }
 }
