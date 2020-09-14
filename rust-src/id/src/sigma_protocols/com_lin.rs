@@ -395,7 +395,7 @@ mod tests {
         let proof = prove(ro.split(), &com_lin, secret, rng).expect("Proving should succeed.");
         assert!(verify(ro, &com_lin, &proof));
 
-        let mut transcript = RandomOracle::empty();
+        let mut ro = RandomOracle::empty();
         let mut G_H = Vec::with_capacity(nm);
         for _i in 0..(nm) {
             let g = G1::generate(rng);
@@ -404,7 +404,7 @@ mod tests {
         }
         let gens = bulletproofs::range_proof::Generators { G_H };
         let proof = bulletproofs::range_proof::prove_given_scalars(
-            &mut transcript,
+            &mut ro.split(),
             rng,
             n,
             m,
@@ -413,9 +413,8 @@ mod tests {
             &cmm_key,
             &rs_copy,
         );
-        let mut transcript = RandomOracle::empty();
         assert!(bulletproofs::range_proof::verify_efficient(
-            &mut transcript,
+            &mut ro,
             n,
             &cmms_copy,
             &proof.unwrap(),
