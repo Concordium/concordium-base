@@ -21,7 +21,7 @@ pub struct Witness<T: Curve> {
     /// * $t = R - c r$
     /// where $c$ is the challenge and $\alpha$ and $R$ are prover chosen
     /// random scalars.
-    witness: (T::Scalar, T::Scalar),
+    pub witness: (T::Scalar, T::Scalar),
 }
 
 #[derive(Debug, Serialize)]
@@ -36,7 +36,7 @@ pub struct ComEq<C: Curve, D: Curve<Scalar = C::Scalar>> {
     /// The evaluation $y$ (see above for notation).
     pub y: C,
     /// The commitment key with which all the commitments are
-    ///   generated
+    /// generated
     pub cmm_key: CommitmentKey<D>,
     /// The generator for discrete log.
     pub g: C,
