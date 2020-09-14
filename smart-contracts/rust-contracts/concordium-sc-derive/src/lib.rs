@@ -305,10 +305,10 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 let idx_lit = syn::LitInt::new(i.to_string().as_str(), Span::call_site());
                 let variant_ident = &variant.ident;
-                let names_tokens = if variant.fields.len() > 0 {
-                    quote! { (#names_tokens) }
-                } else {
+                let names_tokens = if variant.fields.is_empty() {
                     quote! {}
+                } else {
+                    quote! { (#names_tokens) }
                 };
                 matches_tokens.extend(quote! {
                     #idx_lit => {
@@ -440,10 +440,10 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                 }
                 let idx_lit = syn::LitInt::new(i.to_string().as_str(), Span::call_site());
                 let variant_ident = &variant.ident;
-                let names_tokens = if variant.fields.len() > 0 {
-                    quote! { (#names_tokens) }
-                } else {
+                let names_tokens = if variant.fields.is_empty() {
                     quote! {}
+                } else {
+                    quote! { (#names_tokens) }
                 };
                 matches_tokens.extend(quote! {
                     #data_name::#variant_ident#names_tokens => {

@@ -137,7 +137,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 
 // Serializing the string by converting the string to a Vec of bytes, and use
 // `serial` defined for Vec
-fn serial_string<W: Write>(s: &String, out: &mut W) -> Result<(), W::Err> {
+fn serial_string<W: Write>(s: &str, out: &mut W) -> Result<(), W::Err> {
     let bytes = s.bytes().collect::<Vec<_>>();
     bytes.serial(out)
 }
