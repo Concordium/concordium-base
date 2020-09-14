@@ -77,6 +77,25 @@ library:
       cpp-options:
         - -DDISABLE_SMART_CONTRACTS
 
+executables:
+  generate-update-keys:
+    main: Main.hs
+    source-dirs: generate-update-keys
+    ghc-options:
+      - -Wall
+      - -Wcompat
+      - -Werror=missing-fields
+      - -Werror=missing-methods
+      - -Wredundant-constraints
+      - -fno-ignore-asserts
+    dependencies:
+      - globalstate-types
+      - concordium-crypto
+      - aeson-pretty >= 0.8
+      - filepath >= 1.4
+      - optparse-applicative >= 0.15
+
+
 tests:
   types-test:
     main:                Spec.hs
