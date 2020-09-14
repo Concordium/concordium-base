@@ -9,7 +9,6 @@ use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use elgamal::multicombine;
 use ff::Field;
-use merlin::Transcript;
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use rand::*;
 use random_oracle::RandomOracle;
@@ -60,7 +59,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         h: ip_info.ip_verify_key.g,
     };
 
-    let mut transcript = Transcript::new(r"PreIdentityProof".as_ref());
+    let mut transcript = RandomOracle::domain("PreIdentityProof");
     transcript.append_message(b"ctx", &to_bytes(&context.global_context));
     transcript.append_message(
         b"choice_ar_parameters",

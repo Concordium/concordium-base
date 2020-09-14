@@ -10,7 +10,6 @@ use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use either::Either;
-use merlin::Transcript;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
@@ -131,7 +130,7 @@ pub fn verify_cdi<
         witness,
     };
 
-    let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
+    let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
     transcript.append_message(b"cred_values", &to_bytes(&cdi.values));
     transcript.append_message(b"global_context", &to_bytes(&global_context));
     transcript.append_message(b"cred_values", &to_bytes(&proof));
