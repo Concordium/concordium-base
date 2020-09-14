@@ -623,7 +623,7 @@ pub fn verify_efficient<C: Curve>(
 /// It is assumed that a,b \in [0, 2^n)
 #[allow(clippy::too_many_arguments)]
 pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     csprng: &mut T,
     n: u8,
     a: u64,
@@ -646,7 +646,7 @@ pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
 /// but it should follow that a \in [0, 2^n) if the
 /// proof verifies.
 pub fn verify_less_than_or_equal<C: Curve>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     n: u8,
     commitment_a: &Commitment<C>,
     commitment_b: &Commitment<C>,
@@ -1261,7 +1261,7 @@ mod tests {
             randomness.push(r);
             commitments.push(com);
         }
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let proof = prove(
             &mut transcript,
             rng,
@@ -1274,14 +1274,14 @@ mod tests {
         );
         assert!(proof.is_some());
         let proof = proof.unwrap();
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b1 = naive_verify(&mut transcript, n, &commitments, &proof, &gens, &keys);
 
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b2 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
 
         // Testing the even more efficient verifier:
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b3 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
         assert!(b1);
         assert!(b2.is_ok());
@@ -1322,11 +1322,11 @@ mod tests {
         let b_scalar = SomeCurve::scalar_from_u64(b);
         let com_a = key.hide_worker(&a_scalar, &r_a);
         let com_b = key.hide_worker(&b_scalar, &r_b);
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let proof =
             prove_less_than_or_equal(&mut transcript, rng, n, a, b, &gens, &key, &r_a, &r_b)
                 .unwrap();
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         assert!(verify_less_than_or_equal(
             &mut transcript,
             n,

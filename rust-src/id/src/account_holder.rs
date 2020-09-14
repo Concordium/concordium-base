@@ -18,7 +18,6 @@ use either::Either;
 use elgamal::{multicombine, Cipher};
 use failure::Fallible;
 use ff::Field;
-use merlin::Transcript;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey as PedersenKey,
     randomness::Randomness as PedersenRandomness, value::Value,
@@ -143,7 +142,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         ar_identities,
         threshold,
     };
-    let mut transcript = Transcript::new(r"PreIdentityProof".as_ref());
+    let mut transcript = RandomOracle::domain("PreIdentityProof");
     transcript.append_message(b"ctx", &to_bytes(&context.global_context));
     transcript.append_message(b"choice_ar_parameters", &to_bytes(&choice_ar_parameters));
     transcript.append_message(b"cmm_sc", &to_bytes(&cmm_sc));
@@ -661,7 +660,7 @@ where
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
-    let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
+    let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
     transcript.append_message(b"cred_values", &to_bytes(&cred_values));
     transcript.append_message(b"global_context", &to_bytes(&context.global_context));
     transcript.append_message(b"cred_values", &to_bytes(&proof));
