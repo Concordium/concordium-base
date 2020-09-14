@@ -5,14 +5,117 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# OPTIONS_GHC -Wall #-}
-module Concordium.Types (module Concordium.Types,
-                         AccountAddress(..),
-                         SchemeId, AccountVerificationKey,
-                         module Concordium.Common.Amount) where
+-- |Basic blockchain types.
+module Concordium.Types (
+  -- * Cost units
+  module Concordium.Common.Amount,
+  Energy(..),
+  AmountDelta(..),
+  amountToDelta,
+  amountDiff,
+  applyAmountDelta,
+  -- ** Exchange rates
+  ExchangeRate(..),
+  EnergyRate,
+  computeEnergyRate,
+
+  -- * Time units
+  Duration(..),
+  durationToNominalDiffTime,
+  getTransactionTime,
+  Timestamp(..),
+  timestampToUTCTime,
+  utcTimeToTimestamp,
+  timestampToSeconds,
+  addDuration,
+  TransactionTime(..),
+  TransactionExpiryTime,
+  utcTimeToTransactionTime,
+  transactionTimeToTimestamp,
+  transactionExpired,
+  isTimestampBefore,
+
+  -- * Accounts
+  SchemeId,
+  AccountAddress(..),
+  AccountEncryptedAmount(..),
+  initialAccountEncryptedAmount,
+  incomingEncryptedAmounts,
+  numAggregated,
+  selfAmount,
+  startIndex,
+  Nonce(..),
+  minNonce,
+  AccountVerificationKey,
+
+  -- * Smart contracts
+  ModuleRef(..),
+  ContractIndex(..),
+  ContractSubindex(..),
+  ContractAddress(..),
+  -- ** Chain metadata
+  ChainMetadata(..),
+  encodeChainMeta,
+
+  -- * Addresses
+  Address(..),
+
+  -- * Baking
+  ElectionDifficulty(..),
+  makeElectionDifficulty,
+  isValidElectionDifficulty,
+  LotteryPower,
+  BakerAggregationProof,
+  BakerAggregationPrivateKey,
+  BakerAggregationVerifyKey,
+  BakerElectionPrivateKey,
+  BakerElectionVerifyKey,
+  BakerSignPrivateKey,
+  BakerSignVerifyKey,
+  LeadershipElectionNonce,
+  BakerId(..),
+  -- ** Block elements
+  BlockNonce,
+  BlockSignature,
+  BlockProof,
+  TransactionOutcomesHashV0(..),
+  TransactionOutcomesHash,
+  StateHashV0(..),
+  StateHash,
+  BlockHashV0(..),
+  BlockHash,
+  BlockHeight(..),
+  Slot(..),
+  EpochLength,
+  genesisSlot,
+  -- ** Transactions
+  EncodedPayload(..),
+  PayloadSize(..),
+  putEncodedPayload,
+  getEncodedPayload,
+  payloadSize,
+  TransactionSignHashV0(..),
+  TransactionSignHash,
+  transactionSignHashToByteString,
+  TransactionHashV0(..),
+  TransactionHash,
+
+  -- * Finalization
+  VoterId,
+  VoterPower(..),
+  VoterSignKey,
+  VoterVerificationKey,
+  VoterVRFPublicKey,
+  VoterAggregationPrivateKey,
+  VoterAggregationVerifyKey,
+  FinalizationCommitteeSize,
+
+  -- * Hashing
+  Hashed(..),
+  unhashed,
+  makeHashed) where
 
 import GHC.Generics
 import Data.Data (Typeable, Data)
@@ -74,7 +177,7 @@ instance Ord a => Ord (Hashed a) where
 instance (Show a) => Show (Hashed a) where
     show = show . _hashed
 
--- * Types releated to bakers.
+-- * Types related to bakers.
 newtype BakerId = BakerId Word64
     deriving (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Read, Show, Integral, FromJSON, ToJSON, Bits) via Word64
 
@@ -94,11 +197,86 @@ type LotteryPower = Ratio Amount
 
 -- | The type of the birk parameter "election difficulty".
 -- The value must be in the range [0,1).
-type ElectionDifficulty = Double
-type FinalizationCommitteeSize = Word32
+newtype ElectionDifficulty = ElectionDifficulty {electionDifficulty :: Double}
+  deriving newtype (Eq, Ord, Show, ToJSON)
 
+instance S.Serialize ElectionDifficulty where
+    get = do
+        d <- ElectionDifficulty <$> S.get
+        if isValidElectionDifficulty d then
+          return d
+        else
+          fail "Invalid election difficulty (must be in the range [0,1))."
+    put = S.put . electionDifficulty
+
+instance HashableTo Hash.Hash ElectionDifficulty where
+    getHash e = Hash.hash $ S.encode e
+
+instance Monad m => MHashableTo m Hash.Hash ElectionDifficulty
+
+instance FromJSON ElectionDifficulty where
+    parseJSON v = do
+        d <- ElectionDifficulty <$> parseJSON v
+        if isValidElectionDifficulty d then
+          return d
+        else
+          fail "Invalid election difficulty (must be in the range [0,1))."
+
+-- |Convert a 'Double' to an 'ElectionDifficulty'. This requires
+-- the value to be in the range @[0,1)@.
+makeElectionDifficulty :: Double -> ElectionDifficulty
+makeElectionDifficulty d = assert (d >= 0 && d < 1) $ ElectionDifficulty d
+
+-- |Verify that an 'ElectionDifficulty' is valid, that is, in the range
+-- @[0,1)@. This is checked by 'makeElectionDifficulty' as well as the
+-- 'Serialize' and 'FromJSON' instances of 'ElectionDifficulty'.
 isValidElectionDifficulty :: ElectionDifficulty -> Bool
-isValidElectionDifficulty d = d >= 0 && d < 1
+isValidElectionDifficulty (ElectionDifficulty d) = d >= 0 && d < 1
+
+type FinalizationCommitteeSize = Word32
+-- |An exchange rate (e.g. uGTU/Euro or Euro/Energy).
+-- Infinity and zero are disallowed.
+newtype ExchangeRate = ExchangeRate (Ratio Word64)
+    deriving newtype (Eq, Ord, Num, Real, Show, Fractional, ToJSON)
+
+-- |We require the serialization to be in reduced form to ensure
+-- that an exchange rate has a unique serialized representation.
+instance S.Serialize ExchangeRate where
+    put (ExchangeRate r) = assert (numerator r /= 0 && denominator r /= 0) $
+        S.put (numerator r) >> S.put (denominator r)
+    get = do
+        num <- S.get
+        den <- S.get
+        if num == 0 || den == 0 || gcd num den /= 1 then
+            fail "Invalid exchange rate"
+        else
+            return $ ExchangeRate (num % den)
+
+instance FromJSON ExchangeRate where
+    parseJSON v = do
+        r <- parseJSON v
+        if numerator r == 0 || denominator r == 0 then
+            fail "Invalid exchange rate"
+        else
+            return $ ExchangeRate r
+
+instance HashableTo Hash.Hash ExchangeRate where
+    getHash = Hash.hash . S.encode
+
+instance Monad m => MHashableTo m Hash.Hash ExchangeRate
+
+-- |Energy to GTU conversion rate in microGTU per Energy.
+type EnergyRate = Rational
+
+-- |Compute the exchange rate of microGTU per Energy from the 
+-- rate of microGTU per Euro and the rate of Euros per Energy.
+computeEnergyRate
+  :: ExchangeRate
+  -- ^microGTU per Euro
+  -> ExchangeRate
+  -- ^Euros per Energy 
+  -> EnergyRate
+computeEnergyRate microGTUPerEuro euroPerEnergy = toRational microGTUPerEuro * toRational euroPerEnergy
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
@@ -191,6 +369,21 @@ instance Show Address where
 newtype Timestamp = Timestamp { tsMillis :: Word64 }
   deriving (Show, Read, Eq, Num, Ord, Real, Enum, S.Serialize, FromJSON, PersistField) via Word64
 
+-- | Time in seconds since the unix epoch
+newtype TransactionTime = TransactionTime { ttsSeconds :: Word64 }
+    deriving (Show, Read, Eq, Num, Ord, FromJSON, ToJSON, Real, Enum, Integral) via Word64
+
+instance S.Serialize TransactionTime where
+  put = P.putWord64be . ttsSeconds
+  get = TransactionTime <$> G.getWord64be
+
+-- |Get time in seconds since the unix epoch.
+getTransactionTime :: IO TransactionTime
+getTransactionTime = utcTimeToTransactionTime <$> getCurrentTime
+
+utcTimeToTransactionTime :: UTCTime -> TransactionTime
+utcTimeToTransactionTime = floor . utcTimeToPOSIXSeconds
+
 instance PersistFieldSql Timestamp where
     sqlType _ = SqlInt64
 
@@ -218,15 +411,16 @@ addDuration :: Timestamp -> Duration -> Timestamp
 addDuration (Timestamp ts) (Duration d) = Timestamp (ts + d)
 
 -- | Expiry time of a transaction in seconds since the epoch
-newtype TransactionExpiryTime = TransactionExpiryTime { expiry :: Word64 }
-    deriving (Show, Read, Eq, Num, Ord, FromJSON, ToJSON) via Word64
+type TransactionExpiryTime = TransactionTime
 
-instance S.Serialize TransactionExpiryTime where
-  put = P.putWord64be . expiry
-  get = TransactionExpiryTime <$> G.getWord64be
+-- | Convert a 'TransactionTime' (seconds since epoch) to a
+-- 'Timestamp' (milliseconds since epoch).
+transactionTimeToTimestamp :: TransactionTime -> Timestamp
+transactionTimeToTimestamp (TransactionTime x) = Timestamp (1000 * x)
 
+-- |Check if a transaction expiry time precedes a given timestamp.
 transactionExpired :: TransactionExpiryTime -> Timestamp -> Bool
-transactionExpired (TransactionExpiryTime x) (Timestamp t) = 1000*x < t
+transactionExpired (TransactionTime x) (Timestamp t) = 1000*x < t
 
 -- |Check if whether the given timestamp is no greater than the end of the day
 -- of the given year and month.

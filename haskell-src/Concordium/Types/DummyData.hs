@@ -45,7 +45,7 @@ dummyLowTransactionExpiryTime = 0
 
 {-# WARNING dummyMaxTransactionExpiryTime "Do not use in production." #-}
 dummyMaxTransactionExpiryTime :: TransactionExpiryTime
-dummyMaxTransactionExpiryTime = TransactionExpiryTime maxBound
+dummyMaxTransactionExpiryTime = TransactionTime maxBound
 
 {-# WARNING dummySlotTime "Do not use in production." #-}
 dummySlotTime :: Timestamp
@@ -67,7 +67,7 @@ bakerAggregationKey n = fst (randomBlsSecretKey (mkStdGen n))
 -- NB: The cost needs to be in-line with that defined in the scheduler.
 makeTransferTransaction :: (Sig.KeyPair, AccountAddress) -> AccountAddress -> Amount -> Nonce -> BlockItem
 makeTransferTransaction (fromKP, fromAddress) toAddress amount n =
-  normalTransaction . fromBareTransaction 0 . signTransactionSingle fromKP header $ payload
+  normalTransaction . fromAccountTransaction 0 . signTransactionSingle fromKP header $ payload
     where
         header = TransactionHeader{
             thNonce = n,

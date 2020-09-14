@@ -9,6 +9,7 @@ import Data.Serialize
 import qualified Data.ByteString as  BS
 
 import Types.TransactionGen
+import Concordium.Types
 import Concordium.Types.Transactions
 
 groupIntoSize :: (Show a, Integral a) => a -> String
@@ -20,14 +21,15 @@ groupIntoSize s =
               ub = 10^(nd+1) :: Integer
           in show lb ++ " -- " ++ show ub ++ "B"
 
-checkTransaction :: BareTransaction -> Property
+-- |Check that a transaction can be serialized and deserialized.
+checkTransaction :: AccountTransaction -> Property
 checkTransaction tx = let bs = encode tx
               in  case decode bs of
                     Left err -> counterexample err False
                     Right tx' -> QC.label (groupIntoSize (BS.length bs)) $ tx === tx'
 
 testTransaction :: Int -> Property
-testTransaction size = forAll (resize size genBareTransaction) checkTransaction
+testTransaction size = forAll (resize size genAccountTransaction) checkTransaction
 
 dummyTime :: TransactionTime
 dummyTime = 37
