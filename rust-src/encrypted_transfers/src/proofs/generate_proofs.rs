@@ -347,7 +347,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         .collect();
 
     let bulletproof_s_prime = bulletprove(
-        ro,
+        ro, // todo: add sigma proof?
         csprng,
         u8::from(CHUNK_SIZE),
         s_prime_chunks.len() as u8,
@@ -605,7 +605,6 @@ mod test {
             &mut csprng,
         )
         .expect("Could not produce proof.");
-
 
         assert_eq!(
             verify_enc_trans(
