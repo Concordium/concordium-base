@@ -40,6 +40,17 @@ pub fn evaluate_poly<F: Field, R: AsRef<F>>(coeffs: &[R], point: &F) -> F {
     eval
 }
 
+/// This function is used for encryption of the PRF key share in chunks,
+/// where the chunks are written in little endian.
+/// The arguments are
+/// - context - the global context,
+/// - pk - the public key for encryption
+/// - share - the share we want to encrypt
+/// The output is a 3-tuple concisting of
+/// 8 Cipher's, 8 Randomness's and 8 scalars.
+/// The ciphers and randomnesses come from the
+/// encryption in chunks itself.
+/// The scalars are the chunks themselves (in little endian).
 #[allow(clippy::type_complexity)]
 pub fn encrypt_prf_share<C: Curve, R: Rng>(
     context: &GlobalContext<C>,

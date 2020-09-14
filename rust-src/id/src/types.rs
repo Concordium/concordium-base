@@ -634,6 +634,7 @@ pub struct AccCredentialInfo<C: Curve> {
 #[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
+    /// Encryption in chunks (in little endian) of the PRF key share
     #[serde(rename = "encPrfKeyShare")]
     pub enc_prf_key_share: [Cipher<C>; 8],
     /// Witness to the proof that the computed commitment to the share

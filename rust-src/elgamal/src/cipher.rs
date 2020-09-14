@@ -92,6 +92,11 @@ impl<C: Curve> Cipher<C> {
     pub fn scale_u64(&self, e: u64) -> Self { self.scale(&C::scalar_from_u64(e)) }
 }
 
+pub fn multicombine<C: Curve>(ciphers: &[Cipher<C>], scalars: &[C::Scalar]) -> Cipher<C>{
+    let (ciphers_0, ciphers_1): (Vec<_>, Vec<_>) = ciphers.iter().map(|x| (x.0, x.1)).unzip();
+    Cipher(multiexp(&ciphers_0, &scalars), multiexp(&ciphers_1, &scalars))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
