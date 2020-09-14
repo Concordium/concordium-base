@@ -15,19 +15,32 @@
 //! contructed using the sigma protocols for equality and linear relations
 //! described in the Cryptoprim Bluepaper.
 //!
+//! Proving knowledge of (a_i, r_i) such that c_{i,1} = g^{r_i} and c_{i,2} =
+//! h^{a_i} pk_receiver^{r_i} is done using the ComEq sigma protocol in the
+//! following way.
+//! Recall that pk_receiver = g^x where x is the corresponding secret key and
+//! notice that proving knowledge of a_i and r_i such that the above statement
+//! is true is the same as proving knowledge of a_i and r_i such that c_{i,2} is
+//! a Pedersen commitment to r_i under Pedersen commitment key (pk_receiver, h) and
+//! randomness a_i, subject to the extra condition that r_i is the discreet log
+//! of c_{i,1} with respect to g. This is exactly the relation proven by ComEq
+//! with {commitment: c_{i,2}, cmm_key: (pk_receiver, h), y: g^r_i, g: g}
+//!
 //! The trait SigmaProtocol is
 //! implemented directly for the EncTrans struct below, and it is not used that
 //! the Sigmaprotocol trait is already implemented for both Dlog and ComEq.
+// REVIEW: ^why not?
 
 #![allow(non_snake_case)]
 use crate::types::CHUNK_SIZE;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
-use elgamal::ChunkSize;
+use elgamal::{ChunkSize, Randomness};
 use ff::Field;
 use id::sigma_protocols::{com_eq::*, common::*, dlog::*};
-use pedersen_scheme::{Commitment, Randomness, Value};
+use id::sigma_protocols::com_eq::Witness as ComEqWitness;
+use pedersen_scheme::{Commitment, Randomness as PedersenRandomness, Value};
 use random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;
 
@@ -66,23 +79,19 @@ pub struct Witness<C: Curve> {
     witness_common: C::Scalar,
     /// For EncExp/ComEq's involving a_i
     #[size_length = 4]
-    witness_encexp1: Vec<(C::Scalar, C::Scalar)>,
+    witness_encexp1: Vec<ComEqWitness<C>>,
     /// For EncExp/ComEq's involving s_i'
     #[size_length = 4]
-    witness_encexp2: Vec<(C::Scalar, C::Scalar)>,
+    witness_encexp2: Vec<ComEqWitness<C>>,
 }
 
 pub struct EncTransSecret<C: Curve> {
     /// dlog_secret contains the secret key `sk`
     pub dlog_secret: Rc<C::Scalar>,
-    /// The chunks a_i:
-    pub r_a: Vec<Randomness<C>>,
-    /// The r_i:
-    pub a: Vec<Value<C>>,
-    /// The chunks s_i':
-    pub r_s: Vec<Randomness<C>>,
-    /// The r_i':
-    pub s: Vec<Value<C>>,
+    // ComEq secrets for encexp1
+    pub encexp1_secrets: Vec<ComEqSecret<C>>,
+    // ComeEq secrets for encexp2
+    pub encexp2_secrets: Vec<ComEqSecret<C>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -99,17 +108,17 @@ pub struct EncTransCommit<C: Curve> {
     encexp2: Vec<CommittedPoints<C, C>>,
 }
 
-/// As for the witness, we don't need the state for elc_dec
+/// As for the witness, we don't need the state for elg_dec
 #[derive(Debug, Serialize)]
 pub struct EncTransState<C: Curve> {
     /// Randomness used for dlog
     dlog: C::Scalar,
     /// Randomness used for EncExp/ComEq's involving a_i
     #[size_length = 4]
-    encexp1: Vec<(Value<C>, Randomness<C>)>,
+    encexp1: Vec<(Value<C>, PedersenRandomness<C>)>,
     /// Randomness used for EncExp/ComEq's involving s_i'
     #[size_length = 4]
-    encexp2: Vec<(Value<C>, Randomness<C>)>,
+    encexp2: Vec<(Value<C>, PedersenRandomness<C>)>,
 }
 
 /// This function takes scalars x_1, ..., x_n and returns
@@ -212,51 +221,59 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
     ) -> Option<Self::ProverWitness> {
+        // let r_a_as_value: Vec<Value<_>> = secret.r_a.iter().map(Randomness::to_value).collect();
+        // let a_as_rand: Vec<PedersenRandomness<C>> = secret.a
+        //     .iter()
+        //     .copied()
+        //     .map(PedersenRandomness::from_u64)
+        //     .collect();
+        // let r_s_as_value: Vec<Value<_>> =
+        //     secret.r_s.iter().map(Randomness::to_value).collect();
+        // let s_as_rand: Vec<PedersenRandomness<C>> = secret.s
+        //     .iter()
+        //     .copied()
+        //     .map(PedersenRandomness::from_u64)
+        //     .collect();
+
         let mut witness_common = *challenge;
         witness_common.mul_assign(&secret.dlog_secret);
         witness_common.negate();
         witness_common.add_assign(&state.dlog);
         // For encexps:
-        let mut witness_encexp1 = Vec::with_capacity(secret.r_a.len());
-        let mut witness_encexp2 = Vec::with_capacity(secret.r_s.len());
-        if secret.r_a.len() != state.encexp1.len() || secret.r_a.len() != secret.a.len() {
+        let mut witness_encexp1 = Vec::with_capacity(secret.encexp1_secrets.len());
+        let mut witness_encexp2 = Vec::with_capacity(secret.encexp2_secrets.len());
+        if secret.encexp1_secrets.len() != state.encexp1.len() {
             return None;
         }
-        for (r_a, a, encexp1) in izip!(secret.r_a.iter(), secret.a.iter(), state.encexp1.iter()) {
-            // The R is the randomness
-            // that is used together with the secret a_j's
-            let (ref alpha, ref R) = encexp1;
-            // compute alpha_i - a_i * c
-            let mut s = *challenge;
-            s.mul_assign(a);
-            s.negate();
-            s.add_assign(alpha);
-            // compute R_i - r_i * c
-            let mut t: C::Scalar = *challenge;
-            t.mul_assign(r_a); // secret a_j's used here
-            t.negate();
-            t.add_assign(R); // R used here
-            witness_encexp1.push((s, t));
-            // It means that the randomness used for s should be the
-            // corresponding linear combination of the R's
+        for (sec, encexp1, comeq1) in izip!(secret.encexp1_secrets, state.encexp1.iter(), self.encexp1.iter()) {
+            // // The R is the randomness
+            // // that is used together with the secret a_j's
+            // let (ref alpha, ref R) = encexp1;
+            // // compute alpha_i - a_i * c
+            // let mut s = *challenge;
+            // s.mul_assign(a);
+            // s.negate();
+            // s.add_assign(alpha);
+            // // compute R_i - r_i * c
+            // let mut t: C::Scalar = *challenge;
+            // t.mul_assign(r_a); // secret a_j's used here
+            // t.negate();
+            // t.add_assign(R); // R used here
+
+            match comeq1.generate_witness(sec, (*encexp1).clone(), challenge) {
+                Some(w) => witness_encexp1.push(w),
+                None => return None
+            }
         }
-        if secret.r_s.len() != state.encexp2.len() || secret.r_s.len() != secret.s.len() {
+        if secret.encexp2_secrets.len() != state.encexp2.len() {
             return None;
         }
-        for (r_s, s_val, encexp2) in izip!(secret.r_s.iter(), secret.s.iter(), state.encexp2.iter())
+        for (sec, encexp2, comeq2) in izip!(secret.encexp2_secrets, state.encexp2.iter(), self.encexp2.iter())
         {
-            let (ref alpha, ref R) = encexp2;
-            // compute alpha_i - a_i * c
-            let mut s = *challenge;
-            s.mul_assign(s_val);
-            s.negate();
-            s.add_assign(alpha);
-            // compute R_i - r_i * c
-            let mut t: C::Scalar = *challenge;
-            t.mul_assign(r_s); // secret s'_j's used here
-            t.negate();
-            t.add_assign(R);
-            witness_encexp2.push((s, t));
+            match comeq2.generate_witness(sec, (*encexp2).clone(), challenge) {
+                Some(w) => witness_encexp2.push(w),
+                None => return None
+            }
         }
 
         Some(Witness {
@@ -283,30 +300,33 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         let mut w_a_vec = Vec::with_capacity(self.encexp1.len());
         let mut w_s_prime_vec = Vec::with_capacity(self.encexp2.len());
         for (comeq, witness) in izip!(&self.encexp1, &witness.witness_encexp1) {
-            let u = multiexp(&[comeq.y, comeq.g], &[*challenge, witness.0]);
-
-            let v = comeq
-                .commitment
-                .mul_by_scalar(challenge)
-                .plus_point(&comeq.cmm_key.hide_worker(&witness.0, &witness.1));
-            commit_encexp1.push(CommittedPoints {
-                u,
-                v: Commitment(v),
-            });
-            w_a_vec.push(witness.1);
+            // let u = multiexp(&[comeq.y, comeq.g], &[*challenge, witness.0]);
+            //
+            // let v = comeq
+            //     .commitment
+            //     .mul_by_scalar(challenge)
+            //     .plus_point(&comeq.cmm_key.hide_worker(&witness.0, &witness.1));
+            // commit_encexp1.push(CommittedPoints {
+            //     u,
+            //     v: Commitment(v),
+            // });
+            // w_a_vec.push(witness.1);
+            match comeq.extract_point(challenge, witness) {
+                Some(m) => {
+                    commit_encexp1.push(m);
+                    w_a_vec.push(witness.witness.1);
+                },
+                None => return None
+            }
         }
         for (comeq, witness) in izip!(&self.encexp2, &witness.witness_encexp2) {
-            let u = multiexp(&[comeq.y, comeq.g], &[*challenge, witness.0]);
-
-            let v = comeq
-                .commitment
-                .mul_by_scalar(challenge)
-                .plus_point(&comeq.cmm_key.hide_worker(&witness.0, &witness.1));
-            commit_encexp2.push(CommittedPoints {
-                u,
-                v: Commitment(v),
-            });
-            w_s_prime_vec.push(witness.1);
+            match comeq.extract_point(challenge, witness) {
+                Some(m) => {
+                    commit_encexp2.push(m);
+                    w_s_prime_vec.push(witness.witness.1);
+                },
+                None => return None
+            }
         }
 
         // For dlog and elcdec:

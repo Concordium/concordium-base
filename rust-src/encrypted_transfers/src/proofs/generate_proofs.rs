@@ -29,11 +29,11 @@ use std::rc::Rc;
 fn gen_enc_exp_info<C: Curve>(
     cmm_key: &CommitmentKey<C>,
     pk: &PublicKey<C>,
-    cipher: &[Cipher<C>],
+    ciphers: &[Cipher<C>],
 ) -> Vec<ComEq<C, C>> {
     let pk_eg = pk.key;
-    let mut sigma_protocols = Vec::with_capacity(cipher.len());
-    for cipher in cipher {
+    let mut sigma_protocols = Vec::with_capacity(ciphers.len());
+    for cipher in ciphers {
         let commitment = Commitment(cipher.1);
         let y = cipher.0;
         let cmm_key_comeq = CommitmentKey {
@@ -96,6 +96,7 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
     // such that
     // d_{i,1} = g^{r_i'}, d_{i,2} = h^{s_i'} pk_sender^{r_i'} for all i
     let sigma_4_protocols = gen_enc_exp_info(&cmm_key, pk_sender, S_prime);
+
     // The EncTrans implements the SigmaProtocol trait, and by
     // its implementation it is guaranteed that the secret
     // sk in the dlog, and the secret sk in elg_dec are the same,
@@ -172,32 +173,20 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
             pk_sender.encrypt_exponent_rand_given_generator(&Value::<C>::from(x), generator, csprng)
         })
         .collect::<Vec<_>>();
-
     let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) = S_prime_enc_randomness.iter().cloned().unzip();
 
+    let a_secrets = izip!(a_chunks.iter(), A_rand.iter()).map(|(a_i, r_i)| {
+        ComEqSecret::<C>{r: PedersenRandomness::from_u64(*a_i), a: Randomness::to_value(r_i)}
+    }).collect();
+    let s_prime_secrets = izip!(s_prime_chunks.iter(), S_prime_rand.iter()).map(|(a_i, r_i)| {
+        ComEqSecret::<C>{r: PedersenRandomness::from_u64(*a_i), a: Randomness::to_value(r_i)}
+    }).collect();
     let protocol = gen_enc_trans_proof_info(&pk_sender, &pk_receiver, &S, &A, &S_prime, &generator);
-    let A_rand_as_value: Vec<Value<_>> = A_rand.iter().map(Randomness::to_value).collect();
-    let a_chunks_as_rand: Vec<PedersenRandomness<_>> = a_chunks
-        .iter()
-        .copied()
-        .map(PedersenRandomness::from_u64)
-        .collect();
-    let S_prime_rand_as_value: Vec<Value<_>> =
-        S_prime_rand.iter().map(Randomness::to_value).collect();
-    let s_prime_chunks_as_rand: Vec<PedersenRandomness<_>> = s_prime_chunks
-        .iter()
-        .copied()
-        .map(PedersenRandomness::from_u64)
-        .collect();
     let secret = EncTransSecret {
-        // Bad naming of r_a, a, r_s and s
         dlog_secret: Rc::new(sk_sender.scalar),
-        r_a:         a_chunks_as_rand,
-        a:           A_rand_as_value,
-        r_s:         s_prime_chunks_as_rand,
-        s:           S_prime_rand_as_value,
+        encexp1_secrets: a_secrets,
+        encexp2_secrets: s_prime_secrets,
     };
-    // REVIEW: ensure that this is a correct implementation of a Sigma protocol for the relation.
     let sigma_proof = prove(ro.split(), &protocol, secret, csprng)?;
     let cmm_key_bulletproof_a = CommitmentKey {
         g: *generator,
@@ -322,21 +311,22 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
 
     let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) = S_prime_enc_randomness.iter().cloned().unzip();
     let protocol = gen_enc_trans_proof_info(&pk, &pk, &S, &A, &S_prime, &generator);
-    let S_prime_rand_as_value: Vec<Value<_>> =
-        S_prime_rand.iter().map(Randomness::to_value).collect();
-    let s_prime_chunks_as_rand: Vec<PedersenRandomness<_>> = s_prime_chunks
-        .iter()
-        .copied()
-        .map(PedersenRandomness::from_u64)
-        .collect();
-    let a_chunks_as_rand = vec![PedersenRandomness::from_u64(u64::from(a))];
-    let A_rand_as_value = vec![Value::from(0u64)];
+    // let S_prime_rand_as_value: Vec<Value<_>> =
+    //     S_prime_rand.iter().map(Randomness::to_value).collect();
+    // let s_prime_chunks_as_rand: Vec<PedersenRandomness<_>> = s_prime_chunks
+    //     .iter()
+    //     .copied()
+    //     .map(PedersenRandomness::from_u64)
+    //     .collect();
+    // let a_chunks_as_rand = vec![PedersenRandomness::from_u64(u64::from(a))];
+    // let A_rand_as_value = vec![Value::from(0u64)];
+    let s_prime_secrets = izip!(s_prime_chunks.iter(), S_prime_rand.iter()).map(|(a_i, r_i)| {
+        ComEqSecret::<C>{r: PedersenRandomness::from_u64(*a_i), a: Randomness::to_value(r_i)}
+    }).collect();
     let secret = EncTransSecret {
         dlog_secret: Rc::new(sk.scalar),
-        r_a:         a_chunks_as_rand,
-        a:           A_rand_as_value,
-        r_s:         s_prime_chunks_as_rand,
-        s:           S_prime_rand_as_value,
+        encexp1_secrets: vec![ComEqSecret::<C>{r: PedersenRandomness::from_u64(u64::from(a)), a: Value::from(0u64)}],
+        encexp2_secrets: s_prime_secrets,
     };
     let sigma_proof = prove(ro.split(), &protocol, secret, csprng)?;
     let cmm_key_bulletproof_s_prime = CommitmentKey {
