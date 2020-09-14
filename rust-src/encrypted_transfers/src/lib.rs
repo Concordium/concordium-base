@@ -274,14 +274,8 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
 
     // FIXME: Revise order of arguments in verify_sec_to_pub_trans to be more
     // consistent with the rest.
-    generate_proofs::verify_sec_to_pub_trans(
-        ctx,
-        &mut ro,
-        transfer_data,
-        pk,
-        &before_amount.join(),
-    )
-    .is_ok()
+    generate_proofs::verify_sec_to_pub_trans(ctx, &mut ro, transfer_data, pk, &before_amount.join())
+        .is_ok()
 }
 
 #[cfg(test)]
