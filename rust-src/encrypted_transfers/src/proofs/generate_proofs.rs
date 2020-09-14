@@ -346,8 +346,9 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         .map(|x| PedersenRandomness::new(*(x.as_ref())))
         .collect();
 
+    ro.append_message(b"sigmaproof", &to_bytes(&sigma_proof));
     let bulletproof_s_prime = bulletprove(
-        ro, // todo: add sigma proof?
+        ro,
         csprng,
         u8::from(CHUNK_SIZE),
         s_prime_chunks.len() as u8,
@@ -534,6 +535,7 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
     // Number of bits in each chunk, determines the upper bound that needs to be
     // ensured.
     let num_bits_in_chunk = (64 / num_chunks) as u8; // as is safe here because the number is < 64
+    ro.append_message(b"sigmaproof", &to_bytes(&transaction.proof.accounting));
     let bulletproof = verify_efficient(
         ro,
         num_bits_in_chunk,
