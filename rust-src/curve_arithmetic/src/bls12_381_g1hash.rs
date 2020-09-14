@@ -578,14 +578,14 @@ fn from_coordinates_unchecked(x: Fq, y: Fq, z: Fq) -> Result<G1, CurveDecodingEr
 pub fn hash_bytes_to_fq(one: bool, bytes: &[u8]) -> Fq {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
-    h.input(if one { [1u8] } else { [0u8] });
-    h.input(bytes);
+    h.update(if one { [1u8] } else { [0u8] });
+    h.update(bytes);
     let mut fqrepr = [0u64; 6];
     // We need 381 bits to represent the Fq field, so the topmost three bits will
     // always be unset.
     let mask: u64 = !(0b111 << 61);
     loop {
-        hash.copy_from_slice(&h.result_reset());
+        hash.copy_from_slice(&h.finalize_reset());
         for (chunk, f) in hash.chunks_exact(8).zip(fqrepr.iter_mut()) {
             *f = u64::from_le_bytes(chunk.try_into().expect("Chunk size is always 8."));
         }
@@ -595,7 +595,7 @@ pub fn hash_bytes_to_fq(one: bool, bytes: &[u8]) -> Fq {
         if let Ok(fq) = Fq::from_repr(FqRepr(fqrepr)) {
             return fq;
         }
-        h.input(&hash[..]);
+        h.update(&hash[..]);
     }
 }
 
