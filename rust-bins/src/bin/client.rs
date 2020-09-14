@@ -1,7 +1,7 @@
 use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::*;
-use dialoguer::{Checkboxes, Input, Select};
+use dialoguer::{Input, MultiSelect, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
@@ -431,7 +431,7 @@ fn handle_create_credential(cc: CreateCredential) {
         .keys()
         .map(|&x| AttributeStringTag::from(x))
         .collect::<Vec<_>>();
-    let atts: Vec<usize> = match Checkboxes::new()
+    let atts: Vec<usize> = match MultiSelect::new()
         .with_prompt("Select which attributes you wish to reveal")
         .items(&alist_items)
         .interact()
@@ -665,7 +665,7 @@ fn handle_act_as_ip(aai: IpSignPio) {
     let created_at = YearMonth::now();
 
     let tags = {
-        match Checkboxes::new()
+        match MultiSelect::new()
             .with_prompt("Select attributes:")
             .items(&ATTRIBUTE_NAMES)
             .interact()
@@ -804,7 +804,7 @@ fn handle_start_ip(sip: StartIp) {
         .map(|x| x.ar_description.name.as_str())
         .collect();
 
-    let ar_info = Checkboxes::new()
+    let ar_info = MultiSelect::new()
         .with_prompt("Choose anonymity revokers")
         .items(&mrs)
         .interact()
