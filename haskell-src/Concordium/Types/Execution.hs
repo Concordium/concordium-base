@@ -32,7 +32,7 @@ import qualified Concordium.Wasm as Wasm
 import Concordium.Types
 import Concordium.Utils
 import Concordium.Types.Execution.TH
-
+import Concordium.Types.Updates
 import Concordium.ID.Types
 import qualified Concordium.ID.Types as IDTypes
 import Concordium.Crypto.Proofs
@@ -170,12 +170,6 @@ data Payload =
       }
   -- |Undelegate stake.
   | UndelegateStake
-  -- |Update the election difficulty birk parameter.
-  -- Will only be accepted if sent from one of the special beta accounts.
-  | UpdateElectionDifficulty {
-      -- |The new election difficulty. Must be in the range [0,1).
-      uedDifficulty :: !ElectionDifficulty
-      }
   -- | Update the aggregation verification key of the baker
   | UpdateBakerAggregationVerifyKey {
       -- |Id of the baker to update
@@ -285,9 +279,6 @@ putPayload DelegateStake{..} =
     S.put dsID
 putPayload UndelegateStake =
     P.putWord8 9
-putPayload UpdateElectionDifficulty{..} =
-    P.putWord8 10 <>
-    S.put uedDifficulty
 putPayload UpdateBakerAggregationVerifyKey{..} =
     P.putWord8 11 <>
     S.put ubavkId <>
@@ -378,11 +369,6 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               return UpdateBakerSignKey{..}
             8 -> DelegateStake <$> S.get
             9 -> return UndelegateStake
-            10 -> do
-              uedDifficulty <- S.get
-              unless (isValidElectionDifficulty uedDifficulty) $
-                fail $ "Illegal election difficulty: " ++ show uedDifficulty
-              return UpdateElectionDifficulty{..}
             11 -> do
               ubavkId <- S.get
               ubavkKey <- S.get
@@ -598,10 +584,6 @@ data Event =
                -- are not delegating to anyone at the time.
                esuBaker :: !(Maybe BakerId)
                }
-           | ElectionDifficultyUpdated {
-               -- |The new election difficulty.
-               eeduDifficulty :: !Double
-               }
            -- |Keys at existing indexes were updated, no new indexes were added, threshold is unchanged
            | AccountKeysUpdated
            | AccountKeysAdded
@@ -646,6 +628,10 @@ data Event =
                 -- | The amount that was subtracted from the public balance.
                eaaAmount :: !Amount
                }
+           | UpdateEnqueued {
+             ueEffectiveTime :: !TransactionTime,
+             uePayload :: !UpdatePayload
+           }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -660,6 +646,8 @@ data TransactionSummary' a = TransactionSummary {
   tsHash :: !TransactionHash,
   tsCost :: !Amount,
   tsEnergyCost :: !Energy,
+  -- FIXME: transaction type should be changed to differentiate parameter updates from credential deployments.
+  -- Currently, these are both represented by 'Nothing'.
   tsType :: !(Maybe TransactionType),
   tsResult :: !a,
   tsIndex :: !TransactionIndex
@@ -756,6 +744,7 @@ data FailureKind = InsufficientFunds -- ^The sender account's amount is not suff
                  | NonExistentAccount !AccountAddress -- ^Cannot deploy credential onto a non-existing account.
                  | AccountCredentialInvalid -- ^Account credential verification failed, the proofs were invalid or malformed.
                  | DuplicateAccountRegistrationID !IDTypes.CredentialRegistrationID
+                 | InvalidUpdateTime -- ^The update timeout is later than the effective time
       deriving(Eq, Show)
 
 data TxResult = TxValid !TransactionSummary | TxInvalid !FailureKind
