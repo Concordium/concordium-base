@@ -47,7 +47,6 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
     let ro = RandomOracle::domain(&challenge_prefix);
 
-    let mut transcript = RandomOracle::empty();
     let index = csprng.gen();
 
     let context_clone = context.clone();
@@ -56,8 +55,7 @@ pub fn enc_trans_bench(c: &mut Criterion) {
         b.iter(|| {
             gen_enc_trans(
                 &context_clone,
-                ro.split(),
-                &mut transcript,
+                &mut ro.split(),
                 &pk_sender,
                 &sk_clone,
                 &pk_receiver,
@@ -73,14 +71,12 @@ pub fn enc_trans_bench(c: &mut Criterion) {
 
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
     let ro = RandomOracle::domain(&challenge_prefix);
-    let ro_copy = ro.split();
+    let mut ro_copy = ro.split();
 
-    let mut transcript = RandomOracle::empty();
     let index = csprng.gen();
     let transaction = gen_enc_trans(
         &context,
-        ro_copy,
-        &mut transcript,
+        &mut ro_copy,
         &pk_sender,
         &sk_sender,
         &pk_receiver,
@@ -93,13 +89,11 @@ pub fn enc_trans_bench(c: &mut Criterion) {
     .expect("Could not produce proof.");
     c.bench_function("Verify transaction and proofs", move |b| {
         b.iter(|| {
-            let ro = RandomOracle::domain(&challenge_prefix);
-            let mut transcript = RandomOracle::empty();
+            let mut ro = RandomOracle::domain(&challenge_prefix);
             assert_eq!(
                 verify_enc_trans(
                     &context,
-                    ro,
-                    &mut transcript,
+                    &mut ro,
                     &transaction,
                     &pk_sender,
                     &pk_receiver,
@@ -133,7 +127,6 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
     let ro = RandomOracle::domain(&challenge_prefix);
 
-    let mut transcript = RandomOracle::empty();
     let index = csprng.gen();
 
     let context_clone = context.clone();
@@ -142,8 +135,7 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
         b.iter(|| {
             gen_sec_to_pub_trans(
                 &context_clone,
-                ro.split(),
-                &mut transcript,
+                &mut ro.split(),
                 &pk,
                 &sk_clone,
                 index,
@@ -158,14 +150,12 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
 
     let challenge_prefix = generate_challenge_prefix(&mut csprng);
     let ro = RandomOracle::domain(&challenge_prefix);
-    let ro_copy = ro.split();
+    let mut ro_copy = ro.split();
 
-    let mut transcript = RandomOracle::empty();
     let index = csprng.gen();
     let transaction = gen_sec_to_pub_trans(
         &context,
-        ro_copy,
-        &mut transcript,
+        &mut ro_copy,
         &pk,
         &sk,
         index,
@@ -177,10 +167,9 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
     .expect("Could not produce proof.");
     c.bench_function("Verify sec to pub transaction and proofs", move |b| {
         b.iter(|| {
-            let ro = RandomOracle::domain(&challenge_prefix);
-            let mut transcript = RandomOracle::empty();
+            let mut ro = RandomOracle::domain(&challenge_prefix);
             assert_eq!(
-                verify_sec_to_pub_trans(&context, ro, &mut transcript, &transaction, &pk, &S,),
+                verify_sec_to_pub_trans(&context, &mut ro, &transaction, &pk, &S,),
                 Ok(())
             )
         })
