@@ -1202,7 +1202,7 @@ impl SerdeSerialize for CredentialAccount {
 impl<'de> SerdeDeserialize<'de> for CredentialAccount {
     fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
         // expect a map, but also handle string
-        des.deserialize_map(CredentialAccountVisitor)
+        des.deserialize_any(CredentialAccountVisitor)
     }
 }
 
