@@ -36,35 +36,7 @@ use concordium_sc_base::*;
 
 use sha2::Digest;
 
-impl Serialize for Hash {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { self.0.serial(out) }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> { Ok(Hash(source.get()?)) }
-}
-
-impl Serialize for State {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.num_contributions.serial(out)?;
-        self.expiry.serial(out)?;
-        self.prefix.serial(out)?;
-        self.contributions.serial(out)
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let num_contributions = source.get()?;
-        let expiry = source.get()?;
-        let prefix = source.get()?;
-        let contributions = source.get()?;
-        Ok(State {
-            num_contributions,
-            contributions,
-            expiry,
-            prefix,
-        })
-    }
-}
-
-#[derive(Ord, PartialOrd, PartialEq, Eq)]
+#[derive(Ord, PartialOrd, PartialEq, Eq, Serialize)]
 struct Hash([u8; 32]);
 
 /// Message expected by the `contribute` function.
@@ -74,6 +46,7 @@ type Contribution = [u8; 32];
 type Prefix = [u8; 32];
 
 /// State of the smart contract instance.
+#[derive(Serialize)]
 pub struct State {
     /// Number of contributions. Could be different from the size of the map if
     /// the same person contributes multiple times.

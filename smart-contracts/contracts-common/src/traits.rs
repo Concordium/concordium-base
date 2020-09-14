@@ -118,19 +118,32 @@ impl Write for Vec<u8> {
     }
 }
 
-/// The `Serialize` trait provides a means of writing structures into byte-sinks
-/// (`Write`) or reading structures from byte sources (`Read`).
-pub trait Serialize: Sized {
+/// The `Serial` trait provides a means of writing structures into byte-sinks
+/// (`Write`).
+pub trait Serial {
     /// Attempt to write the structure into the provided writer, failing if
     /// only part of the structure could be written.
     ///
     /// NB: We use Result instead of Option for better composability with other
     /// constructs.
     fn serial<W: Write>(&self, _out: &mut W) -> Result<(), W::Err>;
+}
+
+/// The `Deserial` trait provides a means of reading structures from byte-sinks
+/// (`Read`).
+pub trait Deserial: Sized {
     /// Attempt to read a structure from a given source, failing if an error
     /// occurs during deserialization or reading.
     fn deserial<R: Read>(_source: &mut R) -> Result<Self, R::Err>;
 }
+
+/// The `Serialize` trait provides a means of writing structures into byte-sinks
+/// (`Write`) or reading structures from byte sources (`Read`).
+pub trait Serialize: Serial + Deserial {}
+
+/// Generic instance deriving Serialize for any type that implements both Serial
+/// and Deserial.
+impl<A: Deserial + Serial> Serialize for A {}
 
 /// A more convenient wrapper around `Serialize` that makes it easier to write
 /// deserialization code. It has a blanked implementation for any read and
@@ -148,7 +161,7 @@ pub trait Get<T> {
     fn get(&mut self) -> Result<T, Self::Err>;
 }
 
-impl<R: Read, T: Serialize> Get<T> for R {
+impl<R: Read, T: Deserial> Get<T> for R {
     type Err = R::Err;
 
     #[inline(always)]

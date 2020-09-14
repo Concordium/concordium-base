@@ -11,12 +11,14 @@ use std::{collections, mem::MaybeUninit, slice};
 
 // Implementations of Serialize
 
-impl<X: Serialize, Y: Serialize> Serialize for (X, Y) {
+impl<X: Serial, Y: Serial> Serial for (X, Y) {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.0.serial(out)?;
         self.1.serial(out)
     }
+}
 
+impl<X: Deserial, Y: Deserial> Deserial for (X, Y) {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let x = X::deserial(source)?;
         let y = Y::deserial(source)?;
@@ -24,27 +26,35 @@ impl<X: Serialize, Y: Serialize> Serialize for (X, Y) {
     }
 }
 
-impl Serialize for u8 {
+impl Serial for u8 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u8(*self) }
+}
 
+impl Deserial for u8 {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> { source.read_u8() }
 }
 
-impl Serialize for u32 {
+impl Serial for u32 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u32(*self) }
+}
 
+impl Deserial for u32 {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> { source.read_u32() }
 }
 
-impl Serialize for u64 {
+impl Serial for u64 {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u64(*self) }
+}
 
+impl Deserial for u64 {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> { source.read_u64() }
 }
 
-impl Serialize for [u8; 32] {
+impl Serial for [u8; 32] {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_all(self) }
+}
 
+impl Deserial for [u8; 32] {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         // This deliberately does not initialize the array up-front.
         // Initialization is not needed, and costs quite a bit of code space.
@@ -57,21 +67,25 @@ impl Serialize for [u8; 32] {
     }
 }
 
-impl Serialize for AccountAddress {
+impl Serial for AccountAddress {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_all(&self.0) }
+}
 
+impl Deserial for AccountAddress {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let bytes = source.get()?;
         Ok(AccountAddress(bytes))
     }
 }
 
-impl Serialize for ContractAddress {
+impl Serial for ContractAddress {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         out.write_u64(self.index)?;
         out.write_u64(self.subindex)
     }
+}
 
+impl Deserial for ContractAddress {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let index = source.get()?;
         let subindex = source.get()?;
@@ -82,7 +96,7 @@ impl Serialize for ContractAddress {
     }
 }
 
-impl Serialize for Address {
+impl Serial for Address {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         match self {
             Address::Account(ref acc) => {
@@ -95,7 +109,9 @@ impl Serialize for Address {
             }
         }
     }
+}
 
+impl Deserial for Address {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let tag = u8::deserial(source)?;
         match tag {
@@ -106,12 +122,14 @@ impl Serialize for Address {
     }
 }
 
-impl Serialize for InitContext {
+impl Serial for InitContext {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.metadata.serial(out)?;
         self.init_origin.serial(out)
     }
+}
 
+impl Deserial for InitContext {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let metadata = source.get()?;
         let init_origin = source.get()?;
@@ -122,7 +140,7 @@ impl Serialize for InitContext {
     }
 }
 
-impl Serialize for ReceiveContext {
+impl Serial for ReceiveContext {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.metadata.serial(out)?;
         self.invoker.serial(out)?;
@@ -131,7 +149,9 @@ impl Serialize for ReceiveContext {
         self.sender.serial(out)?;
         self.owner.serial(out)
     }
+}
 
+impl Deserial for ReceiveContext {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let metadata = source.get()?;
         let invoker = source.get()?;
@@ -150,14 +170,16 @@ impl Serialize for ReceiveContext {
     }
 }
 
-impl Serialize for ChainMetadata {
+impl Serial for ChainMetadata {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.slot_number.serial(out)?;
         self.block_height.serial(out)?;
         self.finalized_height.serial(out)?;
         self.slot_time.serial(out)
     }
+}
 
+impl Deserial for ChainMetadata {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let slot_number = source.get()?;
         let block_height = source.get()?;
@@ -172,7 +194,7 @@ impl Serialize for ChainMetadata {
     }
 }
 
-impl<T: Serialize> Serialize for Vec<T> {
+impl<T: Serial> Serial for Vec<T> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;
         len.serial(out)?;
@@ -181,7 +203,9 @@ impl<T: Serialize> Serialize for Vec<T> {
         }
         Ok(())
     }
+}
 
+impl<T: Deserial> Deserial for Vec<T> {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let len: u32 = source.get()?;
         // FIXME: Vector deserialization should not allocate blindly, but
@@ -199,7 +223,7 @@ impl<T: Serialize> Serialize for Vec<T> {
 /// sufficient for all realistic use cases in smart contracts.
 /// They are serialized in canonical order (increasing) but deserialization
 /// only requirenes key uniqueness, no order.
-impl<K: Serialize + Ord, V: Serialize> Serialize for collections::BTreeMap<K, V> {
+impl<K: Serial + Ord, V: Serial> Serial for collections::BTreeMap<K, V> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;
         len.serial(out)?;
@@ -209,7 +233,9 @@ impl<K: Serialize + Ord, V: Serialize> Serialize for collections::BTreeMap<K, V>
         }
         Ok(())
     }
+}
 
+impl<K: Deserial + Ord, V: Deserial> Deserial for collections::BTreeMap<K, V> {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let len: u32 = source.get()?;
         let mut map = collections::BTreeMap::<K, V>::new();
@@ -228,7 +254,7 @@ impl<K: Serialize + Ord, V: Serialize> Serialize for collections::BTreeMap<K, V>
 /// sufficient for all realistic use cases in smart contracts.
 /// They are serialized in canonical order (increasing), but deserialization
 /// does not require any order, only uniqueness.
-impl<K: Serialize + Ord> Serialize for collections::BTreeSet<K> {
+impl<K: Serial + Ord> Serial for collections::BTreeSet<K> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;
         len.serial(out)?;
@@ -237,7 +263,9 @@ impl<K: Serialize + Ord> Serialize for collections::BTreeSet<K> {
         }
         Ok(())
     }
+}
 
+impl<K: Deserial + Ord> Deserial for collections::BTreeSet<K> {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let len: u32 = source.get()?;
         let mut map = collections::BTreeSet::<K>::new();
@@ -346,14 +374,14 @@ impl Write for Cursor<&mut Vec<u8>> {
     }
 }
 
-pub fn to_bytes<S: Serialize>(x: &S) -> Vec<u8> {
+pub fn to_bytes<S: Serial>(x: &S) -> Vec<u8> {
     let mut out = Vec::new();
     let mut cursor = Cursor::new(&mut out);
     x.serial(&mut cursor).expect("Writing to a vector should succeed.");
     out
 }
 
-pub fn from_bytes<S: Serialize>(source: &[u8]) -> Result<S, ()> {
+pub fn from_bytes<S: Deserial>(source: &[u8]) -> Result<S, ()> {
     let mut cursor = Cursor::new(source);
     cursor.get()
 }
