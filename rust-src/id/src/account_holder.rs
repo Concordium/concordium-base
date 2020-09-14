@@ -796,11 +796,7 @@ fn compute_pok_reg_id<C: Curve>(
     rand_1.add_assign(&cred_counter_rand);
     // reg_id is the commitment to reg_id_exponent with randomness 0
     // the right-hand side of the equation is commitment to 1 with randomness 0
-    let values = [
-        Value::new(k),
-        Value::new(reg_id_exponent),
-        Value::new(C::Scalar::one()),
-    ];
+    let values = [Value::new(k), Value::new(reg_id_exponent)];
     let rands = [
         PedersenRandomness::new(rand_1),
         PedersenRandomness::zero(),

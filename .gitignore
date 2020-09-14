@@ -30,7 +30,6 @@ rust-bins/target
 mobile_wallet/target/
 pkg
 /idiss/node
-/idiss/Cargo.lock
 idiss/target
 *.hie
 *.iml
