@@ -67,8 +67,8 @@ impl<'a> From<&'a SecretKey> for PublicKey {
         let mut hash: [u8; 64] = [0u8; 64];
         let mut digest: [u8; 32] = [0u8; 32];
 
-        h.input(secret_key.as_bytes());
-        hash.copy_from_slice(h.result().as_slice());
+        h.update(secret_key.as_bytes());
+        hash.copy_from_slice(h.finalize().as_slice());
 
         digest.copy_from_slice(&hash[..32]);
 
@@ -112,18 +112,18 @@ impl PublicKey {
     pub fn hash_to_curve(&self, message: &[u8]) -> Option<EdwardsPoint> {
         let mut p_candidate_bytes = [0u8; 32];
         let mut h: Sha512 = Sha512::new();
-        h.input(SUITE_STRING);
-        h.input(ONE_STRING);
-        h.input(&self.as_bytes()); // PK_string
-        h.input(&message); // alpha_string
+        h.update(SUITE_STRING);
+        h.update(ONE_STRING);
+        h.update(&self.as_bytes()); // PK_string
+        h.update(&message); // alpha_string
         for ctr in 0..=u8::max_value() {
             // Each iteration fails, indpendent of other iterations, with probability about
             // a half. This happens if the digest does not represent a point on
             // the curve when decoded as in https://tools.ietf.org/html/rfc8032#section-5.1.3
             let mut attempt_h = h.clone();
-            attempt_h.input(ctr.to_le_bytes()); // ctr_string
-            attempt_h.input(ZERO_STRING);
-            let hash = attempt_h.result();
+            attempt_h.update(ctr.to_le_bytes()); // ctr_string
+            attempt_h.update(ZERO_STRING);
+            let hash = attempt_h.finalize();
             p_candidate_bytes.copy_from_slice(&hash[..32]);
             let p_candidate = CompressedEdwardsY(p_candidate_bytes);
             if let Some(ed_point) = p_candidate.decompress() {

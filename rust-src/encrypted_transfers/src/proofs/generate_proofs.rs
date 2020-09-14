@@ -145,7 +145,9 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     }
 
     // For Bulletproofs
-    let gens = context.bulletproof_generators();
+    // The number of generators is the total number of bits used to encode the
+    // value, i.e., 64 since amounts are 64-bit values.
+    let gens = context.bulletproof_generators().take(64);
     let generator = context.encryption_in_exponent_generator();
 
     let s_prime = u64::from(s) - u64::from(a);

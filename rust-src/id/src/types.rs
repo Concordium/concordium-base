@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use base58check::*;
-use bulletproofs::range_proof::Generators;
+use bulletproofs::range_proof::{Generators, RangeProof};
 use byteorder::ReadBytesExt;
 use crypto_common::*;
 use crypto_common_derive::*;
@@ -17,7 +17,7 @@ use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
 use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
 use either::Either;
-use elgamal::{Cipher, Message, SecretKey as ElgamalSecretKey};
+use elgamal::{ChunkSize, Cipher, Message, SecretKey as ElgamalSecretKey};
 use ff::Field;
 use hex::{decode, encode};
 use pedersen_scheme::{
@@ -47,7 +47,10 @@ pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
 /// This is currently the number required, since the only
 /// place these are used is for encrypted amounts.
-pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 2;
+pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
+
+/// Chunk size for encryption of prf key
+pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct AccountAddress([u8; ACCOUNT_ADDRESS_SIZE]);
@@ -118,7 +121,7 @@ impl AccountAddress {
     pub fn new<C: Curve>(reg_id: &C) -> Self {
         let mut out = [0; ACCOUNT_ADDRESS_SIZE];
         let hasher = Sha256::new().chain(&to_bytes(reg_id));
-        out.copy_from_slice(&hasher.result());
+        out.copy_from_slice(&hasher.finalize());
         AccountAddress(out)
     }
 }
@@ -631,8 +634,13 @@ pub struct AccCredentialInfo<C: Curve> {
 #[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
-    #[serde(rename = "encPrfKeyShare")]
-    pub enc_prf_key_share: Cipher<C>,
+    /// Encryption in chunks (in little endian) of the PRF key share
+    #[serde(
+        rename = "encPrfKeyShare",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub enc_prf_key_share: [Cipher<C>; 8],
     /// Witness to the proof that the computed commitment to the share
     /// contains the same value as the encryption
     /// the commitment to the share is not sent but computed from
@@ -697,6 +705,9 @@ pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// second commitment to the prf key (hidden in cmm_prf_sharing_coeff)
     /// are hiding the same value.
     pub commitments_prf_same: com_eq_different_groups::Witness<P::G1, C>,
+    /// Bulletproofs for showing that chunks are small so that encryption
+    /// of the prf key can be decrypted
+    pub bulletproofs: Vec<RangeProof<C>>,
 }
 
 /// A type alias for the combined proofs relating to the shared encryption of
@@ -944,6 +955,8 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// deploying proofs on own account.
     /// We could consider replacing this proof by just a list of signatures.
     pub proof_acc_sk: AccountOwnershipProof,
+    /// Proof that cred_counter is less than or equal to max_accounts
+    pub cred_counter_less_than_max_accounts: RangeProof<C>,
 }
 
 // This is an unfortunate situation, but we need to manually write a
@@ -960,6 +973,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for CredDeploymentPro
         tmp_out.put(&self.proof_ip_sig);
         tmp_out.put(&self.proof_reg_id);
         tmp_out.put(&self.proof_acc_sk);
+        tmp_out.put(&self.cred_counter_less_than_max_accounts);
         let len: u32 = tmp_out.len() as u32; // safe
         out.put(&len);
         out.write_all(&tmp_out).expect("Writing to buffer is safe.");
@@ -980,6 +994,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
         let proof_ip_sig = limited.get()?;
         let proof_reg_id = limited.get()?;
         let proof_acc_sk = limited.get()?;
+        let cred_counter_less_than_max_accounts = limited.get()?;
         if limited.limit() == 0 {
             Ok(CredDeploymentProofs {
                 sig,
@@ -989,6 +1004,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
                 proof_ip_sig,
                 proof_reg_id,
                 proof_acc_sk,
+                cred_counter_less_than_max_accounts,
             })
         } else {
             bail!("Length information is inaccurate. Credential proofs not valid.")
@@ -1191,7 +1207,7 @@ impl SerdeSerialize for CredentialAccount {
 impl<'de> SerdeDeserialize<'de> for CredentialAccount {
     fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
         // expect a map, but also handle string
-        des.deserialize_map(CredentialAccountVisitor)
+        des.deserialize_any(CredentialAccountVisitor)
     }
 }
 
