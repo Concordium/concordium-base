@@ -148,12 +148,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     transcript.append_message(b"cmm_sc", &to_bytes(&cmm_sc));
     transcript.append_message(b"cmm_prf", &to_bytes(&cmm_prf));
     transcript.append_message(b"cmm_prf_sharing_coeff", &to_bytes(&cmm_prf_sharing_coeff));
-    let mut ro = RandomOracle::domain("PreIdentityProof")
-        .append(&context.global_context)
-        .append(&choice_ar_parameters)
-        .append(&cmm_sc)
-        .append(&cmm_prf)
-        .append(&cmm_prf_sharing_coeff);
 
     for item in prf_key_data.iter() {
         let u8_chunk_size = u8::from(CHUNK_SIZE);
@@ -192,7 +186,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             enc_prf_key_share: item.encrypted_share,
             proof_com_enc_eq,
         }));
-        ro.add(&item.encrypted_share);
         transcript.append_message(b"encrypted_share", &to_bytes(&item.encrypted_share));
 
         let cmm_key_bulletproof = PedersenKey {
@@ -222,8 +215,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     });
 
     let secret = (secret, replicated_secrets);
-    ro = ro.append(&bulletproofs);
-    let proof = prove(ro, &prover, secret, &mut csprng)?;
+    transcript.append_message(b"bulletproofs", &to_bytes(&bulletproofs));
+    let proof = prove(transcript, &prover, secret, &mut csprng)?;
 
     let ip_ar_data = ip_ar_data
         .iter()
