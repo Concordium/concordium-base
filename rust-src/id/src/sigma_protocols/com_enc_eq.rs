@@ -44,6 +44,8 @@ pub struct ComEncEq<C: Curve> {
     pub pub_key: ElGamalPublicKey<C>,
     /// Commitment key with which the commitment was made.
     pub cmm_key: CommitmentKey<C>,
+    /// Generator used for encryption in the exponent
+    pub encryption_in_exponent_generator: C,
 }
 
 #[allow(non_snake_case)]
@@ -74,7 +76,11 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         csprng: &mut R,
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let beta = Value::generate_non_zero(csprng);
-        let (rand_cipher, alpha) = self.pub_key.encrypt_exponent_rand(csprng, &beta);
+        let (rand_cipher, alpha) = self.pub_key.encrypt_exponent_rand_given_generator(
+            &beta,
+            &self.encryption_in_exponent_generator,
+            csprng,
+        );
         let (rand_cmm, gamma) = self.cmm_key.commit(&beta, csprng);
         Some(((rand_cipher, rand_cmm), (beta, alpha, gamma)))
     }
@@ -119,6 +125,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         let h_1 = self.pub_key.key;
         let g = self.cmm_key.g;
         let h = self.cmm_key.h;
+        let h_in_exponent = self.encryption_in_exponent_generator;
 
         let z_1 = witness.witness.0;
         let z_2 = witness.witness.1;
@@ -136,7 +143,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
            //    .mul_by_scalar(&z_1)
            //    .plus_point(&e_1.mul_by_scalar(&challenge));
         let a_2 = {
-            let bases = [g_1, h_1, e_2];
+            let bases = [h_in_exponent, h_1, e_2];
             let powers = [z_2, z_1, *challenge];
             multiexp(&bases, &powers)
         }; // g_1
@@ -166,7 +173,9 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
         let comm_key = CommitmentKey::generate(csprng);
 
         let x = Value::generate_non_zero(csprng);
-        let (cipher, elgamal_randomness) = public_key.encrypt_exponent_rand(csprng, &x);
+        let h_in_exponent = C::generate(csprng);
+        let (cipher, elgamal_randomness) =
+            public_key.encrypt_exponent_rand_given_generator(&x, &h_in_exponent, csprng);
         let (commitment, randomness) = comm_key.commit(&x, csprng);
         let secret = ComEncEqSecret {
             value:         x,
@@ -178,6 +187,7 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
             commitment,
             pub_key: public_key,
             cmm_key: comm_key,
+            encryption_in_exponent_generator: h_in_exponent,
         };
         f(com_enc_eq, secret, csprng)
     }
