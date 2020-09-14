@@ -74,7 +74,7 @@ fn generate_rand_scalar() -> Scalar {
     let mut bytes = [0u8; 32];
     csprng.fill_bytes(&mut bytes);
     let mut hasher = Sha512::new();
-    hasher.input(&bytes);
+    hasher.update(&bytes);
     Scalar::from_hash(hasher)
 }
 
@@ -82,8 +82,8 @@ fn scalar_from_secret_key(secret_key: &SecretKey) -> Scalar {
     let mut h = Sha512::new();
     let mut hash: [u8; 64] = [0u8; 64];
     let mut bits: [u8; 32] = [0u8; 32];
-    h.input(secret_key.as_bytes());
-    hash.copy_from_slice(h.result().as_slice());
+    h.update(secret_key.as_bytes());
+    hash.copy_from_slice(h.finalize().as_slice());
     bits.copy_from_slice(&hash[..32]);
     bits[0] &= 248;
     bits[31] &= 127;

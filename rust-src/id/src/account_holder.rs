@@ -6,13 +6,19 @@ use crate::{
     types::*,
     utils,
 };
+use bulletproofs::{
+    inner_product_proof::inner_product,
+    range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal},
+};
+use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use either::Either;
-use elgamal::Cipher;
+use elgamal::{multicombine, Cipher};
 use failure::Fallible;
 use ff::Field;
+use merlin::Transcript;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey as PedersenKey,
     randomness::Randomness as PedersenRandomness, value::Value,
@@ -47,8 +53,13 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let ar_commitment_key = &context.global_context.on_chain_commitment_key;
 
-    let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) =
-        compute_sharing_data(&prf_value, &context.ars_infos, threshold, ar_commitment_key);
+    let (prf_key_data, cmm_prf_sharing_coeff, cmm_coeff_randomness) = compute_sharing_data_prf(
+        &prf_value,
+        &context.ars_infos,
+        threshold,
+        ar_commitment_key,
+        &context.global_context,
+    );
     let number_of_ars = context.ars_infos.len();
     let mut ip_ar_data = Vec::with_capacity(number_of_ars);
 
@@ -125,19 +136,56 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let mut replicated_provers = Vec::with_capacity(prf_key_data.len());
     let mut replicated_secrets = Vec::with_capacity(prf_key_data.len());
+    let mut bulletproofs = Vec::with_capacity(prf_key_data.len());
+    // Extract identities of the chosen ARs for use in PIO
+    let ar_identities = context.ars_infos.keys().copied().collect();
+    let choice_ar_parameters = ChoiceArParameters {
+        ar_identities,
+        threshold,
+    };
+    let mut transcript = Transcript::new(r"PreIdentityProof".as_ref());
+    transcript.append_message(b"ctx", &to_bytes(&context.global_context));
+    transcript.append_message(b"choice_ar_parameters", &to_bytes(&choice_ar_parameters));
+    transcript.append_message(b"cmm_sc", &to_bytes(&cmm_sc));
+    transcript.append_message(b"cmm_prf", &to_bytes(&cmm_prf));
+    transcript.append_message(b"cmm_prf_sharing_coeff", &to_bytes(&cmm_prf_sharing_coeff));
+    let mut ro = RandomOracle::domain("PreIdentityProof")
+        .append(&context.global_context)
+        .append(&choice_ar_parameters)
+        .append(&cmm_sc)
+        .append(&cmm_prf)
+        .append(&cmm_prf_sharing_coeff);
 
     for item in prf_key_data.iter() {
+        let u8_chunk_size = u8::from(CHUNK_SIZE);
+        let two_chunksize = C::scalar_from_u64(1 << u8_chunk_size);
+        let mut power_of_two = C::Scalar::one();
+        let mut scalars = Vec::with_capacity(item.encrypted_share.len());
+        for _ in 0..item.encrypted_share.len() {
+            scalars.push(power_of_two);
+            power_of_two.mul_assign(&two_chunksize);
+        }
+        let combined_ciphers = multicombine(&item.encrypted_share, &scalars);
+        let rands_as_scalars: Vec<C::Scalar> = item
+            .encryption_randomness
+            .iter()
+            .map(|x| **x)
+            .collect::<Vec<_>>();
+        let combined_rands = inner_product::<C::Scalar>(&rands_as_scalars, &scalars);
+        let combined_encryption_randomness = elgamal::Randomness::new(combined_rands);
         let secret = com_enc_eq::ComEncEqSecret {
             value:         item.share.clone(),
-            elgamal_rand:  item.encryption_randomness.clone(),
+            elgamal_rand:  combined_encryption_randomness,
             pedersen_rand: item.randomness_cmm_to_share.clone(),
         };
         // FIXME: Need some context in the challenge computation.
+        let h_in_exponent = *context.global_context.encryption_in_exponent_generator();
         let item_prover = com_enc_eq::ComEncEq {
-            cipher:     item.encrypted_share,
+            cipher: combined_ciphers,
             commitment: item.cmm_to_share,
-            pub_key:    item.ar_public_key,
-            cmm_key:    *ar_commitment_key,
+            pub_key: item.ar_public_key,
+            cmm_key: *ar_commitment_key,
+            encryption_in_exponent_generator: h_in_exponent,
         };
         replicated_provers.push(item_prover);
         replicated_secrets.push(secret);
@@ -145,18 +193,38 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             enc_prf_key_share: item.encrypted_share,
             proof_com_enc_eq,
         }));
-    }
+        ro.add(&item.encrypted_share);
+        transcript.append_message(b"encrypted_share", &to_bytes(&item.encrypted_share));
 
-    // Extract identities of the chosen ARs for use in PIO
-    let ar_identities = context.ars_infos.keys().copied().collect();
+        let cmm_key_bulletproof = PedersenKey {
+            g: h_in_exponent,
+            h: item.ar_public_key.key,
+        };
+        let rand_bulletproof = item
+            .encryption_randomness
+            .iter()
+            .map(|x| PedersenRandomness::new(*x.as_ref()))
+            .collect::<Vec<_>>();
+        let bulletproof = bulletprove(
+            &mut transcript,
+            &mut csprng,
+            u8::from(CHUNK_SIZE),
+            item.share_in_chunks.len() as u8,
+            &item.share_in_chunks,
+            &context.global_context.bulletproof_generators().take(32 * 8),
+            &cmm_key_bulletproof,
+            &rand_bulletproof,
+        )?;
+        bulletproofs.push(bulletproof);
+    }
 
     let prover = prover.add_prover(ReplicateAdapter {
         protocols: replicated_provers,
     });
 
     let secret = (secret, replicated_secrets);
-
-    let proof = prove(RandomOracle::empty(), &prover, secret, &mut csprng)?;
+    ro = ro.append(&bulletproofs);
+    let proof = prove(ro, &prover, secret, &mut csprng)?;
 
     let ip_ar_data = ip_ar_data
         .iter()
@@ -164,19 +232,17 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         .map(|(&(ar_id, f), w)| (ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
     let poks = PreIdentityProof {
-        challenge:              proof.challenge,
-        id_cred_sec_witness:    proof.witness.w1.w1.w1,
+        challenge: proof.challenge,
+        id_cred_sec_witness: proof.witness.w1.w1.w1,
         commitments_same_proof: proof.witness.w1.w1.w2,
-        commitments_prf_same:   proof.witness.w1.w2,
+        commitments_prf_same: proof.witness.w1.w2,
+        bulletproofs,
     };
     // attribute list
     let prio = PreIdentityObject {
         id_cred_pub,
         ip_ar_data,
-        choice_ar_parameters: ChoiceArParameters {
-            ar_identities,
-            threshold,
-        },
+        choice_ar_parameters,
         cmm_sc,
         cmm_prf,
         cmm_prf_sharing_coeff,
@@ -203,7 +269,7 @@ pub struct SingleArData<'a, C: Curve> {
     encryption_randomness: elgamal::Randomness<C>,
     cmm_to_share: Commitment<C>,
     randomness_cmm_to_share: PedersenRandomness<C>,
-    ar_public_key: elgamal::PublicKey<C>,
+    // ar_public_key: elgamal::PublicKey<C>,
 }
 
 type SharingData<'a, C> = (
@@ -259,6 +325,94 @@ pub fn compute_sharing_data<'a, C: Curve>(
             ar,
             share,
             encrypted_share: cipher,
+            encryption_randomness: rnd2,
+            cmm_to_share: cmm,
+            randomness_cmm_to_share: rnd,
+            // ar_public_key: pk,
+        };
+        ar_data.push(single_ar_data)
+    }
+    (ar_data, cmm_sharing_coefficients, cmm_coeff_randomness)
+}
+
+/// Convenient data structure to collect data related to a single AR
+/// when encrypting the prf key in chunks
+pub struct SingleArDataPrf<'a, C: Curve> {
+    /// The relevant AR
+    ar: &'a ArInfo<C>,
+    /// The AR's share of the PRF key
+    share: Value<C>,
+    /// The share split in 8 chunks (written in little-endian)
+    share_in_chunks: [C::Scalar; 8],
+    /// Encryption of the share in chunks
+    encrypted_share: [Cipher<C>; 8],
+    /// Encryption randomness used to encrypt the share
+    encryption_randomness: [elgamal::Randomness<C>; 8],
+    /// Commitment to the share
+    cmm_to_share: Commitment<C>,
+    /// Randomness used in commitment to share
+    randomness_cmm_to_share: PedersenRandomness<C>,
+    /// AR's public key used to encrypt share
+    ar_public_key: elgamal::PublicKey<C>,
+}
+
+type SharingDataPrf<'a, C> = (
+    Vec<SingleArDataPrf<'a, C>>,
+    Vec<Commitment<C>>, /* Commitments to the coefficients of sharing polynomial S + b1 X + b2
+                         * X^2... */
+    Vec<PedersenRandomness<C>>,
+);
+
+/// A function to compute sharing data for a single value.
+pub fn compute_sharing_data_prf<'a, C: Curve>(
+    shared_scalar: &Value<C>,                           // Value to be shared.
+    ar_parameters: &'a BTreeMap<ArIdentity, ArInfo<C>>, // Chosen anonimity revokers.
+    threshold: Threshold,                               // Anonymity revocation threshold.
+    commitment_key: &PedersenKey<C>,
+    global_context: &GlobalContext<C>, // commitment key
+) -> SharingDataPrf<'a, C> {
+    let n = ar_parameters.len() as u32;
+    let mut csprng = thread_rng();
+    // first commit to the scalar
+    let (cmm_scalar, cmm_scalar_rand) = commitment_key.commit(&shared_scalar, &mut csprng);
+    // We evaluate the polynomial at ar_identities.
+    let share_points = ar_parameters.keys().copied();
+    // share the scalar on ar_identity points.
+    let sharing_data = share::<C, _, _, _>(&shared_scalar, share_points, threshold, &mut csprng);
+    // commitments to the sharing coefficients
+    let mut cmm_sharing_coefficients: Vec<Commitment<C>> = Vec::with_capacity(threshold.into());
+    // first coefficient is the shared scalar
+    cmm_sharing_coefficients.push(cmm_scalar);
+    // randomness values corresponding to the commitments
+    let mut cmm_coeff_randomness = Vec::with_capacity(threshold.into());
+    // first randomness is the one used in commiting to the scalar
+    cmm_coeff_randomness.push(cmm_scalar_rand);
+    // fill the rest
+    for coeff in sharing_data.coefficients.iter() {
+        let (cmm, rnd) = commitment_key.commit(coeff, &mut csprng);
+        cmm_sharing_coefficients.push(cmm);
+        cmm_coeff_randomness.push(rnd);
+    }
+    // a vector of Ar data
+    let mut ar_data: Vec<SingleArDataPrf<C>> = Vec::with_capacity(n as usize);
+    // The correctness of this relies on the invariant that the map of anonymity
+    // revokers has an anonymity revoker with ArIdentity = x at key x.
+    for (ar, share) in izip!(ar_parameters.values(), sharing_data.shares.into_iter()) {
+        let si = ar.ar_identity;
+        let pk = ar.ar_public_key;
+        // encrypt the share
+        // let (cipher, rnd2) = pk.encrypt_exponent_rand(&mut csprng, &share);
+        let (ciphers, rnd2, share_in_chunks) =
+            utils::encrypt_prf_share(global_context, &pk, &share, &mut csprng);
+        // compute the commitment to this share from the commitment to the coeff
+        let (cmm, rnd) =
+            commitment_to_share_and_rand(si, &cmm_sharing_coefficients, &cmm_coeff_randomness);
+        // fill Ar data
+        let single_ar_data = SingleArDataPrf {
+            ar,
+            share,
+            share_in_chunks,
+            encrypted_share: ciphers,
             encryption_randomness: rnd2,
             cmm_to_share: cmm,
             randomness_cmm_to_share: rnd,
@@ -426,7 +580,9 @@ where
     // Compute the challenge prefix by hashing the values.
     // FIXME: We should do something different here.
     // Eventually we'll have to include the genesis hash.
-    let ro = RandomOracle::domain("credential").append(&cred_values);
+    let ro = RandomOracle::domain("credential")
+        .append(&cred_values)
+        .append(&context.global_context);
 
     let mut id_cred_pub_share_numbers = Vec::with_capacity(number_of_ars);
     let mut id_cred_pub_provers = Vec::with_capacity(number_of_ars);
@@ -441,10 +597,11 @@ where
         };
 
         let item_prover = com_enc_eq::ComEncEq {
-            cipher:     item.encrypted_share,
+            cipher: item.encrypted_share,
             commitment: item.cmm_to_share,
-            pub_key:    item.ar.ar_public_key,
-            cmm_key:    context.global_context.on_chain_commitment_key,
+            pub_key: item.ar.ar_public_key,
+            cmm_key: context.global_context.on_chain_commitment_key,
+            encryption_in_exponent_generator: item.ar.ar_public_key.generator,
         };
 
         id_cred_pub_share_numbers.push(item.ar.ar_identity);
@@ -504,6 +661,25 @@ where
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
+    let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
+    transcript.append_message(b"cred_values", &to_bytes(&cred_values));
+    transcript.append_message(b"global_context", &to_bytes(&context.global_context));
+    transcript.append_message(b"cred_values", &to_bytes(&proof));
+    let cred_counter_less_than_max_accounts = match prove_less_than_or_equal(
+        &mut transcript,
+        &mut csprng,
+        8,
+        u64::from(cred_counter),
+        u64::from(alist.max_accounts),
+        &context.global_context.bulletproof_generators(),
+        &context.global_context.on_chain_commitment_key,
+        &commitment_rands.cred_counter_rand,
+        &commitment_rands.max_accounts_rand,
+    ) {
+        Some(x) => x,
+        None => bail!("Cannot produce proof that cred_counter <= max_accounts."),
+    };
+
     // Proof of knowledge of the secret keys of the account.
     // TODO: This might be replaced by just signatures.
     // What we do now is take all the keys in acc_data and provide a proof of
@@ -533,6 +709,7 @@ where
         proof_reg_id: proof.witness.w1.w1,
         proof_ip_sig: proof.witness.w1.w2,
         proof_acc_sk,
+        cred_counter_less_than_max_accounts,
     };
 
     let info = CredentialDeploymentInfo {
@@ -923,10 +1100,10 @@ mod tests {
                 &data.cmm_to_share,
             );
             assert!(cmm_ok, "ArData cmm_to_share is not valid");
-            assert_eq!(
-                data.ar_public_key, data.ar_public_key,
-                "ArData ar_public_key is invalid"
-            );
+            // assert_eq!(
+            //     data.ar_public_key, data.ar_public_key,
+            //     "ArData ar_public_key is invalid"
+            // );
         }
 
         // Add check of commitment to polynomial coefficients and randomness

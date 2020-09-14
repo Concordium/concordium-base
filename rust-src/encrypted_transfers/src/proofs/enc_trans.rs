@@ -114,7 +114,7 @@ pub struct EncTransState<C: Curve> {
 
 /// This function takes scalars x_1, ..., x_n and returns
 /// \sum_{i=1}^n 2^{(chunk_size)*(i-1)} (x_i)
-fn linear_combination_with_powers_of_two<C: Curve>(
+pub fn linear_combination_with_powers_of_two<C: Curve>(
     scalars: &[C::Scalar],
     chunk_size: ChunkSize,
 ) -> C::Scalar {

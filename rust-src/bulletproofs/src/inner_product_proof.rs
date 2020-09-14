@@ -4,7 +4,7 @@ use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
 use random_oracle::RandomOracle;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Debug)]
 pub struct InnerProductProof<C: Curve> {
     #[size_length = 4]
     pub lr_vec: Vec<(C, C)>,
