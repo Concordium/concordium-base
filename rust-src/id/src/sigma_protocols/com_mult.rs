@@ -10,7 +10,7 @@ use pedersen_scheme::{Commitment, CommitmentKey, Randomness, Value};
 use random_oracle::{Challenge, RandomOracle};
 
 pub struct ComMultSecret<T: Curve> {
-    pub values: [Value<T>; 3],
+    pub values: [Value<T>; 2],
     pub rands:  [Randomness<T>; 3],
 }
 
@@ -27,17 +27,17 @@ pub struct ComMult<C: Curve> {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct Witness<C: Curve> {
     /// The witness, expanded using the same notation as in the specification.
-    ss: [C::Scalar; 3],
-    ts: [C::Scalar; 3],
+    ss: [C::Scalar; 2],
+    ts: [C::Scalar; 2],
     t: C::Scalar,
 }
 
 #[allow(non_snake_case)]
 impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
-    type CommitMessage = ([Commitment<C>; 3], Commitment<C>);
+    type CommitMessage = ([Commitment<C>; 2], Commitment<C>);
     type ProtocolChallenge = C::Scalar;
     // alpha's, R_i's, R's
-    type ProverState = ([Value<C>; 3], [Randomness<C>; 3], Randomness<C>);
+    type ProverState = ([Value<C>; 2], [Randomness<C>; 2], Randomness<C>);
     type ProverWitness = Witness<C>;
     type SecretData = ComMultSecret<C>;
 
@@ -58,21 +58,16 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
     ) -> Option<(Self::CommitMessage, Self::ProverState)> {
         let alpha_1 = Value::generate_non_zero(csprng);
         let alpha_2 = Value::generate_non_zero(csprng);
-        let alpha_3 = Value::generate_non_zero(csprng);
 
         let (v_1, cR_1) = self.cmm_key.commit(&alpha_1, csprng);
         let (v_2, cR_2) = self.cmm_key.commit(&alpha_2, csprng);
-        let (v_3, cR_3) = self.cmm_key.commit(&alpha_3, csprng);
 
         let cmm_key_1 = CommitmentKey {
             g: self.cmms[0].0,
             h: self.cmm_key.h,
         };
         let (v, cR) = cmm_key_1.commit(&alpha_2, csprng);
-        Some((
-            ([v_1, v_2, v_3], v),
-            ([alpha_1, alpha_2, alpha_3], [cR_1, cR_2, cR_3], cR),
-        ))
+        Some((([v_1, v_2], v), ([alpha_1, alpha_2], [cR_1, cR_2], cR)))
     }
 
     #[inline]
@@ -82,28 +77,30 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
     ) -> Option<Self::ProverWitness> {
-        let mut ss = [*challenge; 3];
-        let mut ts = [*challenge; 3];
+        let mut ss = [*challenge; 2];
+        let mut ts = [*challenge; 2];
 
         let alphas = state.0;
         let rands = state.1;
         let cR = state.2;
-        for i in 0..3 {
-            ss[i].mul_assign(&secret.values[i]);
-            ss[i].negate();
-            ss[i].add_assign(&alphas[i]);
+        for i in 0..2 {
+            ss[i].mul_assign(&secret.values[i]); // c * x_i
+            ss[i].negate(); // 
+                            // - c * x_i
+            ss[i].add_assign(&alphas[i]); // alpha - c * x_i
 
-            ts[i].mul_assign(&secret.rands[i]);
-            ts[i].negate();
-            ts[i].add_assign(&rands[i]);
+            ts[i].mul_assign(&secret.rands[i]); // c * r_i
+            ts[i].negate(); // 
+                            // - c * r_i
+            ts[i].add_assign(&rands[i]); // rTilde_i - c * r_i
         }
 
-        // compute r_3 - r_1a_2
+        // compute r_3 - r_1 * x_2
         let mut r = C::Scalar::one();
         r.mul_assign(&secret.rands[0]); // r_1
-        r.mul_assign(&secret.values[1]); // r_1 * a_2
+        r.mul_assign(&secret.values[1]); // r_1 * x_2
         r.negate();
-        r.add_assign(&secret.rands[2]);
+        r.add_assign(&secret.rands[2]); // r_3 - r_1 * x_2
 
         let mut t = r;
         t.mul_assign(challenge);
@@ -119,31 +116,24 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         challenge: &Self::ProtocolChallenge,
         witness: &Self::ProverWitness,
     ) -> Option<Self::CommitMessage> {
-        let mut points = [Commitment(C::zero_point()); 3];
+        let mut points = [Commitment(C::zero_point()); 2];
         for (i, (s_i, t_i)) in izip!(witness.ss.iter(), witness.ts.iter()).enumerate() {
             points[i] = {
                 let bases = [self.cmms[i].0, self.cmm_key.g, self.cmm_key.h];
                 let powers = [*challenge, *s_i, *t_i];
                 let cmm = multiexp(&bases, &powers);
-                Commitment(cmm)
-            } // Commitment(
-              //     self.cmms[i]
-              //         .mul_by_scalar(challenge)
-              //         .plus_point(&self.cmm_key.hide_worker(s_i, t_i)),
-              // );
+                Commitment(cmm) // g^s_i * h^t_i * C_i^c
+            }
         }
         let h = &self.cmm_key.h;
         let s_2 = &witness.ss[1];
         let cC_3 = self.cmms[2];
         let cC_1 = self.cmms[0];
         let v = {
-            let bases = [cC_3.0, cC_1.0, *h];
-            let powers = [*challenge, *s_2, witness.t];
-            multiexp(&bases, &powers)
-        }; // cC_3
-           //    .mul_by_scalar(challenge)
-           //    .plus_point(&cC_1.mul_by_scalar(s_2))
-           //    .plus_point(&h.mul_by_scalar(&witness.t));
+            let bases = [cC_1.0, *h, cC_3.0];
+            let powers = [*s_2, witness.t, *challenge];
+            multiexp(&bases, &powers) // C_1^s_2 * h^t * C_3^c
+        };
         Some((points, Commitment(v)))
     }
 
@@ -159,14 +149,14 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
         let mut a_3 = C::Scalar::one();
         a_3.mul_assign(&a_1);
         a_3.mul_assign(&a_2);
-        let a_3 = Value::new(a_3);
+        let a_3: Value<C> = Value::new(a_3);
 
         let (cmm_1, r_1) = cmm_key.commit(&a_1, csprng);
         let (cmm_2, r_2) = cmm_key.commit(&a_2, csprng);
         let (cmm_3, r_3) = cmm_key.commit(&a_3, csprng);
 
         let secret = ComMultSecret {
-            values: [a_1, a_2, a_3],
+            values: [a_1, a_2],
             rands:  [r_1, r_2, r_3],
         };
 
