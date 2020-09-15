@@ -198,7 +198,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         };
         let gens = &context.global_context.bulletproof_generators().take(32 * 8);
         let commitments = ciphers.iter().map(|x| Commitment(x.1)).collect::<Vec<_>>();
-        ro = ro.append_bytes(&to_bytes(&ciphers));
+        ro.add(&ciphers);
         transcript.append_message(b"encrypted_share", &to_bytes(&ciphers));
         if verify_efficient(&mut transcript, 32, &commitments, &proof, gens, &keys).is_err() {
             return Err(Reason::IncorrectProof);

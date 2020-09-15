@@ -121,7 +121,7 @@ impl AccountAddress {
     pub fn new<C: Curve>(reg_id: &C) -> Self {
         let mut out = [0; ACCOUNT_ADDRESS_SIZE];
         let hasher = Sha256::new().chain(&to_bytes(reg_id));
-        out.copy_from_slice(&hasher.result());
+        out.copy_from_slice(&hasher.finalize());
         AccountAddress(out)
     }
 }
@@ -635,7 +635,11 @@ pub struct AccCredentialInfo<C: Curve> {
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
     /// Encryption in chunks (in little endian) of the PRF key share
-    #[serde(rename = "encPrfKeyShare")]
+    #[serde(
+        rename = "encPrfKeyShare",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
     pub enc_prf_key_share: [Cipher<C>; 8],
     /// Witness to the proof that the computed commitment to the share
     /// contains the same value as the encryption
@@ -1219,7 +1223,7 @@ impl SerdeSerialize for CredentialAccount {
 impl<'de> SerdeDeserialize<'de> for CredentialAccount {
     fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
         // expect a map, but also handle string
-        des.deserialize_map(CredentialAccountVisitor)
+        des.deserialize_any(CredentialAccountVisitor)
     }
 }
 
