@@ -92,9 +92,24 @@ impl<C: Curve> Cipher<C> {
     pub fn scale_u64(&self, e: u64) -> Self { self.scale(&C::scalar_from_u64(e)) }
 }
 
-pub fn multicombine<C: Curve>(ciphers: &[Cipher<C>], scalars: &[C::Scalar]) -> Cipher<C>{
+/// Perform a "linear combination in the exponent", i.e., multiply each of the
+/// ciphers with the corresponding scalar, and sum them together. If cipher C_i
+/// ciphers is an encryption in the exponent of the value v_i, then the
+/// resulting cipher is a valid encryption in the exponent of the value
+/// \sum_i v_i \cdot s_i where s_i is the i-th scalar.
+///
+/// This function assumes the two slices have the same length.
+pub fn multicombine<C: Curve>(ciphers: &[Cipher<C>], scalars: &[C::Scalar]) -> Cipher<C> {
+    assert_eq!(
+        ciphers.len(),
+        scalars.len(),
+        "multicombine precondition violation: input slices have different length."
+    );
     let (ciphers_0, ciphers_1): (Vec<_>, Vec<_>) = ciphers.iter().map(|x| (x.0, x.1)).unzip();
-    Cipher(multiexp(&ciphers_0, &scalars), multiexp(&ciphers_1, &scalars))
+    Cipher(
+        multiexp(&ciphers_0, &scalars),
+        multiexp(&ciphers_1, &scalars),
+    )
 }
 
 #[cfg(test)]

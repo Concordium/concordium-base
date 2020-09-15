@@ -1,5 +1,4 @@
 use sha2::*;
-
 use std::slice;
 
 #[no_mangle]
@@ -27,9 +26,9 @@ pub extern "C" fn sha256_input(ptr: *mut Sha256, a: *const u8, len: usize) {
     if len != 0 {
         assert!(!a.is_null(), "Null pointer in sha256_input()");
         let data: &[u8] = unsafe { slice::from_raw_parts(a, len) };
-        hasher.input(data);
+        hasher.update(data);
     } else {
-        hasher.input([]);
+        hasher.update([]);
     }
 }
 
@@ -43,5 +42,5 @@ pub extern "C" fn sha256_result(hash: &mut [u8; 32], ptr: *mut Sha256) {
     //};
     // let s = hasher.result();
     // hash.copy_from_slice(&[0u8;32]);
-    hash.copy_from_slice(hasher.result().as_slice());
+    hash.copy_from_slice(hasher.finalize().as_slice());
 }
