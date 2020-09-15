@@ -112,6 +112,13 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         return Err(Reason::WrongArParameters);
     }
 
+    // We also need to check that the threshold is actually equal to
+    // the number of coefficients in the sharing polynomial
+    // (corresponding to the degree+1)
+    if rt_usize != pre_id_obj.cmm_prf_sharing_coeff.len() {
+        return Err(Reason::WrongArParameters);
+    }
+
     let mut choice_ars = Vec::with_capacity(number_of_ars);
     for ar in choice_ar_handles.iter() {
         match context.ars_infos.get(ar) {
