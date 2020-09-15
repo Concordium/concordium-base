@@ -58,6 +58,13 @@ pub fn verify_cdi<
     acc_keys: Option<&AccountKeys>,
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
+    // We need to check that the threshold is actually equal to
+    // the number of coefficients in the sharing polynomial
+    // (corresponding to the degree+1)
+    let rt_usize: usize = cdi.values.threshold.into();
+    if rt_usize != cdi.proofs.commitments.cmm_id_cred_sec_sharing_coeff.len() {
+        return Err(CDIVerificationError::AR);
+    } 
     let on_chain_commitment_key = global_context.on_chain_commitment_key;
     let gens = global_context.bulletproof_generators();
     let ip_verify_key = &ip_info.ip_verify_key;
