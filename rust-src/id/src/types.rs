@@ -649,6 +649,19 @@ pub struct IpArData<C: Curve> {
     pub proof_com_enc_eq: com_enc_eq::Witness<C>,
 }
 
+/// Data structure for when a anonymity revoker decrypts its encrypted share
+/// This is the decrypted counterpart of IpArData.
+#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct IpArDecryptedData<C: Curve> {
+    /// identity of the anonymity revoker
+    #[serde(rename = "arIdentity")]
+    pub ar_identity: ArIdentity,
+    /// share of prf key
+    #[serde(rename = "prfKeyShare")]
+    pub prf_key_share: Value<C>,
+}
+
 /// Data relating to a single anonymity revoker sent by the account holder to
 /// the chain.
 /// Typically a vector of these will be sent to the chain.
@@ -679,6 +692,9 @@ pub struct ChainArDecryptedData<C: Curve> {
     pub id_cred_pub_share: Message<C>,
 }
 
+// NOTE: This struct is redundant, but we will
+// will keep it for now for compatibility. 
+// We need to remove it in the future.
 /// Choice of anonymity revocation parameters
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 pub struct ChoiceArParameters {
