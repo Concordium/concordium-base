@@ -91,8 +91,11 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
 
     let current_time: TimeMilliseconds = ctx.metadata().slot_time();
 
-    // Beginning of the time window in which to check transfers, TODO: Handle when current_time < time_limit
-    let time_window_start: TimeMilliseconds = current_time - state.init_params.time_limit;
+    // Beginning of the time window in which to check transfers
+    let time_window_start: TimeMilliseconds = match current_time.checked_sub(state.init_params.time_limit) {
+        None => 0,
+        Some(res) => res,
+    };
 
     let transfer_request: TransferRequest = ctx.parameter_cursor().get()?;
     let transfer = Transfer{time_of_transfer: current_time, transfer_request};
