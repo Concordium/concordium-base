@@ -7,15 +7,17 @@ use wasmer_interp::*;
 use wasmer_runtime::{compile, func, imports, instantiate};
 use wasmer_runtime_core::validate;
 
-static WASM: &[u8] = include_bytes!(
-    "../../rust-contracts/example-contracts/counter/target/wasm32-unknown-unknown/release/counter.\
-     wasm"
-);
+static WASM: &[u8] = include_bytes!("artifacts/counter.wasm");
+
+#[cfg(feature = "cranelift")]
+const BACKEND: wasmer_runtime::Backend = wasmer_runtime::Backend::Cranelift;
+#[cfg(feature = "singlepass")]
+const BACKEND: wasmer_runtime::Backend = wasmer_runtime::Backend::Singlepass;
 
 pub fn bench_instantiate(c: &mut Criterion) {
-    let (import_obj, _, _, _) = make_imports(
+    let (import_obj, _, _, _, _) = make_imports(
         Which::Init {
-            init_ctx: InitContext {
+            init_ctx: &InitContext {
                 init_origin: AccountAddress([0u8; 32]),
                 metadata:    ChainMetadata {
                     slot_number:      0,
@@ -26,6 +28,7 @@ pub fn bench_instantiate(c: &mut Criterion) {
             },
         },
         Vec::new(),
+        1000_000_000,
     );
 
     c.bench_function("instantiate_from_bytes", move |b| b.iter(|| instantiate(WASM, &import_obj)));
@@ -52,8 +55,7 @@ pub fn bench_instantiate(c: &mut Criterion) {
             unsafe {
                 wasmer_runtime_core::load_cache_with(
                     artifact,
-                    &*wasmer_runtime::compiler_for_backend(wasmer_runtime::Backend::default())
-                        .unwrap(),
+                    &*wasmer_runtime::compiler_for_backend(BACKEND).unwrap(),
                 )
                 .unwrap()
             }
@@ -67,8 +69,7 @@ pub fn bench_instantiate(c: &mut Criterion) {
             unsafe {
                 wasmer_runtime_core::load_cache_with(
                     artifact,
-                    &*wasmer_runtime::compiler_for_backend(wasmer_runtime::Backend::default())
-                        .unwrap(),
+                    &*wasmer_runtime::compiler_for_backend(BACKEND).unwrap(),
                 )
                 .unwrap()
             }
@@ -76,9 +77,9 @@ pub fn bench_instantiate(c: &mut Criterion) {
     });
 
     let module = compile(WASM).expect("Compilation should succeed.");
-    let (import_obj, _, _, _) = make_imports(
+    let (import_obj, _, _, _, _) = make_imports(
         Which::Init {
-            init_ctx: InitContext {
+            init_ctx: &InitContext {
                 init_origin: AccountAddress([0u8; 32]),
                 metadata:    ChainMetadata {
                     slot_number:      0,
@@ -89,6 +90,7 @@ pub fn bench_instantiate(c: &mut Criterion) {
             },
         },
         Vec::new(),
+        1000_000_000,
     );
     c.bench_function("instantiate_from_module", move |b| {
         b.iter(|| module.instantiate(&import_obj).unwrap());
