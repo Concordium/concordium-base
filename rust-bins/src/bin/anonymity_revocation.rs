@@ -1,42 +1,44 @@
-use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::*;
-use elgamal::{Message, decrypt_from_chunks_given_generator};
+use curve_arithmetic::Value;
+use elgamal::{decrypt_from_chunks_given_generator, Message};
 use id::{anonymity_revoker::*, types::*};
 use serde_json::json;
 use std::convert::TryFrom;
-use curve_arithmetic::Value;
 
+use std::path::PathBuf;
 use structopt::StructOpt;
-use std::{
-    cmp::max,
-    collections::btree_map::BTreeMap,
-    fs::File,
-    io::{self, Write},
-    path::PathBuf,
-};
-
-#[macro_use]
-extern crate failure;
-use failure::Fallible;
 
 #[derive(StructOpt)]
 struct DecryptPrf {
-    #[structopt(long = "ar-record", help = "File with the JSON encoded (pre) identity object.")]
+    #[structopt(
+        long = "ar-record",
+        help = "File with the JSON encoded (pre) identity object."
+    )]
     ar_record: PathBuf,
-    #[structopt(long = "ar-private", help = "File with anonymity revoker's private and public keys.")]
+    #[structopt(
+        long = "ar-private",
+        help = "File with anonymity revoker's private and public keys."
+    )]
     ar_private: PathBuf,
     #[structopt(long = "global-context", help = "File with global context.")]
     global_context: PathBuf,
-    #[structopt(long = "out", help = "File to output the decryption to")]
+    #[structopt(long = "out", help = "File to output the decryption to.")]
     out: Option<PathBuf>,
 }
 
 #[derive(StructOpt)]
 struct Decrypt {
-    #[structopt(long = "credential", help = "File with the JSON encoded credential or credential values.")]
+    #[structopt(
+        long = "credential",
+        help = "File with the JSON encoded credential or credential values."
+    )]
     credential: PathBuf,
-    #[structopt(long = "ar-private", help = "File with anonymity revoker's private and public keys.")]
+    #[structopt(
+        long = "ar-private",
+        help = "File with anonymity revoker's private and public keys."
+    )]
     ar_private: PathBuf,
     #[structopt(long = "out", help = "File to output the decryption to")]
     out: Option<PathBuf>,
@@ -44,21 +46,33 @@ struct Decrypt {
 
 #[derive(StructOpt)]
 struct CombinePrf {
-    #[structopt(long = "credential", help = "File with the JSON encoded credential or credential values.")]
+    #[structopt(
+        long = "credential",
+        help = "File with the JSON encoded credential or credential values."
+    )]
     credential: PathBuf,
-    #[structopt(long = "shares", help = "Files with the JSON encoded decrypted shares.")]
+    #[structopt(
+        long = "shares",
+        help = "Files with the JSON encoded decrypted shares."
+    )]
     shares: Vec<PathBuf>,
-    #[structopt(long = "out", help = "File to output the decryption to")]
+    #[structopt(long = "out", help = "File to output the decryption to.")]
     out: Option<PathBuf>,
 }
 
 #[derive(StructOpt)]
 struct Combine {
-    #[structopt(long = "credential", help = "File with the JSON encoded credential or credential values.")]
+    #[structopt(
+        long = "credential",
+        help = "File with the JSON encoded credential or credential values."
+    )]
     credential: PathBuf,
-    #[structopt(long = "shares", help = "Files with the JSON encoded decrypted shares.")]
+    #[structopt(
+        long = "shares",
+        help = "Files with the JSON encoded decrypted shares."
+    )]
     shares: Vec<PathBuf>,
-    #[structopt(long = "out", help = "File to output the decryption to")]
+    #[structopt(long = "out", help = "File to output the decryption to.")]
     out: Option<PathBuf>,
 }
 
@@ -71,22 +85,23 @@ struct Combine {
 enum AnonymityRevocation {
     #[structopt(
         name = "decrypt",
-        about = "Take a deployed credential and let one anonymity revoker decrypt its encrypted share if idCredPub"
+        about = "Take a deployed credential and decrypt a share of idCredPub."
     )]
     Decrypt(Decrypt),
     #[structopt(
         name = "combine",
-        about = "Combines decrypted shares of anonymity revokers to get idCredPub"
+        about = "Combine decrypted shares of anonymity revokers to get idCredPub."
     )]
     Combine(Combine),
     #[structopt(
         name = "decrypt-prf",
-        about = "Take a deployed credential and let one anonymity revoker decrypt its encrypted share of the PRF key"
+        about = "Take an anonymity revocation record and let one anonymity revoker decrypt its \
+                 share of the PRF key."
     )]
     DecryptPrf(DecryptPrf),
     #[structopt(
         name = "combine-prf",
-        about = "Combines decrypted shares of anonymity revokers to get the PRF key"
+        about = "Combine decrypted shares of the PRF key to reconstruct the PRF key."
     )]
     CombinePrf(CombinePrf),
 }
@@ -105,18 +120,6 @@ fn main() {
         CombinePrf(cmb) => handle_combine_prf(cmb),
     }
 }
-
-fn read_credential_values(
-    file_name: &str,
-) -> Fallible<CredentialDeploymentValues<ExampleCurve, ExampleAttribute>> {
-    // this will work fine even if the whole credential is given since
-    // JSON serialization of credentials flattens the values.
-    match read_json_from_file(file_name) {
-        Ok(r) => Ok(r),
-        Err(x) => bail!("Could not read credential because {}", x),
-    }
-}
-
 
 /// Decrypt encIdCredPubShare
 fn handle_decrypt_id(dcr: Decrypt) {
@@ -187,7 +190,7 @@ fn handle_decrypt_prf(dcr: DecryptPrf) {
             }
         }
     };
-    
+
     if ar_record.version != VERSION_0 {
         eprintln!("The version of the ArRecord should be 0");
         return;
@@ -209,7 +212,7 @@ fn handle_decrypt_prf(dcr: DecryptPrf) {
         return;
     }
     let global_context = global_context.value;
-    
+
     let ar_data = ar_record.ar_data;
     let ar: ArData<ExampleCurve> = match read_json_from_file(dcr.ar_private) {
         Ok(r) => r,
@@ -228,12 +231,13 @@ fn handle_decrypt_prf(dcr: DecryptPrf) {
         Some(single_ar_data) => {
             let m = decrypt_from_chunks_given_generator(
                 &ar.ar_secret_key,
-                &single_ar_data.enc_prf_key_share, 
-                &global_context.encryption_in_exponent_generator(), 
-                1 << 16, 
-                CHUNK_SIZE);
+                &single_ar_data.enc_prf_key_share,
+                &global_context.encryption_in_exponent_generator(),
+                1 << 16,
+                CHUNK_SIZE,
+            );
             share = IpArDecryptedData {
-                ar_identity:       ar.public_ar_info.ar_identity,
+                ar_identity:   ar.public_ar_info.ar_identity,
                 prf_key_share: m,
             };
         }
@@ -292,7 +296,11 @@ fn handle_combine_id(cmb: Combine) {
         let name = share_value.clone();
         match read_json_from_file(share_value) {
             Err(y) => {
-                eprintln!("Could not read from ar file {:?}, error: {}", name.file_name(), y);
+                eprintln!(
+                    "Could not read from ar file {:?}, error: {}",
+                    name.file_name(),
+                    y
+                );
                 return;
             }
             Ok(val) => ar_decrypted_data_vec.push(val),
@@ -379,7 +387,11 @@ fn handle_combine_prf(cmb: CombinePrf) {
         let name = share_value.clone();
         match read_json_from_file(share_value) {
             Err(y) => {
-                eprintln!("Could not read from ar file {:?}, error: {}", name.file_name(), y);
+                eprintln!(
+                    "Could not read from ar file {:?}, error: {}",
+                    name.file_name(),
+                    y
+                );
                 return;
             }
             Ok(val) => ar_decrypted_data_vec.push(val),
@@ -404,10 +416,7 @@ fn handle_combine_prf(cmb: CombinePrf) {
 
     let prf_key = reveal_prf_key(&shares);
     let prf_key_string = base16_encode_string(&prf_key);
-    println!(
-        "PRF key is:\n {}",
-        prf_key_string
-    );
+    println!("PRF key is:\n {}", prf_key_string);
 
     if let Some(json_file) = cmb.out {
         let json = json!({ "prfKey": prf_key_string });
