@@ -353,24 +353,33 @@ mod tests {
             parameter: &to_bytes(&parameter),
         };
 
+        let transfers = vec![
+            Transfer {
+                time_of_transfer: 0,
+                transfer_request: TransferRequest {
+                    request_id:     0,
+                    amount:         6,
+                    target_account: account1,
+                },
+            },
+            Transfer {
+                time_of_transfer: 1,
+                transfer_request: TransferRequest {
+                    request_id:     1,
+                    amount:         2,
+                    target_account: account2,
+                },
+            },
+            Transfer {
+                time_of_transfer: 2,
+                transfer_request: TransferRequest {
+                    request_id:     2,
+                    amount:         3,
+                    target_account: account1,
+                },
+            },
+        ];
 
-        let mut transfers = Vec::new();
-        transfers.push(Transfer { time_of_transfer: 0,
-                                  transfer_request: TransferRequest { request_id: 0,
-                                                                      amount: 6,
-                                                                      target_account: account1, },
-        });
-        transfers.push(Transfer { time_of_transfer: 1,
-                                  transfer_request: TransferRequest { request_id: 1,
-                                                                      amount: 2,
-                                                                      target_account: account2, },
-        });
-
-        transfers.push(Transfer { time_of_transfer: 2,
-                                  transfer_request: TransferRequest { request_id: 2,
-                                                                      amount: 3,
-                                                                      target_account: account2, },
-        });
 
         let init_params = InitParams{ timed_withdraw_limit: 10, time_limit: 9 };
 
@@ -444,24 +453,33 @@ mod tests {
             parameter: &to_bytes(&parameter),
         };
 
+        let transfers = vec![
+            Transfer {
+                time_of_transfer: 0,
+                transfer_request: TransferRequest {
+                    request_id:     0,
+                    amount:         6,
+                    target_account: account1,
+                },
+            },
+            Transfer {
+                time_of_transfer: 1,
+                transfer_request: TransferRequest {
+                    request_id:     1,
+                    amount:         2,
+                    target_account: account2,
+                },
+            },
+            Transfer {
+                time_of_transfer: 2,
+                transfer_request: TransferRequest {
+                    request_id:     2,
+                    amount:         3,
+                    target_account: account2,
+                },
+            },
+        ];
 
-        let mut transfers = Vec::new();
-        transfers.push(Transfer { time_of_transfer: 0,
-                                  transfer_request: TransferRequest { request_id: 0,
-                                                                      amount: 6,
-                                                                      target_account: account1, },
-        });
-        transfers.push(Transfer { time_of_transfer: 1,
-                                  transfer_request: TransferRequest { request_id: 1,
-                                                                      amount: 2,
-                                                                      target_account: account2, },
-        });
-
-        transfers.push(Transfer { time_of_transfer: 2,
-                                  transfer_request: TransferRequest { request_id: 2,
-                                                                      amount: 3,
-                                                                      target_account: account2, },
-        });
 
         let init_params = InitParams{ timed_withdraw_limit: 10, time_limit: 10 };
 
@@ -524,24 +542,33 @@ mod tests {
             parameter: &to_bytes(&parameter),
         };
 
+        let transfers = vec![
+            Transfer {
+                time_of_transfer: 0,
+                transfer_request: TransferRequest {
+                    request_id:     0,
+                    amount:         1,
+                    target_account: account1,
+                },
+            },
+            Transfer {
+                time_of_transfer: 1,
+                transfer_request: TransferRequest {
+                    request_id:     1,
+                    amount:         1,
+                    target_account: account2,
+                },
+            },
+            Transfer {
+                time_of_transfer: 2,
+                transfer_request: TransferRequest {
+                    request_id:     2,
+                    amount:         1,
+                    target_account: account2,
+                },
+            },
+        ];
 
-        let mut transfers = Vec::new();
-        transfers.push(Transfer { time_of_transfer: 0,
-                                  transfer_request: TransferRequest { request_id: 0,
-                                                                      amount: 1,
-                                                                      target_account: account1, },
-        });
-        transfers.push(Transfer { time_of_transfer: 1,
-                                  transfer_request: TransferRequest { request_id: 1,
-                                                                      amount: 1,
-                                                                      target_account: account2, },
-        });
-
-        transfers.push(Transfer { time_of_transfer: 2,
-                                  transfer_request: TransferRequest { request_id: 2,
-                                                                      amount: 1,
-                                                                      target_account: account2, },
-        });
 
         let init_params = InitParams{ timed_withdraw_limit: 10, time_limit: 1000 };
 
