@@ -67,6 +67,13 @@ pub trait Read {
         Ok(u32::from_le_bytes(bytes))
     }
 
+    /// Read a `u16` in little-endian format.
+    fn read_u16(&mut self) -> Result<u16, Self::Err> {
+        let mut bytes = [0u8; 2];
+        self.read_exact(&mut bytes)?;
+        Ok(u16::from_le_bytes(bytes))
+    }
+
     /// Read a `u8`.
     fn read_u8(&mut self) -> Result<u8, Self::Err> {
         let mut bytes = [0u8; 1];
@@ -120,6 +127,8 @@ impl Write for Vec<u8> {
 
 /// The `Serial` trait provides a means of writing structures into byte-sinks
 /// (`Write`).
+///
+/// Can be derived using `#[derive(Serial)]` for most cases.
 pub trait Serial {
     /// Attempt to write the structure into the provided writer, failing if
     /// only part of the structure could be written.
@@ -131,6 +140,8 @@ pub trait Serial {
 
 /// The `Deserial` trait provides a means of reading structures from byte-sinks
 /// (`Read`).
+///
+/// Can be derived using `#[derive(Deserial)]` for most cases.
 pub trait Deserial: Sized {
     /// Attempt to read a structure from a given source, failing if an error
     /// occurs during deserialization or reading.
@@ -139,13 +150,15 @@ pub trait Deserial: Sized {
 
 /// The `Serialize` trait provides a means of writing structures into byte-sinks
 /// (`Write`) or reading structures from byte sources (`Read`).
+///
+/// Can be derived using `#[derive(Serialized)]` for most cases.
 pub trait Serialize: Serial + Deserial {}
 
 /// Generic instance deriving Serialize for any type that implements both Serial
 /// and Deserial.
 impl<A: Deserial + Serial> Serialize for A {}
 
-/// A more convenient wrapper around `Serialize` that makes it easier to write
+/// A more convenient wrapper around `Deserial` that makes it easier to write
 /// deserialization code. It has a blanked implementation for any read and
 /// serialize pair. The key idea is that the type to deserialize is inferred
 /// from the context, enabling one to write, for example,

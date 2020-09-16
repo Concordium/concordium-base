@@ -7,7 +7,9 @@ use alloc::vec::Vec;
 #[cfg(not(feature = "std"))]
 use core::{mem::MaybeUninit, slice};
 #[cfg(feature = "std")]
-use std::{collections, mem::MaybeUninit, slice};
+use std::{collections::*, mem::MaybeUninit, slice};
+
+static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
 // Implementations of Serialize
 
@@ -32,6 +34,14 @@ impl Serial for u8 {
 
 impl Deserial for u8 {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> { source.read_u8() }
+}
+
+impl Serial for u16 {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u16(*self) }
+}
+
+impl Deserial for u16 {
+    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> { source.read_u16() }
 }
 
 impl Serial for u32 {
@@ -194,88 +204,190 @@ impl Deserial for ChainMetadata {
     }
 }
 
+/// Write a vector without including length information.
+pub fn serial_vector_no_length<W: Write, T: Serial>(xs: &[T], out: &mut W) -> Result<(), W::Err> {
+    for x in xs {
+        x.serial(out)?;
+    }
+    Ok(())
+}
+
+/// Read a vector given a length.
+pub fn deserial_vector_no_length<R: Read, T: Deserial>(
+    reader: &mut R,
+    len: usize,
+) -> Result<Vec<T>, R::Err> {
+    let mut vec = Vec::with_capacity(core::cmp::min(len, MAX_PREALLOCATED_CAPACITY));
+    for _ in 0..len {
+        vec.push(T::deserial(reader)?);
+    }
+    Ok(vec)
+}
+
+/// Write a Map as an list of key-value pairs ordered by the key, without the
+/// length information.
+pub fn serial_map_no_length<'a, W: Write, K: Serial + 'a, V: Serial + 'a>(
+    map: &BTreeMap<K, V>,
+    out: &mut W,
+) -> Result<(), W::Err> {
+    for (k, v) in map.iter() {
+        k.serial(out)?;
+        v.serial(out)?;
+    }
+    Ok(())
+}
+
+/// Read a Map as an list of key-value pairs given some length.
+/// NB: This ensures there are no duplicates, hence the specialized type.
+/// Moreover this will only succeed if keys are listed in order.
+pub fn deserial_map_no_length<R: Read, K: Deserial + Ord + Copy, V: Deserial>(
+    source: &mut R,
+    len: usize,
+) -> Result<BTreeMap<K, V>, R::Err> {
+    let mut out = BTreeMap::new();
+    let mut x = None;
+    for _ in 0..len {
+        let k = source.get()?;
+        let v = source.get()?;
+        match x {
+            None => {
+                out.insert(k, v);
+            }
+            Some(kk) => {
+                if k > kk {
+                    out.insert(k, v);
+                } else {
+                    panic!("Keys not in order.")
+                }
+            }
+        }
+        x = Some(k);
+    }
+    Ok(out)
+}
+
+/// Read a Map as an list of key-value pairs given some length.
+/// Sligthly faster version of `deserial_map_no_length` as it is skipping the
+/// order checking
+pub fn deserial_map_no_length_no_order_check<R: Read, K: Deserial + Ord + Copy, V: Deserial>(
+    source: &mut R,
+    len: usize,
+) -> Result<BTreeMap<K, V>, R::Err> {
+    let mut out = BTreeMap::new();
+    for _ in 0..len {
+        let k = source.get()?;
+        let v = source.get()?;
+        out.insert(k, v);
+    }
+    Ok(out)
+}
+
+/// Write a Set as an list of keys ordered, without the length information.
+pub fn serial_set_no_length<'a, W: Write, K: Serial + 'a>(
+    map: &BTreeSet<K>,
+    out: &mut W,
+) -> Result<(), W::Err> {
+    for k in map.iter() {
+        k.serial(out)?;
+    }
+    Ok(())
+}
+
+/// Read a Set as an list of keys, given some length.
+/// NB: This ensures there are no duplicates, hence the specialized type.
+/// Moreover this will only succeed if keys are listed in order.
+pub fn deserial_set_no_length<R: Read, K: Deserial + Ord + Copy>(
+    source: &mut R,
+    len: usize,
+) -> Result<BTreeSet<K>, R::Err> {
+    let mut out = BTreeSet::new();
+    let mut x = None;
+    for _ in 0..len {
+        let k = source.get()?;
+        match x {
+            None => {
+                out.insert(k);
+            }
+            Some(kk) => {
+                if k > kk {
+                    out.insert(k);
+                } else {
+                    panic!("Keys not in order.")
+                }
+            }
+        }
+        x = Some(k);
+    }
+    Ok(out)
+}
+
+/// Read a Set as an list of key-value pairs given some length.
+/// Sligthly faster version of `deserial_set_no_length` as it is skipping the
+/// order checking.
+pub fn deserial_set_no_length_no_order_check<R: Read, K: Deserial + Ord>(
+    source: &mut R,
+    len: usize,
+) -> Result<BTreeSet<K>, R::Err> {
+    let mut out = BTreeSet::new();
+    for _ in 0..len {
+        let k = source.get()?;
+        out.insert(k);
+    }
+    Ok(out)
+}
+
 impl<T: Serial> Serial for Vec<T> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;
         len.serial(out)?;
-        for elem in self.iter() {
-            elem.serial(out)?;
-        }
-        Ok(())
+        serial_vector_no_length(self, out)
     }
 }
 
 impl<T: Deserial> Deserial for Vec<T> {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let len: u32 = source.get()?;
-        // FIXME: Vector deserialization should not allocate blindly, but
-        // have a safe upper bound.
-        let mut vec: Vec<T> = Vec::with_capacity(len as usize);
-        for _ in 0..len {
-            let elem = source.get()?;
-            vec.push(elem);
-        }
-        Ok(vec)
+        deserial_vector_no_length(source, len as usize)
     }
 }
 
 /// The serialization of maps encodes their size as a u32. This should be
 /// sufficient for all realistic use cases in smart contracts.
-/// They are serialized in canonical order (increasing) but deserialization
-/// only requirenes key uniqueness, no order.
-impl<K: Serial + Ord, V: Serial> Serial for collections::BTreeMap<K, V> {
+/// They are serialized in canonical order (increasing).
+impl<K: Serial + Ord, V: Serial> Serial for BTreeMap<K, V> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;
         len.serial(out)?;
-        for (k, v) in self.iter() {
-            k.serial(out)?;
-            v.serial(out)?;
-        }
-        Ok(())
+        serial_map_no_length(self, out)
     }
 }
 
-impl<K: Deserial + Ord, V: Deserial> Deserial for collections::BTreeMap<K, V> {
+/// The deserialization of maps assumes their size as a u32.
+/// Deserialization will only succeed if the key-value pairs are ordered.
+impl<K: Deserial + Ord + Copy, V: Deserial> Deserial for BTreeMap<K, V> {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let len: u32 = source.get()?;
-        let mut map = collections::BTreeMap::<K, V>::new();
-        for _ in 0..len {
-            let k = source.get()?;
-            let v = source.get()?;
-            if map.insert(k, v).is_some() {
-                return Err(R::Err::default());
-            }
-        }
-        Ok(map)
+        deserial_map_no_length(source, len as usize)
     }
 }
 
 /// The serialization of sets encodes their size as a u32. This should be
 /// sufficient for all realistic use cases in smart contracts.
-/// They are serialized in canonical order (increasing), but deserialization
-/// does not require any order, only uniqueness.
-impl<K: Serial + Ord> Serial for collections::BTreeSet<K> {
+/// They are serialized in canonical order (increasing)
+impl<K: Serial + Ord> Serial for BTreeSet<K> {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         let len = self.len() as u32;
         len.serial(out)?;
-        for k in self.iter() {
-            k.serial(out)?;
-        }
-        Ok(())
+        serial_set_no_length(self, out)
     }
 }
 
-impl<K: Deserial + Ord> Deserial for collections::BTreeSet<K> {
+/// The deserialization of sets assumes their size as a u32.
+/// Deserialization will only succeed if the keys are ordered.
+impl<K: Deserial + Ord + Copy> Deserial for BTreeSet<K> {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let len: u32 = source.get()?;
-        let mut map = collections::BTreeSet::<K>::new();
-        for _ in 0..len {
-            let k = source.get()?;
-            if !map.insert(k) {
-                return Err(R::Err::default());
-            }
-        }
-        Ok(map)
+        deserial_set_no_length(source, len as usize)
     }
 }
 

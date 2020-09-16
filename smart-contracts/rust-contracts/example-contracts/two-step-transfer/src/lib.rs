@@ -63,6 +63,8 @@ struct TransferRequest {
 #[derive(Serialize)]
 struct InitParams {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
+    #[set_size_length = 1]
+    #[skip_order_check]
     account_holders: BTreeSet<AccountAddress>,
 
     // How many of the account holders need to agree before funds are released
@@ -88,6 +90,8 @@ pub struct State {
     // Requests which have not been dropped due to timing out or due to being agreed to yet
     // The request ID, the associated amount, when it times out, who is making the transfer and
     // which account holders support this transfer
+    #[map_size_length = 2]
+    #[skip_order_check]
     requests: BTreeMap<TransferRequestId, TransferRequest>,
 }
 

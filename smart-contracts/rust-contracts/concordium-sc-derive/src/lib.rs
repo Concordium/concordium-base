@@ -168,37 +168,86 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
     out.into()
 }
 
+/// Derive the Deserial trait.
+/// Assumes every field of the data to implement Deserial trait.
+///
+/// Collections are assumed to have a length within u32.
+/// Optionally collection fields can be annotated with a size length to reduce
+/// the serialized size (see also `derive(Serial)`). The annotation for `Vec` is
+/// `size_length`, `BTreeMap` is `map_size_length` and `BTreeSet` is
+/// `set_size_length`.
+///
+/// The derived deserialization for `BTreeMap` and `BTreeSet` checks the
+/// serialized keys to be ordered. Optionally these fields can be annotated with
+/// `skip_order_check` to reduce the resulting code even further.
+///
+/// The size length is specified as the number of bytes, and can be either of
+/// the following numbers: 1, 2, 4, 8.
+///
+/// # Example
+/// ```
+/// #[derive(Deserial)]
+/// struct Foo {
+///     #[set_size_length = 1]
+///     #[skip_order_check]
+///     bar: BTreeSet<u8>,
+/// }
+/// ```
 #[proc_macro_derive(
     Deserial,
-    attributes(size_length, map_size_length, set_size_length, string_size_length)
+    attributes(
+        size_length,
+        map_size_length,
+        set_size_length,
+        string_size_length,
+        skip_order_check
+    )
 )]
 pub fn deserial_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     impl_deserial(&ast)
 }
 
-fn find_length_attribute(l: &[syn::Attribute], attr: &str) -> Option<u32> {
-    let length = format_ident!("{}", attr);
-    for attr in l.iter() {
-        if let Ok(syn::Meta::NameValue(mn)) = attr.parse_meta() {
-            if mn.path.is_ident(&length) {
-                if let syn::Lit::Int(int) = mn.lit {
-                    if let Ok(v) = int.base10_parse() {
-                        if v == 1 || v == 2 || v == 4 || v == 8 {
-                            return Some(v);
-                        } else {
-                            panic!("Length info must be a power of two between 1 and 8 inclusive.")
-                        }
-                    } else {
-                        panic!("Unknown attribute value {}.", int);
-                    }
-                } else {
-                    panic!("Unknown attribute value {:?}.", mn.lit);
-                }
-            }
-        }
+fn find_attribute_value(attributes: &[syn::Attribute], target_attr: &str) -> Option<syn::Lit> {
+    let target_attr = format_ident!("{}", target_attr);
+    let attr_values: Vec<_> = attributes
+        .iter()
+        .filter_map(|attr| match attr.parse_meta() {
+            Ok(syn::Meta::NameValue(value)) if value.path.is_ident(&target_attr) => Some(value.lit),
+            _ => None,
+        })
+        .collect();
+    if attr_values.is_empty() {
+        return None;
     }
-    None
+    if attr_values.len() > 1 {
+        panic!("Attribute '{}' should only be specified once.", target_attr)
+    }
+    Some(attr_values[0].clone())
+}
+
+fn find_length_attribute(attributes: &[syn::Attribute], target_attr: &str) -> Option<u32> {
+    let value = find_attribute_value(attributes, target_attr)?;
+    let value = match value {
+        syn::Lit::Int(int) => int,
+        _ => panic!("Unknown attribute value {:?}.", value),
+    };
+    let value = match value.base10_parse() {
+        Ok(v) => v,
+        _ => panic!("Unknown attribute value {}.", value),
+    };
+    match value {
+        1 | 2 | 4 | 8 => Some(value),
+        _ => panic!("Length info must be a power of two between 1 and 8 inclusive."),
+    }
+}
+
+fn contains_attribute(attributes: &[syn::Attribute], target_attr: &str) -> bool {
+    let target_attr = format_ident!("{}", target_attr);
+    attributes.iter().any(|attr| match attr.parse_meta() {
+        Ok(meta) => meta.path().is_ident(&target_attr),
+        _ => false,
+    })
 }
 
 fn impl_deserial_field(
@@ -207,35 +256,53 @@ fn impl_deserial_field(
     source: &syn::Ident,
 ) -> proc_macro2::TokenStream {
     if let Some(l) = find_length_attribute(&f.attrs, "size_length") {
-        let id = format_ident!("u{}", 8 * l);
+        let size = format_ident!("u{}", 8 * l);
         quote! {
             let #ident = {
-                let len: #id = #id::deserial(#source)?;
-                deserial_vector_no_length(#source, usize::try_from(len)?)?
+                let len = #size::deserial(#source)?;
+                deserial_vector_no_length(#source, len as usize)?
             };
         }
     } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
-        let id = format_ident!("u{}", 8 * l);
-        quote! {
-            let #ident = {
-                let len: #id = #id::deserial(#source)?;
-                deserial_map_no_length(#source, usize::try_from(len)?)?
-            };
+        let size = format_ident!("u{}", 8 * l);
+        if contains_attribute(&f.attrs, "skip_order_check") {
+            quote! {
+                let #ident = {
+                    let len = #size::deserial(#source)?;
+                    deserial_map_no_length_no_order_check(#source, len as usize)?
+                };
+            }
+        } else {
+            quote! {
+                let #ident = {
+                    let len = #size::deserial(#source)?;
+                    deserial_map_no_length(#source, len as usize)?
+                };
+            }
         }
     } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
-        let id = format_ident!("u{}", 8 * l);
-        quote! {
-            let #ident = {
-                let len: #id = #id::deserial(#source)?;
-                deserial_set_no_length(#source, usize::try_from(len)?)?
-            };
+        let size = format_ident!("u{}", 8 * l);
+        if contains_attribute(&f.attrs, "skip_order_check") {
+            quote! {
+                let #ident = {
+                    let len = #size::deserial(#source)?;
+                    deserial_set_no_length_no_order_check(#source, len as usize)?
+                };
+            }
+        } else {
+            quote! {
+                let #ident = {
+                    let len = #size::deserial(#source)?;
+                    deserial_set_no_length(#source, len as usize)?
+                };
+            }
         }
     } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
-        let id = format_ident!("u{}", 8 * l);
+        let size = format_ident!("u{}", 8 * l);
         quote! {
             let #ident = {
-                let len: #id = #id::deserial(#source)?;
-                deserial_string(#source, usize::try_from(len)?)?
+                let len = #size::deserial(#source)?;
+                deserial_string(#source, len as usize)?
             };
         }
     } else {
@@ -292,14 +359,16 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
         syn::Data::Enum(ref data) => {
             let mut matches_tokens = proc_macro2::TokenStream::new();
             let source = Ident::new("source", Span::call_site());
+            let size = if data.variants.len() <= 256 {
+                format_ident!("u8")
+            } else {
+                format_ident!("u16")
+            };
             for (i, variant) in data.variants.iter().enumerate() {
                 let mut field_tokens = proc_macro2::TokenStream::new();
                 let mut names_tokens = proc_macro2::TokenStream::new();
                 for (n, field) in variant.fields.iter().enumerate() {
-                    let field_ident = Ident::new(
-                        format!("{}Field{}", variant.ident, n).as_str(),
-                        Span::call_site(),
-                    );
+                    let field_ident = format_ident!("x_{}", n);
                     names_tokens.extend(quote!(#field_ident,));
                     field_tokens.extend(impl_deserial_field(field, &field_ident, &source));
                 }
@@ -318,7 +387,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 })
             }
             quote! {
-                let idx = #source.read_u8()?;
+                let idx = #size::deserial(#source)?;
                 match idx {
                     #matches_tokens
                     _ => Err(Default::default())
@@ -338,6 +407,29 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
     gen.into()
 }
 
+/// Derive the Serial trait.
+/// Assumes every field of the data to implement Serial trait.
+///
+/// Collections are assumed to have a length within u32.
+/// Optionally collection fields can be annotated with a size length to reduce
+/// the serialized size (see also `derive(Deserial)`). The annotation for `Vec`
+/// is `size_length`, `BTreeMap` is `map_size_length` and `BTreeSet` is
+/// `set_size_length`.
+///
+/// The size length is specified as the number of bytes, and can be either of
+/// the following numbers: 1, 2, 4, 8.
+///
+/// Note: The derived serialization for `BTreeMap` and `BTreeSet` ensures the
+/// keys are ordered.
+///
+/// # Example
+/// ```
+/// #[derive(Serial)]
+/// struct Foo {
+///     #[set_size_length = 1]
+///     bar: BTreeSet<u8>,
+/// }
+/// ```
 #[proc_macro_derive(
     Serial,
     attributes(size_length, map_size_length, set_size_length, string_size_length)
@@ -357,28 +449,28 @@ fn impl_serial_field(
         quote! {
             let len: #id = #ident.len() as #id;
             len.serial(#out)?;
-            serial_vector_no_length(&#ident, #out);
+            serial_vector_no_length(&#ident, #out)?;
         }
     } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
         let id = format_ident!("u{}", 8 * l);
         quote! {
             let len: #id = #ident.len() as #id;
             len.serial(#out)?;
-            serial_map_no_length(&#ident, #out);
+            serial_map_no_length(&#ident, #out)?;
         }
     } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
         let id = format_ident!("u{}", 8 * l);
         quote! {
             let len: #id = #ident.len() as #id;
             len.serial(#out)?;
-            serial_set_no_length(&#ident, #out);
+            serial_set_no_length(&#ident, #out)?;
         }
     } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
         let id = format_ident!("u{}", 8 * l);
         quote! {
             let len: #id = #ident.len() as #id;
             len.serial(#out)?;
-            serial_string(#ident.as_str(), #out);
+            serial_string(#ident.as_str(), #out)?;
         }
     } else {
         quote! {
@@ -426,19 +518,22 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
         }
         syn::Data::Enum(ref data) => {
             let mut matches_tokens = proc_macro2::TokenStream::new();
+            let size = if data.variants.len() <= 256 {
+                format_ident!("u8")
+            } else {
+                format_ident!("u16")
+            };
             for (i, variant) in data.variants.iter().enumerate() {
                 let mut field_tokens = proc_macro2::TokenStream::new();
                 let mut names_tokens = proc_macro2::TokenStream::new();
                 for (n, field) in variant.fields.iter().enumerate() {
-                    let field_ident = Ident::new(
-                        format!("{}Field{}", variant.ident, n).as_str(),
-                        Span::call_site(),
-                    );
+                    let field_ident = format_ident!("x_{}", n);
                     let field_ident = quote!(#field_ident);
                     names_tokens.extend(quote!(#field_ident,));
                     field_tokens.extend(impl_serial_field(field, &field_ident, &out_ident));
                 }
-                let idx_lit = syn::LitInt::new(i.to_string().as_str(), Span::call_site());
+                let idx_lit =
+                    syn::LitInt::new(format!("{}{}", i, size).as_str(), Span::call_site());
                 let variant_ident = &variant.ident;
                 let names_tokens = if variant.fields.is_empty() {
                     quote! {}
@@ -447,7 +542,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                 };
                 matches_tokens.extend(quote! {
                     #data_name::#variant_ident#names_tokens => {
-                        #out_ident.write_u8(#idx_lit)?;
+                        #idx_lit.serial(#out_ident)?;
                         #field_tokens
                     },
                 })
@@ -473,9 +568,40 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
     gen.into()
 }
 
+/// Derive the Serial and Deserial trait.
+/// Assumes every field of the data to implement Serial trait and Deserial
+/// trait.
+///
+/// Collections are assumed to have a length within u32.
+/// Optionally collection fields can be annotated with a size length to reduce
+/// the serialized size (see `derive(Serial)` and `derive(Deserial)`).
+/// The annotation for `Vec` is `size_length`, `BTreeMap` is `map_size_length`
+/// and `BTreeSet` is `set_size_length`.
+///
+/// The size length is specified as the number of bytes, and can be either of
+/// the following numbers: 1, 2, 4, 8.
+///
+/// Note: The derived serialization for `BTreeMap` and `BTreeSet` ensures the
+/// keys are ordered.
+///
+/// # Example
+/// ```
+/// #[derive(Serialize)]
+/// struct Foo {
+///     #[set_size_length = 1]
+///     #[skip_order_check]
+///     bar: BTreeSet<u8>,
+/// }
+/// ```
 #[proc_macro_derive(
     Serialize,
-    attributes(size_length, map_size_length, set_size_length, string_size_length)
+    attributes(
+        size_length,
+        map_size_length,
+        set_size_length,
+        string_size_length,
+        skip_order_check
+    )
 )]
 pub fn serialize_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
