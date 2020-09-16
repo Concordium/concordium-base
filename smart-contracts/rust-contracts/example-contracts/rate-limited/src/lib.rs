@@ -23,15 +23,12 @@ use concordium_sc_base::*;
 
 // Type Aliases
 
-type TransferRequestId = u64;
 type TimeMilliseconds = u64;
 
 // Transfer Requests
 
 #[derive(Clone)]
 struct TransferRequest {
-    /// An ID used to catch erroneous duplicate requests
-    request_id: TransferRequestId,
     /// The amount of GTU to transfer from the contract to the target_account
     amount: Amount,
     /// The account to transfer to
@@ -61,7 +58,7 @@ pub struct State {
     /// The recently accepted transfers.
     /// Used to check whether a new transfer request should be accepted
     /// according to the time_limit and timed_withdraw_limit.
-    transfers: Vec<Transfer>, // TODO: Should BTreeSet be used instead to avoid duplicates?
+    transfers: Vec<Transfer>,
 }
 
 #[init(name = "init")]
@@ -150,18 +147,15 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
 
 impl Serialize for TransferRequest {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        out.write_u64(self.request_id)?;
         self.amount.serial(out)?;
         self.target_account.serial(out)?;
         Ok(())
     }
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let request_id = source.read_u64()?;
         let amount = Amount::deserial(source)?;
         let target_account = AccountAddress::deserial(source)?;
         Ok(TransferRequest {
-            request_id,
             amount,
             target_account,
         })
@@ -272,7 +266,6 @@ mod tests {
         };
 
         let parameter = TransferRequest {
-            request_id: 0,
             amount: 5,
             target_account,
         };
@@ -286,7 +279,6 @@ mod tests {
             Transfer {
                 time_of_transfer: 0,
                 transfer_request: TransferRequest {
-                    request_id:     0,
                     amount:         6,
                     target_account: account1,
                 },
@@ -294,7 +286,6 @@ mod tests {
             Transfer {
                 time_of_transfer: 1,
                 transfer_request: TransferRequest {
-                    request_id:     1,
                     amount:         2,
                     target_account: account2,
                 },
@@ -302,7 +293,6 @@ mod tests {
             Transfer {
                 time_of_transfer: 2,
                 transfer_request: TransferRequest {
-                    request_id:     2,
                     amount:         3,
                     target_account: account1,
                 },
@@ -374,7 +364,6 @@ mod tests {
         };
 
         let parameter = TransferRequest {
-            request_id: 0,
             amount: 5,
             target_account,
         };
@@ -388,7 +377,6 @@ mod tests {
             Transfer {
                 time_of_transfer: 0,
                 transfer_request: TransferRequest {
-                    request_id:     0,
                     amount:         6,
                     target_account: account1,
                 },
@@ -396,7 +384,6 @@ mod tests {
             Transfer {
                 time_of_transfer: 1,
                 transfer_request: TransferRequest {
-                    request_id:     1,
                     amount:         2,
                     target_account: account2,
                 },
@@ -404,7 +391,6 @@ mod tests {
             Transfer {
                 time_of_transfer: 2,
                 transfer_request: TransferRequest {
-                    request_id:     2,
                     amount:         3,
                     target_account: account2,
                 },
@@ -468,7 +454,6 @@ mod tests {
         };
 
         let parameter = TransferRequest {
-            request_id: 0,
             amount: 5,
             target_account,
         };
@@ -482,7 +467,6 @@ mod tests {
             Transfer {
                 time_of_transfer: 0,
                 transfer_request: TransferRequest {
-                    request_id:     0,
                     amount:         1,
                     target_account: account1,
                 },
@@ -490,7 +474,6 @@ mod tests {
             Transfer {
                 time_of_transfer: 1,
                 transfer_request: TransferRequest {
-                    request_id:     1,
                     amount:         1,
                     target_account: account2,
                 },
@@ -498,7 +481,6 @@ mod tests {
             Transfer {
                 time_of_transfer: 2,
                 transfer_request: TransferRequest {
-                    request_id:     2,
                     amount:         1,
                     target_account: account2,
                 },
