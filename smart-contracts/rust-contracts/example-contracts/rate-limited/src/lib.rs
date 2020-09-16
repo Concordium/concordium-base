@@ -96,11 +96,7 @@ fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
 }
 
 #[receive(name = "receive")]
-/// Allows the owner of the contract to transfer GTU from the contract
-/// to an arbitrary account if the following two conditions are met:
-/// - The contract balance is greater than the requested amount
-/// - The total GTU withdrawn within the time_limit plus the requested amount is
-///   less or equal to the timed_withdraw_limit
+/// Allows the owner of the contract to transfer GTU from the contract to an arbitrary account
 fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: R,
     _amount: Amount,
@@ -236,7 +232,7 @@ mod tests {
     #[test]
     /// Test that a valid transfer request is accepted
     ///
-    ///  - Removes outdated transfers from history
+    ///  - Removes outdated transfers from history (state.transfers)
     ///  - Accepts the requested transfer
     ///  - Adds the new request to history
     fn test_receive_transfer_accepted() {
@@ -422,7 +418,7 @@ mod tests {
     }
 
     #[test]
-    /// Test that underflows do not occur when the time_limit is larger than the
+    /// Test that an underflow does not occur when the time_limit is larger than the
     /// current time
     ///
     /// - Transfer request is accepted
