@@ -428,6 +428,8 @@ data RawUpdateInstruction = RawUpdateInstruction {
         ruiPayload :: UpdatePayload
     } deriving (Eq, Show)
 
+$(deriveJSON defaultOptions{fieldLabelModifier = firstLower . drop 3} ''RawUpdateInstruction)
+
 -- |Serialize a 'RawUpdateInstruction'; used for signing.
 putRawUpdateInstruction :: Putter RawUpdateInstruction
 putRawUpdateInstruction RawUpdateInstruction{..} = do
