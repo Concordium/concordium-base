@@ -253,7 +253,7 @@ fn handle_combine_id(cmb: Combine) {
         u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^8-1");
     if number_of_ars < revocation_threshold.into() {
         eprintln!(
-            "insufficient number of anonymity revokers {}, {:?}",
+            "insufficient number of anonymity revokers {}, {}",
             number_of_ars, revocation_threshold
         );
         return;
@@ -265,12 +265,11 @@ fn handle_combine_id(cmb: Combine) {
         Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {
-        let name = share_value.clone();
-        match read_json_from_file(share_value) {
+        match read_json_from_file(&share_value) {
             Err(y) => {
                 eprintln!(
-                    "Could not read from ar file {:?}, error: {}",
-                    name.file_name(),
+                    "Could not read from ar file {}, error: {}",
+                    share_value.to_string_lossy(),
                     y
                 );
                 return;
@@ -344,7 +343,7 @@ fn handle_combine_prf(cmb: CombinePrf) {
         u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^8-1");
     if number_of_ars < revocation_threshold.into() {
         eprintln!(
-            "insufficient number of anonymity revokers {}, {:?}",
+            "insufficient number of anonymity revokers {}, {}",
             number_of_ars, revocation_threshold
         );
         return;
@@ -356,12 +355,11 @@ fn handle_combine_prf(cmb: CombinePrf) {
         Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {
-        let name = share_value.clone();
-        match read_json_from_file(share_value) {
+        match read_json_from_file(&share_value) {
             Err(y) => {
                 eprintln!(
-                    "Could not read from ar file {:?}, error: {}",
-                    name.file_name(),
+                    "Could not read from ar file {}, error: {}",
+                    share_value.to_string_lossy(),
                     y
                 );
                 return;
@@ -392,9 +390,8 @@ fn handle_combine_prf(cmb: CombinePrf) {
 
     if let Some(json_file) = cmb.out {
         let json = json!({ "prfKey": prf_key_string });
-        let name = json_file.clone();
-        match write_json_to_file(json_file, &json) {
-            Ok(_) => println!("Wrote prfKey to {:?}.", name.file_name()),
+        match write_json_to_file(&json_file, &json) {
+            Ok(_) => println!("Wrote PRF key to {}.", json_file.to_string_lossy()),
             Err(e) => {
                 println!("Could not JSON write to file because {}", e);
                 output_json(&json);
