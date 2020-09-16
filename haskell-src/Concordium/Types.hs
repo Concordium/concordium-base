@@ -46,6 +46,7 @@ module Concordium.Types (
   numAggregated,
   selfAmount,
   startIndex,
+  accountEncAmountHash,
   Nonce(..),
   minNonce,
   AccountVerificationKey,
@@ -268,13 +269,13 @@ instance Monad m => MHashableTo m Hash.Hash ExchangeRate
 -- |Energy to GTU conversion rate in microGTU per Energy.
 type EnergyRate = Rational
 
--- |Compute the exchange rate of microGTU per Energy from the 
+-- |Compute the exchange rate of microGTU per Energy from the
 -- rate of microGTU per Euro and the rate of Euros per Energy.
 computeEnergyRate
   :: ExchangeRate
   -- ^microGTU per Euro
   -> ExchangeRate
-  -- ^Euros per Energy 
+  -- ^Euros per Energy
   -> EnergyRate
 computeEnergyRate microGTUPerEuro euroPerEnergy = toRational microGTUPerEuro * toRational euroPerEnergy
 
@@ -495,14 +496,20 @@ data AccountEncryptedAmount = AccountEncryptedAmount {
   _incomingEncryptedAmounts :: !(Seq.Seq EncryptedAmount),
   -- |If 'Just', the number of incoming amounts that have been aggregated. In
   -- that case the number is always >= 2.
-  _numAggregated :: !(Maybe Word32)
+  _numAggregated :: !(Maybe Word32),
+  -- |Hash of the encrypted amount, to be recomputed after each update following these rules:
+  -- - Replacing the self amount: newHash = hash (oldHash <> encode newAmount)
+  -- - Replacing amounts up to index X: newHash = hash (oldHash <> encode newAmount <> encode X)
+  -- - Adding an incoming amount: newHash = hash (oldHash <> encode newAmount)
+  _accountEncAmountHash :: !Hash.Hash
 } deriving(Eq, Show)
 
 instance AE.ToJSON AccountEncryptedAmount where
   toJSON AccountEncryptedAmount{..} = AE.object $ [
     "selfAmount" AE..= _selfAmount,
     "startIndex" AE..= _startIndex,
-    "incomingAmounts" AE..= _incomingEncryptedAmounts
+    "incomingAmounts" AE..= _incomingEncryptedAmounts,
+    "hash" AE..= _accountEncAmountHash
     ] ++ aggregated
     where aggregated = case _numAggregated of
             Nothing -> []
@@ -514,6 +521,7 @@ instance AE.FromJSON AccountEncryptedAmount where
     _startIndex <- obj AE..: "startIndex"
     _incomingEncryptedAmounts <- obj AE..: "incomingAmounts"
     _numAggregated <- obj AE..:? "numAggregated"
+    _accountEncAmountHash <- obj AE..: "hash"
     case _numAggregated of
       Nothing -> return ()
       Just n -> unless (n >= 2) $ fail "numAggregated must be at least 2, if present."
@@ -525,7 +533,8 @@ initialAccountEncryptedAmount = AccountEncryptedAmount{
   _selfAmount = mempty,
   _startIndex = 0,
   _incomingEncryptedAmounts = Seq.empty,
-  _numAggregated = Nothing
+  _numAggregated = Nothing,
+  _accountEncAmountHash = Hash.hash ""
 }
 
 instance S.Serialize AccountEncryptedAmount where
@@ -534,9 +543,10 @@ instance S.Serialize AccountEncryptedAmount where
     S.put _startIndex <>
     S.putWord32be (fromIntegral (Seq.length _incomingEncryptedAmounts)) <>
     mapM_ S.put _incomingEncryptedAmounts <>
-    case _numAggregated of
+    (case _numAggregated of
       Nothing -> S.putWord32be 0
-      Just n -> S.putWord32be n
+      Just n -> S.putWord32be n) <>
+    S.put _accountEncAmountHash
 
   get = do
     _selfAmount <- S.get
@@ -544,6 +554,7 @@ instance S.Serialize AccountEncryptedAmount where
     len <- S.getWord32be
     _incomingEncryptedAmounts <- Seq.fromList <$> replicateM (fromIntegral len) S.get
     mNumAggregated <- S.getWord32be
+    _accountEncAmountHash <- S.get
     case mNumAggregated of
       0 -> return AccountEncryptedAmount{_numAggregated = Nothing,..}
       n | n >= 2 -> return AccountEncryptedAmount{_numAggregated = Just n,..}
