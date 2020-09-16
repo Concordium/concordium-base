@@ -2,13 +2,23 @@
 use concordium_sc_base::*;
 
 /* A contract that acts like an account (can send, store and accept GTU),
- * but requires that no more than x GTU be withdrawn every y time-units
- * (or something approximating that).
+ * but requires that no more than x GTU be withdrawn every y time-units.
  *
  * The idea being that perhaps it can act as something like an annuity,
  * or it can be a form of security in that it gives observers time to react
  * to odd movements of GTU before too much damage is inflicted (e.g. by
  * enacting Concordium’s ability to unmask actors on the chain).
+ *
+ * Implementation:
+ *  - The contract is initiated with a timed_withdraw_limit (corresponding to x in the
+ *    above) and a time_limit (corresponding to y).
+ *  - When a transfer request is received, it is checked whether the contract
+ *    has sufficient funds to process it and whether the accepted transfers
+ *    within the y last time-units, including the new request, is below the x
+ *    withdraw limit. If both terms are met, the transfer is accepted and put
+ *    into state.transfers for future reference.
+ *  - With every request the outdated requests, i.e. those older than
+ *    current_time minus y, in state.transfers are pruned.
  */
 
 // Type Aliases
@@ -20,27 +30,38 @@ type TimeMilliseconds = u64;
 
 #[derive(Clone)]
 struct TransferRequest {
-    request_id:     TransferRequestId,
-    amount:         Amount,
+    /// An ID used to catch erroneous duplicate requests
+    request_id: TransferRequestId,
+    /// The amount of GTU to transfer from the contract to the target_account
+    amount: Amount,
+    /// The account to transfer to
     target_account: AccountAddress,
 }
 
 #[derive(Clone)]
 struct Transfer {
+    /// The time, fx slot_time, of when the request was initiated
     time_of_transfer: TimeMilliseconds,
+    /// The associated request
     transfer_request: TransferRequest,
 }
 
 // State
 
 struct InitParams {
+    /// The amount of GTU allowed to be withdrawn within the time_limit
     timed_withdraw_limit: Amount,
-    time_limit:           TimeMilliseconds,
+    /// The time in which recently accepted transfers are checked
+    time_limit: TimeMilliseconds,
 }
 
 pub struct State {
+    /// The initiating parameters
     init_params: InitParams,
-    transfers:   Vec<Transfer>, // TODO: Should BTreeSet be used instead to avoid duplicates?
+    /// The recently accepted transfers.
+    /// Used to check whether a new transfer request should be accepted
+    /// according to the time_limit and timed_withdraw_limit.
+    transfers: Vec<Transfer>, // TODO: Should BTreeSet be used instead to avoid duplicates?
 }
 
 #[init(name = "init")]
@@ -50,17 +71,24 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     _logger: &mut L,
 ) -> InitResult<State> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
+
+    // If timed_withdraw_limit is zero then no GTU can be transferred from the
+    // account, thus violating the purpose of the contract.
+    ensure!(
+        init_params.timed_withdraw_limit > 0,
+        "The timed_withdraw_limit should be greather than 0."
+    );
+
     let state = State {
         init_params,
         transfers: Vec::new(),
     };
 
-    // TODO: Ensure reasonable init_params
-
     Ok(state)
 }
 
 #[receive(name = "deposit")]
+/// Allows anyone to deposit GTU into the contract.
 fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _ctx: R,
     _amount: Amount,
@@ -71,26 +99,24 @@ fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
 }
 
 #[receive(name = "receive")]
+/// Allows the owner of the contract to transfer GTU from the contract
+/// to an arbitrary account if the following two conditions are met:
+/// - The contract balance is greater than the requested amount
+/// - The total GTU withdrawn within the time_limit plus the requested amount is
+///   less or equal to the timed_withdraw_limit
 fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: R,
     _amount: Amount,
     _logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
-    let sender_address = match ctx.sender() {
-        Address::Contract(_) => bail!("Sender cannot be a contract"),
-        Address::Account(account_address) => account_address,
-    };
-    ensure!(sender_address == ctx.owner());
+    ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can transfer.");
 
     let current_time: TimeMilliseconds = ctx.metadata().slot_time();
 
     // Beginning of the time window in which to check transfer history
     let time_window_start: TimeMilliseconds =
-        match current_time.checked_sub(state.init_params.time_limit) {
-            None => 0,
-            Some(res) => res,
-        };
+        current_time.saturating_sub(state.init_params.time_limit);
 
     let transfer_request: TransferRequest = ctx.parameter_cursor().get()?;
     let transfer = Transfer {
@@ -101,8 +127,7 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
     // Remove requests before the time_window_start
     state.transfers.retain(|r| r.time_of_transfer >= time_window_start);
 
-    // Calculate sum of transfers within time limit, TODO: Use single traversal of
-    // vec
+    // Calculate sum of transfers within time limit
     let amount_transferred_in_window: Amount =
         state.transfers.iter().map(|r| r.transfer_request.amount).sum();
 
