@@ -184,13 +184,17 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         witness,
     };
     let bulletproofs = &pre_id_obj.poks.bulletproofs;
-    for (((_, ar_data), ar_info), proof) in pre_id_obj
+    for ((ar_identity, ar_data), proof) in pre_id_obj
         .ip_ar_data
         .iter()
-        .zip(context.ars_infos.values())
+        // .zip(context.ars_infos.values())
         .zip(bulletproofs.iter())
     {
         let ciphers = ar_data.enc_prf_key_share;
+        let ar_info = match context.ars_infos.get(ar_identity) {
+            Some(x) => x,
+            None => return Err(Reason::IncorrectProof),
+        };
         let pk: C = ar_info.ar_public_key.key;
         let keys: CommitmentKey<C> = CommitmentKey {
             g: h_in_exponent,
