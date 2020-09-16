@@ -46,7 +46,6 @@ module Concordium.Types (
   numAggregated,
   selfAmount,
   startIndex,
-  accountEncAmountHash,
   Nonce(..),
   minNonce,
   AccountVerificationKey,
@@ -496,20 +495,14 @@ data AccountEncryptedAmount = AccountEncryptedAmount {
   _incomingEncryptedAmounts :: !(Seq.Seq EncryptedAmount),
   -- |If 'Just', the number of incoming amounts that have been aggregated. In
   -- that case the number is always >= 2.
-  _numAggregated :: !(Maybe Word32),
-  -- |Hash of the encrypted amount, to be recomputed after each update following these rules:
-  -- - Replacing the self amount: newHash = hash (oldHash <> encode newAmount)
-  -- - Replacing amounts up to index X: newHash = hash (oldHash <> encode newAmount <> encode X)
-  -- - Adding an incoming amount: newHash = hash (oldHash <> encode newAmount)
-  _accountEncAmountHash :: !Hash.Hash
+  _numAggregated :: !(Maybe Word32)
 } deriving(Eq, Show)
 
 instance AE.ToJSON AccountEncryptedAmount where
   toJSON AccountEncryptedAmount{..} = AE.object $ [
     "selfAmount" AE..= _selfAmount,
     "startIndex" AE..= _startIndex,
-    "incomingAmounts" AE..= _incomingEncryptedAmounts,
-    "hash" AE..= _accountEncAmountHash
+    "incomingAmounts" AE..= _incomingEncryptedAmounts
     ] ++ aggregated
     where aggregated = case _numAggregated of
             Nothing -> []
@@ -521,7 +514,6 @@ instance AE.FromJSON AccountEncryptedAmount where
     _startIndex <- obj AE..: "startIndex"
     _incomingEncryptedAmounts <- obj AE..: "incomingAmounts"
     _numAggregated <- obj AE..:? "numAggregated"
-    _accountEncAmountHash <- obj AE..: "hash"
     case _numAggregated of
       Nothing -> return ()
       Just n -> unless (n >= 2) $ fail "numAggregated must be at least 2, if present."
@@ -533,8 +525,7 @@ initialAccountEncryptedAmount = AccountEncryptedAmount{
   _selfAmount = mempty,
   _startIndex = 0,
   _incomingEncryptedAmounts = Seq.empty,
-  _numAggregated = Nothing,
-  _accountEncAmountHash = Hash.hash ""
+  _numAggregated = Nothing
 }
 
 instance S.Serialize AccountEncryptedAmount where
@@ -543,10 +534,9 @@ instance S.Serialize AccountEncryptedAmount where
     S.put _startIndex <>
     S.putWord32be (fromIntegral (Seq.length _incomingEncryptedAmounts)) <>
     mapM_ S.put _incomingEncryptedAmounts <>
-    (case _numAggregated of
+    case _numAggregated of
       Nothing -> S.putWord32be 0
-      Just n -> S.putWord32be n) <>
-    S.put _accountEncAmountHash
+      Just n -> S.putWord32be n
 
   get = do
     _selfAmount <- S.get
@@ -554,7 +544,6 @@ instance S.Serialize AccountEncryptedAmount where
     len <- S.getWord32be
     _incomingEncryptedAmounts <- Seq.fromList <$> replicateM (fromIntegral len) S.get
     mNumAggregated <- S.getWord32be
-    _accountEncAmountHash <- S.get
     case mNumAggregated of
       0 -> return AccountEncryptedAmount{_numAggregated = Nothing,..}
       n | n >= 2 -> return AccountEncryptedAmount{_numAggregated = Just n,..}
