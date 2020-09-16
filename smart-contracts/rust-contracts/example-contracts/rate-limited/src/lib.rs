@@ -54,6 +54,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     _amount: Amount,
     _logger: &mut L,
 ) -> InitResult<State> {
+   
     let init_params: InitParams = ctx.parameter_cursor().get()?;
     let state = State {
         init_params,
@@ -83,6 +84,7 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
     _logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
+
     let sender_address = match ctx.sender() {
         Address::Contract(_) => bail!("Sender cannot be a contract"),
         Address::Account(account_address) => account_address,
@@ -91,8 +93,9 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
 
     let current_time: TimeMilliseconds = ctx.metadata().slot_time();
 
-    // Beginning of the time window in which to check transfers
-    let time_window_start: TimeMilliseconds = match current_time.checked_sub(state.init_params.time_limit) {
+    // Beginning of the time window in which to check transfer history
+    let time_window_start: TimeMilliseconds = match current_time
+        .checked_sub(state.init_params.time_limit) {
         None => 0,
         Some(res) => res,
     };
@@ -100,20 +103,24 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
     let transfer_request: TransferRequest = ctx.parameter_cursor().get()?;
     let transfer = Transfer{time_of_transfer: current_time, transfer_request};
 
-    // Remove requests outside (before) the time_window_start
+    // Remove requests before the time_window_start
     state.transfers.retain(|r|r.time_of_transfer >= time_window_start);
 
-
     // Calculate sum of transfers within time limit, TODO: Use single traversal of vec
-    let amount_transferred_in_window: Amount = state.transfers.iter().map(|r| r.transfer_request.amount).sum();
+    let amount_transferred_in_window: Amount = state.transfers
+                                                    .iter()
+                                                    .map(|r| r.transfer_request.amount)
+                                                    .sum();
 
     ensure!(transfer.transfer_request.amount <= ctx.self_balance()
-            && amount_transferred_in_window + transfer.transfer_request.amount <= state.init_params.timed_withdraw_limit);
+            && amount_transferred_in_window + transfer.transfer_request.amount
+            <= state.init_params.timed_withdraw_limit);
 
     // Add request to vec because it is valid
     state.transfers.push(transfer.clone());
 
-    Ok(A::simple_transfer(&transfer.transfer_request.target_account, transfer.transfer_request.amount))
+    Ok(A::simple_transfer(&transfer.transfer_request.target_account,
+                          transfer.transfer_request.amount))
 }
 
 
@@ -207,6 +214,7 @@ impl Serialize for State {
  *  - Sufficient funds, denied for time_window DONE
  *  - Insufficient funds for last two
  *  - Transfer initiated by Wrong account, i.e not owner
+ *  - No underflow occurs when time_limit > current_time DONE
 */
 
 
@@ -215,7 +223,7 @@ mod tests {
     use super::*;
 
     #[test]
-    /// Test that init succeeds or fails based on what parameter.
+    /// Test that init succeeds and state is initialized with an empty vec.
     fn test_init() {
         // Setup our example state the contract is to be run in.
         // First the context.
@@ -252,6 +260,7 @@ mod tests {
     }
 
     #[test]
+    /// Test that the owner can deposit GTU into the contract
     fn test_receive_deposit() {
         // setup our example state the contract is to be run in.
         // first the context.
@@ -302,6 +311,11 @@ mod tests {
 
 
     #[test]
+    /// Test that a valid transfer request is accepted
+    ///
+    ///  - Removes outdated transfers from history
+    ///  - Accepts the requested transfer
+    ///  - Adds the new request to history
     fn test_receive_transfer_accepted() {
         // setup our example state the contract is to be run in.
         // first the context.
@@ -389,6 +403,10 @@ mod tests {
 
 
     #[test]
+    /// Test that a request fails when the rate limit is exceeded\
+    ///
+    /// - Request is denied
+    /// - Request is _not_ added to history
     fn test_receive_transfer_denied_due_to_limit() {
         // setup our example state the contract is to be run in.
         // first the context.
@@ -460,6 +478,85 @@ mod tests {
 
         // Test
         assert!(res.is_err(), "Contract receive transfer succeeded, but it should not have.");
-        assert_eq!(state.transfers.len(), 3, "No transfers should have been removed, and the new one should not be added.");
+        assert_eq!(state.transfers.len(), 3, "No transfers should have been removed, \
+                                              and the new one should not be added.");
+    }
+
+    #[test]
+    /// Test that underflows do not occur when the time_limit is larger than the current time
+    ///
+    /// - Transfer request is accepted
+    /// - No underflow occurs
+    fn test_receive_transfer_no_underflow() {
+        // setup our example state the contract is to be run in.
+        // first the context.
+        let metadata = ChainMetadata {
+            slot_number:      0,
+            block_height:     0,
+            finalized_height: 0,
+            slot_time:        10,
+        };
+
+        let account1 = AccountAddress([1u8; 32]);
+        let account2 = AccountAddress([2u8; 32]);
+        let target_account = AccountAddress([2u8; 32]);
+
+        let receive_ctx = ReceiveContext {
+            metadata,
+            invoker: account1,
+            self_address: ContractAddress {
+                index:    0,
+                subindex: 0,
+            },
+            self_balance: 10,
+            sender: Address::Account(account1),
+            owner: account1,
+        };
+
+        let parameter = TransferRequest{
+            request_id: 0,
+            amount: 5,
+            target_account: target_account
+        };
+
+        let ctx = test_infrastructure::ReceiveContextWrapper {
+            receive_ctx,
+            parameter: &to_bytes(&parameter),
+        };
+
+
+        let mut transfers = Vec::new();
+        transfers.push(Transfer { time_of_transfer: 0,
+                                  transfer_request: TransferRequest { request_id: 0,
+                                                                      amount: 1,
+                                                                      target_account: account1, },
+        });
+        transfers.push(Transfer { time_of_transfer: 1,
+                                  transfer_request: TransferRequest { request_id: 1,
+                                                                      amount: 1,
+                                                                      target_account: account2, },
+        });
+
+        transfers.push(Transfer { time_of_transfer: 2,
+                                  transfer_request: TransferRequest { request_id: 2,
+                                                                      amount: 1,
+                                                                      target_account: account2, },
+        });
+
+        let init_params = InitParams{ timed_withdraw_limit: 10, time_limit: 1000 };
+
+        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut state = State {
+            init_params,
+            transfers,
+        };
+
+
+        // Execution
+        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+            contract_receive_transfer(ctx, 0, &mut logger, &mut state);
+
+        // Test
+        assert!(res.is_ok(), "Contract receive transfer failed, but it should not have.");
     }
 }
