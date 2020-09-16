@@ -37,6 +37,23 @@ impl Action {
 #[derive(Default, Eq, PartialEq)]
 pub struct Reject {}
 
+#[inline(always)]
+#[cfg(all(debug_assertions, target_arch = "wasm32"))]
+pub fn report_error(message: &str, filename: &str, line: u32, column: u32) {
+    let msg_bytes = message.as_bytes();
+    let filename_bytes = filename.as_bytes();
+    unsafe {
+        crate::prims::report_error(
+            msg_bytes.as_ptr(),
+            msg_bytes.len() as u32,
+            filename_bytes.as_ptr(),
+            filename_bytes.len() as u32,
+            line,
+            column,
+        )
+    };
+}
+
 #[macro_export]
 /// The `bail` macro can be used for cleaner error handling. If the function has
 /// result type Result<_, Reject> then invoking `bail` will terminate execution
@@ -44,16 +61,22 @@ pub struct Reject {}
 /// message will be logged before the function terminates.
 macro_rules! bail {
     () => {
+        #[cfg(all(debug_assertions, target_arch = "wasm32"))]
+        report_error("", file!(), line!(), column!());
         return Err(Reject {});
     };
     ($e:expr) => {{
         // logs are not retained in case of rejection.
         // $crate::events::log_bytes($e);
+        #[cfg(all(debug_assertions, target_arch = "wasm32"))]
+        report_error($e, file!(), line!(), column!());
         return Err(Reject {});
     }};
-    ($fmt:expr, $($arg:tt)+) => {{
+    ($fmt:expr, $($arg:tt),+) => {{
         // format_err!-like formatting
         // logs are not retained in case of rejection.
+        #[cfg(all(debug_assertions, target_arch = "wasm32"))]
+        report_error(format!($fmt, $($arg),+), file!(), line!(), column!());
         return Err(Reject {});
     }};
 }
@@ -65,12 +88,12 @@ macro_rules! bail {
 macro_rules! ensure {
     ($p:expr) => {
         if !$p {
-            return Err(Reject {});
+            $crate::bail!();
         }
     };
-    ($p:expr, $($arg:tt)+) => {{
+    ($p:expr, $($arg:tt),+) => {{
         if !$p {
-            $crate::bail!($($arg:tt)+)
+            $crate::bail!($($arg),+);
         }
     }};
 }
@@ -82,8 +105,8 @@ macro_rules! ensure_eq {
     ($l:expr, $r:expr) => {
         $crate::ensure!($l == $r)
     };
-    ($l:expr, $r:expr, $($arg:tt)+) => {
-        $crate::ensure!($l == $r, $($arg:tt)+)
+    ($l:expr, $r:expr, $($arg:tt),+) => {
+        $crate::ensure!($l == $r, $($arg),+)
     };
 }
 
@@ -93,8 +116,8 @@ macro_rules! ensure_ne {
     ($l:expr, $r:expr) => {
         $crate::ensure!($l != $r)
     };
-    ($l:expr, $r:expr, $($arg:tt)+) => {
-        $crate::ensure!($l != $r, $($arg:tt)+)
+    ($l:expr, $r:expr, $($arg:tt),+) => {
+        $crate::ensure!($l != $r, $($arg),+)
     };
 }
 

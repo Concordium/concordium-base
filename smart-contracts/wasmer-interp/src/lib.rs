@@ -12,8 +12,8 @@ use std::{
 };
 pub use types::*;
 use wasmer_runtime::{
-    error, func, imports, instantiate, types as wasmer_types, Array, Ctx, ImportObject, Module,
-    Value, WasmPtr,
+    error, func, imports, instantiate, types as wasmer_types, Array, Ctx, Func, ImportObject,
+    Module, Value, WasmPtr,
 };
 
 #[derive(Clone, Default)]
@@ -666,6 +666,71 @@ pub fn invoke_receive(
     } else {
         Err(error::CallError::Runtime(error::RuntimeError::User(Box::new("Invalid return."))))
     }
+}
+
+fn read_string(ctx: &Ctx, ptr: WasmPtr<u8, Array>, length: u32) -> Result<String, ()> {
+    let memory = ctx.memory(0);
+    match ptr.deref(memory, 0, length) {
+        Some(cells) => {
+            let bytes: Vec<_> = cells.iter().map(|c| c.get()).collect();
+            Ok(String::from_utf8(bytes).unwrap())
+        }
+        _ => Err(()),
+    }
+}
+
+pub fn test_run(wasm: &[u8]) -> Result<(), ()> {
+    let err_func_u32 = || -> Result<u32, ()> { Err(()) };
+    let err_func = |_: u32| -> Result<(), ()> { Err(()) };
+    let err_func_2u32 = |_: u32, _: u32| -> Result<(), ()> { Err(()) };
+    let err_func_3u32_u32 = |_: u32, _: u32, _: u32| -> Result<u32, ()> { Err(()) };
+
+    let report_error = |ctx: &mut Ctx,
+                        msg_ptr: WasmPtr<u8, Array>,
+                        msg_length: u32,
+                        filename_ptr: WasmPtr<u8, Array>,
+                        filename_length: u32,
+                        line: u32,
+                        column: u32| {
+        let msg = read_string(ctx, msg_ptr, msg_length).unwrap();
+        let filename = read_string(ctx, filename_ptr, filename_length).unwrap();
+        let location = format!("{}:{}:{}", filename, line, column );
+        eprintln!("\nError: {}\n{}\n", msg, location);
+    };
+
+    let import_object = imports! {
+        "concordium" => {
+            "get_init_origin" => func!(err_func),
+            "get_receive_invoker" => func!(err_func),
+            "get_receive_self_address" => func!(err_func),
+            "get_receive_self_balance" => func!(err_func),
+            "get_receive_sender" => func!(err_func),
+            "get_receive_owner" => func!(err_func),
+            "get_slot_number" => func!(err_func),
+            "get_block_height" => func!(err_func),
+            "get_finalized_height" => func!(err_func),
+            "get_slot_time" => func!(err_func),
+            "get_parameter_section" => func!(err_func),
+            "get_parameter_size" => func!(err_func),
+            "combine_and" => func!(err_func),
+            "combine_or" => func!(err_func),
+            "accept" => func!(err_func_u32),
+            "simple_transfer" => func!(err_func),
+            "send" => func!(err_func),
+            "tick_energy" => func!(err_func),
+            "log_event" => func!(err_func_2u32),
+            "write_state" => func!(err_func_3u32_u32),
+            "load_state" => func!(err_func_3u32_u32),
+            "resize_state" => func!(err_func),
+            "state_size" => func!(err_func_u32),
+            "report_error" => func!(report_error)
+        },
+    };
+    let instance = instantiate(wasm, &import_object)
+        .expect("Instantiation should always succeed for well-formed modules.");
+    let test: Func<(u32, u32), u32> = instance.exports.get("main").expect("Tests are not provided");
+    let _value = test.call(0, 0).expect("Test failed");
+    Ok(())
 }
 
 /// Get the init methods of the module.
