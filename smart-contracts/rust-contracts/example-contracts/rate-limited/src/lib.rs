@@ -10,8 +10,8 @@ use concordium_sc_base::*;
  * enacting Concordium’s ability to unmask actors on the chain).
  *
  * Implementation:
- *  - The contract is initiated with a timed_withdraw_limit (corresponding to x in the
- *    above) and a time_limit (corresponding to y).
+ *  - The contract is initiated with a timed_withdraw_limit (corresponding to
+ *    x in the above) and a time_limit (corresponding to y).
  *  - When a transfer request is received, it is checked whether the contract
  *    has sufficient funds to process it and whether the accepted transfers
  *    within the y last time-units, including the new request, is below the x
@@ -96,7 +96,8 @@ fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
 }
 
 #[receive(name = "receive")]
-/// Allows the owner of the contract to transfer GTU from the contract to an arbitrary account
+/// Allows the owner of the contract to transfer GTU from the contract to an
+/// arbitrary account
 fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: R,
     _amount: Amount,
@@ -418,8 +419,8 @@ mod tests {
     }
 
     #[test]
-    /// Test that an underflow does not occur when the time_limit is larger than the
-    /// current time
+    /// Test that an underflow does not occur when the time_limit is larger than
+    /// the current time
     ///
     /// - Transfer request is accepted
     /// - No underflow occurs
