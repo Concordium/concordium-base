@@ -6,7 +6,6 @@ import qualified Data.Serialize as S
 import qualified Data.Sequence as Seq
 import Test.Hspec
 import Test.QuickCheck as QC
-import Concordium.Crypto.SHA256 as Hash
 
 import Concordium.ID.Parameters
 import Concordium.Crypto.EncryptedTransfers
@@ -27,7 +26,6 @@ genAccountEncryptedAmount = do
   len <- choose (0,100)
   _incomingEncryptedAmounts <- Seq.replicateM len genEncryptedAmount
   numAgg <- arbitrary
-  let _accountEncAmountHash = Hash.hash ""
   if numAgg == Just 1 || numAgg == Just 0 then
     return AccountEncryptedAmount{_numAggregated = Nothing,..}
   else
