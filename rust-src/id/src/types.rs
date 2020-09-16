@@ -693,7 +693,7 @@ pub struct ChainArDecryptedData<C: Curve> {
 }
 
 // NOTE: This struct is redundant, but we will
-// will keep it for now for compatibility. 
+// will keep it for now for compatibility.
 // We need to remove it in the future.
 /// Choice of anonymity revocation parameters
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
