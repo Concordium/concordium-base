@@ -298,19 +298,19 @@ mod tests {
 
         // Test
         match res {
-            Err(_) => assert!(false, "Contract receive transfer failed, but it should not have."),
+            Err(_) => claim!(false, "Contract receive transfer failed, but it should not have."),
             Ok(actions) => {
-                assert_eq!(
+                claim_eq!(
                     actions,
                     test_infrastructure::ActionsTree::simple_transfer(&target_account, 5),
                     "The request did not transfer the correct amount."
                 );
-                assert_eq!(
+                claim_eq!(
                     state.recent_transfers.len(),
                     3,
                     "The oldest transfer should have been removed and the new one added."
                 );
-                assert_eq!(
+                claim_eq!(
                     state.recent_transfers[2].transfer_request.amount, 5,
                     "The new transfer should have been added to recent_transfers."
                 )
@@ -399,8 +399,8 @@ mod tests {
             contract_receive_transfer(ctx, 0, &mut logger, &mut state);
 
         // Test
-        assert!(res.is_err(), "Contract receive transfer succeeded, but it should not have.");
-        assert_eq!(
+        claim!(res.is_err(), "Contract receive transfer succeeded, but it should not have.");
+        claim_eq!(
             state.recent_transfers.len(),
             3,
             "No recent transfers should have been removed, and the new one should not be added."
@@ -408,7 +408,7 @@ mod tests {
 
         let recent_transfers_amounts: Vec<u64> =
             state.recent_transfers.iter().map(|t| t.transfer_request.amount).collect();
-        assert_eq!(
+        claim_eq!(
             recent_transfers_amounts,
             vec![6, 2, 3],
             "The recent_transfers should not have been altered."
@@ -497,6 +497,6 @@ mod tests {
             contract_receive_transfer(ctx, 0, &mut logger, &mut state);
 
         // Test
-        assert!(res.is_ok(), "Contract receive transfer failed, but it should not have.");
+        claim!(res.is_ok(), "Contract receive transfer failed, but it should not have.");
     }
 }

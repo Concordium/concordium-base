@@ -119,6 +119,9 @@ macro_rules! ensure_ne {
 }
 
 #[macro_export]
+/// The `claim` macro is used for testing as a substitute for the assert macro.
+/// It checks the condition and if false it reports back an error.
+/// Used only in testing.
 macro_rules! claim {
     ($cond:expr) => {
         if !$cond {
@@ -140,6 +143,8 @@ macro_rules! claim {
 }
 
 #[macro_export]
+/// Ensure the first two arguments are equal, just like `assert_eq!`, otherwise
+/// reports an error. Used only in testing.
 macro_rules! claim_eq {
     ($left:expr, $right:expr) => {
         claim!($left == $right)

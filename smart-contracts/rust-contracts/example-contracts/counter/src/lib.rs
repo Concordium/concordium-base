@@ -163,7 +163,7 @@ mod tests {
             current_count: 13,
         };
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(ctx, 7, &mut logger, &mut state);
+            contract_receive(ctx, 11, &mut logger, &mut state);
         match res {
             Err(_) => claim!(false, "Contract receive failed, but it should not have."),
             Ok(actions) => {
