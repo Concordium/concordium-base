@@ -311,7 +311,8 @@ mod tests {
                     "The oldest transfer should have been removed and the new one added."
                 );
                 claim_eq!(
-                    state.recent_transfers[2].transfer_request.amount, 5,
+                    state.recent_transfers[2].transfer_request.amount,
+                    5,
                     "The new transfer should have been added to recent_transfers."
                 )
             }
