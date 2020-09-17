@@ -143,7 +143,6 @@ pub fn read_credential<P: AsRef<Path> + Debug>(
     }
 }
 
-
 /// Parse YYYYMM as YearMonth
 pub fn parse_yearmonth(input: &str) -> Option<YearMonth> { YearMonth::from_str(input).ok() }
 
