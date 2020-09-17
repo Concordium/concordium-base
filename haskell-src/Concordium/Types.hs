@@ -43,7 +43,7 @@ module Concordium.Types (
   AccountEncryptedAmount(..),
   initialAccountEncryptedAmount,
   incomingEncryptedAmounts,
-  numAggregated,
+  aggregatedAmount,
   selfAmount,
   startIndex,
   Nonce(..),
@@ -495,28 +495,35 @@ data AccountEncryptedAmount = AccountEncryptedAmount {
   _incomingEncryptedAmounts :: !(Seq.Seq EncryptedAmount),
   -- |If 'Just', the number of incoming amounts that have been aggregated. In
   -- that case the number is always >= 2.
-  _numAggregated :: !(Maybe Word32)
+  _aggregatedAmount :: !(Maybe (EncryptedAmount, Word32))
 } deriving(Eq, Show)
 
 instance AE.ToJSON AccountEncryptedAmount where
   toJSON AccountEncryptedAmount{..} = AE.object $ [
     "selfAmount" AE..= _selfAmount,
     "startIndex" AE..= _startIndex,
-    "incomingAmounts" AE..= _incomingEncryptedAmounts
+    "incomingAmounts" AE..= ((case _aggregatedAmount of
+                               Nothing -> id
+                               Just (e, _) -> (e Seq.:<|)) _incomingEncryptedAmounts)
     ] ++ aggregated
-    where aggregated = case _numAggregated of
+    where aggregated = case _aggregatedAmount of
             Nothing -> []
-            Just n -> ["numAggregated" AE..= n]
+            Just (_, n) -> ["numAggregated" AE..= n]
 
 instance AE.FromJSON AccountEncryptedAmount where
   parseJSON = AE.withObject "AccountEncryptedAmount" $ \obj -> do
     _selfAmount <- obj AE..: "selfAmount"
     _startIndex <- obj AE..: "startIndex"
-    _incomingEncryptedAmounts <- obj AE..: "incomingAmounts"
-    _numAggregated <- obj AE..:? "numAggregated"
-    case _numAggregated of
-      Nothing -> return ()
-      Just n -> unless (n >= 2) $ fail "numAggregated must be at least 2, if present."
+    incomingEncryptedAmounts <- obj AE..: "incomingAmounts"
+    numAggregated <- obj AE..:? "numAggregated"
+    (_aggregatedAmount, _incomingEncryptedAmounts) <-
+      case numAggregated of
+        Nothing -> return (Nothing, incomingEncryptedAmounts)
+        Just n | n > 1 -> case incomingEncryptedAmounts of
+                           agg Seq.:<| rest ->
+                             return (Just (agg, n), rest)
+                           _ -> fail "The list of amounts doesn't contain any amounts but it claims some amounts have been aggregated"
+               | otherwise -> fail "Cannot have less than 2 amounts aggregated"
     return AccountEncryptedAmount{..}
 
 -- |Initial encrypted amount on a newly created account.
@@ -525,18 +532,20 @@ initialAccountEncryptedAmount = AccountEncryptedAmount{
   _selfAmount = mempty,
   _startIndex = 0,
   _incomingEncryptedAmounts = Seq.empty,
-  _numAggregated = Nothing
+  _aggregatedAmount = Nothing
 }
 
 instance S.Serialize AccountEncryptedAmount where
-  put AccountEncryptedAmount{..} =
-    S.put _selfAmount <>
-    S.put _startIndex <>
-    S.putWord32be (fromIntegral (Seq.length _incomingEncryptedAmounts)) <>
-    mapM_ S.put _incomingEncryptedAmounts <>
-    case _numAggregated of
+  put AccountEncryptedAmount{..} = do
+    S.put _selfAmount
+    S.put _startIndex
+    S.putWord32be (fromIntegral (Seq.length _incomingEncryptedAmounts))
+    mapM_ S.put _incomingEncryptedAmounts
+    case _aggregatedAmount of
       Nothing -> S.putWord32be 0
-      Just n -> S.putWord32be n
+      Just (e, n) -> do
+        S.putWord32be n
+        S.put e
 
   get = do
     _selfAmount <- S.get
@@ -545,8 +554,10 @@ instance S.Serialize AccountEncryptedAmount where
     _incomingEncryptedAmounts <- Seq.fromList <$> replicateM (fromIntegral len) S.get
     mNumAggregated <- S.getWord32be
     case mNumAggregated of
-      0 -> return AccountEncryptedAmount{_numAggregated = Nothing,..}
-      n | n >= 2 -> return AccountEncryptedAmount{_numAggregated = Just n,..}
+      0 -> return AccountEncryptedAmount{_aggregatedAmount = Nothing,..}
+      n | n >= 2 -> do
+            e <- S.get
+            return AccountEncryptedAmount{_aggregatedAmount = Just (e, n),..}
       _ -> fail "numAggregated must be at least 2, if non-zero."
 
 makeLenses ''AccountEncryptedAmount
