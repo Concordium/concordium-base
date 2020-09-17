@@ -148,7 +148,11 @@ fn main() {
                 eprintln!("{}", e)
             }
         }
-        Combine(cmb) => handle_combine_id(cmb),
+        Combine(cmb) => {
+            if let Err(e) = handle_combine_id(cmb) {
+                eprintln!("{}", e)
+            }
+        }
         DecryptPrf(dcr) => {
             if let Err(e) = handle_decrypt_prf(dcr) {
                 eprintln!("{}", e)
@@ -316,20 +320,10 @@ fn handle_decrypt_prf(dcr: DecryptPrf) -> Result<(), String> {
     Ok(())
 }
 
-fn handle_combine_id(cmb: Combine) {
-    let credential: Versioned<CredentialDeploymentValues<ExampleCurve, ExampleAttribute>> = {
-        let file_name = cmb.credential;
-        match read_json_from_file(file_name) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Could not read credential because {}", e);
-                return;
-            }
-        }
-    };
+fn handle_combine_id(cmb: Combine) -> Result<(), String> {
+    let credential: Versioned<CredentialDeploymentValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(cmb.credential), e => "Could not read credential because {}.");
     if credential.version != VERSION_0 {
-        eprintln!("The version should be 0");
-        return;
+        return Err("The version should be 0".to_owned());
     }
     let credential = credential.value;
     let revocation_threshold = credential.threshold;
@@ -340,11 +334,10 @@ fn handle_combine_id(cmb: Combine) {
     let number_of_ars =
         u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^8-1");
     if number_of_ars < revocation_threshold.into() {
-        eprintln!(
+        return Err(format!(
             "Insufficient number of anonymity revokers ({}). Threshold is {}.",
             number_of_ars, revocation_threshold
-        );
-        return;
+        ));
     }
 
     let mut ar_decrypted_data_vec: Vec<ChainArDecryptedData<ExampleCurve>> =
@@ -353,17 +346,14 @@ fn handle_combine_id(cmb: Combine) {
         Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {
-        match read_json_from_file(&share_value) {
-            Err(y) => {
-                eprintln!(
-                    "Could not read from ar file {}, error: {}",
-                    share_value.to_string_lossy(),
-                    y
-                );
-                return;
-            }
-            Ok(val) => ar_decrypted_data_vec.push(val),
-        }
+        let decrypted = read_json_from_file(&share_value).map_err(|e| {
+            format!(
+                "Could not read from ar file {}, error: {}",
+                share_value.to_string_lossy(),
+                e
+            )
+        })?;
+        ar_decrypted_data_vec.push(decrypted);
     }
 
     let mut ar_identities = Vec::with_capacity(ar_decrypted_data_vec.len());
@@ -376,10 +366,10 @@ fn handle_combine_id(cmb: Combine) {
     ar_identities.sort();
     ar_identities.dedup();
     if ar_identities.len() < shares.len() {
-        println!(
-            "No duplicates among the anonymity revokers identities nor share numbers are allowed"
+        return Err(
+            "No duplicates among the anonymity revokers identities nor share numbers are allowed."
+                .to_owned(),
         );
-        return;
     }
 
     let id_cred_pub = reveal_id_cred_pub(&shares);
@@ -397,13 +387,14 @@ fn handle_combine_id(cmb: Combine) {
         let json = json!({ "idCredPub": id_cred_pub_string });
         let name = json_file.clone();
         match write_json_to_file(json_file, &json) {
-            Ok(_) => println!("Wrote idCredPub to {:?}.", name.file_name().unwrap()),
+            Ok(_) => eprintln!("Wrote idCredPub to {:?}.", name.file_name().unwrap()),
             Err(e) => {
-                println!("Could not JSON write to file because {}", e);
+                eprintln!("Could not JSON write to file because {}", e);
                 output_json(&json);
             }
         }
     }
+    Ok(())
 }
 
 fn handle_combine_prf(cmb: CombinePrf) {
