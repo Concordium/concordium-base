@@ -2,3 +2,6 @@
 [build]
 target = "wasm32-unknown-unknown"
 rustflags = ["-C", "panic=abort"]
+
+[target.wasm32-unknown-unknown]
+runner = ["wasmer-runner", "test", "--source"]

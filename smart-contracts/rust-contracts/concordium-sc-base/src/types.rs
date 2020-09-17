@@ -54,6 +54,10 @@ pub fn report_error(message: &str, filename: &str, line: u32, column: u32) {
     };
 }
 
+#[inline(always)]
+#[cfg(not(all(debug_assertions, target_arch = "wasm32")))]
+pub fn report_error(_message: &str, _filename: &str, _line: u32, _column: u32) {}
+
 #[macro_export]
 /// The `bail` macro can be used for cleaner error handling. If the function has
 /// result type Result<_, Reject> then invoking `bail` will terminate execution
@@ -61,22 +65,15 @@ pub fn report_error(message: &str, filename: &str, line: u32, column: u32) {
 /// message will be logged before the function terminates.
 macro_rules! bail {
     () => {
-        #[cfg(all(debug_assertions, target_arch = "wasm32"))]
-        report_error("", file!(), line!(), column!());
         return Err(Reject {});
     };
     ($e:expr) => {{
         // logs are not retained in case of rejection.
-        // $crate::events::log_bytes($e);
-        #[cfg(all(debug_assertions, target_arch = "wasm32"))]
-        report_error($e, file!(), line!(), column!());
         return Err(Reject {});
     }};
     ($fmt:expr, $($arg:tt),+) => {{
         // format_err!-like formatting
         // logs are not retained in case of rejection.
-        #[cfg(all(debug_assertions, target_arch = "wasm32"))]
-        report_error(format!($fmt, $($arg),+), file!(), line!(), column!());
         return Err(Reject {});
     }};
 }
@@ -118,6 +115,40 @@ macro_rules! ensure_ne {
     };
     ($l:expr, $r:expr, $($arg:tt),+) => {
         $crate::ensure!($l != $r, $($arg),+)
+    };
+}
+
+#[macro_export]
+macro_rules! claim {
+    ($cond:expr) => {
+        if !$cond {
+            panic!()
+        }
+    };
+    ($cond:expr,) => {
+        if !$cond {
+            panic!()
+        }
+    };
+    ($cond:expr, $($arg:tt)+) => {
+        if !$cond {
+            let msg = format!("False claim {:?}", format!($($arg),+));
+            report_error(&msg, file!(), line!(), column!());
+            panic!(msg)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! claim_eq {
+    ($left:expr, $right:expr) => {
+        claim!($left == $right)
+    };
+    ($left:expr, $right:expr,) => {
+        claim!($left == $right)
+    };
+    ($left:expr, $right:expr, $($arg:tt)+) => {
+        claim!($left == $right, $($arg),+)
     };
 }
 

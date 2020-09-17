@@ -114,14 +114,14 @@ mod tests {
 
         // and inspect the result.
         if let Ok(state) = out {
-            assert_eq!(state.step, 13, "The counting step differs from initial amount (mod 256).");
-            assert_eq!(state.current_count, 0);
+            claim_eq!(state.step, 13, "The counting step differs from initial amount (mod 256).");
+            claim_eq!(state.current_count, 0);
         } else {
-            assert!(false, "Contract initialization failed.");
+            claim!(false, "Contract initialization failed.");
         }
         // and make sure the correct logs were produced.
-        assert_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
-        assert_eq!(&logger.logs[0], &[0, 13], "Incorrect log produced.");
+        claim_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
+        claim_eq!(&logger.logs[0], &[0, 13], "Incorrect log produced.");
     }
 
     #[test]
@@ -163,17 +163,17 @@ mod tests {
             current_count: 13,
         };
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(ctx, 17, &mut logger, &mut state);
+            contract_receive(ctx, 7, &mut logger, &mut state);
         match res {
-            Err(_) => assert!(false, "Contract receive failed, but it should not have."),
+            Err(_) => claim!(false, "Contract receive failed, but it should not have."),
             Ok(actions) => {
-                assert_eq!(
+                claim_eq!(
                     actions,
                     test_infrastructure::ActionsTree::Accept,
                     "Contract receive produced incorrect actions."
                 );
-                assert_eq!(state.step, 1, "Contract receive updated the step.");
-                assert_eq!(state.current_count, 14, "Contract receive did not bump the step.");
+                claim_eq!(state.step, 1, "Contract receive updated the step.");
+                claim_eq!(state.current_count, 14, "Contract receive did not bump the step.");
             }
         }
     }
