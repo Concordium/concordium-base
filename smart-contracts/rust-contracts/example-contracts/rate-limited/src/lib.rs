@@ -13,12 +13,12 @@ use concordium_sc_base::*;
  *  - The contract is initiated with a timed_withdraw_limit (corresponding to
  *    x in the above) and a time_limit (corresponding to y).
  *  - When a transfer request is received, it is checked whether the contract
- *    has sufficient funds to process it and whether the accepted transfers
- *    within the y last time-units, including the new request, is below the x
- *    withdraw limit. If both terms are met, the transfer is accepted and put
- *    into state.transfers for future reference.
+ *    has sufficient funds to process it and whether the accepted recent
+ *    transfers within the y last time-units, including the new request, is
+ *    below the x withdraw limit. If both terms are met, the transfer is
+ *    accepted and put into state.recent_transfers for future reference.
  *  - With every request the outdated requests, i.e. those older than
- *    current_time minus y, in state.transfers are pruned.
+ *    current_time minus y, are pruned from state.recent_transfers.
  */
 
 // Type Aliases
@@ -48,7 +48,7 @@ struct Transfer {
 struct InitParams {
     /// The amount of GTU allowed to be withdrawn within the time_limit
     timed_withdraw_limit: Amount,
-    /// The time in which recently accepted transfers are checked
+    /// The time in which recently accepted recent_transfers are checked
     time_limit: TimeMilliseconds,
 }
 
@@ -58,7 +58,7 @@ pub struct State {
     /// The recently accepted transfers.
     /// Used to check whether a new transfer request should be accepted
     /// according to the time_limit and timed_withdraw_limit.
-    transfers: Vec<Transfer>,
+    recent_transfers: Vec<Transfer>,
 }
 
 #[init(name = "init")]
@@ -78,7 +78,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 
     let state = State {
         init_params,
-        transfers: Vec::new(),
+        recent_transfers: Vec::new(),
     };
 
     Ok(state)
@@ -119,11 +119,11 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
     };
 
     // Remove requests before the time_window_start
-    state.transfers.retain(|r| r.time_of_transfer >= time_window_start);
+    state.recent_transfers.retain(|r| r.time_of_transfer >= time_window_start);
 
-    // Calculate sum of transfers within time limit
+    // Calculate sum of recent_transfers within time limit
     let amount_transferred_in_window: Amount =
-        state.transfers.iter().map(|r| r.transfer_request.amount).sum();
+        state.recent_transfers.iter().map(|r| r.transfer_request.amount).sum();
 
     ensure!(
         transfer.transfer_request.amount <= ctx.self_balance()
@@ -132,7 +132,7 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
     );
 
     // Add request to vec because it is valid
-    state.transfers.push(transfer.clone());
+    state.recent_transfers.push(transfer.clone());
 
     Ok(A::simple_transfer(
         &transfer.transfer_request.target_account,
@@ -196,35 +196,20 @@ impl Serialize for InitParams {
 impl Serialize for State {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.init_params.serial(out)?;
-        self.transfers.serial(out)?;
+        self.recent_transfers.serial(out)?;
         Ok(())
     }
 
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let init_params = InitParams::deserial(source)?;
-        let transfers = Vec::deserial(source)?;
+        let recent_transfers = Vec::deserial(source)?;
 
         Ok(State {
             init_params,
-            transfers,
+            recent_transfers,
         })
     }
 }
-
-/* == Test Overview ==
- * Regular init DONE
- * Deposit from
- *  - owner DONE
- *  - others
- * Transfer
- *  - Insufficient funds, empty time_window
- *  - Sufficient funds, empty time_window
- *  - Sufficient funds, accepted for time_window after cleanup DONE
- *  - Sufficient funds, denied for time_window DONE
- *  - Insufficient funds for last two
- *  - Transfer initiated by Wrong account, i.e not owner
- *  - No underflow occurs when time_limit > current_time DONE
- */
 
 #[cfg(test)]
 mod tests {
@@ -233,9 +218,9 @@ mod tests {
     #[test]
     /// Test that a valid transfer request is accepted
     ///
-    ///  - Removes outdated transfers from history (state.transfers)
+    ///  - Removes outdated recent_transfers
     ///  - Accepts the requested transfer
-    ///  - Adds the new request to history
+    ///  - Adds the new request to recent_transfers
     fn test_receive_transfer_accepted() {
         // setup our example state the contract is to be run in.
         // first the context.
@@ -272,7 +257,7 @@ mod tests {
             parameter: &to_bytes(&parameter),
         };
 
-        let transfers = vec![
+        let recent_transfers = vec![
             Transfer {
                 time_of_transfer: 0,
                 transfer_request: TransferRequest {
@@ -304,7 +289,7 @@ mod tests {
         let mut logger = test_infrastructure::LogRecorder::init();
         let mut state = State {
             init_params,
-            transfers,
+            recent_transfers,
         };
 
         // Execution
@@ -321,10 +306,14 @@ mod tests {
                     "The request did not transfer the correct amount."
                 );
                 assert_eq!(
-                    state.transfers.len(),
+                    state.recent_transfers.len(),
                     3,
                     "The oldest transfer should have been removed and the new one added."
                 );
+                assert_eq!(
+                    state.recent_transfers[2].transfer_request.amount, 5,
+                    "The new transfer should have been added to recent_transfers."
+                )
             }
         }
     }
@@ -333,7 +322,7 @@ mod tests {
     /// Test that a request fails when the rate limit is exceeded\
     ///
     /// - Request is denied
-    /// - Request is _not_ added to history
+    /// - Recent_transfers is unaltered
     fn test_receive_transfer_denied_due_to_limit() {
         // setup our example state the contract is to be run in.
         // first the context.
@@ -370,7 +359,7 @@ mod tests {
             parameter: &to_bytes(&parameter),
         };
 
-        let transfers = vec![
+        let recent_transfers = vec![
             Transfer {
                 time_of_transfer: 0,
                 transfer_request: TransferRequest {
@@ -402,7 +391,7 @@ mod tests {
         let mut logger = test_infrastructure::LogRecorder::init();
         let mut state = State {
             init_params,
-            transfers,
+            recent_transfers,
         };
 
         // Execution
@@ -412,10 +401,18 @@ mod tests {
         // Test
         assert!(res.is_err(), "Contract receive transfer succeeded, but it should not have.");
         assert_eq!(
-            state.transfers.len(),
+            state.recent_transfers.len(),
             3,
-            "No transfers should have been removed, and the new one should not be added."
+            "No recent transfers should have been removed, and the new one should not be added."
         );
+
+        let recent_transfers_amounts: Vec<u64> =
+            state.recent_transfers.iter().map(|t| t.transfer_request.amount).collect();
+        assert_eq!(
+            recent_transfers_amounts,
+            vec![6, 2, 3],
+            "The recent_transfers should not have been altered."
+        )
     }
 
     #[test]
@@ -460,7 +457,7 @@ mod tests {
             parameter: &to_bytes(&parameter),
         };
 
-        let transfers = vec![
+        let recent_transfers = vec![
             Transfer {
                 time_of_transfer: 0,
                 transfer_request: TransferRequest {
@@ -492,7 +489,7 @@ mod tests {
         let mut logger = test_infrastructure::LogRecorder::init();
         let mut state = State {
             init_params,
-            transfers,
+            recent_transfers,
         };
 
         // Execution
