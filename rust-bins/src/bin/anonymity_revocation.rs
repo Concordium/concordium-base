@@ -12,10 +12,6 @@ use std::convert::TryFrom;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-#[macro_use]
-extern crate failure;
-use failure::Fallible;
-
 #[derive(StructOpt)]
 struct DecryptPrf {
     #[structopt(
@@ -30,7 +26,7 @@ struct DecryptPrf {
     ar_private: PathBuf,
     #[structopt(long = "global-context", help = "File with global context.")]
     global_context: PathBuf,
-    #[structopt(long = "out", help = "File to output the decryption to")]
+    #[structopt(long = "out", help = "File to output the decryption to.")]
     out: Option<PathBuf>,
 }
 
@@ -62,7 +58,7 @@ struct CombinePrf {
         help = "Files with the JSON encoded decrypted shares."
     )]
     shares: Vec<PathBuf>,
-    #[structopt(long = "out", help = "File to output the PRF key to")]
+    #[structopt(long = "out", help = "File to output the decryption to.")]
     out: Option<PathBuf>,
 }
 
@@ -78,7 +74,7 @@ struct Combine {
         help = "Files with the JSON encoded decrypted shares."
     )]
     shares: Vec<PathBuf>,
-    #[structopt(long = "out", help = "File to output the IdCredPub to")]
+    #[structopt(long = "out", help = "File to output the decryption to.")]
     out: Option<PathBuf>,
 }
 
@@ -106,24 +102,23 @@ struct ComputeRegIds {
 enum AnonymityRevocation {
     #[structopt(
         name = "decrypt",
-        about = "Take a deployed credential and let one anonymity revoker decrypt its encrypted \
-                 share if idCredPub"
+        about = "Take a deployed credential and decrypt a share of idCredPub."
     )]
     Decrypt(Decrypt),
     #[structopt(
         name = "combine",
-        about = "Combines decrypted shares of anonymity revokers to get idCredPub"
+        about = "Combine decrypted shares of anonymity revokers to get idCredPub."
     )]
     Combine(Combine),
     #[structopt(
         name = "decrypt-prf",
-        about = "Take a deployed credential and let one anonymity revoker decrypt its encrypted \
-                 share of the PRF key"
+        about = "Take an anonymity revocation record and let one anonymity revoker decrypt its \
+                 share of the PRF key."
     )]
     DecryptPrf(DecryptPrf),
     #[structopt(
         name = "combine-prf",
-        about = "Combines decrypted shares of anonymity revokers to get the PRF key"
+        about = "Combine decrypted shares of the PRF key to reconstruct the PRF key."
     )]
     CombinePrf(CombinePrf),
     #[structopt(
@@ -148,9 +143,17 @@ fn main() {
     let ar = AnonymityRevocation::from_clap(&matches);
     use AnonymityRevocation::*;
     match ar {
-        Decrypt(dcr) => handle_decrypt_id(dcr),
+        Decrypt(dcr) => {
+            if let Err(e) = handle_decrypt_id(dcr) {
+                eprintln!("{}", e)
+            }
+        }
         Combine(cmb) => handle_combine_id(cmb),
-        DecryptPrf(dcr) => handle_decrypt_prf(dcr),
+        DecryptPrf(dcr) => {
+            if let Err(e) = handle_decrypt_prf(dcr) {
+                eprintln!("{}", e)
+            }
+        }
         CombinePrf(cmb) => handle_combine_prf(cmb),
         ComputeRegIds(rid) => handle_compute_regids(rid),
     }
@@ -203,9 +206,8 @@ fn handle_compute_regids(rid: ComputeRegIds) {
     output_json(&regids);
     if let Some(json_file) = rid.out {
         let json = json!({ "regIds": regids });
-        let name = json_file.clone();
-        match write_json_to_file(json_file, &json) {
-            Ok(_) => println!("Wrote regIds to {:?}.", name.file_name().unwrap()),
+        match write_json_to_file(&json_file, &json) {
+            Ok(_) => println!("Wrote regIds to {:?}.", json_file.to_string_lossy()),
             Err(e) => {
                 println!("Could not JSON write to file because {}", e);
                 output_json(&json);
@@ -215,139 +217,103 @@ fn handle_compute_regids(rid: ComputeRegIds) {
     // println!("{:?}\n {}", prf_wrapper.prf_key, max_accounts);
 }
 
-/// Decrypt encIdCredPubShare
-fn handle_decrypt_id(dcr: Decrypt) {
-    let credential: Versioned<CredentialDeploymentValues<ExampleCurve, ExampleAttribute>> = {
-        let file_name = dcr.credential;
-        match read_json_from_file(file_name) {
+macro_rules! succeed_or_die {
+    ($e:expr, $match:ident => $s:expr) => {
+        match $e {
             Ok(v) => v,
-            Err(e) => {
-                eprintln!("Could not read credential because {}", e);
-                return;
-            }
+            Err($match) => return Err(format!($s, $match)),
         }
     };
+    ($e:expr, $s:expr) => {
+        match $e {
+            Some(x) => x,
+            None => return Err($s.to_owned()),
+        }
+    };
+}
+
+/// Decrypt encIdCredPubShare
+fn handle_decrypt_id(dcr: Decrypt) -> Result<(), String> {
+    let credential: Versioned<CredentialDeploymentValues<ExampleCurve, ExampleAttribute>> = succeed_or_die!(read_json_from_file(dcr.credential), e => "Could not read credential from provided file because {}");
+
     if credential.version != VERSION_0 {
-        eprintln!("The version of the credential should be 0");
-        return;
+        return Err("The version of the credential should be 0".to_owned());
     }
     let credential = credential.value;
 
     let ar_data = credential.ar_data;
-    let ar: ArData<ExampleCurve> = match read_json_from_file(dcr.ar_private) {
-        Ok(r) => r,
-        Err(x) => {
-            eprintln!("Could not read ar-private because {}", x);
-            return;
-        }
-    };
-    let share: ChainArDecryptedData<ExampleCurve>;
+    let ar: ArData<ExampleCurve> = succeed_or_die!(read_json_from_file(dcr.ar_private), e => "Could not read anonymity revoker secret keys due to {}");
 
-    match ar_data.get(&ar.public_ar_info.ar_identity) {
-        None => {
-            eprintln!("AR is not part of the credential");
-            return;
-        }
-        Some(single_ar_data) => {
-            let m = ar
-                .ar_secret_key
-                .decrypt(&single_ar_data.enc_id_cred_pub_share);
-            share = ChainArDecryptedData {
-                ar_identity:       ar.public_ar_info.ar_identity,
-                id_cred_pub_share: m,
-            };
-        }
-    }
+    let single_ar_data = succeed_or_die!(
+        ar_data.get(&ar.public_ar_info.ar_identity),
+        "Supplied AR is not part of the credential."
+    );
+    let m = ar
+        .ar_secret_key
+        .decrypt(&single_ar_data.enc_id_cred_pub_share);
+    let share = ChainArDecryptedData {
+        ar_identity:       ar.public_ar_info.ar_identity,
+        id_cred_pub_share: m,
+    };
     if let Some(json_file) = dcr.out {
-        let name = json_file.clone();
-        match write_json_to_file(json_file, &share) {
-            Ok(_) => println!("Wrote decryption to {:?}", name.file_name().unwrap()),
+        match write_json_to_file(&json_file, &share) {
+            Ok(_) => eprintln!("Wrote decryption to {}", json_file.to_string_lossy()),
             Err(e) => {
-                println!("Could not JSON write to file because {}", e);
+                eprintln!("Could not write JSON to file due to {}", e);
                 output_json(&share);
             }
         }
     } else {
         output_json(&share);
     }
+    Ok(())
 }
 
 /// Decrypt encPrfKeyShare
-fn handle_decrypt_prf(dcr: DecryptPrf) {
-    let ar_record: Versioned<AnonymityRevocationRecord<ExampleCurve>> = {
-        let file_name = dcr.ar_record;
-        match read_json_from_file(file_name) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Could not read ArRecord because {}", e);
-                return;
-            }
-        }
-    };
+fn handle_decrypt_prf(dcr: DecryptPrf) -> Result<(), String> {
+    let ar_record: Versioned<AnonymityRevocationRecord<ExampleCurve>> = succeed_or_die!(read_json_from_file(dcr.ar_record), e => "Could not read ArRecord due to {}");
 
     if ar_record.version != VERSION_0 {
-        eprintln!("The version of the ArRecord should be 0");
-        return;
+        return Err("The version of the ArRecord should be 0.".to_owned());
     }
     let ar_record = ar_record.value;
 
-    let global_context: Versioned<GlobalContext<ExampleCurve>> = {
-        let file_name = dcr.global_context;
-        match read_json_from_file(file_name) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Could not read global context because {}", e);
-                return;
-            }
-        }
-    };
+    let global_context: Versioned<GlobalContext<ExampleCurve>> = succeed_or_die!(read_json_from_file(dcr.global_context), e => "Could not read global context due to {}");
     if global_context.version != VERSION_0 {
-        eprintln!("The version of the GlobalContext should be 0");
-        return;
+        return Err("The version of the GlobalContext should be 0.".to_owned());
     }
     let global_context = global_context.value;
 
     let ar_data = ar_record.ar_data;
-    let ar: ArData<ExampleCurve> = match read_json_from_file(dcr.ar_private) {
-        Ok(r) => r,
-        Err(x) => {
-            eprintln!("Could not read ar-private because {}", x);
-            return;
-        }
-    };
-    let share: IpArDecryptedData<ExampleCurve>;
+    let ar: ArData<ExampleCurve> = succeed_or_die!(read_json_from_file(dcr.ar_private), e => "Could not read AR secret keys due to {}");
 
-    match ar_data.get(&ar.public_ar_info.ar_identity) {
-        None => {
-            eprintln!("AR is not part of the record");
-            return;
-        }
-        Some(single_ar_data) => {
-            let m = decrypt_from_chunks_given_generator(
-                &ar.ar_secret_key,
-                &single_ar_data.enc_prf_key_share,
-                &global_context.encryption_in_exponent_generator(),
-                1 << 16,
-                CHUNK_SIZE,
-            );
-            share = IpArDecryptedData {
-                ar_identity:   ar.public_ar_info.ar_identity,
-                prf_key_share: m,
-            };
-        }
-    }
+    let single_ar_data = succeed_or_die!(
+        ar_data.get(&ar.public_ar_info.ar_identity),
+        "Given AR is not part of the credential."
+    );
+    let m = decrypt_from_chunks_given_generator(
+        &ar.ar_secret_key,
+        &single_ar_data.enc_prf_key_share,
+        &global_context.encryption_in_exponent_generator(),
+        1 << 16,
+        CHUNK_SIZE,
+    );
+    let share = IpArDecryptedData {
+        ar_identity:   ar.public_ar_info.ar_identity,
+        prf_key_share: m,
+    };
     if let Some(json_file) = dcr.out {
-        let name = json_file.clone();
-        match write_json_to_file(json_file, &share) {
-            Ok(_) => println!("Wrote decryption to {:?}", name.file_name().unwrap()),
+        match write_json_to_file(&json_file, &share) {
+            Ok(_) => eprintln!("Wrote decryption to {}.", json_file.to_string_lossy()),
             Err(e) => {
-                println!("Could not JSON write to file because {}", e);
+                eprintln!("Could not write JSON to file because {}", e);
                 output_json(&share);
             }
         }
     } else {
         output_json(&share);
     }
+    Ok(())
 }
 
 fn handle_combine_id(cmb: Combine) {
@@ -375,7 +341,7 @@ fn handle_combine_id(cmb: Combine) {
         u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^8-1");
     if number_of_ars < revocation_threshold.into() {
         eprintln!(
-            "insufficient number of anonymity revokers {}, {:?}",
+            "insufficient number of anonymity revokers {}, {}",
             number_of_ars, revocation_threshold
         );
         return;
@@ -387,13 +353,13 @@ fn handle_combine_id(cmb: Combine) {
         Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {
-        let name = share_value.clone();
-        match read_json_from_file(share_value) {
+        match read_json_from_file(&share_value) {
             Err(y) => {
-                match name.file_name() {
-                    Some(name) => eprintln!("Could not read from ar file {:?}, error: {}", name, y),
-                    None => eprintln!("Could not read from ar file, error: {}", y),
-                }
+                eprintln!(
+                    "Could not read from ar file {}, error: {}",
+                    share_value.to_string_lossy(),
+                    y
+                );
                 return;
             }
             Ok(val) => ar_decrypted_data_vec.push(val),
@@ -465,7 +431,7 @@ fn handle_combine_prf(cmb: CombinePrf) {
         u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^8-1");
     if number_of_ars < revocation_threshold.into() {
         eprintln!(
-            "insufficient number of anonymity revokers {}, {:?}",
+            "insufficient number of anonymity revokers {}, {}",
             number_of_ars, revocation_threshold
         );
         return;
@@ -477,13 +443,13 @@ fn handle_combine_prf(cmb: CombinePrf) {
         Vec::with_capacity(shares_values.len());
 
     for share_value in shares_values.iter() {
-        let name = share_value.clone();
-        match read_json_from_file(share_value) {
+        match read_json_from_file(&share_value) {
             Err(y) => {
-                match name.file_name() {
-                    Some(name) => eprintln!("Could not read from ar file {:?}, error: {}", name, y),
-                    None => eprintln!("Could not read from ar file, error: {}", y),
-                }
+                eprintln!(
+                    "Could not read from ar file {}, error: {}",
+                    share_value.to_string_lossy(),
+                    y
+                );
                 return;
             }
             Ok(val) => ar_decrypted_data_vec.push(val),
@@ -512,9 +478,8 @@ fn handle_combine_prf(cmb: CombinePrf) {
 
     if let Some(json_file) = cmb.out {
         let json = json!({ "prfKey": prf_key_string });
-        let name = json_file.clone();
-        match write_json_to_file(json_file, &json) {
-            Ok(_) => println!("Wrote prfKey to {:?}.", name.file_name().unwrap()),
+        match write_json_to_file(&json_file, &json) {
+            Ok(_) => println!("Wrote PRF key to {}.", json_file.to_string_lossy()),
             Err(e) => {
                 println!("Could not JSON write to file because {}", e);
                 output_json(&json);
