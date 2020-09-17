@@ -128,6 +128,22 @@ pub fn read_anonymity_revokers<P: AsRef<Path> + Debug>(
     }
 }
 
+/// Read anonymity revokers from a file, determining how to parse them from the
+/// version number.
+pub fn read_credential<P: AsRef<Path> + Debug>(
+    filename: P,
+) -> io::Result<CredentialDeploymentInfo<Bls12, ExampleCurve, ExampleAttribute>> {
+    let vars: Versioned<serde_json::Value> = read_json_from_file(filename)?;
+    match vars.version {
+        Version { value: 0 } => Ok(serde_json::from_value(vars.value)?),
+        other => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid credential version {}.", other),
+        )),
+    }
+}
+
+
 /// Parse YYYYMM as YearMonth
 pub fn parse_yearmonth(input: &str) -> Option<YearMonth> { YearMonth::from_str(input).ok() }
 

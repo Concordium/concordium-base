@@ -64,7 +64,7 @@ pub fn verify_cdi<
     let rt_usize: usize = cdi.values.threshold.into();
     if rt_usize != cdi.proofs.commitments.cmm_id_cred_sec_sharing_coeff.len() {
         return Err(CDIVerificationError::AR);
-    } 
+    }
     let on_chain_commitment_key = global_context.on_chain_commitment_key;
     let gens = global_context.bulletproof_generators();
     let ip_verify_key = &ip_info.ip_verify_key;
