@@ -211,14 +211,13 @@ fn handle_compute_regids(rid: ComputeRegIds) {
     if let Some(json_file) = rid.out {
         let json = json!({ "regIds": regids });
         match write_json_to_file(&json_file, &json) {
-            Ok(_) => println!("Wrote regIds to {:?}.", json_file.to_string_lossy()),
+            Ok(_) => println!("Wrote regIds to {}.", json_file.to_string_lossy()),
             Err(e) => {
                 println!("Could not JSON write to file because {}", e);
                 output_json(&json);
             }
         }
     }
-    // println!("{:?}\n {}", prf_wrapper.prf_key, max_accounts);
 }
 
 macro_rules! succeed_or_die {
@@ -385,9 +384,8 @@ fn handle_combine_id(cmb: Combine) -> Result<(), String> {
 
     if let Some(json_file) = cmb.out {
         let json = json!({ "idCredPub": id_cred_pub_string });
-        let name = json_file.clone();
-        match write_json_to_file(json_file, &json) {
-            Ok(_) => eprintln!("Wrote idCredPub to {:?}.", name.file_name().unwrap()),
+        match write_json_to_file(&json_file, &json) {
+            Ok(_) => eprintln!("Wrote idCredPub to {}.", json_file.to_string_lossy()),
             Err(e) => {
                 eprintln!("Could not JSON write to file because {}", e);
                 output_json(&json);
