@@ -431,7 +431,7 @@ fn handle_combine_prf(cmb: CombinePrf) {
         u8::try_from(number_of_ars).expect("Number of anonymity revokers should not exceed 2^8-1");
     if number_of_ars < revocation_threshold.into() {
         eprintln!(
-            "insufficient number of anonymity revokers {}, {}",
+            "insufficient number of anonymity revokers {}, {:?}",
             number_of_ars, revocation_threshold
         );
         return;
