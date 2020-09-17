@@ -26,10 +26,11 @@ genAccountEncryptedAmount = do
   len <- choose (0,100)
   _incomingEncryptedAmounts <- Seq.replicateM len genEncryptedAmount
   numAgg <- arbitrary
+  aggAmount <- genEncryptedAmount
   if numAgg == Just 1 || numAgg == Just 0 then
-    return AccountEncryptedAmount{_numAggregated = Nothing,..}
+    return AccountEncryptedAmount{_aggregatedAmount = Nothing,..}
   else
-    return AccountEncryptedAmount{_numAggregated = numAgg,..}
+    return AccountEncryptedAmount{_aggregatedAmount = (aggAmount,) <$> numAgg,..}
 
 testBinarySerialization :: Property
 testBinarySerialization = forAll genAccountEncryptedAmount $ \acc ->
