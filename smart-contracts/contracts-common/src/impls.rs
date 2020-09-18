@@ -257,7 +257,7 @@ pub fn deserial_map_no_length<R: Read, K: Deserial + Ord + Copy, V: Deserial>(
                 if k > kk {
                     out.insert(k, v);
                 } else {
-                    return Err(R::Err::default())
+                    return Err(R::Err::default());
                 }
             }
         }
@@ -309,7 +309,7 @@ pub fn deserial_set_no_length<R: Read, K: Deserial + Ord + Copy>(
         let next = Some(key);
         if next <= prev {
             return Err(R::Err::default());
-        } 
+        }
         out.insert(key);
         prev = next;
     }
@@ -327,7 +327,7 @@ pub fn deserial_set_no_length_no_order_check<R: Read, K: Deserial + Ord>(
     for _ in 0..len {
         let key = source.get()?;
         if !out.insert(key) {
-            return Err(R::Err::default())
+            return Err(R::Err::default());
         }
     }
     Ok(out)

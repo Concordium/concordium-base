@@ -1,7 +1,6 @@
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
-use core::{mem::MaybeUninit, slice};
-use core::default::Default;
+use core::{default::Default, mem::MaybeUninit, slice};
 
 /// This is the equivalent to the
 /// [SeekFrom](https://doc.rust-lang.org/std/io/enum.SeekFrom.html) type from

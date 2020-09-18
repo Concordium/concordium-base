@@ -349,7 +349,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                     }
                     quote!(Ok(#data_name(#names)))
                 }
-                _ => quote!(Ok(#data_name{}))
+                _ => quote!(Ok(#data_name{})),
             };
             quote! {
                 #field_tokens
