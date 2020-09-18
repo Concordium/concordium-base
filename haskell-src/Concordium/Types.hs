@@ -434,7 +434,7 @@ isTimestampBefore ts ym =
         year = toInteger (ymYear ym)
         month = fromIntegral (ymMonth ym)
         expiryYear = if month == 12 then year + 1 else year
-        expiryMonth = if month == 12 then 1 else (month + 1) -- (month % 12) + 1
+        expiryMonth = if month == 12 then 1 else month + 1 -- (month % 12) + 1
         expiryDay = fromGregorian expiryYear expiryMonth 1 -- unchecked, always valid
 
 
@@ -488,28 +488,36 @@ data AccountEncryptedAmount = AccountEncryptedAmount {
   --
   -- When a transfer is made all of these must always be used.
   _selfAmount :: !EncryptedAmount,
-  -- | Starting index for incoming encrypted amounts.
+  -- | Starting index for incoming encrypted amounts. If there is an aggregated amount
+  -- present, this index is the one for such amount. Otherwise it refers to the first
+  -- amount in the list of incoming encrypted amounts.
   _startIndex :: !EncryptedAmountAggIndex,
-  -- | Amounts starting at @startIndex@. They are assumed to be numbered sequentially.
-  -- This list will never contain more than 'maxNumIncoming' values.
-  _incomingEncryptedAmounts :: !(Seq.Seq EncryptedAmount),
-  -- |If 'Just', the number of incoming amounts that have been aggregated. In
-  -- that case the number is always >= 2.
-  _aggregatedAmount :: !(Maybe (EncryptedAmount, Word32))
+  -- |If 'Just', the amount that has resulted from aggregating other amounts and the
+  -- number of aggregated amounts (must be at least 2 if present).
+  _aggregatedAmount :: !(Maybe (EncryptedAmount, Word32)),
+  -- | Amounts starting at @startIndex@ (or at @startIndex + 1@ if an aggregated amount is present).
+  -- They are assumed to be numbered sequentially.
+  -- This list (plus the optionally present aggregated amount) will never contain more than
+  -- 'maxNumIncoming' values.
+  _incomingEncryptedAmounts :: !(Seq.Seq EncryptedAmount)
 } deriving(Eq, Show)
 
+-- | When serializing to a JSON, we will put the aggregated amount if present at the
+-- beginning of the `"incomingAmounts"` field.
 instance AE.ToJSON AccountEncryptedAmount where
   toJSON AccountEncryptedAmount{..} = AE.object $ [
     "selfAmount" AE..= _selfAmount,
     "startIndex" AE..= _startIndex,
-    "incomingAmounts" AE..= ((case _aggregatedAmount of
-                               Nothing -> id
-                               Just (e, _) -> (e Seq.:<|)) _incomingEncryptedAmounts)
+    "incomingAmounts" AE..= case _aggregatedAmount of
+                               Nothing -> _incomingEncryptedAmounts
+                               Just (e, _) -> e Seq.:<| _incomingEncryptedAmounts
     ] ++ aggregated
     where aggregated = case _aggregatedAmount of
             Nothing -> []
             Just (_, n) -> ["numAggregated" AE..= n]
 
+-- | When deserializing from JSON, if the field `"numAggregated"` is present, we will
+-- interpret the first item in the `"incomingAmounts"` list as the aggregated amount.
 instance AE.FromJSON AccountEncryptedAmount where
   parseJSON = AE.withObject "AccountEncryptedAmount" $ \obj -> do
     _selfAmount <- obj AE..: "selfAmount"
