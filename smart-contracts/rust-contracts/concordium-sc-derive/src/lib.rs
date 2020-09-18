@@ -349,7 +349,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                     }
                     quote!(Ok(#data_name(#names)))
                 }
-                _ => panic!("#[derive(Deserial)] not implemented for empty structs."),
+                _ => quote!(Ok(#data_name{}))
             };
             quote! {
                 #field_tokens
@@ -394,7 +394,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 }
             }
         }
-        _ => panic!("#[derive(Deserial)] only implemented for structs and enums."),
+        _ => unimplemented!("#[derive(Deserial)] is not implemented for union."),
     };
     let gen = quote! {
         #[automatically_derived]
@@ -509,7 +509,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                         field_tokens.extend(impl_serial_field(f, &field_ident, &out_ident));
                     }
                 }
-                _ => panic!("#[derive(Serial)] not implemented for empty structs."),
+                _ => (),
             };
             quote! {
                 #field_tokens
@@ -554,7 +554,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
                 Ok(())
             }
         }
-        _ => panic!("#[derive(Serial)] only implemented for structs."),
+        _ => unimplemented!("#[derive(Serial)] is not implemented for union."),
     };
 
     let gen = quote! {

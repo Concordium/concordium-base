@@ -1,5 +1,6 @@
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use core::{mem::MaybeUninit, slice};
 use core::default::Default;
 
 /// This is the equivalent to the
@@ -55,30 +56,38 @@ pub trait Read {
 
     /// Read a `u32` in little-endian format.
     fn read_u64(&mut self) -> Result<u64, Self::Err> {
-        let mut bytes = [0u8; 8];
-        self.read_exact(&mut bytes)?;
+        let mut bytes: MaybeUninit<[u8; 8]> = MaybeUninit::uninit();
+        let write_bytes = unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, 8) };
+        self.read_exact(write_bytes)?;
+        let bytes = unsafe { bytes.assume_init() };
         Ok(u64::from_le_bytes(bytes))
     }
 
     /// Read a `u32` in little-endian format.
     fn read_u32(&mut self) -> Result<u32, Self::Err> {
-        let mut bytes = [0u8; 4];
-        self.read_exact(&mut bytes)?;
+        let mut bytes: MaybeUninit<[u8; 4]> = MaybeUninit::uninit();
+        let write_bytes = unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, 4) };
+        self.read_exact(write_bytes)?;
+        let bytes = unsafe { bytes.assume_init() };
         Ok(u32::from_le_bytes(bytes))
     }
 
     /// Read a `u16` in little-endian format.
     fn read_u16(&mut self) -> Result<u16, Self::Err> {
-        let mut bytes = [0u8; 2];
-        self.read_exact(&mut bytes)?;
+        let mut bytes: MaybeUninit<[u8; 2]> = MaybeUninit::uninit();
+        let write_bytes = unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, 2) };
+        self.read_exact(write_bytes)?;
+        let bytes = unsafe { bytes.assume_init() };
         Ok(u16::from_le_bytes(bytes))
     }
 
     /// Read a `u8`.
     fn read_u8(&mut self) -> Result<u8, Self::Err> {
-        let mut bytes = [0u8; 1];
-        self.read_exact(&mut bytes)?;
-        Ok(bytes[0])
+        let mut bytes: MaybeUninit<[u8; 1]> = MaybeUninit::uninit();
+        let write_bytes = unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, 1) };
+        self.read_exact(write_bytes)?;
+        let bytes = unsafe { bytes.assume_init() };
+        Ok(u8::from_le_bytes(bytes))
     }
 }
 

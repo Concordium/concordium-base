@@ -257,7 +257,7 @@ pub fn deserial_map_no_length<R: Read, K: Deserial + Ord + Copy, V: Deserial>(
                 if k > kk {
                     out.insert(k, v);
                 } else {
-                    panic!("Keys not in order.")
+                    return Err(R::Err::default())
                 }
             }
         }
@@ -277,7 +277,9 @@ pub fn deserial_map_no_length_no_order_check<R: Read, K: Deserial + Ord + Copy, 
     for _ in 0..len {
         let k = source.get()?;
         let v = source.get()?;
-        out.insert(k, v);
+        if out.insert(k, v).is_some() {
+            return Err(R::Err::default());
+        }
     }
     Ok(out)
 }
@@ -301,22 +303,15 @@ pub fn deserial_set_no_length<R: Read, K: Deserial + Ord + Copy>(
     len: usize,
 ) -> Result<BTreeSet<K>, R::Err> {
     let mut out = BTreeSet::new();
-    let mut x = None;
+    let mut prev = None;
     for _ in 0..len {
-        let k = source.get()?;
-        match x {
-            None => {
-                out.insert(k);
-            }
-            Some(kk) => {
-                if k > kk {
-                    out.insert(k);
-                } else {
-                    panic!("Keys not in order.")
-                }
-            }
-        }
-        x = Some(k);
+        let key = source.get()?;
+        let next = Some(key);
+        if next <= prev {
+            return Err(R::Err::default());
+        } 
+        out.insert(key);
+        prev = next;
     }
     Ok(out)
 }
@@ -330,8 +325,10 @@ pub fn deserial_set_no_length_no_order_check<R: Read, K: Deserial + Ord>(
 ) -> Result<BTreeSet<K>, R::Err> {
     let mut out = BTreeSet::new();
     for _ in 0..len {
-        let k = source.get()?;
-        out.insert(k);
+        let key = source.get()?;
+        if !out.insert(key) {
+            return Err(R::Err::default())
+        }
     }
     Ok(out)
 }
