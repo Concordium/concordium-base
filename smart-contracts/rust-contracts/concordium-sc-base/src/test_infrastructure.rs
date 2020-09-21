@@ -1,6 +1,6 @@
-//! This module provides alternative implementations of `HasInitContext`,
-//! `HasReceiveContext`, `HasParameter`, `HasActions`, and `HasContractState`
-//! traits intended for testing.
+//! The test infrastructure module provides alternative implementations of
+//! `HasInitContext`, `HasReceiveContext`, `HasParameter`, `HasActions`, and
+//! `HasContractState` traits intended for testing.
 //!
 //! They allow writing unit tests directly in contract modules with little to no
 //! external tooling, depending on what is required.

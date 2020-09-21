@@ -118,7 +118,7 @@ pub trait HasLogger {
 
     #[inline(always)]
     /// Log a serializable event by serializing it with a supplied serializer.
-    fn log<S: Serialize>(&mut self, event: &S) {
+    fn log<S: Serial>(&mut self, event: &S) {
         let mut out = Vec::new();
         if event.serial(&mut out).is_err() {
             panic!();

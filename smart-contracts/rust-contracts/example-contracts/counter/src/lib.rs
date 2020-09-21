@@ -1,25 +1,10 @@
 #![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
 use concordium_sc_base::*;
 
+#[derive(Serialize)]
 pub struct State {
     step:          u8,
     current_count: u32,
-}
-
-impl Serialize for State {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        out.write_u8(self.step)?;
-        out.write_u32(self.current_count)
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let step = source.read_u8()?;
-        let current_count = source.read_u32()?;
-        Ok(State {
-            step,
-            current_count,
-        })
-    }
 }
 
 #[init(name = "init")]

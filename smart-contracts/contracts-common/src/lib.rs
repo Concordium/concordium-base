@@ -25,6 +25,6 @@ extern crate alloc;
 mod impls;
 mod traits;
 mod types;
-pub use impls::{from_bytes, to_bytes};
+pub use impls::*;
 pub use traits::*;
 pub use types::*;

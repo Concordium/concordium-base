@@ -1,4 +1,4 @@
-#![no_std]
+// #![no_std]
 extern crate proc_macro;
 extern crate syn;
 #[macro_use]
@@ -6,7 +6,7 @@ extern crate quote;
 
 use proc_macro::TokenStream;
 use quote::ToTokens;
-use syn::{export::Span, parse::Parser, punctuated::*, Ident, Meta, Token};
+use syn::{export::Span, parse::Parser, punctuated::*, spanned::Spanned, Ident, Meta, Token};
 
 // Get the name item from a list, if available and a string literal.
 // FIXME: Ensure there is only one.
@@ -166,4 +166,433 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
     // add the original function to the output as well.
     ast.to_tokens(&mut out);
     out.into()
+}
+
+/// Derive the Deserial trait. See the documentation of `derive(Serial)` for
+/// details and limitations.
+///
+/// In addition to the attributes supported by `derive(Serial)`, this derivation
+/// macro supports the `skip_order_check` attribute. If applied to a field the
+/// of type `BTreeMap` or `BTreeSet` deserialization will additionally ensure
+/// that there keys are in strictly increasing order. By default deserialization
+/// only ensures uniqueness.
+///
+/// # Example
+/// ```
+/// #[derive(Deserial)]
+/// struct Foo {
+///     #[set_size_length = 1]
+///     #[skip_order_check]
+///     bar: BTreeSet<u8>,
+/// }
+/// ```
+#[proc_macro_derive(
+    Deserial,
+    attributes(
+        size_length,
+        map_size_length,
+        set_size_length,
+        string_size_length,
+        skip_order_check
+    )
+)]
+pub fn deserial_derive(input: TokenStream) -> TokenStream {
+    let ast = syn::parse(input).expect("Cannot parse input.");
+    impl_deserial(&ast)
+}
+
+fn find_attribute_value(attributes: &[syn::Attribute], target_attr: &str) -> Option<syn::Lit> {
+    let target_attr = format_ident!("{}", target_attr);
+    let attr_values: Vec<_> = attributes
+        .iter()
+        .filter_map(|attr| match attr.parse_meta() {
+            Ok(syn::Meta::NameValue(value)) if value.path.is_ident(&target_attr) => Some(value.lit),
+            _ => None,
+        })
+        .collect();
+    if attr_values.is_empty() {
+        return None;
+    }
+    if attr_values.len() > 1 {
+        panic!("Attribute '{}' should only be specified once.", target_attr)
+    }
+    Some(attr_values[0].clone())
+}
+
+fn find_length_attribute(attributes: &[syn::Attribute], target_attr: &str) -> Option<u32> {
+    let value = find_attribute_value(attributes, target_attr)?;
+    let value = match value {
+        syn::Lit::Int(int) => int,
+        _ => panic!("Unknown attribute value {:?}.", value),
+    };
+    let value = match value.base10_parse() {
+        Ok(v) => v,
+        _ => panic!("Unknown attribute value {}.", value),
+    };
+    match value {
+        1 | 2 | 4 | 8 => Some(value),
+        _ => panic!("Length info must be a power of two between 1 and 8 inclusive."),
+    }
+}
+
+fn contains_attribute(attributes: &[syn::Attribute], target_attr: &str) -> bool {
+    let target_attr = format_ident!("{}", target_attr);
+    attributes.iter().any(|attr| match attr.parse_meta() {
+        Ok(meta) => meta.path().is_ident(&target_attr),
+        _ => false,
+    })
+}
+
+fn impl_deserial_field(
+    f: &syn::Field,
+    ident: &syn::Ident,
+    source: &syn::Ident,
+) -> proc_macro2::TokenStream {
+    if let Some(l) = find_length_attribute(&f.attrs, "size_length") {
+        let size = format_ident!("u{}", 8 * l);
+        quote! {
+            let #ident = {
+                let len = #size::deserial(#source)?;
+                deserial_vector_no_length(#source, len as usize)?
+            };
+        }
+    } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
+        let size = format_ident!("u{}", 8 * l);
+        if contains_attribute(&f.attrs, "skip_order_check") {
+            quote! {
+                let #ident = {
+                    let len = #size::deserial(#source)?;
+                    deserial_map_no_length_no_order_check(#source, len as usize)?
+                };
+            }
+        } else {
+            quote! {
+                let #ident = {
+                    let len = #size::deserial(#source)?;
+                    deserial_map_no_length(#source, len as usize)?
+                };
+            }
+        }
+    } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
+        let size = format_ident!("u{}", 8 * l);
+        if contains_attribute(&f.attrs, "skip_order_check") {
+            quote! {
+                let #ident = {
+                    let len = #size::deserial(#source)?;
+                    deserial_set_no_length_no_order_check(#source, len as usize)?
+                };
+            }
+        } else {
+            quote! {
+                let #ident = {
+                    let len = #size::deserial(#source)?;
+                    deserial_set_no_length(#source, len as usize)?
+                };
+            }
+        }
+    } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
+        let size = format_ident!("u{}", 8 * l);
+        quote! {
+            let #ident = {
+                let len = #size::deserial(#source)?;
+                deserial_string(#source, len as usize)?
+            };
+        }
+    } else {
+        let ty = &f.ty;
+        quote! {
+            let #ident = <#ty as Deserial>::deserial(#source)?;
+        }
+    }
+}
+
+fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
+    let data_name = &ast.ident;
+
+    let span = ast.span();
+
+    let read_ident = format_ident!("__R", span = span);
+
+    let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
+
+    let source_ident = Ident::new("source", Span::call_site());
+
+    let body_tokens = match ast.data {
+        syn::Data::Struct(ref data) => {
+            let mut names = proc_macro2::TokenStream::new();
+            let mut field_tokens = proc_macro2::TokenStream::new();
+            let return_tokens = match data.fields {
+                syn::Fields::Named(_) => {
+                    for field in data.fields.iter() {
+                        let field_ident = field.ident.clone().unwrap(); // safe since named fields.
+                        field_tokens.extend(impl_deserial_field(
+                            field,
+                            &field_ident,
+                            &source_ident,
+                        ));
+                        names.extend(quote!(#field_ident,))
+                    }
+                    quote!(Ok(#data_name{#names}))
+                }
+                syn::Fields::Unnamed(_) => {
+                    for (i, f) in data.fields.iter().enumerate() {
+                        let field_ident = format_ident!("x_{}", i);
+                        field_tokens.extend(impl_deserial_field(f, &field_ident, &source_ident));
+                        names.extend(quote!(#field_ident,))
+                    }
+                    quote!(Ok(#data_name(#names)))
+                }
+                _ => quote!(Ok(#data_name{})),
+            };
+            quote! {
+                #field_tokens
+                #return_tokens
+            }
+        }
+        syn::Data::Enum(ref data) => {
+            let mut matches_tokens = proc_macro2::TokenStream::new();
+            let source = Ident::new("source", Span::call_site());
+            let size = if data.variants.len() <= 256 {
+                format_ident!("u8")
+            } else if data.variants.len() <= 256 * 256 {
+                format_ident!("u16")
+            } else {
+                panic!("[derive(Deserial)]: Too many variants. Maximum 65536 are supported.")
+            };
+            for (i, variant) in data.variants.iter().enumerate() {
+                let mut field_tokens = proc_macro2::TokenStream::new();
+                let mut names_tokens = proc_macro2::TokenStream::new();
+                for (n, field) in variant.fields.iter().enumerate() {
+                    let field_ident = format_ident!("x_{}", n);
+                    names_tokens.extend(quote!(#field_ident,));
+                    field_tokens.extend(impl_deserial_field(field, &field_ident, &source));
+                }
+                let idx_lit = syn::LitInt::new(i.to_string().as_str(), Span::call_site());
+                let variant_ident = &variant.ident;
+                let names_tokens = if variant.fields.is_empty() {
+                    quote! {}
+                } else {
+                    quote! { (#names_tokens) }
+                };
+                matches_tokens.extend(quote! {
+                    #idx_lit => {
+                        #field_tokens
+                        Ok(#data_name::#variant_ident#names_tokens)
+                    },
+                })
+            }
+            quote! {
+                let idx = #size::deserial(#source)?;
+                match idx {
+                    #matches_tokens
+                    _ => Err(Default::default())
+                }
+            }
+        }
+        _ => unimplemented!("#[derive(Deserial)] is not implemented for union."),
+    };
+    let gen = quote! {
+        #[automatically_derived]
+        impl #impl_generics Deserial for #data_name #ty_generics #where_clauses {
+            fn deserial<#read_ident: Read>(#source_ident: &mut #read_ident) -> Result<Self, #read_ident::Err> {
+                #body_tokens
+            }
+        }
+    };
+    gen.into()
+}
+
+/// Derive the Serial trait for the type.
+///
+/// If the type is a struct all fields must implement the Serial trait. If the
+/// type is an enum then all fields of each of the enums must implement the
+/// Serial trait.
+///
+///
+/// Collections (Vec, BTreeMap, BTreeSet) are by default serialized by
+/// prepending the number of elements as 4 bytes little-endian. If this is too
+/// much or too little, fields of the above types can be annotated with
+/// `size_length` for Vec, `map_size_length` for `BTreeMap` and
+/// `set_size_length` for `BTreeSet`.
+///
+/// The value of this field is the number of bytes that will be used for
+/// encoding the number of elements. Supported values are 1, 2, 4, 8.
+///
+/// For BTreeMap and BTreeSet the serialize method will serialize values in
+/// increasing order of keys.
+///
+/// Fields of structs are serialized in the order they appear in the code.
+///
+/// Enums can have no more than 65536 variants. They are serialized by using a
+/// tag to indicate the variant, enumerating them in the order they are written
+/// in source code. If the number of variants is less than or equal 256 then a
+/// single byte is used to encode it. Otherwise two bytes are used for the tag,
+/// encoded in little endian.
+///
+/// # Example
+/// ```
+/// #[derive(Serial)]
+/// struct Foo {
+///     #[set_size_length = 1]
+///     bar: BTreeSet<u8>,
+/// }
+/// ```
+#[proc_macro_derive(
+    Serial,
+    attributes(size_length, map_size_length, set_size_length, string_size_length)
+)]
+pub fn serial_derive(input: TokenStream) -> TokenStream {
+    let ast = syn::parse(input).expect("Cannot parse input.");
+    impl_serial(&ast)
+}
+
+fn impl_serial_field(
+    f: &syn::Field,
+    ident: &proc_macro2::TokenStream,
+    out: &syn::Ident,
+) -> proc_macro2::TokenStream {
+    if let Some(l) = find_length_attribute(&f.attrs, "size_length") {
+        let id = format_ident!("u{}", 8 * l);
+        quote! {
+            let len: #id = #ident.len() as #id;
+            len.serial(#out)?;
+            serial_vector_no_length(&#ident, #out)?;
+        }
+    } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
+        let id = format_ident!("u{}", 8 * l);
+        quote! {
+            let len: #id = #ident.len() as #id;
+            len.serial(#out)?;
+            serial_map_no_length(&#ident, #out)?;
+        }
+    } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
+        let id = format_ident!("u{}", 8 * l);
+        quote! {
+            let len: #id = #ident.len() as #id;
+            len.serial(#out)?;
+            serial_set_no_length(&#ident, #out)?;
+        }
+    } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
+        let id = format_ident!("u{}", 8 * l);
+        quote! {
+            let len: #id = #ident.len() as #id;
+            len.serial(#out)?;
+            serial_string(#ident.as_str(), #out)?;
+        }
+    } else {
+        quote! {
+            #ident.serial(#out)?;
+        }
+    }
+}
+
+fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
+    let data_name = &ast.ident;
+
+    let span = ast.span();
+
+    let write_ident = format_ident!("W", span = span);
+
+    let (impl_generics, ty_generics, where_clauses) = ast.generics.split_for_impl();
+
+    let out_ident = format_ident!("out");
+
+    let body = match ast.data {
+        syn::Data::Struct(ref data) => {
+            let mut field_tokens = proc_macro2::TokenStream::new();
+            match data.fields {
+                syn::Fields::Named(_) => {
+                    for f in data.fields.iter() {
+                        let field_ident = f.ident.clone().unwrap(); // safe since named fields.
+                        let field_ident = quote!(self.#field_ident);
+                        field_tokens.extend(impl_serial_field(f, &field_ident, &out_ident));
+                    }
+                }
+
+                syn::Fields::Unnamed(_) => {
+                    for (i, f) in data.fields.iter().enumerate() {
+                        let i = syn::LitInt::new(i.to_string().as_str(), Span::call_site());
+                        let field_ident = quote!(self.#i);
+                        field_tokens.extend(impl_serial_field(f, &field_ident, &out_ident));
+                    }
+                }
+                _ => (),
+            };
+            quote! {
+                #field_tokens
+                Ok(())
+            }
+        }
+        syn::Data::Enum(ref data) => {
+            let mut matches_tokens = proc_macro2::TokenStream::new();
+            let size = if data.variants.len() <= 256 {
+                format_ident!("u8")
+            } else if data.variants.len() <= 256 * 256 {
+                format_ident!("u16")
+            } else {
+                panic!("[derive(Serial)]: Enums with more than 65536 variants are not supported.");
+            };
+            for (i, variant) in data.variants.iter().enumerate() {
+                let mut field_tokens = proc_macro2::TokenStream::new();
+                let mut names_tokens = proc_macro2::TokenStream::new();
+                for (n, field) in variant.fields.iter().enumerate() {
+                    let field_ident = format_ident!("x_{}", n);
+                    let field_ident = quote!(#field_ident);
+                    names_tokens.extend(quote!(#field_ident,));
+                    field_tokens.extend(impl_serial_field(field, &field_ident, &out_ident));
+                }
+                let idx_lit =
+                    syn::LitInt::new(format!("{}{}", i, size).as_str(), Span::call_site());
+                let variant_ident = &variant.ident;
+                let names_tokens = if variant.fields.is_empty() {
+                    quote! {}
+                } else {
+                    quote! { (#names_tokens) }
+                };
+                matches_tokens.extend(quote! {
+                    #data_name::#variant_ident#names_tokens => {
+                        #idx_lit.serial(#out_ident)?;
+                        #field_tokens
+                    },
+                })
+            }
+            quote! {
+                match self {
+                    #matches_tokens
+                }
+                Ok(())
+            }
+        }
+        _ => unimplemented!("#[derive(Serial)] is not implemented for union."),
+    };
+
+    let gen = quote! {
+        #[automatically_derived]
+        impl #impl_generics Serial for #data_name #ty_generics #where_clauses {
+            fn serial<#write_ident: Write>(&self, #out_ident: &mut #write_ident) -> Result<(), #write_ident::Err> {
+                #body
+            }
+        }
+    };
+    gen.into()
+}
+
+/// A helper macro to derive both the Serial and Deserial traits.
+/// `[derive(Serialize)]` is equivalent to `[derive(Serial,Deserial)]`, see
+/// documentation of the latter two for details and options.
+#[proc_macro_derive(
+    Serialize,
+    attributes(
+        size_length,
+        map_size_length,
+        set_size_length,
+        string_size_length,
+        skip_order_check
+    )
+)]
+pub fn serialize_derive(input: TokenStream) -> TokenStream {
+    let ast = syn::parse(input).expect("Cannot parse input.");
+    let mut tokens = impl_deserial(&ast);
+    tokens.extend(impl_serial(&ast));
+    tokens
 }

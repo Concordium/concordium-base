@@ -35,19 +35,26 @@ fn abort_panic(_info: &core::panic::PanicInfo) -> ! { loop {} }
 #[cfg(not(feature = "std"))]
 pub use core::result::*;
 
+/// Re-export.
 #[cfg(not(feature = "std"))]
 pub use alloc::collections;
+/// Re-export.
 #[cfg(not(feature = "std"))]
 pub use alloc::{string, string::String, string::ToString, vec, vec::Vec};
+/// Re-export.
 #[cfg(not(feature = "std"))]
 pub use core::convert;
+/// Re-export.
 #[cfg(not(feature = "std"))]
 pub use core::mem;
 
+/// Re-export.
 #[cfg(feature = "std")]
 pub use std::collections;
+/// Re-export.
 #[cfg(feature = "std")]
 pub use std::convert;
+/// Re-export.
 #[cfg(feature = "std")]
 pub use std::mem;
 
@@ -55,8 +62,7 @@ mod impls;
 mod prims;
 mod traits;
 mod types;
-/// Re-export for ease of use.
-pub use concordium_sc_derive::{init, receive};
+pub use concordium_sc_derive::{init, receive, Deserial, Serial, Serialize};
 pub use contracts_common::*;
 pub use traits::*;
 pub use types::*;

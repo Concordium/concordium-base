@@ -17,7 +17,7 @@ use concordium_sc_base::*;
 
 // Types
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize)]
 enum Message {
     WithdrawFunds(Amount),
     CancelFutureVesting,
@@ -27,6 +27,7 @@ type SlotTime = u64;
 
 type VestingEvent = (SlotTime, Amount);
 
+#[derive(Serialize)]
 pub struct InitParams {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
     account_holders: Vec<AccountAddress>,
@@ -38,6 +39,7 @@ pub struct InitParams {
     vesting_schedule: Vec<VestingEvent>,
 }
 
+#[derive(Serialize)]
 pub struct State {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
     account_holders: Vec<AccountAddress>,
@@ -170,81 +172,7 @@ fn make_vested_funds_available(time_now: u64, state: &mut State) {
     state.available_balance += newly_vested_amount;
 }
 
-// (De)serialization
-
-impl Serialize for Message {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        match self {
-            Message::WithdrawFunds(how_much) => {
-                out.write_u8(0)?;
-                out.write_u64(*how_much)?;
-            }
-            Message::CancelFutureVesting => {
-                out.write_u8(1)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        match source.read_u8()? {
-            0 => {
-                let how_much = source.read_u64()?;
-                Ok(Message::WithdrawFunds(how_much))
-            }
-
-            1 => Ok(Message::CancelFutureVesting),
-
-            _ => Err(R::Err::default()),
-        }
-    }
-}
-
-impl Serialize for InitParams {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.account_holders.serial(out)?;
-        self.future_vesting_veto_accounts.serial(out)?;
-        self.vesting_schedule.serial(out)?;
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let account_holders = source.get()?;
-        let future_vesting_veto_accounts = source.get()?;
-        let vesting_schedule = source.get()?;
-        Ok(InitParams {
-            account_holders,
-            future_vesting_veto_accounts,
-            vesting_schedule,
-        })
-    }
-}
-
-impl Serialize for State {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.account_holders.serial(out)?;
-        self.future_vesting_veto_accounts.serial(out)?;
-        self.available_balance.serial(out)?;
-        self.remaining_vesting_schedule.serial(out)?;
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let account_holders = source.get()?;
-        let future_vesting_veto_accounts = source.get()?;
-        let available_balance = source.get()?;
-        let remaining_vesting_schedule = source.get()?;
-        Ok(State {
-            account_holders,
-            future_vesting_veto_accounts,
-            available_balance,
-            remaining_vesting_schedule,
-        })
-    }
-}
-
 // Tests
-
 #[cfg(test)]
 pub mod tests {
     use super::*;
