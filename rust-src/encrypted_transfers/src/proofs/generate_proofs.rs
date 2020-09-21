@@ -311,15 +311,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
 
     let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) = S_prime_enc_randomness.iter().cloned().unzip();
     let protocol = gen_enc_trans_proof_info(&pk, &pk, &S, &A, &S_prime, &generator);
-    // let S_prime_rand_as_value: Vec<Value<_>> =
-    //     S_prime_rand.iter().map(Randomness::to_value).collect();
-    // let s_prime_chunks_as_rand: Vec<PedersenRandomness<_>> = s_prime_chunks
-    //     .iter()
-    //     .copied()
-    //     .map(PedersenRandomness::from_u64)
-    //     .collect();
-    // let a_chunks_as_rand = vec![PedersenRandomness::from_u64(u64::from(a))];
-    // let A_rand_as_value = vec![Value::from(0u64)];
+
     let s_prime_secrets = izip!(s_prime_chunks.iter(), S_prime_rand.iter()).map(|(a_i, r_i)| {
         ComEqSecret::<C>{r: PedersenRandomness::from_u64(*a_i), a: Randomness::to_value(r_i)}
     }).collect();
