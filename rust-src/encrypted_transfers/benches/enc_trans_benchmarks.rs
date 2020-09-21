@@ -190,9 +190,9 @@ pub fn sec_to_pub_bench(c: &mut Criterion) {
 
 criterion_group! {
     name = elgamal_benches;
-    config = Criterion::default().measurement_time(Duration::from_millis(1000)).sample_size(10);
+    config = Criterion::default().measurement_time(Duration::from_millis(100000)).sample_size(20);
     targets =
-        enc_trans_bench, sec_to_pub_bench
+        enc_trans_bench
 }
 
 criterion_main!(elgamal_benches);
