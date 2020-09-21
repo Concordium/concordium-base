@@ -221,19 +221,6 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         state: Self::ProverState,
         challenge: &Self::ProtocolChallenge,
     ) -> Option<Self::ProverWitness> {
-        // let r_a_as_value: Vec<Value<_>> = secret.r_a.iter().map(Randomness::to_value).collect();
-        // let a_as_rand: Vec<PedersenRandomness<C>> = secret.a
-        //     .iter()
-        //     .copied()
-        //     .map(PedersenRandomness::from_u64)
-        //     .collect();
-        // let r_s_as_value: Vec<Value<_>> =
-        //     secret.r_s.iter().map(Randomness::to_value).collect();
-        // let s_as_rand: Vec<PedersenRandomness<C>> = secret.s
-        //     .iter()
-        //     .copied()
-        //     .map(PedersenRandomness::from_u64)
-        //     .collect();
 
         let mut witness_common = *challenge;
         witness_common.mul_assign(&secret.dlog_secret);
@@ -246,20 +233,6 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             return None;
         }
         for (sec, encexp1, comeq1) in izip!(secret.encexp1_secrets, state.encexp1.iter(), self.encexp1.iter()) {
-            // // The R is the randomness
-            // // that is used together with the secret a_j's
-            // let (ref alpha, ref R) = encexp1;
-            // // compute alpha_i - a_i * c
-            // let mut s = *challenge;
-            // s.mul_assign(a);
-            // s.negate();
-            // s.add_assign(alpha);
-            // // compute R_i - r_i * c
-            // let mut t: C::Scalar = *challenge;
-            // t.mul_assign(r_a); // secret a_j's used here
-            // t.negate();
-            // t.add_assign(R); // R used here
-
             match comeq1.generate_witness(sec, (*encexp1).clone(), challenge) {
                 Some(w) => witness_encexp1.push(w),
                 None => return None
