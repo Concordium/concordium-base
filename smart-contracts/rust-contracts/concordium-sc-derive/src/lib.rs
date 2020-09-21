@@ -62,6 +62,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[no_mangle]
             pub extern "C" fn #name(amount: Amount) -> i32 {
+                use concordium_sc_base::{Logger, trap};
                 let ctx = InitContextExtern::open(());
                 let mut state = ContractState::open(());
                 let mut logger = Logger::init();
@@ -75,13 +76,14 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[no_mangle]
             pub extern "C" fn #name(amount: Amount) -> i32 {
+                use concordium_sc_base::{Logger, trap};
                 let ctx = InitContextExtern::open(());
                 let mut logger = Logger::init();
                 match #fn_name(ctx, amount, &mut logger) {
                     Ok(state) => {
                         let mut state_bytes = ContractState::open(());
                         if state.serial(&mut state_bytes).is_err() {
-                            panic!("Could not initialize contract.");
+                            trap() // Could not initialize contract.
                         };
                         0
                     }
@@ -137,7 +139,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #[no_mangle]
             pub extern "C" fn #name(amount: Amount) -> i32 {
-                use concordium_sc_base::{SeekFrom, ContractState, Logger};
+                use concordium_sc_base::{SeekFrom, ContractState, Logger, trap};
                 let ctx = ReceiveContextExtern::open(());
                 let mut logger = Logger::init();
                 let mut state_bytes = ContractState::open(());
@@ -149,7 +151,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 .seek(SeekFrom::Start(0))
                                 .and_then(|_| state.serial(&mut state_bytes));
                             if res.is_err() {
-                                panic!("Could not write state.")
+                                trap() // could not serialize state.
                             } else {
                                 act.tag() as i32
                             }
@@ -158,7 +160,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 }
                 else {
-                    panic!("Could not read state fully.")
+                    trap() // Could not fully read state.
                 }
             }
         }

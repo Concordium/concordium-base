@@ -279,7 +279,10 @@ impl HasReceiveContext<()> for ReceiveContextExtern {
             get_receive_self_address(ptr as *mut u8);
             bytes.assume_init()
         };
-        from_bytes(&address).unwrap()
+        match from_bytes(&address) {
+            Ok(v) => v,
+            Err(_) => crate::trap(),
+        }
     }
 
     #[inline(always)]
@@ -293,10 +296,18 @@ impl HasReceiveContext<()> for ReceiveContextExtern {
             get_receive_sender(ptr);
             let tag = *ptr;
             match tag {
-                0u8 => from_bytes(core::slice::from_raw_parts(ptr.add(1), ACCOUNT_ADDRESS_SIZE))
-                    .unwrap(),
-                1u8 => from_bytes(core::slice::from_raw_parts(ptr.add(1), 16)).unwrap(),
-                _ => unreachable!("Host violated precondition."),
+                0u8 => {
+                    match from_bytes(core::slice::from_raw_parts(ptr.add(1), ACCOUNT_ADDRESS_SIZE))
+                    {
+                        Ok(v) => v,
+                        Err(_) => crate::trap(),
+                    }
+                }
+                1u8 => match from_bytes(core::slice::from_raw_parts(ptr.add(1), 16)) {
+                    Ok(v) => v,
+                    Err(_) => crate::trap(),
+                },
+                _ => crate::trap(), // unreachable!("Host violated precondition."),
             }
         }
     }
