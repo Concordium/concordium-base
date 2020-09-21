@@ -27,7 +27,7 @@ type TimeMilliseconds = u64;
 
 // Transfer Requests
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 struct TransferRequest {
     /// The amount of GTU to transfer from the contract to the target_account
     amount: Amount,
@@ -35,7 +35,7 @@ struct TransferRequest {
     target_account: AccountAddress,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 struct Transfer {
     /// The time, fx slot_time, of when the request was initiated
     time_of_transfer: TimeMilliseconds,
@@ -43,8 +43,8 @@ struct Transfer {
     transfer_request: TransferRequest,
 }
 
-// State
-
+/// # State of the contract.
+#[derive(Serialize)]
 struct InitParams {
     /// The amount of GTU allowed to be withdrawn within the time_limit
     timed_withdraw_limit: Amount,
@@ -52,6 +52,7 @@ struct InitParams {
     time_limit: TimeMilliseconds,
 }
 
+#[derive(Serialize)]
 pub struct State {
     /// The initiating parameters
     init_params: InitParams,
@@ -138,77 +139,6 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
         &transfer.transfer_request.target_account,
         transfer.transfer_request.amount,
     ))
-}
-
-// (De)serialization
-
-impl Serialize for TransferRequest {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.amount.serial(out)?;
-        self.target_account.serial(out)?;
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let amount = Amount::deserial(source)?;
-        let target_account = AccountAddress::deserial(source)?;
-        Ok(TransferRequest {
-            amount,
-            target_account,
-        })
-    }
-}
-
-impl Serialize for Transfer {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        out.write_u64(self.time_of_transfer)?;
-        self.transfer_request.serial(out)?;
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let time_of_transfer = source.read_u64()?;
-        let transfer_request = TransferRequest::deserial(source)?;
-        Ok(Transfer {
-            time_of_transfer,
-            transfer_request,
-        })
-    }
-}
-
-impl Serialize for InitParams {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        out.write_u64(self.timed_withdraw_limit)?;
-        out.write_u64(self.time_limit)?;
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let timed_withdraw_limit = source.read_u64()?;
-        let time_limit = source.read_u64()?;
-        Ok(InitParams {
-            timed_withdraw_limit,
-            time_limit,
-        })
-    }
-}
-
-impl Serialize for State {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.init_params.serial(out)?;
-        self.recent_transfers.serial(out)?;
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let init_params = InitParams::deserial(source)?;
-        let recent_transfers = Vec::deserial(source)?;
-
-        Ok(State {
-            init_params,
-            recent_transfers,
-        })
-    }
 }
 
 #[cfg(test)]

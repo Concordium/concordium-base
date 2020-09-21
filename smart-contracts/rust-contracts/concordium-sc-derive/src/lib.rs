@@ -168,21 +168,14 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
     out.into()
 }
 
-/// Derive the Deserial trait.
-/// Assumes every field of the data to implement Deserial trait.
+/// Derive the Deserial trait. See the documentation of `derive(Serial)` for
+/// details and limitations.
 ///
-/// Collections are assumed to have a length within u32.
-/// Optionally collection fields can be annotated with a size length to reduce
-/// the serialized size (see also `derive(Serial)`). The annotation for `Vec` is
-/// `size_length`, `BTreeMap` is `map_size_length` and `BTreeSet` is
-/// `set_size_length`.
-///
-/// The derived deserialization for `BTreeMap` and `BTreeSet` checks the
-/// serialized keys to be ordered. Optionally these fields can be annotated with
-/// `skip_order_check` to reduce the resulting code even further.
-///
-/// The size length is specified as the number of bytes, and can be either of
-/// the following numbers: 1, 2, 4, 8.
+/// In addition to the attributes supported by `derive(Serial)`, this derivation
+/// macro supports the `skip_order_check` attribute. If applied to a field the
+/// of type `BTreeMap` or `BTreeSet` deserialization will additionally ensure
+/// that there keys are in strictly increasing order. By default deserialization
+/// only ensures uniqueness.
 ///
 /// # Example
 /// ```
@@ -361,8 +354,10 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
             let source = Ident::new("source", Span::call_site());
             let size = if data.variants.len() <= 256 {
                 format_ident!("u8")
-            } else {
+            } else if data.variants.len() <= 256 * 256 {
                 format_ident!("u16")
+            } else {
+                panic!("[derive(Deserial)]: Too many variants. Maximum 65536 are supported.")
             };
             for (i, variant) in data.variants.iter().enumerate() {
                 let mut field_tokens = proc_macro2::TokenStream::new();
@@ -407,20 +402,32 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
     gen.into()
 }
 
-/// Derive the Serial trait.
-/// Assumes every field of the data to implement Serial trait.
+/// Derive the Serial trait for the type.
 ///
-/// Collections are assumed to have a length within u32.
-/// Optionally collection fields can be annotated with a size length to reduce
-/// the serialized size (see also `derive(Deserial)`). The annotation for `Vec`
-/// is `size_length`, `BTreeMap` is `map_size_length` and `BTreeSet` is
-/// `set_size_length`.
+/// If the type is a struct all fields must implement the Serial trait. If the
+/// type is an enum then all fields of each of the enums must implement the
+/// Serial trait.
 ///
-/// The size length is specified as the number of bytes, and can be either of
-/// the following numbers: 1, 2, 4, 8.
 ///
-/// Note: The derived serialization for `BTreeMap` and `BTreeSet` ensures the
-/// keys are ordered.
+/// Collections (Vec, BTreeMap, BTreeSet) are by default serialized by
+/// prepending the number of elements as 4 bytes little-endian. If this is too
+/// much or too little, fields of the above types can be annotated with
+/// `size_length` for Vec, `map_size_length` for `BTreeMap` and
+/// `set_size_length` for `BTreeSet`.
+///
+/// The value of this field is the number of bytes that will be used for
+/// encoding the number of elements. Supported values are 1, 2, 4, 8.
+///
+/// For BTreeMap and BTreeSet the serialize method will serialize values in
+/// increasing order of keys.
+///
+/// Fields of structs are serialized in the order they appear in the code.
+///
+/// Enums can have no more than 65536 variants. They are serialized by using a
+/// tag to indicate the variant, enumerating them in the order they are written
+/// in source code. If the number of variants is less than or equal 256 then a
+/// single byte is used to encode it. Otherwise two bytes are used for the tag,
+/// encoded in little endian.
 ///
 /// # Example
 /// ```
@@ -520,8 +527,10 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
             let mut matches_tokens = proc_macro2::TokenStream::new();
             let size = if data.variants.len() <= 256 {
                 format_ident!("u8")
-            } else {
+            } else if data.variants.len() <= 256 * 256 {
                 format_ident!("u16")
+            } else {
+                panic!("[derive(Serial)]: Enums with more than 65536 variants are not supported.");
             };
             for (i, variant) in data.variants.iter().enumerate() {
                 let mut field_tokens = proc_macro2::TokenStream::new();
@@ -568,31 +577,9 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
     gen.into()
 }
 
-/// Derive the Serial and Deserial trait.
-/// Assumes every field of the data to implement Serial trait and Deserial
-/// trait.
-///
-/// Collections are assumed to have a length within u32.
-/// Optionally collection fields can be annotated with a size length to reduce
-/// the serialized size (see `derive(Serial)` and `derive(Deserial)`).
-/// The annotation for `Vec` is `size_length`, `BTreeMap` is `map_size_length`
-/// and `BTreeSet` is `set_size_length`.
-///
-/// The size length is specified as the number of bytes, and can be either of
-/// the following numbers: 1, 2, 4, 8.
-///
-/// Note: The derived serialization for `BTreeMap` and `BTreeSet` ensures the
-/// keys are ordered.
-///
-/// # Example
-/// ```
-/// #[derive(Serialize)]
-/// struct Foo {
-///     #[set_size_length = 1]
-///     #[skip_order_check]
-///     bar: BTreeSet<u8>,
-/// }
-/// ```
+/// A helper macro to derive both the Serial and Deserial traits.
+/// `[derive(Serialize)]` is equivalent to `[derive(Serial,Deserial)]`, see
+/// documentation of the latter two for details and options.
 #[proc_macro_derive(
     Serialize,
     attributes(
