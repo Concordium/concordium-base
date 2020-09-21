@@ -121,8 +121,7 @@ pub trait HasLogger {
     fn log<S: Serial>(&mut self, event: &S) {
         let mut out = Vec::new();
         if event.serial(&mut out).is_err() {
-            panic!();
-            // should not happen
+            crate::trap(); // should not happen
         }
         self.log_bytes(&out)
     }

@@ -24,7 +24,13 @@ extern crate alloc;
 
 #[cfg(not(feature = "std"))]
 #[alloc_error_handler]
-fn on_oom(_layout: alloc::alloc::Layout) -> ! { panic!() }
+fn on_oom(_layout: alloc::alloc::Layout) -> ! { core::intrinsics::abort() }
+
+/// Abort execution immediately.
+#[cfg(not(feature = "std"))]
+pub use core::intrinsics::abort as trap;
+#[cfg(feature = "std")]
+pub use std::process::abort as trap;
 
 #[cfg(not(feature = "std"))]
 #[panic_handler]
