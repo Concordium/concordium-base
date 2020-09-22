@@ -187,7 +187,7 @@ must be a valid JSON object with fields
   or directly received from another account in another transfer. It must be a JSON object with the fields:
       - `"aggEncryptedAmount"` ... the ciphered amount
       - `"aggAmount"` ... the amount on plaintext
-      - `"index"` ... the index up to which the encrypted amounts on the account have been combined.
+      - `"aggIndex"` ... the index up to which the encrypted amounts on the account have been combined.
 
 The returned value is a JSON object with the following fields:
 
@@ -300,7 +300,7 @@ must be a valid JSON object with fields
   or directly received from another account in another transfer. It must be a JSON object with the fields:
       - `"aggEncryptedAmount"` ... the ciphered amount
       - `"aggAmount"` ... the amount on plaintext
-      - `"index"` ... the index up to which the encrypted amounts on the account have been combined.
+      - `"aggIndex"` ... the index up to which the encrypted amounts on the account have been combined.
 
 The returned value is a JSON object with the following fields:
 
