@@ -209,20 +209,19 @@ This kind of testing is perfectly adequate for a large amount of functional corr
 We might hook into the default testing infrastructure of Rust by specifying a binary runner in `.cargo/config` as well for this, although the best user-experience needs to be determined.
 
 
-# Removing Sensitive Host Information from Binary
-By default the compiled binary from a rust crate contains sensitive information from the host machine, e.g. the paths to the `.cargo` folder. This can be seen by inspecting the produced binary:
+# Removing Host Information from Binary
+By default the compiled binary from a rust crate contains some information from the host machine, namely rust-related paths such as the path to `.cargo`. This can be seen by inspecting the produced binary:
 
 Lets assume your username is `tom` and you have a smart contract `foo` located in your home folder, which you compiled in release-mode to WASM32.
 By running the following command inside the `foo` folder, you will be able to see the paths included in the binary: `strings target/wasm32-unknown-unknown/release/foo.wasm | grep tom`
 
-To remove the sensitive information, the path prefixes can be remapped using a flag given to the compiler.
+To remove the host information, the path prefixes can be remapped using a flag given to the compiler.
 `RUSTFLAGS=--remap-path-prefix=/home/tom=secret cargo build --release --target wasm32-unknown-unknown`, where `/home/tom` is the prefix you want to change into `secret`.
 The flag can be specified multiple times to remap multiple prefixes.
 
 The flags can also be set permanently in the `.cargo/config` file in your crate, under the `build` section:
 
 ``` toml
-# foo/.cargo/config
 [build]
 rustflags = ["--remap-path-prefix=/home/tom=secret"]
 ```
