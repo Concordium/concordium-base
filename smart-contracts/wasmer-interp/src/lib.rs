@@ -736,7 +736,7 @@ pub fn test_run(wasm: &[u8]) -> Result<(), ()> {
         .expect("Instantiation failed! It should always succeed for well-formed modules.");
     println!("Running tests");
     let test: Func<(u32, u32), u32> = instance.exports.get("main").expect("Tests are not provided");
-    // Unable to find a proper source, I'm assuming the two arguments for main are 
+    // Unable to find a proper source, I'm assuming the two arguments for main are
     // equal to `argc` and `argv` in a C program.
     // Since we don't use `argc` and `argv` in the test, we can pass any u32.
     test.call(0, 0).expect("Test result: failed.");
