@@ -37,7 +37,6 @@ impl Action {
 #[derive(Default, Eq, PartialEq)]
 pub struct Reject {}
 
-#[inline(always)]
 #[cfg(all(debug_assertions, target_arch = "wasm32"))]
 pub fn report_error(message: &str, filename: &str, line: u32, column: u32) {
     let msg_bytes = message.as_bytes();
@@ -54,7 +53,6 @@ pub fn report_error(message: &str, filename: &str, line: u32, column: u32) {
     };
 }
 
-#[inline(always)]
 #[cfg(not(all(debug_assertions, target_arch = "wasm32")))]
 pub fn report_error(_message: &str, _filename: &str, _line: u32, _column: u32) {}
 

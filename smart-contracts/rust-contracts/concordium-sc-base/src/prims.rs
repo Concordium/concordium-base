@@ -184,16 +184,4 @@ mod host_dummy_functions {
     pub(crate) extern "C" fn get_slot_time() -> u64 {
         unimplemented!("Dummy function! Not to be executed")
     }
-    #[cfg(all(debug_assertions, target_arch = "wasm32"))]
-    #[no_mangle]
-    pub(crate) extern "C" fn report_error(
-        msg_start: *const u8,
-        msg_length: u32,
-        filename_start: *const u8,
-        filename_length: u32,
-        line: u32,
-        column: u32,
-    ) {
-        unimplemented!("Dummy function! Not to be executed")
-    }
 }
