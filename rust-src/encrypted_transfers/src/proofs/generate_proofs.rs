@@ -25,6 +25,20 @@ use std::rc::Rc;
 /// c_{i,1} = g^{r_i}, c_{i,2} = h^{x_i} pk_receiver^{r_i} for all i.
 /// It is meant as helper function to produce what is for the
 /// fields encexp1 and encexp2 in the EncTrans struct.
+///
+/// Implementation of genEncExpInfo differs from the Cryptoprim bluepaper in the following way
+/// 1. Instead of outputting a single sigma protocol for the equalities using the generic, we
+///    guarantee through their use in EncTrans that they are all verified.
+/// 2. We don't compute the bulletproof information. This is done independendently when needed
+/// 3. Rather than calling genEncExpNoSplitInfo, we inline it in this function. This is found
+///    in the lines inside the for loop.
+///    The list of ComEq protocols are used to prove knowledge of (r, x) such that c_{i,1} = \bar{g}^r
+///    and c_{i, 2} = \bar{h}^{x_i} * pk_{EG}^{r_i}, i.e. knowledge of randomness and value of an encrypted
+///    amount under pk_{EG}.
+///    We do this using ComEq for proving of knowledge of (r_i, x_i) such that r_i is the dlog of
+///    c_{i,1} = \bar{g}^{r_i} with respect to \bar{g} and c_{i,2} is a Pedersen commitment to r_i under
+///    commitment key comm_key=(pk_{EG}, \bar{h}) with randomness x_i where pk_{EG}.gen = \bar{g}.
+///    This is an equivalent proof, as COMMIT_{comm_key}(r_i, x_i) = pk_{EG}^{r_i}*\bar{h}^{x_i}.
 #[allow(clippy::many_single_char_names)]
 fn gen_enc_exp_info<C: Curve>(
     cmm_key: &CommitmentKey<C>,
@@ -60,6 +74,15 @@ fn gen_enc_exp_info<C: Curve>(
 /// and where a_i is the i'th chunk of the amount that A is an encryption of.
 /// Similarly, S_prime of the form (S_1', ..., S_(t')'), where
 /// S_i' = (g^r_i', h^s_i' pk_sender^r_i') =: (d_{i,1}, d_{i,2})
+///
+/// This implementation differs from the one defined in the Cryptoprim
+/// Bluepaper in the following way:
+/// 1. It takes h, the base for encryption in the exponent, as an input.
+/// 2. We don't produce the Bulletproof information. This is computed independently
+/// 3. Instead of using the genAndComp, genEqComp and genLinRelCompEx to compose the sigmaprotocol as in the paper,
+///    we immediately output EncTrans{zeta_1, zeta_2, zeta_3, zeta_4} and guarantee through the implementation of EncTrans
+///    the equality of the decryption key in the dlog and elg-dec protocol, and the linear relation between the chunks
+///    of S', S and A. See EncTrans for more detail
 pub fn gen_enc_trans_proof_info<C: Curve>(
     pk_sender: &PublicKey<C>,
     pk_receiver: &PublicKey<C>,
@@ -111,6 +134,8 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
     }
 }
 
+/// Implementation of genEncTrans in the Cryptoprim Bluepaper
+///
 /// This function produces transfer data containing
 /// a proof that an encrypted transfer was done correctly
 /// The arguments are
@@ -130,6 +155,24 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
 /// EncTrans sigma protocol and a rangeproof (Bulletproofs), i.e.
 /// additonally showing that all a_j and s_j' are in [0, 2^chunk_size)
 /// It returns None if s < a or if it fails to produce one of the bulletproofs.
+///
+/// This implementation differs from the Cryptoprim Bluepaper in the following ways:
+/// 1. The challenge (ctx in the paper) differs. In the paper this function produces the challenge,
+///    but here it is assumed that a random oracle and transcript to be used by the sigma protocol
+///    and bulletproof respectively is supplied in the correct state
+///    This function is called by encrypted_transfers/src/lib.rs by make_transfer_data where the
+///    following prefixes are used:
+///    The random oracle provided is in the following state: Domain separator "EncryptedTransfer",
+///    appended with to_bytes(global_context), then to_bytes(receiver_pk), then to_bytes(sender_pk).
+///    The transcript provided starts with "EncryptedTransfer", then appended with
+///    transcript.append_message(b"ctx", to_bytes(context)), then
+///    transcript.append_message(b"receiver_pk", to_bytes(receiver_pk)), then
+///    transcript.append_message(b"sender_pk", to_bytes(sender_pk)).
+///    TODO: use a RandomOracle for bulletproofs rather than Transcript (CB-481)
+/// 2. The generators for the bulletproofs are provided as input through the context: GlobalContext
+///    parameter. The rest of the information needed for the bulletproof are the randomness returned
+///    by gen_enc_trans_proof_info
+/// 3. The returned value is not signed, we only return the data to be signed by the sender
 #[allow(clippy::too_many_arguments)]
 pub fn gen_enc_trans<C: Curve, R: Rng>(
     context: &GlobalContext<C>,
@@ -144,7 +187,6 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     a: Amount,
     csprng: &mut R,
 ) -> Option<EncryptedAmountTransferData<C>> {
-    // REVIEW: test this
     if s < a {
         return None;
     }
@@ -254,6 +296,8 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     })
 }
 
+/// Implementation of genSecToPubTrans in the Cryptoprim Bluepaper
+///
 /// For sending secret balance to public balance
 /// This function produces transfer data containing
 /// a proof that a secret to public balance transfer was done correctly
@@ -276,7 +320,36 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
 /// of a with randomness 0, in one chunk. The produced EncTrans is then used to
 /// prove that s = a + \sum_{j=1}^(t') 2^{(chunk_size)*(j-1)} s_j', where
 /// the s_j' denote the chunks of s' := s-a.
-/// It returns None if s < a or if it fails to produce the bulletproofs.
+/// It returns None if s < a, if it fails to produce the sigma proof or if it fails
+/// to produce the bulletproofs.
+///
+/// This implementation differs from the Cryptoprim Bluepaper in the following ways:
+/// The challenge (ctx in the paper) differs. In the paper this function produces the challenge,
+/// but here it is assumed that a random oracle and transcript to be used by the sigma protocol
+/// and bulletproof respectively is supplied in the correct state
+/// This function is called by encrypted_transfers/src/lib.rs by make_sec_to_pub_transfer_data
+/// where the following prefixes for the challenges are used:
+///      The random oracle provided is in the following state: Domain separator "SecToPubTransfer",
+///      appended with to_bytes(global_context), then to_bytes(pk).
+///      The transcript provided starts with "SecToPubTransfer", then appended with
+///      transcript.append_message(b"ctx", to_bytes(context)), then
+///      transcript.append_message(b"pk", to_bytes(pk)).
+/// TODO: use a RandomOracle for bulletproofs rather than Transcript (CB-481)
+///
+/// In the bluepaper, a seperate function genSecToPubProofInfo is used to produce the information
+/// needed to prove correctness of the transaction. In this implementation, we instead reuse the
+/// genEncTransProofInfo function by making a trivial encryption A of the amount to send with
+/// randomness = 0 under the public key 1. A = (0, h^a).
+/// The protocol given by genSecToPubProofInfo in the bluepaper provides a protocol for proving
+///  1. Knowledge of decryption key of the sender account
+///  2. Knowledge of (s, sk) such that the secret amount decrypts to s under sk.
+///  3. The two decryption keys in 1 and 2 are equal
+///  4. Knowledge of (s',r) such that S' (the encrypted remaining amount) is an encryption of s'
+///  5. Proof of the linear relation that S' is an encryption of the value s-a, i.e. the value
+///     encrypted by S and the amount a to send
+/// All of this is also proved by using genEncTransProofInfo and can be verified since the verifier
+/// can produce the same encryption A from a.
+/// Furthermore, the challenge used for the proofs is
 #[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case)]
 pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(

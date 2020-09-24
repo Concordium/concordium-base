@@ -26,10 +26,21 @@
 //! of c_{i,1} with respect to g. This is exactly the relation proven by ComEq
 //! with {commitment: c_{i,2}, cmm_key: (pk_receiver, h), y: g^r_i, g: g}
 //!
+//! Ensuring that the same secret is known in the dlog proof and the elg-dec proof
+//! is done by ensuring that the same randomness alpha and challenge c is used in
+//! the dlog proof and in the elg-dec proof (see the Cryptoprim bluepaper).
+//!
+//! Proving the relation
+//!         s = \sum_{j=1}^t 2^{(chunk_size)*(j-1)} (a_j)
+//!             +\sum_{j=1}^(t') 2^{(chunk_size)*(j-1)} s_j' s'
+//! is done using the protocol 10.1.4 in the Cryptoprim bluepaper for proving linear
+//! relations of preimages of homomorphisms. The homomorphism in question is the one
+//! that maps the amounts in chunks to the encrypted amounts.
+//!
 //! The trait SigmaProtocol is
 //! implemented directly for the EncTrans struct below, and it is not used that
-//! the Sigmaprotocol trait is already implemented for both Dlog and ComEq.
-// REVIEW: ^why not?
+//! the Sigmaprotocol trait is already implemented for Dlog, as we need to specify
+//! the randomness to be used directly
 
 #![allow(non_snake_case)]
 use crate::types::CHUNK_SIZE;
@@ -187,10 +198,10 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         }
         for comeq in &self.encexp2 {
             match comeq.commit_point(csprng) {
-                Some((comm_point, (alpha, R_i))) => {
-                    rands_encexp_2.push((alpha, R_i.clone()));
+                Some((comm_point, (alpha, R_s))) => {
+                    rands_encexp_2.push((alpha, R_s.clone()));
                     commit_encexp_2.push(comm_point);
-                    Rs_s_prime.push(*R_i);
+                    Rs_s_prime.push(*R_s);
                 },
                 None => return None
             };
@@ -295,7 +306,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             }
         }
 
-        // For dlog and elcdec:
+        // For dlog and elg-dec:
         let w_lin_a = linear_combination_with_powers_of_two::<C>(&w_a_vec, CHUNK_SIZE);
         let w_lin_s_prime = linear_combination_with_powers_of_two::<C>(&w_s_prime_vec, CHUNK_SIZE);
         let mut w_lin = w_lin_a;
@@ -306,8 +317,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             .mul_by_scalar(&witness.witness_common)
             .plus_point(&self.dlog.public.mul_by_scalar(challenge));
         let mut point = self.elg_dec.public.mul_by_scalar(challenge);
-        let mut exps = vec![witness.witness_common];
-        exps.push(w_lin);
+        let mut exps = vec![witness.witness_common, w_lin];
         let product = multiexp(&self.elg_dec.coeff, &exps);
         point = point.plus_point(&product);
         Some(EncTransCommit {
