@@ -165,7 +165,7 @@ fn try_send_both<A: HasActions>(a: A, b: A) -> A {
 
 // Tests
 
-// We don't use assert_eq! etc. here since they end up requiring formatters
+// We don't use claim_eq! etc. here since they end up requiring formatters
 // which we don't necessarily want to import, etc., etc.
 #[cfg(test)]
 pub mod tests {

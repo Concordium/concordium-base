@@ -296,22 +296,22 @@ mod tests {
 
         // and inspect the result.
         if let Ok(state) = out {
-            assert!(
+            claim!(
                 state.init_params.account_holders.contains(&account1),
                 "Should contain the first account holder"
             );
-            assert!(
+            claim!(
                 state.init_params.account_holders.contains(&account2),
                 "Should contain the second account holder"
             );
-            assert_eq!(
+            claim_eq!(
                 state.init_params.account_holders.len(),
                 2,
                 "Should not contain more account holders"
             );
-            assert_eq!(state.requests.len(), 0, "No transfer request at initialisation");
+            claim_eq!(state.requests.len(), 0, "No transfer request at initialisation");
         } else {
-            assert!(false, "Contract initialization failed.");
+            claim!(false, "Contract initialization failed.");
         }
         // and make sure the correct logs were produced.
     }
@@ -373,30 +373,30 @@ mod tests {
 
         // Test
         match res {
-            Err(_) => assert!(false, "Contract receive failed, but it should not have."),
+            Err(_) => claim!(false, "Contract receive failed, but it should not have."),
             Ok(actions) => {
-                assert_eq!(
+                claim_eq!(
                     actions,
                     test_infrastructure::ActionsTree::Accept,
                     "Contract receive produced incorrect actions."
                 );
-                assert_eq!(
+                claim_eq!(
                     state.requests.len(),
                     1,
                     "Contract receive did not create transfer request"
                 );
-                assert_eq!(
+                claim_eq!(
                     sum_reserved_balance(&state),
                     50,
                     "Contract receive did not reserve requested amount"
                 );
                 let request = state.requests.get(&request_id).unwrap();
-                assert_eq!(
+                claim_eq!(
                     request.supporters.len(),
                     1,
                     "Only one is supporting the request from start"
                 );
-                assert!(
+                claim!(
                     request.supporters.contains(&account1),
                     "The request sender supports the request"
                 );
@@ -469,28 +469,28 @@ mod tests {
 
         // Test
         match res {
-            Err(_) => assert!(false, "Contract receive support failed, but it should not have.:"),
+            Err(_) => claim!(false, "Contract receive support failed, but it should not have.:"),
             Ok(actions) => {
-                assert_eq!(
+                claim_eq!(
                     actions,
                     test_infrastructure::ActionsTree::Accept,
                     "Contract receive support produced incorrect actions."
                 );
             }
         }
-        assert_eq!(
+        claim_eq!(
             state.requests.len(),
             1,
             "Contract receive support should not mutate the outstanding requests"
         );
-        assert_eq!(
+        claim_eq!(
             sum_reserved_balance(&state),
             50,
             "Contract receive did not reserve the requested amount"
         );
         let request = state.requests.get(&request_id).unwrap();
-        assert_eq!(request.supporters.len(), 2, "Two should support the transfer request");
-        assert!(request.supporters.contains(&account2), "The support sender supports the request");
+        claim_eq!(request.supporters.len(), 2, "Two should support the transfer request");
+        claim!(request.supporters.contains(&account2), "The support sender supports the request");
     }
 
     #[test]
@@ -560,17 +560,17 @@ mod tests {
 
         // Test
         match res {
-            Err(_) => assert!(false, "Contract receive support failed, but it should not have."),
+            Err(_) => claim!(false, "Contract receive support failed, but it should not have."),
             Ok(actions) => {
-                assert_eq!(
+                claim_eq!(
                     actions,
                     test_infrastructure::ActionsTree::simple_transfer(&target_account, 50),
                     "Supporting the transfer did not result in the right transfer"
                 );
             }
         }
-        assert_eq!(state.requests.len(), 0, "The request should be removed");
-        assert_eq!(
+        claim_eq!(state.requests.len(), 0, "The request should be removed");
+        claim_eq!(
             sum_reserved_balance(&state),
             0,
             "The transfer should be subtracted from the reserved balance"

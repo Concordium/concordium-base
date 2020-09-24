@@ -212,14 +212,14 @@ pub mod tests {
 
         // Tests
         match out {
-            Err(_) => assert!(false, "Contract initialization failed."),
+            Err(_) => claim!(false, "Contract initialization failed."),
             Ok(state) => {
-                assert_eq!(
+                claim_eq!(
                     state.allowed.len(),
                     0,
                     "No one is allowed to transfer from others account at this point"
                 );
-                assert_eq!(
+                claim_eq!(
                     *state.balances.get(&init_origin).unwrap(),
                     100,
                     "The creator of the contract/token should own all of the tokens"
@@ -227,8 +227,8 @@ pub mod tests {
             }
         }
         // and make sure the correct logs were produced.
-        assert_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
-        assert_eq!(
+        claim_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
+        claim_eq!(
             logger.logs[0],
             to_bytes(&Event::Transfer(AccountAddress([0u8; 32]), init_origin, 100)),
             "Should log an initial transfer, when creating the token"
@@ -286,27 +286,29 @@ pub mod tests {
 
         // Test
         match res {
-            Err(_) => assert!(false, "Contract receive support failed, but it should not have."),
+            Err(_) => claim!(false, "Contract receive support failed, but it should not have."),
             Ok(actions) => {
-                assert_eq!(
+                claim_eq!(
                     actions,
                     test_infrastructure::ActionsTree::accept(),
                     "Transfering should result in an Accept action"
                 );
                 let from_balance = *state.balances.get(&from_account).unwrap();
                 let to_balance = *state.balances.get(&to_account).unwrap();
-                assert_eq!(
-                    from_balance, 30,
+                claim_eq!(
+                    from_balance,
+                    30,
                     "The transfered amount should be subtracted from sender balance"
                 );
-                assert_eq!(
-                    to_balance, 70,
+                claim_eq!(
+                    to_balance,
+                    70,
                     "The transfered amount should be added to receiver balance"
                 );
             }
         }
-        assert_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
-        assert_eq!(
+        claim_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
+        claim_eq!(
             logger.logs[0],
             to_bytes(&Event::Transfer(from_account, to_account, 70)),
             "Should log the transfer"
@@ -369,8 +371,8 @@ pub mod tests {
 
         // Test
         match res {
-            Err(_) => assert!(false, "Contract receive support failed, but it should not have."),
-            Ok(actions) => assert_eq!(
+            Err(_) => claim!(false, "Contract receive support failed, but it should not have."),
+            Ok(actions) => claim_eq!(
                 actions,
                 test_infrastructure::ActionsTree::accept(),
                 "Transfering should result in an Accept action"
@@ -379,18 +381,20 @@ pub mod tests {
         let from_balance = *state.balances.get(&from_account).unwrap();
         let to_balance = *state.balances.get(&to_account).unwrap();
         let from_spender_allowed = *state.allowed.get(&(from_account, spender_account)).unwrap();
-        assert_eq!(
-            from_balance, 140,
+        claim_eq!(
+            from_balance,
+            140,
             "The transfered amount should be subtracted from sender balance"
         );
-        assert_eq!(to_balance, 60, "The transfered amount should be added to receiver balance");
-        assert_eq!(
-            from_spender_allowed, 40,
+        claim_eq!(to_balance, 60, "The transfered amount should be added to receiver balance");
+        claim_eq!(
+            from_spender_allowed,
+            40,
             "The transfered amount should be added to receiver balance"
         );
 
-        assert_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
-        assert_eq!(
+        claim_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
+        claim_eq!(
             logger.logs[0],
             to_bytes(&Event::Transfer(from_account, to_account, 60)),
             "Should log the transfer"
@@ -448,18 +452,18 @@ pub mod tests {
 
         // Test
         match res {
-            Ok(actions) => assert_eq!(
+            Ok(actions) => claim_eq!(
                 actions,
                 test_infrastructure::ActionsTree::accept(),
                 "Should accept the message"
             ),
-            Err(_) => assert!(false, "The message is not expected to fail"),
+            Err(_) => claim!(false, "The message is not expected to fail"),
         }
         let owner_spender_allowed =
             *state.allowed.get(&(owner_account, spender_account)).unwrap_or(&0);
-        assert_eq!(owner_spender_allowed, 100, "The allowed amount is not changed correctly");
-        assert_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
-        assert_eq!(
+        claim_eq!(owner_spender_allowed, 100, "The allowed amount is not changed correctly");
+        claim_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
+        claim_eq!(
             logger.logs[0],
             to_bytes(&Event::Approval(owner_account, spender_account, 100)),
             "Should log the approval"
@@ -521,18 +525,19 @@ pub mod tests {
         // Test
         match res {
             Err(_) => {}
-            Ok(_) => assert!(false, "The message is expected to fail"),
+            Ok(_) => claim!(false, "The message is expected to fail"),
         }
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
         let from_spender_allowed = *state.allowed.get(&(from_account, spender_account)).unwrap();
-        assert_eq!(from_balance, 200, "The balance of the owner account should be unchanged");
-        assert_eq!(to_balance, 0, "The balance of the receiving account should be unchanged");
-        assert_eq!(
-            from_spender_allowed, 100,
+        claim_eq!(from_balance, 200, "The balance of the owner account should be unchanged");
+        claim_eq!(to_balance, 0, "The balance of the receiving account should be unchanged");
+        claim_eq!(
+            from_spender_allowed,
+            100,
             "The allowed amount of the spender account should be unchanged"
         );
-        assert_eq!(logger.logs.len(), 0, "Incorrect number of logs produced.");
+        claim_eq!(logger.logs.len(), 0, "Incorrect number of logs produced.");
     }
 
     #[test]
@@ -587,14 +592,14 @@ pub mod tests {
 
         // Test
         match res {
-            Ok(_) => assert!(false, "The message is expected to fail"),
+            Ok(_) => claim!(false, "The message is expected to fail"),
             Err(_) => {}
         }
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
-        assert_eq!(from_balance, 100, "The balance of the owner account should be unchanged");
-        assert_eq!(to_balance, 0, "The balance of the receiving account should be unchanged");
-        assert_eq!(logger.logs.len(), 0, "Incorrect number of logs produced.");
+        claim_eq!(from_balance, 100, "The balance of the owner account should be unchanged");
+        claim_eq!(to_balance, 0, "The balance of the receiving account should be unchanged");
+        claim_eq!(logger.logs.len(), 0, "Incorrect number of logs produced.");
     }
 
     #[test]
@@ -651,19 +656,20 @@ pub mod tests {
 
         // Test
         match res {
-            Ok(_) => assert!(false, "The message is expected to fail"),
+            Ok(_) => claim!(false, "The message is expected to fail"),
             Err(_) => {}
         }
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
         let from_spender_allowed =
             *state.allowed.get(&(from_account, spender_account)).unwrap_or(&0);
-        assert_eq!(from_balance, 100, "The balance of the owner account should be unchanged");
-        assert_eq!(to_balance, 0, "The balance of the receiving account should be unchanged");
-        assert_eq!(
-            from_spender_allowed, 110,
+        claim_eq!(from_balance, 100, "The balance of the owner account should be unchanged");
+        claim_eq!(to_balance, 0, "The balance of the receiving account should be unchanged");
+        claim_eq!(
+            from_spender_allowed,
+            110,
             "The balance of the receiving account should be unchanged"
         );
-        assert_eq!(logger.logs.len(), 0, "Incorrect number of logs produced.");
+        claim_eq!(logger.logs.len(), 0, "Incorrect number of logs produced.");
     }
 }
