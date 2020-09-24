@@ -176,20 +176,24 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         let mut Rs_a = vec![];
         let mut Rs_s_prime = vec![];
         for comeq in &self.encexp1 {
-            let alpha = Value::<C>::generate_non_zero(csprng);
-            let (v, R_i) = comeq.cmm_key.commit(&alpha, csprng);
-            let u = comeq.g.mul_by_scalar(&alpha);
-            commit_encexp_1.push(CommittedPoints { u, v });
-            rands_encexp_1.push((alpha, R_i.clone()));
-            Rs_a.push(*R_i);
+            match comeq.commit_point(csprng) {
+                Some((comm_point, (alpha, R_i))) => {
+                    rands_encexp_1.push((alpha, R_i.clone()));
+                    commit_encexp_1.push(comm_point);
+                    Rs_a.push(*R_i);
+                },
+                None => return None
+            };
         }
         for comeq in &self.encexp2 {
-            let alpha = Value::<C>::generate_non_zero(csprng);
-            let (v, R_i) = comeq.cmm_key.commit(&alpha, csprng);
-            let u = comeq.g.mul_by_scalar(&alpha);
-            commit_encexp_2.push(CommittedPoints { u, v });
-            rands_encexp_2.push((alpha, R_i.clone()));
-            Rs_s_prime.push(*R_i);
+            match comeq.commit_point(csprng) {
+                Some((comm_point, (alpha, R_i))) => {
+                    rands_encexp_2.push((alpha, R_i.clone()));
+                    commit_encexp_2.push(comm_point);
+                    Rs_s_prime.push(*R_i);
+                },
+                None => return None
+            };
         }
         // For dlog and elcdec:
         let rand_scalar_common = C::generate_non_zero_scalar(csprng);
@@ -273,17 +277,6 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
         let mut w_a_vec = Vec::with_capacity(self.encexp1.len());
         let mut w_s_prime_vec = Vec::with_capacity(self.encexp2.len());
         for (comeq, witness) in izip!(&self.encexp1, &witness.witness_encexp1) {
-            // let u = multiexp(&[comeq.y, comeq.g], &[*challenge, witness.0]);
-            //
-            // let v = comeq
-            //     .commitment
-            //     .mul_by_scalar(challenge)
-            //     .plus_point(&comeq.cmm_key.hide_worker(&witness.0, &witness.1));
-            // commit_encexp1.push(CommittedPoints {
-            //     u,
-            //     v: Commitment(v),
-            // });
-            // w_a_vec.push(witness.1);
             match comeq.extract_point(challenge, witness) {
                 Some(m) => {
                     commit_encexp1.push(m);
