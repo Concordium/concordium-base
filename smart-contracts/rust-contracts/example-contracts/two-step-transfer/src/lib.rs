@@ -32,7 +32,7 @@ use concordium_sc_base::{collections::*, *};
  */
 
 // Types
-
+#[derive(Serialize)]
 enum Message {
     // Indicates that the user sending the message would like to make a request
     // to send funds to the given address with the given ID and amount.
@@ -52,7 +52,7 @@ type TransferRequestId = u64;
 type TransferRequestTimeToLiveMilliseconds = u64;
 type TimeoutSlotTimeMilliseconds = u64;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 struct TransferRequest {
     transfer_amount: Amount,
     target_account:  AccountAddress,
@@ -60,8 +60,11 @@ struct TransferRequest {
     supporters:      BTreeSet<AccountAddress>,
 }
 
+#[derive(Serialize)]
 struct InitParams {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
+    #[set_size_length = 1]
+    #[skip_order_check]
     account_holders: BTreeSet<AccountAddress>,
 
     // How many of the account holders need to agree before funds are released
@@ -79,6 +82,7 @@ struct InitParams {
     transfer_request_ttl: TransferRequestTimeToLiveMilliseconds,
 }
 
+#[derive(Serialize)]
 pub struct State {
     // The initial configuration of the contract
     init_params: InitParams,
@@ -86,6 +90,8 @@ pub struct State {
     // Requests which have not been dropped due to timing out or due to being agreed to yet
     // The request ID, the associated amount, when it times out, who is making the transfer and
     // which account holders support this transfer
+    #[map_size_length = 2]
+    #[skip_order_check]
     requests: BTreeMap<TransferRequestId, TransferRequest>,
 }
 
@@ -238,110 +244,6 @@ fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
                 Ok(A::accept())
             }
         }
-    }
-}
-
-// (De)serialization
-
-impl Serialize for Message {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        match self {
-            Message::RequestTransfer(transfer_request_id, amount, account_address) => {
-                out.write_u8(0)?;
-                out.write_u64(*transfer_request_id)?;
-                out.write_u64(*amount)?;
-                account_address.serial(out)?;
-            }
-            Message::SupportTransfer(transfer_request_id, amount, account_address) => {
-                out.write_u8(1)?;
-                out.write_u64(*transfer_request_id)?;
-                out.write_u64(*amount)?;
-                account_address.serial(out)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        // TODO
-        match source.read_u8()? {
-            0 => {
-                let transfer_request_id = source.read_u64()?;
-                let amount = source.read_u64()?;
-                let account_address = AccountAddress::deserial(source)?;
-                Ok(Message::RequestTransfer(transfer_request_id, amount, account_address))
-            }
-
-            1 => {
-                let transfer_request_id = source.read_u64()?;
-                let amount = source.read_u64()?;
-                let account_address = AccountAddress::deserial(source)?;
-                Ok(Message::SupportTransfer(transfer_request_id, amount, account_address))
-            }
-
-            _ => Err(R::Err::default()),
-        }
-    }
-}
-
-impl Serialize for InitParams {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.account_holders.serial(out)?;
-        out.write_u32(self.transfer_agreement_threshold)?;
-        out.write_u64(self.transfer_request_ttl)?;
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let account_holders = BTreeSet::deserial(source)?;
-        let transfer_agreement_threshold = source.read_u32()?;
-        let transfer_request_ttl = source.read_u64()?;
-        Ok(InitParams {
-            account_holders,
-            transfer_agreement_threshold,
-            transfer_request_ttl,
-        })
-    }
-}
-
-impl Serialize for TransferRequest {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.transfer_amount.serial(out)?;
-        self.target_account.serial(out)?;
-        self.times_out_at.serial(out)?;
-        self.supporters.serial(out)?;
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let transfer_amount = Amount::deserial(source)?;
-        let target_account = AccountAddress::deserial(source)?;
-        let times_out_at = TimeoutSlotTimeMilliseconds::deserial(source)?;
-        let supporters = BTreeSet::deserial(source)?;
-        Ok(TransferRequest {
-            transfer_amount,
-            target_account,
-            times_out_at,
-            supporters,
-        })
-    }
-}
-
-impl Serialize for State {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.init_params.serial(out)?;
-        self.requests.serial(out)?;
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let init_params = InitParams::deserial(source)?;
-        let requests = BTreeMap::deserial(source)?;
-        Ok(State {
-            init_params,
-            requests,
-        })
     }
 }
 

@@ -22,6 +22,7 @@ struct InitParams {
     total_supply: U999,   // Total supply of tokens created
 }
 
+#[derive(Serialize)]
 pub struct State {
     init_params: InitParams,
     balances:    BTreeMap<AccountAddress, U999>,
@@ -29,6 +30,7 @@ pub struct State {
     allowed: BTreeMap<(AccountAddress, AccountAddress), U999>,
 }
 
+#[derive(Serialize)]
 enum Request {
     // (receive_account, amount) - Transfers 'amount' tokens from the sender account to
     // 'receive_account'
@@ -43,6 +45,7 @@ enum Request {
 }
 
 // Event printed in the log
+#[derive(Serialize)]
 enum Event {
     // `amount` of tokens are tranfered `from_account` to `to_account`
     // (from_account, to_account, amount)
@@ -146,7 +149,7 @@ fn deserial_string<R: Read>(source: &mut R) -> Result<String, R::Err> {
     Ok(res)
 }
 
-impl Serialize for InitParams {
+impl Serial for InitParams {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         serial_string(&self.name, out)?;
         serial_string(&self.symbol, out)?;
@@ -154,7 +157,9 @@ impl Serialize for InitParams {
         self.total_supply.serial(out)?;
         Ok(())
     }
+}
 
+impl Deserial for InitParams {
     fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
         let name = deserial_string(source)?;
         let symbol = deserial_string(source)?;
@@ -165,112 +170,6 @@ impl Serialize for InitParams {
             symbol,
             decimals,
             total_supply,
-        })
-    }
-}
-
-impl Serialize for Request {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        match self {
-            Request::TransferTo(account_address, amount) => {
-                out.write_u8(0)?;
-                account_address.serial(out)?;
-                amount.serial(out)?;
-            }
-            Request::TransferFromTo(owner_address, receiver_address, amount) => {
-                out.write_u8(1)?;
-                owner_address.serial(out)?;
-                receiver_address.serial(out)?;
-                amount.serial(out)?;
-            }
-            Request::AllowTransfer(spender_address, amount) => {
-                out.write_u8(2)?;
-                spender_address.serial(out)?;
-                amount.serial(out)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let idx = source.read_u8()?;
-        match idx {
-            0 => {
-                let account_address = AccountAddress::deserial(source)?;
-                let amount = U999::deserial(source)?;
-                Ok(Request::TransferTo(account_address, amount))
-            }
-            1 => {
-                let owner_address = AccountAddress::deserial(source)?;
-                let receiver_address = AccountAddress::deserial(source)?;
-                let amount = U999::deserial(source)?;
-                Ok(Request::TransferFromTo(owner_address, receiver_address, amount))
-            }
-            2 => {
-                let spender_address = AccountAddress::deserial(source)?;
-                let amount = U999::deserial(source)?;
-                Ok(Request::AllowTransfer(spender_address, amount))
-            }
-            _ => Err(Default::default()),
-        }
-    }
-}
-
-impl Serialize for Event {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        match self {
-            Event::Transfer(from_account, to_account, amount) => {
-                out.write_u8(0)?;
-                from_account.serial(out)?;
-                to_account.serial(out)?;
-                amount.serial(out)?;
-            }
-            Event::Approval(owner_account, spender_account, amount) => {
-                out.write_u8(0)?;
-                owner_account.serial(out)?;
-                spender_account.serial(out)?;
-                amount.serial(out)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let idx = source.read_u8()?;
-        match idx {
-            0 => {
-                let from_account = AccountAddress::deserial(source)?;
-                let to_account = AccountAddress::deserial(source)?;
-                let amount = U999::deserial(source)?;
-                Ok(Event::Transfer(from_account, to_account, amount))
-            }
-            1 => {
-                let owner_account = AccountAddress::deserial(source)?;
-                let spender_account = AccountAddress::deserial(source)?;
-                let amount = U999::deserial(source)?;
-                Ok(Event::Approval(owner_account, spender_account, amount))
-            }
-            _ => Err(Default::default()),
-        }
-    }
-}
-
-impl Serialize for State {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.balances.serial(out)?;
-        self.allowed.serial(out)?;
-        self.init_params.serial(out)?;
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let balances = BTreeMap::deserial(source)?;
-        let allowed = BTreeMap::deserial(source)?;
-        let init_params = InitParams::deserial(source)?;
-        Ok(State {
-            balances,
-            allowed,
-            init_params,
         })
     }
 }

@@ -15,8 +15,7 @@ use concordium_sc_base::*;
  */
 
 // Types
-
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Copy, Clone, Serialize)]
 enum Mode {
     AwaitingDeposit,
     AwaitingDelivery,
@@ -24,14 +23,14 @@ enum Mode {
     Done,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize)]
 enum Arbitration {
     ReturnDepositToBuyer,
     ReleaseFundsToSeller,
     ReawaitDelivery,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize)]
 enum Message {
     SubmitDeposit,
     AcceptDelivery,
@@ -39,7 +38,7 @@ enum Message {
     Arbitrate(Arbitration),
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize)]
 pub struct InitParams {
     required_deposit: Amount,
     arbiter_fee:      Amount,
@@ -48,7 +47,7 @@ pub struct InitParams {
     arbiter:          AccountAddress,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize)]
 pub struct State {
     mode:             Mode,
     required_deposit: Amount,
@@ -162,133 +161,6 @@ fn try_send_both<A: HasActions>(a: A, b: A) -> A {
     let best_effort_a = a.or_else(A::accept());
     let best_effort_b = b.or_else(A::accept());
     best_effort_a.and_then(best_effort_b)
-}
-
-// (De)serialization
-
-impl Serialize for Message {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        match self {
-            Message::SubmitDeposit => {
-                out.write_u8(1)?;
-            }
-            Message::AcceptDelivery => {
-                out.write_u8(2)?;
-            }
-            Message::Arbitrate(Arbitration::ReturnDepositToBuyer) => {
-                out.write_u8(3)?;
-            }
-            Message::Arbitrate(Arbitration::ReleaseFundsToSeller) => {
-                out.write_u8(4)?;
-            }
-            Message::Arbitrate(Arbitration::ReawaitDelivery) => {
-                out.write_u8(5)?;
-            }
-            Message::Contest => {
-                out.write_u8(6)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let idx = source.read_u8()?;
-        match idx {
-            1 => Ok(Message::SubmitDeposit),
-            2 => Ok(Message::AcceptDelivery),
-            3 => Ok(Message::Arbitrate(Arbitration::ReturnDepositToBuyer)),
-            4 => Ok(Message::Arbitrate(Arbitration::ReleaseFundsToSeller)),
-            5 => Ok(Message::Arbitrate(Arbitration::ReawaitDelivery)),
-            6 => Ok(Message::Contest),
-            _ => Err(Default::default()),
-        }
-    }
-}
-
-impl Serialize for Mode {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        match self {
-            Mode::AwaitingDeposit => {
-                out.write_u8(1)?;
-            }
-            Mode::AwaitingDelivery => {
-                out.write_u8(2)?;
-            }
-            Mode::AwaitingArbitration => {
-                out.write_u8(3)?;
-            }
-            Mode::Done => {
-                out.write_u8(4)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let idx = source.read_u8()?;
-        match idx {
-            1 => Ok(Mode::AwaitingDeposit),
-            2 => Ok(Mode::AwaitingDelivery),
-            3 => Ok(Mode::AwaitingArbitration),
-            4 => Ok(Mode::Done),
-            _ => Err(Default::default()),
-        }
-    }
-}
-
-impl Serialize for InitParams {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.required_deposit.serial(out)?;
-        self.arbiter_fee.serial(out)?;
-        self.buyer.serial(out)?;
-        self.seller.serial(out)?;
-        self.arbiter.serial(out)?;
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let required_deposit = source.get()?;
-        let arbiter_fee = source.get()?;
-        let buyer = source.get()?;
-        let seller = source.get()?;
-        let arbiter = source.get()?;
-        Ok(InitParams {
-            required_deposit,
-            arbiter_fee,
-            buyer,
-            seller,
-            arbiter,
-        })
-    }
-}
-
-impl Serialize for State {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        self.mode.serial(out)?;
-        self.required_deposit.serial(out)?;
-        self.arbiter_fee.serial(out)?;
-        self.buyer.serial(out)?;
-        self.seller.serial(out)?;
-        self.arbiter.serial(out)?;
-        Ok(())
-    }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let mode = source.get()?;
-        let required_deposit = source.get()?;
-        let arbiter_fee = source.get()?;
-        let buyer = source.get()?;
-        let seller = source.get()?;
-        let arbiter = source.get()?;
-        Ok(State {
-            mode,
-            required_deposit,
-            arbiter_fee,
-            buyer,
-            seller,
-            arbiter,
-        })
-    }
 }
 
 // Tests

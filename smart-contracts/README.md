@@ -207,3 +207,24 @@ or similar, depending on the platform (alternatively just comment out the defaul
 This kind of testing is perfectly adequate for a large amount of functional correctness testing, however ultimately we also want to test code as it will be deployed to the chain. For this, the intention is to update the `wasmer-runner` with a `test` command that will be able to execute smart contracts in a given state and parameters.
 
 We might hook into the default testing infrastructure of Rust by specifying a binary runner in `.cargo/config` as well for this, although the best user-experience needs to be determined.
+
+
+# Removing Host Information from Binary
+By default the compiled binary from a rust crate contains some information from the host machine, namely rust-related paths such as the path to `.cargo`. This can be seen by inspecting the produced binary:
+
+Lets assume your username is `tom` and you have a smart contract `foo` located in your home folder, which you compiled in release-mode to WASM32.
+By running the following command inside the `foo` folder, you will be able to see the paths included in the binary: `strings target/wasm32-unknown-unknown/release/foo.wasm | grep tom`
+
+To remove the host information, the path prefixes can be remapped using a flag given to the compiler.
+`RUSTFLAGS=--remap-path-prefix=/home/tom=secret cargo build --release --target wasm32-unknown-unknown`, where `/home/tom` is the prefix you want to change into `secret`.
+The flag can be specified multiple times to remap multiple prefixes.
+
+The flags can also be set permanently in the `.cargo/config` file in your crate, under the `build` section:
+
+``` toml
+[build]
+rustflags = ["--remap-path-prefix=/home/tom=secret"]
+```
+
+**Important:**
+[The --remap-path-prefix does currently not work in rustc >= 1.46.0, but an issue can been created.](https://github.com/rust-lang/rust/issues/77046)

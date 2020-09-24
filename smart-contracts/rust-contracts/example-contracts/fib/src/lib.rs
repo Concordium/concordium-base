@@ -1,19 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use concordium_sc_base::*;
 
+#[derive(Serialize)]
 pub struct State {
     result: u64,
-}
-
-impl Serialize for State {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_u64(self.result) }
-
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
-        let result = source.read_u64()?;
-        Ok(State {
-            result,
-        })
-    }
 }
 
 #[init(name = "init")]
