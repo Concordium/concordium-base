@@ -5,38 +5,26 @@ This package provides a WASM export of the API needed by the identity provider.
 # Prerequisites
 
 In order to build you need the following
-- the rust compiler, stable toolchain
-- wasm32 target for rust. This is easiest to install with the `rustup` tool as 
+- the rust compiler, stable toolchain, a recent version. We've tested with
+  1.45.2 and 1.46.
+- clang development libraries. On ubuntu these can be installed with 
   ```
-  rustup target add wasm32-unknown-unknown
+  apt install libclang-dev
   ```
-- wasm-pack, see https://rustwasm.github.io/wasm-pack/installer/
 
 # Building
-  In order to build you should first build the `wasm` libraries via cargo as
   ```
-  cargo build --release
-  ```
-
-  The default target is set to `wasm32-unknown-unknown` in
-  [./cargo/config](./cargo/config), the full invocation otherwise would be
-   ```
-   cargo build --target=wasm32-unknown-unknown
-   ```
-
-  After that you should run the `wasm-pack` tool to prepare the generated code
-  for inclusion into your project. Here we assume that the code is going to be
-  used from `nodejs`, in which case you should run
-  
-  ```
-  wasm-pack build --target nodejs --release
+  cargo build --relese
   ```
   
-  This will generate a package inside `pkg` subdirectory of the current
-  directory.
+  will build the library and produce artifacts in `./target/release/`.
+  - On linux this produces a shared library `libidiss.so` that needs to be
+    loaded into a nodejs instance. To do this move/rename the generated shared library
+    to `libidiss.node` (the extension is important, the name is not, it just has
+    to match the import statement in javascript later on)
   
 # Example
-  After building you can try to run the script `example.js` as, e.g., 
+  After following the build instructions you you can try to run the script `example.js` as, e.g., 
   ```
   nodejs example.js
   ```
@@ -45,14 +33,3 @@ In order to build you need the following
   
   The script also illustrates the input formats of the values and whether
   exceptions can or cannot be raised.
-  
-# Typescript
-  Running the `wasm-pack` tool also generates a file `idiss.d.ts` which contains
-  the typescript types of the exposed functions.
-
-# Changes
-
-The changes from the previous version are in the way identity providers and
-anonymity revokers are handled. Concretely this means that `validate_request`
-requires an additional argument with a list of anonymity revokers supported by
-the chain, and the identity provider.
