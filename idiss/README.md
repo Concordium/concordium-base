@@ -41,7 +41,7 @@ anonymity revocation record. The Error case here can happen if the attribute
 list (the `alist` argument) or any other arguments are malformed.
   
 # Example
-  After following the build instructions you you can try to run the script `example.js` as, e.g., 
+  After following the build instructions you can try to run the script `example.js` as, e.g., 
   ```
   nodejs example.js
   ```
