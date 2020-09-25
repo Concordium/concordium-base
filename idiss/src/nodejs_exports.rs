@@ -56,15 +56,15 @@ unsafe fn get_string_arg(env: napi_env, buf: napi_value) -> Option<String> {
     }
 }
 
-unsafe fn get_string_property(env: napi_env, obj: napi_value, name: &str) -> Option<String> {
-    let mut local: napi_value = std::mem::zeroed();
-    let name = std::ffi::CString::new(name).ok()?;
-    if napi_get_named_property(env, obj, name.as_ptr(), &mut local) != napi_status::napi_ok {
-        None
-    } else {
-        get_string_arg(env, local)
-    }
-}
+// unsafe fn get_string_property(env: napi_env, obj: napi_value, name: &str) ->
+// Option<String> {     let mut local: napi_value = std::mem::zeroed();
+//     let name = std::ffi::CString::new(name).ok()?;
+//     if napi_get_named_property(env, obj, name.as_ptr(), &mut local) !=
+// napi_status::napi_ok {         None
+//     } else {
+//         get_string_arg(env, local)
+//     }
+// }
 
 unsafe fn set_string_property(
     env: napi_env,
@@ -105,7 +105,7 @@ unsafe extern "C" fn validate_request_js(env: napi_env, info: napi_callback_info
     }
     let ip_info = match get_string_arg(env, buffer[0]) {
         Some(arg1) => arg1,
-        None => return create_error(env, "IpInfo must be given as a string.")
+        None => return create_error(env, "IpInfo must be given as a string."),
     };
     let ars_info = match get_string_arg(env, buffer[1]) {
         Some(arg1) => arg1,
@@ -151,7 +151,7 @@ unsafe extern "C" fn create_identity_object_js(
     }
     let ip_info = match get_string_arg(env, buffer[0]) {
         Some(arg1) => arg1,
-        None => return create_error(env, "IpInfo must be given as a string.")
+        None => return create_error(env, "IpInfo must be given as a string."),
     };
     let request = match get_string_arg(env, buffer[1]) {
         Some(arg) => arg,
