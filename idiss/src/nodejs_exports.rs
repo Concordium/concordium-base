@@ -95,7 +95,7 @@ unsafe extern "C" fn validate_request_js(env: napi_env, info: napi_callback_info
         std::ptr::null_mut(),
     );
     if ret != napi_status::napi_ok {
-        return create_error(env, "Cannot acuire context.");
+        return create_error(env, "Cannot acquire context.");
     }
     if argc != 3 {
         return create_error(
