@@ -11,15 +11,14 @@ use id::{
     types::*,
 };
 use serde_json::{from_str, from_value, ser::to_string, Value};
-use std::fmt::Display;
-use wasm_bindgen::prelude::*;
+use std::{fmt::Display, io::Cursor};
 
 type ExampleCurve = G1;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
 
 // Parse an IpInfo taking into account the version.
 // For now only version 0 is supported.
-fn parse_exact_versioned_ip_info(ip_info_str: &str) -> Result<IpInfo<Bls12>, JsValue> {
+fn parse_exact_versioned_ip_info(ip_info_str: &str) -> Result<IpInfo<Bls12>, String> {
     let v: Versioned<IpInfo<Bls12>> = from_str(ip_info_str).map_err(show_err)?;
     if v.version == VERSION_0 {
         Ok(v.value)
@@ -30,7 +29,7 @@ fn parse_exact_versioned_ip_info(ip_info_str: &str) -> Result<IpInfo<Bls12>, JsV
 
 // Parse anonymity revokers taking into account the version.
 // For now only version 0 is supported.
-fn parse_exact_versioned_ars_infos(ars_info_str: &str) -> Result<ArInfos<ArCurve>, JsValue> {
+fn parse_exact_versioned_ars_infos(ars_info_str: &str) -> Result<ArInfos<ArCurve>, String> {
     let v: Versioned<ArInfos<ArCurve>> = from_str(ars_info_str).map_err(show_err)?;
     if v.version == VERSION_0 {
         Ok(v.value)
@@ -38,6 +37,7 @@ fn parse_exact_versioned_ars_infos(ars_info_str: &str) -> Result<ArInfos<ArCurve
         Err(show_err("Incorrect Ars version."))
     }
 }
+
 
 // Parse an GlobalContext taking into account the version.
 // For now only version 0 is supported.
@@ -53,7 +53,7 @@ fn parse_exact_versioned_global_context(
     }
 }
 
-#[wasm_bindgen]
+
 pub fn validate_request(
     global_context_str: &str,
     ip_info_str: &str,
@@ -108,15 +108,15 @@ pub fn validate_request(
     vf.is_ok()
 }
 
-fn show_err<D: Display>(err: D) -> JsValue { JsValue::from_str(&format!("ERROR: {}", err)) }
+fn show_err<D: Display>(err: D) -> String { format!("ERROR: {}", err) }
 
-#[wasm_bindgen]
+/// Create an identity object and the anonymity revocation record.
 pub fn create_identity_object(
     ip_info_str: &str,
     request_str: &str,
     alist_str: &str,
     ip_private_key_str: &str,
-) -> Result<String, JsValue> {
+) -> Result<(String, String), String> {
     let ip_info = parse_exact_versioned_ip_info(ip_info_str)?;
 
     let request: Versioned<PreIdentityObject<Bls12, ExampleCurve>> = {
@@ -139,13 +139,22 @@ pub fn create_identity_object(
     let signature = sign_identity_object(&request.value, &ip_info, &alist, &ip_private_key)
         .map_err(show_err)?;
 
+    let ar_record = AnonymityRevocationRecord {
+        id_cred_pub: request.value.id_cred_pub,
+        ar_data:     request.value.ip_ar_data.clone(),
+    };
+
     let id = IdentityObject {
         pre_identity_object: request.value,
         alist,
         signature,
     };
     let vid = Versioned::new(VERSION_0, id);
-    Ok(to_string(&vid).expect("JSON serialization of versioned identity objects should not fail."))
+    let id_obj =
+        to_string(&vid).expect("JSON serialization of versioned identity objects should not fail.");
+    let ar_record = to_string(&ar_record)
+        .expect("JSON serialization of anonymity revocation records should not fail.");
+    Ok((id_obj, ar_record))
 }
 
 #[wasm_bindgen]
@@ -217,3 +226,6 @@ pub fn create_anonymity_revocation_record(
     Ok(to_string(&ar_record)
         .expect("JSON serialization of anonymity revocation records should not fail."))
 }
+
+#[cfg(feature = "nodejs")]
+mod nodejs_exports;
