@@ -141,7 +141,7 @@ unsafe extern "C" fn create_identity_object_js(
         std::ptr::null_mut(),
     );
     if ret != napi_status::napi_ok {
-        return create_error(env, "Cannot acuire context.");
+        return create_error(env, "Cannot acquire context.");
     }
     if argc != 4 {
         return create_error(
