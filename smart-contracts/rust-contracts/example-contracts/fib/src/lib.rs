@@ -9,7 +9,7 @@ pub struct State {
 #[init(name = "init")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    _ctx: I,
+    _ctx: &I,
     _amount: Amount,
     _logger: &mut L,
 ) -> InitResult<State> {
@@ -25,7 +25,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 #[receive(name = "receive")]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
-    ctx: R,
+    ctx: &R,
     _amount: Amount,
     _logger: &mut L,
     state: &mut State,
@@ -51,7 +51,7 @@ fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
 #[receive(name = "receive_calc_fib")]
 #[inline(always)]
 fn contract_receive_calc_fib<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
-    _ctx: R,
+    _ctx: &R,
     amount: Amount,
     _logger: &mut L,
     state: &mut State,

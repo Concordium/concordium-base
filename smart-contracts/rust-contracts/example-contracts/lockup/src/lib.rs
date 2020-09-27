@@ -68,7 +68,7 @@ pub struct State {
 #[init(name = "init")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    ctx: I,
+    ctx: &I,
     amount: Amount,
     _logger: &mut L,
 ) -> InitResult<State> {
@@ -101,7 +101,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 #[receive(name = "receive")]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: R,
+    ctx: &R,
     amount: Amount,
     _logger: &mut L,
     state: &mut State,
@@ -175,10 +175,7 @@ fn make_vested_funds_available(time_now: u64, state: &mut State) {
 // Tests
 #[cfg(test)]
 pub mod tests {
-    use super::*;
-
     #[test]
-    #[no_mangle]
     fn test() {
         todo!("implement tests");
     }

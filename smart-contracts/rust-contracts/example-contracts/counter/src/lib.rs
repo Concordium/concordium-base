@@ -9,7 +9,7 @@ pub struct State {
 
 #[init(name = "init")]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    _ctx: I,
+    _ctx: &I,
     amount: Amount,
     logger: &mut L,
 ) -> InitResult<State> {
@@ -24,7 +24,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 
 #[receive(name = "receive")]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: R,
+    ctx: &R,
     amount: Amount,
     logger: &mut L,
     state: &mut State,
@@ -49,7 +49,7 @@ fn contract_receive_optimized<
     S: HasContractState<()>,
     A: HasActions,
 >(
-    ctx: R,
+    ctx: &R,
     amount: Amount,
     logger: &mut L,
     state_cursor: &mut S,
@@ -95,7 +95,7 @@ mod tests {
         let mut logger = test_infrastructure::LogRecorder::init();
 
         // call the init function
-        let out = contract_init(ctx, 13, &mut logger);
+        let out = contract_init(&ctx, 13, &mut logger);
 
         // and inspect the result.
         if let Ok(state) = out {
@@ -148,7 +148,7 @@ mod tests {
             current_count: 13,
         };
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(ctx, 11, &mut logger, &mut state);
+            contract_receive(&ctx, 11, &mut logger, &mut state);
         match res {
             Err(_) => claim!(false, "Contract receive failed, but it should not have."),
             Ok(actions) => {

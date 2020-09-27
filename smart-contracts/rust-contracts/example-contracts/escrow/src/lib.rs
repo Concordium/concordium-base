@@ -62,7 +62,7 @@ pub struct State {
 #[init(name = "init")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    ctx: I,
+    ctx: &I,
     amount: Amount,
     _logger: &mut L,
 ) -> InitResult<State> {
@@ -86,7 +86,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 #[receive(name = "receive")]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: R,
+    ctx: &R,
     amount: Amount,
     _logger: &mut L,
     state: &mut State,
@@ -181,16 +181,25 @@ pub mod tests {
             slot_time:        43578934,
         };
         let init_origin = AccountAddress([4; ACCOUNT_ADDRESS_SIZE]);
-        let init_context = InitContext {
+        let init_ctx = InitContext {
             metadata,
             init_origin,
         };
+        let parameter = InitParams {
+            required_deposit: 20,
+            arbiter_fee:      30,
+            buyer:            init_origin,
+            seller:           AccountAddress([3; ACCOUNT_ADDRESS_SIZE]),
+            arbiter:          AccountAddress([3; ACCOUNT_ADDRESS_SIZE]),
+        };
+        let ctx = test_infrastructure::InitContextWrapper {
+            init_ctx,
+            parameter: &to_bytes(&parameter),
+        };
         let amount = 200;
-        let result = contract_init(init_context, amount, LogRecorder(vec![]));
-        let expected = Err(Reject {});
-        if !(result == expected) {
-            panic!("init failed to reject a non-zero amount")
-        }
+        let mut logger = test_infrastructure::LogRecorder::init();
+        let result = contract_init(&ctx, amount, &mut logger);
+        claim!(result.is_err(), "init failed to reject a non-zero amount");
     }
 
     #[test]

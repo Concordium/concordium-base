@@ -100,7 +100,7 @@ pub struct State {
 #[init(name = "init")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    ctx: I,
+    ctx: &I,
     _amount: Amount,
     _logger: &mut L,
 ) -> InitResult<State> {
@@ -132,7 +132,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 #[receive(name = "deposit")]
 #[inline(always)]
 fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    _ctx: R,
+    _ctx: &R,
     _amount: Amount,
     _logger: &mut L,
     _state: &mut State,
@@ -143,7 +143,7 @@ fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
 #[receive(name = "receive")]
 #[inline(always)]
 fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: R,
+    ctx: &R,
     amount: Amount,
     _logger: &mut L,
     state: &mut State,
@@ -292,7 +292,7 @@ mod tests {
         let mut logger = test_infrastructure::LogRecorder::init();
 
         // call the init function
-        let out = contract_init(ctx, 0, &mut logger);
+        let out = contract_init(&ctx, 0, &mut logger);
 
         // and inspect the result.
         if let Ok(state) = out {
@@ -369,7 +369,7 @@ mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive_message(ctx, 100, &mut logger, &mut state);
+            contract_receive_message(&ctx, 100, &mut logger, &mut state);
 
         // Test
         match res {
@@ -465,7 +465,7 @@ mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive_message(ctx, 75, &mut logger, &mut state);
+            contract_receive_message(&ctx, 75, &mut logger, &mut state);
 
         // Test
         match res {
@@ -556,7 +556,7 @@ mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive_message(ctx, 100, &mut logger, &mut state);
+            contract_receive_message(&ctx, 100, &mut logger, &mut state);
 
         // Test
         match res {

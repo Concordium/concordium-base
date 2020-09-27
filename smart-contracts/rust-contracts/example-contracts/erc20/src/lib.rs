@@ -60,7 +60,7 @@ enum Event {
 #[init(name = "init")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    ctx: I,
+    ctx: &I,
     amount: Amount,
     logger: &mut L,
 ) -> InitResult<State> {
@@ -85,7 +85,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 #[receive(name = "receive")]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: R,
+    ctx: &R,
     receive_amount: Amount,
     logger: &mut L,
     state: &mut State,
@@ -208,7 +208,7 @@ pub mod tests {
         let mut logger = test_infrastructure::LogRecorder::init();
 
         // Execution
-        let out = contract_init(ctx, 0, &mut logger);
+        let out = contract_init(&ctx, 0, &mut logger);
 
         // Tests
         match out {
@@ -282,7 +282,7 @@ pub mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(ctx, 0, &mut logger, &mut state);
+            contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         match res {
@@ -367,7 +367,7 @@ pub mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(ctx, 0, &mut logger, &mut state);
+            contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         match res {
@@ -448,7 +448,7 @@ pub mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(ctx, 0, &mut logger, &mut state);
+            contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         match res {
@@ -520,7 +520,7 @@ pub mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(ctx, 0, &mut logger, &mut state);
+            contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         match res {
@@ -588,13 +588,10 @@ pub mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(ctx, 0, &mut logger, &mut state);
+            contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
-        match res {
-            Ok(_) => claim!(false, "The message is expected to fail"),
-            Err(_) => {}
-        }
+        claim!(res.is_err(), "The message is expected to fail");
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
         claim_eq!(from_balance, 100, "The balance of the owner account should be unchanged");
@@ -652,13 +649,11 @@ pub mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(ctx, 0, &mut logger, &mut state);
+            contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
-        match res {
-            Ok(_) => claim!(false, "The message is expected to fail"),
-            Err(_) => {}
-        }
+        claim!(res.is_err(), "The message is expected to fail");
+
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
         let from_spender_allowed =

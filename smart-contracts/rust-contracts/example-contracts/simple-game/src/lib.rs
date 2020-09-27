@@ -67,7 +67,7 @@ pub struct State {
 #[init(name = "init", low_level)]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    ctx: I,
+    ctx: &I,
     amount: Amount,
     logger: &mut L,
     state: &mut ContractState,
@@ -109,7 +109,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 #[receive(name = "receive_contribute", low_level)]
 #[inline(always)]
 fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: R,
+    ctx: &R,
     amount: Amount,
     logger: &mut L,
     state: &mut ContractState,
@@ -214,7 +214,7 @@ fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 #[receive(name = "receive_finalize", low_level)]
 #[inline(always)]
 fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: R,
+    ctx: &R,
     amount: Amount,
     logger: &mut L,
     state_cursor: &mut ContractState,
@@ -289,7 +289,7 @@ fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 #[receive(name = "receive_help_yourself", low_level)]
 #[inline(always)]
 fn help_yourself<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: R,
+    ctx: &R,
     amount: Amount,
     _logger: &mut L,
     state: &mut ContractState,

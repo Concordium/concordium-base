@@ -64,7 +64,7 @@ pub struct State {
 
 #[init(name = "init")]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    ctx: I,
+    ctx: &I,
     _amount: Amount,
     _logger: &mut L,
 ) -> InitResult<State> {
@@ -88,7 +88,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 #[receive(name = "deposit")]
 /// Allows anyone to deposit GTU into the contract.
 fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    _ctx: R,
+    _ctx: &R,
     _amount: Amount,
     _logger: &mut L,
     _state: &mut State,
@@ -100,7 +100,7 @@ fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
 /// Allows the owner of the contract to transfer GTU from the contract to an
 /// arbitrary account
 fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-    ctx: R,
+    ctx: &R,
     _amount: Amount,
     _logger: &mut L,
     state: &mut State,
@@ -224,7 +224,7 @@ mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive_transfer(ctx, 0, &mut logger, &mut state);
+            contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
 
         // Test
         match res {
@@ -327,7 +327,7 @@ mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive_transfer(ctx, 0, &mut logger, &mut state);
+            contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
 
         // Test
         claim!(res.is_err(), "Contract receive transfer succeeded, but it should not have.");
@@ -425,7 +425,7 @@ mod tests {
 
         // Execution
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive_transfer(ctx, 0, &mut logger, &mut state);
+            contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
 
         // Test
         claim!(res.is_ok(), "Contract receive transfer failed, but it should not have.");
