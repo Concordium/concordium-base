@@ -66,7 +66,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let ctx = InitContextExtern::open(());
                 let mut state = ContractState::open(());
                 let mut logger = Logger::init();
-                match #fn_name(ctx, amount, &mut logger, &mut state) {
+                match #fn_name(&ctx, amount, &mut logger, &mut state) {
                     Ok(()) => 0,
                     Err(_) => -1,
                 }
@@ -79,7 +79,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
                 use concordium_sc_base::{Logger, trap};
                 let ctx = InitContextExtern::open(());
                 let mut logger = Logger::init();
-                match #fn_name(ctx, amount, &mut logger) {
+                match #fn_name(&ctx, amount, &mut logger) {
                     Ok(state) => {
                         let mut state_bytes = ContractState::open(());
                         if state.serial(&mut state_bytes).is_err() {
@@ -126,7 +126,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
             let ctx = ReceiveContextExtern::open(());
             let mut state = ContractState::open(());
             let mut logger = Logger::init();
-            let res: ReceiveResult<Action> = #fn_name(ctx, amount, &mut logger, &mut state);
+            let res: ReceiveResult<Action> = #fn_name(&ctx, amount, &mut logger, &mut state);
             match res {
                 Ok(act) => {
                     act.tag() as i32
@@ -144,7 +144,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let mut logger = Logger::init();
                 let mut state_bytes = ContractState::open(());
                 if let Ok(mut state) = (&mut state_bytes).get() {
-                    let res: ReceiveResult<Action> = #fn_name(ctx, amount, &mut logger, &mut state);
+                    let res: ReceiveResult<Action> = #fn_name(&ctx, amount, &mut logger, &mut state);
                     match res {
                         Ok(act) => {
                             let res = state_bytes

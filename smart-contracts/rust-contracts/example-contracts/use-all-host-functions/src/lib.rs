@@ -6,7 +6,7 @@ type State = u8;
 #[init(name = "init")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-    ctx: I,
+    ctx: &I,
     _amount: Amount,
     _logger: &mut L,
 ) -> InitResult<State> {
@@ -16,7 +16,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 #[receive(name = "receive", low_level)]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
-    ctx: R,
+    ctx: &R,
     _amount: Amount,
     logger: &mut L,
     state: &mut ContractState,

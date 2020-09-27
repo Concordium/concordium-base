@@ -96,7 +96,7 @@ stages:
   script:
     - cd wasmer-runner
     - echo "Running clippy"
-    - cargo clippy --color=always --all -- -Dclippy::all
+    - cargo clippy --color=always --tests -- -Dclippy::all
 
 "wasmer-interp lint:fmt":
   extends: .generic-lint
@@ -113,7 +113,7 @@ stages:
   script:
     - cd wasmer-interp 
     - echo "Running clippy"
-    - cargo clippy --color=always --all -- -Dclippy::all
+    - cargo clippy --color=always --tests -- -Dclippy::all
 
 "contracts-common lint:fmt":
   extends: .generic-lint
@@ -129,7 +129,7 @@ stages:
   script:
     - cd contracts-common
     - echo "Running clippy"
-    - cargo clippy --color=always --all -- -Dclippy::all
+    - cargo clippy --color=always --tests -- -Dclippy::all
 
 "concordium-sc-base lint:fmt":
   extends: .generic-lint
@@ -146,7 +146,7 @@ stages:
   script:
     - cd rust-contracts/concordium-sc-base
     - echo "Running clippy"
-    - cargo clippy --color=always --all -- -Dclippy::all
+    - cargo clippy --color=always --tests -- -Dclippy::all
 
 "concordium-sc-derive lint:fmt":
   extends: .generic-lint
@@ -163,7 +163,7 @@ stages:
   script:
     - cd rust-contracts/concordium-sc-derive
     - echo "Running clippy"
-    - cargo clippy --color=always --all -- -Dclippy::all
+    - cargo clippy --color=always --tests -- -Dclippy::all
 
 "counter lint:fmt":
   extends: .generic-lint
@@ -180,7 +180,7 @@ stages:
   script:
     - cd rust-contracts/example-contracts/counter
     - echo "Running clippy"
-    - cargo clippy --color=always --all -- -Dclippy::all
+    - cargo clippy --color=always --tests -- -Dclippy::all
 
 "fib lint:fmt":
   extends: .generic-lint
@@ -197,7 +197,7 @@ stages:
   script:
     - cd rust-contracts/example-contracts/fib
     - echo "Running clippy"
-    - cargo clippy --color=always --all -- -Dclippy::all
+    - cargo clippy --color=always --tests -- -Dclippy::all
 
 "escrow lint:fmt":
   extends: .generic-lint
@@ -213,7 +213,7 @@ stages:
   script:
     - cd rust-contracts/example-contracts/escrow
     - echo "Running clippy"
-    - cargo clippy --color=always --all -- -Dclippy::all
+    - cargo clippy --color=always --tests -- -Dclippy::all
 
 "lockup lint:fmt":
   extends: .generic-lint
@@ -229,7 +229,7 @@ stages:
   script:
     - cd rust-contracts/example-contracts/lockup
     - echo "Running clippy"
-    - cargo clippy --color=always --all -- -Dclippy::all
+    - cargo clippy --color=always --tests -- -Dclippy::all
 
 
 "use-all-host-functions lint:fmt":
@@ -246,7 +246,7 @@ stages:
   script:
     - cd rust-contracts/example-contracts/use-all-host-functions
     - echo "Running clippy"
-    - cargo clippy --color=always --all -- -Dclippy::all
+    - cargo clippy --color=always --tests -- -Dclippy::all
 
 
 "rate-limited lint:fmt":
@@ -263,5 +263,5 @@ stages:
   script:
     - cd rust-contracts/example-contracts/rate-limited
     - echo "Running clippy"
-    - cargo clippy --color=always --all -- -Dclippy::all
+    - cargo clippy --color=always --tests -- -Dclippy::all
 

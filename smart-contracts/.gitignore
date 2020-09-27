@@ -22,3 +22,5 @@ pkg
 *.state
 
 wasmer-interp/Cargo.lock
+/rust-contracts/concordium-sc-base/Cargo.lock
+/contracts-common/Cargo.lock
