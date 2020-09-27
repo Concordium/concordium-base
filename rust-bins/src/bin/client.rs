@@ -509,15 +509,20 @@ fn handle_create_credential(cc: CreateCredential) {
         .keys()
         .map(|&x| AttributeStringTag::from(x))
         .collect::<Vec<_>>();
-    let atts: Vec<usize> = match MultiSelect::new()
-        .with_prompt("Select which attributes you wish to reveal")
-        .items(&alist_items)
-        .interact()
-    {
-        Ok(idxs) => idxs,
-        Err(x) => {
-            eprintln!("You need to select which attributes you want. {}", x);
-            return;
+    let atts = if alist_items.is_empty() {
+        eprintln!("No attributes on the identity object, so none will be on the credential.");
+        Vec::new()
+    } else {
+        match MultiSelect::new()
+            .with_prompt("Select which attributes you wish to reveal")
+            .items(&alist_items)
+            .interact()
+        {
+            Ok(idxs) => idxs,
+            Err(x) => {
+                eprintln!("You need to select which attributes you want. {}", x);
+                return;
+            }
         }
     };
 
