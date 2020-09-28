@@ -227,4 +227,4 @@ rustflags = ["--remap-path-prefix=/home/tom=secret"]
 ```
 
 **Important:**
-[The --remap-path-prefix does currently not work in rustc >= 1.46.0, but an issue can been created.](https://github.com/rust-lang/rust/issues/77046)
+[--remap-path-prefix does currently not work correctly if the `rust-src` component is present.](https://github.com/rust-lang/rust/issues/73167)
