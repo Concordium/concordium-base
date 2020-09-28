@@ -46,8 +46,8 @@ testPublicKeyOrd = property $ \(kp1, kp2) ->
              LT -> property True
              GT -> property True
              EQ -> kp1 === kp2
-  let k2 = compare (VRF.publicKey kp1) (VRF.publicKey kp1) === EQ
-  let k3 = compare (VRF.publicKey kp2) (VRF.publicKey kp2) === EQ
+      k2 = compare (VRF.publicKey kp1) (VRF.publicKey kp1) === EQ
+      k3 = compare (VRF.publicKey kp2) (VRF.publicKey kp2) === EQ
   in k1 .&&. k2 .&&. k3
 
 testProofOrd :: Property
