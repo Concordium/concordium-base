@@ -28,7 +28,7 @@ testSerializeKeyPair = property $ \(kp :: VRF.KeyPair) -> Right kp === runGet ge
 
 testSerializeProof :: Property
 testSerializeProof = property $ \kp doc -> monadicIO $ do
-        pf <- run $ VRF.prove kp (BS.pack doc)
+        let pf = VRF.prove kp (BS.pack doc)
         return $ Right pf === runGet get (runPut $ put pf)
 
 testGenVerifyKey :: Property
@@ -37,7 +37,7 @@ testGenVerifyKey = property $ \kp -> VRF.verifyKey (VRF.publicKey kp)
 testProveVerify :: Property
 testProveVerify = property $ \kp doc0 -> monadicIO $ do
                     let doc = BS.pack doc0
-                    pf <- run $ VRF.prove kp doc
+                        pf = VRF.prove kp doc
                     return $ VRF.verify (VRF.publicKey kp) doc pf
 
 testPublicKeyOrd :: Property
@@ -53,22 +53,22 @@ testPublicKeyOrd = property $ \(kp1, kp2) ->
 testProofOrd :: Property
 testProofOrd = property $ \kp doc0 -> monadicIO $ do
   let doc = BS.pack doc0
-  pf1 <- run $ VRF.prove kp doc
-  pf2 <- run $ VRF.prove kp doc
-  let k1 = case compare pf1 pf2 of
+      pf1 = VRF.prove kp doc
+      pf2 = VRF.prove kp doc
+      k1 = case compare pf1 pf2 of
              LT -> property True
              GT -> property True
              EQ -> pf1 === pf2
-  let k2 = compare pf1 pf1 === EQ
-  let k3 = compare pf2 pf2 === EQ
+      k2 = compare pf1 pf1 === EQ
+      k3 = compare pf2 pf2 === EQ
   return (k1 .&&. k2 .&&. k3)
 
-testProofToHashDeterministic :: Property
-testProofToHashDeterministic = property $ \kp doc0 -> monadicIO $ do
+testProveDeterministic :: Property
+testProveDeterministic = property $ \kp doc0 -> monadicIO $ do
         let doc = BS.pack doc0
-        pf1 <- run $ VRF.prove kp doc
-        pf2 <- run $ VRF.prove kp doc
-        return $ VRF.proofToHash pf1 === VRF.proofToHash pf2
+            pf1 = VRF.prove kp doc
+            pf2 = VRF.prove kp doc
+        return $ pf1 === pf2
 
 -- Generate a bunch of proofs and convert them to hashes. They should be
 -- different. This is really regression testing the FFI bug where a generated
@@ -77,8 +77,8 @@ stressTest :: Property
 stressTest = property $ \kp doc0 doc1 -> monadicIO $
         let doc = BS.pack doc0
             doc' = BS.pack doc1 in do
-              pf1 <- run $ VRF.prove kp doc
-              pf2 <- run $ VRF.prove kp doc'
+              let pf1 = VRF.prove kp doc
+                  pf2 = VRF.prove kp doc'
               return $ (VRF.proofToHash pf1 == VRF.proofToHash pf2) == (doc == doc')
 
 
@@ -96,7 +96,7 @@ tests = describe "Concordium.Crypto.VRF" $ do
       it "proof" testProofOrd
     it "verify generated public key" testGenVerifyKey
     it "verify proof" testProveVerify
-    it "output of VRF is independent of proof" testProofToHashDeterministic
+    it "VRF proofs are deterministic" testProveDeterministic
     parallel $ do
       it "stress testing vrf proof to hash 1 " $ withMaxSuccess 100000 stressTest
       it "stress testing vrf proof to hash 2" $ withMaxSuccess 100000 stressTest
