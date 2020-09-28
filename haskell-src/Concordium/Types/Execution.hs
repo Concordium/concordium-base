@@ -608,8 +608,10 @@ data Event =
            -- balance.
            | EncryptedAmountsRemoved{
                earAccount :: !AccountAddress,
-               -- |The newly added amount.
+               -- |The new self amount.
                earNewAmount :: !EncryptedAmount,
+               -- |Input encrypted amount that was consumed.
+               earInputAmount :: !EncryptedAmount,
                -- |Index up to (but not including) which the amounts were removed.
                earUpToIndex :: !EncryptedAmountAggIndex
             }
