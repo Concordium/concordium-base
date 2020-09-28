@@ -73,6 +73,10 @@ impl TryFrom<usize> for Threshold {
     }
 }
 
+impl std::fmt::Display for Threshold {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { self.0.fmt(f) }
+}
+
 pub struct SharingData<C: Curve> {
     /// The coefficients of the sharing polyomial, except the zeroth.
     pub coefficients: Vec<PedersenValue<C>>,

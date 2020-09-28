@@ -244,7 +244,7 @@ impl fmt::Display for IpIdentity {
     SerdeSerialize,
     SerdeDeserialize,
 )]
-#[serde(try_from = "u32", into = "u32")]
+#[serde(into = "u32", try_from = "u32")]
 /// Identity of the anonymity revoker on the chain. This defines their
 /// evaluation point for secret sharing, and thus it cannot be 0.
 pub struct ArIdentity(u32);
@@ -281,6 +281,15 @@ impl TryFrom<u32> for ArIdentity {
         } else {
             Ok(ArIdentity(value))
         }
+    }
+}
+
+impl FromStr for ArIdentity {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let x = u32::from_str(s).map_err(|_| "Could not read u32.")?;
+        ArIdentity::try_from(x)
     }
 }
 
@@ -649,6 +658,19 @@ pub struct IpArData<C: Curve> {
     pub proof_com_enc_eq: com_enc_eq::Witness<C>,
 }
 
+/// Data structure for when a anonymity revoker decrypts its encrypted share
+/// This is the decrypted counterpart of IpArData.
+#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct IpArDecryptedData<C: Curve> {
+    /// identity of the anonymity revoker
+    #[serde(rename = "arIdentity")]
+    pub ar_identity: ArIdentity,
+    /// share of prf key
+    #[serde(rename = "prfKeyShare")]
+    pub prf_key_share: Value<C>,
+}
+
 /// Data relating to a single anonymity revoker sent by the account holder to
 /// the chain.
 /// Typically a vector of these will be sent to the chain.
@@ -679,6 +701,9 @@ pub struct ChainArDecryptedData<C: Curve> {
     pub id_cred_pub_share: Message<C>,
 }
 
+// NOTE: This struct is redundant, but we will
+// will keep it for now for compatibility.
+// We need to remove it in the future.
 /// Choice of anonymity revocation parameters
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 pub struct ChoiceArParameters {
@@ -1335,11 +1360,44 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     /// signed by the identity provider, and permuting the list will invalidate
     /// the signature from the identity provider.
     #[map_size_length = 2]
-    #[serde(rename = "arData")]
+    #[serde(rename = "arData", deserialize_with = "deserialize_ar_data")]
     pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
     /// Policy of this credential object.
     #[serde(rename = "policy")]
     pub policy: Policy<C, AttributeType>,
+}
+
+fn deserialize_ar_data<'de, D: de::Deserializer<'de>, C: Curve>(
+    des: D,
+) -> Result<BTreeMap<ArIdentity, ChainArData<C>>, D::Error> {
+    #[derive(Default)]
+    struct ArIdentityVisitor<C>(std::marker::PhantomData<C>);
+
+    impl<'de, C: Curve> Visitor<'de> for ArIdentityVisitor<C> {
+        type Value = BTreeMap<ArIdentity, ChainArData<C>>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            write!(
+                formatter,
+                "An object with integer keys and ChainArData values."
+            )
+        }
+
+        fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+        where
+            A: de::MapAccess<'de>, {
+            let mut map = map;
+            let mut res = BTreeMap::new();
+            while let Some((k, v)) = map.next_entry::<String, _>()? {
+                let k = ArIdentity::from_str(&k)
+                    .map_err(|_| de::Error::custom("Cannot read ArIdentity key."))?;
+                res.insert(k, v);
+            }
+            Ok(res)
+        }
+    }
+
+    des.deserialize_map(ArIdentityVisitor(std::default::Default::default()))
 }
 
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
