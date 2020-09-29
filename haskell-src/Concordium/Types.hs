@@ -43,6 +43,7 @@ module Concordium.Types (
   AccountEncryptedAmount(..),
   initialAccountEncryptedAmount,
   incomingEncryptedAmounts,
+  getIncomingAmountsList,
   aggregatedAmount,
   selfAmount,
   startIndex,
@@ -140,6 +141,7 @@ import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Bits
 import Data.Ratio
+import Data.Foldable
 
 import Data.Aeson as AE
 import Data.Aeson.TH
@@ -570,6 +572,12 @@ instance S.Serialize AccountEncryptedAmount where
 
 makeLenses ''AccountEncryptedAmount
 
+-- |Get the list of incoming amounts ordered by index, starting at `_startIndex`.
+getIncomingAmountsList :: AccountEncryptedAmount -> [EncryptedAmount]
+getIncomingAmountsList AccountEncryptedAmount{..} =
+    toList $ case _aggregatedAmount of
+               Nothing -> _incomingEncryptedAmounts
+               Just (e, _) -> e Seq.:<| _incomingEncryptedAmounts
 
 -- |Size of the transaction payload.
 newtype PayloadSize = PayloadSize {thePayloadSize :: Word32}
