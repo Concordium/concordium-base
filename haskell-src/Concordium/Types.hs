@@ -572,10 +572,12 @@ instance S.Serialize AccountEncryptedAmount where
 
 makeLenses ''AccountEncryptedAmount
 
+-- |Get the list of incoming amounts ordered by index, starting at `_startIndex`.
 getIncomingAmountsList :: AccountEncryptedAmount -> [EncryptedAmount]
-getIncomingAmountsList AccountEncryptedAmount{..} = toList $ case _aggregatedAmount of
-                                                      Nothing -> _incomingEncryptedAmounts
-                                                      Just (e, _) -> e Seq.:<| _incomingEncryptedAmounts
+getIncomingAmountsList AccountEncryptedAmount{..} =
+    toList $ case _aggregatedAmount of
+               Nothing -> _incomingEncryptedAmounts
+               Just (e, _) -> e Seq.:<| _incomingEncryptedAmounts
 
 -- |Size of the transaction payload.
 newtype PayloadSize = PayloadSize {thePayloadSize :: Word32}
