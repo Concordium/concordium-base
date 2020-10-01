@@ -49,8 +49,6 @@ fn encrypt_amount<C: Curve, R: Rng>(
     (enc, rand)
 }
 
-// REVIEW: what is the purpose of encrypting with fixed randomness
-
 /// Make an encryption of a single amount using a fixed randomness.
 ///
 /// Since randomness is 0 this method does not depend on the public key,
@@ -95,8 +93,6 @@ pub fn aggregate<C: Curve>(
         encryptions: [encryption_low, encryption_hi],
     }
 }
-
-// REVIEW:: Ensure that this function is only ever called on a transfer that indeed verifies
 
 /// Decrypt a single amount given the helper table.
 ///
@@ -153,18 +149,16 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     csprng: &mut R,
 ) -> Option<EncryptedAmountTransferData<C>> {
     let sender_pk = &PublicKey::from(sender_sk);
-    // FIXME: Put context into random oracle
     let ro = RandomOracle::domain("EncryptedTransfer")
         .append_bytes(&to_bytes(&ctx))
-        .append_bytes(&to_bytes(&receiver_pk)) // REVIEW: In the bluepaper, the regId of the accounts are used here
-        .append_bytes(&to_bytes(&sender_pk)); // REVIEW: In the bluepaper, the regId of the accounts are used here
-    // FIXME: Put context into the transcript. // REVIEW: remove this?
+        .append_bytes(&to_bytes(&receiver_pk))
+        .append_bytes(&to_bytes(&sender_pk));
+
     let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
     transcript.append_message(b"ctx", &to_bytes(&ctx));
     transcript.append_message(b"receiver_pk", &to_bytes(&receiver_pk));
     transcript.append_message(b"sender_pk", &to_bytes(&sender_pk));
 
-    // FIXME: Make arguments more in line between gen_enc_trans and this.
     generate_proofs::gen_enc_trans(
         ctx,
         ro,
