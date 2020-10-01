@@ -30,33 +30,6 @@ $> curl -X GET http://localhost:8000/globalparams
 
 Will return the global parameters the server is started with, as a JSON object.
 
-## Create an identity object
-
-```console
-$> curl -d "@example_id_object_request.json" -H "Content-Type: application/json" -X POST http://localhost:8000/identity_object
-```
-
-Given an attribute list and a choice of an identity provider this request returns a new identity object (see [example](example_server_interactions/example_id_object_request.json))
-A request is a JSON object which looks as 
-```json
-{
-    "ipIdentity": 0,
-    "attributes": {
-        "chosenAttributes": {
-            "countryOfResidence": "DK",
-            "nationality": "SI"
-        },
-        "createdAt": "202005",
-        "maxAccounts": 80,
-        "validTo": "202105"
-    },
-    "anonymityRevokers": [0,1,2],
-    "threshold": 2
-}
-```
-
-The response is a JSON object ([example](example_server_interactions/example_id_object_response.json))with both public information and account-holder private information that would normally only appear on the user's device. This object needs to be stored because we generate multiple credentials from it.
-
 ## Create a credential from an identity object and a choice of policy
 
 ```console
