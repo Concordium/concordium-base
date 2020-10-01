@@ -387,14 +387,3 @@ The binary can then be run with the following inputs:
 }
 ```
 where {...} is the response as it used to be.
-
-
-# Temporary functionality for testing until Notabene libraries are available on a new endpoint
-
-The library currently provides a
-`char* id_object_response_ext(char*, uint8_t*);`
-
-function that accepts a single JSON string that has the same format as the
-request to the identity provider (example at
-[id_request-input.json](files/id_request-input.json)), and the same response,
-exemplified in [id_request-output.json](files/id_request-output.json)
