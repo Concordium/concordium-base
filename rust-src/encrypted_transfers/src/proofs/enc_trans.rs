@@ -47,11 +47,11 @@ use crate::types::CHUNK_SIZE;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
-use elgamal::{ChunkSize, Randomness};
+use elgamal::ChunkSize;
 use ff::Field;
 use id::sigma_protocols::{com_eq::*, common::*, dlog::*};
 use id::sigma_protocols::com_eq::Witness as ComEqWitness;
-use pedersen_scheme::{Commitment, Randomness as PedersenRandomness, Value};
+use pedersen_scheme::{Randomness as PedersenRandomness, Value};
 use random_oracle::{Challenge, RandomOracle};
 use std::rc::Rc;
 
@@ -72,9 +72,9 @@ pub struct EncTrans<C: Curve> {
     pub dlog: Dlog<C>,
     /// elg_dec contains the publicly known values S_1, S_2 and h
     pub elg_dec: ElgDec<C>,
-    /// encexp1 contains the publicly known values c_{i,j}'s, g, h, pk_receiver
+    /// encexp1 contains the publicly known values a_{i,j}'s, g, h, pk_receiver
     pub encexp1: Vec<ComEq<C, C>>,
-    /// encexp2 contains the publicly known values d_{i,j}'s, g, h, pk_sender
+    /// encexp2 contains the publicly known values s'_{i,j}'s, g, h, pk_sender
     pub encexp2: Vec<ComEq<C, C>>,
 }
 
@@ -317,7 +317,7 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             .mul_by_scalar(&witness.witness_common)
             .plus_point(&self.dlog.public.mul_by_scalar(challenge));
         let mut point = self.elg_dec.public.mul_by_scalar(challenge);
-        let mut exps = vec![witness.witness_common, w_lin];
+        let exps = vec![witness.witness_common, w_lin];
         let product = multiexp(&self.elg_dec.coeff, &exps);
         point = point.plus_point(&product);
         Some(EncTransCommit {
@@ -326,5 +326,270 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
             encexp1: commit_encexp1,
             encexp2: commit_encexp2,
         })
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::Rng;
+    use pairing::bls12_381::G1;
+    use elgamal::{SecretKey, PublicKey, Randomness};
+    use pedersen_scheme::{Commitment, CommitmentKey};
+
+    impl<C: Curve> EncTrans<C> {
+        fn with_valid_data<R: Rng>(
+            rng: &mut R,
+            f: impl FnOnce(Self, <Self as SigmaProtocol>::SecretData, &mut R) -> (),
+        ) {
+            let sk = SecretKey::generate_all(rng);
+            let pk = PublicKey::from(&sk);
+            let s = rng.gen::<u64>(); // s.
+
+            let dlog = Dlog {
+                public: pk.key,
+                coeff: sk.generator,
+            };
+
+            let encr_exp_base = C::generate(rng); // h
+            let S = pk.encrypt_exponent_given_generator(&Value::from(s), &encr_exp_base, rng);
+            let elgdec = ElgDec {
+                public: S.1,
+                coeff: [S.0, encr_exp_base],
+            };
+
+            let a = rng.gen_range(0, s); // amount to send
+            let s_prime = s - a;
+            let a_chunks = CHUNK_SIZE.u64_to_chunks(a);
+            let s_prime_chunks = CHUNK_SIZE.u64_to_chunks(s_prime);
+
+            let sk2 = SecretKey::generate(&pk.generator, rng);
+            let pk2 = PublicKey::from(&sk2);
+
+            let a_chunks_as_values: Vec<Value<C>> = a_chunks.iter().map(|v| Value::from(*v)).collect();
+            let A_enc_randomness = pk2.encrypt_exponent_vec_given_generator(a_chunks_as_values.iter(), &encr_exp_base, rng);
+            let (A, A_rand): (Vec<_>, Vec<_>) = A_enc_randomness.iter().cloned().unzip();
+            let s_prime_chunks_as_values: Vec<Value<C>> = s_prime_chunks.iter().map(|v| Value::from(*v)).collect();
+            let S_prime_enc_randomness = pk.encrypt_exponent_vec_given_generator(s_prime_chunks_as_values.iter(), &encr_exp_base, rng);
+            let (S_prime, S_prime_rand): (Vec<_>, Vec<_>) = S_prime_enc_randomness.iter().cloned().unzip();
+
+            let a_secrets: Vec<ComEqSecret<C>> = izip!(a_chunks.iter(), A_rand.iter()).map(|(a_i, r_i)| {
+                ComEqSecret::<C>{r: PedersenRandomness::from_u64(*a_i), a: Randomness::to_value(r_i)}
+            }).collect();
+            let s_prime_secrets: Vec<ComEqSecret<C>> = izip!(s_prime_chunks.iter(), S_prime_rand.iter()).map(|(a_i, r_i)| {
+                ComEqSecret::<C>{r: PedersenRandomness::from_u64(*a_i), a: Randomness::to_value(r_i)}
+            }).collect();
+
+            let mut a_com_eqs = vec![];
+            for a_chunk in A.iter() {
+                a_com_eqs.push(ComEq {
+                    commitment: Commitment(a_chunk.1),
+                    y: a_chunk.0,
+                    cmm_key: CommitmentKey {
+                        g: pk2.key,
+                        h: encr_exp_base,
+                    },
+                    g: pk.generator,
+                });
+            }
+
+            let mut s_prime_com_eqs = vec![];
+            for s_prime_chunk in S_prime.iter() {
+                s_prime_com_eqs.push(ComEq {
+                    commitment: Commitment(s_prime_chunk.1),
+                    y: s_prime_chunk.0,
+                    cmm_key: CommitmentKey {
+                        g: pk.key,
+                        h: encr_exp_base,
+                    },
+                    g: pk.generator,
+                });
+            }
+
+            let secret = EncTransSecret {
+                dlog_secret: Rc::new(sk.scalar),
+                encexp1_secrets: a_secrets,
+                encexp2_secrets: s_prime_secrets,
+            };
+            let enc_trans = EncTrans {
+                dlog: dlog,
+                elg_dec: elgdec,
+                encexp1: a_com_eqs,
+                encexp2: s_prime_com_eqs,
+            };
+
+            f(enc_trans, secret, rng)
+        }
+    }
+
+    fn generate_challenge_prefix<R: rand::Rng>(csprng: &mut R) -> Vec<u8> {
+        // length of the challenge
+        let l = csprng.gen_range(0, 1000);
+        let mut challenge_prefix = vec![0; l];
+        for v in challenge_prefix.iter_mut() {
+            *v = csprng.gen();
+        }
+        challenge_prefix
+    }
+
+    #[test]
+    fn enctrans_correctness() {
+        let mut rng = rand::thread_rng();
+        for _i in 1..20 {
+            EncTrans::<G1>::with_valid_data(&mut rng, |enc_trans, secret, rng| {
+                let challenge_prefix = generate_challenge_prefix(rng);
+                let ro = RandomOracle::domain(&challenge_prefix);
+                let proof =
+                    prove(ro.split(), &enc_trans, secret, rng).expect("Proving should succeed.");
+                let res = verify(ro, &enc_trans, &proof);
+                assert!(res, "Verification of produced proof.");
+            })
+        }
+    }
+
+    #[test]
+    fn enctrans_soundness() {
+        let mut rng = rand::thread_rng();
+        for _ in 1..20 {
+            EncTrans::<G1>::with_valid_data(&mut rng, |enc_trans, secret, rng| {
+                let challenge_prefix = generate_challenge_prefix(rng);
+                let ro = RandomOracle::domain(&challenge_prefix);
+                let proof =
+                    prove(ro.split(), &enc_trans, secret, rng).expect("Proving should succeed.");
+
+                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(rng));
+                assert!(!verify(wrong_ro, &enc_trans, &proof));
+
+                // check that changing any information in the protocol makes the proof not verify
+                let mut wrong_enc_trans = enc_trans;
+                {
+                    let tmp = wrong_enc_trans.dlog;
+                    wrong_enc_trans.dlog = Dlog {
+                        public: G1::generate(rng),
+                        coeff: tmp.coeff,
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+
+                    wrong_enc_trans.dlog = Dlog {
+                        public: tmp.public,
+                        coeff: G1::generate(rng),
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    wrong_enc_trans.dlog = tmp;
+                }
+                {
+                    let tmp = wrong_enc_trans.elg_dec;
+                    wrong_enc_trans.elg_dec = ElgDec {
+                        public: G1::generate(rng),
+                        coeff: tmp.coeff,
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+
+                    wrong_enc_trans.elg_dec = ElgDec {
+                        public: tmp.public,
+                        coeff: [G1::generate(rng), tmp.coeff[1]],
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+
+                    wrong_enc_trans.elg_dec = ElgDec {
+                        public: tmp.public,
+                        coeff: [tmp.coeff[1], G1::generate(rng)],
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    wrong_enc_trans.elg_dec = tmp;
+                }
+                for i in 0..wrong_enc_trans.encexp1.len() {
+                    let com_eq = &wrong_enc_trans.encexp1[i];
+                    let tmp = ComEq {
+                        commitment: com_eq.commitment,
+                        y: com_eq.y,
+                        cmm_key: com_eq.cmm_key,
+                        g: com_eq.g,
+                    };
+
+                    let v = Value::<G1>::generate(rng);
+                    let wrong_commit = com_eq.cmm_key.commit(&v, rng).0;
+                    wrong_enc_trans.encexp1[i] = ComEq {
+                        commitment: wrong_commit,
+                        y: tmp.y,
+                        cmm_key: tmp.cmm_key,
+                        g: tmp.g,
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+
+                    wrong_enc_trans.encexp1[i] = ComEq {
+                        commitment: tmp.commitment,
+                        y: G1::generate(rng),
+                        cmm_key: tmp.cmm_key,
+                        g: tmp.g,
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+
+                    wrong_enc_trans.encexp1[i] = ComEq {
+                        commitment: tmp.commitment,
+                        y: tmp.y,
+                        cmm_key: CommitmentKey::generate(rng),
+                        g: tmp.g,
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+
+                    wrong_enc_trans.encexp1[i] = ComEq {
+                        commitment: tmp.commitment,
+                        y: tmp.y,
+                        cmm_key: tmp.cmm_key,
+                        g: G1::generate(rng),
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+
+                    wrong_enc_trans.encexp1[i] = tmp;
+                }
+                for i in 0..wrong_enc_trans.encexp2.len() {
+                    let com_eq = &wrong_enc_trans.encexp2[i];
+                    let tmp = ComEq {
+                        commitment: com_eq.commitment,
+                        y: com_eq.y,
+                        cmm_key: com_eq.cmm_key,
+                        g: com_eq.g,
+                    };
+
+                    let v = Value::<G1>::generate(rng);
+                    let wrong_commit = com_eq.cmm_key.commit(&v, rng).0;
+                    wrong_enc_trans.encexp2[i] = ComEq {
+                        commitment: wrong_commit,
+                        y: tmp.y,
+                        cmm_key: tmp.cmm_key,
+                        g: tmp.g,
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+
+                    wrong_enc_trans.encexp2[i] = ComEq {
+                        commitment: tmp.commitment,
+                        y: G1::generate(rng),
+                        cmm_key: tmp.cmm_key,
+                        g: tmp.g,
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+
+                    wrong_enc_trans.encexp2[i] = ComEq {
+                        commitment: tmp.commitment,
+                        y: tmp.y,
+                        cmm_key: CommitmentKey::generate(rng),
+                        g: tmp.g,
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+
+                    wrong_enc_trans.encexp2[i] = ComEq {
+                        commitment: tmp.commitment,
+                        y: tmp.y,
+                        cmm_key: tmp.cmm_key,
+                        g: G1::generate(rng),
+                    };
+                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+
+                    wrong_enc_trans.encexp2[i] = tmp;
+                }
+            })
+        }
     }
 }
