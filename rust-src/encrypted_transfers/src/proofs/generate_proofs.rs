@@ -18,7 +18,7 @@ use random_oracle::*;
 use std::rc::Rc;
 
 /// This function is an implementation of the genEncExpInfo documented in the
-/// Cryptoprim Bluepaper without bulletproof part.
+/// bluepaper without bulletproof part.
 ///
 /// It produces a list of ComEq sigmaprotocols, i.e. it can be used to
 /// prove knowledge of x_i and r_i such that
@@ -26,7 +26,7 @@ use std::rc::Rc;
 /// It is meant as helper function to produce what is for the
 /// fields encexp1 and encexp2 in the EncTrans struct.
 ///
-/// Implementation of genEncExpInfo differs from the Cryptoprim bluepaper in the following way
+/// Implementation of genEncExpInfo differs from the bluepaper in the following way
 /// 1. Instead of outputting a single sigma protocol for the equalities using the generic, we
 ///    guarantee through their use in EncTrans that they are all verified.
 /// 2. We don't compute the bulletproof information. This is done independendently when needed
@@ -65,7 +65,7 @@ fn gen_enc_exp_info<C: Curve>(
     sigma_protocols
 }
 
-/// Implementation of genEncTransProofInfo in the Cryptoprim Bluepaper
+/// Implementation of genEncTransProofInfo in the bluepaper
 /// It produces a sigma protocol of type EncTrans (see enc_trans.rs)
 ///
 /// Here, both A and S_prime are encrypted amounts that are encrypted
@@ -134,7 +134,7 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
     }
 }
 
-/// Implementation of genEncTrans in the Cryptoprim Bluepaper
+/// Implementation of genEncTrans in the bluepaper
 ///
 /// This function produces transfer data containing
 /// a proof that an encrypted transfer was done correctly
@@ -156,7 +156,7 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
 /// additonally showing that all a_j and s_j' are in [0, 2^chunk_size)
 /// It returns None if s < a or if it fails to produce one of the bulletproofs.
 ///
-/// This implementation differs from the Cryptoprim Bluepaper in the following ways:
+/// This implementation differs from the bluepaper in the following ways:
 /// 1. The challenge (ctx in the paper) differs. In the paper this function produces the challenge,
 ///    but here it is assumed that a random oracle and transcript to be used by the sigma protocol
 ///    and bulletproof respectively is supplied in the correct state
@@ -296,7 +296,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     })
 }
 
-/// Implementation of genSecToPubTrans in the Cryptoprim Bluepaper
+/// Implementation of genSecToPubTrans in the bluepaper
 ///
 /// For sending secret balance to public balance
 /// This function produces transfer data containing
@@ -323,7 +323,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
 /// It returns None if s < a, if it fails to produce the sigma proof or if it fails
 /// to produce the bulletproofs.
 ///
-/// This implementation differs from the Cryptoprim Bluepaper in the following ways:
+/// This implementation differs from the bluepapers in the following ways:
 /// The challenge (ctx in the paper) differs. In the paper this function produces the challenge,
 /// but here it is assumed that a random oracle and transcript to be used by the sigma protocol
 /// and bulletproof respectively is supplied in the correct state
@@ -461,6 +461,11 @@ pub enum VerificationError {
 /// It either returns Ok() indicating that the transfer has been done
 /// correctly or a VerificationError indicating what failed (the EncTrans
 /// protocol or one of the bulletproofs)
+///
+/// This implementation differs from the one in the bluepaper by NOT requiring that the secret
+/// balance of an account has no aggregatable subset of secret amounts. This implementation is
+/// only for verifying the associated sigma- and bullet proofs. This also means, that there is
+/// no signature verification as part of this implementation.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_enc_trans<C: Curve>(
     context: &GlobalContext<C>,
@@ -552,6 +557,12 @@ pub fn verify_enc_trans<C: Curve>(
 /// It either returns Ok() indicating that the transfer has been done
 /// correctly or a VerificationError indicating what failed (the EncTrans
 /// protocol or the bulletproof)
+///
+/// This implementation varies from the one in the bluepaper in the same way that the verify_
+/// enc_transfer does. It only checks the sigma- and bullet proofs associated. Checking the
+/// proofs is done by making a dummy encryption (encryption with randomness 0) of the amount
+/// and then using the same verification procedure as for encrypted transfers. See gen_sec_
+/// to_pub_trans for more details.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_sec_to_pub_trans<C: Curve>(
     context: &GlobalContext<C>,
