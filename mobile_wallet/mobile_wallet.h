@@ -123,18 +123,3 @@ uint64_t decrypt_encrypted_amount(const char *input_ptr, uint8_t *success);
  * Constructed via CString::into_raw its behaviour is undefined.
  */
 void free_response_string(char *ptr);
-
-/**
- * Take a pointer to a NUL-terminated UTF8-string and return a NUL-terminated
- * UTF8-encoded string. The returned string must be freed by the caller by
- * calling the function 'free_response_string'. In case of failure the function
- * returns an error message as the response, and sets the 'success' flag to 0.
- *
- * See rust-bins/wallet-notes/README.md for the description of input and output
- * formats.
- *
- * # Safety
- * The input pointer must point to a null-terminated buffer, otherwise this
- * function will fail in unspecified ways.
- */
-char *id_object_response(const char *input_ptr, uint8_t *success);
