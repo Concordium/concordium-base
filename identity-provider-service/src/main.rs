@@ -20,34 +20,35 @@ type ExampleCurve = G1;
 type ExamplePairing = Bls12;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
 
-/// TODO How do we do logging on standalone servers?
 #[derive(Deserialize)]
 struct Input {
     state: String
 }
 
-// TODO How robust do we want a command-line tool like this to be?
 fn main() {
-    println!("Reading configuration from command line arguments.");
-
-    // TODO: Configuration should be read once - not for each call...
-
-    println!("Booting up HTTP server. Listening on port 8100.");
-    start_server();
+    boot_server();
 }
 
 #[tokio::main]
-async fn start_server() {
-    // Logging that the server has started...
-    println!("Starting up HTTP server...");
+async fn boot_server() {
+    println!("Reading the provided IP and AR configurations.");
+    let args: Vec<String> = env::args().collect();
+    let ip_data_filename = &args[1];
+    let ar_info_filename = &args[2];
+
+    let ip_data_contents = fs::read_to_string(ip_data_filename).expect("Unable to read ip data file.");
+    let ar_info_contents = fs::read_to_string(ar_info_filename).expect("Unable to read ar info file.");
+    println!("Configurations have been loaded successfully.");
 
     let identity_route = warp::path("api")
         .and(warp::path("identity"))
         .and(warp::path::end())
         .and(warp::get())
-        .and(warp::query().map(|input: Input| build_response(input)));
+        .and(warp::query().map(move |input: Input| {
+            return build_response(input, &ip_data_contents, &ar_info_contents);
+        }));
 
-    // TODO: Which ports should we use? How is the infrastructure? Does it matter?
+    println!("Booting up HTTP server. Listening on port 8100.");
     warp::serve(identity_route)
         .run(([0, 0, 0, 0], 8100))
         .await;
@@ -69,31 +70,21 @@ fn deserialize_request(request: &String) -> std::result::Result<PreIdentityObjec
         Ok(request) => request,
         Err(e) => return Err(format!("An error was encountered during deserialization: {}", e))
     };
+
     return Ok(request);
 }
 
-fn build_response(query_param: Input) -> std::result::Result<warp::http::Response<String>, warp::http::Error>  {
-    println!("Attempting to parse received request.");
+fn build_response(query_param: Input, ip_data_contents: &String, ar_info_contents: &String) -> std::result::Result<warp::http::Response<String>, warp::http::Error>  {
     let request = match deserialize_request(&query_param.state) {
         Ok(request) => request,
         Err(e) => return Response::builder().body(format!("The received request was invalid could not be de-serialized: {}", e))
     };
-    println!("Successfully parsed request!");
 
-    // TODO: This should be moved outside of the async - we do not want to parse the files everytime
-    // TODO: we receive a call.
-    let args: Vec<String> = env::args().collect();
-    let ip_data_filename = &args[1];
-    let ar_info_filename = &args[2];
-
-    let ip_data_contents = fs::read_to_string(ip_data_filename).expect("Unable to read ip data file.");
-    let ar_info_contents = fs::read_to_string(ar_info_filename).expect("Unable to read ar info file.");
+    // TODO: Is it possible to use references asynchronously? We spend ~1s deserializing! Their lifetime is an issue...
     let ip_data: IpData<ExamplePairing> = from_str(&ip_data_contents).expect("File did not contain a valid IpData object as JSON.");
     let ar_info: ArInfos<ExampleCurve> = from_str(&ar_info_contents).expect("File did not contain a valid ArInfos object as JSON");
 
-    // TODO Is this correct? Can I just use this? Can it be static throughout?
     let global_context= GlobalContext::<G1>::generate();
-
     let context = IPContext {
         ip_info:        &ip_data.public_ip_info,
         ars_infos:      &ar_info.anonymity_revokers,
