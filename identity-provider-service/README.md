@@ -2,10 +2,25 @@
 
 This module contains a proof-of-concept identity provider service.
 
-# How to run
+# How to build and run
 
-Explain how to run and build the binary.
+Move to the identity-provider-service directory and run:
 
-* Show example of input of IpData
-* Show example of ArInfo
-* Show example of the request sent in the HTTP request query parameter.
+```cargo build --release```
+
+Navigate to the target directory of the build ```identity-provider-service/target/release/``` and run:
+
+```./identity-provider-service identity_provider_file.json anonymity_revokers_file.json```
+
+Here identity_provider_file.json points to the file path for a file containing a JSON representation of the IpData type, and 
+anonymity_revokers_file.json refers to a file containing the JSON representation of the ArsInfos type.
+
+# Configuration file examples
+
+An example of each file type can be found in the ```data``` directory of the module.
+
+# Exposed services
+
+|Method|URL|
+|---|---|
+|GET|http://hostname:8100/api/identity?state=[idObjectRequest]|
