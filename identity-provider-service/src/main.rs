@@ -25,6 +25,9 @@ struct Input {
     state: String
 }
 
+// TODO:
+// 2 Create anonymity revoker stuff and save to a file (simulate a local database with files)
+
 #[tokio::main]
 async fn main() {
     println!("Reading the provided IP and AR configurations.");
@@ -131,6 +134,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_successful_validation_and_response() {
+        // Given
+        let request = fs::read_to_string("data/valid_request.json").unwrap();
+        let ip_data_contents = fs::read_to_string("data/identity_provider.json").unwrap();
+        let ar_info_contents = fs::read_to_string("data/anonymity_revokers.json").unwrap();
+
+        // When
+        let response = validate_and_return_identity_object(&request, &ip_data_contents, &ar_info_contents);
+
+        // Then (we return a JSON serialized IdentityObject)
+        let _deserialized_identity_object: IdentityObject<ExamplePairing, ExampleCurve, AttributeKind> = from_str(response.unwrap().body()).unwrap();
+    }
+
+    #[test]
     fn test_verify_failed_validation() {
         // Given
         let request = fs::read_to_string("data/fail_validation_request.json").unwrap();
@@ -138,9 +155,9 @@ mod tests {
         let ar_info_contents = fs::read_to_string("data/anonymity_revokers.json").unwrap();
 
         // When
-        let identity_object = validate_and_return_identity_object(&request, &ip_data_contents, &ar_info_contents);
+        let response = validate_and_return_identity_object(&request, &ip_data_contents, &ar_info_contents);
 
         // Then (the zero knowledge proofs could not be verified, so we fail)
-        assert!(identity_object.unwrap().body().contains("The request could not be successfully validated by the identity provider"));
+        assert!(response.unwrap().body().contains("The request could not be successfully validated by the identity provider"));
     }
 }
