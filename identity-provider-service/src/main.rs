@@ -42,7 +42,7 @@ async fn main() {
         .and(warp::get())
         .and(warp::query().map(move |input: Input| {
             println!("Received request");
-            let result = build_response(input, &ip_data_contents, &ar_info_contents);
+            let result = validate_and_return_identity_object(&input.state, &ip_data_contents, &ar_info_contents);
             println!("Completed processing request");
             result
         }));
@@ -53,33 +53,14 @@ async fn main() {
         .await;
 }
 
-fn deserialize_request(request: &String) -> std::result::Result<PreIdentityObject<Bls12, ExampleCurve>, String> {
-    let v: Value = match from_str(request) {
-        Ok(v) => v,
-        Err(_) => return Err("Could not deserialize the received JSON.".to_string()),
-    };
-
-    let pre_id_object = match v.get("idObjectRequest") {
-        Some(id_object) => id_object,
-        None => return Err("The received JSON is missing an 'idObjectRequest' entry.".to_string())
-    };
-
-    let request = from_value(pre_id_object.clone());
-    let request: PreIdentityObject<Bls12, ExampleCurve> = match request {
-        Ok(request) => request,
-        Err(e) => return Err(format!("An error was encountered during deserialization: {}", e))
-    };
-
-    return Ok(request);
-}
-
-fn build_response(query_param: Input, ip_data_contents: &String, ar_info_contents: &String) -> std::result::Result<warp::http::Response<String>, warp::http::Error>  {
-    let request = match deserialize_request(&query_param.state) {
+/// Validates the received request and if valid returns a signed identity object.
+fn validate_and_return_identity_object(state: &String, ip_data_contents: &String, ar_info_contents: &String) -> std::result::Result<warp::http::Response<String>, warp::http::Error>  {
+    let request = match deserialize_request(state) {
         Ok(request) => request,
         Err(e) => return Response::builder().body(format!("The received request was invalid could not be de-serialized: {}", e))
     };
 
-    // TODO: How to borrow reference without clone inside async / await
+    // FIXME: Performance optimization - howto borrow references (without cloning) to the de-serialized types to avoid parsing for each request?
     let ip_data: IpData<ExamplePairing> = from_str(&ip_data_contents).expect("File did not contain a valid IpData object as JSON.");
     let ar_info: ArInfos<ExampleCurve> = from_str(&ar_info_contents).expect("File did not contain a valid ArInfos object as JSON");
 
@@ -91,9 +72,15 @@ fn build_response(query_param: Input, ip_data_contents: &String, ar_info_content
     };
 
     // This is hardcoded for the proof-of-concept.
+    let now = YearMonth::now();
+    let valid_to_next_year = YearMonth {
+        year:   now.year + 1,
+        month:  now.month
+    };
+
     let alist = ExampleAttributeList {
-        valid_to:       YearMonth::now(),
-        created_at:     YearMonth::now(),
+        valid_to:       valid_to_next_year,
+        created_at:     now,
         alist:          BTreeMap::new(),
         max_accounts:   200,
         _phantom:       Default::default()
@@ -116,4 +103,25 @@ fn build_response(query_param: Input, ip_data_contents: &String, ar_info_content
     };
 
     Response::builder().body(to_string(&id).expect("JSON serialization of the identity object should not fail."))
+}
+
+/// Deserialize the received request. Give a proper error message if it was not possible.
+fn deserialize_request(request: &String) -> std::result::Result<PreIdentityObject<Bls12, ExampleCurve>, String> {
+    let v: Value = match from_str(request) {
+        Ok(v) => v,
+        Err(_) => return Err("Could not deserialize the received JSON.".to_string()),
+    };
+
+    let pre_id_object = match v.get("idObjectRequest") {
+        Some(id_object) => id_object,
+        None => return Err("The received JSON is missing an 'idObjectRequest' entry.".to_string())
+    };
+
+    let request = from_value(pre_id_object.clone());
+    let request: PreIdentityObject<Bls12, ExampleCurve> = match request {
+        Ok(request) => request,
+        Err(e) => return Err(format!("An error was encountered during deserialization: {}", e))
+    };
+
+    return Ok(request);
 }
