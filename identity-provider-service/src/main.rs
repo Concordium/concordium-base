@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::prelude::*;
 
 use curve_arithmetic::*;
 use id::{
@@ -24,9 +26,6 @@ type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, Attri
 struct Input {
     state: String
 }
-
-// TODO:
-// 2 Create anonymity revoker stuff and save to a file (simulate a local database with files)
 
 #[tokio::main]
 async fn main() {
@@ -99,12 +98,13 @@ fn validate_and_return_identity_object(state: &String, ip_data_contents: &String
         Err(e) => return Response::builder().body(format!("It was not possible to sign the request: {}", e))
     };
 
+    save_revocation_record(request);
+
     let id = IdentityObject {
-        pre_identity_object: request,
+        pre_identity_object: deserialize_request(&state).unwrap(),
         alist,
         signature
     };
-
     Response::builder().body(to_string(&id).expect("JSON serialization of the identity object should not fail."))
 }
 
@@ -129,6 +129,26 @@ fn deserialize_request(request: &String) -> std::result::Result<PreIdentityObjec
     return Ok(request);
 }
 
+/// Creates and saves the revocation record to the file system (which should be a database, but
+/// for the proof-of-concept we use the file system).
+fn save_revocation_record(pre_identity_object: PreIdentityObject<Bls12, ExampleCurve>) {
+    let ar_record = AnonymityRevocationRecord {
+        id_cred_pub:    pre_identity_object.id_cred_pub,
+        ar_data:        pre_identity_object.ip_ar_data
+    };
+
+    let mut serialized_ar_record = to_string(&ar_record).unwrap();
+    serialized_ar_record.push_str("\n\n");
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open("revocation_record_storage.data")
+        .unwrap();
+    writeln!(file, "{}", serialized_ar_record).unwrap();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,8 +163,10 @@ mod tests {
         // When
         let response = validate_and_return_identity_object(&request, &ip_data_contents, &ar_info_contents);
 
-        // Then (we return a JSON serialized IdentityObject)
+        // Then (we return a JSON serialized IdentityObject that we verify by deserializing, and a revocation file was written that can also be deserialized)
         let _deserialized_identity_object: IdentityObject<ExamplePairing, ExampleCurve, AttributeKind> = from_str(response.unwrap().body()).unwrap();
+        let revocation_record = fs::read_to_string("revocation_record_storage.data").unwrap();
+        let revocation_record: AnonymityRevocationRecord<ExampleCurve> = from_str(&revocation_record).unwrap();
     }
 
     #[test]
