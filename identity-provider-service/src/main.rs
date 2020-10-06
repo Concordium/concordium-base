@@ -17,6 +17,7 @@ use warp::{
     Filter,
     http::Response
 };
+use crypto_common::{Versioned, VERSION_0};
 
 type ExampleCurve = G1;
 type ExamplePairing = Bls12;
@@ -105,10 +106,12 @@ fn validate_and_return_identity_object(state: &String, ip_data_contents: &String
         alist,
         signature
     };
-    Response::builder().body(to_string(&id).expect("JSON serialization of the identity object should not fail."))
+    let versioned_id = Versioned::new(VERSION_0, id);
+    Response::builder().body(to_string(&versioned_id).expect("JSON serialization of the identity object should not fail."))
 }
 
-/// Deserialize the received request. Give a proper error message if it was not possible.
+/// Deserialize the received request. Give a proper error message if it was not possible, or if
+/// incorrect version of the request was received.
 fn deserialize_request(request: &String) -> std::result::Result<PreIdentityObject<Bls12, ExampleCurve>, String> {
     let v: Value = match from_str(request) {
         Ok(v) => v,
@@ -121,12 +124,16 @@ fn deserialize_request(request: &String) -> std::result::Result<PreIdentityObjec
     };
 
     let request = from_value(pre_id_object.clone());
-    let request: PreIdentityObject<Bls12, ExampleCurve> = match request {
+    let request: Versioned<PreIdentityObject<Bls12, ExampleCurve>> = match request {
         Ok(request) => request,
         Err(e) => return Err(format!("An error was encountered during deserialization: {}", e))
     };
 
-    return Ok(request);
+    return if request.version != VERSION_0 {
+        Err(format!("The received request version number is unsupported: [version={}]", &request.version))
+    } else {
+        Ok(request.value)
+    }
 }
 
 /// Creates and saves the revocation record to the file system (which should be a database, but
@@ -164,9 +171,9 @@ mod tests {
         let response = validate_and_return_identity_object(&request, &ip_data_contents, &ar_info_contents);
 
         // Then (we return a JSON serialized IdentityObject that we verify by deserializing, and a revocation file was written that can also be deserialized)
-        let _deserialized_identity_object: IdentityObject<ExamplePairing, ExampleCurve, AttributeKind> = from_str(response.unwrap().body()).unwrap();
+        let _deserialized_identity_object: Versioned<IdentityObject<ExamplePairing, ExampleCurve, AttributeKind>> = from_str(response.unwrap().body()).unwrap();
         let revocation_record = fs::read_to_string("revocation_record_storage.data").unwrap();
-        let revocation_record: AnonymityRevocationRecord<ExampleCurve> = from_str(&revocation_record).unwrap();
+        let _revocation_record: AnonymityRevocationRecord<ExampleCurve> = from_str(&revocation_record).unwrap();
     }
 
     #[test]
