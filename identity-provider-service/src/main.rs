@@ -25,12 +25,8 @@ struct Input {
     state: String
 }
 
-fn main() {
-    boot_server();
-}
-
 #[tokio::main]
-async fn boot_server() {
+async fn main() {
     println!("Reading the provided IP and AR configurations.");
     let args: Vec<String> = env::args().collect();
     let ip_data_filename = &args[1];
@@ -45,7 +41,10 @@ async fn boot_server() {
         .and(warp::path::end())
         .and(warp::get())
         .and(warp::query().map(move |input: Input| {
-            return build_response(input, &ip_data_contents, &ar_info_contents);
+            println!("Received request");
+            let result = build_response(input, &ip_data_contents, &ar_info_contents);
+            println!("Completed processing request");
+            result
         }));
 
     println!("Booting up HTTP server. Listening on port 8100.");
@@ -80,7 +79,7 @@ fn build_response(query_param: Input, ip_data_contents: &String, ar_info_content
         Err(e) => return Response::builder().body(format!("The received request was invalid could not be de-serialized: {}", e))
     };
 
-    // TODO: Is it possible to use references asynchronously? We spend ~1s deserializing! Their lifetime is an issue...
+    // TODO: How to borrow reference without clone inside async / await
     let ip_data: IpData<ExamplePairing> = from_str(&ip_data_contents).expect("File did not contain a valid IpData object as JSON.");
     let ar_info: ArInfos<ExampleCurve> = from_str(&ar_info_contents).expect("File did not contain a valid ArInfos object as JSON");
 
