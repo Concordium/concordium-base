@@ -4,6 +4,7 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
+use crypto_common::{VERSION_0, Versioned};
 use curve_arithmetic::*;
 use id::{
     ffi::AttributeKind,
@@ -17,7 +18,8 @@ use warp::{
     Filter,
     http::Response
 };
-use crypto_common::{Versioned, VERSION_0};
+
+use uuid::Uuid;
 
 type ExampleCurve = G1;
 type ExamplePairing = Bls12;
@@ -44,9 +46,10 @@ async fn main() {
         .and(warp::path::end())
         .and(warp::get())
         .and(warp::query().map(move |input: Input| {
-            println!("Received request");
+            let request_id = Uuid::new_v4();
+            println!("flowId={}, message=\"Received request\"", request_id);
             let result = validate_and_return_identity_object(&input.state, &ip_data_contents, &ar_info_contents);
-            println!("Completed processing request");
+            println!("flowId={}, message=\"Completed processing request\"", request_id);
             result
         }));
 
