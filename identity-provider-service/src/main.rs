@@ -125,3 +125,22 @@ fn deserialize_request(request: &String) -> std::result::Result<PreIdentityObjec
 
     return Ok(request);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_verify_failed_validation() {
+        // Given
+        let request = fs::read_to_string("data/fail_validation_request.json").unwrap();
+        let ip_data_contents = fs::read_to_string("data/identity_provider.json").unwrap();
+        let ar_info_contents = fs::read_to_string("data/anonymity_revokers.json").unwrap();
+
+        // When
+        let identity_object = validate_and_return_identity_object(&request, &ip_data_contents, &ar_info_contents);
+
+        // Then (the zero knowledge proofs could not be verified, so we fail)
+        assert!(identity_object.unwrap().body().contains("The request could not be successfully validated by the identity provider"));
+    }
+}
