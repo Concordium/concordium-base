@@ -8,7 +8,7 @@ Move to the identity-provider-service directory and run:
 
 ```cargo build --release```
 
-Navigate to the target directory of the build ```identity-provider-service/target/release/``` and run:
+Navigate next to the generated binary and run:
 
 ```./identity-provider-service identity_provider_file.json anonymity_revokers_file.json```
 
