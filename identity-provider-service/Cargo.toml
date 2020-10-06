@@ -12,7 +12,7 @@ warp = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 pairing = "0.15"
-
+uuid = { version = "0.8", features = ["v4"] }
 [dependencies.id]
 path = "../rust-src/id"
 version = "0"
