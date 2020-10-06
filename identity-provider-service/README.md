@@ -24,3 +24,18 @@ An example of each file type can be found in the ```data``` directory of the mod
 |Method|URL|
 |---|---|
 |GET|http://hostname:8100/api/identity?state=[idObjectRequest]|
+
+Here ```[idObjectRequest]``` should contain a URL encoded version of a JSON serialized PreIdentityObject encapsulated
+with a idObjectRequest tag, i.e.: 
+```
+{
+    "idObjectRequest" :
+    {
+        PreIdentityObject JSON...
+    } 
+}
+```
+encoded into a valid URL:
+```
+%7B%0A%20%20%20%20%22idObjectRequest%22%20%3A%0A%20%20%20%20%7B%0A%20%20%20%20%20%20%20%20PreIdentityObject%20JSON...%0A%20%20%20%20%7D%20%0A%7D
+```
