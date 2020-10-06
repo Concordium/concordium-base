@@ -25,17 +25,18 @@ An example of each file type can be found in the ```data``` directory of the mod
 |---|---|
 |GET|http://hostname:8100/api/identity?state=[idObjectRequest]|
 
-Here ```[idObjectRequest]``` should contain a URL encoded version of a JSON serialized PreIdentityObject encapsulated
-with a idObjectRequest tag, i.e.: 
+Here ```[idObjectRequest]``` should contain a URL encoded version of a JSON serialized versioned PreIdentityObject 
+encapsulated with a idObjectRequest tag, i.e.: 
 ```
 {
-    "idObjectRequest" :
+    "idObjectRequest" : 
     {
-        PreIdentityObject JSON...
+        "value": 
+        {
+            PreIdentityObject JSON...
+        },
+        "v": 0
     } 
 }
 ```
-encoded into a valid URL:
-```
-%7B%0A%20%20%20%20%22idObjectRequest%22%20%3A%0A%20%20%20%20%7B%0A%20%20%20%20%20%20%20%20PreIdentityObject%20JSON...%0A%20%20%20%20%7D%20%0A%7D
-```
+encoded into a URL.
