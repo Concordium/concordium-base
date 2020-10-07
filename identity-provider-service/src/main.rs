@@ -14,12 +14,12 @@ use id::{
 use pairing::bls12_381::{Bls12, G1};
 use serde::Deserialize;
 use serde_json::{from_str, from_value, to_string, Value};
+use uuid::Uuid;
 use warp::{
     Filter,
-    http::Response
+    http::Response,
+    http::StatusCode
 };
-
-use uuid::Uuid;
 
 type ExampleCurve = G1;
 type ExamplePairing = Bls12;
@@ -63,7 +63,7 @@ async fn main() {
 fn validate_and_return_identity_object(state: &String, ip_data_contents: &String, ar_info_contents: &String) -> std::result::Result<warp::http::Response<String>, warp::http::Error>  {
     let request = match deserialize_request(state) {
         Ok(request) => request,
-        Err(e) => return Response::builder().body(format!("The received request was invalid could not be de-serialized: {}", e))
+        Err(e) => return Response::builder().body(format!("Error during deserialization: {}", e))
     };
 
     // FIXME: Performance optimization - howto borrow references (without cloning) to the de-serialized types to avoid parsing for each request?
@@ -102,7 +102,10 @@ fn validate_and_return_identity_object(state: &String, ip_data_contents: &String
         Err(e) => return Response::builder().body(format!("It was not possible to sign the request: {}", e))
     };
 
-    save_revocation_record(request);
+    match save_revocation_record(request) {
+        Ok(_saved) => (),
+        Err(e) => return Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(e)
+    };
 
     let id = IdentityObject {
         pre_identity_object: deserialize_request(&state).unwrap(),
@@ -141,22 +144,28 @@ fn deserialize_request(request: &String) -> std::result::Result<PreIdentityObjec
 
 /// Creates and saves the revocation record to the file system (which should be a database, but
 /// for the proof-of-concept we use the file system).
-fn save_revocation_record(pre_identity_object: PreIdentityObject<Bls12, ExampleCurve>) {
+fn save_revocation_record(pre_identity_object: PreIdentityObject<Bls12, ExampleCurve>) -> std::result::Result<bool, String> {
     let ar_record = AnonymityRevocationRecord {
         id_cred_pub:    pre_identity_object.id_cred_pub,
         ar_data:        pre_identity_object.ip_ar_data
     };
 
     let mut serialized_ar_record = to_string(&ar_record).unwrap();
-    serialized_ar_record.push_str("\n\n");
+    serialized_ar_record.push_str("\n");
 
-    let mut file = OpenOptions::new()
+    let mut file = match OpenOptions::new()
         .write(true)
         .append(true)
         .create(true)
-        .open("revocation_record_storage.data")
-        .unwrap();
-    writeln!(file, "{}", serialized_ar_record).unwrap();
+        .open("revocation_record_storage.data") {
+        Ok(file) => file,
+        Err(e) => return Err(format!("Failed accessing anonymization revocation record file: {}", e))
+    };
+
+    return match writeln!(file, "{}", serialized_ar_record) {
+        Ok(_result) => Ok(true),
+        Err(e) => Err(format!("Failed writing anonymization revocation record to file: {}", e))
+    };
 }
 
 #[cfg(test)]
