@@ -199,7 +199,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         }
     }
 
-    transcript.append_message(b"bulletproofs", &to_bytes(&bulletproofs));
+    transcript.append_message(b"bulletproofs", &bulletproofs);
     if verify(transcript, &verifier, &proof) {
         Ok(())
     } else {

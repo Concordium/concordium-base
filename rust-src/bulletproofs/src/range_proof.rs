@@ -227,8 +227,8 @@ pub fn prove<C: Curve, T: Rng>(
     let S = multiexp_worker_given_table(&S_scalars, &table, window_size);
     transcript.append_point(b"A", &A);
     transcript.append_point(b"S", &S);
-    let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
-    let z: C::Scalar = transcript.challenge_scalar::<C>(b"z");
+    let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
 
     let mut l_0 = Vec::with_capacity(nm);
     let mut l_1 = Vec::with_capacity(nm);
@@ -327,7 +327,7 @@ pub fn prove<C: Curve, T: Rng>(
 
     transcript.append_point(b"T1", &T_1);
     transcript.append_point(b"T2", &T_2);
-    let x: C::Scalar = transcript.challenge_scalar::<C>(b"x");
+    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
     // println!("prover's x = {:?}", x);
     let mut x2 = x;
     x2.mul_assign(&x);
@@ -383,7 +383,7 @@ pub fn prove<C: Curve, T: Rng>(
     transcript.append_scalar::<C>(b"tx", &tx);
     transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
     transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
-    let w: C::Scalar = transcript.challenge_scalar::<C>(b"w");
+    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
     let Q = B.mul_by_scalar(&w);
     // let mut H_prime : Vec<C> = Vec::with_capacity(nm);
     let mut H_prime_scalars: Vec<C::Scalar> = Vec::with_capacity(nm);
@@ -473,22 +473,22 @@ pub fn verify_efficient<C: Curve>(
     let e_tilde = proof.e_tilde;
     transcript.append_point(b"A", &A);
     transcript.append_point(b"S", &S);
-    let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
-    let z: C::Scalar = transcript.challenge_scalar::<C>(b"z");
+    let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
     let mut z2 = z;
     z2.mul_assign(&z);
     let mut z3 = z2;
     z3.mul_assign(&z);
     transcript.append_point(b"T1", &T_1);
     transcript.append_point(b"T2", &T_2);
-    let x: C::Scalar = transcript.challenge_scalar::<C>(b"x");
+    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
     let mut x2 = x;
     x2.mul_assign(&x);
     // println!("verifier's x = {:?}", x);
     transcript.append_scalar::<C>(b"tx", &tx);
     transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
     transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
-    let w: C::Scalar = transcript.challenge_scalar::<C>(b"w");
+    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
     // Calculate delta(x,y):
     let mut ip_1_y_nm = C::Scalar::zero();
     let mut yi = C::Scalar::one();
@@ -709,8 +709,8 @@ mod tests {
         let S = C::zero_point();
         transcript.append_point(b"A", &A);
         transcript.append_point(b"S", &S);
-        let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
-        let z: C::Scalar = transcript.challenge_scalar::<C>(b"z");
+        let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+        let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
         let z_m = z_vec(z, 0, usize::from(m));
 
         // z squared
@@ -730,7 +730,7 @@ mod tests {
         let e_tilde: C::Scalar = C::Scalar::zero();
         transcript.append_point(b"T1", &T_1);
         transcript.append_point(b"T2", &T_2);
-        let _x: C::Scalar = transcript.challenge_scalar::<C>(b"x");
+        let _x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
         // println!("Cheating prover's x = {}", x);
         for j in 0..usize::from(m) {
             // tx:
@@ -841,22 +841,22 @@ mod tests {
         let e_tilde = proof.e_tilde;
         transcript.append_point(b"A", &A);
         transcript.append_point(b"S", &S);
-        let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
-        let z: C::Scalar = transcript.challenge_scalar::<C>(b"z");
+        let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+        let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
         let mut z2 = z;
         z2.mul_assign(&z);
         let mut z3 = z2;
         z3.mul_assign(&z);
         transcript.append_point(b"T1", &T_1);
         transcript.append_point(b"T2", &T_2);
-        let x: C::Scalar = transcript.challenge_scalar::<C>(b"x");
+        let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
         let mut x2 = x;
         x2.mul_assign(&x);
         // println!("verifier's x = {:?}", x);
         transcript.append_scalar::<C>(b"tx", &tx);
         transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
         transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
-        let w: C::Scalar = transcript.challenge_scalar::<C>(b"w");
+        let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
         // Calculate delta(x,y):
         let mut ip_1_y_nm = C::Scalar::zero();
         let mut yi = C::Scalar::one();
@@ -989,22 +989,22 @@ mod tests {
         let e_tilde = proof.e_tilde;
         transcript.append_point(b"A", &A);
         transcript.append_point(b"S", &S);
-        let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
-        let z: C::Scalar = transcript.challenge_scalar::<C>(b"z");
+        let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+        let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
         let mut z2 = z;
         z2.mul_assign(&z);
         let mut z3 = z2;
         z3.mul_assign(&z);
         transcript.append_point(b"T1", &T_1);
         transcript.append_point(b"T2", &T_2);
-        let x: C::Scalar = transcript.challenge_scalar::<C>(b"x");
+        let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
         let mut x2 = x;
         x2.mul_assign(&x);
         // println!("verifier's x = {:?}", x);
         transcript.append_scalar::<C>(b"tx", &tx);
         transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
         transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
-        let w: C::Scalar = transcript.challenge_scalar::<C>(b"w");
+        let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
         // Calculate delta(x,y):
         let mut ip_1_y_nm = C::Scalar::zero();
         let mut yi = C::Scalar::one();

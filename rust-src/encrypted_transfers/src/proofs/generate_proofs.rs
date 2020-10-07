@@ -4,7 +4,7 @@ use bulletproofs::range_proof::{
     prove_given_scalars as bulletprove, verify_efficient,
     VerificationError as BulletproofVerificationError,
 };
-use crypto_common::{to_bytes, types::Amount};
+use crypto_common::types::Amount;
 use curve_arithmetic::{Curve, Value};
 use elgamal::{Cipher, PublicKey, Randomness, SecretKey};
 use id::{
@@ -218,7 +218,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         .iter()
         .map(|x| PedersenRandomness::new(*(x.as_ref())))
         .collect();
-    ro.append_message(b"sigmaproof", &to_bytes(&sigma_proof));
+    ro.append_message(b"sigmaproof", &sigma_proof);
     let bulletproof_a = bulletprove(
         ro,
         csprng,
@@ -348,7 +348,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         .map(|x| PedersenRandomness::new(*(x.as_ref())))
         .collect();
 
-    ro.append_message(b"sigmaproof", &to_bytes(&sigma_proof));
+    ro.append_message(b"sigmaproof", &sigma_proof);
     let bulletproof_s_prime = bulletprove(
         ro,
         csprng,
@@ -452,7 +452,7 @@ pub fn verify_enc_trans<C: Curve>(
         g: *generator,
         h: pk_sender.key,
     };
-    ro.append_message(b"sigmaproof", &to_bytes(&transaction.proof.accounting));
+    ro.append_message(b"sigmaproof", &transaction.proof.accounting);
     let first_bulletproof = verify_efficient(
         ro,
         u8::from(CHUNK_SIZE),
@@ -537,7 +537,7 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
     // Number of bits in each chunk, determines the upper bound that needs to be
     // ensured.
     let num_bits_in_chunk = (64 / num_chunks) as u8; // as is safe here because the number is < 64
-    ro.append_message(b"sigmaproof", &to_bytes(&transaction.proof.accounting));
+    ro.append_message(b"sigmaproof", &transaction.proof.accounting);
     let bulletproof = verify_efficient(
         ro,
         num_bits_in_chunk,

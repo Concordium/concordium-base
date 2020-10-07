@@ -215,7 +215,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     });
 
     let secret = (secret, replicated_secrets);
-    transcript.append_message(b"bulletproofs", &to_bytes(&bulletproofs));
+    transcript.append_message(b"bulletproofs", &bulletproofs);
     let proof = prove(transcript, &prover, secret, &mut csprng)?;
 
     let ip_ar_data = ip_ar_data
