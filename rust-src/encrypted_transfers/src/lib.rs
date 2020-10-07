@@ -10,7 +10,7 @@ pub mod proofs;
 mod types;
 
 use crate::types::{CHUNK_SIZE as CHUNK_SIZE_ENC_TRANS, *};
-use crypto_common::{to_bytes, types::Amount};
+use crypto_common::types::Amount;
 use curve_arithmetic::*;
 use elgamal::*;
 use id::types::*;
@@ -155,9 +155,9 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     let sender_pk = &PublicKey::from(sender_sk);
     // FIXME: Put context into random oracle
     let mut ro = RandomOracle::domain("EncryptedTransfer");
-    ro.append_message(b"ctx", &to_bytes(&ctx));
-    ro.append_message(b"receiver_pk", &to_bytes(&receiver_pk));
-    ro.append_message(b"sender_pk", &to_bytes(&sender_pk));
+    ro.append_message(b"ctx", &ctx);
+    ro.append_message(b"receiver_pk", &receiver_pk);
+    ro.append_message(b"sender_pk", &sender_pk);
 
     // FIXME: Make arguments more in line between gen_enc_trans and this.
     generate_proofs::gen_enc_trans(
@@ -195,9 +195,9 @@ pub fn verify_transfer_data<C: Curve>(
 ) -> bool {
     // Fixme: Put context into the random oracle.
     let mut ro = RandomOracle::domain("EncryptedTransfer");
-    ro.append_message(b"ctx", &to_bytes(&ctx));
-    ro.append_message(b"receiver_pk", &to_bytes(&receiver_pk));
-    ro.append_message(b"sender_pk", &to_bytes(&sender_pk));
+    ro.append_message(b"ctx", &ctx);
+    ro.append_message(b"receiver_pk", &receiver_pk);
+    ro.append_message(b"sender_pk", &sender_pk);
 
     // FIXME: Revise order of arguments in verify_enc_trans to be more consistent
     // with the rest.
@@ -235,8 +235,8 @@ pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
     let pk = &PublicKey::from(sk);
     // FIXME: Put context into random oracle
     let mut ro = RandomOracle::domain("SecToPubTransfer");
-    ro.append_message(b"ctx", &to_bytes(&ctx));
-    ro.append_message(b"pk", &to_bytes(&pk));
+    ro.append_message(b"ctx", &ctx);
+    ro.append_message(b"pk", &pk);
 
     // FIXME: Make arguments more in line between gen_sec_to_pub_trans and this.
     generate_proofs::gen_sec_to_pub_trans(
@@ -274,8 +274,8 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
 ) -> bool {
     // Fixme: Put context into the random oracle.
     let mut ro = RandomOracle::domain("SecToPubTransfer");
-    ro.append_message(b"ctx", &to_bytes(&ctx));
-    ro.append_message(b"pk", &to_bytes(&pk));
+    ro.append_message(b"ctx", &ctx);
+    ro.append_message(b"pk", &pk);
 
     // FIXME: Revise order of arguments in verify_sec_to_pub_trans to be more
     // consistent with the rest.

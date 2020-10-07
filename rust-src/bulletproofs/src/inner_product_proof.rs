@@ -131,7 +131,7 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
         transcript.append_point(b"Lj", &Lj);
         transcript.append_point(b"Rj", &Rj);
         L_R.push((Lj, Rj));
-        let u_j: C::Scalar = transcript.challenge_scalar::<C>(b"uj");
+        let u_j: C::Scalar = transcript.challenge_scalar::<C, _>(b"uj");
         // println!("Prover's u_{:?} = {:?}", j, u_j);
         let u_j_inv = match u_j.inverse() {
             Some(inv) => inv,
@@ -236,7 +236,7 @@ pub fn verify_scalars<C: Curve>(
     for (Lj, Rj) in L_R {
         transcript.append_point(b"Lj", Lj);
         transcript.append_point(b"Rj", Rj);
-        let u_j: C::Scalar = transcript.challenge_scalar::<C>(b"uj");
+        let u_j: C::Scalar = transcript.challenge_scalar::<C, _>(b"uj");
         let u_j_inv = match u_j.inverse() {
             Some(inv) => inv,
             _ => return None,
