@@ -177,6 +177,97 @@ impl<'de> Visitor<'de> for SignatureThresholdVisitor {
 #[serde(transparent)]
 pub struct KeyIndex(pub u8);
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+pub struct AccountOwnershipSignature(ed25519::Signature);
+
+use serde::de::{SeqAccess, Unexpected};
+use std::ops::Deref;
+
+impl Deref for AccountOwnershipSignature {
+    type Target = ed25519::Signature;
+
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl From<ed25519::Signature> for AccountOwnershipSignature {
+    fn from(sig: ed25519::Signature) -> Self { AccountOwnershipSignature(sig) }
+}
+
+impl SerdeSerialize for AccountOwnershipSignature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer, {
+        serializer.serialize_bytes(&self.to_bytes())
+    }
+}
+
+struct BytesVisitor;
+
+impl<'de> Visitor<'de> for BytesVisitor {
+    type Value = [u8; 64];
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("A byte array of length 64")
+    }
+
+    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    where
+        E: de::Error, {
+        let mut bytes = [0u8; 64];
+        bytes.copy_from_slice(v);
+        Ok(bytes)
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>, {
+        let mut bytes = [0u8; 64];
+        for b in bytes.iter_mut() {
+            let next = seq.next_element()?;
+            match next {
+                Some(v) => *b = v,
+                None => {
+                    return Err(de::Error::invalid_value(
+                        Unexpected::Bytes(&bytes),
+                        &BytesVisitor,
+                    ))
+                }
+            }
+        }
+        Ok(bytes)
+    }
+}
+
+impl<'de> SerdeDeserialize<'de> for AccountOwnershipSignature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>, {
+        let bytes = deserializer.deserialize_bytes(BytesVisitor)?;
+        match ed25519::Signature::from_bytes(&bytes) {
+            Ok(sig) => Ok(AccountOwnershipSignature(sig)),
+            Err(_) => Err(de::Error::invalid_value(
+                Unexpected::Bytes(&bytes),
+                &BytesVisitor,
+            )),
+        }
+    }
+}
+
+#[test]
+fn test_serde_sig() {
+    use rand::thread_rng;
+
+    let mut csprng = thread_rng();
+    let keypair = ed25519::Keypair::generate(&mut csprng);
+    for _ in 0..1000 {
+        let message: &[u8] = b"test";
+        let signature: AccountOwnershipSignature = keypair.sign(message).into();
+        let serialized = serde_json::to_string(&signature).unwrap();
+        let deserialized: AccountOwnershipSignature = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(signature, deserialized);
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 /// A list of pairs of index of key and Ed25519 signatures on the challenge
 /// of the proofs of the credential
@@ -186,7 +277,7 @@ pub struct KeyIndex(pub u8);
 #[serde(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct AccountOwnershipProof {
-    pub sigs: BTreeMap<KeyIndex, ed25519::Signature>,
+    pub sigs: BTreeMap<KeyIndex, AccountOwnershipSignature>,
 }
 
 // Manual implementation to be able to encode length as 1, as well as to

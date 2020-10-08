@@ -504,24 +504,22 @@ where
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
-    // A list signature on the challenge used by the other proofs using the account
-    // keys
+    // A list of signatures on the challenge used by the other proofs using the
+    // account keys.
+    // The challenge has domain separator "credential" followed by appending all
+    // values of the credential to the ro, specifically appending the
+    // CredentialDeploymentValues struct.
     //
-    // Signature on this message should be sufficient as the account keys are
-    // included in this challenge (through the hash). In case of an existing
-    // account, the account address is included in the challenge.
-    // The key indices are not included directly in the challenge in case of a new
-    // account, but they are entirely determined by the order of the keys in the
-    // cred_account entry of the CredentialInformationValues struct, which
-    // suffices.
-    let to_sign = ro.split().get_challenge();
+    // The domain seperator in combination with appending all the data of the
+    // credential deployment should make it non-reusable.
+    let to_sign = ro.get_challenge();
     let proof_acc_sk = AccountOwnershipProof {
         sigs: acc_data
             .keys
             .iter()
             .map(|(&idx, kp)| {
                 let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
-                (idx, expanded_sk.sign(to_sign.as_ref(), &kp.public))
+                (idx, expanded_sk.sign(to_sign.as_ref(), &kp.public).into())
             })
             .collect(),
     };
