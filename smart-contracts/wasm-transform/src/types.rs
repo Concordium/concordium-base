@@ -1,6 +1,9 @@
 // AST definition of Wasm modules.
 // Based on the Wasm specification Release 1.1, July 21st, 2020.
 
+// TODO We might want to use newtype (struct) for the type definitions to get
+// compile-time guarantees.
+
 // NOTE: As most parts of the module are actually not changed by our
 // transformation, we do not have to parse and reencode all parts (even though
 // we have to visit them for validation). The only parts we want to change
@@ -24,13 +27,25 @@ impl Module {
     //     panic!("Not yet implemented.");
     // }
 
-    /// Get the arity (number of values) of the given block type.
-    pub fn get_arity(&self, bt: &BlockType) -> usize {
+    /// Get the length of the given block type.
+    pub fn get_block_type_len(&self, bt: &BlockType) -> usize {
         match bt {
             BlockType::EmptyType => 0,
             BlockType::ValueType(_) => 1,
             BlockType::TypeIndex(idx) => 10000000000, // TODO lookup in module
         }
+    }
+
+    /// Get the number of argument and return types of a function.
+    pub fn get_func_type_len(&self, idx: FuncIndex) -> (usize, usize) {
+        // TODO implement
+        (2, 1)
+    }
+
+    /// Get the number of argument and return types of the given function type.
+    pub fn get_type_len(&self, idx: TypeIndex) -> (usize, usize) {
+        // TODO implement
+        (3, 2)
     }
 }
 
@@ -80,6 +95,8 @@ pub enum BlockType {
     ValueType(ValueType),
     TypeIndex(TypeIndex),
 }
+
+pub type FuncType = (Vec<ValueType>, Vec<ValueType>);
 
 pub type LocalsType = u64;
 

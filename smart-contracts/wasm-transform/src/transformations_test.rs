@@ -165,7 +165,7 @@ mod transformation_tests {
                 I32Const(30),
             ],
             to_vec![
-                energy!(ENTRY + 2*COST_CONST + COST_SIMPLE_BIN),
+                energy!(ENTRY + 2*CONST + SIMPLE_BINOP),
                 stack!(S),
                 [ I32Const(10),
                   I32Const(20),
@@ -173,7 +173,7 @@ mod transformation_tests {
                 ],
                 stack!(-S),
                 [ Return ],
-                energy!(COST_CONST),
+                energy!(CONST),
                 [ I32Const(30) ],
                 stack!(-S)
             ])
