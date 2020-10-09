@@ -85,7 +85,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(state)
 }
 
-#[receive(name = "deposit")]
+#[receive(name = "receive_deposit")]
 /// Allows anyone to deposit GTU into the contract.
 fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _ctx: &R,
