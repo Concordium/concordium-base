@@ -53,7 +53,7 @@ mod transformation_tests {
             body:           body_expect.clone(),
             max_stack_size: Some(S as StackSize),
         };
-        assert_eq!(InstrSeqTransformer::inject_accounting(&f, &m), f_);
+        assert_eq!(inject_accounting(&f, &m), f_);
     }
 
     // Tests with different locals
@@ -74,7 +74,7 @@ mod transformation_tests {
             body:           to_vec![energy!(invoke_after(0)), stack!(123), stack!(-123)],
             max_stack_size: Some(123),
         };
-        assert_eq!(InstrSeqTransformer::inject_accounting(&f, &m), f_);
+        assert_eq!(inject_accounting(&f, &m), f_);
     }
 
     #[test]
@@ -93,7 +93,7 @@ mod transformation_tests {
             body:           to_vec![energy!(invoke_after(2)), stack!(123), stack!(-123)],
             max_stack_size: Some(123),
         };
-        assert_eq!(InstrSeqTransformer::inject_accounting(&f, &m), f_);
+        assert_eq!(inject_accounting(&f, &m), f_);
     }
 
     #[test]
@@ -118,7 +118,7 @@ mod transformation_tests {
             max_stack_size: Some(123),
 
         };
-        assert_eq!(InstrSeqTransformer::inject_accounting(&f, &m), f_);
+        assert_eq!(inject_accounting(&f, &m), f_);
     }
 
     #[test]

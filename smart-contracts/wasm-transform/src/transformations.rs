@@ -53,7 +53,6 @@ pub mod cost {
     pub const DIV: Energy = BINOP + 10;
     pub const REM: Energy = BINOP + 10;
 
-
     // Parametric instructions
     pub const DROP: Energy = JUMP_STACK;
     pub const SELECT: Energy = TEST + JUMP_STACK + copy_stack(1);
@@ -171,9 +170,7 @@ pub mod cost {
             MemorySize => MEMSIZE,
             MemoryGrow => MEMGROW,
 
-
             // Numeric instructions
-
             I32Const(_) => CONST,
             I64Const(_) => CONST,
 
@@ -183,7 +180,7 @@ pub mod cost {
             I32LtS => SIMPLE_BINOP,
             I32LtU => SIMPLE_BINOP,
             I32GtS => SIMPLE_BINOP,
-            I32GtU  => SIMPLE_BINOP,// With this instruction, the contract gets 2^32-4294967296 GTU.
+            I32GtU => SIMPLE_BINOP,
             I32LeS => SIMPLE_BINOP,
             I32LeU => SIMPLE_BINOP,
             I32GeS => SIMPLE_BINOP,
@@ -194,7 +191,7 @@ pub mod cost {
             I64LtS => SIMPLE_BINOP,
             I64LtU => SIMPLE_BINOP,
             I64GtS => SIMPLE_BINOP,
-            I64GtU  => SIMPLE_BINOP,// With this instruction, the contract gets 2^64-18446744073709551616 GTU.
+            I64GtU => SIMPLE_BINOP,
             I64LeS => SIMPLE_BINOP,
             I64LeU => SIMPLE_BINOP,
             I64GeS => SIMPLE_BINOP,
@@ -290,51 +287,6 @@ struct InstrSeqTransformer<'a> {
 }
 
 impl<'b> InstrSeqTransformer<'b> {
-    /// Inject cost accounting into the function, according to cost
-    /// specification version XXX.
-    /// This requires function.max_stack_size to be present.
-    pub fn inject_accounting(function: &Function, module: &Module) -> Function {
-        let mut transformer = InstrSeqTransformer {
-            module,
-            max_stack_size: function.max_stack_size.unwrap() as i64,
-            labels: Vec::new(),
-            new_seq: InstrSeq::new(),
-            insert_account_energy_beginning: false,
-            energy_first_part: None,
-            energy: 0,
-            pending_instructions: InstrSeq::new(),
-            seq: &function.body,
-        };
-
-        // We create a new body expression, as in-place modification (as far as
-        // possible) will probably not be cheaper anyway.
-        let mut new_body: InstrSeq = InstrSeq::new();
-
-        // At the beginning of a function, we charge for its invocation and the first
-        // unconditionally executed instructions of the body and account for its maximum
-        // stack size.
-        let (energy_body_first_part, mut injected) = transformer.run();
-        let mut first_energy_accounting = cost::invoke_after(function.locals.len());
-        if let Some(e) = energy_body_first_part {
-            first_energy_accounting += e;
-        }
-        account_energy(&mut new_body, first_energy_accounting);
-        account_stack_size(&mut new_body, transformer.max_stack_size);
-
-        new_body.append(&mut injected);
-
-        // At the end of the function (in addition to before every return statement), we
-        // have to account and for stack size again (subtract the previously added stack
-        // size for this function).
-        account_stack_size(&mut new_body, -transformer.max_stack_size);
-
-        Function {
-            body: new_body,
-            locals: function.locals.clone(),
-            ..*function
-        }
-    }
-
     /// Run a "sub transformer" on the given sequence.
     /// the given label arity is pushed on top of the label stack.
     fn run_sub(
@@ -393,8 +345,7 @@ impl<'b> InstrSeqTransformer<'b> {
             }
         }
         self.energy = 0;
-        // Move the pending instructions for which the last two instructions charge to
-        // new_body.
+        // Move the pending instructions for which we just accounted to new_seq.
         println!(
             "On {:?}: Moving pending to new: {:?}",
             self.seq, self.pending_instructions
@@ -441,14 +392,19 @@ impl<'b> InstrSeqTransformer<'b> {
                     if let Some(e) = energy_first_part {
                         self.add_energy(e);
                     }
-                    // Charge for the current sequence including the first insstructions of the
-                    // block.
+                    // First charge for all pending instructions including the first
+                    // instructions of the block, then execute the pending instructions
+                    // and finally the transformed block.
                     self.account_energy_push_pending();
                     self.add_to_new(&Block(bt.clone(), bseq_new));
                 }
                 Loop(bt, bseq) => {
                     // For "loop", we have to charge as the first instruction of the loop.
+                    // The following will insert a cost accounting instruction into bseq
+                    // if it is not empty.
                     let (_, bseq_new) = self.run_sub(&bseq, self.get_block_type_len(bt), true);
+                    // First charge for all pending instructions, execute the pending
+                    // instructions and finally the transformed loop.
                     self.account_energy_push_pending();
                     self.add_to_new(&Loop(bt.clone(), bseq_new));
                 }
@@ -507,6 +463,51 @@ impl<'b> InstrSeqTransformer<'b> {
         // TODO is there an alternative to cloning here? Returning reference does not
         // work directly.
         (self.energy_first_part, self.new_seq.clone())
+    }
+}
+
+/// Inject cost accounting into the function, according to cost
+/// specification version XXX.
+/// This requires function.max_stack_size to be present.
+pub fn inject_accounting(function: &Function, module: &Module) -> Function {
+    let mut transformer = InstrSeqTransformer {
+        module,
+        max_stack_size: function.max_stack_size.unwrap() as i64,
+        labels: Vec::new(),
+        new_seq: InstrSeq::new(),
+        insert_account_energy_beginning: false,
+        energy_first_part: None,
+        energy: 0,
+        pending_instructions: InstrSeq::new(),
+        seq: &function.body,
+    };
+
+    // We create a new body expression, as in-place modification (as far as
+    // possible) will probably not be cheaper anyway.
+    let mut new_body: InstrSeq = InstrSeq::new();
+
+    // At the beginning of a function, we charge for its invocation and the first
+    // unconditionally executed instructions of the body and account for its maximum
+    // stack size.
+    let (energy_body_first_part, mut injected) = transformer.run();
+    let mut first_energy_accounting = cost::invoke_after(function.locals.len());
+    if let Some(e) = energy_body_first_part {
+        first_energy_accounting += e;
+    }
+    account_energy(&mut new_body, first_energy_accounting);
+    account_stack_size(&mut new_body, transformer.max_stack_size);
+
+    new_body.append(&mut injected);
+
+    // At the end of the function (in addition to before every return statement), we
+    // have to account and for stack size again (subtract the previously added stack
+    // size for this function).
+    account_stack_size(&mut new_body, -transformer.max_stack_size);
+
+    Function {
+        body: new_body,
+        locals: function.locals.clone(),
+        ..*function
     }
 }
 
