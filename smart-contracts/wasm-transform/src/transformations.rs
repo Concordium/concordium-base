@@ -277,7 +277,7 @@ struct InstrSeqTransformer<'a> {
     // Amount to charge for the first instructions in the sequence, before the first injected
     // accounting instruction. This can be added to an earlier charging instruction.
     energy_first_part: Option<Energy>,
-    // Accumulator for energy to be charged for the pending instructions.
+    // Accumulator for energy to be charged for the pending (and currently to be added) instructions.
     energy: Energy,
     // NOTE: Performance could be improved with adding charging instructions directly,
     // updating the energy value in-place after it has been determined.
@@ -332,6 +332,13 @@ impl<'b> InstrSeqTransformer<'b> {
     }
 
     fn account_energy_push_pending(&mut self) {
+        // If there is nothing to account for, do not insert accounting instructions.
+        // This case can occur for example with nested loop instructions.
+        if self.energy == 0 {
+            // This should be an invariant.
+            assert!(self.pending_instructions.is_empty());
+            return;
+        }
         if self.insert_account_energy_beginning {
             self.account_energy(self.energy);
         } else {
