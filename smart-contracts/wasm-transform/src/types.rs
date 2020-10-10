@@ -27,12 +27,12 @@ impl Module {
     //     panic!("Not yet implemented.");
     // }
 
-    /// Get the length of the given block type.
-    pub fn get_block_type_len(&self, bt: &BlockType) -> usize {
+    /// Get the number of argument and return types of the given block type.
+    pub fn get_block_type_len(&self, bt: &BlockType) -> (usize, usize) {
         match bt {
-            BlockType::EmptyType => 0,
-            BlockType::ValueType(_) => 1,
-            BlockType::TypeIndex(idx) => 10000000000, // TODO lookup in module
+            BlockType::EmptyType => (0, 0),
+            BlockType::ValueType(_) => (0, 1),
+            BlockType::TypeIndex(idx) => self.get_type_len(*idx),
         }
     }
 
@@ -45,7 +45,11 @@ impl Module {
     /// Get the number of argument and return types of the given function type.
     pub fn get_type_len(&self, idx: TypeIndex) -> (usize, usize) {
         // TODO implement
-        (3, 2)
+        match idx {
+            0 => (3, 2),
+            1 => (2, 1),
+            _ => (100, 100),
+        }
     }
 }
 
@@ -102,8 +106,8 @@ pub type LocalsType = u64;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct MemArg {
-    offset: u32,
-    align: u32,
+    pub offset: u32,
+    pub align: u32,
 }
 
 pub type InstrSeq = Vec<Instruction>;

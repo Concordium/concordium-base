@@ -113,6 +113,14 @@ pub mod cost {
         write_stack(num_locals)
     }
 
+    pub const fn call_indirect(num_args: usize, num_res: usize) -> Energy {
+        BOUNDS + LOOKUP + type_check(num_args + num_res) + invoke_before(num_args, num_res)
+    }
+
+    pub const fn type_check(len: usize) -> Energy {
+        5 + ((2 * len) as Energy)
+    }
+
     pub fn get_cost(instr: &Instruction, labels: &Vec<usize>, module: &Module) -> Energy {
         use crate::types::Instruction::*;
         match instr {
@@ -132,7 +140,7 @@ pub mod cost {
             }
             CallIndirect(ty_idx) => {
                 let (num_args, num_res) = module.get_type_len(*ty_idx);
-                invoke_before(num_args, num_res)
+                call_indirect(num_args, num_res)
             }
 
             // Parametric instructions
@@ -315,7 +323,7 @@ impl<'b> InstrSeqTransformer<'b> {
         lookup_label(&mut self.labels, idx)
     }
 
-    fn get_block_type_len(&self, bt: &BlockType) -> usize {
+    fn get_block_type_len(&self, bt: &BlockType) -> (usize, usize) {
         self.module.get_block_type_len(bt)
     }
 
@@ -395,7 +403,8 @@ impl<'b> InstrSeqTransformer<'b> {
                     // For block, the energy cost of the first instructions can be combined with
                     // that for previous instructions.
                     let (energy_first_part, bseq_new) =
-                        self.run_sub(&bseq, self.get_block_type_len(bt), false);
+                        // A block's label type is its result type.
+                        self.run_sub(&bseq, self.get_block_type_len(bt).1, false);
                     if let Some(e) = energy_first_part {
                         self.add_energy(e);
                     }
@@ -409,15 +418,17 @@ impl<'b> InstrSeqTransformer<'b> {
                     // For "loop", we have to charge as the first instruction of the loop.
                     // The following will insert a cost accounting instruction into bseq
                     // if it is not empty.
-                    let (_, bseq_new) = self.run_sub(&bseq, self.get_block_type_len(bt), true);
+                    // A loop's label type is its argument type.
+                    let (_, bseq_new) = self.run_sub(&bseq, self.get_block_type_len(bt).0, true);
                     // First charge for all pending instructions, execute the pending
                     // instructions and finally the transformed loop.
                     self.account_energy_push_pending();
                     self.add_to_new(&Loop(bt.clone(), bseq_new));
                 }
                 If(bt, seq1, seq2) => {
-                    let (_, seq1_new) = self.run_sub(&seq1, self.get_block_type_len(bt), true);
-                    let (_, seq2_new) = self.run_sub(&seq2, self.get_block_type_len(bt), true);
+                    // An if-block's label type is its result type.
+                    let (_, seq1_new) = self.run_sub(&seq1, self.get_block_type_len(bt).1, true);
+                    let (_, seq2_new) = self.run_sub(&seq2, self.get_block_type_len(bt).1, true);
                     self.account_energy_push_pending();
                     self.add_to_new(&If(bt.clone(), seq1_new, seq2_new));
                 }
