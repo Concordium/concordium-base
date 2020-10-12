@@ -136,7 +136,7 @@ pub fn verify_cdi<
         witness,
     };
 
-    //todo simon transcript vs ro?
+    // todo simon transcript vs ro?
     let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
     transcript.append_message(b"cred_values", &cdi.values);
     transcript.append_message(b"global_context", &global_context);
