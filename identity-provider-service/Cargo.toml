@@ -15,6 +15,7 @@ pairing = "0.15"
 uuid = { version = "0.8", features = ["v4"] }
 log = "0.4.11"
 env_logger = "0.7.1"
+structopt = "0.3"
 
 [dependencies.id]
 path = "../rust-src/id"

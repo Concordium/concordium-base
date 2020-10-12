@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
-use std::env;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
+use std::path::PathBuf;
 
 use crypto_common::{VERSION_0, Versioned};
 use curve_arithmetic::*;
@@ -15,6 +15,7 @@ use log::info;
 use pairing::bls12_381::{Bls12, G1};
 use serde::Deserialize;
 use serde_json::{from_str, from_value, to_string, Value};
+use structopt::StructOpt;
 use uuid::Uuid;
 use warp::{
     Filter,
@@ -33,17 +34,26 @@ struct Input {
     state: String
 }
 
+/// Structure used to receive the correct command line arguments by using StructOpt.
+#[derive(Debug, StructOpt)]
+struct IdentityProviderServiceConfiguration {
+    #[structopt(long = "global-context", help = "File with global context.")]
+    global_context_file: PathBuf,
+    #[structopt(long = "identity-provider", help = "File with the identity provider as JSON.")]
+    identity_provider_file: PathBuf,
+    #[structopt(long = "anonymity-revokers", help = "File with the list of anonymity revokers as JSON.")]
+    anonymity_revokers_file: PathBuf,
+}
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
+    let opt = IdentityProviderServiceConfiguration::from_args();
 
-    info!("Reading the provided IP and AR configurations.");
-    let args: Vec<String> = env::args().collect();
-    let ip_data_filename = &args[1];
-    let ar_info_filename = &args[2];
-
-    let ip_data_contents = fs::read_to_string(ip_data_filename).expect("Unable to read ip data file.");
-    let ar_info_contents = fs::read_to_string(ar_info_filename).expect("Unable to read ar info file.");
+    info!("Reading the provided IP, AR and global context configurations.");
+    let ip_data_contents = fs::read_to_string(opt.identity_provider_file).expect("Unable to read ip data file.");
+    let ar_info_contents = fs::read_to_string(opt.anonymity_revokers_file).expect("Unable to read ar info file.");
+    let global_context_contents = fs::read_to_string(opt.global_context_file).expect("Unable to read global context info file.");
     info!("Configurations have been loaded successfully.");
 
     let identity_route = warp::path("api")
@@ -53,7 +63,7 @@ async fn main() {
         .and(warp::query().map(move |input: Input| {
             let request_id = Uuid::new_v4();
             info!("flowId={}, message=\"Received request\"", request_id);
-            let result = validate_and_return_identity_object(&input.state, &ip_data_contents, &ar_info_contents);
+            let result = validate_and_return_identity_object(&input.state, &ip_data_contents, &ar_info_contents, &global_context_contents);
             info!("flowId={}, message=\"Completed processing request\"", request_id);
             result
         }));
@@ -65,7 +75,7 @@ async fn main() {
 }
 
 /// Validates the received request and if valid returns a signed identity object.
-fn validate_and_return_identity_object(state: &String, ip_data_contents: &String, ar_info_contents: &String) -> std::result::Result<warp::http::Response<String>, warp::http::Error>  {
+fn validate_and_return_identity_object(state: &String, ip_data_contents: &String, ar_info_contents: &String, global_context_contents: &String) -> std::result::Result<warp::http::Response<String>, warp::http::Error>  {
     let request = match deserialize_request(state) {
         Ok(request) => request,
         Err(e) => return Response::builder().body(format!("Error during deserialization: {}", e))
@@ -74,8 +84,8 @@ fn validate_and_return_identity_object(state: &String, ip_data_contents: &String
     // FIXME: Performance optimization - howto borrow references (without cloning) to the de-serialized types to avoid parsing for each request?
     let ip_data: IpData<ExamplePairing> = from_str(&ip_data_contents).expect("File did not contain a valid IpData object as JSON.");
     let ar_info: ArInfos<ExampleCurve> = from_str(&ar_info_contents).expect("File did not contain a valid ArInfos object as JSON");
+    let global_context= from_str(&global_context_contents).expect("File did not contain a valid GlobalContext object as JSON");
 
-    let global_context= GlobalContext::<G1>::generate();
     let context = IPContext {
         ip_info:        &ip_data.public_ip_info,
         ars_infos:      &ar_info.anonymity_revokers,
@@ -182,9 +192,10 @@ mod tests {
         let request = include_str!("../data/valid_request.json");
         let ip_data_contents = include_str!("../data/identity_provider.json");
         let ar_info_contents = include_str!("../data/anonymity_revokers.json");
+        let global_context = include_str!("../data/global.json");
 
         // When
-        let response = validate_and_return_identity_object(&request.to_string(), &ip_data_contents.to_string(), &ar_info_contents.to_string());
+        let response = validate_and_return_identity_object(&request.to_string(), &ip_data_contents.to_string(), &ar_info_contents.to_string(), &global_context.to_string());
 
         // Then (we return a JSON serialized IdentityObject that we verify by deserializing, and a revocation file was written that can also be deserialized)
         let _deserialized_identity_object: Versioned<IdentityObject<ExamplePairing, ExampleCurve, AttributeKind>> = from_str(response.unwrap().body()).unwrap();
@@ -201,9 +212,10 @@ mod tests {
         let request = include_str!("../data/fail_validation_request.json");
         let ip_data_contents = include_str!("../data/identity_provider.json");
         let ar_info_contents = include_str!("../data/anonymity_revokers.json");
+        let global_context = include_str!("../data/global.json");
 
         // When
-        let response = validate_and_return_identity_object(&request.to_string(), &ip_data_contents.to_string(), &ar_info_contents.to_string());
+        let response = validate_and_return_identity_object(&request.to_string(), &ip_data_contents.to_string(), &ar_info_contents.to_string(), &global_context.to_string());
 
         // Then (the zero knowledge proofs could not be verified, so we fail)
         assert!(response.unwrap().body().contains("The request could not be successfully validated by the identity provider"));
