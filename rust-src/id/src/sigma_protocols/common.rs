@@ -287,8 +287,8 @@ impl<P: SigmaProtocol> ReplicateAdapter<P> {
 }
 
 /// Given a sigma protocol prover and a context (in the form of the random
-/// oracle), produce a sigma proof and update the context. This function can return 'None' if the input
-/// data is inconsistent.
+/// oracle), produce a sigma proof and update the context. This function can
+/// return 'None' if the input data is inconsistent.
 pub fn prove<R: rand::Rng, D: SigmaProtocol>(
     ro: &mut RandomOracle,
     prover: &D,
@@ -307,8 +307,8 @@ pub fn prove<R: rand::Rng, D: SigmaProtocol>(
     })
 }
 
-/// Given a single sigma proof and a context in the form of an instantiated random oracle,
-/// verify the sigma proof and update the state of the context.
+/// Given a single sigma proof and a context in the form of an instantiated
+/// random oracle, verify the sigma proof and update the state of the context.
 pub fn verify<D: SigmaProtocol>(
     ro: &mut RandomOracle,
     verifier: &D,
