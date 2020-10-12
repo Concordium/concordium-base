@@ -152,8 +152,7 @@ fn save_revocation_record(pre_identity_object: PreIdentityObject<Bls12, ExampleC
         ar_data:        pre_identity_object.ip_ar_data
     };
 
-    let mut serialized_ar_record = to_string(&ar_record).unwrap();
-    serialized_ar_record.push_str("\n");
+    let serialized_ar_record = to_string(&ar_record).unwrap();
 
     let mut file = match OpenOptions::new()
         .write(true)
