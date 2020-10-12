@@ -215,7 +215,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let secret = (secret, replicated_secrets);
     transcript.append_message(b"bulletproofs", &bulletproofs);
-    let proof = prove(transcript, &prover, secret, &mut csprng)?;
+    let proof = prove(&mut transcript, &prover, secret, &mut csprng)?;
 
     let ip_ar_data = ip_ar_data
         .iter()
@@ -647,7 +647,8 @@ where
 
     let secret = ((secret_reg_id, secret_sig), id_cred_pub_secrets);
     // FIXME: Pass in a mutable random-oracle so it can be extended.
-    let proof = match prove(ro.split(), &prover, secret, &mut csprng) {
+    let proof = match prove(&mut ro.split(), &prover, secret, &mut csprng) {
+        // todo simon no split?
         Some(x) => x,
         None => bail!("Cannot produce zero knowledge proof."),
     };

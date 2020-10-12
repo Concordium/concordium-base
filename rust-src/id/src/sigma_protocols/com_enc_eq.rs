@@ -58,11 +58,11 @@ impl<C: Curve> SigmaProtocol for ComEncEq<C> {
     type SecretData = ComEncEqSecret<C>;
 
     #[inline]
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        ro.append(&self.cipher)
-            .append(&self.commitment)
-            .append(&self.pub_key)
-            .append(&self.cmm_key)
+    fn public(&self, ro: &mut RandomOracle) {
+        ro.append_message("cipher", &self.cipher);
+        ro.append_message("commitment", &self.commitment);
+        ro.append_message("pub_key", &self.pub_key);
+        ro.append_message("cmm_key", &self.cmm_key)
     }
 
     #[inline]
@@ -205,10 +205,10 @@ mod tests {
         for _i in 0..100 {
             ComEncEq::<G1>::with_valid_data(0, &mut csprng, |com_enc_eq, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
-                let proof = prove(ro.split(), &com_enc_eq, secret, csprng)
+                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let proof = prove(&mut ro.split(), &com_enc_eq, secret, csprng)
                     .expect("Proving should succeed.");
-                assert!(verify(ro, &com_enc_eq, &proof));
+                assert!(verify(&mut ro, &com_enc_eq, &proof));
             })
         }
     }
@@ -220,20 +220,20 @@ mod tests {
             ComEncEq::<G1>::with_valid_data(0, &mut csprng, |com_enc_eq, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
                 let ro = RandomOracle::domain(&challenge_prefix);
-                let proof = prove(ro.split(), &com_enc_eq, secret, csprng)
+                let proof = prove(&mut ro.split(), &com_enc_eq, secret, csprng)
                     .expect("Proving should succeed.");
-                assert!(verify(ro.split(), &com_enc_eq, &proof));
+                assert!(verify(&mut ro.split(), &com_enc_eq, &proof));
 
                 // Construct invalid parameters
-                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
+                let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
                 // Verify failure for invalid parameters
-                assert!(!verify(wrong_ro, &com_enc_eq, &proof));
+                assert!(!verify(&mut wrong_ro, &com_enc_eq, &proof));
                 let mut wrong_com_enc_eq = com_enc_eq;
                 {
                     let tmp = wrong_com_enc_eq.cipher;
                     let m = Message::generate(csprng);
                     wrong_com_enc_eq.cipher = wrong_com_enc_eq.pub_key.encrypt(csprng, &m);
-                    assert!(!verify(ro.split(), &wrong_com_enc_eq, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_com_enc_eq, &proof));
                     wrong_com_enc_eq.cipher = tmp;
                 }
 
@@ -241,7 +241,7 @@ mod tests {
                     let tmp = wrong_com_enc_eq.commitment;
                     let v = Value::<G1>::generate(csprng);
                     wrong_com_enc_eq.commitment = wrong_com_enc_eq.cmm_key.commit(&v, csprng).0;
-                    assert!(!verify(ro.split(), &wrong_com_enc_eq, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_com_enc_eq, &proof));
                     wrong_com_enc_eq.commitment = tmp;
                 }
 
@@ -249,14 +249,14 @@ mod tests {
                     let tmp = wrong_com_enc_eq.pub_key;
                     wrong_com_enc_eq.pub_key =
                         ElGamalPublicKey::from(&ElgamalSecretKey::generate_all(csprng));
-                    assert!(!verify(ro.split(), &wrong_com_enc_eq, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_com_enc_eq, &proof));
                     wrong_com_enc_eq.pub_key = tmp;
                 }
 
                 {
                     let tmp = wrong_com_enc_eq.cmm_key;
                     wrong_com_enc_eq.cmm_key = CommitmentKey::generate(csprng);
-                    assert!(!verify(ro.split(), &wrong_com_enc_eq, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_com_enc_eq, &proof));
                     wrong_com_enc_eq.cmm_key = tmp;
                 }
             })

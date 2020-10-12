@@ -30,7 +30,8 @@ impl<P: Pairing> SecretKey<P> {
         Signature(signature)
     }
 
-    pub fn prove<R: Rng>(&self, csprng: &mut R, ro: RandomOracle) -> Proof<P> {
+    pub fn prove<R: Rng>(&self, csprng: &mut R, mut ro: RandomOracle) -> Proof<P> {
+        // todo simon should it be mutable borrow?
         let prover = Dlog {
             public: P::G2::one_point().mul_by_scalar(&self.0),
             coeff:  P::G2::one_point(),
@@ -38,7 +39,7 @@ impl<P: Pairing> SecretKey<P> {
         let secret = DlogSecret {
             secret: Value::new(self.0),
         };
-        prove(ro, &prover, secret, csprng)
+        prove(&mut ro, &prover, secret, csprng)
             .expect("Input-data is valid, so proving should succeed for this dlog proof.")
     }
 }
@@ -80,12 +81,13 @@ impl<P: Pairing> PublicKey<P> {
         P::check_pairing_eq(&signature.0, &P::G2::one_point(), &g1_hash, &self.0)
     }
 
-    pub fn check_proof(&self, ro: RandomOracle, proof: &Proof<P>) -> bool {
+    pub fn check_proof(&self, mut ro: RandomOracle, proof: &Proof<P>) -> bool {
+        // todo simon should it be mutable borrow?
         let verifier = Dlog {
             public: self.0,
             coeff:  P::G2::one_point(),
         };
-        verify(ro, &verifier, proof)
+        verify(&mut ro, &verifier, proof)
     }
 }
 
