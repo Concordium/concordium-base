@@ -83,7 +83,7 @@ async fn main() {
 fn validate_and_return_identity_object(state: &String, ip_data: Arc<IpData<ExamplePairing>>, ar_info: Arc<ArInfos<ExampleCurve>>, global_context: Arc<GlobalContext<ExampleCurve>>) -> std::result::Result<warp::http::Response<String>, warp::http::Error>  {
     let request = match deserialize_request(state) {
         Ok(request) => request,
-        Err(e) => return Response::builder().body(format!("Error during deserialization: {}", e))
+        Err(e) => return Response::builder().status(StatusCode::BAD_REQUEST).body(format!("Error during deserialization: {}", e))
     };
 
     let context = IPContext {
@@ -109,12 +109,12 @@ fn validate_and_return_identity_object(state: &String, ip_data: Arc<IpData<Examp
 
     match ip_validate_request(&request, context) {
         Ok(validation_result) => validation_result,
-        Err(e) => return Response::builder().body(format!("The request could not be successfully validated by the identity provider: {}", e))
+        Err(e) => return Response::builder().status(StatusCode::BAD_REQUEST).body(format!("The request could not be successfully validated by the identity provider: {}", e))
     };
 
     let signature = match sign_identity_object(&request, &ip_data.public_ip_info, &alist, &ip_data.ip_secret_key) {
         Ok(signature) => signature,
-        Err(e) => return Response::builder().body(format!("It was not possible to sign the request: {}", e))
+        Err(e) => return Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(format!("It was not possible to sign the request: {}", e))
     };
 
     match save_revocation_record(request) {
