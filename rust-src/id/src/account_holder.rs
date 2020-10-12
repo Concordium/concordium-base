@@ -651,7 +651,7 @@ where
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
-    //todo simon transcript vs ro?
+    // todo simon transcript vs ro?
     let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
     transcript.append_message(b"cred_values", &cred_values);
     transcript.append_message(b"global_context", &context.global_context);
