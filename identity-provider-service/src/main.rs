@@ -117,13 +117,13 @@ fn validate_and_return_identity_object(state: &String, ip_data: Arc<IpData<Examp
         Err(e) => return Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(format!("It was not possible to sign the request: {}", e))
     };
 
-    match save_revocation_record(request) {
+    match save_revocation_record(&request) {
         Ok(_saved) => (),
         Err(e) => return Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(e)
     };
 
     let id = IdentityObject {
-        pre_identity_object: deserialize_request(&state).unwrap(),
+        pre_identity_object: request,
         alist,
         signature
     };
@@ -159,10 +159,10 @@ fn deserialize_request(request: &String) -> std::result::Result<PreIdentityObjec
 
 /// Creates and saves the revocation record to the file system (which should be a database, but
 /// for the proof-of-concept we use the file system).
-fn save_revocation_record(pre_identity_object: PreIdentityObject<Bls12, ExampleCurve>) -> std::result::Result<bool, String> {
+fn save_revocation_record(pre_identity_object: &PreIdentityObject<Bls12, ExampleCurve>) -> std::result::Result<bool, String> {
     let ar_record = AnonymityRevocationRecord {
-        id_cred_pub:    pre_identity_object.id_cred_pub,
-        ar_data:        pre_identity_object.ip_ar_data
+        id_cred_pub:    pre_identity_object.id_cred_pub.clone(),
+        ar_data:        pre_identity_object.ip_ar_data.clone()
     };
 
     let serialized_ar_record = to_string(&ar_record).unwrap();
