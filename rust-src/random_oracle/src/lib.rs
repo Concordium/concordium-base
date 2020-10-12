@@ -124,9 +124,7 @@ impl RandomOracle {
     /// Try to convert the computed result into a field element. This interprets
     /// the output of the random oracle as a big-endian integer and reduces is
     /// mod field order.
-    pub fn result_to_scalar<C: Curve>(self) -> C::Scalar { 
-        C::scalar_from_bytes(self.result()) 
-    }
+    pub fn result_to_scalar<C: Curve>(self) -> C::Scalar { C::scalar_from_bytes(self.result()) }
 
     /// Finish and try to convert to scalar. Equivalent to
     /// ```ro.append(input).result_to_scalar()```.
@@ -141,13 +139,15 @@ impl RandomOracle {
         }
     }
 
-    /// Append the input to the state of the oracle, using `label` for domain separation.
+    /// Append the input to the state of the oracle, using `label` as domain
+    /// separation.
     pub fn append_message<S: Serial, B: AsRef<[u8]>>(&mut self, label: B, message: &S) {
         self.add_bytes(label);
         self.add(message)
     }
 
-    /// Get a challenge in the form of a Scalar, using `label` for domain separation.
+    /// Get a challenge in the form of a Scalar, using `label` as domain
+    /// separation.
     pub fn challenge_scalar<C: Curve, B: AsRef<[u8]>>(&mut self, label: B) -> C::Scalar {
         self.add_bytes(label);
         self.split().result_to_scalar::<C>()
