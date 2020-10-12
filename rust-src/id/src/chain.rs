@@ -6,7 +6,6 @@ use crate::{
 };
 use bulletproofs::range_proof::verify_less_than_or_equal;
 use core::fmt::{self, Display};
-use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
 use either::Either;
@@ -138,9 +137,9 @@ pub fn verify_cdi<
     };
 
     let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
-    transcript.append_message(b"cred_values", &to_bytes(&cdi.values));
-    transcript.append_message(b"global_context", &to_bytes(&global_context));
-    transcript.append_message(b"cred_values", &to_bytes(&proof));
+    transcript.append_message(b"cred_values", &cdi.values);
+    transcript.append_message(b"global_context", &global_context);
+    transcript.append_message(b"cred_values", &proof);
     if !verify_less_than_or_equal(
         &mut transcript,
         8,
