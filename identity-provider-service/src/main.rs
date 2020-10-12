@@ -3,6 +3,7 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crypto_common::{VERSION_0, Versioned};
 use curve_arithmetic::*;
@@ -54,6 +55,10 @@ async fn main() {
     let ip_data_contents = fs::read_to_string(opt.identity_provider_file).expect("Unable to read ip data file.");
     let ar_info_contents = fs::read_to_string(opt.anonymity_revokers_file).expect("Unable to read ar info file.");
     let global_context_contents = fs::read_to_string(opt.global_context_file).expect("Unable to read global context info file.");
+
+    let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(from_str(&ip_data_contents).expect("File did not contain a valid IpData object as JSON."));
+    let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(from_str(&ar_info_contents).expect("File did not contain a valid ArInfos object as JSON"));
+    let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(from_str(&global_context_contents).expect("File did not contain a valid GlobalContext object as JSON"));
     info!("Configurations have been loaded successfully.");
 
     let identity_route = warp::path("api")
@@ -63,7 +68,7 @@ async fn main() {
         .and(warp::query().map(move |input: Input| {
             let request_id = Uuid::new_v4();
             info!("flowId={}, message=\"Received request\"", request_id);
-            let result = validate_and_return_identity_object(&input.state, &ip_data_contents, &ar_info_contents, &global_context_contents);
+            let result = validate_and_return_identity_object(&input.state, Arc::clone(&ip_data), Arc::clone(&ar_info), Arc::clone(&global_context));
             info!("flowId={}, message=\"Completed processing request\"", request_id);
             result
         }));
@@ -75,16 +80,11 @@ async fn main() {
 }
 
 /// Validates the received request and if valid returns a signed identity object.
-fn validate_and_return_identity_object(state: &String, ip_data_contents: &String, ar_info_contents: &String, global_context_contents: &String) -> std::result::Result<warp::http::Response<String>, warp::http::Error>  {
+fn validate_and_return_identity_object(state: &String, ip_data: Arc<IpData<ExamplePairing>>, ar_info: Arc<ArInfos<ExampleCurve>>, global_context: Arc<GlobalContext<ExampleCurve>>) -> std::result::Result<warp::http::Response<String>, warp::http::Error>  {
     let request = match deserialize_request(state) {
         Ok(request) => request,
         Err(e) => return Response::builder().body(format!("Error during deserialization: {}", e))
     };
-
-    // FIXME: Performance optimization - howto borrow references (without cloning) to the de-serialized types to avoid parsing for each request?
-    let ip_data: IpData<ExamplePairing> = from_str(&ip_data_contents).expect("File did not contain a valid IpData object as JSON.");
-    let ar_info: ArInfos<ExampleCurve> = from_str(&ar_info_contents).expect("File did not contain a valid ArInfos object as JSON");
-    let global_context= from_str(&global_context_contents).expect("File did not contain a valid GlobalContext object as JSON");
 
     let context = IPContext {
         ip_info:        &ip_data.public_ip_info,
@@ -192,10 +192,14 @@ mod tests {
         let request = include_str!("../data/valid_request.json");
         let ip_data_contents = include_str!("../data/identity_provider.json");
         let ar_info_contents = include_str!("../data/anonymity_revokers.json");
-        let global_context = include_str!("../data/global.json");
+        let global_context_contents = include_str!("../data/global.json");
+
+        let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(from_str(&ip_data_contents).expect("File did not contain a valid IpData object as JSON."));
+        let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(from_str(&ar_info_contents).expect("File did not contain a valid ArInfos object as JSON"));
+        let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(from_str(&global_context_contents).expect("File did not contain a valid GlobalContext object as JSON"));
 
         // When
-        let response = validate_and_return_identity_object(&request.to_string(), &ip_data_contents.to_string(), &ar_info_contents.to_string(), &global_context.to_string());
+        let response = validate_and_return_identity_object(&request.to_string(), Arc::clone(&ip_data), Arc::clone(&ar_info), Arc::clone(&global_context));
 
         // Then (we return a JSON serialized IdentityObject that we verify by deserializing, and a revocation file was written that can also be deserialized)
         let _deserialized_identity_object: Versioned<IdentityObject<ExamplePairing, ExampleCurve, AttributeKind>> = from_str(response.unwrap().body()).unwrap();
@@ -212,10 +216,14 @@ mod tests {
         let request = include_str!("../data/fail_validation_request.json");
         let ip_data_contents = include_str!("../data/identity_provider.json");
         let ar_info_contents = include_str!("../data/anonymity_revokers.json");
-        let global_context = include_str!("../data/global.json");
+        let global_context_contents = include_str!("../data/global.json");
+
+        let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(from_str(&ip_data_contents).expect("File did not contain a valid IpData object as JSON."));
+        let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(from_str(&ar_info_contents).expect("File did not contain a valid ArInfos object as JSON"));
+        let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(from_str(&global_context_contents).expect("File did not contain a valid GlobalContext object as JSON"));
 
         // When
-        let response = validate_and_return_identity_object(&request.to_string(), &ip_data_contents.to_string(), &ar_info_contents.to_string(), &global_context.to_string());
+        let response = validate_and_return_identity_object(&request.to_string(), Arc::clone(&ip_data), Arc::clone(&ar_info), Arc::clone(&global_context));
 
         // Then (the zero knowledge proofs could not be verified, so we fail)
         assert!(response.unwrap().body().contains("The request could not be successfully validated by the identity provider"));
