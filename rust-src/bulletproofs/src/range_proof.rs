@@ -194,7 +194,7 @@ pub fn prove<C: Curve, T: Rng>(
         let v_scalar = C::scalar_from_u64(v_vec[j]);
         let v_value = Value::<C>::new(v_scalar);
         let V_j = v_keys.hide(&v_value, &v_j_tilde);
-        transcript.append_point(b"Vj", &V_j.0);
+        transcript.append_message(b"Vj", &V_j.0);
         V_vec.push(V_j);
     }
     let mut a_tilde_sum = C::Scalar::zero();
@@ -225,8 +225,8 @@ pub fn prove<C: Curve, T: Rng>(
     let table = multiexp_table(&GH_B_tilde, window_size);
     let A = multiexp_worker_given_table(&A_scalars, &table, window_size);
     let S = multiexp_worker_given_table(&S_scalars, &table, window_size);
-    transcript.append_point(b"A", &A);
-    transcript.append_point(b"S", &S);
+    transcript.append_message(b"A", &A);
+    transcript.append_message(b"S", &S);
     let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
     let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
 
@@ -325,8 +325,8 @@ pub fn prove<C: Curve, T: Rng>(
         .mul_by_scalar(&t_2_sum)
         .plus_point(&B_tilde.mul_by_scalar(&t_2_tilde_sum));
 
-    transcript.append_point(b"T1", &T_1);
-    transcript.append_point(b"T2", &T_2);
+    transcript.append_message(b"T1", &T_1);
+    transcript.append_message(b"T2", &T_2);
     let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
     // println!("prover's x = {:?}", x);
     let mut x2 = x;
@@ -380,9 +380,9 @@ pub fn prove<C: Curve, T: Rng>(
         e_tilde.add_assign(&ej_tilde);
     }
 
-    transcript.append_scalar::<C>(b"tx", &tx);
-    transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
-    transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
+    transcript.append_message(b"tx", &tx);
+    transcript.append_message(b"tx_tilde", &tx_tilde);
+    transcript.append_message(b"e_tilde", &e_tilde);
     let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
     let Q = B.mul_by_scalar(&w);
     // let mut H_prime : Vec<C> = Vec::with_capacity(nm);
@@ -462,7 +462,7 @@ pub fn verify_efficient<C: Curve>(
     let B = v_keys.g;
     let B_tilde = v_keys.h;
     for V in commitments {
-        transcript.append_point(b"Vj", &V.0);
+        transcript.append_message(b"Vj", &V.0);
     }
     let A = proof.A;
     let S = proof.S;
@@ -471,23 +471,23 @@ pub fn verify_efficient<C: Curve>(
     let tx = proof.tx;
     let tx_tilde = proof.tx_tilde;
     let e_tilde = proof.e_tilde;
-    transcript.append_point(b"A", &A);
-    transcript.append_point(b"S", &S);
+    transcript.append_message(b"A", &A);
+    transcript.append_message(b"S", &S);
     let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
     let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
     let mut z2 = z;
     z2.mul_assign(&z);
     let mut z3 = z2;
     z3.mul_assign(&z);
-    transcript.append_point(b"T1", &T_1);
-    transcript.append_point(b"T2", &T_2);
+    transcript.append_message(b"T1", &T_1);
+    transcript.append_message(b"T2", &T_2);
     let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
     let mut x2 = x;
     x2.mul_assign(&x);
     // println!("verifier's x = {:?}", x);
-    transcript.append_scalar::<C>(b"tx", &tx);
-    transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
-    transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
+    transcript.append_message(b"tx", &tx);
+    transcript.append_message(b"tx_tilde", &tx_tilde);
+    transcript.append_message(b"e_tilde", &e_tilde);
     let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
     // Calculate delta(x,y):
     let mut ip_1_y_nm = C::Scalar::zero();
@@ -702,13 +702,13 @@ mod tests {
             let v_j_tilde = Randomness::<C>::generate(csprng);
             v_tilde_vec.push(*v_j_tilde);
             let V_j = v_keys.hide(&v_value, &v_j_tilde);
-            transcript.append_point(b"Vj", &V_j.0);
+            transcript.append_message(b"Vj", &V_j.0);
             V_vec.push(V_j);
         }
         let A = C::zero_point();
         let S = C::zero_point();
-        transcript.append_point(b"A", &A);
-        transcript.append_point(b"S", &S);
+        transcript.append_message(b"A", &A);
+        transcript.append_message(b"S", &S);
         let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
         let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
         let z_m = z_vec(z, 0, usize::from(m));
@@ -728,8 +728,8 @@ mod tests {
         let mut tx: C::Scalar = C::Scalar::zero();
         let mut tx_tilde: C::Scalar = C::Scalar::zero();
         let e_tilde: C::Scalar = C::Scalar::zero();
-        transcript.append_point(b"T1", &T_1);
-        transcript.append_point(b"T2", &T_2);
+        transcript.append_message(b"T1", &T_1);
+        transcript.append_message(b"T2", &T_2);
         let _x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
         // println!("Cheating prover's x = {}", x);
         for j in 0..usize::from(m) {
@@ -830,7 +830,7 @@ mod tests {
         let B_tilde = v_keys.h;
         let m = commitments.len();
         for V in commitments.clone() {
-            transcript.append_point(b"Vj", &V.0);
+            transcript.append_message(b"Vj", &V.0);
         }
         let A = proof.A;
         let S = proof.S;
@@ -839,23 +839,23 @@ mod tests {
         let tx = proof.tx;
         let tx_tilde = proof.tx_tilde;
         let e_tilde = proof.e_tilde;
-        transcript.append_point(b"A", &A);
-        transcript.append_point(b"S", &S);
+        transcript.append_message(b"A", &A);
+        transcript.append_message(b"S", &S);
         let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
         let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
         let mut z2 = z;
         z2.mul_assign(&z);
         let mut z3 = z2;
         z3.mul_assign(&z);
-        transcript.append_point(b"T1", &T_1);
-        transcript.append_point(b"T2", &T_2);
+        transcript.append_message(b"T1", &T_1);
+        transcript.append_message(b"T2", &T_2);
         let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
         let mut x2 = x;
         x2.mul_assign(&x);
         // println!("verifier's x = {:?}", x);
-        transcript.append_scalar::<C>(b"tx", &tx);
-        transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
-        transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
+        transcript.append_message(b"tx", &tx);
+        transcript.append_message(b"tx_tilde", &tx_tilde);
+        transcript.append_message(b"e_tilde", &e_tilde);
         let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
         // Calculate delta(x,y):
         let mut ip_1_y_nm = C::Scalar::zero();
@@ -978,7 +978,7 @@ mod tests {
         let B_tilde = v_keys.h;
         let m = commitments.len();
         for V in commitments {
-            transcript.append_point(b"Vj", &V.0);
+            transcript.append_message(b"Vj", &V.0);
         }
         let A = proof.A;
         let S = proof.S;
@@ -987,23 +987,23 @@ mod tests {
         let tx = proof.tx;
         let tx_tilde = proof.tx_tilde;
         let e_tilde = proof.e_tilde;
-        transcript.append_point(b"A", &A);
-        transcript.append_point(b"S", &S);
+        transcript.append_message(b"A", &A);
+        transcript.append_message(b"S", &S);
         let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
         let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
         let mut z2 = z;
         z2.mul_assign(&z);
         let mut z3 = z2;
         z3.mul_assign(&z);
-        transcript.append_point(b"T1", &T_1);
-        transcript.append_point(b"T2", &T_2);
+        transcript.append_message(b"T1", &T_1);
+        transcript.append_message(b"T2", &T_2);
         let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
         let mut x2 = x;
         x2.mul_assign(&x);
         // println!("verifier's x = {:?}", x);
-        transcript.append_scalar::<C>(b"tx", &tx);
-        transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
-        transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
+        transcript.append_message(b"tx", &tx);
+        transcript.append_message(b"tx_tilde", &tx_tilde);
+        transcript.append_message(b"e_tilde", &e_tilde);
         let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
         // Calculate delta(x,y):
         let mut ip_1_y_nm = C::Scalar::zero();

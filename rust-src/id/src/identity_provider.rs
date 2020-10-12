@@ -5,7 +5,6 @@ use crate::{
     utils,
 };
 use bulletproofs::range_proof::verify_efficient;
-use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use elgamal::multicombine;
 use ff::Field;
@@ -60,17 +59,11 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
 
     let mut transcript = RandomOracle::domain("PreIdentityProof");
-    transcript.append_message(b"ctx", &to_bytes(&context.global_context));
-    transcript.append_message(
-        b"choice_ar_parameters",
-        &to_bytes(&pre_id_obj.choice_ar_parameters),
-    );
-    transcript.append_message(b"cmm_sc", &to_bytes(&pre_id_obj.cmm_sc));
-    transcript.append_message(b"cmm_prf", &to_bytes(&pre_id_obj.cmm_prf));
-    transcript.append_message(
-        b"cmm_prf_sharing_coeff",
-        &to_bytes(&pre_id_obj.cmm_prf_sharing_coeff),
-    );
+    transcript.append_message(b"ctx", &context.global_context);
+    transcript.append_message(b"choice_ar_parameters", &pre_id_obj.choice_ar_parameters);
+    transcript.append_message(b"cmm_sc", &pre_id_obj.cmm_sc);
+    transcript.append_message(b"cmm_prf", &pre_id_obj.cmm_prf);
+    transcript.append_message(b"cmm_prf_sharing_coeff", &pre_id_obj.cmm_prf_sharing_coeff);
 
     let id_cred_sec_verifier = dlog::Dlog {
         public: pre_id_obj.id_cred_pub,
@@ -193,7 +186,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         };
         let gens = &context.global_context.bulletproof_generators().take(32 * 8);
         let commitments = ciphers.iter().map(|x| Commitment(x.1)).collect::<Vec<_>>();
-        transcript.append_message(b"encrypted_share", &to_bytes(&ciphers));
+        transcript.append_message(b"encrypted_share", &ciphers);
         if verify_efficient(&mut transcript, 32, &commitments, &proof, gens, &keys).is_err() {
             return Err(Reason::IncorrectProof);
         }

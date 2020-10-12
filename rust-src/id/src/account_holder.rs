@@ -10,7 +10,6 @@ use bulletproofs::{
     inner_product_proof::inner_product,
     range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal},
 };
-use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
@@ -143,11 +142,11 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         threshold,
     };
     let mut transcript = RandomOracle::domain("PreIdentityProof");
-    transcript.append_message(b"ctx", &to_bytes(&context.global_context));
-    transcript.append_message(b"choice_ar_parameters", &to_bytes(&choice_ar_parameters));
-    transcript.append_message(b"cmm_sc", &to_bytes(&cmm_sc));
-    transcript.append_message(b"cmm_prf", &to_bytes(&cmm_prf));
-    transcript.append_message(b"cmm_prf_sharing_coeff", &to_bytes(&cmm_prf_sharing_coeff));
+    transcript.append_message(b"ctx", &context.global_context);
+    transcript.append_message(b"choice_ar_parameters", &choice_ar_parameters);
+    transcript.append_message(b"cmm_sc", &cmm_sc);
+    transcript.append_message(b"cmm_prf", &cmm_prf);
+    transcript.append_message(b"cmm_prf_sharing_coeff", &cmm_prf_sharing_coeff);
 
     for item in prf_key_data.iter() {
         let u8_chunk_size = u8::from(CHUNK_SIZE);
@@ -186,7 +185,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             enc_prf_key_share: item.encrypted_share,
             proof_com_enc_eq,
         }));
-        transcript.append_message(b"encrypted_share", &to_bytes(&item.encrypted_share));
+        transcript.append_message(b"encrypted_share", &item.encrypted_share);
 
         let cmm_key_bulletproof = PedersenKey {
             g: h_in_exponent,
@@ -654,9 +653,9 @@ where
     };
 
     let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
-    transcript.append_message(b"cred_values", &to_bytes(&cred_values));
-    transcript.append_message(b"global_context", &to_bytes(&context.global_context));
-    transcript.append_message(b"cred_values", &to_bytes(&proof));
+    transcript.append_message(b"cred_values", &cred_values);
+    transcript.append_message(b"global_context", &context.global_context);
+    transcript.append_message(b"cred_values", &proof);
     let cred_counter_less_than_max_accounts = match prove_less_than_or_equal(
         &mut transcript,
         &mut csprng,
