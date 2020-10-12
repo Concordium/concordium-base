@@ -571,7 +571,7 @@ where
     // Compute the challenge prefix by hashing the values.
     // FIXME: We should do something different here.
     // Eventually we'll have to include the genesis hash.
-    let ro = RandomOracle::domain("credential")
+    let mut ro = RandomOracle::domain("credential")
         .append(&cred_values)
         .append(&context.global_context);
 
@@ -646,17 +646,16 @@ where
     });
 
     let secret = ((secret_reg_id, secret_sig), id_cred_pub_secrets);
-    // FIXME: Pass in a mutable random-oracle so it can be extended.
-    let proof = match prove(&mut ro.split(), &prover, secret, &mut csprng) {
-        // todo simon no split?
+    let proof = match prove(&mut ro, &prover, secret, &mut csprng) {
         Some(x) => x,
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
+    //todo simon transcript vs ro?
     let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
     transcript.append_message(b"cred_values", &cred_values);
     transcript.append_message(b"global_context", &context.global_context);
-    transcript.append_message(b"cred_values", &proof);
+    transcript.append_message(b"proof", &proof);
     let cred_counter_less_than_max_accounts = match prove_less_than_or_equal(
         &mut transcript,
         &mut csprng,

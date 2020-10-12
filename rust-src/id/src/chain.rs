@@ -67,7 +67,7 @@ pub fn verify_cdi<
     let gens = global_context.bulletproof_generators();
     let ip_verify_key = &ip_info.ip_verify_key;
     // Compute the challenge prefix by hashing the values.
-    let ro = RandomOracle::domain("credential")
+    let mut ro = RandomOracle::domain("credential")
         .append(&cdi.values)
         .append(&global_context);
 
@@ -136,10 +136,11 @@ pub fn verify_cdi<
         witness,
     };
 
+    //todo simon transcript vs ro?
     let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
     transcript.append_message(b"cred_values", &cdi.values);
     transcript.append_message(b"global_context", &global_context);
-    transcript.append_message(b"cred_values", &proof);
+    transcript.append_message(b"proof", &proof);
     if !verify_less_than_or_equal(
         &mut transcript,
         8,
@@ -152,8 +153,7 @@ pub fn verify_cdi<
         return Err(CDIVerificationError::Proof);
     }
 
-    if !verify(&mut ro.split(), &verifier, &proof) {
-        // todo simon no split?
+    if !verify(&mut ro, &verifier, &proof) {
         return Err(CDIVerificationError::Proof);
     }
 
