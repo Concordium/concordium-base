@@ -11,6 +11,7 @@ use id::{
     identity_provider::{sign_identity_object, validate_request as ip_validate_request},
     types::*,
 };
+use log::info;
 use pairing::bls12_381::{Bls12, G1};
 use serde::Deserialize;
 use serde_json::{from_str, from_value, to_string, Value};
@@ -34,14 +35,16 @@ struct Input {
 
 #[tokio::main]
 async fn main() {
-    println!("Reading the provided IP and AR configurations.");
+    env_logger::init();
+
+    info!("Reading the provided IP and AR configurations.");
     let args: Vec<String> = env::args().collect();
     let ip_data_filename = &args[1];
     let ar_info_filename = &args[2];
 
     let ip_data_contents = fs::read_to_string(ip_data_filename).expect("Unable to read ip data file.");
     let ar_info_contents = fs::read_to_string(ar_info_filename).expect("Unable to read ar info file.");
-    println!("Configurations have been loaded successfully.");
+    info!("Configurations have been loaded successfully.");
 
     let identity_route = warp::path("api")
         .and(warp::path("identity"))
@@ -49,13 +52,13 @@ async fn main() {
         .and(warp::get())
         .and(warp::query().map(move |input: Input| {
             let request_id = Uuid::new_v4();
-            println!("flowId={}, message=\"Received request\"", request_id);
+            info!("flowId={}, message=\"Received request\"", request_id);
             let result = validate_and_return_identity_object(&input.state, &ip_data_contents, &ar_info_contents);
-            println!("flowId={}, message=\"Completed processing request\"", request_id);
+            info!("flowId={}, message=\"Completed processing request\"", request_id);
             result
         }));
 
-    println!("Booting up HTTP server. Listening on port 8100.");
+    info!("Booting up HTTP server. Listening on port 8100.");
     warp::serve(identity_route)
         .run(([0, 0, 0, 0], 8100))
         .await;
