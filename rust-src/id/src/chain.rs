@@ -152,7 +152,8 @@ pub fn verify_cdi<
         return Err(CDIVerificationError::Proof);
     }
 
-    if !verify(ro.split(), &verifier, &proof) {
+    if !verify(&mut ro.split(), &verifier, &proof) {
+        // todo simon no split?
         return Err(CDIVerificationError::Proof);
     }
 

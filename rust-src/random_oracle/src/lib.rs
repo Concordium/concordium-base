@@ -95,15 +95,14 @@ impl RandomOracle {
     /// Append all items from an iterator to the random oracle. Equivalent to
     /// repeatedly calling append in sequence.
     /// Returns the new state of the random oracle, consuming the initial state.
-    pub fn extend_from<'a, I, B: 'a>(self, iter: I) -> Self
+    pub fn extend_from<'a, I, B: 'a>(&mut self, iter: I)
+    // todo simon add domain separation
     where
         B: Serial,
         I: IntoIterator<Item = &'a B>, {
-        let mut ro = self;
         for i in iter.into_iter() {
-            ro.add(i)
+            self.add(i)
         }
-        ro
     }
 
     /// Append all items from an iterator to the random oracle. Equivalent to
@@ -197,7 +196,8 @@ mod tests {
             for x in v1.iter() {
                 s1.add(x);
             }
-            let s2 = RandomOracle::empty().extend_from(v1.iter());
+            let mut s2 = RandomOracle::empty();
+            s2.extend_from(v1.iter());
             let res1 = s1.result();
             let ref_res1: &[u8] = res1.as_ref();
             let res2 = s2.result();
