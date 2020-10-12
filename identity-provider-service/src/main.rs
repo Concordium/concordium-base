@@ -176,28 +176,31 @@ mod tests {
     #[test]
     fn test_successful_validation_and_response() {
         // Given
-        let request = fs::read_to_string("data/valid_request.json").unwrap();
-        let ip_data_contents = fs::read_to_string("data/identity_provider.json").unwrap();
-        let ar_info_contents = fs::read_to_string("data/anonymity_revokers.json").unwrap();
+        let request = include_str!("../data/valid_request.json");
+        let ip_data_contents = include_str!("../data/identity_provider.json");
+        let ar_info_contents = include_str!("../data/anonymity_revokers.json");
 
         // When
-        let response = validate_and_return_identity_object(&request, &ip_data_contents, &ar_info_contents);
+        let response = validate_and_return_identity_object(&request.to_string(), &ip_data_contents.to_string(), &ar_info_contents.to_string());
 
         // Then (we return a JSON serialized IdentityObject that we verify by deserializing, and a revocation file was written that can also be deserialized)
         let _deserialized_identity_object: Versioned<IdentityObject<ExamplePairing, ExampleCurve, AttributeKind>> = from_str(response.unwrap().body()).unwrap();
         let revocation_record = fs::read_to_string("revocation_record_storage.data").unwrap();
         let _revocation_record: AnonymityRevocationRecord<ExampleCurve> = from_str(&revocation_record).unwrap();
+
+        // Cleanup the generated revocation_record_storage.data file to make the test idempotent.
+        fs::remove_file("revocation_record_storage.data").unwrap();
     }
 
     #[test]
     fn test_verify_failed_validation() {
         // Given
-        let request = fs::read_to_string("data/fail_validation_request.json").unwrap();
-        let ip_data_contents = fs::read_to_string("data/identity_provider.json").unwrap();
-        let ar_info_contents = fs::read_to_string("data/anonymity_revokers.json").unwrap();
+        let request = include_str!("../data/fail_validation_request.json");
+        let ip_data_contents = include_str!("../data/identity_provider.json");
+        let ar_info_contents = include_str!("../data/anonymity_revokers.json");
 
         // When
-        let response = validate_and_return_identity_object(&request, &ip_data_contents, &ar_info_contents);
+        let response = validate_and_return_identity_object(&request.to_string(), &ip_data_contents.to_string(), &ar_info_contents.to_string());
 
         // Then (the zero knowledge proofs could not be verified, so we fail)
         assert!(response.unwrap().body().contains("The request could not be successfully validated by the identity provider"));
