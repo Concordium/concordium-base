@@ -195,7 +195,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         r_s:         s_prime_chunks_as_rand,
         s:           S_prime_rand_as_value,
     };
-    let sigma_proof = prove(&mut ro.split(), &protocol, secret, csprng)?;
+    let sigma_proof = prove(ro, &protocol, secret, csprng)?;
     let cmm_key_bulletproof_a = CommitmentKey {
         g: *generator,
         h: pk_receiver.key,
@@ -218,7 +218,6 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         .iter()
         .map(|x| PedersenRandomness::new(*(x.as_ref())))
         .collect();
-    ro.append_message(b"sigmaproof", &sigma_proof);
     let bulletproof_a = bulletprove(
         ro,
         csprng,
@@ -333,7 +332,7 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         r_s:         s_prime_chunks_as_rand,
         s:           S_prime_rand_as_value,
     };
-    let sigma_proof = prove(&mut ro.split(), &protocol, secret, csprng)?; // todo simon no split
+    let sigma_proof = prove(ro, &protocol, secret, csprng)?;
     let cmm_key_bulletproof_s_prime = CommitmentKey {
         g: *generator,
         h: pk.key,
@@ -348,7 +347,6 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         .map(|x| PedersenRandomness::new(*(x.as_ref())))
         .collect();
 
-    ro.append_message(b"sigmaproof", &sigma_proof); // todo simon
     let bulletproof_s_prime = bulletprove(
         ro,
         csprng,
@@ -422,8 +420,7 @@ pub fn verify_enc_trans<C: Curve>(
         &transaction.remaining_amount.as_ref(),
         &generator,
     );
-    if !verify(&mut ro.split(), &protocol, &transaction.proof.accounting) {
-        // todo simon no split
+    if !verify(ro, &protocol, &transaction.proof.accounting) {
         return Err(VerificationError::SigmaProofError);
     }
     let num_chunks = 64 / usize::from(u8::from(CHUNK_SIZE));
@@ -453,7 +450,7 @@ pub fn verify_enc_trans<C: Curve>(
         g: *generator,
         h: pk_sender.key,
     };
-    ro.append_message(b"sigmaproof", &transaction.proof.accounting); // todo simon
+
     let first_bulletproof = verify_efficient(
         ro,
         u8::from(CHUNK_SIZE),
@@ -516,8 +513,8 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
         &transaction.remaining_amount.as_ref(),
         &generator,
     );
-    if !verify(&mut ro.split(), &protocol, &transaction.proof.accounting) {
-        return Err(VerificationError::SigmaProofError); // todo simon no split
+    if !verify(ro, &protocol, &transaction.proof.accounting) {
+        return Err(VerificationError::SigmaProofError);
     }
 
     let num_chunks = 64 / usize::from(u8::from(CHUNK_SIZE));
@@ -538,7 +535,7 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
     // Number of bits in each chunk, determines the upper bound that needs to be
     // ensured.
     let num_bits_in_chunk = (64 / num_chunks) as u8; // as is safe here because the number is < 64
-    ro.append_message(b"sigmaproof", &transaction.proof.accounting); // todo simon
+
     let bulletproof = verify_efficient(
         ro,
         num_bits_in_chunk,
