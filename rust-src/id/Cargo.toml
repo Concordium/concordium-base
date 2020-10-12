@@ -5,7 +5,6 @@ authors = ["Concordium AG <contact@concordium.com>"]
 edition = "2018"
 
 [dependencies]
-merlin = { version = "2", default-features = false }
 ff = "0.5"
 sha3 = "0.9"
 sha2 = "0.9"
