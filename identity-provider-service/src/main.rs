@@ -25,6 +25,8 @@ type ExampleCurve = G1;
 type ExamplePairing = Bls12;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
 
+/// Holds the query parameters expected by the service.
+/// * state: contains the JSON serialized and URL encoded identity request object.
 #[derive(Deserialize)]
 struct Input {
     state: String
