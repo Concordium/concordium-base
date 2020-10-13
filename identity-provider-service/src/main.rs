@@ -100,7 +100,7 @@ async fn main() {
 /// Validates the received request and if valid returns a signed identity
 /// object.
 fn validate_and_return_identity_object(
-    state: &String,
+    state: &str,
     ip_data: Arc<IpData<ExamplePairing>>,
     ar_info: Arc<ArInfos<ExampleCurve>>,
     global_context: Arc<GlobalContext<ExampleCurve>>,
@@ -185,7 +185,7 @@ fn validate_and_return_identity_object(
 /// Deserialize the received request. Give a proper error message if it was not
 /// possible, or if incorrect version of the request was received.
 fn deserialize_request(
-    request: &String,
+    request: &str,
 ) -> std::result::Result<PreIdentityObject<Bls12, ExampleCurve>, String> {
     let v: Value = match from_str(request) {
         Ok(v) => v,
@@ -208,14 +208,14 @@ fn deserialize_request(
         }
     };
 
-    return if request.version != VERSION_0 {
+    if request.version != VERSION_0 {
         Err(format!(
             "The received request version number is unsupported: [version={}]",
             &request.version
         ))
     } else {
         Ok(request.value)
-    };
+    }
 }
 
 /// Creates and saves the revocation record to the file system (which should be
@@ -224,7 +224,7 @@ fn save_revocation_record(
     pre_identity_object: &PreIdentityObject<Bls12, ExampleCurve>,
 ) -> std::result::Result<bool, String> {
     let ar_record = AnonymityRevocationRecord {
-        id_cred_pub: pre_identity_object.id_cred_pub.clone(),
+        id_cred_pub: pre_identity_object.id_cred_pub,
         ar_data:     pre_identity_object.ip_ar_data.clone(),
     };
 
@@ -245,13 +245,13 @@ fn save_revocation_record(
         }
     };
 
-    return match writeln!(file, "{}", serialized_ar_record) {
+    match writeln!(file, "{}", serialized_ar_record) {
         Ok(_result) => Ok(true),
         Err(e) => Err(format!(
             "Failed writing anonymization revocation record to file: {}",
             e
         )),
-    };
+    }
 }
 
 #[cfg(test)]
