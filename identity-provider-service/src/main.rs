@@ -15,6 +15,7 @@ use structopt::StructOpt;
 use uuid::Uuid;
 use warp::{
     http::{Response, StatusCode},
+    hyper::header::CONTENT_TYPE,
     Filter,
 };
 
@@ -176,10 +177,12 @@ fn validate_and_return_identity_object(
         signature,
     };
     let versioned_id = Versioned::new(VERSION_0, id);
-    Response::builder().body(
-        to_string(&versioned_id)
-            .expect("JSON serialization of the identity object should not fail."),
-    )
+    Response::builder()
+        .header(CONTENT_TYPE, "application/json")
+        .body(
+            to_string(&versioned_id)
+                .expect("JSON serialization of the identity object should not fail."),
+        )
 }
 
 /// Deserialize the received request. Give a proper error message if it was not
