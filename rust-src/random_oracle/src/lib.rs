@@ -138,6 +138,20 @@ impl RandomOracle {
             challenge: self.result().into(),
         }
     }
+
+    /// Append the input to the state of the oracle, using `label` as domain
+    /// separation.
+    pub fn append_message<S: Serial, B: AsRef<[u8]>>(&mut self, label: B, message: &S) {
+        self.add_bytes(label);
+        self.add(message)
+    }
+
+    /// Get a challenge in the form of a Scalar, using `label` as domain
+    /// separation.
+    pub fn challenge_scalar<C: Curve, B: AsRef<[u8]>>(&mut self, label: B) -> C::Scalar {
+        self.add_bytes(label);
+        self.split().result_to_scalar::<C>()
+    }
 }
 
 #[cfg(test)]

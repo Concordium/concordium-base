@@ -10,7 +10,6 @@ use bulletproofs::{
     inner_product_proof::inner_product,
     range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal},
 };
-use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -18,7 +17,6 @@ use either::Either;
 use elgamal::{multicombine, Cipher};
 use failure::Fallible;
 use ff::Field;
-use merlin::Transcript;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey as PedersenKey,
     randomness::Randomness as PedersenRandomness, value::Value,
@@ -143,18 +141,12 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         ar_identities,
         threshold,
     };
-    let mut transcript = Transcript::new(r"PreIdentityProof".as_ref());
-    transcript.append_message(b"ctx", &to_bytes(&context.global_context));
-    transcript.append_message(b"choice_ar_parameters", &to_bytes(&choice_ar_parameters));
-    transcript.append_message(b"cmm_sc", &to_bytes(&cmm_sc));
-    transcript.append_message(b"cmm_prf", &to_bytes(&cmm_prf));
-    transcript.append_message(b"cmm_prf_sharing_coeff", &to_bytes(&cmm_prf_sharing_coeff));
-    let mut ro = RandomOracle::domain("PreIdentityProof")
-        .append(&context.global_context)
-        .append(&choice_ar_parameters)
-        .append(&cmm_sc)
-        .append(&cmm_prf)
-        .append(&cmm_prf_sharing_coeff);
+    let mut transcript = RandomOracle::domain("PreIdentityProof");
+    transcript.append_message(b"ctx", &context.global_context);
+    transcript.append_message(b"choice_ar_parameters", &choice_ar_parameters);
+    transcript.append_message(b"cmm_sc", &cmm_sc);
+    transcript.append_message(b"cmm_prf", &cmm_prf);
+    transcript.append_message(b"cmm_prf_sharing_coeff", &cmm_prf_sharing_coeff);
 
     for item in prf_key_data.iter() {
         let u8_chunk_size = u8::from(CHUNK_SIZE);
@@ -193,8 +185,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             enc_prf_key_share: item.encrypted_share,
             proof_com_enc_eq,
         }));
-        ro.add(&item.encrypted_share);
-        transcript.append_message(b"encrypted_share", &to_bytes(&item.encrypted_share));
+        transcript.append_message(b"encrypted_share", &item.encrypted_share);
 
         let cmm_key_bulletproof = PedersenKey {
             g: h_in_exponent,
@@ -223,8 +214,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     });
 
     let secret = (secret, replicated_secrets);
-    ro = ro.append(&bulletproofs);
-    let proof = prove(ro, &prover, secret, &mut csprng)?;
+    transcript.append_message(b"bulletproofs", &bulletproofs);
+    let proof = prove(transcript, &prover, secret, &mut csprng)?;
 
     let ip_ar_data = ip_ar_data
         .iter()
@@ -661,6 +652,7 @@ where
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
+
     // A list of signatures on the challenge used by the other proofs using the
     // account keys.
     // The challenge has domain separator "credential" followed by appending all
@@ -671,10 +663,11 @@ where
     // credential deployment should make it non-reusable.
     let to_sign = ro.get_challenge();
 
-    let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
-    transcript.append_message(b"cred_values", &to_bytes(&cred_values));
-    transcript.append_message(b"global_context", &to_bytes(&context.global_context));
-    transcript.append_message(b"cred_values", &to_bytes(&proof));
+    let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
+    transcript.append_message(b"cred_values", &cred_values);
+    transcript.append_message(b"global_context", &context.global_context);
+    transcript.append_message(b"cred_values", &proof);
+
     let cred_counter_less_than_max_accounts = match prove_less_than_or_equal(
         &mut transcript,
         &mut csprng,
