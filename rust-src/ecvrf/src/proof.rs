@@ -16,15 +16,15 @@ use crypto_common::*;
 /// Implements https://tools.ietf.org/id/draft-irtf-cfrg-vrf-07.html#rfc.section.5.4.3
 pub fn hash_points(pts: &[CompressedEdwardsY]) -> Scalar {
     let mut hash: Sha512 = Sha512::new();
-    hash.input(SUITE_STRING);
-    hash.input(TWO_STRING);
+    hash.update(SUITE_STRING);
+    hash.update(TWO_STRING);
     for p in pts {
-        hash.input(p.to_bytes());
+        hash.update(p.to_bytes());
     }
-    hash.input(ZERO_STRING);
+    hash.update(ZERO_STRING);
     let mut c_bytes: [u8; 32] = [0; 32];
     // taking first n=16 bytes of the hash
-    c_bytes[0..16].copy_from_slice(&hash.result().as_slice()[0..16]);
+    c_bytes[0..16].copy_from_slice(&hash.finalize().as_slice()[0..16]);
     Scalar::from_bytes_mod_order(c_bytes)
 }
 
@@ -90,7 +90,7 @@ impl Proof {
             .chain(p.compress().to_bytes())
             .chain(ZERO_STRING);
         let mut c_bytes: [u8; 64] = [0; 64];
-        c_bytes.copy_from_slice(&hash.result().as_slice());
+        c_bytes.copy_from_slice(&hash.finalize().as_slice());
         c_bytes
     }
 }

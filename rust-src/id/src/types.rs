@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use base58check::*;
-use bulletproofs::range_proof::Generators;
+use bulletproofs::range_proof::{Generators, RangeProof};
 use byteorder::ReadBytesExt;
 use crypto_common::*;
 use crypto_common_derive::*;
@@ -15,7 +15,7 @@ use curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either;
-use elgamal::{Cipher, Message, SecretKey as ElgamalSecretKey};
+use elgamal::{ChunkSize, Cipher, Message, SecretKey as ElgamalSecretKey};
 use ff::Field;
 use hex::{decode, encode};
 use pedersen_scheme::{
@@ -45,7 +45,10 @@ pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
 /// This is currently the number required, since the only
 /// place these are used is for encrypted amounts.
-pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 2;
+pub const NUM_BULLETPROOF_GENERATORS: usize = 32 * 8;
+
+/// Chunk size for encryption of prf key
+pub const CHUNK_SIZE: ChunkSize = ChunkSize::ThirtyTwo;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct AccountAddress([u8; ACCOUNT_ADDRESS_SIZE]);
@@ -116,7 +119,7 @@ impl AccountAddress {
     pub fn new<C: Curve>(reg_id: &C) -> Self {
         let mut out = [0; ACCOUNT_ADDRESS_SIZE];
         let hasher = Sha256::new().chain(&to_bytes(reg_id));
-        out.copy_from_slice(&hasher.result());
+        out.copy_from_slice(&hasher.finalize());
         AccountAddress(out)
     }
 }
@@ -253,7 +256,7 @@ impl fmt::Display for IpIdentity {
     SerdeSerialize,
     SerdeDeserialize,
 )]
-#[serde(try_from = "u32", into = "u32")]
+#[serde(into = "u32", try_from = "u32")]
 /// Identity of the anonymity revoker on the chain. This defines their
 /// evaluation point for secret sharing, and thus it cannot be 0.
 pub struct ArIdentity(u32);
@@ -290,6 +293,15 @@ impl TryFrom<u32> for ArIdentity {
         } else {
             Ok(ArIdentity(value))
         }
+    }
+}
+
+impl FromStr for ArIdentity {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let x = u32::from_str(s).map_err(|_| "Could not read u32.")?;
+        ArIdentity::try_from(x)
     }
 }
 
@@ -643,14 +655,32 @@ pub struct AccCredentialInfo<C: Curve> {
 #[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
-    #[serde(rename = "encPrfKeyShare")]
-    pub enc_prf_key_share: Cipher<C>,
+    /// Encryption in chunks (in little endian) of the PRF key share
+    #[serde(
+        rename = "encPrfKeyShare",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub enc_prf_key_share: [Cipher<C>; 8],
     /// Witness to the proof that the computed commitment to the share
     /// contains the same value as the encryption
     /// the commitment to the share is not sent but computed from
     /// the commitments to the sharing coefficients
     #[serde(rename = "proofComEncEq")]
     pub proof_com_enc_eq: com_enc_eq::Witness<C>,
+}
+
+/// Data structure for when a anonymity revoker decrypts its encrypted share
+/// This is the decrypted counterpart of IpArData.
+#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct IpArDecryptedData<C: Curve> {
+    /// identity of the anonymity revoker
+    #[serde(rename = "arIdentity")]
+    pub ar_identity: ArIdentity,
+    /// share of prf key
+    #[serde(rename = "prfKeyShare")]
+    pub prf_key_share: Value<C>,
 }
 
 /// Data relating to a single anonymity revoker sent by the account holder to
@@ -683,6 +713,9 @@ pub struct ChainArDecryptedData<C: Curve> {
     pub id_cred_pub_share: Message<C>,
 }
 
+// NOTE: This struct is redundant, but we will
+// will keep it for now for compatibility.
+// We need to remove it in the future.
 /// Choice of anonymity revocation parameters
 #[derive(SerdeSerialize, SerdeDeserialize, Serialize)]
 pub struct ChoiceArParameters {
@@ -709,6 +742,9 @@ pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// second commitment to the prf key (hidden in cmm_prf_sharing_coeff)
     /// are hiding the same value.
     pub commitments_prf_same: com_eq_different_groups::Witness<P::G1, C>,
+    /// Bulletproofs for showing that chunks are small so that encryption
+    /// of the prf key can be decrypted
+    pub bulletproofs: Vec<RangeProof<C>>,
 }
 
 /// A type alias for the combined proofs relating to the shared encryption of
@@ -956,6 +992,8 @@ pub struct CredDeploymentProofs<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// deploying proofs on own account.
     /// We could consider replacing this proof by just a list of signatures.
     pub proof_acc_sk: AccountOwnershipProof,
+    /// Proof that cred_counter is less than or equal to max_accounts
+    pub cred_counter_less_than_max_accounts: RangeProof<C>,
 }
 
 // This is an unfortunate situation, but we need to manually write a
@@ -972,6 +1010,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Serial for CredDeploymentPro
         tmp_out.put(&self.proof_ip_sig);
         tmp_out.put(&self.proof_reg_id);
         tmp_out.put(&self.proof_acc_sk);
+        tmp_out.put(&self.cred_counter_less_than_max_accounts);
         let len: u32 = tmp_out.len() as u32; // safe
         out.put(&len);
         out.write_all(&tmp_out).expect("Writing to buffer is safe.");
@@ -992,6 +1031,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
         let proof_ip_sig = limited.get()?;
         let proof_reg_id = limited.get()?;
         let proof_acc_sk = limited.get()?;
+        let cred_counter_less_than_max_accounts = limited.get()?;
         if limited.limit() == 0 {
             Ok(CredDeploymentProofs {
                 sig,
@@ -1001,6 +1041,7 @@ impl<P: Pairing, C: Curve<Scalar = P::ScalarField>> Deserial for CredDeploymentP
                 proof_ip_sig,
                 proof_reg_id,
                 proof_acc_sk,
+                cred_counter_less_than_max_accounts,
             })
         } else {
             bail!("Length information is inaccurate. Credential proofs not valid.")
@@ -1203,7 +1244,7 @@ impl SerdeSerialize for CredentialAccount {
 impl<'de> SerdeDeserialize<'de> for CredentialAccount {
     fn deserialize<D: Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
         // expect a map, but also handle string
-        des.deserialize_map(CredentialAccountVisitor)
+        des.deserialize_any(CredentialAccountVisitor)
     }
 }
 
@@ -1331,11 +1372,44 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     /// signed by the identity provider, and permuting the list will invalidate
     /// the signature from the identity provider.
     #[map_size_length = 2]
-    #[serde(rename = "arData")]
+    #[serde(rename = "arData", deserialize_with = "deserialize_ar_data")]
     pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
     /// Policy of this credential object.
     #[serde(rename = "policy")]
     pub policy: Policy<C, AttributeType>,
+}
+
+fn deserialize_ar_data<'de, D: de::Deserializer<'de>, C: Curve>(
+    des: D,
+) -> Result<BTreeMap<ArIdentity, ChainArData<C>>, D::Error> {
+    #[derive(Default)]
+    struct ArIdentityVisitor<C>(std::marker::PhantomData<C>);
+
+    impl<'de, C: Curve> Visitor<'de> for ArIdentityVisitor<C> {
+        type Value = BTreeMap<ArIdentity, ChainArData<C>>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            write!(
+                formatter,
+                "An object with integer keys and ChainArData values."
+            )
+        }
+
+        fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+        where
+            A: de::MapAccess<'de>, {
+            let mut map = map;
+            let mut res = BTreeMap::new();
+            while let Some((k, v)) = map.next_entry::<String, _>()? {
+                let k = ArIdentity::from_str(&k)
+                    .map_err(|_| de::Error::custom("Cannot read ArIdentity key."))?;
+                res.insert(k, v);
+            }
+            Ok(res)
+        }
+    }
+
+    des.deserialize_map(ArIdentityVisitor(std::default::Default::default()))
 }
 
 #[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
@@ -1715,6 +1789,7 @@ pub struct AnonymityRevocationRecord<C: Curve> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519::Signer;
 
     #[test]
     fn test_serde_sig() {

@@ -187,7 +187,7 @@ must be a valid JSON object with fields
   or directly received from another account in another transfer. It must be a JSON object with the fields:
       - `"aggEncryptedAmount"` ... the ciphered amount
       - `"aggAmount"` ... the amount on plaintext
-      - `"index"` ... the index up to which the encrypted amounts on the account have been combined.
+      - `"aggIndex"` ... the index up to which the encrypted amounts on the account have been combined.
 
 The returned value is a JSON object with the following fields:
 
@@ -300,7 +300,7 @@ must be a valid JSON object with fields
   or directly received from another account in another transfer. It must be a JSON object with the fields:
       - `"aggEncryptedAmount"` ... the ciphered amount
       - `"aggAmount"` ... the amount on plaintext
-      - `"index"` ... the index up to which the encrypted amounts on the account have been combined.
+      - `"aggIndex"` ... the index up to which the encrypted amounts on the account have been combined.
 
 The returned value is a JSON object with the following fields:
 
@@ -387,14 +387,3 @@ The binary can then be run with the following inputs:
 }
 ```
 where {...} is the response as it used to be.
-
-
-# Temporary functionality for testing until Notabene libraries are available on a new endpoint
-
-The library currently provides a
-`char* id_object_response_ext(char*, uint8_t*);`
-
-function that accepts a single JSON string that has the same format as the
-request to the identity provider (example at
-[id_request-input.json](files/id_request-input.json)), and the same response,
-exemplified in [id_request-output.json](files/id_request-output.json)
