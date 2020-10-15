@@ -4,9 +4,13 @@ use crate::{
     types::*,
     utils,
 };
+use bulletproofs::range_proof::verify_less_than_or_equal;
 use core::fmt::{self, Display};
+use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
+use ed25519_dalek::Verifier;
 use either::Either;
+use merlin::Transcript;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
@@ -48,35 +52,26 @@ pub fn verify_cdi<
 >(
     global_context: &GlobalContext<C>,
     ip_info: &IpInfo<P>,
-    ars_infos: &BTreeMap<ArIdentity, A>,
-    acc_keys: Option<&AccountKeys>,
-    cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
-) -> Result<(), CDIVerificationError> {
-    verify_cdi_worker(
-        &global_context.on_chain_commitment_key,
-        &ip_info.ip_verify_key,
-        &ars_infos,
-        acc_keys,
-        cdi,
-    )
-}
-
-fn verify_cdi_worker<
-    P: Pairing,
-    C: Curve<Scalar = P::ScalarField>,
-    AttributeType: Attribute<C::Scalar>,
-    A: HasArPublicKey<C>,
->(
-    on_chain_commitment_key: &CommitmentKey<C>,
-    ip_verify_key: &ps_sig::PublicKey<P>,
     // NB: The following map only needs to be a superset of the ars
     // in the cdi.
     known_ars: &BTreeMap<ArIdentity, A>,
     acc_keys: Option<&AccountKeys>,
     cdi: &CredentialDeploymentInfo<P, C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
+    // We need to check that the threshold is actually equal to
+    // the number of coefficients in the sharing polynomial
+    // (corresponding to the degree+1)
+    let rt_usize: usize = cdi.values.threshold.into();
+    if rt_usize != cdi.proofs.commitments.cmm_id_cred_sec_sharing_coeff.len() {
+        return Err(CDIVerificationError::AR);
+    }
+    let on_chain_commitment_key = global_context.on_chain_commitment_key;
+    let gens = global_context.bulletproof_generators();
+    let ip_verify_key = &ip_info.ip_verify_key;
     // Compute the challenge prefix by hashing the values.
-    let ro = RandomOracle::domain("credential").append(&cdi.values);
+    let ro = RandomOracle::domain("credential")
+        .append(&cdi.values)
+        .append(&global_context);
 
     let commitments = &cdi.proofs.commitments;
 
@@ -89,7 +84,7 @@ fn verify_cdi_worker<
             Commitment(cdi.values.reg_id),
             Commitment(on_chain_commitment_key.g),
         ],
-        cmm_key: *on_chain_commitment_key,
+        cmm_key: on_chain_commitment_key,
     };
     // FIXME: Figure out a pattern to get rid of these clone's.
     let witness_reg_id = cdi.proofs.proof_reg_id.clone();
@@ -98,7 +93,7 @@ fn verify_cdi_worker<
     let proofs = &cdi.proofs;
 
     let verifier_sig = pok_sig_verifier(
-        on_chain_commitment_key,
+        &on_chain_commitment_key,
         cdi.values.threshold,
         &cdi.values
             .ar_data
@@ -107,7 +102,7 @@ fn verify_cdi_worker<
             .collect::<BTreeSet<ArIdentity>>(),
         &cdi.values.policy,
         &commitments,
-        ip_verify_key,
+        &ip_verify_key,
         &cdi.proofs.sig,
     );
     let verifier_sig = if let Some(v) = verifier_sig {
@@ -119,7 +114,7 @@ fn verify_cdi_worker<
     let witness_sig = cdi.proofs.proof_ip_sig.clone();
 
     let (id_cred_pub_verifier, id_cred_pub_witnesses) = id_cred_pub_verifier(
-        on_chain_commitment_key,
+        &on_chain_commitment_key,
         known_ars,
         &cdi.values.ar_data,
         &commitments.cmm_id_cred_sec_sharing_coeff,
@@ -142,6 +137,22 @@ fn verify_cdi_worker<
         challenge: cdi.proofs.challenge,
         witness,
     };
+
+    let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
+    transcript.append_message(b"cred_values", &to_bytes(&cdi.values));
+    transcript.append_message(b"global_context", &to_bytes(&global_context));
+    transcript.append_message(b"cred_values", &to_bytes(&proof));
+    if !verify_less_than_or_equal(
+        &mut transcript,
+        8,
+        &cdi.proofs.commitments.cmm_cred_counter,
+        &cdi.proofs.commitments.cmm_max_accounts,
+        &cdi.proofs.cred_counter_less_than_max_accounts,
+        &gens,
+        &on_chain_commitment_key,
+    ) {
+        return Err(CDIVerificationError::Proof);
+    }
 
     if !verify(ro.split(), &verifier, &proof) {
         return Err(CDIVerificationError::Proof);
@@ -213,7 +224,7 @@ fn verify_cdi_worker<
         }
     };
 
-    let check_policy = verify_policy(on_chain_commitment_key, &commitments, &cdi.values.policy);
+    let check_policy = verify_policy(&on_chain_commitment_key, &commitments, &cdi.values.policy);
 
     if !check_policy {
         return Err(CDIVerificationError::Policy);
@@ -252,10 +263,11 @@ fn id_cred_pub_verifier<C: Curve, A: HasArPublicKey<C>>(
             .get(ar_id)
             .ok_or(CDIVerificationError::IdCredPub)?;
         let item_prover = com_enc_eq::ComEncEq {
-            cipher:     ar_data.enc_id_cred_pub_share,
+            cipher: ar_data.enc_id_cred_pub_share,
             commitment: cmm_share,
-            pub_key:    *ar_info.get_public_key(),
-            cmm_key:    *commitment_key,
+            pub_key: *ar_info.get_public_key(),
+            cmm_key: *commitment_key,
+            encryption_in_exponent_generator: ar_info.get_public_key().generator,
         };
         provers.push(item_prover);
         witnesses.push(witness.clone());

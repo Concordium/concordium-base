@@ -194,7 +194,7 @@ impl Deserial for Signature {
     fn deserial<R: ReadBytesExt>(source: &mut R) -> Fallible<Self> {
         let mut buf = [0u8; SIGNATURE_LENGTH];
         source.read_exact(&mut buf)?;
-        Ok(Signature::from_bytes(&buf)?)
+        Ok(Signature::new(buf))
     }
 }
 

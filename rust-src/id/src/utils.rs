@@ -1,7 +1,9 @@
 use crate::{secret_sharing::Threshold, types::*};
-use curve_arithmetic::Curve;
+use curve_arithmetic::{Curve, Value};
+use elgamal::*;
 use ff::{Field, PrimeField};
 use pedersen_scheme::Commitment;
+use rand::*;
 
 use failure::Fallible;
 use std::collections::BTreeSet;
@@ -36,6 +38,70 @@ pub fn evaluate_poly<F: Field, R: AsRef<F>>(coeffs: &[R], point: &F) -> F {
         eval.add_assign(rand.as_ref());
     }
     eval
+}
+
+/// This function is used for encryption of the PRF key share in chunks,
+/// where the chunks are written in little endian.
+/// The arguments are
+/// - context - the global context,
+/// - pk - the public key for encryption
+/// - share - the share we want to encrypt
+/// The output is a 3-tuple concisting of
+/// 8 Cipher's, 8 Randomness's and 8 scalars.
+/// The ciphers and randomnesses come from the
+/// encryption in chunks itself.
+/// The scalars are the chunks themselves (in little endian).
+#[allow(clippy::type_complexity)]
+pub fn encrypt_prf_share<C: Curve, R: Rng>(
+    context: &GlobalContext<C>,
+    pk: &PublicKey<C>,
+    share: &Value<C>,
+    csprng: &mut R,
+) -> ([Cipher<C>; 8], [Randomness<C>; 8], [C::Scalar; 8]) {
+    // The generator for encryption in the exponent is the second component of the
+    // commitment key, the 'h'.
+    let h = context.encryption_in_exponent_generator();
+    // let mut ciphers = encrypt_in_chunks_given_generator(pk, share, CHUNK_SIZE, h,
+    // csprng);
+    let chunks = value_to_chunks::<C>(share, CHUNK_SIZE);
+    let mut ciphers = pk.encrypt_exponent_vec_given_generator(&chunks, h, csprng);
+    // these are guaranteed to exist because we used `ChunkSize::ThirtyTwo`. The
+    // encryptions are in little-endian limbs, so the last one is the encryption
+    // of the high bits.
+    let (encryption_8, randomness_8) = ciphers.pop().unwrap();
+    let (encryption_7, randomness_7) = ciphers.pop().unwrap();
+    let (encryption_6, randomness_6) = ciphers.pop().unwrap();
+    let (encryption_5, randomness_5) = ciphers.pop().unwrap();
+    let (encryption_4, randomness_4) = ciphers.pop().unwrap();
+    let (encryption_3, randomness_3) = ciphers.pop().unwrap();
+    let (encryption_2, randomness_2) = ciphers.pop().unwrap();
+    let (encryption_1, randomness_1) = ciphers.pop().unwrap();
+
+    let enc = [
+        encryption_1,
+        encryption_2,
+        encryption_3,
+        encryption_4,
+        encryption_5,
+        encryption_6,
+        encryption_7,
+        encryption_8,
+    ];
+    let rand = [
+        randomness_1,
+        randomness_2,
+        randomness_3,
+        randomness_4,
+        randomness_5,
+        randomness_6,
+        randomness_7,
+        randomness_8,
+    ];
+    let chunks = [
+        *chunks[0], *chunks[1], *chunks[2], *chunks[3], *chunks[4], *chunks[5], *chunks[6],
+        *chunks[7],
+    ];
+    (enc, rand, chunks)
 }
 
 /// Encode attribute tags into a big-integer bits. The tags are encoded from

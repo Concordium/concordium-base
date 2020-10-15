@@ -20,17 +20,13 @@ build/
 *.lock
 dist/
 
-rust-src/target/
+**/target/
 *.json
 /.dir-locals.el
 *.bin
-rust-bins/target
 /rust-bins/wallet-notes/example
-mobile_wallet/target/
 pkg
 /idiss/node
-/idiss/Cargo.lock
-idiss/target
 *.hie
 *.iml
 lib/
