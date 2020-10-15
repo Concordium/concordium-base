@@ -11,7 +11,6 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-merlin = { version = "2", default-features = false }
 pairing = "0.15"
 ff = "0.5"
 rand = "=0.7"
@@ -25,6 +24,10 @@ version = "0"
 
 [dependencies.crypto_common]
 path = "../crypto_common"
+version = "0"
+
+[dependencies.random_oracle]
+path = "../random_oracle"
 version = "0"
 
 [dependencies.pedersen_scheme]
