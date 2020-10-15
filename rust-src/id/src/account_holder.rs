@@ -12,7 +12,7 @@ use bulletproofs::{
 };
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
-use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
+use ed25519_dalek as ed25519;
 use either::Either;
 use elgamal::{multicombine, Cipher};
 use failure::Fallible;
@@ -652,10 +652,21 @@ where
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
+    // A list of signatures on the challenge used by the other proofs using the
+    // account keys.
+    // The challenge has domain separator "credential" followed by appending all
+    // values of the credential to the ro, specifically appending the
+    // CredentialDeploymentValues struct.
+    //
+    // The domain seperator in combination with appending all the data of the
+    // credential deployment should make it non-reusable.
+    let to_sign = ro.get_challenge();
+
     let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
     transcript.append_message(b"cred_values", &cred_values);
     transcript.append_message(b"global_context", &context.global_context);
     transcript.append_message(b"cred_values", &proof);
+
     let cred_counter_less_than_max_accounts = match prove_less_than_or_equal(
         &mut transcript,
         &mut csprng,
@@ -671,20 +682,13 @@ where
         None => bail!("Cannot produce proof that cred_counter <= max_accounts."),
     };
 
-    // Proof of knowledge of the secret keys of the account.
-    // TODO: This might be replaced by just signatures.
-    // What we do now is take all the keys in acc_data and provide a proof of
-    // knowledge of the key.
-    // FIXME: This should be integrated into the other proofs.
     let proof_acc_sk = AccountOwnershipProof {
-        proofs: acc_data
+        sigs: acc_data
             .keys
             .iter()
             .map(|(&idx, kp)| {
-                (
-                    idx,
-                    eddsa_dlog::prove_dlog_ed25519(ro.split(), &kp.public, &kp.secret),
-                )
+                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
+                (idx, expanded_sk.sign(to_sign.as_ref(), &kp.public).into())
             })
             .collect(),
     };
@@ -1164,7 +1168,7 @@ mod tests {
 
         // Check cred_account
         let cred_account_ok = match cdi.values.cred_account {
-            CredentialAccount::NewAccount(k, t) => k.len() == 3 && t == sigthres,
+            CredentialAccount::NewAccount(ref k, t) => k.len() == 3 && t == sigthres,
             _ => false,
         };
         assert!(cred_account_ok, "CDI cred_account is invalid");
@@ -1202,6 +1206,29 @@ mod tests {
 
         // Check policy
         assert_eq!(cdi.values.policy, policy, "CDI policy is invalid");
+
+        // Check account key signatures
+        match cdi.values.cred_account {
+            CredentialAccount::ExistingAccount(_) => (),
+            CredentialAccount::NewAccount(ref ks, _) => {
+                assert_eq!(ks.len(), cdi.proofs.proof_acc_sk.sigs.len())
+            }
+        };
+        let sig_msg = RandomOracle::domain("credential")
+            .append(&cdi.values)
+            .append(&global_ctx)
+            .get_challenge();
+        cdi.proofs.proof_acc_sk.sigs.iter().for_each(|(idx, sig)| {
+            match acc_data
+                .keys
+                .get(idx)
+                .unwrap()
+                .verify(sig_msg.as_ref(), &sig)
+            {
+                Ok(_) => (),
+                _ => panic!("account key signature is invalid"),
+            }
+        });
 
         // Add checks for proofs
     }
