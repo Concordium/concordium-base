@@ -652,7 +652,6 @@ where
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
-
     // A list of signatures on the challenge used by the other proofs using the
     // account keys.
     // The challenge has domain separator "credential" followed by appending all
