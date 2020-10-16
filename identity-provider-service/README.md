@@ -6,9 +6,11 @@ a signed identity that the calling wallet can retrieve.
 
 # How to build and run
 
-Move to the identity-provider-service directory and run:
+To build the executables move to the identity-provider-service directory and run:
 
 ```cargo build --release```
+
+## Identity provider service
 
 Navigate next to the generated binary and run (remember to update paths to your files):
 
@@ -17,9 +19,15 @@ Navigate next to the generated binary and run (remember to update paths to your 
 Here identity_provider_file.json points to the file path for a file containing a JSON representation of the IpData type, and 
 anonymity_revokers_file.json refers to a file containing the JSON representation of the ArsInfos type.
 
-## Configuration file examples
+### Configuration file examples
 
 An example of each file type can be found in the `data` directory of the module.
+
+## Identity verifier service
+
+Move to the identity-provider-service directory and run:
+
+```./identity_verifier```
 
 # Service flow description
 
