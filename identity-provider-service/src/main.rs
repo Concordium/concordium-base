@@ -29,6 +29,7 @@ type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, Attri
 #[derive(Deserialize)]
 struct Input {
     state: String,
+    redirect_uri: String,
 }
 
 /// Structure used to receive the correct command line arguments by using
@@ -111,7 +112,7 @@ async fn main() {
                 Arc::clone(&ar_info),
                 Arc::clone(&global_context),
             );
-            return (validated_pre_identity_object, Arc::clone(&ip_data));
+            return (validated_pre_identity_object, Arc::clone(&ip_data), input.redirect_uri);
         }))
         .and_then(create_signed_identity_object);
 
@@ -126,9 +127,10 @@ async fn main() {
 /// that is then signed and saved. If successful a re-direct to the URL where
 /// the identity object is available is returned.
 async fn create_signed_identity_object(
-    (request, ip_data): (
+    (request, ip_data, response_url): (
         Result<PreIdentityObject<Bls12, ExampleCurve>, String>,
         Arc<IpData<ExamplePairing>>,
+        String,
     ),
 ) -> Result<impl warp::Reply, Infallible> {
     let request = match request {
@@ -238,16 +240,12 @@ async fn create_signed_identity_object(
         }
     };
 
+    let callback_location = response_url.clone() + "#token=" + &serialized_versioned_id;
+
     return Ok(Response::builder()
-        .header(
-            LOCATION,
-            format!(
-                "/api/identity/{}",
-                base16_encoded_id_cred_pub
-            ),
-        )
+        .header(LOCATION, callback_location)
         .status(StatusCode::FOUND)
-        .body("Redirecting to identity object.".to_string()));
+        .body(format!("api/identity/{}", base16_encoded_id_cred_pub)));
 }
 
 /// Deserializes the received pre-identity-object and then validates it. The
