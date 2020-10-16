@@ -31,13 +31,6 @@ struct Input {
     state: String,
 }
 
-/// Holds the base16 serialized id_cred_pub that the caller wants to retrieve the corresponding
-/// identity object for.
-#[derive(Deserialize)]
-struct Identity {
-    id_cred_pub: String,
-}
-
 /// Structure used to receive the correct command line arguments by using
 /// StructOpt.
 #[derive(Debug, StructOpt)]
@@ -89,10 +82,9 @@ async fn main() {
     let retrieve_identity = warp::get()
         .and(warp::path("api"))
         .and(warp::path("identity"))
-        .and(warp::path("retrieve"))
-        .and(warp::query().map(|identity: Identity| {
-            info!("Queried for receiving identity: {}", identity.id_cred_pub);
-            match fs::read_to_string(format!("database/identity/{}", identity.id_cred_pub)) {
+        .and(warp::path!(String).map(|id_cred_pub| {
+            info!("Queried for receiving identity: {}", id_cred_pub);
+            match fs::read_to_string(format!("database/identity/{}", id_cred_pub)) {
                 Ok(identity_object) => {
                     info!("Identity object found");
                     Response::builder()
@@ -108,7 +100,7 @@ async fn main() {
             }
         }));
 
-    let identity_route = warp::path("api")
+    let create_identity = warp::path("api")
         .and(warp::path("identity"))
         .and(warp::path::end())
         .and(warp::get())
@@ -124,7 +116,7 @@ async fn main() {
         .and_then(create_signed_identity_object);
 
     info!("Booting up HTTP server. Listening on port 8100.");
-    warp::serve(identity_route.or(retrieve_identity))
+    warp::serve(create_identity.or(retrieve_identity))
         .run(([0, 0, 0, 0], 8100))
         .await;
 }
@@ -174,6 +166,11 @@ async fn create_signed_identity_object(
                 )))
         }
     };
+
+    // At this point the identity has been verified, and the identity provider constructs the
+    // identity object and signs it. An anonymity revocation record and the identity object
+    // are persisted, so that they can be retrieved when needed. The constructed response
+    // contains a redirect to a webservice that returns the identity object constructed here.
 
     // This is hardcoded for the proof-of-concept.
     let now = YearMonth::now();
@@ -245,7 +242,7 @@ async fn create_signed_identity_object(
         .header(
             LOCATION,
             format!(
-                "/api/identity/retrieve?id_cred_pub={}",
+                "/api/identity/{}",
                 base16_encoded_id_cred_pub
             ),
         )
