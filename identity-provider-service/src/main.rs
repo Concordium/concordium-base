@@ -1,7 +1,7 @@
 use std::{fs, fs::OpenOptions, io::prelude::*, path::PathBuf, sync::Arc};
 use std::convert::Infallible;
 
-use crypto_common::{VERSION_0, Versioned};
+use crypto_common::{VERSION_0, Versioned, base16_encode_string};
 use curve_arithmetic::*;
 use id::{
     ffi::AttributeKind,
@@ -73,6 +73,10 @@ async fn main() {
         from_str(&global_context_contents)
             .expect("File did not contain a valid GlobalContext object as JSON"),
     );
+
+    // Create the 'database' directories for storing IdentityObjects and AnonymityRevocationRecords.
+    fs::create_dir_all("database/revocation").expect("Unable to create revocation directory.");
+    fs::create_dir_all("database/identity").expect("Unable to create identity directory");
     info!("Configurations have been loaded successfully.");
 
     let identity_route = warp::path("api")
@@ -89,12 +93,17 @@ async fn main() {
     warp::serve(identity_route).run(([0, 0, 0, 0], 8100)).await;
 }
 
+/// Asks the identity verifier to verify the person and return the associated attribute list.
+/// The attribute list is used to create the identity object that is then signed and returned.
 async fn create_signed_identity_object((request, ip_data) : (Result<PreIdentityObject<Bls12, ExampleCurve>, String>, Arc<IpData<ExamplePairing>>)) -> Result<impl warp::Reply, Infallible> {
     let request = match request {
         Ok(request) => request,
         Err(e) => return Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(format!("Failed validation of pre-identity-object: {}", e)))
     };
 
+    // Identity verification process between the identity provider and the identity verifier. In
+    // this example the identity verifier is queried and will always just return static attribute
+    // list without doing any actual verification of an identity.
     let client = Client::new();
     let attribute_list = match client.post("http://localhost:8101/api/verify").send().await {
         Ok(attribute_list) => match attribute_list.json().await {
@@ -129,7 +138,9 @@ async fn create_signed_identity_object((request, ip_data) : (Result<PreIdentityO
         Err(e) => return Ok(Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(format!("It was not possible to sign the identity object: {}", e)))
     };
 
-    match save_revocation_record(&request) {
+    let base16_encoded_id_cred_pub = base16_encode_string(&request.id_cred_pub);
+
+    match save_revocation_record(&request, base16_encoded_id_cred_pub.clone()) {
         Ok(_saved) => (),
         Err(e) => return Ok(Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(e))
     };
@@ -142,6 +153,13 @@ async fn create_signed_identity_object((request, ip_data) : (Result<PreIdentityO
 
     let versioned_id = Versioned::new(VERSION_0, id);
     let serialized_versioned_id = to_string(&versioned_id).unwrap();
+
+    // Store a record containing the created IdentityObject.
+    match store_record(&serialized_versioned_id, base16_encoded_id_cred_pub, "identity".to_string()) {
+        Ok(_saved) => (),
+        Err(e) => return Ok(Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(e))
+    };
+
     return Ok(Response::builder().header(CONTENT_TYPE, "application/json").body(serialized_versioned_id));
 }
 
@@ -210,35 +228,43 @@ fn deserialize_request(
 /// a database, but for the proof-of-concept we use the file system).
 fn save_revocation_record(
     pre_identity_object: &PreIdentityObject<Bls12, ExampleCurve>,
-) -> std::result::Result<bool, String> {
+    base16_id_cred_pub: String
+) -> std::result::Result<(), String> {
     let ar_record = AnonymityRevocationRecord {
         id_cred_pub: pre_identity_object.id_cred_pub,
         ar_data:     pre_identity_object.ip_ar_data.clone(),
     };
 
     let serialized_ar_record = to_string(&ar_record).unwrap();
+    return store_record(&serialized_ar_record, base16_id_cred_pub, "revocation".to_string());
+}
 
+/// Writes record to the provided subdirectory under 'database/'. The filename is set to id_cred_pub,
+/// which is expected to be the base16 serialized id_cred_pub.
+fn store_record(record: &String, id_cred_pub: String, directory: String) -> std::result::Result<(), String> {
     let mut file = match OpenOptions::new()
         .write(true)
         .append(true)
         .create(true)
-        .open("revocation_record_storage.data")
+        .open(format!("database/{}/{}", directory, id_cred_pub))
     {
         Ok(file) => file,
         Err(e) => {
             return Err(format!(
-                "Failed accessing anonymization revocation record file: {}",
+                "Failed accessing {} file: {}",
+                directory,
                 e
             ))
         }
     };
 
-    match writeln!(file, "{}", serialized_ar_record) {
-        Ok(_result) => Ok(true),
+    match writeln!(file, "{}", record) {
+        Ok(_result) => Ok(()),
         Err(e) => Err(format!(
-            "Failed writing anonymization revocation record to file: {}",
+            "Failed writing {} to file: {}",
+            directory,
             e
-        )),
+        ))
     }
 }
 
