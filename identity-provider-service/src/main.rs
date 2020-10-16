@@ -102,7 +102,7 @@ async fn create_signed_identity_object((request, ip_data) : (Result<PreIdentityO
     };
 
     // Identity verification process between the identity provider and the identity verifier. In
-    // this example the identity verifier is queried and will always just return static attribute
+    // this example the identity verifier is queried and will always just return a static attribute
     // list without doing any actual verification of an identity.
     let client = Client::new();
     let attribute_list = match client.post("http://localhost:8101/api/verify").send().await {
@@ -268,87 +268,73 @@ fn store_record(record: &String, id_cred_pub: String, directory: String) -> std:
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     #[test]
-//     fn test_successful_validation_and_response() {
-//         // Given
-//         let request = include_str!("../data/valid_request.json");
-//         let ip_data_contents = include_str!("../data/identity_provider.json");
-//         let ar_info_contents = include_str!("../data/anonymity_revokers.json");
-//         let global_context_contents = include_str!("../data/global.json");
-//
-//         let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(
-//             from_str(&ip_data_contents)
-//                 .expect("File did not contain a valid IpData object as JSON."),
-//         );
-//         let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
-//             from_str(&ar_info_contents)
-//                 .expect("File did not contain a valid ArInfos object as JSON"),
-//         );
-//         let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
-//             from_str(&global_context_contents)
-//                 .expect("File did not contain a valid GlobalContext object as JSON"),
-//         );
-//
-//         // When
-//         let response = validate_and_return_identity_object(
-//             &request.to_string(),
-//             Arc::clone(&ip_data),
-//             Arc::clone(&ar_info),
-//             Arc::clone(&global_context),
-//         );
-//
-//         // Then (we return a JSON serialized IdentityObject that we verify by
-//         // deserializing, and a revocation file was written that can also be
-//         // deserialized)
-//         let _deserialized_identity_object: Versioned<
-//             IdentityObject<ExamplePairing, ExampleCurve, AttributeKind>,
-//         > = from_str(response.unwrap().body()).unwrap();
-//         let revocation_record = fs::read_to_string("revocation_record_storage.data").unwrap();
-//         let _revocation_record: AnonymityRevocationRecord<ExampleCurve> =
-//             from_str(&revocation_record).unwrap();
-//
-//         // Cleanup the generated revocation_record_storage.data file to make the test
-//         // idempotent.
-//         fs::remove_file("revocation_record_storage.data").unwrap();
-//     }
-//
-//     #[test]
-//     fn test_verify_failed_validation() {
-//         // Given
-//         let request = include_str!("../data/fail_validation_request.json");
-//         let ip_data_contents = include_str!("../data/identity_provider.json");
-//         let ar_info_contents = include_str!("../data/anonymity_revokers.json");
-//         let global_context_contents = include_str!("../data/global.json");
-//
-//         let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(
-//             from_str(&ip_data_contents)
-//                 .expect("File did not contain a valid IpData object as JSON."),
-//         );
-//         let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
-//             from_str(&ar_info_contents)
-//                 .expect("File did not contain a valid ArInfos object as JSON"),
-//         );
-//         let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
-//             from_str(&global_context_contents)
-//                 .expect("File did not contain a valid GlobalContext object as JSON"),
-//         );
-//
-//         // When
-//         let response = validate_and_return_identity_object(
-//             &request.to_string(),
-//             Arc::clone(&ip_data),
-//             Arc::clone(&ar_info),
-//             Arc::clone(&global_context),
-//         );
-//
-//         // Then (the zero knowledge proofs could not be verified, so we fail)
-//         assert!(response
-//             .unwrap()
-//             .body()
-//             .contains("The request could not be successfully validated by the identity provider"));
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_successful_validation_and_response() {
+        // Given
+        let request = include_str!("../data/valid_request.json");
+        let ip_data_contents = include_str!("../data/identity_provider.json");
+        let ar_info_contents = include_str!("../data/anonymity_revokers.json");
+        let global_context_contents = include_str!("../data/global.json");
+
+        let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(
+            from_str(&ip_data_contents)
+                .expect("File did not contain a valid IpData object as JSON."),
+        );
+        let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
+            from_str(&ar_info_contents)
+                .expect("File did not contain a valid ArInfos object as JSON"),
+        );
+        let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
+            from_str(&global_context_contents)
+                .expect("File did not contain a valid GlobalContext object as JSON"),
+        );
+
+        // When
+        let response = validate_pre_identity_object(
+            &request.to_string(),
+            Arc::clone(&ip_data),
+            Arc::clone(&ar_info),
+            Arc::clone(&global_context),
+        );
+
+        // Then
+        assert!(response.is_ok());
+    }
+
+    #[test]
+    fn test_verify_failed_validation() {
+        // Given
+        let request = include_str!("../data/fail_validation_request.json");
+        let ip_data_contents = include_str!("../data/identity_provider.json");
+        let ar_info_contents = include_str!("../data/anonymity_revokers.json");
+        let global_context_contents = include_str!("../data/global.json");
+
+        let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(
+            from_str(&ip_data_contents)
+                .expect("File did not contain a valid IpData object as JSON."),
+        );
+        let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
+            from_str(&ar_info_contents)
+                .expect("File did not contain a valid ArInfos object as JSON"),
+        );
+        let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
+            from_str(&global_context_contents)
+                .expect("File did not contain a valid GlobalContext object as JSON"),
+        );
+
+        // When
+        let response = validate_pre_identity_object(
+            &request.to_string(),
+            Arc::clone(&ip_data),
+            Arc::clone(&ar_info),
+            Arc::clone(&global_context),
+        );
+
+        // Then (the zero knowledge proofs could not be verified, so we fail)
+        assert!(response.is_err());
+    }
+}
