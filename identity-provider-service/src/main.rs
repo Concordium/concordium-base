@@ -1,7 +1,6 @@
-use std::{fs, fs::OpenOptions, io::prelude::*, path::PathBuf, sync::Arc};
-use std::convert::Infallible;
+use std::{convert::Infallible, fs, fs::OpenOptions, io::prelude::*, path::PathBuf, sync::Arc};
 
-use crypto_common::{VERSION_0, Versioned, base16_encode_string};
+use crypto_common::{base16_encode_string, Versioned, VERSION_0};
 use curve_arithmetic::*;
 use id::{
     ffi::AttributeKind,
@@ -15,9 +14,9 @@ use serde::Deserialize;
 use serde_json::{from_str, from_value, to_string, Value};
 use structopt::StructOpt;
 use warp::{
-    Filter,
     http::{Response, StatusCode},
-    hyper::header::CONTENT_TYPE,
+    hyper::header::{CONTENT_TYPE, LOCATION},
+    Filter,
 };
 
 type ExampleCurve = G1;
@@ -74,43 +73,99 @@ async fn main() {
             .expect("File did not contain a valid GlobalContext object as JSON"),
     );
 
-    // Create the 'database' directories for storing IdentityObjects and AnonymityRevocationRecords.
+    // Create the 'database' directories for storing IdentityObjects and
+    // AnonymityRevocationRecords.
     fs::create_dir_all("database/revocation").expect("Unable to create revocation directory.");
     fs::create_dir_all("database/identity").expect("Unable to create identity directory");
     info!("Configurations have been loaded successfully.");
+
+    let retrieve_identity = warp::get()
+        .and(warp::path("api"))
+        .and(warp::path("identity"))
+        .and(warp::path("retrieve"))
+        .and(warp::query().map(|input: Input| {
+            info!("Queried for receiving identity: {}", input.state);
+            match fs::read_to_string(format!("database/identity/{}", input.state)) {
+                Ok(identity_object) => {
+                    info!("Identity object found");
+                    Response::builder()
+                        .header(CONTENT_TYPE, "application/json")
+                        .body(identity_object)
+                }
+                Err(_e) => {
+                    info!("Identity object does not exist");
+                    Response::builder()
+                        .status(StatusCode::NOT_FOUND)
+                        .body("The identity is not available.".to_string())
+                }
+            }
+        }));
 
     let identity_route = warp::path("api")
         .and(warp::path("identity"))
         .and(warp::path::end())
         .and(warp::get())
         .and(warp::query().map(move |input: Input| {
-            let validated_pre_identity_object = validate_pre_identity_object(&input.state, Arc::clone(&ip_data), Arc::clone(&ar_info), Arc::clone(&global_context));
-            return (validated_pre_identity_object, Arc::clone(&ip_data))
+            let validated_pre_identity_object = validate_pre_identity_object(
+                &input.state,
+                Arc::clone(&ip_data),
+                Arc::clone(&ar_info),
+                Arc::clone(&global_context),
+            );
+            return (validated_pre_identity_object, Arc::clone(&ip_data));
         }))
         .and_then(create_signed_identity_object);
 
     info!("Booting up HTTP server. Listening on port 8100.");
-    warp::serve(identity_route).run(([0, 0, 0, 0], 8100)).await;
+    warp::serve(identity_route.or(retrieve_identity))
+        .run(([0, 0, 0, 0], 8100))
+        .await;
 }
 
-/// Asks the identity verifier to verify the person and return the associated attribute list.
-/// The attribute list is used to create the identity object that is then signed and returned.
-async fn create_signed_identity_object((request, ip_data) : (Result<PreIdentityObject<Bls12, ExampleCurve>, String>, Arc<IpData<ExamplePairing>>)) -> Result<impl warp::Reply, Infallible> {
+/// Asks the identity verifier to verify the person and return the associated
+/// attribute list. The attribute list is used to create the identity object
+/// that is then signed and saved. If successful a re-direct to the URL where
+/// the identity object is available is returned.
+async fn create_signed_identity_object(
+    (request, ip_data): (
+        Result<PreIdentityObject<Bls12, ExampleCurve>, String>,
+        Arc<IpData<ExamplePairing>>,
+    ),
+) -> Result<impl warp::Reply, Infallible> {
     let request = match request {
         Ok(request) => request,
-        Err(e) => return Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(format!("Failed validation of pre-identity-object: {}", e)))
+        Err(e) => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(format!("Failed validation of pre-identity-object: {}", e)))
+        }
     };
 
-    // Identity verification process between the identity provider and the identity verifier. In
-    // this example the identity verifier is queried and will always just return a static attribute
-    // list without doing any actual verification of an identity.
+    // Identity verification process between the identity provider and the identity
+    // verifier. In this example the identity verifier is queried and will
+    // always just return a static attribute list without doing any actual
+    // verification of an identity.
     let client = Client::new();
     let attribute_list = match client.post("http://localhost:8101/api/verify").send().await {
         Ok(attribute_list) => match attribute_list.json().await {
             Ok(attribute_list) => attribute_list,
-            Err(e) => return Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(format!("Unable to deserialize attribute list received from identity verifier: {}", e)))
+            Err(e) => {
+                return Ok(Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(format!(
+                        "Unable to deserialize attribute list received from identity verifier: {}",
+                        e
+                    )))
+            }
         },
-        Err(e) => return Ok(Response::builder().status(StatusCode::SERVICE_UNAVAILABLE).body(format!("The identity verifier service is unavailable. Try again later: {}", e)))
+        Err(e) => {
+            return Ok(Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .body(format!(
+                    "The identity verifier service is unavailable. Try again later: {}",
+                    e
+                )))
+        }
     };
 
     // This is hardcoded for the proof-of-concept.
@@ -135,14 +190,25 @@ async fn create_signed_identity_object((request, ip_data) : (Result<PreIdentityO
         &ip_data.ip_secret_key,
     ) {
         Ok(signature) => signature,
-        Err(e) => return Ok(Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(format!("It was not possible to sign the identity object: {}", e)))
+        Err(e) => {
+            return Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(format!(
+                    "It was not possible to sign the identity object: {}",
+                    e
+                )))
+        }
     };
 
     let base16_encoded_id_cred_pub = base16_encode_string(&request.id_cred_pub);
 
     match save_revocation_record(&request, base16_encoded_id_cred_pub.clone()) {
         Ok(_saved) => (),
-        Err(e) => return Ok(Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(e))
+        Err(e) => {
+            return Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(e))
+        }
     };
 
     let id = IdentityObject {
@@ -155,25 +221,42 @@ async fn create_signed_identity_object((request, ip_data) : (Result<PreIdentityO
     let serialized_versioned_id = to_string(&versioned_id).unwrap();
 
     // Store a record containing the created IdentityObject.
-    match store_record(&serialized_versioned_id, base16_encoded_id_cred_pub, "identity".to_string()) {
+    match store_record(
+        &serialized_versioned_id,
+        base16_encoded_id_cred_pub.clone(),
+        "identity".to_string(),
+    ) {
         Ok(_saved) => (),
-        Err(e) => return Ok(Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(e))
+        Err(e) => {
+            return Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(e))
+        }
     };
 
-    return Ok(Response::builder().header(CONTENT_TYPE, "application/json").body(serialized_versioned_id));
+    return Ok(Response::builder()
+        .header(
+            LOCATION,
+            format!(
+                "http://localhost:8100/api/identity/retrieve?state={}",
+                base16_encoded_id_cred_pub
+            ),
+        )
+        .status(StatusCode::FOUND)
+        .body("Redirecting to identity object.".to_string()));
 }
 
-/// Deserializes the received pre-identity-object and then validates it. The output is the
-/// deserialized pre-identity-object to be used later.
+/// Deserializes the received pre-identity-object and then validates it. The
+/// output is the deserialized pre-identity-object to be used later.
 fn validate_pre_identity_object(
     state: &str,
     ip_data: Arc<IpData<ExamplePairing>>,
     ar_info: Arc<ArInfos<ExampleCurve>>,
-    global_context: Arc<GlobalContext<ExampleCurve>>
+    global_context: Arc<GlobalContext<ExampleCurve>>,
 ) -> Result<PreIdentityObject<Bls12, ExampleCurve>, String> {
     let request = match deserialize_request(state) {
         Ok(request) => request,
-        Err(e) => return Err(format!("{}", e))
+        Err(e) => return Err(format!("{}", e)),
     };
 
     let context = IPContext {
@@ -184,8 +267,11 @@ fn validate_pre_identity_object(
 
     return match ip_validate_request(&request, context) {
         Ok(_validation_result) => return Ok(request),
-        Err(e) => Err(format!("The request could not be successfully validated by the identity provider: {}", e))
-    }
+        Err(e) => Err(format!(
+            "The request could not be successfully validated by the identity provider: {}",
+            e
+        )),
+    };
 }
 
 /// Deserialize the received request. Give a proper error message if it was not
@@ -228,7 +314,7 @@ fn deserialize_request(
 /// a database, but for the proof-of-concept we use the file system).
 fn save_revocation_record(
     pre_identity_object: &PreIdentityObject<Bls12, ExampleCurve>,
-    base16_id_cred_pub: String
+    base16_id_cred_pub: String,
 ) -> std::result::Result<(), String> {
     let ar_record = AnonymityRevocationRecord {
         id_cred_pub: pre_identity_object.id_cred_pub,
@@ -236,35 +322,33 @@ fn save_revocation_record(
     };
 
     let serialized_ar_record = to_string(&ar_record).unwrap();
-    return store_record(&serialized_ar_record, base16_id_cred_pub, "revocation".to_string());
+    return store_record(
+        &serialized_ar_record,
+        base16_id_cred_pub,
+        "revocation".to_string(),
+    );
 }
 
-/// Writes record to the provided subdirectory under 'database/'. The filename is set to id_cred_pub,
-/// which is expected to be the base16 serialized id_cred_pub.
-fn store_record(record: &String, id_cred_pub: String, directory: String) -> std::result::Result<(), String> {
+/// Writes record to the provided subdirectory under 'database/'. The filename
+/// is set to id_cred_pub, which is expected to be the base16 serialized
+/// id_cred_pub.
+fn store_record(
+    record: &String,
+    id_cred_pub: String,
+    directory: String,
+) -> std::result::Result<(), String> {
     let mut file = match OpenOptions::new()
         .write(true)
-        .append(true)
         .create(true)
         .open(format!("database/{}/{}", directory, id_cred_pub))
     {
         Ok(file) => file,
-        Err(e) => {
-            return Err(format!(
-                "Failed accessing {} file: {}",
-                directory,
-                e
-            ))
-        }
+        Err(e) => return Err(format!("Failed accessing {} file: {}", directory, e)),
     };
 
     match writeln!(file, "{}", record) {
         Ok(_result) => Ok(()),
-        Err(e) => Err(format!(
-            "Failed writing {} to file: {}",
-            directory,
-            e
-        ))
+        Err(e) => Err(format!("Failed writing {} to file: {}", directory, e)),
     }
 }
 
