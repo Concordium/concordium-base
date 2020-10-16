@@ -31,6 +31,13 @@ struct Input {
     state: String,
 }
 
+/// Holds the base16 serialized id_cred_pub that the caller wants to retrieve the corresponding
+/// identity object for.
+#[derive(Deserialize)]
+struct Identity {
+    id_cred_pub: String,
+}
+
 /// Structure used to receive the correct command line arguments by using
 /// StructOpt.
 #[derive(Debug, StructOpt)]
@@ -83,9 +90,9 @@ async fn main() {
         .and(warp::path("api"))
         .and(warp::path("identity"))
         .and(warp::path("retrieve"))
-        .and(warp::query().map(|input: Input| {
-            info!("Queried for receiving identity: {}", input.state);
-            match fs::read_to_string(format!("database/identity/{}", input.state)) {
+        .and(warp::query().map(|identity: Identity| {
+            info!("Queried for receiving identity: {}", identity.id_cred_pub);
+            match fs::read_to_string(format!("database/identity/{}", identity.id_cred_pub)) {
                 Ok(identity_object) => {
                     info!("Identity object found");
                     Response::builder()
@@ -238,7 +245,7 @@ async fn create_signed_identity_object(
         .header(
             LOCATION,
             format!(
-                "http://localhost:8100/api/identity/retrieve?state={}",
+                "/api/identity/retrieve?id_cred_pub={}",
                 base16_encoded_id_cred_pub
             ),
         )
