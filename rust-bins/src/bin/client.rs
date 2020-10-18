@@ -9,6 +9,7 @@ use elgamal::{PublicKey, SecretKey};
 use id::{account_holder::*, identity_provider::*, secret_sharing::*, types::*};
 use pairing::bls12_381::{Bls12, G1};
 use rand::*;
+use serde_json::json;
 use std::{
     cmp::max,
     collections::btree_map::BTreeMap,
@@ -550,45 +551,6 @@ fn handle_create_credential(cc: CreateCredential) {
         _phantom:   Default::default(),
     };
 
-    // We now generate or read account verification/signature key pair.
-    let mut known_acc = false;
-    let acc_data = {
-        if let Some(acc_data_file) = cc.account {
-            match read_json_from_file(acc_data_file) {
-                Ok(acc_data) => {
-                    known_acc = true;
-                    acc_data
-                }
-                Err(e) => {
-                    eprintln!(
-                        "Could not read account data from provided file because {}",
-                        e
-                    );
-                    return;
-                }
-            }
-        } else {
-            let mut csprng = thread_rng();
-            let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
-
-            AccountData {
-                keys,
-                existing: Left(SignatureThreshold(2)),
-            }
-        }
-    };
-
-    if !known_acc {
-        println!(
-            "Generated fresh verification and signature key of the account to file \
-             account_keys.json"
-        );
-        write_json_to_file(&cc.keys_out, &acc_data).ok();
-    }
-
     // finally we also read the credential holder information with secret keys
     // which we need to generate CDI.
     // This file should also contain the public keys of the identity provider who
@@ -628,6 +590,37 @@ fn handle_create_credential(cc: CreateCredential) {
 
     let context = IPContext::new(&ip_info, &ars, &global_ctx);
 
+    // We now generate or read account verification/signature key pair.
+    let mut known_acc = false;
+    let acc_data = {
+        if let Some(acc_data_file) = cc.account {
+            match read_json_from_file(acc_data_file) {
+                Ok(acc_data) => {
+                    known_acc = true;
+                    acc_data
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Could not read account data from provided file because {}",
+                        e
+                    );
+                    return;
+                }
+            }
+        } else {
+            let mut csprng = thread_rng();
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+
+            AccountData {
+                keys,
+                existing: Left(SignatureThreshold(2)),
+            }
+        }
+    };
+
     let cdi = create_credential(context, &id_object, &id_use_data, x, policy, &acc_data);
 
     let cdi = match cdi {
@@ -639,6 +632,32 @@ fn handle_create_credential(cc: CreateCredential) {
     };
 
     let versioned_cdi = Versioned::new(VERSION_0, cdi);
+
+    let enc_key = id_use_data.aci.prf_key.prf_exponent(x).unwrap();
+
+    let secret_key = elgamal::SecretKey {
+        generator: *global_ctx.elgamal_generator(),
+        scalar:    enc_key,
+    };
+
+    let address = AccountAddress::new(&versioned_cdi.value.values.reg_id);
+
+    let account_data_json = json!({
+        "address": address,
+        "encryptionSecretKey": secret_key,
+        "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
+        "accountData": acc_data,
+        "credential": versioned_cdi,
+        "aci": id_use_data.aci,
+    });
+
+    if !known_acc {
+        println!(
+            "Generated fresh verification and signature key of the account to file {}.",
+            cc.keys_out.to_string_lossy()
+        );
+        write_json_to_file(&cc.keys_out, &account_data_json).ok();
+    }
 
     // Double check that the generated CDI is going to be successfully validated.
     // let checked = verify_cdi(&global_ctx, &ip_info, &cdi);
