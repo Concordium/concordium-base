@@ -30,8 +30,7 @@ impl<P: Pairing> SecretKey<P> {
         Signature(signature)
     }
 
-    pub fn prove<R: Rng>(&self, csprng: &mut R, mut ro: RandomOracle) -> Proof<P> {
-        // todo simon should it be mutable borrow?
+    pub fn prove<R: Rng>(&self, csprng: &mut R, ro: &mut RandomOracle) -> Proof<P> {
         let prover = Dlog {
             public: P::G2::one_point().mul_by_scalar(&self.0),
             coeff:  P::G2::one_point(),
@@ -39,7 +38,7 @@ impl<P: Pairing> SecretKey<P> {
         let secret = DlogSecret {
             secret: Value::new(self.0),
         };
-        prove(&mut ro, &prover, secret, csprng)
+        prove(ro, &prover, secret, csprng)
             .expect("Input-data is valid, so proving should succeed for this dlog proof.")
     }
 }
@@ -81,13 +80,12 @@ impl<P: Pairing> PublicKey<P> {
         P::check_pairing_eq(&signature.0, &P::G2::one_point(), &g1_hash, &self.0)
     }
 
-    pub fn check_proof(&self, mut ro: RandomOracle, proof: &Proof<P>) -> bool {
-        // todo simon should it be mutable borrow?
+    pub fn check_proof(&self, ro: &mut RandomOracle, proof: &Proof<P>) -> bool {
         let verifier = Dlog {
             public: self.0,
             coeff:  P::G2::one_point(),
         };
-        verify(&mut ro, &verifier, proof)
+        verify(ro, &verifier, proof)
     }
 }
 
@@ -393,12 +391,12 @@ mod test {
             let m = rng.gen::<[u8; 32]>();
             let mut c = Vec::new();
             c.push(rng.gen::<u8>());
-            let ro = RandomOracle::domain(&c);
+            let mut ro = RandomOracle::domain(&c);
 
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
             let sig = sk.sign(&m);
-            let proof = sk.prove(&mut rng, ro.split());
+            let proof = sk.prove(&mut rng, &mut ro.split());
 
             let sk_from_bytes = serialize_deserialize(&sk);
             let pk_from_bytes = serialize_deserialize(&pk);
@@ -413,10 +411,10 @@ mod test {
             assert_eq!(sig.0, sig_from_bytes.0);
             assert_eq!(sk.0, sk_from_bytes.0);
             assert_eq!(pk.0, pk_from_bytes.0);
-            assert!(pk.check_proof(ro.split(), &proof_from_bytes));
+            assert!(pk.check_proof(&mut ro.split(), &proof_from_bytes));
             assert!(pk.verify(&m, sig_from_bytes));
             assert!(pk_from_bytes.verify(&m, sig));
-            assert!(pk.check_proof(ro, &proof))
+            assert!(pk.check_proof(&mut ro, &proof))
         }
     }
 
@@ -428,12 +426,12 @@ mod test {
             let m = rng.gen::<[u8; 32]>();
             let mut c = Vec::new();
             c.push(rng.gen::<u8>());
-            let ro = RandomOracle::domain(&c);
+            let mut ro = RandomOracle::domain(&c);
 
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
             let sig = sk.sign(&m);
-            let proof = sk.prove(&mut rng, ro);
+            let proof = sk.prove(&mut rng, &mut ro);
 
             let sk_bytes = to_bytes(&sk);
             let pk_bytes = to_bytes(&pk);
@@ -466,16 +464,16 @@ mod test {
                     break;
                 }
             }
-            let ro1 = RandomOracle::domain(c1);
-            let ro2 = RandomOracle::domain(c2);
+            let mut ro1 = RandomOracle::domain(c1);
+            let mut ro2 = RandomOracle::domain(c2);
 
             let sk = SecretKey::<Bls12>::generate(&mut csprng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
-            let proof = sk.prove(&mut csprng, ro1.split());
+            let proof = sk.prove(&mut csprng, &mut ro1.split());
 
-            assert!(pk.check_proof(ro1.split(), &proof));
+            assert!(pk.check_proof(&mut ro1.split(), &proof));
             // check that it doesn't verify a proof with the wrong context
-            assert!(!(pk.check_proof(ro2, &proof)));
+            assert!(!(pk.check_proof(&mut ro2, &proof)));
             // check that the proof doesn't work for a different key
             let mut sk2: SecretKey<Bls12>;
             loop {
@@ -485,7 +483,7 @@ mod test {
                 }
             }
             let pk2 = PublicKey::<Bls12>::from_secret(sk2);
-            assert!(!(pk2.check_proof(ro1, &proof)));
+            assert!(!(pk2.check_proof(&mut ro1, &proof)));
         }
     }
 }
