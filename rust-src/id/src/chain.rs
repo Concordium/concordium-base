@@ -67,9 +67,9 @@ pub fn verify_cdi<
     let gens = global_context.bulletproof_generators();
     let ip_verify_key = &ip_info.ip_verify_key;
     // Compute the challenge prefix by hashing the values.
-    let ro = RandomOracle::domain("credential")
-        .append(&cdi.values)
-        .append(&global_context);
+    let mut ro = RandomOracle::domain("credential");
+    ro.append_message(b"cred_values", &cdi.values);
+    ro.append_message(b"global_context", &global_context);
 
     let commitments = &cdi.proofs.commitments;
 
