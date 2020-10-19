@@ -571,7 +571,7 @@ where
     // Compute the challenge prefix by hashing the values.
     // FIXME: We should do something different here.
     // Eventually we'll have to include the genesis hash.
-    let mut ro = RandomOracle::domain("credential")
+    let ro = RandomOracle::domain("credential")
         .append(&cred_values)
         .append(&context.global_context);
 
