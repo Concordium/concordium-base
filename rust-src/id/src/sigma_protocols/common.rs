@@ -298,7 +298,7 @@ pub fn prove<R: rand::Rng, D: SigmaProtocol>(
     let (point, state) = prover.commit_point(csprng)?;
     prover.public(ro);
     ro.append_message("point", &point);
-    let challenge_bytes = ro.split().get_challenge(); // todo simon use point as domain separation parameter
+    let challenge_bytes = ro.split().get_challenge();
     let challenge = prover.get_challenge(&challenge_bytes);
     let witness = prover.generate_witness(secret, state, &challenge)?;
     Some(SigmaProof {
