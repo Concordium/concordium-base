@@ -59,10 +59,10 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
 
     #[inline]
     fn public(&self, ro: &mut RandomOracle) {
-        ro.append_message("blinded_sig", &self.blinded_sig);
-        ro.extend_from(self.commitments.iter());
-        ro.append_message("ps_pub_key", &self.ps_pub_key);
-        ro.append_message("comm_key", &self.comm_key)
+        ro.append_message(b"blinded_sig", &self.blinded_sig);
+        ro.extend_from(b"commitments", self.commitments.iter());
+        ro.append_message(b"ps_pub_key", &self.ps_pub_key);
+        ro.append_message(b"comm_key", &self.comm_key)
     }
 
     #[inline]
