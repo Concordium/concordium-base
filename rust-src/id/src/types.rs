@@ -13,9 +13,7 @@ use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::*;
 use dodis_yampolskiy_prf::secret as prf;
-use ed25519_dalek as acc_sig_scheme;
 use ed25519_dalek as ed25519;
-use eddsa_ed25519::dlog_ed25519::Ed25519DlogProof;
 use either::Either;
 use elgamal::{ChunkSize, Cipher, Message, SecretKey as ElgamalSecretKey};
 use ff::Field;
@@ -182,24 +180,38 @@ impl<'de> Visitor<'de> for SignatureThresholdVisitor {
 #[serde(transparent)]
 pub struct KeyIndex(pub u8);
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
+pub struct AccountOwnershipSignature(ed25519::Signature);
+
+impl std::ops::Deref for AccountOwnershipSignature {
+    type Target = ed25519::Signature;
+
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl From<ed25519::Signature> for AccountOwnershipSignature {
+    fn from(sig: ed25519::Signature) -> Self { AccountOwnershipSignature(sig) }
+}
+
 #[derive(Debug, PartialEq, Eq)]
-/// List of pairs of index of key and proof.
+/// A list of pairs of index of key and Ed25519 signatures on the challenge
+/// of the proofs of the credential
 /// The list should be non-empty and at most 255 elements long, and have no
 /// duplicates. The current choice of data structure disallows duplicates by
 /// design.
 #[serde(transparent)]
 #[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct AccountOwnershipProof {
-    pub proofs: BTreeMap<KeyIndex, Ed25519DlogProof>,
+    pub sigs: BTreeMap<KeyIndex, AccountOwnershipSignature>,
 }
 
 // Manual implementation to be able to encode length as 1, as well as to
 // make sure there is at least one proof.
 impl Serial for AccountOwnershipProof {
     fn serial<B: Buffer>(&self, out: &mut B) {
-        let len = self.proofs.len() as u8;
+        let len = self.sigs.len() as u8;
         out.put(&len);
-        serial_map_no_length(&self.proofs, out)
+        serial_map_no_length(&self.sigs, out)
     }
 }
 
@@ -209,16 +221,16 @@ impl Deserial for AccountOwnershipProof {
         if len == 0 {
             bail!("Need at least one proof.")
         }
-        let proofs = deserial_map_no_length(source, usize::from(len))?;
-        Ok(AccountOwnershipProof { proofs })
+        let sigs = deserial_map_no_length(source, usize::from(len))?;
+        Ok(AccountOwnershipProof { sigs })
     }
 }
 
 impl AccountOwnershipProof {
-    /// Number of individual proofs in this proof.
-    /// NB: This method relies on the invariant that proofs should not
+    /// Number of individual signatures in this proof.
+    /// NB: This method relies on the invariant that signatures should not
     /// have more than 255 elements.
-    pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.proofs.len() as u8) }
+    pub fn num_proofs(&self) -> SignatureThreshold { SignatureThreshold(self.sigs.len() as u8) }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize)]
@@ -1086,7 +1098,7 @@ pub enum SchemeId {
 
 #[derive(Debug, Eq)]
 pub enum VerifyKey {
-    Ed25519VerifyKey(acc_sig_scheme::PublicKey),
+    Ed25519VerifyKey(ed25519::PublicKey),
 }
 
 impl SerdeSerialize for VerifyKey {
@@ -1157,8 +1169,8 @@ impl<'de> Visitor<'de> for VerifyKeyVisitor {
     }
 }
 
-impl From<acc_sig_scheme::PublicKey> for VerifyKey {
-    fn from(pk: acc_sig_scheme::PublicKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
+impl From<ed25519::PublicKey> for VerifyKey {
+    fn from(pk: ed25519::PublicKey) -> Self { VerifyKey::Ed25519VerifyKey(pk) }
 }
 
 impl From<&ed25519::Keypair> for VerifyKey {
@@ -1777,6 +1789,23 @@ pub struct AnonymityRevocationRecord<C: Curve> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519::Signer;
+
+    #[test]
+    fn test_serde_sig() {
+        use rand::thread_rng;
+
+        let mut csprng = thread_rng();
+        let keypair = ed25519::Keypair::generate(&mut csprng);
+        for _ in 0..1000 {
+            let message: &[u8] = b"test";
+            let signature: AccountOwnershipSignature = keypair.sign(message).into();
+            let serialized = serde_json::to_string(&signature).unwrap();
+            let deserialized: AccountOwnershipSignature =
+                serde_json::from_str(&serialized).unwrap();
+            assert_eq!(signature, deserialized);
+        }
+    }
 
     #[test]
     fn test_yearmonth_serialization() {
