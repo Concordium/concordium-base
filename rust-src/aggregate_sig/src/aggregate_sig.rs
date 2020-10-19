@@ -393,7 +393,7 @@ mod test {
             let m = rng.gen::<[u8; 32]>();
             let mut c = Vec::new();
             c.push(rng.gen::<u8>());
-            let ro = RandomOracle::empty().append_bytes(&c);
+            let ro = RandomOracle::domain(&c);
 
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
@@ -428,7 +428,7 @@ mod test {
             let m = rng.gen::<[u8; 32]>();
             let mut c = Vec::new();
             c.push(rng.gen::<u8>());
-            let ro = RandomOracle::empty().append_bytes(&c);
+            let ro = RandomOracle::domain(&c);
 
             let sk = SecretKey::<Bls12>::generate(&mut rng);
             let pk = PublicKey::<Bls12>::from_secret(sk);
@@ -466,8 +466,8 @@ mod test {
                     break;
                 }
             }
-            let ro1 = RandomOracle::empty().append_bytes(c1);
-            let ro2 = RandomOracle::empty().append_bytes(c2);
+            let ro1 = RandomOracle::domain(c1);
+            let ro2 = RandomOracle::domain(c2);
 
             let sk = SecretKey::<Bls12>::generate(&mut csprng);
             let pk = PublicKey::<Bls12>::from_secret(sk);

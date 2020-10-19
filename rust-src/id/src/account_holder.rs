@@ -571,9 +571,9 @@ where
     // Compute the challenge prefix by hashing the values.
     // FIXME: We should do something different here.
     // Eventually we'll have to include the genesis hash.
-    let ro = RandomOracle::domain("credential")
-        .append(&cred_values)
-        .append(&context.global_context);
+    let mut ro = RandomOracle::domain("credential");
+    ro.append_message(b"cred_values", &cred_values);
+    ro.append_message(b"global_context", &context.global_context);
 
     let mut id_cred_pub_share_numbers = Vec::with_capacity(number_of_ars);
     let mut id_cred_pub_provers = Vec::with_capacity(number_of_ars);
@@ -1214,10 +1214,10 @@ mod tests {
                 assert_eq!(ks.len(), cdi.proofs.proof_acc_sk.sigs.len())
             }
         };
-        let sig_msg = RandomOracle::domain("credential")
-            .append(&cdi.values)
-            .append(&global_ctx)
-            .get_challenge();
+        let mut ro = RandomOracle::domain("credential");
+        ro.append_message(b"cred_values", &cdi.values);
+        ro.append_message(b"global_context", &global_ctx);
+        let sig_msg = ro.get_challenge();
         cdi.proofs.proof_acc_sk.sigs.iter().for_each(|(idx, sig)| {
             match acc_data
                 .keys
