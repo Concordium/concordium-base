@@ -28,8 +28,17 @@ type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, Attri
 ///   object.
 #[derive(Deserialize)]
 struct Input {
-    state: String,
+    state:        String,
     redirect_uri: String,
+}
+
+/// Holds the information required to create the IdentityObject and forward to
+/// the correct response URL that the wallet is expecting. Used for easier
+/// passing between methods.
+struct IdentityObjectInput {
+    request:      Result<PreIdentityObject<Bls12, ExampleCurve>, String>,
+    ip_data:      Arc<IpData<ExamplePairing>>,
+    response_url: String,
 }
 
 /// Structure used to receive the correct command line arguments by using
@@ -112,7 +121,11 @@ async fn main() {
                 Arc::clone(&ar_info),
                 Arc::clone(&global_context),
             );
-            return (validated_pre_identity_object, Arc::clone(&ip_data), input.redirect_uri);
+            IdentityObjectInput {
+                request:      validated_pre_identity_object,
+                ip_data:      Arc::clone(&ip_data),
+                response_url: input.redirect_uri,
+            }
         }))
         .and_then(create_signed_identity_object);
 
@@ -127,13 +140,9 @@ async fn main() {
 /// that is then signed and saved. If successful a re-direct to the URL where
 /// the identity object is available is returned.
 async fn create_signed_identity_object(
-    (request, ip_data, response_url): (
-        Result<PreIdentityObject<Bls12, ExampleCurve>, String>,
-        Arc<IpData<ExamplePairing>>,
-        String,
-    ),
+    identity_object_input: IdentityObjectInput,
 ) -> Result<impl warp::Reply, Infallible> {
-    let request = match request {
+    let request = match identity_object_input.request {
         Ok(request) => request,
         Err(e) => {
             return Ok(Response::builder()
@@ -169,10 +178,11 @@ async fn create_signed_identity_object(
         }
     };
 
-    // At this point the identity has been verified, and the identity provider constructs the
-    // identity object and signs it. An anonymity revocation record and the identity object
-    // are persisted, so that they can be retrieved when needed. The constructed response
-    // contains a redirect to a webservice that returns the identity object constructed here.
+    // At this point the identity has been verified, and the identity provider
+    // constructs the identity object and signs it. An anonymity revocation
+    // record and the identity object are persisted, so that they can be
+    // retrieved when needed. The constructed response contains a redirect to a
+    // webservice that returns the identity object constructed here.
 
     // This is hardcoded for the proof-of-concept.
     let now = YearMonth::now();
@@ -191,9 +201,9 @@ async fn create_signed_identity_object(
 
     let signature = match sign_identity_object(
         &request,
-        &ip_data.public_ip_info,
+        &identity_object_input.ip_data.public_ip_info,
         &alist,
-        &ip_data.ip_secret_key,
+        &identity_object_input.ip_data.ip_secret_key,
     ) {
         Ok(signature) => signature,
         Err(e) => {
@@ -240,12 +250,13 @@ async fn create_signed_identity_object(
         }
     };
 
-    let callback_location = response_url.clone() + "#token=" + &serialized_versioned_id;
+    let callback_location =
+        identity_object_input.response_url.clone() + "#token=" + &serialized_versioned_id;
 
-    return Ok(Response::builder()
+    Ok(Response::builder()
         .header(LOCATION, callback_location)
         .status(StatusCode::FOUND)
-        .body(format!("api/identity/{}", base16_encoded_id_cred_pub)));
+        .body(format!("api/identity/{}", base16_encoded_id_cred_pub)))
 }
 
 /// Deserializes the received pre-identity-object and then validates it. The
@@ -258,7 +269,7 @@ fn validate_pre_identity_object(
 ) -> Result<PreIdentityObject<Bls12, ExampleCurve>, String> {
     let request = match deserialize_request(state) {
         Ok(request) => request,
-        Err(e) => return Err(format!("{}", e)),
+        Err(e) => return Err(e),
     };
 
     let context = IPContext {
@@ -267,13 +278,13 @@ fn validate_pre_identity_object(
         global_context: &global_context,
     };
 
-    return match ip_validate_request(&request, context) {
-        Ok(_validation_result) => return Ok(request),
+    match ip_validate_request(&request, context) {
+        Ok(_validation_result) => Ok(request),
         Err(e) => Err(format!(
             "The request could not be successfully validated by the identity provider: {}",
             e
         )),
-    };
+    }
 }
 
 /// Deserialize the received request. Give a proper error message if it was not
@@ -324,18 +335,18 @@ fn save_revocation_record(
     };
 
     let serialized_ar_record = to_string(&ar_record).unwrap();
-    return store_record(
+    store_record(
         &serialized_ar_record,
         base16_id_cred_pub,
         "revocation".to_string(),
-    );
+    )
 }
 
 /// Writes record to the provided subdirectory under 'database/'. The filename
 /// is set to id_cred_pub, which is expected to be the base16 serialized
 /// id_cred_pub.
 fn store_record(
-    record: &String,
+    record: &str,
     id_cred_pub: String,
     directory: String,
 ) -> std::result::Result<(), String> {
