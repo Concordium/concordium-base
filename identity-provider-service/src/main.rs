@@ -368,6 +368,7 @@ fn store_record(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::runtime::Runtime;
 
     #[test]
     fn test_successful_validation_and_response() {
@@ -398,8 +399,18 @@ mod tests {
             Arc::clone(&global_context),
         );
 
+        let identity_object_input = IdentityObjectInput {
+            ip_data:      Arc::clone(&ip_data),
+            request:      response,
+            response_url: "http://some_url.com/".to_string(),
+        };
+
+        let result = Runtime::new()
+            .unwrap()
+            .block_on(create_signed_identity_object(identity_object_input));
+
         // Then
-        assert!(response.is_ok());
+        assert!(result.is_ok());
     }
 
     #[test]
