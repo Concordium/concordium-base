@@ -646,29 +646,13 @@ where
     });
 
     let secret = ((secret_reg_id, secret_sig), id_cred_pub_secrets);
-    let proof = match prove(&mut ro.split(), &prover, secret, &mut csprng) {
-        // todo simon split is a hack to fix test_create_credential
+    let proof = match prove(&mut ro, &prover, secret, &mut csprng) {
         Some(x) => x,
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
-    // A list of signatures on the challenge used by the other proofs using the
-    // account keys.
-    // The challenge has domain separator "credential" followed by appending all
-    // values of the credential to the ro, specifically appending the
-    // CredentialDeploymentValues struct.
-    //
-    // The domain seperator in combination with appending all the data of the
-    // credential deployment should make it non-reusable.
-    let to_sign = ro.get_challenge();
-
-    // todo simon transcript vs ro?
-    let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
-    transcript.append_message(b"cred_values", &cred_values);
-    transcript.append_message(b"global_context", &context.global_context);
-    transcript.append_message(b"proof", &proof);
     let cred_counter_less_than_max_accounts = match prove_less_than_or_equal(
-        &mut transcript,
+        &mut ro,
         &mut csprng,
         8,
         u64::from(cred_counter),
@@ -681,6 +665,16 @@ where
         Some(x) => x,
         None => bail!("Cannot produce proof that cred_counter <= max_accounts."),
     };
+
+    // A list of signatures on the challenge used by the other proofs using the
+    // account keys.
+    // The challenge has domain separator "credential" followed by appending all
+    // values of the credential to the ro, specifically appending the
+    // CredentialDeploymentValues struct.
+    //
+    // The domain seperator in combination with appending all the data of the
+    // credential deployment should make it non-reusable.
+    let to_sign = ro.get_challenge();
 
     let proof_acc_sk = AccountOwnershipProof {
         sigs: acc_data
@@ -1206,30 +1200,5 @@ mod tests {
 
         // Check policy
         assert_eq!(cdi.values.policy, policy, "CDI policy is invalid");
-
-        // Check account key signatures
-        match cdi.values.cred_account {
-            CredentialAccount::ExistingAccount(_) => (),
-            CredentialAccount::NewAccount(ref ks, _) => {
-                assert_eq!(ks.len(), cdi.proofs.proof_acc_sk.sigs.len())
-            }
-        };
-        let mut ro = RandomOracle::domain("credential");
-        ro.append_message(b"cred_values", &cdi.values);
-        ro.append_message(b"global_context", &global_ctx);
-        let sig_msg = ro.get_challenge();
-        cdi.proofs.proof_acc_sk.sigs.iter().for_each(|(idx, sig)| {
-            match acc_data
-                .keys
-                .get(idx)
-                .unwrap()
-                .verify(sig_msg.as_ref(), &sig)
-            {
-                Ok(_) => (),
-                _ => panic!("account key signature is invalid"),
-            }
-        });
-
-        // Add checks for proofs
     }
 }
