@@ -136,13 +136,12 @@ pub fn verify_cdi<
         witness,
     };
 
-    // todo simon transcript vs ro?
-    let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
-    transcript.append_message(b"cred_values", &cdi.values);
-    transcript.append_message(b"global_context", &global_context);
-    transcript.append_message(b"proof", &proof);
+    if !verify(&mut ro, &verifier, &proof) {
+        return Err(CDIVerificationError::Proof);
+    }
+
     if !verify_less_than_or_equal(
-        &mut transcript,
+        &mut ro,
         8,
         &cdi.proofs.commitments.cmm_cred_counter,
         &cdi.proofs.commitments.cmm_max_accounts,
@@ -153,10 +152,8 @@ pub fn verify_cdi<
         return Err(CDIVerificationError::Proof);
     }
 
-    if !verify(&mut ro.split(), &verifier, &proof) {
-        // todo simon split is a hack to fix test_create_credential
-        return Err(CDIVerificationError::Proof);
-    }
+    // message signed in proofs.proofs_acc_sk.sigs
+    let signed = ro.get_challenge();
 
     match cdv.cred_account {
         CredentialAccount::ExistingAccount(_addr) => {
@@ -168,8 +165,6 @@ pub fn verify_cdi<
                 // we at least have enough proofs now, if they are all valid and have valid
                 // indices
 
-                // message signed in proofs.proofs_acc_sk.sigs
-                let signed = ro.split().get_challenge();
                 for (&idx, proof) in proofs.proof_acc_sk.sigs.iter() {
                     if let Some(key) = acc_keys.get(idx) {
                         let VerifyKey::Ed25519VerifyKey(ref key) = key;
@@ -200,8 +195,6 @@ pub fn verify_cdi<
             {
                 return Err(CDIVerificationError::AccountOwnership);
             }
-            // message signed in proofs.proofs_acc_sk.sigs
-            let signed = ro.split().get_challenge();
             // set of processed keys already
             let mut processed = BTreeSet::new();
             // the new keys get indices 0, 1, ..
