@@ -43,8 +43,8 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
 
     #[inline]
     fn public(&self, ro: &mut RandomOracle) {
-        ro.extend_from(self.cmms.iter());
-        ro.append_message("cmm_key", &self.cmm_key)
+        ro.extend_from(b"cmms", self.cmms.iter());
+        ro.append_message(b"cmm_key", &self.cmm_key)
     }
 
     #[inline]

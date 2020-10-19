@@ -54,10 +54,10 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
     type SecretData = ComLinSecret<C>;
 
     fn public(&self, ro: &mut RandomOracle) {
-        ro.extend_from(self.us.iter());
-        ro.extend_from(self.cmms.iter());
-        ro.append_message("cmm", &self.cmm);
-        ro.append_message("cmm_key", &self.cmm_key)
+        ro.extend_from(b"us", self.us.iter());
+        ro.extend_from(b"cmms", self.cmms.iter());
+        ro.append_message(b"cmm", &self.cmm);
+        ro.append_message(b"cmm_key", &self.cmm_key)
     }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {

@@ -40,8 +40,8 @@ pub struct ElgDec<C: Curve> {
 
 impl<C: Curve> ElgDec<C> {
     fn public(&self, ro: &mut RandomOracle) {
-        ro.append_message("public", &self.public);
-        ro.extend_from(&self.coeff)
+        ro.append_message(b"public", &self.public);
+        ro.extend_from(b"coeff", &self.coeff)
     }
 }
 

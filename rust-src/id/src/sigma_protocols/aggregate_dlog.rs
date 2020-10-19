@@ -35,8 +35,8 @@ impl<C: Curve> SigmaProtocol for AggregateDlog<C> {
     type SecretData = Vec<Rc<C::Scalar>>;
 
     fn public(&self, ro: &mut RandomOracle) {
-        ro.append_message("public", &self.public);
-        ro.extend_from(&self.coeff)
+        ro.append_message(b"public", &self.public);
+        ro.extend_from(b"coeff", &self.coeff)
     }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
