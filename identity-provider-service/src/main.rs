@@ -130,7 +130,9 @@ async fn main() {
                         detail: "Identity object does not exist".to_string(),
                         token:  "".to_string(),
                     };
-                    Response::builder().body(to_string(&error_identity_token_container).unwrap())
+                    Response::builder()
+                        .header(CONTENT_TYPE, "application/json")
+                        .body(to_string(&error_identity_token_container).unwrap())
                 }
             }
         }));
