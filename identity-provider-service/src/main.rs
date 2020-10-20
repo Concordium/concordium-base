@@ -125,9 +125,12 @@ async fn main() {
                 }
                 Err(_e) => {
                     info!("Identity object does not exist");
-                    Response::builder()
-                        .status(StatusCode::NOT_FOUND)
-                        .body("The identity is not available.".to_string())
+                    let error_identity_token_container = IdentityTokenContainer {
+                        status: "error".to_string(),
+                        detail: "Identity object does not exist".to_string(),
+                        token:  "".to_string(),
+                    };
+                    Response::builder().body(to_string(&error_identity_token_container).unwrap())
                 }
             }
         }));
