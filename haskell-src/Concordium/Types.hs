@@ -294,16 +294,22 @@ newtype VoterPower = VoterPower AmountUnit
 -- For now they are placeholders
 
 newtype ContractIndex = ContractIndex { _contractIndex :: Word64 }
-    deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Bits, Integral)
+    deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Bits, Integral, PersistField)
     deriving (Typeable, Data)
+
+instance PersistFieldSql ContractIndex where
+    sqlType _ = SqlInt64
 
 instance S.Serialize ContractIndex where
     get = ContractIndex <$> G.getWord64be
     put (ContractIndex i) = P.putWord64be i
 
 newtype ContractSubindex = ContractSubindex { _contractSubindex :: Word64 }
-    deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral)
+    deriving newtype (Eq, Ord, Num, Enum, Bounded, Real, Hashable, Show, Integral, PersistField)
     deriving (Typeable, Data)
+
+instance PersistFieldSql ContractSubindex where
+    sqlType _ = SqlInt64
 
 instance S.Serialize ContractSubindex where
     get = ContractSubindex <$> G.getWord64be
