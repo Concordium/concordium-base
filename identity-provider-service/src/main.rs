@@ -10,9 +10,10 @@ use id::{
 use log::info;
 use pairing::bls12_381::{Bls12, G1};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{from_str, from_value, to_string, Value};
 use structopt::StructOpt;
+use url::form_urlencoded::byte_serialize;
 use warp::{
     http::{Response, StatusCode},
     hyper::header::{CONTENT_TYPE, LOCATION},
@@ -32,13 +33,22 @@ struct Input {
     redirect_uri: String,
 }
 
+/// JSON object that the wallet expects to be returned when polling for an
+/// identity object.
+#[derive(Serialize)]
+struct IdentityTokenContainer {
+    status: String,
+    token:  String,
+    detail: String,
+}
+
 /// Holds the information required to create the IdentityObject and forward to
 /// the correct response URL that the wallet is expecting. Used for easier
 /// passing between methods.
 struct IdentityObjectInput {
     request:      Result<PreIdentityObject<Bls12, ExampleCurve>, String>,
     ip_data:      Arc<IpData<ExamplePairing>>,
-    response_url: String,
+    redirect_uri: String,
 }
 
 /// Structure used to receive the correct command line arguments by using
@@ -97,9 +107,21 @@ async fn main() {
             match fs::read_to_string(format!("database/identity/{}", id_cred_pub)) {
                 Ok(identity_object) => {
                     info!("Identity object found");
+
+                    let wrapped_identity_object =
+                        "{ \"identityObject\": ".to_string() + &identity_object + "}";
+                    let urlencoded_identity_object: String =
+                        byte_serialize(wrapped_identity_object.as_bytes()).collect();
+
+                    let identity_token_container = IdentityTokenContainer {
+                        status: "done".to_string(),
+                        token:  urlencoded_identity_object,
+                        detail: "".to_string(),
+                    };
+
                     Response::builder()
                         .header(CONTENT_TYPE, "application/json")
-                        .body(identity_object)
+                        .body(to_string(&identity_token_container).unwrap())
                 }
                 Err(_e) => {
                     info!("Identity object does not exist");
@@ -110,11 +132,12 @@ async fn main() {
             }
         }));
 
-    let create_identity = warp::path("api")
+    let create_identity = warp::get()
+        .and(warp::path("api"))
         .and(warp::path("identity"))
         .and(warp::path::end())
-        .and(warp::get())
         .and(warp::query().map(move |input: Input| {
+            info!("Queried for creating an identity");
             let validated_pre_identity_object = validate_pre_identity_object(
                 &input.state,
                 Arc::clone(&ip_data),
@@ -124,7 +147,7 @@ async fn main() {
             IdentityObjectInput {
                 request:      validated_pre_identity_object,
                 ip_data:      Arc::clone(&ip_data),
-                response_url: input.redirect_uri,
+                redirect_uri: input.redirect_uri,
             }
         }))
         .and_then(create_signed_identity_object);
@@ -250,13 +273,20 @@ async fn create_signed_identity_object(
         }
     };
 
-    let callback_location =
-        identity_object_input.response_url.clone() + "#token=" + &serialized_versioned_id;
+    // 10.0.2.2 is how an Android emulator accesses the host machine, which is what
+    // we are using for this proof-of-concept. The callback_location has to
+    // point to the location where the wallet can retrieve the identity object
+    // when it is available.
+    let callback_location = identity_object_input.redirect_uri.clone()
+        + "#code_uri=http://10.0.2.2:8100/api/identity/"
+        + &base16_encoded_id_cred_pub;
+
+    info!("Identity was successfully created. Returning URI where it can be retrieved.");
 
     Ok(Response::builder()
         .header(LOCATION, callback_location)
         .status(StatusCode::FOUND)
-        .body(format!("api/identity/{}", base16_encoded_id_cred_pub)))
+        .body("".to_string()))
 }
 
 /// Deserializes the received pre-identity-object and then validates it. The
@@ -368,7 +398,6 @@ fn store_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::runtime::Runtime;
 
     #[test]
     fn test_successful_validation_and_response() {
@@ -399,18 +428,8 @@ mod tests {
             Arc::clone(&global_context),
         );
 
-        let identity_object_input = IdentityObjectInput {
-            ip_data:      Arc::clone(&ip_data),
-            request:      response,
-            response_url: "http://some_url.com/".to_string(),
-        };
-
-        let result = Runtime::new()
-            .unwrap()
-            .block_on(create_signed_identity_object(identity_object_input));
-
         // Then
-        assert!(result.is_ok());
+        assert!(response.is_ok());
     }
 
     #[test]
