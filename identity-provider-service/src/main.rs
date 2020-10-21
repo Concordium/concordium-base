@@ -11,7 +11,7 @@ use log::info;
 use pairing::bls12_381::{Bls12, G1};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{from_str, from_value, to_string, Value};
+use serde_json::{from_str, to_string};
 use structopt::StructOpt;
 use url::form_urlencoded::byte_serialize;
 use warp::{
@@ -24,12 +24,30 @@ type ExampleCurve = G1;
 type ExamplePairing = Bls12;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
 
+/// 10.0.2.2 is how an Android emulator accesses the host machine, which is what
+/// we are using for this proof-of-concept. The callback_location has to
+/// point to the location where the wallet can retrieve the identity object
+/// when it is available.
+const RETRIEVE_URL: &str = "http://10.0.2.2:8100/api/identity/";
+
+const ID_VERIFICATION_URL: &str = "http://localhost:8101/api/verify";
+
+#[derive(Deserialize)]
+struct IdentityObjectRequest {
+    #[serde(rename = "idObjectRequest")]
+    id_object_request: Versioned<PreIdentityObject<ExamplePairing, ExampleCurve>>,
+}
+
 /// Holds the query parameters expected by the service.
-/// * state: contains the JSON serialized and URL encoded identity request
-///   object.
 #[derive(Deserialize)]
 struct Input {
-    state:        String,
+    /// The JSON serialized and URL encoded identity request
+    /// object.
+    /// The name 'state' is what is expected as a GET parameter name.
+    #[serde(rename = "state")]
+    state: String,
+    /// The URI where the response will be returned.
+    #[serde(rename = "redirect_uri")]
     redirect_uri: String,
 }
 
@@ -45,9 +63,13 @@ struct IdentityTokenContainer {
 /// Holds the information required to create the IdentityObject and forward to
 /// the correct response URL that the wallet is expecting. Used for easier
 /// passing between methods.
-struct IdentityObjectInput {
-    request:      Result<PreIdentityObject<Bls12, ExampleCurve>, String>,
-    ip_data:      Arc<IpData<ExamplePairing>>,
+struct ValidatedRequest {
+    /// The pre-identity-object contained in the initial request.
+    request: PreIdentityObject<ExamplePairing, ExampleCurve>,
+    /// The identity provider data needed to sign the request.
+    ip_data: Arc<IpData<ExamplePairing>>,
+    /// The URI that the ID object should be returned to after we've done the
+    /// verification of the user.
     redirect_uri: String,
 }
 
@@ -67,12 +89,22 @@ struct IdentityProviderServiceConfiguration {
         help = "File with the list of anonymity revokers as JSON."
     )]
     anonymity_revokers_file: PathBuf,
+    #[structopt(
+        long = "port",
+        default_value = "8100",
+        help = "Port on which the server will listen on."
+    )]
+    port: u16,
 }
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    let opt = IdentityProviderServiceConfiguration::from_args();
+    let app = IdentityProviderServiceConfiguration::clap()
+        .setting(clap::AppSettings::ArgRequiredElseHelp)
+        .global_setting(clap::AppSettings::ColoredHelp);
+    let matches = app.get_matches();
+    let opt = IdentityProviderServiceConfiguration::from_clap(&matches);
 
     info!("Reading the provided IP, AR and global context configurations.");
     let ip_data_contents =
@@ -100,11 +132,10 @@ async fn main() {
     info!("Configurations have been loaded successfully.");
 
     let retrieve_identity = warp::get()
-        .and(warp::path("api"))
-        .and(warp::path("identity"))
-        .and(warp::path!(String).map(|id_cred_pub| {
+        .and(warp::path!("api" / "identity" / String))
+        .map(|id_cred_pub| {
             info!("Queried for receiving identity: {}", id_cred_pub);
-            match fs::read_to_string(format!("database/identity/{}", id_cred_pub)) {
+            match fs::read_to_string(std::path::Path::new("database/identity").join(id_cred_pub)) {
                 Ok(identity_object) => {
                     info!("Identity object found");
 
@@ -135,31 +166,24 @@ async fn main() {
                         .body(to_string(&error_identity_token_container).unwrap())
                 }
             }
-        }));
+        });
 
     let create_identity = warp::get()
-        .and(warp::path("api"))
-        .and(warp::path("identity"))
-        .and(warp::path::end())
+        .and(warp::path!("api" / "identity"))
         .and(warp::query().map(move |input: Input| {
             info!("Queried for creating an identity");
-            let validated_pre_identity_object = validate_pre_identity_object(
-                &input.state,
+            extract_and_validate_request(
                 Arc::clone(&ip_data),
                 Arc::clone(&ar_info),
                 Arc::clone(&global_context),
-            );
-            IdentityObjectInput {
-                request:      validated_pre_identity_object,
-                ip_data:      Arc::clone(&ip_data),
-                redirect_uri: input.redirect_uri,
-            }
+                input,
+            )
         }))
         .and_then(create_signed_identity_object);
 
     info!("Booting up HTTP server. Listening on port 8100.");
     warp::serve(create_identity.or(retrieve_identity))
-        .run(([0, 0, 0, 0], 8100))
+        .run(([0, 0, 0, 0], opt.port))
         .await;
 }
 
@@ -168,23 +192,24 @@ async fn main() {
 /// that is then signed and saved. If successful a re-direct to the URL where
 /// the identity object is available is returned.
 async fn create_signed_identity_object(
-    identity_object_input: IdentityObjectInput,
+    identity_object_input: Result<ValidatedRequest, String>,
 ) -> Result<impl warp::Reply, Infallible> {
-    let request = match identity_object_input.request {
+    let identity_object_input = match identity_object_input {
         Ok(request) => request,
         Err(e) => {
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
-                .body(format!("Failed validation of pre-identity-object: {}", e)))
+                .body(format!("Failed validation of the request due to: {}", e)))
         }
     };
+    let request = identity_object_input.request;
 
     // Identity verification process between the identity provider and the identity
     // verifier. In this example the identity verifier is queried and will
     // always just return a static attribute list without doing any actual
     // verification of an identity.
     let client = Client::new();
-    let attribute_list = match client.post("http://localhost:8101/api/verify").send().await {
+    let attribute_list = match client.post(ID_VERIFICATION_URL).send().await {
         Ok(attribute_list) => match attribute_list.json().await {
             Ok(attribute_list) => attribute_list,
             Err(e) => {
@@ -283,7 +308,8 @@ async fn create_signed_identity_object(
     // point to the location where the wallet can retrieve the identity object
     // when it is available.
     let callback_location = identity_object_input.redirect_uri.clone()
-        + "#code_uri=http://10.0.2.2:8100/api/identity/"
+        + "#code_uri="
+        + RETRIEVE_URL
         + &base16_encoded_id_cred_pub;
 
     info!("Identity was successfully created. Returning URI where it can be retrieved.");
@@ -294,18 +320,29 @@ async fn create_signed_identity_object(
         .body("".to_string()))
 }
 
-/// Deserializes the received pre-identity-object and then validates it. The
-/// output is the deserialized pre-identity-object to be used later.
-fn validate_pre_identity_object(
-    state: &str,
+/// Validate that the received request is well-formed.
+/// This check that all the cryptographic values are valid, and that the zero
+/// knowledge proofs in the request are valid.
+///
+/// The return value is either
+///
+/// - Ok(ValidatedRequest) if the request is valid or
+/// - Err(msg) where `msg` is a string describing the error.
+fn extract_and_validate_request(
     ip_data: Arc<IpData<ExamplePairing>>,
     ar_info: Arc<ArInfos<ExampleCurve>>,
     global_context: Arc<GlobalContext<ExampleCurve>>,
-) -> Result<PreIdentityObject<Bls12, ExampleCurve>, String> {
-    let request = match deserialize_request(state) {
-        Ok(request) => request,
-        Err(e) => return Err(e),
-    };
+    input: Input,
+) -> Result<ValidatedRequest, String> {
+    let request: IdentityObjectRequest =
+        from_str(&input.state).map_err(|e| format!("Could not parse identity object {}", e))?;
+    if request.id_object_request.version != VERSION_0 {
+        return Err(format!(
+            "Unsupported version {}",
+            request.id_object_request.version
+        ));
+    }
+    let request = request.id_object_request.value;
 
     let context = IPContext {
         ip_info:        &ip_data.public_ip_info,
@@ -314,54 +351,22 @@ fn validate_pre_identity_object(
     };
 
     match ip_validate_request(&request, context) {
-        Ok(_validation_result) => Ok(request),
+        Ok(()) => Ok(ValidatedRequest {
+            request,
+            ip_data,
+            redirect_uri: input.redirect_uri,
+        }),
         Err(e) => Err(format!(
-            "The request could not be successfully validated by the identity provider: {}",
+            "The request could not be validated by the identity provider: {}",
             e
         )),
-    }
-}
-
-/// Deserialize the received request. Give a proper error message if it was not
-/// possible, or if incorrect version of the request was received.
-fn deserialize_request(
-    request: &str,
-) -> std::result::Result<PreIdentityObject<Bls12, ExampleCurve>, String> {
-    let v: Value = match from_str(request) {
-        Ok(v) => v,
-        Err(_) => return Err("Could not deserialize the received JSON.".to_string()),
-    };
-
-    let pre_id_object = match v.get("idObjectRequest") {
-        Some(id_object) => id_object,
-        None => return Err("The received JSON is missing an 'idObjectRequest' entry.".to_string()),
-    };
-
-    let request = from_value(pre_id_object.clone());
-    let request: Versioned<PreIdentityObject<Bls12, ExampleCurve>> = match request {
-        Ok(request) => request,
-        Err(e) => {
-            return Err(format!(
-                "An error was encountered during deserialization: {}",
-                e
-            ))
-        }
-    };
-
-    if request.version != VERSION_0 {
-        Err(format!(
-            "The received request version number is unsupported: [version={}]",
-            &request.version
-        ))
-    } else {
-        Ok(request.value)
     }
 }
 
 /// Creates and saves the revocation record to the file system (which should be
 /// a database, but for the proof-of-concept we use the file system).
 fn save_revocation_record(
-    pre_identity_object: &PreIdentityObject<Bls12, ExampleCurve>,
+    pre_identity_object: &PreIdentityObject<ExamplePairing, ExampleCurve>,
     base16_id_cred_pub: String,
 ) -> std::result::Result<(), String> {
     let ar_record = AnonymityRevocationRecord {
