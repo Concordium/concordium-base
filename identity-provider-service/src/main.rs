@@ -430,12 +430,17 @@ mod tests {
                 .expect("File did not contain a valid GlobalContext object as JSON"),
         );
 
+        let input = Input {
+            state:        request.to_string(),
+            redirect_uri: "test".to_string(),
+        };
+
         // When
-        let response = validate_pre_identity_object(
-            &request.to_string(),
+        let response = extract_and_validate_request(
             Arc::clone(&ip_data),
             Arc::clone(&ar_info),
             Arc::clone(&global_context),
+            input,
         );
 
         // Then
@@ -463,12 +468,17 @@ mod tests {
                 .expect("File did not contain a valid GlobalContext object as JSON"),
         );
 
+        let input = Input {
+            state:        request.to_string(),
+            redirect_uri: "test".to_string(),
+        };
+
         // When
-        let response = validate_pre_identity_object(
-            &request.to_string(),
+        let response = extract_and_validate_request(
             Arc::clone(&ip_data),
             Arc::clone(&ar_info),
             Arc::clone(&global_context),
+            input,
         );
 
         // Then (the zero knowledge proofs could not be verified, so we fail)
