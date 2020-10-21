@@ -652,7 +652,7 @@ pub struct AccCredentialInfo<C: Curve> {
 /// The data relating to a single anonymity revoker
 /// sent by the account holder to the identity provider
 /// typically the account holder will send a vector of these
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
     /// Encryption in chunks (in little endian) of the PRF key share
