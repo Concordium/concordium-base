@@ -18,6 +18,7 @@ env_logger = "0.7.1"
 structopt = "0.3"
 reqwest = { version = "0.10", features = ["blocking", "json"], default-features = false }
 url = "2.1.1"
+clap = "2.33"
 
 [dependencies.id]
 path = "../rust-src/id"
@@ -30,3 +31,11 @@ version = "0"
 [dependencies.curve_arithmetic]
 path = "../rust-src/curve_arithmetic"
 version = "0"
+
+[[bin]]
+path = "src/bin/identity_verifier.rs"
+name = "identity-verifier"
+
+[[bin]]
+path = "src/main.rs"
+name = "identity-provider-service"
