@@ -288,3 +288,23 @@ stages:
     - echo "Running clippy"
     - cargo clippy --color=always --tests -- -Dclippy::all
 
+.docs:
+  image: sphinxdoc/sphinx
+  before_script:
+    - cd docs
+    - pip install -r requirements.txt
+
+"docs linkcheck":
+  extends: .docs
+  stage: lint
+  script:
+    - make linkcheck
+
+# "docs build":
+#   extends: .docs
+#   stage: build
+#   script:
+#     - make html
+#   artifacts:
+#     paths:
+#       - docs/build/html

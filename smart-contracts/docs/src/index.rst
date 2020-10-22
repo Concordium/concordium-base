@@ -9,12 +9,7 @@ Concordium Smart Contracts Developer Documentation
 .. toctree::
    :maxdepth: 2
    :caption: Table of content:
-
    deployment
-
-Dead external hyperlinks, like ARSTARST_.
-
-.. _ARSTARST: http://www.arstarst.com/
 
 
 Indices and tables
