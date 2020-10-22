@@ -74,8 +74,8 @@ pub fn test_create_ip_info<T: Rng + rand_core::CryptoRng>(
     // Return IpData with public and private keys.
     IpData {
         public_ip_info: IpInfo {
-            ip_identity:       IpIdentity(0),
-            ip_description:    Description {
+            ip_identity: IpIdentity(0),
+            ip_description: Description {
                 name:        "IP0".to_owned(),
                 url:         "IP0.com".to_owned(),
                 description: "IP0".to_owned(),
@@ -84,7 +84,7 @@ pub fn test_create_ip_info<T: Rng + rand_core::CryptoRng>(
             ip_cdi_verify_key,
         },
         ip_secret_key,
-        ip_cdi_secret_key
+        ip_cdi_secret_key,
     }
 }
 
@@ -157,7 +157,7 @@ pub fn test_pipeline() {
     let IpData {
         public_ip_info: ip_info,
         ip_secret_key,
-        ip_cdi_secret_key
+        ip_cdi_secret_key,
     } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
 
     let global_ctx = GlobalContext::generate();
@@ -178,9 +178,15 @@ pub fn test_pipeline() {
     let (context, pio, randomness, pub_info_for_ip, proof_acc_sk) =
         test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
     let alist = test_create_attributes();
-    let ver_ok = verify_credentials(&pio, context,
+    let ver_ok = verify_credentials(
+        &pio,
+        context,
         pub_info_for_ip,
-        &proof_acc_sk, &alist, &ip_secret_key, &ip_cdi_secret_key);
+        &proof_acc_sk,
+        &alist,
+        &ip_secret_key,
+        &ip_cdi_secret_key,
+    );
     assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
 
     // Generate CDI

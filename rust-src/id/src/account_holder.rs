@@ -31,6 +31,7 @@ use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
 /// information (group generators, shared commitment keys, etc).
 /// NB: In this method we assume that all the anonymity revokers in context
 /// are to be used.
+#[allow(clippy::type_complexity)]
 pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: &IPContext<P, C>,
     threshold: Threshold,
@@ -270,18 +271,16 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     //  RegID_ACC = PRF(AHI.key_PRF ,0):
     let prover_prf_regid = com_eq::ComEq {
         commitment: cmm_prf,
-        y: context
-        .global_context
-        .on_chain_commitment_key.g,
-        g: reg_id,
-        cmm_key: commitment_key_prf
+        y:          context.global_context.on_chain_commitment_key.g,
+        g:          reg_id,
+        cmm_key:    commitment_key_prf,
     };
 
-    let secret_prf_regid = com_eq::ComEqSecret{
+    let secret_prf_regid = com_eq::ComEqSecret {
         r: rand_cmm_prf.clone(),
-        a: prf_key.to_value()
+        a: prf_key.to_value(),
     };
-    
+
     let prover = prover.add_prover(ReplicateAdapter {
         protocols: replicated_provers,
     });
@@ -1197,7 +1196,7 @@ mod tests {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
-            ip_cdi_secret_key
+            ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let aci = test_create_aci(&mut csprng);
         let acc_data = InitialAccountData {
@@ -1215,9 +1214,15 @@ mod tests {
         let (context, pio, randomness, pub_info_for_ip, proof_acc_sk) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let alist = test_create_attributes();
-        let ver_ok = verify_credentials(&pio, context,
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
             pub_info_for_ip,
-            &proof_acc_sk, &alist, &ip_secret_key, &ip_cdi_secret_key);
+            &proof_acc_sk,
+            &alist,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
         let (ip_sig, _) = ver_ok.unwrap();
 
         // Create CDI arguments
