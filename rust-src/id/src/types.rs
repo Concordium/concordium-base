@@ -1451,16 +1451,6 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IPContext<'a, P
 #[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct GlobalContext<C: Curve> {
-    /// Generator of the curve C, used for, e.g., elgamal encryption.
-    /// FIXME: This will be just the second part of the commitment key,
-    /// should be removed and its usages replaced dwith
-    /// `encryption_in_the_exponent_generator` function.
-    #[serde(
-        rename = "generator",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub generator: C,
     /// A shared commitment key known to the chain and the account holder (and
     /// therefore it is public). The account holder uses this commitment key to
     /// generate commitments to values in the attribute list.
@@ -1482,23 +1472,30 @@ impl<C: Curve> GlobalContext<C> {
     ///
     /// This is intended mostly for testing, on-chain there will be a fixed
     /// amount.
-    /// FIXME: Make sure the parameters are bounded and this does not panic.
     pub fn generate_size(n: usize) -> Self {
-        assert!(n <= (PI_DIGITS.len() - 200) / 200);
+        // initialize the first generator from pi digits.
+        let mut generator = C::hash_to_group(&PI_DIGITS[0..1000]);
+
+        let g = generator.clone();
+        // generate next generator by hashing the previous one
+        generator = C::hash_to_group(&to_bytes(&generator));
+        let h = generator.clone();
         let cmm_key = PedersenKey {
-            g: C::hash_to_group(&PI_DIGITS[0..100]),
-            h: C::hash_to_group(&PI_DIGITS[100..200]),
+            g: g,
+            h: h,
         };
 
         let mut generators = Vec::with_capacity(n);
-        for bytes in PI_DIGITS[200..].chunks(200).take(n) {
-            let g = C::hash_to_group(&bytes[..100]);
-            let h = C::hash_to_group(&bytes[100..]);
+        for _ in 0..n {
+            generator = C::hash_to_group(&to_bytes(&generator));
+            let g = generator.clone();
+            generator = C::hash_to_group(&to_bytes(&generator));
+            let h = generator.clone();
             generators.push((g, h));
         }
 
         GlobalContext {
-            generator:               C::hash_to_group(&PI_DIGITS[0..100]),
+            // generator:               C::hash_to_group(&PI_DIGITS[0..100]),
             on_chain_commitment_key: cmm_key,
             bulletproof_generators:  Generators { G_H: generators },
         }
