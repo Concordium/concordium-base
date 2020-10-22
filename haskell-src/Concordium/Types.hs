@@ -343,7 +343,7 @@ instance S.Serialize ContractAddress where
 -- |Unique module reference.
 newtype ModuleRef = ModuleRef {moduleRef :: Hash.Hash}
     deriving(Eq, Ord, Hashable, Typeable, Data)
-    deriving (FromJSON, ToJSON) via Hash.Hash
+    deriving (FromJSON, ToJSON, Read) via Hash.Hash
 
 instance Show ModuleRef where
   show (ModuleRef m) = show m
