@@ -4,14 +4,13 @@ use bulletproofs::range_proof::{
     prove_given_scalars as bulletprove, verify_efficient,
     VerificationError as BulletproofVerificationError,
 };
-use crypto_common::{to_bytes, types::Amount};
+use crypto_common::types::Amount;
 use curve_arithmetic::{Curve, Value};
 use elgamal::{Cipher, PublicKey, Randomness, SecretKey};
 use id::{
     sigma_protocols::{com_eq::*, common::*, dlog::*},
     types::GlobalContext,
 };
-use merlin::Transcript;
 use pedersen_scheme::{Commitment, CommitmentKey, Randomness as PedersenRandomness};
 use rand::*;
 use random_oracle::*;
@@ -145,8 +144,7 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
 /// The arguments are
 /// - global context with parameters for generating proofs, and generators for
 ///   encrypting amounts.
-/// - a random oracle needed for the sigma protocol
-/// - a transcript for Bulletproofs
+/// - a random oracle needed for the sigma protocol and Bulletproofs
 /// - public key and secret key of sender
 /// - public key of receiver
 /// - index indicating which amounts where used
@@ -162,19 +160,14 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
 ///
 /// This implementation differs from the bluepaper in the following ways:
 /// 1. The challenge (ctx in the paper) differs. In the paper this function
-/// produces the challenge, but here it is assumed that a random oracle and
-/// transcript to be used by the sigma protocol and bulletproof respectively is
-/// supplied in the correct state This function is called by
-/// encrypted_transfers/src/lib.rs by make_transfer_data where the following
-/// prefixes are used: The random oracle provided is in the following state:
-/// Domain separator "EncryptedTransfer", appended with
-/// to_bytes(global_context), then to_bytes(receiver_pk), then
-/// to_bytes(sender_pk).
-/// The transcript provided starts with "EncryptedTransfer", then appended with
-/// transcript.append_message(b"ctx", to_bytes(context)), then
-/// transcript.append_message(b"receiver_pk", to_bytes(receiver_pk)), then
-/// transcript.append_message(b"sender_pk", to_bytes(sender_pk)).
-/// TODO: use a RandomOracle for bulletproofs rather than Transcript (CB-481)
+/// produces the challenge, but here it is assumed that a random oracle to be
+/// used by the sigma protocol and bulletproof is supplied in the correct state.
+/// This function is called by encrypted_transfers/src/lib.rs by
+/// make_transfer_data where the random oracle provided is in the following
+/// state: Domain separator "EncryptedTransfer", appended with
+/// append_message(b"ctx", global_context), then
+/// append_message(b"receiver_pk", receiver_pk), then
+/// append_message(b"sender_pk", sender_pk)
 /// 2. The generators for the bulletproofs are provided as input through the
 /// context: GlobalContext parameter. The rest of the information needed for the
 /// bulletproof are the randomness returned by gen_enc_trans_proof_info
@@ -183,8 +176,7 @@ pub fn gen_enc_trans_proof_info<C: Curve>(
 #[allow(clippy::too_many_arguments)]
 pub fn gen_enc_trans<C: Curve, R: Rng>(
     context: &GlobalContext<C>,
-    ro: RandomOracle,
-    transcript: &mut Transcript,
+    ro: &mut RandomOracle,
     pk_sender: &PublicKey<C>,
     sk_sender: &SecretKey<C>,
     pk_receiver: &PublicKey<C>,
@@ -267,9 +259,9 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
         .iter()
         .map(|x| PedersenRandomness::new(*(x.as_ref())))
         .collect();
-    transcript.append_message(b"sigmaproof", &to_bytes(&sigma_proof));
+    ro.append_message(b"sigmaproof", &sigma_proof);
     let bulletproof_a = bulletprove(
-        transcript,
+        ro,
         csprng,
         u8::from(CHUNK_SIZE),
         a_chunks.len() as u8,
@@ -280,7 +272,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
     )?;
 
     let bulletproof_s_prime = bulletprove(
-        transcript,
+        ro,
         csprng,
         u8::from(CHUNK_SIZE),
         s_prime_chunks.len() as u8,
@@ -319,8 +311,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
 /// The arguments are
 /// - global context with parameters for generating proofs, and generators for
 ///   encrypting amounts.
-/// - a random oracle needed for the sigma protocol
-/// - a transcript for Bulletproofs
+/// - a random oracle needed for the sigma protocol and Bulletproofs
 /// - public key and secret key of sender (who is also the receiver)
 /// - index indicating which amounts where used
 /// - S - encryption of the input amount up to the index, combined into one
@@ -340,18 +331,12 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
 ///
 /// This implementation differs from the bluepapers in the following ways:
 /// The challenge (ctx in the paper) differs. In the paper this function
-/// produces the challenge, but here it is assumed that a random oracle and
-/// transcript to be used by the sigma protocol and bulletproof respectively is
-/// supplied in the correct state This function is called by
-/// encrypted_transfers/src/lib.rs by make_sec_to_pub_transfer_data
-/// where the following prefixes for the challenges are used:
-/// The random oracle provided is in the following state: Domain separator
-/// "SecToPubTransfer", appended with to_bytes(global_context), then
-/// to_bytes(pk). The transcript provided starts with "SecToPubTransfer",
-/// then appended with transcript.append_message(b"ctx",
-/// to_bytes(context)), then transcript.append_message(b"pk",
-/// to_bytes(pk)).
-/// TODO: use a RandomOracle for bulletproofs rather than Transcript (CB-481)
+/// produces the challenge, but here it is assumed that a random oracle to be
+/// used by the sigma protocol and bulletproof is supplied in the correct state.
+/// This function is called by encrypted_transfers/src/lib.rs by
+/// make_sec_to_pub_transfer_data where the random oracle provided is in the
+/// following state: Domain separator "SecToPubTransfer", appended with
+/// append_message(b"ctx", global_context), then append_message(b"pk", pk);
 ///
 /// In the bluepaper, a seperate function genSecToPubProofInfo is used to
 /// produce the information needed to prove correctness of the transaction. In
@@ -372,8 +357,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
 #[allow(non_snake_case)]
 pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
     context: &GlobalContext<C>,
-    ro: RandomOracle,
-    transcript: &mut Transcript,
+    ro: &mut RandomOracle,
     pk: &PublicKey<C>, // sender and receiver are the same person
     sk: &SecretKey<C>,
     index: u64,    // indicates which amounts were used
@@ -432,8 +416,9 @@ pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
         .map(|x| PedersenRandomness::new(*(x.as_ref())))
         .collect();
 
+    ro.append_message(b"sigmaproof", &sigma_proof);
     let bulletproof_s_prime = bulletprove(
-        transcript,
+        ro,
         csprng,
         u8::from(CHUNK_SIZE),
         s_prime_chunks.len() as u8,
@@ -477,8 +462,7 @@ pub enum VerificationError {
 /// The arguments are
 /// - global context with parameters for generating proofs, and generators for
 ///   encrypting amounts.
-/// - a random oracle needed for the sigma protocol
-/// - a transcript for Bulletproofs
+/// - a random oracle needed for the sigma protocol and Bulletproofs
 /// - a transaction containing a proof
 /// - public keys of both sender and receiver
 /// - S - Encryption of amount on account
@@ -494,8 +478,7 @@ pub enum VerificationError {
 #[allow(clippy::too_many_arguments)]
 pub fn verify_enc_trans<C: Curve>(
     context: &GlobalContext<C>,
-    ro: RandomOracle,
-    transcript: &mut Transcript,
+    ro: &mut RandomOracle,
     transaction: &EncryptedAmountTransferData<C>,
     pk_sender: &PublicKey<C>,
     pk_receiver: &PublicKey<C>,
@@ -513,7 +496,7 @@ pub fn verify_enc_trans<C: Curve>(
         &transaction.remaining_amount.as_ref(),
         &generator,
     );
-    if !verify(ro, &protocol, &transaction.proof.accounting) {
+    if !verify(ro.split(), &protocol, &transaction.proof.accounting) {
         return Err(VerificationError::SigmaProofError);
     }
     let num_chunks = 64 / usize::from(u8::from(CHUNK_SIZE));
@@ -543,9 +526,9 @@ pub fn verify_enc_trans<C: Curve>(
         g: *generator,
         h: pk_sender.key,
     };
-    transcript.append_message(b"sigmaproof", &to_bytes(&transaction.proof.accounting));
+    ro.append_message(b"sigmaproof", &transaction.proof.accounting);
     let first_bulletproof = verify_efficient(
-        transcript,
+        ro,
         u8::from(CHUNK_SIZE),
         &commitments_a,
         &transaction.proof.transfer_amount_correct_encryption,
@@ -556,7 +539,7 @@ pub fn verify_enc_trans<C: Curve>(
         return Err(VerificationError::FirstBulletproofError(err));
     }
     let second_bulletproof = verify_efficient(
-        transcript,
+        ro,
         u8::from(CHUNK_SIZE),
         &commitments_s_prime,
         &transaction.proof.remaining_amount_correct_encryption,
@@ -574,8 +557,7 @@ pub fn verify_enc_trans<C: Curve>(
 /// The arguments are
 /// - global context with parameters for generating proofs, and generators for
 ///   encrypting amounts.
-/// - a random oracle needed for the sigma protocol
-/// - a transcript for Bulletproofs
+/// - a random oracle needed for the sigma protocol and Bulletproofs
 /// - a transaction containing a proof
 /// - public key of both sender (who is also the receiver)
 /// - S - Encryption of amount on account
@@ -592,8 +574,7 @@ pub fn verify_enc_trans<C: Curve>(
 #[allow(clippy::too_many_arguments)]
 pub fn verify_sec_to_pub_trans<C: Curve>(
     context: &GlobalContext<C>,
-    ro: RandomOracle,
-    transcript: &mut Transcript,
+    ro: &mut RandomOracle,
     transaction: &SecToPubAmountTransferData<C>,
     pk: &PublicKey<C>,
     S: &Cipher<C>,
@@ -615,7 +596,7 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
         &transaction.remaining_amount.as_ref(),
         &generator,
     );
-    if !verify(ro, &protocol, &transaction.proof.accounting) {
+    if !verify(ro.split(), &protocol, &transaction.proof.accounting) {
         return Err(VerificationError::SigmaProofError);
     }
 
@@ -637,8 +618,9 @@ pub fn verify_sec_to_pub_trans<C: Curve>(
     // Number of bits in each chunk, determines the upper bound that needs to be
     // ensured.
     let num_bits_in_chunk = (64 / num_chunks) as u8; // as is safe here because the number is < 64
+    ro.append_message(b"sigmaproof", &transaction.proof.accounting);
     let bulletproof = verify_efficient(
-        transcript,
+        ro,
         num_bits_in_chunk,
         &commitments_s_prime,
         &transaction.proof.remaining_amount_correct_encryption,
@@ -692,17 +674,12 @@ mod test {
         let S = pk_sender.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
 
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
-        let ro = RandomOracle::domain(&challenge_prefix);
-        // Somewhere there should be some kind of connection
-        // between the transcript and the RO,
-        // maybe inside the functions used below?
+        let mut ro = RandomOracle::domain(&challenge_prefix);
 
-        let mut transcript = Transcript::new(&[]);
         let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
         let transaction = gen_enc_trans(
             &context,
-            ro.split(),
-            &mut transcript,
+            &mut ro.split(),
             &pk_sender,
             &sk_sender,
             &pk_receiver,
@@ -714,13 +691,10 @@ mod test {
         )
         .expect("Could not produce proof.");
 
-        let mut transcript = Transcript::new(&[]);
-
         assert_eq!(
             verify_enc_trans(
                 &context,
-                ro,
-                &mut transcript,
+                &mut ro,
                 &transaction,
                 &pk_sender,
                 &pk_receiver,
@@ -750,14 +724,12 @@ mod test {
         let S = pk.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
 
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
-        let ro = RandomOracle::domain(&challenge_prefix);
 
-        let mut transcript = Transcript::new(&[]);
+        let mut ro = RandomOracle::domain(&challenge_prefix);
         let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
         let transaction = gen_sec_to_pub_trans(
             &context,
-            ro.split(),
-            &mut transcript,
+            &mut ro.split(),
             &pk,
             &sk,
             index,
@@ -767,10 +739,9 @@ mod test {
             &mut csprng,
         )
         .expect("Proving failed, but that is extremely unlikely, which indicates a bug.");
-        let mut transcript = Transcript::new(&[]);
 
         assert_eq!(
-            verify_sec_to_pub_trans(&context, ro, &mut transcript, &transaction, &pk, &S,),
+            verify_sec_to_pub_trans(&context, &mut ro, &transaction, &pk, &S,),
             Ok(())
         )
     }

@@ -6,11 +6,9 @@ use crate::{
 };
 use bulletproofs::range_proof::verify_less_than_or_equal;
 use core::fmt::{self, Display};
-use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
-use eddsa_ed25519::dlog_ed25519 as eddsa_dlog;
+use ed25519_dalek::Verifier;
 use either::Either;
-use merlin::Transcript;
 use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
@@ -138,10 +136,10 @@ pub fn verify_cdi<
         witness,
     };
 
-    let mut transcript = Transcript::new(r"CredCounterLessThanMaxAccountsProof".as_ref());
-    transcript.append_message(b"cred_values", &to_bytes(&cdi.values));
-    transcript.append_message(b"global_context", &to_bytes(&global_context));
-    transcript.append_message(b"cred_values", &to_bytes(&proof));
+    let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
+    transcript.append_message(b"cred_values", &cdi.values);
+    transcript.append_message(b"global_context", &global_context);
+    transcript.append_message(b"cred_values", &proof);
     if !verify_less_than_or_equal(
         &mut transcript,
         8,
@@ -167,12 +165,15 @@ pub fn verify_cdi<
                 }
                 // we at least have enough proofs now, if they are all valid and have valid
                 // indices
-                for (&idx, proof) in proofs.proof_acc_sk.proofs.iter() {
+
+                // message signed in proofs.proofs_acc_sk.sigs
+                let signed = ro.split().get_challenge();
+                for (&idx, proof) in proofs.proof_acc_sk.sigs.iter() {
                     if let Some(key) = acc_keys.get(idx) {
                         let VerifyKey::Ed25519VerifyKey(ref key) = key;
-                        let verify_dlog = eddsa_dlog::verify_dlog_ed25519(ro.split(), key, proof);
-                        if !verify_dlog {
-                            return Err(CDIVerificationError::AccountOwnership);
+                        match key.verify(signed.as_ref(), &proof) {
+                            Ok(_) => (),
+                            _ => return Err(CDIVerificationError::AccountOwnership),
                         }
                     } else {
                         return Err(CDIVerificationError::AccountOwnership);
@@ -197,6 +198,8 @@ pub fn verify_cdi<
             {
                 return Err(CDIVerificationError::AccountOwnership);
             }
+            // message signed in proofs.proofs_acc_sk.sigs
+            let signed = ro.split().get_challenge();
             // set of processed keys already
             let mut processed = BTreeSet::new();
             // the new keys get indices 0, 1, ..
@@ -206,11 +209,11 @@ pub fn verify_cdi<
                 if !processed.insert(key) {
                     return Err(CDIVerificationError::AccountOwnership);
                 }
-                if let Some(proof) = proofs.proof_acc_sk.proofs.get(&idx) {
+                if let Some(sig) = proofs.proof_acc_sk.sigs.get(&idx) {
                     let VerifyKey::Ed25519VerifyKey(ref key) = key;
-                    let verify_dlog = eddsa_dlog::verify_dlog_ed25519(ro.split(), key, proof);
-                    if !verify_dlog {
-                        return Err(CDIVerificationError::AccountOwnership);
+                    match key.verify(signed.as_ref(), &sig) {
+                        Ok(_) => (),
+                        _ => return Err(CDIVerificationError::AccountOwnership),
                     }
                 } else {
                     return Err(CDIVerificationError::AccountOwnership);

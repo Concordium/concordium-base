@@ -9,12 +9,11 @@ mod ffi;
 pub mod proofs;
 mod types;
 
-use crate::types::{CHUNK_SIZE as CHUNK_SIZE_ENC_TRANS, *};
-use crypto_common::{to_bytes, types::Amount};
+use crate::types::CHUNK_SIZE as CHUNK_SIZE_ENC_TRANS;
+use crypto_common::types::Amount;
 use curve_arithmetic::*;
 use elgamal::*;
 use id::types::*;
-use merlin::Transcript;
 use proofs::*;
 use rand::*;
 use random_oracle::*;
@@ -154,20 +153,14 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     csprng: &mut R,
 ) -> Option<EncryptedAmountTransferData<C>> {
     let sender_pk = &PublicKey::from(sender_sk);
-    let ro = RandomOracle::domain("EncryptedTransfer")
-        .append_bytes(&to_bytes(&ctx))
-        .append_bytes(&to_bytes(&receiver_pk))
-        .append_bytes(&to_bytes(&sender_pk));
-
-    let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
-    transcript.append_message(b"ctx", &to_bytes(&ctx));
-    transcript.append_message(b"receiver_pk", &to_bytes(&receiver_pk));
-    transcript.append_message(b"sender_pk", &to_bytes(&sender_pk));
+    let mut ro = RandomOracle::domain("EncryptedTransfer");
+    ro.append_message(b"ctx", &ctx);
+    ro.append_message(b"receiver_pk", &receiver_pk);
+    ro.append_message(b"sender_pk", &sender_pk);
 
     generate_proofs::gen_enc_trans(
         ctx,
-        ro,
-        &mut transcript,
+        &mut ro,
         sender_pk,
         sender_sk,
         receiver_pk,
@@ -199,21 +192,16 @@ pub fn verify_transfer_data<C: Curve>(
     transfer_data: &EncryptedAmountTransferData<C>,
 ) -> bool {
     // Fixme: Put context into the random oracle.
-    let ro = RandomOracle::domain("EncryptedTransfer")
-        .append_bytes(&to_bytes(&ctx))
-        .append_bytes(&to_bytes(&receiver_pk))
-        .append_bytes(&to_bytes(&sender_pk));
-    let mut transcript = Transcript::new(r"EncryptedTransfer".as_ref());
-    transcript.append_message(b"ctx", &to_bytes(&ctx));
-    transcript.append_message(b"receiver_pk", &to_bytes(&receiver_pk));
-    transcript.append_message(b"sender_pk", &to_bytes(&sender_pk));
+    let mut ro = RandomOracle::domain("EncryptedTransfer");
+    ro.append_message(b"ctx", &ctx);
+    ro.append_message(b"receiver_pk", &receiver_pk);
+    ro.append_message(b"sender_pk", &sender_pk);
 
     // FIXME: Revise order of arguments in verify_enc_trans to be more consistent
     // with the rest.
     generate_proofs::verify_enc_trans(
         ctx,
-        ro,
-        &mut transcript,
+        &mut ro,
         transfer_data,
         sender_pk,
         receiver_pk,
@@ -244,19 +232,14 @@ pub fn make_sec_to_pub_transfer_data<C: Curve, R: Rng>(
 ) -> Option<SecToPubAmountTransferData<C>> {
     let pk = &PublicKey::from(sk);
     // FIXME: Put context into random oracle
-    let ro = RandomOracle::domain("SecToPubTransfer")
-        .append_bytes(&to_bytes(&ctx))
-        .append_bytes(&to_bytes(&pk));
-    // FIXME: Put context into the transcript.
-    let mut transcript = Transcript::new(r"SecToPubTransfer".as_ref());
-    transcript.append_message(b"ctx", &to_bytes(&ctx));
-    transcript.append_message(b"pk", &to_bytes(&pk));
+    let mut ro = RandomOracle::domain("SecToPubTransfer");
+    ro.append_message(b"ctx", &ctx);
+    ro.append_message(b"pk", &pk);
 
     // FIXME: Make arguments more in line between gen_sec_to_pub_trans and this.
     generate_proofs::gen_sec_to_pub_trans(
         ctx,
-        ro,
-        &mut transcript,
+        &mut ro,
         pk,
         sk,
         input_amount.agg_index,
@@ -288,24 +271,14 @@ pub fn verify_sec_to_pub_transfer_data<C: Curve>(
     transfer_data: &SecToPubAmountTransferData<C>,
 ) -> bool {
     // Fixme: Put context into the random oracle.
-    let ro = RandomOracle::domain("SecToPubTransfer")
-        .append_bytes(&to_bytes(&ctx))
-        .append_bytes(&to_bytes(&pk));
-    let mut transcript = Transcript::new(r"SecToPubTransfer".as_ref());
-    transcript.append_message(b"ctx", &to_bytes(&ctx));
-    transcript.append_message(b"pk", &to_bytes(&pk));
+    let mut ro = RandomOracle::domain("SecToPubTransfer");
+    ro.append_message(b"ctx", &ctx);
+    ro.append_message(b"pk", &pk);
 
     // FIXME: Revise order of arguments in verify_sec_to_pub_trans to be more
     // consistent with the rest.
-    generate_proofs::verify_sec_to_pub_trans(
-        ctx,
-        ro,
-        &mut transcript,
-        transfer_data,
-        pk,
-        &before_amount.join(),
-    )
-    .is_ok()
+    generate_proofs::verify_sec_to_pub_trans(ctx, &mut ro, transfer_data, pk, &before_amount.join())
+        .is_ok()
 }
 
 #[cfg(test)]
