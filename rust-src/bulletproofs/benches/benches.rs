@@ -6,10 +6,10 @@ extern crate criterion;
 use criterion::Criterion;
 use curve_arithmetic::*;
 use ff::Field;
-use merlin::Transcript;
 use pairing::bls12_381::{Fr, G1};
 use pedersen_scheme::*;
 use rand::*;
+use random_oracle::RandomOracle;
 
 use std::time::Duration;
 
@@ -65,7 +65,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let v_vec_p = v_vec.clone();
     let gens_p = gens.clone();
     let randomness_p = randomness.clone();
-    let mut transcript = Transcript::new(&[]);
+    let mut transcript = RandomOracle::empty();
     c.bench_function("Prover.", move |b| {
         b.iter(|| {
             prove(
@@ -82,7 +82,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     });
 
     let rng = &mut thread_rng();
-    let mut transcript = Transcript::new(&[]);
+    let mut transcript = RandomOracle::empty();
     let proof = prove(
         &mut transcript,
         rng,
@@ -96,7 +96,7 @@ pub fn prove_verify_benchmarks(c: &mut Criterion) {
     let proof = proof.unwrap();
     c.bench_function("Verifier.", move |b| {
         b.iter(|| {
-            let mut transcript = Transcript::new(&[]);
+            let mut transcript = RandomOracle::empty();
             assert!(
                 verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys).is_ok()
             );
@@ -131,7 +131,7 @@ fn compare_inner_product_proof(c: &mut Criterion) {
     let mut H_prime: Vec<SomeCurve> = Vec::with_capacity(n);
     let y_inv = y.inverse().unwrap();
     let mut H_prime_scalars: Vec<SomeField> = Vec::with_capacity(n);
-    let mut transcript = Transcript::new(&[]);
+    let mut transcript = RandomOracle::empty();
     let G_vec_p = G_vec.clone();
     let H_vec_p = H_vec.clone();
     let a_vec_p = a_vec.clone();
@@ -146,7 +146,7 @@ fn compare_inner_product_proof(c: &mut Criterion) {
             prove_inner_product(&mut transcript, &G_vec, &H_prime, &Q, &a_vec, &b_vec);
         })
     });
-    let mut transcript = Transcript::new(&[]);
+    let mut transcript = RandomOracle::empty();
     c.bench_function("Better inner product proof with scalars.", move |b| {
         b.iter(|| {
             let mut y_inv_i = SomeField::one();

@@ -1,9 +1,8 @@
-use crate::transcript::TranscriptProtocol;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, Curve};
 use ff::Field;
-use merlin::Transcript;
+use random_oracle::RandomOracle;
 
 #[derive(Clone, Serialize, Debug)]
 pub struct InnerProductProof<C: Curve> {
@@ -31,7 +30,7 @@ pub struct InnerProductProof<C: Curve> {
 /// this length must be a power of 2.
 #[allow(non_snake_case)]
 pub fn prove_inner_product<C: Curve>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     G_slice: &[C],
     H_slice: &[C],
     Q: &C,
@@ -63,7 +62,7 @@ pub fn prove_inner_product<C: Curve>(
 /// this length must be a power of 2.
 #[allow(non_snake_case)]
 pub fn prove_inner_product_with_scalars<C: Curve>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     G_slice: &[C],
     H_slice: &[C],
     H_prime_scalars: &[C::Scalar],
@@ -129,10 +128,10 @@ pub fn prove_inner_product_with_scalars<C: Curve>(
         let Lj = a_lo_G_hi.plus_point(&b_hi_H_lo).plus_point(&a_lo_b_hi_Q);
         let Rj = a_hi_G_lo.plus_point(&b_lo_H_hi).plus_point(&a_hi_b_lo_Q);
 
-        transcript.append_point(b"Lj", &Lj);
-        transcript.append_point(b"Rj", &Rj);
+        transcript.append_message(b"Lj", &Lj);
+        transcript.append_message(b"Rj", &Rj);
         L_R.push((Lj, Rj));
-        let u_j: C::Scalar = transcript.challenge_scalar::<C>(b"uj");
+        let u_j: C::Scalar = transcript.challenge_scalar::<C, _>(b"uj");
         // println!("Prover's u_{:?} = {:?}", j, u_j);
         let u_j_inv = match u_j.inverse() {
             Some(inv) => inv,
@@ -219,7 +218,7 @@ pub struct VerificationScalars<C: Curve> {
 #[allow(non_snake_case)]
 #[allow(clippy::many_single_char_names)]
 pub fn verify_scalars<C: Curve>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     n: usize,
     proof: &InnerProductProof<C>,
 ) -> Option<VerificationScalars<C>> {
@@ -235,9 +234,9 @@ pub fn verify_scalars<C: Curve>(
     let mut s = Vec::with_capacity(n);
     let mut s_0 = C::Scalar::one();
     for (Lj, Rj) in L_R {
-        transcript.append_point(b"Lj", Lj);
-        transcript.append_point(b"Rj", Rj);
-        let u_j: C::Scalar = transcript.challenge_scalar::<C>(b"uj");
+        transcript.append_message(b"Lj", Lj);
+        transcript.append_message(b"Rj", Rj);
+        let u_j: C::Scalar = transcript.challenge_scalar::<C, _>(b"uj");
         let u_j_inv = match u_j.inverse() {
             Some(inv) => inv,
             _ => return None,
@@ -285,7 +284,7 @@ pub fn verify_scalars<C: Curve>(
 /// of 2.
 #[allow(non_snake_case)]
 pub fn verify_inner_product<C: Curve>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     G_vec: &[C],
     H_vec: &[C],
     P_prime: &C,
@@ -404,13 +403,13 @@ mod tests {
         let P_prime = multiexp(&G_vec, &a_vec)
             .plus_point(&multiexp(&H_vec, &b_vec))
             .plus_point(&Q.mul_by_scalar(&inner_product(&a_vec, &b_vec)));
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
 
         // Producing inner product proof with vector length = n
         let proof = prove_inner_product(&mut transcript, &G_vec, &H_vec, &Q, &a_vec, &b_vec);
         assert!(proof.is_some());
         let proof = proof.unwrap();
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
 
         assert!(verify_inner_product(
             &mut transcript,

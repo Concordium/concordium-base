@@ -1,11 +1,11 @@
-use crate::{inner_product_proof::*, transcript::TranscriptProtocol};
+use crate::inner_product_proof::*;
 use crypto_common::*;
 use crypto_common_derive::*;
 use curve_arithmetic::{multiexp, multiexp_table, multiexp_worker_given_table, Curve, Value};
 use ff::{Field, PrimeField};
-use merlin::Transcript;
 use pedersen_scheme::*;
 use rand::*;
+use random_oracle::RandomOracle;
 use std::iter::once;
 
 #[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
@@ -110,7 +110,7 @@ impl<C: Curve> Generators<C> {
 /// See the documentation of `prove` below for the meaning of arguments.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_given_scalars<C: Curve, T: Rng>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     csprng: &mut T,
     n: u8,
     m: u8,
@@ -151,7 +151,7 @@ pub fn prove_given_scalars<C: Curve, T: Rng>(
 #[allow(non_snake_case)]
 #[allow(clippy::too_many_arguments)]
 pub fn prove<C: Curve, T: Rng>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     csprng: &mut T,
     n: u8,
     m: u8,
@@ -194,7 +194,7 @@ pub fn prove<C: Curve, T: Rng>(
         let v_scalar = C::scalar_from_u64(v_vec[j]);
         let v_value = Value::<C>::new(v_scalar);
         let V_j = v_keys.hide(&v_value, &v_j_tilde);
-        transcript.append_point(b"Vj", &V_j.0);
+        transcript.append_message(b"Vj", &V_j.0);
         V_vec.push(V_j);
     }
     let mut a_tilde_sum = C::Scalar::zero();
@@ -225,10 +225,10 @@ pub fn prove<C: Curve, T: Rng>(
     let table = multiexp_table(&GH_B_tilde, window_size);
     let A = multiexp_worker_given_table(&A_scalars, &table, window_size);
     let S = multiexp_worker_given_table(&S_scalars, &table, window_size);
-    transcript.append_point(b"A", &A);
-    transcript.append_point(b"S", &S);
-    let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
-    let z: C::Scalar = transcript.challenge_scalar::<C>(b"z");
+    transcript.append_message(b"A", &A);
+    transcript.append_message(b"S", &S);
+    let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
 
     let mut l_0 = Vec::with_capacity(nm);
     let mut l_1 = Vec::with_capacity(nm);
@@ -325,9 +325,9 @@ pub fn prove<C: Curve, T: Rng>(
         .mul_by_scalar(&t_2_sum)
         .plus_point(&B_tilde.mul_by_scalar(&t_2_tilde_sum));
 
-    transcript.append_point(b"T1", &T_1);
-    transcript.append_point(b"T2", &T_2);
-    let x: C::Scalar = transcript.challenge_scalar::<C>(b"x");
+    transcript.append_message(b"T1", &T_1);
+    transcript.append_message(b"T2", &T_2);
+    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
     // println!("prover's x = {:?}", x);
     let mut x2 = x;
     x2.mul_assign(&x);
@@ -380,10 +380,10 @@ pub fn prove<C: Curve, T: Rng>(
         e_tilde.add_assign(&ej_tilde);
     }
 
-    transcript.append_scalar::<C>(b"tx", &tx);
-    transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
-    transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
-    let w: C::Scalar = transcript.challenge_scalar::<C>(b"w");
+    transcript.append_message(b"tx", &tx);
+    transcript.append_message(b"tx_tilde", &tx_tilde);
+    transcript.append_message(b"e_tilde", &e_tilde);
+    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
     let Q = B.mul_by_scalar(&w);
     // let mut H_prime : Vec<C> = Vec::with_capacity(nm);
     let mut H_prime_scalars: Vec<C::Scalar> = Vec::with_capacity(nm);
@@ -446,7 +446,7 @@ pub enum VerificationError {
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::many_single_char_names)]
 pub fn verify_efficient<C: Curve>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     n: u8,
     commitments: &[Commitment<C>],
     proof: &RangeProof<C>,
@@ -462,7 +462,7 @@ pub fn verify_efficient<C: Curve>(
     let B = v_keys.g;
     let B_tilde = v_keys.h;
     for V in commitments {
-        transcript.append_point(b"Vj", &V.0);
+        transcript.append_message(b"Vj", &V.0);
     }
     let A = proof.A;
     let S = proof.S;
@@ -471,24 +471,24 @@ pub fn verify_efficient<C: Curve>(
     let tx = proof.tx;
     let tx_tilde = proof.tx_tilde;
     let e_tilde = proof.e_tilde;
-    transcript.append_point(b"A", &A);
-    transcript.append_point(b"S", &S);
-    let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
-    let z: C::Scalar = transcript.challenge_scalar::<C>(b"z");
+    transcript.append_message(b"A", &A);
+    transcript.append_message(b"S", &S);
+    let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+    let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
     let mut z2 = z;
     z2.mul_assign(&z);
     let mut z3 = z2;
     z3.mul_assign(&z);
-    transcript.append_point(b"T1", &T_1);
-    transcript.append_point(b"T2", &T_2);
-    let x: C::Scalar = transcript.challenge_scalar::<C>(b"x");
+    transcript.append_message(b"T1", &T_1);
+    transcript.append_message(b"T2", &T_2);
+    let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
     let mut x2 = x;
     x2.mul_assign(&x);
     // println!("verifier's x = {:?}", x);
-    transcript.append_scalar::<C>(b"tx", &tx);
-    transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
-    transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
-    let w: C::Scalar = transcript.challenge_scalar::<C>(b"w");
+    transcript.append_message(b"tx", &tx);
+    transcript.append_message(b"tx_tilde", &tx_tilde);
+    transcript.append_message(b"e_tilde", &e_tilde);
+    let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
     // Calculate delta(x,y):
     let mut ip_1_y_nm = C::Scalar::zero();
     let mut yi = C::Scalar::one();
@@ -623,7 +623,7 @@ pub fn verify_efficient<C: Curve>(
 /// It is assumed that a,b \in [0, 2^n)
 #[allow(clippy::too_many_arguments)]
 pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     csprng: &mut T,
     n: u8,
     a: u64,
@@ -646,7 +646,7 @@ pub fn prove_less_than_or_equal<C: Curve, T: Rng>(
 /// but it should follow that a \in [0, 2^n) if the
 /// proof verifies.
 pub fn verify_less_than_or_equal<C: Curve>(
-    transcript: &mut Transcript,
+    transcript: &mut RandomOracle,
     n: u8,
     commitment_a: &Commitment<C>,
     commitment_b: &Commitment<C>,
@@ -689,7 +689,7 @@ mod tests {
         B: C,
         B_tilde: C,
         csprng: &mut T,
-        transcript: &mut Transcript,
+        transcript: &mut RandomOracle,
     ) -> (Vec<Commitment<C>>, Option<RangeProof<C>>) {
         let nm = (usize::from(n)) * (usize::from(m));
         let v_copy = v_vec.clone();
@@ -702,15 +702,15 @@ mod tests {
             let v_j_tilde = Randomness::<C>::generate(csprng);
             v_tilde_vec.push(*v_j_tilde);
             let V_j = v_keys.hide(&v_value, &v_j_tilde);
-            transcript.append_point(b"Vj", &V_j.0);
+            transcript.append_message(b"Vj", &V_j.0);
             V_vec.push(V_j);
         }
         let A = C::zero_point();
         let S = C::zero_point();
-        transcript.append_point(b"A", &A);
-        transcript.append_point(b"S", &S);
-        let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
-        let z: C::Scalar = transcript.challenge_scalar::<C>(b"z");
+        transcript.append_message(b"A", &A);
+        transcript.append_message(b"S", &S);
+        let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+        let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
         let z_m = z_vec(z, 0, usize::from(m));
 
         // z squared
@@ -728,9 +728,9 @@ mod tests {
         let mut tx: C::Scalar = C::Scalar::zero();
         let mut tx_tilde: C::Scalar = C::Scalar::zero();
         let e_tilde: C::Scalar = C::Scalar::zero();
-        transcript.append_point(b"T1", &T_1);
-        transcript.append_point(b"T2", &T_2);
-        let _x: C::Scalar = transcript.challenge_scalar::<C>(b"x");
+        transcript.append_message(b"T1", &T_1);
+        transcript.append_message(b"T2", &T_2);
+        let _x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
         // println!("Cheating prover's x = {}", x);
         for j in 0..usize::from(m) {
             // tx:
@@ -818,7 +818,7 @@ mod tests {
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::many_single_char_names)]
     fn naive_verify<C: Curve>(
-        transcript: &mut Transcript,
+        transcript: &mut RandomOracle,
         n: u8,
         commitments: &[Commitment<C>],
         proof: &RangeProof<C>,
@@ -830,7 +830,7 @@ mod tests {
         let B_tilde = v_keys.h;
         let m = commitments.len();
         for V in commitments.clone() {
-            transcript.append_point(b"Vj", &V.0);
+            transcript.append_message(b"Vj", &V.0);
         }
         let A = proof.A;
         let S = proof.S;
@@ -839,24 +839,24 @@ mod tests {
         let tx = proof.tx;
         let tx_tilde = proof.tx_tilde;
         let e_tilde = proof.e_tilde;
-        transcript.append_point(b"A", &A);
-        transcript.append_point(b"S", &S);
-        let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
-        let z: C::Scalar = transcript.challenge_scalar::<C>(b"z");
+        transcript.append_message(b"A", &A);
+        transcript.append_message(b"S", &S);
+        let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+        let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
         let mut z2 = z;
         z2.mul_assign(&z);
         let mut z3 = z2;
         z3.mul_assign(&z);
-        transcript.append_point(b"T1", &T_1);
-        transcript.append_point(b"T2", &T_2);
-        let x: C::Scalar = transcript.challenge_scalar::<C>(b"x");
+        transcript.append_message(b"T1", &T_1);
+        transcript.append_message(b"T2", &T_2);
+        let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
         let mut x2 = x;
         x2.mul_assign(&x);
         // println!("verifier's x = {:?}", x);
-        transcript.append_scalar::<C>(b"tx", &tx);
-        transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
-        transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
-        let w: C::Scalar = transcript.challenge_scalar::<C>(b"w");
+        transcript.append_message(b"tx", &tx);
+        transcript.append_message(b"tx_tilde", &tx_tilde);
+        transcript.append_message(b"e_tilde", &e_tilde);
+        let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
         // Calculate delta(x,y):
         let mut ip_1_y_nm = C::Scalar::zero();
         let mut yi = C::Scalar::one();
@@ -966,7 +966,7 @@ mod tests {
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::many_single_char_names)]
     pub fn verify_more_efficient<C: Curve>(
-        transcript: &mut Transcript,
+        transcript: &mut RandomOracle,
         n: u8,
         commitments: &[Commitment<C>],
         proof: &RangeProof<C>,
@@ -978,7 +978,7 @@ mod tests {
         let B_tilde = v_keys.h;
         let m = commitments.len();
         for V in commitments {
-            transcript.append_point(b"Vj", &V.0);
+            transcript.append_message(b"Vj", &V.0);
         }
         let A = proof.A;
         let S = proof.S;
@@ -987,24 +987,24 @@ mod tests {
         let tx = proof.tx;
         let tx_tilde = proof.tx_tilde;
         let e_tilde = proof.e_tilde;
-        transcript.append_point(b"A", &A);
-        transcript.append_point(b"S", &S);
-        let y: C::Scalar = transcript.challenge_scalar::<C>(b"y");
-        let z: C::Scalar = transcript.challenge_scalar::<C>(b"z");
+        transcript.append_message(b"A", &A);
+        transcript.append_message(b"S", &S);
+        let y: C::Scalar = transcript.challenge_scalar::<C, _>(b"y");
+        let z: C::Scalar = transcript.challenge_scalar::<C, _>(b"z");
         let mut z2 = z;
         z2.mul_assign(&z);
         let mut z3 = z2;
         z3.mul_assign(&z);
-        transcript.append_point(b"T1", &T_1);
-        transcript.append_point(b"T2", &T_2);
-        let x: C::Scalar = transcript.challenge_scalar::<C>(b"x");
+        transcript.append_message(b"T1", &T_1);
+        transcript.append_message(b"T2", &T_2);
+        let x: C::Scalar = transcript.challenge_scalar::<C, _>(b"x");
         let mut x2 = x;
         x2.mul_assign(&x);
         // println!("verifier's x = {:?}", x);
-        transcript.append_scalar::<C>(b"tx", &tx);
-        transcript.append_scalar::<C>(b"tx_tilde", &tx_tilde);
-        transcript.append_scalar::<C>(b"e_tilde", &e_tilde);
-        let w: C::Scalar = transcript.challenge_scalar::<C>(b"w");
+        transcript.append_message(b"tx", &tx);
+        transcript.append_message(b"tx_tilde", &tx_tilde);
+        transcript.append_message(b"e_tilde", &e_tilde);
+        let w: C::Scalar = transcript.challenge_scalar::<C, _>(b"w");
         // Calculate delta(x,y):
         let mut ip_1_y_nm = C::Scalar::zero();
         let mut yi = C::Scalar::one();
@@ -1187,7 +1187,7 @@ mod tests {
             randomness.push(r);
             commitments.push(com);
         }
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let proof = prove(
             &mut transcript,
             rng,
@@ -1200,14 +1200,14 @@ mod tests {
         );
         assert!(proof.is_some());
         let proof = proof.unwrap();
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b1 = naive_verify(&mut transcript, n, &commitments, &proof, &gens, &keys);
 
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b2 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
 
         // Testing the even more efficient verifier:
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b3 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
         assert!(b1);
         assert!(b2.is_ok());
@@ -1261,7 +1261,7 @@ mod tests {
             randomness.push(r);
             commitments.push(com);
         }
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let proof = prove(
             &mut transcript,
             rng,
@@ -1274,14 +1274,14 @@ mod tests {
         );
         assert!(proof.is_some());
         let proof = proof.unwrap();
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b1 = naive_verify(&mut transcript, n, &commitments, &proof, &gens, &keys);
 
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b2 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
 
         // Testing the even more efficient verifier:
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b3 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
         assert!(b1);
         assert!(b2.is_ok());
@@ -1322,11 +1322,11 @@ mod tests {
         let b_scalar = SomeCurve::scalar_from_u64(b);
         let com_a = key.hide_worker(&a_scalar, &r_a);
         let com_b = key.hide_worker(&b_scalar, &r_b);
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let proof =
             prove_less_than_or_equal(&mut transcript, rng, n, a, b, &gens, &key, &r_a, &r_b)
                 .unwrap();
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         assert!(verify_less_than_or_equal(
             &mut transcript,
             n,
@@ -1373,7 +1373,7 @@ mod tests {
                * ,7,4,15,15,2,15,5,4,4,5,6,8,12,13,10,8 */
         ];
         // CHEATING prover:
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let (commitments, proof) = cheat_prove(
             n,
             m,
@@ -1387,9 +1387,9 @@ mod tests {
         );
         assert!(proof.is_some());
         let proof = proof.unwrap();
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b1 = verify_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
-        let mut transcript = Transcript::new(&[]);
+        let mut transcript = RandomOracle::empty();
         let b2 = verify_more_efficient(&mut transcript, n, &commitments, &proof, &gens, &keys);
         assert_eq!(
             b1,
