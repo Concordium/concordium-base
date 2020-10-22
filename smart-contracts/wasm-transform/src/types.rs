@@ -1,227 +1,31 @@
-//! AST definition of Wasm modules, as well as supporting datatypes.
-//! Based on the [W3C Wasm specification](https://www.w3.org/TR/2019/REC-wasm-core-1-20191205/#syntax-import)
+// AST definition of Wasm modules.
+// Based on the Wasm specification Release 1.1, July 21st, 2020.
 
-#[derive(Debug)]
-/// A webassembly Name. We choose to have it be an owned value rather than ar
-/// reference into the original module. Names are also used in the parsed AST,
-/// and we don't want to retain references to the original bytes just because of
-/// a few names.
-pub struct Name {
-    /// Names in Wasm are utf8 encoded.
-    pub name: String,
-}
+use crate::*;
 
-/// The Display just uses the Display instance for the underlying String.
-impl std::fmt::Display for Name {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { self.name.fmt(f) }
-}
-
-#[derive(Debug)]
-/// A single import description.
-pub enum ImportDescription {
-    /// Import a function with the given type.
-    Func {
-        type_idx: TypeIndex,
-    },
-    /// Import a table of the given type.
-    Table {
-        table_type: TableType,
-    },
-    //// Import a memory of the given type.
-    Memory {
-        memory_type: MemoryType,
-    },
-    /// import a global of a given type.
-    Global {
-        global_type: GlobalType,
-    },
-}
-
-#[derive(Debug)]
-/// Import of an item from another module.
-pub struct Import {
-    /// The name of the module the item is imported from.
-    pub mod_name: Name,
-    /// The name of the item that is to be imported.
-    pub item_name: Name,
-    /// And the description of the item.
-    pub description: ImportDescription,
-}
-
-#[derive(Debug, Default)]
-/// The Default instance for this type produces an empty section.
-pub struct ImportSection {
-    pub imports: Vec<Import>,
-}
-
-#[derive(Debug, Default)]
-/// The Default instance for this type produces an empty function section.
-pub struct FunctionSection {
-    pub types: Vec<TypeIndex>,
-}
-
-#[derive(Debug, Default)]
-/// The Default instance for this type produces an empty table section.
-pub struct TableSection {
-    /// We only support at most one section for now, as in Wasm MVP, hence an
-    /// Option as opposed to the vector.
-    pub table_type: Option<TableType>,
-}
-
-#[derive(Debug)]
-/// An exported item description.
-pub enum ExportDescription {
-    /// An exported function with the given type.
-    Func {
-        index: FuncIndex,
-    },
-    /// An exported table. Since only table with index 0 is currently supported
-    /// there is no explicit index.
-    Table,
-    /// Exported memory. Since only memory with index 0 is currently supported
-    /// there is no explicit index.
-    Memory,
-    /// An exported global.
-    Global {
-        index: GlobalIndex,
-    },
-}
-
-#[derive(Debug)]
-/// An exported item.
-pub struct Export {
-    /// Name of the exported item.
-    pub name: Name,
-    /// And its type.
-    pub description: ExportDescription,
-}
-
-#[derive(Debug, Default)]
-/// The Default instance of this type returns an empty section.
-pub struct ExportSection {
-    pub exports: Vec<Export>,
-}
-
-#[derive(Debug, Default)]
-/// We do not support start sections, so this type has exactly one value, the
-/// empty start section, which is of course also the value returned by the
-/// Default instance.
-pub struct StartSection {}
-
-#[derive(Debug)]
-/// An element description, describing how to initialize the table.
-/// The table index 0 is implicit, so we don't record it in the struct.
-pub struct Element {
-    /// The offset to start the initialization.
-    pub offset: Expression,
-    /// Functions to define in the table, starting at the offset.
-    pub inits: Vec<FuncIndex>,
-}
-
-#[derive(Debug, Default)]
-/// The Default instance of this produces an empty Element section.
-pub struct ElementSection {
-    pub elements: Vec<Element>,
-}
-
-#[derive(Debug)]
-/// A single Global declaration.
-pub struct Global {
-    /// The type of the value.
-    pub ty: GlobalType,
-    /// The initialization expression.
-    pub init: Expression,
-}
-
-#[derive(Debug, Default)]
-/// The Default instance of this type returns an empty section.
-pub struct GlobalSection {
-    pub globals: Vec<Global>,
-}
-
-#[derive(Debug)]
-/// A local variable declaration in a function.
-pub struct Local {
-    /// The number of variables of this type.
-    pub multiplicity: u32,
-    /// The type of the local.
-    pub ty: ValueType,
-}
-
-#[derive(Debug)]
-/// The body of a function.
-pub struct Code {
-    /// Declaration of the locals.
-    pub locals: Vec<Local>,
-    /// And a sequence of instructions.
-    pub expr: Expression,
-}
-
-#[derive(Debug, Default)]
-/// The Default instance of this type returns an empty code section.
-pub struct CodeSection {
-    pub impls: Vec<Code>,
-}
-
-#[derive(Debug)]
-/// The initialization of memory. The memory index is implicitly 0.
-pub struct Data {
-    /// Where to start initializing.
-    pub offset: Expression,
-    /// The bytes to initialize with.
-    pub init: Vec<u8>,
-}
-
-#[derive(Debug, Default)]
-/// The Default instance of this type returns an empty data section.
-pub struct DataSection {
-    pub sections: Vec<Data>,
-}
-
-#[derive(Debug, Default)]
-/// The Default instance for this type produces an empty memory section.
-pub struct MemorySection {
-    /// Since we only support the memory with index 0 we use an Option as
-    /// opposed to a vector. In the version of Wasm we support
-    pub memory_type: Option<MemoryType>,
-}
-
-#[derive(Debug)]
-/// A processed custom section. By specification all custom sections have a
-/// name, followed by uninterpreted bytes.
-pub struct CustomSection<'a> {
-    pub name:     Name,
-    pub contents: &'a [u8],
-}
-
-#[derive(Debug, Default)]
-/// The default instance for type produces an empty type section.
-pub struct TypeSection {
-    pub types: Vec<FunctionType>,
-}
-
-#[derive(Debug)]
-/// A parsed Wasm module. This no longer has custom sections since they are not
-/// needed for further processing.
 pub struct Module {
-    pub ty:      TypeSection,
-    pub import:  ImportSection,
-    pub func:    FunctionSection,
-    pub table:   TableSection,
-    pub memory:  MemorySection,
-    pub global:  GlobalSection,
-    pub export:  ExportSection,
-    pub start:   StartSection,
-    pub element: ElementSection,
-    pub code:    CodeSection,
-    pub data:    DataSection,
+    // TODO
 }
+
+pub struct Function {
+    func_type: FuncIndex,
+    locals:    Vec<ValueType>,
+    body:      Expression,
+    // TODO This is supposed to be an optional annotation, that will only be used
+    // for our source code transformation, and not be used for source generation.
+    // An alternative is to parametrize `Function` over the type to use here,
+    // but maybe `Option` is actually cleaner.
+    /// The maximum stack height this function can use. See cost specification.
+    max_stack_size: Option<StackSize>,
+}
+
+// Special annotations
 
 pub type StackSize = u64;
 /// A number of operands on the stack.
 pub type StackHeight = u64;
 
-/// Indices
+// Indices
 pub type TypeIndex = u32;
 pub type FuncIndex = u32;
 pub type TableIndex = u32;
@@ -230,95 +34,27 @@ pub type GlobalIndex = u32;
 pub type LocalIndex = u32;
 pub type LabelIndex = u32;
 
-/// We do not support floating point instructions, nor types.
-#[derive(Clone, Copy, Debug)]
 pub enum ValueType {
     I32,
     I64,
 }
 
-#[derive(Debug)]
-/// We only support the empty block type and a single value type. Type indices
-/// are not supported in the MVP version of Wasm.
 pub enum BlockType {
-    EmptyType,
+    TypeIndex(TypeIndex),
     ValueType(ValueType),
 }
 
-#[derive(Debug)]
-pub struct GlobalType {
-    pub ty: ValueType,
-    /// Whether the global is mutable or not.
-    pub mutable: bool,
-}
+pub type LocalsType = u64;
 
-#[derive(Debug, Copy, Clone)]
-pub struct TableType {
-    pub limits: Limits,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct MemoryType {
-    pub limits: Limits,
-}
-
-#[derive(Debug)]
-/// The immediate memory argument. Since all operations are on memory index 0
-/// the index is implicit.
-pub struct MemArg {
-    /// The offest into the linear memory.
-    pub offset: u32,
-    /// Alignment. This is ignored by the Wasm semantics, but may be used as a
-    /// hint. We will simply ignore it.
-    pub align: u32,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Limits {
-    pub min: u32,
-    pub max: Option<u32>,
-}
-
-#[derive(Debug)]
-/// A function type with at most one return value. The MVP version of Wasm does
-/// not support multiple return values, and thus we don't either.
-pub struct FunctionType {
-    pub parameters: Vec<ValueType>,
-    pub result:     Option<ValueType>,
-}
-
-/// A sequence of instructions.
 pub type InstrSeq = Vec<Instruction>;
 
 /// An expression is a sequence of instructions followed by the "end" delimiter,
 /// which is also present in the binary format (see 5.4.6).
-#[derive(Debug, Default)]
-pub struct Expression {
-    pub instrs: InstrSeq,
-}
-#[derive(Debug)]
-/// An instruction with its dependants, i.e., a block instruction has the whole
-/// instruction sequence as its parameter.
+pub type Expression = InstrSeq;
+
 pub enum Instruction {
-    // Control instructions
-    Nop,
-    Unreachable,
-    Block(BlockType, InstrSeq),
-    Loop(BlockType, InstrSeq),
-    If {
-        ty:          BlockType,
-        then_branch: InstrSeq,
-        else_branch: InstrSeq,
-    },
-    Br(LabelIndex),
-    BrIf(LabelIndex),
-    BrTable {
-        labels:  Vec<LabelIndex>,
-        default: LabelIndex,
-    },
-    Return,
-    Call(FuncIndex),
-    CallIndirect(TypeIndex),
+    // Numeric instructions
+    // TODO
 
     // Parametric instructions
     Drop,
@@ -332,95 +68,18 @@ pub enum Instruction {
     GlobalSet(GlobalIndex),
 
     // Memory instructions
-    I32Load(MemArg),
-    I64Load(MemArg),
-    I32Load8S(MemArg),
-    I32Load8U(MemArg),
-    I32Load16S(MemArg),
-    I32Load16U(MemArg),
-    I64Load8S(MemArg),
-    I64Load8U(MemArg),
-    I64Load16S(MemArg),
-    I64Load16U(MemArg),
-    I64Load32S(MemArg),
-    I64Load32U(MemArg),
-    I32Store(MemArg),
-    I64Store(MemArg),
-    I32Store8(MemArg),
-    I32Store16(MemArg),
-    I64Store8(MemArg),
-    I64Store16(MemArg),
-    I64Store32(MemArg),
-    MemorySize,
-    MemoryGrow,
+    // TODO
 
-    // Numeric instructions
-    I32Const(i32),
-    I64Const(i64),
-
-    I32Eqz,
-    I32Eq,
-    I32Ne,
-    I32LtS,
-    I32LtU,
-    I32GtS,
-    I32GtU,
-    I32LeS,
-    I32LeU,
-    I32GeS,
-    I32GeU,
-    I64Eqz,
-    I64Eq,
-    I64Ne,
-    I64LtS,
-    I64LtU,
-    I64GtS,
-    I64GtU,
-    I64LeS,
-    I64LeU,
-    I64GeS,
-    I64GeU,
-
-    I32Clz,
-    I32Ctz,
-    I32Popcnt,
-    I32Add,
-    I32Sub,
-    I32Mul,
-    I32DivS,
-    I32DivU,
-    I32RemS,
-    I32RemU,
-    I32And,
-    I32Or,
-    I32Xor,
-    I32Shl,
-    I32ShrS,
-    I32ShrU,
-    I32Rotl,
-    I32Rotr,
-    I64Clz,
-    I64Ctz,
-    I64Popcnt,
-    I64Add,
-    I64Sub,
-    I64Mul,
-    I64DivS,
-    I64DivU,
-    I64RemS,
-    I64RemU,
-    I64And,
-    I64Or,
-    I64Xor,
-    I64Shl,
-    I64ShrS,
-    I64ShrU,
-    I64Rotl,
-    I64Rotr,
-
-    I32WrapI64,
-    I64ExtendI32S,
-    I64ExtendI32U,
-    I32Extend16S,
-    I64Extend32S,
+    // Control instructions
+    Nop,
+    Unreachable,
+    Block(BlockType, InstrSeq),
+    Loop(BlockType, InstrSeq),
+    If(BlockType, Box<Instruction>, Box<Instruction>),
+    Br(LabelIndex),
+    BrIf(LabelIndex),
+    BrTable(Vec<LabelIndex>, LabelIndex),
+    Return,
+    Call(FuncIndex),
+    CallIndirect(TypeIndex),
 }

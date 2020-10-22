@@ -100,11 +100,15 @@ pub type ParseResult<A> = anyhow::Result<A>;
 /// A trait for parsing data. The lifetime is useful when we want to parse
 /// data without copying, which is useful to avoid copying all the unparsed
 /// sections.
-pub trait Parseable<'a>: Sized {
+pub trait Parseable<'a, Ctx = ()>: Sized {
     /// Read a value from the cursor, or signal error.
     /// This function is responsible for advancing the cursor in-line with the
     /// data it has read.
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self>;
+
+    fn parse_with_context(cursor: &mut Cursor<&'a [u8]>, _ctx: &Ctx) -> ParseResult<Self> {
+        Self::parse(cursor)
+    }
 }
 
 /// A helper trait for more convenient use. The difference from the above is
@@ -368,6 +372,8 @@ impl<'a> Parseable<'a> for ValueType {
     }
 }
 
+/// Parse a limit, and additionally ensure that, if given, the upper bound is
+/// no less than lower bound.
 impl<'a> Parseable<'a> for Limits {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         match Byte::parse(cursor)? {
@@ -380,10 +386,11 @@ impl<'a> Parseable<'a> for Limits {
             }
             0x01 => {
                 let min = cursor.next()?;
-                let max = Some(cursor.next()?);
+                let mmax = cursor.next()?;
+                ensure!(min <= mmax, "Lower limit must be no greater than the upper limit.");
                 Ok(Limits {
                     min,
-                    max,
+                    max: Some(mmax),
                 })
             }
             tag => bail!("Incorrect limits tag {:#04x}.", tag),
@@ -415,25 +422,10 @@ impl<'a> Parseable<'a> for FunctionType {
     }
 }
 
-/// Parse a global type, with the same restrictions as the value types, namely
-/// that we only support I32 and I64.
-impl<'a> Parseable<'a> for GlobalType {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let ty = cursor.next()?;
-        let mutable = match Byte::parse(cursor)? {
-            0x00 => false,
-            0x01 => true,
-            flag => bail!("Unsupported mutability flag {:#04x}", flag),
-        };
-        Ok(GlobalType {
-            ty,
-            mutable,
-        })
-    }
-}
-
 /// Parse a table type. In the version we support there is a single table type,
 /// the funcref, so this only records the resulting table limits.
+/// This instance additionally ensures that the limits are valid, i.e., in range
+/// 2^32. Since the bounds are 32-bit integers, this is true by default.
 impl<'a> Parseable<'a> for TableType {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         expect_byte(cursor, 0x70)?;
@@ -445,9 +437,14 @@ impl<'a> Parseable<'a> for TableType {
 }
 
 /// Memory types are just limits on the size of the memory.
+/// This also ensures that limits are within range 2^16.
 impl<'a> Parseable<'a> for MemoryType {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let limits = Limits::parse(cursor)?;
+        match limits.max {
+            Some(x) => ensure!(x <= 1 << 16, "Memory limits must be in range 2^16."),
+            None => ensure!(limits.min <= 1 << 16, "Memory limits must be in range 2^16."),
+        }
         Ok(MemoryType {
             limits,
         })
@@ -472,25 +469,7 @@ impl<'a> Parseable<'a> for ImportDescription {
                     type_idx,
                 })
             }
-            0x01 => {
-                let table_type = cursor.next()?;
-                Ok(ImportDescription::Table {
-                    table_type,
-                })
-            }
-            0x02 => {
-                let memory_type = cursor.next()?;
-                Ok(ImportDescription::Memory {
-                    memory_type,
-                })
-            }
-            0x03 => {
-                let global_type = cursor.next()?;
-                Ok(ImportDescription::Global {
-                    global_type,
-                })
-            }
-            byte => bail!("Unexpected import description tag {:#04x}", byte),
+            tag => bail!("Unsupported import type {:#04x}. Only functions can be imported.", tag),
         }
     }
 }
@@ -524,6 +503,25 @@ impl<'a> Parseable<'a> for FunctionSection {
             types,
         })
     }
+}
+
+/// Attempt to read a constant expression of given type.
+/// Since we do not allow imported globals, the only constant expressions are
+/// single constant instruction.
+fn read_constant_expr<'a>(cursor: &mut Cursor<&'a [u8]>, ty: ValueType) -> ParseResult<GlobalInit> {
+    let res = match ty {
+        ValueType::I32 => match decode_opcode(cursor)? {
+            OpCode::I32Const(n) => GlobalInit::I32(n),
+            _ => bail!("Unexpected instruction. Expected `I32Const`"),
+        },
+        ValueType::I64 => match decode_opcode(cursor)? {
+            OpCode::I64Const(n) => GlobalInit::I64(n),
+            _ => bail!("Unexpected instruction. Expected `I64Const`"),
+        },
+    };
+    // end parsing the expression
+    expect_byte(cursor, END)?;
+    Ok(res)
 }
 
 impl<'a> Parseable<'a> for TableSection {
@@ -608,12 +606,16 @@ impl<'a> Parseable<'a> for Element {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let table_index = TableIndex::parse(cursor)?;
         ensure!(table_index == 0, "Only table index 0 is supported.");
-        let offset = cursor.next()?;
+        let offset = read_constant_expr(cursor, ValueType::I32)?;
         let inits = cursor.next()?;
-        Ok(Element {
-            offset,
-            inits,
-        })
+        if let GlobalInit::I32(offset) = offset {
+            Ok(Element {
+                offset,
+                inits,
+            })
+        } else {
+            bail!("Internal error, parsed a constant of type I32 that is not an I32.");
+        }
     }
 }
 
@@ -629,10 +631,15 @@ impl<'a> Parseable<'a> for ElementSection {
 impl<'a> Parseable<'a> for Global {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let ty = cursor.next()?;
-        let init = cursor.next()?;
+        let mutable = match Byte::parse(cursor)? {
+            0x00 => false,
+            0x01 => true,
+            flag => bail!("Unsupported mutability flag {:#04x}", flag),
+        };
+        let init = read_constant_expr(cursor, ty)?;
         Ok(Global {
-            ty,
             init,
+            mutable,
         })
     }
 }
@@ -662,280 +669,280 @@ impl<'a> Parseable<'a> for BlockType {
     }
 }
 
-/// Decode the given byte as an instruction, and read any subsequent data to
-/// complete it. For example, if the instruction is I32Const then this will read
-/// an u32 from the cursor, if the instruction is a block instruction then a
-/// whole block will be read.
-///
-/// Any instruction involving floating points will result in a parse error.
-fn decode_instruction<'a>(b: Byte, cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Instruction> {
-    match b {
-        0x00 => Ok(Instruction::Unreachable),
-        0x01 => Ok(Instruction::Nop),
-        0x02 => {
-            let bt = cursor.next()?;
-            let seq = decode_terminated_sequence(cursor)?;
-            Ok(Instruction::Block(bt, seq))
-        }
-        0x03 => {
-            let bt = cursor.next()?;
-            let seq = decode_terminated_sequence(cursor)?;
-            Ok(Instruction::Loop(bt, seq))
-        }
-        0x04 => {
-            let ty = cursor.next()?;
-            let mut then_branch = Vec::new();
-            loop {
-                match Byte::parse(cursor)? {
-                    END => {
-                        return Ok(Instruction::If {
-                            ty,
-                            then_branch,
-                            else_branch: Vec::new(),
-                        })
-                    }
-                    0x05 => {
-                        let else_branch = decode_terminated_sequence(cursor)?;
-                        return Ok(Instruction::If {
-                            ty,
-                            then_branch,
-                            else_branch,
-                        });
-                    }
-                    inst => then_branch.push(decode_instruction(inst, cursor)?),
-                }
-            }
-        }
-        0x0C => {
-            let l = cursor.next()?;
-            Ok(Instruction::Br(l))
-        }
-        0x0D => {
-            let l = cursor.next()?;
-            Ok(Instruction::BrIf(l))
-        }
-        0x0E => {
-            let labels = cursor.next()?;
-            let default = cursor.next()?;
-            Ok(Instruction::BrTable {
-                labels,
-                default,
-            })
-        }
-        0x0F => Ok(Instruction::Return),
-        0x10 => {
-            let idx = cursor.next()?;
-            Ok(Instruction::Call(idx))
-        }
-        0x11 => {
-            let ty = cursor.next()?;
-            expect_byte(cursor, 0x00)?;
-            Ok(Instruction::CallIndirect(ty))
-        }
-        // parametric instructions
-        0x1A => Ok(Instruction::Drop),
-        0x1B => Ok(Instruction::Select),
-        // variable instructions
-        0x20 => {
-            let idx = cursor.next()?;
-            Ok(Instruction::LocalGet(idx))
-        }
-        0x21 => {
-            let idx = cursor.next()?;
-            Ok(Instruction::LocalSet(idx))
-        }
-        0x22 => {
-            let idx = cursor.next()?;
-            Ok(Instruction::LocalTee(idx))
-        }
-        0x23 => {
-            let idx = cursor.next()?;
-            Ok(Instruction::GlobalGet(idx))
-        }
-        0x24 => {
-            let idx = cursor.next()?;
-            Ok(Instruction::GlobalSet(idx))
-        }
-        // memory instructions
-        0x28 => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I32Load(memarg))
-        }
-        0x29 => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I64Load(memarg))
-        }
-        0x2C => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I32Load8S(memarg))
-        }
-        0x2D => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I32Load8U(memarg))
-        }
-        0x2E => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I32Load16S(memarg))
-        }
-        0x2F => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I32Load16U(memarg))
-        }
-        0x30 => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I64Load8S(memarg))
-        }
-        0x31 => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I64Load8U(memarg))
-        }
-        0x32 => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I64Load16S(memarg))
-        }
-        0x33 => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I64Load16U(memarg))
-        }
-        0x34 => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I64Load32S(memarg))
-        }
-        0x35 => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I64Load32U(memarg))
-        }
-        0x36 => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I32Store(memarg))
-        }
-        0x37 => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I64Store(memarg))
-        }
-        0x3A => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I32Store8(memarg))
-        }
-        0x3B => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I32Store16(memarg))
-        }
-        0x3C => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I64Store8(memarg))
-        }
-        0x3D => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I64Store16(memarg))
-        }
-        0x3E => {
-            let memarg = cursor.next()?;
-            Ok(Instruction::I64Store32(memarg))
-        }
-        0x3F => {
-            expect_byte(cursor, 0x00)?;
-            Ok(Instruction::MemorySize)
-        }
-        0x40 => {
-            expect_byte(cursor, 0x00)?;
-            Ok(Instruction::MemoryGrow)
-        }
-        // constants
-        0x41 => {
-            let n = cursor.next()?;
-            Ok(Instruction::I32Const(n))
-        }
-        0x42 => {
-            let n = cursor.next()?;
-            Ok(Instruction::I64Const(n))
-        }
-        // numeric instructions
-        0x45 => Ok(Instruction::I32Eqz),
-        0x46 => Ok(Instruction::I32Eq),
-        0x47 => Ok(Instruction::I32Ne),
-        0x48 => Ok(Instruction::I32LtS),
-        0x49 => Ok(Instruction::I32LtU),
-        0x4A => Ok(Instruction::I32GtS),
-        0x4B => Ok(Instruction::I32GtU),
-        0x4C => Ok(Instruction::I32LeS),
-        0x4D => Ok(Instruction::I32LeU),
-        0x4E => Ok(Instruction::I32GeS),
-        0x4F => Ok(Instruction::I32GeU),
+// /// Decode the given byte as an instruction, and read any subsequent data to
+// /// complete it. For example, if the instruction is I32Const then this will
+// read /// an u32 from the cursor, if the instruction is a block instruction
+// then a /// whole block will be read.
+// ///
+// /// Any instruction involving floating points will result in a parse error.
+// fn decode_instruction<'a>(b: Byte, cursor: &mut Cursor<&'a [u8]>) ->
+// ParseResult<Instruction> {     match b {
+//         0x00 => Ok(Instruction::Unreachable),
+//         0x01 => Ok(Instruction::Nop),
+//         0x02 => {
+//             let bt = cursor.next()?;
+//             let seq = decode_terminated_sequence(cursor)?;
+//             Ok(Instruction::Block(bt, seq))
+//         }
+//         0x03 => {
+//             let bt = cursor.next()?;
+//             let seq = decode_terminated_sequence(cursor)?;
+//             Ok(Instruction::Loop(bt, seq))
+//         }
+//         0x04 => {
+//             let ty = cursor.next()?;
+//             let mut then_branch = Vec::new();
+//             loop {
+//                 match Byte::parse(cursor)? {
+//                     END => {
+//                         return Ok(Instruction::If {
+//                             ty,
+//                             then_branch,
+//                             else_branch: Vec::new(),
+//                         })
+//                     }
+//                     0x05 => {
+//                         let else_branch =
+// decode_terminated_sequence(cursor)?;                         return
+// Ok(Instruction::If {                             ty,
+//                             then_branch,
+//                             else_branch,
+//                         });
+//                     }
+//                     inst => then_branch.push(decode_instruction(inst,
+// cursor)?),                 }
+//             }
+//         }
+//         0x0C => {
+//             let l = cursor.next()?;
+//             Ok(Instruction::Br(l))
+//         }
+//         0x0D => {
+//             let l = cursor.next()?;
+//             Ok(Instruction::BrIf(l))
+//         }
+//         0x0E => {
+//             let labels = cursor.next()?;
+//             let default = cursor.next()?;
+//             Ok(Instruction::BrTable {
+//                 labels,
+//                 default,
+//             })
+//         }
+//         0x0F => Ok(Instruction::Return),
+//         0x10 => {
+//             let idx = cursor.next()?;
+//             Ok(Instruction::Call(idx))
+//         }
+//         0x11 => {
+//             let ty = cursor.next()?;
+//             expect_byte(cursor, 0x00)?;
+//             Ok(Instruction::CallIndirect(ty))
+//         }
+//         // parametric instructions
+//         0x1A => Ok(Instruction::Drop),
+//         0x1B => Ok(Instruction::Select),
+//         // variable instructions
+//         0x20 => {
+//             let idx = cursor.next()?;
+//             Ok(Instruction::LocalGet(idx))
+//         }
+//         0x21 => {
+//             let idx = cursor.next()?;
+//             Ok(Instruction::LocalSet(idx))
+//         }
+//         0x22 => {
+//             let idx = cursor.next()?;
+//             Ok(Instruction::LocalTee(idx))
+//         }
+//         0x23 => {
+//             let idx = cursor.next()?;
+//             Ok(Instruction::GlobalGet(idx))
+//         }
+//         0x24 => {
+//             let idx = cursor.next()?;
+//             Ok(Instruction::GlobalSet(idx))
+//         }
+//         // memory instructions
+//         0x28 => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I32Load(memarg))
+//         }
+//         0x29 => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I64Load(memarg))
+//         }
+//         0x2C => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I32Load8S(memarg))
+//         }
+//         0x2D => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I32Load8U(memarg))
+//         }
+//         0x2E => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I32Load16S(memarg))
+//         }
+//         0x2F => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I32Load16U(memarg))
+//         }
+//         0x30 => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I64Load8S(memarg))
+//         }
+//         0x31 => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I64Load8U(memarg))
+//         }
+//         0x32 => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I64Load16S(memarg))
+//         }
+//         0x33 => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I64Load16U(memarg))
+//         }
+//         0x34 => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I64Load32S(memarg))
+//         }
+//         0x35 => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I64Load32U(memarg))
+//         }
+//         0x36 => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I32Store(memarg))
+//         }
+//         0x37 => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I64Store(memarg))
+//         }
+//         0x3A => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I32Store8(memarg))
+//         }
+//         0x3B => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I32Store16(memarg))
+//         }
+//         0x3C => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I64Store8(memarg))
+//         }
+//         0x3D => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I64Store16(memarg))
+//         }
+//         0x3E => {
+//             let memarg = cursor.next()?;
+//             Ok(Instruction::I64Store32(memarg))
+//         }
+//         0x3F => {
+//             expect_byte(cursor, 0x00)?;
+//             Ok(Instruction::MemorySize)
+//         }
+//         0x40 => {
+//             expect_byte(cursor, 0x00)?;
+//             Ok(Instruction::MemoryGrow)
+//         }
+//         // constants
+//         0x41 => {
+//             let n = cursor.next()?;
+//             Ok(Instruction::I32Const(n))
+//         }
+//         0x42 => {
+//             let n = cursor.next()?;
+//             Ok(Instruction::I64Const(n))
+//         }
+//         // numeric instructions
+//         0x45 => Ok(Instruction::I32Eqz),
+//         0x46 => Ok(Instruction::I32Eq),
+//         0x47 => Ok(Instruction::I32Ne),
+//         0x48 => Ok(Instruction::I32LtS),
+//         0x49 => Ok(Instruction::I32LtU),
+//         0x4A => Ok(Instruction::I32GtS),
+//         0x4B => Ok(Instruction::I32GtU),
+//         0x4C => Ok(Instruction::I32LeS),
+//         0x4D => Ok(Instruction::I32LeU),
+//         0x4E => Ok(Instruction::I32GeS),
+//         0x4F => Ok(Instruction::I32GeU),
 
-        0x50 => Ok(Instruction::I64Eqz),
-        0x51 => Ok(Instruction::I64Eq),
-        0x52 => Ok(Instruction::I64Ne),
-        0x53 => Ok(Instruction::I64LtS),
-        0x54 => Ok(Instruction::I64LtU),
-        0x55 => Ok(Instruction::I64GtS),
-        0x56 => Ok(Instruction::I64GtU),
-        0x57 => Ok(Instruction::I64LeS),
-        0x58 => Ok(Instruction::I64LeU),
-        0x59 => Ok(Instruction::I64GeS),
-        0x5A => Ok(Instruction::I64GeU),
+//         0x50 => Ok(Instruction::I64Eqz),
+//         0x51 => Ok(Instruction::I64Eq),
+//         0x52 => Ok(Instruction::I64Ne),
+//         0x53 => Ok(Instruction::I64LtS),
+//         0x54 => Ok(Instruction::I64LtU),
+//         0x55 => Ok(Instruction::I64GtS),
+//         0x56 => Ok(Instruction::I64GtU),
+//         0x57 => Ok(Instruction::I64LeS),
+//         0x58 => Ok(Instruction::I64LeU),
+//         0x59 => Ok(Instruction::I64GeS),
+//         0x5A => Ok(Instruction::I64GeU),
 
-        0x67 => Ok(Instruction::I32Clz),
-        0x68 => Ok(Instruction::I32Ctz),
-        0x69 => Ok(Instruction::I32Popcnt),
-        0x6A => Ok(Instruction::I32Add),
-        0x6B => Ok(Instruction::I32Sub),
-        0x6C => Ok(Instruction::I32Mul),
-        0x6D => Ok(Instruction::I32DivS),
-        0x6E => Ok(Instruction::I32DivU),
-        0x6F => Ok(Instruction::I32RemS),
-        0x70 => Ok(Instruction::I32RemU),
-        0x71 => Ok(Instruction::I32And),
-        0x72 => Ok(Instruction::I32Or),
-        0x73 => Ok(Instruction::I32Xor),
-        0x74 => Ok(Instruction::I32Shl),
-        0x75 => Ok(Instruction::I32ShrS),
-        0x76 => Ok(Instruction::I32ShrU),
-        0x77 => Ok(Instruction::I32Rotl),
-        0x78 => Ok(Instruction::I32Rotr),
+//         0x67 => Ok(Instruction::I32Clz),
+//         0x68 => Ok(Instruction::I32Ctz),
+//         0x69 => Ok(Instruction::I32Popcnt),
+//         0x6A => Ok(Instruction::I32Add),
+//         0x6B => Ok(Instruction::I32Sub),
+//         0x6C => Ok(Instruction::I32Mul),
+//         0x6D => Ok(Instruction::I32DivS),
+//         0x6E => Ok(Instruction::I32DivU),
+//         0x6F => Ok(Instruction::I32RemS),
+//         0x70 => Ok(Instruction::I32RemU),
+//         0x71 => Ok(Instruction::I32And),
+//         0x72 => Ok(Instruction::I32Or),
+//         0x73 => Ok(Instruction::I32Xor),
+//         0x74 => Ok(Instruction::I32Shl),
+//         0x75 => Ok(Instruction::I32ShrS),
+//         0x76 => Ok(Instruction::I32ShrU),
+//         0x77 => Ok(Instruction::I32Rotl),
+//         0x78 => Ok(Instruction::I32Rotr),
 
-        0x79 => Ok(Instruction::I64Clz),
-        0x7A => Ok(Instruction::I64Ctz),
-        0x7B => Ok(Instruction::I64Popcnt),
-        0x7C => Ok(Instruction::I64Add),
-        0x7D => Ok(Instruction::I64Sub),
-        0x7E => Ok(Instruction::I64Mul),
-        0x7F => Ok(Instruction::I64DivS),
-        0x80 => Ok(Instruction::I64DivU),
-        0x81 => Ok(Instruction::I64RemS),
-        0x82 => Ok(Instruction::I64RemU),
-        0x83 => Ok(Instruction::I64And),
-        0x84 => Ok(Instruction::I64Or),
-        0x85 => Ok(Instruction::I64Xor),
-        0x86 => Ok(Instruction::I64Shl),
-        0x87 => Ok(Instruction::I64ShrS),
-        0x88 => Ok(Instruction::I64ShrU),
-        0x89 => Ok(Instruction::I64Rotl),
-        0x8A => Ok(Instruction::I64Rotr),
+//         0x79 => Ok(Instruction::I64Clz),
+//         0x7A => Ok(Instruction::I64Ctz),
+//         0x7B => Ok(Instruction::I64Popcnt),
+//         0x7C => Ok(Instruction::I64Add),
+//         0x7D => Ok(Instruction::I64Sub),
+//         0x7E => Ok(Instruction::I64Mul),
+//         0x7F => Ok(Instruction::I64DivS),
+//         0x80 => Ok(Instruction::I64DivU),
+//         0x81 => Ok(Instruction::I64RemS),
+//         0x82 => Ok(Instruction::I64RemU),
+//         0x83 => Ok(Instruction::I64And),
+//         0x84 => Ok(Instruction::I64Or),
+//         0x85 => Ok(Instruction::I64Xor),
+//         0x86 => Ok(Instruction::I64Shl),
+//         0x87 => Ok(Instruction::I64ShrS),
+//         0x88 => Ok(Instruction::I64ShrU),
+//         0x89 => Ok(Instruction::I64Rotl),
+//         0x8A => Ok(Instruction::I64Rotr),
 
-        0xA7 => Ok(Instruction::I32WrapI64),
+//         0xA7 => Ok(Instruction::I32WrapI64),
 
-        0xAC => Ok(Instruction::I64ExtendI32S),
-        0xAD => Ok(Instruction::I64ExtendI32U),
-        byte => bail!("Unsupported instruction {:#04x}", byte),
-    }
-}
+//         0xAC => Ok(Instruction::I64ExtendI32S),
+//         0xAD => Ok(Instruction::I64ExtendI32U),
+//         byte => bail!("Unsupported instruction {:#04x}", byte),
+//     }
+// }
 
-/// Decode a sequence terminated by the `END` byte.
-fn decode_terminated_sequence<'a>(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<InstrSeq> {
-    let mut instrs = Vec::new();
-    loop {
-        match Byte::parse(cursor)? {
-            END => return Ok(instrs),
-            other => instrs.push(decode_instruction(other, cursor)?),
-        }
-    }
-}
+// /// Decode a sequence terminated by the `END` byte.
+// fn decode_terminated_sequence<'a>(cursor: &mut Cursor<&'a [u8]>) ->
+// ParseResult<InstrSeq> {     let mut instrs = Vec::new();
+//     loop {
+//         match Byte::parse(cursor)? {
+//             END => return Ok(instrs),
+//             other => instrs.push(decode_instruction(other, cursor)?),
+//         }
+//     }
+// }
 
 impl<'a> Parseable<'a> for MemArg {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let offset = cursor.next()?;
         let align = cursor.next()?;
+        let offset = cursor.next()?;
         Ok(MemArg {
             offset,
             align,
@@ -943,14 +950,14 @@ impl<'a> Parseable<'a> for MemArg {
     }
 }
 
-impl<'a> Parseable<'a> for Expression {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let instrs = decode_terminated_sequence(cursor)?;
-        Ok(Expression {
-            instrs,
-        })
-    }
-}
+// impl<'a> Parseable<'a> for Expression {
+//     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+//         let instrs = decode_terminated_sequence(cursor)?;
+//         Ok(Expression {
+//             instrs,
+//         })
+//     }
+// }
 
 impl<'a> Parseable<'a> for Local {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
@@ -963,40 +970,44 @@ impl<'a> Parseable<'a> for Local {
     }
 }
 
-impl<'a> Parseable<'a> for Code {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let size: u32 = cursor.next()?;
-        let cur_pos = cursor.position();
-        let locals = cursor.next()?;
-        let expr = cursor.next()?;
-        let end_pos = cursor.position();
-        ensure!(end_pos - cur_pos == u64::from(size), "Declared size must match actual size.");
-        Ok(Code {
-            locals,
-            expr,
-        })
-    }
-}
+// impl<'a> Parseable<'a> for Code {
+//     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+//         let size: u32 = cursor.next()?;
+//         let cur_pos = cursor.position();
+//         let locals = cursor.next()?;
+//         let expr = cursor.next()?;
+//         let end_pos = cursor.position();
+//         ensure!(end_pos - cur_pos == u64::from(size), "Declared size must
+// match actual size.");         Ok(Code {
+//             locals,
+//             expr,
+//         })
+//     }
+// }
 
-impl<'a> Parseable<'a> for CodeSection {
-    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let impls = cursor.next()?;
-        Ok(CodeSection {
-            impls,
-        })
-    }
-}
+// impl<'a> Parseable<'a> for CodeSection {
+//     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+//         let impls = cursor.next()?;
+//         Ok(CodeSection {
+//             impls,
+//         })
+//     }
+// }
 
 impl<'a> Parseable<'a> for Data {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let index = u32::parse(cursor)?;
         ensure!(index == 0, "Only memory index 0 is supported.");
-        let offset = cursor.next()?;
+        let offset = read_constant_expr(cursor, ValueType::I32)?;
         let init = cursor.next()?;
-        Ok(Data {
-            offset,
-            init,
-        })
+        if let GlobalInit::I32(offset) = offset {
+            Ok(Data {
+                offset,
+                init,
+            })
+        } else {
+            bail!("Internal error, a constant expression of type I32 is not an I32");
+        }
     }
 }
 
@@ -1009,7 +1020,7 @@ impl<'a> Parseable<'a> for DataSection {
     }
 }
 
-fn parse_sec_with_default<'a, A: Parseable<'a> + Default>(
+pub fn parse_sec_with_default<'a, A: Parseable<'a> + Default>(
     sec: &Option<UnparsedSection<'a>>,
 ) -> ParseResult<A> {
     match sec.as_ref() {
@@ -1018,30 +1029,338 @@ fn parse_sec_with_default<'a, A: Parseable<'a> + Default>(
     }
 }
 
-/// Try to parse all the non-custom sections of a Skeleton into a Module.
-pub fn parse_module<'a>(skeleton: &Skeleton<'a>) -> ParseResult<Module> {
-    let ty = parse_sec_with_default(&skeleton.ty)?;
-    let import = parse_sec_with_default(&skeleton.import)?;
-    let func = parse_sec_with_default(&skeleton.func)?;
-    let table = parse_sec_with_default(&skeleton.table)?;
-    let memory = parse_sec_with_default(&skeleton.memory)?;
-    let global = parse_sec_with_default(&skeleton.global)?;
-    let export = parse_sec_with_default(&skeleton.export)?;
-    let start = parse_sec_with_default(&skeleton.start)?;
-    let element = parse_sec_with_default(&skeleton.element)?;
-    let code = parse_sec_with_default(&skeleton.code)?;
-    let data = parse_sec_with_default(&skeleton.data)?;
-    Ok(Module {
-        ty,
-        import,
-        func,
-        table,
-        memory,
-        global,
-        export,
-        start,
-        element,
-        code,
-        data,
-    })
+// /// Try to parse all the non-custom sections of a Skeleton into a Module.
+// pub fn parse_module<'a>(skeleton: &Skeleton<'a>) -> ParseResult<Module> {
+//     let ty = parse_sec_with_default(&skeleton.ty)?;
+//     let import = parse_sec_with_default(&skeleton.import)?;
+//     let func = parse_sec_with_default(&skeleton.func)?;
+//     let table = parse_sec_with_default(&skeleton.table)?;
+//     let memory = parse_sec_with_default(&skeleton.memory)?;
+//     let global = parse_sec_with_default(&skeleton.global)?;
+//     let export = parse_sec_with_default(&skeleton.export)?;
+//     let start = parse_sec_with_default(&skeleton.start)?;
+//     let element = parse_sec_with_default(&skeleton.element)?;
+//     let code = parse_sec_with_default(&skeleton.code)?;
+//     let data = parse_sec_with_default(&skeleton.data)?;
+//     Ok(Module {
+//         ty,
+//         import,
+//         func,
+//         table,
+//         memory,
+//         global,
+//         export,
+//         start,
+//         element,
+//         code,
+//         data,
+//     })
+// }
+
+/// Decode the next opcode directly from the cursor.
+pub fn decode_opcode<'a>(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<OpCode> {
+    match Byte::parse(cursor)? {
+        END => Ok(OpCode::End),
+        0x00 => Ok(OpCode::Unreachable),
+        0x01 => Ok(OpCode::Nop),
+        0x02 => {
+            let bt = cursor.next()?;
+            Ok(OpCode::Block(bt))
+        }
+        0x03 => {
+            let bt = cursor.next()?;
+            Ok(OpCode::Loop(bt))
+        }
+        0x04 => {
+            let ty = cursor.next()?;
+            Ok(OpCode::If {
+                ty,
+            })
+        }
+        0x05 => Ok(OpCode::Else),
+        0x0C => {
+            let l = cursor.next()?;
+            Ok(OpCode::Br(l))
+        }
+        0x0D => {
+            let l = cursor.next()?;
+            Ok(OpCode::BrIf(l))
+        }
+        0x0E => {
+            let labels = cursor.next()?;
+            let default = cursor.next()?;
+            Ok(OpCode::BrTable {
+                labels,
+                default,
+            })
+        }
+        0x0F => Ok(OpCode::Return),
+        0x10 => {
+            let idx = cursor.next()?;
+            Ok(OpCode::Call(idx))
+        }
+        0x11 => {
+            let ty = cursor.next()?;
+            expect_byte(cursor, 0x00)?;
+            Ok(OpCode::CallIndirect(ty))
+        }
+        // parametric instructions
+        0x1A => Ok(OpCode::Drop),
+        0x1B => Ok(OpCode::Select),
+        // variable instructions
+        0x20 => {
+            let idx = cursor.next()?;
+            Ok(OpCode::LocalGet(idx))
+        }
+        0x21 => {
+            let idx = cursor.next()?;
+            Ok(OpCode::LocalSet(idx))
+        }
+        0x22 => {
+            let idx = cursor.next()?;
+            Ok(OpCode::LocalTee(idx))
+        }
+        0x23 => {
+            let idx = cursor.next()?;
+            Ok(OpCode::GlobalGet(idx))
+        }
+        0x24 => {
+            let idx = cursor.next()?;
+            Ok(OpCode::GlobalSet(idx))
+        }
+        // memory instructions
+        0x28 => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I32Load(memarg))
+        }
+        0x29 => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I64Load(memarg))
+        }
+        0x2C => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I32Load8S(memarg))
+        }
+        0x2D => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I32Load8U(memarg))
+        }
+        0x2E => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I32Load16S(memarg))
+        }
+        0x2F => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I32Load16U(memarg))
+        }
+        0x30 => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I64Load8S(memarg))
+        }
+        0x31 => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I64Load8U(memarg))
+        }
+        0x32 => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I64Load16S(memarg))
+        }
+        0x33 => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I64Load16U(memarg))
+        }
+        0x34 => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I64Load32S(memarg))
+        }
+        0x35 => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I64Load32U(memarg))
+        }
+        0x36 => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I32Store(memarg))
+        }
+        0x37 => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I64Store(memarg))
+        }
+        0x3A => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I32Store8(memarg))
+        }
+        0x3B => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I32Store16(memarg))
+        }
+        0x3C => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I64Store8(memarg))
+        }
+        0x3D => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I64Store16(memarg))
+        }
+        0x3E => {
+            let memarg = cursor.next()?;
+            Ok(OpCode::I64Store32(memarg))
+        }
+        0x3F => {
+            expect_byte(cursor, 0x00)?;
+            Ok(OpCode::MemorySize)
+        }
+        0x40 => {
+            expect_byte(cursor, 0x00)?;
+            Ok(OpCode::MemoryGrow)
+        }
+        // constants
+        0x41 => {
+            let n = cursor.next()?;
+            Ok(OpCode::I32Const(n))
+        }
+        0x42 => {
+            let n = cursor.next()?;
+            Ok(OpCode::I64Const(n))
+        }
+        // numeric instructions
+        0x45 => Ok(OpCode::I32Eqz),
+        0x46 => Ok(OpCode::I32Eq),
+        0x47 => Ok(OpCode::I32Ne),
+        0x48 => Ok(OpCode::I32LtS),
+        0x49 => Ok(OpCode::I32LtU),
+        0x4A => Ok(OpCode::I32GtS),
+        0x4B => Ok(OpCode::I32GtU),
+        0x4C => Ok(OpCode::I32LeS),
+        0x4D => Ok(OpCode::I32LeU),
+        0x4E => Ok(OpCode::I32GeS),
+        0x4F => Ok(OpCode::I32GeU),
+
+        0x50 => Ok(OpCode::I64Eqz),
+        0x51 => Ok(OpCode::I64Eq),
+        0x52 => Ok(OpCode::I64Ne),
+        0x53 => Ok(OpCode::I64LtS),
+        0x54 => Ok(OpCode::I64LtU),
+        0x55 => Ok(OpCode::I64GtS),
+        0x56 => Ok(OpCode::I64GtU),
+        0x57 => Ok(OpCode::I64LeS),
+        0x58 => Ok(OpCode::I64LeU),
+        0x59 => Ok(OpCode::I64GeS),
+        0x5A => Ok(OpCode::I64GeU),
+
+        0x67 => Ok(OpCode::I32Clz),
+        0x68 => Ok(OpCode::I32Ctz),
+        0x69 => Ok(OpCode::I32Popcnt),
+        0x6A => Ok(OpCode::I32Add),
+        0x6B => Ok(OpCode::I32Sub),
+        0x6C => Ok(OpCode::I32Mul),
+        0x6D => Ok(OpCode::I32DivS),
+        0x6E => Ok(OpCode::I32DivU),
+        0x6F => Ok(OpCode::I32RemS),
+        0x70 => Ok(OpCode::I32RemU),
+        0x71 => Ok(OpCode::I32And),
+        0x72 => Ok(OpCode::I32Or),
+        0x73 => Ok(OpCode::I32Xor),
+        0x74 => Ok(OpCode::I32Shl),
+        0x75 => Ok(OpCode::I32ShrS),
+        0x76 => Ok(OpCode::I32ShrU),
+        0x77 => Ok(OpCode::I32Rotl),
+        0x78 => Ok(OpCode::I32Rotr),
+
+        0x79 => Ok(OpCode::I64Clz),
+        0x7A => Ok(OpCode::I64Ctz),
+        0x7B => Ok(OpCode::I64Popcnt),
+        0x7C => Ok(OpCode::I64Add),
+        0x7D => Ok(OpCode::I64Sub),
+        0x7E => Ok(OpCode::I64Mul),
+        0x7F => Ok(OpCode::I64DivS),
+        0x80 => Ok(OpCode::I64DivU),
+        0x81 => Ok(OpCode::I64RemS),
+        0x82 => Ok(OpCode::I64RemU),
+        0x83 => Ok(OpCode::I64And),
+        0x84 => Ok(OpCode::I64Or),
+        0x85 => Ok(OpCode::I64Xor),
+        0x86 => Ok(OpCode::I64Shl),
+        0x87 => Ok(OpCode::I64ShrS),
+        0x88 => Ok(OpCode::I64ShrU),
+        0x89 => Ok(OpCode::I64Rotl),
+        0x8A => Ok(OpCode::I64Rotr),
+
+        0xA7 => Ok(OpCode::I32WrapI64),
+
+        0xAC => Ok(OpCode::I64ExtendI32S),
+        0xAD => Ok(OpCode::I64ExtendI32U),
+        byte => bail!("Unsupported instruction {:#04x}", byte),
+    }
+}
+
+pub struct OpCodeIterator<'a> {
+    state: Cursor<&'a [u8]>,
+}
+
+impl<'a> OpCodeIterator<'a> {
+    pub fn new(bytes: &'a [u8]) -> Self {
+        Self {
+            state: Cursor::new(bytes),
+        }
+    }
+}
+
+impl<'a> Iterator for OpCodeIterator<'a> {
+    type Item = ParseResult<OpCode>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.state.position() == self.state.get_ref().len() as u64 {
+            None
+        } else {
+            Some(decode_opcode(&mut self.state))
+        }
+    }
+}
+
+#[derive(Debug)]
+/// The body of a function.
+pub struct CodeSkeleton<'a> {
+    /// Declaration of the locals.
+    pub locals: Vec<Local>,
+    /// And uninterpreter instructions.
+    pub expr_bytes: &'a [u8],
+}
+
+#[derive(Debug, Default)]
+/// The Default instance of this type returns an empty code section.
+pub struct CodeSkeletonSection<'a> {
+    pub impls: Vec<CodeSkeleton<'a>>,
+}
+
+impl<'a> Parseable<'a> for CodeSkeleton<'a> {
+    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let size: u32 = cursor.next()?;
+        let cur_pos = cursor.position();
+        let locals = cursor.next()?;
+        let end_pos = cursor.position();
+        ensure!(
+            u64::from(size) >= end_pos - cur_pos,
+            "We've already read too many bytes, module is malformed."
+        );
+        let remaining = u64::from(size) - (end_pos - cur_pos);
+        ensure!(
+            ((end_pos + remaining) as usize) <= cursor.get_ref().len(),
+            "We would need to read beyond the end of the input."
+        );
+        let expr_bytes = &cursor.get_ref()[end_pos as usize..(end_pos + remaining) as usize];
+        cursor.set_position(end_pos + remaining);
+        Ok(CodeSkeleton {
+            locals,
+            expr_bytes,
+        })
+    }
+}
+
+impl<'a> Parseable<'a> for CodeSkeletonSection<'a> {
+    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let impls = cursor.next()?;
+        Ok(CodeSkeletonSection {
+            impls,
+        })
+    }
 }
