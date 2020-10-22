@@ -24,3 +24,4 @@ pkg
 /rust-contracts/concordium-sc-base/Cargo.lock
 /contracts-common/Cargo.lock
 /wasm-transform/Cargo.lock
+docs/build
