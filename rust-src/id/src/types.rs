@@ -39,7 +39,7 @@ use std::{
 
 /// NB: This includes digits of PI (starting with 14...) as ASCII characters
 /// this could be what is desired, but it is important to be aware of it.
-pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-10million.txt");
+pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-1000-digits.txt");
 
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
@@ -1492,7 +1492,6 @@ impl<C: Curve> GlobalContext<C> {
         }
 
         GlobalContext {
-            // generator:               C::hash_to_group(&PI_DIGITS[0..100]),
             on_chain_commitment_key: cmm_key,
             bulletproof_generators:  Generators { G_H: generators },
         }
