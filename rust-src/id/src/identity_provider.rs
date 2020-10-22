@@ -5,7 +5,9 @@ use crate::{
     utils,
 };
 use bulletproofs::range_proof::verify_efficient;
+use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
+use ed25519_dalek::Verifier;
 use elgamal::multicombine;
 use ff::Field;
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
@@ -41,13 +43,52 @@ impl std::fmt::Display for Reason {
     }
 }
 
+
 /// FIXME: This function does not check that the anonymity revocation
 /// parameters make sense.
 /// Validate all the proofs in an identity object request.
 pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     pre_id_obj: &PreIdentityObject<P, C>,
     context: IPContext<P, C>,
+    pub_info_for_ip: &PublicInformationForIP<C>,
+    proof_acc_sk: &AccountOwnershipProof,
 ) -> Result<(), Reason> {
+    // Verify signature:
+    let keys = &pub_info_for_ip.vk_acc.account.keys;
+    let threshold = pub_info_for_ip.vk_acc.account.threshold;
+
+    let reason = Reason::IncorrectProof; // TODO: introduce different reason
+
+    if proof_acc_sk.num_proofs() < threshold
+        || keys.len() > 255
+        || keys.is_empty()
+        || proof_acc_sk.num_proofs() != SignatureThreshold(keys.len() as u8)
+    {
+        return Err(reason);
+    }
+    // message signed in proofs.proofs_acc_sk.sigs
+    let signed = to_bytes(&pub_info_for_ip);
+    // set of processed keys already
+    let mut processed = BTreeSet::new();
+    // the new keys get indices 0, 1, ..
+    for (idx, key) in (0u8..).zip(keys.iter()) {
+        let idx = KeyIndex(idx);
+        // insert returns true if key was __not__ present
+        if !processed.insert(key) {
+            return Err(reason);
+        }
+        if let Some(sig) = proof_acc_sk.sigs.get(&idx) {
+            let VerifyKey::Ed25519VerifyKey(ref key) = key;
+            match key.verify(signed.as_ref(), &sig) {
+                Ok(_) => (),
+                _ => return Err(reason),
+            }
+        } else {
+            return Err(reason);
+        }
+    }
+
+    // Verify proof:
     let ip_info = &context.ip_info;
     let commitment_key_sc = CommitmentKey {
         g: ip_info.ip_verify_key.ys[0],
@@ -145,6 +186,15 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         Some(v) => v,
         None => return Err(Reason::WrongArParameters),
     };
+    let verifier_prf_regid = com_eq::ComEq {
+        commitment: pre_id_obj.cmm_prf,
+        y: context
+        .global_context
+        .on_chain_commitment_key.g,
+        g: pub_info_for_ip.reg_id,
+        cmm_key: commitment_key_prf
+    };
+    let prf_regid_witness = pre_id_obj.poks.prf_regid_proof.clone();
 
     let verifier = AndAdapter {
         first:  id_cred_sec_verifier,
@@ -152,16 +202,20 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
     let verifier = verifier
         .add_prover(verifier_prf_same)
-        .add_prover(prf_sharing_verifier);
+        .add_prover(prf_sharing_verifier)
+        .add_prover(verifier_prf_regid);
     let witness = AndWitness {
         w1: AndWitness {
             w1: AndWitness {
-                w1: id_cred_sec_witness,
-                w2: id_cred_sec_eq_witness,
+                w1: AndWitness {
+                    w1: id_cred_sec_witness,
+                    w2: id_cred_sec_eq_witness,
+                },
+                w2: witness_prf_same,
             },
-            w2: witness_prf_same,
+            w2: prf_sharing_witness,
         },
-        w2: prf_sharing_witness,
+        w2: prf_regid_witness,
     };
     let proof = SigmaProof {
         challenge: pre_id_obj.poks.challenge,
@@ -278,11 +332,68 @@ pub fn verify_credentials<
 >(
     pre_id_obj: &PreIdentityObject<P, C>,
     context: IPContext<P, C>,
+    pub_info_for_ip: PublicInformationForIP<C>,
+    proof_acc_sk: &AccountOwnershipProof,
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &ps_sig::SecretKey<P>,
-) -> Result<ps_sig::Signature<P>, Reason> {
-    validate_request(pre_id_obj, context)?;
-    sign_identity_object(pre_id_obj, &context.ip_info, alist, ip_secret_key)
+    ip_cdi_secret_key: &ed25519_dalek::SecretKey
+) -> Result<
+    (
+        ps_sig::Signature<P>,
+        InitialCredentialDeploymentInfo<C, AttributeType>,
+    ),
+    Reason,
+> {
+    validate_request(pre_id_obj, context, &pub_info_for_ip, proof_acc_sk)?;
+    let sig = sign_identity_object(pre_id_obj, &context.ip_info, alist, ip_secret_key)?;
+    let initial_cdi = create_initial_cdi(pre_id_obj, context, pub_info_for_ip, alist, &ip_cdi_secret_key);
+    Ok((sig, initial_cdi))
+}
+
+pub fn create_initial_cdi<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
+    pio: &PreIdentityObject<P, C>,
+    context: IPContext<P, C>,
+    pub_info_for_ip: PublicInformationForIP<C>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
+    ip_cdi_secret_key: &ed25519_dalek::SecretKey
+) -> InitialCredentialDeploymentInfo<C, AttributeType> {
+    let policy: Policy<C, AttributeType> = Policy {
+        valid_to:   alist.valid_to,
+        created_at: alist.created_at,
+        policy_vec: BTreeMap::new(),
+        _phantom:   Default::default(),
+    };
+    let cred_values = InitialCredentialDeploymentValues {
+        reg_id: pub_info_for_ip.reg_id,
+        threshold: pio.choice_ar_parameters.threshold,
+        // ar_data,
+        ip_identity: context.ip_info.ip_identity,
+        policy,
+        cred_account: pub_info_for_ip.vk_acc,
+    };
+    let sig = sign_initial_cred_values(&cred_values, &context.ip_info, &ip_cdi_secret_key); 
+    InitialCredentialDeploymentInfo {
+        values: cred_values,
+        sig
+    }
+}
+
+pub fn sign_initial_cred_values<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
+    initial_cred_values: &InitialCredentialDeploymentValues<C, AttributeType>,
+    ip_info: &IpInfo<P>,
+    ip_cdi_secret_key: &ed25519_dalek::SecretKey,
+) -> IpCdiSignature {
+    let to_sign = to_bytes(&initial_cred_values); // TODO: use hash
+    let expanded_sk = ed25519_dalek::ExpandedSecretKey::from(ip_cdi_secret_key);
+    expanded_sk.sign(to_sign.as_ref(), &ip_info.ip_cdi_verify_key).into()
 }
 
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
@@ -358,6 +469,8 @@ mod tests {
     use super::*;
 
     use crate::test::*;
+    use ed25519_dalek as ed25519;
+    use std::collections::btree_map::BTreeMap;
 
     use pairing::bls12_381::G1;
     use pedersen_scheme::{key::CommitmentKey, Value as PedersenValue};
@@ -419,19 +532,40 @@ mod tests {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
+            ip_cdi_secret_key
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
 
         let aci = test_create_aci(&mut csprng);
-        let (context, pio, _) = test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
+        let acc_data = InitialAccountData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
+        let (context, pio, _, pub_info_for_ip, proof_acc_sk) =
+            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let attrs = test_create_attributes();
 
         // Act
-        let sig_ok = verify_credentials(&pio, context, &attrs, &ip_secret_key);
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
+            pub_info_for_ip,
+            &proof_acc_sk,
+            &attrs,
+            &ip_secret_key,
+            &ip_cdi_secret_key
+        );
 
         // Assert
-        assert!(sig_ok.is_ok());
+        assert!(ver_ok.is_ok());
+
     }
 
     // /// Check IP's verify_credentials fail for wrong id_cred_sec
@@ -489,11 +623,22 @@ mod tests {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
+            ..
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
-        let (ctx, mut pio, _) = test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
+        let acc_data = InitialAccountData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
+        let (ctx, mut pio, _, pub_info_for_ip, proof_acc_sk) = test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let attrs = test_create_attributes();
 
         // Act (make cmm_sc be comm. of id_cred_sec but with wrong/fresh randomness)
@@ -504,11 +649,12 @@ mod tests {
         let id_cred_sec = aci.cred_holder_info.id_cred.id_cred_sec;
         let (cmm_sc, _) = sc_ck.commit(&id_cred_sec, &mut csprng);
         pio.cmm_sc = cmm_sc;
-        let sig_ok = verify_credentials(&pio, ctx, &attrs, &ip_secret_key);
+        let ver_ok = validate_request(&pio, ctx, &pub_info_for_ip,
+            &proof_acc_sk);
 
         // Assert
         assert_eq!(
-            sig_ok,
+            ver_ok,
             Err(Reason::IncorrectProof),
             "Verify_credentials did not fail with inconsistent idcredpub and elgamal"
         );
@@ -524,12 +670,23 @@ mod tests {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
+            ip_cdi_secret_key
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
-        let (context, mut pio, _) =
-            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
+        let acc_data = InitialAccountData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
+        let (context, mut pio, _, pub_info_for_ip, proof_acc_sk) =
+            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let attrs = test_create_attributes();
 
         // Act (make cmm_prf be a commitment to a wrong/random value)
@@ -539,11 +696,13 @@ mod tests {
             .on_chain_commitment_key
             .commit(&val, &mut csprng);
         pio.cmm_prf = cmm_prf;
-        let sig_ok = verify_credentials(&pio, context, &attrs, &ip_secret_key);
+        let ver_ok = validate_request(&pio, context,
+            &pub_info_for_ip,
+            &proof_acc_sk);
 
         // Assert
         assert_eq!(
-            sig_ok,
+            ver_ok,
             Err(Reason::IncorrectProof),
             "Verify_credentials did not fail with invalid PRF commitment"
         );

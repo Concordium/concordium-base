@@ -32,6 +32,7 @@ fn bench_parts(c: &mut Criterion) {
 
     let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(20, &mut csprng);
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+    let keypair = ed25519::Keypair::generate(&mut csprng);
 
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_cred: IdCredentials::generate(&mut csprng),
@@ -76,9 +77,10 @@ fn bench_parts(c: &mut Criterion) {
     };
 
     let ip_info = IpInfo {
-        ip_identity:    IpIdentity(88),
-        ip_description: mk_dummy_description("IP88".to_string()),
-        ip_verify_key:  ip_public_key,
+        ip_identity:       IpIdentity(88),
+        ip_description:    mk_dummy_description("IP88".to_string()),
+        ip_verify_key:     ip_public_key,
+        ip_cdi_verify_key: keypair.public,
     };
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
