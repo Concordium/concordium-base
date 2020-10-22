@@ -184,7 +184,21 @@ pub fn test_pipeline() {
     assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
 
     // Generate CDI
-    let (ip_sig, _) = ver_ok.unwrap();
+    let (ip_sig, initial_cdi) = ver_ok.unwrap();
+    let cdi_check = verify_initial_cdi(&ip_info, &initial_cdi);
+    assert_eq!(cdi_check, Ok(()));
+    let initial_cdi_values = serialize_deserialize(&initial_cdi.values);
+    assert!(
+        initial_cdi_values.is_ok(),
+        "INITIAL VALUES Deserialization must be successful."
+    );
+    let initial_cdi_sig = serialize_deserialize(&initial_cdi.sig);
+    assert!(
+        initial_cdi_sig.is_ok(),
+        "Signature deserialization must be successful."
+    );
+    let des_initial = serialize_deserialize(&initial_cdi);
+    assert!(des_initial.is_ok(), "Deserialization must be successful.");
 
     let id_object = IdentityObject {
         pre_identity_object: pio,

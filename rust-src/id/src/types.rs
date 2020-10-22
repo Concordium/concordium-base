@@ -1238,7 +1238,7 @@ impl Deserial for VerifyKey {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
 pub struct NewAccount {
     // #[serde(rename = "keys")]
     pub keys:      Vec<VerifyKey>,
@@ -1371,44 +1371,44 @@ impl Deserial for CredentialAccount {
 
 /// What account should this credential be deployed to, or the keys of the new
 /// account.
-#[derive(Debug, PartialEq, Eq, SerdeSerialize, SerdeDeserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
 pub struct InitialCredentialAccount {
     pub account: NewAccount,
 }
 
-impl Serial for InitialCredentialAccount {
-    fn serial<B: Buffer>(&self, out: &mut B) {
-        // use CredentialAccount::*;
-        let keys = &self.account.keys;
-        let threshold = self.account.threshold;
-        out.write_u8(1).expect("Writing to buffer should succeed.");
-        let len = keys.len() as u8;
-        len.serial(out);
-        for key in keys.iter() {
-            key.serial(out);
-        }
-        threshold.serial(out);
-    }
-}
+// impl Serial for InitialCredentialAccount {
+//     fn serial<B: Buffer>(&self, out: &mut B) {
+//         // use CredentialAccount::*;
+//         let keys = &self.account.keys;
+//         let threshold = self.account.threshold;
+//         out.write_u8(1).expect("Writing to buffer should succeed.");
+//         let len = keys.len() as u8;
+//         len.serial(out);
+//         for key in keys.iter() {
+//             key.serial(out);
+//         }
+//         threshold.serial(out);
+//     }
+// }
 
-impl Deserial for InitialCredentialAccount {
-    fn deserial<R: ReadBytesExt>(cur: &mut R) -> Fallible<Self> {
-        // use CredentialAccount::*;
-        let len = cur.read_u8()?;
-        if len == 0 {
-            bail!("Need at least one key.")
-        }
-        let mut keys = Vec::with_capacity(len as usize);
-        for _ in 0..len {
-            keys.push(cur.get()?);
-        }
-        let threshold = cur.get()?;
-        let new_account = InitialCredentialAccount {
-            account: NewAccount { keys, threshold },
-        };
-        Ok(new_account)
-    }
-}
+// impl Deserial for InitialCredentialAccount {
+//     fn deserial<R: ReadBytesExt>(cur: &mut R) -> Fallible<Self> {
+//         // use CredentialAccount::*;
+//         let len = cur.read_u8()?;
+//         if len == 0 {
+//             bail!("Need at least one key.")
+//         }
+//         let mut keys = Vec::with_capacity(len as usize);
+//         for _ in 0..len {
+//             keys.push(cur.get()?);
+//         }
+//         let threshold = cur.get()?;
+//         let new_account = InitialCredentialAccount {
+//             account: NewAccount { keys, threshold },
+//         };
+//         Ok(new_account)
+//     }
+// }
 
 /// Values (as opposed to proofs) in credential deployment.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
