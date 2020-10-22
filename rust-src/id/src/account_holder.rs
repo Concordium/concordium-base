@@ -10,6 +10,7 @@ use bulletproofs::{
     inner_product_proof::inner_product,
     range_proof::{prove_given_scalars as bulletprove, prove_less_than_or_equal},
 };
+use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -34,7 +35,13 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     context: &IPContext<P, C>,
     threshold: Threshold,
     aci: &AccCredentialInfo<C>,
-) -> Option<(PreIdentityObject<P, C>, ps_sig::SigRetrievalRandomness<P>)> {
+    initial_account_data: &InitialAccountData,
+) -> Option<(
+    PreIdentityObject<P, C>,
+    ps_sig::SigRetrievalRandomness<P>,
+    PublicInformationForIP<C>,
+    AccountOwnershipProof,
+)> {
     let mut csprng = thread_rng();
     let id_cred_pub = context
         .global_context
@@ -43,6 +50,56 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     // PRF related computation
     let prf_key = &aci.prf_key;
+
+    // From create_credential:
+    // let id_cred_sec = &aci.cred_holder_info.id_cred.id_cred_sec;
+    let reg_id_exponent = match aci.prf_key.prf_exponent(0) {
+        Ok(exp) => exp,
+        Err(_) => return None,
+    };
+
+    // RegId as well as Prf key commitments must be computed
+    // with the same generators as in the commitment key.
+    let reg_id = context
+        .global_context
+        .on_chain_commitment_key
+        .hide(
+            &Value::<C>::new(reg_id_exponent),
+            &PedersenRandomness::zero(),
+        )
+        .0;
+
+    let vk_acc = InitialCredentialAccount {
+        account: NewAccount {
+            keys:      initial_account_data
+                .keys
+                .values()
+                .map(|kp| VerifyKey::Ed25519VerifyKey(kp.public))
+                .collect::<Vec<_>>(),
+            threshold: initial_account_data.threshold,
+        },
+    };
+
+    // Step 3: We should sign IDcred_PUB ,policy_ACC ,RegID_ACC ,vk_ACC ,pk_ACC
+    let pub_info_for_ip = PublicInformationForIP {
+        id_cred_pub,
+        reg_id,
+        vk_acc,
+        // policy
+    };
+    let to_sign = to_bytes(&pub_info_for_ip); // TODO: use hash
+    let proof_acc_sk = AccountOwnershipProof {
+        sigs: initial_account_data
+            .keys
+            .iter()
+            .map(|(&idx, kp)| {
+                let expanded_sk = ed25519::ExpandedSecretKey::from(&kp.secret);
+                (idx, expanded_sk.sign(to_sign.as_ref(), &kp.public).into())
+            })
+            .collect(),
+    };
+    // --
+
     // FIXME: The next item will change to encrypt by chunks to enable anonymity
     // revocation.
     // sharing data, commitments to sharing coefficients, and randomness of the
@@ -209,24 +266,44 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         bulletproofs.push(bulletproof);
     }
 
+    // Somewhere here we have to add a proof that
+    //  RegID_ACC = PRF(AHI.key_PRF ,0):
+    let prover_prf_regid = com_eq::ComEq {
+        commitment: cmm_prf,
+        y: context
+        .global_context
+        .on_chain_commitment_key.g,
+        g: reg_id,
+        cmm_key: commitment_key_prf
+    };
+
+    let secret_prf_regid = com_eq::ComEqSecret{
+        r: rand_cmm_prf.clone(),
+        a: prf_key.to_value()
+    };
+    
     let prover = prover.add_prover(ReplicateAdapter {
         protocols: replicated_provers,
     });
 
     let secret = (secret, replicated_secrets);
+
+    let prover = prover.add_prover(prover_prf_regid);
+    let secret = (secret, secret_prf_regid);
     transcript.append_message(b"bulletproofs", &bulletproofs);
     let proof = prove(transcript, &prover, secret, &mut csprng)?;
 
     let ip_ar_data = ip_ar_data
         .iter()
-        .zip(proof.witness.w2.witnesses.into_iter())
+        .zip(proof.witness.w1.w2.witnesses.into_iter())
         .map(|(&(ar_id, f), w)| (ar_id, f(w)))
         .collect::<BTreeMap<ArIdentity, _>>();
     let poks = PreIdentityProof {
         challenge: proof.challenge,
-        id_cred_sec_witness: proof.witness.w1.w1.w1,
-        commitments_same_proof: proof.witness.w1.w1.w2,
-        commitments_prf_same: proof.witness.w1.w2,
+        id_cred_sec_witness: proof.witness.w1.w1.w1.w1,
+        commitments_same_proof: proof.witness.w1.w1.w1.w2,
+        commitments_prf_same: proof.witness.w1.w1.w2,
+        prf_regid_proof: proof.witness.w2,
         bulletproofs,
     };
     // attribute list
@@ -240,6 +317,9 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         poks,
     };
 
+    // Step 9:  Somewhere here we should also send the credential stuff for the
+    // initial account (the ACI in the bluepaper)
+
     // Randomness to retrieve the signature
     // We add randomness from both of the commitments.
     // See specification of ps_sig and id layer for why this is so.
@@ -249,6 +329,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     Some((
         prio,
         ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand),
+        pub_info_for_ip,
+        proof_acc_sk,
     ))
 }
 
@@ -601,8 +683,7 @@ where
     }
 
     // Proof that the registration id is computed correctly from the prf key K and
-    // the cred_counter x. At the moment there is no proof that x is less than
-    // max_account.
+    // the cred_counter x.
     let (prover_reg_id, secret_reg_id) = compute_pok_reg_id(
         &context.global_context.on_chain_commitment_key,
         prf_key.clone(),
@@ -1116,15 +1197,28 @@ mod tests {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
+            ip_cdi_secret_key
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let aci = test_create_aci(&mut csprng);
+        let acc_data = InitialAccountData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
         let global_ctx = GlobalContext::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
-        let (context, pio, randomness) =
-            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
+        let (context, pio, randomness, pub_info_for_ip, proof_acc_sk) =
+            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let alist = test_create_attributes();
-        let sig_ok = verify_credentials(&pio, context, &alist, &ip_secret_key);
-        let ip_sig = sig_ok.unwrap();
+        let ver_ok = verify_credentials(&pio, context,
+            pub_info_for_ip,
+            &proof_acc_sk, &alist, &ip_secret_key, &ip_cdi_secret_key);
+        let (ip_sig, _) = ver_ok.unwrap();
 
         // Create CDI arguments
         let id_object = IdentityObject {

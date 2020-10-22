@@ -279,6 +279,7 @@ mod test {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
+            ip_cdi_secret_key
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
 
         let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -293,6 +294,16 @@ mod test {
         let aci = AccCredentialInfo {
             cred_holder_info: ah_info,
             prf_key,
+        };
+        let acc_data = InitialAccountData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
         };
 
         let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
@@ -312,15 +323,17 @@ mod test {
 
         let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
         let threshold = Threshold(num_ars - 1);
-        let (pio, randomness) = generate_pio(&context, threshold, &aci)
+        let (pio, randomness, pub_info_for_ip, proof_acc_sk) = generate_pio(&context, threshold, &aci, &acc_data)
             .expect("Creating the credential should succeed.");
 
-        let sig_ok = verify_credentials(&pio, context, &alist, &ip_secret_key);
+        let ver_ok = verify_credentials(&pio, context,
+            pub_info_for_ip,
+            &proof_acc_sk, &alist, &ip_secret_key, &ip_cdi_secret_key);
 
         // First test, check that we have a valid signature.
-        assert!(sig_ok.is_ok());
+        assert!(ver_ok.is_ok());
 
-        let ip_sig = sig_ok.unwrap();
+        let (ip_sig, _) = ver_ok.unwrap();
 
         let policy = Policy {
             valid_to,
