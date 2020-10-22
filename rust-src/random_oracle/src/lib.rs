@@ -25,13 +25,13 @@ impl AsRef<[u8]> for Challenge {
 impl Write for RandomOracle {
     #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.input(buf);
+        self.0.update(buf);
         Ok(buf.len())
     }
 
     #[inline(always)]
     fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        self.0.input(buf);
+        self.0.update(buf);
         Ok(())
     }
 
@@ -49,7 +49,7 @@ impl Buffer for RandomOracle {
     fn start() -> Self { RandomOracle::empty() }
 
     // Compute the result in the given state, consuming the state.
-    fn result(self) -> Self::Result { self.0.result() }
+    fn result(self) -> Self::Result { self.0.finalize() }
 }
 
 impl RandomOracle {
@@ -81,7 +81,7 @@ impl RandomOracle {
     /// Same as append, but modifies the oracle state instead of consuming it
     pub fn add<B: Serial>(&mut self, data: &B) { self.put(data) }
 
-    pub fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) { self.0.input(data) }
+    pub fn add_bytes<B: AsRef<[u8]>>(&mut self, data: B) { self.0.update(data) }
 
     pub fn append_bytes<B: AsRef<[u8]>>(self, data: B) -> RandomOracle {
         RandomOracle(self.0.chain(data))
@@ -163,8 +163,10 @@ mod tests {
             let s1 = RandomOracle::empty();
             let s2 = RandomOracle::empty();
             let res1 = s1.append_bytes(&v1).append_bytes(&v2).result();
+            let ref_res1: &[u8] = res1.as_ref();
             let res2 = s2.append_bytes(&v3).result();
-            assert_eq!(res1.as_ref(), res2.as_ref());
+            let ref_res2: &[u8] = res2.as_ref();
+            assert_eq!(ref_res1, ref_res2);
         }
     }
 
@@ -183,8 +185,10 @@ mod tests {
             }
             let s2 = RandomOracle::empty().extend_from(v1.iter());
             let res1 = s1.result();
+            let ref_res1: &[u8] = res1.as_ref();
             let res2 = s2.result();
-            assert_eq!(res1.as_ref(), res2.as_ref());
+            let ref_res2: &[u8] = res2.as_ref();
+            assert_eq!(ref_res1, ref_res2);
         }
     }
 
@@ -200,8 +204,10 @@ mod tests {
                 s1.add(&v1[i]);
             }
             let res1 = s1.result();
+            let ref_res1: &[u8] = res1.as_ref();
             let res2 = s2.append_bytes(&v1).result();
-            assert_eq!(res1.as_ref(), res2.as_ref());
+            let ref_res2: &[u8] = res2.as_ref();
+            assert_eq!(ref_res1, ref_res2);
         }
     }
 

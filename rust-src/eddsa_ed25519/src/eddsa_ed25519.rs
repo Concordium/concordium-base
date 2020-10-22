@@ -111,11 +111,7 @@ pub extern "C" fn eddsa_verify(
     pk_ptr: *mut PublicKey,
     signature_bytes: &[u8; SIGNATURE_LENGTH],
 ) -> i32 {
-    let sig_res = Signature::from_bytes(signature_bytes);
-    if sig_res.is_err() {
-        return -1;
-    };
-    let sig = sig_res.unwrap();
+    let sig = Signature::new(*signature_bytes);
     let pk = from_ptr!(pk_ptr);
     let data: &[u8] = slice_from_c_bytes!(message, len);
     match pk.verify(data, &sig) {
