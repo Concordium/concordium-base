@@ -9,7 +9,7 @@ mod ffi;
 pub mod proofs;
 mod types;
 
-use crate::types::CHUNK_SIZE as CHUNK_SIZE_ENC_TRANS;
+use crate::types::{CHUNK_SIZE as CHUNK_SIZE_ENC_TRANS, *};
 use crypto_common::types::Amount;
 use curve_arithmetic::*;
 use elgamal::*;
