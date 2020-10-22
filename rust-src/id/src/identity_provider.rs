@@ -43,7 +43,6 @@ impl std::fmt::Display for Reason {
     }
 }
 
-
 /// FIXME: This function does not check that the anonymity revocation
 /// parameters make sense.
 /// Validate all the proofs in an identity object request.
@@ -188,11 +187,9 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
     let verifier_prf_regid = com_eq::ComEq {
         commitment: pre_id_obj.cmm_prf,
-        y: context
-        .global_context
-        .on_chain_commitment_key.g,
-        g: pub_info_for_ip.reg_id,
-        cmm_key: commitment_key_prf
+        y:          context.global_context.on_chain_commitment_key.g,
+        g:          pub_info_for_ip.reg_id,
+        cmm_key:    commitment_key_prf,
     };
     let prf_regid_witness = pre_id_obj.poks.prf_regid_proof.clone();
 
@@ -336,7 +333,7 @@ pub fn verify_credentials<
     proof_acc_sk: &AccountOwnershipProof,
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &ps_sig::SecretKey<P>,
-    ip_cdi_secret_key: &ed25519_dalek::SecretKey
+    ip_cdi_secret_key: &ed25519_dalek::SecretKey,
 ) -> Result<
     (
         ps_sig::Signature<P>,
@@ -346,7 +343,13 @@ pub fn verify_credentials<
 > {
     validate_request(pre_id_obj, context, &pub_info_for_ip, proof_acc_sk)?;
     let sig = sign_identity_object(pre_id_obj, &context.ip_info, alist, ip_secret_key)?;
-    let initial_cdi = create_initial_cdi(pre_id_obj, context, pub_info_for_ip, alist, &ip_cdi_secret_key);
+    let initial_cdi = create_initial_cdi(
+        pre_id_obj,
+        context,
+        pub_info_for_ip,
+        alist,
+        &ip_cdi_secret_key,
+    );
     Ok((sig, initial_cdi))
 }
 
@@ -359,7 +362,7 @@ pub fn create_initial_cdi<
     context: IPContext<P, C>,
     pub_info_for_ip: PublicInformationForIP<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
-    ip_cdi_secret_key: &ed25519_dalek::SecretKey
+    ip_cdi_secret_key: &ed25519_dalek::SecretKey,
 ) -> InitialCredentialDeploymentInfo<C, AttributeType> {
     let policy: Policy<C, AttributeType> = Policy {
         valid_to:   alist.valid_to,
@@ -375,10 +378,10 @@ pub fn create_initial_cdi<
         policy,
         cred_account: pub_info_for_ip.vk_acc,
     };
-    let sig = sign_initial_cred_values(&cred_values, &context.ip_info, &ip_cdi_secret_key); 
+    let sig = sign_initial_cred_values(&cred_values, &context.ip_info, &ip_cdi_secret_key);
     InitialCredentialDeploymentInfo {
         values: cred_values,
-        sig
+        sig,
     }
 }
 
@@ -393,7 +396,9 @@ pub fn sign_initial_cred_values<
 ) -> IpCdiSignature {
     let to_sign = to_bytes(&initial_cred_values); // TODO: use hash
     let expanded_sk = ed25519_dalek::ExpandedSecretKey::from(ip_cdi_secret_key);
-    expanded_sk.sign(to_sign.as_ref(), &ip_info.ip_cdi_verify_key).into()
+    expanded_sk
+        .sign(to_sign.as_ref(), &ip_info.ip_cdi_verify_key)
+        .into()
 }
 
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
@@ -532,7 +537,7 @@ mod tests {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
-            ip_cdi_secret_key
+            ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
@@ -560,12 +565,11 @@ mod tests {
             &proof_acc_sk,
             &attrs,
             &ip_secret_key,
-            &ip_cdi_secret_key
+            &ip_cdi_secret_key,
         );
 
         // Assert
         assert!(ver_ok.is_ok());
-
     }
 
     // /// Check IP's verify_credentials fail for wrong id_cred_sec
@@ -622,7 +626,6 @@ mod tests {
         let mut csprng = thread_rng();
         let IpData {
             public_ip_info: ip_info,
-            ip_secret_key,
             ..
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
@@ -638,8 +641,9 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (ctx, mut pio, _, pub_info_for_ip, proof_acc_sk) = test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
-        let attrs = test_create_attributes();
+        let (ctx, mut pio, _, pub_info_for_ip, proof_acc_sk) =
+            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+        // let attrs = test_create_attributes();
 
         // Act (make cmm_sc be comm. of id_cred_sec but with wrong/fresh randomness)
         let sc_ck = CommitmentKey {
@@ -649,8 +653,7 @@ mod tests {
         let id_cred_sec = aci.cred_holder_info.id_cred.id_cred_sec;
         let (cmm_sc, _) = sc_ck.commit(&id_cred_sec, &mut csprng);
         pio.cmm_sc = cmm_sc;
-        let ver_ok = validate_request(&pio, ctx, &pub_info_for_ip,
-            &proof_acc_sk);
+        let ver_ok = validate_request(&pio, ctx, &pub_info_for_ip, &proof_acc_sk);
 
         // Assert
         assert_eq!(
@@ -669,8 +672,7 @@ mod tests {
         let mut csprng = thread_rng();
         let IpData {
             public_ip_info: ip_info,
-            ip_secret_key,
-            ip_cdi_secret_key
+            ..
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
@@ -687,7 +689,7 @@ mod tests {
         };
         let (context, mut pio, _, pub_info_for_ip, proof_acc_sk) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
-        let attrs = test_create_attributes();
+        // let attrs = test_create_attributes();
 
         // Act (make cmm_prf be a commitment to a wrong/random value)
         let val = curve_arithmetic::Value::<G1>::generate(&mut csprng);
@@ -696,9 +698,7 @@ mod tests {
             .on_chain_commitment_key
             .commit(&val, &mut csprng);
         pio.cmm_prf = cmm_prf;
-        let ver_ok = validate_request(&pio, context,
-            &pub_info_for_ip,
-            &proof_acc_sk);
+        let ver_ok = validate_request(&pio, context, &pub_info_for_ip, &proof_acc_sk);
 
         // Assert
         assert_eq!(

@@ -6,6 +6,7 @@ use crate::{
 };
 use bulletproofs::range_proof::verify_less_than_or_equal;
 use core::fmt::{self, Display};
+use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use ed25519_dalek::Verifier;
 use either::Either;
@@ -13,7 +14,6 @@ use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
 use random_oracle::RandomOracle;
-use crypto_common::to_bytes;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -239,12 +239,12 @@ pub fn verify_initial_cdi<
     AttributeType: Attribute<C::Scalar>,
 >(
     ip_info: &IpInfo<P>,
-    cdi: &InitialCredentialDeploymentInfo<C, AttributeType>
-) -> Result<(), CDIVerificationError>{
+    cdi: &InitialCredentialDeploymentInfo<C, AttributeType>,
+) -> Result<(), CDIVerificationError> {
     let signed = to_bytes(&cdi.values);
     match ip_info.ip_cdi_verify_key.verify(signed.as_ref(), &cdi.sig) {
         Err(_) => Err(CDIVerificationError::Signature),
-        _ => Ok(())
+        _ => Ok(()),
     }
 }
 
@@ -465,7 +465,7 @@ mod tests {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
-            ip_cdi_secret_key
+            ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
@@ -480,12 +480,24 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (context, pio, randomness, pub_info_for_ip, proof_acc_sk) =
-            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &initial_acc_data);
+        let (context, pio, randomness, pub_info_for_ip, proof_acc_sk) = test_create_pio(
+            &aci,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &initial_acc_data,
+        );
         let alist = test_create_attributes();
-        let ver_ok = verify_credentials(&pio, context,
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
             pub_info_for_ip,
-            &proof_acc_sk, &alist, &ip_secret_key, &ip_cdi_secret_key);
+            &proof_acc_sk,
+            &alist,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
         assert!(ver_ok.is_ok());
 
         // Generate CDI
@@ -535,7 +547,7 @@ mod tests {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
-            ip_cdi_secret_key
+            ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
@@ -553,9 +565,15 @@ mod tests {
         let (context, pio, _, pub_info_for_ip, proof_acc_sk) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let alist = test_create_attributes();
-        let ver_ok = verify_credentials(&pio, context,
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
             pub_info_for_ip,
-            &proof_acc_sk, &alist, &ip_secret_key, &ip_cdi_secret_key);
+            &proof_acc_sk,
+            &alist,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
         assert!(ver_ok.is_ok());
 
         // Verify initial CDI

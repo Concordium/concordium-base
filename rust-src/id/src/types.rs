@@ -902,9 +902,11 @@ pub struct IpInfo<P: Pairing> {
     #[serde(rename = "ipVerifyKey")]
     pub ip_verify_key: pssig::PublicKey<P>,
     /// Ed public key of the IP
-    #[serde(rename = "ipCdiVerifyKey",
-    serialize_with = "base16_encode",
-    deserialize_with = "base16_decode")]
+    #[serde(
+        rename = "ipCdiVerifyKey",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
     pub ip_cdi_verify_key: ed25519::PublicKey,
 }
 
@@ -1552,9 +1554,9 @@ pub struct InitialCredentialDeploymentInfo<
 > {
     #[serde(flatten)]
     pub values: InitialCredentialDeploymentValues<C, AttributeType>,
-    pub sig: IpCdiSignature
-    /* #[serde(rename = "proofs")] // FIXME: This should remove the first 4 bytes
-     * pub proofs: CredDeploymentProofs<P, C>, */
+    pub sig: IpCdiSignature, /* #[serde(rename = "proofs")] // FIXME: This should remove the
+                              * first 4 bytes pub proofs:
+                              * CredDeploymentProofs<P, C>, */
 }
 
 #[derive(Debug, Serialize)]
