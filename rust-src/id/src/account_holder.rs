@@ -78,7 +78,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // First the proof that we know id_cred_sec.
     let prover = dlog::Dlog::<C> {
         public: id_cred_pub,
-        coeff:  context.global_context.on_chain_commitment_key.g, // REVIEW: check that this is correct
+        coeff:  context.global_context.on_chain_commitment_key.g, /* REVIEW: check that this is
+                                                                   * correct */
     };
     let secret = dlog::DlogSecret {
         secret: id_cred_sec.clone(),
@@ -1119,7 +1120,8 @@ mod tests {
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let aci = test_create_aci(&mut csprng);
         let global_ctx = GlobalContext::generate();
-        let (ars_infos, _) = test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
+        let (ars_infos, _) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let (context, pio, randomness) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
         let alist = test_create_attributes();
