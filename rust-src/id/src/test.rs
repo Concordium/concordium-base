@@ -153,7 +153,8 @@ pub fn test_pipeline() {
 
     let global_ctx = GlobalContext::generate();
 
-    let (ars_infos, ars_secret) = test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
+    let (ars_infos, ars_secret) =
+        test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
     let aci = test_create_aci(&mut csprng);
     let (context, pio, randomness) =
@@ -251,7 +252,8 @@ pub fn test_pipeline() {
     assert_eq!(
         revealed_id_cred_pub,
         global_ctx
-            .on_chain_commitment_key.g
+            .on_chain_commitment_key
+            .g
             .mul_by_scalar(&id_use_data.aci.cred_holder_info.id_cred.id_cred_sec)
     );
 

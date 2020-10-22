@@ -1480,10 +1480,7 @@ impl<C: Curve> GlobalContext<C> {
         // generate next generator by hashing the previous one
         generator = C::hash_to_group(&to_bytes(&generator));
         let h = generator.clone();
-        let cmm_key = PedersenKey {
-            g: g,
-            h: h,
-        };
+        let cmm_key = PedersenKey { g, h };
 
         let mut generators = Vec::with_capacity(n);
         for _ in 0..n {
