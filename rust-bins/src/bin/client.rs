@@ -1,7 +1,7 @@
 use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::*;
-use dialoguer::{Checkboxes, Input, Select};
+use dialoguer::{Input, MultiSelect, Select};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
@@ -221,6 +221,32 @@ struct CreateCredential {
 }
 
 #[derive(StructOpt)]
+struct VerifyCredential {
+    #[structopt(
+        long = "credential",
+        help = "File with the JSON encoded credential object."
+    )]
+    credential: PathBuf,
+    #[structopt(
+        long = "global",
+        help = "File with global parameters.",
+        default_value = "database/global.json"
+    )]
+    global: PathBuf,
+    #[structopt(
+        long = "ip-info",
+        help = "File with the JSON encoded information about the identity provider."
+    )]
+    ip_info: PathBuf,
+    #[structopt(
+        long = "ars",
+        help = "File with a list of anonymity revokers.",
+        default_value = "database/anonymity_revokers.json"
+    )]
+    anonymity_revokers: PathBuf,
+}
+
+#[derive(StructOpt)]
 struct ExtendIpList {
     #[structopt(
         long = "ips-meta-file",
@@ -288,6 +314,8 @@ enum IdClient {
                  object to deploy on chain."
     )]
     CreateCredential(CreateCredential),
+    #[structopt(name = "verify-credential", about = "Verify the given credential.")]
+    VerifyCredential(VerifyCredential),
     #[structopt(
         name = "extend-ip-list",
         about = "Extend the list of identity providers as served by the wallet-proxy."
@@ -310,6 +338,56 @@ fn main() {
         IpSignPio(isp) => handle_act_as_ip(isp),
         CreateCredential(cc) => handle_create_credential(cc),
         ExtendIpList(eil) => handle_extend_ip_list(eil),
+        VerifyCredential(vcred) => handle_verify_credential(vcred),
+    }
+}
+
+fn handle_verify_credential(vcred: VerifyCredential) {
+    let ip_info = match read_ip_info(vcred.ip_info) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("Could not read identity provider info because {}", err);
+            return;
+        }
+    };
+
+    // we also read the global context from another json file (called
+    // global.context). We need commitment keys and other data in there.
+    let global_ctx = {
+        if let Some(gc) = read_global_context(vcred.global) {
+            gc
+        } else {
+            eprintln!("Cannot read global context information database. Terminating.");
+            return;
+        }
+    };
+
+    let all_ars_infos = match read_anonymity_revokers(vcred.anonymity_revokers) {
+        Ok(v) => v,
+        Err(x) => {
+            eprintln!("Could not decode anonymity revokers file due to {}", x);
+            return;
+        }
+    };
+
+    let credential = match read_credential(vcred.credential) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Error reading credential: {}", e);
+            return;
+        }
+    };
+
+    if let Err(e) = id::chain::verify_cdi(
+        &global_ctx,
+        &ip_info,
+        &all_ars_infos.anonymity_revokers,
+        None,
+        &credential,
+    ) {
+        eprintln!("Credential verification failed due to {}", e)
+    } else {
+        eprintln!("Credential verifies.")
     }
 }
 
@@ -431,7 +509,7 @@ fn handle_create_credential(cc: CreateCredential) {
         .keys()
         .map(|&x| AttributeStringTag::from(x))
         .collect::<Vec<_>>();
-    let atts: Vec<usize> = match Checkboxes::new()
+    let atts: Vec<usize> = match MultiSelect::new()
         .with_prompt("Select which attributes you wish to reveal")
         .items(&alist_items)
         .interact()
@@ -665,7 +743,7 @@ fn handle_act_as_ip(aai: IpSignPio) {
     let created_at = YearMonth::now();
 
     let tags = {
-        match Checkboxes::new()
+        match MultiSelect::new()
             .with_prompt("Select attributes:")
             .items(&ATTRIBUTE_NAMES)
             .interact()
@@ -804,7 +882,7 @@ fn handle_start_ip(sip: StartIp) {
         .map(|x| x.ar_description.name.as_str())
         .collect();
 
-    let ar_info = Checkboxes::new()
+    let ar_info = MultiSelect::new()
         .with_prompt("Choose anonymity revokers")
         .items(&mrs)
         .interact()

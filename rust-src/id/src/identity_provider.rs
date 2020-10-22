@@ -4,7 +4,12 @@ use crate::{
     types::*,
     utils,
 };
+use bulletproofs::range_proof::verify_efficient;
+use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
+use elgamal::multicombine;
+use ff::Field;
+use merlin::Transcript;
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use rand::*;
 use random_oracle::RandomOracle;
@@ -55,7 +60,26 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         h: ip_info.ip_verify_key.g,
     };
 
-    let ro = RandomOracle::empty();
+    let mut transcript = Transcript::new(r"PreIdentityProof".as_ref());
+    transcript.append_message(b"ctx", &to_bytes(&context.global_context));
+    transcript.append_message(
+        b"choice_ar_parameters",
+        &to_bytes(&pre_id_obj.choice_ar_parameters),
+    );
+    transcript.append_message(b"cmm_sc", &to_bytes(&pre_id_obj.cmm_sc));
+    transcript.append_message(b"cmm_prf", &to_bytes(&pre_id_obj.cmm_prf));
+    transcript.append_message(
+        b"cmm_prf_sharing_coeff",
+        &to_bytes(&pre_id_obj.cmm_prf_sharing_coeff),
+    );
+    let mut ro = RandomOracle::domain("PreIdentityProof")
+        .append_bytes(&to_bytes(&context.global_context))
+        .append_bytes(&to_bytes(&pre_id_obj.choice_ar_parameters))
+        .append_bytes(&to_bytes(&pre_id_obj.cmm_sc))
+        .append_bytes(&to_bytes(&pre_id_obj.cmm_prf))
+        .append_bytes(&to_bytes(&pre_id_obj.cmm_prf_sharing_coeff));
+
+    // let mut ro = RandomOracle::empty();
 
     let id_cred_sec_verifier = dlog::Dlog {
         public: pre_id_obj.id_cred_pub,
@@ -85,6 +109,13 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // it does not hurt.
     let rt_usize: usize = revocation_threshold.into();
     if number_of_ars == 0 || rt_usize > number_of_ars {
+        return Err(Reason::WrongArParameters);
+    }
+
+    // We also need to check that the threshold is actually equal to
+    // the number of coefficients in the sharing polynomial
+    // (corresponding to the degree+1)
+    if rt_usize != pre_id_obj.cmm_prf_sharing_coeff.len() {
         return Err(Reason::WrongArParameters);
     }
 
@@ -118,11 +149,13 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
     let witness_prf_same = pre_id_obj.poks.commitments_prf_same;
 
+    let h_in_exponent = *context.global_context.encryption_in_exponent_generator();
     let prf_verification = compute_prf_sharing_verifier(
         ar_ck,
         &pre_id_obj.cmm_prf_sharing_coeff,
         &pre_id_obj.ip_ar_data,
         &context.ars_infos,
+        &h_in_exponent,
     );
     let (prf_sharing_verifier, prf_sharing_witness) = match prf_verification {
         Some(v) => v,
@@ -150,6 +183,32 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         challenge: pre_id_obj.poks.challenge,
         witness,
     };
+    let bulletproofs = &pre_id_obj.poks.bulletproofs;
+    for ((ar_identity, ar_data), proof) in pre_id_obj
+        .ip_ar_data
+        .iter()
+        // .zip(context.ars_infos.values())
+        .zip(bulletproofs.iter())
+    {
+        let ciphers = ar_data.enc_prf_key_share;
+        let ar_info = match context.ars_infos.get(ar_identity) {
+            Some(x) => x,
+            None => return Err(Reason::IncorrectProof),
+        };
+        let pk: C = ar_info.ar_public_key.key;
+        let keys: CommitmentKey<C> = CommitmentKey {
+            g: h_in_exponent,
+            h: pk,
+        };
+        let gens = &context.global_context.bulletproof_generators().take(32 * 8);
+        let commitments = ciphers.iter().map(|x| Commitment(x.1)).collect::<Vec<_>>();
+        ro.add(&ciphers);
+        transcript.append_message(b"encrypted_share", &to_bytes(&ciphers));
+        if verify_efficient(&mut transcript, 32, &commitments, &proof, gens, &keys).is_err() {
+            return Err(Reason::IncorrectProof);
+        }
+    }
+    ro = ro.append_bytes(&to_bytes(&bulletproofs));
     if verify(ro, &verifier, &proof) {
         Ok(())
     } else {
@@ -186,6 +245,7 @@ fn compute_prf_sharing_verifier<C: Curve>(
     cmm_sharing_coeff: &[Commitment<C>],
     ip_ar_data: &BTreeMap<ArIdentity, IpArData<C>>,
     known_ars: &BTreeMap<ArIdentity, ArInfo<C>>,
+    encryption_in_exponent_generator: &C,
 ) -> Option<IdCredPubVerifiers<C>> {
     let mut verifiers = Vec::with_capacity(ip_ar_data.len());
     let mut witnesses = Vec::with_capacity(ip_ar_data.len());
@@ -193,12 +253,26 @@ fn compute_prf_sharing_verifier<C: Curve>(
     for (ar_id, ar_data) in ip_ar_data.iter() {
         let cmm_share = utils::commitment_to_share(&ar_id.to_scalar::<C>(), cmm_sharing_coeff);
         // finding the right encryption key
+
+        // Take linear combination of ciphers
+        let u8_chunk_size = u8::from(CHUNK_SIZE);
+        let two_chunksize = C::scalar_from_u64(1 << u8_chunk_size);
+        let mut power_of_two = C::Scalar::one();
+
+        let mut scalars = Vec::with_capacity(ar_data.enc_prf_key_share.len());
+        for _ in 0..ar_data.enc_prf_key_share.len() {
+            scalars.push(power_of_two);
+            power_of_two.mul_assign(&two_chunksize);
+        }
+        let combined_ciphers = multicombine(&ar_data.enc_prf_key_share, &scalars);
+
         let ar_info = known_ars.get(ar_id)?;
         let verifier = com_enc_eq::ComEncEq {
-            cipher:     ar_data.enc_prf_key_share,
+            cipher: combined_ciphers,
             commitment: cmm_share,
-            pub_key:    ar_info.ar_public_key,
-            cmm_key:    *ar_commitment_key,
+            pub_key: ar_info.ar_public_key,
+            cmm_key: *ar_commitment_key,
+            encryption_in_exponent_generator: *encryption_in_exponent_generator,
         };
         verifiers.push(verifier);
         // TODO: Figure out whether we can somehow get rid of this clone.
@@ -224,7 +298,6 @@ pub fn verify_credentials<
     ip_secret_key: &ps_sig::SecretKey<P>,
 ) -> Result<ps_sig::Signature<P>, Reason> {
     validate_request(pre_id_obj, context)?;
-
     sign_identity_object(pre_id_obj, &context.ip_info, alist, ip_secret_key)
 }
 

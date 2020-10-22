@@ -5,6 +5,7 @@ extern crate serde_json;
 use crypto_common::{types::Amount, *};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
+use ed25519_dalek::Signer;
 use either::Either::{Left, Right};
 use encrypted_transfers::encrypt_amount_with_fixed_randomness;
 use failure::Fallible;
@@ -145,7 +146,7 @@ fn make_transaction_bytes(
     body.extend_from_slice(payload_bytes);
 
     let hasher = Sha256::new().chain(&body);
-    (hasher.result(), body)
+    (hasher.finalize(), body)
 }
 
 fn create_transfer_aux(input: &str) -> Fallible<String> {

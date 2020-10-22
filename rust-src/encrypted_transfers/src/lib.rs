@@ -9,7 +9,7 @@ mod ffi;
 pub mod proofs;
 mod types;
 
-use crate::types::*;
+use crate::types::{CHUNK_SIZE as CHUNK_SIZE_ENC_TRANS, *};
 use crypto_common::{to_bytes, types::Amount};
 use curve_arithmetic::*;
 use elgamal::*;
@@ -32,8 +32,13 @@ fn encrypt_amount<C: Curve, R: Rng>(
     // The generator for encryption in the exponent is the second component of the
     // commitment key, the 'h'.
     let h = context.encryption_in_exponent_generator();
-    let mut ciphers =
-        encrypt_u64_in_chunks_given_generator(pk, u64::from(amount), CHUNK_SIZE, h, csprng);
+    let mut ciphers = encrypt_u64_in_chunks_given_generator(
+        pk,
+        u64::from(amount),
+        CHUNK_SIZE_ENC_TRANS,
+        h,
+        csprng,
+    );
     // these two are guaranteed to exist because we used `ChunkSize::ThirtyTwo`. The
     // encryptions are in little-endian limbs, so the last one is the encryption
     // of the high bits.
@@ -62,7 +67,7 @@ pub fn encrypt_amount_with_fixed_randomness<C: Curve>(
     // commitment key, the 'h'.
     let h = context.encryption_in_exponent_generator();
     let val = u64::from(amount);
-    let chunks = CHUNK_SIZE
+    let chunks = CHUNK_SIZE_ENC_TRANS
         .u64_to_chunks(val)
         .into_iter()
         .map(Value::<C>::from)
@@ -110,14 +115,14 @@ pub fn decrypt_amount<C: Curve>(
 ) -> Amount {
     let low_chunk = sk.decrypt_exponent(&amount.encryptions[0], table);
     let hi_chunk = sk.decrypt_exponent(&amount.encryptions[1], table);
-    Amount::from(CHUNK_SIZE.chunks_to_u64([low_chunk, hi_chunk].iter().copied()))
+    Amount::from(CHUNK_SIZE_ENC_TRANS.chunks_to_u64([low_chunk, hi_chunk].iter().copied()))
 }
 
 impl<C: Curve> EncryptedAmount<C> {
     /// Join chunks of an encrypted amount into a single ciphertext.
     /// The resulting ciphertext will in general not be easily decryptable.
     pub fn join(&self) -> Cipher<C> {
-        let scale = 1u64 << u8::from(CHUNK_SIZE);
+        let scale = 1u64 << u8::from(CHUNK_SIZE_ENC_TRANS);
         // NB: This relies on chunks being little-endian
         self.encryptions[1]
             .scale_u64(scale)
