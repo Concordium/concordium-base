@@ -3,19 +3,31 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-======================================================
-Concordium Smart Contracts Developer Documentation
-======================================================
+====================================================================
+Concordium Smart Contract Documentation!
+====================================================================
+
+Welcome to the official documentation of Concordium Smart Contracts!
+
 
 .. toctree::
    :maxdepth: 2
-   :caption: Smart Contracts:
+   :caption: General
 
-   smart-contracts
+   general/introduction
 
+.. toctree::
+   :maxdepth: 2
+   :caption: How-to guides
 
-.. todolist::
+   guides/rust-contracts
+   guides/guides
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials
+
+   tutorial
 
 Indices and tables
 ==================
@@ -23,3 +35,5 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+.. todolist::

@@ -40,7 +40,8 @@ release = ''
 # ones.
 extensions = [
     "sphinx_rtd_theme",
-    "sphinx.ext.todo"
+    "sphinx.ext.todo",
+    # "sphinx.ext.imgconverter" # To support svg when targeting LaTeX
 ]
 
 todo_include_todos = True
@@ -73,6 +74,7 @@ exclude_patterns = []
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = None
+highlight_language = "rust"
 
 
 # -- Options for HTML output -------------------------------------------------
