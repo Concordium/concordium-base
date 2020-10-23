@@ -20,6 +20,7 @@ module Concordium.Types (
   ExchangeRate(..),
   EnergyRate,
   computeEnergyRate,
+  computeCost,
 
   -- * Time units
   Duration(..),
@@ -279,6 +280,14 @@ computeEnergyRate
   -- ^Euros per Energy
   -> EnergyRate
 computeEnergyRate microGTUPerEuro euroPerEnergy = toRational microGTUPerEuro * toRational euroPerEnergy
+
+-- |Compute the cost of energy at a given rate.
+-- This rounds up to the nearest microGTU.
+computeCost
+  :: EnergyRate
+  -> Energy
+  -> Amount
+computeCost rate energy = ceiling (rate * fromIntegral energy)
 
 type VoterId = Word64
 type VoterVerificationKey = Sig.VerifyKey
