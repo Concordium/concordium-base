@@ -3,13 +3,18 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
+======================================================
 Concordium Smart Contracts Developer Documentation
 ======================================================
 
 .. toctree::
    :maxdepth: 2
-   :caption: Table of content:
-   deployment
+   :caption: Smart Contracts:
+
+   smart-contracts
+
+
+.. todolist::
 
 
 Indices and tables

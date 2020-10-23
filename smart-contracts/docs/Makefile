@@ -21,3 +21,6 @@ help:
 
 linkcheck:
 	@$(SPHINXBUILD) -b linkcheck "$(SOURCEDIR)" "$(BUILDDIR)"
+
+dev:
+	sphinx-autobuild "$(SOURCEDIR)" "$(BUILDDIR)/html" -E

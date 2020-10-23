@@ -39,8 +39,13 @@ release = ''
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    "sphinx_rtd_theme"
+    "sphinx_rtd_theme",
+    "sphinx.ext.todo"
 ]
+
+todo_include_todos = True
+todo_emit_warnings = True
+# todo_link_only = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
