@@ -82,8 +82,8 @@ pygments_style = None
 #
 html_theme = "sphinx_rtd_theme"
 
-html_logo = "_static/concordium-logo.png"
-html_favicon = "_static/favicon.png"
+html_logo = "_static/concordium-logo.svg"
+html_favicon = "_static/concordium-logo-no-text.svg"
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the

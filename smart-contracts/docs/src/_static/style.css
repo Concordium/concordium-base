@@ -2,3 +2,8 @@
     max-width: 1200px;
     margin: auto;
 }
+
+.wy-side-nav-search > a {
+    /* Fixes logo is gone, when it is an svg */
+    width: 100% !important;
+}
