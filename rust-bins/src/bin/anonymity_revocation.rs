@@ -81,16 +81,22 @@ struct Combine {
 #[derive(StructOpt)]
 struct ComputeRegIds {
     #[structopt(
-        long = "max-accounts",
-        help = "Integer specifying the maximal number of accounts"
+        long = "max-account",
+        help = "Integer specifying the maximal account number that could have been used.",
+        default_value = "255"
     )]
-    max_accounts: u8,
+    max_account: u8,
     #[structopt(long = "prf-key", help = "File containing the PRF key.")]
     prf_key: PathBuf,
     #[structopt(long = "global-context", help = "File with global context.")]
     global_context: PathBuf,
     #[structopt(long = "out", help = "File to output the RegIds to")]
     out: Option<PathBuf>,
+    #[structopt(
+        long = "no-secret",
+        help = "Do __not__ output the decryption key together with the RegId."
+    )]
+    no_secret: bool,
 }
 
 #[derive(StructOpt)]
@@ -190,31 +196,37 @@ fn handle_compute_regids(rid: ComputeRegIds) {
     }
     let global_context = global_context.value;
 
-    let max_accounts: u8 = rid.max_accounts;
+    let max_account: u8 = rid.max_account;
     let g = global_context.on_chain_commitment_key.g;
     let prf_key: prf::SecretKey<_> = prf_wrapper.prf_key;
 
-    let mut regids = Vec::with_capacity(usize::from(max_accounts));
-    for x in 0..max_accounts {
-        let regid = prf_key.prf(&g, x);
-        match regid {
-            Ok(id) => regids.push(hex::encode(&to_bytes(&id))),
-            Err(x) => {
-                eprintln!("Could not produce RegIds, because {} ", x);
-                return;
+    let mut regids = Vec::with_capacity(usize::from(max_account));
+    for x in 0..=max_account {
+        if let Ok(secret) = prf_key.prf_exponent(x) {
+            let regid = g.mul_by_scalar(&secret);
+            let regid_hex = hex::encode(&to_bytes(&regid));
+            if !rid.no_secret {
+                regids.push(json!({
+                    "regId": regid_hex,
+                    "accountAddress": AccountAddress::new(&regid),
+                    "decryptionKey": hex::encode(&to_bytes(&secret))
+                }));
+            } else {
+                regids.push(json!({
+                    "regId": regid_hex,
+                    "accountAddress": AccountAddress::new(&regid),
+                }));
             }
-        };
+        }
     }
-    // let json = json!({ "regIds": regids});
-    println!("Here is a list of regids:");
-    output_json(&regids);
+
     if let Some(json_file) = rid.out {
-        let json = json!({ "regIds": regids });
-        match write_json_to_file(&json_file, &json) {
-            Ok(_) => println!("Wrote regIds to {}.", json_file.to_string_lossy()),
+        match write_json_to_file(&json_file, &regids) {
+            Ok(_) => eprintln!("Wrote regIds to {}.", json_file.to_string_lossy()),
             Err(e) => {
-                println!("Could not JSON write to file because {}", e);
-                output_json(&json);
+                eprintln!("Could not JSON write to file because {}", e);
+                eprintln!("Here are the potential accounts.");
+                output_json(&regids);
             }
         }
     }
