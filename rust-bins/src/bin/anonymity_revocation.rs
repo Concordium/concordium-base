@@ -209,7 +209,10 @@ fn handle_compute_regids(rid: ComputeRegIds) {
                 regids.push(json!({
                     "regId": regid_hex,
                     "accountAddress": AccountAddress::new(&regid),
-                    "decryptionKey": hex::encode(&to_bytes(&secret))
+                    "encryptionSecretKey": elgamal::SecretKey{
+                        generator: *global_context.elgamal_generator(),
+                        scalar: secret
+                    }
                 }));
             } else {
                 regids.push(json!({
