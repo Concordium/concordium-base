@@ -7,7 +7,7 @@ use curve_arithmetic::*;
 use elgamal::*;
 use id::sigma_protocols::common::*;
 
-#[derive(Clone, Serialize, SerdeBase16Serialize)]
+#[derive(Clone, Serialize, SerdeBase16Serialize, Debug)]
 /// An encrypted amount, in two chunks. The JSON serialization of this is just
 /// base16 encoded serialized chunks.
 pub struct EncryptedAmount<C: Curve> {
