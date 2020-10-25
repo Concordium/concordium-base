@@ -445,7 +445,8 @@ mod tests {
             ip_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
-        let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
+        let (ars_infos, _) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
         let (context, pio, randomness) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
