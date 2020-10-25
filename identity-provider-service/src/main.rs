@@ -7,7 +7,7 @@ use id::{
     identity_provider::{sign_identity_object, validate_request as ip_validate_request},
     types::*,
 };
-use log::info;
+use log::{error, info};
 use pairing::bls12_381::{Bls12, G1};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -107,19 +107,48 @@ async fn main() {
     let opt = IdentityProviderServiceConfiguration::from_clap(&matches);
 
     info!("Reading the provided IP, AR and global context configurations.");
-    let ip_data_contents =
-        fs::read_to_string(opt.identity_provider_file).expect("Unable to read ip data file.");
-    let ar_info_contents =
-        fs::read_to_string(opt.anonymity_revokers_file).expect("Unable to read ar info file.");
-    let global_context_contents = fs::read_to_string(opt.global_context_file)
-        .expect("Unable to read global context info file.");
+    let ip_data_contents = match fs::read_to_string(opt.identity_provider_file) {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Could not read identity provider file: {}.", e);
+            return;
+        }
+    };
+    let ar_info_contents = match fs::read_to_string(opt.anonymity_revokers_file) {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Could not read anonymity revokers file: {}", e);
+            return;
+        }
+    };
+    let global_context_contents = match fs::read_to_string(opt.global_context_file) {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Could not read global context file: {}", e);
+            return;
+        }
+    };
 
-    let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(
-        from_str(&ip_data_contents).expect("File did not contain a valid IpData object as JSON."),
-    );
-    let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
-        from_str(&ar_info_contents).expect("File did not contain a valid ArInfos object as JSON"),
-    );
+    let ip_data: Arc<IpData<ExamplePairing>> = match from_str(&ip_data_contents) {
+        Ok(v) => Arc::new(v),
+        Err(e) => {
+            error!("File did not contain a valid IpData object as JSON {}.", e);
+            return;
+        }
+    };
+    let ar_info: Arc<ArInfos<ExampleCurve>> =
+        match from_str::<Versioned<ArInfos<ExampleCurve>>>(&ar_info_contents) {
+            Ok(info) if info.version == VERSION_0 => Arc::new(info.value),
+            Ok(info) => {
+                error!("Unsupported anonymity revokers version {}.", info.version);
+                return;
+            }
+            Err(e) => {
+                error!("File did not contain a valid ArInfos object as JSON {}", e);
+                return;
+            }
+        };
+
     let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
         from_str(&global_context_contents)
             .expect("File did not contain a valid GlobalContext object as JSON"),
@@ -421,10 +450,10 @@ mod tests {
             from_str(&ip_data_contents)
                 .expect("File did not contain a valid IpData object as JSON."),
         );
-        let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
-            from_str(&ar_info_contents)
-                .expect("File did not contain a valid ArInfos object as JSON"),
-        );
+        let ar_info: Versioned<ArInfos<ExampleCurve>> = from_str(&ar_info_contents)
+            .expect("File did not contain a valid ArInfos object as JSON");
+        assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
+        let ar_info = Arc::new(ar_info.value);
         let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
             from_str(&global_context_contents)
                 .expect("File did not contain a valid GlobalContext object as JSON"),
@@ -459,10 +488,10 @@ mod tests {
             from_str(&ip_data_contents)
                 .expect("File did not contain a valid IpData object as JSON."),
         );
-        let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
-            from_str(&ar_info_contents)
-                .expect("File did not contain a valid ArInfos object as JSON"),
-        );
+        let ar_info: Versioned<ArInfos<ExampleCurve>> = from_str(&ar_info_contents)
+            .expect("File did not contain a valid ArInfos object as JSON");
+        assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
+        let ar_info = Arc::new(ar_info.value);
         let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
             from_str(&global_context_contents)
                 .expect("File did not contain a valid GlobalContext object as JSON"),

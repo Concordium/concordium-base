@@ -193,7 +193,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     }
 
     transcript.append_message(b"bulletproofs", &bulletproofs);
-    if verify(transcript, &verifier, &proof) {
+    if verify(&mut transcript, &verifier, &proof) {
         Ok(())
     } else {
         Err(Reason::IncorrectProof)

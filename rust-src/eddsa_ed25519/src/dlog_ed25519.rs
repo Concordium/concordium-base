@@ -97,21 +97,20 @@ fn point_from_public_key(public_key: &PublicKey) -> Option<EdwardsPoint> {
 }
 
 pub fn prove_dlog_ed25519(
-    ro: RandomOracle,
+    ro: &mut RandomOracle,
     public: &PublicKey,
     secret_key: &SecretKey,
 ) -> Ed25519DlogProof {
     let secret = scalar_from_secret_key(&secret_key);
     // FIXME: Add base to the proof.
-    let hasher = ro.append_bytes("dlog_ed25519").append(public);
+    ro.append_message(b"dlog_ed25519", public);
 
     // FIXME non_zero scalar should be generated
     let rand_scalar = generate_rand_scalar();
     let randomised_point = &rand_scalar * &constants::ED25519_BASEPOINT_TABLE;
-    let challenge_bytes = hasher
-        .split()
-        .append_bytes(&randomised_point.compress().to_bytes())
-        .result();
+
+    ro.append_message(b"randomised_point", &randomised_point.compress().to_bytes());
+    let challenge_bytes = ro.split().result();
     // FIXME: Do the same as in other proofs in sigma_protocols in id.
     let mut array = [0u8; 32];
     array.copy_from_slice(&challenge_bytes.as_ref());
@@ -123,7 +122,7 @@ pub fn prove_dlog_ed25519(
 }
 
 pub fn verify_dlog_ed25519(
-    ro: RandomOracle,
+    ro: &mut RandomOracle,
     public_key: &PublicKey,
     proof: &Ed25519DlogProof,
 ) -> bool {
@@ -132,12 +131,11 @@ pub fn verify_dlog_ed25519(
         Some(public) => {
             let randomised_point =
                 public * proof.challenge + &proof.witness * &constants::ED25519_BASEPOINT_TABLE;
-            let hasher = ro
-                .append_bytes("dlog_ed25519")
-                .append(public_key)
-                .append_bytes(&randomised_point.compress().to_bytes());
+            ro.append_message(b"dlog_ed25519", public_key);
+            ro.append_message(b"randomised_point", &randomised_point.compress().to_bytes());
+
             // FIXME: Should do the same as for normal dlog.
-            let challenge_bytes = hasher.result();
+            let challenge_bytes = ro.split().result();
             // FIXME: Do the same as in other proofs in sigma_protocols in id.
             let mut array = [0u8; 32];
             array.copy_from_slice(&challenge_bytes.as_ref());
@@ -158,11 +156,15 @@ mod tests {
             let secret = SecretKey::generate(&mut csprng);
             let public = PublicKey::from(&secret);
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let ro = RandomOracle::domain(&challenge_prefix);
-            let proof = prove_dlog_ed25519(ro.split(), &public, &secret);
-            assert!(verify_dlog_ed25519(ro, &public, &proof));
+            let mut ro = RandomOracle::domain(&challenge_prefix);
+            let proof = prove_dlog_ed25519(&mut ro.split(), &public, &secret);
+            assert!(verify_dlog_ed25519(&mut ro, &public, &proof));
             let challenge_prefix_1 = generate_challenge_prefix(&mut csprng);
-            if verify_dlog_ed25519(RandomOracle::domain(&challenge_prefix_1), &public, &proof) {
+            if verify_dlog_ed25519(
+                &mut RandomOracle::domain(&challenge_prefix_1),
+                &public,
+                &proof,
+            ) {
                 assert_eq!(challenge_prefix, challenge_prefix_1);
             }
         }
@@ -175,8 +177,11 @@ mod tests {
             let secret = SecretKey::generate(&mut csprng);
             let public = PublicKey::from(&secret);
             let challenge_prefix = generate_challenge_prefix(&mut csprng);
-            let ro = RandomOracle::domain(&challenge_prefix);
-            let proof = prove_dlog_ed25519(ro, &public, &secret);
+            let proof = prove_dlog_ed25519(
+                &mut RandomOracle::domain(&challenge_prefix),
+                &public,
+                &secret,
+            );
             let proof_des = serialize_deserialize(&proof);
             assert_eq!(proof, proof_des.expect("Proof did not deserialize."));
         }
