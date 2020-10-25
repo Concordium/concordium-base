@@ -4,6 +4,11 @@ version = "0.1.0"
 authors = ["Concordium AG <contact@concordium.com>"]
 edition = "2018"
 
+[features]
+# Force openssl-sys to staticly link in the openssl library. Necessary when
+# cross compiling to x86_64-unknown-linux-musl.
+vendored = ["openssl-sys/vendored"]
+
 [dependencies]
 clap = "2.33"
 dialoguer = "0.6"
@@ -19,6 +24,7 @@ hex = "0.4"
 reqwest = {version = "0.10.8", features = ["json", "blocking"]}
 url = "2.1.1"
 chrono = "0.4.19"
+openssl-sys = {version = "0.9", optional = true}
 
 [dependencies.crypto_common]
 path = "../rust-src/crypto_common"
