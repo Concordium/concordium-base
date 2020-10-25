@@ -6,9 +6,10 @@ use id::{
     ffi::AttributeKind,
     identity_provider::{sign_identity_object, validate_request as ip_validate_request},
     types::*,
+    constants::{ArCurve, IpPairing},
 };
-use log::info;
-use pairing::bls12_381::{Bls12, G1};
+use log::{error, info};
+use pairing::bls12_381::{Bls12};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string};
@@ -20,8 +21,6 @@ use warp::{
     Filter,
 };
 
-type ExampleCurve = G1;
-type ExamplePairing = Bls12;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
 
 /// 10.0.2.2 is how an Android emulator accesses the host machine, which is what
@@ -35,7 +34,7 @@ const ID_VERIFICATION_URL: &str = "http://localhost:8101/api/verify";
 #[derive(Deserialize)]
 struct IdentityObjectRequest {
     #[serde(rename = "idObjectRequest")]
-    id_object_request: Versioned<PreIdentityObject<ExamplePairing, ExampleCurve>>,
+    id_object_request: Versioned<PreIdentityObject<IpPairing, ArCurve>>,
 }
 
 /// Holds the query parameters expected by the service.
@@ -65,9 +64,9 @@ struct IdentityTokenContainer {
 /// passing between methods.
 struct ValidatedRequest {
     /// The pre-identity-object contained in the initial request.
-    request: PreIdentityObject<ExamplePairing, ExampleCurve>,
+    request: PreIdentityObject<IpPairing, ArCurve>,
     /// The identity provider data needed to sign the request.
-    ip_data: Arc<IpData<ExamplePairing>>,
+    ip_data: Arc<IpData<IpPairing>>,
     /// The URI that the ID object should be returned to after we've done the
     /// verification of the user.
     redirect_uri: String,
@@ -107,23 +106,63 @@ async fn main() {
     let opt = IdentityProviderServiceConfiguration::from_clap(&matches);
 
     info!("Reading the provided IP, AR and global context configurations.");
-    let ip_data_contents =
-        fs::read_to_string(opt.identity_provider_file).expect("Unable to read ip data file.");
-    let ar_info_contents =
-        fs::read_to_string(opt.anonymity_revokers_file).expect("Unable to read ar info file.");
-    let global_context_contents = fs::read_to_string(opt.global_context_file)
-        .expect("Unable to read global context info file.");
+    let ip_data_contents = match fs::read_to_string(opt.identity_provider_file) {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Could not read identity provider file: {}.", e);
+            return;
+        }
+    };
+    let ar_info_contents = match fs::read_to_string(opt.anonymity_revokers_file) {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Could not read anonymity revokers file: {}", e);
+            return;
+        }
+    };
+    let global_context_contents = match fs::read_to_string(opt.global_context_file) {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Could not read global context file: {}", e);
+            return;
+        }
+    };
 
-    let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(
-        from_str(&ip_data_contents).expect("File did not contain a valid IpData object as JSON."),
-    );
-    let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
-        from_str(&ar_info_contents).expect("File did not contain a valid ArInfos object as JSON"),
-    );
-    let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
-        from_str(&global_context_contents)
-            .expect("File did not contain a valid GlobalContext object as JSON"),
-    );
+    let ip_data: Arc<IpData<IpPairing>> = match from_str(&ip_data_contents) {
+        Ok(v) => Arc::new(v),
+        Err(e) => {
+            error!("File did not contain a valid IpData object as JSON {}.", e);
+            return;
+        }
+    };
+    let ar_info: Arc<ArInfos<ArCurve>> =
+        match from_str::<Versioned<ArInfos<ArCurve>>>(&ar_info_contents) {
+            Ok(info) if info.version == VERSION_0 => Arc::new(info.value),
+            Ok(info) => {
+                error!("Unsupported anonymity revokers version {}.", info.version);
+                return;
+            }
+            Err(e) => {
+                error!("File did not contain a valid ArInfos object as JSON {}", e);
+                return;
+            }
+        };
+
+    let global_context: Arc<GlobalContext<ArCurve>> =
+        match from_str::<Versioned<GlobalContext<ArCurve>>>(&global_context_contents) {
+            Ok(global) if global.version == VERSION_0 => Arc::new(global.value),
+            Ok(global) => {
+                error!("Unsupported global parameters version {}.", global.version);
+                return;
+            }
+            Err(e) => {
+                error!(
+                    "File did not contain a valid GlobalContext object as JSON {}.",
+                    e
+                );
+                return;
+            }
+        };
 
     // Create the 'database' directories for storing IdentityObjects and
     // AnonymityRevocationRecords.
@@ -329,9 +368,9 @@ async fn create_signed_identity_object(
 /// - Ok(ValidatedRequest) if the request is valid or
 /// - Err(msg) where `msg` is a string describing the error.
 fn extract_and_validate_request(
-    ip_data: Arc<IpData<ExamplePairing>>,
-    ar_info: Arc<ArInfos<ExampleCurve>>,
-    global_context: Arc<GlobalContext<ExampleCurve>>,
+    ip_data: Arc<IpData<IpPairing>>,
+    ar_info: Arc<ArInfos<ArCurve>>,
+    global_context: Arc<GlobalContext<ArCurve>>,
     input: Input,
 ) -> Result<ValidatedRequest, String> {
     let request: IdentityObjectRequest =
@@ -366,7 +405,7 @@ fn extract_and_validate_request(
 /// Creates and saves the revocation record to the file system (which should be
 /// a database, but for the proof-of-concept we use the file system).
 fn save_revocation_record(
-    pre_identity_object: &PreIdentityObject<ExamplePairing, ExampleCurve>,
+    pre_identity_object: &PreIdentityObject<IpPairing, ArCurve>,
     base16_id_cred_pub: String,
 ) -> std::result::Result<(), String> {
     let ar_record = AnonymityRevocationRecord {
@@ -417,18 +456,19 @@ mod tests {
         let ar_info_contents = include_str!("../data/anonymity_revokers.json");
         let global_context_contents = include_str!("../data/global.json");
 
-        let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(
+        let ip_data: Arc<IpData<IpPairing>> = Arc::new(
             from_str(&ip_data_contents)
                 .expect("File did not contain a valid IpData object as JSON."),
         );
-        let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
-            from_str(&ar_info_contents)
-                .expect("File did not contain a valid ArInfos object as JSON"),
-        );
-        let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
+        let ar_info: Versioned<ArInfos<ArCurve>> = from_str(&ar_info_contents)
+            .expect("File did not contain a valid ArInfos object as JSON");
+        assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
+        let ar_info = Arc::new(ar_info.value);
+        let global_context: Versioned<GlobalContext<ArCurve>> =
             from_str(&global_context_contents)
-                .expect("File did not contain a valid GlobalContext object as JSON"),
-        );
+                .expect("File did not contain a valid GlobalContext object as JSON");
+        assert_eq!(global_context.version, VERSION_0);
+        let global_context = Arc::new(global_context.value);
 
         let input = Input {
             state:        request.to_string(),
@@ -442,7 +482,9 @@ mod tests {
             Arc::clone(&global_context),
             input,
         );
-
+        if let Err(e) = response.as_ref() {
+            println!("{:?}", e);
+        }
         // Then
         assert!(response.is_ok());
     }
@@ -455,18 +497,19 @@ mod tests {
         let ar_info_contents = include_str!("../data/anonymity_revokers.json");
         let global_context_contents = include_str!("../data/global.json");
 
-        let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(
+        let ip_data: Arc<IpData<IpPairing>> = Arc::new(
             from_str(&ip_data_contents)
                 .expect("File did not contain a valid IpData object as JSON."),
         );
-        let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
-            from_str(&ar_info_contents)
-                .expect("File did not contain a valid ArInfos object as JSON"),
-        );
-        let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
+        let ar_info: Versioned<ArInfos<ArCurve>> = from_str(&ar_info_contents)
+            .expect("File did not contain a valid ArInfos object as JSON");
+        assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
+        let ar_info = Arc::new(ar_info.value);
+        let global_context: Versioned<GlobalContext<ArCurve>> =
             from_str(&global_context_contents)
-                .expect("File did not contain a valid GlobalContext object as JSON"),
-        );
+                .expect("File did not contain a valid GlobalContext object as JSON");
+        assert_eq!(global_context.version, VERSION_0);
+        let global_context = Arc::new(global_context.value);
 
         let input = Input {
             state:        request.to_string(),

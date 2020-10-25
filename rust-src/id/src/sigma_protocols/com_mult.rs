@@ -42,8 +42,9 @@ impl<'a, C: Curve> SigmaProtocol for ComMult<C> {
     type SecretData = ComMultSecret<C>;
 
     #[inline]
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        ro.extend_from(self.cmms.iter()).append(&self.cmm_key)
+    fn public(&self, ro: &mut RandomOracle) {
+        ro.extend_from(b"cmms", self.cmms.iter());
+        ro.append_message(b"cmm_key", &self.cmm_key)
     }
 
     #[inline]
@@ -180,10 +181,10 @@ mod tests {
         for _ in 0..100 {
             ComMult::<G1>::with_valid_data(0, &mut csprng, |com_mult, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
-                let proof =
-                    prove(ro.split(), &com_mult, secret, csprng).expect("Proving should succeed.");
-                assert!(verify(ro, &com_mult, &proof));
+                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let proof = prove(&mut ro.split(), &com_mult, secret, csprng)
+                    .expect("Proving should succeed.");
+                assert!(verify(&mut ro, &com_mult, &proof));
             })
         }
     }
@@ -195,27 +196,27 @@ mod tests {
             ComMult::<G1>::with_valid_data(0, &mut csprng, |com_mult, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
                 let ro = RandomOracle::domain(&challenge_prefix);
-                let proof =
-                    prove(ro.split(), &com_mult, secret, csprng).expect("Proving should succeed.");
-                assert!(verify(ro.split(), &com_mult, &proof));
+                let proof = prove(&mut ro.split(), &com_mult, secret, csprng)
+                    .expect("Proving should succeed.");
+                assert!(verify(&mut ro.split(), &com_mult, &proof));
 
                 // Construct invalid parameters
-                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
+                let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
 
                 // Verify failure for invalid parameters
-                assert!(!verify(wrong_ro, &com_mult, &proof));
+                assert!(!verify(&mut wrong_ro, &com_mult, &proof));
                 let mut wrong_cmm = com_mult;
                 for i in 0..3 {
                     let tmp = wrong_cmm.cmms[i];
                     let v = pedersen_scheme::Value::<G1>::generate(csprng);
                     wrong_cmm.cmms[i] = wrong_cmm.cmm_key.commit(&v, csprng).0;
-                    assert!(!verify(ro.split(), &wrong_cmm, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_cmm, &proof));
                     wrong_cmm.cmms[i] = tmp;
                 }
 
                 wrong_cmm.cmm_key = pedersen_scheme::CommitmentKey::generate(csprng);
 
-                assert!(!verify(ro.split(), &wrong_cmm, &proof))
+                assert!(!verify(&mut ro.split(), &wrong_cmm, &proof))
             })
         }
     }
