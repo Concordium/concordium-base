@@ -3,13 +3,13 @@ use std::{convert::Infallible, fs, fs::OpenOptions, io::prelude::*, path::PathBu
 use crypto_common::{base16_encode_string, Versioned, VERSION_0};
 use curve_arithmetic::*;
 use id::{
+    constants::{ArCurve, IpPairing},
     ffi::AttributeKind,
     identity_provider::{sign_identity_object, validate_request as ip_validate_request},
     types::*,
-    constants::{ArCurve, IpPairing},
 };
 use log::{error, info};
-use pairing::bls12_381::{Bls12};
+use pairing::bls12_381::Bls12;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string};
@@ -464,9 +464,8 @@ mod tests {
             .expect("File did not contain a valid ArInfos object as JSON");
         assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
         let ar_info = Arc::new(ar_info.value);
-        let global_context: Versioned<GlobalContext<ArCurve>> =
-            from_str(&global_context_contents)
-                .expect("File did not contain a valid GlobalContext object as JSON");
+        let global_context: Versioned<GlobalContext<ArCurve>> = from_str(&global_context_contents)
+            .expect("File did not contain a valid GlobalContext object as JSON");
         assert_eq!(global_context.version, VERSION_0);
         let global_context = Arc::new(global_context.value);
 
@@ -482,9 +481,6 @@ mod tests {
             Arc::clone(&global_context),
             input,
         );
-        if let Err(e) = response.as_ref() {
-            println!("{:?}", e);
-        }
         // Then
         assert!(response.is_ok());
     }
@@ -505,9 +501,8 @@ mod tests {
             .expect("File did not contain a valid ArInfos object as JSON");
         assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
         let ar_info = Arc::new(ar_info.value);
-        let global_context: Versioned<GlobalContext<ArCurve>> =
-            from_str(&global_context_contents)
-                .expect("File did not contain a valid GlobalContext object as JSON");
+        let global_context: Versioned<GlobalContext<ArCurve>> = from_str(&global_context_contents)
+            .expect("File did not contain a valid GlobalContext object as JSON");
         assert_eq!(global_context.version, VERSION_0);
         let global_context = Arc::new(global_context.value);
 
