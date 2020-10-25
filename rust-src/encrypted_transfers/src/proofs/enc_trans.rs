@@ -39,8 +39,9 @@ pub struct ElgDec<C: Curve> {
 }
 
 impl<C: Curve> ElgDec<C> {
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        ro.append(&self.public).extend_from(&self.coeff)
+    fn public(&self, ro: &mut RandomOracle) {
+        ro.append_message(b"public", &self.public);
+        ro.extend_from(b"coeff", &self.coeff)
     }
 }
 
@@ -138,17 +139,11 @@ impl<C: Curve> SigmaProtocol for EncTrans<C> {
     type ProverWitness = Witness<C>;
     type SecretData = EncTransSecret<C>;
 
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        let ro = self.elg_dec.public(ro);
-        let ro1 = self
-            .encexp1
-            .iter()
-            .fold(ro, |running_ro, p| p.public(running_ro));
-        let ro2 = self
-            .encexp2
-            .iter()
-            .fold(ro1, |running_ro, p| p.public(running_ro));
-        self.dlog.public(ro2)
+    fn public(&self, ro: &mut RandomOracle) {
+        self.elg_dec.public(ro);
+        self.encexp1.iter().for_each(|p| p.public(ro));
+        self.encexp2.iter().for_each(|p| p.public(ro));
+        self.dlog.public(ro)
     }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {

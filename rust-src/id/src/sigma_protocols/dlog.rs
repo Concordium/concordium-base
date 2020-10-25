@@ -36,8 +36,9 @@ impl<C: Curve> SigmaProtocol for Dlog<C> {
     type ProverWitness = Witness<C>;
     type SecretData = DlogSecret<C>;
 
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        ro.append(&self.public).append(&self.coeff)
+    fn public(&self, ro: &mut RandomOracle) {
+        ro.append_message("public", &self.public);
+        ro.append_message("coeff", &self.coeff)
     }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
@@ -107,10 +108,10 @@ mod tests {
         for _ in 0..1000 {
             Dlog::with_valid_data(0, &mut csprng, |dlog: Dlog<G1>, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(&challenge_prefix);
                 let proof =
-                    prove(ro.split(), &dlog, secret, csprng).expect("Proving should succeed.");
-                assert!(verify(ro, &dlog, &proof));
+                    prove(&mut ro.split(), &dlog, secret, csprng).expect("Proving should succeed.");
+                assert!(verify(&mut ro, &dlog, &proof));
             })
         }
     }
@@ -122,12 +123,12 @@ mod tests {
             Dlog::with_valid_data(0, &mut csprng, |dlog, secret, csprng| {
                 // Generate proof
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(&challenge_prefix);
                 let proof =
-                    prove(ro.split(), &dlog, secret, csprng).expect("Proving should succeed.");
+                    prove(&mut ro.split(), &dlog, secret, csprng).expect("Proving should succeed.");
 
                 // Construct invalid parameters
-                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
+                let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
                 let wrong_base = G1::generate(csprng);
                 let wrong_public = G1::generate(csprng);
 
@@ -144,7 +145,7 @@ mod tests {
                 };
 
                 // Verify failure for invalid parameters
-                assert!(!verify(wrong_ro, &dlog, &proof));
+                assert!(!verify(&mut wrong_ro, &dlog, &proof));
                 let dlog_wrong_base = Dlog {
                     coeff: wrong_base,
                     ..dlog
@@ -153,10 +154,10 @@ mod tests {
                     public: wrong_public,
                     ..dlog
                 };
-                assert!(!verify(ro.split(), &dlog_wrong_base, &proof));
-                assert!(!verify(ro.split(), &dlog_wrong_public, &proof));
-                assert!(!verify(ro.split(), &dlog, &wrong_proof_challenge));
-                assert!(!verify(ro.split(), &dlog, &wrong_proof_witness));
+                assert!(!verify(&mut ro.split(), &dlog_wrong_base, &proof));
+                assert!(!verify(&mut ro.split(), &dlog_wrong_public, &proof));
+                assert!(!verify(&mut ro.split(), &dlog, &wrong_proof_challenge));
+                assert!(!verify(&mut ro, &dlog, &wrong_proof_witness));
             })
         }
     }

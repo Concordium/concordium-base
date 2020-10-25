@@ -34,12 +34,9 @@ impl<C: Curve> SigmaProtocol for DlogAndAggregateDlogsEqual<C> {
     type ProverWitness = Witness<C>;
     type SecretData = (Rc<C::Scalar>, Vec<Vec<Rc<C::Scalar>>>);
 
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        let ro1 = self
-            .aggregate_dlogs
-            .iter()
-            .fold(ro, |running_ro, p| p.public(running_ro));
-        self.dlog.public(ro1)
+    fn public(&self, ro: &mut RandomOracle) {
+        self.aggregate_dlogs.iter().for_each(|p| p.public(ro));
+        self.dlog.public(ro)
     }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
@@ -195,8 +192,8 @@ mod test {
             Rc::new(y2),
         ]]);
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
-        let ro = RandomOracle::domain(&challenge_prefix);
-        let proof = prove(ro.split(), &protocol, secret, &mut csprng).unwrap();
-        assert!(verify(ro, &protocol, &proof));
+        let mut ro = RandomOracle::domain(&challenge_prefix);
+        let proof = prove(&mut ro.split(), &protocol, secret, &mut csprng).unwrap();
+        assert!(verify(&mut ro, &protocol, &proof));
     }
 }

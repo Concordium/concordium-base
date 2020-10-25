@@ -53,11 +53,11 @@ impl<C: Curve> SigmaProtocol for ComLin<C> {
     type ProverWitness = Witness<C>;
     type SecretData = ComLinSecret<C>;
 
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        ro.extend_from(self.us.iter())
-            .extend_from(self.cmms.iter())
-            .append(&self.cmm)
-            .append(&self.cmm_key)
+    fn public(&self, ro: &mut RandomOracle) {
+        ro.extend_from(b"us", self.us.iter());
+        ro.extend_from(b"cmms", self.cmms.iter());
+        ro.append_message(b"cmm", &self.cmm);
+        ro.append_message(b"cmm_key", &self.cmm_key)
     }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
@@ -228,11 +228,11 @@ mod tests {
         for _ in 0..10 {
             ComLin::<G1>::with_valid_data(10, &mut csprng, |com_lin, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
-                let proof =
-                    prove(ro.split(), &com_lin, secret, csprng).expect("Proving should succeed.");
+                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let proof = prove(&mut ro.split(), &com_lin, secret, csprng)
+                    .expect("Proving should succeed.");
                 assert!(
-                    verify(ro, &com_lin, &proof),
+                    verify(&mut ro, &com_lin, &proof),
                     "Produced proof did not verify."
                 );
             })
@@ -246,22 +246,22 @@ mod tests {
             let n = 6;
             ComLin::<G1>::with_valid_data(n, &mut csprng, |com_lin, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
-                let proof =
-                    prove(ro.split(), &com_lin, secret, csprng).expect("Proving should succeed.");
-                assert!(verify(ro.split(), &com_lin, &proof));
+                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let proof = prove(&mut ro.split(), &com_lin, secret, csprng)
+                    .expect("Proving should succeed.");
+                assert!(verify(&mut ro.split(), &com_lin, &proof));
 
                 // Construct invalid parameters
-                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
+                let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
 
                 // Verify failure for invalid parameters
-                assert!(!verify(wrong_ro, &com_lin, &proof));
+                assert!(!verify(&mut wrong_ro, &com_lin, &proof));
                 let mut wrong_cmm = com_lin;
                 for i in 0..n {
                     let tmp = wrong_cmm.cmms[i];
                     let v = pedersen_scheme::Value::<G1>::generate(csprng);
                     wrong_cmm.cmms[i] = wrong_cmm.cmm_key.commit(&v, csprng).0;
-                    assert!(!verify(ro.split(), &wrong_cmm, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_cmm, &proof));
                     wrong_cmm.cmms[i] = tmp;
                 }
 
@@ -269,13 +269,13 @@ mod tests {
                     let tmp = wrong_cmm.cmm;
                     let v = pedersen_scheme::Value::<G1>::generate(csprng);
                     wrong_cmm.cmm = wrong_cmm.cmm_key.commit(&v, csprng).0;
-                    assert!(!verify(ro.split(), &wrong_cmm, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_cmm, &proof));
                     wrong_cmm.cmm = tmp;
                 }
 
                 wrong_cmm.cmm_key = pedersen_scheme::CommitmentKey::generate(csprng);
 
-                assert!(!verify(ro.split(), &wrong_cmm, &proof))
+                assert!(!verify(&mut ro, &wrong_cmm, &proof))
             })
         }
     }
@@ -391,9 +391,9 @@ mod tests {
         };
         let secret = ComLinSecret { xs, rs, r };
         let challenge_prefix = generate_challenge_prefix(rng);
-        let ro = RandomOracle::domain(&challenge_prefix);
-        let proof = prove(ro.split(), &com_lin, secret, rng).expect("Proving should succeed.");
-        assert!(verify(ro, &com_lin, &proof));
+        let mut ro = RandomOracle::domain(&challenge_prefix);
+        let proof = prove(&mut ro.split(), &com_lin, secret, rng).expect("Proving should succeed.");
+        assert!(verify(&mut ro, &com_lin, &proof));
 
         let mut ro = RandomOracle::empty();
         let mut G_H = Vec::with_capacity(nm);

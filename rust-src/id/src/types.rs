@@ -1474,20 +1474,20 @@ impl<C: Curve> GlobalContext<C> {
     /// amount.
     pub fn generate_size(n: usize) -> Self {
         // initialize the first generator from pi digits.
-        let mut generator = C::hash_to_group(&PI_DIGITS[0..1000]);
+        let g = C::hash_to_group(&PI_DIGITS[0..1000]);
 
-        let g = generator.clone();
         // generate next generator by hashing the previous one
-        generator = C::hash_to_group(&to_bytes(&generator));
-        let h = generator.clone();
+        let h = C::hash_to_group(&to_bytes(&g));
+
         let cmm_key = PedersenKey { g, h };
 
         let mut generators = Vec::with_capacity(n);
+        let mut generator = h;
         for _ in 0..n {
             generator = C::hash_to_group(&to_bytes(&generator));
-            let g = generator.clone();
+            let g = generator;
             generator = C::hash_to_group(&to_bytes(&generator));
-            let h = generator.clone();
+            let h = generator;
             generators.push((g, h));
         }
 
