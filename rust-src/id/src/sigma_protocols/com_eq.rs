@@ -56,11 +56,11 @@ impl<C: Curve, D: Curve<Scalar = C::Scalar>> SigmaProtocol for ComEq<C, D> {
     type ProverWitness = Witness<C>;
     type SecretData = ComEqSecret<D>;
 
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        ro.append(&self.commitment)
-            .append(&self.y)
-            .append(&self.cmm_key)
-            .append(&self.g)
+    fn public(&self, ro: &mut RandomOracle) {
+        ro.append_message("commitment", &self.commitment);
+        ro.append_message("y", &self.y);
+        ro.append_message("cmm_key", &self.cmm_key);
+        ro.append_message("g", &self.g)
     }
 
     fn commit_point<R: rand::Rng>(
@@ -157,10 +157,10 @@ mod test {
         for _i in 1..20 {
             ComEq::<G1, G2>::with_valid_data(0, &mut csprng, |com_eq, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
-                let proof =
-                    prove(ro.split(), &com_eq, secret, csprng).expect("Proving should succeed.");
-                let res = verify(ro, &com_eq, &proof);
+                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let proof = prove(&mut ro.split(), &com_eq, secret, csprng)
+                    .expect("Proving should succeed.");
+                let res = verify(&mut ro, &com_eq, &proof);
                 assert!(res, "Verification of produced proof.");
             })
         }
@@ -173,38 +173,38 @@ mod test {
             ComEq::<G1, G2>::with_valid_data(i, &mut csprng, |com_eq, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
                 let ro = RandomOracle::domain(&challenge_prefix);
-                let proof =
-                    prove(ro.split(), &com_eq, secret, csprng).expect("Proving should succeed.");
+                let proof = prove(&mut ro.split(), &com_eq, secret, csprng)
+                    .expect("Proving should succeed.");
 
-                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
-                assert!(!verify(wrong_ro, &com_eq, &proof));
+                let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
+                assert!(!verify(&mut wrong_ro, &com_eq, &proof));
                 let mut wrong_com_eq = com_eq;
                 {
                     let tmp = wrong_com_eq.commitment;
                     let v = Value::<G1>::generate(csprng);
                     wrong_com_eq.commitment = wrong_com_eq.cmm_key.commit(&v, csprng).0;
-                    assert!(!verify(ro.split(), &wrong_com_eq, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_com_eq, &proof));
                     wrong_com_eq.commitment = tmp;
                 }
 
                 {
                     let tmp = wrong_com_eq.y;
                     wrong_com_eq.y = G1::generate(csprng);
-                    assert!(!verify(ro.split(), &wrong_com_eq, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_com_eq, &proof));
                     wrong_com_eq.y = tmp;
                 }
 
                 {
                     let tmp = wrong_com_eq.cmm_key;
                     wrong_com_eq.cmm_key = CommitmentKey::generate(csprng);
-                    assert!(!verify(ro.split(), &wrong_com_eq, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_com_eq, &proof));
                     wrong_com_eq.cmm_key = tmp;
                 }
 
                 {
                     let tmp = wrong_com_eq.g;
                     wrong_com_eq.g = G1::generate(csprng);
-                    assert!(!verify(ro.split(), &wrong_com_eq, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_com_eq, &proof));
                     wrong_com_eq.g = tmp;
                 }
             })
