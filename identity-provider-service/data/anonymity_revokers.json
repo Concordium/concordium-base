@@ -1,38 +1,50 @@
 {
-  "1":{
-    "arIdentity":1,
-    "arDescription":{
-      "name":"AnonymityRevoker1",
-      "url":"AnonymityRevoker1.com",
-      "description":"AnonymityRevoker1"
+  "v": 0,
+  "value": {
+    "1": {
+      "arIdentity": 1,
+      "arDescription": {
+        "name": "AR-1",
+        "url": "",
+        "description": ""
+      },
+      "arPublicKey": "a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd5a93a64961f18969e5167ce8e6492bdbbb40f83be07b39d5ced014e43672546f7cfd472f13b4eed9364b58ced585b7df3"
     },
-    "arPublicKey":"a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd585dc73effb46b8f1f6c474ec280c4a66d5a40d8b08cdf9dbabbd43b878fa2a94306dc1158d1ac9e1a444ea2cea0da9fd"
-  },
-  "2":{
-    "arIdentity":2,
-    "arDescription":{
-      "name":"AnonymityRevoker2",
-      "url":"AnonymityRevoker2.com",
-      "description":"AnonymityRevoker2"
+    "2": {
+      "arIdentity": 2,
+      "arDescription": {
+        "name": "AR-2",
+        "url": "",
+        "description": ""
+      },
+      "arPublicKey": "a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd5959e048ec30697d40f91a36ec00f4215323859c4f500003372c7c702aa8e3c69fb2c137898a2796a74ac164a1de4dc7a"
     },
-    "arPublicKey":"a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd58680a7deeb92c263b00226fc60a727a284d34c959456b8407fa4185a0d5c1ab999b4919263b9ba25832467a91bc157cf"
-  },
-  "3":{
-    "arIdentity":3,
-    "arDescription":{
-      "name":"AnonymityRevoker3",
-      "url":"AnonymityRevoker3.com",
-      "description":"AnonymityRevoker3"
+    "3": {
+      "arIdentity": 3,
+      "arDescription": {
+        "name": "AR-3",
+        "url": "",
+        "description": ""
+      },
+      "arPublicKey": "a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd5aa8b96b3f70c642271e0d78299d7ce3618574282e62bd3958008d2e3c75b211a9f2b5940d4b7d69d74515dfd5514781e"
     },
-    "arPublicKey":"a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd5acbbb8561250f82615407921e87cfea0123d40e073d78018144ff98a92313511056e2b964fa99957f74dec6f1c245e77"
-  },
-  "4":{
-    "arIdentity":4,
-    "arDescription":{
-      "name":"AnonymityRevoker4",
-      "url":"AnonymityRevoker4.com",
-      "description":"AnonymityRevoker4"
+    "4": {
+      "arIdentity": 4,
+      "arDescription": {
+        "name": "AR-4",
+        "url": "",
+        "description": ""
+      },
+      "arPublicKey": "a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd5918efbe13f4d368ab05fb62a1f22fe2e87d8cd43ed3bc36863dcbdf061a1a9074f432bb731a9c9957a7039b5803c90f5"
     },
-    "arPublicKey":"a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd5883b0b7cc2955d250ca2baf94df693497c1a08d5e768dbdb64851543e44322dbd9e9e180e7ef3f2f0effc0c1499a7524"
+    "5": {
+      "arIdentity": 5,
+      "arDescription": {
+        "name": "AR-5",
+        "url": "",
+        "description": ""
+      },
+      "arPublicKey": "a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd595c276bc87239c651d4a53cbb3135bf106abd0d2d1f3c86057a7a5df1b0b89e041175fe299f260ec6b76e7fec849c9e5"
+    }
   }
 }
