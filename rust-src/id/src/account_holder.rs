@@ -38,7 +38,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let mut csprng = thread_rng();
     let id_cred_pub = context
         .global_context
-        .on_chain_commitment_key.g // REVIEW: check that this is correct
+        .on_chain_commitment_key
+        .g
         .mul_by_scalar(&aci.cred_holder_info.id_cred.id_cred_sec);
 
     // PRF related computation
@@ -78,8 +79,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // First the proof that we know id_cred_sec.
     let prover = dlog::Dlog::<C> {
         public: id_cred_pub,
-        coeff:  context.global_context.on_chain_commitment_key.g, /* REVIEW: check that this is
-                                                                   * correct */
+        coeff:  context.global_context.on_chain_commitment_key.g,
     };
     let secret = dlog::DlogSecret {
         secret: id_cred_sec.clone(),
