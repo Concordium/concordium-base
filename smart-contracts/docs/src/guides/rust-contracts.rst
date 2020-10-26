@@ -12,13 +12,29 @@ It uses Cargo_ for compilation and dependency management.
 Installation
 ====================================
 
-First install rustup_, which will install both Rust_ and Cargo_ on your machine.
-Then use rustup to install the Rust Wasm toolchain::
+First install rustup_, which will install both Rust_ and Cargo_ on your
+machine.
+Then use rustup to install the Wasm target::
 
     rustup target add wasm32-unknown-unknown
 
+Next install the Concordium Smart Contract tool ``cargo-concordium`` by
+running::
 
+    cargo install cargo-concordium
 
+.. note::
+    Until the tool is release on crates.io_, you will also have to clone
+    the repo containing ``cargo-concordium`` and from the directory
+    ``cargo-concordium`` run::
+
+        cargo install -path .
+
+.. todo::
+    Once the tool is released:
+
+    - Verify the above is correct.
+    - Remove the note.
 
 Getting started
 =====================================
@@ -53,7 +69,8 @@ Open the ``Cargo.toml`` file and add the following dependency::
     - Link crate documentation.
 
 
-
+.. todo::
+    Explain how to write a basic contract in ``src/lib.rs``
 
 Building
 ====================================

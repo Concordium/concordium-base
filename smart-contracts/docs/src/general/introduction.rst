@@ -12,9 +12,9 @@ on the chain.
 This could be legal agreements and contracts, such as crowdfunding and
 escrow contracts.
 
-Deploying a smart contract to the chain, essentially means getting the code into
-a block on chain and the deployment itself will not trigger any actions from the
-smart contract.
+Deploying a smart contract to the chain, essentially means getting the code
+into a block on chain and the deployment itself will not trigger any actions
+from the smart contract.
 
 .. note::
     The code which is on chain is referred to as the *smart contract*.
@@ -30,8 +30,8 @@ Since a smart contract instance can receive, hold and send GTU tokens, it also
 holds a balance.
 
 On the Concordium blockchain the smart contract language is `Web Assembly`_
-(Wasm in short), which is designed to be a portable compilation target and to be
-run in sandboxed environments.
+(Wasm in short), which is designed to be a portable compilation target and to
+be run in sandboxed environments.
 This is perfect, since the smart contracts will be run by nodes in the network.
 
 Wasm is a very low-level language and is impractical to write by hand for any
@@ -46,4 +46,3 @@ is then compiled to Wasm.
 
 .. _Web Assembly: https://webassembly.org/
 .. _Rust: https://www.rust-lang.org/
-
