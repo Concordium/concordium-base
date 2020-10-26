@@ -7,12 +7,12 @@ use crate::{
 use bulletproofs::range_proof::verify_efficient;
 use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
-use ed25519_dalek::Verifier;
 use elgamal::multicombine;
 use ff::Field;
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use rand::*;
 use random_oracle::RandomOracle;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,42 +49,20 @@ impl std::fmt::Display for Reason {
 pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     pre_id_obj: &PreIdentityObject<P, C>,
     context: IPContext<P, C>,
-    pub_info_for_ip: &PublicInformationForIP<C>,
-    proof_acc_sk: &AccountOwnershipProof,
 ) -> Result<(), Reason> {
     // Verify signature:
+    let pub_info_for_ip = &pre_id_obj.pub_info_for_ip;
+    let proof_acc_sk = &pre_id_obj.poks.proof_acc_sk;
     let keys = &pub_info_for_ip.vk_acc.account.keys;
     let threshold = pub_info_for_ip.vk_acc.account.threshold;
 
+    // message signed
+    let signed = Sha256::digest(&to_bytes(&pub_info_for_ip));
+
     let reason = Reason::IncorrectProof; // TODO: introduce different reason
 
-    if proof_acc_sk.num_proofs() < threshold
-        || keys.len() > 255
-        || keys.is_empty()
-        || proof_acc_sk.num_proofs() != SignatureThreshold(keys.len() as u8)
-    {
+    if !utils::verify_accunt_ownership_proof(&keys, threshold, &proof_acc_sk, signed.as_ref()) {
         return Err(reason);
-    }
-    // message signed in proofs.proofs_acc_sk.sigs
-    let signed = to_bytes(&pub_info_for_ip);
-    // set of processed keys already
-    let mut processed = BTreeSet::new();
-    // the new keys get indices 0, 1, ..
-    for (idx, key) in (0u8..).zip(keys.iter()) {
-        let idx = KeyIndex(idx);
-        // insert returns true if key was __not__ present
-        if !processed.insert(key) {
-            return Err(reason);
-        }
-        if let Some(sig) = proof_acc_sk.sigs.get(&idx) {
-            let VerifyKey::Ed25519VerifyKey(ref key) = key;
-            match key.verify(signed.as_ref(), &sig) {
-                Ok(_) => (),
-                _ => return Err(reason),
-            }
-        } else {
-            return Err(reason);
-        }
     }
 
     // Verify proof:
@@ -106,7 +84,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     transcript.append_message(b"cmm_prf_sharing_coeff", &pre_id_obj.cmm_prf_sharing_coeff);
 
     let id_cred_sec_verifier = dlog::Dlog {
-        public: pre_id_obj.id_cred_pub,
+        public: pub_info_for_ip.id_cred_pub,
         coeff:  context.global_context.generator,
     };
     let id_cred_sec_witness = pre_id_obj.poks.id_cred_sec_witness;
@@ -114,7 +92,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // Verify that id_cred_sec is the same both in id_cred_pub and in cmm_sc
     let id_cred_sec_eq_verifier = com_eq::ComEq {
         commitment: pre_id_obj.cmm_sc,
-        y:          pre_id_obj.id_cred_pub,
+        y:          pub_info_for_ip.id_cred_pub,
         cmm_key:    commitment_key_sc,
         g:          context.global_context.generator,
     };
@@ -329,8 +307,6 @@ pub fn verify_credentials<
 >(
     pre_id_obj: &PreIdentityObject<P, C>,
     context: IPContext<P, C>,
-    pub_info_for_ip: PublicInformationForIP<C>,
-    proof_acc_sk: &AccountOwnershipProof,
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &ps_sig::SecretKey<P>,
     ip_cdi_secret_key: &ed25519_dalek::SecretKey,
@@ -341,12 +317,11 @@ pub fn verify_credentials<
     ),
     Reason,
 > {
-    validate_request(pre_id_obj, context, &pub_info_for_ip, proof_acc_sk)?;
+    validate_request(pre_id_obj, context)?;
     let sig = sign_identity_object(pre_id_obj, &context.ip_info, alist, ip_secret_key)?;
     let initial_cdi = create_initial_cdi(
-        pre_id_obj,
         context,
-        pub_info_for_ip,
+        pre_id_obj.pub_info_for_ip.clone(),
         alist,
         &ip_cdi_secret_key,
     );
@@ -358,7 +333,6 @@ pub fn create_initial_cdi<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 >(
-    pio: &PreIdentityObject<P, C>,
     context: IPContext<P, C>,
     pub_info_for_ip: PublicInformationForIP<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
@@ -372,12 +346,11 @@ pub fn create_initial_cdi<
     };
     let cred_values = InitialCredentialDeploymentValues {
         reg_id: pub_info_for_ip.reg_id,
-        threshold: pio.choice_ar_parameters.threshold,
-        // ar_data,
         ip_identity: context.ip_info.ip_identity,
         policy,
         cred_account: pub_info_for_ip.vk_acc,
     };
+
     let sig = sign_initial_cred_values(&cred_values, &context.ip_info, &ip_cdi_secret_key);
     InitialCredentialDeploymentInfo {
         values: cred_values,
@@ -394,7 +367,7 @@ pub fn sign_initial_cred_values<
     ip_info: &IpInfo<P>,
     ip_cdi_secret_key: &ed25519_dalek::SecretKey,
 ) -> IpCdiSignature {
-    let to_sign = to_bytes(&initial_cred_values); // TODO: use hash
+    let to_sign = Sha256::digest(&to_bytes(&initial_cred_values));
     let expanded_sk = ed25519_dalek::ExpandedSecretKey::from(ip_cdi_secret_key);
     expanded_sk
         .sign(to_sign.as_ref(), &ip_info.ip_cdi_verify_key)
@@ -553,20 +526,12 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (context, pio, _, pub_info_for_ip, proof_acc_sk) =
+        let (context, pio, _) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let attrs = test_create_attributes();
 
         // Act
-        let ver_ok = verify_credentials(
-            &pio,
-            context,
-            pub_info_for_ip,
-            &proof_acc_sk,
-            &attrs,
-            &ip_secret_key,
-            &ip_cdi_secret_key,
-        );
+        let ver_ok = verify_credentials(&pio, context, &attrs, &ip_secret_key, &ip_cdi_secret_key);
 
         // Assert
         assert!(ver_ok.is_ok());
@@ -641,7 +606,7 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (ctx, mut pio, _, pub_info_for_ip, proof_acc_sk) =
+        let (ctx, mut pio, _) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         // let attrs = test_create_attributes();
 
@@ -653,7 +618,7 @@ mod tests {
         let id_cred_sec = aci.cred_holder_info.id_cred.id_cred_sec;
         let (cmm_sc, _) = sc_ck.commit(&id_cred_sec, &mut csprng);
         pio.cmm_sc = cmm_sc;
-        let ver_ok = validate_request(&pio, ctx, &pub_info_for_ip, &proof_acc_sk);
+        let ver_ok = validate_request(&pio, ctx);
 
         // Assert
         assert_eq!(
@@ -687,7 +652,7 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (context, mut pio, _, pub_info_for_ip, proof_acc_sk) =
+        let (context, mut pio, _) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         // let attrs = test_create_attributes();
 
@@ -698,7 +663,7 @@ mod tests {
             .on_chain_commitment_key
             .commit(&val, &mut csprng);
         pio.cmm_prf = cmm_prf;
-        let ver_ok = validate_request(&pio, context, &pub_info_for_ip, &proof_acc_sk);
+        let ver_ok = validate_request(&pio, context);
 
         // Assert
         assert_eq!(

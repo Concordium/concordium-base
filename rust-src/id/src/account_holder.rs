@@ -24,6 +24,7 @@ use pedersen_scheme::{
 };
 use rand::*;
 use random_oracle::RandomOracle;
+use sha2::{Digest, Sha256};
 use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
 
 /// Generate PreIdentityObject out of the account holder information,
@@ -31,18 +32,13 @@ use std::collections::{btree_map::BTreeMap, hash_map::HashMap, BTreeSet};
 /// information (group generators, shared commitment keys, etc).
 /// NB: In this method we assume that all the anonymity revokers in context
 /// are to be used.
-#[allow(clippy::type_complexity)]
 pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
+    // TODO: consider renaming this function
     context: &IPContext<P, C>,
     threshold: Threshold,
     aci: &AccCredentialInfo<C>,
     initial_account_data: &InitialAccountData,
-) -> Option<(
-    PreIdentityObject<P, C>,
-    ps_sig::SigRetrievalRandomness<P>,
-    PublicInformationForIP<C>,
-    AccountOwnershipProof,
-)> {
+) -> Option<(PreIdentityObject<P, C>, ps_sig::SigRetrievalRandomness<P>)> {
     let mut csprng = thread_rng();
     let id_cred_pub = context
         .global_context
@@ -88,7 +84,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         vk_acc,
         // policy
     };
-    let to_sign = to_bytes(&pub_info_for_ip); // TODO: use hash
+    let to_sign = Sha256::digest(&to_bytes(&pub_info_for_ip));
     let proof_acc_sk = AccountOwnershipProof {
         sigs: initial_account_data
             .keys
@@ -101,10 +97,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
     // --
 
-    // FIXME: The next item will change to encrypt by chunks to enable anonymity
-    // revocation.
-    // sharing data, commitments to sharing coefficients, and randomness of the
-    // commitments sharing data is a list of SingleArData
     let prf_value = aci.prf_key.to_value();
 
     let ar_commitment_key = &context.global_context.on_chain_commitment_key;
@@ -303,11 +295,12 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         commitments_same_proof: proof.witness.w1.w1.w1.w2,
         commitments_prf_same: proof.witness.w1.w1.w2,
         prf_regid_proof: proof.witness.w2,
+        proof_acc_sk,
         bulletproofs,
     };
     // attribute list
     let prio = PreIdentityObject {
-        id_cred_pub,
+        pub_info_for_ip,
         ip_ar_data,
         choice_ar_parameters,
         cmm_sc,
@@ -328,8 +321,6 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     Some((
         prio,
         ps_sig::SigRetrievalRandomness::new(sig_retrieval_rand),
-        pub_info_for_ip,
-        proof_acc_sk,
     ))
 }
 
@@ -1211,18 +1202,10 @@ mod tests {
         };
         let global_ctx = GlobalContext::generate();
         let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
-        let (context, pio, randomness, pub_info_for_ip, proof_acc_sk) =
+        let (context, pio, randomness) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let alist = test_create_attributes();
-        let ver_ok = verify_credentials(
-            &pio,
-            context,
-            pub_info_for_ip,
-            &proof_acc_sk,
-            &alist,
-            &ip_secret_key,
-            &ip_cdi_secret_key,
-        );
+        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
         let (ip_sig, _) = ver_ok.unwrap();
 
         // Create CDI arguments

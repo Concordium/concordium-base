@@ -323,19 +323,10 @@ mod test {
 
         let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
         let threshold = Threshold(num_ars - 1);
-        let (pio, randomness, pub_info_for_ip, proof_acc_sk) =
-            generate_pio(&context, threshold, &aci, &acc_data)
-                .expect("Creating the credential should succeed.");
+        let (pio, randomness) = generate_pio(&context, threshold, &aci, &acc_data)
+            .expect("Creating the credential should succeed.");
 
-        let ver_ok = verify_credentials(
-            &pio,
-            context,
-            pub_info_for_ip,
-            &proof_acc_sk,
-            &alist,
-            &ip_secret_key,
-            &ip_cdi_secret_key,
-        );
+        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
 
         // First test, check that we have a valid signature.
         assert!(ver_ok.is_ok());

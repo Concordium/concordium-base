@@ -114,8 +114,6 @@ pub fn test_create_pio<'a>(
     IPContext<'a, ExamplePairing, ExampleCurve>,
     PreIdentityObject<ExamplePairing, ExampleCurve>,
     ps_sig::SigRetrievalRandomness<ExamplePairing>,
-    PublicInformationForIP<ExampleCurve>,
-    AccountOwnershipProof,
 ) {
     // Create context with all anonymity revokers
     let context = IPContext::new(ip_info, ars_infos, global_ctx);
@@ -124,10 +122,9 @@ pub fn test_create_pio<'a>(
     let threshold = Threshold::try_from(num_ars - 1).unwrap_or(Threshold(1));
 
     // Create and return PIO
-    let (pio, randomness, pub_info_for_ip, proof_acc_sk) =
-        generate_pio(&context, threshold, &aci, initial_account_data)
-            .expect("Generating the pre-identity object should succeed.");
-    (context, pio, randomness, pub_info_for_ip, proof_acc_sk)
+    let (pio, randomness) = generate_pio(&context, threshold, &aci, initial_account_data)
+        .expect("Generating the pre-identity object should succeed.");
+    (context, pio, randomness)
 }
 
 /// Create example attributes to be used by tests.
@@ -175,18 +172,10 @@ pub fn test_pipeline() {
         },
         threshold: SignatureThreshold(2),
     };
-    let (context, pio, randomness, pub_info_for_ip, proof_acc_sk) =
+    let (context, pio, randomness) =
         test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
     let alist = test_create_attributes();
-    let ver_ok = verify_credentials(
-        &pio,
-        context,
-        pub_info_for_ip,
-        &proof_acc_sk,
-        &alist,
-        &ip_secret_key,
-        &ip_cdi_secret_key,
-    );
+    let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
     assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
 
     // Generate CDI

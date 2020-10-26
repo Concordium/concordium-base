@@ -14,6 +14,7 @@ use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
 use random_oracle::RandomOracle;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -186,39 +187,15 @@ pub fn verify_cdi<
             }
         }
         CredentialAccount::NewAccount(ref keys, threshold) => {
-            // we check all the keys that were provided, and check enough were provided
-            // compared to the threshold
-            // We also make sure that no more than 255 keys are provided, as well as
-            // - all keys are distinct
-            // - at least one key is provided
-            // - there are the same number of proofs and keys
-            if proofs.proof_acc_sk.num_proofs() < threshold
-                || keys.len() > 255
-                || keys.is_empty()
-                || proofs.proof_acc_sk.num_proofs() != SignatureThreshold(keys.len() as u8)
-            {
-                return Err(CDIVerificationError::AccountOwnership);
-            }
             // message signed in proofs.proofs_acc_sk.sigs
             let signed = ro.split().get_challenge();
-            // set of processed keys already
-            let mut processed = BTreeSet::new();
-            // the new keys get indices 0, 1, ..
-            for (idx, key) in (0u8..).zip(keys.iter()) {
-                let idx = KeyIndex(idx);
-                // insert returns true if key was __not__ present
-                if !processed.insert(key) {
-                    return Err(CDIVerificationError::AccountOwnership);
-                }
-                if let Some(sig) = proofs.proof_acc_sk.sigs.get(&idx) {
-                    let VerifyKey::Ed25519VerifyKey(ref key) = key;
-                    match key.verify(signed.as_ref(), &sig) {
-                        Ok(_) => (),
-                        _ => return Err(CDIVerificationError::AccountOwnership),
-                    }
-                } else {
-                    return Err(CDIVerificationError::AccountOwnership);
-                }
+            if !utils::verify_accunt_ownership_proof(
+                &keys,
+                threshold,
+                &proofs.proof_acc_sk,
+                signed.as_ref(),
+            ) {
+                return Err(CDIVerificationError::AccountOwnership);
             }
         }
     };
@@ -241,7 +218,7 @@ pub fn verify_initial_cdi<
     ip_info: &IpInfo<P>,
     cdi: &InitialCredentialDeploymentInfo<C, AttributeType>,
 ) -> Result<(), CDIVerificationError> {
-    let signed = to_bytes(&cdi.values);
+    let signed = Sha256::digest(&to_bytes(&cdi.values));
     match ip_info.ip_cdi_verify_key.verify(signed.as_ref(), &cdi.sig) {
         Err(_) => Err(CDIVerificationError::Signature),
         _ => Ok(()),
@@ -480,7 +457,7 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (context, pio, randomness, pub_info_for_ip, proof_acc_sk) = test_create_pio(
+        let (context, pio, randomness) = test_create_pio(
             &aci,
             &ip_info,
             &ars_infos,
@@ -489,15 +466,7 @@ mod tests {
             &initial_acc_data,
         );
         let alist = test_create_attributes();
-        let ver_ok = verify_credentials(
-            &pio,
-            context,
-            pub_info_for_ip,
-            &proof_acc_sk,
-            &alist,
-            &ip_secret_key,
-            &ip_cdi_secret_key,
-        );
+        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
         assert!(ver_ok.is_ok());
 
         // Generate CDI
@@ -562,18 +531,10 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let (context, pio, _, pub_info_for_ip, proof_acc_sk) =
+        let (context, pio, _) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let alist = test_create_attributes();
-        let ver_ok = verify_credentials(
-            &pio,
-            context,
-            pub_info_for_ip,
-            &proof_acc_sk,
-            &alist,
-            &ip_secret_key,
-            &ip_cdi_secret_key,
-        );
+        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
         assert!(ver_ok.is_ok());
 
         // Verify initial CDI
