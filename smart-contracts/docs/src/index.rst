@@ -9,12 +9,15 @@ Concordium Smart Contract Documentation!
 
 Welcome to the official documentation of Concordium Smart Contracts!
 
+.. todo::
+   Describe the structure of the documentation
 
 .. toctree::
    :maxdepth: 2
    :caption: General
 
    general/introduction
+   general/contract-on-chain
 
 .. toctree::
    :maxdepth: 2
@@ -28,6 +31,7 @@ Welcome to the official documentation of Concordium Smart Contracts!
    :caption: Tutorials
 
    tutorial
+
 
 Indices and tables
 ==================

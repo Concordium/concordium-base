@@ -12,6 +12,8 @@ Additionally we have enabled the [extension for todo](https://www.sphinx-doc.org
     Write the todo here
 ```
 
+
+
 ## Installation
 
 Install `python3` and the python package manager `pip`.
@@ -30,6 +32,8 @@ make dev
 ```
 and navigate to [localhost:8000](http://localhost:8000)
 
+> **Note**: In `make dev` we disable the cache on build as this tend to inconsistencies.
+> If the build time gets to slow, it might be worth enabling again by removing `-E`.
 
 ## Build the docs
 

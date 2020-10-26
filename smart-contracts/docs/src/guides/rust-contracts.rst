@@ -68,6 +68,8 @@ Open the ``Cargo.toml`` file and add the following dependency::
     - Remove the note.
     - Link crate documentation.
 
+This library contains useful macros for writing small and efficient smart
+contracts.
 
 .. todo::
     Explain how to write a basic contract in ``src/lib.rs``
