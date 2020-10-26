@@ -23,14 +23,6 @@ use warp::{
 
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
 
-/// 10.0.2.2 is how an Android emulator accesses the host machine, which is what
-/// we are using for this proof-of-concept. The callback_location has to
-/// point to the location where the wallet can retrieve the identity object
-/// when it is available.
-const RETRIEVE_URL: &str = "http://10.0.2.2:8100/api/identity/";
-
-const ID_VERIFICATION_URL: &str = "http://localhost:8101/api/verify";
-
 #[derive(Deserialize)]
 struct IdentityObjectRequest {
     #[serde(rename = "idObjectRequest")]
@@ -76,24 +68,47 @@ struct ValidatedRequest {
 /// StructOpt.
 #[derive(Debug, StructOpt)]
 struct IdentityProviderServiceConfiguration {
-    #[structopt(long = "global-context", help = "File with global context.")]
+    #[structopt(
+        long = "global-context",
+        help = "File with global context.",
+        env = "GLOBAL_CONTEXT",
+        default_value = "global.json"
+    )]
     global_context_file: PathBuf,
     #[structopt(
         long = "identity-provider",
-        help = "File with the identity provider as JSON."
+        help = "File with the identity provider as JSON.",
+        default_value = "identity_providers.json",
+        env = "IDENTITY_PROVIDER"
     )]
     identity_provider_file: PathBuf,
     #[structopt(
         long = "anonymity-revokers",
-        help = "File with the list of anonymity revokers as JSON."
+        help = "File with the list of anonymity revokers as JSON.",
+        default_value = "identity_providers.json",
+        env = "ANONYMITY_REVOKERS"
     )]
     anonymity_revokers_file: PathBuf,
     #[structopt(
         long = "port",
         default_value = "8100",
-        help = "Port on which the server will listen on."
+        help = "Port on which the server will listen on.",
+        env = "PORT"
     )]
     port: u16,
+    #[structopt(
+        long = "retrieve-base",
+        help = "Base URL where the wallet can retrieve the identity object.",
+        env = "RETRIEVE_BASE"
+    )]
+    retrieve_url: url::Url,
+    #[structopt(
+        long = "id-verification-url",
+        help = "URL of the identity verifier.",
+        default_value = "http://localhost:8101/api/verify",
+        env = "ID_VERIFICATION_URL"
+    )]
+    id_verification_url: url::Url,
 }
 
 #[tokio::main]
@@ -103,24 +118,24 @@ async fn main() {
         .setting(clap::AppSettings::ArgRequiredElseHelp)
         .global_setting(clap::AppSettings::ColoredHelp);
     let matches = app.get_matches();
-    let opt = IdentityProviderServiceConfiguration::from_clap(&matches);
+    let opt = Arc::new(IdentityProviderServiceConfiguration::from_clap(&matches));
 
     info!("Reading the provided IP, AR and global context configurations.");
-    let ip_data_contents = match fs::read_to_string(opt.identity_provider_file) {
+    let ip_data_contents = match fs::read_to_string(&opt.identity_provider_file) {
         Ok(data) => data,
         Err(e) => {
             error!("Could not read identity provider file: {}.", e);
             return;
         }
     };
-    let ar_info_contents = match fs::read_to_string(opt.anonymity_revokers_file) {
+    let ar_info_contents = match fs::read_to_string(&opt.anonymity_revokers_file) {
         Ok(data) => data,
         Err(e) => {
             error!("Could not read anonymity revokers file: {}", e);
             return;
         }
     };
-    let global_context_contents = match fs::read_to_string(opt.global_context_file) {
+    let global_context_contents = match fs::read_to_string(&opt.global_context_file) {
         Ok(data) => data,
         Err(e) => {
             error!("Could not read global context file: {}", e);
@@ -207,6 +222,7 @@ async fn main() {
             }
         });
 
+    let id_opt = Arc::clone(&opt);
     let create_identity = warp::get()
         .and(warp::path!("api" / "identity"))
         .and(warp::query().map(move |input: Input| {
@@ -218,9 +234,9 @@ async fn main() {
                 input,
             )
         }))
-        .and_then(create_signed_identity_object);
+        .and_then(move |idi| create_signed_identity_object(id_opt.clone(), idi));
 
-    info!("Booting up HTTP server. Listening on port 8100.");
+    info!("Booting up HTTP server. Listening on port {}.", opt.port);
     warp::serve(create_identity.or(retrieve_identity))
         .run(([0, 0, 0, 0], opt.port))
         .await;
@@ -231,6 +247,7 @@ async fn main() {
 /// that is then signed and saved. If successful a re-direct to the URL where
 /// the identity object is available is returned.
 async fn create_signed_identity_object(
+    opt: Arc<IdentityProviderServiceConfiguration>,
     identity_object_input: Result<ValidatedRequest, String>,
 ) -> Result<impl warp::Reply, Infallible> {
     let identity_object_input = match identity_object_input {
@@ -248,7 +265,7 @@ async fn create_signed_identity_object(
     // always just return a static attribute list without doing any actual
     // verification of an identity.
     let client = Client::new();
-    let attribute_list = match client.post(ID_VERIFICATION_URL).send().await {
+    let attribute_list = match client.post(opt.id_verification_url.clone()).send().await {
         Ok(attribute_list) => match attribute_list.json().await {
             Ok(attribute_list) => attribute_list,
             Err(e) => {
@@ -346,10 +363,10 @@ async fn create_signed_identity_object(
     // we are using for this proof-of-concept. The callback_location has to
     // point to the location where the wallet can retrieve the identity object
     // when it is available.
-    let callback_location = identity_object_input.redirect_uri.clone()
-        + "#code_uri="
-        + RETRIEVE_URL
-        + &base16_encoded_id_cred_pub;
+    let mut retrieve_url = opt.retrieve_url.clone();
+    retrieve_url.set_path(&format!("api/identity/{}", base16_encoded_id_cred_pub));
+    let callback_location =
+        identity_object_input.redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
 
     info!("Identity was successfully created. Returning URI where it can be retrieved.");
 
