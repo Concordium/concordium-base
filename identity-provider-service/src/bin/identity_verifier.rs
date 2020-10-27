@@ -1,15 +1,32 @@
-use std::{collections::BTreeMap, sync::Arc};
-
 use id::{ffi::AttributeKind, types::*};
 use log::info;
 use serde_json::to_string;
+use std::{collections::BTreeMap, sync::Arc};
+use structopt::StructOpt;
 use warp::{http::Response, hyper::header::CONTENT_TYPE, Filter};
+
+#[derive(Debug, StructOpt)]
+struct Config {
+    #[structopt(
+        long = "port",
+        default_value = "8101",
+        help = "Port on which the server will listen on.",
+        env = "IDENTITY_VERIFIER_PORT"
+    )]
+    port: u16,
+}
 
 /// A small binary that simulates an identity verifier that always verifies an
 /// identity, and returns a verified attribute list.
 #[tokio::main]
 async fn main() {
     env_logger::init();
+
+    let app = Config::clap()
+        .setting(clap::AppSettings::ArgRequiredElseHelp)
+        .global_setting(clap::AppSettings::ColoredHelp);
+    let matches = app.get_matches();
+    let opt = Config::from_clap(&matches);
 
     let attribute_list = {
         let mut alist: BTreeMap<AttributeTag, AttributeKind> = BTreeMap::new();
@@ -58,8 +75,11 @@ async fn main() {
                 .body(serialized_attribute_list.to_string())
         }));
 
-    info!("Booting up identity verifier service. Listening on port 8101.");
+    info!(
+        "Booting up identity verifier service. Listening on port {}.",
+        opt.port
+    );
     warp::serve(identity_verifier)
-        .run(([0, 0, 0, 0], 8101))
+        .run(([0, 0, 0, 0], opt.port))
         .await;
 }
