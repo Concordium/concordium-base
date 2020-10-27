@@ -11,7 +11,7 @@ struct Config {
         long = "port",
         default_value = "8101",
         help = "Port on which the server will listen on.",
-        env = "PORT"
+        env = "IDENTITY_VERIFIER_PORT"
     )]
     port: u16,
 }
