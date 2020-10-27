@@ -118,17 +118,33 @@ fn bench_parts(c: &mut Criterion) {
 
     let context = IPContext::new(&ip_info, &ars_infos, &global_context);
 
-    let (pio, randomness) = generate_pio(&context, Threshold(2), &aci)
+    let initial_acc_data = InitialAccountData {
+        keys:      {
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+            keys
+        },
+        threshold: SignatureThreshold(2),
+    };
+
+    let (pio, randomness) = generate_pio(&context, Threshold(2), &aci, &initial_acc_data)
         .expect("Generating the pre-identity object succeed.");
     let pio_ser = to_bytes(&pio);
     let ip_info_ser = to_bytes(&ip_info);
     let pio_des = from_bytes(&mut Cursor::new(&pio_ser)).unwrap();
     let ip_info_des: IpInfo<Bls12> = from_bytes(&mut Cursor::new(&ip_info_ser)).unwrap();
     let des_context = IPContext::new(&ip_info_des, &ars_infos, &global_context);
-    let sig_ok =
-        verify_credentials::<_, _, ExampleCurve>(&pio_des, des_context, &alist, &ip_secret_key);
+    let ver_ok = verify_credentials::<_, _, ExampleCurve>(
+        &pio_des,
+        des_context,
+        &alist,
+        &ip_secret_key,
+        &keypair.secret,
+    );
 
-    let ip_sig = sig_ok.unwrap();
+    let (ip_sig, initial_cdi) = ver_ok.unwrap();
 
     let policy = Policy {
         valid_to,
@@ -185,11 +201,19 @@ fn bench_parts(c: &mut Criterion) {
     );
 
     let bench_pio =
-        move |b: &mut Bencher, x: &(_, _)| b.iter(|| generate_pio(x.0, Threshold(2), x.1));
+        move |b: &mut Bencher, x: &(_, _, _)| b.iter(|| generate_pio(x.0, Threshold(2), x.1, x.2));
     c.bench_with_input(
         BenchmarkId::new("Generate ID request", ""),
-        &(&context, &id_use_data.aci),
+        &(&context, &id_use_data.aci, &initial_acc_data),
         bench_pio,
+    );
+
+    let bench_verify_initial_cdi =
+        move |b: &mut Bencher, x: &(_, _)| b.iter(|| verify_initial_cdi(x.0, x.1).unwrap());
+    c.bench_with_input(
+        BenchmarkId::new("Verify Initial CDI", ""),
+        &(&ip_info, &initial_cdi),
+        bench_verify_initial_cdi,
     );
 
     let bench_create_credential =
@@ -219,6 +243,7 @@ fn bench_parts(c: &mut Criterion) {
                 context,
                 &id_object.alist,
                 &ip_secret_key,
+                &keypair.secret,
             )
             .unwrap()
         })
