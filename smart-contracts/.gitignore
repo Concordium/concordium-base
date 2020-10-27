@@ -7,7 +7,6 @@
 *.a
 *.pdf
 *.csv
-*.html
 
 .stack-work
 target
