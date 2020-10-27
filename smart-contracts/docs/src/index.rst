@@ -32,6 +32,13 @@ Welcome to the official documentation of Concordium Smart Contracts!
 
    tutorial
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Reference
+
+   references/host-fns
+
+
 
 Indices and tables
 ==================
