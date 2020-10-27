@@ -117,6 +117,41 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn verify_initial_cdi_ffi(
+    ip_info_ptr: *const IpInfo<Bls12>,
+    // acc_keys_ptr: *const u8,
+    // acc_keys_len: size_t,
+    initial_cdi_ptr: *const u8,
+    initial_cdi_len: size_t,
+) -> i32 {
+    let cdi_bytes = slice_from_c_bytes!(initial_cdi_ptr, initial_cdi_len as usize);
+    match InitialCredentialDeploymentInfo::<G1, AttributeKind>::deserial(&mut Cursor::new(
+        &cdi_bytes,
+    )) {
+        Err(_) => -12,
+        Ok(cdi) => {
+            match chain::verify_initial_cdi::<Bls12, G1, AttributeKind>(
+                from_ptr!(ip_info_ptr),
+                &cdi,
+            ) {
+                Ok(()) => 1, // verification succeeded
+                Err(CDIVerificationError::RegId) => -1,
+                Err(CDIVerificationError::IdCredPub) => -2,
+                Err(CDIVerificationError::Signature) => -3, /* Only this one can happend, so
+                                                              * should probably catch everything
+                                                              * else with _ */
+                Err(CDIVerificationError::Dlog) => -4,
+                Err(CDIVerificationError::Policy) => -5,
+                Err(CDIVerificationError::AR) => -6,
+                Err(CDIVerificationError::AccountOwnership) => -7,
+                Err(CDIVerificationError::Proof) => -8,
+            }
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn verify_cdi_ffi(
     gc_ptr: *const GlobalContext<G1>,
     ip_info_ptr: *const IpInfo<Bls12>,
@@ -331,7 +366,17 @@ mod test {
         // First test, check that we have a valid signature.
         assert!(ver_ok.is_ok());
 
-        let (ip_sig, _) = ver_ok.unwrap();
+        let (ip_sig, initial_cdi) = ver_ok.unwrap();
+
+        let initial_cdi_bytes = to_bytes(&initial_cdi);
+        let initial_cdi_bytes_len = initial_cdi_bytes.len() as size_t;
+        let ip_info_ptr = Box::into_raw(Box::new(ip_info.clone()));
+        let initial_cdi_check = verify_initial_cdi_ffi(
+            ip_info_ptr,
+            initial_cdi_bytes.as_ptr(),
+            initial_cdi_bytes_len,
+        );
+        assert_eq!(initial_cdi_check, 1);
 
         let policy = Policy {
             valid_to,
@@ -390,7 +435,7 @@ mod test {
         let cdi_bytes_len = cdi_bytes.len() as size_t;
 
         let gc_ptr = Box::into_raw(Box::new(global_ctx));
-        let ip_info_ptr = Box::into_raw(Box::new(ip_info));
+        // let ip_info_ptr = Box::into_raw(Box::new(ip_info));
         let ars_infos_ptr = ars_infos
             .into_iter()
             .map(|(_, x)| Box::into_raw(Box::new(x)))
