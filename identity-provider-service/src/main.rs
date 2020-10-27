@@ -93,7 +93,7 @@ struct IdentityProviderServiceConfiguration {
         long = "port",
         default_value = "8100",
         help = "Port on which the server will listen on.",
-        env = "PORT"
+        env = "IDENTITY_PROVIDER_SERVICE_PORT"
     )]
     port: u16,
     #[structopt(
@@ -359,10 +359,8 @@ async fn create_signed_identity_object(
         }
     };
 
-    // 10.0.2.2 is how an Android emulator accesses the host machine, which is what
-    // we are using for this proof-of-concept. The callback_location has to
-    // point to the location where the wallet can retrieve the identity object
-    // when it is available.
+    // The callback_location has to point to the location where the wallet can
+    // retrieve the identity object when it is available.
     let mut retrieve_url = opt.retrieve_url.clone();
     retrieve_url.set_path(&format!("api/identity/{}", base16_encoded_id_cred_pub));
     let callback_location =
