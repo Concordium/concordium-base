@@ -137,9 +137,9 @@ pub extern "C" fn verify_initial_cdi_ffi(
                 Ok(()) => 1, // verification succeeded
                 Err(CDIVerificationError::RegId) => -1,
                 Err(CDIVerificationError::IdCredPub) => -2,
-                Err(CDIVerificationError::Signature) => -3, /* Only this one can happend, so
-                                                              * should probably catch everything
-                                                              * else with _ */
+                Err(CDIVerificationError::Signature) => -3, // Only this one can happend, so
+                // should probably catch everything
+                // else with _
                 Err(CDIVerificationError::Dlog) => -4,
                 Err(CDIVerificationError::Policy) => -5,
                 Err(CDIVerificationError::AR) => -6,

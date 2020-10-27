@@ -283,6 +283,7 @@ fn try_get<A: serde::de::DeserializeOwned>(v: &Value, fname: &str) -> Fallible<A
     }
 }
 
+/// This function creates the identity object request 
 fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
 
@@ -315,8 +316,18 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
     // Choice of anonymity revokers, all of them in this implementation.
     let context = IPContext::new(&ip_info, &ars_infos, &global_context);
+
+    // Generating account data for the initial account
+    let mut keys = std::collections::BTreeMap::new();
+    let mut csprng = thread_rng();
+    keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+
+    let initial_acc_data = InitialAccountData {
+        keys,
+        threshold: SignatureThreshold(1),
+    };
     let (pio, randomness) = {
-        match generate_pio(&context, threshold, &aci) {
+        match generate_pio(&context, threshold, &aci, &initial_acc_data) {
             Some(x) => x,
             None => bail!("Generating the pre-identity object failed."),
         }
