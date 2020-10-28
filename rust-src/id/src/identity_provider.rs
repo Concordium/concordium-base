@@ -320,7 +320,7 @@ pub fn verify_credentials<
     validate_request(pre_id_obj, context)?;
     let sig = sign_identity_object(pre_id_obj, &context.ip_info, alist, ip_secret_key)?;
     let initial_cdi = create_initial_cdi(
-        context,
+        &context.ip_info,
         pre_id_obj.pub_info_for_ip.clone(),
         alist,
         &ip_cdi_secret_key,
@@ -333,7 +333,7 @@ pub fn create_initial_cdi<
     C: Curve<Scalar = P::ScalarField>,
     AttributeType: Attribute<C::Scalar>,
 >(
-    context: IPContext<P, C>,
+    ip_info: &IpInfo<P>,
     pub_info_for_ip: PublicInformationForIP<C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_cdi_secret_key: &ed25519_dalek::SecretKey,
@@ -346,12 +346,12 @@ pub fn create_initial_cdi<
     };
     let cred_values = InitialCredentialDeploymentValues {
         reg_id: pub_info_for_ip.reg_id,
-        ip_identity: context.ip_info.ip_identity,
+        ip_identity: ip_info.ip_identity,
         policy,
         cred_account: pub_info_for_ip.vk_acc,
     };
 
-    let sig = sign_initial_cred_values(&cred_values, &context.ip_info, &ip_cdi_secret_key);
+    let sig = sign_initial_cred_values(&cred_values, ip_info, &ip_cdi_secret_key);
     InitialCredentialDeploymentInfo {
         values: cred_values,
         sig,
