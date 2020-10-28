@@ -12,12 +12,12 @@ on the chain.
 This could be legal agreements and contracts, such as crowdfunding and
 escrow contracts.
 
+.. note::
+    The code which is on chain is referred to as the *smart contract*.
+
 Deploying a smart contract to the chain, essentially means getting the code
 into a block on chain and the deployment itself will not trigger any actions
 from the smart contract.
-
-.. note::
-    The code which is on chain is referred to as the *smart contract*.
 
 To use a smart contract, one must first create an *instance* of it, which
 invokes an ``init``-function defined as part of the smart contract, setting the

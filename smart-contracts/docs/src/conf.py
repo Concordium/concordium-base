@@ -41,12 +41,27 @@ release = ''
 extensions = [
     "sphinx_rtd_theme",
     "sphinx.ext.todo",
-    # "sphinx.ext.imgconverter" # To support svg when targeting LaTeX
+    "sphinx.ext.graphviz",
+    # "sphinx.ext.imgconverter", # To support svg when targeting LaTeX
 ]
 
-todo_include_todos = True
+todo_include_todos = False
 todo_emit_warnings = True
 # todo_link_only = True
+
+graphviz_fontname = "'Lato,proxima-nova,Helvetica Neue,Arial,sans-serif'"
+
+graphviz_output_format="svg"
+graphviz_dot_args=[
+    "-Gfontname="+graphviz_fontname,
+    "-Gfontsize=12",
+    "-Gbgcolor=transparent",
+    "-Nfontname="+graphviz_fontname,
+    "-Nfontsize=12",
+    "-Efontname="+graphviz_fontname,
+    "-Efontsize=12",
+]
+
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

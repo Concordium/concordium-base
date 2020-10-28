@@ -23,6 +23,13 @@ To install the python dependencies run
 pip install -r requirements.txt
 ```
 
+Install `graphviz`
+
+On Ubuntu
+```
+sudo apt install graphviz
+```
+
 ## Development
 To watch the doc files and automate the build run:
 

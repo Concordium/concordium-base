@@ -49,6 +49,8 @@ Function parameter
     :return: The number of actual read bytes
     :rtype: i32
 
+.. _host-functions-state:
+
 Smart contract instance state
 =================================================
 

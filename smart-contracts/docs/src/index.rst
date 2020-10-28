@@ -13,8 +13,8 @@ The documentation is split into four categories
 
    - **General**: Explaining concepts and details for understanding concordium
      smart contracts.
-   - **How-to guides**: Guides to achieve specific goals.
    - **Tutorials**: Step by step walkthrough with details explained as needed.
+   - **How-to guides**: Guides to achieve specific goals.
    - **References**: Precise descriptions of the machinery.
 
 
@@ -50,6 +50,7 @@ The documentation is split into four categories
    :maxdepth: 1
    :caption: How-to guides
 
+   guides/setup-rust
 
 .. toctree::
    :maxdepth: 1
