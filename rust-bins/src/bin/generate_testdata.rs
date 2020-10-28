@@ -78,17 +78,18 @@ fn main() {
     };
 
     // Load identity provider and anonymity revokers.
-    let (ip_info, ip_secret_key) = match read_json_from_file::<_, IpData<Bls12>>(args.ip_data) {
-        Ok(IpData {
-            ip_secret_key,
-            public_ip_info,
-            ..
-        }) => (public_ip_info, ip_secret_key),
-        Err(x) => {
-            eprintln!("Could not read identity issuer information because {}", x);
-            return;
-        }
-    };
+    let (ip_info, ip_secret_key, ip_cdi_secret_key) =
+        match read_json_from_file::<_, IpData<Bls12>>(args.ip_data) {
+            Ok(IpData {
+                ip_secret_key,
+                public_ip_info,
+                ip_cdi_secret_key,
+            }) => (public_ip_info, ip_secret_key, ip_cdi_secret_key),
+            Err(x) => {
+                eprintln!("Could not read identity issuer information because {}", x);
+                return;
+            }
+        };
 
     // Choose prf key.
     let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -117,20 +118,37 @@ fn main() {
     };
 
     let context = IPContext::new(&ip_info, &ars_infos.anonymity_revokers, &global_ctx);
+    let initial_acc_data = InitialAccountData {
+        keys:      {
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+            keys
+        },
+        threshold: SignatureThreshold(2),
+    };
     // Threshold is all anonymity revokers.
     let (pio, randomness) = generate_pio(
         &context,
         Threshold(ars_infos.anonymity_revokers.len() as u8),
         &aci,
+        &initial_acc_data,
     )
     .expect("Generating the pre-identity object should succeed.");
 
-    let sig_ok = verify_credentials(&pio, context, &attributes, &ip_secret_key);
+    let ver_ok = verify_credentials(
+        &pio,
+        context,
+        &attributes,
+        &ip_secret_key,
+        &ip_cdi_secret_key,
+    );
 
     // First test, check that we have a valid signature.
-    assert!(sig_ok.is_ok());
+    assert!(ver_ok.is_ok());
 
-    let ip_sig = sig_ok.unwrap();
+    let (ip_sig, _) = ver_ok.unwrap();
 
     // we also read the global context from another json file (called
     // global.context). We need commitment keys and other data in there.

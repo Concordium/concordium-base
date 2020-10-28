@@ -117,17 +117,18 @@ fn main() {
     let mut csprng = thread_rng();
 
     // Load identity provider and anonymity revokers.
-    let (ip_info, ip_secret_key) = match read_json_from_file::<_, IpData<Bls12>>(&common.ip_data) {
-        Ok(IpData {
-            public_ip_info,
-            ip_secret_key,
-            ..
-        }) => (public_ip_info, ip_secret_key),
-        Err(e) => {
-            eprintln!("Could not parse identity issuer JSON because: {}", e);
-            return;
-        }
-    };
+    let (ip_info, ip_secret_key, ip_cdi_secret_key) =
+        match read_json_from_file::<_, IpData<Bls12>>(&common.ip_data) {
+            Ok(IpData {
+                public_ip_info,
+                ip_secret_key,
+                ip_cdi_secret_key,
+            }) => (public_ip_info, ip_secret_key, ip_cdi_secret_key),
+            Err(e) => {
+                eprintln!("Could not parse identity issuer JSON because: {}", e);
+                return;
+            }
+        };
 
     let global_ctx = {
         if let Some(gc) = read_global_context(&common.global) {
@@ -187,12 +188,36 @@ fn main() {
             _phantom: Default::default(),
         };
 
-        let (pio, randomness) = generate_pio(&context, threshold, &aci)
+        let mut initial_keys = BTreeMap::new();
+        for idx in 0..common.num_keys {
+            initial_keys.insert(KeyIndex(idx as u8), ed25519::Keypair::generate(csprng));
+        }
+
+        let initial_threshold = SignatureThreshold(
+            if common.num_keys == 1 {
+                1
+            } else {
+                common.num_keys as u8 - 1
+            },
+        );
+
+        let initial_acc_data = InitialAccountData {
+            keys:      initial_keys,
+            threshold: initial_threshold,
+        };
+
+        let (pio, randomness) = generate_pio(&context, threshold, &aci, &initial_acc_data)
             .expect("Generating the pre-identity object should succeed.");
 
-        let sig_ok = verify_credentials(&pio, context, &attributes, &ip_secret_key);
+        let ver_ok = verify_credentials(
+            &pio,
+            context,
+            &attributes,
+            &ip_secret_key,
+            &ip_cdi_secret_key,
+        );
 
-        let ip_sig = sig_ok.expect("There is an error in signing");
+        let (ip_sig, _) = ver_ok.expect("There is an error in signing");
 
         let policy = Policy {
             valid_to,
