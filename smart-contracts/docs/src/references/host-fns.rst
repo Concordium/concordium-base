@@ -4,6 +4,14 @@ Wasm host functions
 This is a reference of the functions in the ``concordium`` module supplied by a
 host running smart contract Wasm module.
 
+.. warning::
+    These functions are not meant to be called directly by smart contract writers.
+    Instead used behind a more sensible language-specific API supplied by a
+    library, such as ``concordium-sc-base`` for Rust.
+
+    .. todo::
+        Link ``concordium-sc-base`` documentation.
+
 .. module:: concordium
 
 .. function:: log_event(start, length)
@@ -176,6 +184,20 @@ The description of actions to execute on the chain, returned by smart contract
 
     :param i32 addr_bytes: Pointer to the address of the receiver
     :param i64 amount: The amount of GTU to send
+    :return: Pointer to resulting action
+    :rtype: i32
+
+.. function:: send(addr_index, addr_subindex, receive_name, receive_name_len, amount, parameter, parameter_len) -> i32
+
+    Constructs a accept action, indicating the function was successful.
+
+    :param i64 addr_index: Index of the smart contract instance address to send to
+    :param i64 addr_subindex: Subindex of the smart contract instance address to send to
+    :param i32 receive_name: Pointer to a memory location containing the name of the ``receive``-function to invoke
+    :param i32 receive_name_len: Length of the receive method name. Determines how much memory will be read by the host.
+    :param i64 amount: The amount of GTU to invoke the receive method with
+    :param i32 parameter: Pointer to a memory location containing the parameters to the ``receive``-function
+    :param i32 parameter_len: Length of the parameters
     :return: Pointer to resulting action
     :rtype: i32
 
