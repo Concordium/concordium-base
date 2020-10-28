@@ -300,6 +300,12 @@ stages:
   script:
     - make linkcheck
 
+"docs lint":
+  extends: .docs
+  stage: lint
+  script:
+    - make lint
+
 # pages:
 #   extends: .docs
 #   stage: build

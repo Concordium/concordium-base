@@ -24,3 +24,6 @@ linkcheck:
 
 dev:
 	sphinx-autobuild "$(SOURCEDIR)" "$(BUILDDIR)/html" -E
+
+lint:
+	doc8 "$(SOURCEDIR)"
