@@ -710,13 +710,18 @@ fn handle_act_as_ip(aai: IpSignPio) {
             return;
         }
     };
-    let (ip_info, ip_sec_key) = match read_json_from_file::<_, IpData<Bls12>>(&aai.ip_data) {
-        Ok(ip_data) => (ip_data.public_ip_info, ip_data.ip_secret_key),
-        Err(x) => {
-            eprintln!("Could not read identity issuer information because {}", x);
-            return;
-        }
-    };
+    let (ip_info, ip_sec_key, ip_cdi_secret_key) =
+        match read_json_from_file::<_, IpData<Bls12>>(&aai.ip_data) {
+            Ok(ip_data) => (
+                ip_data.public_ip_info,
+                ip_data.ip_secret_key,
+                ip_data.ip_cdi_secret_key,
+            ),
+            Err(x) => {
+                eprintln!("Could not read identity issuer information because {}", x);
+                return;
+            }
+        };
 
     let valid_to = match read_validto() {
         Ok(ym) => ym,
@@ -785,10 +790,10 @@ fn handle_act_as_ip(aai: IpSignPio) {
         _phantom: Default::default(),
     };
     let context = IPContext::new(&ip_info, &ars, &global_ctx);
-    let vf = verify_credentials(&pio, context, &attributes, &ip_sec_key);
+    let vf = verify_credentials(&pio, context, &attributes, &ip_sec_key, &ip_cdi_secret_key);
 
     match vf {
-        Ok(signature) => {
+        Ok((signature, _)) => {
             let id_object = IdentityObject {
                 pre_identity_object: pio,
                 alist: attributes,
@@ -941,7 +946,17 @@ fn handle_start_ip(sip: StartIp) {
     // and finally generate the pre-identity object
     // we also retrieve the randomness which we must keep private.
     // This randomness must be used
-    let (pio, randomness) = generate_pio(&context, threshold, &aci)
+    let initial_acc_data = InitialAccountData {
+        keys:      {
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+            keys
+        },
+        threshold: SignatureThreshold(2),
+    };
+    let (pio, randomness) = generate_pio(&context, threshold, &aci, &initial_acc_data)
         .expect("Generating the pre-identity object should succeed.");
 
     // the only thing left is to output all the information
@@ -1058,15 +1073,21 @@ fn handle_generate_ips(gip: GenerateIps) {
             ps_sig::secret::SecretKey::<Bls12>::generate(gip.key_capacity, &mut csprng);
         let id_public_key = ps_sig::public::PublicKey::from(&id_secret_key);
 
+        let keypair = ed25519::Keypair::generate(&mut csprng);
+        let ip_cdi_verify_key = keypair.public;
+        let ip_cdi_secret_key = keypair.secret;
+
         let ip_id = IpIdentity(id as u32);
         let ip_info = IpInfo {
-            ip_identity:    ip_id,
+            ip_identity: ip_id,
             ip_description: mk_ip_description(id),
-            ip_verify_key:  id_public_key,
+            ip_verify_key: id_public_key,
+            ip_cdi_verify_key,
         };
         let full_info = IpData {
-            ip_secret_key:  id_secret_key,
+            ip_secret_key: id_secret_key,
             public_ip_info: ip_info,
+            ip_cdi_secret_key,
         };
         println!("writing ip_{} in file {}", id, ip_fname.display());
         if let Err(err) = write_json_to_file(&ip_fname, &full_info) {
