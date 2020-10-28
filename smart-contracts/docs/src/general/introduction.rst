@@ -1,5 +1,5 @@
 ====================================
-Introduction to Smart Contracts
+Introduction to smart contracts
 ====================================
 
 A smart contract is a user-supplied piece of code that can be deployed on the
@@ -20,10 +20,10 @@ from the smart contract.
     The code which is on chain is referred to as the *smart contract*.
 
 To use a smart contract, one must first create an *instance* of it, which
-invokes an ``init`` message defined as part of the smart contract, setting the
+invokes an ``init``-function defined as part of the smart contract, setting the
 initial state of that instance.
 This instance is given an address, which is used by users and other smart
-contract instances to invoke different ``receive`` messages also defined in the
+contract instances to invoke different ``receive``-function also defined in the
 smart contract.
 
 Since a smart contract instance can receive, hold and send GTU tokens, it also

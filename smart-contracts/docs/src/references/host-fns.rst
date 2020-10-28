@@ -1,5 +1,7 @@
+.. _host-functions:
+
 ================================
-Wasm host functions
+Contract host functions
 ================================
 This is a reference of the functions in the ``concordium`` module supplied by a
 host running smart contract Wasm module.
@@ -14,12 +16,18 @@ host running smart contract Wasm module.
 
 .. module:: concordium
 
+Logging
+================================
+
 .. function:: log_event(start, length)
 
     Adds a log item from an array of bytes.
 
     :param i32 start: Pointer to start of the item
     :param i32 length: Number of bytes in the item
+
+Function parameter
+================================
 
 .. function:: get_parameter_size() -> i32
 
@@ -40,6 +48,9 @@ host running smart contract Wasm module.
     :param i32 offset: Starting offset in the parameter bytes
     :return: The number of actual read bytes
     :rtype: i32
+
+Smart contract instance state
+=================================================
 
 .. function:: state_size() -> i32
 
@@ -80,8 +91,10 @@ host running smart contract Wasm module.
     Resize state to the new value (truncate if new size is smaller).
 
     :param i32 new_size: Pointer to read location
-    :return: 0 if this was unsuccesful (new state too big), or 1 if successful
+    :return: 0 if this was unsuccessful (new state too big), or 1 if successful
     :rtype: i32
+
+.. _host_function_chain_getters:
 
 Chain data
 ================================
@@ -180,7 +193,7 @@ The description of actions to execute on the chain, returned by smart contract
 
 .. function:: simple_transfer(addr_bytes, amount) -> i32
 
-    Constructs a accept action, indicating the function was successful.
+    Constructs a simple transfer of GTU action.
 
     :param i32 addr_bytes: Pointer to the address of the receiver
     :param i64 amount: The amount of GTU to send
@@ -189,7 +202,7 @@ The description of actions to execute on the chain, returned by smart contract
 
 .. function:: send(addr_index, addr_subindex, receive_name, receive_name_len, amount, parameter, parameter_len) -> i32
 
-    Constructs a accept action, indicating the function was successful.
+    Constructs an action for sending a message to another smart contract instance.
 
     :param i64 addr_index: Index of the smart contract instance address to send to
     :param i64 addr_subindex: Subindex of the smart contract instance address to send to

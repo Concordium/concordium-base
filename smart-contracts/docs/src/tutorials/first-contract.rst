@@ -1,12 +1,10 @@
-.. _writing-smart-contracts:
+===============================================
+My first smart contract
+===============================================
 
-====================================
-Smart Contracts in Rust
-====================================
-
-In Rust_ a smart contract is written as an ordinary Rust library package, which
+In Rust_ a smart contract is written as an ordinary Rust library crate, which
 is then compile to target ``wasm-unknown-unknown``.
-It uses Cargo_ for compilation and dependency management.
+We can use Cargo_ for compilation and dependency management.
 
 
 Installation
@@ -18,17 +16,17 @@ Then use rustup to install the Wasm target::
 
     rustup target add wasm32-unknown-unknown
 
-Next install the Concordium Smart Contract tool ``cargo-concordium`` by
+Next install the Concordium smart contract tool ``cargo-concordium`` by
 running::
 
     cargo install cargo-concordium
 
 .. note::
-    Until the tool is release on crates.io_, you will also have to clone
+    Until the tool is release on crates.io_, you instead have to clone
     the repo containing ``cargo-concordium`` and from the directory
     ``cargo-concordium`` run::
 
-        cargo install -path .
+        cargo install --path .
 
 .. todo::
     Once the tool is released:
@@ -73,32 +71,6 @@ contracts.
 
 .. todo::
     Explain how to write a basic contract in ``src/lib.rs``
-
-Building
-====================================
-
-
-
-
-.. todo::
-    write section
-
-Schema
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. todo::
-    write section
-
-Testing
-====================================
-
-.. todo::
-    write section
-
-Examples
-====================================
-
-
 
 .. _Rust: https://www.rust-lang.org/
 .. _Cargo: https://doc.rust-lang.org/cargo/
