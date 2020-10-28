@@ -283,7 +283,7 @@ fn try_get<A: serde::de::DeserializeOwned>(v: &Value, fname: &str) -> Fallible<A
     }
 }
 
-/// This function creates the identity object request 
+/// This function creates the identity object request
 fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
 
