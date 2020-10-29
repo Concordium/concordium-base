@@ -10,6 +10,7 @@ edition = "2018"
 default = ["std"]
 
 std = ["concordium-sc-base/std"]
+build-schema = []
 
 [dependencies]
 byteorder = "1.3"

@@ -1,7 +1,8 @@
 #![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
 use concordium_sc_base::*;
 
-#[derive(Serialize)]
+#[contract_state]
+#[derive(Serialize, SchemaType)]
 pub struct State {
     step:          u8,
     current_count: u32,
@@ -72,6 +73,7 @@ mod tests {
     #[test]
     /// Test that init succeeds or fails based on what parameter and amount are.
     fn test_init() {
+        println!("Schema {:?}", State::get_type());
         // Setup our example state the contract is to be run in.
         // First the context.
         let metadata = ChainMetadata {

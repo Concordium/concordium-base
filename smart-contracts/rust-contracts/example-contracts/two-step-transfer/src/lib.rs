@@ -52,7 +52,7 @@ type TransferRequestId = u64;
 type TransferRequestTimeToLiveMilliseconds = u64;
 type TimeoutSlotTimeMilliseconds = u64;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, SchemaType)]
 struct TransferRequest {
     transfer_amount: Amount,
     target_account:  AccountAddress,
@@ -60,7 +60,7 @@ struct TransferRequest {
     supporters:      BTreeSet<AccountAddress>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, SchemaType)]
 struct InitParams {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
     #[set_size_length = 1]
@@ -82,7 +82,8 @@ struct InitParams {
     transfer_request_ttl: TransferRequestTimeToLiveMilliseconds,
 }
 
-#[derive(Serialize)]
+#[contract_state]
+#[derive(Serialize, SchemaType)]
 pub struct State {
     // The initial configuration of the contract
     init_params: InitParams,

@@ -15,7 +15,7 @@ use concordium_sc_base::*;
  */
 
 // Types
-#[derive(Copy, Clone, Serialize)]
+#[derive(Copy, Clone, Serialize, SchemaType)]
 enum Mode {
     AwaitingDeposit,
     AwaitingDelivery,
@@ -23,14 +23,14 @@ enum Mode {
     Done,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, SchemaType)]
 enum Arbitration {
     ReturnDepositToBuyer,
     ReleaseFundsToSeller,
     ReawaitDelivery,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, SchemaType)]
 enum Message {
     SubmitDeposit,
     AcceptDelivery,
@@ -38,7 +38,7 @@ enum Message {
     Arbitrate(Arbitration),
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, SchemaType)]
 pub struct InitParams {
     required_deposit: Amount,
     arbiter_fee:      Amount,
@@ -47,14 +47,11 @@ pub struct InitParams {
     arbiter:          AccountAddress,
 }
 
-#[derive(Serialize)]
+#[contract_state]
+#[derive(Serialize, SchemaType)]
 pub struct State {
-    mode:             Mode,
-    required_deposit: Amount,
-    arbiter_fee:      Amount,
-    buyer:            AccountAddress,
-    seller:           AccountAddress,
-    arbiter:          AccountAddress,
+    mode:        Mode,
+    init_params: InitParams,
 }
 
 // Contract implementation
@@ -73,12 +70,8 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
         "Buyer and seller must have different accounts."
     );
     let state = State {
-        mode:             Mode::AwaitingDeposit,
-        required_deposit: init_params.required_deposit,
-        arbiter_fee:      init_params.arbiter_fee,
-        buyer:            init_params.buyer,
-        seller:           init_params.seller,
-        arbiter:          init_params.arbiter,
+        mode: Mode::AwaitingDeposit,
+        init_params,
     };
     Ok(state)
 }
@@ -95,11 +88,11 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     match (state.mode, msg) {
         (Mode::AwaitingDeposit, Message::SubmitDeposit) => {
             ensure!(
-                ctx.sender().matches_account(&state.buyer),
+                ctx.sender().matches_account(&state.init_params.buyer),
                 "Only the designated buyer can submit the deposit."
             );
             ensure!(
-                amount == state.required_deposit + state.arbiter_fee,
+                amount == state.init_params.required_deposit + state.init_params.arbiter_fee,
                 "Amount given does not match the required deposit and arbiter fee."
             );
             state.mode = Mode::AwaitingDelivery;
@@ -108,20 +101,21 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 
         (Mode::AwaitingDelivery, Message::AcceptDelivery) => {
             ensure!(
-                ctx.sender().matches_account(&state.buyer),
+                ctx.sender().matches_account(&state.init_params.buyer),
                 "Only the designated buyer can accept delivery."
             );
             state.mode = Mode::Done;
             let release_payment_to_seller =
-                A::simple_transfer(&state.seller, state.required_deposit);
-            let pay_arbiter = A::simple_transfer(&state.arbiter, state.arbiter_fee);
+                A::simple_transfer(&state.init_params.seller, state.init_params.required_deposit);
+            let pay_arbiter =
+                A::simple_transfer(&state.init_params.arbiter, state.init_params.arbiter_fee);
             Ok(try_send_both(release_payment_to_seller, pay_arbiter))
         }
 
         (Mode::AwaitingDelivery, Message::Contest) => {
             ensure!(
-                ctx.sender().matches_account(&state.buyer)
-                    || ctx.sender().matches_account(&state.seller),
+                ctx.sender().matches_account(&state.init_params.buyer)
+                    || ctx.sender().matches_account(&state.init_params.seller),
                 "Only the designated buyer or seller can contest delivery."
             );
             state.mode = Mode::AwaitingArbitration;
@@ -130,16 +124,19 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 
         (Mode::AwaitingArbitration, Message::Arbitrate(Arbitration::ReturnDepositToBuyer)) => {
             state.mode = Mode::Done;
-            let return_deposit = A::simple_transfer(&state.buyer, state.required_deposit);
-            let pay_arbiter = A::simple_transfer(&state.arbiter, state.arbiter_fee);
+            let return_deposit =
+                A::simple_transfer(&state.init_params.buyer, state.init_params.required_deposit);
+            let pay_arbiter =
+                A::simple_transfer(&state.init_params.arbiter, state.init_params.arbiter_fee);
             Ok(try_send_both(return_deposit, pay_arbiter))
         }
 
         (Mode::AwaitingArbitration, Message::Arbitrate(Arbitration::ReleaseFundsToSeller)) => {
             state.mode = Mode::Done;
             let release_payment_to_seller =
-                A::simple_transfer(&state.seller, state.required_deposit);
-            let pay_arbiter = A::simple_transfer(&state.arbiter, state.arbiter_fee);
+                A::simple_transfer(&state.init_params.seller, state.init_params.required_deposit);
+            let pay_arbiter =
+                A::simple_transfer(&state.init_params.arbiter, state.init_params.arbiter_fee);
             Ok(try_send_both(release_payment_to_seller, pay_arbiter))
         }
 

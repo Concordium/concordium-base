@@ -27,7 +27,7 @@ type TimeMilliseconds = u64;
 
 // Transfer Requests
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, SchemaType)]
 struct TransferRequest {
     /// The amount of GTU to transfer from the contract to the target_account
     amount: Amount,
@@ -35,7 +35,7 @@ struct TransferRequest {
     target_account: AccountAddress,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, SchemaType)]
 struct Transfer {
     /// The time, fx slot_time, of when the request was initiated
     time_of_transfer: TimeMilliseconds,
@@ -44,7 +44,7 @@ struct Transfer {
 }
 
 /// # State of the contract.
-#[derive(Serialize)]
+#[derive(Serialize, SchemaType)]
 struct InitParams {
     /// The amount of GTU allowed to be withdrawn within the time_limit
     timed_withdraw_limit: Amount,
@@ -52,7 +52,8 @@ struct InitParams {
     time_limit: TimeMilliseconds,
 }
 
-#[derive(Serialize)]
+#[contract_state]
+#[derive(Serialize, SchemaType)]
 pub struct State {
     /// The initiating parameters
     init_params: InitParams,

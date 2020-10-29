@@ -3,4 +3,4 @@
 target = "wasm32-unknown-unknown"
 
 [target.wasm32-unknown-unknown]
-runner = ["wasmer-runner", "test", "--source"]
+runner = ["cargo", "concordium", "test", "--source"]

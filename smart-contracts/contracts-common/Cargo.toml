@@ -12,6 +12,10 @@ optional = true
 features = ["derive"]
 version = "1.0"
 
+[dependencies.serde_json]
+optional = true
+version = "1.0"
+
 [dependencies.base58check]
 optional = true
 version = "0.1"
@@ -21,9 +25,14 @@ default = ["std"]
 
 std = []
 
-derive-serde = ["serde", "std", "base58check"]
+derive-serde = ["serde", "serde_json", "std", "base58check"]
 
 [lib]
 # Since we don't define an allocator in this trate, we can only produce an rlib
 # directly.
 crate-type = ["rlib"]
+
+[dev-dependencies]
+arbitrary = { version = "0.4", features = ["derive"] }
+rand = "=0.7"
+rand_pcg = "0.2.1"
