@@ -58,11 +58,11 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> SigmaProtocol for ComEqS
     type SecretData = ComEqSigSecret<P, C>;
 
     #[inline]
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        ro.append(&self.blinded_sig)
-            .extend_from(self.commitments.iter())
-            .append(&self.ps_pub_key)
-            .append(&self.comm_key)
+    fn public(&self, ro: &mut RandomOracle) {
+        ro.append_message(b"blinded_sig", &self.blinded_sig);
+        ro.extend_from(b"commitments", self.commitments.iter());
+        ro.append_message(b"ps_pub_key", &self.ps_pub_key);
+        ro.append_message(b"comm_key", &self.comm_key)
     }
 
     #[inline]
@@ -298,11 +298,11 @@ mod tests {
         for i in 1..20 {
             ComEqSig::<Bls12, G1>::with_valid_data(i, &mut csprng, |ces, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(&challenge_prefix);
 
                 let proof =
-                    prove(ro.split(), &ces, secret, csprng).expect("Proving should succeed.");
-                assert!(verify(ro, &ces, &proof));
+                    prove(&mut ro.split(), &ces, secret, csprng).expect("Proving should succeed.");
+                assert!(verify(&mut ro, &ces, &proof));
             })
         }
     }
@@ -317,12 +317,12 @@ mod tests {
                 let ro = RandomOracle::domain(&challenge_prefix);
 
                 let proof =
-                    prove(ro.split(), &ces, secret, csprng).expect("Proving should succeed.");
-                assert!(verify(ro.split(), &ces, &proof));
+                    prove(&mut ro.split(), &ces, secret, csprng).expect("Proving should succeed.");
+                assert!(verify(&mut ro.split(), &ces, &proof));
 
                 // Construct invalid parameters
-                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
-                assert!(!verify(wrong_ro, &ces, &proof));
+                let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
+                assert!(!verify(&mut wrong_ro, &ces, &proof));
 
                 let mut wrong_ces = ces;
                 {
@@ -330,7 +330,7 @@ mod tests {
                     wrong_ces.blinded_sig = BlindedSignature {
                         sig: Signature(G1::generate(csprng), G1::generate(csprng)),
                     };
-                    assert!(!verify(ro.split(), &wrong_ces, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_ces, &proof));
                     wrong_ces.blinded_sig = tmp;
                 }
 
@@ -342,7 +342,7 @@ mod tests {
                             .comm_key
                             .commit(&Value::<G1>::generate(csprng), csprng)
                             .0;
-                        assert!(!verify(ro.split(), &wrong_ces, &proof));
+                        assert!(!verify(&mut ro.split(), &wrong_ces, &proof));
                         wrong_ces.commitments[idx] = tmp;
                     }
                 }
@@ -350,7 +350,7 @@ mod tests {
                 {
                     let tmp = wrong_ces.comm_key;
                     wrong_ces.comm_key = CommitmentKey::generate(csprng);
-                    assert!(!verify(ro.split(), &wrong_ces, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_ces, &proof));
                     wrong_ces.comm_key = tmp;
                 }
 
@@ -358,7 +358,7 @@ mod tests {
                     let tmp = wrong_ces.ps_pub_key;
                     wrong_ces.ps_pub_key =
                         PsSigPublicKey::from(&PsSigSecretKey::generate(i, csprng));
-                    assert!(!verify(ro.split(), &wrong_ces, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_ces, &proof));
                     wrong_ces.ps_pub_key = tmp;
                 }
             })

@@ -119,7 +119,7 @@ Test-Suite tests
                     , random >= 1.1
                     , aeson >= 1.4.2
                     , mtl >= 2.2
-  ghc-options: -threaded -with-rtsopts=-N -Wall -O2 -Wno-deprecations
+  ghc-options: -threaded -with-rtsopts=-N -Wall -O2 -Wno-deprecations -dynamic
 
   other-modules:
    ConcordiumTests.Data.Base58Encoding

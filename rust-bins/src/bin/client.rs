@@ -1015,7 +1015,7 @@ fn handle_generate_ips(gip: GenerateIps) {
         }
     };
     {
-        let ar_base = global_ctx.generator;
+        let ar_base = global_ctx.on_chain_commitment_key.g;
         let mut all_ars = ArInfos {
             anonymity_revokers: BTreeMap::new(),
         };

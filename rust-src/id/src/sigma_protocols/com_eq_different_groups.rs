@@ -45,11 +45,11 @@ impl<C1: Curve, C2: Curve<Scalar = C1::Scalar>> SigmaProtocol for ComEqDiffGroup
     type SecretData = ComEqDiffGroupsSecret<C1, C2>;
 
     #[inline]
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        ro.append(&self.commitment_1)
-            .append(&self.commitment_2)
-            .append(&self.cmm_key_1)
-            .append(&self.cmm_key_2)
+    fn public(&self, ro: &mut RandomOracle) {
+        ro.append_message("commitment_1", &self.commitment_1);
+        ro.append_message("commitment_2", &self.commitment_2);
+        ro.append_message("cmm_key_1", &self.cmm_key_1);
+        ro.append_message("cmm_key_2", &self.cmm_key_2)
     }
 
     #[inline]
@@ -169,11 +169,11 @@ mod tests {
         for _i in 0..100 {
             ComEqDiffGroups::<G1, G2>::with_valid_data(0, &mut csprng, |cdg, secret, csprng| {
                 let challenge_prefix = generate_challenge_prefix(csprng);
-                let ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(&challenge_prefix);
 
                 let proof =
-                    prove(ro.split(), &cdg, secret, csprng).expect("Proving should succeed.");
-                assert!(verify(ro, &cdg, &proof))
+                    prove(&mut ro.split(), &cdg, secret, csprng).expect("Proving should succeed.");
+                assert!(verify(&mut ro, &cdg, &proof))
             })
         }
     }
@@ -187,22 +187,22 @@ mod tests {
                 let ro = RandomOracle::domain(&challenge_prefix);
 
                 let proof =
-                    prove(ro.split(), &cdg, secret, csprng).expect("Proving should succeed.");
+                    prove(&mut ro.split(), &cdg, secret, csprng).expect("Proving should succeed.");
 
                 // Construct invalid parameters
-                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
-                assert!(!verify(wrong_ro, &cdg, &proof));
+                let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(csprng));
+                assert!(!verify(&mut wrong_ro, &cdg, &proof));
                 let mut wrong_cdg = cdg;
                 {
                     let tmp = wrong_cdg.cmm_key_1;
                     wrong_cdg.cmm_key_1 = CommitmentKey::generate(csprng);
-                    assert!(!verify(ro.split(), &wrong_cdg, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_cdg, &proof));
                     wrong_cdg.cmm_key_1 = tmp;
                 }
                 {
                     let tmp = wrong_cdg.cmm_key_2;
                     wrong_cdg.cmm_key_1 = CommitmentKey::generate(csprng);
-                    assert!(!verify(ro.split(), &wrong_cdg, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_cdg, &proof));
                     wrong_cdg.cmm_key_2 = tmp;
                 }
 
@@ -212,7 +212,7 @@ mod tests {
                         .cmm_key_1
                         .commit(&Value::<G1>::generate(csprng), csprng)
                         .0;
-                    assert!(!verify(ro.split(), &wrong_cdg, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_cdg, &proof));
                     wrong_cdg.commitment_1 = tmp;
                 }
 
@@ -222,7 +222,7 @@ mod tests {
                         .cmm_key_2
                         .commit(&Value::<G2>::generate(csprng), csprng)
                         .0;
-                    assert!(!verify(ro.split(), &wrong_cdg, &proof));
+                    assert!(!verify(&mut ro.split(), &wrong_cdg, &proof));
                     wrong_cdg.commitment_2 = tmp;
                 }
             })

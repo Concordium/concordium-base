@@ -3,12 +3,13 @@ use std::{convert::Infallible, fs, fs::OpenOptions, io::prelude::*, path::PathBu
 use crypto_common::{base16_encode_string, Versioned, VERSION_0};
 use curve_arithmetic::*;
 use id::{
+    constants::{ArCurve, IpPairing},
     ffi::AttributeKind,
     identity_provider::{sign_identity_object, validate_request as ip_validate_request},
     types::*,
 };
-use log::info;
-use pairing::bls12_381::{Bls12, G1};
+use log::{error, info};
+use pairing::bls12_381::Bls12;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string};
@@ -20,22 +21,12 @@ use warp::{
     Filter,
 };
 
-type ExampleCurve = G1;
-type ExamplePairing = Bls12;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
-
-/// 10.0.2.2 is how an Android emulator accesses the host machine, which is what
-/// we are using for this proof-of-concept. The callback_location has to
-/// point to the location where the wallet can retrieve the identity object
-/// when it is available.
-const RETRIEVE_URL: &str = "http://10.0.2.2:8100/api/identity/";
-
-const ID_VERIFICATION_URL: &str = "http://localhost:8101/api/verify";
 
 #[derive(Deserialize)]
 struct IdentityObjectRequest {
     #[serde(rename = "idObjectRequest")]
-    id_object_request: Versioned<PreIdentityObject<ExamplePairing, ExampleCurve>>,
+    id_object_request: Versioned<PreIdentityObject<IpPairing, ArCurve>>,
 }
 
 /// Holds the query parameters expected by the service.
@@ -65,9 +56,9 @@ struct IdentityTokenContainer {
 /// passing between methods.
 struct ValidatedRequest {
     /// The pre-identity-object contained in the initial request.
-    request: PreIdentityObject<ExamplePairing, ExampleCurve>,
+    request: PreIdentityObject<IpPairing, ArCurve>,
     /// The identity provider data needed to sign the request.
-    ip_data: Arc<IpData<ExamplePairing>>,
+    ip_data: Arc<IpData<IpPairing>>,
     /// The URI that the ID object should be returned to after we've done the
     /// verification of the user.
     redirect_uri: String,
@@ -77,24 +68,47 @@ struct ValidatedRequest {
 /// StructOpt.
 #[derive(Debug, StructOpt)]
 struct IdentityProviderServiceConfiguration {
-    #[structopt(long = "global-context", help = "File with global context.")]
+    #[structopt(
+        long = "global-context",
+        help = "File with global context.",
+        env = "GLOBAL_CONTEXT",
+        default_value = "global.json"
+    )]
     global_context_file: PathBuf,
     #[structopt(
         long = "identity-provider",
-        help = "File with the identity provider as JSON."
+        help = "File with the identity provider as JSON.",
+        default_value = "identity_providers.json",
+        env = "IDENTITY_PROVIDER"
     )]
     identity_provider_file: PathBuf,
     #[structopt(
         long = "anonymity-revokers",
-        help = "File with the list of anonymity revokers as JSON."
+        help = "File with the list of anonymity revokers as JSON.",
+        default_value = "identity_providers.json",
+        env = "ANONYMITY_REVOKERS"
     )]
     anonymity_revokers_file: PathBuf,
     #[structopt(
         long = "port",
         default_value = "8100",
-        help = "Port on which the server will listen on."
+        help = "Port on which the server will listen on.",
+        env = "IDENTITY_PROVIDER_SERVICE_PORT"
     )]
     port: u16,
+    #[structopt(
+        long = "retrieve-base",
+        help = "Base URL where the wallet can retrieve the identity object.",
+        env = "RETRIEVE_BASE"
+    )]
+    retrieve_url: url::Url,
+    #[structopt(
+        long = "id-verification-url",
+        help = "URL of the identity verifier.",
+        default_value = "http://localhost:8101/api/verify",
+        env = "ID_VERIFICATION_URL"
+    )]
+    id_verification_url: url::Url,
 }
 
 #[tokio::main]
@@ -104,26 +118,66 @@ async fn main() {
         .setting(clap::AppSettings::ArgRequiredElseHelp)
         .global_setting(clap::AppSettings::ColoredHelp);
     let matches = app.get_matches();
-    let opt = IdentityProviderServiceConfiguration::from_clap(&matches);
+    let opt = Arc::new(IdentityProviderServiceConfiguration::from_clap(&matches));
 
     info!("Reading the provided IP, AR and global context configurations.");
-    let ip_data_contents =
-        fs::read_to_string(opt.identity_provider_file).expect("Unable to read ip data file.");
-    let ar_info_contents =
-        fs::read_to_string(opt.anonymity_revokers_file).expect("Unable to read ar info file.");
-    let global_context_contents = fs::read_to_string(opt.global_context_file)
-        .expect("Unable to read global context info file.");
+    let ip_data_contents = match fs::read_to_string(&opt.identity_provider_file) {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Could not read identity provider file: {}.", e);
+            return;
+        }
+    };
+    let ar_info_contents = match fs::read_to_string(&opt.anonymity_revokers_file) {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Could not read anonymity revokers file: {}", e);
+            return;
+        }
+    };
+    let global_context_contents = match fs::read_to_string(&opt.global_context_file) {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Could not read global context file: {}", e);
+            return;
+        }
+    };
 
-    let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(
-        from_str(&ip_data_contents).expect("File did not contain a valid IpData object as JSON."),
-    );
-    let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
-        from_str(&ar_info_contents).expect("File did not contain a valid ArInfos object as JSON"),
-    );
-    let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
-        from_str(&global_context_contents)
-            .expect("File did not contain a valid GlobalContext object as JSON"),
-    );
+    let ip_data: Arc<IpData<IpPairing>> = match from_str(&ip_data_contents) {
+        Ok(v) => Arc::new(v),
+        Err(e) => {
+            error!("File did not contain a valid IpData object as JSON {}.", e);
+            return;
+        }
+    };
+    let ar_info: Arc<ArInfos<ArCurve>> =
+        match from_str::<Versioned<ArInfos<ArCurve>>>(&ar_info_contents) {
+            Ok(info) if info.version == VERSION_0 => Arc::new(info.value),
+            Ok(info) => {
+                error!("Unsupported anonymity revokers version {}.", info.version);
+                return;
+            }
+            Err(e) => {
+                error!("File did not contain a valid ArInfos object as JSON {}", e);
+                return;
+            }
+        };
+
+    let global_context: Arc<GlobalContext<ArCurve>> =
+        match from_str::<Versioned<GlobalContext<ArCurve>>>(&global_context_contents) {
+            Ok(global) if global.version == VERSION_0 => Arc::new(global.value),
+            Ok(global) => {
+                error!("Unsupported global parameters version {}.", global.version);
+                return;
+            }
+            Err(e) => {
+                error!(
+                    "File did not contain a valid GlobalContext object as JSON {}.",
+                    e
+                );
+                return;
+            }
+        };
 
     // Create the 'database' directories for storing IdentityObjects and
     // AnonymityRevocationRecords.
@@ -168,6 +222,7 @@ async fn main() {
             }
         });
 
+    let id_opt = Arc::clone(&opt);
     let create_identity = warp::get()
         .and(warp::path!("api" / "identity"))
         .and(warp::query().map(move |input: Input| {
@@ -179,9 +234,9 @@ async fn main() {
                 input,
             )
         }))
-        .and_then(create_signed_identity_object);
+        .and_then(move |idi| create_signed_identity_object(id_opt.clone(), idi));
 
-    info!("Booting up HTTP server. Listening on port 8100.");
+    info!("Booting up HTTP server. Listening on port {}.", opt.port);
     warp::serve(create_identity.or(retrieve_identity))
         .run(([0, 0, 0, 0], opt.port))
         .await;
@@ -192,6 +247,7 @@ async fn main() {
 /// that is then signed and saved. If successful a re-direct to the URL where
 /// the identity object is available is returned.
 async fn create_signed_identity_object(
+    opt: Arc<IdentityProviderServiceConfiguration>,
     identity_object_input: Result<ValidatedRequest, String>,
 ) -> Result<impl warp::Reply, Infallible> {
     let identity_object_input = match identity_object_input {
@@ -209,7 +265,7 @@ async fn create_signed_identity_object(
     // always just return a static attribute list without doing any actual
     // verification of an identity.
     let client = Client::new();
-    let attribute_list = match client.post(ID_VERIFICATION_URL).send().await {
+    let attribute_list = match client.post(opt.id_verification_url.clone()).send().await {
         Ok(attribute_list) => match attribute_list.json().await {
             Ok(attribute_list) => attribute_list,
             Err(e) => {
@@ -303,14 +359,12 @@ async fn create_signed_identity_object(
         }
     };
 
-    // 10.0.2.2 is how an Android emulator accesses the host machine, which is what
-    // we are using for this proof-of-concept. The callback_location has to
-    // point to the location where the wallet can retrieve the identity object
-    // when it is available.
-    let callback_location = identity_object_input.redirect_uri.clone()
-        + "#code_uri="
-        + RETRIEVE_URL
-        + &base16_encoded_id_cred_pub;
+    // The callback_location has to point to the location where the wallet can
+    // retrieve the identity object when it is available.
+    let mut retrieve_url = opt.retrieve_url.clone();
+    retrieve_url.set_path(&format!("api/identity/{}", base16_encoded_id_cred_pub));
+    let callback_location =
+        identity_object_input.redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
 
     info!("Identity was successfully created. Returning URI where it can be retrieved.");
 
@@ -329,9 +383,9 @@ async fn create_signed_identity_object(
 /// - Ok(ValidatedRequest) if the request is valid or
 /// - Err(msg) where `msg` is a string describing the error.
 fn extract_and_validate_request(
-    ip_data: Arc<IpData<ExamplePairing>>,
-    ar_info: Arc<ArInfos<ExampleCurve>>,
-    global_context: Arc<GlobalContext<ExampleCurve>>,
+    ip_data: Arc<IpData<IpPairing>>,
+    ar_info: Arc<ArInfos<ArCurve>>,
+    global_context: Arc<GlobalContext<ArCurve>>,
     input: Input,
 ) -> Result<ValidatedRequest, String> {
     let request: IdentityObjectRequest =
@@ -366,7 +420,7 @@ fn extract_and_validate_request(
 /// Creates and saves the revocation record to the file system (which should be
 /// a database, but for the proof-of-concept we use the file system).
 fn save_revocation_record(
-    pre_identity_object: &PreIdentityObject<ExamplePairing, ExampleCurve>,
+    pre_identity_object: &PreIdentityObject<IpPairing, ArCurve>,
     base16_id_cred_pub: String,
 ) -> std::result::Result<(), String> {
     let ar_record = AnonymityRevocationRecord {
@@ -417,18 +471,18 @@ mod tests {
         let ar_info_contents = include_str!("../data/anonymity_revokers.json");
         let global_context_contents = include_str!("../data/global.json");
 
-        let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(
+        let ip_data: Arc<IpData<IpPairing>> = Arc::new(
             from_str(&ip_data_contents)
                 .expect("File did not contain a valid IpData object as JSON."),
         );
-        let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
-            from_str(&ar_info_contents)
-                .expect("File did not contain a valid ArInfos object as JSON"),
-        );
-        let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
-            from_str(&global_context_contents)
-                .expect("File did not contain a valid GlobalContext object as JSON"),
-        );
+        let ar_info: Versioned<ArInfos<ArCurve>> = from_str(&ar_info_contents)
+            .expect("File did not contain a valid ArInfos object as JSON");
+        assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
+        let ar_info = Arc::new(ar_info.value);
+        let global_context: Versioned<GlobalContext<ArCurve>> = from_str(&global_context_contents)
+            .expect("File did not contain a valid GlobalContext object as JSON");
+        assert_eq!(global_context.version, VERSION_0);
+        let global_context = Arc::new(global_context.value);
 
         let input = Input {
             state:        request.to_string(),
@@ -442,7 +496,6 @@ mod tests {
             Arc::clone(&global_context),
             input,
         );
-
         // Then
         assert!(response.is_ok());
     }
@@ -455,18 +508,18 @@ mod tests {
         let ar_info_contents = include_str!("../data/anonymity_revokers.json");
         let global_context_contents = include_str!("../data/global.json");
 
-        let ip_data: Arc<IpData<ExamplePairing>> = Arc::new(
+        let ip_data: Arc<IpData<IpPairing>> = Arc::new(
             from_str(&ip_data_contents)
                 .expect("File did not contain a valid IpData object as JSON."),
         );
-        let ar_info: Arc<ArInfos<ExampleCurve>> = Arc::new(
-            from_str(&ar_info_contents)
-                .expect("File did not contain a valid ArInfos object as JSON"),
-        );
-        let global_context: Arc<GlobalContext<ExampleCurve>> = Arc::new(
-            from_str(&global_context_contents)
-                .expect("File did not contain a valid GlobalContext object as JSON"),
-        );
+        let ar_info: Versioned<ArInfos<ArCurve>> = from_str(&ar_info_contents)
+            .expect("File did not contain a valid ArInfos object as JSON");
+        assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
+        let ar_info = Arc::new(ar_info.value);
+        let global_context: Versioned<GlobalContext<ArCurve>> = from_str(&global_context_contents)
+            .expect("File did not contain a valid GlobalContext object as JSON");
+        assert_eq!(global_context.version, VERSION_0);
+        let global_context = Arc::new(global_context.value);
 
         let input = Input {
             state:        request.to_string(),
