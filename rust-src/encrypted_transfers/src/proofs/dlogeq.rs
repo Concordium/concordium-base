@@ -23,9 +23,9 @@ impl<C: Curve> SigmaProtocol for DlogEqual<C> {
     type ProverWitness = DlogWitness<C>;
     type SecretData = DlogSecret<C>;
 
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        let ro1 = self.dlog1.public(ro);
-        self.dlog2.public(ro1)
+    fn public(&self, ro: &mut RandomOracle) {
+        self.dlog1.public(ro);
+        self.dlog2.public(ro)
     }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
@@ -103,8 +103,8 @@ mod test {
         let equal = DlogEqual { dlog1, dlog2 };
         let secret = DlogSecret { secret: x_secret };
         let challenge_prefix = generate_challenge_prefix(&mut csprng);
-        let ro = RandomOracle::domain(&challenge_prefix);
-        let proof = prove(ro.split(), &equal, secret, &mut csprng).unwrap();
-        assert!(verify(ro, &equal, &proof));
+        let mut ro = RandomOracle::domain(&challenge_prefix);
+        let proof = prove(&mut ro.split(), &equal, secret, &mut csprng).unwrap();
+        assert!(verify(&mut ro, &equal, &proof));
     }
 }

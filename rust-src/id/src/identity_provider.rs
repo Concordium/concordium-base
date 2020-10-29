@@ -67,7 +67,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
 
     let id_cred_sec_verifier = dlog::Dlog {
         public: pre_id_obj.id_cred_pub,
-        coeff:  context.global_context.generator,
+        coeff:  context.global_context.on_chain_commitment_key.g,
     };
     let id_cred_sec_witness = pre_id_obj.poks.id_cred_sec_witness;
 
@@ -76,7 +76,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         commitment: pre_id_obj.cmm_sc,
         y:          pre_id_obj.id_cred_pub,
         cmm_key:    commitment_key_sc,
-        g:          context.global_context.generator,
+        g:          context.global_context.on_chain_commitment_key.g,
     };
 
     // TODO: Figure out whether we can somehow get rid of this clone.
@@ -193,7 +193,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     }
 
     transcript.append_message(b"bulletproofs", &bulletproofs);
-    if verify(transcript, &verifier, &proof) {
+    if verify(&mut transcript, &verifier, &proof) {
         Ok(())
     } else {
         Err(Reason::IncorrectProof)
@@ -421,7 +421,8 @@ mod tests {
             ip_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
-        let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
+        let (ars_infos, _) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
         let aci = test_create_aci(&mut csprng);
         let (context, pio, _) = test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
@@ -491,7 +492,8 @@ mod tests {
             ip_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
-        let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
+        let (ars_infos, _) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
         let (ctx, mut pio, _) = test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
         let attrs = test_create_attributes();
@@ -526,7 +528,8 @@ mod tests {
             ip_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
-        let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
+        let (ars_infos, _) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
         let (context, mut pio, _) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);

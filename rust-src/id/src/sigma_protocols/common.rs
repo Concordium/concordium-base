@@ -17,9 +17,8 @@ pub trait SigmaProtocol: Sized {
     /// The prover's secret data.
     type SecretData;
 
-    /// Given a random oracle, feed it all of the public input of this instance,
-    /// and return the new state.
-    fn public(&self, ro: RandomOracle) -> RandomOracle;
+    /// Given a random oracle, feed it all of the public input of this instance.
+    fn public(&self, ro: &mut RandomOracle);
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge;
 
@@ -103,9 +102,9 @@ impl<P1: SigmaProtocol, P2: SigmaProtocol> SigmaProtocol for AndAdapter<P1, P2> 
     type ProverWitness = AndWitness<P1::ProverWitness, P2::ProverWitness>;
     type SecretData = (P1::SecretData, P2::SecretData);
 
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
-        let ro1 = self.first.public(ro);
-        self.second.public(ro1)
+    fn public(&self, ro: &mut RandomOracle) {
+        self.first.public(ro);
+        self.second.public(ro)
     }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
@@ -206,11 +205,9 @@ impl<P: SigmaProtocol> SigmaProtocol for ReplicateAdapter<P> {
     type ProverWitness = ReplicateWitness<P::ProverWitness>;
     type SecretData = Vec<P::SecretData>;
 
-    fn public(&self, ro: RandomOracle) -> RandomOracle {
+    fn public(&self, ro: &mut RandomOracle) {
         // add all public data in sequence from left to right
-        self.protocols
-            .iter()
-            .fold(ro, |running_ro, p| p.public(running_ro))
+        self.protocols.iter().for_each(|p| p.public(ro))
     }
 
     fn get_challenge(&self, challenge: &Challenge) -> Self::ProtocolChallenge {
@@ -290,16 +287,18 @@ impl<P: SigmaProtocol> ReplicateAdapter<P> {
 }
 
 /// Given a sigma protocol prover and a context (in the form of the random
-/// oracle), produce a sigma proof. This function can return 'None' if the input
-/// data is inconsistent.
+/// oracle), produce a sigma proof and update the context. This function can
+/// return 'None' if the input data is inconsistent.
 pub fn prove<R: rand::Rng, D: SigmaProtocol>(
-    ro: RandomOracle,
+    ro: &mut RandomOracle,
     prover: &D,
     secret: D::SecretData,
     csprng: &mut R,
 ) -> Option<SigmaProof<D::ProverWitness>> {
     let (point, state) = prover.commit_point(csprng)?;
-    let challenge_bytes = prover.public(ro).append(&point).get_challenge();
+    prover.public(ro);
+    ro.append_message("point", &point);
+    let challenge_bytes = ro.split().get_challenge();
     let challenge = prover.get_challenge(&challenge_bytes);
     let witness = prover.generate_witness(secret, state, &challenge)?;
     Some(SigmaProof {
@@ -308,10 +307,10 @@ pub fn prove<R: rand::Rng, D: SigmaProtocol>(
     })
 }
 
-/// Verify a single sigma proof, given a sigma proof verifier and a context in
-/// the form of an instantiated random oracle.
+/// Given a single sigma proof and a context in the form of an instantiated
+/// random oracle, verify the sigma proof and update the state of the context.
 pub fn verify<D: SigmaProtocol>(
-    ro: RandomOracle,
+    ro: &mut RandomOracle,
     verifier: &D,
     proof: &SigmaProof<D::ProverWitness>,
 ) -> bool {
@@ -319,7 +318,9 @@ pub fn verify<D: SigmaProtocol>(
     match verifier.extract_point(&challenge, &proof.witness) {
         None => false,
         Some(ref point) => {
-            let computed_challenge = verifier.public(ro).append(&point).get_challenge();
+            verifier.public(ro);
+            ro.append_message("point", &point);
+            let computed_challenge = ro.split().get_challenge();
             computed_challenge == proof.challenge
         }
     }

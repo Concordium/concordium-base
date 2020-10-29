@@ -143,8 +143,7 @@ pub extern "C" fn eddsa_verify_dlog_ed25519(
             Ok(proof) => proof,
         }
     };
-    let ro = RandomOracle::domain(&challenge);
-    if verify_dlog_ed25519(ro, &public_key, &proof) {
+    if verify_dlog_ed25519(&mut RandomOracle::domain(&challenge), &public_key, &proof) {
         1
     } else {
         0
@@ -176,8 +175,11 @@ pub extern "C" fn eddsa_prove_dlog_ed25519(
         }
     };
     let proof_bytes = mut_slice_from_c_bytes!(proof_ptr, PROOF_LENGTH);
-    let ro = RandomOracle::domain(&challenge);
-    let proof = prove_dlog_ed25519(ro, &public_key, &secret_key);
+    let proof = prove_dlog_ed25519(
+        &mut RandomOracle::domain(&challenge),
+        &public_key,
+        &secret_key,
+    );
     proof_bytes.copy_from_slice(&to_bytes(&proof));
     0
 }
