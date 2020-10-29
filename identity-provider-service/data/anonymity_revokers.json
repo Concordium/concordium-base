@@ -1,0 +1,50 @@
+{
+  "v": 0,
+  "value": {
+    "1": {
+      "arIdentity": 1,
+      "arDescription": {
+        "name": "AR-1",
+        "url": "",
+        "description": ""
+      },
+      "arPublicKey": "a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd5a93a64961f18969e5167ce8e6492bdbbb40f83be07b39d5ced014e43672546f7cfd472f13b4eed9364b58ced585b7df3"
+    },
+    "2": {
+      "arIdentity": 2,
+      "arDescription": {
+        "name": "AR-2",
+        "url": "",
+        "description": ""
+      },
+      "arPublicKey": "a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd5959e048ec30697d40f91a36ec00f4215323859c4f500003372c7c702aa8e3c69fb2c137898a2796a74ac164a1de4dc7a"
+    },
+    "3": {
+      "arIdentity": 3,
+      "arDescription": {
+        "name": "AR-3",
+        "url": "",
+        "description": ""
+      },
+      "arPublicKey": "a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd5aa8b96b3f70c642271e0d78299d7ce3618574282e62bd3958008d2e3c75b211a9f2b5940d4b7d69d74515dfd5514781e"
+    },
+    "4": {
+      "arIdentity": 4,
+      "arDescription": {
+        "name": "AR-4",
+        "url": "",
+        "description": ""
+      },
+      "arPublicKey": "a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd5918efbe13f4d368ab05fb62a1f22fe2e87d8cd43ed3bc36863dcbdf061a1a9074f432bb731a9c9957a7039b5803c90f5"
+    },
+    "5": {
+      "arIdentity": 5,
+      "arDescription": {
+        "name": "AR-5",
+        "url": "",
+        "description": ""
+      },
+      "arPublicKey": "a820662531d0aac70b3a80dd8a249aa692436097d06da005aec7c56aad17997ec8331d1e4050fd8dced2b92f06277bd595c276bc87239c651d4a53cbb3135bf106abd0d2d1f3c86057a7a5df1b0b89e041175fe299f260ec6b76e7fec849c9e5"
+    }
+  }
+}

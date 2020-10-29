@@ -69,9 +69,9 @@ pub fn verify_cdi<
     let gens = global_context.bulletproof_generators();
     let ip_verify_key = &ip_info.ip_verify_key;
     // Compute the challenge prefix by hashing the values.
-    let ro = RandomOracle::domain("credential")
-        .append(&cdi.values)
-        .append(&global_context);
+    let mut ro = RandomOracle::domain("credential");
+    ro.append_message(b"cred_values", &cdi.values);
+    ro.append_message(b"global_context", &global_context);
 
     let commitments = &cdi.proofs.commitments;
 
@@ -138,12 +138,12 @@ pub fn verify_cdi<
         witness,
     };
 
-    let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
-    transcript.append_message(b"cred_values", &cdi.values);
-    transcript.append_message(b"global_context", &global_context);
-    transcript.append_message(b"cred_values", &proof);
+    if !verify(&mut ro, &verifier, &proof) {
+        return Err(CDIVerificationError::Proof);
+    }
+
     if !verify_less_than_or_equal(
-        &mut transcript,
+        &mut ro,
         8,
         &cdi.proofs.commitments.cmm_cred_counter,
         &cdi.proofs.commitments.cmm_max_accounts,
@@ -154,9 +154,8 @@ pub fn verify_cdi<
         return Err(CDIVerificationError::Proof);
     }
 
-    if !verify(ro.split(), &verifier, &proof) {
-        return Err(CDIVerificationError::Proof);
-    }
+    // message signed in proofs.proofs_acc_sk.sigs
+    let signed = ro.get_challenge();
 
     match cdv.cred_account {
         CredentialAccount::ExistingAccount(_addr) => {
@@ -168,8 +167,6 @@ pub fn verify_cdi<
                 // we at least have enough proofs now, if they are all valid and have valid
                 // indices
 
-                // message signed in proofs.proofs_acc_sk.sigs
-                let signed = ro.split().get_challenge();
                 for (&idx, proof) in proofs.proof_acc_sk.sigs.iter() {
                     if let Some(key) = acc_keys.get(idx) {
                         let VerifyKey::Ed25519VerifyKey(ref key) = key;
@@ -445,7 +442,8 @@ mod tests {
             ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
-        let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
+        let (ars_infos, _) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
         let initial_acc_data = InitialAccountData {
             keys:      {
@@ -519,7 +517,7 @@ mod tests {
             ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
-        let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
+        let (ars_infos, _) = test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
         let acc_data = InitialAccountData {
             keys:      {
