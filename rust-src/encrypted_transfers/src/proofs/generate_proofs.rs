@@ -66,7 +66,7 @@ fn gen_enc_exp_info<C: Curve>(
     sigma_protocols
 }
 
-/// Implementation of genEncTransProofInfo in the bluepaper
+/// Implementation of genEncTransProofInfo in the bluepaper.
 /// It produces a sigma protocol of type EncTrans (see enc_trans.rs)
 ///
 /// Here, both A and S_prime are encrypted amounts that are encrypted
@@ -80,12 +80,14 @@ fn gen_enc_exp_info<C: Curve>(
 /// Bluepaper in the following way:
 /// 1. It takes h, the base for encryption in the exponent, as an input.
 /// 2. We don't produce the Bulletproof information. This is computed
-/// independently 3. Instead of using the genAndComp, genEqComp and
-/// genLinRelCompEx to compose the sigmaprotocol as in the paper, we immediately
-/// output EncTrans{zeta_1, zeta_2, zeta_3, zeta_4} and guarantee through the
-/// implementation of EncTrans the equality of the decryption key in the dlog
-/// and elg-dec protocol, and the linear relation between the chunks of S', S
-/// and A. See EncTrans for more detail
+/// independently
+/// 3. Instead of using the genAndComp, genEqComp and genLinRelCompEx to compose
+/// the sigmaprotocol as in the paper, we immediately output EncTrans{zeta_1,
+/// zeta_2, zeta_3, zeta_4} and guarantee through the implementation of EncTrans
+/// the equality of the decryption key in the dlog and elg-dec protocol, and the
+/// linear relation between the chunks of S', S and A.
+///
+/// See EncTrans for more detail
 pub fn gen_enc_trans_proof_info<C: Curve>(
     pk_sender: &PublicKey<C>,
     pk_receiver: &PublicKey<C>,
@@ -305,9 +307,9 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
 
 /// Implementation of genSecToPubTrans in the bluepaper
 ///
-/// For sending secret balance to public balance
+/// For sending secret balance to public balance.
 /// This function produces transfer data containing
-/// a proof that a secret to public balance transfer was done correctly
+/// a proof that a secret to public balance transfer was done correctly.
 /// The arguments are
 /// - global context with parameters for generating proofs, and generators for
 ///   encrypting amounts.
@@ -318,6 +320,7 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
 ///   encryption
 /// - s - input amount
 /// - a - amount to send
+///
 /// The proof contained in the transfer data produced
 /// by this function is a combination a proof produced by the
 /// EncTrans sigma protocol and a rangeproof (Bulletproofs), i.e.
@@ -342,17 +345,18 @@ pub fn gen_enc_trans<C: Curve, R: Rng>(
 /// produce the information needed to prove correctness of the transaction. In
 /// this implementation, we instead reuse the genEncTransProofInfo function by
 /// making a trivial encryption A of the amount to send with randomness = 0
-/// under the public key 1. A = (0, h^a). The protocol given by
+/// under the public key 1, that is A = (0, h^a). The protocol given by
 /// genSecToPubProofInfo in the bluepaper provides a protocol for proving
 /// 1. Knowledge of decryption key of the sender account
 /// 2. Knowledge of (s, sk) such that the secret amount decrypts to s under sk.
 /// 3. The two decryption keys in 1 and 2 are equal
 /// 4. Knowledge of (s',r) such that S' (the encrypted remaining amount) is an
-/// encryption of s'  5. Proof of the linear relation that S' is an encryption
-/// of the value s-a, i.e. the value encrypted by S and the amount a to send
+/// encryption of s'
+/// 5. Proof of the linear relation that S' is an encryption of the value s-a,
+/// i.e. the value encrypted by S and the amount a to send
+///
 /// All of this is also proved by using genEncTransProofInfo and can be verified
 /// since the verifier can produce the same encryption A from a.
-/// Furthermore, the challenge used for the proofs is
 #[allow(clippy::too_many_arguments)]
 #[allow(non_snake_case)]
 pub fn gen_sec_to_pub_trans<C: Curve, R: Rng>(
@@ -470,11 +474,16 @@ pub enum VerificationError {
 /// correctly or a VerificationError indicating what failed (the EncTrans
 /// protocol or one of the bulletproofs)
 ///
-/// This implementation differs from the one in the bluepaper by NOT requiring
-/// that the secret balance of an account has no aggregatable subset of secret
-/// amounts. This implementation is only for verifying the associated sigma- and
-/// bullet proofs. This also means, that there is no signature verification as
-/// part of this implementation.
+/// This function is only responsible of for checking the cryptographic proofs
+/// of an encrypted transfer. This means it varies from the bluepaper in the
+/// following way:
+/// 1. In the bluepaper, this function is responsible for checking that the
+/// sender account has no aggregatable secret amount, however in the
+/// implementation this responsibility is handled by aggregating all amounts at
+/// indices less than the index of the transaction.
+/// 2. In the bluepaper, this function is also responsible for checking the
+/// signature of the transaction, however this is done elsewhere in the
+/// implementation, namely before these cryptographic proofs are checked.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_enc_trans<C: Curve>(
     context: &GlobalContext<C>,
@@ -566,11 +575,13 @@ pub fn verify_enc_trans<C: Curve>(
 /// protocol or the bulletproof)
 ///
 /// This implementation varies from the one in the bluepaper in the same way
-/// that the verify_ enc_transfer does. It only checks the sigma- and bullet
-/// proofs associated. Checking the proofs is done by making a dummy encryption
-/// (encryption with randomness 0) of the amount and then using the same
-/// verification procedure as for encrypted transfers. See gen_sec_ to_pub_trans
-/// for more details.
+/// that the verify_ enc_transfer does (see this function for more detail). In
+/// short, it only checks the cryptographic proofs, the signature is checked
+/// elsewhere before this is called and aggregation of secret amounts are
+/// handled by the scheduler. Checking the proofs are done by making a dummy
+/// encryption (encryption with randomness 0) of the amount and then using the
+/// same verification procedure as for encrypted transfers. See gen_sec_
+/// to_pub_trans for more details.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_sec_to_pub_trans<C: Curve>(
     context: &GlobalContext<C>,
