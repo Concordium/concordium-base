@@ -10,6 +10,7 @@ For further tests:
 */
 
 mod transformation_tests {
+    use crate::types::*;
     use std::rc::Rc;
 
     use crate::{
@@ -79,30 +80,36 @@ mod transformation_tests {
     }
 
     impl HasTransformationContext for TransformationContext {
-        fn get_type_len(&self, idx: TypeIndex) -> Option<(usize, usize)> {
-            self.types.get(idx as usize).map(|ty| {
-                (
-                    ty.parameters.len(),
-                    if ty.result.is_some() {
-                        1
-                    } else {
-                        0
-                    },
-                )
-            })
+        fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)> {
+            self.types
+                .get(idx as usize)
+                .map(|ty| {
+                    (
+                        ty.parameters.len(),
+                        if ty.result.is_some() {
+                            1
+                        } else {
+                            0
+                        },
+                    )
+                })
+                .ok_or_else(|| anyhow::anyhow!("Type with index {} not found.", idx))
         }
 
-        fn get_func_type_len(&self, idx: FuncIndex) -> Option<(usize, usize)> {
-            self.funcs.get(idx as usize).map(|ty| {
-                (
-                    ty.parameters.len(),
-                    if ty.result.is_some() {
-                        1
-                    } else {
-                        0
-                    },
-                )
-            })
+        fn get_func_type_len(&self, idx: FuncIndex) -> TransformationResult<(usize, usize)> {
+            self.funcs
+                .get(idx as usize)
+                .map(|ty| {
+                    (
+                        ty.parameters.len(),
+                        if ty.result.is_some() {
+                            1
+                        } else {
+                            0
+                        },
+                    )
+                })
+                .ok_or_else(|| anyhow::anyhow!("Function with index {} not found.", idx))
         }
     }
 
@@ -137,12 +144,12 @@ mod transformation_tests {
             locals: mk_locals(&[I32, I64]),
             /* For testing the transformation of the body, we always use these exemplary locals. */
             expr:       Expression {
-                instrs: body_orig.clone(),
+                instrs: body_orig,
             },
             ty:         Rc::new(ty),
             num_locals: 2,
         };
-        assert_eq!(inject_accounting(&f, &ctx).expr.instrs, body_expect);
+        assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, body_expect);
     }
 
     // Tests with different locals
@@ -157,7 +164,7 @@ mod transformation_tests {
         };
         let expected = flatten![stack!(123), stack!(-123), [End]];
 
-        assert_eq!(inject_accounting(&f, &ctx).expr.instrs, expected);
+        assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, expected);
     }
 
     #[test]
@@ -172,7 +179,7 @@ mod transformation_tests {
             num_locals: 2,
         };
         let expected = flatten![energy!(invoke_after(2)), stack!(123), stack!(-123), [End]];
-        assert_eq!(inject_accounting(&f, &ctx).expr.instrs, expected);
+        assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, expected);
     }
 
     #[test]
@@ -186,7 +193,7 @@ mod transformation_tests {
             // NOTE: this is a random value and does not correspond to the body
         };
         let expected = flatten![energy!(invoke_after(2)), stack!(123), stack!(-123), [End]];
-        assert_eq!(inject_accounting(&f, &ctx).expr.instrs, expected);
+        assert_eq!(inject_accounting(&f, &ctx).unwrap().expr.instrs, expected);
     }
 
     // Tests for function bodies.
@@ -290,7 +297,7 @@ mod transformation_tests {
             flatten![
                 energy!(ENTRY + 2 * CONST + invoke_before(2, 1)),
                 stack!(S),
-                [I32Const(10), I32Const(20), Call(0 + NUM_ADDED_FUNCTIONS)],
+                [I32Const(10), I32Const(20), Call(NUM_ADDED_FUNCTIONS)],
                 energy!(CONST + SIMPLE_BINOP),
                 [I32Const(40), I32Sub],
                 stack!(-S),

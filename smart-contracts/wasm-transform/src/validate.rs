@@ -3,7 +3,7 @@ use crate::{
     types::*,
 };
 use anyhow::{anyhow, bail, ensure};
-use std::{collections::BTreeSet, convert::TryInto, rc::Rc};
+use std::{collections::BTreeSet, rc::Rc};
 
 /// The number of allowed locals in a function.
 /// This includes parameters and declared locals.
@@ -11,31 +11,19 @@ pub const ALLOWED_LOCALS: u32 = 1 << 15;
 
 pub type ValidateResult<A> = anyhow::Result<A>;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
+/// The default instance produces an empty operator stack.
 pub struct OperandStack {
     pub stack: Vec<MaybeKnown>,
 }
 
-impl OperandStack {
-    pub fn new() -> Self {
-        Self {
-            stack: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default)]
+/// The default instance produces an empty control stack.
 pub struct ControlStack {
     pub stack: Vec<ControlFrame>,
 }
 
 impl ControlStack {
-    pub fn new() -> Self {
-        Self {
-            stack: Vec::new(),
-        }
-    }
-
     /// Get the n-th element of the stack, starting at 0.
     pub fn get(&self, n: u32) -> Option<&ControlFrame> {
         let n = n as usize;
@@ -224,7 +212,7 @@ fn make_locals(ty: &FunctionType, locals: &[Local]) -> ValidateResult<(Vec<Local
         });
         start = end;
     }
-    let num_locals = start.try_into().map_err(|_| anyhow!("Too many locals."))?;
+    let num_locals = start;
     ensure!(
         num_locals <= ALLOWED_LOCALS,
         "The number of locals ({}) is more than allowed ({}).",
@@ -287,7 +275,7 @@ enum Type {
 fn ensure_alignment(num: u32, align: Type) -> ValidateResult<()> {
     match align {
         Type::I8 => {
-            ensure!(num <= 0, "Type I8 alignment must be less than 0, but is {}.", num);
+            ensure!(num == 0, "Type I8 alignment must be less than 0, but is {}.", num);
         }
         Type::I16 => {
             ensure!(num <= 1, "Type I16 alignment must be less than 1, but is {}.", num);
@@ -304,15 +292,15 @@ fn ensure_alignment(num: u32, align: Type) -> ValidateResult<()> {
 
 pub fn validate<'a>(
     context: &FunctionContext<'a>,
-    mut opcodes: impl Iterator<Item = ParseResult<OpCode>>,
+    opcodes: impl Iterator<Item = ParseResult<OpCode>>,
 ) -> ValidateResult<Vec<OpCode>> {
     let mut state = ValidationState {
-        opds:  OperandStack::new(),
-        ctrls: ControlStack::new(),
+        opds:  OperandStack::default(),
+        ctrls: ControlStack::default(),
     };
     state.push_ctrl(context.return_type, context.return_type);
     let mut instructions = Vec::new();
-    while let Some(opcode) = opcodes.next() {
+    for opcode in opcodes {
         let next_opcode = opcode?;
         match &next_opcode {
             OpCode::End => {
@@ -475,7 +463,7 @@ pub fn validate<'a>(
             }
             OpCode::I64Load8U(memarg) => {
                 ensure_alignment(memarg.align, Type::I8)?;
-                ensure!(memarg.align <= 0, "Alignment out of range");
+                ensure!(memarg.align == 0, "Alignment out of range");
                 state.pop_expect_opd(Known(ValueType::I32))?;
                 state.push_opd(Known(ValueType::I64));
             }
@@ -702,10 +690,10 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
     let funcs = import
         .imports
         .iter()
-        .filter_map(|i| match i.description {
+        .map(|i| match i.description {
             ImportDescription::Func {
                 type_idx,
-            } => Some(type_idx),
+            } => type_idx,
         })
         .chain(func.types.iter().copied())
         .collect::<Vec<TypeIndex>>();

@@ -1,4 +1,5 @@
-pub use crate::types::*;
+use crate::types::*;
+use anyhow::{anyhow, bail};
 
 /// TODO set these indices to the imports of the respective accounting host
 /// functions. They should be given by the specification.
@@ -12,16 +13,18 @@ pub const FN_IDX_MEMORY_ALLOC: FuncIndex = 2;
 /// 3.
 pub const NUM_ADDED_FUNCTIONS: FuncIndex = 3;
 
+pub type TransformationResult<A> = anyhow::Result<A>;
+
 /// Return the arity of the label, i.e., 0 or 1.
-fn lookup_label(labels: &[BlockType], idx: LabelIndex) -> Option<usize> {
+fn lookup_label(labels: &[BlockType], idx: LabelIndex) -> TransformationResult<usize> {
     if (idx as usize) < labels.len() {
         let i = labels.len() - 1 - idx as usize;
         match labels[i] {
-            BlockType::EmptyType => Some(0),
-            BlockType::ValueType(_) => Some(1),
+            BlockType::EmptyType => Ok(0),
+            BlockType::ValueType(_) => Ok(1),
         }
     } else {
-        None
+        bail!("Label {} not found.", idx)
     }
 }
 
@@ -125,7 +128,7 @@ pub mod cost {
         instr: &OpCode,
         labels: &[BlockType],
         module: &C,
-    ) -> Option<Energy> {
+    ) -> TransformationResult<Energy> {
         use crate::types::OpCode::*;
         let res = match instr {
             // Control instructions
@@ -257,7 +260,7 @@ pub mod cost {
             I64ExtendI32S => SIMPLE_UNOP,
             I64ExtendI32U => SIMPLE_UNOP,
         };
-        Some(res)
+        Ok(res)
     }
 }
 
@@ -297,7 +300,9 @@ struct InstrSeqTransformer<'a, C> {
 }
 
 impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
-    fn lookup_label(&mut self, idx: LabelIndex) -> Option<usize> { lookup_label(&self.labels, idx) }
+    fn lookup_label(&mut self, idx: LabelIndex) -> TransformationResult<usize> {
+        lookup_label(&self.labels, idx)
+    }
 
     fn account_energy(&mut self, e: Energy) { account_energy(&mut self.new_seq, e) }
 
@@ -339,7 +344,10 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
     // Injects accounting instructions into a sequence of instructions, returning
     // the energy to charge for the first instructions that will be unconditionally
     // executed. This energy has to be charged for before.
-    fn run(&mut self, input_instructions: impl Iterator<Item = &'b OpCode>) -> Option<()> {
+    fn run(
+        &mut self,
+        input_instructions: impl Iterator<Item = &'b OpCode>,
+    ) -> TransformationResult<()> {
         use crate::types::OpCode::*;
 
         for instr in input_instructions {
@@ -398,7 +406,10 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                     if let Some(ty) = self.labels.pop() {
                         self.labels.push(ty)
                     } else {
-                        return None;
+                        bail!(
+                            "Instruction sequence malformed: Else branch that does not have a \
+                             label."
+                        )
                     }
                     self.add_to_new(instr);
                 }
@@ -448,42 +459,50 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
         if !self.pending_instructions.is_empty() {
             self.account_energy_push_pending();
         }
-        Some(())
+        Ok(())
     }
 }
 
 pub trait HasTransformationContext {
     /// Get the number of arguments and return values of a function type at the
     /// given index.
-    fn get_type_len(&self, idx: TypeIndex) -> Option<(usize, usize)>;
+    fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)>;
 
     /// Get the number of parameters and return values of a function.
     /// In our version of Wasm there is at most one return value.
-    fn get_func_type_len(&self, idx: FuncIndex) -> Option<(usize, usize)>;
+    fn get_func_type_len(&self, idx: FuncIndex) -> TransformationResult<(usize, usize)>;
 }
 
 impl HasTransformationContext for Module {
-    fn get_type_len(&self, idx: TypeIndex) -> Option<(usize, usize)> {
-        self.ty.get(idx).map(|ty| {
-            (
-                ty.parameters.len(),
-                if ty.result.is_some() {
-                    1
-                } else {
-                    0
-                },
-            )
-        })
+    fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)> {
+        self.ty
+            .get(idx)
+            .map(|ty| {
+                (
+                    ty.parameters.len(),
+                    if ty.result.is_some() {
+                        1
+                    } else {
+                        0
+                    },
+                )
+            })
+            .ok_or_else(|| anyhow!("Type with index {} not found.", idx))
     }
 
-    fn get_func_type_len(&self, idx: FuncIndex) -> Option<(usize, usize)> {
-        self.func.get(idx).and_then(|tyidx| self.get_type_len(tyidx))
+    fn get_func_type_len(&self, idx: FuncIndex) -> TransformationResult<(usize, usize)> {
+        let ty_idx =
+            self.func.get(idx).ok_or_else(|| anyhow!("Function with index {} not found.", idx))?;
+        self.get_type_len(ty_idx)
     }
 }
 
 /// Inject cost accounting into the function, according to cost
 /// specification version XXX.
-pub fn inject_accounting<C: HasTransformationContext>(function: &Code, module: &C) -> Code {
+pub fn inject_accounting<C: HasTransformationContext>(
+    function: &Code,
+    module: &C,
+) -> TransformationResult<Code> {
     // At the beginning of a function, we charge for its invocation and the first
     // unconditionally executed instructions of the body and account for its maximum
     // stack size.
@@ -500,16 +519,12 @@ pub fn inject_accounting<C: HasTransformationContext>(function: &Code, module: &
         pending_instructions: Vec::new(),
     };
 
-    if transformer.run(function.expr.instrs.iter()).is_none() {
-        todo!("{:#?}, {:#?}", transformer.new_seq, transformer.pending_instructions)
-        // TODO: We should fail in this case, which should not happen
-        // for well-formed modules.
-    }
+    transformer.run(function.expr.instrs.iter())?;
 
-    Code {
+    Ok(Code {
         ty: function.ty.clone(),
         expr: Expression::from(transformer.new_seq),
         locals: function.locals.clone(),
         ..*function
-    }
+    })
 }

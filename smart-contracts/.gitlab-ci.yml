@@ -28,6 +28,20 @@ stages:
     - cd cargo-concordium
     - cargo test
 
+"wasm-transform lint:clippy":
+  extends: .generic-lint
+  stage: lint
+  script:
+    - cd wasm-transform
+    - cargo clippy --color=always --tests -- -Dclippy::all
+
+"wasm-transform cargo:test":
+  extends: .generic
+  stage: test
+  script:
+    - cd wasm-transform
+    - cargo test
+
 "concordium-sc-base cargo:test":
   extends: .generic
   stage: test
