@@ -1,5 +1,6 @@
 use crate::types::*;
 use anyhow::{anyhow, bail};
+use std::rc::Rc;
 
 /// TODO set these indices to the imports of the respective accounting host
 /// functions. They should be given by the specification.
@@ -506,8 +507,6 @@ pub fn inject_accounting<C: HasTransformationContext>(
     // At the beginning of a function, we charge for its invocation and the first
     // unconditionally executed instructions of the body and account for its maximum
     // stack size.
-    // FIXME: Length of locals is the wrong measure here, since we use the compact
-    // representation.
     let energy = cost::invoke_after(function.num_locals);
 
     let labels = vec![BlockType::from(function.ty.result)];
@@ -527,4 +526,115 @@ pub fn inject_accounting<C: HasTransformationContext>(
         locals: function.locals.clone(),
         ..*function
     })
+}
+
+struct ModuleContext<'a> {
+    types: &'a [Rc<FunctionType>],
+    funcs: &'a [TypeIndex],
+}
+
+impl<'a> HasTransformationContext for ModuleContext<'a> {
+    fn get_type_len(&self, idx: TypeIndex) -> TransformationResult<(usize, usize)> {
+        self.types
+            .get(idx as usize)
+            .map(|ty| {
+                (
+                    ty.parameters.len(),
+                    if ty.result.is_some() {
+                        1
+                    } else {
+                        0
+                    },
+                )
+            })
+            .ok_or_else(|| anyhow!("Type with index {} not found.", idx))
+    }
+
+    fn get_func_type_len(&self, idx: FuncIndex) -> TransformationResult<(usize, usize)> {
+        let ty_idx = self
+            .funcs
+            .get(idx as usize)
+            .ok_or_else(|| anyhow!("Function with index {} not found.", idx))?;
+        self.get_type_len(*ty_idx)
+    }
+}
+
+impl Module {
+    /// Add metering instructions to the module.
+    pub fn inject_metering(&mut self) -> TransformationResult<()> {
+        // Update the elements to account for the inserted imports.
+        for elem in self.element.elements.iter_mut() {
+            for init in elem.inits.iter_mut() {
+                *init += NUM_ADDED_FUNCTIONS;
+            }
+        }
+        let ctx = ModuleContext {
+            types: &self.ty.types,
+            funcs: &self.func.types,
+        };
+        for code in self.code.impls.iter_mut() {
+            let injected_code = inject_accounting(code, &ctx)?;
+            *code = injected_code;
+        }
+
+        // insert a new type for the new imports
+        let mut new_types = Vec::with_capacity(self.ty.types.len() + NUM_ADDED_FUNCTIONS as usize);
+        // account energy
+        new_types.push(Rc::new(FunctionType {
+            parameters: vec![ValueType::I32],
+            result:     None,
+        }));
+        // account stack size
+        new_types.push(Rc::new(FunctionType {
+            parameters: vec![ValueType::I32],
+            result:     None,
+        }));
+        // account memory alloc
+        new_types.push(Rc::new(FunctionType {
+            parameters: vec![ValueType::I32],
+            result:     Some(ValueType::I32),
+        }));
+        new_types.append(&mut self.ty.types);
+        self.ty.types = new_types;
+
+        // Add functions to the beggining of the import list.
+        let mut new_imports =
+            Vec::with_capacity(NUM_ADDED_FUNCTIONS as usize + self.import.imports.len());
+        new_imports.push(Import {
+            mod_name:    Name {
+                name: "concordium_metering".to_owned(),
+            },
+            item_name:   Name {
+                name: "account_energy".to_owned(),
+            },
+            description: ImportDescription::Func {
+                type_idx: 0,
+            },
+        });
+        new_imports.push(Import {
+            mod_name:    Name {
+                name: "concordium_metering".to_owned(),
+            },
+            item_name:   Name {
+                name: "account_stack".to_owned(),
+            },
+            description: ImportDescription::Func {
+                type_idx: 1,
+            },
+        });
+        new_imports.push(Import {
+            mod_name:    Name {
+                name: "concordium_metering".to_owned(),
+            },
+            item_name:   Name {
+                name: "account_memory".to_owned(),
+            },
+            description: ImportDescription::Func {
+                type_idx: 2,
+            },
+        });
+        new_imports.append(&mut self.import.imports);
+        self.import.imports = new_imports;
+        Ok(())
+    }
 }
