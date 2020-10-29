@@ -54,3 +54,13 @@ To check for deadlinks (also done by the CI)
 ```
 make linkcheck
 ```
+
+
+## Gitlab Pages
+
+The documentation can be release on Gitlab pages by triggering a manual CI job called `pages`.
+The build can be reached at https://concordium.gitlab.io/smart-contracts/
+but only by people with access to this repository.
+
+This is useful for sharing drafts of the documentation without having people
+setting up a build step.
