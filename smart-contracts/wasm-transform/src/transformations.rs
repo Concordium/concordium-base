@@ -1,17 +1,37 @@
 pub use crate::types::*;
 
-// TODO set these indices to the imports of the respective accounting host
-// functions. They should be given by the specification.
-const FN_IDX_ACCOUNT_ENERGY: FuncIndex = 0;
-const FN_IDX_ACCOUNT_STACK_SIZE: FuncIndex = 1;
-const FN_IDX_MEMORY_ALLOC: FuncIndex = 2;
+/// TODO set these indices to the imports of the respective accounting host
+/// functions. They should be given by the specification.
+pub const FN_IDX_ACCOUNT_ENERGY: FuncIndex = 0;
+pub const FN_IDX_ACCOUNT_STACK_SIZE: FuncIndex = 1;
+pub const FN_IDX_MEMORY_ALLOC: FuncIndex = 2;
+
+/// The number of added functions. All functions that are in the source module
+/// will have the indices shifted by this amount.
+/// The table as well must be updated by increasing all the function indices by
+/// 3.
+pub const NUM_ADDED_FUNCTIONS: FuncIndex = 3;
+
+/// Return the arity of the label, i.e., 0 or 1.
+fn lookup_label(labels: &[BlockType], idx: LabelIndex) -> Option<usize> {
+    if (idx as usize) < labels.len() {
+        let i = labels.len() - 1 - idx as usize;
+        match labels[i] {
+            BlockType::EmptyType => Some(0),
+            BlockType::ValueType(_) => Some(1),
+        }
+    } else {
+        None
+    }
+}
 
 /// Definition of energy costs of instructions. See cost specification.
-/// TODO The concrete factors between different costs are not specified in the specification yet,
-/// and the values chosen here are rather exemplary; they still have to be carefully determined.
+/// TODO The concrete factors between different costs are not specified in the
+/// specification yet, and the values chosen here are rather exemplary; they
+/// still have to be carefully determined.
 pub mod cost {
     pub type Energy = u64; // TODO import type from elsewhere
-    use crate::types::*;
+    use super::*;
 
     // General costs
     pub const FUNC_FRAME_BASE: Energy = 10;
@@ -19,28 +39,18 @@ pub mod cost {
     pub const JUMP: Energy = 1;
     pub const JUMP_STACK: Energy = 1;
 
-    pub const fn read_stack(n: usize) -> Energy {
-        (n as Energy) * 2
-    }
+    pub const fn read_stack(n: usize) -> Energy { (n as Energy) * 2 }
 
-    pub const fn write_stack(n: usize) -> Energy {
-        (n as Energy) * 2
-    }
+    pub const fn write_stack(n: u32) -> Energy { (n as Energy) * 2 }
 
-    pub const fn copy_stack(n: usize) -> Energy {
-        (n as Energy) * 8
-    }
+    pub const fn copy_stack(n: usize) -> Energy { (n as Energy) * 8 }
 
     pub const TEST: Energy = 2;
     pub const BOUNDS: Energy = 10;
 
-    pub const fn read_mem(n: usize) -> Energy {
-        100 + (n as Energy) * 5
-    }
+    pub const fn read_mem(n: usize) -> Energy { 100 + (n as Energy) * 5 }
 
-    pub const fn write_mem(n: usize) -> Energy {
-        100 + (n as Energy) * 5
-    }
+    pub const fn write_mem(n: usize) -> Energy { 100 + (n as Energy) * 5 }
 
     // Numeric instructions
     pub const UNOP: Energy = read_stack(1) + write_stack(1);
@@ -61,20 +71,16 @@ pub mod cost {
     pub const GET_LOCAL: Energy = read_stack(1) + write_stack(1);
     pub const SET_LOCAL: Energy = read_stack(1) + write_stack(1);
     pub const TEE_LOCAL: Energy = read_stack(1) + write_stack(1);
-    // TODO: The current specification distinguishes between 4 or 8 bytes, but to simplify implementation
-    // (we would need to lookup the type of the global index) we might not want to change this
-    // to not distinguish.
+    // TODO: The current specification distinguishes between 4 or 8 bytes, but to
+    // simplify implementation (we would need to lookup the type of the global
+    // index) we might not want to change this to not distinguish.
     pub const GET_GLOBAL: Energy = read_mem(8);
     pub const SET_GLOBAL: Energy = write_mem(8); // NB: We do not distinguish between 4 or 8 bytes.
 
     // Memory instructions
-    pub const fn load(n: usize) -> Energy {
-        SIMPLE_BINOP + BOUNDS + read_mem(n)
-    }
+    pub const fn load(n: usize) -> Energy { SIMPLE_BINOP + BOUNDS + read_mem(n) }
 
-    pub const fn store(n: usize) -> Energy {
-        SIMPLE_BINOP + BOUNDS + write_mem(n)
-    }
+    pub const fn store(n: usize) -> Energy { SIMPLE_BINOP + BOUNDS + write_mem(n) }
 
     pub const MEMSIZE: Energy = 100;
     // Constant part for the memory grow instruction.
@@ -83,18 +89,14 @@ pub mod cost {
     // Control instructions
     pub const NOP: Energy = JUMP;
 
-    pub const IF: Energy = TEST + JUMP;
+    pub const IF_STATEMENT: Energy = TEST + JUMP;
 
-    pub const fn branch(label_arity: usize) -> Energy {
-        JUMP + copy_stack(label_arity)
-    }
+    pub const fn branch(label_arity: usize) -> Energy { JUMP + copy_stack(label_arity) }
 
     // This is only the cost to be charged before the replacement instruction.
-    pub const BR_IF: Energy = IF;
+    pub const BR_IF: Energy = IF_STATEMENT;
 
-    pub const fn br_table(label_arity: usize) -> Energy {
-        BOUNDS + LOOKUP + branch(label_arity)
-    }
+    pub const fn br_table(label_arity: usize) -> Energy { BOUNDS + LOOKUP + branch(label_arity) }
 
     // Cost for invoking a function (to be charged before invocation), excluding the
     // cost incurred by the number of locals the function defines (for the latter,
@@ -108,7 +110,7 @@ pub mod cost {
 
     // Cost incurred by the number of locals when invoking a function (to be charged
     // after invocation).
-    pub const fn invoke_after(num_locals: usize) -> Energy {
+    pub const fn invoke_after(num_locals: u32) -> Energy {
         // Enter frame
         write_stack(num_locals)
     }
@@ -117,31 +119,40 @@ pub mod cost {
         BOUNDS + LOOKUP + type_check(num_args + num_res) + invoke_before(num_args, num_res)
     }
 
-    pub const fn type_check(len: usize) -> Energy {
-        5 + ((2 * len) as Energy)
-    }
+    pub const fn type_check(len: usize) -> Energy { 5 + ((2 * len) as Energy) }
 
-    pub fn get_cost(instr: &Instruction, labels: &Vec<usize>, module: &Module) -> Energy {
-        use crate::types::Instruction::*;
-        match instr {
+    pub fn get_cost<C: HasTransformationContext>(
+        instr: &OpCode,
+        labels: &[BlockType],
+        module: &C,
+    ) -> Option<Energy> {
+        use crate::types::OpCode::*;
+        let res = match instr {
             // Control instructions
             Nop => NOP,
             Unreachable => 0,
-            Block(_, _) => 0,
-            Loop(_, _) => 0,
-            If(_, _, _) => IF,
-            Br(idx) => branch(lookup_label(labels, *idx)),
+            Block(_) => 0,
+            Loop(_) => 0,
+            If {
+                ..
+            } => IF_STATEMENT,
+            Br(idx) => branch(lookup_label(labels, *idx)?),
             BrIf(_) => BR_IF,
-            BrTable(_, idx_default) => br_table(lookup_label(labels, *idx_default)),
+            BrTable {
+                default,
+                ..
+            } => br_table(lookup_label(labels, *default)?),
             Return => 0,
             Call(idx) => {
-                let (num_args, num_res) = module.get_func_type_len(*idx);
+                let (num_args, num_res) = module.get_func_type_len(*idx)?;
                 invoke_before(num_args, num_res)
             }
             CallIndirect(ty_idx) => {
-                let (num_args, num_res) = module.get_type_len(*ty_idx);
+                let (num_args, num_res) = module.get_type_len(*ty_idx)?;
                 call_indirect(num_args, num_res)
             }
+            End => 0, // FIXME: Perhapse we could charge for cleanup.
+            Else => 0,
 
             // Parametric instructions
             Drop => DROP,
@@ -245,12 +256,8 @@ pub mod cost {
             I32WrapI64 => SIMPLE_UNOP,
             I64ExtendI32S => SIMPLE_UNOP,
             I64ExtendI32U => SIMPLE_UNOP,
-            I32Extend8S => SIMPLE_UNOP,
-            I32Extend16S => SIMPLE_UNOP,
-            I64Extend8S => SIMPLE_UNOP,
-            I64Extend16S => SIMPLE_UNOP,
-            I64Extend32S => SIMPLE_UNOP,
-        }
+        };
+        Some(res)
     }
 }
 
@@ -258,179 +265,118 @@ use cost::Energy;
 
 // Add energy accounting instructions.
 fn account_energy(exp: &mut InstrSeq, e: Energy) {
-    // TODO the current specification says we use an I32Const. Decide what is actually the best also regarding conversion etc. Probably i64 is actually fine.
-    // NB: The u64 energy value is written as is, and will be reinterpreted as u64 again in the host function call.
-    exp.push(Instruction::I64Const(e as i64));
-    exp.push(Instruction::Call(FN_IDX_ACCOUNT_ENERGY));
+    // TODO the current specification says we use an I32Const. Decide what is
+    // actually the best also regarding conversion etc. Probably i64 is actually
+    // fine. NB: The u64 energy value is written as is, and will be
+    // reinterpreted as u64 again in the host function call.
+    exp.push(OpCode::I64Const(e as i64));
+    exp.push(OpCode::Call(FN_IDX_ACCOUNT_ENERGY));
 }
 
-// Add stack accounting instructions.
-fn account_stack_size(exp: &mut InstrSeq, size: i64) {
-    exp.push(Instruction::I64Const(size));
-    exp.push(Instruction::Call(FN_IDX_ACCOUNT_STACK_SIZE));
-}
+// // TODO: Add stack accounting instructions.
+// fn account_stack_size(exp: &mut InstrSeq, size: i64) {
+//     exp.push(OpCode::I64Const(size));
+//     exp.push(OpCode::Call(FN_IDX_ACCOUNT_STACK_SIZE));
+// }
 
 // Metadata needed for transformation.
-struct InstrSeqTransformer<'a> {
-    module: &'a Module,
-    max_stack_size: i64,
-    // Current label stack (in the form of the labels' arities).
-    labels: Vec<usize>,
-    // `seq` with injected accounting.
+struct InstrSeqTransformer<'a, C> {
+    /// Reference to the original module to get the right context.
+    module: &'a C,
+    /// Current label stack (in the form of the labels' arities).
+    /// The last item in the vector is the innermost block label.
+    labels: Vec<BlockType>,
+    /// The transformed sequence with accounting instructions inserded.
     new_seq: InstrSeq,
-    // Whether to add an accounting instruction at the beginning of the sequence for the first
-    // instructions in the sequence. Otherwise the energy for these first instructions is returned
-    // with the result.
-    insert_account_energy_beginning: bool,
-    // Amount to charge for the first instructions in the sequence, before the first injected
-    // accounting instruction. This can be added to an earlier charging instruction.
-    energy_first_part: Option<Energy>,
-    // Accumulator for energy to be charged for the pending (and currently to be added) instructions.
+    /// Accumulator for energy to be charged for the pending (and currently to
+    /// be added) instructions.
     energy: Energy,
-    // NOTE: Performance could be improved with adding charging instructions directly,
-    // updating the energy value in-place after it has been determined.
+    /// Pending instructions that are going to be inserted after the energy
+    /// charging instruction. This is a temporary cache.
     pending_instructions: InstrSeq,
-    // Original sequence
-    seq: &'a InstrSeq,
 }
 
-impl<'b> InstrSeqTransformer<'b> {
-    /// Run a "sub transformer" on the given sequence.
-    /// the given label arity is pushed on top of the label stack.
-    fn run_sub(
-        &self,
-        seq: &'b InstrSeq,
-        label_arity: usize,
-        insert_account_energy_beginning: bool,
-    ) -> (Option<Energy>, InstrSeq) {
-        let mut sub_transformer = InstrSeqTransformer {
-            module: self.module,
-            // Max stack size is that of the current function.
-            max_stack_size: self.max_stack_size,
-            labels: self.labels.clone(),
-            new_seq: InstrSeq::new(),
-            insert_account_energy_beginning,
-            energy_first_part: None,
-            energy: 0,
-            pending_instructions: InstrSeq::new(),
-            seq,
-        };
-        sub_transformer.labels.push(label_arity);
-        sub_transformer.run()
-    }
+impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
+    fn lookup_label(&mut self, idx: LabelIndex) -> Option<usize> { lookup_label(&self.labels, idx) }
 
-    fn lookup_label(&mut self, idx: LabelIndex) -> usize {
-        lookup_label(&mut self.labels, idx)
-    }
+    fn account_energy(&mut self, e: Energy) { account_energy(&mut self.new_seq, e) }
 
-    fn get_block_type_len(&self, bt: &BlockType) -> (usize, usize) {
-        self.module.get_block_type_len(bt)
-    }
+    // TODO fn account_stack_size(&mut self, size: i64) { account_stack_size(&mut
+    // self.new_seq, size) }
 
-    fn account_energy(&mut self, e: Energy) {
-        account_energy(&mut self.new_seq, e)
-    }
+    fn add_energy(&mut self, e: Energy) { self.energy += e; }
 
-    fn account_stack_size(&mut self, size: i64) {
-        account_stack_size(&mut self.new_seq, size)
-    }
-
-    fn add_energy(&mut self, e: Energy) {
-        self.energy += e;
-    }
-
+    /// Account for all of the pending energy and drain the pending OpCodes to
+    /// the new output sequence.
     fn account_energy_push_pending(&mut self) {
         // If there is nothing to account for, do not insert accounting instructions.
         // This case can occur for example with nested loop instructions.
         if self.energy == 0 {
-            // This should be an invariant.
+            // TODO: This should be an invariant, but the assertion should be removed.
             assert!(self.pending_instructions.is_empty());
-            return;
-        }
-        if self.insert_account_energy_beginning {
-            self.account_energy(self.energy);
         } else {
-            // Depending on the cost factors, `energy` could be 0. But as this should only
-            // happen in very unsual cases, we should probably not add a check to optimizing
-            // in this case.
-            if self.energy_first_part.is_none() {
-                self.energy_first_part = Some(self.energy);
-            } else {
-                self.account_energy(self.energy);
-            }
+            self.account_energy(self.energy);
+            self.energy = 0;
+            // Move the pending instructions for which we just accounted to new_seq.
+            // NB: This leaves pending_instructions empty, and correctness relies on it.
+            self.new_seq.append(&mut self.pending_instructions);
         }
-        self.energy = 0;
-        // Move the pending instructions for which we just accounted to new_seq.
-        println!(
-            "On {:?}: Moving pending to new: {:?}",
-            self.seq, self.pending_instructions
-        );
-        self.new_seq.append(&mut self.pending_instructions);
     }
 
-    fn add_instr_account_energy(&mut self, instr: &Instruction) {
+    /// Account for all the pending energy, and push the given OpCode to the
+    /// output list.
+    fn add_instr_account_energy(&mut self, instr: &OpCode) {
         self.account_energy_push_pending();
         self.add_to_new(instr);
     }
 
-    fn add_to_pending(&mut self, instr: &Instruction) {
-        println!("On {:?}: Adding to pending: {:?}", self.seq, *instr);
-        self.pending_instructions.push(instr.clone());
-    }
+    /// Add the OpCode to the pending sequence.
+    fn add_to_pending(&mut self, instr: &OpCode) { self.pending_instructions.push(instr.clone()); }
 
-    fn add_to_new(&mut self, instr: &Instruction) {
-        println!("On {:?}: Adding to new: {:?}", self.seq, *instr);
-        self.new_seq.push(instr.clone());
-    }
+    /// Add the OpCode to the output sequence.
+    fn add_to_new(&mut self, instr: &OpCode) { self.new_seq.push(instr.clone()); }
 
     // Injects accounting instructions into a sequence of instructions, returning
     // the energy to charge for the first instructions that will be unconditionally
     // executed. This energy has to be charged for before.
-    fn run(&mut self) -> (Option<Energy>, InstrSeq) {
-        use crate::types::Instruction::*;
+    fn run(&mut self, input_instructions: impl Iterator<Item = &'b OpCode>) -> Option<()> {
+        use crate::types::OpCode::*;
 
-        for instr in self.seq.iter() {
+        for instr in input_instructions {
             // First add the energy to be charged for this instruction to the accumulated
             // energy.
-            self.add_energy(cost::get_cost(instr, &self.labels, &self.module));
+            self.add_energy(cost::get_cost(instr, &self.labels, self.module)?);
 
             // Then determine whether the current unconditional instruction sequence stops
             // (in which case the amount to charge for the collected instructions is now
             // collected in `energy`) or what other accounting instructions have to be
             // inserted.
             match instr {
-                Block(bt, bseq) => {
+                Block(bt) => {
                     // For block, the energy cost of the first instructions can be combined with
                     // that for previous instructions.
-                    let (energy_first_part, bseq_new) =
-                        // A block's label type is its result type.
-                        self.run_sub(&bseq, self.get_block_type_len(bt).1, false);
-                    if let Some(e) = energy_first_part {
-                        self.add_energy(e);
-                    }
-                    // First charge for all pending instructions including the first
-                    // instructions of the block, then execute the pending instructions
-                    // and finally the transformed block.
-                    self.account_energy_push_pending();
-                    self.add_to_new(&Block(bt.clone(), bseq_new));
+                    // So we do not do anything other than continue processing the  the
+                    // instructions.
+                    self.labels.push(*bt);
+                    self.add_to_pending(instr);
                 }
-                Loop(bt, bseq) => {
-                    // For "loop", we have to charge as the first instruction of the loop.
-                    // The following will insert a cost accounting instruction into bseq
-                    // if it is not empty.
+                Loop(_) => {
+                    // account for all the pending instructions up to this point since a loop can be
+                    // entered multiple times.
+                    self.account_energy_push_pending();
                     // A loop's label type is its argument type.
-                    let (_, bseq_new) = self.run_sub(&bseq, self.get_block_type_len(bt).0, true);
-                    // First charge for all pending instructions, execute the pending
-                    // instructions and finally the transformed loop.
-                    self.account_energy_push_pending();
-                    self.add_to_new(&Loop(bt.clone(), bseq_new));
+                    self.labels.push(BlockType::EmptyType);
+                    self.add_to_new(instr);
                 }
-                If(bt, seq1, seq2) => {
-                    // An if-block's label type is its result type.
-                    let (_, seq1_new) = self.run_sub(&seq1, self.get_block_type_len(bt).1, true);
-                    let (_, seq2_new) = self.run_sub(&seq2, self.get_block_type_len(bt).1, true);
+                If {
+                    ty,
+                } => {
+                    // Since there are two branches we need to charge for all the instructions
+                    // before we enter either of them, and start afresh.
                     self.account_energy_push_pending();
-                    self.add_to_new(&If(bt.clone(), seq1_new, seq2_new));
+                    // An if-block's label type is its end type.
+                    self.labels.push(*ty);
+                    self.add_to_new(instr);
                 }
                 Return => {
                     // First charge for all pending instructions and execute all pending
@@ -438,8 +384,22 @@ impl<'b> InstrSeqTransformer<'b> {
                     self.account_energy_push_pending();
                     // Finally account for stack size by reducing it by the same value it was
                     // increased when entering the function, then return.
-                    self.account_stack_size(-self.max_stack_size);
+                    // TODO self.account_stack_size(-self.max_stack_size);
                     // The return instruction.
+                    self.add_to_new(instr);
+                }
+                End => {
+                    self.account_energy_push_pending();
+                    self.labels.pop();
+                    self.add_to_new(instr);
+                }
+                Else => {
+                    self.account_energy_push_pending();
+                    if let Some(ty) = self.labels.pop() {
+                        self.labels.push(ty)
+                    } else {
+                        return None;
+                    }
                     self.add_to_new(instr);
                 }
                 MemoryGrow => {
@@ -449,24 +409,34 @@ impl<'b> InstrSeqTransformer<'b> {
                     self.add_to_pending(instr);
                 }
                 Unreachable => self.add_instr_account_energy(instr),
-                Br(_) => self.add_instr_account_energy(instr),
+                Br(_) => {
+                    self.add_instr_account_energy(instr);
+                }
                 BrIf(idx) => {
                     // NB: We must not add the original instruction - it is replaced with a new
                     // instruction.
                     self.account_energy_push_pending();
-                    let mut bseq1 = InstrSeq::new();
-                    // We do not need to update the labels vector for this non-recursive
-                    // replacement. Therefore, the original label index is still
-                    // valid here.
-                    account_energy(&mut bseq1, cost::branch(self.lookup_label(*idx)));
-                    // In the replacement instruction, the lable moves out by one index and
+                    self.add_to_new(&If {
+                        ty: BlockType::EmptyType,
+                    });
+                    let label_arity = self.lookup_label(*idx)?;
+                    self.account_energy(cost::branch(label_arity));
+                    // In the replacement instruction, the label moves out by one index and
                     // therefore the index has to be incremented.
-                    bseq1.push(Br(idx + 1));
-                    // NB: The cost for "if" has already been added by `get_cost`.
-                    self.add_to_new(&If(BlockType::EmptyType, bseq1, vec![Nop]));
+                    self.add_to_new(&Br(idx + 1));
+                    self.add_to_new(&End);
+                    // We do not need to update the labels vector for this
+                    // non-recursive replacement. Therefore,
+                    // the original label index is still
+                    // valid here.
                 }
-                BrTable(_, _) => self.add_instr_account_energy(instr),
-                Call(_) => self.add_instr_account_energy(instr),
+                BrTable {
+                    ..
+                } => self.add_instr_account_energy(instr),
+                // We need to change which function we call since we've inserted NUM_ADDED_FUNCTIONS
+                // functions at the beginning of the module, for cost accounting.
+                Call(idx) => self.add_instr_account_energy(&Call(idx + NUM_ADDED_FUNCTIONS)),
+                // The call indirect function does not have to be reindexed since the table is.
                 CallIndirect(_) => self.add_instr_account_energy(instr),
 
                 _ => {
@@ -478,57 +448,68 @@ impl<'b> InstrSeqTransformer<'b> {
         if !self.pending_instructions.is_empty() {
             self.account_energy_push_pending();
         }
-        // TODO is there an alternative to cloning here? Returning reference does not
-        // work directly.
-        (self.energy_first_part, self.new_seq.clone())
+        Some(())
+    }
+}
+
+pub trait HasTransformationContext {
+    /// Get the number of arguments and return values of a function type at the
+    /// given index.
+    fn get_type_len(&self, idx: TypeIndex) -> Option<(usize, usize)>;
+
+    /// Get the number of parameters and return values of a function.
+    /// In our version of Wasm there is at most one return value.
+    fn get_func_type_len(&self, idx: FuncIndex) -> Option<(usize, usize)>;
+}
+
+impl HasTransformationContext for Module {
+    fn get_type_len(&self, idx: TypeIndex) -> Option<(usize, usize)> {
+        self.ty.get(idx).map(|ty| {
+            (
+                ty.parameters.len(),
+                if ty.result.is_some() {
+                    1
+                } else {
+                    0
+                },
+            )
+        })
+    }
+
+    fn get_func_type_len(&self, idx: FuncIndex) -> Option<(usize, usize)> {
+        self.func.get(idx).and_then(|tyidx| self.get_type_len(tyidx))
     }
 }
 
 /// Inject cost accounting into the function, according to cost
 /// specification version XXX.
-/// This requires function.max_stack_size to be present.
-pub fn inject_accounting(function: &Function, module: &Module) -> Function {
-    let mut transformer = InstrSeqTransformer {
-        module,
-        max_stack_size: function.max_stack_size.unwrap() as i64,
-        labels: Vec::new(),
-        new_seq: InstrSeq::new(),
-        insert_account_energy_beginning: false,
-        energy_first_part: None,
-        energy: 0,
-        pending_instructions: InstrSeq::new(),
-        seq: &function.body,
-    };
-
-    // We create a new body expression, as in-place modification (as far as
-    // possible) will probably not be cheaper anyway.
-    let mut new_body: InstrSeq = InstrSeq::new();
-
+pub fn inject_accounting<C: HasTransformationContext>(function: &Code, module: &C) -> Code {
     // At the beginning of a function, we charge for its invocation and the first
     // unconditionally executed instructions of the body and account for its maximum
     // stack size.
-    let (energy_body_first_part, mut injected) = transformer.run();
-    let mut first_energy_accounting = cost::invoke_after(function.locals.len());
-    if let Some(e) = energy_body_first_part {
-        first_energy_accounting += e;
+    // FIXME: Length of locals is the wrong measure here, since we use the compact
+    // representation.
+    let energy = cost::invoke_after(function.num_locals);
+
+    let labels = vec![BlockType::from(function.ty.result)];
+    let mut transformer = InstrSeqTransformer {
+        module,
+        labels,
+        new_seq: InstrSeq::new(),
+        energy,
+        pending_instructions: Vec::new(),
+    };
+
+    if transformer.run(function.expr.instrs.iter()).is_none() {
+        todo!("{:#?}, {:#?}", transformer.new_seq, transformer.pending_instructions)
+        // TODO: We should fail in this case, which should not happen
+        // for well-formed modules.
     }
-    account_energy(&mut new_body, first_energy_accounting);
-    account_stack_size(&mut new_body, transformer.max_stack_size);
 
-    new_body.append(&mut injected);
-
-    // At the end of the function (in addition to before every return statement), we
-    // have to account and for stack size again (subtract the previously added stack
-    // size for this function).
-    account_stack_size(&mut new_body, -transformer.max_stack_size);
-
-    Function {
-        body: new_body,
+    Code {
+        ty: function.ty.clone(),
+        expr: Expression::from(transformer.new_seq),
         locals: function.locals.clone(),
         ..*function
     }
 }
-
-#[cfg(test)]
-#[path = "./transformations_test.rs"]
-mod transformations_test;

@@ -19,6 +19,7 @@ use anyhow::{bail, ensure};
 use std::{
     convert::TryFrom,
     io::{Cursor, Read, Seek, SeekFrom},
+    rc::Rc,
 };
 
 /// # Core constants
@@ -449,6 +450,10 @@ impl<'a> Parseable<'a> for MemoryType {
             limits,
         })
     }
+}
+
+impl<'a, X: Parseable<'a>> Parseable<'a> for Rc<X> {
+    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> { Ok(Rc::new(X::parse(cursor)?)) }
 }
 
 impl<'a> Parseable<'a> for TypeSection {

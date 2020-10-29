@@ -3,7 +3,11 @@ use crate::{
     types::*,
 };
 use anyhow::{anyhow, bail, ensure};
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, convert::TryInto, rc::Rc};
+
+/// The number of allowed locals in a function.
+/// This includes parameters and declared locals.
+pub const ALLOWED_LOCALS: u32 = 1 << 15;
 
 pub type ValidateResult<A> = anyhow::Result<A>;
 
@@ -186,7 +190,7 @@ pub struct FunctionContext<'a> {
     pub return_type: BlockType,
     pub globals:     &'a [Global],
     pub funcs:       &'a [TypeIndex],
-    pub types:       &'a [FunctionType],
+    pub types:       &'a [Rc<FunctionType>],
     pub locals:      Vec<LocalsRange>,
     // Whether memory exists or not.
     pub memory: bool,
@@ -194,7 +198,11 @@ pub struct FunctionContext<'a> {
     pub table: bool,
 }
 
-fn make_locals(ty: &FunctionType, locals: &[Local]) -> Vec<LocalsRange> {
+/// Make a locals structure used to validate a function body.
+/// This function additionally ensures that there are no more than
+/// ALLOWED_LOCALS local variables. Note that function parameters are included
+/// in locals.
+fn make_locals(ty: &FunctionType, locals: &[Local]) -> ValidateResult<(Vec<LocalsRange>, u32)> {
     let mut out = Vec::with_capacity(ty.parameters.len() + locals.len());
     let mut start = 0;
     for &ty in ty.parameters.iter() {
@@ -207,7 +215,8 @@ fn make_locals(ty: &FunctionType, locals: &[Local]) -> Vec<LocalsRange> {
         start = end;
     }
     for local in locals.iter() {
-        let end = start + local.multiplicity;
+        let end =
+            start.checked_add(local.multiplicity).ok_or_else(|| anyhow!("Too many locals"))?;
         out.push(LocalsRange {
             start,
             end,
@@ -215,7 +224,14 @@ fn make_locals(ty: &FunctionType, locals: &[Local]) -> Vec<LocalsRange> {
         });
         start = end;
     }
-    out
+    let num_locals = start.try_into().map_err(|_| anyhow!("Too many locals."))?;
+    ensure!(
+        num_locals <= ALLOWED_LOCALS,
+        "The number of locals ({}) is more than allowed ({}).",
+        num_locals,
+        ALLOWED_LOCALS
+    );
+    Ok((out, num_locals))
 }
 
 impl<'a> FunctionContext<'a> {
@@ -248,7 +264,7 @@ impl<'a> FunctionContext<'a> {
 
     pub fn table_exists(&self) -> bool { self.table }
 
-    pub fn get_func(&self, idx: FuncIndex) -> ValidateResult<&FunctionType> {
+    pub fn get_func(&self, idx: FuncIndex) -> ValidateResult<&Rc<FunctionType>> {
         if let Some(&type_idx) = self.funcs.get(idx as usize) {
             self.get_type(type_idx)
         } else {
@@ -256,7 +272,7 @@ impl<'a> FunctionContext<'a> {
         }
     }
 
-    pub fn get_type(&self, idx: TypeIndex) -> ValidateResult<&FunctionType> {
+    pub fn get_type(&self, idx: TypeIndex) -> ValidateResult<&Rc<FunctionType>> {
         self.types.get(idx as usize).ok_or_else(|| anyhow!("Type index out of range."))
     }
 }
@@ -698,19 +714,22 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
     for (&f, c) in func.types.iter().zip(code.impls) {
         match ty.get(f) {
             Some(func_ty) => {
+                let (locals, num_locals) = make_locals(func_ty, &c.locals)?;
                 let ctx = FunctionContext {
                     return_type: BlockType::from(func_ty.result),
-                    globals:     &global.globals,
-                    funcs:       &funcs,
-                    types:       &ty.types,
-                    locals:      make_locals(func_ty, &c.locals),
-                    memory:      memory.memory_type.is_some(),
-                    table:       table.table_type.is_some(),
+                    globals: &global.globals,
+                    funcs: &funcs,
+                    types: &ty.types,
+                    locals,
+                    memory: memory.memory_type.is_some(),
+                    table: table.table_type.is_some(),
                 };
                 let opcodes = validate(&ctx, &mut OpCodeIterator::new(c.expr_bytes))?;
                 parsed_code.push(Code {
+                    ty: func_ty.clone(),
+                    num_locals,
                     locals: c.locals,
-                    expr:   Expression {
+                    expr: Expression {
                         instrs: opcodes,
                     },
                 })
