@@ -312,6 +312,22 @@ fn main() {
         } else {
             println!("Output binary file cdi.bin.");
         }
+
+        // As for CDI we output an ICDI json and binary to test compatibility between
+        // haskell and rust serialization
+        let ver_icdi = Versioned::new(VERSION_0, icdi);
+        if let Err(err) = write_json_to_file("icdi.json", &ver_icdi) {
+            eprintln!("Could not output JSON file icdi.json, because {}.", err);
+        } else {
+            println!("Output icdi.json.");
+        }
+
+        let icdi_file = File::create("icdi.bin");
+        if let Err(err) = icdi_file.unwrap().write_all(&to_bytes(&ver_icdi)) {
+            eprintln!("Could not output binary file icdi.bin, because {}.", err);
+        } else {
+            println!("Output binary file icdi.bin.");
+        }
     }
 
     // generate account credentials, parametrized
