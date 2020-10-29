@@ -1,0 +1,30 @@
+{
+  "v": 0,
+  "value": {
+    "account": {
+      "keys": [
+        {
+          "schemeId": "Ed25519",
+          "verifyKey": "435456114091f12db35ab7d721aa385224308aca095c1af58e389b4f4d8aed6d"
+        },
+        {
+          "schemeId": "Ed25519",
+          "verifyKey": "62bf12c02dfd4d45e393029e3013f647a2ea5427a600fffabe8fd426f1d03b27"
+        },
+        {
+          "schemeId": "Ed25519",
+          "verifyKey": "659d52728176709072da9143f445f3da6df60278f30668b7d2842f8d522fed42"
+        }
+      ],
+      "threshold": 2
+    },
+    "regId": "85fe2abf0c983255b637e562dc9498c5171d85476bada5de13abbe8cf411234e45691825f6726974ebfa2c77eef96c61",
+    "ipIdentity": 0,
+    "policy": {
+      "validTo": "202205",
+      "createdAt": "202005",
+      "revealedAttributes": {}
+    },
+    "sig": "e83ee00ec7c564ee2bbd23e6790158f938adb12a90c352ab0d14ce5627dda93d1ee68f4ed0502f5de885e8a00b0f5cd00f062a5f49a71b8665f674c1f8590206"
+  }
+}
