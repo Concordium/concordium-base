@@ -737,8 +737,8 @@ type IpCdiSignature = Signature
 
 -- |The initial credential deployment information consists of values deployed
 -- a signature from the identity provider on said values
-data InitialCredentialDeploymentInformation = InitialCredentialDeploymentInformation {
-  icdiValues :: CredentialDeploymentValues,
+data InitialCredentialDeploymentInfo = InitialCredentialDeploymentInfo {
+  icdiValues :: InitialCredentialDeploymentValues,
   -- |A signature under on the credential deployment values under the public
   -- signing key of the identity provider
   icdiSig :: IpCdiSignature
@@ -746,22 +746,31 @@ data InitialCredentialDeploymentInformation = InitialCredentialDeploymentInforma
   deriving (Show)
 
 -- |NB: This must match the one defined in rust
-instance Serialize InitialCredentialDeploymentInformation where
-  put InitialCredentialDeploymentInformation{..} =
-    put icdiValues <> put icdiSig
-  get = InitialCredentialDeploymentInformation <$> get <*> get
+instance Serialize InitialCredentialDeploymentInfo where
+  put InitialCredentialDeploymentInfo{..} =
+    let (Signature bs) = icdiSig in
+    put icdiValues <> putShortByteString bs
+
+  get = do
+    icdiValues <- get
+    icdiSig <- Signature <$> getShortByteString 64
+    return InitialCredentialDeploymentInfo {..}
 
 -- |NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
-instance Eq InitialCredentialDeploymentInformation where
+instance Eq InitialCredentialDeploymentInfo where
   icdi1 == icdi2 = icdiValues icdi1 == icdiValues icdi2
 
--- instance FromJSON CredentialDeploymentInformation where
---   parseJSON = withObject "CredentialDeploymentInformation" $ \x -> do
---     cdiValues <- parseJSON (Object x)
---     proofsText <- x .: "sig"
---     let (bs, rest) = BS16.decode . Text.encodeUtf8 $ proofsText
---     unless (BS.null rest) $ fail "\"proofs\" is not a valid base16 string."
---     return CredentialDeploymentInformation {
---         cdiProofs = Proofs (BSS.toShort bs),
---         ..
---       }
+instance FromJSON InitialCredentialDeploymentInfo where
+  parseJSON = withObject "CredentialDeploymentInformation" $ \v -> do
+    icdiValues <- parseJSON (Object v)
+    icdiSig <- v .: "sig"
+    return InitialCredentialDeploymentInfo{..}
+  -- withObject "CredentialDeploymentInformation" $\x -> do
+  --   icdiValues <- parseJSON (Object x)
+  --   sigsText <- x .: "sig"
+  --   let (bs, rest) = BS16.decode . Text.encodeUtf8 $ proofsText
+  --   unless (BS.null rest) $ fail "\"proofs\" is not a valid base16 string."
+  --   return CredentialDeploymentInformation {
+  --       cdiProofs = Proofs (BSS.toShort bs),
+  --       ..
+  --     }
