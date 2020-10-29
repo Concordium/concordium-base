@@ -28,17 +28,20 @@ readData bs = loop (runGetPartial getData bs)
 test :: BS.ByteString -> Either String Bool
 test bs = do
   ((gc, ipInfo, arInfos), rest) <- readData bs
-  (cdi1, accKeys, cdi2, accKeys') <- flip runGet rest $ do
+  (cdi1, accKeys, cdi2, accKeys', icdi) <- flip runGet rest $ do
     l1 <- getWord32be
     c1 <- getByteString (fromIntegral l1)
     k <- get
     l2 <- getWord32be
     c2 <- getByteString (fromIntegral l2)
     k3 <- get
-    return (c1, k, c2, k3)
+    l3 <- getWord32be
+    c3 <- getByteString (fromIntegral l3)
+    return (c1, k, c2, k3, c3)
   unless (verifyCredential gc ipInfo arInfos Nothing cdi1) $ throwError "Verification of the first credential failed."
   unless (verifyCredential gc ipInfo arInfos (Just accKeys) cdi2) $ throwError "Verification of the second credential failed."
   when (verifyCredential gc ipInfo arInfos (Just accKeys') cdi2) $ throwError "Verification of with wrong keys should fail."
+  unless (verifyInitialAccountCreation ipInfo icdi) $ throwError "Verification of initial credential deployment failed"
   return True
 
 tests :: Spec
