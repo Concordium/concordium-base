@@ -30,12 +30,10 @@ enum Source {
 #[derive(SerdeDeserialize)]
 #[serde(rename_all = "camelCase")]
 struct RetrievalInput {
-    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
-    #[allow(dead_code)]
-    reg_id: id::constants::ArCurve,
     account_address: AccountAddress,
-    #[serde(serialize_with = "base16_encode", deserialize_with = "base16_decode")]
-    encryption_secret_key: elgamal::SecretKey<id::constants::ArCurve>,
+    /// An optional secret key. If present amounts will be decrypted, otherwise
+    /// they will not.
+    encryption_secret_key: Option<elgamal::SecretKey<id::constants::ArCurve>>,
 }
 
 #[derive(SerdeDeserialize)]
@@ -122,8 +120,24 @@ struct Trace {
         default_value = "global.json"
     )]
     global: PathBuf,
-    #[structopt(help = "File with data about the account we need to decrypt.")]
-    input: PathBuf,
+    #[structopt(
+        help = "File with data about the account we need to decrypt. Required unless `--address` \
+                is provided.",
+        required_unless = "address",
+        long = "input"
+    )]
+    input: Option<PathBuf>,
+    #[structopt(
+        help = "Account address to trace. Required unless `--input` is provided.",
+        required_unless = "input",
+        long = "address"
+    )]
+    address: AccountAddress,
+    #[structopt(
+        help = "Optionally a decryption key to decrypt encrypted transfers.",
+        long = "decryption-key"
+    )]
+    decryption_key: Option<String>,
     #[structopt(flatten)]
     source_type: Source,
 }
@@ -149,11 +163,29 @@ fn main() {
                 return;
             }
         };
-    let input: RetrievalInput = match read_json_from_file(&tr.input) {
-        Ok(data) => data,
-        Err(_) => {
-            eprintln!("Could not read account data.");
-            return;
+    let input = match tr.input {
+        Some(path) => match read_json_from_file(path) {
+            Ok(data) => data,
+            Err(_) => {
+                eprintln!("Could not read account data.");
+                return;
+            }
+        },
+        None => {
+            let encryption_secret_key = match tr.decryption_key {
+                Some(dk) => match serde_json::from_str(&dk) {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        eprintln!("The provided decryption key is malformed due to: {}", e);
+                        return;
+                    }
+                },
+                None => None,
+            };
+            RetrievalInput {
+                account_address: tr.address,
+                encryption_secret_key,
+            }
         }
     };
     let table = elgamal::BabyStepGiantStep::new(global.encryption_in_exponent_generator(), 1 << 16);
@@ -245,52 +277,81 @@ fn main() {
                                 }
                                 AdditionalDetails::EncryptedTransfer(et) => {
                                     if tx.origin.origin_type == "self" {
-                                        let before = encrypted_transfers::decrypt_amount(
-                                            &table,
-                                            &sk,
-                                            &et.input_encrypted_amount,
-                                        );
-                                        let after = encrypted_transfers::decrypt_amount(
-                                            &table,
-                                            &sk,
-                                            &et.new_self_encrypted_amount,
-                                        );
-                                        assert!(before >= after);
-                                        let amount = Amount {
-                                            microgtu: before.microgtu - after.microgtu,
-                                        };
-                                        writeln!(
-                                            writer,
-                                            "[{}] {}: outgoing encrypted transfer of {} GTU to \
-                                             account {}.\n    Block hash: {}\n    Transaction \
-                                             hash: {}",
-                                            pretty_time(tx.block_time),
-                                            i,
-                                            amount,
-                                            et.transfer_destination,
-                                            tx.block_hash,
-                                            tx.transaction_hash.as_ref().unwrap(),
-                                        )
-                                        .expect("Could not write.");
-                                    } else {
-                                        let amount = encrypted_transfers::decrypt_amount(
-                                            &table,
-                                            &sk,
-                                            &et.encrypted_amount,
-                                        );
-                                        writeln!(
-                                            writer,
-                                            "[{}] {}: incoming encrypted transfer of {} GTU from \
-                                             account {}\n    Block hash: {}\n    Transaction \
-                                             hash: {}",
-                                            pretty_time(tx.block_time),
-                                            i,
-                                            amount,
-                                            et.transfer_source,
-                                            tx.block_hash,
-                                            tx.transaction_hash.as_ref().unwrap(),
-                                        )
-                                        .expect("Could not write.")
+                                        if let Some(sk) = &sk {
+                                            let before = encrypted_transfers::decrypt_amount(
+                                                &table,
+                                                &sk,
+                                                &et.input_encrypted_amount,
+                                            );
+                                            let after = encrypted_transfers::decrypt_amount(
+                                                &table,
+                                                &sk,
+                                                &et.new_self_encrypted_amount,
+                                            );
+                                            assert!(before >= after);
+                                            let amount = Amount {
+                                                microgtu: before.microgtu - after.microgtu,
+                                            };
+                                            writeln!(
+                                                writer,
+                                                "[{}] {}: outgoing encrypted transfer of {} GTU \
+                                                 to account {}.\n    Block hash: {}\n    \
+                                                 Transaction hash: {}",
+                                                pretty_time(tx.block_time),
+                                                i,
+                                                amount,
+                                                et.transfer_destination,
+                                                tx.block_hash,
+                                                tx.transaction_hash.as_ref().unwrap(),
+                                            )
+                                            .expect("Could not write.");
+                                        } else {
+                                            writeln!(
+                                                writer,
+                                                "[{}] {}: outgoing encrypted transfer to account \
+                                                 {}.\n    Block hash: {}\n    Transaction hash: {}",
+                                                pretty_time(tx.block_time),
+                                                i,
+                                                et.transfer_destination,
+                                                tx.block_hash,
+                                                tx.transaction_hash.as_ref().unwrap(),
+                                            )
+                                            .expect("Could not write.");
+                                        }
+                                    } else if tx.origin.origin_type == "account" {
+                                        if let Some(sk) = &sk {
+                                            let amount = encrypted_transfers::decrypt_amount(
+                                                &table,
+                                                &sk,
+                                                &et.encrypted_amount,
+                                            );
+                                            writeln!(
+                                                writer,
+                                                "[{}] {}: incoming encrypted transfer of {} GTU \
+                                                 from account {}\n    Block hash: {}\n    \
+                                                 Transaction hash: {}",
+                                                pretty_time(tx.block_time),
+                                                i,
+                                                amount,
+                                                et.transfer_source,
+                                                tx.block_hash,
+                                                tx.transaction_hash.as_ref().unwrap(),
+                                            )
+                                            .expect("Could not write.")
+                                        } else {
+                                            writeln!(
+                                                writer,
+                                                "[{}] {}: incoming encrypted transfer from \
+                                                 account {}\n    Block hash: {}\n    Transaction \
+                                                 hash: {}",
+                                                pretty_time(tx.block_time),
+                                                i,
+                                                et.transfer_source,
+                                                tx.block_hash,
+                                                tx.transaction_hash.as_ref().unwrap()
+                                            )
+                                            .expect("Could not write.")
+                                        }
                                     }
                                 }
                                 AdditionalDetails::Uninteresting => {}
