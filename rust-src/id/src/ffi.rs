@@ -353,8 +353,11 @@ mod test {
 
         let global_ctx = GlobalContext::<G1>::generate();
 
-        let (ars_infos, _ars_secret) =
-            test_create_ars(&global_ctx.generator, num_ars - 1, &mut csprng);
+        let (ars_infos, _ars_secret) = test_create_ars(
+            &global_ctx.on_chain_commitment_key.g,
+            num_ars - 1,
+            &mut csprng,
+        );
 
         let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
         let threshold = Threshold(num_ars - 1);

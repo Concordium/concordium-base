@@ -32,7 +32,7 @@ struct GenerateTestData {
     #[structopt(
         long = "global",
         help = "File with global parameters.",
-        default_value = "database/global.json"
+        default_value = GLOBAL_CONTEXT
     )]
     global: PathBuf,
     #[structopt(
@@ -149,17 +149,6 @@ fn main() {
     assert!(ver_ok.is_ok());
 
     let (ip_sig, _) = ver_ok.unwrap();
-
-    // we also read the global context from another json file (called
-    // global.context). We need commitment keys and other data in there.
-    let global_ctx = {
-        if let Some(gc) = read_global_context(GLOBAL_CONTEXT) {
-            gc
-        } else {
-            eprintln!("Cannot read global context information database. Terminating.");
-            return;
-        }
-    };
 
     let id_object = IdentityObject {
         pre_identity_object: pio,

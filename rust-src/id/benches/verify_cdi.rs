@@ -39,9 +39,9 @@ fn bench_parts(c: &mut Criterion) {
     };
 
     let global_context = GlobalContext::generate();
-    let ar_base = global_context.generator;
+    let ar_base = global_context.elgamal_generator();
 
-    let ar1_secret_key = SecretKey::generate(&ar_base, &mut csprng);
+    let ar1_secret_key = SecretKey::generate(ar_base, &mut csprng);
     let ar1_public_key = PublicKey::from(&ar1_secret_key);
     let ar_id1 = ArIdentity::try_from(1).unwrap();
     let ar1_info = ArInfo::<G1> {
@@ -50,7 +50,7 @@ fn bench_parts(c: &mut Criterion) {
         ar_public_key:  ar1_public_key,
     };
 
-    let ar2_secret_key = SecretKey::generate(&ar_base, &mut csprng);
+    let ar2_secret_key = SecretKey::generate(ar_base, &mut csprng);
     let ar2_public_key = PublicKey::from(&ar2_secret_key);
     let ar_id2 = ArIdentity::try_from(2).unwrap();
     let ar2_info = ArInfo::<G1> {
@@ -58,7 +58,7 @@ fn bench_parts(c: &mut Criterion) {
         ar_description: mk_dummy_description("A nice AR".to_string()),
         ar_public_key:  ar2_public_key,
     };
-    let ar3_secret_key = SecretKey::generate(&ar_base, &mut csprng);
+    let ar3_secret_key = SecretKey::generate(ar_base, &mut csprng);
     let ar3_public_key = PublicKey::from(&ar3_secret_key);
     let ar_id3 = ArIdentity::try_from(3).unwrap();
     let ar3_info = ArInfo::<G1> {
@@ -67,7 +67,7 @@ fn bench_parts(c: &mut Criterion) {
         ar_public_key:  ar3_public_key,
     };
 
-    let ar4_secret_key = SecretKey::generate(&ar_base, &mut csprng);
+    let ar4_secret_key = SecretKey::generate(ar_base, &mut csprng);
     let ar4_public_key = PublicKey::from(&ar4_secret_key);
     let ar_id4 = ArIdentity::try_from(4).unwrap();
     let ar4_info = ArInfo::<G1> {

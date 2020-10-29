@@ -42,7 +42,8 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let mut csprng = thread_rng();
     let id_cred_pub = context
         .global_context
-        .generator
+        .on_chain_commitment_key
+        .g
         .mul_by_scalar(&aci.cred_holder_info.id_cred.id_cred_sec);
 
     // PRF related computation
@@ -128,7 +129,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // First the proof that we know id_cred_sec.
     let prover = dlog::Dlog::<C> {
         public: id_cred_pub,
-        coeff:  context.global_context.generator,
+        coeff:  context.global_context.on_chain_commitment_key.g,
     };
     let secret = dlog::DlogSecret {
         secret: id_cred_sec.clone(),
@@ -142,7 +143,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
             commitment: cmm_sc,
             y:          id_cred_pub,
             cmm_key:    sc_ck,
-            g:          context.global_context.generator,
+            g:          context.global_context.on_chain_commitment_key.g,
         },
     };
     let secret = (secret, com_eq::ComEqSecret::<P::G1> {
@@ -282,7 +283,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     let prover = prover.add_prover(prover_prf_regid);
     let secret = (secret, secret_prf_regid);
     transcript.append_message(b"bulletproofs", &bulletproofs);
-    let proof = prove(transcript, &prover, secret, &mut csprng)?;
+    let proof = prove(&mut transcript, &prover, secret, &mut csprng)?;
 
     let ip_ar_data = ip_ar_data
         .iter()
@@ -643,9 +644,9 @@ where
     // Compute the challenge prefix by hashing the values.
     // FIXME: We should do something different here.
     // Eventually we'll have to include the genesis hash.
-    let ro = RandomOracle::domain("credential")
-        .append(&cred_values)
-        .append(&context.global_context);
+    let mut ro = RandomOracle::domain("credential");
+    ro.append_message(b"cred_values", &cred_values);
+    ro.append_message(b"global_context", &context.global_context);
 
     let mut id_cred_pub_share_numbers = Vec::with_capacity(number_of_ars);
     let mut id_cred_pub_provers = Vec::with_capacity(number_of_ars);
@@ -717,29 +718,13 @@ where
     });
 
     let secret = ((secret_reg_id, secret_sig), id_cred_pub_secrets);
-    // FIXME: Pass in a mutable random-oracle so it can be extended.
-    let proof = match prove(ro.split(), &prover, secret, &mut csprng) {
+    let proof = match prove(&mut ro, &prover, secret, &mut csprng) {
         Some(x) => x,
         None => bail!("Cannot produce zero knowledge proof."),
     };
 
-    // A list of signatures on the challenge used by the other proofs using the
-    // account keys.
-    // The challenge has domain separator "credential" followed by appending all
-    // values of the credential to the ro, specifically appending the
-    // CredentialDeploymentValues struct.
-    //
-    // The domain seperator in combination with appending all the data of the
-    // credential deployment should make it non-reusable.
-    let to_sign = ro.get_challenge();
-
-    let mut transcript = RandomOracle::domain("CredCounterLessThanMaxAccountsProof");
-    transcript.append_message(b"cred_values", &cred_values);
-    transcript.append_message(b"global_context", &context.global_context);
-    transcript.append_message(b"cred_values", &proof);
-
     let cred_counter_less_than_max_accounts = match prove_less_than_or_equal(
-        &mut transcript,
+        &mut ro,
         &mut csprng,
         8,
         u64::from(cred_counter),
@@ -752,6 +737,16 @@ where
         Some(x) => x,
         None => bail!("Cannot produce proof that cred_counter <= max_accounts."),
     };
+
+    // A list of signatures on the challenge used by the other proofs using the
+    // account keys.
+    // The challenge has domain separator "credential" followed by appending all
+    // values of the credential to the ro, specifically appending the
+    // CredentialDeploymentValues struct.
+    //
+    // The domain seperator in combination with appending all the data of the
+    // credential deployment should make it non-reusable.
+    let to_sign = ro.get_challenge();
 
     let proof_acc_sk = AccountOwnershipProof {
         sigs: acc_data
@@ -1201,7 +1196,8 @@ mod tests {
             threshold: SignatureThreshold(2),
         };
         let global_ctx = GlobalContext::generate();
-        let (ars_infos, _) = test_create_ars(&global_ctx.generator, num_ars, &mut csprng);
+        let (ars_infos, _) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let (context, pio, randomness) =
             test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let alist = test_create_attributes();
@@ -1288,30 +1284,5 @@ mod tests {
 
         // Check policy
         assert_eq!(cdi.values.policy, policy, "CDI policy is invalid");
-
-        // Check account key signatures
-        match cdi.values.cred_account {
-            CredentialAccount::ExistingAccount(_) => (),
-            CredentialAccount::NewAccount(ref ks, _) => {
-                assert_eq!(ks.len(), cdi.proofs.proof_acc_sk.sigs.len())
-            }
-        };
-        let sig_msg = RandomOracle::domain("credential")
-            .append(&cdi.values)
-            .append(&global_ctx)
-            .get_challenge();
-        cdi.proofs.proof_acc_sk.sigs.iter().for_each(|(idx, sig)| {
-            match acc_data
-                .keys
-                .get(idx)
-                .unwrap()
-                .verify(sig_msg.as_ref(), &sig)
-            {
-                Ok(_) => (),
-                _ => panic!("account key signature is invalid"),
-            }
-        });
-
-        // Add checks for proofs
     }
 }

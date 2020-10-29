@@ -39,7 +39,7 @@ use std::{
 
 /// NB: This includes digits of PI (starting with 14...) as ASCII characters
 /// this could be what is desired, but it is important to be aware of it.
-pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-10million.txt");
+pub static PI_DIGITS: &[u8] = include_bytes!("../data/pi-1000-digits.txt");
 
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
@@ -665,7 +665,7 @@ pub struct AccCredentialInfo<C: Curve> {
 /// The data relating to a single anonymity revoker
 /// sent by the account holder to the identity provider
 /// typically the account holder will send a vector of these
-#[derive(Serialize, SerdeSerialize, SerdeDeserialize)]
+#[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct IpArData<C: Curve> {
     /// Encryption in chunks (in little endian) of the PRF key share
@@ -1550,16 +1550,6 @@ impl<'a, P: Pairing, C: Curve<Scalar = P::ScalarField>> Copy for IPContext<'a, P
 #[derive(Clone, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
 pub struct GlobalContext<C: Curve> {
-    /// Generator of the curve C, used for, e.g., elgamal encryption.
-    /// FIXME: This will be just the second part of the commitment key,
-    /// should be removed and its usages replaced dwith
-    /// `encryption_in_the_exponent_generator` function.
-    #[serde(
-        rename = "generator",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub generator: C,
     /// A shared commitment key known to the chain and the account holder (and
     /// therefore it is public). The account holder uses this commitment key to
     /// generate commitments to values in the attribute list.
@@ -1581,23 +1571,26 @@ impl<C: Curve> GlobalContext<C> {
     ///
     /// This is intended mostly for testing, on-chain there will be a fixed
     /// amount.
-    /// FIXME: Make sure the parameters are bounded and this does not panic.
     pub fn generate_size(n: usize) -> Self {
-        assert!(n <= (PI_DIGITS.len() - 200) / 200);
-        let cmm_key = PedersenKey {
-            g: C::hash_to_group(&PI_DIGITS[0..100]),
-            h: C::hash_to_group(&PI_DIGITS[100..200]),
-        };
+        // initialize the first generator from pi digits.
+        let g = C::hash_to_group(&PI_DIGITS[0..1000]);
+
+        // generate next generator by hashing the previous one
+        let h = C::hash_to_group(&to_bytes(&g));
+
+        let cmm_key = PedersenKey { g, h };
 
         let mut generators = Vec::with_capacity(n);
-        for bytes in PI_DIGITS[200..].chunks(200).take(n) {
-            let g = C::hash_to_group(&bytes[..100]);
-            let h = C::hash_to_group(&bytes[100..]);
+        let mut generator = h;
+        for _ in 0..n {
+            generator = C::hash_to_group(&to_bytes(&generator));
+            let g = generator;
+            generator = C::hash_to_group(&to_bytes(&generator));
+            let h = generator;
             generators.push((g, h));
         }
 
         GlobalContext {
-            generator:               C::hash_to_group(&PI_DIGITS[0..100]),
             on_chain_commitment_key: cmm_key,
             bulletproof_generators:  Generators { G_H: generators },
         }
