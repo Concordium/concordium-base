@@ -19,7 +19,7 @@ import sphinx_rtd_theme
 
 # -- Project information -----------------------------------------------------
 
-project = 'Concordium Smart Contracts'
+project = 'Concordium Smart Contract'
 copyright = '2020, Concordium'
 author = 'Concordium'
 
@@ -88,7 +88,7 @@ language = None
 exclude_patterns = []
 
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = None
+pygments_style = "friendly" # "sphinx" # "lovelace" # None # "abap" # "sas" # "algol_nu"
 highlight_language = "rust"
 
 
@@ -120,7 +120,7 @@ html_theme_options = {
     # # Toc options
     # 'collapse_navigation': True,
     # 'sticky_navigation': True,
-    # 'navigation_depth': 4,
+    'navigation_depth': 2,
     # 'includehidden': True,
     # 'titles_only': False
 }

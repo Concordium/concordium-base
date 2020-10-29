@@ -1,23 +1,30 @@
 .. _setup_rust:
 
-=========================================
+=====================
 Setup for development
-=========================================
+=====================
 Before we can start developing smart contracts, we need to install and setup a
 environment.
 
 Rust and Cargo
-======================
+==============
 First install rustup_, which will install both Rust_ and Cargo_ on your
 machine.
-Then use ``rustup`` to install the Wasm target::
+Then use ``rustup`` to install the Wasm target, which is used by for
+compilation::
 
     rustup target add wasm32-unknown-unknown
 
 Cargo Concordium
-======================
-Next install the Concordium smart contract tool ``cargo-concordium`` by
-running::
+================
+The tool for developing smart contracts for the Concordium blockchain.
+It can be used for :ref:`compiling<compiling-smart-contracts>` and testing
+smart contracts, and enables features such as contract schemas.
+
+.. todo::
+    Add links for testing and schemas.
+
+It is installed by running::
 
     cargo install cargo-concordium
 
@@ -28,8 +35,12 @@ running::
 
         cargo install --path .
 
+For a description of how to use the tool run::
+
+    cargo concordium --help
+
 Concordium Client
-======================
+=================
 To be able to deploy smart contract and generally interacting with the chain,
 make sure to have ``concordium-client`` install on your local system.
 

@@ -19,9 +19,9 @@ Deploying a smart contract to the chain, essentially means getting the code
 into a block on chain and the deployment itself will not trigger any actions
 from the smart contract.
 
-To use a smart contract, one must first create an *instance* of it, which
-invokes an ``init``-function defined as part of the smart contract, setting the
-initial state of that instance.
+To use a smart contract, one must first create an *instance* of it, by
+invoking an ``init``-function defined as part of the smart contract, setting
+the initial state of that instance.
 This instance is given an address, which is used by users and other smart
 contract instances to invoke different ``receive``-function also defined in the
 smart contract.
@@ -32,7 +32,7 @@ holds a balance.
 On the Concordium blockchain the smart contract language is `Web Assembly`_
 (Wasm in short), which is designed to be a portable compilation target and to
 be run in sandboxed environments.
-This is perfect, since the smart contracts will be run by nodes in the network.
+This is perfect, since smart contracts will be run by bakers in the network.
 
 Wasm is a very low-level language and is impractical to write by hand for any
 decent sized smart contracts.

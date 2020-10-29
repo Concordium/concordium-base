@@ -4,8 +4,8 @@
 Smart contracts on the chain
 ===================================
 
-In this section we describe all aspects of smart contracts that are relevant
-for a node in the network.
+In this section we describe all aspects of smart contracts on the chain.
+This is especially relevant for a node in the network.
 
 Life-cycle
 ===================================
@@ -27,8 +27,8 @@ Smart contract module
 
 .. graphviz::
     :align: center
-    :caption: Smart contract module containing two smart contracts: Escrow and
-              Crowdfunding. Each contract have two instances.
+    :caption: Example of smart contract module containing two smart contracts:
+              Escrow and Crowdfunding. Each contract have two instances.
 
     digraph G {
         subgraph cluster_0 {
@@ -47,13 +47,13 @@ Smart contract module
             node [style=filled, color = white]
             House;
             Car;
-            jPhone;
+            Gadget;
             Boardgame;
         }
 
         Escrow:s -> House;
         Escrow:s -> Car;
-        Crowdfunding:s -> jPhone;
+        Crowdfunding:s -> Gadget;
         Crowdfunding:s -> Boardgame;
     }
 
@@ -76,21 +76,21 @@ contract by importing a module named ``concordium``.
     Check out :ref:`host-functions` for a complete reference.
 
 Instantiating a smart contract
-===================================
+==============================
 The smart contract module can export several functions, some for creating smart
 contract instances.
-To instantiate a smart contract, an account sends a transaction with the
-information of where to find the smart contract on chain and which function
+To instantiate a smart contract, an account sends a special transaction with
+the information of where to find the smart contract on chain and which function
 from the module to use for creating an instance.
-This function will typically take an argument, also supplied as part of the
-transaction.
 
 .. note::
     The functions for creating a new instance are referred to as
     ``init``-functions.
 
-This transaction may also include some amount of GTU, which is added to
-the balance of the smart contract and is accessible in the ``init``-function.
+This function can take an argument, which is also supplied as part of the
+transaction.
+The transaction can also include an amount of GTU, which is added to the
+balance of the smart contract instance.
 If the ``init``-function is successful, it returns the initial state of the
 instance.
 
@@ -98,11 +98,11 @@ There are only *one* ``init``-function for each *smart contract*, but a
 *smart contract module* can contain multiple smart contracts.
 If need of different variations of some smart contract, one can either define
 an ``init``-function for each variation, resulting in multiple smart contracts
-or use the parameter to change the variation.
-
+or use the parameter to change the behavior.
+This is up to the developer of the contract.
 
 Interacting with an instance
-===========================================
+============================
 
 A smart contract module include functions for interacting with a smart contract
 instance.
@@ -124,10 +124,22 @@ access information about the chain.
     Link section about accessible chain information.
 
 Instance state
-===============================================
+==============
 A smart contract instance is able to hold state.
 The state is simply an array of bytes and the instance uses functions supplied
 by the host environment to read and write.
 
 .. seealso::
     See :ref:`host-functions-state` for the reference of these functions.
+
+Floating point numbers
+======================
+Although Wasm have support floating point numbers, a smart contract is
+disallowed to use them.
+It is even disallowed for the Wasm module to contain a floating point number
+type, which would reject the module during validation.
+
+The reasoning behind, is that manipulating floating point numbers in Wasm is
+not fully deterministic.
+This could introduce problems for reaching consensus in the blockchain, as
+nodes reach different conclusions.

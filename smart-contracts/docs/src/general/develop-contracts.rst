@@ -17,7 +17,7 @@ compiled to Wasm using the ``wasm32-unknown-unknown`` target.
 Writing a smart contract
 ====================================
 
-It is recommended to use the ``concordium-sc-base`` crate, which provides a
+It is recommended to use the ``concordium_sc_base`` crate, which provides a
 more Rust-like experience for developing smart contract modules and calling
 host functions.
 
@@ -28,7 +28,7 @@ A simple counter example would look like:
 
 .. code-block:: rust
 
-    use concordium-sc-base::*;
+    use concordium_sc_base::*;
 
     type State = u32;
 
@@ -60,6 +60,7 @@ functions.
 Likewise ``#[receive(name = "counter_increment")]`` supplies the state to be
 manipulated directly.
 
+.. _compiling-smart-contracts:
 
 Compiling to Wasm
 ====================================
@@ -84,10 +85,8 @@ Install the tool by running::
     - Verify the above is correct.
     - Remove the note.
 
-
-
-The tool includes various tools for developing smart contracts, so in order to
-build run::
+The ``cargo-concordium`` tool includes various utils for developing smart
+contracts, such as testing and generating schemas, so in order to build run::
 
     cargo concordium build
 
@@ -101,8 +100,8 @@ This uses Cargo_ for building, but runs further optimizations on the result.
 
         cargo build --target=wasm32-unknown-unknown [--release]
 
-    But even with the ``--release`` set, the produced Wasm module includes bytes of
-    debug information and in some cases embed paths.
+    But even with the ``--release`` set, the produced Wasm module includes debug
+    information and in some cases embed paths.
 
     .. todo::
         Maybe elaborate or add some link to an explanation.
