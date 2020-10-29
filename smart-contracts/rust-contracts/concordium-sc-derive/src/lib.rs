@@ -10,14 +10,14 @@ use syn::{export::Span, parse::Parser, punctuated::*, spanned::Spanned, Ident, M
 
 // Get the name item from a list, if available and a string literal.
 // FIXME: Ensure there is only one.
-fn get_name<'a, I: IntoIterator<Item = &'a Meta>>(iter: I) -> Option<Ident> {
+fn get_attribute_value<'a, I: IntoIterator<Item = &'a Meta>>(iter: I, name: &str) -> Option<Ident> {
     iter.into_iter().find_map(|attr| match attr {
         Meta::NameValue(mnv) => {
-            if mnv.path.is_ident("name") {
+            if mnv.path.is_ident(name) {
                 if let syn::Lit::Str(lit) = &mnv.lit {
                     Some(Ident::new(&lit.value(), Span::call_site()))
                 } else {
-                    panic!("The `name` attribute must be a string literal.")
+                    panic!("The `{}` attribute must be a string literal.", name)
                 }
             } else {
                 None
@@ -50,10 +50,8 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
     let attrs = parser.parse(attr).expect("Expect a comma-separated list of meta items.");
 
-    let name = match get_name(attrs.iter()) {
-        Some(ident) => ident,
-        None => panic!("A name attribute must be provided."),
-    };
+    let name =
+        get_attribute_value(attrs.iter(), "name").expect("A name attribute must be provided.");
 
     let ast: syn::ItemFn = syn::parse(item).expect("Init can only be applied to functions.");
 
@@ -92,7 +90,13 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     };
+
+    // Embed schema if 'parameter' attribute is set
+    let parameter_option = get_attribute_value(attrs.iter(), "parameter");
+    out.extend(contract_function_schema_tokens(parameter_option, name));
+
     ast.to_tokens(&mut out);
+
     out.into()
 }
 
@@ -111,10 +115,8 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
     let attrs = parser.parse(attr).expect("Expect a comma-separated list of meta items.");
 
-    let name = match get_name(attrs.iter()) {
-        Some(ident) => ident,
-        None => panic!("A name attribute must be provided."),
-    };
+    let name =
+        get_attribute_value(attrs.iter(), "name").expect("A name attribute must be provided.");
 
     let ast: syn::ItemFn = syn::parse(item).expect("Receive can only be applied to functions.");
     let fn_name = &ast.sig.ident;
@@ -165,9 +167,36 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     };
+
+    // Embed schema if 'parameter' attribute is set
+    let parameter_option = get_attribute_value(attrs.iter(), "parameter");
+    out.extend(contract_function_schema_tokens(parameter_option, name));
     // add the original function to the output as well.
     ast.to_tokens(&mut out);
     out.into()
+}
+
+fn contract_function_schema_tokens(
+    parameter_option: Option<syn::Ident>,
+    name: syn::Ident,
+) -> proc_macro2::TokenStream {
+    match parameter_option {
+        Some(parameter_ty) => {
+            let parameter_ident = format_ident!("{}", parameter_ty);
+            let schema_name = format_ident!("concordium_schema_function_{}", name);
+            quote! {
+                #[cfg(target_arch = "wasm32")]
+                #[cfg(feature = "build-schema")]
+                #[no_mangle]
+                pub extern "C" fn #schema_name() -> *mut u8 {
+                    let schema = <#parameter_ident as SchemaType>::get_type();
+                    let schema_bytes = concordium_sc_base::to_bytes(&schema);
+                    concordium_sc_base::put_in_memory(&schema_bytes)
+                }
+            }
+        }
+        None => proc_macro2::TokenStream::new(),
+    }
 }
 
 /// Derive the Deserial trait. See the documentation of `derive(Serial)` for
@@ -362,24 +391,38 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
                 panic!("[derive(Deserial)]: Too many variants. Maximum 65536 are supported.")
             };
             for (i, variant) in data.variants.iter().enumerate() {
-                let mut field_tokens = proc_macro2::TokenStream::new();
-                let mut names_tokens = proc_macro2::TokenStream::new();
-                for (n, field) in variant.fields.iter().enumerate() {
-                    let field_ident = format_ident!("x_{}", n);
-                    names_tokens.extend(quote!(#field_ident,));
-                    field_tokens.extend(impl_deserial_field(field, &field_ident, &source));
-                }
+                let (field_names, pattern) = match variant.fields {
+                    syn::Fields::Named(_) => {
+                        let field_names: Vec<_> = variant
+                            .fields
+                            .iter()
+                            .map(|field| field.ident.clone().unwrap())
+                            .collect();
+                        (field_names.clone(), quote! { {#(#field_names),*} })
+                    }
+                    syn::Fields::Unnamed(_) => {
+                        let field_names: Vec<_> = variant
+                            .fields
+                            .iter()
+                            .enumerate()
+                            .map(|(i, _)| format_ident!("x_{}", i))
+                            .collect();
+                        (field_names.clone(), quote! { ( #(#field_names),* ) })
+                    }
+                    syn::Fields::Unit => (Vec::new(), proc_macro2::TokenStream::new()),
+                };
+
+                let field_tokens: proc_macro2::TokenStream = field_names
+                    .iter()
+                    .zip(variant.fields.iter())
+                    .map(|(name, field)| impl_deserial_field(field, name, &source))
+                    .collect();
                 let idx_lit = syn::LitInt::new(i.to_string().as_str(), Span::call_site());
                 let variant_ident = &variant.ident;
-                let names_tokens = if variant.fields.is_empty() {
-                    quote! {}
-                } else {
-                    quote! { (#names_tokens) }
-                };
                 matches_tokens.extend(quote! {
                     #idx_lit => {
                         #field_tokens
-                        Ok(#data_name::#variant_ident#names_tokens)
+                        Ok(#data_name::#variant_ident#pattern)
                     },
                 })
             }
@@ -449,32 +492,32 @@ pub fn serial_derive(input: TokenStream) -> TokenStream {
 }
 
 fn impl_serial_field(
-    f: &syn::Field,
+    field: &syn::Field,
     ident: &proc_macro2::TokenStream,
     out: &syn::Ident,
 ) -> proc_macro2::TokenStream {
-    if let Some(l) = find_length_attribute(&f.attrs, "size_length") {
+    if let Some(l) = find_length_attribute(&field.attrs, "size_length") {
         let id = format_ident!("u{}", 8 * l);
         quote! {
             let len: #id = #ident.len() as #id;
             len.serial(#out)?;
             serial_vector_no_length(&#ident, #out)?;
         }
-    } else if let Some(l) = find_length_attribute(&f.attrs, "map_size_length") {
+    } else if let Some(l) = find_length_attribute(&field.attrs, "map_size_length") {
         let id = format_ident!("u{}", 8 * l);
         quote! {
             let len: #id = #ident.len() as #id;
             len.serial(#out)?;
             serial_map_no_length(&#ident, #out)?;
         }
-    } else if let Some(l) = find_length_attribute(&f.attrs, "set_size_length") {
+    } else if let Some(l) = find_length_attribute(&field.attrs, "set_size_length") {
         let id = format_ident!("u{}", 8 * l);
         quote! {
             let len: #id = #ident.len() as #id;
             len.serial(#out)?;
             serial_set_no_length(&#ident, #out)?;
         }
-    } else if let Some(l) = find_length_attribute(&f.attrs, "string_size_length") {
+    } else if let Some(l) = find_length_attribute(&field.attrs, "string_size_length") {
         let id = format_ident!("u{}", 8 * l);
         quote! {
             let len: #id = #ident.len() as #id;
@@ -501,58 +544,80 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
 
     let body = match ast.data {
         syn::Data::Struct(ref data) => {
-            let mut field_tokens = proc_macro2::TokenStream::new();
-            match data.fields {
+            let fields_tokens = match data.fields {
                 syn::Fields::Named(_) => {
-                    for f in data.fields.iter() {
-                        let field_ident = f.ident.clone().unwrap(); // safe since named fields.
-                        let field_ident = quote!(self.#field_ident);
-                        field_tokens.extend(impl_serial_field(f, &field_ident, &out_ident));
-                    }
+                    data.fields
+                        .iter()
+                        .map(|field| {
+                            let field_ident = field.ident.clone().unwrap(); // safe since named fields.
+                            let field_ident = quote!(self.#field_ident);
+                            impl_serial_field(field, &field_ident, &out_ident)
+                        })
+                        .collect()
                 }
-
-                syn::Fields::Unnamed(_) => {
-                    for (i, f) in data.fields.iter().enumerate() {
+                syn::Fields::Unnamed(_) => data
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, field)| {
                         let i = syn::LitInt::new(i.to_string().as_str(), Span::call_site());
                         let field_ident = quote!(self.#i);
-                        field_tokens.extend(impl_serial_field(f, &field_ident, &out_ident));
-                    }
-                }
-                _ => (),
+                        impl_serial_field(field, &field_ident, &out_ident)
+                    })
+                    .collect(),
+                syn::Fields::Unit => proc_macro2::TokenStream::new(),
             };
             quote! {
-                #field_tokens
+                #fields_tokens
                 Ok(())
             }
         }
         syn::Data::Enum(ref data) => {
             let mut matches_tokens = proc_macro2::TokenStream::new();
+
             let size = if data.variants.len() <= 256 {
                 format_ident!("u8")
             } else if data.variants.len() <= 256 * 256 {
                 format_ident!("u16")
             } else {
-                panic!("[derive(Serial)]: Enums with more than 65536 variants are not supported.");
+                unimplemented!(
+                    "[derive(Serial)]: Enums with more than 65536 variants are not supported."
+                );
             };
+
             for (i, variant) in data.variants.iter().enumerate() {
-                let mut field_tokens = proc_macro2::TokenStream::new();
-                let mut names_tokens = proc_macro2::TokenStream::new();
-                for (n, field) in variant.fields.iter().enumerate() {
-                    let field_ident = format_ident!("x_{}", n);
-                    let field_ident = quote!(#field_ident);
-                    names_tokens.extend(quote!(#field_ident,));
-                    field_tokens.extend(impl_serial_field(field, &field_ident, &out_ident));
-                }
+                let (field_names, pattern) = match variant.fields {
+                    syn::Fields::Named(_) => {
+                        let field_names: Vec<_> = variant
+                            .fields
+                            .iter()
+                            .map(|field| field.ident.clone().unwrap())
+                            .collect();
+                        (field_names.clone(), quote! { {#(#field_names),*} })
+                    }
+                    syn::Fields::Unnamed(_) => {
+                        let field_names: Vec<_> = variant
+                            .fields
+                            .iter()
+                            .enumerate()
+                            .map(|(i, _)| format_ident!("x_{}", i))
+                            .collect();
+                        (field_names.clone(), quote! { (#(#field_names),*) })
+                    }
+                    syn::Fields::Unit => (Vec::new(), proc_macro2::TokenStream::new()),
+                };
+                let field_tokens: proc_macro2::TokenStream = field_names
+                    .iter()
+                    .zip(variant.fields.iter())
+                    .map(|(name, field)| impl_serial_field(field, &quote!(#name), &out_ident))
+                    .collect();
+
                 let idx_lit =
                     syn::LitInt::new(format!("{}{}", i, size).as_str(), Span::call_site());
                 let variant_ident = &variant.ident;
-                let names_tokens = if variant.fields.is_empty() {
-                    quote! {}
-                } else {
-                    quote! { (#names_tokens) }
-                };
+
                 matches_tokens.extend(quote! {
-                    #data_name::#variant_ident#names_tokens => {
+                    #data_name::#variant_ident#pattern => {
                         #idx_lit.serial(#out_ident)?;
                         #field_tokens
                     },
@@ -597,4 +662,122 @@ pub fn serialize_derive(input: TokenStream) -> TokenStream {
     let mut tokens = impl_deserial(&ast);
     tokens.extend(impl_serial(&ast));
     tokens
+}
+
+/// Marks a type as the contract state. So far only used for generating the
+/// schema of the contract state.
+///
+///
+/// # Example
+/// ```rust
+/// #[contract_state]
+/// #[derive(SchemaType)]
+/// struct MyContractState {
+///      ...
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn contract_state(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut out = proc_macro2::TokenStream::new();
+
+    let data_ident = if let Ok(ast) = syn::parse::<syn::ItemStruct>(item.clone()) {
+        ast.to_tokens(&mut out);
+        ast.ident
+    } else if let Ok(ast) = syn::parse::<syn::ItemEnum>(item.clone()) {
+        ast.to_tokens(&mut out);
+        ast.ident
+    } else if let Ok(ast) = syn::parse::<syn::ItemType>(item) {
+        ast.to_tokens(&mut out);
+        ast.ident
+    } else {
+        unimplemented!("Only supports structs, enums and type aliases as contract state so far")
+    };
+
+    let generate_schema_tokens = quote! {
+        #[cfg(target_arch = "wasm32")]
+        #[cfg(feature = "build-schema")]
+        #[no_mangle]
+        pub extern "C" fn concordium_schema_state() -> *mut u8 {
+            let schema = <#data_ident as SchemaType>::get_type();
+            let schema_bytes = concordium_sc_base::to_bytes(&schema);
+            concordium_sc_base::put_in_memory(&schema_bytes)
+        }
+    };
+    generate_schema_tokens.to_tokens(&mut out);
+    out.into()
+}
+
+/// Derive the `SchemaType` trait for a type.
+#[proc_macro_derive(SchemaType)]
+pub fn schema_type_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).expect("Cannot parse input.");
+
+    let data_name = &ast.ident;
+
+    let body = match ast.data {
+        syn::Data::Struct(ref data) => {
+            let fields_tokens = schema_type_fields(&data.fields);
+            quote! {
+                schema::Type::Struct(#fields_tokens)
+            }
+        }
+        syn::Data::Enum(ref data) => {
+            let variant_tokens: Vec<_> = data
+                .variants
+                .iter()
+                .map(|variant| {
+                    let variant_name = &variant.ident.to_string();
+                    let fields_tokens = schema_type_fields(&variant.fields);
+                    quote! {
+                        (String::from(#variant_name), #fields_tokens)
+                    }
+                })
+                .collect();
+            quote! {
+                schema::Type::Enum(vec! [ #(#variant_tokens),* ])
+            }
+        }
+        _ => unimplemented!("Union is not supported"),
+    };
+
+    let out = quote! {
+        #[automatically_derived]
+        impl SchemaType for #data_name {
+            fn get_type() -> schema::Type {
+                #body
+            }
+        }
+    };
+    out.into()
+}
+
+fn schema_type_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
+    match fields {
+        syn::Fields::Named(_) => {
+            let fields_tokens: Vec<_> = fields
+                .iter()
+                .map(|field| {
+                    let field_name = field.ident.clone().unwrap().to_string(); // safe since named fields
+                    let field_type = &field.ty;
+                    quote! {
+                        (String::from(#field_name), <#field_type as SchemaType>::get_type())
+                    }
+                })
+                .collect();
+            quote! { schema::Fields::Named(vec![ #(#fields_tokens),* ]) }
+        }
+        syn::Fields::Unnamed(_) => {
+            let fields_tokens: Vec<_> = fields
+                .iter()
+                .map(|field| {
+                    let field_type = &field.ty;
+                    quote! {
+                        <#field_type as SchemaType>::get_type()
+                    }
+                })
+                .collect();
+            quote! { schema::Fields::Unnamed(vec![ #(#fields_tokens),* ]) }
+        }
+        syn::Fields::Unit => quote! { schema::Fields::Unit },
+    }
 }

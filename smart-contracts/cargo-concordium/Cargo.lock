@@ -137,6 +137,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08c48aae112d48ed9f069b33538ea9e3e90aa263cfa3d1c24309612b1f7472de"
 
 [[package]]
+name = "cargo-concordium"
+version = "0.1.0"
+dependencies = [
+ "cargo_toml",
+ "clap",
+ "contracts-common",
+ "criterion",
+ "hex",
+ "serde_json",
+ "structopt",
+ "wasmer-interp",
+ "wasmer-runtime",
+ "wasmer-runtime-core",
+]
+
+[[package]]
+name = "cargo_toml"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "513d17226888c7b8283ac02a1c1b0d8a9d4cbf6db65dfadb79f598f5d7966fe9"
+dependencies = [
+ "serde",
+ "serde_derive",
+ "toml",
+]
+
+[[package]]
 name = "cast"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -193,6 +220,7 @@ version = "0.1.0"
 dependencies = [
  "base58check",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1049,6 +1077,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "toml"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffc92d160b1eef40665be3a05630d003936a3bc7da7421277846c2613e92c71a"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "typenum"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1214,21 +1251,6 @@ dependencies = [
  "contracts-common",
  "libc",
  "wasmer-runtime",
-]
-
-[[package]]
-name = "wasmer-runner"
-version = "0.1.0"
-dependencies = [
- "clap",
- "contracts-common",
- "criterion",
- "hex",
- "serde_json",
- "structopt",
- "wasmer-interp",
- "wasmer-runtime",
- "wasmer-runtime-core",
 ]
 
 [[package]]

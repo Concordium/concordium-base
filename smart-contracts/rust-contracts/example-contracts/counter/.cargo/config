@@ -4,4 +4,4 @@ target = "wasm32-unknown-unknown"
 
 [target.wasm32-unknown-unknown]
 # rustflags = ["-C", "panic=abort"]
-runner = ["wasmer-runner", "test", "--source"]
+runner = ["cargo", "concordium", "test", "--source"]

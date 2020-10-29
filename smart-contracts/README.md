@@ -24,7 +24,8 @@ This repository contains several packages to support smart contracts on and off-
 Currently it consists of the following parts
 - [rust-contracts](./rust-contracts) which is the collection of base libraries and example smart contracts written in Rust.
 - [wasmer-interp](./wasmer-interp) which is a wrapper around the [wasmer](https://github.com/wasmerio/wasmer) interpreter providing the functionality needed by the scheduler to execute smart contracts.
-- [wasmer-runner](./wasmer-runner) which is a small tool that uses the API exposed in wasmer-interp to execute smart contracts directly. It can initialize and update smart contracts, in a desired state. See the `--help` option of the tool for details on how to invoke it.
+- [cargo-concordium](./cargo-concordium) which is a small tool for developing smart contracts. It uses the API exposed in wasmer-interp to execute smart contracts directly and can initialize and update smart contracts, in a desired state. See the `--help` option of the tool for details on how to invoke it.
+It can also be used to build contracts embedded with schemas (see section about [contract schemas](#contract-schema)).
 - [contracts-common](./contracts-common) which contains common functionality used by smart contracts as well as the host environment to provide data for smart contracts. It defines common datatypes that need to cross boundaries, and common serialization formats.
 
 ## Rust-contracts
@@ -127,12 +128,12 @@ or even `opt-level = "z"`.
 
 In some cases using `opt-level=3` actually leads to smaller code sizes, presumably due to more inlining and dead code removal as a result.
 
-# Example inputs to the wasmer-runner
+# Example inputs to the `cargo concordium run`
 
-The following are some example invocations of the `wasmer-runner` binary.
+The following are some example invocations of the `cargo concordium` binary's subcommand `run`.
 
 ```shell
-./wasmer-runner init --context init-context.json --parameter parameter.bin --source ./simple_game.wasm --out state.bin --amount 123
+cargo concordium run init --context init-context.json --parameter parameter.bin --source ./simple_game.wasm --out state.bin --amount 123
 ```
 
 with input files
@@ -158,7 +159,7 @@ and `parameter.bin` as
 (as a text file without a newline).
 
 ```shell
-./wasmer-runner update --context receive-context.json --parameter parameter-receive.bin --source ./simple_game.wasm --state state-in.bin --amount 0 --name "receive_help_yourself" --balance 13 --out state-out.bin
+cargo concordium run receive --context receive-context.json --parameter parameter-receive.bin --source ./simple_game.wasm --state state-in.bin --amount 0 --name "receive_help_yourself" --balance 13 --out state-out.bin
 ```
 
 where an example receive context is
@@ -182,7 +183,7 @@ where an example receive context is
 }
 ```
 
-See `--help` or `help` option to `wasmer-runner` for an explanation of the options.
+See `--help` or `help` option to `cargo concordium run` for an explanation of the options.
 
 # Testing smart contracts
 
@@ -190,23 +191,84 @@ Testing of smart contracts should be done at many different levels, from immedia
 
 The first and second can be done directly in the module the contract is written in. This relies on the contract's init and receive methods being written with a generic enough signature so that the host functions, normally provided by the scheduler, can be replaced by a test harness.
 
-The design is as follows. 
+The design is as follows.
 
-- Each of the host-provided parameters to the init and receive methods has its own trait. 
+- Each of the host-provided parameters to the init and receive methods has its own trait.
 These are defined in [concordium-sc-base/src/traits.rs](./rust-contracts/concordium-sc-base/src/traits.rs).
 - The traits have implementations that are used when the contract is invoked with host functions. These are defined in [concordium-sc-base/src/impls.rs](./rust-contracts/concordium-sc-base/src/impls.rs).
 - Additionally, there are implementations of these traits that allow calling of smart contracts in a way that is easy to specify parameters, run the contract, and inspect the result, all entirely inside `Rust`. These are defined in [concordium-sc-base/src/test_infrastructure.rs](./rust-contracts/concordium-sc-base/src/test_infrastructure.rs), together with the wrappers that can be used for testing.
 - The intended use of this functionality is exemplified in the tests in the [counter-smart-contract](./rust-contracts/example-contracts/counter/src/lib.rs).
 
-Currently the only way to run tests is to compile to native code. This can be done by explicitly specifying the target as 
+Currently the only way to run tests is to compile to native code. This can be done by explicitly specifying the target as
 ```
 cargo test --release --target=x86_64-unknown-linux-gnu
 ```
 or similar, depending on the platform (alternatively just comment out the default target in `.cargo/config`).
 
-This kind of testing is perfectly adequate for a large amount of functional correctness testing, however ultimately we also want to test code as it will be deployed to the chain. For this, the intention is to update the `wasmer-runner` with a `test` command that will be able to execute smart contracts in a given state and parameters.
+It is also possible to hook into the default testing infrastructure of Rust by specifying a binary runner in `.cargo/config`.
 
-We might hook into the default testing infrastructure of Rust by specifying a binary runner in `.cargo/config` as well for this, although the best user-experience needs to be determined.
+```toml
+...
+[target.wasm32-unknown-unknown]
+runner = ["cargo", "concordium", "test", "--source"]
+```
+Allowing to run rust tests compile to target `wasm32-unknown-unknown`
+```
+cargo test --target=wasm32-unknown-unknown
+```
+
+This kind of testing is perfectly adequate for a large amount of functional correctness testing, however ultimately we also want to test code as it will be deployed to the chain. For this, one can use `cargo concordium run` that will execute smart contracts in a given state and parameters.
+
+
+# Contract schema
+The state of a contract is a bunch of bytes and how to interpret these bytes into representations such as structs and enums is hidden away into the contract functions after compilation.
+For the execution of the contract, this is exactly as intended, but reading and writing bytes directly is error prone and impractical for a user. To solve this we can embed a contract schema into the contract module.
+
+A contract schema is a description of how to interpret these bytes, that optionally can be embedded into the smart contract on-chain, such that external tools can use this information to display and interact with the smart contract in some format other than just raw bytes.
+
+Tool like `cargo concordium run init` can then check for an embedded schema and use this to parse the bytes of the state, or have the user supply parameters in a more readable format than bytes.
+
+More technically the contract schema is serialized and embedded into the wasm module by setting a [custom section](https://webassembly.github.io/spec/core/appendix/custom.html) named `"contract-schema"`.
+
+
+## Generating the schema in rust
+The schema itself is embedded as bytes, and to automate this process the user can annotate the contract state and which parameters to include in the schema using `#[contract_state]` and including an `parameter` attribute in the `#[init(...)]` and `#[receive(...)]` proc-macros.
+
+```rust
+#[contract_state]
+#[derive(SchemaType)]
+struct MyState {
+    ...
+}
+```
+```rust
+#[derive(SchemaType)]
+enum MyParameter {
+    ...
+}
+
+#[init(name = "init", parameter = "MyParameter")]
+fn contract_init<...> (...){
+    ...
+}
+```
+For a type to be part of the schema it must implement the `SchemaType` trait, which is just a getter for the schema of the type, and for most cases of structs and enums this can be automatically derived using `#[derive(SchemaType)]` as seen above.
+```rust
+trait SchemaType {
+    fn get_type() -> crate::schema::Type;
+}
+```
+
+To build the schema, the `Cargo.toml` must include the `build-schema` feature, which is used by the contract building tool.
+```toml
+...
+[features]
+build-schema = []
+...
+```
+Running `cargo concordium build --build-schema` will then first compile the contract with the `build-schema` feature enabled, generate the schema from the contract module and then compile the contract again without the code for generating the schema, and embed the schema as bytes into this.
+
+The reason for compiling the contract again is to avoid including dependencies from the schema generation into the final contract, resulting in smaller modules.
 
 
 # Removing Host Information from Binary

@@ -4,7 +4,7 @@ mod types;
 use contracts_common::*;
 use std::{
     cell::Cell,
-    collections::LinkedList,
+    collections::{BTreeMap, LinkedList},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex,
@@ -12,8 +12,8 @@ use std::{
 };
 pub use types::*;
 use wasmer_runtime::{
-    error, func, imports, instantiate, types as wasmer_types, Array, Ctx, Func, ImportObject,
-    Module, Value, WasmPtr,
+    compile, error, func, imports, instantiate, types as wasmer_types, Array, Ctx, Func,
+    ImportObject, Instance, Module, Value, WasmPtr,
 };
 
 #[derive(Clone, Default)]
@@ -599,7 +599,7 @@ pub fn invoke_init(
     );
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
-    // Wasmer supports cacheing of modules into Artifacts.
+    // Wasmer supports caching of modules into Artifacts.
     let inst = instantiate(wasm, &import_obj)
         .expect("Instantiation should always succeed for well-formed modules.");
     let res = inst.call(init_name, &[Value::I64(amount as i64)])?;
@@ -638,7 +638,7 @@ pub fn invoke_receive(
     );
     // FIXME: We should cache instantiated modules, depending on how expensive
     // instantiation actually is.
-    // Wasmer supports cacheing of modules into Artifacts.
+    // Wasmer supports caching of modules into Artifacts.
     let inst = instantiate(wasm, &import_obj)
         .expect("Instantiation should always succeed for well-formed modules.");
     let res = inst.call(receive_name, &[Value::I64(amount as i64)])?;
@@ -679,7 +679,7 @@ fn read_string(ctx: &Ctx, ptr: WasmPtr<u8, Array>, length: u32) -> Result<String
     }
 }
 
-pub fn test_run(wasm: &[u8]) -> Result<(), ()> {
+fn test_imports_object() -> ImportObject {
     let err_func_res_u32 = || -> Result<u32, ()> { Err(()) };
     let err_func_u32_u32 = |_: u32| -> Result<u32, ()> { Err(()) };
     let err_func_res_u64 = || -> Result<u64, ()> { Err(()) };
@@ -704,7 +704,7 @@ pub fn test_run(wasm: &[u8]) -> Result<(), ()> {
         eprintln!("\nError: {}\n{}\n", msg, location);
     };
 
-    let import_object = imports! {
+    imports! {
         "concordium" => {
             "accept" => func!(err_func_res_u32),
             "simple_transfer" => func!(err_func_u32u64_u32),
@@ -730,8 +730,15 @@ pub fn test_run(wasm: &[u8]) -> Result<(), ()> {
             "get_slot_time" => func!(err_func_res_u64),
             "report_error" => func!(report_error)
         },
-    };
-    println!("\nInstatiating WASM module.");
+    }
+}
+
+/// Instantiates the module with an external function to report back errors.
+/// Then tries to run an exported 'main' function.
+/// The main function is present in the module if compile using 'cargo test'
+pub fn test_run(wasm: &[u8]) -> Result<(), ()> {
+    let import_object = test_imports_object();
+    println!("\nInstantiating WASM module.");
     let instance = instantiate(wasm, &import_object)
         .expect("Instantiation failed! It should always succeed for well-formed modules.");
     println!("Running tests");
@@ -742,6 +749,54 @@ pub fn test_run(wasm: &[u8]) -> Result<(), ()> {
     test.call(0, 0).expect("Test result: failed.");
     println!("Test result: ok.");
     Ok(())
+}
+
+/// Instantiates the module with dummy external functions
+/// Tries to generate a state schema
+/// Generates schemas for methods
+pub fn generate_contract_schema(wasm: &[u8]) -> Result<schema::Contract, String> {
+    let import_object = test_imports_object();
+    let instance = instantiate(wasm, &import_object)
+        .expect("Instantiation failed! It should always succeed for well-formed modules.");
+
+    let state = generate_schema_run(&instance, "concordium_schema_state").ok();
+
+    let mut method_parameter = BTreeMap::new();
+    for (name, _) in instance.exports() {
+        let name_str = name.as_str();
+        if name_str.starts_with("concordium_schema_function_") {
+            let schema_type = generate_schema_run(&instance, name_str)?;
+            let mut name = name.clone();
+            name.drain(.."concordium_schema_function_".len());
+            method_parameter.insert(name, schema_type);
+        }
+    }
+
+    Ok(schema::Contract {
+        state,
+        method_parameter,
+    })
+}
+
+/// Runs the given schema function and reads the resulting schema from memory
+fn generate_schema_run(instance: &Instance, schema_fn_name: &str) -> Result<schema::Type, String> {
+    let schema_fn: Func<(), WasmPtr<u8, Array>> =
+        instance.exports.get(schema_fn_name).map_err(|err| err.to_string())?;
+    let ptr =
+        schema_fn.call().map_err(|err| format!("Failed running '{}': {}", schema_fn_name, err))?;
+    let memory = instance.context().memory(0);
+
+    // First we read an u32 which is the length of the serialized schema
+    let len_cells = ptr.deref(memory, 0, 4).ok_or("Failed reading length from memory.")?;
+    let len_in_bytes = len_cells.iter().map(|x| x.get()).collect::<Vec<u8>>();
+    let len = u32::deserial(&mut Cursor::new(len_in_bytes))
+        .map_err(|_| "Failed deserialising the schema length.")?;
+
+    // Read the schema with offset of the u32
+    let schema_cells = ptr.deref(memory, 4, len).ok_or("Failed reading schema from memory")?;
+    let schema_bytes = schema_cells.iter().map(|x| x.get()).collect::<Vec<u8>>();
+    schema::Type::deserial(&mut Cursor::new(schema_bytes))
+        .map_err(|_| String::from("Failed deserialising the schema."))
 }
 
 /// Get the init methods of the module.
@@ -768,4 +823,14 @@ pub fn get_receives(module: &Module) -> Vec<String> {
         }
     }
     out
+}
+
+/// Get the embedded schema if it exists
+pub fn get_embedded_schema(wasm: &[u8]) -> Result<schema::Contract, &str> {
+    let module = compile(wasm).expect("Invalid module");
+    let sections =
+        module.custom_sections("contract-schema").ok_or("No schema found in the module")?;
+    let section = sections.first().ok_or("No schema found in the module")?;
+    let source = &mut Cursor::new(section);
+    schema::Contract::deserial(source).map_err(|_| "Failed parsing schema")
 }

@@ -15,6 +15,7 @@ use concordium_sc_base::{collections::*, *};
 // Types
 type U999 = u64; // spec says u256 but we only have u64 at most
 
+#[derive(SchemaType)]
 struct InitParams {
     name:         String, // Name of the token
     symbol:       String, // Symbol of the token
@@ -22,7 +23,8 @@ struct InitParams {
     total_supply: U999,   // Total supply of tokens created
 }
 
-#[derive(Serialize)]
+#[contract_state]
+#[derive(Serialize, SchemaType)]
 pub struct State {
     init_params: InitParams,
     balances:    BTreeMap<AccountAddress, U999>,

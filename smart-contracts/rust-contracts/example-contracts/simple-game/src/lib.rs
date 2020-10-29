@@ -36,7 +36,7 @@ use concordium_sc_base::*;
 
 use sha2::Digest;
 
-#[derive(Ord, PartialOrd, PartialEq, Eq, Serialize)]
+#[derive(Ord, PartialOrd, PartialEq, Eq, Serialize, SchemaType)]
 struct Hash([u8; 32]);
 
 /// Message expected by the `contribute` function.
@@ -46,7 +46,8 @@ type Contribution = [u8; 32];
 type Prefix = [u8; 32];
 
 /// State of the smart contract instance.
-#[derive(Serialize)]
+#[contract_state]
+#[derive(Serialize, SchemaType)]
 pub struct State {
     /// Number of contributions. Could be different from the size of the map if
     /// the same person contributes multiple times.

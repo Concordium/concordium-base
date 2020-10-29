@@ -39,7 +39,8 @@ pub struct InitParams {
     vesting_schedule: Vec<VestingEvent>,
 }
 
-#[derive(Serialize)]
+#[contract_state]
+#[derive(Serialize, SchemaType)]
 pub struct State {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
     account_holders: Vec<AccountAddress>,

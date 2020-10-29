@@ -24,6 +24,17 @@ pub trait Seek {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Err>;
 }
 
+/// Reads `n` bytes from a given `source` without initializing the byte array
+/// beforehand using MaybeUninit.
+macro_rules! read_n_bytes {
+    ($n:expr, $source:tt) => {{
+        let mut bytes: MaybeUninit<[u8; $n]> = MaybeUninit::uninit();
+        let write_bytes = unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, $n) };
+        $source.read_exact(write_bytes)?;
+        unsafe { bytes.assume_init() }
+    }};
+}
+
 /// The `Read` trait provides a means of reading from byte streams.
 pub trait Read {
     type Err: Default;
@@ -53,40 +64,52 @@ pub trait Read {
         }
     }
 
-    /// Read a `u32` in little-endian format.
+    /// Read a `u64` in little-endian format.
     fn read_u64(&mut self) -> Result<u64, Self::Err> {
-        let mut bytes: MaybeUninit<[u8; 8]> = MaybeUninit::uninit();
-        let write_bytes = unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, 8) };
-        self.read_exact(write_bytes)?;
-        let bytes = unsafe { bytes.assume_init() };
+        let bytes = read_n_bytes!(8, self);
         Ok(u64::from_le_bytes(bytes))
     }
 
     /// Read a `u32` in little-endian format.
     fn read_u32(&mut self) -> Result<u32, Self::Err> {
-        let mut bytes: MaybeUninit<[u8; 4]> = MaybeUninit::uninit();
-        let write_bytes = unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, 4) };
-        self.read_exact(write_bytes)?;
-        let bytes = unsafe { bytes.assume_init() };
+        let bytes = read_n_bytes!(4, self);
         Ok(u32::from_le_bytes(bytes))
     }
 
     /// Read a `u16` in little-endian format.
     fn read_u16(&mut self) -> Result<u16, Self::Err> {
-        let mut bytes: MaybeUninit<[u8; 2]> = MaybeUninit::uninit();
-        let write_bytes = unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, 2) };
-        self.read_exact(write_bytes)?;
-        let bytes = unsafe { bytes.assume_init() };
+        let bytes = read_n_bytes!(2, self);
         Ok(u16::from_le_bytes(bytes))
     }
 
     /// Read a `u8`.
     fn read_u8(&mut self) -> Result<u8, Self::Err> {
-        let mut bytes: MaybeUninit<[u8; 1]> = MaybeUninit::uninit();
-        let write_bytes = unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, 1) };
-        self.read_exact(write_bytes)?;
-        let bytes = unsafe { bytes.assume_init() };
+        let bytes = read_n_bytes!(1, self);
         Ok(u8::from_le_bytes(bytes))
+    }
+
+    /// Read a `i64` in little-endian format.
+    fn read_i64(&mut self) -> Result<i64, Self::Err> {
+        let bytes = read_n_bytes!(8, self);
+        Ok(i64::from_le_bytes(bytes))
+    }
+
+    /// Read a `i32` in little-endian format.
+    fn read_i32(&mut self) -> Result<i32, Self::Err> {
+        let bytes = read_n_bytes!(4, self);
+        Ok(i32::from_le_bytes(bytes))
+    }
+
+    /// Read a `i16` in little-endian format.
+    fn read_i16(&mut self) -> Result<i16, Self::Err> {
+        let bytes = read_n_bytes!(2, self);
+        Ok(i16::from_le_bytes(bytes))
+    }
+
+    /// Read a `i32` in little-endian format.
+    fn read_i8(&mut self) -> Result<i8, Self::Err> {
+        let bytes = read_n_bytes!(1, self);
+        Ok(i8::from_le_bytes(bytes))
     }
 }
 
@@ -122,6 +145,18 @@ pub trait Write {
 
     /// Write a `u64` in little endian.
     fn write_u64(&mut self, x: u64) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+
+    /// Write a `i8` to the output.
+    fn write_i8(&mut self, x: i8) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+
+    /// Write a `i16` in little endian.
+    fn write_i16(&mut self, x: i16) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+
+    /// Write a `i32` in little endian.
+    fn write_i32(&mut self, x: i32) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
+
+    /// Write a `i64` in little endian.
+    fn write_i64(&mut self, x: i64) -> Result<(), Self::Err> { self.write_all(&x.to_le_bytes()) }
 }
 
 impl Write for Vec<u8> {
@@ -187,4 +222,15 @@ impl<R: Read, T: Deserial> Get<T> for R {
 
     #[inline(always)]
     fn get(&mut self) -> Result<T, R::Err> { T::deserial(self) }
+}
+
+/// The `SchemaType` trait provides means to generate a schema for structures.
+/// Schemas used to make structures human readable and to avoid dealing directly
+/// with bytes, such as the contract state or parameters for contract
+/// interaction.
+///
+/// Can be derived using `#[derive(SchemaType)]` for most cases of structs and
+/// enums.
+pub trait SchemaType {
+    fn get_type() -> crate::schema::Type;
 }

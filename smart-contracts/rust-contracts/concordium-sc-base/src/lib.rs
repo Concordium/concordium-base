@@ -68,8 +68,9 @@ mod impls;
 mod prims;
 mod traits;
 mod types;
-pub use concordium_sc_derive::{init, receive, Deserial, Serial, Serialize};
+pub use concordium_sc_derive::*;
 pub use contracts_common::*;
+pub use impls::*;
 pub use traits::*;
 pub use types::*;
 

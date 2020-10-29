@@ -130,9 +130,15 @@ mod serde_impl {
         }
     }
 
+    impl fmt::Display for AccountAddress {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.0.to_base58check(1))
+        }
+    }
+
     impl SerdeSerialize for AccountAddress {
         fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-            let b58_str = self.0.to_base58check(1);
+            let b58_str = self.to_string();
             ser.serialize_str(&b58_str)
         }
     }
@@ -155,5 +161,56 @@ mod serde_impl {
         fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
             v.parse::<AccountAddress>().map_err(|_| de::Error::custom("Wrong Base58 version."))
         }
+    }
+}
+
+/// Contract schema related types
+pub mod schema {
+    use std::collections::BTreeMap;
+
+    /// Describes all the schemas of a smart contract.
+    #[derive(Debug, Clone)]
+    pub struct Contract {
+        pub state:            Option<Type>,
+        pub method_parameter: BTreeMap<String, Type>,
+    }
+
+    /// Schema for the fields of a struct or some enum variant.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[cfg_attr(test, derive(arbitrary::Arbitrary))]
+    pub enum Fields {
+        Named(Vec<(String, Type)>),
+        Unnamed(Vec<Type>),
+        /// No fields
+        Unit,
+    }
+
+    /// Schema type used to describe the different types in a rust smart
+    /// contract.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[cfg_attr(test, derive(arbitrary::Arbitrary))]
+    pub enum Type {
+        U8,
+        U16,
+        U32,
+        U64,
+        String,
+        Unit,
+        Bool,
+        Bytes,
+        Pair(Box<Type>, Box<Type>),
+        Struct(Fields),
+        Enum(Vec<(String, Fields)>),
+        List(Box<Type>),
+        Map(Box<Type>, Box<Type>),
+        Set(Box<Type>),
+        Option(Box<Type>), // Sum(Box<Type>, Box<Type>),
+        AccountAddress,
+        ContractAddress,
+        Array(u32, Box<Type>),
+        I8,
+        I16,
+        I32,
+        I64,
     }
 }
