@@ -137,6 +137,8 @@ fn main() {
     )
     .expect("Generating the pre-identity object should succeed.");
 
+    let pub_info_for_ip = pio.pub_info_for_ip.clone();
+
     let ver_ok = verify_credentials(
         &pio,
         context,
@@ -152,7 +154,7 @@ fn main() {
 
     let id_object = IdentityObject {
         pre_identity_object: pio,
-        alist:               attributes,
+        alist:               attributes.clone(),
         signature:           ip_sig,
     };
     let id_object_use_data = IdObjectUseData { aci, randomness };
@@ -263,6 +265,17 @@ fn main() {
         };
         out.put(&acc_keys_3);
 
+        // Create an initial cdi and output it
+        let icdi = create_initial_cdi(
+            &ip_info,
+            pub_info_for_ip,
+            &attributes,
+            &ip_cdi_secret_key
+        );
+        let icdi_bytes = to_bytes(&icdi);
+        out.put(&(icdi_bytes.len() as u32));
+        out.write_all(&icdi_bytes).unwrap();
+
         let file = File::create("testdata.bin");
         if let Err(err) = file.unwrap().write_all(&out) {
             eprintln!(
@@ -287,6 +300,22 @@ fn main() {
             eprintln!("Could not output binary file cdi.bin, because {}.", err);
         } else {
             println!("Output binary file cdi.bin.");
+        }
+
+        // As for CDI we output an ICDI json and binary to test compatibility between
+        // haskell and rust serialization
+        let ver_icdi = Versioned::new(VERSION_0, icdi);
+        if let Err(err) = write_json_to_file("icdi.json", &ver_icdi) {
+            eprintln!("Could not output JSON file icdi.json, because {}.", err);
+        } else {
+            println!("Output icdi.json.");
+        }
+
+        let icdi_file = File::create("icdi.bin");
+        if let Err(err) = icdi_file.unwrap().write_all(&to_bytes(&ver_icdi)) {
+            eprintln!("Could not output binary file icdi.bin, because {}.", err);
+        } else {
+            println!("Output binary file icdi.bin.");
         }
     }
 
