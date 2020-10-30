@@ -812,3 +812,33 @@ instance Serialize AccountCredential where
     0 -> InitialAC <$> get
     1 -> NormalAC <$> get
     _ -> fail "Unsupported credential type."
+
+instance FromJSON AccountCredentialWithProofs where
+  parseJSON = withObject "Account credential with proofs" $ \v -> do
+    ty <- v .: "type"
+    case ty :: String of
+      "initial" -> InitialACWP <$> v .: "contents"
+      "normal" -> NormalACWP <$> v .: "contents"
+      _ -> fail "Unsupported credential type."
+
+instance FromJSON AccountCredential where
+  parseJSON = withObject "Account credential with proofs" $ \v -> do
+    ty <- v .: "type"
+    case ty :: String of
+      "initial" -> InitialAC <$> v .: "contents"
+      "normal" -> NormalAC <$> v .: "contents"
+      _ -> fail "Unsupported credential type."
+
+-- |Extract the validity information for the credential.
+validTo :: AccountCredential -> CredentialValidTo
+validTo (NormalAC cdv) = pValidTo . cdvPolicy $ cdv
+validTo (InitialAC icdv) = pValidTo . icdvPolicy $ icdv
+
+regId :: AccountCredential -> CredentialRegistrationID
+regId (NormalAC cdv) = cdvRegId cdv
+regId (InitialAC icdv) = icdvRegId icdv
+
+-- |Remove the proofs from the structure
+values :: AccountCredentialWithProofs -> AccountCredential
+values (InitialACWP icdi) = InitialAC (icdiValues icdi)
+values (NormalACWP cdi) = NormalAC (cdiValues cdi)
