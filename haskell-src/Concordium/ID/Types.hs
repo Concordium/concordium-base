@@ -862,6 +862,10 @@ ipId :: AccountCredential -> IdentityProviderIdentity
 ipId (InitialAC icdv) = icdvIpId icdv
 ipId (NormalAC cdv) = cdvIpId cdv
 
+policy :: AccountCredential -> Policy
+policy (InitialAC icdv) = icdvPolicy icdv
+policy (NormalAC cdv) = cdvPolicy cdv
+
 class HasCredentialType a where
   credentialType :: a -> CredentialType
 
