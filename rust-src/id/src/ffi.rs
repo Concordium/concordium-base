@@ -134,9 +134,9 @@ extern "C" fn verify_initial_cdi_ffi(
                 from_ptr!(ip_info_ptr),
                 &cdi,
             ) {
-                Ok(()) => 1,  // verification succeeded
+                Ok(()) => 1, // verification succeeded
                 Err(_) => -2, /* Only signature verification can fail, so just map all failures
-                                * to one. */
+                               * to one. */
             }
         }
     }
