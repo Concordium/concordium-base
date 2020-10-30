@@ -780,3 +780,35 @@ instance FromJSON InitialCredentialDeploymentInfo where
     icdiValues <- parseJSON (Object v)
     icdiSig <- v .: "sig"
     return InitialCredentialDeploymentInfo{..}
+
+
+-- |Different kinds of credentials that can go onto the chain.
+data AccountCredentialWithProofs =
+  InitialACWP InitialCredentialDeploymentInfo
+  | NormalACWP CredentialDeploymentInformation
+  deriving(Eq, Show)
+
+instance Serialize AccountCredentialWithProofs where
+  put (InitialACWP icdi) = putWord8 0 <> put icdi
+  put (NormalACWP cdi) = putWord8 1 <> put cdi
+
+  get = getWord8 >>= \case
+    0 -> InitialACWP <$> get
+    1 -> NormalACWP <$> get
+    _ -> fail "Unsupported credential type."
+
+
+-- |Analogue of 'AccountCredentialWithProofs' but with the proofs removed.
+data AccountCredential =
+  InitialAC InitialCredentialDeploymentValues
+  | NormalAC CredentialDeploymentValues
+  deriving(Eq, Show)
+
+instance Serialize AccountCredential where
+  put (InitialAC icdi) = putWord8 0 <> put icdi
+  put (NormalAC cdi) = putWord8 1 <> put cdi
+
+  get = getWord8 >>= \case
+    0 -> InitialAC <$> get
+    1 -> NormalAC <$> get
+    _ -> fail "Unsupported credential type."
