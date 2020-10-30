@@ -117,7 +117,7 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn verify_initial_cdi_ffi(
+extern "C" fn verify_initial_cdi_ffi(
     ip_info_ptr: *const IpInfo<Bls12>,
     // acc_keys_ptr: *const u8,
     // acc_keys_len: size_t,
@@ -128,23 +128,15 @@ pub extern "C" fn verify_initial_cdi_ffi(
     match InitialCredentialDeploymentInfo::<G1, AttributeKind>::deserial(&mut Cursor::new(
         &cdi_bytes,
     )) {
-        Err(_) => -12,
+        Err(_) => -3,
         Ok(cdi) => {
             match chain::verify_initial_cdi::<Bls12, G1, AttributeKind>(
                 from_ptr!(ip_info_ptr),
                 &cdi,
             ) {
-                Ok(()) => 1, // verification succeeded
-                Err(CDIVerificationError::RegId) => -1,
-                Err(CDIVerificationError::IdCredPub) => -2,
-                Err(CDIVerificationError::Signature) => -3, // Only this one can happend, so
-                // should probably catch everything
-                // else with _
-                Err(CDIVerificationError::Dlog) => -4,
-                Err(CDIVerificationError::Policy) => -5,
-                Err(CDIVerificationError::AR) => -6,
-                Err(CDIVerificationError::AccountOwnership) => -7,
-                Err(CDIVerificationError::Proof) => -8,
+                Ok(()) => 1,  // verification succeeded
+                Err(_) => -2, /* Only signature verification can fail, so just map all failures
+                                * to one. */
             }
         }
     }
@@ -152,7 +144,7 @@ pub extern "C" fn verify_initial_cdi_ffi(
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn verify_cdi_ffi(
+extern "C" fn verify_cdi_ffi(
     gc_ptr: *const GlobalContext<G1>,
     ip_info_ptr: *const IpInfo<Bls12>,
     ars_infos_ptr: *const *mut ArInfo<G1>,
