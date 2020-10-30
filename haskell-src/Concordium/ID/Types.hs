@@ -653,6 +653,9 @@ instance FromJSON CredentialDeploymentInformation where
         ..
       }
 
+
+-- |Information about the account that should be created as part of the initial
+-- credential deployment.
 data InitialCredentialAccount = InitialCredentialAccount {
   icaKeys :: ![AccountVerificationKey],
   icaThreshold :: !SignatureThreshold
@@ -686,6 +689,8 @@ instance Serialize InitialCredentialAccount where
     icaThreshold <- S.get
     return InitialCredentialAccount{..}
 
+-- |The data for the initial account creation. This is submitted by the identity
+-- provider on behalf of the account holder.
 data InitialCredentialDeploymentValues = InitialCredentialDeploymentValues {
   -- |List of keys the new account should have, together with a threshold
   -- for how many are needed. Its address is derived from the registration
@@ -699,6 +704,8 @@ data InitialCredentialDeploymentValues = InitialCredentialDeploymentValues {
   icdvPolicy :: !Policy
 } deriving(Eq, Show)
 
+-- |Address of the account that is created as a result of the initial credential
+-- deployment.
 initialCredentialAccountAddress :: InitialCredentialDeploymentValues -> AccountAddress
 initialCredentialAccountAddress icdv = addressFromRegId (icdvRegId icdv)
 
@@ -733,14 +740,22 @@ instance Serialize InitialCredentialDeploymentValues where
     put icdvIpId <>
     putPolicy icdvPolicy
 
-type IpCdiSignature = Signature
+-- |A signature using the Ed25519 signature scheme.
+-- Always 64 bytes in length.
+newtype IpCdiSignature = IpCdiSignature { theSignature :: ShortByteString }
+    deriving (ToJSON, FromJSON, Show) via ByteStringHex
+
+instance Serialize IpCdiSignature where
+  put = putShortByteString . theSignature
+  get = IpCdiSignature <$> getShortByteString 64
 
 -- |The initial credential deployment information consists of values deployed
 -- a signature from the identity provider on said values
 data InitialCredentialDeploymentInfo = InitialCredentialDeploymentInfo {
   icdiValues :: InitialCredentialDeploymentValues,
-  -- |A signature under on the credential deployment values under the public
-  -- signing key of the identity provider
+  -- |A signature under the public key of identity provider's key on the
+  -- credential deployment values. This is the dual of `proofs` for the normal
+  -- credential deployment.
   icdiSig :: IpCdiSignature
   }
   deriving (Show)
@@ -748,29 +763,20 @@ data InitialCredentialDeploymentInfo = InitialCredentialDeploymentInfo {
 -- |NB: This must match the one defined in rust
 instance Serialize InitialCredentialDeploymentInfo where
   put InitialCredentialDeploymentInfo{..} =
-    let (Signature bs) = icdiSig in
-    put icdiValues <> putShortByteString bs
+    put icdiValues <> put icdiSig
 
   get = do
     icdiValues <- get
-    icdiSig <- Signature <$> getShortByteString 64
+    icdiSig <- get
     return InitialCredentialDeploymentInfo {..}
 
--- |NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
+-- |NB: This makes sense for well-formed data only and is consistent with how
+-- accounts are identified internally.
 instance Eq InitialCredentialDeploymentInfo where
   icdi1 == icdi2 = icdiValues icdi1 == icdiValues icdi2
 
 instance FromJSON InitialCredentialDeploymentInfo where
-  parseJSON = withObject "CredentialDeploymentInformation" $ \v -> do
+  parseJSON = withObject "InitialCredentialDeploymentInformation" $ \v -> do
     icdiValues <- parseJSON (Object v)
     icdiSig <- v .: "sig"
     return InitialCredentialDeploymentInfo{..}
-  -- withObject "CredentialDeploymentInformation" $\x -> do
-  --   icdiValues <- parseJSON (Object x)
-  --   sigsText <- x .: "sig"
-  --   let (bs, rest) = BS16.decode . Text.encodeUtf8 $ proofsText
-  --   unless (BS.null rest) $ fail "\"proofs\" is not a valid base16 string."
-  --   return CredentialDeploymentInformation {
-  --       cdiProofs = Proofs (BSS.toShort bs),
-  --       ..
-  --     }

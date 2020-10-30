@@ -11,7 +11,11 @@ use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Thresh
 use pairing::bls12_381::{Bls12, G1};
 use rand::{rngs::ThreadRng, *};
 use serde_json::json;
-use std::{collections::btree_map::BTreeMap, path::PathBuf};
+use std::{
+    collections::btree_map::BTreeMap,
+    io::{Error, ErrorKind},
+    path::PathBuf,
+};
 use structopt::StructOpt;
 
 type ExampleCurve = G1;
@@ -100,7 +104,7 @@ struct CommonOptions {
     out_dir: PathBuf,
 }
 
-fn main() {
+fn main() -> std::io::Result<()> {
     let gt = {
         let app = GenesisTool::clap()
             .setting(AppSettings::ArgRequiredElseHelp)
@@ -117,43 +121,29 @@ fn main() {
     let mut csprng = thread_rng();
 
     // Load identity provider and anonymity revokers.
-    let (ip_info, ip_secret_key, ip_cdi_secret_key) =
-        match read_json_from_file::<_, IpData<Bls12>>(&common.ip_data) {
-            Ok(IpData {
-                public_ip_info,
-                ip_secret_key,
-                ip_cdi_secret_key,
-            }) => (public_ip_info, ip_secret_key, ip_cdi_secret_key),
-            Err(e) => {
-                eprintln!("Could not parse identity issuer JSON because: {}", e);
-                return;
-            }
-        };
+    let ip_data = read_json_from_file::<_, IpData<Bls12>>(&common.ip_data)?;
 
-    let global_ctx = {
-        if let Some(gc) = read_global_context(&common.global) {
-            gc
-        } else {
-            eprintln!("Cannot read global context information database. Terminating.");
-            return;
-        }
-    };
+    let global_ctx = read_global_context(&common.global).ok_or_else(|| {
+        Error::new(
+            ErrorKind::Other,
+            "Cannot read global context information database. Terminating.",
+        )
+    })?;
 
-    let ars_infos = {
-        if let Ok(ars) = read_anonymity_revokers(&common.anonymity_revokers) {
-            ars
-        } else {
-            eprintln!("Cannot read anonymity revokers from the database. Terminating.");
-            return;
-        }
-    };
+    let ars_infos = read_anonymity_revokers(&common.anonymity_revokers)?;
 
-    let context = IPContext::new(&ip_info, &ars_infos.anonymity_revokers, &global_ctx);
+    let context = IPContext::new(
+        &ip_data.public_ip_info,
+        &ars_infos.anonymity_revokers,
+        &global_ctx,
+    );
     let threshold = Threshold((ars_infos.anonymity_revokers.len() - 1) as u8);
 
     if common.num_keys == 0 && common.num_keys > 255 {
-        eprintln!("num_keys should be a positive integer <= 255.");
-        return;
+        return Err(Error::new(
+            ErrorKind::Other,
+            "num_keys should be a positive integer <= 255.",
+        ));
     }
 
     // Roughly one year
@@ -213,8 +203,8 @@ fn main() {
             &pio,
             context,
             &attributes,
-            &ip_secret_key,
-            &ip_cdi_secret_key,
+            &ip_data.ip_secret_key,
+            &ip_data.ip_cdi_secret_key,
         );
 
         let (ip_sig, _) = ver_ok.expect("There is an error in signing");
@@ -424,4 +414,5 @@ fn main() {
             }
         }
     }
+    Ok(())
 }

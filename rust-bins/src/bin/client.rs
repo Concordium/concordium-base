@@ -162,7 +162,7 @@ struct IpSignPio {
     )]
     bin_out: Option<PathBuf>,
     #[structopt(
-        long = "out-icdi",
+        long = "initial-cdi-out",
         help = "File to output the JSON transaction payload to (regarding the initial account)."
     )]
     out_icdi: Option<PathBuf>,

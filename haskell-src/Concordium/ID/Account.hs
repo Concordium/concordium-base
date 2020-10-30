@@ -33,7 +33,7 @@ foreign import ccall unsafe "verify_cdi_ffi" verifyCDIFFI
 -- FIXME: We pass in keys as byte arrays which is quite bad since
 -- keys are not bytes, but rather we know that they are well-formed already.
 
-foreign import ccall unsafe "verify_initial_cdi_ffi" verifyACIFFI
+foreign import ccall unsafe "verify_initial_cdi_ffi" verifyInitialCDIFFI
     :: Ptr IpInfo
     -> Ptr Word8 -- Serialized account creation information
     -> CSize -- length of serialized account creation information
@@ -43,6 +43,9 @@ withArInfoArray :: [Ptr ArInfo] -> [ArInfo] -> (Int -> Ptr (Ptr ArInfo) -> IO a)
 withArInfoArray arPtrs [] k = withArrayLen arPtrs k
 withArInfoArray arPtrs (ar:ars) k = withArInfo ar $ \arPtr -> withArInfoArray (arPtr:arPtrs) ars k
 
+-- |Verify a credential in the context of the given cryptographic parameters and
+-- identity provider information. If the account keys are given this checks that
+-- the proofs contained in the credential correspond to them.
 verifyCredential :: GlobalContext -> IpInfo -> [ArInfo] -> Maybe AccountKeys -> CredentialDeploymentInformationBytes -> Bool
 verifyCredential gc ipInfo arInfos Nothing cdiBytes = unsafeDupablePerformIO $ do
     res <- withGlobalContext gc $ \gcPtr ->
@@ -74,10 +77,14 @@ verifyCredential gc ipInfo arInfos (Just keys) cdiBytes = unsafeDupablePerformIO
     return (res == 1)
     where keyBytes = encode keys
 
-verifyInitialAccountCreation :: IpInfo -> ByteString -> Bool
+type InitialCredentialBytes = ByteString
+
+-- |Verify the initial account creation payload, in the context of the given
+-- identity provider.
+verifyInitialAccountCreation :: IpInfo -> InitialCredentialBytes -> Bool
 verifyInitialAccountCreation ipInfo aciBytes = unsafeDupablePerformIO $ do
   res <- withIpInfo ipInfo $ \ipInfoPtr ->
     unsafeUseAsCStringLen aciBytes $ \(aciBytesPtr, aciBytesLen) ->
       -- TODO: ensure that we only call this on nonempty byte lists
-      verifyACIFFI ipInfoPtr (castPtr aciBytesPtr) (fromIntegral aciBytesLen)
+      verifyInitialCDIFFI ipInfoPtr (castPtr aciBytesPtr) (fromIntegral aciBytesLen)
   return (res == 1)
