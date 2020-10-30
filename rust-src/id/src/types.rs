@@ -1246,7 +1246,7 @@ impl Deserial for VerifyKey {
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
 pub struct NewAccount {
     #[size_length = 1]
-    pub keys:      Vec<VerifyKey>,
+    pub keys: Vec<VerifyKey>,
     pub threshold: SignatureThreshold,
 }
 
