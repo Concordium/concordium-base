@@ -813,6 +813,10 @@ instance FromJSON CredentialType where
     else if t == "normal" then return Normal
     else fail "Unsupported credential type."
 
+instance ToJSON CredentialType where
+  toJSON Initial = String "initial"
+  toJSON Normal = String "normal"
+
 instance Serialize AccountCredential where
   put (InitialAC icdi) = putWord8 0 <> put icdi
   put (NormalAC cdi) = putWord8 1 <> put cdi
@@ -836,6 +840,10 @@ instance FromJSON AccountCredential where
       Initial -> InitialAC <$> v .: "contents"
       Normal -> NormalAC <$> v .: "contents"
 
+instance ToJSON AccountCredential where
+  toJSON (InitialAC icdv) = object ["type" .= Initial, "contents" .= icdv]
+  toJSON (NormalAC icdv) = object ["type" .= Normal, "contents" .= icdv]
+
 -- |Extract the validity information for the credential.
 validTo :: AccountCredential -> CredentialValidTo
 validTo (NormalAC cdv) = pValidTo . cdvPolicy $ cdv
@@ -854,6 +862,17 @@ ipId :: AccountCredential -> IdentityProviderIdentity
 ipId (InitialAC icdv) = icdvIpId icdv
 ipId (NormalAC cdv) = cdvIpId cdv
 
-credentialType :: AccountCredential -> CredentialType
-credentialType (InitialAC _) = Initial
-credentialType (NormalAC _) = Normal
+policy :: AccountCredential -> Policy
+policy (InitialAC icdv) = icdvPolicy icdv
+policy (NormalAC cdv) = cdvPolicy cdv
+
+class HasCredentialType a where
+  credentialType :: a -> CredentialType
+
+instance HasCredentialType AccountCredential where
+  credentialType (InitialAC _) = Initial
+  credentialType (NormalAC _) = Normal
+
+instance HasCredentialType AccountCredentialWithProofs where
+  credentialType (InitialACWP _) = Initial
+  credentialType (NormalACWP _) = Normal
