@@ -325,7 +325,7 @@ async fn create_signed_identity_object(
         }
     };
 
-    let base16_encoded_id_cred_pub = base16_encode_string(&request.id_cred_pub);
+    let base16_encoded_id_cred_pub = base16_encode_string(&request.pub_info_for_ip.id_cred_pub);
 
     match save_revocation_record(&request, base16_encoded_id_cred_pub.clone()) {
         Ok(_saved) => (),
@@ -424,7 +424,7 @@ fn save_revocation_record(
     base16_id_cred_pub: String,
 ) -> std::result::Result<(), String> {
     let ar_record = AnonymityRevocationRecord {
-        id_cred_pub: pre_identity_object.id_cred_pub,
+        id_cred_pub: pre_identity_object.pub_info_for_ip.id_cred_pub,
         ar_data:     pre_identity_object.ip_ar_data.clone(),
     };
 

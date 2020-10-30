@@ -157,6 +157,16 @@ struct IpSignPio {
     #[structopt(long = "out", help = "File to write the signed identity object to.")]
     out_file: Option<PathBuf>,
     #[structopt(
+        long = "bin-out",
+        help = "File to output the binary transaction payload to (regarding the initial account)."
+    )]
+    bin_out: Option<PathBuf>,
+    #[structopt(
+        long = "out-icdi",
+        help = "File to output the JSON transaction payload to (regarding the initial account)."
+    )]
+    out_icdi: Option<PathBuf>,
+    #[structopt(
         long = "global",
         help = "File with global parameters.",
         default_value = "database/global.json"
@@ -812,7 +822,7 @@ fn handle_act_as_ip(aai: IpSignPio) {
     let vf = verify_credentials(&pio, context, &attributes, &ip_sec_key, &ip_cdi_secret_key);
 
     match vf {
-        Ok((signature, _)) => {
+        Ok((signature, icdi)) => {
             let id_object = IdentityObject {
                 pre_identity_object: pio,
                 alist: attributes,
@@ -835,6 +845,30 @@ fn handle_act_as_ip(aai: IpSignPio) {
                 }
             } else {
                 println!("The signature is: {}", base16_encode_string(signature));
+            }
+            let versioned_icdi = Versioned::new(VERSION_0, icdi);
+            if let Some(json_file) = aai.out_icdi {
+                match write_json_to_file(json_file, &versioned_icdi) {
+                    Ok(_) => println!("Wrote transaction payload to JSON file."),
+                    Err(e) => {
+                        eprintln!("Could not JSON write to file because {}", e);
+                        output_json(&versioned_icdi);
+                    }
+                }
+            }
+            if let Some(bin_file) = aai.bin_out {
+                match File::create(&bin_file) {
+                    // This is a bit stupid, we should write directly to the sink.
+                    Ok(mut file) => match file.write_all(&to_bytes(&versioned_icdi)) {
+                        Ok(_) => println!("Wrote binary data to provided file."),
+                        Err(e) => {
+                            eprintln!("Could not write binary to file because {}", e);
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("Could not write binary to file because {}", e);
+                    }
+                }
             }
         }
         Err(r) => eprintln!("Could not verify pre-identity object {:?}", r),
