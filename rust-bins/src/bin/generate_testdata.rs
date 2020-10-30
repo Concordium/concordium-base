@@ -364,4 +364,62 @@ fn main() {
     let acc_data = generate(None, 4, 5);
     let _ = generate(Some(acc_data), 5, 6);
     let _ = generate(None, 6, 7);
+
+    let mut generate_initial = |prf, idx, ip_secret| {
+        let initial_acc_data = {
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+
+            InitialAccountData {
+                keys,
+                threshold: SignatureThreshold(2),
+            }
+        };
+        let ah_info = CredentialHolderInfo::<ExampleCurve> {
+            id_cred: IdCredentials::generate(&mut csprng),
+        };
+        let aci = AccCredentialInfo {
+            cred_holder_info: ah_info,
+            prf_key:          prf,
+        };
+        let (pio, _) = generate_pio(
+            &context,
+            Threshold(ars_infos.anonymity_revokers.len() as u8),
+            &aci,
+            &initial_acc_data,
+        )
+        .expect("Generating the pre-identity object should succeed.");
+
+        let icdi = create_initial_cdi(
+            &context.ip_info,
+            pio.pub_info_for_ip,
+            &attributes,
+            ip_secret,
+        );
+        let versioned_icdi = Versioned::new(VERSION_0, icdi);
+
+        if let Err(err) =
+            write_json_to_file(&format!("initial-credential-{}.json", idx), &versioned_icdi)
+        {
+            eprintln!(
+                "Could not output initial credential = {}, because {}.",
+                idx, err
+            );
+        } else {
+            println!("Output initial credential {}.", idx);
+        }
+    };
+
+    let mut csprng = thread_rng();
+    let prf_key = prf::SecretKey::generate(&mut csprng);
+    generate_initial(prf_key, 1, &ip_cdi_secret_key);
+    let prf_key: prf::SecretKey<ExampleCurve> = prf::SecretKey::generate(&mut csprng);
+    let prf_key_same = prf_key.clone();
+    generate_initial(prf_key, 2, &ip_cdi_secret_key);
+    generate_initial(prf_key_same, 3, &ip_cdi_secret_key); // Reuse of prf key
+    let prf_key: prf::SecretKey<ExampleCurve> = prf::SecretKey::generate(&mut csprng);
+    let wrong_keys = ed25519_dalek::Keypair::generate(&mut csprng);
+    generate_initial(prf_key, 4, &wrong_keys.secret); // Wrong secret key
 }
