@@ -266,12 +266,7 @@ fn main() {
         out.put(&acc_keys_3);
 
         // Create an initial cdi and output it
-        let icdi = create_initial_cdi(
-            &ip_info,
-            pub_info_for_ip,
-            &attributes,
-            &ip_cdi_secret_key
-        );
+        let icdi = create_initial_cdi(&ip_info, pub_info_for_ip, &attributes, &ip_cdi_secret_key);
         let icdi_bytes = to_bytes(&icdi);
         out.put(&(icdi_bytes.len() as u32));
         out.write_all(&icdi_bytes).unwrap();
