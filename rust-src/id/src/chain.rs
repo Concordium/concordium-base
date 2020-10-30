@@ -516,7 +516,8 @@ mod tests {
             ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
-        let (ars_infos, _) = test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
+        let (ars_infos, _) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
         let acc_data = InitialAccountData {
             keys:      {
