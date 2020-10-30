@@ -652,3 +652,125 @@ instance FromJSON CredentialDeploymentInformation where
         cdiProofs = Proofs (BSS.toShort bs),
         ..
       }
+
+data InitialCredentialAccount = InitialCredentialAccount {
+  icaKeys :: ![AccountVerificationKey],
+  icaThreshold :: !SignatureThreshold
+} deriving(Eq, Show)
+
+instance ToJSON InitialCredentialAccount where
+  toJSON (InitialCredentialAccount keys threshold) = object [
+    "keys" .= keys,
+    "threshold" .= threshold
+    ]
+
+instance FromJSON InitialCredentialAccount where
+  parseJSON = withObject "InitialCredentialAccount" $ \v -> do
+    icaKeys <- v .: "keys"
+    when (null icaKeys) $ fail "The list of keys must be non-empty."
+    let len = length icaKeys
+    unless (len <= 255) $ fail "The list of keys must be no longer than 255 elements."
+    icaThreshold <- v .: "threshold"
+    return InitialCredentialAccount{..}
+
+instance Serialize InitialCredentialAccount where
+  put InitialCredentialAccount{..} =
+      S.putWord8 (fromIntegral (length icaKeys)) <>
+      mapM_ S.put icaKeys <>
+      S.put icaThreshold
+
+  get = do
+    len <- S.getWord8
+    unless (len >= 1) $ fail "The list of keys must be non-empty and at most 255 elements long."
+    icaKeys <- replicateM (fromIntegral len) S.get
+    icaThreshold <- S.get
+    return InitialCredentialAccount{..}
+
+data InitialCredentialDeploymentValues = InitialCredentialDeploymentValues {
+  -- |List of keys the new account should have, together with a threshold
+  -- for how many are needed. Its address is derived from the registration
+  -- id of this credential.
+  icdvAccount :: !InitialCredentialAccount,
+  -- |Registration id of __this__ credential.
+  icdvRegId :: !CredentialRegistrationID,
+  -- |Identity of the identity provider who signed this account creation
+  icdvIpId :: !IdentityProviderIdentity,
+  -- |Policy.
+  icdvPolicy :: !Policy
+} deriving(Eq, Show)
+
+initialCredentialAccountAddress :: InitialCredentialDeploymentValues -> AccountAddress
+initialCredentialAccountAddress icdv = addressFromRegId (icdvRegId icdv)
+
+instance ToJSON InitialCredentialDeploymentValues where
+  toJSON InitialCredentialDeploymentValues{..} =
+    object [
+    "account" .= icdvAccount,
+    "regId" .= icdvRegId,
+    "ipIdentity" .= icdvIpId,
+    "policy" .= icdvPolicy
+    ]
+
+instance FromJSON InitialCredentialDeploymentValues where
+  parseJSON = withObject "InitialCredentialDeploymentValues" $ \v -> do
+    icdvAccount <- v .: "account"
+    icdvRegId <- v .: "regId"
+    icdvIpId <- v .: "ipIdentity"
+    icdvPolicy <- v .: "policy"
+    return InitialCredentialDeploymentValues{..}
+
+instance Serialize InitialCredentialDeploymentValues where
+  get = do
+    icdvAccount <- get
+    icdvRegId <- get
+    icdvIpId <- get
+    icdvPolicy <- getPolicy
+    return InitialCredentialDeploymentValues{..}
+
+  put InitialCredentialDeploymentValues{..} =
+    put icdvAccount <>
+    put icdvRegId <>
+    put icdvIpId <>
+    putPolicy icdvPolicy
+
+type IpCdiSignature = Signature
+
+-- |The initial credential deployment information consists of values deployed
+-- a signature from the identity provider on said values
+data InitialCredentialDeploymentInfo = InitialCredentialDeploymentInfo {
+  icdiValues :: InitialCredentialDeploymentValues,
+  -- |A signature under on the credential deployment values under the public
+  -- signing key of the identity provider
+  icdiSig :: IpCdiSignature
+  }
+  deriving (Show)
+
+-- |NB: This must match the one defined in rust
+instance Serialize InitialCredentialDeploymentInfo where
+  put InitialCredentialDeploymentInfo{..} =
+    let (Signature bs) = icdiSig in
+    put icdiValues <> putShortByteString bs
+
+  get = do
+    icdiValues <- get
+    icdiSig <- Signature <$> getShortByteString 64
+    return InitialCredentialDeploymentInfo {..}
+
+-- |NB: This makes sense for well-formed data only and is consistent with how accounts are identified internally.
+instance Eq InitialCredentialDeploymentInfo where
+  icdi1 == icdi2 = icdiValues icdi1 == icdiValues icdi2
+
+instance FromJSON InitialCredentialDeploymentInfo where
+  parseJSON = withObject "CredentialDeploymentInformation" $ \v -> do
+    icdiValues <- parseJSON (Object v)
+    icdiSig <- v .: "sig"
+    return InitialCredentialDeploymentInfo{..}
+  -- withObject "CredentialDeploymentInformation" $\x -> do
+  --   icdiValues <- parseJSON (Object x)
+  --   sigsText <- x .: "sig"
+  --   let (bs, rest) = BS16.decode . Text.encodeUtf8 $ proofsText
+  --   unless (BS.null rest) $ fail "\"proofs\" is not a valid base16 string."
+  --   return CredentialDeploymentInformation {
+  --       cdiProofs = Proofs (BSS.toShort bs),
+  --       ..
+  --     }

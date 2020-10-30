@@ -42,8 +42,19 @@ checkCDICompatibility filename referenceFile = do
       -- we do unpack for better error reporting, easier to compare lists of word8s
       assertEqual "Incompatible binary serializations." (BS.unpack referenceOutput) (BS.unpack (S.encode input))
 
+-- Check that serializations in Haskell and rust, json and binary are compatible.
+checkICDICompatibility :: FilePath -> FilePath -> Expectation
+checkICDICompatibility filename referenceFile = do
+  eitherDecodeFileStrict filename >>= \case
+    Left err -> assertFailure err
+    Right (input :: Versioned InitialCredentialDeploymentInfo) -> do
+      referenceOutput <- BS.readFile referenceFile
+      -- we do unpack for better error reporting, easier to compare lists of word8s
+      assertEqual "Incompatible binary serializations." (BS.unpack referenceOutput) (BS.unpack (S.encode input))
+
 tests :: Spec
 tests = describe "Concordium.ID" $ do
   specify "account address JSON" $ withMaxSuccess 100000 testJSON
   specify "account address from bytes" $ withMaxSuccess 100000 testFromBytes
-  specify "JSON/binary serialization check" $ checkCDICompatibility "testdata/cdi.json" "testdata/cdi.bin"
+  specify "JSON/binary CDI serialization check" $ checkCDICompatibility "testdata/cdi.json" "testdata/cdi.bin"
+  specify "JSON/binary Initial CDI serialization check" $ checkICDICompatibility "testdata/icdi.json" "testdata/icdi.bin"
