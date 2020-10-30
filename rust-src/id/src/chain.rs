@@ -185,7 +185,6 @@ pub fn verify_cdi<
         }
         CredentialAccount::NewAccount(ref keys, threshold) => {
             // message signed in proofs.proofs_acc_sk.sigs
-            let signed = ro.split().get_challenge();
             if !utils::verify_accunt_ownership_proof(
                 &keys,
                 threshold,
