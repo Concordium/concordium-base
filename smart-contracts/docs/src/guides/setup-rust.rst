@@ -1,8 +1,8 @@
 .. _setup_rust:
 
-=====================
-Setup for development
-=====================
+=============================
+Install tools for development
+=============================
 Before we can start developing smart contracts, we need to install and setup a
 environment.
 

@@ -31,6 +31,7 @@ The documentation is split into four categories
    - Queries
    - Cargo-concordium reference
    - Contract examples
+   - Contract best practices (ensure amount is 0 ...)
 
 .. toctree::
    :maxdepth: 1
@@ -51,6 +52,7 @@ The documentation is split into four categories
    :caption: How-to guides
 
    guides/setup-rust
+   guides/setup-contract
 
 .. toctree::
    :maxdepth: 1

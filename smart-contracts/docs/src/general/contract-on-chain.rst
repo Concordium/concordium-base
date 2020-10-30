@@ -31,20 +31,20 @@ Smart contract module
               Escrow and Crowdfunding. Each contract have two instances.
 
     digraph G {
+        node [style=filled, color = white]
+
         subgraph cluster_0 {
             label = "Smart contract module";
             style=filled;
             color=lightgrey;
-            node [style=filled, color = white]
             "Crowdfunding";
             "Escrow";
         }
 
         subgraph cluster_1 {
             label = "Instances";
-             style=filled;
+            style=filled;
             color=lightgrey;
-            node [style=filled, color = white]
             House;
             Car;
             Gadget;
