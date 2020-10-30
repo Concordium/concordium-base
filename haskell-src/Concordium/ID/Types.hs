@@ -804,6 +804,15 @@ data AccountCredential =
   | NormalAC CredentialDeploymentValues
   deriving(Eq, Show)
 
+data CredentialType = Initial | Normal
+    deriving(Eq, Show)
+
+instance FromJSON CredentialType where
+  parseJSON = withText "Credential Type" $ \t ->
+    if t == "initial" then return Initial
+    else if t == "normal" then return Normal
+    else fail "Unsupported credential type."
+
 instance Serialize AccountCredential where
   put (InitialAC icdi) = putWord8 0 <> put icdi
   put (NormalAC cdi) = putWord8 1 <> put cdi
@@ -816,18 +825,16 @@ instance Serialize AccountCredential where
 instance FromJSON AccountCredentialWithProofs where
   parseJSON = withObject "Account credential with proofs" $ \v -> do
     ty <- v .: "type"
-    case ty :: String of
-      "initial" -> InitialACWP <$> v .: "contents"
-      "normal" -> NormalACWP <$> v .: "contents"
-      _ -> fail "Unsupported credential type."
+    case ty of
+      Initial -> InitialACWP <$> v .: "contents"
+      Normal -> NormalACWP <$> v .: "contents"
 
 instance FromJSON AccountCredential where
   parseJSON = withObject "Account credential with proofs" $ \v -> do
     ty <- v .: "type"
-    case ty :: String of
-      "initial" -> InitialAC <$> v .: "contents"
-      "normal" -> NormalAC <$> v .: "contents"
-      _ -> fail "Unsupported credential type."
+    case ty of
+      Initial -> InitialAC <$> v .: "contents"
+      Normal -> NormalAC <$> v .: "contents"
 
 -- |Extract the validity information for the credential.
 validTo :: AccountCredential -> CredentialValidTo
@@ -842,3 +849,11 @@ regId (InitialAC icdv) = icdvRegId icdv
 values :: AccountCredentialWithProofs -> AccountCredential
 values (InitialACWP icdi) = InitialAC (icdiValues icdi)
 values (NormalACWP cdi) = NormalAC (cdiValues cdi)
+
+ipId :: AccountCredential -> IdentityProviderIdentity
+ipId (InitialAC icdv) = icdvIpId icdv
+ipId (NormalAC cdv) = cdvIpId cdv
+
+credentialType :: AccountCredential -> CredentialType
+credentialType (InitialAC _) = Initial
+credentialType (NormalAC _) = Normal
