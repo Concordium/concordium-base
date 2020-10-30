@@ -5,7 +5,7 @@ use curve_arithmetic::*;
 use id::{
     constants::{ArCurve, IpPairing},
     ffi::AttributeKind,
-    identity_provider::{sign_identity_object, validate_request as ip_validate_request},
+    identity_provider::{sign_identity_object, validate_request as ip_validate_request, create_initial_cdi},
     types::*,
 };
 use log::{error, info};
@@ -358,6 +358,8 @@ async fn create_signed_identity_object(
                 .body(e))
         }
     };
+
+    let initial_cdi = create_initial_cdi(&identity_object_input.ip_data.public_ip_info, versioned_id.value.pre_identity_object.pub_info_for_ip.clone(), &versioned_id.value.alist, &identity_object_input.ip_data.ip_cdi_secret_key);
 
     // The callback_location has to point to the location where the wallet can
     // retrieve the identity object when it is available.
