@@ -1889,6 +1889,8 @@ pub struct AnonymityRevocationRecord<C: Curve> {
     /// anonymity revocation.
     #[serde(rename = "arData")]
     pub ar_data: BTreeMap<ArIdentity, IpArData<C>>,
+    #[serde(rename = "maxAcccounts")]
+    pub max_accounts: u8,
 }
 
 #[cfg(test)]
