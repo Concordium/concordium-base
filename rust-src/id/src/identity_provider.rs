@@ -338,6 +338,7 @@ pub fn create_initial_cdi<
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_cdi_secret_key: &ed25519_dalek::SecretKey,
 ) -> InitialCredentialDeploymentInfo<C, AttributeType> {
+    // The initial policy is empty, apart from the expiry date of the credential.
     let policy: Policy<C, AttributeType> = Policy {
         valid_to:   alist.valid_to,
         created_at: alist.created_at,

@@ -1,7 +1,5 @@
-use std::{convert::Infallible, fs, fs::OpenOptions, io::prelude::*, path::PathBuf, sync::Arc};
-
-use crypto_common::{base16_encode_string, Versioned, VERSION_0};
-use curve_arithmetic::*;
+use anyhow::{bail, ensure};
+use crypto_common::{base16_encode_string, SerdeDeserialize, SerdeSerialize, Versioned, VERSION_0};
 use id::{
     constants::{ArCurve, IpPairing},
     ffi::AttributeKind,
@@ -11,19 +9,25 @@ use id::{
     types::*,
 };
 use log::{error, info};
-use pairing::bls12_381::Bls12;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{from_str, to_string};
+use serde_json::{from_str, json, to_value};
+use std::{
+    collections::HashMap,
+    convert::Infallible,
+    fs,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use structopt::StructOpt;
-use url::form_urlencoded::byte_serialize;
 use warp::{
     http::{Response, StatusCode},
-    hyper::header::{CONTENT_TYPE, LOCATION},
+    hyper::header::LOCATION,
     Filter,
 };
 
-type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
+type ExampleAttributeList = AttributeList<id::constants::BaseField, AttributeKind>;
 
 #[derive(Deserialize)]
 struct IdentityObjectRequest {
@@ -49,7 +53,7 @@ struct Input {
 #[derive(Serialize)]
 struct IdentityTokenContainer {
     status: String,
-    token:  String,
+    token:  serde_json::Value,
     detail: String,
 }
 
@@ -59,8 +63,6 @@ struct IdentityTokenContainer {
 struct ValidatedRequest {
     /// The pre-identity-object contained in the initial request.
     request: PreIdentityObject<IpPairing, ArCurve>,
-    /// The identity provider data needed to sign the request.
-    ip_data: Arc<IpData<IpPairing>>,
     /// The URI that the ID object should be returned to after we've done the
     /// verification of the user.
     redirect_uri: String,
@@ -111,10 +113,322 @@ struct IdentityProviderServiceConfiguration {
         env = "ID_VERIFICATION_URL"
     )]
     id_verification_url: url::Url,
+    #[structopt(
+        long = "wallet-proxy-base",
+        help = "URL of the wallet-proxy.",
+        env = "WALLET_PROXY_BASE"
+    )]
+    wallet_proxy_base: url::Url,
+}
+/// The state the server maintains in-between the requests.
+struct ServerConfig {
+    ip_data:               IpData<IpPairing>,
+    global:                GlobalContext<ArCurve>,
+    ars:                   ArInfos<ArCurve>,
+    id_verification_url:   url::Url,
+    retrieve_url:          url::Url,
+    submit_credential_url: url::Url,
+}
+
+fn load_server_config(
+    config: &IdentityProviderServiceConfiguration,
+) -> anyhow::Result<ServerConfig> {
+    let ip_data_contents = fs::read_to_string(&config.identity_provider_file)?;
+    let ar_info_contents = fs::read_to_string(&config.anonymity_revokers_file)?;
+    let global_context_contents = fs::read_to_string(&config.global_context_file)?;
+    let ip_data = from_str(&ip_data_contents)?;
+    let versioned_global = from_str::<Versioned<_>>(&global_context_contents)?;
+    let versioned_ar_infos = from_str::<Versioned<_>>(&ar_info_contents)?;
+    ensure!(
+        versioned_global.version == VERSION_0,
+        "Unsupported global parameters version."
+    );
+    ensure!(
+        versioned_ar_infos.version == VERSION_0,
+        "Unsupported anonymity revokers version."
+    );
+    let mut submit_credential_url = config.wallet_proxy_base.clone();
+    submit_credential_url.set_path("v0/submitCredential/");
+    Ok(ServerConfig {
+        ip_data,
+        global: versioned_global.value,
+        ars: versioned_ar_infos.value,
+        id_verification_url: config.id_verification_url.clone(),
+        retrieve_url: config.retrieve_url.clone(),
+        submit_credential_url,
+    })
+}
+
+/// A mockup of a database to store all the data.
+/// In production this would be a real database.
+#[derive(Clone)]
+struct DB {
+    /// Root directory where all the data is stored.
+    root: std::path::PathBuf,
+    /// Root of the backup directory where we store "deleted" files.
+    backup_root: std::path::PathBuf,
+    /// And a hashmap of pending entries. Pending entries are also stored in the
+    /// filesystem, but we cache them here since they have to be accessed
+    /// often. We put it behind a mutex to sync all accesses, to the hashmap
+    /// as well as to the filesystem, which is implicit. In a real database
+    /// this would be done differently.
+    pending: Arc<Mutex<HashMap<String, PendingEntry>>>,
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(rename_all = "lowercase")]
+enum PendingStatus {
+    Submitted {
+        submission_id: String,
+        status:        SubmissionStatus,
+    },
+    CouldNotSubmit,
+}
+
+#[derive(SerdeDeserialize, SerdeSerialize)]
+#[serde(rename_all = "camelCase")]
+/// Successful response from the wallet proxy.
+struct InitialAccountReponse {
+    submission_id: String,
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize, Clone)]
+struct PendingEntry {
+    pub status: PendingStatus,
+    pub value:  serde_json::Value,
+}
+
+impl DB {
+    pub fn new(root: std::path::PathBuf, backup_root: std::path::PathBuf) -> anyhow::Result<Self> {
+        // Create the 'database' directories for storing IdentityObjects and
+        // AnonymityRevocationRecords.
+        fs::create_dir_all(root.join("revocation"))?;
+        fs::create_dir_all(root.join("identity"))?;
+        fs::create_dir_all(root.join("pending"))?;
+        let mut hm = HashMap::new();
+        for file in fs::read_dir(root.join("pending"))? {
+            if let Ok(file) = file {
+                if file.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+                    let name = file
+                        .file_name()
+                        .into_string()
+                        .expect("Base16 strings are valid strings.");
+                    let contents = fs::read_to_string(file.path())?;
+                    let entry = from_str::<PendingEntry>(&contents)?;
+                    hm.insert(name, entry);
+                }
+            }
+        }
+        let pending = Arc::new(Mutex::new(hm));
+        Ok(Self {
+            root,
+            backup_root,
+            pending,
+        })
+    }
+
+    pub fn write_revocation_record(
+        &self,
+        key: &str,
+        record: &AnonymityRevocationRecord<ArCurve>,
+    ) -> anyhow::Result<()> {
+        let _lock = self
+            .pending
+            .lock()
+            .expect("Cannot acquire a lock, which means something is very wrong.");
+        {
+            // FIXME: We should be careful to not overwrite here.
+            let file = std::fs::File::create(self.root.join("revocation").join(key))?;
+            serde_json::to_writer(file, record)?;
+        } // close the file
+          // and now drop the lock as well.
+        Ok(())
+    }
+
+    pub fn write_identity_object(
+        &self,
+        key: &str,
+        obj: &Versioned<IdentityObject<IpPairing, ArCurve, AttributeKind>>,
+    ) -> anyhow::Result<()> {
+        let _lock = self
+            .pending
+            .lock()
+            .expect("Cannot acquire a lock, which means something is very wrong.");
+        {
+            let file = std::fs::File::create(self.root.join("identity").join(key))?;
+            let stored_obj = json!({
+                "identityObject": obj,
+                "accountAddress": AccountAddress::new(&obj.value.pre_identity_object.pub_info_for_ip.reg_id)
+            });
+            serde_json::to_writer(file, &stored_obj)?;
+        }
+        Ok(())
+    }
+
+    pub fn read_identity_object(&self, key: &str) -> anyhow::Result<serde_json::Value> {
+        // ensure the key is valid base16 characters, which also ensures we are only
+        // reading in the subdirectory FIXME: This is an inefficient way of
+        // doing it.
+        if hex::decode(key).is_err() {
+            bail!("Invalid key.")
+        }
+
+        let contents = {
+            let _lock = self
+                .pending
+                .lock()
+                .expect("Cannot acquire a lock, which means something is very wrong.");
+            fs::read_to_string(self.root.join("identity").join(key))?
+        }; // drop the lock at this point
+           // It is more efficient to read the whole thing, and then deserialize
+        Ok(from_str::<serde_json::Value>(&contents)?)
+    }
+
+    pub fn write_pending(
+        &self,
+        key: &str,
+        status: PendingStatus,
+        value: serde_json::Value,
+    ) -> anyhow::Result<()> {
+        let _lock = self
+            .pending
+            .lock()
+            .expect("Cannot acquire a lock, which means something is very wrong.");
+        {
+            let file = std::fs::File::create(self.root.join("pending").join(key))?;
+            let value = PendingEntry { status, value };
+            serde_json::to_writer(file, &value)?;
+        }
+        Ok(())
+    }
+
+    pub fn mark_finalized(&self, key: &str) { self.pending.lock().unwrap().remove(key); }
+
+    pub fn delete_all(&self, key: &str) {
+        let mut lock = self.pending.lock().unwrap();
+        let ar_record_path = self.root.join("revocation").join(key);
+        let id_path = self.root.join("identity").join(key);
+
+        std::fs::rename(
+            ar_record_path,
+            self.backup_root.join("revocation").join(key),
+        )
+        .unwrap();
+        std::fs::rename(id_path, self.backup_root.join("identity").join(key)).unwrap();
+        lock.remove(key);
+    }
+
+    pub fn is_pending(&self, key: &str) -> bool { self.pending.lock().unwrap().get(key).is_some() }
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(rename_all = "lowercase")]
+enum SubmissionStatus {
+    Absent,
+    Received,
+    Committed,
+    Finalized,
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "camelCase")]
+/// The part of the response we care about. Since the transaction
+/// will either be in a block, or not, and if it is, then the account will have
+/// been created.
+struct SubmissionStatusResponse {
+    status: SubmissionStatus,
+}
+
+fn pending_checker(client: Client, db: DB, submission_url: url::Url, mut query_url_base: url::Url) {
+    loop {
+        // just clone the map and then traverse it so that the lock is only acquired for
+        // a limited amount of time.
+        let (finalized, to_remove) = if let Ok(mut hm) = db.pending.lock() {
+            // this is not the best use of locks, but for the proof of concept it is good
+            // enough. In a more production-ready solution we'd not lock for the
+            // duration of the queries.
+            let queries = async {
+                let mut finalized = Vec::new();
+                let mut to_remove = Vec::new();
+                for (k, v) in hm.iter_mut() {
+                    match &v.status {
+                        PendingStatus::CouldNotSubmit => {
+                            match submit_account_creation(&client, submission_url.clone(), &v.value)
+                                .await
+                            {
+                                Ok(new_status) => v.status = new_status,
+                                Err(_) => to_remove.push(k.to_string()),
+                            }
+                        }
+                        PendingStatus::Submitted { submission_id, .. } => {
+                            query_url_base
+                                .set_path(&format!("v0/submissionStatus/{}", submission_id));
+                            match client.get(query_url_base.clone()).send().await {
+                                Ok(response) => {
+                                    match response.status() {
+                                        StatusCode::OK => {
+                                            match response.json::<SubmissionStatusResponse>().await
+                                            {
+                                                Ok(ss) => {
+                                                    match ss.status {
+                                                        SubmissionStatus::Finalized => {
+                                                            finalized.push(k.to_string())
+                                                        }
+                                                        SubmissionStatus::Absent => error!(
+                                                            "An account creation transaction has \
+                                                             gone missing. This indicates a \
+                                                             configuration error."
+                                                        ),
+                                                        SubmissionStatus::Received => {} /* do nothing, wait for the next iteration */
+                                                        SubmissionStatus::Committed => {} /* do nothing, wait for the next iteration */
+                                                    }
+                                                }
+                                                Err(e) => error!(
+                                                    "Received unexpected response when querying \
+                                                     submission status: {}.",
+                                                    e
+                                                ),
+                                            }
+                                        }
+                                        other => error!(
+                                            "Received unexpected response when querying \
+                                             submission status: {}.",
+                                            other
+                                        ),
+                                    }
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Could not query submission status for {} due to: {}.",
+                                        k, e
+                                    );
+                                    // and do nothing
+                                }
+                            }
+                        }
+                    }
+                }
+                (finalized, to_remove)
+            };
+            futures::executor::block_on(queries)
+        } else {
+            // This shouldn't really happen, but if it does, the following is safe
+            (Vec::new(), Vec::new())
+        };
+
+        for f in finalized.iter() {
+            db.mark_finalized(f);
+        }
+        for r in to_remove.iter() {
+            db.delete_all(r);
+        }
+
+        std::thread::sleep(Duration::new(5, 0));
+    }
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     env_logger::init();
     let app = IdentityProviderServiceConfiguration::clap()
         .setting(clap::AppSettings::ArgRequiredElseHelp)
@@ -123,125 +437,153 @@ async fn main() {
     let opt = Arc::new(IdentityProviderServiceConfiguration::from_clap(&matches));
 
     info!("Reading the provided IP, AR and global context configurations.");
-    let ip_data_contents = match fs::read_to_string(&opt.identity_provider_file) {
-        Ok(data) => data,
-        Err(e) => {
-            error!("Could not read identity provider file: {}.", e);
-            return;
-        }
-    };
-    let ar_info_contents = match fs::read_to_string(&opt.anonymity_revokers_file) {
-        Ok(data) => data,
-        Err(e) => {
-            error!("Could not read anonymity revokers file: {}", e);
-            return;
-        }
-    };
-    let global_context_contents = match fs::read_to_string(&opt.global_context_file) {
-        Ok(data) => data,
-        Err(e) => {
-            error!("Could not read global context file: {}", e);
-            return;
-        }
-    };
 
-    let ip_data: Arc<IpData<IpPairing>> = match from_str(&ip_data_contents) {
-        Ok(v) => Arc::new(v),
-        Err(e) => {
-            error!("File did not contain a valid IpData object as JSON {}.", e);
-            return;
-        }
-    };
-    let ar_info: Arc<ArInfos<ArCurve>> =
-        match from_str::<Versioned<ArInfos<ArCurve>>>(&ar_info_contents) {
-            Ok(info) if info.version == VERSION_0 => Arc::new(info.value),
-            Ok(info) => {
-                error!("Unsupported anonymity revokers version {}.", info.version);
-                return;
-            }
-            Err(e) => {
-                error!("File did not contain a valid ArInfos object as JSON {}", e);
-                return;
-            }
-        };
+    let server_config = Arc::new(load_server_config(&opt)?);
 
-    let global_context: Arc<GlobalContext<ArCurve>> =
-        match from_str::<Versioned<GlobalContext<ArCurve>>>(&global_context_contents) {
-            Ok(global) if global.version == VERSION_0 => Arc::new(global.value),
-            Ok(global) => {
-                error!("Unsupported global parameters version {}.", global.version);
-                return;
-            }
-            Err(e) => {
-                error!(
-                    "File did not contain a valid GlobalContext object as JSON {}.",
-                    e
-                );
-                return;
-            }
-        };
+    // Client used to make HTTP requests to both the id verifier,
+    // as well as to submit the initial account creation.
+    // We reuse it between requests since it is expensive to create.
+    let client = Client::new();
 
     // Create the 'database' directories for storing IdentityObjects and
     // AnonymityRevocationRecords.
-    fs::create_dir_all("database/revocation").expect("Unable to create revocation directory.");
-    fs::create_dir_all("database/identity").expect("Unable to create identity directory");
+    let db = DB::new(
+        std::path::Path::new("database").to_path_buf(),
+        std::path::Path::new("database-deleted").to_path_buf(),
+    )?;
     info!("Configurations have been loaded successfully.");
+
+    let retrieval_db = db.clone();
+    let resubmit_db = db.clone();
+
+    let _ = {
+        let mut submission_url = opt.wallet_proxy_base.clone();
+        submission_url.set_path("v0/submitCredential/");
+
+        let query_url_base = opt.wallet_proxy_base.clone();
+
+        let pending_client = client.clone();
+
+        std::thread::spawn(move || {
+            pending_checker(pending_client, resubmit_db, submission_url, query_url_base)
+        });
+    };
 
     let retrieve_identity = warp::get()
         .and(warp::path!("api" / "identity" / String))
-        .map(|id_cred_pub| {
+        .map(move |id_cred_pub: String| {
             info!("Queried for receiving identity: {}", id_cred_pub);
-            match fs::read_to_string(std::path::Path::new("database/identity").join(id_cred_pub)) {
-                Ok(identity_object) => {
-                    info!("Identity object found");
+            if retrieval_db.is_pending(&id_cred_pub) {
+                info!("Identity object is pending.");
+                let identity_token_container = IdentityTokenContainer {
+                    status: "pending".to_string(),
+                    detail: "Pending initial account creation.".to_string(),
+                    token:  serde_json::Value::Null,
+                };
+                warp::reply::json(&identity_token_container)
+            } else {
+                match retrieval_db.read_identity_object(&id_cred_pub) {
+                    Ok(identity_object) => {
+                        info!("Identity object found");
 
-                    let wrapped_identity_object =
-                        "{ \"identityObject\": ".to_string() + &identity_object + "}";
-                    let urlencoded_identity_object: String =
-                        byte_serialize(wrapped_identity_object.as_bytes()).collect();
-
-                    let identity_token_container = IdentityTokenContainer {
-                        status: "done".to_string(),
-                        token:  urlencoded_identity_object,
-                        detail: "".to_string(),
-                    };
-
-                    Response::builder()
-                        .header(CONTENT_TYPE, "application/json")
-                        .body(to_string(&identity_token_container).unwrap())
-                }
-                Err(_e) => {
-                    info!("Identity object does not exist");
-                    let error_identity_token_container = IdentityTokenContainer {
-                        status: "error".to_string(),
-                        detail: "Identity object does not exist".to_string(),
-                        token:  "".to_string(),
-                    };
-                    Response::builder()
-                        .header(CONTENT_TYPE, "application/json")
-                        .body(to_string(&error_identity_token_container).unwrap())
+                        let identity_token_container = IdentityTokenContainer {
+                            status: "done".to_string(),
+                            token:  identity_object,
+                            detail: "".to_string(),
+                        };
+                        warp::reply::json(&identity_token_container)
+                    }
+                    Err(_e) => {
+                        info!("Identity object does not exist or the request is malformed.");
+                        let error_identity_token_container = IdentityTokenContainer {
+                            status: "error".to_string(),
+                            detail: "Identity object does not exist".to_string(),
+                            token:  serde_json::Value::Null,
+                        };
+                        warp::reply::json(&error_identity_token_container)
+                    }
                 }
             }
         });
 
-    let id_opt = Arc::clone(&opt);
+    let server_config_validate = Arc::clone(&server_config);
     let create_identity = warp::get()
         .and(warp::path!("api" / "identity"))
         .and(warp::query().map(move |input: Input| {
             info!("Queried for creating an identity");
-            extract_and_validate_request(
-                Arc::clone(&ip_data),
-                Arc::clone(&ar_info),
-                Arc::clone(&global_context),
-                input,
-            )
+            extract_and_validate_request(Arc::clone(&server_config_validate), input)
         }))
-        .and_then(move |idi| create_signed_identity_object(id_opt.clone(), idi));
+        .and_then(move |idi| {
+            create_signed_identity_object(
+                Arc::clone(&server_config),
+                db.clone(),
+                client.clone(),
+                idi,
+            )
+        });
 
     info!("Booting up HTTP server. Listening on port {}.", opt.port);
-    warp::serve(create_identity.or(retrieve_identity))
-        .run(([0, 0, 0, 0], opt.port))
-        .await;
+    let server = create_identity.or(retrieve_identity);
+    warp::serve(server).run(([0, 0, 0, 0], opt.port)).await;
+    Ok(())
+}
+
+macro_rules! ok_or_502 (
+    ($e: expr, $s: expr) => {
+        if $e.is_err() {
+            error!($s);
+            return Ok(Response::builder()
+                      .status(StatusCode::INTERNAL_SERVER_ERROR)
+                      .body($s.to_string()))
+        }
+    };
+);
+
+/// Submit an account creation transaction. Return Ok if either the submission
+/// was successful or if it failed due to reasons unrelated to the request
+/// itself, e.g., we could not reach the server. Return Err(_) if the submission
+/// is malformed for some reason.
+async fn submit_account_creation(
+    client: &Client,
+    url: url::Url,
+    submission: &serde_json::Value,
+) -> Result<PendingStatus, String> {
+    // Submit and wait for the submission ID.
+    match client.put(url).json(submission).send().await {
+        Ok(response) => {
+            match response.status() {
+                StatusCode::BAD_GATEWAY => {
+                    // internal server error, retry later.
+                    Ok(PendingStatus::CouldNotSubmit)
+                }
+                StatusCode::BAD_REQUEST => {
+                    Err("Failed validation of the reuse of malformed initial account.".to_string())
+                }
+                StatusCode::OK => match response.json::<InitialAccountReponse>().await {
+                    Ok(v) => {
+                        let initial_status = PendingStatus::Submitted {
+                            submission_id: v.submission_id,
+                            status:        SubmissionStatus::Received,
+                        };
+                        Ok(initial_status)
+                    }
+                    Err(_) => Ok(PendingStatus::CouldNotSubmit),
+                },
+                other => {
+                    error!("Unexpected response from the Wallet Proxy: {}", other);
+                    // internal server error, retry later.
+                    Ok(PendingStatus::CouldNotSubmit)
+                }
+            }
+        }
+        Err(e) => {
+            // This almost certainly means we could not reach the server, or the server is
+            // configured wrong. This should be considered an internal error and
+            // we must retry.
+            error!("Could not reach the wallet proxy due to: {}", e);
+            Ok(PendingStatus::CouldNotSubmit)
+        }
+    }
 }
 
 /// Asks the identity verifier to verify the person and return the associated
@@ -249,7 +591,9 @@ async fn main() {
 /// that is then signed and saved. If successful a re-direct to the URL where
 /// the identity object is available is returned.
 async fn create_signed_identity_object(
-    opt: Arc<IdentityProviderServiceConfiguration>,
+    server_config: Arc<ServerConfig>,
+    db: DB,
+    client: Client,
     identity_object_input: Result<ValidatedRequest, String>,
 ) -> Result<impl warp::Reply, Infallible> {
     let identity_object_input = match identity_object_input {
@@ -266,8 +610,11 @@ async fn create_signed_identity_object(
     // verifier. In this example the identity verifier is queried and will
     // always just return a static attribute list without doing any actual
     // verification of an identity.
-    let client = Client::new();
-    let attribute_list = match client.post(opt.id_verification_url.clone()).send().await {
+    let attribute_list = match client
+        .post(server_config.id_verification_url.clone())
+        .send()
+        .await
+    {
         Ok(attribute_list) => match attribute_list.json().await {
             Ok(attribute_list) => attribute_list,
             Err(e) => {
@@ -296,6 +643,7 @@ async fn create_signed_identity_object(
     // webservice that returns the identity object constructed here.
 
     // This is hardcoded for the proof-of-concept.
+    // Expiry is a year from now.
     let now = YearMonth::now();
     let valid_to_next_year = YearMonth {
         year:  now.year + 1,
@@ -312,9 +660,9 @@ async fn create_signed_identity_object(
 
     let signature = match sign_identity_object(
         &request,
-        &identity_object_input.ip_data.public_ip_info,
+        &server_config.ip_data.public_ip_info,
         &alist,
-        &identity_object_input.ip_data.ip_secret_key,
+        &server_config.ip_data.ip_secret_key,
     ) {
         Ok(signature) => signature,
         Err(e) => {
@@ -329,13 +677,11 @@ async fn create_signed_identity_object(
 
     let base16_encoded_id_cred_pub = base16_encode_string(&request.pub_info_for_ip.id_cred_pub);
 
-    match save_revocation_record(&request, base16_encoded_id_cred_pub.clone()) {
-        Ok(_saved) => (),
-        Err(e) => {
-            return Ok(Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(e))
-        }
+    if save_revocation_record(&db, &request, &alist).is_err() {
+        return Ok(Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body("Could not write the revocation record to database.".to_string()));
+        //
     };
 
     let id = IdentityObject {
@@ -345,36 +691,67 @@ async fn create_signed_identity_object(
     };
 
     let versioned_id = Versioned::new(VERSION_0, id);
-    let serialized_versioned_id = to_string(&versioned_id).unwrap();
 
-    // Store a record containing the created IdentityObject.
-    match store_record(
-        &serialized_versioned_id,
-        base16_encoded_id_cred_pub.clone(),
-        "identity".to_string(),
-    ) {
-        Ok(_saved) => (),
-        Err(e) => {
-            return Ok(Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(e))
-        }
-    };
+    // Store the created IdentityObject.
+    // This is stored so it can later be retrieved by querying via the idCredPub.
+    if db
+        .write_identity_object(&base16_encoded_id_cred_pub, &versioned_id)
+        .is_err()
+    {
+        return Ok(Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body("Could not write to database.".to_string()));
+    }
 
+    // As a last step we submit the initial account creation to the chain.
+    // TODO: We should check beforehand that the regid is fresh and that
+    // no account with this regid already exists, since that will lead to failure of
+    // account creation.
     let initial_cdi = create_initial_cdi(
-        &identity_object_input.ip_data.public_ip_info,
+        &server_config.ip_data.public_ip_info,
         versioned_id
             .value
             .pre_identity_object
             .pub_info_for_ip
             .clone(),
         &versioned_id.value.alist,
-        &identity_object_input.ip_data.ip_cdi_secret_key,
+        &server_config.ip_data.ip_cdi_secret_key,
     );
+
+    let submission = json!({
+        "type": "initial",
+        "contents": initial_cdi,
+    });
+
+    // The proxy expects a versioned submission, so that is what we construction.
+    let versioned_submission = to_value(&Versioned::new(VERSION_0, submission)).unwrap();
+
+    // Submit and wait for the submission ID.
+    match submit_account_creation(
+        &client,
+        server_config.submit_credential_url.clone(),
+        &versioned_submission,
+    )
+    .await
+    {
+        Ok(status) => {
+            ok_or_502!(
+                db.write_pending(&base16_encoded_id_cred_pub, status, versioned_submission),
+                "Could not write submission status."
+            );
+        }
+        Err(_) => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body("Failed validation, or the reuse of initial account.".to_string()))
+        }
+    };
+    // If we reached here it means we at least have a pending request. We respond
+    // with a URL where they will be able to retrieve the ID object.
 
     // The callback_location has to point to the location where the wallet can
     // retrieve the identity object when it is available.
-    let mut retrieve_url = opt.retrieve_url.clone();
+    let mut retrieve_url = server_config.retrieve_url.clone();
     retrieve_url.set_path(&format!("api/identity/{}", base16_encoded_id_cred_pub));
     let callback_location =
         identity_object_input.redirect_uri.clone() + "#code_uri=" + retrieve_url.as_str();
@@ -396,9 +773,7 @@ async fn create_signed_identity_object(
 /// - Ok(ValidatedRequest) if the request is valid or
 /// - Err(msg) where `msg` is a string describing the error.
 fn extract_and_validate_request(
-    ip_data: Arc<IpData<IpPairing>>,
-    ar_info: Arc<ArInfos<ArCurve>>,
-    global_context: Arc<GlobalContext<ArCurve>>,
+    server_config: Arc<ServerConfig>,
     input: Input,
 ) -> Result<ValidatedRequest, String> {
     let request: IdentityObjectRequest =
@@ -412,15 +787,14 @@ fn extract_and_validate_request(
     let request = request.id_object_request.value;
 
     let context = IPContext {
-        ip_info:        &ip_data.public_ip_info,
-        ars_infos:      &ar_info.anonymity_revokers,
-        global_context: &global_context,
+        ip_info:        &server_config.ip_data.public_ip_info,
+        ars_infos:      &server_config.ars.anonymity_revokers,
+        global_context: &server_config.global,
     };
 
     match ip_validate_request(&request, context) {
         Ok(()) => Ok(ValidatedRequest {
             request,
-            ip_data,
             redirect_uri: input.redirect_uri,
         }),
         Err(e) => Err(format!(
@@ -432,44 +806,18 @@ fn extract_and_validate_request(
 
 /// Creates and saves the revocation record to the file system (which should be
 /// a database, but for the proof-of-concept we use the file system).
-fn save_revocation_record(
+fn save_revocation_record<A: Attribute<id::constants::BaseField>>(
+    db: &DB,
     pre_identity_object: &PreIdentityObject<IpPairing, ArCurve>,
-    base16_id_cred_pub: String,
-) -> std::result::Result<(), String> {
+    alist: &AttributeList<id::constants::BaseField, A>,
+) -> anyhow::Result<()> {
     let ar_record = AnonymityRevocationRecord {
-        id_cred_pub: pre_identity_object.pub_info_for_ip.id_cred_pub,
-        ar_data:     pre_identity_object.ip_ar_data.clone(),
+        id_cred_pub:  pre_identity_object.pub_info_for_ip.id_cred_pub,
+        ar_data:      pre_identity_object.ip_ar_data.clone(),
+        max_accounts: alist.max_accounts,
     };
-
-    let serialized_ar_record = to_string(&ar_record).unwrap();
-    store_record(
-        &serialized_ar_record,
-        base16_id_cred_pub,
-        "revocation".to_string(),
-    )
-}
-
-/// Writes record to the provided subdirectory under 'database/'. The filename
-/// is set to id_cred_pub, which is expected to be the base16 serialized
-/// id_cred_pub.
-fn store_record(
-    record: &str,
-    id_cred_pub: String,
-    directory: String,
-) -> std::result::Result<(), String> {
-    let mut file = match OpenOptions::new()
-        .write(true)
-        .create(true)
-        .open(format!("database/{}/{}", directory, id_cred_pub))
-    {
-        Ok(file) => file,
-        Err(e) => return Err(format!("Failed accessing {} file: {}", directory, e)),
-    };
-
-    match writeln!(file, "{}", record) {
-        Ok(_result) => Ok(()),
-        Err(e) => Err(format!("Failed writing {} to file: {}", directory, e)),
-    }
+    let base16_id_cred_pub = base16_encode_string(&ar_record.id_cred_pub);
+    db.write_revocation_record(&base16_id_cred_pub, &ar_record)
 }
 
 #[cfg(test)]
@@ -484,18 +832,25 @@ mod tests {
         let ar_info_contents = include_str!("../data/anonymity_revokers.json");
         let global_context_contents = include_str!("../data/global.json");
 
-        let ip_data: Arc<IpData<IpPairing>> = Arc::new(
-            from_str(&ip_data_contents)
-                .expect("File did not contain a valid IpData object as JSON."),
-        );
+        let ip_data: IpData<IpPairing> = from_str(&ip_data_contents)
+            .expect("File did not contain a valid IpData object as JSON.");
         let ar_info: Versioned<ArInfos<ArCurve>> = from_str(&ar_info_contents)
             .expect("File did not contain a valid ArInfos object as JSON");
         assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
-        let ar_info = Arc::new(ar_info.value);
+        let ars = ar_info.value;
         let global_context: Versioned<GlobalContext<ArCurve>> = from_str(&global_context_contents)
             .expect("File did not contain a valid GlobalContext object as JSON");
         assert_eq!(global_context.version, VERSION_0);
-        let global_context = Arc::new(global_context.value);
+        let global = global_context.value;
+
+        let server_config = Arc::new(ServerConfig {
+            ip_data,
+            global,
+            ars,
+            id_verification_url: url::Url::parse("http://localhost/verify").unwrap(),
+            retrieve_url: url::Url::parse("http://localhost/retrieve").unwrap(),
+            submit_credential_url: url::Url::parse("http://localhost/submitCredential").unwrap(),
+        });
 
         let input = Input {
             state:        request.to_string(),
@@ -503,12 +858,7 @@ mod tests {
         };
 
         // When
-        let response = extract_and_validate_request(
-            Arc::clone(&ip_data),
-            Arc::clone(&ar_info),
-            Arc::clone(&global_context),
-            input,
-        );
+        let response = extract_and_validate_request(server_config.clone(), input);
         // Then
         assert!(response.is_ok());
     }
@@ -521,18 +871,25 @@ mod tests {
         let ar_info_contents = include_str!("../data/anonymity_revokers.json");
         let global_context_contents = include_str!("../data/global.json");
 
-        let ip_data: Arc<IpData<IpPairing>> = Arc::new(
-            from_str(&ip_data_contents)
-                .expect("File did not contain a valid IpData object as JSON."),
-        );
+        let ip_data: IpData<IpPairing> = from_str(&ip_data_contents)
+            .expect("File did not contain a valid IpData object as JSON.");
         let ar_info: Versioned<ArInfos<ArCurve>> = from_str(&ar_info_contents)
             .expect("File did not contain a valid ArInfos object as JSON");
         assert_eq!(ar_info.version, VERSION_0, "Unsupported ArInfo version.");
-        let ar_info = Arc::new(ar_info.value);
+        let ars = ar_info.value;
         let global_context: Versioned<GlobalContext<ArCurve>> = from_str(&global_context_contents)
             .expect("File did not contain a valid GlobalContext object as JSON");
         assert_eq!(global_context.version, VERSION_0);
-        let global_context = Arc::new(global_context.value);
+        let global = global_context.value;
+
+        let server_config = Arc::new(ServerConfig {
+            ip_data,
+            global,
+            ars,
+            id_verification_url: url::Url::parse("http://localhost/verify").unwrap(),
+            retrieve_url: url::Url::parse("http://localhost/retrieve").unwrap(),
+            submit_credential_url: url::Url::parse("http://localhost/submitCredential").unwrap(),
+        });
 
         let input = Input {
             state:        request.to_string(),
@@ -540,12 +897,7 @@ mod tests {
         };
 
         // When
-        let response = extract_and_validate_request(
-            Arc::clone(&ip_data),
-            Arc::clone(&ar_info),
-            Arc::clone(&global_context),
-            input,
-        );
+        let response = extract_and_validate_request(server_config, input);
 
         // Then (the zero knowledge proofs could not be verified, so we fail)
         assert!(response.is_err());
