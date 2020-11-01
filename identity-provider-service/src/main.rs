@@ -528,7 +528,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-macro_rules! ok_or_502 (
+macro_rules! ok_or_500 (
     ($e: expr, $s: expr) => {
         if $e.is_err() {
             error!($s);
@@ -677,12 +677,10 @@ async fn create_signed_identity_object(
 
     let base16_encoded_id_cred_pub = base16_encode_string(&request.pub_info_for_ip.id_cred_pub);
 
-    if save_revocation_record(&db, &request, &alist).is_err() {
-        return Ok(Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body("Could not write the revocation record to database.".to_string()));
-        //
-    };
+    ok_or_500!(
+        save_revocation_record(&db, &request, &alist),
+        "Could not write the revocation record to database."
+    );
 
     let id = IdentityObject {
         pre_identity_object: request,
@@ -694,14 +692,10 @@ async fn create_signed_identity_object(
 
     // Store the created IdentityObject.
     // This is stored so it can later be retrieved by querying via the idCredPub.
-    if db
-        .write_identity_object(&base16_encoded_id_cred_pub, &versioned_id)
-        .is_err()
-    {
-        return Ok(Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body("Could not write to database.".to_string()));
-    }
+    ok_or_500!(
+        db.write_identity_object(&base16_encoded_id_cred_pub, &versioned_id),
+        "Could not write to database."
+    );
 
     // As a last step we submit the initial account creation to the chain.
     // TODO: We should check beforehand that the regid is fresh and that
@@ -735,7 +729,7 @@ async fn create_signed_identity_object(
     .await
     {
         Ok(status) => {
-            ok_or_502!(
+            ok_or_500!(
                 db.write_pending(&base16_encoded_id_cred_pub, status, versioned_submission),
                 "Could not write submission status."
             );
