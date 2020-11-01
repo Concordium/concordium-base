@@ -1893,6 +1893,31 @@ pub struct AnonymityRevocationRecord<C: Curve> {
     pub max_accounts: u8,
 }
 
+/// A type encapsulating both types of credentials.
+/// Serialization must match the one in Haskell.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(tag = "type", content = "contents")]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+                 Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub enum AccountCredential<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    #[serde(rename = "initial")]
+    Initial {
+        icdi: InitialCredentialDeploymentInfo<C, AttributeType>,
+    },
+    #[serde(rename = "normal")]
+    Normal {
+        cdi: CredentialDeploymentInfo<P, C, AttributeType>,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

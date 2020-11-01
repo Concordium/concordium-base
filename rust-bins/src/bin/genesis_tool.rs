@@ -2,13 +2,14 @@ use aggregate_sig as agg;
 use clap::AppSettings;
 use client_server_helpers::*;
 use crypto_common::{base16_encode_string, types::Amount, *};
-use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ecvrf as vrf;
 use ed25519_dalek as ed25519;
 use either::Either::Left;
-use id::{account_holder::*, ffi::*, identity_provider::*, secret_sharing::Threshold, types::*};
-use pairing::bls12_381::{Bls12, G1};
+use id::{
+    account_holder::*, constants::*, ffi::*, identity_provider::*, secret_sharing::Threshold,
+    types::*,
+};
 use rand::{rngs::ThreadRng, *};
 use serde_json::json;
 use std::{
@@ -18,11 +19,9 @@ use std::{
 };
 use structopt::StructOpt;
 
-type ExampleCurve = G1;
-
 type ExampleAttribute = AttributeKind;
 
-type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, ExampleAttribute>;
+type ExampleAttributeList = AttributeList<BaseField, ExampleAttribute>;
 
 #[derive(StructOpt)]
 #[structopt(
@@ -121,7 +120,7 @@ fn main() -> std::io::Result<()> {
     let mut csprng = thread_rng();
 
     // Load identity provider and anonymity revokers.
-    let ip_data = read_json_from_file::<_, IpData<Bls12>>(&common.ip_data)?;
+    let ip_data = read_json_from_file::<_, IpData<IpPairing>>(&common.ip_data)?;
 
     let global_ctx = read_global_context(&common.global).ok_or_else(|| {
         Error::new(
@@ -148,7 +147,7 @@ fn main() -> std::io::Result<()> {
 
     // Roughly one year
     let generate_account = |csprng: &mut ThreadRng| {
-        let ah_info = CredentialHolderInfo::<ExampleCurve> {
+        let ah_info = CredentialHolderInfo::<ArCurve> {
             id_cred: IdCredentials::generate(csprng),
         };
 
@@ -209,13 +208,6 @@ fn main() -> std::io::Result<()> {
 
         let (ip_sig, _) = ver_ok.expect("There is an error in signing");
 
-        let policy = Policy {
-            valid_to,
-            created_at,
-            policy_vec: BTreeMap::new(),
-            _phantom: Default::default(),
-        };
-
         let mut keys = BTreeMap::new();
         for idx in 0..common.num_keys {
             keys.insert(KeyIndex(idx as u8), ed25519::Keypair::generate(csprng));
@@ -244,19 +236,19 @@ fn main() -> std::io::Result<()> {
 
         let acc_num = 53;
 
-        let cdi = create_credential(
-            context,
-            &id_object,
-            &id_object_use_data,
-            acc_num,
-            policy,
-            &acc_data,
-        )
-        .expect("We should have constructed valid data.");
+        let icdi = create_initial_cdi(
+            &ip_data.public_ip_info,
+            id_object.pre_identity_object.pub_info_for_ip,
+            &id_object.alist,
+            &ip_data.ip_cdi_secret_key,
+        );
 
-        let address = AccountAddress::new(&cdi.values.reg_id);
+        let address = AccountAddress::new(&icdi.values.reg_id);
 
-        let versioned_cdi = Versioned::new(VERSION_0, cdi);
+        let versioned_cdi =
+            Versioned::new(VERSION_0, AccountCredential::Initial::<IpPairing, _, _> {
+                icdi,
+            });
 
         let acc_keys = AccountKeys {
             keys: acc_data
@@ -326,7 +318,7 @@ fn main() -> std::io::Result<()> {
                 // signature keypair
                 let sign_key = ed25519::Keypair::generate(&mut csprng);
 
-                let agg_sign_key = agg::SecretKey::<Bls12>::generate(&mut csprng);
+                let agg_sign_key = agg::SecretKey::<IpPairing>::generate(&mut csprng);
                 let agg_verify_key = agg::PublicKey::from_secret(agg_sign_key);
 
                 // Output baker vrf and election keys in a json file.
