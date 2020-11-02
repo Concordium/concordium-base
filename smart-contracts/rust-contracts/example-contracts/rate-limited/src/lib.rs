@@ -216,7 +216,7 @@ mod tests {
         // Test
         let actions = match res {
             Err(_) => fail!("Contract receive transfer failed, but it should not have."),
-            Ok(actions) => actions
+            Ok(actions) => actions,
         };
         claim_eq!(
             actions,

@@ -174,10 +174,10 @@ pub mod tests {
 
         let parameter = InitParams {
             required_deposit: 20,
-            arbiter_fee:      30,
+            arbiter_fee: 30,
             buyer,
-            seller:           AccountAddress([1; ACCOUNT_ADDRESS_SIZE]),
-            arbiter:          AccountAddress([2; ACCOUNT_ADDRESS_SIZE]),
+            seller: AccountAddress([1; ACCOUNT_ADDRESS_SIZE]),
+            arbiter: AccountAddress([2; ACCOUNT_ADDRESS_SIZE]),
         };
 
         let mut ctx = InitContextTest::default();

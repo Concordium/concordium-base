@@ -289,7 +289,7 @@ mod tests {
         // and inspect the result.
         let state = match out {
             Ok(s) => s,
-            Err(_) => fail!("Contract initialization failed.")
+            Err(_) => fail!("Contract initialization failed."),
         };
         claim!(
             state.init_params.account_holders.contains(&account1),
@@ -355,33 +355,22 @@ mod tests {
         // Test
         let actions = match res {
             Err(_) => fail!("Contract receive failed, but it should not have."),
-            Ok(actions) => actions
+            Ok(actions) => actions,
         };
         claim_eq!(
             actions,
             test_infrastructure::ActionsTree::Accept,
             "Contract receive produced incorrect actions."
         );
-        claim_eq!(
-            state.requests.len(),
-            1,
-            "Contract receive did not create transfer request"
-        );
+        claim_eq!(state.requests.len(), 1, "Contract receive did not create transfer request");
         claim_eq!(
             sum_reserved_balance(&state),
             50,
             "Contract receive did not reserve requested amount"
         );
         let request = state.requests.get(&request_id).unwrap();
-        claim_eq!(
-            request.supporters.len(),
-            1,
-            "Only one is supporting the request from start"
-        );
-        claim!(
-            request.supporters.contains(&account1),
-            "The request sender supports the request"
-        );
+        claim_eq!(request.supporters.len(), 1, "Only one is supporting the request from start");
+        claim!(request.supporters.contains(&account1), "The request sender supports the request");
     }
 
     #[test]
@@ -438,7 +427,7 @@ mod tests {
         // Test
         let actions = match res {
             Err(_) => fail!("Contract receive support failed, but it should not have.:"),
-            Ok(actions) => actions
+            Ok(actions) => actions,
         };
 
         claim_eq!(
@@ -517,7 +506,7 @@ mod tests {
         // Test
         let actions = match res {
             Err(_) => fail!("Contract receive support failed, but it should not have."),
-            Ok(actions) => actions
+            Ok(actions) => actions,
         };
         claim_eq!(
             actions,

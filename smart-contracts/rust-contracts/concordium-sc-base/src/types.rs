@@ -174,7 +174,6 @@ macro_rules! claim_ne {
     };
 }
 
-
 /// The expected return type of the receive method of a smart contract.
 pub type ReceiveResult<A> = Result<A, Reject>;
 

@@ -104,14 +104,13 @@ impl<'a> ReceiveContextTest<'a> {
     }
 }
 
-
 // Error handling when unwrapping
 fn unwrap_ctx_field<A>(opt: Option<A>, name: &str) -> A {
     match opt {
         Some(v) => v,
         None => fail!(
             "Unset field on test context '{}', make sure to set all the field necessary for the \
-            contract",
+             contract",
             name
         ),
     }
@@ -119,16 +118,19 @@ fn unwrap_ctx_field<A>(opt: Option<A>, name: &str) -> A {
 
 // Getters for testing-context
 impl HasChainMetadata for ChainMetaTest {
-
     fn slot_time(&self) -> SlotTime { unwrap_ctx_field(self.slot_time, "metadata.slot_time") }
 
-    fn block_height(&self) -> BlockHeight { unwrap_ctx_field(self.block_height, "metadata.block_height") }
+    fn block_height(&self) -> BlockHeight {
+        unwrap_ctx_field(self.block_height, "metadata.block_height")
+    }
 
     fn finalized_height(&self) -> FinalizedHeight {
         unwrap_ctx_field(self.finalized_height, "metadata.finalized_height")
     }
 
-    fn slot_number(&self) -> SlotNumber { unwrap_ctx_field(self.slot_number, "metadata.slot_number") }
+    fn slot_number(&self) -> SlotNumber {
+        unwrap_ctx_field(self.slot_number, "metadata.slot_number")
+    }
 }
 
 impl<'a> HasInitContext<()> for InitContextTest<'a> {
