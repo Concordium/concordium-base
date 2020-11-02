@@ -69,30 +69,15 @@ fn contract_receive_optimized<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use concordium_sc_base::test_infrastructure::*;
 
     #[test]
     /// Test that init succeeds or fails based on what parameter and amount are.
     fn test_init() {
-        println!("Schema {:?}", State::get_type());
         // Setup our example state the contract is to be run in.
         // First the context.
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        0,
-        };
-        let init_origin = AccountAddress([0u8; 32]);
-        let init_ctx = InitContext {
-            metadata,
-            init_origin,
-        };
-        // The init function does not expect a parameter, so empty will do.
-        let parameter = Vec::new();
-        let ctx = test_infrastructure::InitContextWrapper {
-            init_ctx,
-            parameter: &parameter,
-        };
+        let ctx = InitContextTest::default();
+
         // set up the logger so we can intercept and analyze them at the end.
         let mut logger = test_infrastructure::LogRecorder::init();
 
@@ -119,30 +104,12 @@ mod tests {
     fn test_receive() {
         // Setup our example state the contract is to be run in.
         // First the context.
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        0,
-        };
-        let invoker = AccountAddress([0u8; 32]);
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 0,
-            sender: Address::Account(invoker),
-            owner: invoker,
-        };
-        // Still no parameter expected.
-        let parameter = Vec::new();
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &parameter,
-        };
+        let mut ctx = ReceiveContextTest::default();
+        // Set the owner as sender in the context
+        let owner = AccountAddress([0u8; 32]);
+        ctx.set_owner(owner);
+        ctx.set_sender(Address::Account(owner));
+
         // set up the logger so we can intercept and analyze them at the end.
         let mut logger = test_infrastructure::LogRecorder::init();
         let mut state = State {
@@ -152,7 +119,7 @@ mod tests {
         let res: ReceiveResult<test_infrastructure::ActionsTree> =
             contract_receive(&ctx, 11, &mut logger, &mut state);
         match res {
-            Err(_) => claim!(false, "Contract receive failed, but it should not have."),
+            Err(_) => fail!("Contract receive failed, but it should not have."),
             Ok(actions) => {
                 claim_eq!(
                     actions,

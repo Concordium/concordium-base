@@ -37,24 +37,7 @@ impl Action {
 #[derive(Default, Eq, PartialEq)]
 pub struct Reject {}
 
-#[cfg(all(debug_assertions, target_arch = "wasm32"))]
-pub fn report_error(message: &str, filename: &str, line: u32, column: u32) {
-    let msg_bytes = message.as_bytes();
-    let filename_bytes = filename.as_bytes();
-    unsafe {
-        crate::prims::report_error(
-            msg_bytes.as_ptr(),
-            msg_bytes.len() as u32,
-            filename_bytes.as_ptr(),
-            filename_bytes.len() as u32,
-            line,
-            column,
-        )
-    };
-}
-
-#[cfg(not(all(debug_assertions, target_arch = "wasm32")))]
-pub fn report_error(_message: &str, _filename: &str, _line: u32, _column: u32) {}
+// Macros for failing a contract function
 
 #[macro_export]
 /// The `bail` macro can be used for cleaner error handling. If the function has
@@ -116,44 +99,81 @@ macro_rules! ensure_ne {
     };
 }
 
-#[macro_export]
-/// The `claim` macro is used for testing as a substitute for the assert macro.
-/// It checks the condition and if false it reports back an error.
+// Macros for failing a test
+
+/// The `fail` macro is used for testing as a substitute for the panic macro.
+/// It reports back error information to the host.
 /// Used only in testing.
-macro_rules! claim {
-    ($cond:expr) => {
-        if !$cond {
+#[macro_export]
+macro_rules! fail {
+    () => {
+        {
+            $crate::test_infrastructure::report_error("", file!(), line!(), column!());
             panic!()
         }
     };
-    ($cond:expr,) => {
-        if !$cond {
-            panic!()
-        }
-    };
-    ($cond:expr, $($arg:tt)+) => {
-        if !$cond {
-            let msg = format!("False claim {:?}", format!($($arg),+));
-            report_error(&msg, file!(), line!(), column!());
+    ($($arg:tt),+) => {
+        {
+            let msg = format!($($arg),+);
+            $crate::test_infrastructure::report_error(&msg, file!(), line!(), column!());
             panic!(msg)
         }
     };
 }
 
+/// The `claim` macro is used for testing as a substitute for the assert macro.
+/// It checks the condition and if false it reports back an error.
+/// Used only in testing.
 #[macro_export]
-/// Ensure the first two arguments are equal, just like `assert_eq!`, otherwise
-/// reports an error. Used only in testing.
-macro_rules! claim_eq {
-    ($left:expr, $right:expr) => {
-        claim!($left == $right)
+macro_rules! claim {
+    ($cond:expr) => {
+        if !$cond {
+            $crate::fail!()
+        }
     };
-    ($left:expr, $right:expr,) => {
-        claim!($left == $right)
+    ($cond:expr,) => {
+        if !$cond {
+            $crate::fail!()
+        }
     };
-    ($left:expr, $right:expr, $($arg:tt)+) => {
-        claim!($left == $right, $($arg),+)
+    ($cond:expr, $($arg:tt),+) => {
+        if !$cond {
+            $crate::fail!($($arg),+)
+        }
     };
 }
+
+/// Ensure the first two arguments are equal, just like `assert_eq!`, otherwise
+/// reports an error. Used only in testing.
+#[macro_export]
+macro_rules! claim_eq {
+    ($left:expr, $right:expr) => {
+        $crate::claim!($left == $right)
+    };
+    ($left:expr, $right:expr,) => {
+        $crate::claim!($left == $right)
+    };
+    ($left:expr, $right:expr, $($arg:tt),+) => {
+        $crate::claim!($left == $right, $($arg),+)
+    };
+}
+
+/// Ensure the first two arguments are *not* equal, just like `assert_ne!`,
+/// otherwise reports an error.
+/// Used only in testing.
+#[macro_export]
+macro_rules! claim_ne {
+    ($left:expr, $right:expr) => {
+        $crate::claim!($left != $right)
+    };
+    ($left:expr, $right:expr,) => {
+        $crate::claim!($left != $right)
+    };
+    ($left:expr, $right:expr, $($arg:tt),+) => {
+        $crate::claim!($left != $right, $($arg),+)
+    };
+}
+
 
 /// The expected return type of the receive method of a smart contract.
 pub type ReceiveResult<A> = Result<A, Reject>;

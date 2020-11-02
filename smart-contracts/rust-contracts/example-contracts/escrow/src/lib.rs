@@ -63,7 +63,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     amount: Amount,
     _logger: &mut L,
 ) -> InitResult<State> {
-    ensure!(amount == 0, "This escrow contract must be initialised with a 0 amount.");
+    ensure!(amount == 0, "This escrow contract must be initialized with a 0 amount.");
     let init_params: InitParams = ctx.parameter_cursor().get()?;
     ensure!(
         init_params.buyer != init_params.seller,
@@ -162,37 +162,28 @@ fn try_send_both<A: HasActions>(a: A, b: A) -> A {
 
 // Tests
 
-// We don't use claim_eq! etc. here since they end up requiring formatters
-// which we don't necessarily want to import, etc., etc.
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use concordium_sc_base::test_infrastructure::*;
 
     #[test]
     #[no_mangle]
     fn test_init_rejects_non_zero_amounts() {
-        let metadata = ChainMetadata {
-            slot_number:      1172,
-            block_height:     1150,
-            finalized_height: 1148,
-            slot_time:        43578934,
-        };
-        let init_origin = AccountAddress([4; ACCOUNT_ADDRESS_SIZE]);
-        let init_ctx = InitContext {
-            metadata,
-            init_origin,
-        };
+        let buyer = AccountAddress([0; ACCOUNT_ADDRESS_SIZE]);
+
         let parameter = InitParams {
             required_deposit: 20,
             arbiter_fee:      30,
-            buyer:            init_origin,
-            seller:           AccountAddress([3; ACCOUNT_ADDRESS_SIZE]),
-            arbiter:          AccountAddress([3; ACCOUNT_ADDRESS_SIZE]),
+            buyer,
+            seller:           AccountAddress([1; ACCOUNT_ADDRESS_SIZE]),
+            arbiter:          AccountAddress([2; ACCOUNT_ADDRESS_SIZE]),
         };
-        let ctx = test_infrastructure::InitContextWrapper {
-            init_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+
+        let mut ctx = InitContextTest::default();
+        let parameter_bytes = to_bytes(&parameter);
+        ctx.set_parameter(&parameter_bytes);
+
         let amount = 200;
         let mut logger = test_infrastructure::LogRecorder::init();
         let result = contract_init(&ctx, amount, &mut logger);

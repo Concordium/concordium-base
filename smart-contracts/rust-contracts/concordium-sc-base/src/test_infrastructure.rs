@@ -11,81 +11,170 @@ use alloc::boxed::Box;
 #[cfg(feature = "std")]
 use std::boxed::Box;
 
-/// Wrapper for all the data that goes into an init context.
-pub struct InitContextWrapper<'a> {
-    pub init_ctx:  InitContext,
-    pub parameter: &'a [u8],
+#[derive(Default, Clone)]
+pub struct ChainMetaTest {
+    pub(crate) slot_number:      Option<SlotNumber>,
+    pub(crate) block_height:     Option<BlockHeight>,
+    pub(crate) finalized_height: Option<FinalizedHeight>,
+    pub(crate) slot_time:        Option<SlotTime>,
+}
+
+#[derive(Default, Clone)]
+pub struct InitContextTest<'a> {
+    pub metadata:           ChainMetaTest,
+    pub(crate) parameter:   Option<&'a [u8]>,
+    pub(crate) init_origin: Option<AccountAddress>,
+}
+
+#[derive(Default, Clone)]
+pub struct ReceiveContextTest<'a> {
+    pub metadata:            ChainMetaTest,
+    pub(crate) parameter:    Option<&'a [u8]>,
+    pub(crate) invoker:      Option<AccountAddress>,
+    pub(crate) self_address: Option<ContractAddress>,
+    pub(crate) self_balance: Option<Amount>,
+    pub(crate) sender:       Option<Address>,
+    pub(crate) owner:        Option<AccountAddress>,
+}
+
+// Setters for testing-context
+impl ChainMetaTest {
+    pub fn set_slot_time(&mut self, value: SlotTime) -> &mut Self {
+        self.slot_time = Some(value);
+        self
+    }
+
+    pub fn set_block_height(&mut self, value: BlockHeight) -> &mut Self {
+        self.block_height = Some(value);
+        self
+    }
+
+    pub fn set_finalized_height(&mut self, value: FinalizedHeight) -> &mut Self {
+        self.finalized_height = Some(value);
+        self
+    }
+
+    pub fn set_slot_number(&mut self, value: SlotNumber) -> &mut Self {
+        self.slot_number = Some(value);
+        self
+    }
+}
+
+impl<'a> InitContextTest<'a> {
+    pub fn set_parameter(&mut self, value: &'a [u8]) -> &mut Self {
+        self.parameter = Some(value);
+        self
+    }
+
+    pub fn set_init_origin(&mut self, value: AccountAddress) -> &mut Self {
+        self.init_origin = Some(value);
+        self
+    }
+}
+
+impl<'a> ReceiveContextTest<'a> {
+    pub fn set_parameter(&mut self, value: &'a [u8]) -> &mut Self {
+        self.parameter = Some(value);
+        self
+    }
+
+    pub fn set_invoker(&mut self, value: AccountAddress) -> &mut Self {
+        self.invoker = Some(value);
+        self
+    }
+
+    pub fn set_self_address(&mut self, value: ContractAddress) -> &mut Self {
+        self.self_address = Some(value);
+        self
+    }
+
+    pub fn set_self_balance(&mut self, value: Amount) -> &mut Self {
+        self.self_balance = Some(value);
+        self
+    }
+
+    pub fn set_sender(&mut self, value: Address) -> &mut Self {
+        self.sender = Some(value);
+        self
+    }
+
+    pub fn set_owner(&mut self, value: AccountAddress) -> &mut Self {
+        self.owner = Some(value);
+        self
+    }
+}
+
+
+// Error handling when unwrapping
+fn unwrap_ctx_field<A>(opt: Option<A>, name: &str) -> A {
+    match opt {
+        Some(v) => v,
+        None => fail!(
+            "Unset field on test context '{}', make sure to set all the field necessary for the \
+            contract",
+            name
+        ),
+    }
+}
+
+// Getters for testing-context
+impl HasChainMetadata for ChainMetaTest {
+
+    fn slot_time(&self) -> SlotTime { unwrap_ctx_field(self.slot_time, "metadata.slot_time") }
+
+    fn block_height(&self) -> BlockHeight { unwrap_ctx_field(self.block_height, "metadata.block_height") }
+
+    fn finalized_height(&self) -> FinalizedHeight {
+        unwrap_ctx_field(self.finalized_height, "metadata.finalized_height")
+    }
+
+    fn slot_number(&self) -> SlotNumber { unwrap_ctx_field(self.slot_number, "metadata.slot_number") }
+}
+
+impl<'a> HasInitContext<()> for InitContextTest<'a> {
+    type InitData = ();
+    type MetadataType = ChainMetaTest;
+    type ParamType = Cursor<&'a [u8]>;
+
+    fn open(_data: Self::InitData) -> Self { InitContextTest::default() }
+
+    fn init_origin(&self) -> AccountAddress { unwrap_ctx_field(self.init_origin, "init_origin") }
+
+    fn parameter_cursor(&self) -> Self::ParamType {
+        Cursor::new(unwrap_ctx_field(self.parameter, "parameter"))
+    }
+
+    fn metadata(&self) -> &Self::MetadataType { &self.metadata }
+}
+
+impl<'a> HasReceiveContext<()> for ReceiveContextTest<'a> {
+    type MetadataType = ChainMetaTest;
+    type ParamType = Cursor<&'a [u8]>;
+    type ReceiveData = ();
+
+    fn open(_data: Self::ReceiveData) -> Self { ReceiveContextTest::default() }
+
+    fn parameter_cursor(&self) -> Self::ParamType {
+        Cursor::new(unwrap_ctx_field(self.parameter, "parameter"))
+    }
+
+    fn metadata(&self) -> &Self::MetadataType { &self.metadata }
+
+    fn invoker(&self) -> AccountAddress { unwrap_ctx_field(self.invoker, "invoker") }
+
+    fn self_address(&self) -> ContractAddress {
+        unwrap_ctx_field(self.self_address, "self_address")
+    }
+
+    fn self_balance(&self) -> Amount { unwrap_ctx_field(self.self_balance, "self_balance") }
+
+    fn sender(&self) -> Address { unwrap_ctx_field(self.sender, "sender") }
+
+    fn owner(&self) -> AccountAddress { unwrap_ctx_field(self.owner, "owner") }
 }
 
 impl<'a> HasParameter for Cursor<&'a [u8]> {
     fn size(&self) -> u32 { self.data.len() as u32 }
-}
-
-/// # Trait implementations for the chain metadata.
-impl HasChainMetadata for ChainMetadata {
-    #[inline(always)]
-    fn slot_time(&self) -> SlotTime { self.slot_time }
-
-    #[inline(always)]
-    fn block_height(&self) -> BlockHeight { self.block_height }
-
-    #[inline(always)]
-    fn finalized_height(&self) -> FinalizedHeight { self.finalized_height }
-
-    #[inline(always)]
-    fn slot_number(&self) -> SlotNumber { self.slot_number }
-}
-
-impl<'a> HasInitContext<()> for InitContextWrapper<'a> {
-    type InitData = (InitContext, &'a [u8]);
-    type MetadataType = ChainMetadata;
-    type ParamType = Cursor<&'a [u8]>;
-
-    fn open(data: Self::InitData) -> Self {
-        Self {
-            init_ctx:  data.0,
-            parameter: data.1,
-        }
-    }
-
-    fn init_origin(&self) -> AccountAddress { self.init_ctx.init_origin }
-
-    fn parameter_cursor(&self) -> Self::ParamType { Cursor::new(self.parameter) }
-
-    fn metadata(&self) -> &Self::MetadataType { &self.init_ctx.metadata }
-}
-
-/// Wrapper for all the data that goes into a receive context.
-pub struct ReceiveContextWrapper<'a> {
-    pub receive_ctx: ReceiveContext,
-    pub parameter:   &'a [u8],
-}
-
-impl<'a> HasReceiveContext<()> for ReceiveContextWrapper<'a> {
-    type MetadataType = ChainMetadata;
-    type ParamType = Cursor<&'a [u8]>;
-    type ReceiveData = (ReceiveContext, &'a [u8]);
-
-    fn open(data: Self::ReceiveData) -> Self {
-        Self {
-            receive_ctx: data.0,
-            parameter:   data.1,
-        }
-    }
-
-    fn parameter_cursor(&self) -> Self::ParamType { Cursor::new(self.parameter) }
-
-    fn metadata(&self) -> &Self::MetadataType { &self.receive_ctx.metadata }
-
-    fn invoker(&self) -> AccountAddress { self.receive_ctx.invoker }
-
-    fn self_address(&self) -> ContractAddress { self.receive_ctx.self_address }
-
-    fn self_balance(&self) -> Amount { self.receive_ctx.self_balance }
-
-    fn sender(&self) -> Address { self.receive_ctx.sender }
-
-    fn owner(&self) -> AccountAddress { self.receive_ctx.owner }
 }
 
 /// A logger that simply accumulates all the logged items to be inspected at the
@@ -162,97 +251,25 @@ impl HasActions for ActionsTree {
     }
 }
 
-/// Contract state for testing, mimicking the operations the scheduler allows.
-pub struct ContractStateWrapper<'a> {
-    pub cursor: Cursor<&'a mut Vec<u8>>,
+/// Reports back an error to the host when compiled to wasm
+/// Used internally, not meant to be called directly by contract writers
+#[cfg(all(debug_assertions, target_arch = "wasm32"))]
+pub fn report_error(message: &str, filename: &str, line: u32, column: u32) {
+    let msg_bytes = message.as_bytes();
+    let filename_bytes = filename.as_bytes();
+    unsafe {
+        crate::prims::report_error(
+            msg_bytes.as_ptr(),
+            msg_bytes.len() as u32,
+            filename_bytes.as_ptr(),
+            filename_bytes.len() as u32,
+            line,
+            column,
+        )
+    };
 }
 
-impl<'a> Read for ContractStateWrapper<'a> {
-    type Err = ();
-
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Err> { self.cursor.read(buf) }
-}
-
-impl<'a> Write for ContractStateWrapper<'a> {
-    type Err = ();
-
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Err> { self.cursor.write(buf) }
-}
-
-// TODO: This is not tested.
-impl<'a> Seek for ContractStateWrapper<'a> {
-    type Err = ();
-
-    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Err> {
-        match pos {
-            SeekFrom::Start(x) => {
-                if x <= u64::from(self.size()) {
-                    self.cursor.offset = x as usize; // safe because of <= check
-                    Ok(x)
-                } else {
-                    Err(())
-                }
-            }
-            SeekFrom::End(x) => {
-                // cannot seek beyond end, nor before beginning
-                if x > 0 || (-x) as u64 > u64::from(self.size()) {
-                    Err(())
-                } else {
-                    use convert::TryInto;
-                    let new_pos = u64::from(self.size()) - ((-x) as u64);
-                    self.cursor.offset = new_pos.try_into().map_err(|_| ())?;
-                    Ok(new_pos)
-                }
-            }
-            SeekFrom::Current(x) => {
-                use convert::TryInto;
-                if x >= 0 {
-                    let x = x.try_into().map_err(|_| ())?;
-                    let new_pos = self.cursor.offset.checked_add(x).ok_or(())?;
-                    if new_pos <= self.cursor.data.len() {
-                        self.cursor.offset = new_pos;
-                        Ok(new_pos as u64)
-                    } else {
-                        Err(())
-                    }
-                } else {
-                    let x = (-x).try_into().map_err(|_| ())?;
-                    let new_pos = self.cursor.offset.checked_sub(x).ok_or(())?;
-                    self.cursor.offset = new_pos;
-                    Ok(new_pos as u64)
-                }
-            }
-        }
-    }
-}
-
-impl<'a> HasContractState<()> for ContractStateWrapper<'a> {
-    type ContractStateData = &'a mut Vec<u8>;
-
-    fn open(data: Self::ContractStateData) -> Self {
-        Self {
-            cursor: Cursor::new(data),
-        }
-    }
-
-    fn size(&self) -> u32 { self.cursor.data.len() as u32 }
-
-    fn truncate(&mut self, new_size: u32) {
-        if self.size() > new_size {
-            let new_size = new_size as usize;
-            self.cursor.data.truncate(new_size);
-            if self.cursor.offset > new_size {
-                self.cursor.offset = new_size
-            }
-        }
-    }
-
-    fn reserve(&mut self, len: u32) -> bool {
-        if self.size() < len {
-            self.cursor.data.resize(len as usize, 0u8);
-            true
-        } else {
-            true
-        }
-    }
-}
+/// Reports back an error to the host when compiled to wasm
+/// Used internally, not meant to be called directly by contract writers
+#[cfg(not(all(debug_assertions, target_arch = "wasm32")))]
+pub fn report_error(_message: &str, _filename: &str, _line: u32, _column: u32) {}
