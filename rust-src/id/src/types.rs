@@ -1910,10 +1910,12 @@ pub enum AccountCredential<
 > {
     #[serde(rename = "initial")]
     Initial {
+        #[serde(flatten)]
         icdi: InitialCredentialDeploymentInfo<C, AttributeType>,
     },
     #[serde(rename = "normal")]
     Normal {
+        #[serde(flatten)]
         cdi: CredentialDeploymentInfo<P, C, AttributeType>,
     },
 }
