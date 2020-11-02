@@ -8,7 +8,7 @@ use id::{
     },
     types::*,
 };
-use log::{error, info};
+use log::{error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, json, to_value};
@@ -339,91 +339,90 @@ struct SubmissionStatusResponse {
     status: SubmissionStatus,
 }
 
-fn pending_checker(client: Client, db: DB, submission_url: url::Url, mut query_url_base: url::Url) {
+async fn followup(
+    client: Client,
+    db: DB,
+    submission_url: url::Url,
+    mut query_url_base: url::Url,
+    key: String,
+) {
     loop {
-        // just clone the map and then traverse it so that the lock is only acquired for
-        // a limited amount of time.
-        let (finalized, to_remove) = if let Ok(mut hm) = db.pending.lock() {
-            // this is not the best use of locks, but for the proof of concept it is good
-            // enough. In a more production-ready solution we'd not lock for the
-            // duration of the queries.
-            let queries = async {
-                let mut finalized = Vec::new();
-                let mut to_remove = Vec::new();
-                for (k, v) in hm.iter_mut() {
-                    match &v.status {
-                        PendingStatus::CouldNotSubmit => {
-                            match submit_account_creation(&client, submission_url.clone(), &v.value)
-                                .await
-                            {
-                                Ok(new_status) => v.status = new_status,
-                                Err(_) => to_remove.push(k.to_string()),
+        let v = {
+            let hm = db.pending.lock().unwrap();
+            hm.get(&key).cloned()
+        }; // release lock
+        if let Some(v) = v {
+            match &v.status {
+                PendingStatus::CouldNotSubmit => {
+                    match submit_account_creation(&client, submission_url.clone(), &v.value).await {
+                        Ok(new_status) => {
+                            let mut hm = db.pending.lock().unwrap();
+                            if let Some(point) = hm.get_mut(&key) {
+                                point.status = new_status;
+                            } else {
+                                break;
                             }
                         }
-                        PendingStatus::Submitted { submission_id, .. } => {
-                            query_url_base
-                                .set_path(&format!("v0/submissionStatus/{}", submission_id));
-                            match client.get(query_url_base.clone()).send().await {
-                                Ok(response) => {
-                                    match response.status() {
-                                        StatusCode::OK => {
-                                            match response.json::<SubmissionStatusResponse>().await
-                                            {
-                                                Ok(ss) => {
-                                                    match ss.status {
-                                                        SubmissionStatus::Finalized => {
-                                                            finalized.push(k.to_string())
-                                                        }
-                                                        SubmissionStatus::Absent => error!(
-                                                            "An account creation transaction has \
-                                                             gone missing. This indicates a \
-                                                             configuration error."
-                                                        ),
-                                                        SubmissionStatus::Received => {} /* do nothing, wait for the next iteration */
-                                                        SubmissionStatus::Committed => {} /* do nothing, wait for the next iteration */
-                                                    }
-                                                }
-                                                Err(e) => error!(
-                                                    "Received unexpected response when querying \
-                                                     submission status: {}.",
-                                                    e
-                                                ),
-                                            }
-                                        }
-                                        other => error!(
-                                            "Received unexpected response when querying \
-                                             submission status: {}.",
-                                            other
-                                        ),
-                                    }
-                                }
-                                Err(e) => {
-                                    error!(
-                                        "Could not query submission status for {} due to: {}.",
-                                        k, e
-                                    );
-                                    // and do nothing
-                                }
-                            }
+                        Err(_) => {
+                            db.delete_all(&key);
+                            warn!("Account creation transaction rejected.");
+                            break;
                         }
                     }
                 }
-                (finalized, to_remove)
-            };
-            futures::executor::block_on(queries)
+                PendingStatus::Submitted { submission_id, .. } => {
+                    query_url_base.set_path(&format!("v0/submissionStatus/{}", submission_id));
+                    match client.get(query_url_base.clone()).send().await {
+                        Ok(response) => {
+                            match response.status() {
+                                StatusCode::OK => {
+                                    match response.json::<SubmissionStatusResponse>().await {
+                                        Ok(ss) => {
+                                            match ss.status {
+                                                SubmissionStatus::Finalized => {
+                                                    db.mark_finalized(&key);
+                                                    info!(
+                                                        "Account creation transaction finalized."
+                                                    );
+                                                    break;
+                                                }
+                                                SubmissionStatus::Absent => error!(
+                                                    "An account creation transaction has gone \
+                                                     missing. This indicates a configuration \
+                                                     error."
+                                                ),
+                                                SubmissionStatus::Received => {} /* do nothing, wait for the next iteration */
+                                                SubmissionStatus::Committed => {} /* do nothing, wait for the next iteration */
+                                            }
+                                        }
+                                        Err(e) => error!(
+                                            "Received unexpected response when querying \
+                                             submission status: {}.",
+                                            e
+                                        ),
+                                    }
+                                }
+                                other => error!(
+                                    "Received unexpected response when querying submission \
+                                     status: {}.",
+                                    other
+                                ),
+                            }
+                        }
+                        Err(e) => {
+                            error!(
+                                "Could not query submission status for {} due to: {}.",
+                                key, e
+                            );
+                            // and do nothing
+                        }
+                    }
+                }
+            }
+            std::thread::sleep(Duration::new(5, 0));
         } else {
-            // This shouldn't really happen, but if it does, the following is safe
-            (Vec::new(), Vec::new())
-        };
-
-        for f in finalized.iter() {
-            db.mark_finalized(f);
+            break;
         }
-        for r in to_remove.iter() {
-            db.delete_all(r);
-        }
-
-        std::thread::sleep(Duration::new(5, 0));
     }
 }
 
@@ -454,20 +453,6 @@ async fn main() -> anyhow::Result<()> {
     info!("Configurations have been loaded successfully.");
 
     let retrieval_db = db.clone();
-    let resubmit_db = db.clone();
-
-    let _ = {
-        let mut submission_url = opt.wallet_proxy_base.clone();
-        submission_url.set_path("v0/submitCredential/");
-
-        let query_url_base = opt.wallet_proxy_base.clone();
-
-        let pending_client = client.clone();
-
-        std::thread::spawn(move || {
-            pending_checker(pending_client, resubmit_db, submission_url, query_url_base)
-        });
-    };
 
     let retrieve_identity = warp::get()
         .and(warp::path!("api" / "identity" / String))
@@ -599,9 +584,10 @@ async fn create_signed_identity_object(
     let identity_object_input = match identity_object_input {
         Ok(request) => request,
         Err(e) => {
+            warn!("Invalid request: {}", e);
             return Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
-                .body(format!("Failed validation of the request due to: {}", e)))
+                .body(format!("Failed validation of the request due to: {}", e)));
         }
     };
     let request = identity_object_input.request;
@@ -733,6 +719,14 @@ async fn create_signed_identity_object(
                 db.write_pending(&base16_encoded_id_cred_pub, status, versioned_submission),
                 "Could not write submission status."
             );
+            let query_url_base = server_config.submit_credential_url.clone();
+            tokio::spawn(followup(
+                client,
+                db,
+                server_config.submit_credential_url.clone(),
+                query_url_base,
+                base16_encoded_id_cred_pub.clone(),
+            ))
         }
         Err(_) => {
             return Ok(Response::builder()
@@ -787,14 +781,20 @@ fn extract_and_validate_request(
     };
 
     match ip_validate_request(&request, context) {
-        Ok(()) => Ok(ValidatedRequest {
-            request,
-            redirect_uri: input.redirect_uri,
-        }),
-        Err(e) => Err(format!(
-            "The request could not be validated by the identity provider: {}",
-            e
-        )),
+        Ok(()) => {
+            info!("Request is valid.");
+            Ok(ValidatedRequest {
+                request,
+                redirect_uri: input.redirect_uri,
+            })
+        }
+        Err(e) => {
+            warn!("Request is invalid");
+            Err(format!(
+                "The request could not be validated by the identity provider: {}",
+                e
+            ))
+        }
     }
 }
 
