@@ -159,7 +159,7 @@ fn serial_string<W: Write>(s: &str, out: &mut W) -> Result<(), W::Err> {
 }
 // Deserializing a string using deserial of Vec of bytes, and treat the byte
 // vector as utf8 encoding
-fn deserial_string<R: Read>(source: &mut R) -> Result<String, ParseError> {
+fn deserial_string<R: Read>(source: &mut R) -> ParseResult<String> {
     let bytes = Vec::deserial(source)?;
     let res = String::from_utf8(bytes).unwrap();
     Ok(res)
@@ -176,7 +176,7 @@ impl Serial for InitParams {
 }
 
 impl Deserial for InitParams {
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, ParseError> {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let name = deserial_string(source)?;
         let symbol = deserial_string(source)?;
         let decimals = u32::deserial(source)?;

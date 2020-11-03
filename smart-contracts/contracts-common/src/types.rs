@@ -106,6 +106,39 @@ pub struct Cursor<T> {
     pub data:   T,
 }
 
+/// Zero-sized type to represent an error when reading bytes and deserializing.
+///
+/// When using custom error types in your smart contract, it is convenient to
+/// implement the trait `From<ParseError>` for you custom error type, to allow
+/// using the `?` operator when deserializing bytes, such as the contract state
+/// or parameters.
+///
+/// ```rust
+/// enum MyCustomReceiveError {
+///     Parsing
+/// }
+///
+/// impl From<ParseError> for MyCustomReceiveError {
+///     fn from(_: ParseError) -> Self { MyCustomReceiveError::ParseParams }
+/// }
+///
+/// #[receive(name="some_receive_name")]
+/// fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+///     ctx: &R,
+///     receive_amount: Amount,
+///     logger: &mut L,
+///     state: &mut State,
+/// ) -> Result<A, MyCustomReceiveError> {
+///     ...
+///     let msg: MyParameterType = ctx.parameter_cursor().get()?;
+///     ...
+/// }
+/// ```
+#[derive(Debug, Default)]
+pub struct ParseError {}
+
+pub type ParseResult<A> = Result<A, ParseError>;
+
 #[cfg(feature = "derive-serde")]
 mod serde_impl {
     // FIXME: This is duplicated from crypto/id/types.

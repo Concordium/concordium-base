@@ -439,7 +439,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
     let gen = quote! {
         #[automatically_derived]
         impl #impl_generics Deserial for #data_name #ty_generics #where_clauses {
-            fn deserial<#read_ident: Read>(#source_ident: &mut #read_ident) -> Result<Self, ParseError> {
+            fn deserial<#read_ident: Read>(#source_ident: &mut #read_ident) -> ParseResult<Self> {
                 #body_tokens
             }
         }

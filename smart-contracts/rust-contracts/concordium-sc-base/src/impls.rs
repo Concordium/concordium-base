@@ -74,7 +74,7 @@ impl Seek for ContractState {
 }
 
 impl Read for ContractState {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, ParseError> {
+    fn read(&mut self, buf: &mut [u8]) -> ParseResult<usize> {
         use core::convert::TryInto;
         let len: u32 = {
             match buf.len().try_into() {
@@ -89,7 +89,7 @@ impl Read for ContractState {
 
     /// Read a `u32` in little-endian format. This is optimized to not
     /// initialize a dummy value before calling an external function.
-    fn read_u64(&mut self) -> Result<u64, ParseError> {
+    fn read_u64(&mut self) -> ParseResult<u64> {
         let mut bytes: MaybeUninit<[u8; 8]> = MaybeUninit::uninit();
         let num_read =
             unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 8, self.current_position) };
@@ -103,7 +103,7 @@ impl Read for ContractState {
 
     /// Read a `u32` in little-endian format. This is optimized to not
     /// initialize a dummy value before calling an external function.
-    fn read_u32(&mut self) -> Result<u32, ParseError> {
+    fn read_u32(&mut self) -> ParseResult<u32> {
         let mut bytes: MaybeUninit<[u8; 4]> = MaybeUninit::uninit();
         let num_read =
             unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 4, self.current_position) };
@@ -117,7 +117,7 @@ impl Read for ContractState {
 
     /// Read a `u8` in little-endian format. This is optimized to not
     /// initialize a dummy value before calling an external function.
-    fn read_u8(&mut self) -> Result<u8, ParseError> {
+    fn read_u8(&mut self) -> ParseResult<u8> {
         let mut bytes: MaybeUninit<[u8; 1]> = MaybeUninit::uninit();
         let num_read =
             unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 1, self.current_position) };
@@ -186,7 +186,7 @@ impl HasContractState<()> for ContractState {
 
 /// # Trait implementations for Parameter
 impl Read for Parameter {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, ParseError> {
+    fn read(&mut self, buf: &mut [u8]) -> ParseResult<usize> {
         use core::convert::TryInto;
         let len: u32 = {
             match buf.len().try_into() {

@@ -40,9 +40,10 @@ pub struct Reject {}
 // Macros for failing a contract function
 
 /// The `bail` macro can be used for cleaner error handling. If the function has
-/// result type Result<_, Reject> then invoking `bail` will terminate execution
-/// early with an error. If the macro is invoked with a string message the
-/// message will be logged before the function terminates.
+/// result type `Result` invoking `bail` will terminate execution early with an
+/// error.
+/// If an argument is supplied, this will be used as the error, otherwise it
+/// requires the type `E` in `Result<_, E>` to implement the `Default` trait.
 #[macro_export]
 macro_rules! bail {
     () => {{
@@ -171,10 +172,54 @@ macro_rules! claim_ne {
 }
 
 /// The expected return type of the receive method of a smart contract.
+///
+/// Optionally, to define a custom type for error instead of using
+/// Reject, allowing the track the reason for rejection, *but only in unit
+/// tests*.
+///
+/// See also the documentation for [bail!](macro.bail.html) for how to use
+/// custom error types.
+///
+/// # Example
+/// Defining a custom error type
+/// ```rust
+/// enum MyCustomError {
+///     SomeError
+/// }
+///
+/// #[receive(name = "receive")]
+/// fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+///     ctx: &R,
+///     receive_amount: Amount,
+///     logger: &mut L,
+///     state: &mut State,
+/// ) -> Result<A, MyCustomError> { ... }
+/// ```
 pub type ReceiveResult<A> = Result<A, Reject>;
 
 /// The expected return type of the init method of the smart contract,
 /// parametrized by the state type of the smart contract.
+///
+/// Optionally, to define a custom type for error instead of using Reject,
+/// allowing the track the reason for rejection, *but only in unit tests*.
+///
+/// See also the documentation for [bail!](macro.bail.html) for how to use
+/// custom error types.
+///
+/// # Example
+/// Defining a custom error type
+/// ```rust
+/// enum MyCustomError {
+///     SomeError
+/// }
+///
+/// #[init(name = "init")]
+/// fn contract_init<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+///     ctx: &R,
+///     receive_amount: Amount,
+///     logger: &mut L,
+/// ) -> Result<State, MyCustomError> { ... }
+/// ```
 pub type InitResult<S> = Result<S, Reject>;
 
 pub struct InitContextExtern {}
