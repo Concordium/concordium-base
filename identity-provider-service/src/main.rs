@@ -29,18 +29,7 @@ type ExampleAttributeList = AttributeList<id::constants::BaseField, AttributeKin
 struct IdentityObjectRequest {
     #[serde(rename = "idObjectRequest")]
     id_object_request: Versioned<PreIdentityObject<IpPairing, ArCurve>>,
-}
-
-/// Holds the query parameters expected by the service.
-#[derive(Deserialize)]
-struct Input {
-    /// The JSON serialized and URL encoded identity request
-    /// object.
-    /// The name 'state' is what is expected as a GET parameter name.
-    #[serde(rename = "state")]
-    state: String,
-    /// The URI where the response will be returned.
-    #[serde(rename = "redirect_uri")]
+    #[serde(rename = "redirectURI")]
     redirect_uri: String,
 }
 
@@ -496,7 +485,8 @@ async fn main() -> anyhow::Result<()> {
         });
 
     let server_config_validate = Arc::clone(&server_config);
-    let create_identity = warp::get()
+    let create_identity = warp::post()
+        .and(warp::filters::body::content_length_limit(50 * 1024))
         .and(warp::path!("api" / "identity"))
         .and(extract_and_validate_request(server_config_validate))
         .and_then(move |idi| {
@@ -574,7 +564,6 @@ async fn submit_account_creation(
 
 #[derive(Debug)]
 enum IdRequestRejection {
-    CouldNotParse,
     UnsupportedVersion,
     InvalidProofs,
     IdVerifierFailure,
@@ -584,39 +573,53 @@ enum IdRequestRejection {
 
 impl warp::reject::Reject for IdRequestRejection {}
 
+#[derive(SerdeSerialize)]
+struct ErrorResponse {
+    code:    u16,
+    message: &'static str,
+}
+
+fn mk_reply(message: &'static str, code: StatusCode) -> impl warp::Reply {
+    let msg = ErrorResponse {
+        message,
+        code: code.as_u16(),
+    };
+    warp::reply::with_status(warp::reply::json(&msg), code)
+}
+
 async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible> {
     if err.is_not_found() {
         let code = StatusCode::NOT_FOUND;
         let message = "Not found.";
-        Ok(warp::reply::with_status(message, code))
-    } else if let Some(IdRequestRejection::CouldNotParse) = err.find() {
-        let code = StatusCode::BAD_REQUEST;
-        let message = "Could not parse the request.";
-        Ok(warp::reply::with_status(message, code))
+        Ok(mk_reply(message, code))
     } else if let Some(IdRequestRejection::UnsupportedVersion) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Unsupported version.";
-        Ok(warp::reply::with_status(message, code))
+        Ok(mk_reply(message, code))
     } else if let Some(IdRequestRejection::InvalidProofs) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Invalid proofs.";
-        Ok(warp::reply::with_status(message, code))
+        Ok(mk_reply(message, code))
     } else if let Some(IdRequestRejection::IdVerifierFailure) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "ID verifier rejected..";
-        Ok(warp::reply::with_status(message, code))
+        Ok(mk_reply(message, code))
     } else if let Some(IdRequestRejection::InternalError) = err.find() {
         let code = StatusCode::INTERNAL_SERVER_ERROR;
         let message = "Internal server error";
-        Ok(warp::reply::with_status(message, code))
+        Ok(mk_reply(message, code))
     } else if let Some(IdRequestRejection::ReuseOfRegId) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Reuse of RegId";
-        Ok(warp::reply::with_status(message, code))
+        Ok(mk_reply(message, code))
+    } else if let Some(_) = err.find::<warp::filters::body::BodyDeserializeError>() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "Malformed body.";
+        Ok(mk_reply(message, code))
     } else {
         let code = StatusCode::INTERNAL_SERVER_ERROR;
         let message = "Internal error.";
-        Ok(warp::reply::with_status(message, code))
+        Ok(mk_reply(message, code))
     }
 }
 
@@ -790,16 +793,14 @@ async fn create_signed_identity_object(
 fn extract_and_validate_request(
     server_config: Arc<ServerConfig>,
 ) -> impl Filter<Extract = (ValidatedRequest,), Error = Rejection> + Clone {
-    warp::query().and_then(move |input: Input| {
+    warp::body::json().and_then(move |input: IdentityObjectRequest| {
         let server_config = server_config.clone();
         async move {
             info!("Queried for creating an identity");
-            let request: IdentityObjectRequest = from_str(&input.state)
-                .map_err(|_| warp::reject::custom(IdRequestRejection::CouldNotParse))?;
-            if request.id_object_request.version != VERSION_0 {
+            if input.id_object_request.version != VERSION_0 {
                 return Err(warp::reject::custom(IdRequestRejection::UnsupportedVersion));
             }
-            let request = request.id_object_request.value;
+            let request = input.id_object_request.value;
 
             let context = IPContext {
                 ip_info:        &server_config.ip_data.public_ip_info,
@@ -843,6 +844,7 @@ fn save_revocation_record<A: Attribute<id::constants::BaseField>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use warp::test;
 
     #[test]
     fn test_successful_validation_and_response() {
@@ -872,15 +874,16 @@ mod tests {
             submit_credential_url: url::Url::parse("http://localhost/submitCredential").unwrap(),
         });
 
-        let input = Input {
-            state:        request.to_string(),
-            redirect_uri: "test".to_string(),
-        };
-
-        // When
-        let response = extract_and_validate_request(server_config.clone(), input);
-        // Then
-        assert!(response.is_ok());
+        tokio_test::block_on(async {
+            let v = serde_json::from_str::<serde_json::Value>(request).unwrap();
+            let matches = test::request()
+                .method("POST")
+                .json(&v)
+                .matches(&extract_and_validate_request(server_config.clone()))
+                .await;
+            // Then
+            assert!(matches, "The filter does not match the example request.");
+        });
     }
 
     #[test]
@@ -911,15 +914,21 @@ mod tests {
             submit_credential_url: url::Url::parse("http://localhost/submitCredential").unwrap(),
         });
 
-        let input = Input {
-            state:        request.to_string(),
-            redirect_uri: "test".to_string(),
-        };
-
-        // When
-        let response = extract_and_validate_request(server_config, input);
-
-        // Then (the zero knowledge proofs could not be verified, so we fail)
-        assert!(response.is_err());
+        tokio_test::block_on(async {
+            let v = serde_json::from_str::<serde_json::Value>(request).unwrap();
+            let matches = test::request()
+                .method("POST")
+                .json(&v)
+                .filter(&extract_and_validate_request(server_config.clone()))
+                .await;
+            if let Err(e) = matches {
+                if let Some(IdRequestRejection::InvalidProofs) = e.find() {
+                } else {
+                    assert!(false, "Request should fail due to invalid proofs.")
+                }
+            } else {
+                assert!(false, "Invalid request should not pass the filter.")
+            }
+        });
     }
 }

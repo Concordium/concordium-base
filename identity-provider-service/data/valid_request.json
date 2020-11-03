@@ -37,5 +37,6 @@
       }
     },
     "signature": "b4df4da8a5fc7afe8b809dabee7a18f89a166fbd51c78c4c81e38891414ac422caab8fbf88d2a8c846d8f985105ef62486dad832dacc2c8269bf4f8868277e8f0aab227d02ce672b3f2f4dfb9077b4665bae472c60ae514ea21e92f7db9d66e2"
-  }
+  },
+    "redirectURI": "exampleURI"
 }
