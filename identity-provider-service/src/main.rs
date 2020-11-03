@@ -290,7 +290,7 @@ impl DB {
         status: PendingStatus,
         value: serde_json::Value,
     ) -> anyhow::Result<()> {
-        let _lock = self
+        let mut lock = self
             .pending
             .lock()
             .expect("Cannot acquire a lock, which means something is very wrong.");
@@ -298,16 +298,23 @@ impl DB {
             let file = std::fs::File::create(self.root.join("pending").join(key))?;
             let value = PendingEntry { status, value };
             serde_json::to_writer(file, &value)?;
+            lock.insert(key.to_string(), value);
         }
         Ok(())
     }
 
-    pub fn mark_finalized(&self, key: &str) { self.pending.lock().unwrap().remove(key); }
+    pub fn mark_finalized(&self, key: &str) {
+        let mut lock = self.pending.lock().unwrap();
+        lock.remove(key);
+        let pending_path = self.root.join("pending").join(key);
+        std::fs::remove_file(pending_path).unwrap();
+    }
 
     pub fn delete_all(&self, key: &str) {
         let mut lock = self.pending.lock().unwrap();
         let ar_record_path = self.root.join("revocation").join(key);
         let id_path = self.root.join("identity").join(key);
+        let pending_path = self.root.join("pending").join(key);
 
         std::fs::rename(
             ar_record_path,
@@ -315,6 +322,7 @@ impl DB {
         )
         .unwrap();
         std::fs::rename(id_path, self.backup_root.join("identity").join(key)).unwrap();
+        std::fs::remove_file(pending_path).unwrap();
         lock.remove(key);
     }
 
