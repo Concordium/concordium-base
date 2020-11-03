@@ -1,6 +1,5 @@
-use nodejs_sys::*;
-
 use crate::*;
+use nodejs_sys::*;
 
 unsafe fn create_error(env: napi_env, err: &str) -> napi_value {
     let mut result: napi_value = std::mem::zeroed();
@@ -129,8 +128,8 @@ unsafe extern "C" fn create_identity_object_js(
     env: napi_env,
     info: napi_callback_info,
 ) -> napi_value {
-    let mut buffer: [napi_value; 4] = std::mem::MaybeUninit::zeroed().assume_init();
-    let mut argc = 4usize;
+    let mut buffer: [napi_value; 5] = std::mem::MaybeUninit::zeroed().assume_init();
+    let mut argc = 5usize;
     let mut this: napi_value = std::mem::zeroed();
     let ret = napi_get_cb_info(
         env,
@@ -143,10 +142,10 @@ unsafe extern "C" fn create_identity_object_js(
     if ret != napi_status::napi_ok {
         return create_error(env, "Cannot acquire context.");
     }
-    if argc != 4 {
+    if argc != 5 {
         return create_error(
             env,
-            &format!("Expected 4 arguments, but provided {}.", argc),
+            &format!("Expected 5 arguments, but provided {}.", argc),
         );
     }
     let ip_info = match get_string_arg(env, buffer[0]) {
@@ -165,10 +164,20 @@ unsafe extern "C" fn create_identity_object_js(
         Some(arg1) => arg1,
         None => return create_error(env, "The private key must be given as a string."),
     };
+    let ip_cdi_private_key = match get_string_arg(env, buffer[4]) {
+        Some(arg1) => arg1,
+        None => return create_error(env, "The CDI private key must be given as a string."),
+    };
 
-    let e = create_identity_object(&ip_info, &request, &alist, &ip_private_key);
+    let e = create_identity_object(
+        &ip_info,
+        &request,
+        &alist,
+        &ip_private_key,
+        &ip_cdi_private_key,
+    );
     match e {
-        Ok((idobj, ar_record)) => {
+        Ok((idobj, ar_record, icdi)) => {
             let mut ret_obj: napi_value = std::mem::zeroed();
             if napi_create_object(env, &mut ret_obj) != napi_status::napi_ok {
                 return create_error(env, "Cannot make return object.");
@@ -177,7 +186,10 @@ unsafe extern "C" fn create_identity_object_js(
                 return create_error(env, "Cannot set 'idObject' property");
             }
             if set_string_property(env, ret_obj, "arRecord", &ar_record).is_none() {
-                return create_error(env, "Cannot set 'arRecort' property");
+                return create_error(env, "Cannot set 'arRecord' property");
+            }
+            if set_string_property(env, ret_obj, "initialAccount", &icdi).is_none() {
+                return create_error(env, "Cannot set 'initialAccount' property");
             }
             ret_obj
         }

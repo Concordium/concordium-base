@@ -163,10 +163,10 @@ dependencies = [
  "curve_arithmetic",
  "ff",
  "group",
- "merlin",
  "pairing",
  "pedersen_scheme",
  "rand",
+ "random_oracle",
  "serde",
 ]
 
@@ -646,7 +646,6 @@ dependencies = [
  "hex",
  "itertools",
  "libc",
- "merlin",
  "num",
  "pairing",
  "pedersen_scheme",
@@ -759,18 +758,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c198b026e1bbf08a937e94c6c60f9ec4a2267f5b0d2eec9c1b21b061ce2be55f"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "merlin"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6feca46f4fa3443a01769d768727f10c10a20fdb65e52dc16a81f0c8269bb78"
-dependencies = [
- "byteorder",
- "keccak",
- "rand_core",
- "zeroize",
 ]
 
 [[package]]
