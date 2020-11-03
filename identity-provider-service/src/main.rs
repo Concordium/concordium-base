@@ -612,7 +612,10 @@ async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible
         let code = StatusCode::BAD_REQUEST;
         let message = "Reuse of RegId";
         Ok(mk_reply(message, code))
-    } else if err.find::<warp::filters::body::BodyDeserializeError>().is_some() {
+    } else if err
+        .find::<warp::filters::body::BodyDeserializeError>()
+        .is_some()
+    {
         let code = StatusCode::BAD_REQUEST;
         let message = "Malformed body.";
         Ok(mk_reply(message, code))
