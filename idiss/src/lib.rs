@@ -133,6 +133,7 @@ pub fn create_identity_object(
     Ok(to_string(&vid).expect("JSON serialization of versioned identity objects should not fail."))
 }
 
+#[wasm_bindgen]
 pub fn create_initial_credential(
     ip_info_str: &str,
     request_str: &str,
@@ -162,6 +163,11 @@ pub fn create_initial_credential(
     let initial_cdi = create_initial_cdi(&ip_info, pub_info_for_ip, &alist, &ip_cdi_secret_key);
 
     let v_initial_cdi = Versioned::new(VERSION_0, initial_cdi);
+    let addr = AccountAddress::new(&pub_info_for_ip.reg_id);
+    let response = serde_json::json!({
+        "request": v_initial_cdi,
+        "accountAddress": addr
+    });
     Ok(to_string(&v_initial_cdi)
         .expect("JSON serialization of versioned initial credential should not fail."))
 }
