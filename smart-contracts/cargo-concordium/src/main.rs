@@ -439,7 +439,7 @@ To include a schema for a method parameter specify the parameter type as an attr
                 }
                 if schema_embed {
                     println!("Embedding schema into contract module.");
-                    unimplemented!("Embed the schema as a custom section in the wasm module");
+                    todo!("Embed the schema as a custom section in the wasm module");
                 }
             }
             // TODO: Actually build the contract without the code for schema generation.
