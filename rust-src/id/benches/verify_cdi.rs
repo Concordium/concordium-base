@@ -1,25 +1,17 @@
-use crypto_common::*;
+use criterion::*;
+use crypto_common::{serde_impls::KeyPairDef, *};
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
+use either::Left;
 use elgamal::{PublicKey, SecretKey};
 use id::{
     account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*,
     secret_sharing::Threshold, types::*,
 };
-use std::io::Cursor;
-
 use pairing::bls12_381::{Bls12, G1};
-
 use rand::*;
-
-use std::collections::BTreeMap;
-
-use either::Left;
-
-use std::convert::TryFrom;
-
-use criterion::*;
+use std::{collections::BTreeMap, convert::TryFrom, io::Cursor};
 
 type ExampleCurve = G1;
 
@@ -121,9 +113,9 @@ fn bench_parts(c: &mut Criterion) {
     let initial_acc_data = InitialAccountData {
         keys:      {
             let mut keys = BTreeMap::new();
-            keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-            keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
             keys
         },
         threshold: SignatureThreshold(2),
