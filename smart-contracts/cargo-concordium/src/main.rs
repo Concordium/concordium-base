@@ -2,7 +2,7 @@ use crate::build::*;
 use clap::AppSettings;
 use contracts_common::to_bytes;
 use std::{
-    fs::{read, File, write},
+    fs::{read, write, File},
     io::{Read, Write},
     path::PathBuf,
 };
@@ -384,7 +384,7 @@ pub fn main() {
         }
         Command::Build {
             schema_embed,
-            schema_output
+            schema_output,
         } => {
             let build_schema = schema_embed || schema_output.is_some();
             if build_schema {
@@ -431,7 +431,7 @@ To include a schema for a method parameter specify the parameter type as an attr
                     contract_schema_bytes.len()
                 );
                 match schema_output {
-                    None => {},
+                    None => {}
                     Some(schema_out) => {
                         println!("Writing schema to {:?}.", schema_out);
                         write(schema_out, &contract_schema_bytes).unwrap();
