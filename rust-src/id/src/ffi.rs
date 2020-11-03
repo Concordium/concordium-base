@@ -283,6 +283,7 @@ pub extern "C" fn ar_info_ar_identity(ar_info_ptr: *const ArInfo<G1>) -> u32 {
 mod test {
     use super::*;
     use crate::{account_holder::*, identity_provider::*, secret_sharing::Threshold, test::*};
+    use crypto_common::serde_impls::KeyPairDef;
     use dodis_yampolskiy_prf::secret as prf;
     use ed25519_dalek as ed25519;
     use either::Either::Left;
@@ -325,9 +326,9 @@ mod test {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-                keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-                keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),

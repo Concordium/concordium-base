@@ -421,7 +421,7 @@ mod tests {
     use super::*;
 
     use crate::{account_holder::*, ffi::*, identity_provider::*, test::*};
-
+    use crypto_common::serde_impls::KeyPairDef;
     use ed25519_dalek as ed25519;
     use either::Left;
     use pairing::bls12_381::G1;
@@ -447,9 +447,9 @@ mod tests {
         let initial_acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-                keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-                keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),
@@ -522,9 +522,9 @@ mod tests {
         let acc_data = InitialAccountData {
             keys:      {
                 let mut keys = BTreeMap::new();
-                keys.insert(KeyIndex(0), ed25519::Keypair::generate(&mut csprng));
-                keys.insert(KeyIndex(1), ed25519::Keypair::generate(&mut csprng));
-                keys.insert(KeyIndex(2), ed25519::Keypair::generate(&mut csprng));
+                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
                 keys
             },
             threshold: SignatureThreshold(2),

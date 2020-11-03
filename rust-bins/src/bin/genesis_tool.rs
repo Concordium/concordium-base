@@ -179,7 +179,10 @@ fn main() -> std::io::Result<()> {
 
         let mut initial_keys = BTreeMap::new();
         for idx in 0..common.num_keys {
-            initial_keys.insert(KeyIndex(idx as u8), ed25519::Keypair::generate(csprng));
+            initial_keys.insert(
+                KeyIndex(idx as u8),
+                crypto_common::serde_impls::KeyPairDef::generate(csprng),
+            );
         }
 
         let initial_threshold = SignatureThreshold(

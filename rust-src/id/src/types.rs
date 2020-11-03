@@ -1635,10 +1635,13 @@ pub struct AccountData {
     pub existing: Either<SignatureThreshold, AccountAddress>,
 }
 
-/// This contains all the keys on the account
-/// of the initial credential deployment.
+/// This contains all the keys on the account of the initial credential
+/// deployment.
+#[derive(SerdeSerialize, SerdeDeserialize)]
 pub struct InitialAccountData {
-    pub keys:      BTreeMap<KeyIndex, ed25519::Keypair>,
+    #[serde(rename = "keys")]
+    pub keys: BTreeMap<KeyIndex, crypto_common::serde_impls::KeyPairDef>,
+    #[serde(rename = "threshold")]
     pub threshold: SignatureThreshold,
 }
 
