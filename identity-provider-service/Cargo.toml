@@ -34,6 +34,9 @@ version = "0"
 path = "../rust-src/curve_arithmetic"
 version = "0"
 
+[dev-dependencies]
+tokio-test = "0.3"
+
 [[bin]]
 path = "src/bin/identity_verifier.rs"
 name = "identity-verifier"
