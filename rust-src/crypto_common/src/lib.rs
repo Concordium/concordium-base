@@ -1,5 +1,6 @@
 pub mod helpers;
 pub mod impls;
+pub mod serde_impls;
 pub mod serialize;
 pub mod types;
 pub mod version;
