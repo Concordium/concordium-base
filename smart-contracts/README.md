@@ -266,7 +266,7 @@ To build the schema, the `Cargo.toml` must include the `build-schema` feature, w
 build-schema = []
 ...
 ```
-Running `cargo concordium build --build-schema` will then first compile the contract with the `build-schema` feature enabled, generate the schema from the contract module and then compile the contract again without the code for generating the schema, and embed the schema as bytes into this.
+Running `cargo concordium build` with either `--schema-embed` or `--schema-output=<file>` will then first compile the contract with the `build-schema` feature enabled, generate the schema from the contract module and then compile the contract again without the code for generating the schema, and either embed the schema as bytes into this or output the bytes into a file (or both).
 
 The reason for compiling the contract again is to avoid including dependencies from the schema generation into the final contract, resulting in smaller modules.
 
