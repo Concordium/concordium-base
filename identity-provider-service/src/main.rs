@@ -21,11 +21,7 @@ use std::{
     time::Duration,
 };
 use structopt::StructOpt;
-use warp::{
-    http::{Response, StatusCode},
-    hyper::header::LOCATION,
-    Filter,
-};
+use warp::{http::StatusCode, hyper::header::LOCATION, Filter, Rejection, Reply};
 
 type ExampleAttributeList = AttributeList<id::constants::BaseField, AttributeKind>;
 
@@ -502,10 +498,7 @@ async fn main() -> anyhow::Result<()> {
     let server_config_validate = Arc::clone(&server_config);
     let create_identity = warp::get()
         .and(warp::path!("api" / "identity"))
-        .and(warp::query().map(move |input: Input| {
-            info!("Queried for creating an identity");
-            extract_and_validate_request(Arc::clone(&server_config_validate), input)
-        }))
+        .and(extract_and_validate_request(server_config_validate))
         .and_then(move |idi| {
             create_signed_identity_object(
                 Arc::clone(&server_config),
@@ -516,7 +509,9 @@ async fn main() -> anyhow::Result<()> {
         });
 
     info!("Booting up HTTP server. Listening on port {}.", opt.port);
-    let server = create_identity.or(retrieve_identity);
+    let server = create_identity
+        .or(retrieve_identity)
+        .recover(handle_rejection);
     warp::serve(server).run(([0, 0, 0, 0], opt.port)).await;
     Ok(())
 }
@@ -525,9 +520,7 @@ macro_rules! ok_or_500 (
     ($e: expr, $s: expr) => {
         if $e.is_err() {
             error!($s);
-            return Ok(Response::builder()
-                      .status(StatusCode::INTERNAL_SERVER_ERROR)
-                      .body($s.to_string()))
+            return Err(warp::reject::custom(IdRequestRejection::InternalError))
         }
     };
 );
@@ -579,6 +572,54 @@ async fn submit_account_creation(
     }
 }
 
+#[derive(Debug)]
+enum IdRequestRejection {
+    CouldNotParse,
+    UnsupportedVersion,
+    InvalidProofs,
+    IdVerifierFailure,
+    InternalError,
+    ReuseOfRegId,
+}
+
+impl warp::reject::Reject for IdRequestRejection {}
+
+async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible> {
+    if err.is_not_found() {
+        let code = StatusCode::NOT_FOUND;
+        let message = "Not found.";
+        Ok(warp::reply::with_status(message, code))
+    } else if let Some(IdRequestRejection::CouldNotParse) = err.find() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "Could not parse the request.";
+        Ok(warp::reply::with_status(message, code))
+    } else if let Some(IdRequestRejection::UnsupportedVersion) = err.find() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "Unsupported version.";
+        Ok(warp::reply::with_status(message, code))
+    } else if let Some(IdRequestRejection::InvalidProofs) = err.find() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "Invalid proofs.";
+        Ok(warp::reply::with_status(message, code))
+    } else if let Some(IdRequestRejection::IdVerifierFailure) = err.find() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "ID verifier rejected..";
+        Ok(warp::reply::with_status(message, code))
+    } else if let Some(IdRequestRejection::InternalError) = err.find() {
+        let code = StatusCode::INTERNAL_SERVER_ERROR;
+        let message = "Internal server error";
+        Ok(warp::reply::with_status(message, code))
+    } else if let Some(IdRequestRejection::ReuseOfRegId) = err.find() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "Reuse of RegId";
+        Ok(warp::reply::with_status(message, code))
+    } else {
+        let code = StatusCode::INTERNAL_SERVER_ERROR;
+        let message = "Internal error.";
+        Ok(warp::reply::with_status(message, code))
+    }
+}
+
 /// Asks the identity verifier to verify the person and return the associated
 /// attribute list. The attribute list is used to create the identity object
 /// that is then signed and saved. If successful a re-direct to the URL where
@@ -587,17 +628,8 @@ async fn create_signed_identity_object(
     server_config: Arc<ServerConfig>,
     db: DB,
     client: Client,
-    identity_object_input: Result<ValidatedRequest, String>,
-) -> Result<impl warp::Reply, Infallible> {
-    let identity_object_input = match identity_object_input {
-        Ok(request) => request,
-        Err(e) => {
-            warn!("Invalid request: {}", e);
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(format!("Failed validation of the request due to: {}", e)));
-        }
-    };
+    identity_object_input: ValidatedRequest,
+) -> Result<impl Reply, Rejection> {
     let request = identity_object_input.request;
 
     // Identity verification process between the identity provider and the identity
@@ -612,21 +644,16 @@ async fn create_signed_identity_object(
         Ok(attribute_list) => match attribute_list.json().await {
             Ok(attribute_list) => attribute_list,
             Err(e) => {
-                return Ok(Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(format!(
-                        "Unable to deserialize attribute list received from identity verifier: {}",
-                        e
-                    )))
+                error!("Could not deserialize response from the verifier {}.", e);
+                return Err(warp::reject::custom(IdRequestRejection::IdVerifierFailure));
             }
         },
         Err(e) => {
-            return Ok(Response::builder()
-                .status(StatusCode::SERVICE_UNAVAILABLE)
-                .body(format!(
-                    "The identity verifier service is unavailable. Try again later: {}",
-                    e
-                )))
+            error!(
+                "Could not retrieve attribute list from the verifier: {}.",
+                e
+            );
+            return Err(warp::reject::custom(IdRequestRejection::InternalError));
         }
     };
 
@@ -660,12 +687,8 @@ async fn create_signed_identity_object(
     ) {
         Ok(signature) => signature,
         Err(e) => {
-            return Ok(Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(format!(
-                    "It was not possible to sign the identity object: {}",
-                    e
-                )))
+            error!("Could not sign the identity object {}.", e);
+            return Err(warp::reject::custom(IdRequestRejection::InternalError));
         }
     };
 
@@ -736,11 +759,7 @@ async fn create_signed_identity_object(
                 base16_encoded_id_cred_pub.clone(),
             ))
         }
-        Err(_) => {
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body("Failed validation, or the reuse of initial account.".to_string()))
-        }
+        Err(_) => return Err(warp::reject::custom(IdRequestRejection::ReuseOfRegId)),
     };
     // If we reached here it means we at least have a pending request. We respond
     // with a URL where they will be able to retrieve the ID object.
@@ -754,10 +773,10 @@ async fn create_signed_identity_object(
 
     info!("Identity was successfully created. Returning URI where it can be retrieved.");
 
-    Ok(Response::builder()
-        .header(LOCATION, callback_location)
-        .status(StatusCode::FOUND)
-        .body("".to_string()))
+    Ok(warp::reply::with_status(
+        warp::reply::with_header(warp::reply(), LOCATION, callback_location),
+        StatusCode::FOUND,
+    ))
 }
 
 /// Validate that the received request is well-formed.
@@ -770,40 +789,39 @@ async fn create_signed_identity_object(
 /// - Err(msg) where `msg` is a string describing the error.
 fn extract_and_validate_request(
     server_config: Arc<ServerConfig>,
-    input: Input,
-) -> Result<ValidatedRequest, String> {
-    let request: IdentityObjectRequest =
-        from_str(&input.state).map_err(|e| format!("Could not parse identity object {}", e))?;
-    if request.id_object_request.version != VERSION_0 {
-        return Err(format!(
-            "Unsupported version {}",
-            request.id_object_request.version
-        ));
-    }
-    let request = request.id_object_request.value;
+) -> impl Filter<Extract = (ValidatedRequest,), Error = Rejection> + Clone {
+    warp::query().and_then(move |input: Input| {
+        let server_config = server_config.clone();
+        async move {
+            info!("Queried for creating an identity");
+            let request: IdentityObjectRequest = from_str(&input.state)
+                .map_err(|_| warp::reject::custom(IdRequestRejection::CouldNotParse))?;
+            if request.id_object_request.version != VERSION_0 {
+                return Err(warp::reject::custom(IdRequestRejection::UnsupportedVersion));
+            }
+            let request = request.id_object_request.value;
 
-    let context = IPContext {
-        ip_info:        &server_config.ip_data.public_ip_info,
-        ars_infos:      &server_config.ars.anonymity_revokers,
-        global_context: &server_config.global,
-    };
+            let context = IPContext {
+                ip_info:        &server_config.ip_data.public_ip_info,
+                ars_infos:      &server_config.ars.anonymity_revokers,
+                global_context: &server_config.global,
+            };
 
-    match ip_validate_request(&request, context) {
-        Ok(()) => {
-            info!("Request is valid.");
-            Ok(ValidatedRequest {
-                request,
-                redirect_uri: input.redirect_uri,
-            })
+            match ip_validate_request(&request, context) {
+                Ok(()) => {
+                    info!("Request is valid.");
+                    Ok(ValidatedRequest {
+                        request,
+                        redirect_uri: input.redirect_uri,
+                    })
+                }
+                Err(e) => {
+                    warn!("Request is invalid {}.", e);
+                    Err(warp::reject::custom(IdRequestRejection::InvalidProofs))
+                }
+            }
         }
-        Err(e) => {
-            warn!("Request is invalid");
-            Err(format!(
-                "The request could not be validated by the identity provider: {}",
-                e
-            ))
-        }
-    }
+    })
 }
 
 /// Creates and saves the revocation record to the file system (which should be
