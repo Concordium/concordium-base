@@ -76,10 +76,10 @@ mod tests {
     fn test_init() {
         // Setup our example state the contract is to be run in.
         // First the context.
-        let ctx = InitContextTest::default();
+        let ctx = InitContextTest::empty();
 
         // set up the logger so we can intercept and analyze them at the end.
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
 
         // call the init function
         let out = contract_init(&ctx, 13, &mut logger);
@@ -104,26 +104,25 @@ mod tests {
     fn test_receive() {
         // Setup our example state the contract is to be run in.
         // First the context.
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         // Set the owner as sender in the context
         let owner = AccountAddress([0u8; 32]);
         ctx.set_owner(owner);
         ctx.set_sender(Address::Account(owner));
 
         // set up the logger so we can intercept and analyze them at the end.
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             step:          1,
             current_count: 13,
         };
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 11, &mut logger, &mut state);
+        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 11, &mut logger, &mut state);
         match res {
             Err(_) => fail!("Contract receive failed, but it should not have."),
             Ok(actions) => {
                 claim_eq!(
                     actions,
-                    test_infrastructure::ActionsTree::Accept,
+                    ActionsTree::Accept,
                     "Contract receive produced incorrect actions."
                 );
                 claim_eq!(state.step, 1, "Contract receive updated the step.");

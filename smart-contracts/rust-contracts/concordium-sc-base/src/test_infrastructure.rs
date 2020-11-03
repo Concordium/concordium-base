@@ -4,6 +4,54 @@
 //!
 //! They allow writing unit tests directly in contract modules with little to no
 //! external tooling, depending on what is required.
+//!
+//!
+//! # Example
+//!
+//! ```rust
+//! // Some contract
+//! #[init(name = "noop")]
+//! fn contract_init<I: HasInitContext<()>, L: HasLogger>(
+//!     ctx: &I,
+//!     _amount: Amount,
+//!     _logger: &mut L,
+//! ) -> InitResult<State> { ... }
+//!
+//! #[receive(name = "receive")]
+//! fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+//!     ctx: &R,
+//!     amount: Amount,
+//!     logger: &mut L,
+//!     state: &mut State,
+//! ) -> ReceiveResult<A> { ... }
+//!
+//! #[cfg(test)]
+//! mod tests {
+//!     use super::*;
+//!     use concordium_sc_base::test_infrastructure::*;
+//!     #[test]
+//!     fn test_init() {
+//!         let mut ctx = InitContextTest::empty();
+//!         ctx.set_init_origin(AccountAddress([0u8; 32]));
+//!         ...
+//!         let mut logger = LogRecorder::init();
+//!         let result = contract_init(&ctx, 0, &mut logger);
+//!         claim!(...)
+//!         ...
+//!     }
+//!
+//!     #[test]
+//!     fn test_receive() {
+//!         let mut ctx = ReceiveContextTest::empty();
+//!         ctx.set_owner(AccountAddress([0u8; 32]));
+//!         ...
+//!         let mut logger = LogRecorder::init();
+//!         let result: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, state);
+//!         claim!(...)
+//!         ...
+//!     }
+//! }
+//! ```
 use crate::*;
 
 #[cfg(not(feature = "std"))]
@@ -11,6 +59,15 @@ use alloc::boxed::Box;
 #[cfg(feature = "std")]
 use std::boxed::Box;
 
+/// Placeholder for the context chain meta data.
+/// All the fields are optionally set and the getting an unset field will result
+/// in test failing.
+/// For most cases it is used as part of either
+/// [`InitContextTest`](struct.InitContextTest.html) or
+/// [`ReceiveContextTest`](struct.ReceiveContextTest.html).
+/// Use only in unit tests!
+///
+/// Defaults to having all of the fields unset
 #[derive(Default, Clone)]
 pub struct ChainMetaTest {
     pub(crate) slot_number:      Option<SlotNumber>,
@@ -19,6 +76,62 @@ pub struct ChainMetaTest {
     pub(crate) slot_time:        Option<SlotTime>,
 }
 
+/// Placeholder for the initial context. All the fields can be set optionally
+/// and the getting an unset field will result in calling
+/// [`fail!`](../macro.fail.html). Use only in tests!
+///
+/// # Setters
+/// Every field have a setter function prefixed with `set_`.
+///
+/// ### Example
+/// Creating an empty context and setting the `init_origin`.
+/// ```
+/// let mut ctx = InitContextTest::empty();
+/// ctx.set_init_origin(AccountAddress([0u8; 32]));
+/// ```
+/// ## Set chain meta data
+/// Chain meta data is set using setters on the public field `metadata`
+/// (see [`ChainMetaTest`](struct.ChainMetaTest.html)).
+///
+/// ### Example
+/// Creating an empty context and setting the `slot_time` metadata.
+/// ```
+/// let mut ctx = InitContextTest::empty();
+/// ctx.metadata.set_slot_time(1609459200);
+/// ```
+///
+/// # Use case example
+///
+/// ```rust
+/// #[init(name = "noop")]
+/// fn contract_init<I: HasInitContext<()>, L: HasLogger>(
+///     ctx: &I,
+///     _amount: Amount,
+///     _logger: &mut L,
+/// ) -> InitResult<()> {
+///     let init_origin = ctx.init_origin();
+///     let parameter: SomeParameterType = ctx.parameter_cursor().get()?;
+///     Ok(())
+/// }
+///
+/// #[cfg(test)]
+/// mod tests {
+///     use super::*;
+///     use concordium_sc_base::test_infrastructure::*;
+///     #[test]
+///     fn test() {
+///         let mut ctx = InitContextTest::empty();
+///         ctx.set_init_origin(AccountAddress([0u8; 32]));
+///         ...
+///         let result = contract_init(&ctx, 0, &mut logger);
+///         // Reads the init_origin without any problems.
+///         // But then fails because the parameter is not set.
+///     }
+/// }
+/// ```
+/// # Default
+/// Defaults to having all the fields unset, and constructing
+/// [`ChainMetaTest`](struct.ChainMetaTest.html) using default.
 #[derive(Default, Clone)]
 pub struct InitContextTest<'a> {
     pub metadata:           ChainMetaTest,
@@ -26,6 +139,61 @@ pub struct InitContextTest<'a> {
     pub(crate) init_origin: Option<AccountAddress>,
 }
 
+/// Placeholder for the receiving context. All the fields can be set optionally
+/// and the getting an unset field will result in calling
+/// [`fail!`](../macro.fail.html). Use only in tests!
+///
+/// # Setters
+/// Every field have a setter function prefixed with `set_`.
+///
+/// ### Example
+/// Creating an empty context and setting the `init_origin`.
+/// ```
+/// let owner = AccountAddress([0u8; 32]);
+/// let mut ctx = ReceiveContextTest::empty();
+/// ctx.set_owner(owner);
+/// ctx.set_sender(Address::Account(owner));
+/// ```
+/// ## Set chain meta data
+/// Chain meta data is set using setters on the public field `metadata`
+/// (see [`ChainMetaTest`](struct.ChainMetaTest.html)).
+///
+/// ### Example
+/// Creating an empty context and setting the `slot_time` metadata.
+/// ```
+/// let mut ctx = ReceiveContextTest::empty();
+/// ctx.metadata.set_slot_time(1609459200);
+/// ```
+///
+/// # Use case example
+/// Creating a context for running unit tests
+/// ```rust
+/// #[receive(name = "receive")]
+/// fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+///     ctx: &R,
+///     amount: Amount,
+///     logger: &mut L,
+///     state: &mut State,
+/// ) -> ReceiveResult<A> {
+///     ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can increment.");
+///     Ok(A::accept())
+/// }
+///
+/// #[cfg(test)]
+/// mod tests {
+///     use super::*;
+///     use concordium_sc_base::test_infrastructure::*;
+///     #[test]
+///     fn test() {
+///         let owner = AccountAddress([0u8; 32]);
+///         let mut ctx = ReceiveContextTest::empty();
+///         ctx.set_owner(owner);
+///         ctx.set_sender(Address::Account(owner));
+///         ...
+///         let result: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, state);
+///     }
+/// }
+/// ```
 #[derive(Default, Clone)]
 pub struct ReceiveContextTest<'a> {
     pub metadata:            ChainMetaTest,
@@ -39,21 +207,29 @@ pub struct ReceiveContextTest<'a> {
 
 // Setters for testing-context
 impl ChainMetaTest {
+    /// Create an `ChainMetaTest` where every field is unset, and getting any of
+    /// the fields will result in [`fail!`](../macro.fail.html).
+    pub fn empty() -> Self { Default::default() }
+
+    /// Set the block slot time
     pub fn set_slot_time(&mut self, value: SlotTime) -> &mut Self {
         self.slot_time = Some(value);
         self
     }
 
+    /// Set the block height
     pub fn set_block_height(&mut self, value: BlockHeight) -> &mut Self {
         self.block_height = Some(value);
         self
     }
 
+    /// Set the finalized block height
     pub fn set_finalized_height(&mut self, value: FinalizedHeight) -> &mut Self {
         self.finalized_height = Some(value);
         self
     }
 
+    /// Set the slot number
     pub fn set_slot_number(&mut self, value: SlotNumber) -> &mut Self {
         self.slot_number = Some(value);
         self
@@ -61,11 +237,17 @@ impl ChainMetaTest {
 }
 
 impl<'a> InitContextTest<'a> {
+    /// Create an `InitContextTest` where every field is unset, and getting any
+    /// of the fields will result in [`fail!`](../macro.fail.html).
+    pub fn empty() -> Self { Default::default() }
+
+    /// Set the parameter bytes of the `InitContextTest`
     pub fn set_parameter(&mut self, value: &'a [u8]) -> &mut Self {
         self.parameter = Some(value);
         self
     }
 
+    /// Set `init_origin` in the `InitContextTest`
     pub fn set_init_origin(&mut self, value: AccountAddress) -> &mut Self {
         self.init_origin = Some(value);
         self
@@ -73,6 +255,10 @@ impl<'a> InitContextTest<'a> {
 }
 
 impl<'a> ReceiveContextTest<'a> {
+    /// Create an `InitContextTest` where every field is unset, and getting any
+    /// of the fields will result in [`fail!`](../macro.fail.html).
+    pub fn empty() -> Self { Default::default() }
+
     pub fn set_parameter(&mut self, value: &'a [u8]) -> &mut Self {
         self.parameter = Some(value);
         self
@@ -195,7 +381,7 @@ impl HasLogger for LogRecorder {
     fn log_bytes(&mut self, event: &[u8]) { self.logs.push(event.to_vec()) }
 }
 
-/// An actions tree.
+/// An actions tree, used to provide a more simple presentation for testing.
 #[derive(Eq, PartialEq, Debug)]
 pub enum ActionsTree {
     Accept,
@@ -255,6 +441,7 @@ impl HasActions for ActionsTree {
 
 /// Reports back an error to the host when compiled to wasm
 /// Used internally, not meant to be called directly by contract writers
+#[doc(hidden)]
 #[cfg(all(debug_assertions, target_arch = "wasm32"))]
 pub fn report_error(message: &str, filename: &str, line: u32, column: u32) {
     let msg_bytes = message.as_bytes();
@@ -273,5 +460,6 @@ pub fn report_error(message: &str, filename: &str, line: u32, column: u32) {
 
 /// Reports back an error to the host when compiled to wasm
 /// Used internally, not meant to be called directly by contract writers
+#[doc(hidden)]
 #[cfg(not(all(debug_assertions, target_arch = "wasm32")))]
 pub fn report_error(_message: &str, _filename: &str, _line: u32, _column: u32) {}

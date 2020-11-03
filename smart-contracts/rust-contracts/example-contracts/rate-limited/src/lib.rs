@@ -166,7 +166,7 @@ mod tests {
         };
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.metadata.set_slot_time(10);
         ctx.set_sender(Address::Account(account1));
@@ -203,14 +203,14 @@ mod tests {
             time_limit:           9,
         };
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             recent_transfers,
         };
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+        let res: ReceiveResult<ActionsTree> =
             contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
 
         // Test
@@ -220,7 +220,7 @@ mod tests {
         };
         claim_eq!(
             actions,
-            test_infrastructure::ActionsTree::simple_transfer(&target_account, 5),
+            ActionsTree::simple_transfer(&target_account, 5),
             "The request did not transfer the correct amount."
         );
         claim_eq!(
@@ -252,7 +252,7 @@ mod tests {
         };
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         ctx.metadata.set_slot_time(10);
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
@@ -289,14 +289,14 @@ mod tests {
             time_limit:           10,
         };
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             recent_transfers,
         };
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+        let res: ReceiveResult<ActionsTree> =
             contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
 
         // Test
@@ -334,7 +334,7 @@ mod tests {
         };
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.metadata.set_slot_time(10);
         ctx.set_self_balance(10);
@@ -371,14 +371,14 @@ mod tests {
             time_limit:           1000,
         };
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             recent_transfers,
         };
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+        let res: ReceiveResult<ActionsTree> =
             contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
 
         // Test

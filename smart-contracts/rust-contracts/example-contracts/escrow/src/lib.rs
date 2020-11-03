@@ -180,12 +180,12 @@ pub mod tests {
             arbiter: AccountAddress([2; ACCOUNT_ADDRESS_SIZE]),
         };
 
-        let mut ctx = InitContextTest::default();
+        let mut ctx = InitContextTest::empty();
         let parameter_bytes = to_bytes(&parameter);
         ctx.set_parameter(&parameter_bytes);
 
         let amount = 200;
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let result = contract_init(&ctx, amount, &mut logger);
         claim!(result.is_err(), "init failed to reject a non-zero amount");
     }

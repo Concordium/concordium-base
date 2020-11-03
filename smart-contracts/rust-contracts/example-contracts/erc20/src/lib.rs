@@ -197,12 +197,12 @@ pub mod tests {
         };
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = InitContextTest::default();
+        let mut ctx = InitContextTest::empty();
         ctx.set_init_origin(init_origin);
         ctx.set_parameter(&parameter_bytes);
 
         // set up the logger so we can intercept and analyze them at the end.
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
 
         // Execution
         let out = contract_init(&ctx, 0, &mut logger);
@@ -243,7 +243,7 @@ pub mod tests {
         let parameter = Request::TransferTo(to_account, 70);
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.set_sender(Address::Account(from_account));
 
@@ -263,22 +263,17 @@ pub mod tests {
             balances,
             allowed,
         };
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         let actions = match res {
             Err(_) => fail!("Contract receive support failed, but it should not have."),
             Ok(actions) => actions,
         };
-        claim_eq!(
-            actions,
-            test_infrastructure::ActionsTree::accept(),
-            "Transferring should result in an Accept action"
-        );
+        claim_eq!(actions, ActionsTree::accept(), "Transferring should result in an Accept action");
         let from_balance = *state.balances.get(&from_account).unwrap();
         let to_balance = *state.balances.get(&to_account).unwrap();
         claim_eq!(
@@ -309,7 +304,7 @@ pub mod tests {
         let parameter = Request::TransferFromTo(from_account, to_account, 60);
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.set_sender(Address::Account(spender_account));
 
@@ -325,7 +320,7 @@ pub mod tests {
         let mut allowed = BTreeMap::new();
         allowed.insert((from_account, spender_account), 100);
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             balances,
@@ -333,19 +328,14 @@ pub mod tests {
         };
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         let actions = match res {
             Err(_) => fail!("Contract receive support failed, but it should not have."),
             Ok(actions) => actions,
         };
-        claim_eq!(
-            actions,
-            test_infrastructure::ActionsTree::accept(),
-            "Transferring should result in an Accept action"
-        );
+        claim_eq!(actions, ActionsTree::accept(), "Transferring should result in an Accept action");
         let from_balance = *state.balances.get(&from_account).unwrap();
         let to_balance = *state.balances.get(&to_account).unwrap();
         let from_spender_allowed = *state.allowed.get(&(from_account, spender_account)).unwrap();
@@ -380,7 +370,7 @@ pub mod tests {
         let parameter = Request::AllowTransfer(spender_account, 100);
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.set_sender(Address::Account(owner_account));
 
@@ -393,7 +383,7 @@ pub mod tests {
         let balances = BTreeMap::new();
         let allowed = BTreeMap::new();
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             balances,
@@ -401,15 +391,14 @@ pub mod tests {
         };
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         let actions = match res {
             Ok(actions) => actions,
             Err(_) => fail!("The message is not expected to fail"),
         };
-        claim_eq!(actions, test_infrastructure::ActionsTree::accept(), "Should accept the message");
+        claim_eq!(actions, ActionsTree::accept(), "Should accept the message");
         let owner_spender_allowed =
             *state.allowed.get(&(owner_account, spender_account)).unwrap_or(&0);
         claim_eq!(owner_spender_allowed, 100, "The allowed amount is not changed correctly");
@@ -433,7 +422,7 @@ pub mod tests {
         let parameter = Request::TransferFromTo(from_account, to_account, 110);
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.set_sender(Address::Account(spender_account));
 
@@ -454,11 +443,10 @@ pub mod tests {
             balances,
             allowed,
         };
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         claim!(res.is_err(), "The message is expected to fail");
@@ -487,7 +475,7 @@ pub mod tests {
         let parameter = Request::TransferTo(to_account, 110);
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.set_sender(Address::Account(from_account));
 
@@ -507,11 +495,10 @@ pub mod tests {
             balances,
             allowed,
         };
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         claim!(res.is_err(), "The message is expected to fail");
@@ -534,7 +521,7 @@ pub mod tests {
         let parameter = Request::TransferFromTo(from_account, to_account, 110);
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.set_sender(Address::Account(spender_account));
 
@@ -549,7 +536,7 @@ pub mod tests {
         let mut allowed = BTreeMap::new();
         allowed.insert((from_account, spender_account), 110);
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             balances,
@@ -557,8 +544,7 @@ pub mod tests {
         };
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         claim!(res.is_err(), "The message is expected to fail");
