@@ -61,3 +61,10 @@ readCredential bs =
   case AE.eitherDecode bs of
     Left err -> error $ "Cannot read credential because " ++ err
     Right d -> if vVersion d == 0 then vValue d else error "Incorrect credential version."
+
+{-# WARNING readInitialCredential "Do not use in production." #-}
+readInitialCredential :: BSL.ByteString -> ID.InitialCredentialDeploymentInfo
+readInitialCredential bs =
+  case AE.eitherDecode bs of
+    Left err -> error $ "Cannot read credential because " ++ err
+    Right d -> if vVersion d == 0 then vValue d else error "Incorrect credential version."
