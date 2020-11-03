@@ -8,6 +8,11 @@ impl convert::From<()> for Reject {
     fn from(_: ()) -> Self { Reject {} }
 }
 
+impl convert::From<ParseError> for Reject {
+    #[inline(always)]
+    fn from(_: ParseError) -> Self { Reject {} }
+}
+
 /// # Contract state trait implementations.
 impl Seek for ContractState {
     type Err = ();
@@ -69,14 +74,12 @@ impl Seek for ContractState {
 }
 
 impl Read for ContractState {
-    type Err = ();
-
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Err> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, ParseError> {
         use core::convert::TryInto;
         let len: u32 = {
             match buf.len().try_into() {
                 Ok(v) => v,
-                _ => return Err(()),
+                _ => return Err(ParseError::default()),
             }
         };
         let num_read = unsafe { load_state(buf.as_mut_ptr(), len, self.current_position) };
@@ -86,7 +89,7 @@ impl Read for ContractState {
 
     /// Read a `u32` in little-endian format. This is optimized to not
     /// initialize a dummy value before calling an external function.
-    fn read_u64(&mut self) -> Result<u64, Self::Err> {
+    fn read_u64(&mut self) -> Result<u64, ParseError> {
         let mut bytes: MaybeUninit<[u8; 8]> = MaybeUninit::uninit();
         let num_read =
             unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 8, self.current_position) };
@@ -94,13 +97,13 @@ impl Read for ContractState {
         if num_read == 8 {
             unsafe { Ok(u64::from_le_bytes(bytes.assume_init())) }
         } else {
-            Err(())
+            Err(ParseError::default())
         }
     }
 
     /// Read a `u32` in little-endian format. This is optimized to not
     /// initialize a dummy value before calling an external function.
-    fn read_u32(&mut self) -> Result<u32, Self::Err> {
+    fn read_u32(&mut self) -> Result<u32, ParseError> {
         let mut bytes: MaybeUninit<[u8; 4]> = MaybeUninit::uninit();
         let num_read =
             unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 4, self.current_position) };
@@ -108,13 +111,13 @@ impl Read for ContractState {
         if num_read == 4 {
             unsafe { Ok(u32::from_le_bytes(bytes.assume_init())) }
         } else {
-            Err(())
+            Err(ParseError::default())
         }
     }
 
     /// Read a `u8` in little-endian format. This is optimized to not
     /// initialize a dummy value before calling an external function.
-    fn read_u8(&mut self) -> Result<u8, Self::Err> {
+    fn read_u8(&mut self) -> Result<u8, ParseError> {
         let mut bytes: MaybeUninit<[u8; 1]> = MaybeUninit::uninit();
         let num_read =
             unsafe { load_state(bytes.as_mut_ptr() as *mut u8, 1, self.current_position) };
@@ -122,7 +125,7 @@ impl Read for ContractState {
         if num_read == 1 {
             unsafe { Ok(bytes.assume_init()[0]) }
         } else {
-            Err(())
+            Err(ParseError::default())
         }
     }
 }
@@ -183,14 +186,12 @@ impl HasContractState<()> for ContractState {
 
 /// # Trait implementations for Parameter
 impl Read for Parameter {
-    type Err = ();
-
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Err> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, ParseError> {
         use core::convert::TryInto;
         let len: u32 = {
             match buf.len().try_into() {
                 Ok(v) => v,
-                _ => return Err(()),
+                _ => return Err(ParseError::default()),
             }
         };
         let num_read =

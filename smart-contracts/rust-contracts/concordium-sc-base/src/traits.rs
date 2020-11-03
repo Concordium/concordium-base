@@ -35,7 +35,7 @@ pub trait HasChainMetadata {
 /// Types which can act as init contexts.
 pub trait HasInitContext<Error: Default>
 where
-    Self::ParamType: Read<Err = Error>, {
+    Self::ParamType: Read, {
     /// Data needed to open the context.
     type InitData;
     type ParamType: HasParameter;
@@ -53,7 +53,7 @@ where
 /// Types which can act as receive contexts.
 pub trait HasReceiveContext<Error: Default>
 where
-    Self::ParamType: Read<Err = Error>, {
+    Self::ParamType: Read, {
     type ReceiveData;
     type ParamType: HasParameter;
     type MetadataType: HasChainMetadata;
@@ -81,7 +81,7 @@ where
 /// A type that can serve as the contract state type.
 pub trait HasContractState<Error: Default>
 where
-    Self: Read<Err = Error>,
+    Self: Read,
     Self: Write<Err = Error>,
     Self: Seek<Err = Error>, {
     type ContractStateData;

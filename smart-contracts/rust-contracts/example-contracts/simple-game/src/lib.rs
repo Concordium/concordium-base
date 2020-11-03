@@ -48,7 +48,7 @@ type Prefix = [u8; 32];
 /// State of the smart contract instance.
 #[contract_state]
 #[derive(Serialize, SchemaType)]
-pub struct State {
+struct State {
     /// Number of contributions. Could be different from the size of the map if
     /// the same person contributes multiple times.
     num_contributions: u32,
@@ -76,8 +76,8 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     let initializer = ctx.init_origin();
     let (expiry, prefix): (u64, Prefix) = ctx.parameter_cursor().get()?;
     let ct = ctx.metadata().slot_time();
-    ensure!(expiry > ct, "Expiry must be strictly in the future.");
-    // Compute the initial hash contribution.
+    ensure!(expiry > ct); // Expiry must be strictly in the future.
+                          // Compute the initial hash contribution.
     let hash = {
         let mut hasher: sha2::Sha256 = Digest::new();
         hasher.update(&prefix);
@@ -119,12 +119,9 @@ fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     let num_contributions: u32 = state.get()?;
     // Ensure that you have to contribute more tokens the later you are to the
     // game. The scaling is arbitrarily linear.
-    ensure!(
-        amount > u64::from(num_contributions) * 10,
-        "Amount too small, rejecting contribution."
-    );
-    // Try to get the parameter (which should be exactly 32-bytes for this to
-    // succeed).
+    ensure!(amount > u64::from(num_contributions) * 10); // Amount too small, rejecting contribution.
+                                                         // Try to get the parameter (which should be exactly 32-bytes for this to
+                                                         // succeed).
     let cont: Contribution = ctx.parameter_cursor().get()?;
 
     // The main logic of the function. If the the sender is an account then we
@@ -206,7 +203,7 @@ fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             (num_contributions + 1).serial(state)?;
             Ok(A::accept())
         }
-        _ => bail!("Only accounts can contribute."),
+        _ => bail!(), // Only accounts can contribute.
     }
 }
 
@@ -226,14 +223,14 @@ fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     // memory we use, as well as the cost of this. We would not have to sort.
     let state: State = state_cursor.get()?;
     let ct = ctx.metadata().slot_time();
-    ensure!(amount == 0, "Ending the game should not transfer any tokens.");
-    ensure!(ct >= state.expiry, "Cannot finalize before expiry time.");
-    ensure!(!state.contributions.is_empty(), "Already finalized.");
-    ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can finalize.");
-    // sort the btreemap by the second key.
-    // This would be unnecessary if we swapped the values in the BTreeMap so that
-    // the hash would come first, the iterator would then give ordered values
-    // already.
+    ensure!(amount == 0); // Ending the game should not transfer any tokens.
+    ensure!(ct >= state.expiry); // Cannot finalize before expiry time.
+    ensure!(!state.contributions.is_empty()); // Already finalized.
+    ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can finalize.
+                                                         // sort the btreemap by the second key.
+                                                         // This would be unnecessary if we swapped the values in the BTreeMap so that
+                                                         // the hash would come first, the iterator would then give ordered values
+                                                         // already.
     let mut v = state.contributions.iter().collect::<Vec<_>>();
     v.sort_by_key(|triple| &(triple.1).1);
     // Split the first element off from the rest. The first element has the lowest
@@ -295,10 +292,7 @@ fn help_yourself<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _logger: &mut L,
     state: &mut ContractState,
 ) -> ReceiveResult<A> {
-    ensure!(amount == 0, "Helping yourself should not add tokens.");
-    ensure!(
-        state.size() == 0,
-        "Helping yourself only allowed after normal contributions are sent.."
-    );
+    ensure!(amount == 0); // Helping yourself should not add tokens.
+    ensure!(state.size() == 0); // Helping yourself only allowed after normal contributions are sent.
     Ok(A::simple_transfer(&ctx.invoker(), ctx.self_balance()))
 }

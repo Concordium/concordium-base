@@ -39,52 +39,48 @@ pub struct Reject {}
 
 // Macros for failing a contract function
 
-#[macro_export]
 /// The `bail` macro can be used for cleaner error handling. If the function has
 /// result type Result<_, Reject> then invoking `bail` will terminate execution
 /// early with an error. If the macro is invoked with a string message the
 /// message will be logged before the function terminates.
+#[macro_export]
 macro_rules! bail {
-    () => {
-        return Err(Reject {});
-    };
-    ($e:expr) => {{
-        // logs are not retained in case of rejection.
-        return Err(Reject {});
+    () => {{
+        return Err(Default::default());
     }};
-    ($fmt:expr, $($arg:tt),+) => {{
+    ($arg:expr) => {{
         // format_err!-like formatting
-        // logs are not retained in case of rejection.
-        return Err(Reject {});
+        // logs are only retained in case of rejection when testing.
+        return Err($arg);
     }};
 }
 
-#[macro_export]
 /// The `ensure` macro can be used for cleaner error handling. It is analogous
 /// to `assert`, but instead of panicking it uses `bail` to terminate execution
 /// of the function early.
+#[macro_export]
 macro_rules! ensure {
     ($p:expr) => {
         if !$p {
             $crate::bail!();
         }
     };
-    ($p:expr, $($arg:tt),+) => {{
+    ($p:expr, $arg:expr) => {{
         if !$p {
-            $crate::bail!($($arg),+);
+            $crate::bail!($arg);
         }
     }};
 }
 
 /// ## Variants of `ensure` for ease of use in certain contexts.
-#[macro_export]
 /// Ensure the first two arguments are equal, using `bail` otherwise.
+#[macro_export]
 macro_rules! ensure_eq {
     ($l:expr, $r:expr) => {
         $crate::ensure!($l == $r)
     };
-    ($l:expr, $r:expr, $($arg:tt),+) => {
-        $crate::ensure!($l == $r, $($arg),+)
+    ($l:expr, $r:expr, $arg:expr) => {
+        $crate::ensure!($l == $r, $arg)
     };
 }
 
@@ -94,8 +90,8 @@ macro_rules! ensure_ne {
     ($l:expr, $r:expr) => {
         $crate::ensure!($l != $r)
     };
-    ($l:expr, $r:expr, $($arg:tt),+) => {
-        $crate::ensure!($l != $r, $($arg),+)
+    ($l:expr, $r:expr, $arg:expr) => {
+        $crate::ensure!($l != $r, $arg)
     };
 }
 
@@ -148,10 +144,10 @@ macro_rules! claim {
 #[macro_export]
 macro_rules! claim_eq {
     ($left:expr, $right:expr) => {
-        $crate::claim!($left == $right)
+        $crate::claim!($left == $right, "left and right are not equal\nleft: {:?}\nright: {:?}", $left, $right)
     };
     ($left:expr, $right:expr,) => {
-        $crate::claim!($left == $right)
+        $crate::claim_eq!($left, $right)
     };
     ($left:expr, $right:expr, $($arg:tt),+) => {
         $crate::claim!($left == $right, $($arg),+)

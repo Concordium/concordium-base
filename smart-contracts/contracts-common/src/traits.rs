@@ -35,18 +35,20 @@ macro_rules! read_n_bytes {
     }};
 }
 
+#[derive(Debug, Default)]
+pub struct ParseError {}
+
 /// The `Read` trait provides a means of reading from byte streams.
 pub trait Read {
-    type Err: Default;
     /// Read a number of bytes into the provided buffer. The returned value is
     /// `Ok(n)` if a read was successful, and `n` bytes were read (`n` could be
     /// 0).
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Err>;
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, ParseError>;
 
     /// Read exactly the required number of bytes. If not enough bytes could be
     /// read the function returns `Err(_)`, and the contents of the given buffer
     /// is unspecified.
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Err> {
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), ParseError> {
         let mut start = 0;
         while start < buf.len() {
             match self.read(&mut buf[start..]) {
@@ -65,49 +67,49 @@ pub trait Read {
     }
 
     /// Read a `u64` in little-endian format.
-    fn read_u64(&mut self) -> Result<u64, Self::Err> {
+    fn read_u64(&mut self) -> Result<u64, ParseError> {
         let bytes = read_n_bytes!(8, self);
         Ok(u64::from_le_bytes(bytes))
     }
 
     /// Read a `u32` in little-endian format.
-    fn read_u32(&mut self) -> Result<u32, Self::Err> {
+    fn read_u32(&mut self) -> Result<u32, ParseError> {
         let bytes = read_n_bytes!(4, self);
         Ok(u32::from_le_bytes(bytes))
     }
 
     /// Read a `u16` in little-endian format.
-    fn read_u16(&mut self) -> Result<u16, Self::Err> {
+    fn read_u16(&mut self) -> Result<u16, ParseError> {
         let bytes = read_n_bytes!(2, self);
         Ok(u16::from_le_bytes(bytes))
     }
 
     /// Read a `u8`.
-    fn read_u8(&mut self) -> Result<u8, Self::Err> {
+    fn read_u8(&mut self) -> Result<u8, ParseError> {
         let bytes = read_n_bytes!(1, self);
         Ok(u8::from_le_bytes(bytes))
     }
 
     /// Read a `i64` in little-endian format.
-    fn read_i64(&mut self) -> Result<i64, Self::Err> {
+    fn read_i64(&mut self) -> Result<i64, ParseError> {
         let bytes = read_n_bytes!(8, self);
         Ok(i64::from_le_bytes(bytes))
     }
 
     /// Read a `i32` in little-endian format.
-    fn read_i32(&mut self) -> Result<i32, Self::Err> {
+    fn read_i32(&mut self) -> Result<i32, ParseError> {
         let bytes = read_n_bytes!(4, self);
         Ok(i32::from_le_bytes(bytes))
     }
 
     /// Read a `i16` in little-endian format.
-    fn read_i16(&mut self) -> Result<i16, Self::Err> {
+    fn read_i16(&mut self) -> Result<i16, ParseError> {
         let bytes = read_n_bytes!(2, self);
         Ok(i16::from_le_bytes(bytes))
     }
 
     /// Read a `i32` in little-endian format.
-    fn read_i8(&mut self) -> Result<i8, Self::Err> {
+    fn read_i8(&mut self) -> Result<i8, ParseError> {
         let bytes = read_n_bytes!(1, self);
         Ok(i8::from_le_bytes(bytes))
     }
@@ -188,7 +190,7 @@ pub trait Serial {
 pub trait Deserial: Sized {
     /// Attempt to read a structure from a given source, failing if an error
     /// occurs during deserialization or reading.
-    fn deserial<R: Read>(_source: &mut R) -> Result<Self, R::Err>;
+    fn deserial<R: Read>(_source: &mut R) -> Result<Self, ParseError>;
 }
 
 /// The `Serialize` trait provides a means of writing structures into byte-sinks
@@ -213,15 +215,12 @@ impl<A: Deserial + Serial> Serialize for A {}
 /// ```
 /// where `source` is any type that implements `Read`.
 pub trait Get<T> {
-    type Err;
-    fn get(&mut self) -> Result<T, Self::Err>;
+    fn get(&mut self) -> Result<T, ParseError>;
 }
 
 impl<R: Read, T: Deserial> Get<T> for R {
-    type Err = R::Err;
-
     #[inline(always)]
-    fn get(&mut self) -> Result<T, R::Err> { T::deserial(self) }
+    fn get(&mut self) -> Result<T, ParseError> { T::deserial(self) }
 }
 
 /// The `SchemaType` trait provides means to generate a schema for structures.
