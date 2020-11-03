@@ -34,10 +34,11 @@ or an Error if an internal error occurred (this indicates something is wrong
 with the setup, an Error will never occur due to a malformed request)
 
 ```javascript
-  fn create_identity_object(ip_info: string, alist: string, request: string, ip_private_key: string): {idObject: string; arData: string} | Error
+  fn create_identity_object(ip_info: string, alist: string, request: string, ip_private_key: string, ip_cdi_private_key: string): {idObject: string; arRecord: string, initialAccount: string} | Error
 ```
 which creates the identity object to be sent back to the user, as well as the
-anonymity revocation record. The Error case here can happen if the attribute
+anonymity revocation record, and information about the initial account that must
+be submitted to the chain. The Error case here can happen if the attribute
 list (the `alist` argument) or any other arguments are malformed.
   
 # Example

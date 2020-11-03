@@ -116,7 +116,8 @@ pub fn create_identity_object(
     request_str: &str,
     alist_str: &str,
     ip_private_key_str: &str,
-) -> Result<(String, String), String> {
+    ip_cdi_private_key_str: &str,
+) -> Result<(String, String, String), String> {
     let ip_info = parse_exact_versioned_ip_info(ip_info_str)?;
 
     let request: Versioned<PreIdentityObject<Bls12, ExampleCurve>> = {
@@ -135,15 +136,27 @@ pub fn create_identity_object(
 
     let ip_private_key: ps_sig::SecretKey<Bls12> =
         base16_decode_string(ip_private_key_str).map_err(show_err)?;
+    let ip_cdi_private_key: ed25519_dalek::SecretKey =
+        base16_decode_string(ip_cdi_private_key_str).map_err(show_err)?;
 
     let signature = sign_identity_object(&request.value, &ip_info, &alist, &ip_private_key)
         .map_err(show_err)?;
 
     let ar_record = AnonymityRevocationRecord {
-        id_cred_pub: request.value.id_cred_pub,
-        ar_data:     request.value.ip_ar_data.clone(),
+        id_cred_pub:  request.value.pub_info_for_ip.id_cred_pub,
+        ar_data:      request.value.ip_ar_data.clone(),
+        max_accounts: alist.max_accounts,
     };
 
+    let icdi = create_initial_cdi(
+        &ip_info,
+        request.value.pub_info_for_ip.clone(),
+        &alist,
+        &ip_cdi_private_key,
+    );
+    let versioned_icdi = Versioned::new(VERSION_0, icdi);
+    // address of the account that will be created.
+    let addr = AccountAddress::new(&request.value.pub_info_for_ip.reg_id);
     let id = IdentityObject {
         pre_identity_object: request.value,
         alist,
@@ -154,17 +167,6 @@ pub fn create_identity_object(
         to_string(&vid).expect("JSON serialization of versioned identity objects should not fail.");
     let ar_record = to_string(&ar_record)
         .expect("JSON serialization of anonymity revocation records should not fail.");
-    Ok((id_obj, ar_record))
-}
-
-#[wasm_bindgen]
-pub fn create_initial_credential(
-    ip_info_str: &str,
-    request_str: &str,
-    alist_str: &str,
-    ip_cdi_secret_key_str: &str,
-) -> Result<String, JsValue> {
-    let alist: ExampleAttributeList = from_str(alist_str).map_err(show_err)?;
 
     let request: Versioned<PreIdentityObject<Bls12, ExampleCurve>> = {
         let v: Value = from_str(request_str).map_err(show_err)?;
@@ -198,33 +200,14 @@ pub fn create_initial_credential(
         "request": v_initial_cdi,
         "accountAddress": addr
     });
-    Ok(to_string(&response)
-        .expect("JSON serialization of versioned initial credential should not fail."))
-}
 
-#[wasm_bindgen]
-pub fn create_anonymity_revocation_record(
-    request_str: &str,
-    max_accounts: u8,
-) -> Result<String, JsValue> {
-    let request: Versioned<PreIdentityObject<Bls12, ExampleCurve>> = {
-        let v: Value = from_str(request_str).map_err(show_err)?;
-        let pre_id_obj_value = v
-            .get("idObjectRequest")
-            .ok_or_else(|| show_err("'idObjectRequest' field not present."))?;
-        from_value(pre_id_obj_value.clone()).map_err(show_err)?
-    };
-    if request.version != VERSION_0 {
-        return Err(show_err("Incorrect request version."));
-    }
-
-    let ar_record = AnonymityRevocationRecord {
-        id_cred_pub: request.value.pub_info_for_ip.id_cred_pub,
-        ar_data: request.value.ip_ar_data,
-        max_accounts,
-    };
-    Ok(to_string(&ar_record)
-        .expect("JSON serialization of anonymity revocation records should not fail."))
+    let init_acc = serde_json::json!({
+        "request": versioned_icdi,
+        "accountAddress": addr
+    });
+    let init_acc =
+        to_string(&init_acc).expect("JSON serialization of initial credentials should not fail.");
+    Ok((id_obj, ar_record, init_acc))
 }
 
 #[cfg(feature = "nodejs")]
