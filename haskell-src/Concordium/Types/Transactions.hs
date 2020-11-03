@@ -248,6 +248,13 @@ fromCDI wmdArrivalTime wmdData =
       wmdHash = getHash (CredentialDeployment (NormalACWP wmdData))
   in WithMetadata{wmdData = NormalACWP wmdData,..}
 
+fromICDI :: TransactionTime -> InitialCredentialDeploymentInfo -> CredentialDeploymentWithMeta
+fromICDI wmdArrivalTime wmdData =
+  let cdiBytes = S.encode wmdData
+      wmdSize = BS.length cdiBytes + 2 -- + 2 for the two tags
+      wmdHash = getHash (CredentialDeployment (InitialACWP wmdData))
+  in WithMetadata{wmdData = InitialACWP wmdData,..}
+
 -----------------
 -- * Block items
 -----------------
