@@ -5,6 +5,7 @@ use ff::{Field, PrimeField};
 use pedersen_scheme::Commitment;
 use rand::*;
 
+use ed25519_dalek::Verifier;
 use failure::Fallible;
 use std::collections::BTreeSet;
 
@@ -204,6 +205,54 @@ pub fn encode_public_credential_values<F: PrimeField>(
     let threshold: u8 = threshold.into();
     f.as_mut()[1] = u64::from(threshold);
     Ok(F::from_repr(f)?)
+}
+
+/// This function verifies that the signature inside
+/// the AccountOwnershipProof is a signature of the given message.
+/// The arguments are
+///  - keys - the verification keys
+///  - threshold - the signature threshold
+///  - proof_acc_sk - the AccountOwnershipProof containing the signature to be
+///    verified
+///  - msg - the message
+pub fn verify_accunt_ownership_proof(
+    keys: &[VerifyKey],
+    threshold: SignatureThreshold,
+    proof_acc_sk: &AccountOwnershipProof,
+    msg: &[u8],
+) -> bool {
+    // we check all the keys that were provided, and check enough were provided
+    // compared to the threshold
+    // We also make sure that no more than 255 keys are provided, as well as
+    // - all keys are distinct
+    // - at least one key is provided
+    // - there are the same number of proofs and keys
+    if proof_acc_sk.num_proofs() < threshold
+        || keys.len() > 255
+        || keys.is_empty()
+        || proof_acc_sk.num_proofs() != SignatureThreshold(keys.len() as u8)
+    {
+        return false;
+    }
+    // set of processed keys already
+    let mut processed = BTreeSet::new();
+    // the new keys get indices 0, 1, ..
+    for (idx, key) in (0u8..).zip(keys.iter()) {
+        let idx = KeyIndex(idx);
+        // insert returns true if key was __not__ present
+        if !processed.insert(key) {
+            return false;
+        }
+        if let Some(sig) = proof_acc_sk.sigs.get(&idx) {
+            let VerifyKey::Ed25519VerifyKey(ref key) = key;
+            if key.verify(msg, &sig).is_err() {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(test)]
