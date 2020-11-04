@@ -12,7 +12,7 @@ use wallet::{
     check_account_address_ext, combine_encrypted_amounts_ext, create_credential_ext,
     create_encrypted_transfer_ext, create_id_request_and_private_data_ext,
     create_pub_to_sec_transfer_ext, create_sec_to_pub_transfer_ext, create_transfer_ext,
-    generate_accounts_ext, decrypt_encrypted_amount_ext,
+    decrypt_encrypted_amount_ext, generate_accounts_ext,
 };
 
 #[no_mangle]
@@ -101,7 +101,6 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
     }
 }
 
-
 #[no_mangle]
 /// The JNI wrapper for the `generate_accounts` method.
 /// The `input` parameter must be a properly initalized `java.lang.String` that
@@ -143,7 +142,6 @@ pub extern "system" fn Java_com_concordium_mobile_1wallet_1lib_WalletKt_create_1
         ),
     }
 }
-
 
 #[no_mangle]
 /// The JNI wrapper for the `create_transfer` method.
