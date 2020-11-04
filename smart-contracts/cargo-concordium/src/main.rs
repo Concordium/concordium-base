@@ -2,7 +2,7 @@ use crate::build::*;
 use clap::AppSettings;
 use contracts_common::to_bytes;
 use std::{
-    fs::{read, File},
+    fs::{read, write, File},
     io::{Read, Write},
     path::PathBuf,
 };
@@ -41,12 +41,19 @@ enum Command {
     #[structopt(name = "build", about = "Build a deployment ready smart-contract module.")]
     Build {
         #[structopt(
-            name = "build-schema",
-            long = "build-schema",
-            short = "b",
+            name = "schema-embed",
+            long = "schema-embed",
+            short = "e",
             help = "Builds the contract schema and embeds it into the wasm module."
         )]
-        build_schema: bool,
+        schema_embed: bool,
+        #[structopt(
+            name = "schema-output",
+            long = "schema-output",
+            short = "s",
+            help = "Builds the contract schema and writes it to file at specified location."
+        )]
+        schema_output: Option<PathBuf>,
     },
 }
 
@@ -376,8 +383,10 @@ pub fn main() {
             test_run(&source).expect("Invocation failed.");
         }
         Command::Build {
-            build_schema,
+            schema_embed,
+            schema_output,
         } => {
+            let build_schema = schema_embed || schema_output.is_some();
             if build_schema {
                 let contract_schema = match build_contract_schema() {
                     Ok(schema) => schema,
@@ -418,9 +427,20 @@ To include a schema for a method parameter specify the parameter type as an attr
                     }
                 }
                 println!(
-                    "\nTotal size of contract schema is {} bytes",
+                    "\nTotal size of contract schema is {} bytes.\n",
                     contract_schema_bytes.len()
                 );
+                match schema_output {
+                    None => {}
+                    Some(schema_out) => {
+                        println!("Writing schema to {:?}.", schema_out);
+                        write(schema_out, &contract_schema_bytes).unwrap();
+                    }
+                }
+                if schema_embed {
+                    println!("Embedding schema into contract module.");
+                    todo!("Embed the schema as a custom section in the wasm module");
+                }
             }
             // TODO: Actually build the contract without the code for schema generation.
             println!("\nDone building your smart contract.");
