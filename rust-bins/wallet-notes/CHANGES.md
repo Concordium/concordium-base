@@ -32,3 +32,9 @@ just passed to the library directly.
 
 Again, if the wallet never inspects them this should not affect it. The
 generators field was removed because it is subsumed by others.
+
+## A new library call to generate all accounts.
+
+A new library call was added `generate_accounts` to generate all the accounts
+from an identity object, see [./README.md](./README.md) for documentation of the
+input and output formats.
