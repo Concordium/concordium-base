@@ -223,7 +223,7 @@ instance HashableTo TransactionHash (WithMetadata value) where
   getHash = wmdHash
 
 type Transaction = WithMetadata AccountTransaction
-type CredentialDeploymentWithMeta = WithMetadata CredentialDeploymentInformation
+type CredentialDeploymentWithMeta = WithMetadata AccountCredentialWithProofs
 
 addMetadata :: (a -> BareBlockItem) -> TransactionTime -> a -> WithMetadata a
 addMetadata f time a = WithMetadata {
@@ -238,15 +238,22 @@ addMetadata f time a = WithMetadata {
 fromAccountTransaction :: TransactionTime -> AccountTransaction -> Transaction
 fromAccountTransaction wmdArrivalTime wmdData =
   let wmdHash = getHash wmdData
-      wmdSize = BS.length (S.encode wmdData)
+      wmdSize = BS.length (S.encode wmdData) + 1
   in WithMetadata{..}
 
 fromCDI :: TransactionTime -> CredentialDeploymentInformation -> CredentialDeploymentWithMeta
 fromCDI wmdArrivalTime wmdData =
   let cdiBytes = S.encode wmdData
-      wmdSize = BS.length cdiBytes
-      wmdHash = getHash (CredentialDeployment wmdData)
-  in WithMetadata{..}
+      wmdSize = BS.length cdiBytes + 2 -- + 2 for the two tags
+      wmdHash = getHash (CredentialDeployment (NormalACWP wmdData))
+  in WithMetadata{wmdData = NormalACWP wmdData,..}
+
+fromICDI :: TransactionTime -> InitialCredentialDeploymentInfo -> CredentialDeploymentWithMeta
+fromICDI wmdArrivalTime wmdData =
+  let cdiBytes = S.encode wmdData
+      wmdSize = BS.length cdiBytes + 2 -- + 2 for the two tags
+      wmdHash = getHash (CredentialDeployment (InitialACWP wmdData))
+  in WithMetadata{wmdData = InitialACWP wmdData,..}
 
 -----------------
 -- * Block items
@@ -276,7 +283,7 @@ data BareBlockItem =
     biTransaction :: !AccountTransaction
   }
   | CredentialDeployment {
-      biCred :: !CredentialDeploymentInformation
+      biCred :: !AccountCredentialWithProofs
   }
   | ChainUpdate {
     biUpdate :: !UpdateInstruction
@@ -299,14 +306,16 @@ instance S.Serialize BareBlockItem  where
     CredentialDeploymentKind -> CredentialDeployment <$> S.get
     UpdateInstructionKind -> ChainUpdate <$> S.get
 
+-- |Embed a transaction as a block item.
 normalTransaction :: Transaction -> BlockItem
-normalTransaction WithMetadata{..} = WithMetadata{wmdData = NormalTransaction wmdData, ..}
+-- the +1 is for the additional tag.
+normalTransaction WithMetadata{..} = WithMetadata{wmdData = NormalTransaction wmdData, wmdSize = wmdSize + 1,..}
 
-credentialDeployment :: WithMetadata CredentialDeploymentInformation -> BlockItem
-credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeployment wmdData, ..}
+credentialDeployment :: WithMetadata AccountCredentialWithProofs -> BlockItem
+credentialDeployment WithMetadata{..} = WithMetadata{wmdData = CredentialDeployment wmdData, wmdSize = wmdSize + 1,..}
 
 chainUpdate :: WithMetadata UpdateInstruction -> BlockItem
-chainUpdate WithMetadata{..} = WithMetadata{wmdData = ChainUpdate wmdData, ..}
+chainUpdate WithMetadata{..} = WithMetadata{wmdData = ChainUpdate wmdData, wmdSize = wmdSize + 1,..}
 
 -- |Serialize a block item according to V0 format, without the metadata.
 putBlockItemV0 :: BlockItem -> S.Put

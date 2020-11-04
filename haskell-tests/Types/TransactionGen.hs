@@ -112,9 +112,33 @@ genCredentialDeploymentInformation = do
   let cdiValues = CredentialDeploymentValues{..}
   return CredentialDeploymentInformation{..}
 
+genInitialCredentialDeploymentInformation :: Gen InitialCredentialDeploymentInfo
+genInitialCredentialDeploymentInformation = do
+  icdvAccount <- do
+        nacc <- choose (1,255)
+        keys <- replicateM nacc genVerifyKey
+        threshold <- choose (1, nacc)
+        return $ InitialCredentialAccount keys (SignatureThreshold $ fromIntegral threshold)
+  icdvRegId <- RegIdCred . generateGroupElementFromSeed globalContext <$> arbitrary
+  icdvIpId <- IP_ID <$> arbitrary
+  icdvPolicy <- do
+    let ym = YearMonth <$> choose (1000,9999) <*> choose (1,12)
+    pValidTo <- ym
+    pCreatedAt <- ym
+    let pItems = Map.empty
+    return Policy{..}
+  let icdiValues = InitialCredentialDeploymentValues{..}
+  icdiSig <- IpCdiSignature . BSS.pack <$> vector 64
+  return InitialCredentialDeploymentInfo{..}
+
+genAccountCredentialWithProofs :: Gen AccountCredentialWithProofs
+genAccountCredentialWithProofs =
+  oneof [NormalACWP <$> genCredentialDeploymentInformation,
+         InitialACWP <$> genInitialCredentialDeploymentInformation]
+
 genCredentialDeploymentWithMeta :: Gen CredentialDeploymentWithMeta
 genCredentialDeploymentWithMeta = do
-  wmdData <- genCredentialDeploymentInformation
+  wmdData <- genAccountCredentialWithProofs
   wmdArrivalTime <- TransactionTime <$> arbitrary
   return $ addMetadata CredentialDeployment wmdArrivalTime wmdData
 
