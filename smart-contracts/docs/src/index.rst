@@ -51,8 +51,9 @@ The documentation is split into four categories
    :maxdepth: 1
    :caption: How-to guides
 
-   guides/setup-rust
+   guides/setup-tools
    guides/setup-contract
+   guides/build-schema
 
 .. toctree::
    :maxdepth: 1

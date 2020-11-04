@@ -1,4 +1,4 @@
-.. _setup_rust:
+.. _setup_tools:
 
 =============================
 Install tools for development
@@ -30,7 +30,7 @@ It is installed by running::
 
 .. note::
     Until the tool is release on crates.io_, you instead have to clone
-    the repo containing ``cargo-concordium`` and from the directory
+    the repo_ containing ``cargo-concordium`` and from the directory
     ``cargo-concordium`` run::
 
         cargo install --path .
@@ -52,3 +52,4 @@ make sure to have ``concordium-client`` install on your local system.
 .. _Cargo: https://doc.rust-lang.org/cargo/
 .. _rustup: https://rustup.rs/
 .. _crates.io: https://crates.io/
+.. _repo: https://gitlab.com/Concordium/smart-contracts
