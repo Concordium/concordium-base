@@ -1,6 +1,6 @@
 use clap::AppSettings;
 use client_server_helpers::*;
-use crypto_common::*;
+use crypto_common::{serde_impls::KeyPairDef, *};
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -78,17 +78,18 @@ fn main() {
     };
 
     // Load identity provider and anonymity revokers.
-    let (ip_info, ip_secret_key) = match read_json_from_file::<_, IpData<Bls12>>(args.ip_data) {
-        Ok(IpData {
-            ip_secret_key,
-            public_ip_info,
-            ..
-        }) => (public_ip_info, ip_secret_key),
-        Err(x) => {
-            eprintln!("Could not read identity issuer information because {}", x);
-            return;
-        }
-    };
+    let (ip_info, ip_secret_key, ip_cdi_secret_key) =
+        match read_json_from_file::<_, IpData<Bls12>>(args.ip_data) {
+            Ok(IpData {
+                ip_secret_key,
+                public_ip_info,
+                ip_cdi_secret_key,
+            }) => (public_ip_info, ip_secret_key, ip_cdi_secret_key),
+            Err(x) => {
+                eprintln!("Could not read identity issuer information because {}", x);
+                return;
+            }
+        };
 
     // Choose prf key.
     let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -117,24 +118,43 @@ fn main() {
     };
 
     let context = IPContext::new(&ip_info, &ars_infos.anonymity_revokers, &global_ctx);
+    let initial_acc_data = InitialAccountData {
+        keys:      {
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys
+        },
+        threshold: SignatureThreshold(2),
+    };
     // Threshold is all anonymity revokers.
     let (pio, randomness) = generate_pio(
         &context,
         Threshold(ars_infos.anonymity_revokers.len() as u8),
         &aci,
+        &initial_acc_data,
     )
     .expect("Generating the pre-identity object should succeed.");
 
-    let sig_ok = verify_credentials(&pio, context, &attributes, &ip_secret_key);
+    let pub_info_for_ip = pio.pub_info_for_ip.clone();
+
+    let ver_ok = verify_credentials(
+        &pio,
+        context,
+        &attributes,
+        &ip_secret_key,
+        &ip_cdi_secret_key,
+    );
 
     // First test, check that we have a valid signature.
-    assert!(sig_ok.is_ok());
+    assert!(ver_ok.is_ok());
 
-    let ip_sig = sig_ok.unwrap();
+    let (ip_sig, _) = ver_ok.unwrap();
 
     let id_object = IdentityObject {
         pre_identity_object: pio,
-        alist:               attributes,
+        alist:               attributes.clone(),
         signature:           ip_sig,
     };
     let id_object_use_data = IdObjectUseData { aci, randomness };
@@ -245,6 +265,12 @@ fn main() {
         };
         out.put(&acc_keys_3);
 
+        // Create an initial cdi and output it
+        let icdi = create_initial_cdi(&ip_info, pub_info_for_ip, &attributes, &ip_cdi_secret_key);
+        let icdi_bytes = to_bytes(&icdi);
+        out.put(&(icdi_bytes.len() as u32));
+        out.write_all(&icdi_bytes).unwrap();
+
         let file = File::create("testdata.bin");
         if let Err(err) = file.unwrap().write_all(&out) {
             eprintln!(
@@ -269,6 +295,22 @@ fn main() {
             eprintln!("Could not output binary file cdi.bin, because {}.", err);
         } else {
             println!("Output binary file cdi.bin.");
+        }
+
+        // As for CDI we output an ICDI json and binary to test compatibility between
+        // haskell and rust serialization
+        let ver_icdi = Versioned::new(VERSION_0, icdi);
+        if let Err(err) = write_json_to_file("icdi.json", &ver_icdi) {
+            eprintln!("Could not output JSON file icdi.json, because {}.", err);
+        } else {
+            println!("Output icdi.json.");
+        }
+
+        let icdi_file = File::create("icdi.bin");
+        if let Err(err) = icdi_file.unwrap().write_all(&to_bytes(&ver_icdi)) {
+            eprintln!("Could not output binary file icdi.bin, because {}.", err);
+        } else {
+            println!("Output binary file icdi.bin.");
         }
     }
 
@@ -322,4 +364,62 @@ fn main() {
     let acc_data = generate(None, 4, 5);
     let _ = generate(Some(acc_data), 5, 6);
     let _ = generate(None, 6, 7);
+
+    let mut generate_initial = |prf, idx, ip_secret| {
+        let initial_acc_data = {
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+
+            InitialAccountData {
+                keys,
+                threshold: SignatureThreshold(2),
+            }
+        };
+        let ah_info = CredentialHolderInfo::<ExampleCurve> {
+            id_cred: IdCredentials::generate(&mut csprng),
+        };
+        let aci = AccCredentialInfo {
+            cred_holder_info: ah_info,
+            prf_key:          prf,
+        };
+        let (pio, _) = generate_pio(
+            &context,
+            Threshold(ars_infos.anonymity_revokers.len() as u8),
+            &aci,
+            &initial_acc_data,
+        )
+        .expect("Generating the pre-identity object should succeed.");
+
+        let icdi = create_initial_cdi(
+            &context.ip_info,
+            pio.pub_info_for_ip,
+            &attributes,
+            ip_secret,
+        );
+        let versioned_icdi = Versioned::new(VERSION_0, icdi);
+
+        if let Err(err) =
+            write_json_to_file(&format!("initial-credential-{}.json", idx), &versioned_icdi)
+        {
+            eprintln!(
+                "Could not output initial credential = {}, because {}.",
+                idx, err
+            );
+        } else {
+            println!("Output initial credential {}.", idx);
+        }
+    };
+
+    let mut csprng = thread_rng();
+    let prf_key = prf::SecretKey::generate(&mut csprng);
+    generate_initial(prf_key, 1, &ip_cdi_secret_key);
+    let prf_key: prf::SecretKey<ExampleCurve> = prf::SecretKey::generate(&mut csprng);
+    let prf_key_same = prf_key.clone();
+    generate_initial(prf_key, 2, &ip_cdi_secret_key);
+    generate_initial(prf_key_same, 3, &ip_cdi_secret_key); // Reuse of prf key
+    let prf_key: prf::SecretKey<ExampleCurve> = prf::SecretKey::generate(&mut csprng);
+    let wrong_keys = ed25519_dalek::Keypair::generate(&mut csprng);
+    generate_initial(prf_key, 4, &wrong_keys.secret); // Wrong secret key
 }

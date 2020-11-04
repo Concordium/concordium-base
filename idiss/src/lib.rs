@@ -5,7 +5,9 @@ use curve_arithmetic::*;
 use id::{
     constants::ArCurve,
     ffi::AttributeKind,
-    identity_provider::{sign_identity_object, validate_request as ip_validate_request},
+    identity_provider::{
+        create_initial_cdi, sign_identity_object, validate_request as ip_validate_request,
+    },
     types::*,
 };
 use serde_json::{from_str, from_value, ser::to_string, Value};
@@ -132,6 +134,45 @@ pub fn create_identity_object(
 }
 
 #[wasm_bindgen]
+pub fn create_initial_credential(
+    ip_info_str: &str,
+    request_str: &str,
+    alist_str: &str,
+    ip_cdi_secret_key_str: &str,
+) -> Result<String, JsValue> {
+    let alist: ExampleAttributeList = from_str(alist_str).map_err(show_err)?;
+
+    let request: Versioned<PreIdentityObject<Bls12, ExampleCurve>> = {
+        let v: Value = from_str(request_str).map_err(show_err)?;
+        let pre_id_obj_value = v
+            .get("idObjectRequest")
+            .ok_or_else(|| show_err("'idObjectRequest' field not present."))?;
+        from_value(pre_id_obj_value.clone()).map_err(show_err)?
+    };
+
+    if request.version != VERSION_0 {
+        return Err(show_err("Incorrect request version."));
+    }
+
+    let pub_info_for_ip = request.value.pub_info_for_ip;
+    let ip_info = parse_exact_versioned_ip_info(ip_info_str)?;
+
+    let ip_cdi_secret_key: ed25519_dalek::SecretKey =
+        base16_decode_string(ip_cdi_secret_key_str).map_err(show_err)?;
+
+    let initial_cdi = create_initial_cdi(&ip_info, pub_info_for_ip, &alist, &ip_cdi_secret_key);
+
+    let v_initial_cdi = Versioned::new(VERSION_0, initial_cdi);
+    let addr = AccountAddress::new(&pub_info_for_ip.reg_id);
+    let response = serde_json::json!({
+        "request": v_initial_cdi,
+        "accountAddress": addr
+    });
+    Ok(to_string(&v_initial_cdi)
+        .expect("JSON serialization of versioned initial credential should not fail."))
+}
+
+#[wasm_bindgen]
 pub fn create_anonymity_revocation_record(request_str: &str) -> Result<String, JsValue> {
     let request: Versioned<PreIdentityObject<Bls12, ExampleCurve>> = {
         let v: Value = from_str(request_str).map_err(show_err)?;
@@ -145,7 +186,7 @@ pub fn create_anonymity_revocation_record(request_str: &str) -> Result<String, J
     }
 
     let ar_record = AnonymityRevocationRecord {
-        id_cred_pub: request.value.id_cred_pub,
+        id_cred_pub: request.value.pub_info_for_ip.id_cred_pub,
         ar_data:     request.value.ip_ar_data,
     };
     Ok(to_string(&ar_record)

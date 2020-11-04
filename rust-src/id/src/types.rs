@@ -181,6 +181,19 @@ impl<'de> Visitor<'de> for SignatureThresholdVisitor {
 pub struct KeyIndex(pub u8);
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
+pub struct IpCdiSignature(ed25519::Signature);
+
+impl std::ops::Deref for IpCdiSignature {
+    type Target = ed25519::Signature;
+
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl From<ed25519::Signature> for IpCdiSignature {
+    fn from(sig: ed25519::Signature) -> Self { IpCdiSignature(sig) }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, SerdeBase16Serialize)]
 pub struct AccountOwnershipSignature(ed25519::Signature);
 
 impl std::ops::Deref for AccountOwnershipSignature {
@@ -742,6 +755,10 @@ pub struct PreIdentityProof<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
     /// second commitment to the prf key (hidden in cmm_prf_sharing_coeff)
     /// are hiding the same value.
     pub commitments_prf_same: com_eq_different_groups::Witness<P::G1, C>,
+    /// Witness to the proof that reg_id = PRF(prf_key, 0)
+    pub prf_regid_proof: com_eq::Witness<C>,
+    /// Signature on the public information for the IP from the account holder
+    pub proof_acc_sk: AccountOwnershipProof,
     /// Bulletproofs for showing that chunks are small so that encryption
     /// of the prf key can be decrypted
     pub bulletproofs: Vec<RangeProof<C>>,
@@ -763,14 +780,11 @@ pub type IdCredPubVerifiers<C> = (
     deserialize = "P: Pairing, C: Curve<Scalar=P::ScalarField>"
 ))]
 pub struct PreIdentityObject<P: Pairing, C: Curve<Scalar = P::ScalarField>> {
+    // TODO: consider renaming this struct
     /// Public credential of the account holder in the anonymity revoker's
     /// group.
-    #[serde(
-        rename = "idCredPub",
-        serialize_with = "base16_encode",
-        deserialize_with = "base16_decode"
-    )]
-    pub id_cred_pub: C,
+    #[serde(rename = "pubInfoForIp")]
+    pub pub_info_for_ip: PublicInformationForIP<C>,
     /// Anonymity revocation data for the chosen anonymity revokers.
     #[serde(rename = "ipArData")]
     #[map_size_length = 4]
@@ -886,6 +900,13 @@ pub struct IpInfo<P: Pairing> {
     /// PS public key of the IP
     #[serde(rename = "ipVerifyKey")]
     pub ip_verify_key: pssig::PublicKey<P>,
+    /// Ed public key of the IP
+    #[serde(
+        rename = "ipCdiVerifyKey",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub ip_cdi_verify_key: ed25519::PublicKey,
 }
 
 /// Collection of identity providers.
@@ -1096,7 +1117,7 @@ pub enum SchemeId {
     Ed25519,
 }
 
-#[derive(Debug, Eq)]
+#[derive(Debug, Eq, Clone)]
 pub enum VerifyKey {
     Ed25519VerifyKey(ed25519::PublicKey),
 }
@@ -1216,6 +1237,13 @@ impl Deserial for VerifyKey {
             }
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+pub struct NewAccount {
+    #[size_length = 1]
+    pub keys: Vec<VerifyKey>,
+    pub threshold: SignatureThreshold,
 }
 
 /// What account should this credential be deployed to, or the keys of the new
@@ -1342,6 +1370,14 @@ impl Deserial for CredentialAccount {
     }
 }
 
+/// What account should this credential be deployed to, or the keys of the new
+/// account.
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize, Clone)]
+#[serde(transparent)]
+pub struct InitialCredentialAccount {
+    pub account: NewAccount,
+}
+
 /// Values (as opposed to proofs) in credential deployment.
 #[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
 #[serde(bound(
@@ -1349,8 +1385,7 @@ impl Deserial for CredentialAccount {
     deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
 ))]
 pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
-    /// Account this credential belongs to. Either an existing account, or keys
-    /// of a new account.
+    /// Account this credential belongs to.
     #[serde(rename = "account")]
     pub cred_account: CredentialAccount,
     /// Credential registration id of the credential.
@@ -1374,6 +1409,32 @@ pub struct CredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scal
     #[map_size_length = 2]
     #[serde(rename = "arData", deserialize_with = "deserialize_ar_data")]
     pub ar_data: BTreeMap<ArIdentity, ChainArData<C>>,
+    /// Policy of this credential object.
+    #[serde(rename = "policy")]
+    pub policy: Policy<C, AttributeType>,
+}
+
+/// Values in initial credential deployment.
+#[derive(Debug, PartialEq, Eq, Serialize, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub struct InitialCredentialDeploymentValues<C: Curve, AttributeType: Attribute<C::Scalar>> {
+    /// Account this credential belongs to.
+    #[serde(rename = "account")]
+    pub cred_account: InitialCredentialAccount,
+    /// Credential registration id of the credential.
+    #[serde(
+        rename = "regId",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub reg_id: C,
+    /// Identity of the identity provider who signed the identity object from
+    /// which this credential is derived.
+    #[serde(rename = "ipIdentity")]
+    pub ip_identity: IpIdentity,
     /// Policy of this credential object.
     #[serde(rename = "policy")]
     pub policy: Policy<C, AttributeType>,
@@ -1428,6 +1489,51 @@ pub struct CredentialDeploymentInfo<
     pub values: CredentialDeploymentValues<C, AttributeType>,
     #[serde(rename = "proofs")] // FIXME: This should remove the first 4 bytes
     pub proofs: CredDeploymentProofs<P, C>,
+}
+
+#[derive(Debug, Serialize, SerdeSerialize, SerdeDeserialize)]
+// #[serde(bound(
+//     serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+//                  Attribute<C::Scalar> + SerdeSerialize",
+//     deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+//                    Attribute<C::Scalar> + SerdeDeserialize<'de>"
+// ))]
+#[serde(bound(
+    serialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "C: Curve, AttributeType: Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub struct InitialCredentialDeploymentInfo<
+    // P: Pairing,
+    C: Curve, //<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    #[serde(flatten)]
+    pub values: InitialCredentialDeploymentValues<C, AttributeType>,
+    #[serde(rename = "sig")]
+    pub sig: IpCdiSignature,
+}
+
+/// This struct contains information from the account holder that the identity
+/// provider needs in order to create the initial credential for the account
+/// hoder. It contains idCredPub, regId and the account keys.
+/// It is part of the preidentity object.
+#[derive(Debug, Serialize, Clone, SerdeSerialize, SerdeDeserialize)]
+#[serde(bound(serialize = "C: Curve", deserialize = "C: Curve"))]
+pub struct PublicInformationForIP<C: Curve> {
+    #[serde(
+        rename = "idCredPub",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub id_cred_pub: C,
+    #[serde(
+        rename = "regId",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub reg_id: C,
+    #[serde(rename = "publicKeys")]
+    pub vk_acc: InitialCredentialAccount,
 }
 
 /// Context needed to generate pre-identity object as well as to check it.
@@ -1534,6 +1640,16 @@ pub struct AccountData {
     /// If it is an existing account, its address, otherwise the signature
     /// threshold of the new account.
     pub existing: Either<SignatureThreshold, AccountAddress>,
+}
+
+/// This contains all the keys on the account of the initial credential
+/// deployment.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+pub struct InitialAccountData {
+    #[serde(rename = "keys")]
+    pub keys: BTreeMap<KeyIndex, crypto_common::serde_impls::KeyPairDef>,
+    #[serde(rename = "threshold")]
+    pub threshold: SignatureThreshold,
 }
 
 impl SerdeSerialize for AccountData {
@@ -1726,6 +1842,12 @@ pub struct IpData<P: Pairing> {
         deserialize_with = "base16_decode"
     )]
     pub ip_secret_key: ps_sig::SecretKey<P>,
+    #[serde(
+        rename = "ipCdiSecretKey",
+        serialize_with = "base16_encode",
+        deserialize_with = "base16_decode"
+    )]
+    pub ip_cdi_secret_key: ed25519::SecretKey,
 }
 
 /// Private and public data on an anonymity revoker.
@@ -1777,6 +1899,35 @@ pub struct AnonymityRevocationRecord<C: Curve> {
     /// anonymity revocation.
     #[serde(rename = "arData")]
     pub ar_data: BTreeMap<ArIdentity, IpArData<C>>,
+    #[serde(rename = "maxAccounts")]
+    pub max_accounts: u8,
+}
+
+/// A type encapsulating both types of credentials.
+/// Serialization must match the one in Haskell.
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(tag = "type", content = "contents")]
+#[serde(bound(
+    serialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+                 Attribute<C::Scalar> + SerdeSerialize",
+    deserialize = "P: Pairing, C: Curve<Scalar = P::ScalarField>, AttributeType: \
+                   Attribute<C::Scalar> + SerdeDeserialize<'de>"
+))]
+pub enum AccountCredential<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+> {
+    #[serde(rename = "initial")]
+    Initial {
+        #[serde(flatten)]
+        icdi: InitialCredentialDeploymentInfo<C, AttributeType>,
+    },
+    #[serde(rename = "normal")]
+    Normal {
+        #[serde(flatten)]
+        cdi: CredentialDeploymentInfo<P, C, AttributeType>,
+    },
 }
 
 #[cfg(test)]

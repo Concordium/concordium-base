@@ -2,7 +2,7 @@ use crate::{
     account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*,
     secret_sharing::Threshold, types::*,
 };
-use crypto_common::*;
+use crypto_common::{serde_impls::KeyPairDef, *};
 use curve_arithmetic::{Curve, Pairing};
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
@@ -57,7 +57,7 @@ pub fn test_create_ars<T: Rng>(
 }
 
 /// Create identity provider with #num_ars ARs to be used by tests
-pub fn test_create_ip_info<T: Rng>(
+pub fn test_create_ip_info<T: Rng + rand_core::CryptoRng>(
     csprng: &mut T,
     num_ars: u8,
     max_attrs: u8,
@@ -66,20 +66,25 @@ pub fn test_create_ip_info<T: Rng>(
     // revokers.
     let ps_len = (5 + num_ars + max_attrs) as usize;
     let ip_secret_key = ps_sig::secret::SecretKey::<ExamplePairing>::generate(ps_len, csprng);
-    let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+    let ip_verify_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+    let keypair = ed25519::Keypair::generate(csprng);
+    let ip_cdi_verify_key = keypair.public;
+    let ip_cdi_secret_key = keypair.secret;
 
     // Return IpData with public and private keys.
     IpData {
         public_ip_info: IpInfo {
-            ip_identity:    IpIdentity(0),
+            ip_identity: IpIdentity(0),
             ip_description: Description {
                 name:        "IP0".to_owned(),
                 url:         "IP0.com".to_owned(),
                 description: "IP0".to_owned(),
             },
-            ip_verify_key:  ip_public_key,
+            ip_verify_key,
+            ip_cdi_verify_key,
         },
         ip_secret_key,
+        ip_cdi_secret_key,
     }
 }
 
@@ -104,6 +109,7 @@ pub fn test_create_pio<'a>(
     ars_infos: &'a BTreeMap<ArIdentity, ArInfo<ExampleCurve>>,
     global_ctx: &'a GlobalContext<ExampleCurve>,
     num_ars: u8, // should be at least 1
+    initial_account_data: &InitialAccountData,
 ) -> (
     IPContext<'a, ExamplePairing, ExampleCurve>,
     PreIdentityObject<ExamplePairing, ExampleCurve>,
@@ -116,7 +122,7 @@ pub fn test_create_pio<'a>(
     let threshold = Threshold::try_from(num_ars - 1).unwrap_or(Threshold(1));
 
     // Create and return PIO
-    let (pio, randomness) = generate_pio(&context, threshold, &aci)
+    let (pio, randomness) = generate_pio(&context, threshold, &aci, initial_account_data)
         .expect("Generating the pre-identity object should succeed.");
     (context, pio, randomness)
 }
@@ -148,7 +154,7 @@ pub fn test_pipeline() {
     let IpData {
         public_ip_info: ip_info,
         ip_secret_key,
-        ..
+        ip_cdi_secret_key,
     } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
 
     let global_ctx = GlobalContext::generate();
@@ -157,14 +163,38 @@ pub fn test_pipeline() {
         test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
     let aci = test_create_aci(&mut csprng);
+    let acc_data = InitialAccountData {
+        keys:      {
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys
+        },
+        threshold: SignatureThreshold(2),
+    };
     let (context, pio, randomness) =
-        test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
+        test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
     let alist = test_create_attributes();
-    let sig_ok = verify_credentials(&pio, context, &alist, &ip_secret_key);
-    assert!(sig_ok.is_ok(), "Signature on the credential is invalid.");
+    let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
+    assert!(ver_ok.is_ok(), "Signature on the credential is invalid.");
 
     // Generate CDI
-    let ip_sig = sig_ok.unwrap();
+    let (ip_sig, initial_cdi) = ver_ok.unwrap();
+    let cdi_check = verify_initial_cdi(&ip_info, &initial_cdi);
+    assert_eq!(cdi_check, Ok(()));
+    let initial_cdi_values = serialize_deserialize(&initial_cdi.values);
+    assert!(
+        initial_cdi_values.is_ok(),
+        "INITIAL VALUES Deserialization must be successful."
+    );
+    let initial_cdi_sig = serialize_deserialize(&initial_cdi.sig);
+    assert!(
+        initial_cdi_sig.is_ok(),
+        "Signature deserialization must be successful."
+    );
+    let des_initial = serialize_deserialize(&initial_cdi);
+    assert!(des_initial.is_ok(), "Deserialization must be successful.");
 
     let id_object = IdentityObject {
         pre_identity_object: pio,

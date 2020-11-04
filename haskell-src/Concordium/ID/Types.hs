@@ -652,3 +652,227 @@ instance FromJSON CredentialDeploymentInformation where
         cdiProofs = Proofs (BSS.toShort bs),
         ..
       }
+
+
+-- |Information about the account that should be created as part of the initial
+-- credential deployment.
+data InitialCredentialAccount = InitialCredentialAccount {
+  icaKeys :: ![AccountVerificationKey],
+  icaThreshold :: !SignatureThreshold
+} deriving(Eq, Show)
+
+instance ToJSON InitialCredentialAccount where
+  toJSON (InitialCredentialAccount keys threshold) = object [
+    "keys" .= keys,
+    "threshold" .= threshold
+    ]
+
+instance FromJSON InitialCredentialAccount where
+  parseJSON = withObject "InitialCredentialAccount" $ \v -> do
+    icaKeys <- v .: "keys"
+    when (null icaKeys) $ fail "The list of keys must be non-empty."
+    let len = length icaKeys
+    unless (len <= 255) $ fail "The list of keys must be no longer than 255 elements."
+    icaThreshold <- v .: "threshold"
+    return InitialCredentialAccount{..}
+
+instance Serialize InitialCredentialAccount where
+  put InitialCredentialAccount{..} =
+      S.putWord8 (fromIntegral (length icaKeys)) <>
+      mapM_ S.put icaKeys <>
+      S.put icaThreshold
+
+  get = do
+    len <- S.getWord8
+    unless (len >= 1) $ fail "The list of keys must be non-empty and at most 255 elements long."
+    icaKeys <- replicateM (fromIntegral len) S.get
+    icaThreshold <- S.get
+    return InitialCredentialAccount{..}
+
+-- |The data for the initial account creation. This is submitted by the identity
+-- provider on behalf of the account holder.
+data InitialCredentialDeploymentValues = InitialCredentialDeploymentValues {
+  -- |List of keys the new account should have, together with a threshold
+  -- for how many are needed. Its address is derived from the registration
+  -- id of this credential.
+  icdvAccount :: !InitialCredentialAccount,
+  -- |Registration id of __this__ credential.
+  icdvRegId :: !CredentialRegistrationID,
+  -- |Identity of the identity provider who signed this account creation
+  icdvIpId :: !IdentityProviderIdentity,
+  -- |Policy.
+  icdvPolicy :: !Policy
+} deriving(Eq, Show)
+
+-- |Address of the account that is created as a result of the initial credential
+-- deployment.
+initialCredentialAccountAddress :: InitialCredentialDeploymentValues -> AccountAddress
+initialCredentialAccountAddress icdv = addressFromRegId (icdvRegId icdv)
+
+instance ToJSON InitialCredentialDeploymentValues where
+  toJSON InitialCredentialDeploymentValues{..} =
+    object [
+    "account" .= icdvAccount,
+    "regId" .= icdvRegId,
+    "ipIdentity" .= icdvIpId,
+    "policy" .= icdvPolicy
+    ]
+
+instance FromJSON InitialCredentialDeploymentValues where
+  parseJSON = withObject "InitialCredentialDeploymentValues" $ \v -> do
+    icdvAccount <- v .: "account"
+    icdvRegId <- v .: "regId"
+    icdvIpId <- v .: "ipIdentity"
+    icdvPolicy <- v .: "policy"
+    return InitialCredentialDeploymentValues{..}
+
+instance Serialize InitialCredentialDeploymentValues where
+  get = do
+    icdvAccount <- get
+    icdvRegId <- get
+    icdvIpId <- get
+    icdvPolicy <- getPolicy
+    return InitialCredentialDeploymentValues{..}
+
+  put InitialCredentialDeploymentValues{..} =
+    put icdvAccount <>
+    put icdvRegId <>
+    put icdvIpId <>
+    putPolicy icdvPolicy
+
+-- |A signature using the Ed25519 signature scheme.
+-- Always 64 bytes in length.
+newtype IpCdiSignature = IpCdiSignature { theSignature :: ShortByteString }
+    deriving (ToJSON, FromJSON, Show) via ByteStringHex
+
+instance Serialize IpCdiSignature where
+  put = putShortByteString . theSignature
+  get = IpCdiSignature <$> getShortByteString 64
+
+-- |The initial credential deployment information consists of values deployed
+-- a signature from the identity provider on said values
+data InitialCredentialDeploymentInfo = InitialCredentialDeploymentInfo {
+  icdiValues :: InitialCredentialDeploymentValues,
+  -- |A signature under the public key of identity provider's key on the
+  -- credential deployment values. This is the dual of `proofs` for the normal
+  -- credential deployment.
+  icdiSig :: IpCdiSignature
+  }
+  deriving (Show)
+
+-- |NB: This must match the one defined in rust
+instance Serialize InitialCredentialDeploymentInfo where
+  put InitialCredentialDeploymentInfo{..} =
+    put icdiValues <> put icdiSig
+
+  get = do
+    icdiValues <- get
+    icdiSig <- get
+    return InitialCredentialDeploymentInfo {..}
+
+-- |NB: This makes sense for well-formed data only and is consistent with how
+-- accounts are identified internally.
+instance Eq InitialCredentialDeploymentInfo where
+  icdi1 == icdi2 = icdiValues icdi1 == icdiValues icdi2
+
+instance FromJSON InitialCredentialDeploymentInfo where
+  parseJSON = withObject "InitialCredentialDeploymentInformation" $ \v -> do
+    icdiValues <- parseJSON (Object v)
+    icdiSig <- v .: "sig"
+    return InitialCredentialDeploymentInfo{..}
+
+
+-- |Different kinds of credentials that can go onto the chain.
+data AccountCredentialWithProofs =
+  InitialACWP InitialCredentialDeploymentInfo
+  | NormalACWP CredentialDeploymentInformation
+  deriving(Eq, Show)
+
+instance Serialize AccountCredentialWithProofs where
+  put (InitialACWP icdi) = putWord8 0 <> put icdi
+  put (NormalACWP cdi) = putWord8 1 <> put cdi
+
+  get = getWord8 >>= \case
+    0 -> InitialACWP <$> get
+    1 -> NormalACWP <$> get
+    _ -> fail "Unsupported credential type."
+
+
+-- |Analogue of 'AccountCredentialWithProofs' but with the proofs removed.
+data AccountCredential =
+  InitialAC InitialCredentialDeploymentValues
+  | NormalAC CredentialDeploymentValues
+  deriving(Eq, Show)
+
+data CredentialType = Initial | Normal
+    deriving(Eq, Show)
+
+instance FromJSON CredentialType where
+  parseJSON = withText "Credential Type" $ \t ->
+    if t == "initial" then return Initial
+    else if t == "normal" then return Normal
+    else fail "Unsupported credential type."
+
+instance ToJSON CredentialType where
+  toJSON Initial = String "initial"
+  toJSON Normal = String "normal"
+
+instance Serialize AccountCredential where
+  put (InitialAC icdi) = putWord8 0 <> put icdi
+  put (NormalAC cdi) = putWord8 1 <> put cdi
+
+  get = getWord8 >>= \case
+    0 -> InitialAC <$> get
+    1 -> NormalAC <$> get
+    _ -> fail "Unsupported credential type."
+
+instance FromJSON AccountCredentialWithProofs where
+  parseJSON = withObject "Account credential with proofs" $ \v -> do
+    ty <- v .: "type"
+    case ty of
+      Initial -> InitialACWP <$> v .: "contents"
+      Normal -> NormalACWP <$> v .: "contents"
+
+instance FromJSON AccountCredential where
+  parseJSON = withObject "Account credential with proofs" $ \v -> do
+    ty <- v .: "type"
+    case ty of
+      Initial -> InitialAC <$> v .: "contents"
+      Normal -> NormalAC <$> v .: "contents"
+
+instance ToJSON AccountCredential where
+  toJSON (InitialAC icdv) = object ["type" .= Initial, "contents" .= icdv]
+  toJSON (NormalAC icdv) = object ["type" .= Normal, "contents" .= icdv]
+
+-- |Extract the validity information for the credential.
+validTo :: AccountCredential -> CredentialValidTo
+validTo (NormalAC cdv) = pValidTo . cdvPolicy $ cdv
+validTo (InitialAC icdv) = pValidTo . icdvPolicy $ icdv
+
+regId :: AccountCredential -> CredentialRegistrationID
+regId (NormalAC cdv) = cdvRegId cdv
+regId (InitialAC icdv) = icdvRegId icdv
+
+-- |Remove the proofs from the structure
+values :: AccountCredentialWithProofs -> AccountCredential
+values (InitialACWP icdi) = InitialAC (icdiValues icdi)
+values (NormalACWP cdi) = NormalAC (cdiValues cdi)
+
+ipId :: AccountCredential -> IdentityProviderIdentity
+ipId (InitialAC icdv) = icdvIpId icdv
+ipId (NormalAC cdv) = cdvIpId cdv
+
+policy :: AccountCredential -> Policy
+policy (InitialAC icdv) = icdvPolicy icdv
+policy (NormalAC cdv) = cdvPolicy cdv
+
+class HasCredentialType a where
+  credentialType :: a -> CredentialType
+
+instance HasCredentialType AccountCredential where
+  credentialType (InitialAC _) = Initial
+  credentialType (NormalAC _) = Normal
+
+instance HasCredentialType AccountCredentialWithProofs where
+  credentialType (InitialACWP _) = Initial
+  credentialType (NormalACWP _) = Normal

@@ -28,8 +28,8 @@ dummyEncryptionSecretKey addr = generateElgamalSecretKeyFromSeed globalContext (
 -- Should only be used when only the existence of a credential is needed in testing, but the credential
 -- will neither be serialized, nor inspected.
 {-# WARNING dummyCredential "Invalid credential, only for testing." #-}
-dummyCredential :: ID.AccountAddress -> ID.CredentialValidTo -> ID.CredentialCreatedAt -> ID.CredentialDeploymentValues
-dummyCredential address pValidTo pCreatedAt = ID.CredentialDeploymentValues
+dummyCredential :: ID.AccountAddress -> ID.CredentialValidTo -> ID.CredentialCreatedAt -> ID.AccountCredential
+dummyCredential address pValidTo pCreatedAt = ID.NormalAC $ ID.CredentialDeploymentValues
     {
       cdvAccount = ID.ExistingAccount address,
       cdvRegId = dummyRegId address,
@@ -58,6 +58,13 @@ dummyCreatedAt = YearMonth 2020 3
 {-# WARNING readCredential "Do not use in production." #-}
 readCredential :: BSL.ByteString -> ID.CredentialDeploymentInformation
 readCredential bs = 
+  case AE.eitherDecode bs of
+    Left err -> error $ "Cannot read credential because " ++ err
+    Right d -> if vVersion d == 0 then vValue d else error "Incorrect credential version."
+
+{-# WARNING readInitialCredential "Do not use in production." #-}
+readInitialCredential :: BSL.ByteString -> ID.InitialCredentialDeploymentInfo
+readInitialCredential bs =
   case AE.eitherDecode bs of
     Left err -> error $ "Cannot read credential because " ++ err
     Right d -> if vVersion d == 0 then vValue d else error "Incorrect credential version."

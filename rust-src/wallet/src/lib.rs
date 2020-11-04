@@ -283,6 +283,7 @@ fn try_get<A: serde::de::DeserializeOwned>(v: &Value, fname: &str) -> Fallible<A
     }
 }
 
+/// This function creates the identity object request
 fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
 
@@ -315,8 +316,21 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
     // Choice of anonymity revokers, all of them in this implementation.
     let context = IPContext::new(&ip_info, &ars_infos, &global_context);
+
+    // Generating account data for the initial account
+    let mut keys = std::collections::BTreeMap::new();
+    let mut csprng = thread_rng();
+    keys.insert(
+        KeyIndex(0),
+        crypto_common::serde_impls::KeyPairDef::from(ed25519::Keypair::generate(&mut csprng)),
+    );
+
+    let initial_acc_data = InitialAccountData {
+        keys,
+        threshold: SignatureThreshold(1),
+    };
     let (pio, randomness) = {
-        match generate_pio(&context, threshold, &aci) {
+        match generate_pio(&context, threshold, &aci, &initial_acc_data) {
             Some(x) => x,
             None => bail!("Generating the pre-identity object failed."),
         }
@@ -324,9 +338,25 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
     let id_use_data = IdObjectUseData { aci, randomness };
 
+    let reg_id = &pio.pub_info_for_ip.reg_id;
+    let address = AccountAddress::new(reg_id);
+    let secret_key = elgamal::SecretKey {
+        generator: *global_context.elgamal_generator(),
+        scalar:    id_use_data.aci.prf_key.prf_exponent(0).unwrap(), /* the unwrap is safe since
+                                                                      * we've generated the
+                                                                      * RegID successfully
+                                                                      * above. */
+    };
+
     let response = json!({
         "idObjectRequest": Versioned::new(VERSION_0, pio),
         "privateIdObjectData": Versioned::new(VERSION_0, id_use_data),
+        "initialAccountData": json!({
+            "accountData": initial_acc_data,
+            "encryptionSecretKey": secret_key,
+            "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
+            "accountAddress": address,
+        })
     });
 
     Ok(to_string(&response)?)
