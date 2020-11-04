@@ -145,6 +145,7 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
 #[cfg(test)]
 mod tests {
     use super::*;
+    use concordium_sc_base::test_infrastructure::*;
 
     #[test]
     /// Test that a valid transfer request is accepted
@@ -153,41 +154,26 @@ mod tests {
     ///  - Accepts the requested transfer
     ///  - Adds the new request to recent_transfers
     fn test_receive_transfer_accepted() {
-        // setup our example state the contract is to be run in.
-        // first the context.
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        10,
-        };
+        // Setup the context
 
         let account1 = AccountAddress([1u8; 32]);
         let account2 = AccountAddress([2u8; 32]);
         let target_account = AccountAddress([2u8; 32]);
 
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker: account1,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 10,
-            sender: Address::Account(account1),
-            owner: account1,
-        };
-
         let parameter = TransferRequest {
             amount: 5,
             target_account,
         };
+        let parameter_bytes = to_bytes(&parameter);
 
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+        let mut ctx = ReceiveContextTest::empty();
+        ctx.set_parameter(&parameter_bytes);
+        ctx.metadata.set_slot_time(10);
+        ctx.set_sender(Address::Account(account1));
+        ctx.set_owner(account1);
+        ctx.set_self_balance(10);
 
+        // Setup state
         let recent_transfers = vec![
             Transfer {
                 time_of_transfer: 0,
@@ -217,37 +203,36 @@ mod tests {
             time_limit:           9,
         };
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             recent_transfers,
         };
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+        let res: ReceiveResult<ActionsTree> =
             contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
 
         // Test
-        match res {
-            Err(_) => claim!(false, "Contract receive transfer failed, but it should not have."),
-            Ok(actions) => {
-                claim_eq!(
-                    actions,
-                    test_infrastructure::ActionsTree::simple_transfer(&target_account, 5),
-                    "The request did not transfer the correct amount."
-                );
-                claim_eq!(
-                    state.recent_transfers.len(),
-                    3,
-                    "The oldest transfer should have been removed and the new one added."
-                );
-                claim_eq!(
-                    state.recent_transfers[2].transfer_request.amount,
-                    5,
-                    "The new transfer should have been added to recent_transfers."
-                )
-            }
-        }
+        let actions = match res {
+            Err(_) => fail!("Contract receive transfer failed, but it should not have."),
+            Ok(actions) => actions,
+        };
+        claim_eq!(
+            actions,
+            ActionsTree::simple_transfer(&target_account, 5),
+            "The request did not transfer the correct amount."
+        );
+        claim_eq!(
+            state.recent_transfers.len(),
+            3,
+            "The oldest transfer should have been removed and the new one added."
+        );
+        claim_eq!(
+            state.recent_transfers[2].transfer_request.amount,
+            5,
+            "The new transfer should have been added to recent_transfers."
+        );
     }
 
     #[test]
@@ -256,41 +241,25 @@ mod tests {
     /// - Request is denied
     /// - Recent_transfers is unaltered
     fn test_receive_transfer_denied_due_to_limit() {
-        // setup our example state the contract is to be run in.
-        // first the context.
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        10,
-        };
-
+        // Setup context
         let account1 = AccountAddress([1u8; 32]);
         let account2 = AccountAddress([2u8; 32]);
         let target_account = AccountAddress([2u8; 32]);
-
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker: account1,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 10,
-            sender: Address::Account(account1),
-            owner: account1,
-        };
 
         let parameter = TransferRequest {
             amount: 5,
             target_account,
         };
+        let parameter_bytes = to_bytes(&parameter);
 
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+        let mut ctx = ReceiveContextTest::empty();
+        ctx.metadata.set_slot_time(10);
+        ctx.set_sender(Address::Account(account1));
+        ctx.set_owner(account1);
+        ctx.set_self_balance(10);
+        ctx.set_parameter(&parameter_bytes);
 
+        // Setup state
         let recent_transfers = vec![
             Transfer {
                 time_of_transfer: 0,
@@ -320,14 +289,14 @@ mod tests {
             time_limit:           10,
         };
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             recent_transfers,
         };
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+        let res: ReceiveResult<ActionsTree> =
             contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
 
         // Test
@@ -354,41 +323,25 @@ mod tests {
     /// - Transfer request is accepted
     /// - No underflow occurs
     fn test_receive_transfer_no_underflow() {
-        // setup our example state the contract is to be run in.
-        // first the context.
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        10,
-        };
-
+        // Setup context
         let account1 = AccountAddress([1u8; 32]);
         let account2 = AccountAddress([2u8; 32]);
         let target_account = AccountAddress([2u8; 32]);
-
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker: account1,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 10,
-            sender: Address::Account(account1),
-            owner: account1,
-        };
 
         let parameter = TransferRequest {
             amount: 5,
             target_account,
         };
+        let parameter_bytes = to_bytes(&parameter);
 
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+        let mut ctx = ReceiveContextTest::empty();
+        ctx.set_parameter(&parameter_bytes);
+        ctx.metadata.set_slot_time(10);
+        ctx.set_self_balance(10);
+        ctx.set_sender(Address::Account(account1));
+        ctx.set_owner(account1);
 
+        // Setup state
         let recent_transfers = vec![
             Transfer {
                 time_of_transfer: 0,
@@ -418,14 +371,14 @@ mod tests {
             time_limit:           1000,
         };
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             recent_transfers,
         };
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
+        let res: ReceiveResult<ActionsTree> =
             contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
 
         // Test

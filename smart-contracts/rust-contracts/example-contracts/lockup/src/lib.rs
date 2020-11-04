@@ -129,7 +129,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
                 "Not enough available funds to make withdrawal."
             );
 
-            // We have checked that the avaiable balance is high enough, so underflow
+            // We have checked that the available balance is high enough, so underflow
             // should not be possible
             state.available_balance -= withdrawal_amount;
             Ok(A::simple_transfer(&sender, withdrawal_amount))
@@ -168,7 +168,7 @@ fn make_vested_funds_available(time_now: u64, state: &mut State) {
     // It shouldn't be possible to overflow because when we init we sum all
     // vesting events and check for no overflow, and this sum here should
     // always be less than or equal to that (the difference being due to
-    // withrawn funds), but greater than or equal to zero (since you can't
+    // withdrawn funds), but greater than or equal to zero (since you can't
     // withdraw funds you don't have).
     state.available_balance += newly_vested_amount;
 }
