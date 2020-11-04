@@ -441,7 +441,7 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     };
 
     let response = json!({
-        "credential": Versioned::new(Version::from(0u32), cdi),
+        "credential": Versioned::new(VERSION_0, AccountCredential::Normal{cdi}),
         "accountData": acc_data,
         "encryptionSecretKey": secret_key,
         "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
