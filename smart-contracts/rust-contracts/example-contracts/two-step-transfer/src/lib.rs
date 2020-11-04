@@ -311,7 +311,7 @@ mod tests {
         };
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = InitContextTest::default();
+        let mut ctx = InitContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
 
         // set up the logger so we can intercept and analyze them at the end.
@@ -359,7 +359,7 @@ mod tests {
         let parameter = Message::RequestTransfer(request_id, 50, target_account);
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.set_sender(Address::Account(account1));
         ctx.metadata.set_slot_time(0);
@@ -391,11 +391,7 @@ mod tests {
             Err(_) => fail!("Contract receive failed, but it should not have."),
             Ok(actions) => actions,
         };
-        claim_eq!(
-            actions,
-            test_infrastructure::ActionsTree::Accept,
-            "Contract receive produced incorrect actions."
-        );
+        claim_eq!(actions, ActionsTree::Accept, "Contract receive produced incorrect actions.");
         claim_eq!(state.requests.len(), 1, "Contract receive did not create transfer request");
         claim_eq!(
             sum_reserved_balance(&state),
@@ -422,7 +418,7 @@ mod tests {
         let parameter = Message::SupportTransfer(request_id, 50, target_account);
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.metadata.set_slot_time(100);
         ctx.set_sender(Address::Account(account2));
@@ -466,7 +462,7 @@ mod tests {
 
         claim_eq!(
             actions,
-            test_infrastructure::ActionsTree::Accept,
+            ActionsTree::Accept,
             "Contract receive support produced incorrect actions."
         );
         claim_eq!(
@@ -501,7 +497,7 @@ mod tests {
         let parameter = Message::SupportTransfer(request_id, 50, target_account);
         let parameter_bytes = to_bytes(&parameter);
 
-        let mut ctx = ReceiveContextTest::default();
+        let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.set_sender(Address::Account(account2));
         ctx.metadata.set_slot_time(0);
@@ -544,7 +540,7 @@ mod tests {
         };
         claim_eq!(
             actions,
-            test_infrastructure::ActionsTree::simple_transfer(&target_account, 50),
+            ActionsTree::simple_transfer(&target_account, 50),
             "Supporting the transfer did not result in the right transfer"
         );
         claim_eq!(state.requests.len(), 0, "The request should be removed");
