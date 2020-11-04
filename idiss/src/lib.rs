@@ -159,21 +159,30 @@ pub fn create_initial_credential(
 
     let ip_cdi_secret_key: ed25519_dalek::SecretKey =
         base16_decode_string(ip_cdi_secret_key_str).map_err(show_err)?;
-
+    let addr = AccountAddress::new(&pub_info_for_ip.reg_id);
     let initial_cdi = create_initial_cdi(&ip_info, pub_info_for_ip, &alist, &ip_cdi_secret_key);
 
-    let v_initial_cdi = Versioned::new(VERSION_0, initial_cdi);
-    let addr = AccountAddress::new(&pub_info_for_ip.reg_id);
+    let v_initial_cdi = Versioned::new(VERSION_0, AccountCredential::Initial::<
+        id::constants::IpPairing,
+        _,
+        _,
+    > {
+        icdi: initial_cdi,
+    });
+
     let response = serde_json::json!({
         "request": v_initial_cdi,
         "accountAddress": addr
     });
-    Ok(to_string(&v_initial_cdi)
+    Ok(to_string(&response)
         .expect("JSON serialization of versioned initial credential should not fail."))
 }
 
 #[wasm_bindgen]
-pub fn create_anonymity_revocation_record(request_str: &str) -> Result<String, JsValue> {
+pub fn create_anonymity_revocation_record(
+    request_str: &str,
+    max_accounts: u8,
+) -> Result<String, JsValue> {
     let request: Versioned<PreIdentityObject<Bls12, ExampleCurve>> = {
         let v: Value = from_str(request_str).map_err(show_err)?;
         let pre_id_obj_value = v
@@ -187,7 +196,8 @@ pub fn create_anonymity_revocation_record(request_str: &str) -> Result<String, J
 
     let ar_record = AnonymityRevocationRecord {
         id_cred_pub: request.value.pub_info_for_ip.id_cred_pub,
-        ar_data:     request.value.ip_ar_data,
+        ar_data: request.value.ip_ar_data,
+        max_accounts,
     };
     Ok(to_string(&ar_record)
         .expect("JSON serialization of anonymity revocation records should not fail."))
