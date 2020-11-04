@@ -62,14 +62,17 @@ To generate and include the schema for parameters for ``init`` and
 ``#[init(..)]`` and ``#[receive(..)]`` macro::
 
     #[derive(SchemaType)]
-    enum MyParameter {
-        ...
-    }
+    enum InitParameter { ... }
 
-    #[init(name = "my_init", parameter = "MyParameter")]
-    fn contract_init<...> (...){
-        ...
-    }
+    #[derive(SchemaType)]
+    enum ReceiveParameter { ... }
+
+    #[init(name = "my_init", parameter = "InitParameter")]
+    fn contract_init<...> (...){ ... }
+
+    #[receive(name = "my_receive", parameter = "ReceiveParameter")]
+    fn contract_receive<...> (...){ ... }
+
 
 
 Building the schema
