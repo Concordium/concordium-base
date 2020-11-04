@@ -154,9 +154,8 @@ pub fn create_identity_object(
         &alist,
         &ip_cdi_private_key,
     );
-    let versioned_icdi = Versioned::new(VERSION_0, icdi);
+
     // address of the account that will be created.
-    let addr = AccountAddress::new(&request.value.pub_info_for_ip.reg_id);
     let id = IdentityObject {
         pre_identity_object: request.value,
         alist,
@@ -168,45 +167,22 @@ pub fn create_identity_object(
     let ar_record = to_string(&ar_record)
         .expect("JSON serialization of anonymity revocation records should not fail.");
 
-    let request: Versioned<PreIdentityObject<Bls12, ExampleCurve>> = {
-        let v: Value = from_str(request_str).map_err(show_err)?;
-        let pre_id_obj_value = v
-            .get("idObjectRequest")
-            .ok_or_else(|| show_err("'idObjectRequest' field not present."))?;
-        from_value(pre_id_obj_value.clone()).map_err(show_err)?
-    };
-
-    if request.version != VERSION_0 {
-        return Err(show_err("Incorrect request version."));
-    }
-
-    let pub_info_for_ip = request.value.pub_info_for_ip;
-    let ip_info = parse_exact_versioned_ip_info(ip_info_str)?;
-
-    let ip_cdi_secret_key: ed25519_dalek::SecretKey =
-        base16_decode_string(ip_cdi_secret_key_str).map_err(show_err)?;
-    let addr = AccountAddress::new(&pub_info_for_ip.reg_id);
-    let initial_cdi = create_initial_cdi(&ip_info, pub_info_for_ip, &alist, &ip_cdi_secret_key);
+    let addr = AccountAddress::new(&vid.value.pre_identity_object.pub_info_for_ip.reg_id);
 
     let v_initial_cdi = Versioned::new(VERSION_0, AccountCredential::Initial::<
         id::constants::IpPairing,
         _,
         _,
     > {
-        icdi: initial_cdi,
+        icdi,
     });
 
     let response = serde_json::json!({
         "request": v_initial_cdi,
         "accountAddress": addr
     });
-
-    let init_acc = serde_json::json!({
-        "request": versioned_icdi,
-        "accountAddress": addr
-    });
     let init_acc =
-        to_string(&init_acc).expect("JSON serialization of initial credentials should not fail.");
+        to_string(&response).expect("JSON serialization of initial credentials should not fail.");
     Ok((id_obj, ar_record, init_acc))
 }
 
