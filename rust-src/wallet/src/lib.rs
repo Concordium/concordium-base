@@ -450,6 +450,42 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     Ok(to_string(&response)?)
 }
 
+fn generate_accounts_aux(input: &str) -> Fallible<String> {
+    let v: Value = from_str(input)?;
+
+    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+
+    let id_object: IdentityObject<Bls12, ExampleCurve, AttributeKind> =
+        try_get(&v, "identityObject")?;
+
+    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = try_get(&v, "privateIdObjectData")?;
+
+    let start: u8 = try_get(&v, "start").unwrap_or(0);
+
+    let mut response = Vec::with_capacity(256);
+
+    for acc_num in start..id_object.alist.max_accounts {
+        if let Ok(reg_id) = id_use_data
+            .aci
+            .prf_key
+            .prf(global_context.elgamal_generator(), acc_num)
+        {
+            let enc_key = id_use_data.aci.prf_key.prf_exponent(acc_num).unwrap();
+            let secret_key = elgamal::SecretKey {
+                generator: *global_context.elgamal_generator(),
+                scalar:    enc_key,
+            };
+            let address = AccountAddress::new(&reg_id);
+            response.push(json!({
+                "encryptionSecretKey": secret_key,
+                "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
+                "accountAddress": address,
+            }));
+        }
+    }
+    Ok(to_string(&response)?)
+}
+
 /// Embed the precomputed table for decryption.
 /// It is unfortunate that this is pure bytes, but not enough of data is marked
 /// as const, and in any case a HashMap relies on an allocator, so will never be
@@ -654,6 +690,21 @@ make_wrapper!(
     /// The input pointers must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => combine_encrypted_amounts_ext --> combine_encrypted_amounts_aux);
+
+make_wrapper!(
+    /// Take pointers to NUL-terminated UTF8-strings and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// The input strings must contain a valid JSON object with fields `identityObject`, `privateIdObjectData`, and `global`.
+    /// If there is failure decoding input arguments the return value is a string
+    /// describing the error.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => generate_accounts_ext -> generate_accounts_aux);
 
 /// Take pointers to a NUL-terminated UTF8-string and return a u64.
 ///
