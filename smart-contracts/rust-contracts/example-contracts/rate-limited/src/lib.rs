@@ -73,10 +73,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 
     // If timed_withdraw_limit is zero then no GTU can be transferred from the
     // account, thus violating the purpose of the contract.
-    ensure!(
-        init_params.timed_withdraw_limit > 0,
-        "The timed_withdraw_limit should be greather than 0."
-    );
+    ensure!(init_params.timed_withdraw_limit > 0); // The timed_withdraw_limit should be greater than 0.
 
     let state = State {
         init_params,
@@ -106,7 +103,7 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
     _logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
-    ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can transfer.");
+    ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can transfer.
 
     let current_time: TimeMilliseconds = ctx.metadata().slot_time();
 

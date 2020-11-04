@@ -63,8 +63,8 @@ struct TransferRequest {
 #[derive(Serialize, SchemaType)]
 struct InitParams {
     // Who is authorized to withdraw funds from this lockup (must be non-empty)
-    #[set_size_length = 1]
-    #[skip_order_check]
+    // #[set_size_length = 1]
+    // #[skip_order_check]
     account_holders: BTreeSet<AccountAddress>,
 
     // How many of the account holders need to agree before funds are released
@@ -98,29 +98,40 @@ pub struct State {
 
 // Contract implementation
 
+#[derive(Debug, PartialEq, Eq)]
+enum InitError {
+    /// Failed parsing the parameter
+    ParseParams,
+    /// Not enough account holders: At least two are needed for this contract
+    /// to be valid.
+    InsufficientAccountHolders,
+    /// The threshold for agreeing account holders to allow a transfer must be
+    /// less than or equal to the number of unique account holders, else a
+    /// transfer can never be made!
+    ThresholdAboveAccountHolders,
+    /// The number of account holders required to accept a transfer must be two
+    /// or more else you would be better off with a normal account!
+    ThresholdBelowTwo,
+}
+
+impl From<ParseError> for InitError {
+    fn from(_: ParseError) -> Self { InitError::ParseParams }
+}
+
 #[init(name = "init")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
     _amount: Amount,
     _logger: &mut L,
-) -> InitResult<State> {
+) -> Result<State, InitError> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
-    ensure!(
-        init_params.account_holders.len() >= 2,
-        "Not enough account holders: At least two are needed for this contract to be valid."
-    );
+    ensure!(init_params.account_holders.len() >= 2, InitError::InsufficientAccountHolders);
     ensure!(
         init_params.transfer_agreement_threshold <= init_params.account_holders.len() as u32,
-        ("The threshold for agreeing account holders to allow a transfer must be "
-            + "less than or equal to the number of unique account holders, else a transfer can \
-               never be made!")
+        InitError::ThresholdAboveAccountHolders
     );
-    ensure!(
-        init_params.transfer_agreement_threshold >= 2,
-        "The number of account holders required to accept a transfer must be two or more else you \
-         would be better off with a normal account!"
-    );
+    ensure!(init_params.transfer_agreement_threshold >= 2, InitError::ThresholdBelowTwo);
 
     let state = State {
         init_params,
@@ -141,6 +152,32 @@ fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
     Ok(A::accept())
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum ReceiveError {
+    /// Failed parsing the parameter.
+    ParseParams,
+    /// Only account holders can interact with this contract.
+    NotAccountHolder,
+    /// Sender cannot be a contract.
+    ContractSender,
+    /// A request with this ID already exists.
+    RequestAlreadyExists,
+    /// Not enough available funds for the requested transfer.
+    InsufficientAvailableFunds,
+    /// No such transfer to support.
+    UnknownTransfer,
+    /// The request have timed out.
+    RequestTimeout,
+    /// Transfer amount or account is different from the request.
+    MismatchingRequestInformation,
+    /// You have already supported this transfer.
+    RequestAlreadySupported,
+}
+
+impl From<ParseError> for ReceiveError {
+    fn from(_: ParseError) -> Self { ReceiveError::ParseParams }
+}
+
 #[receive(name = "receive")]
 #[inline(always)]
 fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
@@ -148,7 +185,7 @@ fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
     amount: Amount,
     _logger: &mut L,
     state: &mut State,
-) -> ReceiveResult<A> {
+) -> Result<A, ReceiveError> {
     let sender = ctx.sender();
     ensure!(
         state
@@ -156,10 +193,10 @@ fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
             .account_holders
             .iter()
             .any(|account_holder| sender.matches_account(account_holder)),
-        "Only account holders can interact with this contract."
+        ReceiveError::NotAccountHolder
     );
     let sender_address = match sender {
-        Address::Contract(_) => bail!("Sender cannot be a contract"),
+        Address::Contract(_) => bail!(ReceiveError::ContractSender),
         Address::Account(account_address) => account_address,
     };
     let now = ctx.metadata().slot_time();
@@ -179,16 +216,13 @@ fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
             state.requests = active_requests;
 
             // Check if a request already exists
-            ensure!(
-                !state.requests.contains_key(&req_id),
-                "A request with this ID already exists."
-            );
+            ensure!(!state.requests.contains_key(&req_id), ReceiveError::RequestAlreadyExists);
 
             // Ensure enough funds for the requested transfer
             let balance = amount + ctx.self_balance();
             ensure!(
                 balance - reserved_balance >= transfer_amount,
-                "Not enough available funds for the requested transfer."
+                ReceiveError::InsufficientAvailableFunds
             );
 
             // Create the request with the sender as the only supporter
@@ -209,25 +243,25 @@ fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
             let matching_request_result = state.requests.get_mut(&transfer_request_id);
 
             let matching_request = match matching_request_result {
-                None => bail!("No such transfer to support."),
+                None => bail!(ReceiveError::UnknownTransfer),
                 Some(matching) => matching,
             };
 
             // Validate the details of the transfer
-            ensure!(matching_request.times_out_at > now, "The request have timed out.");
+            ensure!(matching_request.times_out_at > now, ReceiveError::RequestTimeout);
             ensure!(
                 matching_request.transfer_amount == transfer_amount,
-                "Transfer amount is different from the amount of the request."
+                ReceiveError::MismatchingRequestInformation
             );
             ensure!(
                 matching_request.target_account == target_account,
-                "Target account is different from the target account of the request."
+                ReceiveError::MismatchingRequestInformation
             );
 
             // Can't have already supported this transfer
             ensure!(
                 !matching_request.supporters.contains(&sender_address),
-                "You have already supported this transfer."
+                ReceiveError::RequestAlreadySupported
             );
 
             // Support the request
@@ -349,7 +383,7 @@ mod tests {
         };
 
         // Execution
-        let res: ReceiveResult<ActionsTree> =
+        let res: Result<ActionsTree, _> =
             contract_receive_message(&ctx, 100, &mut logger, &mut state);
 
         // Test
@@ -417,7 +451,7 @@ mod tests {
         };
 
         // Execution
-        let res: ReceiveResult<ActionsTree> =
+        let res: Result<ActionsTree, _> =
             contract_receive_message(&ctx, 75, &mut logger, &mut state);
 
         // Test
@@ -496,7 +530,7 @@ mod tests {
 
         let mut logger = LogRecorder::init();
         // Execution
-        let res: ReceiveResult<ActionsTree> =
+        let res: Result<ActionsTree, _> =
             contract_receive_message(&ctx, 100, &mut logger, &mut state);
 
         // Test

@@ -128,7 +128,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
             let ctx = ReceiveContextExtern::open(());
             let mut state = ContractState::open(());
             let mut logger = Logger::init();
-            let res: ReceiveResult<Action> = #fn_name(&ctx, amount, &mut logger, &mut state);
+            let res: Result<Action, _> = #fn_name(&ctx, amount, &mut logger, &mut state);
             match res {
                 Ok(act) => {
                     act.tag() as i32
@@ -146,7 +146,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let mut logger = Logger::init();
                 let mut state_bytes = ContractState::open(());
                 if let Ok(mut state) = (&mut state_bytes).get() {
-                    let res: ReceiveResult<Action> = #fn_name(&ctx, amount, &mut logger, &mut state);
+                    let res: Result<Action, _> = #fn_name(&ctx, amount, &mut logger, &mut state);
                     match res {
                         Ok(act) => {
                             let res = state_bytes
@@ -439,7 +439,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
     let gen = quote! {
         #[automatically_derived]
         impl #impl_generics Deserial for #data_name #ty_generics #where_clauses {
-            fn deserial<#read_ident: Read>(#source_ident: &mut #read_ident) -> Result<Self, #read_ident::Err> {
+            fn deserial<#read_ident: Read>(#source_ident: &mut #read_ident) -> ParseResult<Self> {
                 #body_tokens
             }
         }

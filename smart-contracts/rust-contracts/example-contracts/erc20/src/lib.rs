@@ -66,7 +66,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     amount: Amount,
     logger: &mut L,
 ) -> InitResult<State> {
-    ensure!(amount == 0, "The amount must be 0");
+    ensure!(amount == 0); // The amount must be 0
 
     let init_params: InitParams = ctx.parameter_cursor().get()?;
 
@@ -84,6 +84,23 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(state)
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum ReceiveError {
+    /// Failed parsing the parameter
+    ParseParams,
+    /// Only accounts can interact with this contract
+    OnlyAccounts,
+    /// The amount must be 0
+    NoAmount,
+    /// The account owner is not allowing you to send this much
+    MoreThanAllowed,
+    InsufficientFunds,
+}
+
+impl From<ParseError> for ReceiveError {
+    fn from(_: ParseError) -> Self { ReceiveError::ParseParams }
+}
+
 #[receive(name = "receive")]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
@@ -91,20 +108,20 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     receive_amount: Amount,
     logger: &mut L,
     state: &mut State,
-) -> ReceiveResult<A> {
-    ensure!(receive_amount == 0, "The amount must be 0");
+) -> Result<A, ReceiveError> {
+    ensure!(receive_amount == 0, ReceiveError::NoAmount);
 
     let msg: Request = ctx.parameter_cursor().get()?;
 
     let sender_address = match ctx.sender() {
-        Address::Contract(_) => bail!("Only accounts can interact with this contract"),
+        Address::Contract(_) => bail!(ReceiveError::OnlyAccounts),
         Address::Account(address) => address,
     };
 
     match msg {
         Request::TransferTo(receiver_address, amount) => {
             let sender_balance = *state.balances.get(&sender_address).unwrap_or(&0);
-            ensure!(sender_balance >= amount, "Insufficient funds");
+            ensure!(sender_balance >= amount, ReceiveError::InsufficientFunds);
 
             let receiver_balance = *state.balances.get(&receiver_address).unwrap_or(&0);
             state.balances.insert(sender_address, sender_balance - amount);
@@ -113,13 +130,10 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
         }
         Request::TransferFromTo(owner_address, receiver_address, amount) => {
             let allowed_amount = *state.allowed.get(&(owner_address, sender_address)).unwrap_or(&0);
-            ensure!(
-                allowed_amount >= amount,
-                "The account owner is not allowing you to send this much"
-            );
+            ensure!(allowed_amount >= amount, ReceiveError::MoreThanAllowed);
 
             let owner_balance = *state.balances.get(&owner_address).unwrap_or(&0);
-            ensure!(owner_balance >= amount, "Insufficient funds");
+            ensure!(owner_balance >= amount, ReceiveError::InsufficientFunds);
 
             let receiver_balance = *state.balances.get(&receiver_address).unwrap_or(&0);
             state.allowed.insert((owner_address, sender_address), allowed_amount - amount);
@@ -145,7 +159,7 @@ fn serial_string<W: Write>(s: &str, out: &mut W) -> Result<(), W::Err> {
 }
 // Deserializing a string using deserial of Vec of bytes, and treat the byte
 // vector as utf8 encoding
-fn deserial_string<R: Read>(source: &mut R) -> Result<String, R::Err> {
+fn deserial_string<R: Read>(source: &mut R) -> ParseResult<String> {
     let bytes = Vec::deserial(source)?;
     let res = String::from_utf8(bytes).unwrap();
     Ok(res)
@@ -162,7 +176,7 @@ impl Serial for InitParams {
 }
 
 impl Deserial for InitParams {
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let name = deserial_string(source)?;
         let symbol = deserial_string(source)?;
         let decimals = u32::deserial(source)?;
@@ -266,7 +280,7 @@ pub mod tests {
         let mut logger = LogRecorder::init();
 
         // Execution
-        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         let actions = match res {
@@ -328,7 +342,7 @@ pub mod tests {
         };
 
         // Execution
-        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         let actions = match res {
@@ -360,10 +374,9 @@ pub mod tests {
     }
 
     #[test]
-    /// Fail when attempting to transfer from account, without being allowed to
-    /// the full amount
+    /// Succeed, when allowing others to transfer
     fn test_receive_allow_transfer() {
-        // Setup
+        // Setup context
         let spender_account = AccountAddress([1u8; 32]);
         let owner_account = AccountAddress([2u8; 32]);
 
@@ -374,6 +387,7 @@ pub mod tests {
         ctx.set_parameter(&parameter_bytes);
         ctx.set_sender(Address::Account(owner_account));
 
+        // Setup state
         let init_params = InitParams {
             name:         "Dollars".to_string(),
             symbol:       "$".to_string(),
@@ -383,15 +397,15 @@ pub mod tests {
         let balances = BTreeMap::new();
         let allowed = BTreeMap::new();
 
-        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             balances,
             allowed,
         };
 
+        let mut logger = LogRecorder::init();
         // Execution
-        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
         let actions = match res {
@@ -446,10 +460,13 @@ pub mod tests {
         let mut logger = LogRecorder::init();
 
         // Execution
-        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
-        claim!(res.is_err(), "The message is expected to fail");
+        match res {
+            Ok(_) => fail!("The message is expected to fail"),
+            Err(err) => claim_eq!(err, ReceiveError::MoreThanAllowed),
+        }
 
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
@@ -465,8 +482,7 @@ pub mod tests {
     }
 
     #[test]
-    /// Fail when attempting to transfer from account, without being allowed to
-    /// the full amount
+    /// Fail when attempting to transfer from account, with insufficient funds
     fn test_receive_transfer_to_insufficient() {
         // Setup context
         let from_account = AccountAddress([2u8; 32]);
@@ -498,10 +514,13 @@ pub mod tests {
         let mut logger = LogRecorder::init();
 
         // Execution
-        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
-        claim!(res.is_err(), "The message is expected to fail");
+        match res {
+            Ok(_) => fail!("The message is expected to fail"),
+            Err(err) => claim_eq!(err, ReceiveError::InsufficientFunds),
+        }
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
         claim_eq!(from_balance, 100, "The balance of the owner account should be unchanged");
@@ -544,10 +563,13 @@ pub mod tests {
         };
 
         // Execution
-        let res: ReceiveResult<ActionsTree> = contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, 0, &mut logger, &mut state);
 
         // Test
-        claim!(res.is_err(), "The message is expected to fail");
+        match res {
+            Ok(_) => fail!("The message is expected to fail"),
+            Err(err) => claim_eq!(err, ReceiveError::InsufficientFunds),
+        }
 
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
