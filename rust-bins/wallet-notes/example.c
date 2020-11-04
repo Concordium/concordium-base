@@ -6,6 +6,7 @@
 
 char* create_id_request_and_private_data_ext(char*, uint8_t*);
 char* create_credential_ext(char*, uint8_t*);
+char* generate_accounts_ext(char*, uint8_t*);
 uint8_t check_account_address_ext(char*);
 
 char* create_transfer_ext(char*, uint8_t*);
@@ -81,6 +82,9 @@ int main(int argc, char *argv[]) {
         printStr(out, flag);
       } else if (strcmp(argv[1], "create_credential-input.json") == 0) {
         out = create_credential_ext(buffer, &flag);
+        printStr(out, flag);
+      } else if (strcmp(argv[1], "generate-accounts-input.json") == 0) {
+        out = generate_accounts_ext(buffer, &flag);
         printStr(out, flag);
       } else if (strcmp(argv[1], "create_encrypted_transfer-input.json") == 0) {
         out = create_encrypted_transfer_ext(buffer, &flag);
