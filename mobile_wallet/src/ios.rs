@@ -12,8 +12,11 @@ use wallet::{
 /// # Safety
 /// The input pointer must point to a null-terminated buffer, otherwise this
 /// function will fail in unspecified ways.
-pub unsafe extern "C" fn generate_accounts(input_ptr: *const c_char) -> *mut c_char {
-    generate_accounts_ext(input_ptr)
+pub unsafe extern "C" fn generate_accounts(
+    input_ptr: *const c_char,
+    success: *mut u8,
+) -> *mut c_char {
+    generate_accounts_ext(input_ptr, success)
 }
 
 #[no_mangle]
