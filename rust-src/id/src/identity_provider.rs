@@ -5,12 +5,14 @@ use crate::{
     utils,
 };
 use bulletproofs::range_proof::verify_efficient;
+use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use elgamal::multicombine;
 use ff::Field;
 use pedersen_scheme::{commitment::Commitment, key::CommitmentKey};
 use rand::*;
 use random_oracle::RandomOracle;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,6 +50,22 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     pre_id_obj: &PreIdentityObject<P, C>,
     context: IPContext<P, C>,
 ) -> Result<(), Reason> {
+    // Verify signature:
+    let pub_info_for_ip = &pre_id_obj.pub_info_for_ip;
+    let proof_acc_sk = &pre_id_obj.poks.proof_acc_sk;
+    let keys = &pub_info_for_ip.vk_acc.account.keys;
+    let threshold = pub_info_for_ip.vk_acc.account.threshold;
+
+    // message signed
+    let signed = Sha256::digest(&to_bytes(&pub_info_for_ip));
+
+    let reason = Reason::IncorrectProof; // TODO: introduce different reason
+
+    if !utils::verify_accunt_ownership_proof(&keys, threshold, &proof_acc_sk, signed.as_ref()) {
+        return Err(reason);
+    }
+
+    // Verify proof:
     let ip_info = &context.ip_info;
     let commitment_key_sc = CommitmentKey {
         g: ip_info.ip_verify_key.ys[0],
@@ -66,7 +84,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     transcript.append_message(b"cmm_prf_sharing_coeff", &pre_id_obj.cmm_prf_sharing_coeff);
 
     let id_cred_sec_verifier = dlog::Dlog {
-        public: pre_id_obj.id_cred_pub,
+        public: pub_info_for_ip.id_cred_pub,
         coeff:  context.global_context.on_chain_commitment_key.g,
     };
     let id_cred_sec_witness = pre_id_obj.poks.id_cred_sec_witness;
@@ -74,7 +92,7 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     // Verify that id_cred_sec is the same both in id_cred_pub and in cmm_sc
     let id_cred_sec_eq_verifier = com_eq::ComEq {
         commitment: pre_id_obj.cmm_sc,
-        y:          pre_id_obj.id_cred_pub,
+        y:          pub_info_for_ip.id_cred_pub,
         cmm_key:    commitment_key_sc,
         g:          context.global_context.on_chain_commitment_key.g,
     };
@@ -145,6 +163,13 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         Some(v) => v,
         None => return Err(Reason::WrongArParameters),
     };
+    let verifier_prf_regid = com_eq::ComEq {
+        commitment: pre_id_obj.cmm_prf,
+        y:          context.global_context.on_chain_commitment_key.g,
+        g:          pub_info_for_ip.reg_id,
+        cmm_key:    commitment_key_prf,
+    };
+    let prf_regid_witness = pre_id_obj.poks.prf_regid_proof.clone();
 
     let verifier = AndAdapter {
         first:  id_cred_sec_verifier,
@@ -152,16 +177,20 @@ pub fn validate_request<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
     };
     let verifier = verifier
         .add_prover(verifier_prf_same)
-        .add_prover(prf_sharing_verifier);
+        .add_prover(prf_sharing_verifier)
+        .add_prover(verifier_prf_regid);
     let witness = AndWitness {
         w1: AndWitness {
             w1: AndWitness {
-                w1: id_cred_sec_witness,
-                w2: id_cred_sec_eq_witness,
+                w1: AndWitness {
+                    w1: id_cred_sec_witness,
+                    w2: id_cred_sec_eq_witness,
+                },
+                w2: witness_prf_same,
             },
-            w2: witness_prf_same,
+            w2: prf_sharing_witness,
         },
-        w2: prf_sharing_witness,
+        w2: prf_regid_witness,
     };
     let proof = SigmaProof {
         challenge: pre_id_obj.poks.challenge,
@@ -260,7 +289,7 @@ fn compute_prf_sharing_verifier<C: Curve>(
         };
         verifiers.push(verifier);
         // TODO: Figure out whether we can somehow get rid of this clone.
-        witnesses.push(ar_data.proof_com_enc_eq.clone());
+        witnesses.push(ar_data.proof_com_enc_eq.clone())
     }
     Some((
         ReplicateAdapter {
@@ -280,9 +309,70 @@ pub fn verify_credentials<
     context: IPContext<P, C>,
     alist: &AttributeList<C::Scalar, AttributeType>,
     ip_secret_key: &ps_sig::SecretKey<P>,
-) -> Result<ps_sig::Signature<P>, Reason> {
+    ip_cdi_secret_key: &ed25519_dalek::SecretKey,
+) -> Result<
+    (
+        ps_sig::Signature<P>,
+        InitialCredentialDeploymentInfo<C, AttributeType>,
+    ),
+    Reason,
+> {
     validate_request(pre_id_obj, context)?;
-    sign_identity_object(pre_id_obj, &context.ip_info, alist, ip_secret_key)
+    let sig = sign_identity_object(pre_id_obj, &context.ip_info, alist, ip_secret_key)?;
+    let initial_cdi = create_initial_cdi(
+        &context.ip_info,
+        pre_id_obj.pub_info_for_ip.clone(),
+        alist,
+        &ip_cdi_secret_key,
+    );
+    Ok((sig, initial_cdi))
+}
+
+pub fn create_initial_cdi<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
+    ip_info: &IpInfo<P>,
+    pub_info_for_ip: PublicInformationForIP<C>,
+    alist: &AttributeList<C::Scalar, AttributeType>,
+    ip_cdi_secret_key: &ed25519_dalek::SecretKey,
+) -> InitialCredentialDeploymentInfo<C, AttributeType> {
+    // The initial policy is empty, apart from the expiry date of the credential.
+    let policy: Policy<C, AttributeType> = Policy {
+        valid_to:   alist.valid_to,
+        created_at: alist.created_at,
+        policy_vec: BTreeMap::new(),
+        _phantom:   Default::default(),
+    };
+    let cred_values = InitialCredentialDeploymentValues {
+        reg_id: pub_info_for_ip.reg_id,
+        ip_identity: ip_info.ip_identity,
+        policy,
+        cred_account: pub_info_for_ip.vk_acc,
+    };
+
+    let sig = sign_initial_cred_values(&cred_values, ip_info, &ip_cdi_secret_key);
+    InitialCredentialDeploymentInfo {
+        values: cred_values,
+        sig,
+    }
+}
+
+pub fn sign_initial_cred_values<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
+    initial_cred_values: &InitialCredentialDeploymentValues<C, AttributeType>,
+    ip_info: &IpInfo<P>,
+    ip_cdi_secret_key: &ed25519_dalek::SecretKey,
+) -> IpCdiSignature {
+    let to_sign = Sha256::digest(&to_bytes(&initial_cred_values));
+    let expanded_sk = ed25519_dalek::ExpandedSecretKey::from(ip_cdi_secret_key);
+    expanded_sk
+        .sign(to_sign.as_ref(), &ip_info.ip_cdi_verify_key)
+        .into()
 }
 
 fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
@@ -356,13 +446,12 @@ fn compute_message<P: Pairing, AttributeType: Attribute<P::ScalarField>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::test::*;
-
+    use crypto_common::serde_impls::KeyPairDef;
+    use ff::Field;
     use pairing::bls12_381::G1;
     use pedersen_scheme::{key::CommitmentKey, Value as PedersenValue};
-
-    use ff::Field;
+    use std::collections::btree_map::BTreeMap;
 
     type ExampleCurve = G1;
 
@@ -419,20 +508,32 @@ mod tests {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
+            ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
         let aci = test_create_aci(&mut csprng);
-        let (context, pio, _) = test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
+        let acc_data = InitialAccountData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
+        let (context, pio, _) =
+            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
         let attrs = test_create_attributes();
 
         // Act
-        let sig_ok = verify_credentials(&pio, context, &attrs, &ip_secret_key);
+        let ver_ok = verify_credentials(&pio, context, &attrs, &ip_secret_key, &ip_cdi_secret_key);
 
         // Assert
-        assert!(sig_ok.is_ok());
+        assert!(ver_ok.is_ok());
     }
 
     // /// Check IP's verify_credentials fail for wrong id_cred_sec
@@ -489,14 +590,25 @@ mod tests {
         let mut csprng = thread_rng();
         let IpData {
             public_ip_info: ip_info,
-            ip_secret_key,
+            ..
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
-        let (ctx, mut pio, _) = test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
-        let attrs = test_create_attributes();
+        let acc_data = InitialAccountData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
+        let (ctx, mut pio, _) =
+            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+        // let attrs = test_create_attributes();
 
         // Act (make cmm_sc be comm. of id_cred_sec but with wrong/fresh randomness)
         let sc_ck = CommitmentKey {
@@ -506,11 +618,11 @@ mod tests {
         let id_cred_sec = aci.cred_holder_info.id_cred.id_cred_sec;
         let (cmm_sc, _) = sc_ck.commit(&id_cred_sec, &mut csprng);
         pio.cmm_sc = cmm_sc;
-        let sig_ok = verify_credentials(&pio, ctx, &attrs, &ip_secret_key);
+        let ver_ok = validate_request(&pio, ctx);
 
         // Assert
         assert_eq!(
-            sig_ok,
+            ver_ok,
             Err(Reason::IncorrectProof),
             "Verify_credentials did not fail with inconsistent idcredpub and elgamal"
         );
@@ -525,15 +637,25 @@ mod tests {
         let mut csprng = thread_rng();
         let IpData {
             public_ip_info: ip_info,
-            ip_secret_key,
+            ..
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
+        let acc_data = InitialAccountData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
         let (context, mut pio, _) =
-            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
-        let attrs = test_create_attributes();
+            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+        // let attrs = test_create_attributes();
 
         // Act (make cmm_prf be a commitment to a wrong/random value)
         let val = curve_arithmetic::Value::<G1>::generate(&mut csprng);
@@ -542,11 +664,11 @@ mod tests {
             .on_chain_commitment_key
             .commit(&val, &mut csprng);
         pio.cmm_prf = cmm_prf;
-        let sig_ok = verify_credentials(&pio, context, &attrs, &ip_secret_key);
+        let ver_ok = validate_request(&pio, context);
 
         // Assert
         assert_eq!(
-            sig_ok,
+            ver_ok,
             Err(Reason::IncorrectProof),
             "Verify_credentials did not fail with invalid PRF commitment"
         );

@@ -117,7 +117,34 @@ impl Attribute<<G1 as Curve>::Scalar> for AttributeKind {
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn verify_cdi_ffi(
+extern "C" fn verify_initial_cdi_ffi(
+    ip_info_ptr: *const IpInfo<Bls12>,
+    // acc_keys_ptr: *const u8,
+    // acc_keys_len: size_t,
+    initial_cdi_ptr: *const u8,
+    initial_cdi_len: size_t,
+) -> i32 {
+    let cdi_bytes = slice_from_c_bytes!(initial_cdi_ptr, initial_cdi_len as usize);
+    match InitialCredentialDeploymentInfo::<G1, AttributeKind>::deserial(&mut Cursor::new(
+        &cdi_bytes,
+    )) {
+        Err(_) => -3,
+        Ok(cdi) => {
+            match chain::verify_initial_cdi::<Bls12, G1, AttributeKind>(
+                from_ptr!(ip_info_ptr),
+                &cdi,
+            ) {
+                Ok(()) => 1, // verification succeeded
+                Err(_) => -2, /* Only signature verification can fail, so just map all failures
+                               * to one. */
+            }
+        }
+    }
+}
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+extern "C" fn verify_cdi_ffi(
     gc_ptr: *const GlobalContext<G1>,
     ip_info_ptr: *const IpInfo<Bls12>,
     ars_infos_ptr: *const *mut ArInfo<G1>,
@@ -256,6 +283,7 @@ pub extern "C" fn ar_info_ar_identity(ar_info_ptr: *const ArInfo<G1>) -> u32 {
 mod test {
     use super::*;
     use crate::{account_holder::*, identity_provider::*, secret_sharing::Threshold, test::*};
+    use crypto_common::serde_impls::KeyPairDef;
     use dodis_yampolskiy_prf::secret as prf;
     use ed25519_dalek as ed25519;
     use either::Either::Left;
@@ -279,6 +307,7 @@ mod test {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
+            ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
 
         let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -293,6 +322,16 @@ mod test {
         let aci = AccCredentialInfo {
             cred_holder_info: ah_info,
             prf_key,
+        };
+        let acc_data = InitialAccountData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
         };
 
         let valid_to = YearMonth::try_from(2022 << 8 | 5).unwrap(); // May 2022
@@ -315,15 +354,25 @@ mod test {
 
         let context = IPContext::new(&ip_info, &ars_infos, &global_ctx);
         let threshold = Threshold(num_ars - 1);
-        let (pio, randomness) = generate_pio(&context, threshold, &aci)
+        let (pio, randomness) = generate_pio(&context, threshold, &aci, &acc_data)
             .expect("Creating the credential should succeed.");
 
-        let sig_ok = verify_credentials(&pio, context, &alist, &ip_secret_key);
+        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
 
         // First test, check that we have a valid signature.
-        assert!(sig_ok.is_ok());
+        assert!(ver_ok.is_ok());
 
-        let ip_sig = sig_ok.unwrap();
+        let (ip_sig, initial_cdi) = ver_ok.unwrap();
+
+        let initial_cdi_bytes = to_bytes(&initial_cdi);
+        let initial_cdi_bytes_len = initial_cdi_bytes.len() as size_t;
+        let ip_info_ptr = Box::into_raw(Box::new(ip_info.clone()));
+        let initial_cdi_check = verify_initial_cdi_ffi(
+            ip_info_ptr,
+            initial_cdi_bytes.as_ptr(),
+            initial_cdi_bytes_len,
+        );
+        assert_eq!(initial_cdi_check, 1);
 
         let policy = Policy {
             valid_to,
@@ -382,7 +431,7 @@ mod test {
         let cdi_bytes_len = cdi_bytes.len() as size_t;
 
         let gc_ptr = Box::into_raw(Box::new(global_ctx));
-        let ip_info_ptr = Box::into_raw(Box::new(ip_info));
+        // let ip_info_ptr = Box::into_raw(Box::new(ip_info));
         let ars_infos_ptr = ars_infos
             .into_iter()
             .map(|(_, x)| Box::into_raw(Box::new(x)))

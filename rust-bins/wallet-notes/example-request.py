@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 import requests
 import json
+import sys
+import urllib
 
-payload = {'id_request': open("id-request.json", 'r').read()}
+inputPio = json.loads(open(sys.argv[1], 'r').read())
 
-r = requests.get('http://localhost:8000/request_id', params=payload)
+input = {'idObjectRequest': inputPio}
 
-print(r)
+input['redirectURI'] = 'http://localhost:1234'
+
+r = requests.post('http://localhost:8100/api/identity', json=input)
+
+print(r.headers)
+print(r.status_code)
+print(r.text)
 
 print(json.dumps(json.loads(r.text), indent=4, sort_keys=True))
