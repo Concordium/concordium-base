@@ -316,10 +316,10 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
     /// the new output sequence.
     fn account_energy_push_pending(&mut self) {
         // If there is nothing to account for, do not insert accounting instructions.
-        // This case can occur for example with nested loop instructions.
+        // This case can occur for example with nested loop instructions, or nested
+        // blocks followed by a loop.
         if self.energy == 0 {
-            // TODO: This should be an invariant, but the assertion should be removed.
-            assert!(self.pending_instructions.is_empty());
+            self.new_seq.append(&mut self.pending_instructions);
         } else {
             self.account_energy(self.energy);
             self.energy = 0;
@@ -529,8 +529,9 @@ pub fn inject_accounting<C: HasTransformationContext>(
 }
 
 struct ModuleContext<'a> {
-    types: &'a [Rc<FunctionType>],
-    funcs: &'a [TypeIndex],
+    types:    &'a [Rc<FunctionType>],
+    imported: &'a [Import],
+    funcs:    &'a [TypeIndex],
 }
 
 impl<'a> HasTransformationContext for ModuleContext<'a> {
@@ -552,10 +553,16 @@ impl<'a> HasTransformationContext for ModuleContext<'a> {
 
     fn get_func_type_len(&self, idx: FuncIndex) -> TransformationResult<(usize, usize)> {
         let ty_idx = self
-            .funcs
+            .imported
             .get(idx as usize)
+            .map(|i| match i.description {
+                ImportDescription::Func {
+                    type_idx,
+                } => type_idx,
+            })
+            .or_else(|| self.funcs.get(idx as usize - self.imported.len()).copied())
             .ok_or_else(|| anyhow!("Function with index {} not found.", idx))?;
-        self.get_type_len(*ty_idx)
+        self.get_type_len(ty_idx)
     }
 }
 
@@ -569,8 +576,9 @@ impl Module {
             }
         }
         let ctx = ModuleContext {
-            types: &self.ty.types,
-            funcs: &self.func.types,
+            types:    &self.ty.types,
+            funcs:    &self.func.types,
+            imported: &self.import.imports,
         };
         for code in self.code.impls.iter_mut() {
             let injected_code = inject_accounting(code, &ctx)?;
