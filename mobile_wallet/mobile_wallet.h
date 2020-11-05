@@ -33,6 +33,13 @@ char *combine_encrypted_amounts(const char *input_ptr_1, const char *input_ptr_2
  * The input pointer must point to a null-terminated buffer, otherwise this
  * function will fail in unspecified ways.
  */
+char *generate_accounts(const char *input_ptr, uint8_t *success);
+
+/**
+ * # Safety
+ * The input pointer must point to a null-terminated buffer, otherwise this
+ * function will fail in unspecified ways.
+ */
 char *create_credential(const char *input_ptr, uint8_t *success);
 
 /**
