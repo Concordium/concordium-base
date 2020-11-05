@@ -3,8 +3,7 @@
 =============================
 Install tools for development
 =============================
-Before we can start developing smart contracts, we need to install and setup a
-environment.
+Before we can start developing smart contracts, we need to setup an environment.
 
 Rust and Cargo
 ==============

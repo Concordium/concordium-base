@@ -32,6 +32,9 @@ The documentation is split into four categories
    - Cargo-concordium reference
    - Contract examples
    - Contract best practices (ensure amount is 0 ...)
+   - Description of contract schema
+   - Interacting with smart contract
+   - Logging in a contract
 
 .. toctree::
    :maxdepth: 1
@@ -53,6 +56,8 @@ The documentation is split into four categories
 
    guides/setup-tools
    guides/setup-contract
+   guides/unittest-contract
+   guides/local-simulate
    guides/build-schema
 
 .. toctree::

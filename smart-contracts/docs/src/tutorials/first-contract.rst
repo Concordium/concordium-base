@@ -90,7 +90,7 @@ contract, which we are about to explain in detail.
         amount: Amount,
         _logger: &mut L,
     ) -> InitResult<State> {
-        ensure_eq!(amount, 0, "The amount must be 0");
+        ensure_eq!(amount, 0);
         let state = 0;
         Ok(state)
     }
@@ -142,19 +142,20 @@ preventing the GTU send to them from being accessible *ever* again.
 To prevent this, we let the contract instantiation fail, if some amount is
 sent to it.
 We do this with the ``ensure_eq!`` macro, which is given two arguments to
-compare for equality, it *not* equal it will make the contract reject the
+compare for equality, if *not* equal it will make the contract reject the
 instantiation::
 
-    ensure_eq!(amount, 0, "The amount must be 0");
+    ensure_eq!(amount, 0);
 
-The third argument is the error message to display *when testing* the contract.
-This error message will not be included in the resulting smart contract, since
-the protocol of the Concordium blockchain does not log the error messages of
-smart contracts rejecting, therefore adding the error messages would be a waste
-of bytes.
+There is also an optional third argument is the error message to return
+*when testing* the contract.
+This error message will not be used in the resulting smart contract, when
+deployed to the chain, since the protocol of the Concordium blockchain does not
+log the error messages of smart contracts rejecting, therefore adding error
+messages is only useful when testing.
 
 If you want to reject directly in your smart contract, you should use
-``bail!``, which is the smart contract equivalent to ``panic!``, while
+``bail!``, which is the smart contract equivalent of ``panic!``, while
 ``ensure_eq!`` and ``ensure!`` corresponds to ``assert_eq!`` and ``assert!``
 respectively, and are using ``bail!`` internally.
 We strongly recommend using these over panicking and assertions, because they
@@ -163,7 +164,108 @@ end as they take advantage of the ``Result`` type of our function.
 
 Testing instantiation
 ------------------------
-We now have enough to write our first unit test!
+We now have enough code to write our first test!
+
+Testing a smart contract can be done on various levels, which you can learn more
+about in LINK_, but we will only go through one as part of this tutorial.
+
+.. todo::
+    Insert reference for contract testing
+
+Since a smart contract is written as a Rust library, we can test it as one would
+test any library and write unit-tests as part of the Rust module.
+At the bottom of our contract, make sure you have the following starting point:
+
+.. code-block:: rust
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_init() {
+
+        }
+    }
+
+This is our test module, which is a common pattern for writing unit tests in
+Rust, so we will not spend time on explaining any of the above code.
+
+For our first test, we wish to call the ``counter_init`` function as just a
+regular function, but we first need a way to construct the arguments.
+Luckily ``concordium_sc_base`` contains a submodule ``test_infrastructure`` with
+stubs for all of this, so let us first bring everything from the submodule into
+scope.
+
+.. code-block:: rust
+    :emphasize-lines: 4
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use test_infrastructure::*;
+
+        #[test]
+        fn test_init() {
+
+        }
+    }
+
+To construct the first argument, we use ``InitContextTest::empty()``, which is
+a stub for the context::
+
+    let ctx = InitContextTest::empty();
+
+As hinted by ``empty`` the name of the constructor, our context is empty, and if
+we try to access anything in the context the test will fail.
+This will be fine for now, since our contract does not access the context during
+initialization.
+
+The second argument is the amount included with the transfer at initialization.
+This is represented in rust as the type ``u64`` and we can simply use a
+literal::
+
+    let amount = 0;
+
+For the third argument, we need to specify a *logger* and from
+``test_infrastructure`` we get the ``LogRecorder`` which collects all the
+contract logs into a Vec that we inspect running our function::
+
+    let mut logger = LogRecorder::init();
+
+We will not use the logger for anything in this tutorial, but to learn more see
+LINK_.
+
+.. todo::
+    Link page about logging
+
+With all of the arguments constructed we can now call our function and get back
+a result::
+
+    let out = counter_init(&ctx, amount, &mut logger);
+
+
+Altogether our test should look something like this:
+
+.. code-block:: rust
+
+    #[test]
+    fn test_init() {
+        // Setup
+        let ctx = InitContextTest::empty();
+        let amount = 0;
+        let mut logger = LogRecorder::init();
+
+        // Call the init function
+        let result = counter_init(&ctx, amount, &mut logger);
+
+        // Inspect the result
+        let state = match result {
+            Ok(state) => state,
+            Err(_) => fail!("Contract initialization failed."),
+        };
+        claim_eq!(state, 0, "Initial count set to 0");
+    }
 
 
 
@@ -180,51 +282,12 @@ We now have enough to write our first unit test!
         _logger: &mut L,
         state: &mut State,
     ) -> ReceiveResult<A> {
-        ensure_eq!(amount, 0, "The amount must be 0");
-        ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can increment.");
+        ensure_eq!(amount, 0); // The amount must be 0.
+        ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can increment.
         *state += 1;
         Ok(A::accept())
     }
 
-
-
-.. code-block:: rust
-
-    use concordium_sc_base::*;
-
-    type State = u32;
-
-    #[init(name = "counter")]
-    fn counter_init<I: HasInitContext<()>, L: HasLogger>(
-        _ctx: &I,
-        _amount: Amount,
-        _logger: &mut L,
-    ) -> InitResult<State> {
-        ensure_eq!(amount, 0, "The amount must be 0");
-        let state = 0;
-        Ok(state)
-    }
-
-    #[receive(name = "increment",)]
-    fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-        ctx: &R,
-        _amount: Amount,
-        _logger: &mut L,
-        state: &mut State,
-    ) -> ReceiveResult<A> {
-        ensure_eq!(amount, 0, "The amount must be 0");
-        ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can increment.");
-        *state += 1;
-        Ok(A::accept())
-    }
-
-    #[cfg(test)]
-    mod tests {
-        #[test]
-        fn it_works() {
-            assert_eq!(2 + 2, 4);
-        }
-    }
 
 .. todo::
     Explain how to write a basic contract in ``src/lib.rs``

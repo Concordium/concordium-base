@@ -1,7 +1,7 @@
 .. _build_schema:
 
 ==========================
-Building a contract schema
+Build a contract schema
 ==========================
 
 The guide will show you how to build a smart contract schema, how to export it
@@ -29,8 +29,8 @@ First step is to add a ``build-schema`` feature to the ``Cargo.toml``::
     ...
 
 Now we can choose which parts of our smart contract to included in the schema.
-The options are to include a schema for the contract state, and/or the each of
-the parameters for the `init`-functions and ``receive``-functions.
+The options are to include a schema for the contract state, and/or for each of
+the parameters of ``init``-functions and ``receive``-functions.
 
 Every type we want to include in the schema must implement the ``SchemaType``
 trait.
