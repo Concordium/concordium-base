@@ -10,6 +10,7 @@ services:
       - GLOBAL=/global.json
       - RETRIEVE_BASE=https://id-service.eu.staging.concordium.com
       - ID_VERIFICATION_URL=http://identity-verifier:7012/api/verify
+      - WALLET_PROXY_BASE=https://wallet-proxy.eu.staging.concordium.com
     ports:
       - "7011:7011"
   identity-verifier:
