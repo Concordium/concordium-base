@@ -283,6 +283,7 @@ fn try_get<A: serde::de::DeserializeOwned>(v: &Value, fname: &str) -> Fallible<A
     }
 }
 
+/// This function creates the identity object request
 fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
     let v: Value = from_str(input)?;
 
@@ -315,8 +316,21 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
     // Choice of anonymity revokers, all of them in this implementation.
     let context = IPContext::new(&ip_info, &ars_infos, &global_context);
+
+    // Generating account data for the initial account
+    let mut keys = std::collections::BTreeMap::new();
+    let mut csprng = thread_rng();
+    keys.insert(
+        KeyIndex(0),
+        crypto_common::serde_impls::KeyPairDef::from(ed25519::Keypair::generate(&mut csprng)),
+    );
+
+    let initial_acc_data = InitialAccountData {
+        keys,
+        threshold: SignatureThreshold(1),
+    };
     let (pio, randomness) = {
-        match generate_pio(&context, threshold, &aci) {
+        match generate_pio(&context, threshold, &aci, &initial_acc_data) {
             Some(x) => x,
             None => bail!("Generating the pre-identity object failed."),
         }
@@ -324,9 +338,25 @@ fn create_id_request_and_private_data_aux(input: &str) -> Fallible<String> {
 
     let id_use_data = IdObjectUseData { aci, randomness };
 
+    let reg_id = &pio.pub_info_for_ip.reg_id;
+    let address = AccountAddress::new(reg_id);
+    let secret_key = elgamal::SecretKey {
+        generator: *global_context.elgamal_generator(),
+        scalar:    id_use_data.aci.prf_key.prf_exponent(0).unwrap(), /* the unwrap is safe since
+                                                                      * we've generated the
+                                                                      * RegID successfully
+                                                                      * above. */
+    };
+
     let response = json!({
         "idObjectRequest": Versioned::new(VERSION_0, pio),
         "privateIdObjectData": Versioned::new(VERSION_0, id_use_data),
+        "initialAccountData": json!({
+            "accountData": initial_acc_data,
+            "encryptionSecretKey": secret_key,
+            "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
+            "accountAddress": address,
+        })
     });
 
     Ok(to_string(&response)?)
@@ -411,12 +441,48 @@ fn create_credential_aux(input: &str) -> Fallible<String> {
     };
 
     let response = json!({
-        "credential": Versioned::new(Version::from(0u32), cdi),
+        "credential": Versioned::new(VERSION_0, AccountCredential::Normal{cdi}),
         "accountData": acc_data,
         "encryptionSecretKey": secret_key,
         "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
         "accountAddress": address,
     });
+    Ok(to_string(&response)?)
+}
+
+fn generate_accounts_aux(input: &str) -> Fallible<String> {
+    let v: Value = from_str(input)?;
+
+    let global_context: GlobalContext<ExampleCurve> = try_get(&v, "global")?;
+
+    let id_object: IdentityObject<Bls12, ExampleCurve, AttributeKind> =
+        try_get(&v, "identityObject")?;
+
+    let id_use_data: IdObjectUseData<Bls12, ExampleCurve> = try_get(&v, "privateIdObjectData")?;
+
+    let start: u8 = try_get(&v, "start").unwrap_or(0);
+
+    let mut response = Vec::with_capacity(256);
+
+    for acc_num in start..id_object.alist.max_accounts {
+        if let Ok(reg_id) = id_use_data
+            .aci
+            .prf_key
+            .prf(global_context.elgamal_generator(), acc_num)
+        {
+            let enc_key = id_use_data.aci.prf_key.prf_exponent(acc_num).unwrap();
+            let secret_key = elgamal::SecretKey {
+                generator: *global_context.elgamal_generator(),
+                scalar:    enc_key,
+            };
+            let address = AccountAddress::new(&reg_id);
+            response.push(json!({
+                "encryptionSecretKey": secret_key,
+                "encryptionPublicKey": elgamal::PublicKey::from(&secret_key),
+                "accountAddress": address,
+            }));
+        }
+    }
     Ok(to_string(&response)?)
 }
 
@@ -624,6 +690,21 @@ make_wrapper!(
     /// The input pointers must point to a null-terminated buffer, otherwise this
     /// function will fail in unspecified ways.
     => combine_encrypted_amounts_ext --> combine_encrypted_amounts_aux);
+
+make_wrapper!(
+    /// Take pointers to NUL-terminated UTF8-strings and return a NUL-terminated
+    /// UTF8-encoded string. The returned string must be freed by the caller by
+    /// calling the function 'free_response_string'. In case of failure the function
+    /// returns an error message as the response, and sets the 'success' flag to 0.
+    ///
+    /// The input strings must contain a valid JSON object with fields `identityObject`, `privateIdObjectData`, and `global`.
+    /// If there is failure decoding input arguments the return value is a string
+    /// describing the error.
+    ///
+    /// # Safety
+    /// The input pointer must point to a null-terminated buffer, otherwise this
+    /// function will fail in unspecified ways.
+    => generate_accounts_ext -> generate_accounts_aux);
 
 /// Take pointers to a NUL-terminated UTF8-string and return a u64.
 ///

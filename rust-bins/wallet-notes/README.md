@@ -313,6 +313,24 @@ The returned value is a JSON object with the following fields:
 An example input to this request is in the file [create_sec_to_pub-input.json](files/create_sec_to_pub-input.json).
 An example output to this request is in the file [create_sec_to_pub-output.json](files/create_sec_to_pub-output.json).
 
+## generate_accounts_ext
+
+Semantics: Given an identity object, generate all the possible accounts, with their encryption keys, that could have been created from it.
+
+This function takes as input a NUL-terminated UTF8-encoded string. The string msut be a valid JSON object with fields
+
+- `"global"`, the cryptographic parameters
+- `"identityObject"`, the identity object, as received from the identity provider.
+- `"privateIdObjectData"`, the private identity object data, as used in the `create_credential` call.
+- (optional) `"start"`, an unsigned integer <= 255 that indicates which accounts it should generate.
+
+The return value is a a JSON array with JSON objects as entries. Each object has fields
+- `"accountAddress"`
+- `"encryptionSecretKey"`
+- `"encryptionPublicKey"`
+
+With meaning that can be discerned from their names.
+
 ## Example
 The [Example C program](example.c) that uses the library is available. This
 program reads a JSON file and passes it to the library, retrieving and printing
@@ -364,6 +382,7 @@ The binary can then be run with the following inputs:
 | `decrypt_encrypted_amount_ext`       | [`decrypt_encrypted_amount-input.json`](files/decrypt_encrypted_amount-input.json)                     | [`decrypt_encrypted_amount-output.json`](files/decrypt_encrypted_amount-output.json)                     |
 | `create_sec_to_pub_ext`              | [`create_sec_to_pub-input.json`](files/create_sec_to_pub-input.json)                                   | [`create_sec_to_pub-output.json`](files/create_sec_to_pub-output.json)                                   |
 | `create_pub_to_sec_ext`              | [`create_pub_to_sec-input.json`](files/create_pub_to_sec-input.json)                                   | [`create_pub_to_sec-output.json`](files/create_pub_to_sec-output.json)                                   |
+| `generate_accounts_ext`               | [generate-accounts-input.json](files/generate-accounts-input.json) |  [generate-accounts-output.json](files/generate-accounts-output.json) |
 
 
 # Other change set from the previous version

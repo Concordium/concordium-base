@@ -5,8 +5,16 @@ use wallet::{
     check_account_address_ext, combine_encrypted_amounts_ext, create_credential_ext,
     create_encrypted_transfer_ext, create_id_request_and_private_data_ext,
     create_pub_to_sec_transfer_ext, create_sec_to_pub_transfer_ext, create_transfer_ext,
-    decrypt_encrypted_amount_ext, free_response_string_ext,
+    decrypt_encrypted_amount_ext, free_response_string_ext, generate_accounts_ext,
 };
+
+#[no_mangle]
+/// # Safety
+/// The input pointer must point to a null-terminated buffer, otherwise this
+/// function will fail in unspecified ways.
+pub unsafe extern "C" fn generate_accounts(input_ptr: *const c_char) -> *mut c_char {
+    generate_accounts_ext(input_ptr)
+}
 
 #[no_mangle]
 /// # Safety
