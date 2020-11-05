@@ -14,7 +14,7 @@ The documentation is split into four categories
    - **General**: Explaining concepts and details for understanding concordium
      smart contracts.
    - **Tutorials**: Step by step walkthrough with details explained as needed.
-   - **How-to guides**: Guides to achieve specific goals.
+   - **How-to guides**: Short guides to achieve specific goals.
    - **References**: Precise descriptions of the machinery.
 
 
@@ -24,7 +24,7 @@ The documentation is split into four categories
 .. todo::
    A list of information, still missing from the documentation
 
-   - Resource accounting and limiting contracts
+   - Resource accounting and limiting contracts (Energy)
    - Testing on and off-chain
    - Full description of a smart contract structure
    - Deployment
@@ -59,6 +59,8 @@ The documentation is split into four categories
    guides/unittest-contract
    guides/local-simulate
    guides/build-schema
+   guides/deploy-module
+   guides/initialize-contract
 
 .. toctree::
    :maxdepth: 1

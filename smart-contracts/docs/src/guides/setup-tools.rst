@@ -40,8 +40,9 @@ For a description of how to use the tool run::
 
 Concordium Client
 =================
-To be able to deploy smart contract and generally interacting with the chain,
-make sure to have ``concordium-client`` install on your local system.
+
+To deploy smart contract modules and interact with the chain, make sure to have
+``concordium-client`` install on your local system.
 
 .. todo::
     Link to install instructions

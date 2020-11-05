@@ -8,7 +8,7 @@ This guide will show you how to write unit tests for a smart contract written in
 Rust.
 For testing a smart contract Wasm module see :ref:`local-simulate`.
 
-Smart contract in Rust is written as a library and we can unit test like a
+a smart contracts in Rust is written as a library and we can unit test like a
 library by having a test module in the same file as our contract.
 
 .. code-block:: rust
@@ -70,6 +70,9 @@ Testing stubs for the function arguments can be found in a submodule of
     For more information and examples see the crate documentation of
     concordium-sc-base_.
 
+.. todo::
+
+    Show more of how to write the unit test
 
 Running tests in Wasm
 ======================
