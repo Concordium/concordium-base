@@ -12,10 +12,10 @@ scenarios.
 
 .. seealso::
 
-    For a guide on automated unit tests see :ref:`unittest_contract`.
+    For a guide on automated unit tests see :ref:`unittest-contract`.
 
 Make sure you have ``cargo-concordium`` installed, if not follow the guide
-:ref:`setup_tools`.
+:ref:`setup-tools`.
 You will also need a smart contract module in Wasm to simulate.
 
 .. todo::

@@ -1,8 +1,8 @@
-.. _initialize_contract:
+.. _initialize-contract:
 
-==============================
-Initializing a smart contract
-==============================
+======================================
+Initializing a smart contract instance
+======================================
 
 This guide will show you how to initialize a smart contract from a deployed
 smart contract module.
@@ -15,9 +15,9 @@ contract deployed in some module on chain.
 
 .. seealso::
     For instructions on how to install ``concordium-client`` see
-    :ref:`setup_tools`.
+    :ref:`setup-tools`.
 
-    For how to deploy a smart contract module see :ref:`deploy_module`.
+    For how to deploy a smart contract module see :ref:`deploy-module`.
 
 Since initializing a smart contract is a transaction, you should also make sure
 to have ``concordium-client`` setup with an account with enough GTU to pay for

@@ -1,4 +1,4 @@
-.. _deploy_module:
+.. _deploy-module:
 
 ==============================
 Deploy a smart contract module
@@ -14,7 +14,7 @@ contract module ready to be deployed.
 
 .. seealso::
     For instructions on how to install ``concordium-client`` see
-    :ref:`setup_tools`.
+    :ref:`setup-tools`.
 
 Since deploying a smart contract module is done in the form of a transaction,
 you will also need to have ``concordium-client`` setup with an account with

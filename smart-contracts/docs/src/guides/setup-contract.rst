@@ -1,4 +1,4 @@
-.. _setup_contract:
+.. _setup-contract:
 
 =============================
 Setup a contract project

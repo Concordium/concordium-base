@@ -1,4 +1,4 @@
-.. _unittest_contract:
+.. _unittest-contract:
 
 =============================
 Unit test a contract in Rust
@@ -88,7 +88,7 @@ uses the same Wasm interpreter as the one shipped in the Concordium nodes.
 
 .. seealso::
 
-    For a guide of how to install ``cargo-concordium`` see :ref:`setup_tools`.
+    For a guide of how to install ``cargo-concordium`` see :ref:`setup-tools`.
 
 To set ``cargo-concordium`` as the test runner, create the file
 ``.cargo/config`` and add the following::

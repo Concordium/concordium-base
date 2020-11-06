@@ -1,4 +1,4 @@
-.. _build_schema:
+.. _build-schema:
 
 ==========================
 Build a contract schema
@@ -11,7 +11,7 @@ to a file and/or embed the schema into the smart contract module, all using
 Preparation
 =====================
 First ensure you have ``cargo-concordium`` installed and if not the guide
-:ref:`setup_tools` will help you.
+:ref:`setup-tools` will help you.
 
 We also need the rust source code of the smart contract you wish to build
 a schema for.

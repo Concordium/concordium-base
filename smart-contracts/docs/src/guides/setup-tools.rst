@@ -1,4 +1,4 @@
-.. _setup_tools:
+.. _setup-tools:
 
 =============================
 Install tools for development

@@ -25,7 +25,6 @@ The documentation is split into four categories
    A list of information, still missing from the documentation
 
    - Resource accounting and limiting contracts (Energy)
-   - Testing on and off-chain
    - Full description of a smart contract structure
    - Deployment
    - Queries
@@ -33,7 +32,6 @@ The documentation is split into four categories
    - Contract examples
    - Contract best practices (ensure amount is 0 ...)
    - Description of contract schema
-   - Interacting with smart contract
    - Logging in a contract
 
 .. toctree::
@@ -61,6 +59,8 @@ The documentation is split into four categories
    guides/build-schema
    guides/deploy-module
    guides/initialize-contract
+   guides/interacting-instance
+   guides/interact-on-chain/index
 
 .. toctree::
    :maxdepth: 1
