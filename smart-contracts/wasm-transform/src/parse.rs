@@ -29,6 +29,22 @@ use std::{
 /// careful not to explode by maliciously crafted input.
 pub const MAX_PREALLOCATED_BYTES: usize = 1000;
 
+/// The maximum allowed initial table size.
+/// In the version of Wasm we support there is no way to grow tables, so
+/// the initial size is the size of the table.
+pub const MAX_INIT_TABLE_SIZE: u32 = 1 << 16;
+
+/// Size of a Wasm page in bytes.
+/// This constant must be such that MAX_INIT_TABLE_SIZE * PAGE_SIZE does not
+/// overflow a u32;
+pub const PAGE_SIZE: u32 = 65536;
+
+/// Maximum number of pages for the initial memory size.
+/// Corresponds to 2MB.
+/// This constant must be such that MAX_INIT_TABLE_SIZE * PAGE_SIZE does not
+/// overflow a u32;
+pub const MAX_INIT_MEMORY_SIZE: u32 = 32;
+
 pub const MAGIC_HASH: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
 
 pub const VERSION: [u8; 4] = [0x01, 0x00, 0x00, 0x00];
@@ -431,6 +447,7 @@ impl<'a> Parseable<'a> for TableType {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         expect_byte(cursor, 0x70)?;
         let limits = Limits::parse(cursor)?;
+        ensure!(limits.min <= MAX_INIT_TABLE_SIZE, "Initial table size exceeds allowed limits.");
         Ok(TableType {
             limits,
         })

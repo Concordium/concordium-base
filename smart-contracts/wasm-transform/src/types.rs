@@ -71,6 +71,8 @@ impl FunctionSection {
 pub struct TableSection {
     /// We only support at most one section for now, as in Wasm MVP, hence an
     /// Option as opposed to the vector.
+    ///
+    /// If present, the table type limits ensure that min <= 2^16.
     pub table_type: Option<TableType>,
 }
 

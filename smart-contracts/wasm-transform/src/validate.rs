@@ -1,9 +1,12 @@
 use crate::{
-    parse::{parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult, Skeleton},
+    parse::{
+        parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult, Skeleton,
+        MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE, PAGE_SIZE,
+    },
     types::*,
 };
 use anyhow::{anyhow, bail, ensure};
-use std::{collections::BTreeSet, rc::Rc};
+use std::{collections::BTreeSet, convert::TryInto, rc::Rc};
 
 /// The number of allowed locals in a function.
 /// This includes parameters and declared locals.
@@ -771,7 +774,32 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
     // We additionally need to check that all the functions referred
     // to in the table are defined.
     let element: ElementSection = parse_sec_with_default(&skeleton.element)?;
+    ensure!(
+        element.elements.is_empty() || table.table_type.is_some(),
+        "There is an elements section, but no table."
+    );
     for elem in element.elements.iter() {
+        let inits_len: u32 = elem.inits.len().try_into()?;
+        ensure!(
+            inits_len <= MAX_INIT_TABLE_SIZE,
+            "Number of initial elements is more than the table size."
+        );
+        if let Some(table_type) = table.table_type.as_ref() {
+            let offset = elem.offset as u32;
+            // since we provide no way to grow the table the initial minimum size
+            // is the size of the table, as specified in the allocation section of the
+            // Wasm semantics.
+            // The as u32 is safe beca
+            let end = offset
+                .checked_add(inits_len)
+                .ok_or_else(|| anyhow!("The end of the table exceeds u32 max bound."))?;
+            ensure!(
+                end <= table_type.limits.min,
+                "Initialization expression for the table exceeds table size {} > {}.",
+                end,
+                table_type.limits.min
+            );
+        }
         for &init in elem.inits.iter() {
             ensure!(
                 (init as usize) < total_funcs,
@@ -780,8 +808,11 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
         }
     }
 
-    // The data section is valid by parsing, provided that a memory.
-    // is declared in the module.
+    // The data section is almost well-formed by parsing.
+    // Parsing already ensures that limits are well-formed, that
+    // the offset expression is of the correct type and constant.
+    // We additionally need to check that all the locations referred
+    // to in the table are defined.
     let data: DataSection = parse_sec_with_default(&skeleton.data)?;
     // Make sure that if there are any data segments then a memory exists.
     // By parsing we already ensure that all the references are to a single memory.
@@ -789,6 +820,32 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
         data.sections.is_empty() || memory.memory_type.is_some(),
         "There are some data sections, but no declared memory."
     );
+    for data in data.sections.iter() {
+        let inits_len: u32 = data.init.len().try_into()?;
+        ensure!(
+            inits_len <= MAX_INIT_MEMORY_SIZE * PAGE_SIZE,
+            "Number of initial elements is more than the initial memory size."
+        );
+        if let Some(memory_type) = memory.memory_type.as_ref() {
+            let offset = data.offset as u32;
+            // since we provide no way to grow the table the initial minimum size
+            // is the size of the table, as specified in the allocation section of the
+            // Wasm semantics.
+            // The as u32 is safe beca
+            let end = offset
+                .checked_add(inits_len)
+                .ok_or_else(|| anyhow!("The end of the memory exceeds u32 max bound."))?;
+            ensure!(
+                // by validation we have that memory_type.limits.min <= 2^16, so this cannot
+                // overflow but we're still being safe
+                memory_type.limits.min.checked_mul(PAGE_SIZE).map(|l| end <= l).unwrap_or(false),
+                "Initialization expression for the table exceeds table size {} > {}.",
+                end,
+                memory_type.limits.min
+            );
+        }
+    }
+
     Ok(Module {
         ty,
         import,
