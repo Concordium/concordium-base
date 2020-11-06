@@ -453,7 +453,7 @@ async fn followup(
                     }
                 }
             }
-            /// Wait for 5 seconds.
+            // Wait for 5 seconds.
             std::thread::sleep(Duration::new(5, 0));
         } else {
             break;
