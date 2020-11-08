@@ -184,7 +184,9 @@ pub struct Local {
 #[derive(Debug)]
 /// The body of a function.
 pub struct Code {
-    /// Type of the function, this is added here
+    /// Type of the function, this is added here to avoid more error cases.
+    /// in processing (e.g., after validation we know that the number of code
+    /// and function sections match).
     pub ty: Rc<FunctionType>,
     pub num_locals: u32,
     /// Declaration of the locals.
@@ -275,6 +277,7 @@ pub type LabelIndex = u32;
 
 /// We do not support floating point instructions, nor types.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
 pub enum ValueType {
     I32,
     I64,

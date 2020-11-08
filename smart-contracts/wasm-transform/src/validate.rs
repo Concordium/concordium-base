@@ -1,7 +1,7 @@
 use crate::{
     parse::{
         parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult, Skeleton,
-        MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE, PAGE_SIZE,
+        MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE, MAX_NUM_GLOBALS, PAGE_SIZE,
     },
     types::*,
 };
@@ -76,8 +76,10 @@ impl MaybeKnown {
 }
 
 impl ValidationState {
+    /// Push a new type to the stack.
     pub fn push_opd(&mut self, m_type: MaybeKnown) { self.opds.stack.push(m_type); }
 
+    /// Pop a type from the stack and, if successful, return it.
     pub fn pop_opd(&mut self) -> ValidateResult<MaybeKnown> {
         match self.ctrls.stack.last() {
             None => bail!("Control frame exhausted."),
@@ -98,6 +100,11 @@ impl ValidationState {
         }
     }
 
+    /// Pop an operand from the stack, checking that it is as expected.
+    ///
+    /// If successful, return the more precise type of the two, expected and
+    /// actual. The type in the stack can be marked as unknown if it is in
+    /// an unreachable part of the code.
     pub fn pop_expect_opd(&mut self, expect: MaybeKnown) -> ValidateResult<MaybeKnown> {
         let actual = self.pop_opd()?;
         if actual.is_unknown() {
@@ -115,12 +122,15 @@ impl ValidationState {
         Ok(actual)
     }
 
+    /// Push zero or one operands to the current stack.
     pub fn push_opds(&mut self, tys: BlockType) {
         if let BlockType::ValueType(ty) = tys {
             self.push_opd(Known(ty))
         }
     }
 
+    /// Pop zero or one operands from the stack, and check that it
+    /// has expected type.
     pub fn pop_opds(&mut self, expected: BlockType) -> ValidateResult<()> {
         if let BlockType::ValueType(ty) = expected {
             self.pop_expect_opd(Known(ty))?;
@@ -128,6 +138,15 @@ impl ValidationState {
         Ok(())
     }
 
+    /// Push a new control frame with the given label and end types.
+    ///
+    /// The label type is the type that will be at the top of the stack
+    /// when a jump to this label is executed.
+    /// The end type is the type that is at the top of the stack when normal
+    /// execution of the block reaches its end.
+    ///
+    /// For blocks the label type and end type are the same, for loops the label
+    /// type is empty, and the end type is potentially not.
     pub fn push_ctrl(&mut self, label_type: BlockType, end_type: BlockType) {
         let frame = ControlFrame {
             label_type,
@@ -138,7 +157,7 @@ impl ValidationState {
         self.ctrls.stack.push(frame)
     }
 
-    // Returns the result type of the block.
+    /// Pop the current control frame and return its result type.
     pub fn pop_ctrl(&mut self) -> ValidateResult<BlockType> {
         // We first check for the last element, and use it without removing it.
         // This is so that pop_expect_opd, which pops elements from the stack, can see
@@ -664,6 +683,11 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
     // We already check that all the globals are initialized with
     // correct expressions.
     let global: GlobalSection = parse_sec_with_default(&skeleton.global)?;
+    ensure!(
+        global.globals.len() <= MAX_NUM_GLOBALS,
+        "The number of globals must not exceed {}.",
+        MAX_NUM_GLOBALS
+    );
 
     // The start section is valid as long as it parses correctly.
     // We make sure that there is no content in the start section during parsing.

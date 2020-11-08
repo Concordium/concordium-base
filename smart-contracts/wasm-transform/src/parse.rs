@@ -45,6 +45,11 @@ pub const PAGE_SIZE: u32 = 65536;
 /// overflow a u32;
 pub const MAX_INIT_MEMORY_SIZE: u32 = 32;
 
+/// Maximum number of globals allowed in a module.
+/// This allows us to use a u16 for indexing and is relied upon by the
+/// interpreter.
+pub const MAX_NUM_GLOBALS: usize = 1 << 16;
+
 pub const MAGIC_HASH: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
 
 pub const VERSION: [u8; 4] = [0x01, 0x00, 0x00, 0x00];
