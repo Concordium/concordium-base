@@ -1,6 +1,6 @@
 use crate::types::*;
 use anyhow::{anyhow, bail};
-use std::rc::Rc;
+use std::{rc::Rc, convert::TryInto};
 
 /// TODO set these indices to the imports of the respective accounting host
 /// functions. They should be given by the specification.
@@ -269,7 +269,7 @@ use cost::Energy;
 
 // Add energy accounting instructions.
 fn account_energy(exp: &mut InstrSeq, e: Energy) {
-    // TODO the current specification says we use an I32Const. Decide what is
+    // TODO the current specification says we use an I64Const. Decide what is
     // actually the best also regarding conversion etc. Probably i64 is actually
     // fine. NB: The u64 energy value is written as is, and will be
     // reinterpreted as u64 again in the host function call.
@@ -585,11 +585,13 @@ impl Module {
             *code = injected_code;
         }
 
+        let num_types_originally: u32 = self.ty.types.len().try_into()?;
         // insert a new type for the new imports
         let mut new_types = Vec::with_capacity(self.ty.types.len() + NUM_ADDED_FUNCTIONS as usize);
+        new_types.extend_from_slice(&self.ty.types);
         // account energy
         new_types.push(Rc::new(FunctionType {
-            parameters: vec![ValueType::I32],
+            parameters: vec![ValueType::I64],
             result:     None,
         }));
         // account stack size
@@ -602,7 +604,6 @@ impl Module {
             parameters: vec![ValueType::I32],
             result:     Some(ValueType::I32),
         }));
-        new_types.append(&mut self.ty.types);
         self.ty.types = new_types;
 
         // Add functions to the beggining of the import list.
@@ -616,7 +617,7 @@ impl Module {
                 name: "account_energy".to_owned(),
             },
             description: ImportDescription::Func {
-                type_idx: 0,
+                type_idx: num_types_originally,
             },
         });
         new_imports.push(Import {
@@ -627,7 +628,7 @@ impl Module {
                 name: "account_stack".to_owned(),
             },
             description: ImportDescription::Func {
-                type_idx: 1,
+                type_idx: num_types_originally + 1,
             },
         });
         new_imports.push(Import {
@@ -638,7 +639,7 @@ impl Module {
                 name: "account_memory".to_owned(),
             },
             description: ImportDescription::Func {
-                type_idx: 2,
+                type_idx: num_types_originally + 2,
             },
         });
         new_imports.append(&mut self.import.imports);

@@ -50,6 +50,14 @@ pub const MAX_INIT_MEMORY_SIZE: u32 = 32;
 /// interpreter.
 pub const MAX_NUM_GLOBALS: usize = 1 << 16;
 
+/// Maximum number of branches in the switch statement without the default
+/// branch.
+pub const MAX_SWITCH_SIZE: usize = 1 << 16;
+
+/// Maximum height of the stack inside a single function. Checked during
+/// validation. This is relied upon by the interpreter to be less than 2^31.
+pub const MAX_STACK_HEIGHT: usize = 1 << 24;
+
 pub const MAGIC_HASH: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
 
 pub const VERSION: [u8; 4] = [0x01, 0x00, 0x00, 0x00];

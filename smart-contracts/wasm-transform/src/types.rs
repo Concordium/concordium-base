@@ -144,6 +144,24 @@ pub enum GlobalInit {
     I64(i64),
 }
 
+impl From<GlobalInit> for i64 {
+    fn from(g: GlobalInit) -> Self {
+        match g {
+            GlobalInit::I64(x) => x,
+            GlobalInit::I32(x) => i64::from(x),
+        }
+    }
+}
+
+impl From<&Global> for ValueType {
+    fn from(g: &Global) -> Self {
+        match g.init {
+            GlobalInit::I32(_) => ValueType::I32,
+            GlobalInit::I64(_) => ValueType::I64,
+        }
+    }
+}
+
 impl GlobalInit {
     ///  Type of this global
     pub fn ty(self) -> ValueType {
@@ -327,7 +345,7 @@ pub struct Limits {
     pub max: Option<u32>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// A function type with at most one return value. The MVP version of Wasm does
 /// not support multiple return values, and thus we don't either.
 pub struct FunctionType {

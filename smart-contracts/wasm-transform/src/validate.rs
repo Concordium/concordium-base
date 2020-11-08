@@ -1,12 +1,12 @@
 use crate::{
     parse::{
         parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult, Skeleton,
-        MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE, MAX_NUM_GLOBALS, PAGE_SIZE,
+        MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE, MAX_NUM_GLOBALS, MAX_SWITCH_SIZE, PAGE_SIZE,
     },
     types::*,
 };
 use anyhow::{anyhow, bail, ensure};
-use std::{collections::BTreeSet, convert::TryInto, rc::Rc};
+use std::{borrow::Borrow, collections::BTreeSet, convert::TryInto, rc::Rc};
 
 /// The number of allowed locals in a function.
 /// This includes parameters and declared locals.
@@ -47,9 +47,17 @@ impl ControlStack {
 
 #[derive(Debug)]
 pub struct ControlFrame {
-    pub label_type:  BlockType,
-    pub end_type:    BlockType,
-    pub height:      usize,
+    /// Label type of the block, this is the type that is used when
+    /// jumping to the label of the block.
+    pub label_type: BlockType,
+    /// End type of the block, this is the type that is used when
+    /// ending the block in a normal way.
+    pub end_type: BlockType,
+    /// Height of the stack at the entry of this block.
+    pub height: usize,
+    /// Whether we are in the unreachable part of this block or not.
+    /// The unreachable part is any part after an unconditional jump or
+    /// a trap instruction.
     pub unreachable: bool,
 }
 
@@ -244,8 +252,25 @@ fn make_locals(ty: &FunctionType, locals: &[Local]) -> ValidateResult<(Vec<Local
     Ok((out, num_locals))
 }
 
-impl<'a> FunctionContext<'a> {
-    pub fn get_local(&self, idx: LocalIndex) -> ValidateResult<ValueType> {
+pub trait HasValidationContext {
+    fn get_local(&self, idx: LocalIndex) -> ValidateResult<ValueType>;
+
+    /// Get a global together with its mutability.
+    fn get_global(&self, idx: GlobalIndex) -> ValidateResult<(ValueType, bool)>;
+
+    fn memory_exists(&self) -> bool;
+
+    fn table_exists(&self) -> bool;
+
+    fn get_func(&self, idx: FuncIndex) -> ValidateResult<&Rc<FunctionType>>;
+
+    fn get_type(&self, idx: TypeIndex) -> ValidateResult<&Rc<FunctionType>>;
+
+    fn return_type(&self) -> BlockType;
+}
+
+impl<'a> HasValidationContext for FunctionContext<'a> {
+    fn get_local(&self, idx: LocalIndex) -> ValidateResult<ValueType> {
         let res = self.locals.binary_search_by(|locals| {
             if locals.end <= idx {
                 std::cmp::Ordering::Less
@@ -262,7 +287,7 @@ impl<'a> FunctionContext<'a> {
     }
 
     /// Get a global together with its mutability.
-    pub fn get_global(&self, idx: GlobalIndex) -> ValidateResult<(ValueType, bool)> {
+    fn get_global(&self, idx: GlobalIndex) -> ValidateResult<(ValueType, bool)> {
         if let Some(global) = self.globals.get(idx as usize) {
             Ok((global.init.ty(), global.mutable))
         } else {
@@ -270,11 +295,11 @@ impl<'a> FunctionContext<'a> {
         }
     }
 
-    pub fn memory_exists(&self) -> bool { self.memory }
+    fn memory_exists(&self) -> bool { self.memory }
 
-    pub fn table_exists(&self) -> bool { self.table }
+    fn table_exists(&self) -> bool { self.table }
 
-    pub fn get_func(&self, idx: FuncIndex) -> ValidateResult<&Rc<FunctionType>> {
+    fn get_func(&self, idx: FuncIndex) -> ValidateResult<&Rc<FunctionType>> {
         if let Some(&type_idx) = self.funcs.get(idx as usize) {
             self.get_type(type_idx)
         } else {
@@ -282,9 +307,11 @@ impl<'a> FunctionContext<'a> {
         }
     }
 
-    pub fn get_type(&self, idx: TypeIndex) -> ValidateResult<&Rc<FunctionType>> {
+    fn get_type(&self, idx: TypeIndex) -> ValidateResult<&Rc<FunctionType>> {
         self.types.get(idx as usize).ok_or_else(|| anyhow!("Type index out of range."))
     }
+
+    fn return_type(&self) -> BlockType { self.return_type }
 }
 
 enum Type {
@@ -312,19 +339,41 @@ fn ensure_alignment(num: u32, align: Type) -> ValidateResult<()> {
     Ok(())
 }
 
-pub fn validate<'a>(
-    context: &FunctionContext<'a>,
-    opcodes: impl Iterator<Item = ParseResult<OpCode>>,
-) -> ValidateResult<Vec<OpCode>> {
+/// Trait to handle the results of validation.
+pub trait Handler<O> {
+    type Outcome: Sized;
+
+    fn handle_opcode(&mut self, state: &ValidationState, opcode: O) -> anyhow::Result<()>;
+
+    fn finish(self) -> anyhow::Result<Self::Outcome>;
+}
+
+impl Handler<OpCode> for Vec<OpCode> {
+    type Outcome = Self;
+
+    #[inline(always)]
+    fn handle_opcode(&mut self, _state: &ValidationState, opcode: OpCode) -> anyhow::Result<()> {
+        self.push(opcode);
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn finish(self) -> anyhow::Result<Self::Outcome> { Ok(self) }
+}
+
+pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
+    context: &impl HasValidationContext,
+    opcodes: impl Iterator<Item = ParseResult<O>>,
+    mut handler: H,
+) -> ValidateResult<H::Outcome> {
     let mut state = ValidationState {
         opds:  OperandStack::default(),
         ctrls: ControlStack::default(),
     };
-    state.push_ctrl(context.return_type, context.return_type);
-    let mut instructions = Vec::new();
+    state.push_ctrl(context.return_type(), context.return_type());
     for opcode in opcodes {
         let next_opcode = opcode?;
-        match &next_opcode {
+        match next_opcode.borrow() {
             OpCode::End => {
                 let res = state.pop_ctrl()?;
                 state.push_opds(res);
@@ -372,6 +421,10 @@ pub fn validate<'a>(
                 labels,
                 default,
             } => {
+                ensure!(
+                    labels.len() <= MAX_SWITCH_SIZE,
+                    "Size of switch statement exceeds maximum."
+                );
                 if let Some(default_label_type) = state.ctrls.get_label(*default) {
                     for &label in labels.iter() {
                         if let Some(target_frame) = state.ctrls.get(label) {
@@ -650,10 +703,10 @@ pub fn validate<'a>(
                 state.push_opd(Known(ValueType::I64));
             }
         }
-        instructions.push(next_opcode);
+        handler.handle_opcode(&state, next_opcode)?;
     }
     if state.done() {
-        Ok(instructions)
+        handler.finish()
     } else {
         bail!("Improperly terminated instruction sequence.")
     }
@@ -739,7 +792,8 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
                     memory: memory.memory_type.is_some(),
                     table: table.table_type.is_some(),
                 };
-                let opcodes = validate(&ctx, &mut OpCodeIterator::new(c.expr_bytes))?;
+                let opcodes = validate(&ctx, &mut OpCodeIterator::new(c.expr_bytes), Vec::new())?;
+
                 parsed_code.push(Code {
                     ty: func_ty.clone(),
                     num_locals,
