@@ -24,22 +24,37 @@ The documentation is split into four categories
 .. todo::
    A list of information, still missing from the documentation
 
+   **General**
+
    - Resource accounting and limiting contracts (Energy)
-   - Full description of a smart contract structure
-   - Deployment
+   - Full description of a smart contract module + contract + instance
+   - Contract Schema
+   - Logging
+   - Actions
+
+   **Guides**
+
    - Queries
+   - Contract best practices (ensure amount is 0, naming conventions)
+
+   **References**
+
    - Cargo-concordium reference
    - Contract examples
-   - Contract best practices (ensure amount is 0 ...)
-   - Description of contract schema
-   - Logging in a contract
+
+   **Tutorial**
+
+   - Finish first contract
 
 .. toctree::
    :maxdepth: 1
    :caption: General
 
    general/introduction
-   general/contract-on-chain
+   general/contract-module
+   general/contract-instances
+   general/contract-schema
+   general/resource-accounting
    general/develop-contracts
 
 .. toctree::
@@ -54,13 +69,13 @@ The documentation is split into four categories
 
    guides/setup-tools
    guides/setup-contract
-   guides/unittest-contract
+   guides/compile-module
+   guides/unit-test-contract
    guides/local-simulate
    guides/build-schema
    guides/deploy-module
    guides/initialize-contract
    guides/interacting-instance
-   guides/interact-on-chain/index
 
 .. toctree::
    :maxdepth: 1

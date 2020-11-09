@@ -1,4 +1,4 @@
-.. _unittest-contract:
+.. _unit-test-contract:
 
 =============================
 Unit test a contract in Rust

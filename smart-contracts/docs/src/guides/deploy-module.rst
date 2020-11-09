@@ -44,7 +44,7 @@ instances.
 .. seealso::
 
     For a guide on how to initialize smart contracts from a deployed module see
-    :ref:`initialize_contract`.
+    :ref:`initialize-contract`.
 
 Optionally a name can be specified to easier referencing of the module. The name
 is only stored locally by ``concordium-client``, and is not visible on chain.

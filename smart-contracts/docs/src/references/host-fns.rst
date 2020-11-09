@@ -179,7 +179,7 @@ Functions only accessible for smart contract ``receive``-functions.
     :return: Current balance of the contract instance
     :rtype: i64
 
-
+.. _host-functions-actions:
 
 Action description
 --------------------------------

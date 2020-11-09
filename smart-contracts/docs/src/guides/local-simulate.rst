@@ -12,7 +12,7 @@ scenarios.
 
 .. seealso::
 
-    For a guide on automated unit tests see :ref:`unittest-contract`.
+    For a guide on automated unit tests see :ref:`unit-test-contract`.
 
 Make sure you have ``cargo-concordium`` installed, if not follow the guide
 :ref:`setup-tools`.

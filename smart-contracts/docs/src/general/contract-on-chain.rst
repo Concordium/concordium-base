@@ -28,33 +28,45 @@ Smart contract module
 .. graphviz::
     :align: center
     :caption: Example of smart contract module containing two smart contracts:
+              Escrow and Crowdfunding.
+
+    digraph G {
+        subgraph cluster_0 {
+            node [fillcolor=white, shape=note]
+            label = "Module";
+            "Crowdfunding";
+            "Escrow";
+        }
+    }
+
+.. graphviz::
+    :align: center
+    :caption: Example of smart contract module containing two smart contracts:
               Escrow and Crowdfunding. Each contract have two instances.
 
     digraph G {
-        node [style=filled, color = white]
 
         subgraph cluster_0 {
-            label = "Smart contract module";
-            style=filled;
-            color=lightgrey;
+            node [fillcolor=white, shape=note]
+            label = "Module";
             "Crowdfunding";
             "Escrow";
         }
 
         subgraph cluster_1 {
+            node [style="filled", fillcolor=white, shape=box]
             label = "Instances";
-            style=filled;
-            color=lightgrey;
+            style=dotted;
             House;
             Car;
             Gadget;
             Boardgame;
         }
 
-        Escrow:s -> House;
-        Escrow:s -> Car;
-        Crowdfunding:s -> Gadget;
-        Crowdfunding:s -> Boardgame;
+        House:s -> Escrow;
+        Car:s -> Escrow;
+        Gadget:s -> Crowdfunding;
+        Boardgame:s -> Crowdfunding;
     }
 
 A *smart contract module* can contain the code for one or more smart contracts,
