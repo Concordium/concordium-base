@@ -44,7 +44,7 @@ stages:
   script:
     - ( cd rust-src && cargo clippy --color=always --all )
     - ( cd rust-bins && cargo clippy --color=always --all )
-    - ( cd identity-provider-service && cargo clippy --color=always --all )
+    - ( cd identity-provider-service && cargo clippy --features=vendored-ssl --color=always --all )
 
 "cargo:build-bench":
   extends: .generic-lint
@@ -72,4 +72,4 @@ stages:
   stage: test
   cache: {}
   script:
-    - ( cd identity-provider-service && cargo test --all --verbose --release --color=always)
+    - ( cd identity-provider-service && cargo test --features=vendored-ssl --all --verbose --release --color=always)

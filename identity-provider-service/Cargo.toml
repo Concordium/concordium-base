@@ -6,6 +6,10 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+# embed the ssl library into the binary for easier distribution.
+vendored-ssl = ["reqwest/native-tls-vendored"]
+
 [dependencies]
 tokio = { version = "0.2", features = ["full"] }
 warp = "0.2"
@@ -16,7 +20,7 @@ uuid = { version = "0.8", features = ["v4"] }
 log = "0.4.11"
 env_logger = "0.7.1"
 structopt = "0.3"
-reqwest = { version = "0.10", features = ["blocking", "json"] }
+reqwest = { version = "0.10", features = ["json"] }
 url = "2.1.1"
 clap = "2.33"
 anyhow = "1.0"
