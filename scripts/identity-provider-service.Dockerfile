@@ -4,7 +4,7 @@
 FROM 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base:0.15 as builder
 COPY . /build
 WORKDIR /build
-RUN (cd identity-provider-service && cargo build --release --features=vendored-ssl)
+RUN (cd identity-provider-service && cargo build --release)
 
 # Fetch selected files from genesis data.
 WORKDIR /
@@ -20,6 +20,7 @@ RUN --mount=type=ssh git clone --depth 1 --branch ${GENESIS_REF} git@gitlab.com:
 
 # Collect build artifacts in fresh image.
 FROM ubuntu:20.04
+RUN apt-get update && apt-get install -y libssl-dev
 COPY --from=builder /build/identity-provider-service/target/release/identity-provider-service /identity-provider-service
 COPY --from=builder /build/identity-provider-service/target/release/identity-verifier /identity-verifier
 COPY --from=builder /genesis-data/global.json /global.json
