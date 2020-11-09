@@ -1,6 +1,6 @@
 use crate::types::*;
 use anyhow::{anyhow, bail};
-use std::{rc::Rc, convert::TryInto};
+use std::{convert::TryInto, rc::Rc};
 
 /// TODO set these indices to the imports of the respective accounting host
 /// functions. They should be given by the specification.

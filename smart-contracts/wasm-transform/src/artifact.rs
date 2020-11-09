@@ -7,7 +7,7 @@
 
 use crate::{
     types::*,
-    validate::{validate, HasValidationContext, ValidationState},
+    validate::{validate, Handler, HasValidationContext, ValidationState},
 };
 use anyhow::{anyhow, bail, ensure};
 use std::{collections::BTreeMap, convert::TryInto, io::Write};
@@ -196,8 +196,6 @@ impl Instructions {
 
     pub fn push_u32(&mut self, x: u32) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
 
-    pub fn push_u64(&mut self, x: u64) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
-
     pub fn push_i32(&mut self, x: i32) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
 
     pub fn push_i64(&mut self, x: i64) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
@@ -262,16 +260,58 @@ struct BackPatch {
 
 impl BackPatch {
     fn new() -> Self {
-        Self{
-            out: Default::default(),
-            backpatch: BackPatchStack{
+        Self {
+            out:       Default::default(),
+            backpatch: BackPatchStack {
                 stack: vec![JumpTarget::new_unknown()],
+            },
+        }
+    }
+
+    pub fn push_jump(
+        &mut self,
+        label_idx: LabelIndex,
+        state: &ValidationState,
+    ) -> CompileResult<()> {
+        let target = self.backpatch.get_mut(label_idx)?;
+        let target_frame = state
+            .ctrls
+            .get(label_idx)
+            .ok_or_else(|| anyhow!("Could not get jump target frame."))?;
+        let target_height = target_frame.height;
+        let current_height = state.opds.stack.len();
+        ensure!(
+            current_height >= target_height,
+            "Current height must be at least as much as the target."
+        );
+        let diff = if let BlockType::EmptyType = target_frame.label_type {
+            (current_height - target_height).try_into()?
+        } else {
+            let diff: u32 = (current_height - target_height).try_into()?;
+            diff & 0x8000_0000
+        };
+        // output the difference in stack heights.
+        self.out.push_u32(diff);
+        match target {
+            JumpTarget::Known {
+                pos,
+            } => {
+                self.out.push_u32(*pos as u32);
+            }
+            JumpTarget::Unknown {
+                backpatch_locations,
+            } => {
+                // output instruction
+                backpatch_locations.push(self.out.current_offset());
+                // output a dummy value
+                self.out.push_u32(0u32);
             }
         }
+        Ok(())
     }
 }
 
-impl crate::validate::Handler<&OpCode> for BackPatch {
+impl Handler<&OpCode> for BackPatch {
     type Outcome = Instructions;
 
     fn handle_opcode(&mut self, state: &ValidationState, opcode: &OpCode) -> CompileResult<()> {
@@ -323,77 +363,11 @@ impl crate::validate::Handler<&OpCode> for BackPatch {
             }
             OpCode::Br(label_idx) => {
                 self.out.push(Br);
-                let target = self.backpatch.get_mut(*label_idx)?;
-                let target_frame = state
-                    .ctrls
-                    .get(*label_idx)
-                    .ok_or_else(|| anyhow!("Could not get jump target frame."))?;
-                let target_height = target_frame.height;
-                let current_height = state.opds.stack.len();
-                ensure!(
-                    current_height >= target_height,
-                    "Current height must be at least as much as the target."
-                );
-                let diff = if let BlockType::EmptyType = target_frame.label_type {
-                    (current_height - target_height).try_into()?
-                } else {
-                    let diff: u32 = (current_height - target_height).try_into()?;
-                    diff & 0x8000_0000
-                };
-                // output the difference in stack heights.
-                self.out.push_u32(diff);
-                match target {
-                    JumpTarget::Known {
-                        pos,
-                    } => {
-                        self.out.push_u32(*pos as u32);
-                    }
-                    JumpTarget::Unknown {
-                        backpatch_locations,
-                    } => {
-                        // output instruction
-                        backpatch_locations.push(self.out.current_offset());
-                        // output a dummy value that will be backpatched
-                        self.out.push_u32(0u32);
-                    }
-                }
+                self.push_jump(*label_idx, state)?;
             }
             OpCode::BrIf(label_idx) => {
                 self.out.push(BrIf);
-                let target = self.backpatch.get_mut(*label_idx)?;
-                let target_frame = state
-                    .ctrls
-                    .get(*label_idx)
-                    .ok_or_else(|| anyhow!("Could not get jump target frame."))?;
-                let target_height = target_frame.height;
-                let current_height = state.opds.stack.len();
-                ensure!(
-                    current_height >= target_height,
-                    "Current height must be at least as much as the target."
-                );
-                let diff = if let BlockType::EmptyType = target_frame.label_type {
-                    (current_height - target_height).try_into()?
-                } else {
-                    let diff: u32 = (current_height - target_height).try_into()?;
-                    diff & 0x8000_0000
-                };
-                // output the difference in stack heights.
-                self.out.push_u32(diff);
-                match target {
-                    JumpTarget::Known {
-                        pos,
-                    } => {
-                        self.out.push_u32(*pos as u32);
-                    }
-                    JumpTarget::Unknown {
-                        backpatch_locations,
-                    } => {
-                        // output instruction
-                        backpatch_locations.push(self.out.current_offset());
-                        // output a dummy value
-                        self.out.push_u32(0u32);
-                    }
-                }
+                self.push_jump(*label_idx, state)?;
             }
             OpCode::BrTable {
                 labels,
@@ -402,78 +376,11 @@ impl crate::validate::Handler<&OpCode> for BackPatch {
                 self.out.push(BrTable);
                 let labels_len: u16 = labels.len().try_into()?;
                 self.out.push_u16(labels_len);
-                let current_height = state.opds.stack.len();
-                {
-                    let target = self.backpatch.get_mut(*default)?;
-                    let target_frame = state
-                        .ctrls
-                        .get(*default)
-                        .ok_or_else(|| anyhow!("Could not get jump target frame."))?;
-                    let target_height = target_frame.height;
-                    ensure!(
-                        current_height >= target_height,
-                        "Current height must be at least as much as the target."
-                    );
-                    let diff = if let BlockType::EmptyType = target_frame.label_type {
-                        (current_height - target_height).try_into()?
-                    } else {
-                        let diff: u32 = (current_height - target_height).try_into()?;
-                        diff & 0x8000_0000
-                    };
-                    // output the difference in stack heights.
-                    self.out.push_u32(diff);
-                    match target {
-                        JumpTarget::Known {
-                            pos,
-                        } => {
-                            self.out.push_u32(*pos as u32);
-                        }
-                        JumpTarget::Unknown {
-                            backpatch_locations,
-                        } => {
-                            // output instruction
-                            backpatch_locations.push(self.out.current_offset());
-                            // output a dummy value
-                            self.out.push_u32(0u32);
-                        }
-                    }
-                }
+                self.push_jump(*default, state)?;
                 // The label types are the same for the default as well all the other
                 // labels.
-                for &label_idx in labels {
-                    let target = self.backpatch.get_mut(label_idx)?;
-                    let target_frame = state
-                        .ctrls
-                        .get(label_idx)
-                        .ok_or_else(|| anyhow!("Could not get jump target frame."))?;
-                    let target_height = target_frame.height;
-                    ensure!(
-                        current_height >= target_height,
-                        "Current height must be at least as much as the target."
-                    );
-                    let diff = if let BlockType::EmptyType = target_frame.label_type {
-                        (current_height - target_height).try_into()?
-                    } else {
-                        let diff: u32 = (current_height - target_height).try_into()?;
-                        diff & 0x8000_0000
-                    };
-                    // output the difference in stack heights.
-                    self.out.push_u32(diff);
-                    match target {
-                        JumpTarget::Known {
-                            pos,
-                        } => {
-                            self.out.push_u32(*pos as u32);
-                        }
-                        JumpTarget::Unknown {
-                            backpatch_locations,
-                        } => {
-                            // output instruction
-                            backpatch_locations.push(self.out.current_offset());
-                            // output a dummy value
-                            self.out.push_u32(0u32);
-                        }
-                    }
+                for label_idx in labels {
+                    self.push_jump(*label_idx, state)?;
                 }
             }
             OpCode::Return => {
@@ -817,10 +724,7 @@ impl<'a> HasValidationContext for ModuleContext<'a> {
         self.locals.get(idx as usize).copied().ok_or_else(|| anyhow!("Local does not exist."))
     }
 
-    fn get_global(
-        &self,
-        idx: crate::types::GlobalIndex,
-    ) -> crate::validate::ValidateResult<(ValueType, bool)> {
+    fn get_global(&self, idx: crate::types::GlobalIndex) -> CompileResult<(ValueType, bool)> {
         match self.module.global.globals.get(idx as usize) {
             Some(g) => Ok((ValueType::from(g), g.mutable)),
             None => bail!("Attempting to access non-existing global."),
@@ -831,30 +735,28 @@ impl<'a> HasValidationContext for ModuleContext<'a> {
 
     fn table_exists(&self) -> bool { self.module.table.table_type.is_some() }
 
-    fn get_func(
-        &self,
-        idx: FuncIndex,
-    ) -> crate::validate::ValidateResult<&std::rc::Rc<FunctionType>> {
+    fn get_func(&self, idx: FuncIndex) -> CompileResult<&std::rc::Rc<FunctionType>> {
         if (idx as usize) < self.module.import.imports.len() {
             match self.module.import.imports[idx as usize].description {
-                ImportDescription::Func { type_idx } => {
-                    self.module.ty.get(type_idx).ok_or_else(|| anyhow!("Attempting to get type that does not exist"))
-                }
+                ImportDescription::Func {
+                    type_idx,
+                } => self
+                    .module
+                    .ty
+                    .get(type_idx)
+                    .ok_or_else(|| anyhow!("Attempting to get type that does not exist")),
             }
         } else {
-        self.module
-            .code
-            .impls
-            .get(idx as usize - self.module.import.imports.len())
-            .map(|c| &c.ty)
-            .ok_or_else(|| anyhow!("Attempting to get type of function that does not exist."))
+            self.module
+                .code
+                .impls
+                .get(idx as usize - self.module.import.imports.len())
+                .map(|c| &c.ty)
+                .ok_or_else(|| anyhow!("Attempting to get type of function that does not exist."))
         }
     }
 
-    fn get_type(
-        &self,
-        idx: TypeIndex,
-    ) -> crate::validate::ValidateResult<&std::rc::Rc<FunctionType>> {
+    fn get_type(&self, idx: TypeIndex) -> CompileResult<&std::rc::Rc<FunctionType>> {
         self.module
             .ty
             .types
