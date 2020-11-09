@@ -4,7 +4,7 @@
 FROM 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base:0.15 as builder
 COPY . /build
 WORKDIR /build
-RUN (cd identity-provider-service && cargo build --release)
+RUN (cd identity-provider-service && cargo build --release --features=vendored-ssl)
 
 # Fetch selected files from genesis data.
 WORKDIR /
