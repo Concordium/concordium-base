@@ -1,0 +1,14 @@
+title Identity provider proof of concept
+
+
+App->Identity provider: POST identity-provider-url?response_type=code \n Body {IdentityObjectRequest}
+Identity provider->Identity provider: Validate request
+Identity provider->Identity verifier: Verify identity
+Identity verifier->Identity provider: Verification result and attribute list
+Identity provider->Identity provider: Create identity object, save revocation record \n and identity object
+Identity provider->App: HTTP 302 Found \n Location {redirect_uri}#code_uri=identity-provider-url/path/to/identity-object
+
+loop Poll for identity object
+    App->Identity provider: GET identity-provider-url/path/to/identity-object
+    Identity provider->App: { "status": "(done|pending|error)", "detail":"Optional", \n "token": { "identityObject": url_encoding_of_json_serialized_versioned_identity_object }}
+end
