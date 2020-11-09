@@ -17,18 +17,31 @@ Navigate next to the generated binary and run (remember to update paths to your 
 
 ```./identity-provider-service --identity-provider identity_provider.json --anonymity-revokers anonymity_revokers.json --global-context global.json```
 
-Here identity_provider_file.json points to the file path for a file containing a JSON representation of the IpData type, and 
-anonymity_revokers_file.json refers to a file containing the JSON representation of the ArsInfos type.
+Here identity_provider_file.json points to the file path containing the JSON representation of the identity provider public and private keys.
+The `anonymity_revokers_file.json` refers to a file containing the JSON
+representation of the anonymity revoker's public keys. This list determines the
+supported anonymity revokers.
 
 ### Configuration file examples
 
-An example of each file type can be found in the `data` directory of the module.
+An example of each file type can be found in the [./data](./data) subdirectory.
 
 ## Identity verifier service
 
-Navigate next to the generated binary and run:
+The identity verifier is a supporting service that verifies the real-life
+identity of the user. In this POC we assume that the service has a REST API that
+the provider uses. The identity provider would redirect the initial request,
+after it has validated the cryptographic proofs, to the identity verifier, which
+would then verify the real-life identity by, e.g., asking the user to take
+photos, and provide documents.
 
-```./identity_verifier```
+The identity verifier can be run by using:
+
+```console
+cargo run --release --bin identity_verifier
+```
+
+or directly running the binary `identity_verifier` in `./target/release/`.
 
 ## Testing with the wallet on Staging
 
@@ -65,7 +78,7 @@ The flow that is implemented by this proof of concept follows the flow that is e
 for Android. The flow is as follows:
 
 1. Receive a request from a wallet on `http://[hostname]:8100/api/identity
-1. Deserialize `idObjectRequest` and validate its contents by using the supplied library function 
+1. Deserialize `IdentityObjectRequest` and validate its contents by using the supplied library function 
 `id::identity_provider::validate_request`.
 1. Perform identity verification with the identity verifier, i.e. the identity of the given caller has to be verified.
 In the proof of concept the identity verifier is another service, which always verifies an identity and returns a 
@@ -75,6 +88,7 @@ static attribute list for any identity.
 1. Save the corresponding revocation record that can be used by the anonymity revokers to identify the user.
 1. Generate the identity object which consists of the received request, the attribute list and the signature and 
 save it so that it can be retrieved later.
+1. Create the initial account transaction using the supplied library function and submit it to a Concordium-run service `wallet-proxy`.
 1. Return to the caller with an HTTP 302 Found redirect `location` header to where the identity object will be available
 when processing has completed. In the case of the proof of concept it will be available instantaneously. The format of 
 the `location` header is: `redirect_uri#code_uri=url_where_identity_object_can_be_retrieved`, where `redirect_uri` is

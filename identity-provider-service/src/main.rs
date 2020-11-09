@@ -10,7 +10,6 @@ use id::{
 };
 use log::{error, info, warn};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use serde_json::{from_str, json, to_value};
 use std::{
     collections::HashMap,
@@ -25,36 +24,7 @@ use warp::{http::StatusCode, hyper::header::LOCATION, Filter, Rejection, Reply};
 
 type ExampleAttributeList = AttributeList<id::constants::BaseField, AttributeKind>;
 
-#[derive(Deserialize)]
-struct IdentityObjectRequest {
-    #[serde(rename = "idObjectRequest")]
-    id_object_request: Versioned<PreIdentityObject<IpPairing, ArCurve>>,
-    #[serde(rename = "redirectURI")]
-    redirect_uri: String,
-}
-
-/// JSON object that the wallet expects to be returned when polling for an
-/// identity object.
-#[derive(Serialize)]
-struct IdentityTokenContainer {
-    status: String,
-    token:  serde_json::Value,
-    detail: String,
-}
-
-/// Holds the information required to create the IdentityObject and forward to
-/// the correct response URL that the wallet is expecting. Used for easier
-/// passing between methods.
-struct ValidatedRequest {
-    /// The pre-identity-object contained in the initial request.
-    request: PreIdentityObject<IpPairing, ArCurve>,
-    /// The URI that the ID object should be returned to after we've done the
-    /// verification of the user.
-    redirect_uri: String,
-}
-
-/// Structure used to receive the correct command line arguments by using
-/// StructOpt.
+/// Structure used to receive the correct command line arguments.
 #[derive(Debug, StructOpt)]
 struct IdentityProviderServiceConfiguration {
     #[structopt(
@@ -105,7 +75,45 @@ struct IdentityProviderServiceConfiguration {
     )]
     wallet_proxy_base: url::Url,
 }
-/// The state the server maintains in-between the requests.
+
+#[derive(SerdeDeserialize)]
+/// The identity object request sent by the wallet in the body of the POST
+/// request. The 'Deserialize' instance is automatically derived to parse the
+/// expected format.
+struct IdentityObjectRequest {
+    #[serde(rename = "idObjectRequest")]
+    id_object_request: Versioned<PreIdentityObject<IpPairing, ArCurve>>,
+    #[serde(rename = "redirectURI")]
+    redirect_uri: String,
+}
+
+#[derive(SerdeSerialize, SerdeDeserialize)]
+#[serde(rename_all = "lowercase")]
+/// Status of the identity. Identities are identified via their `idCredPub`.
+enum IdentityStatus {
+    /// The identity is pending verification and initial account creation.
+    Pending,
+    /// The identity was rejected.
+    Error,
+    /// The identity is ready.
+    Done,
+}
+
+/// The object that the wallet expects to be returned when polling for the
+/// identity object.
+#[derive(SerdeSerialize)]
+struct IdentityTokenContainer {
+    /// The status of the submission.
+    status: IdentityStatus,
+    /// The response, if available, otherwise Null.
+    token: serde_json::Value,
+    /// Details of the response in the form of a free-form text.
+    detail: String,
+}
+
+/// The state the server maintains in-between the requests, consisting of
+/// the resolved configuration. In particular in this prototype the private keys
+/// are maintain in-memory.
 struct ServerConfig {
     ip_data:               IpData<IpPairing>,
     global:                GlobalContext<ArCurve>,
@@ -115,37 +123,10 @@ struct ServerConfig {
     submit_credential_url: url::Url,
 }
 
-fn load_server_config(
-    config: &IdentityProviderServiceConfiguration,
-) -> anyhow::Result<ServerConfig> {
-    let ip_data_contents = fs::read_to_string(&config.identity_provider_file)?;
-    let ar_info_contents = fs::read_to_string(&config.anonymity_revokers_file)?;
-    let global_context_contents = fs::read_to_string(&config.global_context_file)?;
-    let ip_data = from_str(&ip_data_contents)?;
-    let versioned_global = from_str::<Versioned<_>>(&global_context_contents)?;
-    let versioned_ar_infos = from_str::<Versioned<_>>(&ar_info_contents)?;
-    ensure!(
-        versioned_global.version == VERSION_0,
-        "Unsupported global parameters version."
-    );
-    ensure!(
-        versioned_ar_infos.version == VERSION_0,
-        "Unsupported anonymity revokers version."
-    );
-    let mut submit_credential_url = config.wallet_proxy_base.clone();
-    submit_credential_url.set_path("v0/submitCredential/");
-    Ok(ServerConfig {
-        ip_data,
-        global: versioned_global.value,
-        ars: versioned_ar_infos.value,
-        id_verification_url: config.id_verification_url.clone(),
-        retrieve_url: config.retrieve_url.clone(),
-        submit_credential_url,
-    })
-}
-
 /// A mockup of a database to store all the data.
-/// In production this would be a real database.
+/// In production this would be a real database, here we store everything as
+/// files on disk and synchronize access to disk via a lock. On deletion files
+/// are moved into a 'backup_root' folder.
 #[derive(Clone)]
 struct DB {
     /// Root directory where all the data is stored.
@@ -162,28 +143,72 @@ struct DB {
 
 #[derive(SerdeSerialize, SerdeDeserialize, Clone)]
 #[serde(rename_all = "lowercase")]
+/// When the initial account transaction is submitted we use this type to keep
+/// track of its status.
 enum PendingStatus {
+    /// The transaction was submitted, and is currently in the state indicated
+    /// by the submission status.
     Submitted {
         submission_id: String,
         status:        SubmissionStatus,
     },
+    /// The transaction could not be submitted due to, most likely, network
+    /// issues. It should be retried.
     CouldNotSubmit,
 }
 
 #[derive(SerdeDeserialize, SerdeSerialize)]
 #[serde(rename_all = "camelCase")]
 /// Successful response from the wallet proxy.
+/// It contains a JSON body with a single field `submissionId`.
 struct InitialAccountReponse {
     submission_id: String,
 }
 
+///
 #[derive(SerdeSerialize, SerdeDeserialize, Clone)]
 struct PendingEntry {
     pub status: PendingStatus,
     pub value:  serde_json::Value,
 }
 
+impl ServerConfig {
+    /// Resolve the configuration from the command-line arguments, checking that
+    /// all values have the correct formats.
+    pub fn from_opts(config: &IdentityProviderServiceConfiguration) -> anyhow::Result<Self> {
+        let ip_data_contents = fs::read_to_string(&config.identity_provider_file)?;
+        let ar_info_contents = fs::read_to_string(&config.anonymity_revokers_file)?;
+        let global_context_contents = fs::read_to_string(&config.global_context_file)?;
+        let ip_data = from_str(&ip_data_contents)?;
+        let versioned_global = from_str::<Versioned<_>>(&global_context_contents)?;
+        let versioned_ar_infos = from_str::<Versioned<_>>(&ar_info_contents)?;
+        ensure!(
+            versioned_global.version == VERSION_0,
+            "Unsupported global parameters version."
+        );
+        ensure!(
+            versioned_ar_infos.version == VERSION_0,
+            "Unsupported anonymity revokers version."
+        );
+        let mut submit_credential_url = config.wallet_proxy_base.clone();
+        submit_credential_url.set_path("v0/submitCredential/");
+        Ok(ServerConfig {
+            ip_data,
+            global: versioned_global.value,
+            ars: versioned_ar_infos.value,
+            id_verification_url: config.id_verification_url.clone(),
+            retrieve_url: config.retrieve_url.clone(),
+            submit_credential_url,
+        })
+    }
+}
+
 impl DB {
+    /// Create a new database using the given root and backup_root paths.
+    /// The 'backup_root' path is used to place deleted entries.
+    ///
+    /// This function will attempt to reconstruct the in-memory pending table if
+    /// it finds any pending entries.
     pub fn new(root: std::path::PathBuf, backup_root: std::path::PathBuf) -> anyhow::Result<Self> {
         // Create the 'database' directories for storing IdentityObjects and
         // AnonymityRevocationRecords.
@@ -212,6 +237,8 @@ impl DB {
         })
     }
 
+    /// Write the anonymity revocation record under the given key.
+    /// The key should be a valid filename.
     pub fn write_revocation_record(
         &self,
         key: &str,
@@ -230,6 +257,8 @@ impl DB {
         Ok(())
     }
 
+    /// Write the identity object under the given key. The key should be
+    /// a valid filename.
     pub fn write_identity_object(
         &self,
         key: &str,
@@ -250,6 +279,7 @@ impl DB {
         Ok(())
     }
 
+    /// Try to read the identity object under the given key, if it exists.
     pub fn read_identity_object(&self, key: &str) -> anyhow::Result<serde_json::Value> {
         // ensure the key is valid base16 characters, which also ensures we are only
         // reading in the subdirectory FIXME: This is an inefficient way of
@@ -269,6 +299,8 @@ impl DB {
         Ok(from_str::<serde_json::Value>(&contents)?)
     }
 
+    /// Store the pending entry. This is only used in case of server-restart to
+    /// pupulate the pending table.
     pub fn write_pending(
         &self,
         key: &str,
@@ -316,10 +348,15 @@ impl DB {
 
 #[derive(SerdeSerialize, SerdeDeserialize, Clone)]
 #[serde(rename_all = "lowercase")]
+/// Status of a submission as returned by the wallet-proxy.
 enum SubmissionStatus {
+    /// Submission is absent, most likely it was invalid.
     Absent,
+    /// Submission is received, but not yet committed to any blocks.
     Received,
+    /// Submission is committed to one or more blocks.
     Committed,
+    /// Submission is finalized in a block.
     Finalized,
 }
 
@@ -332,6 +369,10 @@ struct SubmissionStatusResponse {
     status: SubmissionStatus,
 }
 
+/// Query the status of the transaction until it is finalized, or absent.
+/// TODO: This currently does not terminate polling until either it is finalized
+/// or absent. In a production server we'd likely want to give up at some point
+/// and only poll on queries for the identity.
 async fn followup(
     client: Client,
     db: DB,
@@ -412,6 +453,7 @@ async fn followup(
                     }
                 }
             }
+            // Wait for 5 seconds.
             std::thread::sleep(Duration::new(5, 0));
         } else {
             break;
@@ -430,7 +472,7 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Reading the provided IP, AR and global context configurations.");
 
-    let server_config = Arc::new(load_server_config(&opt)?);
+    let server_config = Arc::new(ServerConfig::from_opts(&opt)?);
 
     // Client used to make HTTP requests to both the id verifier,
     // as well as to submit the initial account creation.
@@ -447,6 +489,7 @@ async fn main() -> anyhow::Result<()> {
 
     let retrieval_db = db.clone();
 
+    // The endpoint for querying the identity object.
     let retrieve_identity = warp::get()
         .and(warp::path!("api" / "identity" / String))
         .map(move |id_cred_pub: String| {
@@ -454,7 +497,7 @@ async fn main() -> anyhow::Result<()> {
             if retrieval_db.is_pending(&id_cred_pub) {
                 info!("Identity object is pending.");
                 let identity_token_container = IdentityTokenContainer {
-                    status: "pending".to_string(),
+                    status: IdentityStatus::Pending,
                     detail: "Pending initial account creation.".to_string(),
                     token:  serde_json::Value::Null,
                 };
@@ -465,7 +508,7 @@ async fn main() -> anyhow::Result<()> {
                         info!("Identity object found");
 
                         let identity_token_container = IdentityTokenContainer {
-                            status: "done".to_string(),
+                            status: IdentityStatus::Done,
                             token:  identity_object,
                             detail: "".to_string(),
                         };
@@ -474,7 +517,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(_e) => {
                         info!("Identity object does not exist or the request is malformed.");
                         let error_identity_token_container = IdentityTokenContainer {
-                            status: "error".to_string(),
+                            status: IdentityStatus::Error,
                             detail: "Identity object does not exist".to_string(),
                             token:  serde_json::Value::Null,
                         };
@@ -485,6 +528,7 @@ async fn main() -> anyhow::Result<()> {
         });
 
     let server_config_validate = Arc::clone(&server_config);
+    // Endpoint for creating the identity object.
     let create_identity = warp::post()
         .and(warp::filters::body::content_length_limit(50 * 1024))
         .and(warp::path!("api" / "identity"))
@@ -506,6 +550,8 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// A helper macro to check whether the expression is an error, an in that case
+/// fail with internal server error.
 macro_rules! ok_or_500 (
     ($e: expr, $s: expr) => {
         if $e.is_err() {
@@ -563,22 +609,32 @@ async fn submit_account_creation(
 }
 
 #[derive(Debug)]
+/// An internal error type used by this server to manage error handling.
 enum IdRequestRejection {
+    /// Request was made with an unsupported version of the identity object.
     UnsupportedVersion,
+    /// The request had invalid proofs.
     InvalidProofs,
+    /// The identity verifier could not validate the supporting evidence, e.g.,
+    /// passport.
     IdVerifierFailure,
+    /// Internal server error occurred.
     InternalError,
+    /// Registration ID was reused, leading to initial account creation failure.
     ReuseOfRegId,
 }
 
 impl warp::reject::Reject for IdRequestRejection {}
 
 #[derive(SerdeSerialize)]
+/// Response in case of an error. This is going to be encoded as a JSON body
+/// with fields 'code' and 'message'.
 struct ErrorResponse {
     code:    u16,
     message: &'static str,
 }
 
+/// Helper function to make the reply.
 fn mk_reply(message: &'static str, code: StatusCode) -> impl warp::Reply {
     let msg = ErrorResponse {
         message,
@@ -634,9 +690,9 @@ async fn create_signed_identity_object(
     server_config: Arc<ServerConfig>,
     db: DB,
     client: Client,
-    identity_object_input: ValidatedRequest,
+    identity_object_input: IdentityObjectRequest,
 ) -> Result<impl Reply, Rejection> {
-    let request = identity_object_input.request;
+    let request = identity_object_input.id_object_request.value;
 
     // Identity verification process between the identity provider and the identity
     // verifier. In this example the identity verifier is queried and will
@@ -795,7 +851,7 @@ async fn create_signed_identity_object(
 /// - Err(msg) where `msg` is a string describing the error.
 fn extract_and_validate_request(
     server_config: Arc<ServerConfig>,
-) -> impl Filter<Extract = (ValidatedRequest,), Error = Rejection> + Clone {
+) -> impl Filter<Extract = (IdentityObjectRequest,), Error = Rejection> + Clone {
     warp::body::json().and_then(move |input: IdentityObjectRequest| {
         let server_config = server_config.clone();
         async move {
@@ -803,7 +859,7 @@ fn extract_and_validate_request(
             if input.id_object_request.version != VERSION_0 {
                 return Err(warp::reject::custom(IdRequestRejection::UnsupportedVersion));
             }
-            let request = input.id_object_request.value;
+            let request = &input.id_object_request.value;
 
             let context = IPContext {
                 ip_info:        &server_config.ip_data.public_ip_info,
@@ -811,13 +867,10 @@ fn extract_and_validate_request(
                 global_context: &server_config.global,
             };
 
-            match ip_validate_request(&request, context) {
+            match ip_validate_request(request, context) {
                 Ok(()) => {
                     info!("Request is valid.");
-                    Ok(ValidatedRequest {
-                        request,
-                        redirect_uri: input.redirect_uri,
-                    })
+                    Ok(input)
                 }
                 Err(e) => {
                     warn!("Request is invalid {}.", e);
