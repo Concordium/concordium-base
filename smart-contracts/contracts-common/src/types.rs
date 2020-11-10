@@ -273,7 +273,7 @@ pub mod schema {
                 Type::List(_, ty) => Type::List(size_len, ty),
                 Type::Set(_, ty) => Type::Set(size_len, ty),
                 Type::Map(_, key_ty, val_ty) => Type::Map(size_len, key_ty, val_ty),
-                _ => panic!("Only schema types with variable size can be mapped to new size."),
+                t => t,
             }
         }
     }

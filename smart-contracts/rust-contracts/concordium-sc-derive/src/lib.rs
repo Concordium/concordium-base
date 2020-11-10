@@ -708,7 +708,10 @@ pub fn contract_state(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 /// Derive the `SchemaType` trait for a type.
-#[proc_macro_derive(SchemaType)]
+#[proc_macro_derive(
+    SchemaType,
+    attributes(size_length, map_size_length, set_size_length, string_size_length)
+)]
 pub fn schema_type_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).expect("Cannot parse input.");
 
@@ -760,7 +763,7 @@ fn schema_type_field_type(field: &syn::Field) -> proc_macro2::TokenStream {
     {
         let size = format_ident!("U{}", 8 * l);
         quote! {
-            <#field_type as SchemaType>::get_type().set_size_length(concordium-sc-base::schema::SizeLength::#size)
+            <#field_type as SchemaType>::get_type().set_size_length(concordium_sc_base::schema::SizeLength::#size)
         }
     } else {
         quote! {

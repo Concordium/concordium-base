@@ -68,7 +68,7 @@ struct InitParams {
     account_holders: BTreeSet<AccountAddress>,
 
     // How many of the account holders need to agree before funds are released
-    transfer_agreement_threshold: u32,
+    transfer_agreement_threshold: u8,
 
     // How long to wait before dropping a request due to lack of support
     // N.B. If this is set too long, in practice the chain might !ome busy
@@ -91,8 +91,8 @@ pub struct State {
     // Requests which have not been dropped due to timing out or due to being agreed to yet
     // The request ID, the associated amount, when it times out, who is making the transfer and
     // which account holders support this transfer
-    // #[map_size_length = 2]
-    // #[skip_order_check]
+    #[map_size_length = 2]
+    #[skip_order_check]
     requests: BTreeMap<TransferRequestId, TransferRequest>,
 }
 
@@ -128,7 +128,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     let init_params: InitParams = ctx.parameter_cursor().get()?;
     ensure!(init_params.account_holders.len() >= 2, InitError::InsufficientAccountHolders);
     ensure!(
-        init_params.transfer_agreement_threshold <= init_params.account_holders.len() as u32,
+        init_params.transfer_agreement_threshold <= init_params.account_holders.len() as u8,
         InitError::ThresholdAboveAccountHolders
     );
     ensure!(init_params.transfer_agreement_threshold >= 2, InitError::ThresholdBelowTwo);
@@ -268,7 +268,7 @@ fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
             matching_request.supporters.insert(sender_address);
 
             // Check if the have enough supporters to trigger
-            if matching_request.supporters.len() as u32
+            if matching_request.supporters.len() as u8
                 >= state.init_params.transfer_agreement_threshold
             {
                 // Remove the transfer from the list of outstanding transfers and send it
