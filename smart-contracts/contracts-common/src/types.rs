@@ -262,4 +262,19 @@ pub mod schema {
         Struct(Fields),
         Enum(Vec<(String, Fields)>),
     }
+
+    impl Type {
+        #[doc(hidden)]
+        /// Sets the size_length of schema types, with variable size otherwise
+        /// panics. Used when deriving SchemaType using derive.
+        pub fn set_size_length(self, size_len: SizeLength) -> Type {
+            match self {
+                Type::String(_) => Type::String(size_len),
+                Type::List(_, ty) => Type::List(size_len, ty),
+                Type::Set(_, ty) => Type::Set(size_len, ty),
+                Type::Map(_, key_ty, val_ty) => Type::Map(size_len, key_ty, val_ty),
+                _ => panic!("Only schema types with variable size can be mapped to new size."),
+            }
+        }
+    }
 }

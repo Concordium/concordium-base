@@ -1151,7 +1151,7 @@ impl schema::Type {
                 };
                 let (name, fields_ty) = variants.get(idx).ok_or(ParseError::default())?;
                 let fields = fields_ty.to_json(source)?;
-                Ok(json!({ name : fields }))
+                Ok(json!({ name: fields }))
             }
         }
     }

@@ -751,6 +751,24 @@ pub fn schema_type_derive(input: TokenStream) -> TokenStream {
     out.into()
 }
 
+fn schema_type_field_type(field: &syn::Field) -> proc_macro2::TokenStream {
+    let field_type = &field.ty;
+    if let Some(l) = find_length_attribute(&field.attrs, "size_length")
+        .or_else(|| find_length_attribute(&field.attrs, "map_size_length"))
+        .or_else(|| find_length_attribute(&field.attrs, "set_size_length"))
+        .or_else(|| find_length_attribute(&field.attrs, "string_size_length"))
+    {
+        let size = format_ident!("U{}", 8 * l);
+        quote! {
+            <#field_type as SchemaType>::get_type().set_size_length(concordium-sc-base::schema::SizeLength::#size)
+        }
+    } else {
+        quote! {
+            <#field_type as SchemaType>::get_type()
+        }
+    }
+}
+
 fn schema_type_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
     match fields {
         syn::Fields::Named(_) => {
@@ -758,24 +776,16 @@ fn schema_type_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
                 .iter()
                 .map(|field| {
                     let field_name = field.ident.clone().unwrap().to_string(); // safe since named fields
-                    let field_type = &field.ty;
+                    let field_schema_type = schema_type_field_type(&field);
                     quote! {
-                        (String::from(#field_name), <#field_type as SchemaType>::get_type())
+                        (String::from(#field_name), #field_schema_type)
                     }
                 })
                 .collect();
             quote! { schema::Fields::Named(vec![ #(#fields_tokens),* ]) }
         }
         syn::Fields::Unnamed(_) => {
-            let fields_tokens: Vec<_> = fields
-                .iter()
-                .map(|field| {
-                    let field_type = &field.ty;
-                    quote! {
-                        <#field_type as SchemaType>::get_type()
-                    }
-                })
-                .collect();
+            let fields_tokens: Vec<_> = fields.iter().map(schema_type_field_type).collect();
             quote! { schema::Fields::Unnamed(vec![ #(#fields_tokens),* ]) }
         }
         syn::Fields::Unit => quote! { schema::Fields::Unit },

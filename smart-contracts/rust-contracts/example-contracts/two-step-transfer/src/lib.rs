@@ -63,8 +63,8 @@ struct TransferRequest {
 #[derive(Serialize, SchemaType)]
 struct InitParams {
     // Who is authorized to withdraw funds from this lockup (must be non-empty)
-    // #[set_size_length = 1]
-    // #[skip_order_check]
+    #[set_size_length = 1]
+    #[skip_order_check]
     account_holders: BTreeSet<AccountAddress>,
 
     // How many of the account holders need to agree before funds are released
