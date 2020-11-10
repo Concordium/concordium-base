@@ -124,12 +124,12 @@ Action description
 A ``receive``-function returns a *description of actions*, to be be executed and
 the host environment then attempts to execute these actions on the chain.
 
-The actions a contract can produce are:
+The possible actions a contract can produce are:
 
-- Accept: Do nothing, always succeeds.
-- Simple transfer: Send some amount of GTU from the balance of the instance to
-  some account.
-- Send: Invoke ``receive``-function of some smart contract instance.
+- **Accept** Do nothing, always succeeds.
+- **Simple transfer** Send some amount of GTU from the balance of the instance 
+  to some account.
+- **Send** Invoke ``receive``-function of a smart contract instance.
 
 
 If the actions fail to execute, the ``receive``-function is reverted, leaving
@@ -141,8 +141,8 @@ Action descriptions can be combined to describe a sequence of actions to be
 executed and have the second action to be executed depending on the first
 action.
 
-- And: Try the second action if the first succeeds, otherwise fail.
-- Or: Try the second action *only* if the first action fails.
+- **And** Try the second action if the first succeeds, otherwise fail.
+- **Or** Try the second action *only* if the first action fails.
 
 These combinators allow the action description to form a decision tree, where
 the leafs are the actions and the nodes are combinators.
@@ -150,7 +150,7 @@ the leafs are the actions and the nodes are combinators.
 .. graphviz::
     :align: center
     :caption: Example of an action description, which tries to transfer to Alice
-              and Bob, if this fails it will try to transfer to Charlie instead.
+              and then Bob, if any of these fails, it will try to transfer to Charlie instead.
 
     digraph G {
         node [color=transparent]
