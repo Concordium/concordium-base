@@ -182,6 +182,12 @@ mod serde_impl {
         }
     }
 
+    impl fmt::Display for ContractAddress {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "<{},{}>", self.index, self.subindex)
+        }
+    }
+
     struct Base58Visitor;
 
     impl<'de> Visitor<'de> for Base58Visitor {

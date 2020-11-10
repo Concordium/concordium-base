@@ -1048,73 +1048,43 @@ impl schema::Type {
             }
             Type::U8 => {
                 let n = u8::deserial(source)?;
-                Ok(json!({
-                    "type": "u8",
-                    "value": n
-                }))
+                Ok(Value::Number(n.into()))
             }
             Type::U16 => {
                 let n = u16::deserial(source)?;
-                Ok(json!({
-                    "type": "u16",
-                    "value": n
-                }))
+                Ok(Value::Number(n.into()))
             }
             Type::U32 => {
                 let n = u32::deserial(source)?;
-                Ok(json!({
-                    "type": "u32",
-                    "value": n
-                }))
+                Ok(Value::Number(n.into()))
             }
             Type::U64 => {
                 let n = u64::deserial(source)?;
-                Ok(json!({
-                    "type": "u64",
-                    "value": n
-                }))
+                Ok(Value::Number(n.into()))
             }
             Type::I8 => {
                 let n = i8::deserial(source)?;
-                Ok(json!({
-                    "type": "i8",
-                    "value": n
-                }))
+                Ok(Value::Number(n.into()))
             }
             Type::I16 => {
                 let n = i16::deserial(source)?;
-                Ok(json!({
-                    "type": "i16",
-                    "value": n
-                }))
+                Ok(Value::Number(n.into()))
             }
             Type::I32 => {
                 let n = i32::deserial(source)?;
-                Ok(json!({
-                    "type": "i32",
-                    "value": n
-                }))
+                Ok(Value::Number(n.into()))
             }
             Type::I64 => {
                 let n = i64::deserial(source)?;
-                Ok(json!({
-                    "type": "i64",
-                    "value": n
-                }))
+                Ok(Value::Number(n.into()))
             }
             Type::AccountAddress => {
                 let address = AccountAddress::deserial(source)?;
-                Ok(json!({
-                    "type": "account_address",
-                    "value": address.to_string()
-                }))
+                Ok(Value::String(address.to_string()))
             }
             Type::ContractAddress => {
                 let address = ContractAddress::deserial(source)?;
-                Ok(json!({
-                    "type": "account_address",
-                    "value": address
-                }))
+                Ok(Value::String(address.to_string()))
             }
             Type::Option(ty) => {
                 let idx = u8::deserial(source)?;
@@ -1128,20 +1098,12 @@ impl schema::Type {
                 } else {
                     Ok(Value::Null)
                 }?;
-                Ok(json!({
-                    "type": "option",
-                    "some": some,
-                    "value": value
-                }))
+                Ok(value)
             }
             Type::Pair(left_type, right_type) => {
                 let left = left_type.to_json(source)?;
                 let right = right_type.to_json(source)?;
-                Ok(json!({
-                    "type": "pair",
-                    "left": left,
-                    "right": right
-                }))
+                Ok(Value::Array(vec![left, right]))
             }
             Type::String(size_len) => {
                 let len = deserial_length(source, size_len)?;
@@ -1154,28 +1116,19 @@ impl schema::Type {
             }
             Type::List(size_len, ty) => {
                 let values = item_list_to_json(source, size_len, |s| ty.to_json(s))?;
-                Ok(json!({
-                    "type": "list",
-                    "value": Value::Array(values)
-                }))
+                Ok(Value::Array(values))
             }
             Type::Set(size_len, ty) => {
                 let values = item_list_to_json(source, size_len, |s| ty.to_json(s))?;
-                Ok(json!({
-                    "type": "set",
-                    "value": Value::Array(values)
-                }))
+                Ok(Value::Array(values))
             }
             Type::Map(size_len, key_type, value_type) => {
                 let values = item_list_to_json(source, size_len, |s| {
                     let key = key_type.to_json(s)?;
                     let value = value_type.to_json(s)?;
-                    Ok(json!({"key" : key, "value": value}))
+                    Ok(Value::Array(vec![key, value]))
                 })?;
-                Ok(json!({
-                    "type": "map",
-                    "value": Value::Array(values)
-                }))
+                Ok(Value::Array(values))
             }
             Type::Array(len, ty) => {
                 let len: usize = (*len).try_into()?;
@@ -1184,17 +1137,11 @@ impl schema::Type {
                     let value = ty.to_json(source)?;
                     values.push(value);
                 }
-                Ok(json!({
-                    "type": "array",
-                    "value": values
-                }))
+                Ok(Value::Array(values))
             }
             Type::Struct(fields_ty) => {
                 let fields = fields_ty.to_json(source)?;
-                Ok(json!({
-                    "type": "struct",
-                    "fields": fields
-                }))
+                Ok(fields)
             }
             Type::Enum(variants) => {
                 let idx = if variants.len() <= 256 {
@@ -1202,17 +1149,9 @@ impl schema::Type {
                 } else {
                     u32::deserial(source)? as usize
                 };
-                let variant = variants.get(idx);
-                let (name, fields_ty) = match variant {
-                    None => return Err(ParseError::default()),
-                    Some(entry) => entry,
-                };
+                let (name, fields_ty) = variants.get(idx).ok_or(ParseError::default())?;
                 let fields = fields_ty.to_json(source)?;
-                Ok(json!({
-                    "type": "variant",
-                    "name": name,
-                    "fields": fields
-                }))
+                Ok(json!({ name : fields }))
             }
         }
     }
