@@ -218,32 +218,42 @@ pub mod schema {
         Unit,
     }
 
+    // TODO: Extend with LEB128
+    /// Type of the variable used to encode the length of Sets, List, Maps
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[cfg_attr(test, derive(arbitrary::Arbitrary))]
+    pub enum SizeLength {
+        U8,
+        U16,
+        U32,
+        U64,
+    }
+
     /// Schema type used to describe the different types in a rust smart
     /// contract.
     #[derive(Debug, Clone, PartialEq, Eq)]
     #[cfg_attr(test, derive(arbitrary::Arbitrary))]
     pub enum Type {
+        Unit,
+        Bool,
         U8,
         U16,
         U32,
         U64,
-        String,
-        Unit,
-        Bool,
-        Bytes,
-        Pair(Box<Type>, Box<Type>),
-        Struct(Fields),
-        Enum(Vec<(String, Fields)>),
-        List(Box<Type>),
-        Map(Box<Type>, Box<Type>),
-        Set(Box<Type>),
-        Option(Box<Type>), // Sum(Box<Type>, Box<Type>),
-        AccountAddress,
-        ContractAddress,
-        Array(u32, Box<Type>),
         I8,
         I16,
         I32,
         I64,
+        AccountAddress,
+        ContractAddress,
+        Option(Box<Type>),
+        Pair(Box<Type>, Box<Type>),
+        String(SizeLength),
+        List(SizeLength, Box<Type>),
+        Set(SizeLength, Box<Type>),
+        Map(SizeLength, Box<Type>, Box<Type>),
+        Array(u32, Box<Type>),
+        Struct(Fields),
+        Enum(Vec<(String, Fields)>),
     }
 }
