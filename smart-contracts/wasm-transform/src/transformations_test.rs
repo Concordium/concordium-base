@@ -142,6 +142,7 @@ mod transformation_tests {
         // testing below)
         let f = Code {
             locals: mk_locals(&[I32, I64]),
+            ty_idx: 0,
             /* For testing the transformation of the body, we always use these exemplary locals. */
             expr:       Expression {
                 instrs: body_orig,
@@ -159,6 +160,7 @@ mod transformation_tests {
         let f = Code {
             locals:     vec![],
             ty:         Rc::new(FunctionType::empty()),
+            ty_idx:     0,
             expr:       Expression::from(vec![End]),
             num_locals: 0,
         };
@@ -172,6 +174,7 @@ mod transformation_tests {
         let ctx = TransformationContext::empty();
         let f = Code {
             locals:     mk_locals(&[I32, I64]),
+            ty_idx:     0,
             expr:       Expression {
                 instrs: vec![End],
             },
@@ -187,6 +190,7 @@ mod transformation_tests {
         let ctx = TransformationContext::empty();
         let f = Code {
             ty:         Rc::new(FunctionType::empty()), // irrelevant
+            ty_idx:     0,
             locals:     mk_locals(&[I64, I64]),
             expr:       Expression::from(vec![End]),
             num_locals: 2,

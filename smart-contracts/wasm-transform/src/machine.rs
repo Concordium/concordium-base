@@ -10,7 +10,7 @@ use std::{convert::TryInto, io::Write};
 pub trait Host<I> {
     fn tick_energy(x: u64) -> RunResult<()>;
     /// Call the host function.
-    fn call(&mut self, f: &I, memory: &mut Vec<u8>, stack: &mut Vec<StackValue>) -> RunResult<()>;
+    fn call(&mut self, f: &I, memory: &mut Vec<u8>, stack: &mut RuntimeStack) -> RunResult<()>;
 
     /// Call the host function, but before that check that the type
     /// is as expected.
@@ -18,7 +18,7 @@ pub trait Host<I> {
         &mut self,
         f: &I,
         memory: &mut Vec<u8>,
-        stack: &mut Vec<StackValue>,
+        stack: &mut RuntimeStack,
         ty: &FunctionType,
     ) -> RunResult<()>;
 }
@@ -61,25 +61,49 @@ impl From<Value> for i64 {
     }
 }
 
-struct RuntimeStack {
+pub struct RuntimeStack {
+    /// The vector containing the whole stack.
     stack: Vec<StackValue>,
+    /// The first free position. Pushing an element will
+    /// insert it at this position.
     pos: usize,
 }
 
 impl RuntimeStack {
+    #[inline(always)]
+    pub fn size(&self) -> usize { self.pos }
+
+    #[inline(always)]
+    pub fn split_off(&mut self, mid: usize) -> &[StackValue] {
+        let rest = &self.stack[mid..self.pos];
+        self.pos = mid;
+        rest
+    }
+
+    #[inline(always)]
     pub fn pop(&mut self) -> StackValue {
-        self.pos = self.pos.saturating_sub(1);
+        self.pos -= 1;
         self.stack[self.pos]
     }
 
+    #[inline(always)]
     pub fn push(&mut self, x: StackValue) {
-        self.stack[self.pos] = x;
+        if self.pos < self.stack.len() {
+            self.stack[self.pos] = x;
+        } else {
+            self.stack.push(x)
+        }
         self.pos += 1;
     }
 
-    pub fn peek_mut(&mut self) -> &mut StackValue {
-        &mut self.stack[self.pos.saturating_sub(1)]
-    }
+    #[inline(always)]
+    pub fn peek_mut(&mut self) -> &mut StackValue { &mut self.stack[self.pos - 1] }
+
+    #[inline(always)]
+    pub fn peek(&mut self) -> StackValue { self.stack[self.pos - 1] }
+
+    #[inline(always)]
+    pub fn set_pos(&mut self, pos: usize) { self.pos = pos; }
 }
 
 #[inline(always)]
@@ -159,11 +183,11 @@ fn read_i64(bytes: &[u8], pos: usize) -> RunResult<i64> {
 #[inline(always)]
 fn get_memory_pos(
     instructions: &[u8],
-    stack: &mut Vec<StackValue>,
+    stack: &mut RuntimeStack,
     pc: &mut usize,
 ) -> RunResult<usize> {
     let offset = get_u32(instructions, pc);
-    let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+    let top = stack.pop();
     let top = unsafe { top.short };
     let pos = top as usize + offset as usize;
     Ok(pos)
@@ -175,63 +199,63 @@ fn write_memory_at(memory: &mut [u8], pos: usize, bytes: &[u8]) -> RunResult<()>
 }
 
 #[inline(always)]
-fn unary_i32(stack: &mut Vec<StackValue>, f: impl Fn(i32) -> i32) -> RunResult<()> {
-    let val = stack.last_mut().ok_or_else(|| anyhow!("Stack exhausted"))?;
+fn unary_i32(stack: &mut RuntimeStack, f: impl Fn(i32) -> i32) -> RunResult<()> {
+    let val = stack.peek_mut();
     val.short = f(unsafe { val.short });
     Ok(())
 }
 
 #[inline(always)]
-fn unary_i64(stack: &mut Vec<StackValue>, f: impl Fn(i64) -> i64) -> RunResult<()> {
-    let val = stack.last_mut().ok_or_else(|| anyhow!("Stack exhausted"))?;
+fn unary_i64(stack: &mut RuntimeStack, f: impl Fn(i64) -> i64) -> RunResult<()> {
+    let val = stack.peek_mut();
     val.long = f(unsafe { val.long });
     Ok(())
 }
 
 #[inline(always)]
-fn binary_i32(stack: &mut Vec<StackValue>, f: impl Fn(i32, i32) -> i32) -> RunResult<()> {
-    let right = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
-    let left = stack.last_mut().ok_or_else(|| anyhow!("Stack exhausted"))?;
+fn binary_i32(stack: &mut RuntimeStack, f: impl Fn(i32, i32) -> i32) -> RunResult<()> {
+    let right = stack.pop();
+    let left = stack.peek_mut();
     left.short = f(unsafe { left.short }, unsafe { right.short });
     Ok(())
 }
 
 #[inline(always)]
 fn binary_i32_partial(
-    stack: &mut Vec<StackValue>,
+    stack: &mut RuntimeStack,
     f: impl Fn(i32, i32) -> Option<i32>,
 ) -> RunResult<()> {
-    let right = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
-    let left = stack.last_mut().ok_or_else(|| anyhow!("Stack exhausted"))?;
+    let right = stack.pop();
+    let left = stack.peek_mut();
     left.short = f(unsafe { left.short }, unsafe { right.short })
         .ok_or_else(|| anyhow!("Runtime exception in i32 binary."))?;
     Ok(())
 }
 
 #[inline(always)]
-fn binary_i64(stack: &mut Vec<StackValue>, f: impl Fn(i64, i64) -> i64) -> RunResult<()> {
-    let right = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
-    let left = stack.last_mut().ok_or_else(|| anyhow!("Stack exhausted"))?;
+fn binary_i64(stack: &mut RuntimeStack, f: impl Fn(i64, i64) -> i64) -> RunResult<()> {
+    let right = stack.pop();
+    let left = stack.peek_mut();
     left.long = f(unsafe { left.long }, unsafe { right.long });
     Ok(())
 }
 
 #[inline(always)]
 fn binary_i64_partial(
-    stack: &mut Vec<StackValue>,
+    stack: &mut RuntimeStack,
     f: impl Fn(i64, i64) -> Option<i64>,
 ) -> RunResult<()> {
-    let right = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
-    let left = stack.last_mut().ok_or_else(|| anyhow!("Stack exhausted"))?;
+    let right = stack.pop();
+    let left = stack.peek_mut();
     left.long = f(unsafe { left.long }, unsafe { right.long })
         .ok_or_else(|| anyhow!("Runtime exception in i64 binary"))?;
     Ok(())
 }
 
 #[inline(always)]
-fn binary_i64_test(stack: &mut Vec<StackValue>, f: impl Fn(i64, i64) -> i32) -> RunResult<()> {
-    let right = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
-    let left = stack.last_mut().ok_or_else(|| anyhow!("Stack exhausted"))?;
+fn binary_i64_test(stack: &mut RuntimeStack, f: impl Fn(i64, i64) -> i32) -> RunResult<()> {
+    let right = stack.pop();
+    let left = stack.peek_mut();
     left.short = f(unsafe { left.long }, unsafe { right.long });
     Ok(())
 }
@@ -291,7 +315,10 @@ impl<I: RenameImports> Artifact<I> {
         let mut pc = 0;
         let mut instructions: &[u8] = &self.code[start as usize].code.bytes;
         // TODO: We could actually allocate an exact one here.
-        let mut stack: Vec<StackValue> = Vec::with_capacity(1000);
+        let mut stack: RuntimeStack = RuntimeStack {
+            stack: Vec::with_capacity(1000),
+            pos:   0,
+        };
         let mut function_frames: Vec<FunctionState> = Vec::new();
         let mut return_type = self.code[start as usize].return_type;
 
@@ -314,7 +341,7 @@ impl<I: RenameImports> Artifact<I> {
                 InternalOpcode::Unreachable => bail!("Unreachable."),
                 InternalOpcode::If => {
                     let else_target = get_u32(instructions, &mut pc);
-                    let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted."))?;
+                    let top = stack.pop();
                     if unsafe { top.short } == 0 {
                         // jump to the else branch.
                         pc = else_target as usize;
@@ -324,31 +351,31 @@ impl<I: RenameImports> Artifact<I> {
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
                     if diff & 0x8000_0000 != 0 {
-                        let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted."))?;
-                        stack.truncate(stack.len() - (diff & !0x8000_0000) as usize);
+                        let top = stack.pop();
+                        stack.set_pos(stack.size() - (diff & !0x8000_0000) as usize);
                         stack.push(top)
                     } else {
-                        stack.truncate(stack.len() - diff as usize);
+                        stack.set_pos(stack.size() - diff as usize);
                     }
                     pc = target as usize;
                 }
                 InternalOpcode::BrIf => {
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
-                    let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted."))?;
+                    let top = stack.pop();
                     if unsafe { top.short } != 0 {
                         if diff & 0x8000_0000 != 0 {
-                            let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted."))?;
-                            stack.truncate(stack.len() - (diff & !0x8000_0000) as usize);
+                            let top = stack.pop();
+                            stack.set_pos(stack.size() - (diff & !0x8000_0000) as usize);
                             stack.push(top)
                         } else {
-                            stack.truncate(stack.len() - diff as usize);
+                            stack.set_pos(stack.size() - diff as usize);
                         }
                         pc = target as usize;
                     } // else do nothing
                 }
                 InternalOpcode::BrTable => {
-                    let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted."))?;
+                    let top = stack.pop();
                     let num_labels = get_u16(instructions, &mut pc);
                     let top: u32 = unsafe { top.short } as u32;
                     if top < u32::from(num_labels) {
@@ -357,11 +384,11 @@ impl<I: RenameImports> Artifact<I> {
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
                     if diff & 0x8000_0000 != 0 {
-                        let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted."))?;
-                        stack.truncate(stack.len() - (diff & !0x8000_0000) as usize);
+                        let top = stack.pop();
+                        stack.set_pos(stack.size() - (diff & !0x8000_0000) as usize);
                         stack.push(top)
                     } else {
-                        stack.truncate(stack.len() - diff as usize);
+                        stack.set_pos(stack.size() - diff as usize);
                     }
                     pc = target as usize;
                 }
@@ -369,11 +396,11 @@ impl<I: RenameImports> Artifact<I> {
                     // this is the same as return
                     if let Some(top_frame) = function_frames.pop() {
                         if return_type.is_some() {
-                            let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted."))?;
-                            stack.truncate(top_frame.height);
+                            let top = stack.pop();
+                            stack.set_pos(top_frame.height);
                             stack.push(top)
                         } else {
-                            stack.truncate(top_frame.height);
+                            stack.set_pos(top_frame.height);
                         }
                         pc = top_frame.pc;
                         locals = top_frame.locals;
@@ -393,7 +420,7 @@ impl<I: RenameImports> Artifact<I> {
                             pc,
                             locals,
                             instructions,
-                            height: stack.len(),
+                            height: stack.size(),
                             return_type,
                         };
                         function_frames.push(current_frame);
@@ -402,7 +429,9 @@ impl<I: RenameImports> Artifact<I> {
                             .get(idx as usize - self.imports.len())
                             .ok_or_else(|| anyhow!("Accessing non-existent code."))?;
                         locals = Vec::with_capacity(f.locals.len());
-                        locals.extend(stack.drain(stack.len() - f.num_params as usize..));
+                        locals.extend_from_slice(
+                            stack.split_off(stack.size() - f.num_params as usize),
+                        );
 
                         for ty in f.locals[f.num_params as usize..].iter() {
                             match ty {
@@ -425,7 +454,7 @@ impl<I: RenameImports> Artifact<I> {
                         .ty
                         .get(ty_idx as usize)
                         .ok_or_else(|| anyhow!("Non-existent type."))?;
-                    let idx = stack.pop().ok_or_else(|| anyhow!("Stack exhausted."))?;
+                    let idx = stack.pop();
                     let idx = unsafe { idx.short } as u32;
                     if let Some(Some(f_idx)) = self.table.functions.get(idx as usize) {
                         if let Some(f) = self.imports.get(*f_idx as usize) {
@@ -449,12 +478,14 @@ impl<I: RenameImports> Artifact<I> {
                                 pc,
                                 locals,
                                 instructions,
-                                height: stack.len(),
+                                height: stack.size(),
                                 return_type,
                             };
                             function_frames.push(current_frame);
                             locals = Vec::with_capacity(f.locals.len());
-                            locals.extend(stack.drain(stack.len() - f.num_params as usize..));
+                            locals.extend_from_slice(
+                                stack.split_off(stack.size() - f.num_params as usize),
+                            );
 
                             for ty in f.locals[f.num_params as usize..].iter() {
                                 match ty {
@@ -478,11 +509,10 @@ impl<I: RenameImports> Artifact<I> {
                     stack.pop();
                 }
                 InternalOpcode::Select => {
-                    let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
-                    let t2 = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let top = stack.pop();
+                    let t2 = stack.pop();
                     if unsafe { top.short } == 0 {
-                        stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?; // FIXME: We don't need to panic here.
-                        stack.push(t2)
+                        *stack.peek_mut() = t2;
                     } // else t1 remains on the top of the stack.
                 }
                 InternalOpcode::LocalGet => {
@@ -491,12 +521,12 @@ impl<I: RenameImports> Artifact<I> {
                 }
                 InternalOpcode::LocalSet => {
                     let idx = get_u16(instructions, &mut pc);
-                    let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let top = stack.pop();
                     locals[idx as usize] = top
                 }
                 InternalOpcode::LocalTee => {
                     let idx = get_u16(instructions, &mut pc);
-                    let top = *stack.last().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let top = stack.peek();
                     locals[idx as usize] = top
                 }
                 InternalOpcode::GlobalGet => {
@@ -505,7 +535,7 @@ impl<I: RenameImports> Artifact<I> {
                 }
                 InternalOpcode::GlobalSet => {
                     let idx = get_u16(instructions, &mut pc);
-                    let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let top = stack.pop();
                     globals[idx as usize] = top
                 }
                 InternalOpcode::I32Load => {
@@ -569,43 +599,43 @@ impl<I: RenameImports> Artifact<I> {
                     stack.push(StackValue::from(val as i64))
                 }
                 InternalOpcode::I32Store => {
-                    let val = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let val = stack.pop();
                     let val = unsafe { val.short };
                     let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     write_memory_at(&mut memory, pos, &val.to_le_bytes())?;
                 }
                 InternalOpcode::I64Store => {
-                    let val = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let val = stack.pop();
                     let val = unsafe { val.long };
                     let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     write_memory_at(&mut memory, pos, &val.to_le_bytes())?;
                 }
                 InternalOpcode::I32Store8 => {
-                    let val = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let val = stack.pop();
                     let val = unsafe { val.short };
                     let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     write_memory_at(&mut memory, pos, &val.to_le_bytes()[..1])?;
                 }
                 InternalOpcode::I32Store16 => {
-                    let val = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let val = stack.pop();
                     let val = unsafe { val.short };
                     let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     write_memory_at(&mut memory, pos, &val.to_le_bytes()[..2])?;
                 }
                 InternalOpcode::I64Store8 => {
-                    let val = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let val = stack.pop();
                     let val = unsafe { val.long };
                     let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     write_memory_at(&mut memory, pos, &val.to_le_bytes()[..1])?;
                 }
                 InternalOpcode::I64Store16 => {
-                    let val = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let val = stack.pop();
                     let val = unsafe { val.long };
                     let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     write_memory_at(&mut memory, pos, &val.to_le_bytes()[..2])?;
                 }
                 InternalOpcode::I64Store32 => {
-                    let val = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let val = stack.pop();
                     let val = unsafe { val.long };
                     let pos = get_memory_pos(instructions, &mut stack, &mut pc)?;
                     write_memory_at(&mut memory, pos, &val.to_le_bytes()[..4])?;
@@ -615,14 +645,14 @@ impl<I: RenameImports> Artifact<I> {
                     stack.push(StackValue::from(l as i32))
                 }
                 InternalOpcode::MemoryGrow => {
-                    let val = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let val = stack.peek_mut();
                     let n = unsafe { val.short } as u32;
                     let sz = memory.len() / PAGE_SIZE as usize;
                     if sz + n as usize > max_memory {
-                        stack.push(StackValue::from(-1i32))
+                        val.short = -1i32;
                     } else {
                         memory.resize((sz + n as usize) * PAGE_SIZE as usize, 0);
-                        stack.push(StackValue::from(sz as i32));
+                        val.short = sz as i32;
                     }
                 }
                 InternalOpcode::I32Const => {
@@ -634,15 +664,13 @@ impl<I: RenameImports> Artifact<I> {
                     stack.push(StackValue::from(val as i64));
                 }
                 InternalOpcode::I32Eqz => {
-                    let val = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
-                    let val = unsafe { val.short };
-                    stack.push(StackValue::from(
-                        if val == 0 {
-                            1i32
-                        } else {
-                            0i32
-                        },
-                    ))
+                    let top = stack.peek_mut();
+                    let val = unsafe { top.short };
+                    top.short = if val == 0 {
+                        1i32
+                    } else {
+                        0i32
+                    };
                 }
                 InternalOpcode::I32Eq => {
                     binary_i32(&mut stack, |left, right| (left == right) as i32)?;
@@ -675,15 +703,13 @@ impl<I: RenameImports> Artifact<I> {
                     binary_i32(&mut stack, |left, right| ((left as u32) >= (right as u32)) as i32)?;
                 }
                 InternalOpcode::I64Eqz => {
-                    let val = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
-                    let val = unsafe { val.long };
-                    stack.push(StackValue::from(
-                        if val == 0 {
-                            1i32
-                        } else {
-                            0i32
-                        },
-                    ))
+                    let top = stack.peek_mut();
+                    let val = unsafe { top.long };
+                    top.short = if val == 0 {
+                        1i32
+                    } else {
+                        0i32
+                    };
                 }
                 InternalOpcode::I64Eq => {
                     binary_i64_test(&mut stack, |left, right| (left == right) as i32)?;
@@ -840,29 +866,29 @@ impl<I: RenameImports> Artifact<I> {
                     binary_i64(&mut stack, |x, y| x.rotate_right((y as u64 % 64) as u32))?;
                 }
                 InternalOpcode::I32WrapI64 => {
-                    let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
-                    stack.push(StackValue::from(unsafe { top.long } as i32));
+                    let top = stack.peek_mut();
+                    top.short = unsafe { top.long } as i32;
                 }
                 InternalOpcode::I64ExtendI32S => {
-                    let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
-                    stack.push(StackValue::from(unsafe { top.short } as i64));
+                    let top = stack.peek_mut();
+                    top.long = unsafe { top.short } as i64;
                 }
                 InternalOpcode::I64ExtendI32U => {
-                    let top = stack.pop().ok_or_else(|| anyhow!("Stack exhausted"))?;
+                    let top = stack.peek_mut();
                     // The two as' are important since the semantics of the cast in rust is that
                     // it will sign extend if the source is signed. So first we make it unsigned,
                     // and then extend, making it so that it is extended with 0's.
-                    stack.push(StackValue::from(unsafe { top.short } as u32 as i64));
+                    top.long = unsafe { top.short } as u32 as i64;
                 }
             }
         }
         match f.return_type {
             Some(ValueType::I32) => {
-                let val = stack.pop().ok_or_else(|| anyhow!("Stack exhausted."))?;
+                let val = stack.pop();
                 Ok(Some(Value::I32(unsafe { val.short })))
             }
             Some(ValueType::I64) => {
-                let val = stack.pop().ok_or_else(|| anyhow!("Stack exhausted."))?;
+                let val = stack.pop();
                 Ok(Some(Value::I64(unsafe { val.long })))
             }
             None => Ok(None),
