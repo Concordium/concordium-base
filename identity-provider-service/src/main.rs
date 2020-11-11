@@ -371,6 +371,15 @@ struct SubmissionStatusResponse {
     status: SubmissionStatus,
 }
 
+/// Parameters of the get request.
+#[derive(SerdeDeserialize)]
+struct GetParameters {
+    #[serde(rename = "state")]
+    state: String,
+    #[serde(rename = "redirect_uri")]
+    redirect_uri: String,
+}
+
 /// Query the status of the transaction until it is finalized, or absent.
 /// TODO: This currently does not terminate polling until either it is finalized
 /// or absent. In a production server we'd likely want to give up at some point
@@ -530,11 +539,16 @@ async fn main() -> anyhow::Result<()> {
         });
 
     let server_config_validate = Arc::clone(&server_config);
+    let server_config_validate_query = Arc::clone(&server_config);
     // Endpoint for creating the identity object.
     let create_identity = warp::post()
         .and(warp::filters::body::content_length_limit(50 * 1024))
         .and(warp::path!("api" / "identity"))
         .and(extract_and_validate_request(server_config_validate))
+        .or(warp::get().and(warp::path!("api" / "identity")).and(
+            extract_and_validate_request_query(server_config_validate_query),
+        ))
+        .unify()
         .and_then(move |idi| {
             create_signed_identity_object(
                 Arc::clone(&server_config),
@@ -624,6 +638,8 @@ enum IdRequestRejection {
     InternalError,
     /// Registration ID was reused, leading to initial account creation failure.
     ReuseOfRegId,
+    /// Malformed request.
+    Malformed,
 }
 
 impl warp::reject::Reject for IdRequestRejection {}
@@ -669,6 +685,10 @@ async fn handle_rejection(err: Rejection) -> Result<impl warp::Reply, Infallible
     } else if let Some(IdRequestRejection::ReuseOfRegId) = err.find() {
         let code = StatusCode::BAD_REQUEST;
         let message = "Reuse of RegId";
+        Ok(mk_reply(message, code))
+    } else if let Some(IdRequestRejection::Malformed) = err.find() {
+        let code = StatusCode::BAD_REQUEST;
+        let message = "Malformed request.";
         Ok(mk_reply(message, code))
     } else if err
         .find::<warp::filters::body::BodyDeserializeError>()
@@ -845,6 +865,34 @@ async fn create_signed_identity_object(
     ))
 }
 
+/// A common function that validates the cryptographic proofs in the request.
+fn validate_worker(
+    server_config: &Arc<ServerConfig>,
+    input: IdentityObjectRequest,
+) -> Result<IdentityObjectRequest, IdRequestRejection> {
+    if input.id_object_request.version != VERSION_0 {
+        return Err(IdRequestRejection::UnsupportedVersion);
+    }
+    let request = &input.id_object_request.value;
+
+    let context = IPContext {
+        ip_info:        &server_config.ip_data.public_ip_info,
+        ars_infos:      &server_config.ars.anonymity_revokers,
+        global_context: &server_config.global,
+    };
+
+    match ip_validate_request(request, context) {
+        Ok(()) => {
+            info!("Request is valid.");
+            Ok(input)
+        }
+        Err(e) => {
+            warn!("Request is invalid {}.", e);
+            Err(IdRequestRejection::InvalidProofs)
+        }
+    }
+}
+
 /// Validate that the received request is well-formed.
 /// This check that all the cryptographic values are valid, and that the zero
 /// knowledge proofs in the request are valid.
@@ -860,25 +908,48 @@ fn extract_and_validate_request(
         let server_config = server_config.clone();
         async move {
             info!("Queried for creating an identity");
-            if input.id_object_request.version != VERSION_0 {
-                return Err(warp::reject::custom(IdRequestRejection::UnsupportedVersion));
+
+            match validate_worker(&server_config, input) {
+                Ok(r) => Ok(r),
+                Err(e) => {
+                    warn!("Request is invalid {:#?}.", e);
+                    Err(warp::reject::custom(e))
+                }
             }
-            let request = &input.id_object_request.value;
+        }
+    })
+}
 
-            let context = IPContext {
-                ip_info:        &server_config.ip_data.public_ip_info,
-                ars_infos:      &server_config.ars.anonymity_revokers,
-                global_context: &server_config.global,
+/// Validate that the received request is well-formed.
+/// This check that all the cryptographic values are valid, and that the zero
+/// knowledge proofs in the request are valid.
+///
+/// The return value is either
+///
+/// - Ok(ValidatedRequest) if the request is valid or
+/// - Err(msg) where `msg` is a string describing the error.
+fn extract_and_validate_request_query(
+    server_config: Arc<ServerConfig>,
+) -> impl Filter<Extract = (IdentityObjectRequest,), Error = Rejection> + Clone {
+    warp::query().and_then(move |input: GetParameters| {
+        let server_config = server_config.clone();
+        async move {
+            info!("Queried for creating an identity");
+            let id_object_request = match from_str::<Versioned<_>>(&input.state) {
+                Ok(v) => v,
+                Err(_) => return Err(warp::reject::custom(IdRequestRejection::Malformed)),
             };
-
-            match ip_validate_request(request, context) {
-                Ok(()) => {
+            match validate_worker(&server_config, IdentityObjectRequest {
+                id_object_request,
+                redirect_uri: input.redirect_uri,
+            }) {
+                Ok(v) => {
                     info!("Request is valid.");
-                    Ok(input)
+                    Ok(v)
                 }
                 Err(e) => {
-                    warn!("Request is invalid {}.", e);
-                    Err(warp::reject::custom(IdRequestRejection::InvalidProofs))
+                    warn!("Request is invalid {:#?}.", e);
+                    Err(warp::reject::custom(e))
                 }
             }
         }
