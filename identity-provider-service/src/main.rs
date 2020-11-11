@@ -263,6 +263,7 @@ impl DB {
         &self,
         key: &str,
         obj: &Versioned<IdentityObject<IpPairing, ArCurve, AttributeKind>>,
+        init_credential: &Versioned<AccountCredential<IpPairing, ArCurve, AttributeKind>>,
     ) -> anyhow::Result<()> {
         let _lock = self
             .pending
@@ -272,7 +273,8 @@ impl DB {
             let file = std::fs::File::create(self.root.join("identity").join(key))?;
             let stored_obj = json!({
                 "identityObject": obj,
-                "accountAddress": AccountAddress::new(&obj.value.pre_identity_object.pub_info_for_ip.reg_id)
+                "accountAddress": AccountAddress::new(&obj.value.pre_identity_object.pub_info_for_ip.reg_id),
+                "credential": init_credential
             });
             serde_json::to_writer(file, &stored_obj)?;
         }
@@ -769,13 +771,6 @@ async fn create_signed_identity_object(
 
     let versioned_id = Versioned::new(VERSION_0, id);
 
-    // Store the created IdentityObject.
-    // This is stored so it can later be retrieved by querying via the idCredPub.
-    ok_or_500!(
-        db.write_identity_object(&base16_encoded_id_cred_pub, &versioned_id),
-        "Could not write to database."
-    );
-
     // As a last step we submit the initial account creation to the chain.
     // TODO: We should check beforehand that the regid is fresh and that
     // no account with this regid already exists, since that will lead to failure of
@@ -791,25 +786,34 @@ async fn create_signed_identity_object(
         &server_config.ip_data.ip_cdi_secret_key,
     );
 
-    let submission = json!({
-        "type": "initial",
-        "contents": initial_cdi,
-    });
+    let submission = AccountCredential::<IpPairing, _, _>::Initial { icdi: initial_cdi };
 
     // The proxy expects a versioned submission, so that is what we construction.
-    let versioned_submission = to_value(&Versioned::new(VERSION_0, submission)).unwrap();
+    let versioned_submission = Versioned::new(VERSION_0, submission);
+
+    // Store the created IdentityObject.
+    // This is stored so it can later be retrieved by querying via the idCredPub.
+    ok_or_500!(
+        db.write_identity_object(
+            &base16_encoded_id_cred_pub,
+            &versioned_id,
+            &versioned_submission
+        ),
+        "Could not write to database."
+    );
 
     // Submit and wait for the submission ID.
+    let submission_value = to_value(versioned_submission).unwrap();
     match submit_account_creation(
         &client,
         server_config.submit_credential_url.clone(),
-        &versioned_submission,
+        &submission_value,
     )
     .await
     {
         Ok(status) => {
             ok_or_500!(
-                db.write_pending(&base16_encoded_id_cred_pub, status, versioned_submission),
+                db.write_pending(&base16_encoded_id_cred_pub, status, submission_value),
                 "Could not write submission status."
             );
             let query_url_base = server_config.submit_credential_url.clone();
