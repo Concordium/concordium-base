@@ -60,7 +60,10 @@ a JSON object with two fields
 ```json
 {
     "identityObject": {..},
-    "accountAddress": "..."
+    "accountAddress": "...",
+    "credential": {..}
 }
 ```
-where accountAddress is the address of the initial account that will be created (returned by `create_initial_account` call).
+where accountAddress is the address of the initial account that will be created
+(returned by `create_initial_account` call), the credential is the initial
+credential that created the account.
