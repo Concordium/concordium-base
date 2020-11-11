@@ -73,7 +73,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 
     // If timed_withdraw_limit is zero then no GTU can be transferred from the
     // account, thus violating the purpose of the contract.
-    ensure!(init_params.timed_withdraw_limit > 0); // The timed_withdraw_limit should be greater than 0.
+    ensure!(init_params.timed_withdraw_limit.micro_gtu > 0); // The timed_withdraw_limit should be greater than 0.
 
     let state = State {
         init_params,
@@ -158,7 +158,7 @@ mod tests {
         let target_account = AccountAddress([2u8; 32]);
 
         let parameter = TransferRequest {
-            amount: 5,
+            amount: Amount::from_micro_gtu(5),
             target_account,
         };
         let parameter_bytes = to_bytes(&parameter);
@@ -168,35 +168,35 @@ mod tests {
         ctx.metadata.set_slot_time(10);
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
-        ctx.set_self_balance(10);
+        ctx.set_self_balance(Amount::from_micro_gtu(10));
 
         // Setup state
         let recent_transfers = vec![
             Transfer {
                 time_of_transfer: 0,
                 transfer_request: TransferRequest {
-                    amount:         6,
+                    amount:         Amount::from_micro_gtu(6),
                     target_account: account1,
                 },
             },
             Transfer {
                 time_of_transfer: 1,
                 transfer_request: TransferRequest {
-                    amount:         2,
+                    amount:         Amount::from_micro_gtu(2),
                     target_account: account2,
                 },
             },
             Transfer {
                 time_of_transfer: 2,
                 transfer_request: TransferRequest {
-                    amount:         3,
+                    amount:         Amount::from_micro_gtu(3),
                     target_account: account1,
                 },
             },
         ];
 
         let init_params = InitParams {
-            timed_withdraw_limit: 10,
+            timed_withdraw_limit: Amount::from_micro_gtu(10),
             time_limit:           9,
         };
 
@@ -208,7 +208,7 @@ mod tests {
 
         // Execution
         let res: ReceiveResult<ActionsTree> =
-            contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
+            contract_receive_transfer(&ctx, Amount::zero(), &mut logger, &mut state);
 
         // Test
         let actions = match res {
@@ -217,7 +217,7 @@ mod tests {
         };
         claim_eq!(
             actions,
-            ActionsTree::simple_transfer(&target_account, 5),
+            ActionsTree::simple_transfer(&target_account, Amount::from_micro_gtu(5)),
             "The request did not transfer the correct amount."
         );
         claim_eq!(
@@ -226,7 +226,7 @@ mod tests {
             "The oldest transfer should have been removed and the new one added."
         );
         claim_eq!(
-            state.recent_transfers[2].transfer_request.amount,
+            state.recent_transfers[2].transfer_request.amount.micro_gtu,
             5,
             "The new transfer should have been added to recent_transfers."
         );
@@ -244,7 +244,7 @@ mod tests {
         let target_account = AccountAddress([2u8; 32]);
 
         let parameter = TransferRequest {
-            amount: 5,
+            amount: Amount::from_micro_gtu(5),
             target_account,
         };
         let parameter_bytes = to_bytes(&parameter);
@@ -253,7 +253,7 @@ mod tests {
         ctx.metadata.set_slot_time(10);
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
-        ctx.set_self_balance(10);
+        ctx.set_self_balance(Amount::from_micro_gtu(10));
         ctx.set_parameter(&parameter_bytes);
 
         // Setup state
@@ -261,28 +261,28 @@ mod tests {
             Transfer {
                 time_of_transfer: 0,
                 transfer_request: TransferRequest {
-                    amount:         6,
+                    amount:         Amount::from_micro_gtu(6),
                     target_account: account1,
                 },
             },
             Transfer {
                 time_of_transfer: 1,
                 transfer_request: TransferRequest {
-                    amount:         2,
+                    amount:         Amount::from_micro_gtu(2),
                     target_account: account2,
                 },
             },
             Transfer {
                 time_of_transfer: 2,
                 transfer_request: TransferRequest {
-                    amount:         3,
+                    amount:         Amount::from_micro_gtu(3),
                     target_account: account2,
                 },
             },
         ];
 
         let init_params = InitParams {
-            timed_withdraw_limit: 10,
+            timed_withdraw_limit: Amount::from_micro_gtu(10),
             time_limit:           10,
         };
 
@@ -294,7 +294,7 @@ mod tests {
 
         // Execution
         let res: ReceiveResult<ActionsTree> =
-            contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
+            contract_receive_transfer(&ctx, Amount::zero(), &mut logger, &mut state);
 
         // Test
         claim!(res.is_err(), "Contract receive transfer succeeded, but it should not have.");
@@ -305,7 +305,7 @@ mod tests {
         );
 
         let recent_transfers_amounts: Vec<u64> =
-            state.recent_transfers.iter().map(|t| t.transfer_request.amount).collect();
+            state.recent_transfers.iter().map(|t| t.transfer_request.amount.micro_gtu).collect();
         claim_eq!(
             recent_transfers_amounts,
             vec![6, 2, 3],
@@ -326,7 +326,7 @@ mod tests {
         let target_account = AccountAddress([2u8; 32]);
 
         let parameter = TransferRequest {
-            amount: 5,
+            amount: Amount::from_micro_gtu(5),
             target_account,
         };
         let parameter_bytes = to_bytes(&parameter);
@@ -334,7 +334,7 @@ mod tests {
         let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.metadata.set_slot_time(10);
-        ctx.set_self_balance(10);
+        ctx.set_self_balance(Amount::from_micro_gtu(10));
         ctx.set_sender(Address::Account(account1));
         ctx.set_owner(account1);
 
@@ -343,28 +343,28 @@ mod tests {
             Transfer {
                 time_of_transfer: 0,
                 transfer_request: TransferRequest {
-                    amount:         1,
+                    amount:         Amount::from_micro_gtu(1),
                     target_account: account1,
                 },
             },
             Transfer {
                 time_of_transfer: 1,
                 transfer_request: TransferRequest {
-                    amount:         1,
+                    amount:         Amount::from_micro_gtu(1),
                     target_account: account2,
                 },
             },
             Transfer {
                 time_of_transfer: 2,
                 transfer_request: TransferRequest {
-                    amount:         1,
+                    amount:         Amount::from_micro_gtu(1),
                     target_account: account2,
                 },
             },
         ];
 
         let init_params = InitParams {
-            timed_withdraw_limit: 10,
+            timed_withdraw_limit: Amount::from_micro_gtu(10),
             time_limit:           1000,
         };
 
@@ -376,7 +376,7 @@ mod tests {
 
         // Execution
         let res: ReceiveResult<ActionsTree> =
-            contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
+            contract_receive_transfer(&ctx, Amount::zero(), &mut logger, &mut state);
 
         // Test
         claim!(res.is_ok(), "Contract receive transfer failed, but it should not have.");

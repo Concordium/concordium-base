@@ -137,6 +137,18 @@ impl Deserial for bool {
     }
 }
 
+impl Serial for Amount {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        out.write_u64((*self).micro_gtu)
+    }
+}
+
+impl Deserial for Amount {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        source.read_u64().map(Amount::from_micro_gtu)
+    }
+}
+
 /// Serialized by writing an `u32` representing the number of bytes for a
 /// utf8-encoding of the string, then writing the bytes. Similar to `Vec<_>`.
 impl Serial for String {
@@ -647,6 +659,9 @@ impl SchemaType for i32 {
 impl SchemaType for i64 {
     fn get_type() -> schema::Type { schema::Type::I64 }
 }
+impl SchemaType for Amount {
+    fn get_type() -> schema::Type { schema::Type::Amount }
+}
 impl SchemaType for AccountAddress {
     fn get_type() -> schema::Type { schema::Type::AccountAddress }
 }
@@ -847,52 +862,55 @@ impl Serial for schema::Type {
             Type::I64 => {
                 out.write_u8(9)?;
             }
-            Type::AccountAddress => {
+            Type::Amount => {
                 out.write_u8(10)?;
             }
-            Type::ContractAddress => {
+            Type::AccountAddress => {
                 out.write_u8(11)?;
             }
-            Type::Option(ty) => {
+            Type::ContractAddress => {
                 out.write_u8(12)?;
+            }
+            Type::Option(ty) => {
+                out.write_u8(13)?;
                 ty.serial(out)?;
             }
             Type::Pair(left, right) => {
-                out.write_u8(13)?;
+                out.write_u8(14)?;
                 left.serial(out)?;
                 right.serial(out)?;
             }
             Type::String(len_size) => {
-                out.write_u8(14)?;
+                out.write_u8(15)?;
                 len_size.serial(out)?;
             }
             Type::List(len_size, ty) => {
-                out.write_u8(15)?;
-                len_size.serial(out)?;
-                ty.serial(out)?;
-            }
-            Type::Set(len_size, ty) => {
                 out.write_u8(16)?;
                 len_size.serial(out)?;
                 ty.serial(out)?;
             }
-            Type::Map(len_size, key, value) => {
+            Type::Set(len_size, ty) => {
                 out.write_u8(17)?;
+                len_size.serial(out)?;
+                ty.serial(out)?;
+            }
+            Type::Map(len_size, key, value) => {
+                out.write_u8(18)?;
                 len_size.serial(out)?;
                 key.serial(out)?;
                 value.serial(out)?;
             }
             Type::Array(len, ty) => {
-                out.write_u8(18)?;
+                out.write_u8(19)?;
                 len.serial(out)?;
                 ty.serial(out)?;
             }
             Type::Struct(fields) => {
-                out.write_u8(19)?;
+                out.write_u8(20)?;
                 fields.serial(out)?;
             }
             Type::Enum(fields) => {
-                out.write_u8(20)?;
+                out.write_u8(21)?;
                 fields.serial(out)?;
             }
         }
@@ -915,47 +933,48 @@ impl Deserial for schema::Type {
             7 => Ok(Type::I16),
             8 => Ok(Type::I32),
             9 => Ok(Type::I64),
-            10 => Ok(Type::AccountAddress),
-            11 => Ok(Type::ContractAddress),
-            12 => {
+            10 => Ok(Type::Amount),
+            11 => Ok(Type::AccountAddress),
+            12 => Ok(Type::ContractAddress),
+            13 => {
                 let ty = Type::deserial(source)?;
                 Ok(Type::Option(Box::new(ty)))
             }
-            13 => {
+            14 => {
                 let left = Type::deserial(source)?;
                 let right = Type::deserial(source)?;
                 Ok(Type::Pair(Box::new(left), Box::new(right)))
             }
-            14 => {
-                let len_size = SizeLength::deserial(source)?;
-                Ok(Type::String(len_size))
-            }
             15 => {
                 let len_size = SizeLength::deserial(source)?;
-                let ty = Type::deserial(source)?;
-                Ok(Type::List(len_size, Box::new(ty)))
+                Ok(Type::String(len_size))
             }
             16 => {
                 let len_size = SizeLength::deserial(source)?;
                 let ty = Type::deserial(source)?;
-                Ok(Type::Set(len_size, Box::new(ty)))
+                Ok(Type::List(len_size, Box::new(ty)))
             }
             17 => {
+                let len_size = SizeLength::deserial(source)?;
+                let ty = Type::deserial(source)?;
+                Ok(Type::Set(len_size, Box::new(ty)))
+            }
+            18 => {
                 let len_size = SizeLength::deserial(source)?;
                 let key = Type::deserial(source)?;
                 let value = Type::deserial(source)?;
                 Ok(Type::Map(len_size, Box::new(key), Box::new(value)))
             }
-            18 => {
+            19 => {
                 let len = u32::deserial(source)?;
                 let ty = Type::deserial(source)?;
                 Ok(Type::Array(len, Box::new(ty)))
             }
-            19 => {
+            20 => {
                 let fields = source.get()?;
                 Ok(Type::Struct(fields))
             }
-            20 => {
+            21 => {
                 let variants = source.get()?;
                 Ok(Type::Enum(variants))
             }
@@ -1078,6 +1097,10 @@ impl schema::Type {
                 let n = i64::deserial(source)?;
                 Ok(Value::Number(n.into()))
             }
+            Type::Amount => {
+                let n = Amount::deserial(source)?;
+                Ok(Value::String(n.to_string()))
+            }
             Type::AccountAddress => {
                 let address = AccountAddress::deserial(source)?;
                 Ok(Value::String(address.to_string()))
@@ -1149,7 +1172,7 @@ impl schema::Type {
                 } else {
                     u32::deserial(source)? as usize
                 };
-                let (name, fields_ty) = variants.get(idx).ok_or(ParseError::default())?;
+                let (name, fields_ty) = variants.get(idx).ok_or_else(ParseError::default)?;
                 let fields = fields_ty.to_json(source)?;
                 Ok(json!({ name: fields }))
             }

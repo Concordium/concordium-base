@@ -77,7 +77,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     amount: Amount,
     _logger: &mut L,
 ) -> Result<State, InitError> {
-    ensure!(amount == 0, InitError::NoAmount);
+    ensure!(amount.micro_gtu == 0, InitError::NoAmount);
     let init_params: InitParams = ctx.parameter_cursor().get()?;
     ensure!(init_params.buyer != init_params.seller, InitError::SameBuyerSeller);
     let state = State {
@@ -205,8 +205,8 @@ pub mod tests {
         let buyer = AccountAddress([0; ACCOUNT_ADDRESS_SIZE]);
 
         let parameter = InitParams {
-            required_deposit: 20,
-            arbiter_fee: 30,
+            required_deposit: Amount::from_micro_gtu(20),
+            arbiter_fee: Amount::from_micro_gtu(30),
             buyer,
             seller: AccountAddress([1; ACCOUNT_ADDRESS_SIZE]),
             arbiter: AccountAddress([2; ACCOUNT_ADDRESS_SIZE]),
@@ -216,7 +216,7 @@ pub mod tests {
         let parameter_bytes = to_bytes(&parameter);
         ctx.set_parameter(&parameter_bytes);
 
-        let amount = 200;
+        let amount = Amount::from_micro_gtu(200);
         let mut logger = LogRecorder::init();
         let result = contract_init(&ctx, amount, &mut logger);
         match result {
@@ -230,19 +230,19 @@ pub mod tests {
     #[test]
     #[no_mangle]
     fn test_init_rejects_same_buyer_and_seller() {
-        todo!("implement me");
+        fail!("implement me");
     }
 
     #[test]
     #[no_mangle]
     fn test_init_builds_corresponding_state_from_init_params() {
-        todo!("implement me");
+        fail!("implement me");
     }
 
     #[test]
     #[no_mangle]
     fn test_receive_happy_path() {
-        todo!("implement me");
+        fail!("implement me");
     }
 
     // TODO Lots more to test!

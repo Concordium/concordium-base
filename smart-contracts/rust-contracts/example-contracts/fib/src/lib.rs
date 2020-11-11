@@ -38,12 +38,8 @@ fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
         Ok(A::accept())
     } else {
         let self_address = ctx.self_address();
-        Ok(A::send(&self_address, "receive", 0, &(n - 1).to_le_bytes()).and_then(A::send(
-            &self_address,
-            "receive",
-            0,
-            &(n - 2).to_le_bytes(),
-        )))
+        Ok(A::send(&self_address, "receive", Amount::zero(), &(n - 1).to_le_bytes())
+            .and_then(A::send(&self_address, "receive", Amount::zero(), &(n - 2).to_le_bytes())))
     }
 }
 
@@ -57,7 +53,7 @@ fn contract_receive_calc_fib<R: HasReceiveContext<()>, A: HasActions, L: HasLogg
     _logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
-    state.result = fib(amount);
+    state.result = fib(amount.micro_gtu);
     Ok(A::accept())
 }
 

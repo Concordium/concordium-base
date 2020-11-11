@@ -14,7 +14,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     amount: Amount,
     logger: &mut L,
 ) -> InitResult<State> {
-    let step: u8 = (amount % 256) as u8;
+    let step: u8 = (amount.micro_gtu % 256) as u8;
     logger.log(&(0u8, step));
     let state = State {
         step,
@@ -40,7 +40,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     logger: &mut L,
     state: &mut State,
 ) -> Result<A, ReceiveError> {
-    ensure!(amount > 10, ReceiveError::SmallAmount);
+    ensure!(amount.micro_gtu > 10, ReceiveError::SmallAmount);
     ensure!(ctx.sender().matches_account(&ctx.owner()), ReceiveError::OnlyOwner);
     logger.log(&(1u8, state.step));
     state.current_count += u32::from(state.step);
@@ -65,7 +65,7 @@ fn contract_receive_optimized<
     logger: &mut L,
     state_cursor: &mut S,
 ) -> ReceiveResult<A> {
-    ensure!(amount > 10); // Amount too small, not increasing.
+    ensure!(amount.micro_gtu > 10); // Amount too small, not increasing.
     ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can increment.
     let state: State = state_cursor.get()?;
     logger.log(&(1u8, state.step));
@@ -92,7 +92,7 @@ mod tests {
         let mut logger = LogRecorder::init();
 
         // call the init function
-        let out = contract_init(&ctx, 13, &mut logger);
+        let out = contract_init(&ctx, Amount::from_micro_gtu(13), &mut logger);
 
         // and inspect the result.
         let state = match out {
@@ -126,7 +126,8 @@ mod tests {
             step:          1,
             current_count: 13,
         };
-        let res: Result<ActionsTree, _> = contract_receive(&ctx, 11, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> =
+            contract_receive(&ctx, Amount::from_micro_gtu(11), &mut logger, &mut state);
         let actions = match res {
             Err(_) => fail!("Contract receive failed, but it should not have."),
             Ok(actions) => actions,
@@ -154,7 +155,8 @@ mod tests {
             step:          1,
             current_count: 13,
         };
-        let res: Result<ActionsTree, _> = contract_receive(&ctx, 11, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> =
+            contract_receive(&ctx, Amount::from_micro_gtu(11), &mut logger, &mut state);
         match res {
             Err(reason) => claim_eq!(
                 reason,

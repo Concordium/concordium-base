@@ -119,9 +119,9 @@ fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     let num_contributions: u32 = state.get()?;
     // Ensure that you have to contribute more tokens the later you are to the
     // game. The scaling is arbitrarily linear.
-    ensure!(amount > u64::from(num_contributions) * 10); // Amount too small, rejecting contribution.
-                                                         // Try to get the parameter (which should be exactly 32-bytes for this to
-                                                         // succeed).
+    ensure!(amount.micro_gtu > u64::from(num_contributions) * 10); // Amount too small, rejecting contribution.
+                                                                   // Try to get the parameter (which should be exactly 32-bytes for this to
+                                                                   // succeed).
     let cont: Contribution = ctx.parameter_cursor().get()?;
 
     // The main logic of the function. If the the sender is an account then we
@@ -223,7 +223,7 @@ fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     // memory we use, as well as the cost of this. We would not have to sort.
     let state: State = state_cursor.get()?;
     let ct = ctx.metadata().slot_time();
-    ensure!(amount == 0); // Ending the game should not transfer any tokens.
+    ensure!(amount.micro_gtu == 0); // Ending the game should not transfer any tokens.
     ensure!(ct >= state.expiry); // Cannot finalize before expiry time.
     ensure!(!state.contributions.is_empty()); // Already finalized.
     ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can finalize.
@@ -250,14 +250,14 @@ fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             // Transfer by decreasing amounts.
             // The first account gets 1/2 of the total balance, the second 1/4, third 1/8
             // ...
-            let to_transfer = total / 2;
+            let (to_transfer, _remainder) = total.quotient_remainder(2);
             let send = try_send(addr, to_transfer);
             logger.log::<AccountAddress>(addr);
             total -= to_transfer;
             // Send to each account in the list until there is something to send.
             let send = rest.iter().rev().try_fold(send, |acc, (addr, _)| {
-                if total > 0 {
-                    let to_transfer = total / 2;
+                if total.micro_gtu > 0 {
+                    let (to_transfer, _remainder) = total.quotient_remainder(2);
                     logger.log::<AccountAddress>(addr);
                     total -= to_transfer;
                     Some(acc.and_then(try_send(addr, to_transfer)))
@@ -292,7 +292,7 @@ fn help_yourself<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _logger: &mut L,
     state: &mut ContractState,
 ) -> ReceiveResult<A> {
-    ensure!(amount == 0); // Helping yourself should not add tokens.
+    ensure!(amount.micro_gtu == 0); // Helping yourself should not add tokens.
     ensure!(state.size() == 0); // Helping yourself only allowed after normal contributions are sent.
     Ok(A::simple_transfer(&ctx.invoker(), ctx.self_balance()))
 }
