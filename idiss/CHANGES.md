@@ -47,7 +47,7 @@ In addition to this, the wallet-proxy might have connectivity issues, or connect
 # Return object
 
 The returned identity object should be expanded. In the past it was a JSON object with a single field `identityObject`. It should now be
-a JSON object with two fields
+a JSON object with three fields
 ```json
 {
     "identityObject": {..},
@@ -57,4 +57,5 @@ a JSON object with two fields
 ```
 where accountAddress is the address of the initial account that will be created
 (returned by `create_initial_account` call), the credential is the initial
-credential that created the account.
+credential that created the account (what is returned under the `request`
+heading above).
