@@ -6,29 +6,79 @@
 //! deserialization are straightforward and cheap.
 
 use crate::{
+    parse::MAX_NUM_PAGES,
     types::*,
     validate::{validate, Handler, HasValidationContext, ValidationState},
 };
 use anyhow::{anyhow, bail, ensure};
 use std::{collections::BTreeMap, convert::TryInto, io::Write};
 
-pub struct ArtifactImport {}
+#[derive(Copy, Clone)]
+pub union StackValue {
+    pub short: i32,
+    pub long:  i64,
+}
 
+impl std::fmt::Debug for StackValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("StackValue")
+        // writeln!(f, "{}", unsafe { self.long })
+    }
+}
+
+impl From<i32> for StackValue {
+    #[inline(always)]
+    fn from(short: i32) -> Self {
+        Self {
+            short,
+        }
+    }
+}
+
+impl From<i64> for StackValue {
+    #[inline(always)]
+    fn from(long: i64) -> Self {
+        Self {
+            long,
+        }
+    }
+}
+
+impl From<GlobalInit> for StackValue {
+    #[inline(always)]
+    fn from(g: GlobalInit) -> Self {
+        match g {
+            GlobalInit::I32(short) => Self {
+                short,
+            },
+            GlobalInit::I64(long) => Self {
+                long,
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct InstantiatedTable {
     pub functions: Vec<Option<FuncIndex>>,
 }
 
+#[derive(Debug)]
 pub struct InstantiatedGlobals {
-    pub inits: Vec<i64>,
+    pub inits: Vec<StackValue>,
 }
 
+#[derive(Debug)]
 pub struct ArtifactMemory {
-    pub limits: Limits,
-    pub init:   Vec<Data>,
+    pub init_size: u32,
+    pub max_size:  u32,
+    pub init:      Vec<Data>,
 }
 
+#[derive(Debug)]
 pub struct CompiledFunction {
     pub num_params: u32,
+    pub type_idx: TypeIndex,
     pub return_type: Option<ValueType>,
     /// Vector of types of locals. This includes function parameters at the
     /// beginning.
@@ -36,9 +86,97 @@ pub struct CompiledFunction {
     pub code: Instructions,
 }
 
+#[repr(u8)]
+#[derive(Copy, Clone, Debug)]
+pub enum ImportFunc {
+    ChargeEnergy,
+    ChargeStackSize,
+    ChargeMemoryAlloc,
+    Accept,
+    SimpleTransfer,
+    Send,
+    CombineAnd,
+    CombineOr,
+    GetParameterSize,
+    GetParameterSection,
+    LogEvent,
+    LoadState,
+    WriteState,
+    ResizeState,
+    StateSize,
+    GetInitOrigin,
+    GetReceiveInvoker,
+    GetReceiveSelfAddress,
+    GetReceiveSelfBalance,
+    GetReceiveSender,
+    GetReceiveOwner,
+    GetSlotNumber,
+    GetSlotTime,
+    GetBlockHeight,
+    GetFinalizedHeight,
+    /// Only used in smart contract tests.
+    ReportError,
+}
+
+pub trait RenameImports: Sized {
+    fn from_import(i: &Import) -> CompileResult<Self>;
+}
+
+impl RenameImports for (String, String) {
+    fn from_import(i: &Import) -> CompileResult<Self> {
+        Ok((i.mod_name.name.clone(), i.item_name.name.clone()))
+    }
+}
+
+impl RenameImports for ImportFunc {
+    fn from_import(i: &Import) -> CompileResult<ImportFunc> {
+        let m = &i.mod_name;
+        if m.name == "concordium_metering" {
+            match i.item_name.name.as_ref() {
+                "account_energy" => Ok(ImportFunc::ChargeEnergy),
+                "account_stack" => Ok(ImportFunc::ChargeStackSize),
+                "account_memory" => Ok(ImportFunc::ChargeMemoryAlloc),
+                name => bail!("Unsupported import {}.", name),
+            }
+        } else if m.name == "concordium" {
+            match i.item_name.name.as_ref() {
+                "accept" => Ok(ImportFunc::Accept),
+                "simple_transfer" => Ok(ImportFunc::SimpleTransfer),
+                "send" => Ok(ImportFunc::Send),
+                "combine_and" => Ok(ImportFunc::CombineAnd),
+                "combine_or" => Ok(ImportFunc::CombineOr),
+                "get_parameter_size" => Ok(ImportFunc::GetParameterSize),
+                "get_parameter_section" => Ok(ImportFunc::GetParameterSection),
+                "log_event" => Ok(ImportFunc::LogEvent),
+                "load_state" => Ok(ImportFunc::LoadState),
+                "write_state" => Ok(ImportFunc::WriteState),
+                "resize_state" => Ok(ImportFunc::ResizeState),
+                "state_size" => Ok(ImportFunc::StateSize),
+                "get_init_origin" => Ok(ImportFunc::GetInitOrigin),
+                "get_receive_invoker" => Ok(ImportFunc::GetReceiveInvoker),
+                "get_receive_self_address" => Ok(ImportFunc::GetReceiveSelfAddress),
+                "get_receive_self_balance" => Ok(ImportFunc::GetReceiveSelfBalance),
+                "get_receive_sender" => Ok(ImportFunc::GetReceiveSender),
+                "get_receive_owner" => Ok(ImportFunc::GetReceiveOwner),
+                "get_slot_number" => Ok(ImportFunc::GetSlotNumber),
+                "get_block_height" => Ok(ImportFunc::GetBlockHeight),
+                "get_finalized_height" => Ok(ImportFunc::GetFinalizedHeight),
+                "get_slot_time" => Ok(ImportFunc::GetSlotTime),
+                "report_error" => Ok(ImportFunc::ReportError),
+                name => bail!("Unsupported import {}.", name),
+            }
+        } else {
+            bail!("Unsupported import module {}.", m)
+        }
+    }
+}
+
 /// A parsed Wasm module. This no longer has custom sections since they are not
 /// needed for further processing.
-pub struct Artifact {
+#[derive(Debug)]
+pub struct Artifact<ImportFunc> {
+    /// Imports by (module name, item name).
+    pub imports: Vec<ImportFunc>,
     /// Types of the module. These are needed for dynamic dispatch, i.e.,
     /// call-indirect.
     pub ty: Vec<FunctionType>,
@@ -58,9 +196,9 @@ pub struct Artifact {
 
 /// Internal opcode. This is mostly the same as OpCode, but with control
 /// instructions resolved to jumps in the instruction sequence, and function
-/// calls processed so it is more immediately clear whether it is internal or
-/// external.
+/// calls processed.
 #[repr(u8)]
+#[derive(Debug, num_enum::TryFromPrimitive)]
 pub enum InternalOpcode {
     // Control instructions
     Nop = 0u8,
@@ -178,9 +316,9 @@ pub enum InternalOpcode {
 
 type CompileResult<A> = anyhow::Result<A>;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Instructions {
-    bytes: Vec<u8>,
+    pub(crate) bytes: Vec<u8>,
 }
 
 impl Instructions {
@@ -203,7 +341,8 @@ impl Instructions {
     pub fn current_offset(&self) -> usize { self.bytes.len() }
 
     pub fn back_patch(&mut self, back_loc: usize, to_write: u32) -> CompileResult<()> {
-        (&mut self.bytes[back_loc..]).write_all(&to_write.to_le_bytes())?;
+        let mut place: &mut [u8] = &mut self.bytes[back_loc..];
+        place.write_all(&to_write.to_le_bytes())?;
         Ok(())
     }
 }
@@ -288,7 +427,7 @@ impl BackPatch {
             (current_height - target_height).try_into()?
         } else {
             let diff: u32 = (current_height - target_height).try_into()?;
-            diff & 0x8000_0000
+            diff | 0x8000_0000
         };
         // output the difference in stack heights.
         self.out.push_u32(diff);
@@ -345,21 +484,30 @@ impl Handler<&OpCode> for BackPatch {
                 self.backpatch.push(JumpTarget::new_unknown());
             }
             OpCode::Else => {
-                // this is essentially end + block start.
-                // because the module is well-formed
-                // this can only happen after an if,
+                // If we reached the else normally, after executing the if branch, we just break
+                // to the end of else.
+                self.out.push(Br);
+                self.push_jump(0, state)?;
+                // Because the module is well-formed this can only happen after an if
+                // We do not backpatch the code now, apart from the initial jump to the else
+                // branch. The effect of this will be that any break out of the if statement
+                // will jump to the end of else, as intended.
                 if let JumpTarget::Unknown {
                     backpatch_locations,
-                } = self.backpatch.pop()?
+                } = self.backpatch.get_mut(0)?
                 {
                     // As u32 would be safe here since module sizes are much less than 4GB, but
                     // we are being extra careful.
                     let current_pos: u32 = self.out.bytes.len().try_into()?;
-                    for pos in backpatch_locations {
-                        self.out.back_patch(pos, current_pos)?;
-                    }
+                    ensure!(
+                        !backpatch_locations.is_empty(),
+                        "Backpatch should contain at least the If start."
+                    );
+                    let first = backpatch_locations.remove(0);
+                    self.out.back_patch(first, current_pos)?;
+                } else {
+                    bail!("Invariant violation in else branch.")
                 }
-                self.backpatch.push(JumpTarget::new_unknown());
             }
             OpCode::Br(label_idx) => {
                 self.out.push(Br);
@@ -374,6 +522,8 @@ impl Handler<&OpCode> for BackPatch {
                 default,
             } => {
                 self.out.push(BrTable);
+                // the try_into is not needed because MAX_SWITCH_SIZE is small enough
+                // but it does not hurt.
                 let labels_len: u16 = labels.len().try_into()?;
                 self.out.push_u16(labels_len);
                 self.push_jump(*default, state)?;
@@ -767,7 +917,7 @@ impl<'a> HasValidationContext for ModuleContext<'a> {
     fn return_type(&self) -> BlockType { BlockType::from(self.code.ty.result) }
 }
 
-pub fn compile_module(input: Module) -> CompileResult<Artifact> {
+pub fn compile_module<I: RenameImports>(input: Module) -> CompileResult<Artifact<I>> {
     let mut code_out = Vec::with_capacity(input.code.impls.len());
 
     for code in input.code.impls.iter() {
@@ -782,10 +932,14 @@ pub fn compile_module(input: Module) -> CompileResult<Artifact> {
             code,
         };
 
-        let exec_code =
+        let mut exec_code =
             validate(&context, code.expr.instrs.iter().map(Result::Ok), BackPatch::new())?;
+        // We add a return instruction at the end so we have an easier time in the
+        // interpreter since there is no implicit return.
+        exec_code.push(InternalOpcode::Return);
 
         let result = CompiledFunction {
+            type_idx: code.ty_idx,
             locals,
             num_params: code.ty.parameters.len().try_into()?,
             return_type: code.ty.result,
@@ -818,15 +972,20 @@ pub fn compile_module(input: Module) -> CompileResult<Artifact> {
     let memory = {
         if let Some(mt) = input.memory.memory_type {
             Some(ArtifactMemory {
-                limits: mt.limits,
-                init:   input.data.sections,
+                init_size: mt.limits.min,
+                max_size:  mt
+                    .limits
+                    .max
+                    .map(|x| std::cmp::min(x, MAX_NUM_PAGES))
+                    .unwrap_or(MAX_NUM_PAGES),
+                init:      input.data.sections,
             })
         } else {
             None
         }
     };
     let global = InstantiatedGlobals {
-        inits: input.global.globals.iter().map(|g| i64::from(g.init)).collect::<Vec<_>>(),
+        inits: input.global.globals.iter().map(|g| StackValue::from(g.init)).collect::<Vec<_>>(),
     };
     let export = input
         .export
@@ -843,7 +1002,10 @@ pub fn compile_module(input: Module) -> CompileResult<Artifact> {
             }
         })
         .collect::<BTreeMap<_, _>>();
+    let imports =
+        input.import.imports.iter().map(|i| I::from_import(i)).collect::<CompileResult<_>>()?;
     Ok(Artifact {
+        imports,
         ty,
         table,
         memory,

@@ -796,6 +796,7 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
 
                 parsed_code.push(Code {
                     ty: func_ty.clone(),
+                    ty_idx: f,
                     num_locals,
                     locals: c.locals,
                     expr: Expression {
@@ -905,11 +906,10 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
             "Number of initial elements is more than the initial memory size."
         );
         if let Some(memory_type) = memory.memory_type.as_ref() {
-            let offset = data.offset as u32;
+            let offset: u32 = data.offset.try_into()?;
             // since we provide no way to grow the table the initial minimum size
             // is the size of the table, as specified in the allocation section of the
             // Wasm semantics.
-            // The as u32 is safe beca
             let end = offset
                 .checked_add(inits_len)
                 .ok_or_else(|| anyhow!("The end of the memory exceeds u32 max bound."))?;

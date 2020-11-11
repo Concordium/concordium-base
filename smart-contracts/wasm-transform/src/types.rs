@@ -206,6 +206,9 @@ pub struct Code {
     /// in processing (e.g., after validation we know that the number of code
     /// and function sections match).
     pub ty: Rc<FunctionType>,
+    /// Type index carried over from the source. This should match the ty type
+    /// above.
+    pub ty_idx: TypeIndex,
     pub num_locals: u32,
     /// Declaration of the locals.
     pub locals: Vec<Local>,
@@ -345,7 +348,7 @@ pub struct Limits {
     pub max: Option<u32>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// A function type with at most one return value. The MVP version of Wasm does
 /// not support multiple return values, and thus we don't either.
 pub struct FunctionType {

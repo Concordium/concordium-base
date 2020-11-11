@@ -45,6 +45,9 @@ pub const PAGE_SIZE: u32 = 65536;
 /// overflow a u32;
 pub const MAX_INIT_MEMORY_SIZE: u32 = 32;
 
+/// Maximum number of pages allowed by our contracts.
+pub const MAX_NUM_PAGES: u32 = 1024; // corresponds to 64MB memory at most.
+
 /// Maximum number of globals allowed in a module.
 /// This allows us to use a u16 for indexing and is relied upon by the
 /// interpreter.

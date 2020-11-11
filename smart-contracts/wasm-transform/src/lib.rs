@@ -1,4 +1,5 @@
 pub mod artifact;
+pub mod machine;
 pub mod output;
 pub mod parse;
 pub mod transformations;
