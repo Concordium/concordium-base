@@ -122,7 +122,7 @@ pub struct Cursor<T> {
 ///     fn from(_: ParseError) -> Self { MyCustomReceiveError::ParseParams }
 /// }
 ///
-/// #[receive(name="some_receive_name")]
+/// #[receive(contract = "mycontract", name="some_receive_name")]
 /// fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 ///     ctx: &R,
 ///     receive_amount: Amount,

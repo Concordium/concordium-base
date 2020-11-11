@@ -50,8 +50,10 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
     let attrs = parser.parse(attr).expect("Expect a comma-separated list of meta items.");
 
-    let name =
-        get_attribute_value(attrs.iter(), "name").expect("A name attribute must be provided.");
+    let contract_name = get_attribute_value(attrs.iter(), "contract")
+        .expect("A name for the contract must be provided, using the contract attribute.");
+
+    let init_name = format_ident!("init_{}", contract_name);
 
     let ast: syn::ItemFn = syn::parse(item).expect("Init can only be applied to functions.");
 
@@ -59,7 +61,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut out = if get_low_level(attrs.iter()) {
         quote! {
             #[no_mangle]
-            pub extern "C" fn #name(amount: Amount) -> i32 {
+            pub extern "C" fn #init_name(amount: Amount) -> i32 {
                 use concordium_sc_base::{Logger, trap};
                 let ctx = InitContextExtern::open(());
                 let mut state = ContractState::open(());
@@ -73,7 +75,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     } else {
         quote! {
             #[no_mangle]
-            pub extern "C" fn #name(amount: Amount) -> i32 {
+            pub extern "C" fn #init_name(amount: Amount) -> i32 {
                 use concordium_sc_base::{Logger, trap};
                 let ctx = InitContextExtern::open(());
                 let mut logger = Logger::init();
@@ -93,7 +95,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Embed schema if 'parameter' attribute is set
     let parameter_option = get_attribute_value(attrs.iter(), "parameter");
-    out.extend(contract_function_schema_tokens(parameter_option, name));
+    out.extend(contract_function_schema_tokens(parameter_option, init_name));
 
     ast.to_tokens(&mut out);
 
@@ -115,15 +117,20 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
     let attrs = parser.parse(attr).expect("Expect a comma-separated list of meta items.");
 
-    let name =
-        get_attribute_value(attrs.iter(), "name").expect("A name attribute must be provided.");
+    let contract_name = get_attribute_value(attrs.iter(), "contract").expect(
+        "The name of the associated contract must be provided, using the contract attribute.",
+    );
+    let name = get_attribute_value(attrs.iter(), "name")
+        .expect("A name for the receive function must be provided, using the name attribute");
+
+    let receive_name = format_ident!("receive_{}_{}", contract_name, name);
 
     let ast: syn::ItemFn = syn::parse(item).expect("Receive can only be applied to functions.");
     let fn_name = &ast.sig.ident;
     let mut out = if get_low_level(attrs.iter()) {
         quote! {
         #[no_mangle]
-        pub extern "C" fn #name(amount: Amount) -> i32 {
+        pub extern "C" fn #receive_name(amount: Amount) -> i32 {
             use concordium_sc_base::{SeekFrom, ContractState, Logger};
             let ctx = ReceiveContextExtern::open(());
             let mut state = ContractState::open(());
@@ -140,7 +147,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
     } else {
         quote! {
             #[no_mangle]
-            pub extern "C" fn #name(amount: Amount) -> i32 {
+            pub extern "C" fn #receive_name(amount: Amount) -> i32 {
                 use concordium_sc_base::{SeekFrom, ContractState, Logger, trap};
                 let ctx = ReceiveContextExtern::open(());
                 let mut logger = Logger::init();
@@ -170,7 +177,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Embed schema if 'parameter' attribute is set
     let parameter_option = get_attribute_value(attrs.iter(), "parameter");
-    out.extend(contract_function_schema_tokens(parameter_option, name));
+    out.extend(contract_function_schema_tokens(parameter_option, receive_name));
     // add the original function to the output as well.
     ast.to_tokens(&mut out);
     out.into()

@@ -3,7 +3,7 @@ use concordium_sc_base::*;
 
 type State = u8;
 
-#[init(name = "init")]
+#[init(contract = "use_all")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
@@ -13,7 +13,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(ctx.metadata().slot_time().to_be_bytes()[0])
 }
 
-#[receive(name = "receive", low_level)]
+#[receive(contract = "use_all", name = "receive", low_level)]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
     ctx: &R,
