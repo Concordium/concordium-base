@@ -63,7 +63,7 @@ pub struct State {
     recent_transfers: Vec<Transfer>,
 }
 
-#[init(name = "init")]
+#[init(contract = "init")]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
     _amount: Amount,
@@ -83,7 +83,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(state)
 }
 
-#[receive(name = "receive_deposit")]
+#[receive(contract = "init", name = "receive_deposit")]
 /// Allows anyone to deposit GTU into the contract.
 fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _ctx: &R,
@@ -94,7 +94,7 @@ fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
     Ok(A::accept())
 }
 
-#[receive(name = "receive")]
+#[receive(contract = "init", name = "receive")]
 /// Allows the owner of the contract to transfer GTU from the contract to an
 /// arbitrary account
 fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(

@@ -65,7 +65,7 @@ struct State {
 /// Initialize a smart contract.
 /// This method expects as parameter a pair of (u64, Prefix), the expiry and the
 /// prefix.
-#[init(name = "init", low_level)]
+#[init(contract = "simple_game", low_level)]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
@@ -107,7 +107,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 
 /// Contribute to the game. The parameter to this method is a single byte-array
 /// of length 32.
-#[receive(name = "receive_contribute", low_level)]
+#[receive(contract = "simple_game", name = "receive_contribute", low_level)]
 #[inline(always)]
 fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,
@@ -209,7 +209,7 @@ fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 
 /// This entry point finalizes the contract instance and sends out rewards to
 /// all the contributors.
-#[receive(name = "receive_finalize", low_level)]
+#[receive(contract = "simple_game", name = "receive_finalize", low_level)]
 #[inline(always)]
 fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,
@@ -284,7 +284,7 @@ fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 /// This entry-point allows whoever sends the message to recover the remaining
 /// tokens. It will simply send all the currently owned tokens to the person who
 /// invoked the top-level transaction this invocation is a part of.
-#[receive(name = "receive_help_yourself", low_level)]
+#[receive(contract = "simple_game", name = "receive_help_yourself", low_level)]
 #[inline(always)]
 fn help_yourself<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,

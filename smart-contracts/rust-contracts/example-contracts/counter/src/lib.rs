@@ -8,7 +8,7 @@ pub struct State {
     current_count: u32,
 }
 
-#[init(name = "init")]
+#[init(contract = "counter")]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     _ctx: &I,
     amount: Amount,
@@ -33,7 +33,7 @@ enum ReceiveError {
     OnlyOwner,
 }
 
-#[receive(name = "receive")]
+#[receive(contract = "counter", name = "receive")]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,
     amount: Amount,
@@ -53,7 +53,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 ///
 /// While in this particular case this is likely irrelevant, it serves to
 /// demonstrates the pattern.
-#[receive(name = "receive_optimized", low_level)]
+#[receive(contract = "counter", name = "receive_optimized", low_level)]
 fn contract_receive_optimized<
     R: HasReceiveContext<()>,
     L: HasLogger,

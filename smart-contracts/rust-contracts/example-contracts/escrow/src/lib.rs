@@ -70,7 +70,7 @@ impl From<ParseError> for InitError {
 
 // Contract implementation
 
-#[init(name = "init")]
+#[init(contract = "escrow")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
@@ -110,7 +110,7 @@ impl From<ParseError> for ReceiveError {
     fn from(_: ParseError) -> Self { ReceiveError::ParseParams }
 }
 
-#[receive(name = "receive")]
+#[receive(contract = "escrow", name = "receive")]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,

@@ -66,7 +66,7 @@ struct State {
 
 // Contract implementation
 
-#[init(name = "init")]
+#[init(contract = "lockup")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
@@ -94,7 +94,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(state)
 }
 
-#[receive(name = "receive")]
+#[receive(contract = "lockup", name = "receive")]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,

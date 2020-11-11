@@ -59,7 +59,7 @@ enum Event {
 
 // Contract
 
-#[init(name = "init")]
+#[init(contract = "erc20")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
@@ -101,7 +101,7 @@ impl From<ParseError> for ReceiveError {
     fn from(_: ParseError) -> Self { ReceiveError::ParseParams }
 }
 
-#[receive(name = "receive")]
+#[receive(contract = "erc20", name = "receive")]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,

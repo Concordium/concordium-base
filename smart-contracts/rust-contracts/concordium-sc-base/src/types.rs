@@ -187,7 +187,7 @@ macro_rules! claim_ne {
 ///     SomeError
 /// }
 ///
-/// #[receive(name = "receive")]
+/// #[receive(contract = "mycontract", name = "receive")]
 /// fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 ///     ctx: &R,
 ///     receive_amount: Amount,
@@ -213,7 +213,7 @@ pub type ReceiveResult<A> = Result<A, Reject>;
 ///     SomeError
 /// }
 ///
-/// #[init(name = "init")]
+/// #[init(contract = "mycontract")]
 /// fn contract_init<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 ///     ctx: &R,
 ///     receive_amount: Amount,

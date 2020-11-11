@@ -10,14 +10,14 @@
 //!
 //! ```rust
 //! // Some contract
-//! #[init(name = "noop")]
+//! #[init(contract = "noop")]
 //! fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 //!     ctx: &I,
 //!     _amount: Amount,
 //!     _logger: &mut L,
 //! ) -> InitResult<State> { ... }
 //!
-//! #[receive(name = "receive")]
+//! #[receive(contract = "noop", name = "receive")]
 //! fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 //!     ctx: &R,
 //!     amount: Amount,
@@ -103,7 +103,7 @@ pub struct ChainMetaTest {
 /// # Use case example
 ///
 /// ```rust
-/// #[init(name = "noop")]
+/// #[init(contract = "noop")]
 /// fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 ///     ctx: &I,
 ///     _amount: Amount,
@@ -168,7 +168,7 @@ pub struct InitContextTest<'a> {
 /// # Use case example
 /// Creating a context for running unit tests
 /// ```rust
-/// #[receive(name = "receive")]
+/// #[receive(contract = "mycontract", name = "receive")]
 /// fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 ///     ctx: &R,
 ///     amount: Amount,

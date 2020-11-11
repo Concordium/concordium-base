@@ -118,7 +118,7 @@ impl From<ParseError> for InitError {
     fn from(_: ParseError) -> Self { InitError::ParseParams }
 }
 
-#[init(name = "init")]
+#[init(contract = "two_step_transfer")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
@@ -141,7 +141,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(state)
 }
 
-#[receive(name = "deposit")]
+#[receive(contract = "two_step_transfer", name = "deposit")]
 #[inline(always)]
 fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _ctx: &R,
@@ -178,7 +178,7 @@ impl From<ParseError> for ReceiveError {
     fn from(_: ParseError) -> Self { ReceiveError::ParseParams }
 }
 
-#[receive(name = "receive")]
+#[receive(contract = "two_step_transfer", name = "receive")]
 #[inline(always)]
 fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,
