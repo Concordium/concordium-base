@@ -16,12 +16,16 @@ host running smart contract Wasm module.
 
 .. module:: concordium
 
-Logging
+.. _host-functions-log:
+
+Logging events
 ================================
 
 .. function:: log_event(start, length)
 
     Adds a log item from an array of bytes.
+    If not enough data can be read then this function will trap and abort
+    execution of the smart contract.
 
     :param i32 start: Pointer to start of the item
     :param i32 length: Number of bytes in the item

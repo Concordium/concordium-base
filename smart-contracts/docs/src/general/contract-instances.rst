@@ -14,7 +14,7 @@ The functionality is archive by interacting with this smart contract instance.
     from the context it is a smart contract instance.
 
 Multiple instances can be created for of a smart contract and each instance have
-its own GTU balance and state.
+its own GTU balance, state and a log of events.
 
 .. graphviz::
     :align: center
@@ -97,6 +97,23 @@ The size of the state is accounted for through the usage of *gas*.
 .. seealso::
     Check out :ref:`resource-accounting` for more on this.
 
+
+Logging events
+==============
+
+A smart contract instance also holds a log for events for event the smart
+contract deem interesting, and are logged using a function supplied by the host
+environment.
+
+.. seealso::
+    See :ref:`host-functions-log` for the reference of this function.
+
+These event logs are retained by bakers and included in transaction summaries to
+facilitate interaction of smart contracts and off-chain code.
+
+These logs are paid for as if it were part of the instance state, and in most
+cases it would only make sense to log a few bytes to reduce cost.
+
 Interacting with an instance
 ============================
 
@@ -127,7 +144,7 @@ the host environment then attempts to execute these actions on the chain.
 The possible actions a contract can produce are:
 
 - **Accept** Do nothing, always succeeds.
-- **Simple transfer** Send some amount of GTU from the balance of the instance 
+- **Simple transfer** Send some amount of GTU from the balance of the instance
   to some account.
 - **Send** Invoke ``receive``-function of a smart contract instance.
 
@@ -150,7 +167,8 @@ the leafs are the actions and the nodes are combinators.
 .. graphviz::
     :align: center
     :caption: Example of an action description, which tries to transfer to Alice
-              and then Bob, if any of these fails, it will try to transfer to Charlie instead.
+              and then Bob, if any of these fails, it will try to transfer to
+              Charlie instead.
 
     digraph G {
         node [color=transparent]

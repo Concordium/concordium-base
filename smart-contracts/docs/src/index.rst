@@ -11,26 +11,14 @@ Welcome to the official documentation of Concordium smart contracts!
 
 The documentation is split into four categories
 
-   - **General**: Explaining concepts and details for understanding concordium
-     smart contracts.
+   - **General**: Explaining concepts and details for understanding Concordium
+     Smart Contracts.
    - **Tutorials**: Step by step walkthrough with details explained as needed.
    - **How-to guides**: Short guides to achieve specific goals.
    - **References**: Precise descriptions of the machinery.
 
-
-.. todo::
-   Describe the structure of the documentation
-
 .. todo::
    A list of information, still missing from the documentation
-
-   **General**
-
-   - Resource accounting and limiting contracts (Energy)
-   - Full description of a smart contract module + contract + instance
-   - Contract Schema
-   - Logging
-   - Actions
 
    **Guides**
 
@@ -76,6 +64,7 @@ The documentation is split into four categories
    guides/deploy-module
    guides/initialize-contract
    guides/interacting-instance
+   guides/inspect-instance
 
 .. toctree::
    :maxdepth: 1
@@ -92,4 +81,3 @@ The documentation is split into four categories
 .. * :ref:`modindex`
 .. * :ref:`search`
 
-.. todolist::

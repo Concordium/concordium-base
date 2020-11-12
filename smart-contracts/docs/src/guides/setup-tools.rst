@@ -16,9 +16,11 @@ compilation::
 
 Cargo Concordium
 ================
+
 The tool for developing smart contracts for the Concordium blockchain.
-It can be used for :ref:`compiling<compiling-smart-contracts>` and testing
-smart contracts, and enables features such as contract schemas.
+It can be used for :ref:`compiling<compile-module>` and
+:ref:`testing<unit-test-contract>` smart contracts, and enables features such as
+:ref:`building contract schemas<build-schema>`.
 
 .. todo::
     Add links for testing and schemas.

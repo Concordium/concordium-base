@@ -344,7 +344,7 @@ However, when we limit the maximum stack size anyway and require this space to
 be available, this should not be a concern.
 
 Refined accounting
-~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^
 
 If one does not want to accept an accumulating overapproximation of stack height
 with nested and recursive function calls, a more fine-grained accounting as
@@ -365,7 +365,7 @@ different places at which different stack heights are currently accounted for.
 
 
 Allocation of stack size
-^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------
 
 Note that depending on the implementation, the stack(s) could be a pre-allocated
 part of memory, or it/they will be dynamically allocated. In the latter case,
@@ -414,9 +414,10 @@ execution.
 
 * Stack size
 
-* All linear memories allocated in modules * Module size
-(particularly code size, to be able to jump arbitrarily between
-instructions/functions)
+* All linear memories allocated in modules
+
+* Module size (particularly code
+  size, to be able to jump arbitrarily between instructions/functions)
 
 
 Note that also the runtime system needs some memory.

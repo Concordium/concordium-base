@@ -51,13 +51,16 @@ is then compiled to Wasm.
 Limitations
 -----------
 
+.. todo::
+    Add other limitations, such as start sections...
+
 Floating point numbers
 ^^^^^^^^^^^^^^^^^^^^^^
 
-Although Wasm have support floating point numbers, a smart contract is
+Although Wasm have support for floating point numbers, a smart contract is
 disallowed to use them.
-It is even disallowed for the Wasm module to contain a floating point number
-type, which would reject the module during validation.
+It is even disallowed for a smart contract Wasm module to contain a floating
+point number type, which would reject the module during validation.
 
 The reasoning behind, is that manipulating floating point numbers in Wasm is
 not fully deterministic.
