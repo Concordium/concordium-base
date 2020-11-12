@@ -5,17 +5,18 @@ Developing smart contracts in Rust
 ====================================
 
 On the concordium blockchain smart contracts are deployed as Wasm modules, but
-Wasm is not suitable for writing by hand.
+Wasm is designed as a compile target and is not suitable for writing by hand.
 Instead we can write our smart contract in the Rust_ programming language,
 which have good support for compiling to Wasm.
 
-.. seealso:: For more on this see :ref:`contracts-on-chain`
+.. seealso::
+    See :ref:`contract-module` for more about smart contract modules
 
 A smart contract module is developed in Rust as a library crate, which is then
 compiled to Wasm using the ``wasm32-unknown-unknown`` target.
 
-Writing a smart contract
-====================================
+Writing a smart contract using ``concordium_sc_base``
+=====================================================
 
 It is recommended to use the ``concordium_sc_base`` crate, which provides a
 more Rust-like experience for developing smart contract modules and calling
@@ -32,84 +33,35 @@ A simple counter example would look like:
 
     type State = u32;
 
-    #[init(name = "counter")]
-    fn counter_init<I: HasInitContext<()>, L: HasLogger>(
-        _ctx: &I,
+    #[init(contract = "counter")]
+    fn counter_init(
+        _ctx: &impl HasInitContext<()>,
         _amount: Amount,
-        _logger: &mut L,
+        _logger: &mut impl HasLogger,
     ) -> InitResult<State> {
         let state = 0;
         Ok(state)
     }
 
-    #[receive(name = "counter_increment")]
-    fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-        ctx: &R,
+    #[receive(contract = "counter", name = "increment")]
+    fn contract_receive<A: HasActions>(
+        ctx: &impl HasReceiveContext<()>,
         _amount: Amount,
-        _logger: &mut L,
+        _logger: &mut impl HasLogger,
         state: &mut State,
     ) -> ReceiveResult<A> {
-        ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can increment.");
+        ensure!(ctx.sender().matches_account(&ctx.owner()); // Only the owner can increment
         *state += 1;
         Ok(A::accept())
     }
 
-Here ``#[init(name = "counter")]`` sets up the exported ``init``-function
-and name it ``"counter"``, it ensures the state is set properly using host
-functions.
-Likewise ``#[receive(name = "counter_increment")]`` supplies the state to be
-manipulated directly.
+Here ``#[init(contract = "counter")]`` sets up the exported ``init``-function
+for a contract we named ``"counter"``, it ensures the state is set properly
+using host functions and the exported function follows the contract naming
+convention.
 
-.. _compiling-smart-contracts:
-
-Compiling to Wasm
-====================================
-
-To help building small smart contract modules and to take advantage of features
-such as contract schemas, we recommend using the ``cargo-concordium`` tool for
-building rust smart contracts.
-Install the tool by running::
-
-    cargo install cargo-concordium
-
-.. note::
-    Until the tool is release on crates.io_, you instead have to clone
-    the repo containing ``cargo-concordium`` and from the directory
-    ``cargo-concordium`` run::
-
-        cargo install --path .
-
-.. todo::
-    Once the tool is released:
-
-    - Verify the above is correct.
-    - Remove the note.
-
-The ``cargo-concordium`` tool includes various utils for developing smart
-contracts, such as testing and generating schemas, so in order to build run::
-
-    cargo concordium build
-
-.. todo:: Link contract schemas and the cargo-concordium tool
-
-This uses Cargo_ for building, but runs further optimizations on the result.
-
-.. warning::
-    Although it is *not* recommended, it is possible to compile using Cargo_
-    directly by running::
-
-        cargo build --target=wasm32-unknown-unknown [--release]
-
-    But even with the ``--release`` set, the produced Wasm module includes debug
-    information and in some cases embed paths.
-
-    .. todo::
-        Maybe elaborate or add some link to an explanation.
-
-
-Testing
-====================================
-
+The ``#[receive(contract = "counter", name = "increment")]`` supplies the
+state to be manipulated directly.
 
 
 .. _Rust: https://www.rust-lang.org/

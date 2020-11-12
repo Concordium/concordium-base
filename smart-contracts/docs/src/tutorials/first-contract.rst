@@ -86,11 +86,11 @@ contract, which we are about to explain in detail.
 
 .. code-block:: rust
 
-    #[init(name = "counter")]
-    fn counter_init<I: HasInitContext<()>, L: HasLogger>(
-        _ctx: &I,
+    #[init(contract = "counter")]
+    fn counter_init(
+        _ctx: &impl HasInitContext<()>,
         amount: Amount,
-        _logger: &mut L,
+        _logger: &mut impl HasLogger,
     ) -> InitResult<State> {
         ensure_eq!(amount, 0);
         let state = 0;
@@ -106,9 +106,10 @@ The macro saves you from some details of setting up the function as
 external function and supplies a nicer interface for accessing information and
 logging.
 
-You are required to set the ``name`` attribute of the macro, which is going to
-be the name of the exposed ``init``-function and therefore visible on the
-chain.
+You are required to set the ``contract`` attribute of the macro, which is going
+to be the name of the exposed ``init``-function and therefore visible on the
+chain with "init\_" as prefix.
+
 This also means that the contract name is limited to the possible names for a
 function in Rust.
 Unsurprisingly we choose to call our contract "counter".
@@ -118,7 +119,7 @@ But here is a brief description of what they are:
 
 - **ctx**: An object with a bunch of getter functions for accessing information
   about the current context, such as who invoke this function, the argument
-  supplied and the state of the chain.
+  supplied and the current state of the chain.
 - **amount**: The amount of GTU included in the transaction which invoked this
   function.
 - **logger**: An object with functions for outputting to the log of the smart
@@ -278,10 +279,10 @@ Altogether our test should look something like this:
 .. code-block:: rust
 
     #[receive(name = "increment",)]
-    fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-        ctx: &R,
+    fn contract_receive<A: HasActions>(
+        ctx: &impl HasReceiveContext<()>,
         _amount: Amount,
-        _logger: &mut L,
+        _logger: &mut impl HasLogger,
         state: &mut State,
     ) -> ReceiveResult<A> {
         ensure_eq!(amount, 0); // The amount must be 0.

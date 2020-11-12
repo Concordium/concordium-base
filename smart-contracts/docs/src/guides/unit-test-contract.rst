@@ -47,18 +47,18 @@ If the contract functions are written using ``#[init(..)]`` or
 
     use concordium_sc_base::*;
 
-    #[init(name = "my_init")]
-    fn contract_init<I: HasInitContext<()>, L: HasLogger>(
-        ctx: &I,
+    #[init(contract = "my_contract")]
+    fn contract_init(
+        ctx: &impl HasInitContext<()>,
         amount: Amount,
-        logger: &mut L,
+        logger: &mut impl HasLogger,
     ) -> InitResult<State> { ... }
 
-    #[receive(name = "my_receive")]
-    fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
-        ctx: &R,
+    #[receive(contract = "my_contract", name = "my_receive")]
+    fn contract_receive<A: HasActions>(
+        ctx: &impl HasReceiveContext<()>,
         amount: Amount,
-        logger: &mut L,
+        logger: &mut impl HasLogger,
         state: &mut State,
     ) -> ReceiveResult<A> { ... }
 

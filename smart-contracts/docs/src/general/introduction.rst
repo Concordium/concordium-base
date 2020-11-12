@@ -7,8 +7,7 @@ Introduction to smart contracts
 A smart contract is a user-supplied piece of code, used to define behavior that
 is not directly available on the chain.
 
-The code exists publicly as part of the chain and can in theory be used by
-anyone.
+The code exists publicly as part of the chain and can be used by anyone.
 
 .. note::
     The code which is on chain is referred to as the *smart contract*.

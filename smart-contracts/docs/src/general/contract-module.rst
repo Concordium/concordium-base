@@ -43,13 +43,16 @@ run in sandboxed environments.
 This is perfect, since smart contracts will be run by bakers in the network, who
 does not necessarily trust the code.
 
-Wasm is a very low-level language and is impractical to write by hand for any
+Wasm is a low-level language and is impractical to write by hand for any
 decent sized smart contracts.
 Instead one would write the smart contract in a more high level language, which
 is then compiled to Wasm.
 
+Limitations
+-----------
+
 Floating point numbers
-----------------------
+^^^^^^^^^^^^^^^^^^^^^^
 
 Although Wasm have support floating point numbers, a smart contract is
 disallowed to use them.
@@ -82,5 +85,28 @@ smart contract and a user must first create an *instance* of a contract.
 .. seealso::
 
     See :ref:`contract-instances` for more on this.
+
+Smart contract on chain
+=======================
+
+A smart contract on chain is a collection of functions exported from a deployed
+module.
+A smart contract must export one function for initializing instances and can
+export zero or more functions for interacting with an instance.
+
+Since a smart contract module can export functions for multiple different smart
+contract, we associate the functions using a naming scheme:
+
+- ``init_<contract-name>``: The function for initializing a smart contract must
+  start with ``init_`` followed by a name of the smart contract.
+
+- ``receive_<contract-name>_<receive-function-name>``: Functions for interacting
+  with a smart contract are prefixed with ``receive_``, followed by the contract
+  name and a name for the function.
+
+.. note::
+    If you develop smart contracts using Rust and ``concordium-sc-base``, the
+    procedural macros ``#[init(...)]`` and ``#[receive(...)]`` sets up the
+    correct naming scheme.
 
 .. _Web Assembly: https://webassembly.org/

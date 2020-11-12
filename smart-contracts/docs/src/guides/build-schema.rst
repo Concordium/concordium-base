@@ -67,10 +67,10 @@ To generate and include the schema for parameters for ``init`` and
     #[derive(SchemaType)]
     enum ReceiveParameter { ... }
 
-    #[init(name = "my_init", parameter = "InitParameter")]
+    #[init(contract = "my_contract", parameter = "InitParameter")]
     fn contract_init<...> (...){ ... }
 
-    #[receive(name = "my_receive", parameter = "ReceiveParameter")]
+    #[receive(contract = "my_contract", name = "my_receive", parameter = "ReceiveParameter")]
     fn contract_receive<...> (...){ ... }
 
 
