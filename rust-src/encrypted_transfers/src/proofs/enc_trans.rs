@@ -461,10 +461,11 @@ mod tests {
         for _i in 1..20 {
             EncTrans::<G1>::with_valid_data(&mut rng, |enc_trans, secret, rng| {
                 let challenge_prefix = generate_challenge_prefix(rng);
-                let ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro_copy = ro.split();
                 let proof =
-                    prove(ro.split(), &enc_trans, secret, rng).expect("Proving should succeed.");
-                let res = verify(ro, &enc_trans, &proof);
+                    prove(&mut ro_copy, &enc_trans, secret, rng).expect("Proving should succeed.");
+                let res = verify(&mut ro, &enc_trans, &proof);
                 assert!(res, "Verification of produced proof.");
             })
         }
@@ -477,11 +478,12 @@ mod tests {
             EncTrans::<G1>::with_valid_data(&mut rng, |enc_trans, secret, rng| {
                 let challenge_prefix = generate_challenge_prefix(rng);
                 let ro = RandomOracle::domain(&challenge_prefix);
+                let mut ro_split = ro.split();
                 let proof =
-                    prove(ro.split(), &enc_trans, secret, rng).expect("Proving should succeed.");
+                    prove(&mut ro_split, &enc_trans, secret, rng).expect("Proving should succeed.");
 
-                let wrong_ro = RandomOracle::domain(generate_challenge_prefix(rng));
-                assert!(!verify(wrong_ro, &enc_trans, &proof));
+                let mut wrong_ro = RandomOracle::domain(generate_challenge_prefix(rng));
+                assert!(!verify(&mut wrong_ro, &enc_trans, &proof));
 
                 // check that changing any information in the protocol makes the proof not
                 // verify
@@ -492,13 +494,15 @@ mod tests {
                         public: G1::generate(rng),
                         coeff:  tmp.coeff,
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
 
                     wrong_enc_trans.dlog = Dlog {
                         public: tmp.public,
                         coeff:  G1::generate(rng),
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
                     wrong_enc_trans.dlog = tmp;
                 }
                 {
@@ -507,19 +511,22 @@ mod tests {
                         public: G1::generate(rng),
                         coeff:  tmp.coeff,
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
 
                     wrong_enc_trans.elg_dec = ElgDec {
                         public: tmp.public,
                         coeff:  [G1::generate(rng), tmp.coeff[1]],
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
 
                     wrong_enc_trans.elg_dec = ElgDec {
                         public: tmp.public,
                         coeff:  [tmp.coeff[1], G1::generate(rng)],
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
                     wrong_enc_trans.elg_dec = tmp;
                 }
                 for i in 0..wrong_enc_trans.encexp1.len() {
@@ -539,7 +546,8 @@ mod tests {
                         cmm_key:    tmp.cmm_key,
                         g:          tmp.g,
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
 
                     wrong_enc_trans.encexp1[i] = ComEq {
                         commitment: tmp.commitment,
@@ -547,7 +555,8 @@ mod tests {
                         cmm_key:    tmp.cmm_key,
                         g:          tmp.g,
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
 
                     wrong_enc_trans.encexp1[i] = ComEq {
                         commitment: tmp.commitment,
@@ -555,7 +564,8 @@ mod tests {
                         cmm_key:    CommitmentKey::generate(rng),
                         g:          tmp.g,
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
 
                     wrong_enc_trans.encexp1[i] = ComEq {
                         commitment: tmp.commitment,
@@ -563,7 +573,8 @@ mod tests {
                         cmm_key:    tmp.cmm_key,
                         g:          G1::generate(rng),
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
 
                     wrong_enc_trans.encexp1[i] = tmp;
                 }
@@ -584,7 +595,8 @@ mod tests {
                         cmm_key:    tmp.cmm_key,
                         g:          tmp.g,
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
 
                     wrong_enc_trans.encexp2[i] = ComEq {
                         commitment: tmp.commitment,
@@ -592,7 +604,8 @@ mod tests {
                         cmm_key:    tmp.cmm_key,
                         g:          tmp.g,
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
 
                     wrong_enc_trans.encexp2[i] = ComEq {
                         commitment: tmp.commitment,
@@ -600,7 +613,8 @@ mod tests {
                         cmm_key:    CommitmentKey::generate(rng),
                         g:          tmp.g,
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
 
                     wrong_enc_trans.encexp2[i] = ComEq {
                         commitment: tmp.commitment,
@@ -608,7 +622,8 @@ mod tests {
                         cmm_key:    tmp.cmm_key,
                         g:          G1::generate(rng),
                     };
-                    assert!(!verify(ro.split(), &wrong_enc_trans, &proof));
+                    let mut ro_split = ro.split();
+                    assert!(!verify(&mut ro_split, &wrong_enc_trans, &proof));
 
                     wrong_enc_trans.encexp2[i] = tmp;
                 }
