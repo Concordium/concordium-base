@@ -677,7 +677,7 @@ mod test {
         let n = 32;
         let nm = n * m;
 
-        let context = GlobalContext::<SomeCurve>::generate_size(nm);
+        let context = GlobalContext::<SomeCurve>::generate_size(String::from("genesis_string"), nm);
         let generator = context.encryption_in_exponent_generator(); // h
         let s_value = Value::from(s);
         let S = pk_sender.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);
@@ -727,7 +727,7 @@ mod test {
         let n = 32;
         let nm = n * m;
 
-        let context = GlobalContext::<SomeCurve>::generate_size(nm);
+        let context = GlobalContext::<SomeCurve>::generate_size(String::from("genesis_string"), nm);
         let generator = context.encryption_in_exponent_generator(); // h
         let s_value = Value::from(s);
         let S = pk.encrypt_exponent_given_generator(&s_value, generator, &mut csprng);

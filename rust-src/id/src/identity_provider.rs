@@ -510,7 +510,7 @@ mod tests {
             ip_secret_key,
             ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let global_ctx = GlobalContext::<G1>::generate();
+        let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
 
@@ -592,7 +592,7 @@ mod tests {
             public_ip_info: ip_info,
             ..
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let global_ctx = GlobalContext::<G1>::generate();
+        let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
@@ -639,7 +639,7 @@ mod tests {
             public_ip_info: ip_info,
             ..
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
-        let global_ctx = GlobalContext::<G1>::generate();
+        let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);

@@ -1,6 +1,6 @@
 use pairing::bls12_381::{Bls12, G1};
 
-use crypto_common::{base16_decode_string, from_bytes, version::*};
+use crypto_common::{base16_decode_string, version::*};
 use curve_arithmetic::*;
 use id::{
     constants::ArCurve,
@@ -11,15 +11,11 @@ use id::{
     types::*,
 };
 use serde_json::{from_str, from_value, ser::to_string, Value};
-use std::{fmt::Display, io::Cursor};
+use std::fmt::Display;
 use wasm_bindgen::prelude::*;
 
 type ExampleCurve = G1;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
-
-/// Embed the precomputed global parameters.
-/// It is unfortunate that this is pure bytes, but not enough data is constant.
-static GLOBAL_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/global_bytes.bin"));
 
 // Parse an IpInfo taking into account the version.
 // For now only version 0 is supported.
@@ -43,8 +39,27 @@ fn parse_exact_versioned_ars_infos(ars_info_str: &str) -> Result<ArInfos<ArCurve
     }
 }
 
+// Parse an GlobalContext taking into account the version.
+// For now only version 0 is supported.
+fn parse_exact_versioned_global_context(
+    global_context_str: &str,
+) -> Result<GlobalContext<ExampleCurve>, JsValue> {
+    let v: Versioned<GlobalContext<ExampleCurve>> =
+        from_str(global_context_str).map_err(show_err)?;
+    if v.version == VERSION_0 {
+        Ok(v.value)
+    } else {
+        Err(show_err("Incorrect IpInfo version."))
+    }
+}
+
 #[wasm_bindgen]
-pub fn validate_request(ip_info_str: &str, ars_infos_str: &str, request_str: &str) -> bool {
+pub fn validate_request(
+    global_context_str: &str,
+    ip_info_str: &str,
+    ars_infos_str: &str,
+    request_str: &str,
+) -> bool {
     let ip_info = match parse_exact_versioned_ip_info(ip_info_str) {
         Ok(v) => v,
         Err(_) => return false,
@@ -55,7 +70,7 @@ pub fn validate_request(ip_info_str: &str, ars_infos_str: &str, request_str: &st
         Err(_) => return false,
     };
 
-    let global = match from_bytes(&mut Cursor::new(GLOBAL_BYTES)) {
+    let global_context = match parse_exact_versioned_global_context(global_context_str) {
         Ok(v) => v,
         Err(_) => return false,
     };
@@ -86,7 +101,7 @@ pub fn validate_request(ip_info_str: &str, ars_infos_str: &str, request_str: &st
     let context = IPContext {
         ip_info:        &ip_info,
         ars_infos:      &ars_infos.anonymity_revokers,
-        global_context: &global,
+        global_context: &global_context,
     };
 
     let vf = ip_validate_request(&request, context);

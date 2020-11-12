@@ -1173,7 +1173,7 @@ fn handle_generate_ips(gip: GenerateIps) {
 
 /// Generate the global context.
 fn handle_generate_global(gl: GenerateGlobal) {
-    let gc = GlobalContext::<ExampleCurve>::generate();
+    let gc = GlobalContext::<ExampleCurve>::generate(String::from("genesis_string"));
     let vgc = Versioned::new(VERSION_0, gc);
     if let Err(err) = write_json_to_file(&gl.output_file, &vgc) {
         eprintln!("Could not write global parameters because {}.", err);
