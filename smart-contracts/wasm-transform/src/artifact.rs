@@ -363,6 +363,12 @@ impl JumpTarget {
         }
     }
 
+    pub fn new_unknown_loc(pos: usize) -> Self {
+        JumpTarget::Unknown {
+            backpatch_locations: vec![pos],
+        }
+    }
+
     pub fn new_known(pos: usize) -> Self {
         JumpTarget::Known {
             pos,
@@ -481,7 +487,8 @@ impl Handler<&OpCode> for BackPatch {
                 ..
             } => {
                 self.out.push(If);
-                self.backpatch.push(JumpTarget::new_unknown());
+                self.backpatch.push(JumpTarget::new_unknown_loc(self.out.bytes.len()));
+                self.out.push_u32(0);
             }
             OpCode::Else => {
                 // If we reached the else normally, after executing the if branch, we just break
