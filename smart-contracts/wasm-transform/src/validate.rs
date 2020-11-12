@@ -794,7 +794,7 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
                 };
                 let opcodes = validate(&ctx, &mut OpCodeIterator::new(c.expr_bytes), Vec::new())?;
 
-                parsed_code.push(Code {
+                let code = Code {
                     ty: func_ty.clone(),
                     ty_idx: f,
                     num_locals,
@@ -802,7 +802,8 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
                     expr: Expression {
                         instrs: opcodes,
                     },
-                })
+                };
+                parsed_code.push(code)
             }
             None => bail!("Function has a type that does not exist."),
         }

@@ -22,7 +22,7 @@ pub union StackValue {
 impl std::fmt::Debug for StackValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("StackValue")
-        // writeln!(f, "{}", unsafe { self.long })
+        // write!(f, "{}", unsafe { self.short })
     }
 }
 

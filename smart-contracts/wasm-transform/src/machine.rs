@@ -4,6 +4,7 @@ use crate::{
     types::*,
 };
 use anyhow::{anyhow, bail, ensure};
+
 use std::{convert::TryInto, io::Write};
 
 /// The host that can process external functions.
@@ -28,12 +29,11 @@ pub type RunResult<A> = anyhow::Result<A>;
 struct FunctionState<'a> {
     /// The program counter.
     pc: usize,
-    /// Current values of all the locals (including parameters).
-    locals: Vec<StackValue>,
     /// Instructions
     instructions: &'a [u8],
     /// Stack height
     height: usize,
+    locals_base: usize,
     return_type: Option<ValueType>,
 }
 
@@ -72,13 +72,6 @@ pub struct RuntimeStack {
 impl RuntimeStack {
     #[inline(always)]
     pub fn size(&self) -> usize { self.pos }
-
-    #[inline(always)]
-    pub fn split_off(&mut self, mid: usize) -> &[StackValue] {
-        let rest = &self.stack[mid..self.pos];
-        self.pos = mid;
-        rest
-    }
 
     #[inline(always)]
     pub fn pop(&mut self) -> StackValue {
@@ -120,6 +113,14 @@ fn get_u32(bytes: &[u8], pc: &mut usize) -> u32 {
     dst.copy_from_slice(&bytes[*pc..*pc + 4]);
     *pc += 4;
     u32::from_le_bytes(dst)
+}
+
+#[inline(always)]
+fn get_i32(bytes: &[u8], pc: &mut usize) -> i32 {
+    let mut dst = [0u8; 4];
+    dst.copy_from_slice(&bytes[*pc..*pc + 4]);
+    *pc += 4;
+    i32::from_le_bytes(dst)
 }
 
 #[inline(always)]
@@ -188,12 +189,13 @@ fn get_memory_pos(
 ) -> RunResult<usize> {
     let offset = get_u32(instructions, pc);
     let top = stack.pop();
-    let top = unsafe { top.short };
+    let top = unsafe { top.short } as u32;
     let pos = top as usize + offset as usize;
     Ok(pos)
 }
 
 fn write_memory_at(memory: &mut [u8], pos: usize, bytes: &[u8]) -> RunResult<()> {
+    ensure!(pos < memory.len(), "Illegal memory access.");
     (&mut memory[pos..]).write_all(bytes)?;
     Ok(())
 }
@@ -271,29 +273,31 @@ impl<I: RenameImports> Artifact<I> {
             .export
             .get(name)
             .ok_or_else(|| anyhow!("Trying to invoke a method that does not exist: {}.", name))?;
-        let f = &self.code[start as usize]; // safe because the artifact should be well-formed.
+        let outer_function = &self.code[start as usize]; // safe because the artifact should be well-formed.
         ensure!(
-            f.num_params == args.len().try_into()?,
+            outer_function.num_params == args.len().try_into()?,
             "The number of arguments does not match the number of parameters."
         );
-        for (p, actual) in f.locals.iter().zip(args.iter()) {
+        for (p, actual) in outer_function.locals.iter().zip(args.iter()) {
             // the first num_params locals are arguments
             ensure!(*p == ValueType::from(*actual), "Argument of incorrect type.")
         }
 
         let mut globals = self.global.inits.clone();
-
-        let mut locals = Vec::with_capacity(f.locals.len());
+        let mut stack: RuntimeStack = RuntimeStack {
+            stack: Vec::with_capacity(1000),
+            pos:   0,
+        };
         for &arg in args.iter() {
             match arg {
-                Value::I32(short) => locals.push(StackValue::from(short)),
-                Value::I64(long) => locals.push(StackValue::from(long)),
+                Value::I32(short) => stack.push(StackValue::from(short)),
+                Value::I64(long) => stack.push(StackValue::from(long)),
             }
         }
-        for l in f.locals[args.len()..].iter() {
+        for l in outer_function.locals[args.len()..].iter() {
             match l {
-                ValueType::I32 => locals.push(StackValue::from(0i32)),
-                ValueType::I64 => locals.push(StackValue::from(0i64)),
+                ValueType::I32 => stack.push(StackValue::from(0i32)),
+                ValueType::I64 => stack.push(StackValue::from(0i64)),
             }
         }
         // FIXME: Charge for initial memory allocation.
@@ -314,20 +318,14 @@ impl<I: RenameImports> Artifact<I> {
 
         let mut pc = 0;
         let mut instructions: &[u8] = &self.code[start as usize].code.bytes;
-        // TODO: We could actually allocate an exact one here.
-        let mut stack: RuntimeStack = RuntimeStack {
-            stack: Vec::with_capacity(1000),
-            pos:   0,
-        };
+
         let mut function_frames: Vec<FunctionState> = Vec::new();
         let mut return_type = self.code[start as usize].return_type;
 
+        let mut locals_base = 0;
         'outer: loop {
-            // FIXME: This while loop here is not an ideal situation.
-            // It is necessary because we can have tail calls.
             let instr = instructions[pc];
             pc += 1;
-            // println!("{:?}", InternalOpcode::try_from(instr)?);
             // FIXME: The unsafe here is a bit wrong, but it is much faster than using
             // InternalOpcode::try_from(instr). About 25% faster on a fibonacci test.
             // The ensure here guarantees that the transmute is safe, provided that
@@ -393,7 +391,6 @@ impl<I: RenameImports> Artifact<I> {
                     pc = target as usize;
                 }
                 InternalOpcode::Return => {
-                    // this is the same as return
                     if let Some(top_frame) = function_frames.pop() {
                         if return_type.is_some() {
                             let top = stack.pop();
@@ -403,9 +400,9 @@ impl<I: RenameImports> Artifact<I> {
                             stack.set_pos(top_frame.height);
                         }
                         pc = top_frame.pc;
-                        locals = top_frame.locals;
                         instructions = top_frame.instructions;
-                        return_type = top_frame.return_type
+                        return_type = top_frame.return_type;
+                        locals_base = top_frame.locals_base;
                     } else {
                         break 'outer;
                     }
@@ -416,29 +413,25 @@ impl<I: RenameImports> Artifact<I> {
                         // we are calling an imported function, handle the call directly.
                         host.call(f, &mut memory, &mut stack)?;
                     } else {
-                        let current_frame = FunctionState {
-                            pc,
-                            locals,
-                            instructions,
-                            height: stack.size(),
-                            return_type,
-                        };
-                        function_frames.push(current_frame);
                         let f = self
                             .code
                             .get(idx as usize - self.imports.len())
                             .ok_or_else(|| anyhow!("Accessing non-existent code."))?;
-                        locals = Vec::with_capacity(f.locals.len());
-                        locals.extend_from_slice(
-                            stack.split_off(stack.size() - f.num_params as usize),
-                        );
-
+                        let current_frame = FunctionState {
+                            pc,
+                            instructions,
+                            locals_base,
+                            height: stack.size() - f.num_params as usize,
+                            return_type,
+                        };
+                        locals_base = current_frame.height;
+                        function_frames.push(current_frame);
                         for ty in f.locals[f.num_params as usize..].iter() {
                             match ty {
-                                ValueType::I32 => locals.push(StackValue {
+                                ValueType::I32 => stack.push(StackValue {
                                     short: 0,
                                 }),
-                                ValueType::I64 => locals.push(StackValue {
+                                ValueType::I64 => stack.push(StackValue {
                                     long: 0,
                                 }),
                             }
@@ -473,26 +466,21 @@ impl<I: RenameImports> Artifact<I> {
                                 "Actual type different from expected."
                             );
                             // FIXME: Remove duplication.
-
                             let current_frame = FunctionState {
                                 pc,
-                                locals,
                                 instructions,
-                                height: stack.size(),
+                                locals_base,
+                                height: stack.size() - f.num_params as usize,
                                 return_type,
                             };
+                            locals_base = current_frame.height;
                             function_frames.push(current_frame);
-                            locals = Vec::with_capacity(f.locals.len());
-                            locals.extend_from_slice(
-                                stack.split_off(stack.size() - f.num_params as usize),
-                            );
-
                             for ty in f.locals[f.num_params as usize..].iter() {
                                 match ty {
-                                    ValueType::I32 => locals.push(StackValue {
+                                    ValueType::I32 => stack.push(StackValue {
                                         short: 0,
                                     }),
-                                    ValueType::I64 => locals.push(StackValue {
+                                    ValueType::I64 => stack.push(StackValue {
                                         long: 0,
                                     }),
                                 }
@@ -502,7 +490,7 @@ impl<I: RenameImports> Artifact<I> {
                             return_type = f.return_type;
                         }
                     } else {
-                        bail!("Calling undefined function.") // trap
+                        bail!("Calling undefined function {}.", idx) // trap
                     }
                 }
                 InternalOpcode::Drop => {
@@ -517,17 +505,18 @@ impl<I: RenameImports> Artifact<I> {
                 }
                 InternalOpcode::LocalGet => {
                     let idx = get_u16(instructions, &mut pc);
-                    stack.push(locals[idx as usize])
+                    let val = stack.stack[locals_base + idx as usize];
+                    stack.push(val)
                 }
                 InternalOpcode::LocalSet => {
                     let idx = get_u16(instructions, &mut pc);
                     let top = stack.pop();
-                    locals[idx as usize] = top
+                    stack.stack[locals_base + idx as usize] = top
                 }
                 InternalOpcode::LocalTee => {
                     let idx = get_u16(instructions, &mut pc);
                     let top = stack.peek();
-                    locals[idx as usize] = top
+                    stack.stack[locals_base + idx as usize] = top
                 }
                 InternalOpcode::GlobalGet => {
                     let idx = get_u16(instructions, &mut pc);
@@ -656,8 +645,8 @@ impl<I: RenameImports> Artifact<I> {
                     }
                 }
                 InternalOpcode::I32Const => {
-                    let val = get_u32(instructions, &mut pc);
-                    stack.push(StackValue::from(val as i32));
+                    let val = get_i32(instructions, &mut pc);
+                    stack.push(StackValue::from(val));
                 }
                 InternalOpcode::I64Const => {
                     let val = get_u64(instructions, &mut pc);
@@ -882,7 +871,7 @@ impl<I: RenameImports> Artifact<I> {
                 }
             }
         }
-        match f.return_type {
+        match outer_function.return_type {
             Some(ValueType::I32) => {
                 let val = stack.pop();
                 Ok(Some(Value::I32(unsafe { val.short })))
