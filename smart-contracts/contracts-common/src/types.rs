@@ -365,9 +365,13 @@ mod serde_impl {
 
     impl fmt::Display for Amount {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            let mut nr = format!("{:07}", self.micro_gtu);
-            nr.insert(6, '.');
-            write!(f, "{}", nr)
+            let q = self.micro_gtu / 1000000;
+            let r = self.micro_gtu % 1000000;
+            if r == 0 {
+                write!(f, "{}.0", q)
+            } else {
+                write!(f, "{}.{:06}", q, r)
+            }
         }
     }
 
@@ -450,7 +454,7 @@ pub mod schema {
     impl Type {
         #[doc(hidden)]
         /// Sets the size_length of schema types, with variable size otherwise
-        /// panics. Used when deriving SchemaType using derive.
+        /// it is a noop. Used when deriving SchemaType.
         pub fn set_size_length(self, size_len: SizeLength) -> Type {
             match self {
                 Type::String(_) => Type::String(size_len),
