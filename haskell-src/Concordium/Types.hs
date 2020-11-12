@@ -91,6 +91,7 @@ module Concordium.Types (
   BlockHeight(..),
   Slot(..),
   EpochLength,
+  Epoch,
   genesisSlot,
   -- ** Transactions
   EncodedPayload(..),
@@ -631,6 +632,9 @@ genesisSlot :: Slot
 genesisSlot = 0
 
 type EpochLength = Slot
+
+-- |Index of an epoch.
+type Epoch = Word64
 
 newtype BlockHeight = BlockHeight {theBlockHeight :: Word64}
   deriving (Eq, Ord, Num, Real, Enum, Integral, Read, Show, Hashable, FromJSON, ToJSON, PersistField) via Word64
