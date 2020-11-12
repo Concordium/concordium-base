@@ -23,7 +23,7 @@ import System.IO.Unsafe
 newtype GlobalContext = GlobalContext (ForeignPtr GlobalContext)
 
 foreign import ccall unsafe "&global_context_free" freeGlobalContext :: FunPtr (Ptr GlobalContext -> IO ())
-foreign import ccall unsafe "generate_global_context" generateGlobalContextPtr :: IO (Ptr GlobalContext)
+foreign import ccall unsafe "dummy_generate_global_context" dummyGenerateGlobalContextPtr :: IO (Ptr GlobalContext)
 foreign import ccall unsafe "global_context_to_bytes" globalContextToBytes :: Ptr GlobalContext -> Ptr CSize -> IO (Ptr Word8)
 foreign import ccall unsafe "global_context_from_bytes" globalContextFromBytes :: Ptr Word8 -> CSize -> IO (Ptr GlobalContext)
 foreign import ccall unsafe "global_context_to_json" globalContextToJSONFFI :: Ptr GlobalContext -> Ptr CSize -> IO (Ptr Word8)
@@ -65,7 +65,7 @@ globalContextToJSON (GlobalContext ip) = toJSONHelper globalContextToJSONFFI ip
 -- |Create a global context structure. This is a constant value, but quite expensive to generate.
 {-# NOINLINE globalContext #-}
 globalContext :: GlobalContext
-globalContext = GlobalContext $ unsafeDupablePerformIO (newForeignPtr freeGlobalContext =<< generateGlobalContextPtr)
+globalContext = GlobalContext $ unsafeDupablePerformIO (newForeignPtr freeGlobalContext =<< dummyGenerateGlobalContextPtr)
 
 -- These JSON instances are very inefficient and should not be used in
 -- performance critical contexts, however they are fine for loading

@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt() {
         let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate();
+        let context = GlobalContext::<G1>::generate(String::from("genesis_string"));
 
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let pk = PublicKey::from(&sk);
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn test_scale() {
         let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate();
+        let context = GlobalContext::<G1>::generate(String::from("genesis_string"));
 
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let pk = PublicKey::from(&sk);
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn test_encryption_randomness_zero() {
         let mut csprng = thread_rng();
-        let context = GlobalContext::<G1>::generate();
+        let context = GlobalContext::<G1>::generate(String::from("genesis_string"));
         let sk = SecretKey::generate(context.elgamal_generator(), &mut csprng);
         let amount = Amount::from(csprng.gen::<u64>());
         let dummy_encryption = encrypt_amount_with_fixed_randomness(&context, amount);
@@ -368,7 +368,7 @@ mod tests {
         let n = 32;
         let nm = n * m;
 
-        let context = GlobalContext::<G1>::generate_size(nm);
+        let context = GlobalContext::<G1>::generate_size(String::from("genesis_string"), nm);
         let S_in_chunks = encrypt_amount(&context, &pk_sender, Amount::from(s), &mut csprng);
 
         let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.
@@ -413,7 +413,7 @@ mod tests {
         let n = 32;
         let nm = n * m;
 
-        let context = GlobalContext::<G1>::generate_size(nm);
+        let context = GlobalContext::<G1>::generate_size(String::from("genesis_string"), nm);
         let S_in_chunks = encrypt_amount(&context, &pk_sender, Amount::from(s), &mut csprng);
 
         let index = csprng.gen(); // index is only important for on-chain stuff, not for proofs.

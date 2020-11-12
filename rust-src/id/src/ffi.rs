@@ -262,8 +262,10 @@ macro_derive_to_bytes!(Box global_context_to_bytes, GlobalContext<G1>);
 macro_derive_from_json!(global_context_from_json, GlobalContext<G1>);
 macro_derive_to_json!(global_context_to_json, GlobalContext<G1>);
 #[no_mangle]
-extern "C" fn generate_global_context() -> *mut GlobalContext<G1> {
-    Box::into_raw(Box::new(GlobalContext::generate()))
+extern "C" fn dummy_generate_global_context() -> *mut GlobalContext<G1> {
+    Box::into_raw(Box::new(GlobalContext::generate(String::from(
+        "genesis_string",
+    ))))
 }
 
 // derive conversion methods for ArInfo to be used in Haskell
@@ -344,7 +346,7 @@ mod test {
             _phantom: Default::default(),
         };
 
-        let global_ctx = GlobalContext::<G1>::generate();
+        let global_ctx = GlobalContext::<G1>::generate(String::from("genesis_string"));
 
         let (ars_infos, _ars_secret) = test_create_ars(
             &global_ctx.on_chain_commitment_key.g,
