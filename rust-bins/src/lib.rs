@@ -7,7 +7,7 @@ use serde_json::{to_string_pretty, to_writer_pretty};
 use std::{
     fmt::Debug,
     fs::File,
-    io::{self, BufReader},
+    io::{self, prelude::*, BufReader},
     path::Path,
     str::FromStr,
 };
@@ -166,4 +166,13 @@ where
     let reader = BufReader::new(file);
     let u = serde_json::from_reader(reader)?;
     Ok(u)
+}
+
+pub fn read_bytes_from_file<P>(path: P) -> io::Result<Vec<u8>>
+where
+    P: AsRef<Path> + Debug, {
+    let mut file = File::open(path)?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
+    Ok(buffer)
 }
