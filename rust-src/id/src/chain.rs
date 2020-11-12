@@ -6,6 +6,7 @@ use crate::{
 };
 use bulletproofs::range_proof::verify_less_than_or_equal;
 use core::fmt::{self, Display};
+use crypto_common::to_bytes;
 use curve_arithmetic::{Curve, Pairing};
 use ed25519_dalek::Verifier;
 use either::Either;
@@ -13,6 +14,7 @@ use pedersen_scheme::{
     commitment::Commitment, key::CommitmentKey, randomness::Randomness, value::Value,
 };
 use random_oracle::RandomOracle;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -182,37 +184,14 @@ pub fn verify_cdi<
             }
         }
         CredentialAccount::NewAccount(ref keys, threshold) => {
-            // we check all the keys that were provided, and check enough were provided
-            // compared to the threshold
-            // We also make sure that no more than 255 keys are provided, as well as
-            // - all keys are distinct
-            // - at least one key is provided
-            // - there are the same number of proofs and keys
-            if proofs.proof_acc_sk.num_proofs() < threshold
-                || keys.len() > 255
-                || keys.is_empty()
-                || proofs.proof_acc_sk.num_proofs() != SignatureThreshold(keys.len() as u8)
-            {
+            // message signed in proofs.proofs_acc_sk.sigs
+            if !utils::verify_accunt_ownership_proof(
+                &keys,
+                threshold,
+                &proofs.proof_acc_sk,
+                signed.as_ref(),
+            ) {
                 return Err(CDIVerificationError::AccountOwnership);
-            }
-            // set of processed keys already
-            let mut processed = BTreeSet::new();
-            // the new keys get indices 0, 1, ..
-            for (idx, key) in (0u8..).zip(keys.iter()) {
-                let idx = KeyIndex(idx);
-                // insert returns true if key was __not__ present
-                if !processed.insert(key) {
-                    return Err(CDIVerificationError::AccountOwnership);
-                }
-                if let Some(sig) = proofs.proof_acc_sk.sigs.get(&idx) {
-                    let VerifyKey::Ed25519VerifyKey(ref key) = key;
-                    match key.verify(signed.as_ref(), &sig) {
-                        Ok(_) => (),
-                        _ => return Err(CDIVerificationError::AccountOwnership),
-                    }
-                } else {
-                    return Err(CDIVerificationError::AccountOwnership);
-                }
             }
         }
     };
@@ -224,6 +203,22 @@ pub fn verify_cdi<
     }
 
     Ok(())
+}
+
+/// verify initial credential deployment info
+pub fn verify_initial_cdi<
+    P: Pairing,
+    C: Curve<Scalar = P::ScalarField>,
+    AttributeType: Attribute<C::Scalar>,
+>(
+    ip_info: &IpInfo<P>,
+    cdi: &InitialCredentialDeploymentInfo<C, AttributeType>,
+) -> Result<(), CDIVerificationError> {
+    let signed = Sha256::digest(&to_bytes(&cdi.values));
+    match ip_info.ip_cdi_verify_key.verify(signed.as_ref(), &cdi.sig) {
+        Err(_) => Err(CDIVerificationError::Signature),
+        _ => Ok(()),
+    }
 }
 
 /// verify id_cred data
@@ -426,7 +421,7 @@ mod tests {
     use super::*;
 
     use crate::{account_holder::*, ffi::*, identity_provider::*, test::*};
-
+    use crypto_common::serde_impls::KeyPairDef;
     use ed25519_dalek as ed25519;
     use either::Left;
     use pairing::bls12_381::G1;
@@ -443,19 +438,36 @@ mod tests {
         let IpData {
             public_ip_info: ip_info,
             ip_secret_key,
+            ip_cdi_secret_key,
         } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
         let global_ctx = GlobalContext::<G1>::generate();
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let aci = test_create_aci(&mut csprng);
-        let (context, pio, randomness) =
-            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars);
+        let initial_acc_data = InitialAccountData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
+        let (context, pio, randomness) = test_create_pio(
+            &aci,
+            &ip_info,
+            &ars_infos,
+            &global_ctx,
+            num_ars,
+            &initial_acc_data,
+        );
         let alist = test_create_attributes();
-        let sig_ok = verify_credentials(&pio, context, &alist, &ip_secret_key);
-        assert!(sig_ok.is_ok());
+        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
+        assert!(ver_ok.is_ok());
 
         // Generate CDI
-        let ip_sig = sig_ok.unwrap();
+        let (ip_sig, _) = ver_ok.unwrap();
         let id_object = IdentityObject {
             pre_identity_object: pio,
             alist,
@@ -488,6 +500,44 @@ mod tests {
         let cdi = create_credential(context, &id_object, &id_use_data, 0, policy, &acc_data)
             .expect("Should generate the credential successfully.");
         let cdi_check = verify_cdi(&global_ctx, &ip_info, &ars_infos, None, &cdi);
+        assert_eq!(cdi_check, Ok(()));
+    }
+
+    #[test]
+    fn test_verify_initial_cdi() {
+        let mut csprng = thread_rng();
+
+        // Generate PIO
+        let max_attrs = 10;
+        let num_ars = 5;
+        let IpData {
+            public_ip_info: ip_info,
+            ip_secret_key,
+            ip_cdi_secret_key,
+        } = test_create_ip_info(&mut csprng, num_ars, max_attrs);
+        let global_ctx = GlobalContext::<G1>::generate();
+        let (ars_infos, _) =
+            test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
+        let aci = test_create_aci(&mut csprng);
+        let acc_data = InitialAccountData {
+            keys:      {
+                let mut keys = BTreeMap::new();
+                keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+                keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+                keys
+            },
+            threshold: SignatureThreshold(2),
+        };
+        let (context, pio, _) =
+            test_create_pio(&aci, &ip_info, &ars_infos, &global_ctx, num_ars, &acc_data);
+        let alist = test_create_attributes();
+        let ver_ok = verify_credentials(&pio, context, &alist, &ip_secret_key, &ip_cdi_secret_key);
+        assert!(ver_ok.is_ok());
+
+        // Verify initial CDI
+        let (_, initial_cdi) = ver_ok.unwrap();
+        let cdi_check = verify_initial_cdi(&ip_info, &initial_cdi);
         assert_eq!(cdi_check, Ok(()));
     }
 }

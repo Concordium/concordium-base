@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Concordium.ID.Account(CredentialDeploymentInformationBytes, verifyCredential) where
+module Concordium.ID.Account(CredentialDeploymentInformationBytes, verifyCredential, verifyInitialAccountCreation) where
 
 import GHC.Word
 import System.IO.Unsafe
@@ -30,14 +30,22 @@ foreign import ccall unsafe "verify_cdi_ffi" verifyCDIFFI
                -> Ptr Word8 -- ^Serialized credential.
                -> CSize  -- ^Length of the serialized credential.
                -> IO Int32
-
 -- FIXME: We pass in keys as byte arrays which is quite bad since
 -- keys are not bytes, but rather we know that they are well-formed already.
+
+foreign import ccall unsafe "verify_initial_cdi_ffi" verifyInitialCDIFFI
+    :: Ptr IpInfo
+    -> Ptr Word8 -- Serialized account creation information
+    -> CSize -- length of serialized account creation information
+    -> IO Int32
 
 withArInfoArray :: [Ptr ArInfo] -> [ArInfo] -> (Int -> Ptr (Ptr ArInfo) -> IO a) -> IO a
 withArInfoArray arPtrs [] k = withArrayLen arPtrs k
 withArInfoArray arPtrs (ar:ars) k = withArInfo ar $ \arPtr -> withArInfoArray (arPtr:arPtrs) ars k
 
+-- |Verify a credential in the context of the given cryptographic parameters and
+-- identity provider information. If the account keys are given this checks that
+-- the proofs contained in the credential correspond to them.
 verifyCredential :: GlobalContext -> IpInfo -> [ArInfo] -> Maybe AccountKeys -> CredentialDeploymentInformationBytes -> Bool
 verifyCredential gc ipInfo arInfos Nothing cdiBytes = unsafeDupablePerformIO $ do
     res <- withGlobalContext gc $ \gcPtr ->
@@ -68,3 +76,15 @@ verifyCredential gc ipInfo arInfos (Just keys) cdiBytes = unsafeDupablePerformIO
                             (fromIntegral cdiBytesLen)
     return (res == 1)
     where keyBytes = encode keys
+
+type InitialCredentialBytes = ByteString
+
+-- |Verify the initial account creation payload, in the context of the given
+-- identity provider.
+verifyInitialAccountCreation :: IpInfo -> InitialCredentialBytes -> Bool
+verifyInitialAccountCreation ipInfo aciBytes = unsafeDupablePerformIO $ do
+  res <- withIpInfo ipInfo $ \ipInfoPtr ->
+    unsafeUseAsCStringLen aciBytes $ \(aciBytesPtr, aciBytesLen) ->
+      -- TODO: ensure that we only call this on nonempty byte lists
+      verifyInitialCDIFFI ipInfoPtr (castPtr aciBytesPtr) (fromIntegral aciBytesLen)
+  return (res == 1)
