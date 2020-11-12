@@ -39,3 +39,9 @@ This has the following parameters
 - `--id-verification-url` (envar ID_VERIFICATION_URL), the Url where the
   identity verifier can be reached, example `http://localhost:8101/api/verify`.
   The server will make POST requests to the URL.
+
+- `--wallet-proxy-base` (envar WALLET_PROXY_BASE), the base Url of the wallet
+  proxy. Example https://wallet-proxy.eu.staging.concordium.com.
+  This cannot have a path component, the way it is currently set-up. If that is
+  necessary (e.g., if we want to deploy this behind a proxy) we need to change
+  the use of this parameter a little bit.

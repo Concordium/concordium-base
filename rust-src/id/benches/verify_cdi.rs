@@ -1,25 +1,17 @@
-use crypto_common::*;
+use criterion::*;
+use crypto_common::{serde_impls::KeyPairDef, *};
 use curve_arithmetic::Pairing;
 use dodis_yampolskiy_prf::secret as prf;
 use ed25519_dalek as ed25519;
+use either::Left;
 use elgamal::{PublicKey, SecretKey};
 use id::{
     account_holder::*, anonymity_revoker::*, chain::*, ffi::*, identity_provider::*,
     secret_sharing::Threshold, types::*,
 };
-use std::io::Cursor;
-
 use pairing::bls12_381::{Bls12, G1};
-
 use rand::*;
-
-use std::collections::BTreeMap;
-
-use either::Left;
-
-use std::convert::TryFrom;
-
-use criterion::*;
+use std::{collections::BTreeMap, convert::TryFrom, io::Cursor};
 
 type ExampleCurve = G1;
 
@@ -32,6 +24,7 @@ fn bench_parts(c: &mut Criterion) {
 
     let ip_secret_key = ps_sig::secret::SecretKey::<Bls12>::generate(20, &mut csprng);
     let ip_public_key = ps_sig::public::PublicKey::from(&ip_secret_key);
+    let keypair = ed25519::Keypair::generate(&mut csprng);
 
     let ah_info = CredentialHolderInfo::<ExampleCurve> {
         id_cred: IdCredentials::generate(&mut csprng),
@@ -76,9 +69,10 @@ fn bench_parts(c: &mut Criterion) {
     };
 
     let ip_info = IpInfo {
-        ip_identity:    IpIdentity(88),
-        ip_description: mk_dummy_description("IP88".to_string()),
-        ip_verify_key:  ip_public_key,
+        ip_identity:       IpIdentity(88),
+        ip_description:    mk_dummy_description("IP88".to_string()),
+        ip_verify_key:     ip_public_key,
+        ip_cdi_verify_key: keypair.public,
     };
 
     let prf_key = prf::SecretKey::generate(&mut csprng);
@@ -116,17 +110,33 @@ fn bench_parts(c: &mut Criterion) {
 
     let context = IPContext::new(&ip_info, &ars_infos, &global_context);
 
-    let (pio, randomness) = generate_pio(&context, Threshold(2), &aci)
+    let initial_acc_data = InitialAccountData {
+        keys:      {
+            let mut keys = BTreeMap::new();
+            keys.insert(KeyIndex(0), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(1), KeyPairDef::generate(&mut csprng));
+            keys.insert(KeyIndex(2), KeyPairDef::generate(&mut csprng));
+            keys
+        },
+        threshold: SignatureThreshold(2),
+    };
+
+    let (pio, randomness) = generate_pio(&context, Threshold(2), &aci, &initial_acc_data)
         .expect("Generating the pre-identity object succeed.");
     let pio_ser = to_bytes(&pio);
     let ip_info_ser = to_bytes(&ip_info);
     let pio_des = from_bytes(&mut Cursor::new(&pio_ser)).unwrap();
     let ip_info_des: IpInfo<Bls12> = from_bytes(&mut Cursor::new(&ip_info_ser)).unwrap();
     let des_context = IPContext::new(&ip_info_des, &ars_infos, &global_context);
-    let sig_ok =
-        verify_credentials::<_, _, ExampleCurve>(&pio_des, des_context, &alist, &ip_secret_key);
+    let ver_ok = verify_credentials::<_, _, ExampleCurve>(
+        &pio_des,
+        des_context,
+        &alist,
+        &ip_secret_key,
+        &keypair.secret,
+    );
 
-    let ip_sig = sig_ok.unwrap();
+    let (ip_sig, initial_cdi) = ver_ok.unwrap();
 
     let policy = Policy {
         valid_to,
@@ -183,11 +193,19 @@ fn bench_parts(c: &mut Criterion) {
     );
 
     let bench_pio =
-        move |b: &mut Bencher, x: &(_, _)| b.iter(|| generate_pio(x.0, Threshold(2), x.1));
+        move |b: &mut Bencher, x: &(_, _, _)| b.iter(|| generate_pio(x.0, Threshold(2), x.1, x.2));
     c.bench_with_input(
         BenchmarkId::new("Generate ID request", ""),
-        &(&context, &id_use_data.aci),
+        &(&context, &id_use_data.aci, &initial_acc_data),
         bench_pio,
+    );
+
+    let bench_verify_initial_cdi =
+        move |b: &mut Bencher, x: &(_, _)| b.iter(|| verify_initial_cdi(x.0, x.1).unwrap());
+    c.bench_with_input(
+        BenchmarkId::new("Verify Initial CDI", ""),
+        &(&ip_info, &initial_cdi),
+        bench_verify_initial_cdi,
     );
 
     let bench_create_credential =
@@ -217,6 +235,7 @@ fn bench_parts(c: &mut Criterion) {
                 context,
                 &id_object.alist,
                 &ip_secret_key,
+                &keypair.secret,
             )
             .unwrap()
         })
