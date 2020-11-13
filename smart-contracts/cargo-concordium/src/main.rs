@@ -82,7 +82,7 @@ struct Runner {
     #[structopt(
         name = "amount",
         long = "amount",
-        help = "The amount to invoke the method with.",
+        help = "The amount of micro GTU to invoke the method with.",
         default_value = "0"
     )]
     amount: u64,
@@ -293,7 +293,8 @@ pub fn main() {
                             .expect("Could not parse init context")
                     };
                     if let Some(balance) = balance {
-                        receive_ctx.self_balance = balance;
+                        receive_ctx.self_balance =
+                            contracts_common::Amount::from_micro_gtu(balance);
                     }
 
                     // initial state of the smart contract, read from a file.

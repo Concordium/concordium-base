@@ -46,12 +46,12 @@ pub enum Action {
     Send {
         to_addr:   ContractAddress,
         name:      Vec<u8>,
-        amount:    Amount,
+        amount:    u64,
         parameter: Vec<u8>,
     },
     SimpleTransfer {
         to_addr: AccountAddress,
-        amount:  Amount,
+        amount:  u64,
     },
     And {
         l: u32,

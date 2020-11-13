@@ -536,7 +536,7 @@ pub fn make_imports(
             let get_receive_self_address = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
                 put_in_memory(ctx, ptr, &self_address_bytes)
             };
-            let receive_self_balance = receive_ctx.self_balance;
+            let receive_self_balance = receive_ctx.self_balance.micro_gtu;
             let get_receive_self_balance = move || receive_self_balance;
             let sender_bytes = to_bytes(&receive_ctx.sender);
             let get_receive_sender = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
@@ -584,7 +584,7 @@ type Parameter = Vec<u8>;
 
 pub fn invoke_init(
     wasm: &[u8],
-    amount: Amount,
+    amount: u64,
     init_ctx: InitContext,
     init_name: &str,
     parameter: Parameter,
@@ -619,7 +619,7 @@ pub fn invoke_init(
 
 pub fn invoke_receive(
     wasm: &[u8],
-    amount: Amount,
+    amount: u64,
     receive_ctx: ReceiveContext,
     current_state: &[u8],
     receive_name: &str,

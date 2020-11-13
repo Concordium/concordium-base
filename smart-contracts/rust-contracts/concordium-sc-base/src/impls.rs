@@ -287,7 +287,9 @@ impl HasReceiveContext<()> for ReceiveContextExtern {
     }
 
     #[inline(always)]
-    fn self_balance(&self) -> Amount { unsafe { get_receive_self_balance() } }
+    fn self_balance(&self) -> Amount {
+        Amount::from_micro_gtu(unsafe { get_receive_self_balance() })
+    }
 
     #[inline(always)]
     fn sender(&self) -> Address {
@@ -365,7 +367,7 @@ impl HasActions for Action {
 
     #[inline(always)]
     fn simple_transfer(acc: &AccountAddress, amount: Amount) -> Self {
-        let res = unsafe { simple_transfer(acc.0.as_ptr(), amount) };
+        let res = unsafe { simple_transfer(acc.0.as_ptr(), amount.micro_gtu) };
         Action {
             _private: res,
         }
@@ -380,7 +382,7 @@ impl HasActions for Action {
                 ca.subindex,
                 receive_bytes.as_ptr(),
                 receive_bytes.len() as u32,
-                amount,
+                amount.micro_gtu,
                 parameter.as_ptr(),
                 parameter.len() as u32,
             )

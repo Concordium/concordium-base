@@ -63,12 +63,12 @@ struct TransferRequest {
 #[derive(Serialize, SchemaType)]
 struct InitParams {
     // Who is authorized to withdraw funds from this lockup (must be non-empty)
-    // #[set_size_length = 1]
-    // #[skip_order_check]
+    #[set_size_length = 1]
+    #[skip_order_check]
     account_holders: BTreeSet<AccountAddress>,
 
     // How many of the account holders need to agree before funds are released
-    transfer_agreement_threshold: u32,
+    transfer_agreement_threshold: u8,
 
     // How long to wait before dropping a request due to lack of support
     // N.B. If this is set too long, in practice the chain might !ome busy
@@ -91,8 +91,8 @@ pub struct State {
     // Requests which have not been dropped due to timing out or due to being agreed to yet
     // The request ID, the associated amount, when it times out, who is making the transfer and
     // which account holders support this transfer
-    // #[map_size_length = 2]
-    // #[skip_order_check]
+    #[map_size_length = 2]
+    #[skip_order_check]
     requests: BTreeMap<TransferRequestId, TransferRequest>,
 }
 
@@ -128,7 +128,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     let init_params: InitParams = ctx.parameter_cursor().get()?;
     ensure!(init_params.account_holders.len() >= 2, InitError::InsufficientAccountHolders);
     ensure!(
-        init_params.transfer_agreement_threshold <= init_params.account_holders.len() as u32,
+        init_params.transfer_agreement_threshold <= init_params.account_holders.len() as u8,
         InitError::ThresholdAboveAccountHolders
     );
     ensure!(init_params.transfer_agreement_threshold >= 2, InitError::ThresholdBelowTwo);
@@ -205,7 +205,7 @@ fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
     match msg {
         Message::RequestTransfer(req_id, transfer_amount, target_account) => {
             // Remove outdated requests and calculate the reserved balance
-            let mut reserved_balance = 0;
+            let mut reserved_balance = Amount::zero();
             let mut active_requests: BTreeMap<TransferRequestId, TransferRequest> = BTreeMap::new();
             for (key, req) in state.requests.iter() {
                 if req.times_out_at > now {
@@ -268,7 +268,7 @@ fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
             matching_request.supporters.insert(sender_address);
 
             // Check if the have enough supporters to trigger
-            if matching_request.supporters.len() as u32
+            if matching_request.supporters.len() as u8
                 >= state.init_params.transfer_agreement_threshold
             {
                 // Remove the transfer from the list of outstanding transfers and send it
@@ -317,8 +317,9 @@ mod tests {
         // set up the logger so we can intercept and analyze them at the end.
         let mut logger = LogRecorder::init();
 
+        let amount = Amount::from_micro_gtu(0);
         // call the init function
-        let out = contract_init(&ctx, 0, &mut logger);
+        let out = contract_init(&ctx, amount, &mut logger);
 
         // and inspect the result.
         let state = match out {
@@ -355,15 +356,16 @@ mod tests {
         let target_account = AccountAddress([3u8; 32]);
 
         let request_id = 0;
+        let transfer_amount = Amount::from_micro_gtu(50);
         // Create Request with id 0, to transfer 50 to target_account
-        let parameter = Message::RequestTransfer(request_id, 50, target_account);
+        let parameter = Message::RequestTransfer(request_id, transfer_amount, target_account);
         let parameter_bytes = to_bytes(&parameter);
 
         let mut ctx = ReceiveContextTest::empty();
         ctx.set_parameter(&parameter_bytes);
         ctx.set_sender(Address::Account(account1));
         ctx.metadata.set_slot_time(0);
-        ctx.set_self_balance(0);
+        ctx.set_self_balance(Amount::from_micro_gtu(0));
 
         // Setup state
         let mut account_holders = BTreeSet::new();
@@ -382,9 +384,10 @@ mod tests {
             requests: BTreeMap::new(),
         };
 
+        let receive_amount = Amount::from_micro_gtu(100);
         // Execution
         let res: Result<ActionsTree, _> =
-            contract_receive_message(&ctx, 100, &mut logger, &mut state);
+            contract_receive_message(&ctx, receive_amount, &mut logger, &mut state);
 
         // Test
         let actions = match res {
@@ -395,7 +398,7 @@ mod tests {
         claim_eq!(state.requests.len(), 1, "Contract receive did not create transfer request");
         claim_eq!(
             sum_reserved_balance(&state),
-            50,
+            Amount::from_micro_gtu(50),
             "Contract receive did not reserve requested amount"
         );
         let request = state.requests.get(&request_id).unwrap();
@@ -415,7 +418,8 @@ mod tests {
         let target_account = AccountAddress([3u8; 32]);
 
         let request_id = 0;
-        let parameter = Message::SupportTransfer(request_id, 50, target_account);
+        let transfer_amount = Amount::from_micro_gtu(50);
+        let parameter = Message::SupportTransfer(request_id, transfer_amount, target_account);
         let parameter_bytes = to_bytes(&parameter);
 
         let mut ctx = ReceiveContextTest::empty();
@@ -439,7 +443,7 @@ mod tests {
             supporters,
             target_account,
             times_out_at: 200,
-            transfer_amount: 50,
+            transfer_amount,
         };
         let mut requests = BTreeMap::new();
         requests.insert(request_id, request);
@@ -450,9 +454,11 @@ mod tests {
             requests,
         };
 
+        let receive_amount = Amount::from_micro_gtu(75);
+
         // Execution
         let res: Result<ActionsTree, _> =
-            contract_receive_message(&ctx, 75, &mut logger, &mut state);
+            contract_receive_message(&ctx, receive_amount, &mut logger, &mut state);
 
         // Test
         let actions = match res {
@@ -472,7 +478,7 @@ mod tests {
         );
         claim_eq!(
             sum_reserved_balance(&state),
-            50,
+            Amount::from_micro_gtu(50),
             "Contract receive did not reserve the requested amount"
         );
         let request = state.requests.get(&request_id).unwrap();
@@ -494,7 +500,8 @@ mod tests {
         let target_account = AccountAddress([3u8; 32]);
 
         let request_id = 0;
-        let parameter = Message::SupportTransfer(request_id, 50, target_account);
+        let transfer_amount = Amount::from_micro_gtu(50);
+        let parameter = Message::SupportTransfer(request_id, transfer_amount, target_account);
         let parameter_bytes = to_bytes(&parameter);
 
         let mut ctx = ReceiveContextTest::empty();
@@ -518,7 +525,7 @@ mod tests {
             supporters,
             target_account,
             times_out_at: 10,
-            transfer_amount: 50,
+            transfer_amount,
         };
 
         let mut requests = BTreeMap::new();
@@ -529,9 +536,12 @@ mod tests {
         };
 
         let mut logger = LogRecorder::init();
+
+        let receive_amount = Amount::from_micro_gtu(100);
+
         // Execution
         let res: Result<ActionsTree, _> =
-            contract_receive_message(&ctx, 100, &mut logger, &mut state);
+            contract_receive_message(&ctx, receive_amount, &mut logger, &mut state);
 
         // Test
         let actions = match res {
@@ -540,13 +550,13 @@ mod tests {
         };
         claim_eq!(
             actions,
-            ActionsTree::simple_transfer(&target_account, 50),
+            ActionsTree::simple_transfer(&target_account, Amount::from_micro_gtu(50)),
             "Supporting the transfer did not result in the right transfer"
         );
         claim_eq!(state.requests.len(), 0, "The request should be removed");
         claim_eq!(
             sum_reserved_balance(&state),
-            0,
+            Amount::from_micro_gtu(0),
             "The transfer should be subtracted from the reserved balance"
         );
     }
