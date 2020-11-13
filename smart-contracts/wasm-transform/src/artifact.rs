@@ -11,7 +11,11 @@ use crate::{
     validate::{validate, Handler, HasValidationContext, ValidationState},
 };
 use anyhow::{anyhow, bail, ensure};
-use std::{collections::BTreeMap, convert::TryInto, io::Write};
+use std::{
+    collections::BTreeMap,
+    convert::{TryFrom, TryInto},
+    io::Write,
+};
 
 #[derive(Copy, Clone)]
 pub union StackValue {
@@ -77,13 +81,24 @@ pub struct ArtifactMemory {
 
 #[derive(Debug)]
 pub struct CompiledFunction {
+    num_params: u32,
+    type_idx: TypeIndex,
+    return_type: Option<ValueType>,
+    /// Vector of types of locals. This includes function parameters at the
+    /// beginning.
+    locals: Vec<ValueType>,
+    code: Instructions,
+}
+
+#[derive(Debug)]
+pub struct CompiledFunctionBytes<'a> {
     pub num_params: u32,
     pub type_idx: TypeIndex,
     pub return_type: Option<ValueType>,
     /// Vector of types of locals. This includes function parameters at the
     /// beginning.
-    pub locals: Vec<ValueType>,
-    pub code: Instructions,
+    pub locals: &'a [ValueType],
+    pub code: &'a [u8],
 }
 
 #[repr(u8)]
@@ -118,18 +133,24 @@ pub enum ImportFunc {
     ReportError,
 }
 
-pub trait RenameImports: Sized {
-    fn from_import(i: &Import) -> CompileResult<Self>;
+pub trait TryFromImport: Sized {
+    fn try_from_import(import: Import) -> CompileResult<Self>;
 }
 
-impl RenameImports for (String, String) {
-    fn from_import(i: &Import) -> CompileResult<Self> {
-        Ok((i.mod_name.name.clone(), i.item_name.name.clone()))
-    }
+impl<T: TryFrom<Import, Error = anyhow::Error>> TryFromImport for T {
+    fn try_from_import(import: Import) -> CompileResult<Self> { Self::try_from(import) }
 }
 
-impl RenameImports for ImportFunc {
-    fn from_import(i: &Import) -> CompileResult<ImportFunc> {
+impl TryFrom<Import> for (String, String) {
+    type Error = anyhow::Error;
+
+    fn try_from(i: Import) -> CompileResult<Self> { Ok((i.mod_name.name, i.item_name.name)) }
+}
+
+impl TryFrom<Import> for ImportFunc {
+    type Error = anyhow::Error;
+
+    fn try_from(i: Import) -> CompileResult<ImportFunc> {
         let m = &i.mod_name;
         if m.name == "concordium_metering" {
             match i.item_name.name.as_ref() {
@@ -171,10 +192,37 @@ impl RenameImports for ImportFunc {
     }
 }
 
+pub trait RunnableCode {
+    fn num_params(&self) -> u32;
+    fn type_idx(&self) -> TypeIndex;
+    fn return_type(&self) -> Option<ValueType>;
+    /// Vector of types of locals. This includes function parameters at the
+    /// beginning.
+    fn locals(&self) -> &[ValueType];
+    fn code(&self) -> &[u8];
+}
+
+impl RunnableCode for CompiledFunction {
+    #[inline(always)]
+    fn num_params(&self) -> u32 { self.num_params }
+
+    #[inline(always)]
+    fn type_idx(&self) -> TypeIndex { self.type_idx }
+
+    #[inline(always)]
+    fn return_type(&self) -> Option<ValueType> { self.return_type }
+
+    #[inline(always)]
+    fn locals(&self) -> &[ValueType] { &self.locals }
+
+    #[inline(always)]
+    fn code(&self) -> &[u8] { &self.code.bytes }
+}
+
 /// A parsed Wasm module. This no longer has custom sections since they are not
 /// needed for further processing.
 #[derive(Debug)]
-pub struct Artifact<ImportFunc> {
+pub struct Artifact<ImportFunc, CompiledCode> {
     /// Imports by (module name, item name).
     pub imports: Vec<ImportFunc>,
     /// Types of the module. These are needed for dynamic dispatch, i.e.,
@@ -191,7 +239,7 @@ pub struct Artifact<ImportFunc> {
     /// and not one of the imported ones.
     /// Thus the index refers to the index in the code section.
     pub export: BTreeMap<String, FuncIndex>,
-    pub code: Vec<CompiledFunction>,
+    pub code: Vec<CompiledCode>,
 }
 
 /// Internal opcode. This is mostly the same as OpCode, but with control
@@ -201,8 +249,7 @@ pub struct Artifact<ImportFunc> {
 #[derive(Debug, num_enum::TryFromPrimitive)]
 pub enum InternalOpcode {
     // Control instructions
-    Nop = 0u8,
-    Unreachable,
+    Unreachable = 0u8,
     If,
     Br,
     BrIf,
@@ -555,7 +602,8 @@ impl Handler<&OpCode> for BackPatch {
                 self.out.push_u32(*x);
             }
             OpCode::Nop => {
-                self.out.push(Nop);
+                // do nothing, we don't need an opcode for that since we don't
+                // care about alignment.
             }
             OpCode::Unreachable => {
                 self.out.push(Unreachable);
@@ -924,7 +972,9 @@ impl<'a> HasValidationContext for ModuleContext<'a> {
     fn return_type(&self) -> BlockType { BlockType::from(self.code.ty.result) }
 }
 
-pub fn compile_module<I: RenameImports>(input: Module) -> CompileResult<Artifact<I>> {
+pub fn compile_module<I: TryFromImport>(
+    input: Module,
+) -> CompileResult<Artifact<I, CompiledFunction>> {
     let mut code_out = Vec::with_capacity(input.code.impls.len());
 
     for code in input.code.impls.iter() {
@@ -1010,7 +1060,7 @@ pub fn compile_module<I: RenameImports>(input: Module) -> CompileResult<Artifact
         })
         .collect::<BTreeMap<_, _>>();
     let imports =
-        input.import.imports.iter().map(|i| I::from_import(i)).collect::<CompileResult<_>>()?;
+        input.import.imports.into_iter().map(I::try_from_import).collect::<CompileResult<_>>()?;
     Ok(Artifact {
         imports,
         ty,

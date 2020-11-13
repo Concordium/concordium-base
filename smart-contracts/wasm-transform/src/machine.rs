@@ -262,7 +262,7 @@ fn binary_i64_test(stack: &mut RuntimeStack, f: impl Fn(i64, i64) -> i32) -> Run
     Ok(())
 }
 
-impl<I: RenameImports> Artifact<I> {
+impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
     pub fn run(
         &self,
         host: &mut impl Host<I>,
@@ -275,10 +275,10 @@ impl<I: RenameImports> Artifact<I> {
             .ok_or_else(|| anyhow!("Trying to invoke a method that does not exist: {}.", name))?;
         let outer_function = &self.code[start as usize]; // safe because the artifact should be well-formed.
         ensure!(
-            outer_function.num_params == args.len().try_into()?,
+            outer_function.num_params() == args.len().try_into()?,
             "The number of arguments does not match the number of parameters."
         );
-        for (p, actual) in outer_function.locals.iter().zip(args.iter()) {
+        for (p, actual) in outer_function.locals().iter().zip(args.iter()) {
             // the first num_params locals are arguments
             ensure!(*p == ValueType::from(*actual), "Argument of incorrect type.")
         }
@@ -294,7 +294,7 @@ impl<I: RenameImports> Artifact<I> {
                 Value::I64(long) => stack.push(StackValue::from(long)),
             }
         }
-        for l in outer_function.locals[args.len()..].iter() {
+        for l in outer_function.locals()[args.len()..].iter() {
             match l {
                 ValueType::I32 => stack.push(StackValue::from(0i32)),
                 ValueType::I64 => stack.push(StackValue::from(0i64)),
@@ -317,10 +317,10 @@ impl<I: RenameImports> Artifact<I> {
         let max_memory = self.memory.as_ref().map(|x| x.max_size).unwrap_or(MAX_NUM_PAGES) as usize;
 
         let mut pc = 0;
-        let mut instructions: &[u8] = &self.code[start as usize].code.bytes;
+        let mut instructions: &[u8] = self.code[start as usize].code();
 
         let mut function_frames: Vec<FunctionState> = Vec::new();
-        let mut return_type = self.code[start as usize].return_type;
+        let mut return_type = self.code[start as usize].return_type();
 
         let mut locals_base = 0;
         'outer: loop {
@@ -333,9 +333,6 @@ impl<I: RenameImports> Artifact<I> {
             ensure!(instr <= InternalOpcode::I64ExtendI32U as u8, "Illegal opcode.");
             match unsafe { std::mem::transmute(instr) } {
                 // InternalOpcode::try_from(instr)? {
-                InternalOpcode::Nop => {
-                    // do nothing
-                }
                 InternalOpcode::Unreachable => bail!("Unreachable."),
                 InternalOpcode::If => {
                     let else_target = get_u32(instructions, &mut pc);
@@ -421,12 +418,12 @@ impl<I: RenameImports> Artifact<I> {
                             pc,
                             instructions,
                             locals_base,
-                            height: stack.size() - f.num_params as usize,
+                            height: stack.size() - f.num_params() as usize,
                             return_type,
                         };
                         locals_base = current_frame.height;
                         function_frames.push(current_frame);
-                        for ty in f.locals[f.num_params as usize..].iter() {
+                        for ty in f.locals()[f.num_params() as usize..].iter() {
                             match ty {
                                 ValueType::I32 => stack.push(StackValue {
                                     short: 0,
@@ -436,9 +433,9 @@ impl<I: RenameImports> Artifact<I> {
                                 }),
                             }
                         }
-                        instructions = &f.code.bytes;
+                        instructions = f.code();
                         pc = 0;
-                        return_type = f.return_type;
+                        return_type = f.return_type();
                     }
                 }
                 InternalOpcode::CallIndirect => {
@@ -458,11 +455,12 @@ impl<I: RenameImports> Artifact<I> {
                                 .code
                                 .get(*f_idx as usize - self.imports.len())
                                 .ok_or_else(|| anyhow!("Accessing non-existent code."))?;
-                            let ty_actual = self.ty.get(f.type_idx as usize).ok_or_else(|| {
-                                anyhow!("Non-existent type. This should not happen.")
-                            })?;
+                            let ty_actual =
+                                self.ty.get(f.type_idx() as usize).ok_or_else(|| {
+                                    anyhow!("Non-existent type. This should not happen.")
+                                })?;
                             ensure!(
-                                f.type_idx == ty_idx || ty_actual == ty,
+                                f.type_idx() == ty_idx || ty_actual == ty,
                                 "Actual type different from expected."
                             );
                             // FIXME: Remove duplication.
@@ -470,12 +468,12 @@ impl<I: RenameImports> Artifact<I> {
                                 pc,
                                 instructions,
                                 locals_base,
-                                height: stack.size() - f.num_params as usize,
+                                height: stack.size() - f.num_params() as usize,
                                 return_type,
                             };
                             locals_base = current_frame.height;
                             function_frames.push(current_frame);
-                            for ty in f.locals[f.num_params as usize..].iter() {
+                            for ty in f.locals()[f.num_params() as usize..].iter() {
                                 match ty {
                                     ValueType::I32 => stack.push(StackValue {
                                         short: 0,
@@ -485,9 +483,9 @@ impl<I: RenameImports> Artifact<I> {
                                     }),
                                 }
                             }
-                            instructions = &f.code.bytes;
+                            instructions = f.code();
                             pc = 0;
-                            return_type = f.return_type;
+                            return_type = f.return_type();
                         }
                     } else {
                         bail!("Calling undefined function {}.", idx) // trap
@@ -871,7 +869,7 @@ impl<I: RenameImports> Artifact<I> {
                 }
             }
         }
-        match outer_function.return_type {
+        match outer_function.return_type() {
             Some(ValueType::I32) => {
                 let val = stack.pop();
                 Ok(Some(Value::I32(unsafe { val.short })))
