@@ -935,9 +935,17 @@ fn extract_and_validate_request_query(
         let server_config = server_config.clone();
         async move {
             info!("Queried for creating an identity");
-            let id_object_request = match from_str::<Versioned<_>>(&input.state) {
-                Ok(v) => v,
-                Err(_) => return Err(warp::reject::custom(IdRequestRejection::Malformed)),
+
+            let id_object_request = match from_str::<serde_json::Value>(&input.state)
+                .ok()
+                .and_then(|mut v| match v.get_mut("idObjectRequest") {
+                    Some(v) => Some(v.take()),
+                    None => None,
+                })
+                .and_then(|v| serde_json::from_value::<Versioned<_>>(v).ok())
+            {
+                Some(v) => v,
+                None => return Err(warp::reject::custom(IdRequestRejection::Malformed)),
             };
             match validate_worker(&server_config, IdentityObjectRequest {
                 id_object_request,
