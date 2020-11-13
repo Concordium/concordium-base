@@ -59,14 +59,14 @@ enum Event {
 
 // Contract
 
-#[init(name = "init")]
+#[init(contract = "erc20")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
     amount: Amount,
     logger: &mut L,
 ) -> InitResult<State> {
-    ensure!(amount == 0, "The amount must be 0");
+    ensure_eq!(amount.micro_gtu, 0); // The amount must be 0
 
     let init_params: InitParams = ctx.parameter_cursor().get()?;
 
@@ -84,27 +84,44 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(state)
 }
 
-#[receive(name = "receive")]
+#[derive(Debug, PartialEq, Eq)]
+enum ReceiveError {
+    /// Failed parsing the parameter
+    ParseParams,
+    /// Only accounts can interact with this contract
+    OnlyAccounts,
+    /// The amount must be 0
+    NoAmount,
+    /// The account owner is not allowing you to send this much
+    MoreThanAllowed,
+    InsufficientFunds,
+}
+
+impl From<ParseError> for ReceiveError {
+    fn from(_: ParseError) -> Self { ReceiveError::ParseParams }
+}
+
+#[receive(contract = "erc20", name = "receive")]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,
     receive_amount: Amount,
     logger: &mut L,
     state: &mut State,
-) -> ReceiveResult<A> {
-    ensure!(receive_amount == 0, "The amount must be 0");
+) -> Result<A, ReceiveError> {
+    ensure_eq!(receive_amount.micro_gtu, 0, ReceiveError::NoAmount);
 
     let msg: Request = ctx.parameter_cursor().get()?;
 
     let sender_address = match ctx.sender() {
-        Address::Contract(_) => bail!("Only accounts can interact with this contract"),
+        Address::Contract(_) => bail!(ReceiveError::OnlyAccounts),
         Address::Account(address) => address,
     };
 
     match msg {
         Request::TransferTo(receiver_address, amount) => {
             let sender_balance = *state.balances.get(&sender_address).unwrap_or(&0);
-            ensure!(sender_balance >= amount, "Insufficient funds");
+            ensure!(sender_balance >= amount, ReceiveError::InsufficientFunds);
 
             let receiver_balance = *state.balances.get(&receiver_address).unwrap_or(&0);
             state.balances.insert(sender_address, sender_balance - amount);
@@ -113,13 +130,10 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
         }
         Request::TransferFromTo(owner_address, receiver_address, amount) => {
             let allowed_amount = *state.allowed.get(&(owner_address, sender_address)).unwrap_or(&0);
-            ensure!(
-                allowed_amount >= amount,
-                "The account owner is not allowing you to send this much"
-            );
+            ensure!(allowed_amount >= amount, ReceiveError::MoreThanAllowed);
 
             let owner_balance = *state.balances.get(&owner_address).unwrap_or(&0);
-            ensure!(owner_balance >= amount, "Insufficient funds");
+            ensure!(owner_balance >= amount, ReceiveError::InsufficientFunds);
 
             let receiver_balance = *state.balances.get(&receiver_address).unwrap_or(&0);
             state.allowed.insert((owner_address, sender_address), allowed_amount - amount);
@@ -145,7 +159,7 @@ fn serial_string<W: Write>(s: &str, out: &mut W) -> Result<(), W::Err> {
 }
 // Deserializing a string using deserial of Vec of bytes, and treat the byte
 // vector as utf8 encoding
-fn deserial_string<R: Read>(source: &mut R) -> Result<String, R::Err> {
+fn deserial_string<R: Read>(source: &mut R) -> ParseResult<String> {
     let bytes = Vec::deserial(source)?;
     let res = String::from_utf8(bytes).unwrap();
     Ok(res)
@@ -162,7 +176,7 @@ impl Serial for InitParams {
 }
 
 impl Deserial for InitParams {
-    fn deserial<R: Read>(source: &mut R) -> Result<Self, R::Err> {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let name = deserial_string(source)?;
         let symbol = deserial_string(source)?;
         let decimals = u32::deserial(source)?;
@@ -180,37 +194,33 @@ impl Deserial for InitParams {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use concordium_sc_base::test_infrastructure::*;
 
     #[test]
     /// Initialise token/contract giving the owner
     fn test_init() {
-        // Setup
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        0,
-        };
+        // Setup context
+
         let init_origin = AccountAddress([1u8; 32]);
-        let init_ctx = InitContext {
-            metadata,
-            init_origin,
-        };
+
         let parameter = InitParams {
             name:         "USD".to_string(),
             symbol:       "$".to_string(),
             decimals:     0,
             total_supply: 100,
         };
-        let ctx = test_infrastructure::InitContextWrapper {
-            init_ctx,
-            parameter: &to_bytes(&parameter),
-        };
-        // set up the logger so we can intercept and analyze them at the end.
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let parameter_bytes = to_bytes(&parameter);
 
+        let mut ctx = InitContextTest::empty();
+        ctx.set_init_origin(init_origin);
+        ctx.set_parameter(&parameter_bytes);
+
+        // set up the logger so we can intercept and analyze them at the end.
+        let mut logger = LogRecorder::init();
+
+        let amount = Amount::from_micro_gtu(0);
         // Execution
-        let out = contract_init(&ctx, 0, &mut logger);
+        let out = contract_init(&ctx, amount, &mut logger);
 
         // Tests
         match out {
@@ -240,31 +250,19 @@ pub mod tests {
     #[test]
     /// Transfers tokens from the sender account
     fn test_receive_transfer_to() {
-        // Setup
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        0,
-        };
+        // Setup context
+
         let from_account = AccountAddress([1u8; 32]);
         let to_account = AccountAddress([2u8; 32]);
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker: from_account,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 0,
-            sender: Address::Account(from_account),
-            owner: from_account,
-        };
+
         let parameter = Request::TransferTo(to_account, 70);
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+        let parameter_bytes = to_bytes(&parameter);
+
+        let mut ctx = ReceiveContextTest::empty();
+        ctx.set_parameter(&parameter_bytes);
+        ctx.set_sender(Address::Account(from_account));
+
+        // Setup state
         let init_params = InitParams {
             name:         "USD".to_string(),
             symbol:       "$".to_string(),
@@ -275,40 +273,31 @@ pub mod tests {
         balances.insert(from_account, 100);
         let allowed = BTreeMap::new();
 
-        let mut logger = test_infrastructure::LogRecorder::init();
         let mut state = State {
             init_params,
             balances,
             allowed,
         };
+        let mut logger = LogRecorder::init();
+        let amount = Amount::from_micro_gtu(0);
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, amount, &mut logger, &mut state);
 
         // Test
-        match res {
-            Err(_) => claim!(false, "Contract receive support failed, but it should not have."),
-            Ok(actions) => {
-                claim_eq!(
-                    actions,
-                    test_infrastructure::ActionsTree::accept(),
-                    "Transfering should result in an Accept action"
-                );
-                let from_balance = *state.balances.get(&from_account).unwrap();
-                let to_balance = *state.balances.get(&to_account).unwrap();
-                claim_eq!(
-                    from_balance,
-                    30,
-                    "The transfered amount should be subtracted from sender balance"
-                );
-                claim_eq!(
-                    to_balance,
-                    70,
-                    "The transfered amount should be added to receiver balance"
-                );
-            }
-        }
+        let actions = match res {
+            Err(_) => fail!("Contract receive support failed, but it should not have."),
+            Ok(actions) => actions,
+        };
+        claim_eq!(actions, ActionsTree::accept(), "Transferring should result in an Accept action");
+        let from_balance = *state.balances.get(&from_account).unwrap();
+        let to_balance = *state.balances.get(&to_account).unwrap();
+        claim_eq!(
+            from_balance,
+            30,
+            "The transferred amount should be subtracted from sender balance"
+        );
+        claim_eq!(to_balance, 70, "The transferred amount should be added to receiver balance");
         claim_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
         claim_eq!(
             logger.logs[0],
@@ -323,32 +312,19 @@ pub mod tests {
     /// - The amount is subtracted from the owners allowed funds
     /// - The transfer is successful
     fn test_receive_transfer_from_to() {
-        // Setup
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        0,
-        };
+        // Setup context
         let spender_account = AccountAddress([1u8; 32]);
         let from_account = AccountAddress([2u8; 32]);
         let to_account = AccountAddress([3u8; 32]);
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker: spender_account,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 0,
-            sender: Address::Account(spender_account),
-            owner: spender_account,
-        };
+
         let parameter = Request::TransferFromTo(from_account, to_account, 60);
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+        let parameter_bytes = to_bytes(&parameter);
+
+        let mut ctx = ReceiveContextTest::empty();
+        ctx.set_parameter(&parameter_bytes);
+        ctx.set_sender(Address::Account(spender_account));
+
+        // Setup state
         let init_params = InitParams {
             name:         "Dollars".to_string(),
             symbol:       "$".to_string(),
@@ -360,39 +336,36 @@ pub mod tests {
         let mut allowed = BTreeMap::new();
         allowed.insert((from_account, spender_account), 100);
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             balances,
             allowed,
         };
 
+        let amount = Amount::from_micro_gtu(0);
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, amount, &mut logger, &mut state);
 
         // Test
-        match res {
-            Err(_) => claim!(false, "Contract receive support failed, but it should not have."),
-            Ok(actions) => claim_eq!(
-                actions,
-                test_infrastructure::ActionsTree::accept(),
-                "Transfering should result in an Accept action"
-            ),
-        }
+        let actions = match res {
+            Err(_) => fail!("Contract receive support failed, but it should not have."),
+            Ok(actions) => actions,
+        };
+        claim_eq!(actions, ActionsTree::accept(), "Transferring should result in an Accept action");
         let from_balance = *state.balances.get(&from_account).unwrap();
         let to_balance = *state.balances.get(&to_account).unwrap();
         let from_spender_allowed = *state.allowed.get(&(from_account, spender_account)).unwrap();
         claim_eq!(
             from_balance,
             140,
-            "The transfered amount should be subtracted from sender balance"
+            "The transferred amount should be subtracted from sender balance"
         );
-        claim_eq!(to_balance, 60, "The transfered amount should be added to receiver balance");
+        claim_eq!(to_balance, 60, "The transferred amount should be added to receiver balance");
         claim_eq!(
             from_spender_allowed,
             40,
-            "The transfered amount should be added to receiver balance"
+            "The transferred amount should be added to receiver balance"
         );
 
         claim_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
@@ -404,34 +377,20 @@ pub mod tests {
     }
 
     #[test]
-    /// Fail when attempting to transfer from account, without being allowed to
-    /// the full amount
+    /// Succeed, when allowing others to transfer
     fn test_receive_allow_transfer() {
-        // Setup
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        0,
-        };
+        // Setup context
         let spender_account = AccountAddress([1u8; 32]);
         let owner_account = AccountAddress([2u8; 32]);
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker: owner_account,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 0,
-            sender: Address::Account(owner_account),
-            owner: owner_account,
-        };
+
         let parameter = Request::AllowTransfer(spender_account, 100);
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+        let parameter_bytes = to_bytes(&parameter);
+
+        let mut ctx = ReceiveContextTest::empty();
+        ctx.set_parameter(&parameter_bytes);
+        ctx.set_sender(Address::Account(owner_account));
+
+        // Setup state
         let init_params = InitParams {
             name:         "Dollars".to_string(),
             symbol:       "$".to_string(),
@@ -441,26 +400,24 @@ pub mod tests {
         let balances = BTreeMap::new();
         let allowed = BTreeMap::new();
 
-        let mut logger = test_infrastructure::LogRecorder::init();
         let mut state = State {
             init_params,
             balances,
             allowed,
         };
 
+        let mut logger = LogRecorder::init();
+        let amount = Amount::from_micro_gtu(0);
+
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, amount, &mut logger, &mut state);
 
         // Test
-        match res {
-            Ok(actions) => claim_eq!(
-                actions,
-                test_infrastructure::ActionsTree::accept(),
-                "Should accept the message"
-            ),
-            Err(_) => claim!(false, "The message is not expected to fail"),
-        }
+        let actions = match res {
+            Ok(actions) => actions,
+            Err(_) => fail!("The message is not expected to fail"),
+        };
+        claim_eq!(actions, ActionsTree::accept(), "Should accept the message");
         let owner_spender_allowed =
             *state.allowed.get(&(owner_account, spender_account)).unwrap_or(&0);
         claim_eq!(owner_spender_allowed, 100, "The allowed amount is not changed correctly");
@@ -476,32 +433,19 @@ pub mod tests {
     /// Fail when attempting to transfer from account, without being allowed to
     /// the full amount
     fn test_receive_transfer_to_not_allowed() {
-        // Setup
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        0,
-        };
+        // Setup context
         let spender_account = AccountAddress([1u8; 32]);
         let from_account = AccountAddress([2u8; 32]);
         let to_account = AccountAddress([3u8; 32]);
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker: spender_account,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 0,
-            sender: Address::Account(spender_account),
-            owner: spender_account,
-        };
+
         let parameter = Request::TransferFromTo(from_account, to_account, 110);
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+        let parameter_bytes = to_bytes(&parameter);
+
+        let mut ctx = ReceiveContextTest::empty();
+        ctx.set_parameter(&parameter_bytes);
+        ctx.set_sender(Address::Account(spender_account));
+
+        // Setup state
         let init_params = InitParams {
             name:         "Dollars".to_string(),
             symbol:       "$".to_string(),
@@ -513,22 +457,23 @@ pub mod tests {
         let mut allowed = BTreeMap::new();
         allowed.insert((from_account, spender_account), 100);
 
-        let mut logger = test_infrastructure::LogRecorder::init();
         let mut state = State {
             init_params,
             balances,
             allowed,
         };
+        let mut logger = LogRecorder::init();
 
+        let amount = Amount::from_micro_gtu(0);
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, amount, &mut logger, &mut state);
 
         // Test
         match res {
-            Err(_) => {}
-            Ok(_) => claim!(false, "The message is expected to fail"),
+            Ok(_) => fail!("The message is expected to fail"),
+            Err(err) => claim_eq!(err, ReceiveError::MoreThanAllowed),
         }
+
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
         let from_spender_allowed = *state.allowed.get(&(from_account, spender_account)).unwrap();
@@ -543,34 +488,20 @@ pub mod tests {
     }
 
     #[test]
-    /// Fail when attempting to transfer from account, without being allowed to
-    /// the full amount
+    /// Fail when attempting to transfer from account, with insufficient funds
     fn test_receive_transfer_to_insufficient() {
-        // Setup
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        0,
-        };
+        // Setup context
         let from_account = AccountAddress([2u8; 32]);
         let to_account = AccountAddress([3u8; 32]);
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker: from_account,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 0,
-            sender: Address::Account(from_account),
-            owner: from_account,
-        };
+
         let parameter = Request::TransferTo(to_account, 110);
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+        let parameter_bytes = to_bytes(&parameter);
+
+        let mut ctx = ReceiveContextTest::empty();
+        ctx.set_parameter(&parameter_bytes);
+        ctx.set_sender(Address::Account(from_account));
+
+        // Setup state
         let init_params = InitParams {
             name:         "Dollars".to_string(),
             symbol:       "$".to_string(),
@@ -581,19 +512,22 @@ pub mod tests {
         balances.insert(from_account, 100);
         let allowed = BTreeMap::new();
 
-        let mut logger = test_infrastructure::LogRecorder::init();
         let mut state = State {
             init_params,
             balances,
             allowed,
         };
+        let mut logger = LogRecorder::init();
 
+        let amount = Amount::from_micro_gtu(0);
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, amount, &mut logger, &mut state);
 
         // Test
-        claim!(res.is_err(), "The message is expected to fail");
+        match res {
+            Ok(_) => fail!("The message is expected to fail"),
+            Err(err) => claim_eq!(err, ReceiveError::InsufficientFunds),
+        }
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);
         claim_eq!(from_balance, 100, "The balance of the owner account should be unchanged");
@@ -606,31 +540,17 @@ pub mod tests {
     /// insufficient funds
     fn test_receive_transfer_from_to_insufficient() {
         // Setup
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        0,
-        };
         let from_account = AccountAddress([2u8; 32]);
         let to_account = AccountAddress([3u8; 32]);
         let spender_account = AccountAddress([4u8; 32]);
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker: spender_account,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 0,
-            sender: Address::Account(spender_account),
-            owner: spender_account,
-        };
+
         let parameter = Request::TransferFromTo(from_account, to_account, 110);
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+        let parameter_bytes = to_bytes(&parameter);
+
+        let mut ctx = ReceiveContextTest::empty();
+        ctx.set_parameter(&parameter_bytes);
+        ctx.set_sender(Address::Account(spender_account));
+
         let init_params = InitParams {
             name:         "Dollars".to_string(),
             symbol:       "$".to_string(),
@@ -642,19 +562,22 @@ pub mod tests {
         let mut allowed = BTreeMap::new();
         allowed.insert((from_account, spender_account), 110);
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             balances,
             allowed,
         };
 
+        let amount = Amount::from_micro_gtu(0);
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 0, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> = contract_receive(&ctx, amount, &mut logger, &mut state);
 
         // Test
-        claim!(res.is_err(), "The message is expected to fail");
+        match res {
+            Ok(_) => fail!("The message is expected to fail"),
+            Err(err) => claim_eq!(err, ReceiveError::InsufficientFunds),
+        }
 
         let from_balance = *state.balances.get(&from_account).unwrap_or(&0);
         let to_balance = *state.balances.get(&to_account).unwrap_or(&0);

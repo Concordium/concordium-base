@@ -3,7 +3,7 @@ use concordium_sc_base::*;
 
 type State = u8;
 
-#[init(name = "init")]
+#[init(contract = "use_all")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
@@ -13,7 +13,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(ctx.metadata().slot_time().to_be_bytes()[0])
 }
 
-#[receive(name = "receive", low_level)]
+#[receive(contract = "use_all", name = "receive", low_level)]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
     ctx: &R,
@@ -27,7 +27,8 @@ fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
     state.write(&state_contents)?; // Exercises write_state()
     state.reserve(0); // Exercises state_size() & resize_state()
                       // get_receive_ctx_size() currently unreachable
-    Ok(A::send(&ctx.self_address(), "receive", 100, &[1, 2, 3])
-        .and_then(A::simple_transfer(&ctx.owner(), 100).or_else(A::accept())))
+    Ok(A::send(&ctx.self_address(), "receive", Amount::from_micro_gtu(100), &[1, 2, 3]).and_then(
+        A::simple_transfer(&ctx.owner(), Amount::from_micro_gtu(100)).or_else(A::accept()),
+    ))
     // Exercises combine_and, combine_or, send, simple_transfer and accept
 }

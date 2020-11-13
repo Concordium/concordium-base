@@ -3,13 +3,188 @@ use core::convert;
 #[cfg(feature = "std")]
 use std::convert;
 
+#[cfg(not(feature = "std"))]
+use core::ops::{Add, AddAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
+#[cfg(feature = "std")]
+use std::ops::{Add, AddAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
+
+#[cfg(not(feature = "std"))]
+use core::iter::Sum;
+#[cfg(feature = "std")]
+use std::iter::Sum;
+
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
 #[cfg(feature = "derive-serde")]
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
-/// The type of amounts on the chain.
-pub type Amount = u64;
+/// The type of amounts on the chain
+#[cfg_attr(
+    feature = "derive-serde",
+    derive(SerdeSerialize, SerdeDeserialize),
+    serde(rename_all = "camelCase")
+)]
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Amount {
+    pub micro_gtu: u64,
+}
+
+impl Amount {
+    /// Create amount from a number of microGTU
+    #[inline(always)]
+    pub fn from_micro_gtu(micro_gtu: u64) -> Amount {
+        Amount {
+            micro_gtu,
+        }
+    }
+
+    /// Create amount from a number of GTU
+    #[inline(always)]
+    pub fn from_gtu(gtu: u64) -> Amount {
+        Amount {
+            micro_gtu: gtu * 1000000,
+        }
+    }
+
+    /// Create zero amount
+    #[inline(always)]
+    pub fn zero() -> Amount {
+        Amount {
+            micro_gtu: 0,
+        }
+    }
+
+    /// Add a number of micro GTU to an amount
+    #[inline(always)]
+    pub fn add_micro_gtu(self, micro_gtu: u64) -> Amount {
+        Amount {
+            micro_gtu: self.micro_gtu + micro_gtu,
+        }
+    }
+
+    /// Checked addition. Adds another amount and return None if overflow
+    /// occurred
+    #[inline(always)]
+    pub fn checked_add(self, other: Amount) -> Option<Amount> {
+        self.micro_gtu.checked_add(other.micro_gtu).map(Amount::from_micro_gtu)
+    }
+
+    /// Add a number of GTU to an amount
+    #[inline(always)]
+    pub fn add_gtu(self, gtu: u64) -> Amount {
+        Amount {
+            micro_gtu: self.micro_gtu + gtu * 1000000,
+        }
+    }
+
+    /// Subtract a number of micro GTU to an amount
+    #[inline(always)]
+    pub fn subtract_micro_gtu(self, micro_gtu: u64) -> Amount {
+        Amount {
+            micro_gtu: self.micro_gtu - micro_gtu,
+        }
+    }
+
+    /// Subtract a number of GTU to an amount
+    #[inline(always)]
+    pub fn subtract_gtu(self, gtu: u64) -> Amount {
+        Amount {
+            micro_gtu: self.micro_gtu - gtu * 1000000,
+        }
+    }
+
+    /// Calculates the quotient and remainder of integer division
+    #[inline(always)]
+    pub fn quotient_remainder(self, denominator: u64) -> (Amount, Amount) {
+        let div = Amount {
+            micro_gtu: self.micro_gtu / denominator,
+        };
+        let rem = self % denominator;
+        (div, rem)
+    }
+}
+
+impl Mul<u64> for Amount {
+    type Output = Self;
+
+    #[inline(always)]
+    fn mul(self, other: u64) -> Self::Output {
+        Amount {
+            micro_gtu: self.micro_gtu * other,
+        }
+    }
+}
+
+impl Mul<Amount> for u64 {
+    type Output = Amount;
+
+    #[inline(always)]
+    fn mul(self, other: Amount) -> Self::Output {
+        Amount {
+            micro_gtu: self * other.micro_gtu,
+        }
+    }
+}
+
+impl Add<Amount> for Amount {
+    type Output = Self;
+
+    #[inline(always)]
+    fn add(self, other: Amount) -> Self::Output {
+        Amount {
+            micro_gtu: self.micro_gtu + other.micro_gtu,
+        }
+    }
+}
+
+impl Sub<Amount> for Amount {
+    type Output = Self;
+
+    #[inline(always)]
+    fn sub(self, other: Amount) -> Self::Output {
+        Amount {
+            micro_gtu: self.micro_gtu - other.micro_gtu,
+        }
+    }
+}
+
+impl Rem<u64> for Amount {
+    type Output = Self;
+
+    #[inline(always)]
+    fn rem(self, other: u64) -> Self::Output {
+        Amount {
+            micro_gtu: self.micro_gtu % other,
+        }
+    }
+}
+
+impl Sum for Amount {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Amount::from_micro_gtu(0), Add::add)
+    }
+}
+
+impl AddAssign for Amount {
+    #[inline(always)]
+    fn add_assign(&mut self, other: Amount) { *self = *self + other; }
+}
+
+impl SubAssign for Amount {
+    #[inline(always)]
+    fn sub_assign(&mut self, other: Amount) { *self = *self - other; }
+}
+
+impl MulAssign<u64> for Amount {
+    #[inline(always)]
+    fn mul_assign(&mut self, other: u64) { *self = *self * other; }
+}
+
+impl RemAssign<u64> for Amount {
+    #[inline(always)]
+    fn rem_assign(&mut self, other: u64) { *self = *self % other; }
+}
 
 /// Address of an account, as raw bytes.
 #[derive(Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Debug)]
@@ -106,6 +281,39 @@ pub struct Cursor<T> {
     pub data:   T,
 }
 
+/// Zero-sized type to represent an error when reading bytes and deserializing.
+///
+/// When using custom error types in your smart contract, it is convenient to
+/// implement the trait `From<ParseError>` for you custom error type, to allow
+/// using the `?` operator when deserializing bytes, such as the contract state
+/// or parameters.
+///
+/// ```rust
+/// enum MyCustomReceiveError {
+///     Parsing
+/// }
+///
+/// impl From<ParseError> for MyCustomReceiveError {
+///     fn from(_: ParseError) -> Self { MyCustomReceiveError::ParseParams }
+/// }
+///
+/// #[receive(contract = "mycontract", name="some_receive_name")]
+/// fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
+///     ctx: &R,
+///     receive_amount: Amount,
+///     logger: &mut L,
+///     state: &mut State,
+/// ) -> Result<A, MyCustomReceiveError> {
+///     ...
+///     let msg: MyParameterType = ctx.parameter_cursor().get()?;
+///     ...
+/// }
+/// ```
+#[derive(Debug, Default)]
+pub struct ParseError {}
+
+pub type ParseResult<A> = Result<A, ParseError>;
+
 #[cfg(feature = "derive-serde")]
 mod serde_impl {
     // FIXME: This is duplicated from crypto/id/types.
@@ -149,6 +357,24 @@ mod serde_impl {
         }
     }
 
+    impl fmt::Display for ContractAddress {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "<{},{}>", self.index, self.subindex)
+        }
+    }
+
+    impl fmt::Display for Amount {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            let q = self.micro_gtu / 1000000;
+            let r = self.micro_gtu % 1000000;
+            if r == 0 {
+                write!(f, "{}.0", q)
+            } else {
+                write!(f, "{}.{:06}", q, r)
+            }
+        }
+    }
+
     struct Base58Visitor;
 
     impl<'de> Visitor<'de> for Base58Visitor {
@@ -185,32 +411,58 @@ pub mod schema {
         Unit,
     }
 
+    // TODO: Extend with LEB128
+    /// Type of the variable used to encode the length of Sets, List, Maps
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[cfg_attr(test, derive(arbitrary::Arbitrary))]
+    pub enum SizeLength {
+        U8,
+        U16,
+        U32,
+        U64,
+    }
+
     /// Schema type used to describe the different types in a rust smart
     /// contract.
     #[derive(Debug, Clone, PartialEq, Eq)]
     #[cfg_attr(test, derive(arbitrary::Arbitrary))]
     pub enum Type {
+        Unit,
+        Bool,
         U8,
         U16,
         U32,
         U64,
-        String,
-        Unit,
-        Bool,
-        Bytes,
-        Pair(Box<Type>, Box<Type>),
-        Struct(Fields),
-        Enum(Vec<(String, Fields)>),
-        List(Box<Type>),
-        Map(Box<Type>, Box<Type>),
-        Set(Box<Type>),
-        Option(Box<Type>), // Sum(Box<Type>, Box<Type>),
-        AccountAddress,
-        ContractAddress,
-        Array(u32, Box<Type>),
         I8,
         I16,
         I32,
         I64,
+        Amount,
+        AccountAddress,
+        ContractAddress,
+        Option(Box<Type>),
+        Pair(Box<Type>, Box<Type>),
+        String(SizeLength),
+        List(SizeLength, Box<Type>),
+        Set(SizeLength, Box<Type>),
+        Map(SizeLength, Box<Type>, Box<Type>),
+        Array(u32, Box<Type>),
+        Struct(Fields),
+        Enum(Vec<(String, Fields)>),
+    }
+
+    impl Type {
+        #[doc(hidden)]
+        /// Sets the size_length of schema types, with variable size otherwise
+        /// it is a noop. Used when deriving SchemaType.
+        pub fn set_size_length(self, size_len: SizeLength) -> Type {
+            match self {
+                Type::String(_) => Type::String(size_len),
+                Type::List(_, ty) => Type::List(size_len, ty),
+                Type::Set(_, ty) => Type::Set(size_len, ty),
+                Type::Map(_, key_ty, val_ty) => Type::Map(size_len, key_ty, val_ty),
+                t => t,
+            }
+        }
     }
 }

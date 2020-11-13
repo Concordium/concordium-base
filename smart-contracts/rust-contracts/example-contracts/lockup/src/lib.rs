@@ -28,7 +28,7 @@ type SlotTime = u64;
 type VestingEvent = (SlotTime, Amount);
 
 #[derive(Serialize)]
-pub struct InitParams {
+struct InitParams {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
     account_holders: Vec<AccountAddress>,
 
@@ -41,7 +41,7 @@ pub struct InitParams {
 
 #[contract_state]
 #[derive(Serialize, SchemaType)]
-pub struct State {
+struct State {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)
     account_holders: Vec<AccountAddress>,
 
@@ -66,7 +66,7 @@ pub struct State {
 
 // Contract implementation
 
-#[init(name = "init")]
+#[init(contract = "lockup")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
@@ -74,32 +74,23 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     _logger: &mut L,
 ) -> InitResult<State> {
     let init_params: InitParams = ctx.parameter_cursor().get()?;
-    ensure!(
-        !init_params.account_holders.is_empty(),
-        "No account holders given, but we need at least one."
-    );
+    ensure!(!init_params.account_holders.is_empty()); // No account holders given, but we need at least one.
 
     // Catch overflow when computing the amount to vest using checked summation
-    let total_to_vest: Amount = init_params
-        .vesting_schedule
-        .iter()
-        .map(|(_, how_much)| *how_much)
-        .try_fold(0, u64::checked_add)
-        .ok_or(Reject {})?;
-    ensure!(
-        total_to_vest == amount,
-        "Amount given does not match what is required by the vesting schedule."
-    );
+    let total_to_vest: Amount =
+        init_params.vesting_schedule.iter().map(|(_, how_much)| *how_much).sum();
+    ensure_eq!(total_to_vest, amount); // Amount given does not match what is required by the vesting schedule.
+
     let state = State {
         account_holders:              init_params.account_holders,
         future_vesting_veto_accounts: init_params.future_vesting_veto_accounts,
-        available_balance:            0,
+        available_balance:            Amount::zero(),
         remaining_vesting_schedule:   init_params.vesting_schedule,
     };
     Ok(state)
 }
 
-#[receive(name = "receive")]
+#[receive(contract = "lockup", name = "receive")]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,
@@ -107,11 +98,12 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
-    ensure!(amount == 0, "Depositing into a running lockup account is not allowed.");
+    ensure!(amount.micro_gtu == 0); // Depositing into a running lockup account is not allowed.
     let sender = match ctx.sender() {
         Address::Account(acc) => acc,
         Address::Contract(_) => {
-            bail!("This contract only allows interaction with accounts, not contracts.")
+            bail!(); // This contract only allows interaction with accounts, not
+                     // contracts.
         }
     };
 
@@ -120,29 +112,20 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 
     match msg {
         Message::WithdrawFunds(withdrawal_amount) => {
-            ensure!(
-                state.account_holders.iter().any(|&account_holder| sender == account_holder),
-                "Only account holders can make a withdrawal."
-            );
-            ensure!(
-                state.available_balance >= withdrawal_amount,
-                "Not enough available funds to make withdrawal."
-            );
+            ensure!(state.account_holders.iter().any(|&account_holder| sender == account_holder)); // Only account holders can make a withdrawal.
+            ensure!(state.available_balance >= withdrawal_amount); // Not enough available funds to make withdrawal.
 
-            // We have checked that the avaiable balance is high enough, so underflow
+            // We have checked that the available balance is high enough, so underflow
             // should not be possible
             state.available_balance -= withdrawal_amount;
             Ok(A::simple_transfer(&sender, withdrawal_amount))
         }
 
         Message::CancelFutureVesting => {
-            ensure!(
-                state
-                    .future_vesting_veto_accounts
-                    .iter()
-                    .any(|&veto_account| sender == veto_account),
-                "Only veto accounts can cancel future vesting."
-            );
+            ensure!(state
+                .future_vesting_veto_accounts
+                .iter()
+                .any(|&veto_account| sender == veto_account)); // Only veto accounts can cancel future vesting.
 
             // Should not overflow since the sum is positive but less than
             // or equal to the checked sum of the initial vesting schedule
@@ -161,14 +144,14 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 fn make_vested_funds_available(time_now: u64, state: &mut State) {
     let (newly_vested, not_vested_yet): (Vec<VestingEvent>, Vec<VestingEvent>) =
         state.remaining_vesting_schedule.iter().partition(|(when, _how_much)| when < &time_now);
-    let newly_vested_amount: Amount = newly_vested.iter().map(|(_, how_much)| how_much).sum();
+    let newly_vested_amount: Amount = newly_vested.iter().map(|(_, how_much)| *how_much).sum();
 
     state.remaining_vesting_schedule = not_vested_yet;
 
     // It shouldn't be possible to overflow because when we init we sum all
     // vesting events and check for no overflow, and this sum here should
     // always be less than or equal to that (the difference being due to
-    // withrawn funds), but greater than or equal to zero (since you can't
+    // withdrawn funds), but greater than or equal to zero (since you can't
     // withdraw funds you don't have).
     state.available_balance += newly_vested_amount;
 }

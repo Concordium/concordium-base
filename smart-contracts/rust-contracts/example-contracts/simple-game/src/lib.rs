@@ -48,7 +48,7 @@ type Prefix = [u8; 32];
 /// State of the smart contract instance.
 #[contract_state]
 #[derive(Serialize, SchemaType)]
-pub struct State {
+struct State {
     /// Number of contributions. Could be different from the size of the map if
     /// the same person contributes multiple times.
     num_contributions: u32,
@@ -65,7 +65,7 @@ pub struct State {
 /// Initialize a smart contract.
 /// This method expects as parameter a pair of (u64, Prefix), the expiry and the
 /// prefix.
-#[init(name = "init", low_level)]
+#[init(contract = "simple_game", low_level)]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
@@ -76,8 +76,8 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     let initializer = ctx.init_origin();
     let (expiry, prefix): (u64, Prefix) = ctx.parameter_cursor().get()?;
     let ct = ctx.metadata().slot_time();
-    ensure!(expiry > ct, "Expiry must be strictly in the future.");
-    // Compute the initial hash contribution.
+    ensure!(expiry > ct); // Expiry must be strictly in the future.
+                          // Compute the initial hash contribution.
     let hash = {
         let mut hasher: sha2::Sha256 = Digest::new();
         hasher.update(&prefix);
@@ -107,7 +107,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 
 /// Contribute to the game. The parameter to this method is a single byte-array
 /// of length 32.
-#[receive(name = "receive_contribute", low_level)]
+#[receive(contract = "simple_game", name = "receive_contribute", low_level)]
 #[inline(always)]
 fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,
@@ -119,12 +119,9 @@ fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     let num_contributions: u32 = state.get()?;
     // Ensure that you have to contribute more tokens the later you are to the
     // game. The scaling is arbitrarily linear.
-    ensure!(
-        amount > u64::from(num_contributions) * 10,
-        "Amount too small, rejecting contribution."
-    );
-    // Try to get the parameter (which should be exactly 32-bytes for this to
-    // succeed).
+    ensure!(amount.micro_gtu > u64::from(num_contributions) * 10); // Amount too small, rejecting contribution.
+                                                                   // Try to get the parameter (which should be exactly 32-bytes for this to
+                                                                   // succeed).
     let cont: Contribution = ctx.parameter_cursor().get()?;
 
     // The main logic of the function. If the the sender is an account then we
@@ -206,13 +203,13 @@ fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             (num_contributions + 1).serial(state)?;
             Ok(A::accept())
         }
-        _ => bail!("Only accounts can contribute."),
+        _ => bail!(), // Only accounts can contribute.
     }
 }
 
 /// This entry point finalizes the contract instance and sends out rewards to
 /// all the contributors.
-#[receive(name = "receive_finalize", low_level)]
+#[receive(contract = "simple_game", name = "receive_finalize", low_level)]
 #[inline(always)]
 fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,
@@ -226,14 +223,14 @@ fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     // memory we use, as well as the cost of this. We would not have to sort.
     let state: State = state_cursor.get()?;
     let ct = ctx.metadata().slot_time();
-    ensure!(amount == 0, "Ending the game should not transfer any tokens.");
-    ensure!(ct >= state.expiry, "Cannot finalize before expiry time.");
-    ensure!(!state.contributions.is_empty(), "Already finalized.");
-    ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can finalize.");
-    // sort the btreemap by the second key.
-    // This would be unnecessary if we swapped the values in the BTreeMap so that
-    // the hash would come first, the iterator would then give ordered values
-    // already.
+    ensure!(amount.micro_gtu == 0); // Ending the game should not transfer any tokens.
+    ensure!(ct >= state.expiry); // Cannot finalize before expiry time.
+    ensure!(!state.contributions.is_empty()); // Already finalized.
+    ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can finalize.
+                                                         // sort the btreemap by the second key.
+                                                         // This would be unnecessary if we swapped the values in the BTreeMap so that
+                                                         // the hash would come first, the iterator would then give ordered values
+                                                         // already.
     let mut v = state.contributions.iter().collect::<Vec<_>>();
     v.sort_by_key(|triple| &(triple.1).1);
     // Split the first element off from the rest. The first element has the lowest
@@ -253,14 +250,14 @@ fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             // Transfer by decreasing amounts.
             // The first account gets 1/2 of the total balance, the second 1/4, third 1/8
             // ...
-            let to_transfer = total / 2;
+            let (to_transfer, _remainder) = total.quotient_remainder(2);
             let send = try_send(addr, to_transfer);
             logger.log::<AccountAddress>(addr);
             total -= to_transfer;
             // Send to each account in the list until there is something to send.
             let send = rest.iter().rev().try_fold(send, |acc, (addr, _)| {
-                if total > 0 {
-                    let to_transfer = total / 2;
+                if total.micro_gtu > 0 {
+                    let (to_transfer, _remainder) = total.quotient_remainder(2);
                     logger.log::<AccountAddress>(addr);
                     total -= to_transfer;
                     Some(acc.and_then(try_send(addr, to_transfer)))
@@ -287,7 +284,7 @@ fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 /// This entry-point allows whoever sends the message to recover the remaining
 /// tokens. It will simply send all the currently owned tokens to the person who
 /// invoked the top-level transaction this invocation is a part of.
-#[receive(name = "receive_help_yourself", low_level)]
+#[receive(contract = "simple_game", name = "receive_help_yourself", low_level)]
 #[inline(always)]
 fn help_yourself<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,
@@ -295,10 +292,7 @@ fn help_yourself<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _logger: &mut L,
     state: &mut ContractState,
 ) -> ReceiveResult<A> {
-    ensure!(amount == 0, "Helping yourself should not add tokens.");
-    ensure!(
-        state.size() == 0,
-        "Helping yourself only allowed after normal contributions are sent.."
-    );
+    ensure!(amount.micro_gtu == 0); // Helping yourself should not add tokens.
+    ensure!(state.size() == 0); // Helping yourself only allowed after normal contributions are sent.
     Ok(A::simple_transfer(&ctx.invoker(), ctx.self_balance()))
 }

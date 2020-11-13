@@ -8,13 +8,13 @@ pub struct State {
     current_count: u32,
 }
 
-#[init(name = "init")]
+#[init(contract = "counter")]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     _ctx: &I,
     amount: Amount,
     logger: &mut L,
 ) -> InitResult<State> {
-    let step: u8 = (amount % 256) as u8;
+    let step: u8 = (amount.micro_gtu % 256) as u8;
     logger.log(&(0u8, step));
     let state = State {
         step,
@@ -23,15 +23,25 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(state)
 }
 
-#[receive(name = "receive")]
+/// Custom Error type only for testing purposes.
+/// Not usable when contract is deployed to the chain.
+#[derive(Debug, PartialEq, Eq)]
+enum ReceiveError {
+    /// Amount too small to allow increasing.
+    SmallAmount,
+    /// Only the owner can increment.
+    OnlyOwner,
+}
+
+#[receive(contract = "counter", name = "receive")]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,
     amount: Amount,
     logger: &mut L,
     state: &mut State,
-) -> ReceiveResult<A> {
-    ensure!(amount > 10, "Amount too small, not increasing.");
-    ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can increment.");
+) -> Result<A, ReceiveError> {
+    ensure!(amount.micro_gtu > 10, ReceiveError::SmallAmount);
+    ensure!(ctx.sender().matches_account(&ctx.owner()), ReceiveError::OnlyOwner);
     logger.log(&(1u8, state.step));
     state.current_count += u32::from(state.step);
     Ok(A::accept())
@@ -43,7 +53,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
 ///
 /// While in this particular case this is likely irrelevant, it serves to
 /// demonstrates the pattern.
-#[receive(name = "receive_optimized", low_level)]
+#[receive(contract = "counter", name = "receive_optimized", low_level)]
 fn contract_receive_optimized<
     R: HasReceiveContext<()>,
     L: HasLogger,
@@ -55,8 +65,8 @@ fn contract_receive_optimized<
     logger: &mut L,
     state_cursor: &mut S,
 ) -> ReceiveResult<A> {
-    ensure!(amount > 10, r#"Amount too small, not increasing."#);
-    ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can increment.");
+    ensure!(amount.micro_gtu > 10); // Amount too small, not increasing.
+    ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can increment.
     let state: State = state_cursor.get()?;
     logger.log(&(1u8, state.step));
     // get to the current count position.
@@ -69,43 +79,28 @@ fn contract_receive_optimized<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use concordium_sc_base::test_infrastructure::*;
 
     #[test]
     /// Test that init succeeds or fails based on what parameter and amount are.
     fn test_init() {
-        println!("Schema {:?}", State::get_type());
         // Setup our example state the contract is to be run in.
         // First the context.
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        0,
-        };
-        let init_origin = AccountAddress([0u8; 32]);
-        let init_ctx = InitContext {
-            metadata,
-            init_origin,
-        };
-        // The init function does not expect a parameter, so empty will do.
-        let parameter = Vec::new();
-        let ctx = test_infrastructure::InitContextWrapper {
-            init_ctx,
-            parameter: &parameter,
-        };
+        let ctx = InitContextTest::empty();
+
         // set up the logger so we can intercept and analyze them at the end.
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
 
         // call the init function
-        let out = contract_init(&ctx, 13, &mut logger);
+        let out = contract_init(&ctx, Amount::from_micro_gtu(13), &mut logger);
 
         // and inspect the result.
-        if let Ok(state) = out {
-            claim_eq!(state.step, 13, "The counting step differs from initial amount (mod 256).");
-            claim_eq!(state.current_count, 0);
-        } else {
-            claim!(false, "Contract initialization failed.");
-        }
+        let state = match out {
+            Ok(state) => state,
+            Err(_) => fail!("Contract initialization failed."),
+        };
+        claim_eq!(state.current_count, 0);
+        claim_eq!(state.step, 13, "The counting step differs from initial amount (mod 256).");
         // and make sure the correct logs were produced.
         claim_eq!(logger.logs.len(), 1, "Incorrect number of logs produced.");
         claim_eq!(&logger.logs[0], &[0, 13], "Incorrect log produced.");
@@ -119,49 +114,56 @@ mod tests {
     fn test_receive() {
         // Setup our example state the contract is to be run in.
         // First the context.
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        0,
+        let mut ctx = ReceiveContextTest::empty();
+        // Set the owner as sender in the context
+        let owner = AccountAddress([0u8; 32]);
+        ctx.set_owner(owner);
+        ctx.set_sender(Address::Account(owner));
+
+        // set up the logger so we can intercept and analyze them at the end.
+        let mut logger = LogRecorder::init();
+        let mut state = State {
+            step:          1,
+            current_count: 13,
         };
-        let invoker = AccountAddress([0u8; 32]);
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 0,
-            sender: Address::Account(invoker),
-            owner: invoker,
+        let res: Result<ActionsTree, _> =
+            contract_receive(&ctx, Amount::from_micro_gtu(11), &mut logger, &mut state);
+        let actions = match res {
+            Err(_) => fail!("Contract receive failed, but it should not have."),
+            Ok(actions) => actions,
         };
-        // Still no parameter expected.
-        let parameter = Vec::new();
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &parameter,
-        };
+        claim_eq!(actions, ActionsTree::Accept, "Contract receive produced incorrect actions.");
+        claim_eq!(state.step, 1, "Contract receive updated the step.");
+        claim_eq!(state.current_count, 14, "Contract receive did not bump the step.");
+    }
+
+    #[test]
+    /// Test receive fails a user which is not the owner increments
+    fn test_receive_fails_() {
+        // Setup our example state the contract is to be run in.
+        // First the context.
+        let mut ctx = ReceiveContextTest::default();
+        // Set the owner as sender in the context
+        let owner = AccountAddress([0u8; 32]);
+        let sender = AccountAddress([1u8; 32]);
+        ctx.set_owner(owner);
+        ctx.set_sender(Address::Account(sender));
+
         // set up the logger so we can intercept and analyze them at the end.
         let mut logger = test_infrastructure::LogRecorder::init();
         let mut state = State {
             step:          1,
             current_count: 13,
         };
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive(&ctx, 11, &mut logger, &mut state);
+        let res: Result<ActionsTree, _> =
+            contract_receive(&ctx, Amount::from_micro_gtu(11), &mut logger, &mut state);
         match res {
-            Err(_) => claim!(false, "Contract receive failed, but it should not have."),
-            Ok(actions) => {
-                claim_eq!(
-                    actions,
-                    test_infrastructure::ActionsTree::Accept,
-                    "Contract receive produced incorrect actions."
-                );
-                claim_eq!(state.step, 1, "Contract receive updated the step.");
-                claim_eq!(state.current_count, 14, "Contract receive did not bump the step.");
-            }
-        }
+            Err(reason) => claim_eq!(
+                reason,
+                ReceiveError::OnlyOwner,
+                "Expected error for only owner can increment"
+            ),
+            Ok(_) => fail!("Contract receive succeeded, but it should not have."),
+        };
     }
 }

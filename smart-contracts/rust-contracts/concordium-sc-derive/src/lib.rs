@@ -50,8 +50,10 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
     let attrs = parser.parse(attr).expect("Expect a comma-separated list of meta items.");
 
-    let name =
-        get_attribute_value(attrs.iter(), "name").expect("A name attribute must be provided.");
+    let contract_name = get_attribute_value(attrs.iter(), "contract")
+        .expect("A name for the contract must be provided, using the contract attribute.");
+
+    let init_name = format_ident!("init_{}", contract_name);
 
     let ast: syn::ItemFn = syn::parse(item).expect("Init can only be applied to functions.");
 
@@ -59,7 +61,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut out = if get_low_level(attrs.iter()) {
         quote! {
             #[no_mangle]
-            pub extern "C" fn #name(amount: Amount) -> i32 {
+            pub extern "C" fn #init_name(amount: Amount) -> i32 {
                 use concordium_sc_base::{Logger, trap};
                 let ctx = InitContextExtern::open(());
                 let mut state = ContractState::open(());
@@ -73,7 +75,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     } else {
         quote! {
             #[no_mangle]
-            pub extern "C" fn #name(amount: Amount) -> i32 {
+            pub extern "C" fn #init_name(amount: Amount) -> i32 {
                 use concordium_sc_base::{Logger, trap};
                 let ctx = InitContextExtern::open(());
                 let mut logger = Logger::init();
@@ -93,7 +95,7 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Embed schema if 'parameter' attribute is set
     let parameter_option = get_attribute_value(attrs.iter(), "parameter");
-    out.extend(contract_function_schema_tokens(parameter_option, name));
+    out.extend(contract_function_schema_tokens(parameter_option, init_name));
 
     ast.to_tokens(&mut out);
 
@@ -115,20 +117,25 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
     let attrs = parser.parse(attr).expect("Expect a comma-separated list of meta items.");
 
-    let name =
-        get_attribute_value(attrs.iter(), "name").expect("A name attribute must be provided.");
+    let contract_name = get_attribute_value(attrs.iter(), "contract").expect(
+        "The name of the associated contract must be provided, using the contract attribute.",
+    );
+    let name = get_attribute_value(attrs.iter(), "name")
+        .expect("A name for the receive function must be provided, using the name attribute");
+
+    let receive_name = format_ident!("receive_{}_{}", contract_name, name);
 
     let ast: syn::ItemFn = syn::parse(item).expect("Receive can only be applied to functions.");
     let fn_name = &ast.sig.ident;
     let mut out = if get_low_level(attrs.iter()) {
         quote! {
         #[no_mangle]
-        pub extern "C" fn #name(amount: Amount) -> i32 {
+        pub extern "C" fn #receive_name(amount: Amount) -> i32 {
             use concordium_sc_base::{SeekFrom, ContractState, Logger};
             let ctx = ReceiveContextExtern::open(());
             let mut state = ContractState::open(());
             let mut logger = Logger::init();
-            let res: ReceiveResult<Action> = #fn_name(&ctx, amount, &mut logger, &mut state);
+            let res: Result<Action, _> = #fn_name(&ctx, amount, &mut logger, &mut state);
             match res {
                 Ok(act) => {
                     act.tag() as i32
@@ -140,13 +147,13 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
     } else {
         quote! {
             #[no_mangle]
-            pub extern "C" fn #name(amount: Amount) -> i32 {
+            pub extern "C" fn #receive_name(amount: Amount) -> i32 {
                 use concordium_sc_base::{SeekFrom, ContractState, Logger, trap};
                 let ctx = ReceiveContextExtern::open(());
                 let mut logger = Logger::init();
                 let mut state_bytes = ContractState::open(());
                 if let Ok(mut state) = (&mut state_bytes).get() {
-                    let res: ReceiveResult<Action> = #fn_name(&ctx, amount, &mut logger, &mut state);
+                    let res: Result<Action, _> = #fn_name(&ctx, amount, &mut logger, &mut state);
                     match res {
                         Ok(act) => {
                             let res = state_bytes
@@ -170,7 +177,7 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Embed schema if 'parameter' attribute is set
     let parameter_option = get_attribute_value(attrs.iter(), "parameter");
-    out.extend(contract_function_schema_tokens(parameter_option, name));
+    out.extend(contract_function_schema_tokens(parameter_option, receive_name));
     // add the original function to the output as well.
     ast.to_tokens(&mut out);
     out.into()
@@ -212,32 +219,60 @@ fn contract_function_schema_tokens(
 /// ```
 /// #[derive(Deserial)]
 /// struct Foo {
-///     #[set_size_length = 1]
-///     #[skip_order_check]
+///     #[concordium(set_size_length = 1, skip_order_check)]
 ///     bar: BTreeSet<u8>,
 /// }
 /// ```
-#[proc_macro_derive(
-    Deserial,
-    attributes(
-        size_length,
-        map_size_length,
-        set_size_length,
-        string_size_length,
-        skip_order_check
-    )
-)]
+#[proc_macro_derive(Deserial, attributes(concordium))]
 pub fn deserial_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     impl_deserial(&ast)
 }
 
-fn find_attribute_value(attributes: &[syn::Attribute], target_attr: &str) -> Option<syn::Lit> {
-    let target_attr = format_ident!("{}", target_attr);
-    let attr_values: Vec<_> = attributes
+/// The prefix used in field attributes: `#[concordium(attr = "something")]`
+const CONCORDIUM_FIELD_ATTRIBUTE: &str = "concordium";
+
+/// A list of valid concordium field attributes
+const VALID_CONCORDIUM_FIELD_ATTRIBUTES: [&str; 5] =
+    ["size_length", "set_size_length", "map_size_length", "string_size_length", "skip_order_check"];
+
+fn get_concordium_field_attributes(attributes: &[syn::Attribute]) -> Vec<syn::Meta> {
+    attributes
         .iter()
-        .filter_map(|attr| match attr.parse_meta() {
-            Ok(syn::Meta::NameValue(value)) if value.path.is_ident(&target_attr) => Some(value.lit),
+        // Keep only concordium attributes
+        .flat_map(|attr| match attr.parse_meta() {
+            Ok(syn::Meta::List(list)) if list.path.is_ident(CONCORDIUM_FIELD_ATTRIBUTE) => {
+                list.nested
+            }
+            _ => syn::punctuated::Punctuated::new(),
+        })
+        // Ensure only valid attributes and unwrap NestedMeta
+        .map(|nested| match nested {
+            syn::NestedMeta::Meta(meta) => {
+                let path = meta.path();
+                if VALID_CONCORDIUM_FIELD_ATTRIBUTES.iter().any(|&attr| path.is_ident(attr)) {
+                    meta
+                } else {
+                    panic!(
+                        "The attribute '{}' is not supported as a concordium field attribute.",
+                        path.to_token_stream()
+                    )
+                }
+            }
+            _ => panic!("Literals are not supported in a concordium field attribute."),
+        })
+        .collect()
+}
+
+fn find_field_attribute_value(
+    attributes: &[syn::Attribute],
+    target_attr: &str,
+) -> Option<syn::Lit> {
+    let target_attr = format_ident!("{}", target_attr);
+    let attr_values: Vec<_> = get_concordium_field_attributes(attributes)
+        .into_iter()
+        .filter_map(|nested_meta| match nested_meta {
+            syn::Meta::NameValue(value) if value.path.is_ident(&target_attr) => Some(value.lit),
             _ => None,
         })
         .collect();
@@ -251,7 +286,7 @@ fn find_attribute_value(attributes: &[syn::Attribute], target_attr: &str) -> Opt
 }
 
 fn find_length_attribute(attributes: &[syn::Attribute], target_attr: &str) -> Option<u32> {
-    let value = find_attribute_value(attributes, target_attr)?;
+    let value = find_field_attribute_value(attributes, target_attr)?;
     let value = match value {
         syn::Lit::Int(int) => int,
         _ => panic!("Unknown attribute value {:?}.", value),
@@ -268,10 +303,9 @@ fn find_length_attribute(attributes: &[syn::Attribute], target_attr: &str) -> Op
 
 fn contains_attribute(attributes: &[syn::Attribute], target_attr: &str) -> bool {
     let target_attr = format_ident!("{}", target_attr);
-    attributes.iter().any(|attr| match attr.parse_meta() {
-        Ok(meta) => meta.path().is_ident(&target_attr),
-        _ => false,
-    })
+    get_concordium_field_attributes(attributes)
+        .iter()
+        .any(|meta| meta.path().is_ident(&target_attr))
 }
 
 fn impl_deserial_field(
@@ -439,7 +473,7 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
     let gen = quote! {
         #[automatically_derived]
         impl #impl_generics Deserial for #data_name #ty_generics #where_clauses {
-            fn deserial<#read_ident: Read>(#source_ident: &mut #read_ident) -> Result<Self, #read_ident::Err> {
+            fn deserial<#read_ident: Read>(#source_ident: &mut #read_ident) -> ParseResult<Self> {
                 #body_tokens
             }
         }
@@ -478,14 +512,11 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
 /// ```
 /// #[derive(Serial)]
 /// struct Foo {
-///     #[set_size_length = 1]
+///     #[concordium(set_size_length = 1)]
 ///     bar: BTreeSet<u8>,
 /// }
 /// ```
-#[proc_macro_derive(
-    Serial,
-    attributes(size_length, map_size_length, set_size_length, string_size_length)
-)]
+#[proc_macro_derive(Serial, attributes(concordium))]
 pub fn serial_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     impl_serial(&ast)
@@ -647,16 +678,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
 /// A helper macro to derive both the Serial and Deserial traits.
 /// `[derive(Serialize)]` is equivalent to `[derive(Serial,Deserial)]`, see
 /// documentation of the latter two for details and options.
-#[proc_macro_derive(
-    Serialize,
-    attributes(
-        size_length,
-        map_size_length,
-        set_size_length,
-        string_size_length,
-        skip_order_check
-    )
-)]
+#[proc_macro_derive(Serialize, attributes(concordium))]
 pub fn serialize_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     let mut tokens = impl_deserial(&ast);
@@ -708,7 +730,10 @@ pub fn contract_state(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 /// Derive the `SchemaType` trait for a type.
-#[proc_macro_derive(SchemaType)]
+#[proc_macro_derive(
+    SchemaType,
+    attributes(size_length, map_size_length, set_size_length, string_size_length)
+)]
 pub fn schema_type_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).expect("Cannot parse input.");
 
@@ -751,6 +776,24 @@ pub fn schema_type_derive(input: TokenStream) -> TokenStream {
     out.into()
 }
 
+fn schema_type_field_type(field: &syn::Field) -> proc_macro2::TokenStream {
+    let field_type = &field.ty;
+    if let Some(l) = find_length_attribute(&field.attrs, "size_length")
+        .or_else(|| find_length_attribute(&field.attrs, "map_size_length"))
+        .or_else(|| find_length_attribute(&field.attrs, "set_size_length"))
+        .or_else(|| find_length_attribute(&field.attrs, "string_size_length"))
+    {
+        let size = format_ident!("U{}", 8 * l);
+        quote! {
+            <#field_type as SchemaType>::get_type().set_size_length(concordium_sc_base::schema::SizeLength::#size)
+        }
+    } else {
+        quote! {
+            <#field_type as SchemaType>::get_type()
+        }
+    }
+}
+
 fn schema_type_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
     match fields {
         syn::Fields::Named(_) => {
@@ -758,24 +801,16 @@ fn schema_type_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
                 .iter()
                 .map(|field| {
                     let field_name = field.ident.clone().unwrap().to_string(); // safe since named fields
-                    let field_type = &field.ty;
+                    let field_schema_type = schema_type_field_type(&field);
                     quote! {
-                        (String::from(#field_name), <#field_type as SchemaType>::get_type())
+                        (String::from(#field_name), #field_schema_type)
                     }
                 })
                 .collect();
             quote! { schema::Fields::Named(vec![ #(#fields_tokens),* ]) }
         }
         syn::Fields::Unnamed(_) => {
-            let fields_tokens: Vec<_> = fields
-                .iter()
-                .map(|field| {
-                    let field_type = &field.ty;
-                    quote! {
-                        <#field_type as SchemaType>::get_type()
-                    }
-                })
-                .collect();
+            let fields_tokens: Vec<_> = fields.iter().map(schema_type_field_type).collect();
             quote! { schema::Fields::Unnamed(vec![ #(#fields_tokens),* ]) }
         }
         syn::Fields::Unit => quote! { schema::Fields::Unit },

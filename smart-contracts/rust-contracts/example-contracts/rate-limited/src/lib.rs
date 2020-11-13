@@ -63,7 +63,7 @@ pub struct State {
     recent_transfers: Vec<Transfer>,
 }
 
-#[init(name = "init")]
+#[init(contract = "init")]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
     _amount: Amount,
@@ -73,10 +73,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 
     // If timed_withdraw_limit is zero then no GTU can be transferred from the
     // account, thus violating the purpose of the contract.
-    ensure!(
-        init_params.timed_withdraw_limit > 0,
-        "The timed_withdraw_limit should be greather than 0."
-    );
+    ensure!(init_params.timed_withdraw_limit.micro_gtu > 0); // The timed_withdraw_limit should be greater than 0.
 
     let state = State {
         init_params,
@@ -86,7 +83,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(state)
 }
 
-#[receive(name = "receive_deposit")]
+#[receive(contract = "init", name = "receive_deposit")]
 /// Allows anyone to deposit GTU into the contract.
 fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _ctx: &R,
@@ -97,7 +94,7 @@ fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
     Ok(A::accept())
 }
 
-#[receive(name = "receive")]
+#[receive(contract = "init", name = "receive")]
 /// Allows the owner of the contract to transfer GTU from the contract to an
 /// arbitrary account
 fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
@@ -106,7 +103,7 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
     _logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
-    ensure!(ctx.sender().matches_account(&ctx.owner()), "Only the owner can transfer.");
+    ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can transfer.
 
     let current_time: TimeMilliseconds = ctx.metadata().slot_time();
 
@@ -145,6 +142,7 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
 #[cfg(test)]
 mod tests {
     use super::*;
+    use concordium_sc_base::test_infrastructure::*;
 
     #[test]
     /// Test that a valid transfer request is accepted
@@ -153,101 +151,85 @@ mod tests {
     ///  - Accepts the requested transfer
     ///  - Adds the new request to recent_transfers
     fn test_receive_transfer_accepted() {
-        // setup our example state the contract is to be run in.
-        // first the context.
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        10,
-        };
+        // Setup the context
 
         let account1 = AccountAddress([1u8; 32]);
         let account2 = AccountAddress([2u8; 32]);
         let target_account = AccountAddress([2u8; 32]);
 
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker: account1,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 10,
-            sender: Address::Account(account1),
-            owner: account1,
-        };
-
         let parameter = TransferRequest {
-            amount: 5,
+            amount: Amount::from_micro_gtu(5),
             target_account,
         };
+        let parameter_bytes = to_bytes(&parameter);
 
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+        let mut ctx = ReceiveContextTest::empty();
+        ctx.set_parameter(&parameter_bytes);
+        ctx.metadata.set_slot_time(10);
+        ctx.set_sender(Address::Account(account1));
+        ctx.set_owner(account1);
+        ctx.set_self_balance(Amount::from_micro_gtu(10));
 
+        // Setup state
         let recent_transfers = vec![
             Transfer {
                 time_of_transfer: 0,
                 transfer_request: TransferRequest {
-                    amount:         6,
+                    amount:         Amount::from_micro_gtu(6),
                     target_account: account1,
                 },
             },
             Transfer {
                 time_of_transfer: 1,
                 transfer_request: TransferRequest {
-                    amount:         2,
+                    amount:         Amount::from_micro_gtu(2),
                     target_account: account2,
                 },
             },
             Transfer {
                 time_of_transfer: 2,
                 transfer_request: TransferRequest {
-                    amount:         3,
+                    amount:         Amount::from_micro_gtu(3),
                     target_account: account1,
                 },
             },
         ];
 
         let init_params = InitParams {
-            timed_withdraw_limit: 10,
+            timed_withdraw_limit: Amount::from_micro_gtu(10),
             time_limit:           9,
         };
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             recent_transfers,
         };
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
+        let res: ReceiveResult<ActionsTree> =
+            contract_receive_transfer(&ctx, Amount::zero(), &mut logger, &mut state);
 
         // Test
-        match res {
-            Err(_) => claim!(false, "Contract receive transfer failed, but it should not have."),
-            Ok(actions) => {
-                claim_eq!(
-                    actions,
-                    test_infrastructure::ActionsTree::simple_transfer(&target_account, 5),
-                    "The request did not transfer the correct amount."
-                );
-                claim_eq!(
-                    state.recent_transfers.len(),
-                    3,
-                    "The oldest transfer should have been removed and the new one added."
-                );
-                claim_eq!(
-                    state.recent_transfers[2].transfer_request.amount,
-                    5,
-                    "The new transfer should have been added to recent_transfers."
-                )
-            }
-        }
+        let actions = match res {
+            Err(_) => fail!("Contract receive transfer failed, but it should not have."),
+            Ok(actions) => actions,
+        };
+        claim_eq!(
+            actions,
+            ActionsTree::simple_transfer(&target_account, Amount::from_micro_gtu(5)),
+            "The request did not transfer the correct amount."
+        );
+        claim_eq!(
+            state.recent_transfers.len(),
+            3,
+            "The oldest transfer should have been removed and the new one added."
+        );
+        claim_eq!(
+            state.recent_transfers[2].transfer_request.amount.micro_gtu,
+            5,
+            "The new transfer should have been added to recent_transfers."
+        );
     }
 
     #[test]
@@ -256,79 +238,63 @@ mod tests {
     /// - Request is denied
     /// - Recent_transfers is unaltered
     fn test_receive_transfer_denied_due_to_limit() {
-        // setup our example state the contract is to be run in.
-        // first the context.
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        10,
-        };
-
+        // Setup context
         let account1 = AccountAddress([1u8; 32]);
         let account2 = AccountAddress([2u8; 32]);
         let target_account = AccountAddress([2u8; 32]);
 
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker: account1,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 10,
-            sender: Address::Account(account1),
-            owner: account1,
-        };
-
         let parameter = TransferRequest {
-            amount: 5,
+            amount: Amount::from_micro_gtu(5),
             target_account,
         };
+        let parameter_bytes = to_bytes(&parameter);
 
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+        let mut ctx = ReceiveContextTest::empty();
+        ctx.metadata.set_slot_time(10);
+        ctx.set_sender(Address::Account(account1));
+        ctx.set_owner(account1);
+        ctx.set_self_balance(Amount::from_micro_gtu(10));
+        ctx.set_parameter(&parameter_bytes);
 
+        // Setup state
         let recent_transfers = vec![
             Transfer {
                 time_of_transfer: 0,
                 transfer_request: TransferRequest {
-                    amount:         6,
+                    amount:         Amount::from_micro_gtu(6),
                     target_account: account1,
                 },
             },
             Transfer {
                 time_of_transfer: 1,
                 transfer_request: TransferRequest {
-                    amount:         2,
+                    amount:         Amount::from_micro_gtu(2),
                     target_account: account2,
                 },
             },
             Transfer {
                 time_of_transfer: 2,
                 transfer_request: TransferRequest {
-                    amount:         3,
+                    amount:         Amount::from_micro_gtu(3),
                     target_account: account2,
                 },
             },
         ];
 
         let init_params = InitParams {
-            timed_withdraw_limit: 10,
+            timed_withdraw_limit: Amount::from_micro_gtu(10),
             time_limit:           10,
         };
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             recent_transfers,
         };
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
+        let res: ReceiveResult<ActionsTree> =
+            contract_receive_transfer(&ctx, Amount::zero(), &mut logger, &mut state);
 
         // Test
         claim!(res.is_err(), "Contract receive transfer succeeded, but it should not have.");
@@ -339,7 +305,7 @@ mod tests {
         );
 
         let recent_transfers_amounts: Vec<u64> =
-            state.recent_transfers.iter().map(|t| t.transfer_request.amount).collect();
+            state.recent_transfers.iter().map(|t| t.transfer_request.amount.micro_gtu).collect();
         claim_eq!(
             recent_transfers_amounts,
             vec![6, 2, 3],
@@ -354,79 +320,63 @@ mod tests {
     /// - Transfer request is accepted
     /// - No underflow occurs
     fn test_receive_transfer_no_underflow() {
-        // setup our example state the contract is to be run in.
-        // first the context.
-        let metadata = ChainMetadata {
-            slot_number:      0,
-            block_height:     0,
-            finalized_height: 0,
-            slot_time:        10,
-        };
-
+        // Setup context
         let account1 = AccountAddress([1u8; 32]);
         let account2 = AccountAddress([2u8; 32]);
         let target_account = AccountAddress([2u8; 32]);
 
-        let receive_ctx = ReceiveContext {
-            metadata,
-            invoker: account1,
-            self_address: ContractAddress {
-                index:    0,
-                subindex: 0,
-            },
-            self_balance: 10,
-            sender: Address::Account(account1),
-            owner: account1,
-        };
-
         let parameter = TransferRequest {
-            amount: 5,
+            amount: Amount::from_micro_gtu(5),
             target_account,
         };
+        let parameter_bytes = to_bytes(&parameter);
 
-        let ctx = test_infrastructure::ReceiveContextWrapper {
-            receive_ctx,
-            parameter: &to_bytes(&parameter),
-        };
+        let mut ctx = ReceiveContextTest::empty();
+        ctx.set_parameter(&parameter_bytes);
+        ctx.metadata.set_slot_time(10);
+        ctx.set_self_balance(Amount::from_micro_gtu(10));
+        ctx.set_sender(Address::Account(account1));
+        ctx.set_owner(account1);
 
+        // Setup state
         let recent_transfers = vec![
             Transfer {
                 time_of_transfer: 0,
                 transfer_request: TransferRequest {
-                    amount:         1,
+                    amount:         Amount::from_micro_gtu(1),
                     target_account: account1,
                 },
             },
             Transfer {
                 time_of_transfer: 1,
                 transfer_request: TransferRequest {
-                    amount:         1,
+                    amount:         Amount::from_micro_gtu(1),
                     target_account: account2,
                 },
             },
             Transfer {
                 time_of_transfer: 2,
                 transfer_request: TransferRequest {
-                    amount:         1,
+                    amount:         Amount::from_micro_gtu(1),
                     target_account: account2,
                 },
             },
         ];
 
         let init_params = InitParams {
-            timed_withdraw_limit: 10,
+            timed_withdraw_limit: Amount::from_micro_gtu(10),
             time_limit:           1000,
         };
 
-        let mut logger = test_infrastructure::LogRecorder::init();
+        let mut logger = LogRecorder::init();
         let mut state = State {
             init_params,
             recent_transfers,
         };
 
         // Execution
-        let res: ReceiveResult<test_infrastructure::ActionsTree> =
-            contract_receive_transfer(&ctx, 0, &mut logger, &mut state);
+        let res: ReceiveResult<ActionsTree> =
+            contract_receive_transfer(&ctx, Amount::zero(), &mut logger, &mut state);
 
         // Test
         claim!(res.is_ok(), "Contract receive transfer failed, but it should not have.");

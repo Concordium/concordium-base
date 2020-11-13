@@ -39,7 +39,7 @@ enum Message {
 }
 
 #[derive(Serialize, SchemaType)]
-pub struct InitParams {
+struct InitParams {
     required_deposit: Amount,
     arbiter_fee:      Amount,
     buyer:            AccountAddress,
@@ -49,26 +49,37 @@ pub struct InitParams {
 
 #[contract_state]
 #[derive(Serialize, SchemaType)]
-pub struct State {
+struct State {
     mode:        Mode,
     init_params: InitParams,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum InitError {
+    /// Failed parsing the parameter
+    ParseParams,
+    /// This escrow contract must be initialized with a 0 amount.
+    NoAmount,
+    /// Buyer and seller must have different accounts.
+    SameBuyerSeller,
+}
+
+impl From<ParseError> for InitError {
+    fn from(_: ParseError) -> Self { InitError::ParseParams }
+}
+
 // Contract implementation
 
-#[init(name = "init")]
+#[init(contract = "escrow")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
     amount: Amount,
     _logger: &mut L,
-) -> InitResult<State> {
-    ensure!(amount == 0, "This escrow contract must be initialised with a 0 amount.");
+) -> Result<State, InitError> {
+    ensure!(amount.micro_gtu == 0, InitError::NoAmount);
     let init_params: InitParams = ctx.parameter_cursor().get()?;
-    ensure!(
-        init_params.buyer != init_params.seller,
-        "Buyer and seller must have different accounts."
-    );
+    ensure!(init_params.buyer != init_params.seller, InitError::SameBuyerSeller);
     let state = State {
         mode: Mode::AwaitingDeposit,
         init_params,
@@ -76,24 +87,47 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(state)
 }
 
-#[receive(name = "receive")]
+#[derive(Debug, PartialEq, Eq)]
+enum ReceiveError {
+    /// Failed parsing the parameter
+    ParseParams,
+    /// The received message does not fit the current state
+    InvalidOperation,
+    /// This escrow contract has been completed - there is nothing more for it
+    /// to do.
+    Completed,
+    /// Only the designated buyer can submit the deposit.
+    DepositIsNotByBuyer,
+    /// Amount given does not match the required deposit and arbiter fee.
+    IncorrectAmount,
+    /// Only the designated buyer can accept delivery.
+    AcceptDeliveryNotByBuyer,
+    /// Only the designated buyer or seller can contest delivery.
+    ContestNotByBuyerOrSeller,
+}
+
+impl From<ParseError> for ReceiveError {
+    fn from(_: ParseError) -> Self { ReceiveError::ParseParams }
+}
+
+#[receive(contract = "escrow", name = "receive")]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,
     amount: Amount,
     _logger: &mut L,
     state: &mut State,
-) -> ReceiveResult<A> {
+) -> Result<A, ReceiveError> {
     let msg: Message = ctx.parameter_cursor().get()?;
     match (state.mode, msg) {
         (Mode::AwaitingDeposit, Message::SubmitDeposit) => {
             ensure!(
                 ctx.sender().matches_account(&state.init_params.buyer),
-                "Only the designated buyer can submit the deposit."
+                ReceiveError::DepositIsNotByBuyer
             );
             ensure!(
                 amount == state.init_params.required_deposit + state.init_params.arbiter_fee,
-                "Amount given does not match the required deposit and arbiter fee."
+                ReceiveError::IncorrectAmount
             );
             state.mode = Mode::AwaitingDelivery;
             Ok(A::accept())
@@ -102,7 +136,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
         (Mode::AwaitingDelivery, Message::AcceptDelivery) => {
             ensure!(
                 ctx.sender().matches_account(&state.init_params.buyer),
-                "Only the designated buyer can accept delivery."
+                ReceiveError::AcceptDeliveryNotByBuyer
             );
             state.mode = Mode::Done;
             let release_payment_to_seller =
@@ -116,7 +150,7 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             ensure!(
                 ctx.sender().matches_account(&state.init_params.buyer)
                     || ctx.sender().matches_account(&state.init_params.seller),
-                "Only the designated buyer or seller can contest delivery."
+                ReceiveError::ContestNotByBuyerOrSeller
             );
             state.mode = Mode::AwaitingArbitration;
             Ok(A::accept())
@@ -145,11 +179,9 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
             Ok(A::accept())
         }
 
-        (Mode::Done, _) => {
-            bail!("This escrow contract has been completed - there is nothing more for it to do.")
-        }
+        (Mode::Done, _) => bail!(ReceiveError::Completed),
 
-        _ => bail!("Invalid operation for current mode."),
+        _ => bail!(ReceiveError::InvalidOperation),
     }
 }
 
@@ -162,59 +194,55 @@ fn try_send_both<A: HasActions>(a: A, b: A) -> A {
 
 // Tests
 
-// We don't use claim_eq! etc. here since they end up requiring formatters
-// which we don't necessarily want to import, etc., etc.
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use concordium_sc_base::test_infrastructure::*;
 
     #[test]
     #[no_mangle]
     fn test_init_rejects_non_zero_amounts() {
-        let metadata = ChainMetadata {
-            slot_number:      1172,
-            block_height:     1150,
-            finalized_height: 1148,
-            slot_time:        43578934,
-        };
-        let init_origin = AccountAddress([4; ACCOUNT_ADDRESS_SIZE]);
-        let init_ctx = InitContext {
-            metadata,
-            init_origin,
-        };
+        let buyer = AccountAddress([0; ACCOUNT_ADDRESS_SIZE]);
+
         let parameter = InitParams {
-            required_deposit: 20,
-            arbiter_fee:      30,
-            buyer:            init_origin,
-            seller:           AccountAddress([3; ACCOUNT_ADDRESS_SIZE]),
-            arbiter:          AccountAddress([3; ACCOUNT_ADDRESS_SIZE]),
+            required_deposit: Amount::from_micro_gtu(20),
+            arbiter_fee: Amount::from_micro_gtu(30),
+            buyer,
+            seller: AccountAddress([1; ACCOUNT_ADDRESS_SIZE]),
+            arbiter: AccountAddress([2; ACCOUNT_ADDRESS_SIZE]),
         };
-        let ctx = test_infrastructure::InitContextWrapper {
-            init_ctx,
-            parameter: &to_bytes(&parameter),
-        };
-        let amount = 200;
-        let mut logger = test_infrastructure::LogRecorder::init();
+
+        let mut ctx = InitContextTest::empty();
+        let parameter_bytes = to_bytes(&parameter);
+        ctx.set_parameter(&parameter_bytes);
+
+        let amount = Amount::from_micro_gtu(200);
+        let mut logger = LogRecorder::init();
         let result = contract_init(&ctx, amount, &mut logger);
-        claim!(result.is_err(), "init failed to reject a non-zero amount");
+        match result {
+            Err(err) => {
+                claim_eq!(err, InitError::NoAmount, "Init failed to reject a non-zero amount")
+            }
+            Ok(_) => fail!("Contract succeeded when it was suppose to fail."),
+        }
     }
 
     #[test]
     #[no_mangle]
     fn test_init_rejects_same_buyer_and_seller() {
-        todo!("implement me");
+        fail!("implement me");
     }
 
     #[test]
     #[no_mangle]
     fn test_init_builds_corresponding_state_from_init_params() {
-        todo!("implement me");
+        fail!("implement me");
     }
 
     #[test]
     #[no_mangle]
     fn test_receive_happy_path() {
-        todo!("implement me");
+        fail!("implement me");
     }
 
     // TODO Lots more to test!

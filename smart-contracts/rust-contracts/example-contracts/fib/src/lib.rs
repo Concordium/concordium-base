@@ -7,7 +7,7 @@ pub struct State {
     result: u64,
 }
 
-#[init(name = "init")]
+#[init(contract = "fib")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     _ctx: &I,
@@ -23,7 +23,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 // Add the the nth Fibonacci number F(n) to this contract's state.
 // This is achieved by recursively sending messages to this receive method,
 // corresponding to the recursive evaluation F(n) = F(n-1) + F(n-2) (for n>1).
-#[receive(name = "receive")]
+#[receive(contract = "fib", name = "receive")]
 #[inline(always)]
 fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
     ctx: &R,
@@ -38,18 +38,14 @@ fn contract_receive<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
         Ok(A::accept())
     } else {
         let self_address = ctx.self_address();
-        Ok(A::send(&self_address, "receive", 0, &(n - 1).to_le_bytes()).and_then(A::send(
-            &self_address,
-            "receive",
-            0,
-            &(n - 2).to_le_bytes(),
-        )))
+        Ok(A::send(&self_address, "receive", Amount::zero(), &(n - 1).to_le_bytes())
+            .and_then(A::send(&self_address, "receive", Amount::zero(), &(n - 2).to_le_bytes())))
     }
 }
 
 // Calculates the nth Fibonacci number where n is the given amount and sets the
 // state to that number.
-#[receive(name = "receive_calc_fib")]
+#[receive(contract = "fib", name = "receive_calc_fib")]
 #[inline(always)]
 fn contract_receive_calc_fib<R: HasReceiveContext<()>, A: HasActions, L: HasLogger>(
     _ctx: &R,
@@ -57,7 +53,7 @@ fn contract_receive_calc_fib<R: HasReceiveContext<()>, A: HasActions, L: HasLogg
     _logger: &mut L,
     state: &mut State,
 ) -> ReceiveResult<A> {
-    state.result = fib(amount);
+    state.result = fib(amount.micro_gtu);
     Ok(A::accept())
 }
 

@@ -5,7 +5,7 @@ Changes to any of the packages must be such that
 - ```cargo clippy --all``` produces no warnings
 - ```rust fmt``` makes no changes.
 
-Everything in this repository should build with stable rust at the moment (at least version 1.44 and up), however the fmt tool must be from a nightly release since some of the configuration options are not stable. One way to run the `fmt` tool is 
+Everything in this repository should build with stable rust at the moment (at least version 1.44 and up), however the fmt tool must be from a nightly release since some of the configuration options are not stable. One way to run the `fmt` tool is
 ```
  cargo +nightly-2019-11-13 fmt
 ```
@@ -34,7 +34,7 @@ The [rust-contracts](./rust-contracts) aims to be organized into two (conceptual
 
 The first consisting of crates [concordium-sc-base](./rust-contracts/concordium-sc-base) and [concordium-sc-derive](./rust-contracts/concordium-sc-derive) contains Rust packages that are meant to be developed into the core API all Rust smart contracts use. It wraps the primitives that are allowed to be used on the chain in safer wrappers. The goal is to provide an API that spans from low-level, requiring the user to be very careful, but allowing precise control over resources, to a high-level one with more safety, but less efficiency for more advanced uses.
 
-The `concordium-sc-base` library is what is intended to be used directly, and the `concordium-sc-derive` provides some procedural macros that are re-exported by `concordium-sc-base`. These are used to remove the boilerplate FFI wrappers that are needed for each smart contract. 
+The `concordium-sc-base` library is what is intended to be used directly, and the `concordium-sc-derive` provides some procedural macros that are re-exported by `concordium-sc-base`. These are used to remove the boilerplate FFI wrappers that are needed for each smart contract.
 Currently there are two macros `init` and `receive` that can be used to generate low-level init and receive functions.
 The reason these macros are in a separate crate is because such macros must be in a special crate type `proc-macro`, which cannot have other exports than said macros.
 
@@ -71,7 +71,7 @@ cargo build --target wasm32-unknown-unknown [--release]
 which are slower and bigger.
 
 Running `cargo build` will produce a single `.wasm` module in
-`target/wasm32-unknown-unknown/release/counter.wasm` or 
+`target/wasm32-unknown-unknown/release/counter.wasm` or
 `target/wasm32-unknown-unknown/debug/counter.wasm`, depending on whether the
 `--release` option was used or not.
 
@@ -99,7 +99,7 @@ panics, and error traces are not reported, it is useful not to bloat code size
 with them. Setting `panic=abort` will make it so that the compiler will generate
 simple `Wasm` traps on any panic that occurs. This option can be specified
 either in `.cargo/config` as exemplified in
-[counter/.cargo/config](./rust-contracts/example-contracts/counter/.cargo/config), 
+[counter/.cargo/config](./rust-contracts/example-contracts/counter/.cargo/config),
 or in the `Cargo.toml` file as
 
 ```
@@ -247,7 +247,7 @@ enum MyParameter {
     ...
 }
 
-#[init(name = "init", parameter = "MyParameter")]
+#[init(contract = "init", parameter = "MyParameter")]
 fn contract_init<...> (...){
     ...
 }
@@ -266,7 +266,7 @@ To build the schema, the `Cargo.toml` must include the `build-schema` feature, w
 build-schema = []
 ...
 ```
-Running `cargo concordium build --build-schema` will then first compile the contract with the `build-schema` feature enabled, generate the schema from the contract module and then compile the contract again without the code for generating the schema, and embed the schema as bytes into this.
+Running `cargo concordium build` with either `--schema-embed` or `--schema-output=<file>` will then first compile the contract with the `build-schema` feature enabled, generate the schema from the contract module and then compile the contract again without the code for generating the schema, and either embed the schema as bytes into this or output the bytes into a file (or both).
 
 The reason for compiling the contract again is to avoid including dependencies from the schema generation into the final contract, resulting in smaller modules.
 
