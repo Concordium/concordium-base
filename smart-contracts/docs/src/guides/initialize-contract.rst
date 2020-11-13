@@ -1,8 +1,8 @@
 .. _initialize-contract:
 
-======================================
-Initializing a smart contract instance
-======================================
+====================================
+Initialize a smart contract instance
+====================================
 
 This guide will show you how to initialize a smart contract from a deployed
 smart contract module.

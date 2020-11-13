@@ -1,7 +1,7 @@
-.. _interacting-instance:
+.. _interact-instance:
 
 ==========================================
-Interacting with a smart contract instance
+Interact with a smart contract instance
 ==========================================
 
 This guide will show you, how to interact with a smart contract instance, which

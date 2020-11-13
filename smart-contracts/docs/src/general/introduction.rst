@@ -1,3 +1,9 @@
+.. Should answer:
+    - What is a smart contract
+    - Why use a smart contract
+    - What are the use cases
+    - What are not the use cases
+
 .. _introduction:
 
 ====================================
@@ -6,11 +12,14 @@ Introduction to smart contracts
 
 A smart contract is a user-supplied piece of code, used to define behavior that
 is not directly available on the chain.
+It can be used to define legal agreements and contracts, which are executed
+automatically, as part of the blockchain protocol.
 
-The code exists publicly as part of the chain and can be used by anyone.
+The hope is to reduce the needed amount of trust in third-parties, in some cases
+removing the need for trusted third-party, in other cases reducing their
+capabilities and therefore the amount of trust needed in them.
 
-.. note::
-    The code which is on chain is referred to as the *smart contract*.
+
 
 .. todo::
 

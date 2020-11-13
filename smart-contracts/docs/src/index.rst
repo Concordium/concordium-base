@@ -25,11 +25,6 @@ The documentation is split into four categories
    - Queries
    - Contract best practices (ensure amount is 0, naming conventions)
 
-   **References**
-
-   - Cargo-concordium reference
-   - Contract examples
-
    **Tutorial**
 
    - Finish first contract
@@ -53,7 +48,7 @@ The documentation is split into four categories
 
 .. toctree::
    :maxdepth: 1
-   :caption: How-to guides
+   :caption: Contract development guides
 
    guides/setup-tools
    guides/setup-contract
@@ -61,9 +56,14 @@ The documentation is split into four categories
    guides/unit-test-contract
    guides/local-simulate
    guides/build-schema
+
+.. toctree::
+   :maxdepth: 1
+   :caption: On chain guides
+
    guides/deploy-module
    guides/initialize-contract
-   guides/interacting-instance
+   guides/interact-instance
    guides/inspect-instance
 
 .. toctree::
@@ -72,6 +72,7 @@ The documentation is split into four categories
 
    references/host-fns
    concordium-sc-base (crate docs) <https://crates.io/crates/concordium-sc-base>
+   Rust contract examples (repo) <https://gitlab.com/Concordium/smart-contracts/-/tree/master/rust-contracts/example-contracts>
 
 
 .. Indices and tables
