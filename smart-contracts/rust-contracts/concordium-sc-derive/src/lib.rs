@@ -219,32 +219,60 @@ fn contract_function_schema_tokens(
 /// ```
 /// #[derive(Deserial)]
 /// struct Foo {
-///     #[set_size_length = 1]
-///     #[skip_order_check]
+///     #[concordium(set_size_length = 1, skip_order_check)]
 ///     bar: BTreeSet<u8>,
 /// }
 /// ```
-#[proc_macro_derive(
-    Deserial,
-    attributes(
-        size_length,
-        map_size_length,
-        set_size_length,
-        string_size_length,
-        skip_order_check
-    )
-)]
+#[proc_macro_derive(Deserial, attributes(concordium))]
 pub fn deserial_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     impl_deserial(&ast)
 }
 
-fn find_attribute_value(attributes: &[syn::Attribute], target_attr: &str) -> Option<syn::Lit> {
-    let target_attr = format_ident!("{}", target_attr);
-    let attr_values: Vec<_> = attributes
+/// The prefix used in field attributes: `#[concordium(attr = "something")]`
+const CONCORDIUM_FIELD_ATTRIBUTE: &str = "concordium";
+
+/// A list of valid concordium field attributes
+const VALID_CONCORDIUM_FIELD_ATTRIBUTES: [&str; 5] =
+    ["size_length", "set_size_length", "map_size_length", "string_size_length", "skip_order_check"];
+
+fn get_concordium_field_attributes(attributes: &[syn::Attribute]) -> Vec<syn::Meta> {
+    attributes
         .iter()
-        .filter_map(|attr| match attr.parse_meta() {
-            Ok(syn::Meta::NameValue(value)) if value.path.is_ident(&target_attr) => Some(value.lit),
+        // Keep only concordium attributes
+        .flat_map(|attr| match attr.parse_meta() {
+            Ok(syn::Meta::List(list)) if list.path.is_ident(CONCORDIUM_FIELD_ATTRIBUTE) => {
+                list.nested
+            }
+            _ => syn::punctuated::Punctuated::new(),
+        })
+        // Ensure only valid attributes and unwrap NestedMeta
+        .map(|nested| match nested {
+            syn::NestedMeta::Meta(meta) => {
+                let path = meta.path();
+                if VALID_CONCORDIUM_FIELD_ATTRIBUTES.iter().any(|&attr| path.is_ident(attr)) {
+                    meta
+                } else {
+                    panic!(
+                        "The attribute '{}' is not supported as a concordium field attribute.",
+                        path.to_token_stream()
+                    )
+                }
+            }
+            _ => panic!("Literals are not supported in a concordium field attribute."),
+        })
+        .collect()
+}
+
+fn find_field_attribute_value(
+    attributes: &[syn::Attribute],
+    target_attr: &str,
+) -> Option<syn::Lit> {
+    let target_attr = format_ident!("{}", target_attr);
+    let attr_values: Vec<_> = get_concordium_field_attributes(attributes)
+        .into_iter()
+        .filter_map(|nested_meta| match nested_meta {
+            syn::Meta::NameValue(value) if value.path.is_ident(&target_attr) => Some(value.lit),
             _ => None,
         })
         .collect();
@@ -258,7 +286,7 @@ fn find_attribute_value(attributes: &[syn::Attribute], target_attr: &str) -> Opt
 }
 
 fn find_length_attribute(attributes: &[syn::Attribute], target_attr: &str) -> Option<u32> {
-    let value = find_attribute_value(attributes, target_attr)?;
+    let value = find_field_attribute_value(attributes, target_attr)?;
     let value = match value {
         syn::Lit::Int(int) => int,
         _ => panic!("Unknown attribute value {:?}.", value),
@@ -275,10 +303,9 @@ fn find_length_attribute(attributes: &[syn::Attribute], target_attr: &str) -> Op
 
 fn contains_attribute(attributes: &[syn::Attribute], target_attr: &str) -> bool {
     let target_attr = format_ident!("{}", target_attr);
-    attributes.iter().any(|attr| match attr.parse_meta() {
-        Ok(meta) => meta.path().is_ident(&target_attr),
-        _ => false,
-    })
+    get_concordium_field_attributes(attributes)
+        .iter()
+        .any(|meta| meta.path().is_ident(&target_attr))
 }
 
 fn impl_deserial_field(
@@ -485,14 +512,11 @@ fn impl_deserial(ast: &syn::DeriveInput) -> TokenStream {
 /// ```
 /// #[derive(Serial)]
 /// struct Foo {
-///     #[set_size_length = 1]
+///     #[concordium(set_size_length = 1)]
 ///     bar: BTreeSet<u8>,
 /// }
 /// ```
-#[proc_macro_derive(
-    Serial,
-    attributes(size_length, map_size_length, set_size_length, string_size_length)
-)]
+#[proc_macro_derive(Serial, attributes(concordium))]
 pub fn serial_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     impl_serial(&ast)
@@ -654,16 +678,7 @@ fn impl_serial(ast: &syn::DeriveInput) -> TokenStream {
 /// A helper macro to derive both the Serial and Deserial traits.
 /// `[derive(Serialize)]` is equivalent to `[derive(Serial,Deserial)]`, see
 /// documentation of the latter two for details and options.
-#[proc_macro_derive(
-    Serialize,
-    attributes(
-        size_length,
-        map_size_length,
-        set_size_length,
-        string_size_length,
-        skip_order_check
-    )
-)]
+#[proc_macro_derive(Serialize, attributes(concordium))]
 pub fn serialize_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).expect("Cannot parse input.");
     let mut tokens = impl_deserial(&ast);
