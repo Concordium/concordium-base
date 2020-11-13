@@ -10,12 +10,15 @@ use syn::{export::Span, parse::Parser, punctuated::*, spanned::Spanned, Ident, M
 
 // Get the name item from a list, if available and a string literal.
 // FIXME: Ensure there is only one.
-fn get_attribute_value<'a, I: IntoIterator<Item = &'a Meta>>(iter: I, name: &str) -> Option<Ident> {
+fn get_attribute_value<'a, I: IntoIterator<Item = &'a Meta>>(
+    iter: I,
+    name: &str,
+) -> Option<String> {
     iter.into_iter().find_map(|attr| match attr {
         Meta::NameValue(mnv) => {
             if mnv.path.is_ident(name) {
                 if let syn::Lit::Str(lit) = &mnv.lit {
-                    Some(Ident::new(&lit.value(), Span::call_site()))
+                    Some(lit.value())
                 } else {
                     panic!("The `{}` attribute must be a string literal.", name)
                 }
@@ -53,15 +56,17 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
     let contract_name = get_attribute_value(attrs.iter(), "contract")
         .expect("A name for the contract must be provided, using the contract attribute.");
 
-    let init_name = format_ident!("init_{}", contract_name);
+    let wasm_export_fn_name = format!("init_{}", contract_name);
 
     let ast: syn::ItemFn = syn::parse(item).expect("Init can only be applied to functions.");
 
     let fn_name = &ast.sig.ident;
+    let rust_export_fn_name = format_ident!("export_{}", fn_name);
+
     let mut out = if get_low_level(attrs.iter()) {
         quote! {
-            #[no_mangle]
-            pub extern "C" fn #init_name(amount: Amount) -> i32 {
+            #[export_name = #wasm_export_fn_name]
+            pub extern "C" fn #rust_export_fn_name(amount: Amount) -> i32 {
                 use concordium_sc_base::{Logger, trap};
                 let ctx = InitContextExtern::open(());
                 let mut state = ContractState::open(());
@@ -74,8 +79,8 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     } else {
         quote! {
-            #[no_mangle]
-            pub extern "C" fn #init_name(amount: Amount) -> i32 {
+            #[export_name = #wasm_export_fn_name]
+            pub extern "C" fn #rust_export_fn_name(amount: Amount) -> i32 {
                 use concordium_sc_base::{Logger, trap};
                 let ctx = InitContextExtern::open(());
                 let mut logger = Logger::init();
@@ -95,7 +100,11 @@ pub fn init(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Embed schema if 'parameter' attribute is set
     let parameter_option = get_attribute_value(attrs.iter(), "parameter");
-    out.extend(contract_function_schema_tokens(parameter_option, init_name));
+    out.extend(contract_function_schema_tokens(
+        parameter_option,
+        rust_export_fn_name,
+        wasm_export_fn_name,
+    ));
 
     ast.to_tokens(&mut out);
 
@@ -122,15 +131,17 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
     );
     let name = get_attribute_value(attrs.iter(), "name")
         .expect("A name for the receive function must be provided, using the name attribute");
-
-    let receive_name = format_ident!("receive_{}_{}", contract_name, name);
+    let wasm_export_fn_name = format!("{}.{}", contract_name, name);
 
     let ast: syn::ItemFn = syn::parse(item).expect("Receive can only be applied to functions.");
+
     let fn_name = &ast.sig.ident;
+    let rust_export_fn_name = format_ident!("export_{}", fn_name);
+
     let mut out = if get_low_level(attrs.iter()) {
         quote! {
-        #[no_mangle]
-        pub extern "C" fn #receive_name(amount: Amount) -> i32 {
+        #[export_name = #wasm_export_fn_name]
+        pub extern "C" fn #rust_export_fn_name(amount: Amount) -> i32 {
             use concordium_sc_base::{SeekFrom, ContractState, Logger};
             let ctx = ReceiveContextExtern::open(());
             let mut state = ContractState::open(());
@@ -146,8 +157,8 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     } else {
         quote! {
-            #[no_mangle]
-            pub extern "C" fn #receive_name(amount: Amount) -> i32 {
+            #[export_name = #wasm_export_fn_name]
+            pub extern "C" fn #rust_export_fn_name(amount: Amount) -> i32 {
                 use concordium_sc_base::{SeekFrom, ContractState, Logger, trap};
                 let ctx = ReceiveContextExtern::open(());
                 let mut logger = Logger::init();
@@ -177,25 +188,31 @@ pub fn receive(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Embed schema if 'parameter' attribute is set
     let parameter_option = get_attribute_value(attrs.iter(), "parameter");
-    out.extend(contract_function_schema_tokens(parameter_option, receive_name));
+    out.extend(contract_function_schema_tokens(
+        parameter_option,
+        rust_export_fn_name,
+        wasm_export_fn_name,
+    ));
     // add the original function to the output as well.
     ast.to_tokens(&mut out);
     out.into()
 }
 
 fn contract_function_schema_tokens(
-    parameter_option: Option<syn::Ident>,
-    name: syn::Ident,
+    parameter_option: Option<String>,
+    rust_name: syn::Ident,
+    wasm_name: String,
 ) -> proc_macro2::TokenStream {
     match parameter_option {
         Some(parameter_ty) => {
-            let parameter_ident = format_ident!("{}", parameter_ty);
-            let schema_name = format_ident!("concordium_schema_function_{}", name);
+            let parameter_ident = syn::Ident::new(&parameter_ty, Span::call_site());
+            let schema_name = format!("concordium_schema_function_{}", wasm_name);
+            let schema_ident = format_ident!("concordium_schema_function_{}", rust_name);
             quote! {
                 #[cfg(target_arch = "wasm32")]
                 #[cfg(feature = "build-schema")]
-                #[no_mangle]
-                pub extern "C" fn #schema_name() -> *mut u8 {
+                #[export_name = #schema_name]
+                pub extern "C" fn #schema_ident() -> *mut u8 {
                     let schema = <#parameter_ident as SchemaType>::get_type();
                     let schema_bytes = concordium_sc_base::to_bytes(&schema);
                     concordium_sc_base::put_in_memory(&schema_bytes)
