@@ -102,32 +102,36 @@ impl RuntimeStack {
 #[inline(always)]
 fn get_u16(bytes: &[u8], pc: &mut usize) -> u16 {
     let mut dst = [0u8; 2];
-    dst.copy_from_slice(&bytes[*pc..*pc + 2]);
-    *pc += 2;
+    let end = *pc + 2;
+    dst.copy_from_slice(&bytes[*pc..end]);
+    *pc = end;
     u16::from_le_bytes(dst)
 }
 
 #[inline(always)]
 fn get_u32(bytes: &[u8], pc: &mut usize) -> u32 {
     let mut dst = [0u8; 4];
-    dst.copy_from_slice(&bytes[*pc..*pc + 4]);
-    *pc += 4;
+    let end = *pc + 4;
+    dst.copy_from_slice(&bytes[*pc..end]);
+    *pc = end;
     u32::from_le_bytes(dst)
 }
 
 #[inline(always)]
 fn get_i32(bytes: &[u8], pc: &mut usize) -> i32 {
     let mut dst = [0u8; 4];
-    dst.copy_from_slice(&bytes[*pc..*pc + 4]);
-    *pc += 4;
+    let end = *pc + 4;
+    dst.copy_from_slice(&bytes[*pc..end]);
+    *pc = end;
     i32::from_le_bytes(dst)
 }
 
 #[inline(always)]
 fn get_u64(bytes: &[u8], pc: &mut usize) -> u64 {
     let mut dst = [0u8; 8];
-    dst.copy_from_slice(&bytes[*pc..*pc + 8]);
-    *pc += 8;
+    let end = *pc + 8;
+    dst.copy_from_slice(&bytes[*pc..end]);
+    *pc = end;
     u64::from_le_bytes(dst)
 }
 
@@ -194,6 +198,7 @@ fn get_memory_pos(
     Ok(pos)
 }
 
+#[inline(always)]
 fn write_memory_at(memory: &mut [u8], pos: usize, bytes: &[u8]) -> RunResult<()> {
     ensure!(pos < memory.len(), "Illegal memory access.");
     (&mut memory[pos..]).write_all(bytes)?;
@@ -201,25 +206,22 @@ fn write_memory_at(memory: &mut [u8], pos: usize, bytes: &[u8]) -> RunResult<()>
 }
 
 #[inline(always)]
-fn unary_i32(stack: &mut RuntimeStack, f: impl Fn(i32) -> i32) -> RunResult<()> {
+fn unary_i32(stack: &mut RuntimeStack, f: impl Fn(i32) -> i32) {
     let val = stack.peek_mut();
     val.short = f(unsafe { val.short });
-    Ok(())
 }
 
 #[inline(always)]
-fn unary_i64(stack: &mut RuntimeStack, f: impl Fn(i64) -> i64) -> RunResult<()> {
+fn unary_i64(stack: &mut RuntimeStack, f: impl Fn(i64) -> i64) {
     let val = stack.peek_mut();
     val.long = f(unsafe { val.long });
-    Ok(())
 }
 
 #[inline(always)]
-fn binary_i32(stack: &mut RuntimeStack, f: impl Fn(i32, i32) -> i32) -> RunResult<()> {
+fn binary_i32(stack: &mut RuntimeStack, f: impl Fn(i32, i32) -> i32) {
     let right = stack.pop();
     let left = stack.peek_mut();
     left.short = f(unsafe { left.short }, unsafe { right.short });
-    Ok(())
 }
 
 #[inline(always)]
@@ -235,11 +237,10 @@ fn binary_i32_partial(
 }
 
 #[inline(always)]
-fn binary_i64(stack: &mut RuntimeStack, f: impl Fn(i64, i64) -> i64) -> RunResult<()> {
+fn binary_i64(stack: &mut RuntimeStack, f: impl Fn(i64, i64) -> i64) {
     let right = stack.pop();
     let left = stack.peek_mut();
     left.long = f(unsafe { left.long }, unsafe { right.long });
-    Ok(())
 }
 
 #[inline(always)]
@@ -255,11 +256,10 @@ fn binary_i64_partial(
 }
 
 #[inline(always)]
-fn binary_i64_test(stack: &mut RuntimeStack, f: impl Fn(i64, i64) -> i32) -> RunResult<()> {
+fn binary_i64_test(stack: &mut RuntimeStack, f: impl Fn(i64, i64) -> i32) {
     let right = stack.pop();
     let left = stack.peek_mut();
     left.short = f(unsafe { left.long }, unsafe { right.long });
-    Ok(())
 }
 
 impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
@@ -283,7 +283,8 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             ensure!(*p == ValueType::from(*actual), "Argument of incorrect type.")
         }
 
-        let mut globals = self.global.inits.clone();
+        let mut globals =
+            self.global.inits.iter().copied().map(StackValue::from).collect::<Vec<_>>();
         let mut stack: RuntimeStack = RuntimeStack {
             stack: Vec::with_capacity(1000),
             pos:   0,
@@ -321,16 +322,17 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
 
         let mut function_frames: Vec<FunctionState> = Vec::new();
         let mut return_type = self.code[start as usize].return_type();
-
         let mut locals_base = 0;
+
         'outer: loop {
+            assert!(pc < instructions.len(), "Out of bounds.");
             let instr = instructions[pc];
             pc += 1;
             // FIXME: The unsafe here is a bit wrong, but it is much faster than using
             // InternalOpcode::try_from(instr). About 25% faster on a fibonacci test.
             // The ensure here guarantees that the transmute is safe, provided that
             // InternalOpcode stays as it is.
-            ensure!(instr <= InternalOpcode::I64ExtendI32U as u8, "Illegal opcode.");
+            // ensure!(instr <= InternalOpcode::I64ExtendI32U as u8, "Illegal opcode.");
             match unsafe { std::mem::transmute(instr) } {
                 // InternalOpcode::try_from(instr)? {
                 InternalOpcode::Unreachable => bail!("Unreachable."),
@@ -345,13 +347,15 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 InternalOpcode::Br => {
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
-                    if diff & 0x8000_0000 != 0 {
-                        let top = stack.pop();
-                        stack.set_pos(stack.size() - (diff & !0x8000_0000) as usize);
-                        stack.push(top)
-                    } else {
-                        stack.set_pos(stack.size() - diff as usize);
-                    }
+                    stack.set_pos(stack.size() - diff as usize);
+                    pc = target as usize;
+                }
+                InternalOpcode::BrCarry => {
+                    let diff = get_u32(instructions, &mut pc);
+                    let target = get_u32(instructions, &mut pc);
+                    let top = stack.pop();
+                    stack.set_pos(stack.size() - diff as usize);
+                    stack.push(top);
                     pc = target as usize;
                 }
                 InternalOpcode::BrIf => {
@@ -359,13 +363,18 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     let target = get_u32(instructions, &mut pc);
                     let top = stack.pop();
                     if unsafe { top.short } != 0 {
-                        if diff & 0x8000_0000 != 0 {
-                            let top = stack.pop();
-                            stack.set_pos(stack.size() - (diff & !0x8000_0000) as usize);
-                            stack.push(top)
-                        } else {
-                            stack.set_pos(stack.size() - diff as usize);
-                        }
+                        stack.set_pos(stack.size() - diff as usize);
+                        pc = target as usize;
+                    } // else do nothing
+                }
+                InternalOpcode::BrIfCarry => {
+                    let diff = get_u32(instructions, &mut pc);
+                    let target = get_u32(instructions, &mut pc);
+                    let top = stack.pop();
+                    if unsafe { top.short } != 0 {
+                        let top = stack.pop();
+                        stack.set_pos(stack.size() - diff as usize);
+                        stack.push(top);
                         pc = target as usize;
                     } // else do nothing
                 }
@@ -378,13 +387,21 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     } // else use default branch
                     let diff = get_u32(instructions, &mut pc);
                     let target = get_u32(instructions, &mut pc);
-                    if diff & 0x8000_0000 != 0 {
-                        let top = stack.pop();
-                        stack.set_pos(stack.size() - (diff & !0x8000_0000) as usize);
-                        stack.push(top)
-                    } else {
-                        stack.set_pos(stack.size() - diff as usize);
-                    }
+                    stack.set_pos(stack.size() - diff as usize);
+                    pc = target as usize;
+                }
+                InternalOpcode::BrTableCarry => {
+                    let top = stack.pop();
+                    let num_labels = get_u16(instructions, &mut pc);
+                    let top: u32 = unsafe { top.short } as u32;
+                    if top < u32::from(num_labels) {
+                        pc += (top as usize + 1) * 8;
+                    } // else use default branch
+                    let diff = get_u32(instructions, &mut pc);
+                    let target = get_u32(instructions, &mut pc);
+                    let top = stack.pop();
+                    stack.set_pos(stack.size() - diff as usize);
+                    stack.push(top);
                     pc = target as usize;
                 }
                 InternalOpcode::Return => {
@@ -660,34 +677,34 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     };
                 }
                 InternalOpcode::I32Eq => {
-                    binary_i32(&mut stack, |left, right| (left == right) as i32)?;
+                    binary_i32(&mut stack, |left, right| (left == right) as i32);
                 }
                 InternalOpcode::I32Ne => {
-                    binary_i32(&mut stack, |left, right| (left != right) as i32)?;
+                    binary_i32(&mut stack, |left, right| (left != right) as i32);
                 }
                 InternalOpcode::I32LtS => {
-                    binary_i32(&mut stack, |left, right| (left < right) as i32)?;
+                    binary_i32(&mut stack, |left, right| (left < right) as i32);
                 }
                 InternalOpcode::I32LtU => {
-                    binary_i32(&mut stack, |left, right| ((left as u32) < (right as u32)) as i32)?;
+                    binary_i32(&mut stack, |left, right| ((left as u32) < (right as u32)) as i32);
                 }
                 InternalOpcode::I32GtS => {
-                    binary_i32(&mut stack, |left, right| (left > right) as i32)?;
+                    binary_i32(&mut stack, |left, right| (left > right) as i32);
                 }
                 InternalOpcode::I32GtU => {
-                    binary_i32(&mut stack, |left, right| ((left as u32) > (right as u32)) as i32)?;
+                    binary_i32(&mut stack, |left, right| ((left as u32) > (right as u32)) as i32);
                 }
                 InternalOpcode::I32LeS => {
-                    binary_i32(&mut stack, |left, right| (left <= right) as i32)?;
+                    binary_i32(&mut stack, |left, right| (left <= right) as i32);
                 }
                 InternalOpcode::I32LeU => {
-                    binary_i32(&mut stack, |left, right| ((left as u32) <= (right as u32)) as i32)?;
+                    binary_i32(&mut stack, |left, right| ((left as u32) <= (right as u32)) as i32);
                 }
                 InternalOpcode::I32GeS => {
-                    binary_i32(&mut stack, |left, right| (left >= right) as i32)?;
+                    binary_i32(&mut stack, |left, right| (left >= right) as i32);
                 }
                 InternalOpcode::I32GeU => {
-                    binary_i32(&mut stack, |left, right| ((left as u32) >= (right as u32)) as i32)?;
+                    binary_i32(&mut stack, |left, right| ((left as u32) >= (right as u32)) as i32);
                 }
                 InternalOpcode::I64Eqz => {
                     let top = stack.peek_mut();
@@ -699,60 +716,60 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     };
                 }
                 InternalOpcode::I64Eq => {
-                    binary_i64_test(&mut stack, |left, right| (left == right) as i32)?;
+                    binary_i64_test(&mut stack, |left, right| (left == right) as i32);
                 }
                 InternalOpcode::I64Ne => {
-                    binary_i64_test(&mut stack, |left, right| (left != right) as i32)?;
+                    binary_i64_test(&mut stack, |left, right| (left != right) as i32);
                 }
                 InternalOpcode::I64LtS => {
-                    binary_i64_test(&mut stack, |left, right| (left < right) as i32)?;
+                    binary_i64_test(&mut stack, |left, right| (left < right) as i32);
                 }
                 InternalOpcode::I64LtU => {
                     binary_i64_test(&mut stack, |left, right| {
                         ((left as u64) < (right as u64)) as i32
-                    })?;
+                    });
                 }
                 InternalOpcode::I64GtS => {
-                    binary_i64_test(&mut stack, |left, right| (left > right) as i32)?;
+                    binary_i64_test(&mut stack, |left, right| (left > right) as i32);
                 }
                 InternalOpcode::I64GtU => {
                     binary_i64_test(&mut stack, |left, right| {
                         ((left as u64) > (right as u64)) as i32
-                    })?;
+                    });
                 }
                 InternalOpcode::I64LeS => {
-                    binary_i64_test(&mut stack, |left, right| (left <= right) as i32)?;
+                    binary_i64_test(&mut stack, |left, right| (left <= right) as i32);
                 }
                 InternalOpcode::I64LeU => {
                     binary_i64_test(&mut stack, |left, right| {
                         ((left as u64) <= (right as u64)) as i32
-                    })?;
+                    });
                 }
                 InternalOpcode::I64GeS => {
-                    binary_i64_test(&mut stack, |left, right| (left >= right) as i32)?;
+                    binary_i64_test(&mut stack, |left, right| (left >= right) as i32);
                 }
                 InternalOpcode::I64GeU => {
                     binary_i64_test(&mut stack, |left, right| {
                         ((left as u64) >= (right as u64)) as i32
-                    })?;
+                    });
                 }
                 InternalOpcode::I32Clz => {
-                    unary_i32(&mut stack, |x| x.leading_zeros() as i32)?;
+                    unary_i32(&mut stack, |x| x.leading_zeros() as i32);
                 }
                 InternalOpcode::I32Ctz => {
-                    unary_i32(&mut stack, |x| x.trailing_zeros() as i32)?;
+                    unary_i32(&mut stack, |x| x.trailing_zeros() as i32);
                 }
                 InternalOpcode::I32Popcnt => {
-                    unary_i32(&mut stack, |x| x.count_ones() as i32)?;
+                    unary_i32(&mut stack, |x| x.count_ones() as i32);
                 }
                 InternalOpcode::I32Add => {
-                    binary_i32(&mut stack, |x, y| x.wrapping_add(y))?;
+                    binary_i32(&mut stack, |x, y| x.wrapping_add(y));
                 }
                 InternalOpcode::I32Sub => {
-                    binary_i32(&mut stack, |x, y| x.wrapping_sub(y))?;
+                    binary_i32(&mut stack, |x, y| x.wrapping_sub(y));
                 }
                 InternalOpcode::I32Mul => {
-                    binary_i32(&mut stack, |x, y| x.wrapping_mul(y))?;
+                    binary_i32(&mut stack, |x, y| x.wrapping_mul(y));
                 }
                 InternalOpcode::I32DivS => {
                     binary_i32_partial(&mut stack, |x, y| x.checked_div(y))?;
@@ -771,46 +788,46 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     })?;
                 }
                 InternalOpcode::I32And => {
-                    binary_i32(&mut stack, |x, y| x & y)?;
+                    binary_i32(&mut stack, |x, y| x & y);
                 }
                 InternalOpcode::I32Or => {
-                    binary_i32(&mut stack, |x, y| x | y)?;
+                    binary_i32(&mut stack, |x, y| x | y);
                 }
                 InternalOpcode::I32Xor => {
-                    binary_i32(&mut stack, |x, y| x ^ y)?;
+                    binary_i32(&mut stack, |x, y| x ^ y);
                 }
                 InternalOpcode::I32Shl => {
-                    binary_i32(&mut stack, |x, y| x << (y as u32 % 32))?;
+                    binary_i32(&mut stack, |x, y| x << (y as u32 % 32));
                 }
                 InternalOpcode::I32ShrS => {
-                    binary_i32(&mut stack, |x, y| x >> (y as u32 % 32))?;
+                    binary_i32(&mut stack, |x, y| x >> (y as u32 % 32));
                 }
                 InternalOpcode::I32ShrU => {
-                    binary_i32(&mut stack, |x, y| ((x as u32) >> (y as u32 % 32)) as i32)?;
+                    binary_i32(&mut stack, |x, y| ((x as u32) >> (y as u32 % 32)) as i32);
                 }
                 InternalOpcode::I32Rotl => {
-                    binary_i32(&mut stack, |x, y| x.rotate_left(y as u32 % 32))?;
+                    binary_i32(&mut stack, |x, y| x.rotate_left(y as u32 % 32));
                 }
                 InternalOpcode::I32Rotr => {
-                    binary_i32(&mut stack, |x, y| x.rotate_right(y as u32 % 32))?;
+                    binary_i32(&mut stack, |x, y| x.rotate_right(y as u32 % 32));
                 }
                 InternalOpcode::I64Clz => {
-                    unary_i64(&mut stack, |x| x.leading_zeros() as i64)?;
+                    unary_i64(&mut stack, |x| x.leading_zeros() as i64);
                 }
                 InternalOpcode::I64Ctz => {
-                    unary_i64(&mut stack, |x| x.trailing_zeros() as i64)?;
+                    unary_i64(&mut stack, |x| x.trailing_zeros() as i64);
                 }
                 InternalOpcode::I64Popcnt => {
-                    unary_i64(&mut stack, |x| x.count_ones() as i64)?;
+                    unary_i64(&mut stack, |x| x.count_ones() as i64);
                 }
                 InternalOpcode::I64Add => {
-                    binary_i64(&mut stack, |x, y| x.wrapping_add(y))?;
+                    binary_i64(&mut stack, |x, y| x.wrapping_add(y));
                 }
                 InternalOpcode::I64Sub => {
-                    binary_i64(&mut stack, |x, y| x.wrapping_sub(y))?;
+                    binary_i64(&mut stack, |x, y| x.wrapping_sub(y));
                 }
                 InternalOpcode::I64Mul => {
-                    binary_i64(&mut stack, |x, y| x.wrapping_mul(y))?;
+                    binary_i64(&mut stack, |x, y| x.wrapping_mul(y));
                 }
                 InternalOpcode::I64DivS => {
                     binary_i64_partial(&mut stack, |x, y| x.checked_div(y))?;
@@ -829,28 +846,28 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     })?;
                 }
                 InternalOpcode::I64And => {
-                    binary_i64(&mut stack, |x, y| x & y)?;
+                    binary_i64(&mut stack, |x, y| x & y);
                 }
                 InternalOpcode::I64Or => {
-                    binary_i64(&mut stack, |x, y| x | y)?;
+                    binary_i64(&mut stack, |x, y| x | y);
                 }
                 InternalOpcode::I64Xor => {
-                    binary_i64(&mut stack, |x, y| x ^ y)?;
+                    binary_i64(&mut stack, |x, y| x ^ y);
                 }
                 InternalOpcode::I64Shl => {
-                    binary_i64(&mut stack, |x, y| x << (y as u64 % 64))?;
+                    binary_i64(&mut stack, |x, y| x << (y as u64 % 64));
                 }
                 InternalOpcode::I64ShrS => {
-                    binary_i64(&mut stack, |x, y| x >> (y as u64 % 64))?;
+                    binary_i64(&mut stack, |x, y| x >> (y as u64 % 64));
                 }
                 InternalOpcode::I64ShrU => {
-                    binary_i64(&mut stack, |x, y| ((x as u64) >> (y as u64 % 64)) as i64)?;
+                    binary_i64(&mut stack, |x, y| ((x as u64) >> (y as u64 % 64)) as i64);
                 }
                 InternalOpcode::I64Rotl => {
-                    binary_i64(&mut stack, |x, y| x.rotate_left((y as u64 % 64) as u32))?;
+                    binary_i64(&mut stack, |x, y| x.rotate_left((y as u64 % 64) as u32));
                 }
                 InternalOpcode::I64Rotr => {
-                    binary_i64(&mut stack, |x, y| x.rotate_right((y as u64 % 64) as u32))?;
+                    binary_i64(&mut stack, |x, y| x.rotate_right((y as u64 % 64) as u32));
                 }
                 InternalOpcode::I32WrapI64 => {
                     let top = stack.peek_mut();

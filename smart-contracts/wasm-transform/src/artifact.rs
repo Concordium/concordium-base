@@ -18,6 +18,9 @@ use std::{
 };
 
 #[derive(Copy, Clone)]
+/// Either a short or long integer. The use of repr(C) is crucial to guarantee
+/// that offsets of both fields are 0, i.e., that we can read the short field if
+/// the long field is stored. This only works on little endian platforms.
 pub union StackValue {
     pub short: i32,
     pub long:  i64,
@@ -69,7 +72,7 @@ pub struct InstantiatedTable {
 
 #[derive(Debug)]
 pub struct InstantiatedGlobals {
-    pub inits: Vec<StackValue>,
+    pub inits: Vec<GlobalInit>,
 }
 
 #[derive(Debug)]
@@ -252,8 +255,11 @@ pub enum InternalOpcode {
     Unreachable = 0u8,
     If,
     Br,
+    BrCarry,
     BrIf,
+    BrIfCarry,
     BrTable,
+    BrTableCarry,
     Return,
     Call,
     CallIndirect,
@@ -464,6 +470,7 @@ impl BackPatch {
         &mut self,
         label_idx: LabelIndex,
         state: &ValidationState,
+        instruction: Option<(InternalOpcode, InternalOpcode)>,
     ) -> CompileResult<()> {
         let target = self.backpatch.get_mut(label_idx)?;
         let target_frame = state
@@ -477,10 +484,15 @@ impl BackPatch {
             "Current height must be at least as much as the target."
         );
         let diff = if let BlockType::EmptyType = target_frame.label_type {
+            if let Some((l, _)) = instruction {
+                self.out.push(l);
+            }
             (current_height - target_height).try_into()?
         } else {
-            let diff: u32 = (current_height - target_height).try_into()?;
-            diff | 0x8000_0000
+            if let Some((_, r)) = instruction {
+                self.out.push(r);
+            }
+            (current_height - target_height).try_into()?
         };
         // output the difference in stack heights.
         self.out.push_u32(diff);
@@ -540,8 +552,7 @@ impl Handler<&OpCode> for BackPatch {
             OpCode::Else => {
                 // If we reached the else normally, after executing the if branch, we just break
                 // to the end of else.
-                self.out.push(Br);
-                self.push_jump(0, state)?;
+                self.push_jump(0, state, Some((Br, BrCarry)))?;
                 // Because the module is well-formed this can only happen after an if
                 // We do not backpatch the code now, apart from the initial jump to the else
                 // branch. The effect of this will be that any break out of the if statement
@@ -564,27 +575,33 @@ impl Handler<&OpCode> for BackPatch {
                 }
             }
             OpCode::Br(label_idx) => {
-                self.out.push(Br);
-                self.push_jump(*label_idx, state)?;
+                self.push_jump(*label_idx, state, Some((Br, BrCarry)))?;
             }
             OpCode::BrIf(label_idx) => {
-                self.out.push(BrIf);
-                self.push_jump(*label_idx, state)?;
+                self.push_jump(*label_idx, state, Some((BrIf, BrIfCarry)))?;
             }
             OpCode::BrTable {
                 labels,
                 default,
             } => {
-                self.out.push(BrTable);
+                let target_frame = state
+                    .ctrls
+                    .get(*default)
+                    .ok_or_else(|| anyhow!("Could not get jump target frame."))?;
+                if let BlockType::EmptyType = target_frame.label_type {
+                    self.out.push(BrTable);
+                } else {
+                    self.out.push(BrTableCarry);
+                }
                 // the try_into is not needed because MAX_SWITCH_SIZE is small enough
                 // but it does not hurt.
                 let labels_len: u16 = labels.len().try_into()?;
                 self.out.push_u16(labels_len);
-                self.push_jump(*default, state)?;
+                self.push_jump(*default, state, None)?;
                 // The label types are the same for the default as well all the other
                 // labels.
                 for label_idx in labels {
-                    self.push_jump(*label_idx, state)?;
+                    self.push_jump(*label_idx, state, None)?;
                 }
             }
             OpCode::Return => {
@@ -1042,7 +1059,7 @@ pub fn compile_module<I: TryFromImport>(
         }
     };
     let global = InstantiatedGlobals {
-        inits: input.global.globals.iter().map(|g| StackValue::from(g.init)).collect::<Vec<_>>(),
+        inits: input.global.globals.iter().map(|x| x.init).collect::<Vec<_>>(),
     };
     let export = input
         .export

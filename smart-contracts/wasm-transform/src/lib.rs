@@ -1,4 +1,5 @@
 pub mod artifact;
+pub mod artifact_output;
 pub mod machine;
 pub mod output;
 pub mod parse;
