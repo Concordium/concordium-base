@@ -397,6 +397,7 @@ impl<'a> Parseable<'a> for Name {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
         let name_bytes = cursor.next()?;
         let name = std::str::from_utf8(name_bytes)?.to_string();
+        ensure!(name.is_ascii(), "Only ASCII names are allowed.");
         Ok(Name {
             name,
         })
