@@ -5,6 +5,10 @@ authors = ["Concordium <info@concordium.com>"]
 edition = "2018"
 
 [features]
+# If this feature is enabled  the ffi exports are going to be produced
+# for use from Haskell.
+enable-ffi = []
+default=["enable-ffi"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
