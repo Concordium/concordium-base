@@ -11,11 +11,7 @@ use crate::{
     validate::{validate, Handler, HasValidationContext, ValidationState},
 };
 use anyhow::{anyhow, bail, ensure};
-use std::{
-    collections::BTreeMap,
-    convert::{TryFrom, TryInto},
-    io::Write,
-};
+use std::{collections::BTreeMap, convert::TryInto, io::Write};
 
 #[derive(Copy, Clone)]
 /// Either a short or long integer. The use of repr(C) is crucial to guarantee
@@ -42,11 +38,29 @@ impl From<i32> for StackValue {
     }
 }
 
+impl From<u32> for StackValue {
+    #[inline(always)]
+    fn from(short: u32) -> Self {
+        Self {
+            short: short as i32,
+        }
+    }
+}
+
 impl From<i64> for StackValue {
     #[inline(always)]
     fn from(long: i64) -> Self {
         Self {
             long,
+        }
+    }
+}
+
+impl From<u64> for StackValue {
+    #[inline(always)]
+    fn from(long: u64) -> Self {
+        Self {
+            long: long as i64,
         }
     }
 }
@@ -121,95 +135,37 @@ pub struct CompiledFunctionBytes<'a> {
     pub code: &'a [u8],
 }
 
-#[repr(u8)]
-#[derive(Copy, Clone, Debug)]
-pub enum ImportFunc {
-    ChargeEnergy,
-    ChargeStackSize,
-    ChargeMemoryAlloc,
-    Accept,
-    SimpleTransfer,
-    Send,
-    CombineAnd,
-    CombineOr,
-    GetParameterSize,
-    GetParameterSection,
-    LogEvent,
-    LoadState,
-    WriteState,
-    ResizeState,
-    StateSize,
-    GetInitOrigin,
-    GetReceiveInvoker,
-    GetReceiveSelfAddress,
-    GetReceiveSelfBalance,
-    GetReceiveSender,
-    GetReceiveOwner,
-    GetSlotNumber,
-    GetSlotTime,
-    GetBlockHeight,
-    GetFinalizedHeight,
-    /// Only used in smart contract tests.
-    ReportError,
-}
-
 pub trait TryFromImport: Sized {
-    fn try_from_import(import: Import) -> CompileResult<Self>;
+    fn try_from_import(ty: &[FunctionType], import: Import) -> CompileResult<Self>;
+    fn ty(&self) -> &FunctionType;
 }
 
-impl<T: TryFrom<Import, Error = anyhow::Error>> TryFromImport for T {
-    fn try_from_import(import: Import) -> CompileResult<Self> { Self::try_from(import) }
+pub struct ArtifactNamedImport {
+    pub(crate) mod_name:  Name,
+    pub(crate) item_name: Name,
+    pub(crate) ty:        FunctionType,
 }
 
-impl TryFrom<Import> for (Name, Name) {
-    type Error = anyhow::Error;
-
-    fn try_from(i: Import) -> CompileResult<Self> { Ok((i.mod_name, i.item_name)) }
-}
-
-impl TryFrom<Import> for ImportFunc {
-    type Error = anyhow::Error;
-
-    fn try_from(i: Import) -> CompileResult<ImportFunc> {
-        let m = &i.mod_name;
-        if m.name == "concordium_metering" {
-            match i.item_name.name.as_ref() {
-                "account_energy" => Ok(ImportFunc::ChargeEnergy),
-                "account_stack" => Ok(ImportFunc::ChargeStackSize),
-                "account_memory" => Ok(ImportFunc::ChargeMemoryAlloc),
-                name => bail!("Unsupported import {}.", name),
+impl TryFromImport for ArtifactNamedImport {
+    fn try_from_import(ty: &[FunctionType], import: Import) -> CompileResult<Self> {
+        match import.description {
+            ImportDescription::Func {
+                type_idx,
+            } => {
+                let ty = ty
+                    .get(type_idx as usize)
+                    .ok_or_else(|| anyhow!("Unknown type index."))?
+                    .clone();
+                Ok(Self {
+                    mod_name: import.mod_name,
+                    item_name: import.item_name,
+                    ty,
+                })
             }
-        } else if m.name == "concordium" {
-            match i.item_name.name.as_ref() {
-                "accept" => Ok(ImportFunc::Accept),
-                "simple_transfer" => Ok(ImportFunc::SimpleTransfer),
-                "send" => Ok(ImportFunc::Send),
-                "combine_and" => Ok(ImportFunc::CombineAnd),
-                "combine_or" => Ok(ImportFunc::CombineOr),
-                "get_parameter_size" => Ok(ImportFunc::GetParameterSize),
-                "get_parameter_section" => Ok(ImportFunc::GetParameterSection),
-                "log_event" => Ok(ImportFunc::LogEvent),
-                "load_state" => Ok(ImportFunc::LoadState),
-                "write_state" => Ok(ImportFunc::WriteState),
-                "resize_state" => Ok(ImportFunc::ResizeState),
-                "state_size" => Ok(ImportFunc::StateSize),
-                "get_init_origin" => Ok(ImportFunc::GetInitOrigin),
-                "get_receive_invoker" => Ok(ImportFunc::GetReceiveInvoker),
-                "get_receive_self_address" => Ok(ImportFunc::GetReceiveSelfAddress),
-                "get_receive_self_balance" => Ok(ImportFunc::GetReceiveSelfBalance),
-                "get_receive_sender" => Ok(ImportFunc::GetReceiveSender),
-                "get_receive_owner" => Ok(ImportFunc::GetReceiveOwner),
-                "get_slot_number" => Ok(ImportFunc::GetSlotNumber),
-                "get_block_height" => Ok(ImportFunc::GetBlockHeight),
-                "get_finalized_height" => Ok(ImportFunc::GetFinalizedHeight),
-                "get_slot_time" => Ok(ImportFunc::GetSlotTime),
-                "report_error" => Ok(ImportFunc::ReportError),
-                name => bail!("Unsupported import {}.", name),
-            }
-        } else {
-            bail!("Unsupported import module {}.", m)
         }
     }
+
+    fn ty(&self) -> &FunctionType { &self.ty }
 }
 
 pub trait RunnableCode {
@@ -401,7 +357,7 @@ pub enum InternalOpcode {
     I64ExtendI32U,
 }
 
-type CompileResult<A> = anyhow::Result<A>;
+pub type CompileResult<A> = anyhow::Result<A>;
 
 #[derive(Default, Debug)]
 pub struct Instructions {
@@ -1115,8 +1071,12 @@ pub fn compile_module<I: TryFromImport>(
             }
         })
         .collect::<BTreeMap<_, _>>();
-    let imports =
-        input.import.imports.into_iter().map(I::try_from_import).collect::<CompileResult<_>>()?;
+    let imports = input
+        .import
+        .imports
+        .into_iter()
+        .map(|i| I::try_from_import(&ty, i))
+        .collect::<CompileResult<_>>()?;
     Ok(Artifact {
         imports,
         ty,

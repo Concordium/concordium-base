@@ -1,7 +1,7 @@
 use crate::{
     artifact::{
-        Artifact, ArtifactData, ArtifactMemory, CompiledFunctionBytes, InstantiatedGlobals,
-        InstantiatedTable,
+        Artifact, ArtifactData, ArtifactMemory, ArtifactNamedImport, CompiledFunctionBytes,
+        InstantiatedGlobals, InstantiatedTable,
     },
     parse::*,
     types::{BlockType, FuncIndex, FunctionType, GlobalInit, Name, TypeIndex, ValueType},
@@ -9,11 +9,16 @@ use crate::{
 use anyhow::bail;
 use std::{collections::BTreeMap, io::Cursor};
 
-impl<'a> Parseable<'a> for (Name, Name) {
+impl<'a> Parseable<'a> for ArtifactNamedImport {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        let left = cursor.next()?;
-        let right = cursor.next()?;
-        Ok((left, right))
+        let mod_name = cursor.next()?;
+        let item_name = cursor.next()?;
+        let ty = cursor.next()?;
+        Ok(ArtifactNamedImport {
+            mod_name,
+            item_name,
+            ty,
+        })
     }
 }
 

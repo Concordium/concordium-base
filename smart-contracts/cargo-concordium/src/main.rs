@@ -182,16 +182,16 @@ pub fn main() {
             let source = read(&runner.source).expect("Could not read file.");
 
             let print_result = |state: State, logs: Logs| {
-                for (i, item) in logs.iterate().iter().enumerate() {
+                for (i, item) in logs.iterate().enumerate() {
                     if let Ok(s) = std::str::from_utf8(item) {
                         println!("{}: {}", i, s)
                     } else {
                         println!("{}: {:?}", i, item)
                     }
                 }
-                let state = state.get();
+                let state = &state.state;
                 if runner.hex_state {
-                    let output = hex::encode(&state);
+                    let output = hex::encode(state);
                     match &runner.out {
                         None => println!("The new state is: {}", output),
                         Some(fp) => {

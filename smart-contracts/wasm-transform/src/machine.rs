@@ -9,19 +9,9 @@ use std::{convert::TryInto, io::Write};
 
 /// The host that can process external functions.
 pub trait Host<I> {
-    fn tick_energy(x: u64) -> RunResult<()>;
+    fn tick_energy(&mut self, x: u64) -> RunResult<()>;
     /// Call the host function.
     fn call(&mut self, f: &I, memory: &mut Vec<u8>, stack: &mut RuntimeStack) -> RunResult<()>;
-
-    /// Call the host function, but before that check that the type
-    /// is as expected.
-    fn call_check_type(
-        &mut self,
-        f: &I,
-        memory: &mut Vec<u8>,
-        stack: &mut RuntimeStack,
-        ty: &FunctionType,
-    ) -> RunResult<()>;
 }
 
 pub type RunResult<A> = anyhow::Result<A>;
@@ -97,6 +87,37 @@ impl RuntimeStack {
 
     #[inline(always)]
     pub fn set_pos(&mut self, pos: usize) { self.pos = pos; }
+
+    #[inline(always)]
+    pub fn push_value<F>(&mut self, f: F)
+    where
+        StackValue: From<F>, {
+        self.push(StackValue::from(f))
+    }
+
+    /// # Safety
+    /// This function is safe provided
+    /// - the stack is not empty
+    /// - top of the stack contains a 32-bit value.
+    pub unsafe fn pop_u32(&mut self) -> u32 { self.pop().short as u32 }
+
+    /// # Safety
+    /// This function is safe provided
+    /// - the stack is not empty
+    /// - top of the stack contains a 32-bit value.
+    pub unsafe fn peek_u32(&mut self) -> u32 { self.peek().short as u32 }
+
+    /// # Safety
+    /// This function is safe provided
+    /// - the stack is not empty
+    /// - top of the stack contains a 64-bit value.
+    pub unsafe fn pop_u64(&mut self) -> u64 { self.pop().long as u64 }
+
+    /// # Safety
+    /// This function is safe provided
+    /// - the stack is not empty
+    /// - top of the stack contains a 64-bit value.
+    pub unsafe fn peek_u64(&mut self) -> u64 { self.peek().long as u64 }
 }
 
 #[inline(always)]
@@ -268,7 +289,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         host: &mut impl Host<I>,
         name: &Q,
         args: &[Value],
-    ) -> RunResult<Option<Value>>
+    ) -> RunResult<(Option<Value>, Vec<u8>)>
     where
         Name: std::borrow::Borrow<Q>, {
         let start = *self
@@ -473,8 +494,10 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     let idx = unsafe { idx.short } as u32;
                     if let Some(Some(f_idx)) = self.table.functions.get(idx as usize) {
                         if let Some(f) = self.imports.get(*f_idx as usize) {
+                            let ty_actual = f.ty();
                             // call imported function.
-                            host.call_check_type(f, &mut memory, &mut stack, ty)?;
+                            ensure!(ty_actual == ty, "Actual type different from expected.");
+                            host.call(f, &mut memory, &mut stack)?;
                         } else {
                             let f = self
                                 .code
@@ -897,13 +920,13 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         match outer_function.return_type() {
             BlockType::ValueType(ValueType::I32) => {
                 let val = stack.pop();
-                Ok(Some(Value::I32(unsafe { val.short })))
+                Ok((Some(Value::I32(unsafe { val.short })), memory))
             }
             BlockType::ValueType(ValueType::I64) => {
                 let val = stack.pop();
-                Ok(Some(Value::I64(unsafe { val.long })))
+                Ok((Some(Value::I64(unsafe { val.long })), memory))
             }
-            BlockType::EmptyType => Ok(None),
+            BlockType::EmptyType => Ok((None, memory)),
         }
     }
 }

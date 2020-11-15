@@ -1,613 +1,557 @@
+mod constants;
 mod ffi;
 mod types;
 
+use anyhow::{anyhow, bail, ensure};
+use constants::MAX_CONTRACT_STATE;
 use contracts_common::*;
+use machine::Value;
 use std::{
-    cell::Cell,
     collections::{BTreeMap, LinkedList},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
-    },
+    convert::TryInto,
+    io::Write,
 };
 pub use types::*;
-use wasmer_runtime::{
-    compile, error, func, imports, instantiate, types as wasmer_types, Array, Ctx, Func,
-    ImportObject, Instance, Module, Value, WasmPtr,
+use wasm_transform::{
+    artifact::{Artifact, ArtifactNamedImport, RunnableCode, TryFromImport},
+    machine,
+    parse::{parse_custom, parse_skeleton},
+    types::{ExportDescription, Module, Name},
 };
+
+pub type ExecResult<A> = anyhow::Result<A>;
 
 #[derive(Clone, Default)]
 /// Structure to support logging of events from smart contracts.
 pub struct Logs {
-    pub logs: Arc<Mutex<LinkedList<Vec<u8>>>>,
+    pub logs: LinkedList<Vec<u8>>,
 }
 
 impl Logs {
     pub fn new() -> Self {
         Self {
-            logs: Arc::new(Mutex::new(LinkedList::new())),
+            logs: LinkedList::new(),
         }
     }
 
-    pub fn log_event(&self, event: Vec<u8>) {
-        if let Ok(mut guard) = self.logs.lock() {
-            guard.push_back(event);
-        }
-        // else todo
-    }
+    pub fn log_event(&mut self, event: Vec<u8>) { self.logs.push_back(event); }
 
-    pub fn iterate(&self) -> LinkedList<Vec<u8>> {
-        if let Ok(guard) = self.logs.lock() {
-            guard.clone()
-        } else {
-            unreachable!("Failed.");
-        }
-    }
+    pub fn iterate(&self) -> impl Iterator<Item = &Vec<u8>> { self.logs.iter() }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        if let Ok(guard) = self.logs.lock() {
-            let len = guard.len();
-            let mut out = Vec::with_capacity(4 * len + 4);
-            out.extend_from_slice(&(len as u32).to_be_bytes());
-            for v in guard.iter() {
-                out.extend_from_slice(&(v.len() as u32).to_be_bytes());
-                out.extend_from_slice(v);
-            }
-            out
-        } else {
-            unreachable!("Failed to acquire lock.")
+        let len = self.logs.len();
+        let mut out = Vec::with_capacity(4 * len + 4);
+        out.extend_from_slice(&(len as u32).to_be_bytes());
+        for v in self.iterate() {
+            out.extend_from_slice(&(v.len() as u32).to_be_bytes());
+            out.extend_from_slice(v);
         }
+        out
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Energy {
     /// Energy left to use
-    pub energy: Arc<AtomicU64>,
+    pub energy: u64,
 }
+
+/// Cost of allocation of one page of memory in relation to execution cost.
+/// FIXME: It is unclear whether this is really necessary with the hard limit we
+/// have on memory use.
+/// If we keep it, the cost must be analyzed and put into perspective
+pub const MEMORY_COST_FACTOR: u32 = 100;
 
 impl Energy {
-    pub fn new(initial_energy: u64) -> Self {
-        Self {
-            energy: Arc::new(AtomicU64::new(initial_energy)),
-        }
-    }
-
-    pub fn tick_energy(&self, e: u32) -> Result<(), error::RuntimeError> {
-        let e = u64::from(e);
-        let old_val = self.energy.fetch_sub(e, Ordering::SeqCst);
-        if old_val >= e {
+    pub fn tick_energy(&mut self, amount: u64) -> ExecResult<()> {
+        if self.energy >= amount {
+            self.energy -= amount;
             Ok(())
         } else {
-            Err(error::RuntimeError::User(Box::new("out of energy")))
+            self.energy = 0;
+            bail!("Out of energy.")
         }
     }
 
-    pub fn get_remaining_energy(&self) -> u64 { self.energy.load(Ordering::Acquire) }
+    /// TODO: This needs more specification. At the moment it is not used, but
+    /// should be.
+    pub fn charge_stack(&mut self, amount: u64) -> ExecResult<()> {
+        if self.energy >= amount {
+            self.energy -= amount;
+            Ok(())
+        } else {
+            self.energy = 0;
+            bail!("Out of energy.")
+        }
+    }
+
+    /// TODO: This needs more specification. At the moment it is not used, but
+    /// should be.
+    pub fn charge_memory_alloc(&mut self, num_pages: u32) -> ExecResult<()> {
+        let to_charge = u64::from(num_pages) * u64::from(MEMORY_COST_FACTOR); // this cannot overflow because of the cast.
+        if self.energy >= to_charge {
+            self.energy -= to_charge;
+        } else {
+            self.energy = 0;
+            bail!("Out of energy.");
+        }
+        Ok(())
+    }
 }
 
-// FIXME: Add support for trees, not just accept/reject.
-#[derive(Clone)]
+#[derive(Clone, Default)]
+/// The Default instance of this type constructs and empty list of outcomes.
 pub struct Outcome {
-    pub cur_state: Arc<Mutex<Vec<Action>>>,
+    pub cur_state: Vec<Action>,
 }
 
 impl Outcome {
-    // FIXME: This allow is only temporary, until we have more outcomes.
-    #[allow(clippy::mutex_atomic)]
-    pub fn init() -> Outcome {
-        Self {
-            cur_state: Arc::new(Mutex::new(Vec::new())),
-        }
+    pub fn new() -> Outcome { Self::default() }
+
+    pub fn accept(&mut self) -> u32 {
+        let response = self.cur_state.len();
+        self.cur_state.push(Action::Accept);
+        response as u32
     }
 
-    // FIXME: This is not how it should be.
-    pub fn accept(&self) -> u32 {
-        if let Ok(mut guard) = self.cur_state.lock() {
-            let response = guard.len();
-            guard.push(Action::Accept);
-            response as u32
-        } else {
-            unreachable!("Failed to acquire lock.")
-        }
-    }
-
-    pub fn simple_transfer(
-        &self,
-        bytes: &[Cell<u8>],
-        amount: u64,
-    ) -> Result<u32, error::RuntimeError> {
-        if let Ok(mut guard) = self.cur_state.lock() {
-            let response = guard.len();
-            if bytes.len() != 32 {
-                Err(error::RuntimeError::User(Box::new("simple-transfer: Bytes length not 32.")))
-            } else {
-                let mut addr = [0u8; 32];
-                for (place, byte) in addr.iter_mut().zip(bytes) {
-                    *place = byte.get();
-                }
-                let to_addr = AccountAddress(addr);
-                guard.push(Action::SimpleTransfer {
-                    to_addr,
-                    amount,
-                });
-                Ok(response as u32)
-            }
-        } else {
-            unreachable!("Failed to acquire lock.")
-        }
+    pub fn simple_transfer(&mut self, bytes: &[u8], amount: u64) -> ExecResult<u32> {
+        let response = self.cur_state.len();
+        let addr: [u8; 32] = bytes.try_into()?;
+        let to_addr = AccountAddress(addr);
+        self.cur_state.push(Action::SimpleTransfer {
+            to_addr,
+            amount,
+        });
+        Ok(response as u32)
     }
 
     pub fn send(
-        &self,
+        &mut self,
         addr_index: u64,
         addr_subindex: u64,
-        receive_name_bytes: &[Cell<u8>],
+        receive_name_bytes: &[u8],
         amount: u64,
-        parameter_bytes: &[Cell<u8>],
-    ) -> Result<u32, error::RuntimeError> {
-        if let Ok(mut guard) = self.cur_state.lock() {
-            let response = guard.len();
+        parameter_bytes: &[u8],
+    ) -> ExecResult<u32> {
+        let response = self.cur_state.len();
 
-            let mut name = Vec::with_capacity(receive_name_bytes.len());
-            for cell in receive_name_bytes.iter() {
-                name.push(cell.get());
-            }
+        let name = receive_name_bytes.to_vec();
+        let parameter = parameter_bytes.to_vec();
 
-            let mut parameter = Vec::with_capacity(parameter_bytes.len());
-            for cell in parameter_bytes.iter() {
-                parameter.push(cell.get());
-            }
-
-            let to_addr = ContractAddress {
-                index:    addr_index,
-                subindex: addr_subindex,
-            };
-
-            guard.push(Action::Send {
-                to_addr,
-                name,
-                amount,
-                parameter,
-            });
-
-            Ok(response as u32)
-        } else {
-            unreachable!("Failed to acquire lock.")
-        }
+        let to_addr = ContractAddress {
+            index:    addr_index,
+            subindex: addr_subindex,
+        };
+        self.cur_state.push(Action::Send {
+            to_addr,
+            name,
+            amount,
+            parameter,
+        });
+        Ok(response as u32)
     }
 
-    pub fn combine_and(&self, l: u32, r: u32) -> Result<u32, error::RuntimeError> {
-        if let Ok(mut guard) = self.cur_state.lock() {
-            let response = guard.len() as u32;
-            if l < response && r < response {
-                guard.push(Action::And {
-                    l,
-                    r,
-                });
-                Ok(response)
-            } else {
-                Err(error::RuntimeError::User(Box::new("Actions not known already.")))
-            }
-        } else {
-            unreachable!("Failed to acquire lock.")
-        }
+    pub fn combine_and(&mut self, l: u32, r: u32) -> ExecResult<u32> {
+        let response = self.cur_state.len() as u32;
+        ensure!(l < response && r < response, "Combining unknown actions.");
+        self.cur_state.push(Action::And {
+            l,
+            r,
+        });
+        Ok(response)
     }
 
-    pub fn combine_or(&self, l: u32, r: u32) -> Result<u32, error::RuntimeError> {
-        if let Ok(mut guard) = self.cur_state.lock() {
-            let response = guard.len() as u32;
-            if l < response && r < response {
-                guard.push(Action::Or {
-                    l,
-                    r,
-                });
-                Ok(response)
-            } else {
-                Err(error::RuntimeError::User(Box::new("Actions not known already.")))
-            }
-        } else {
-            unreachable!("Failed to acquire lock.")
-        }
-    }
-
-    pub fn get(&self) -> Vec<Action> {
-        if let Ok(guard) = self.cur_state.lock() {
-            guard.clone()
-        } else {
-            unreachable!("Failed to acquire lock.")
-        }
+    pub fn combine_or(&mut self, l: u32, r: u32) -> ExecResult<u32> {
+        let response = self.cur_state.len() as u32;
+        ensure!(l < response && r < response, "Combining unknown actions.");
+        self.cur_state.push(Action::Or {
+            l,
+            r,
+        });
+        Ok(response)
     }
 }
 
 /// Smart contract state.
 #[derive(Clone)]
 pub struct State {
-    pub state: Arc<Mutex<Vec<u8>>>,
+    pub state: Vec<u8>,
 }
 
 impl State {
-    pub fn is_empty(&self) -> bool {
-        if let Ok(guard) = self.state.lock() {
-            guard.is_empty()
-        } else {
-            unreachable!("Failed to acquire lock.")
-        }
-    }
+    pub fn is_empty(&self) -> bool { self.state.is_empty() }
 
     // FIXME: This should not be copying so much data around, but for POC it is
-    // fine.
+    // fine. We should probably do some sort of copy-on-write here in the near term,
+    // and in the long term we need to keep track of which parts were written.
     pub fn new(st: Option<&[u8]>) -> Self {
         match st {
             None => Self {
-                state: Arc::new(Mutex::new(Vec::new())),
+                state: Vec::new(),
             },
             Some(bytes) => Self {
-                state: Arc::new(Mutex::new(Vec::from(bytes))),
+                state: Vec::from(bytes),
             },
         }
     }
 
-    pub fn len(&self) -> u32 {
-        if let Ok(guard) = self.state.lock() {
-            guard.len() as u32
-        } else {
-            unreachable!("Failed to acquire lock.")
-        }
-    }
+    pub fn len(&self) -> u32 { self.state.len() as u32 }
 
-    pub fn write_state(&self, offset: u32, bytes: &[Cell<u8>]) -> Result<u32, ()> {
+    pub fn write_state(&mut self, offset: u32, bytes: &[u8]) -> ExecResult<u32> {
         let length = bytes.len();
+        ensure!(offset <= self.len(), "Cannot write past the offset.");
         let offset = offset as usize;
-        match self.state.lock() {
-            Ok(mut guard) => {
-                if offset > guard.len() {
-                    // cannot write past the offset
-                    Err(())
-                } else {
-                    match offset.checked_add(length) {
-                        None => Err(()),
-                        Some(new_length) => {
-                            if guard.len() < new_length as usize {
-                                guard.resize(new_length as usize, 0u8);
-                            }
-                            for (place, byte) in guard[offset..].iter_mut().zip(bytes) {
-                                *place = byte.get();
-                            }
-                            Ok(length as u32)
-                        }
-                    }
-                }
-            }
-            Err(_) => Err(()),
+        let end = offset
+            .checked_add(length)
+            .ok_or_else(|| anyhow!("Writing past the end of memory."))? as usize;
+        let end = std::cmp::min(end, MAX_CONTRACT_STATE as usize) as u32;
+        if self.len() < end {
+            self.state.resize(end as usize, 0u8);
         }
+        let written = (&mut self.state[offset..end as usize]).write(bytes)?;
+        Ok(written as u32)
     }
 
-    pub fn load_state(&self, offset: u32, bytes: &mut [Cell<u8>]) -> Result<u32, ()> {
+    pub fn load_state(&self, offset: u32, mut bytes: &mut [u8]) -> ExecResult<u32> {
         let offset = offset as usize;
-        let length = bytes.len();
-        match self.state.lock() {
-            Ok(guard) => {
-                if offset > guard.len() {
-                    Ok(0)
-                } else {
-                    for (place, byte) in bytes.iter_mut().zip(guard[offset..].iter().take(length)) {
-                        place.set(*byte);
-                    }
-                    Ok(std::cmp::min(length as u32, (guard.len() - offset) as u32))
-                }
-            }
-            Err(_) => Err(()),
-        }
-    }
-
-    pub fn resize_state(&self, new_size: u32) -> Result<u32, ()> {
-        match self.state.lock() {
-            Ok(mut guard) => {
-                guard.resize(new_size as usize, 0u8);
-                Ok(1)
-            }
-            Err(_) => Err(()),
-        }
-    }
-
-    pub fn get(&self) -> Vec<u8> {
-        if let Ok(guard) = self.state.lock() {
-            guard.clone()
+        if offset >= self.state.len() {
+            Ok(0)
         } else {
-            todo!("Should not happen.")
+            // Write on slices overwrites the buffer and returns how many bytes were
+            // written.
+            let amt = bytes.write(&self.state[offset..])?;
+            Ok(amt as u32)
+        }
+    }
+
+    pub fn resize_state(&mut self, new_size: u32) -> u32 {
+        if new_size > MAX_CONTRACT_STATE {
+            0
+        } else {
+            self.state.resize(new_size as usize, 0u8);
+            1
         }
     }
 }
 
-fn put_in_memory(ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, bytes: &[u8]) -> Result<(), ()> {
-    let bytes_len = bytes.len() as u32;
-    let memory = ctx.memory(0);
-    match unsafe { ptr.deref_mut(memory, 0, bytes_len) } {
-        Some(cells) => {
-            for (place, byte) in cells.iter_mut().zip(bytes) {
-                place.set(*byte);
-            }
-            Ok(())
+struct InitHost<'a> {
+    /// Remaining energy for execution.
+    energy: Energy,
+    /// Logs produced during execution.
+    logs: Logs,
+    /// The contract's state.
+    state: State,
+    /// The parameter to the init method.
+    param: &'a [u8],
+    /// The init context for this invocation.
+    init_ctx: &'a InitContext,
+}
+
+struct ReceiveHost<'a> {
+    /// Remaining energy for execution.
+    energy: Energy,
+    /// Logs produced during execution.
+    logs: Logs,
+    /// The contract's state.
+    state: State,
+    /// The parameter to the init method.
+    param: &'a [u8],
+    /// Outcomes of the execution, i.e., the actions tree.
+    outcomes: Outcome,
+    /// The receive context for this call.
+    receive_ctx: &'a ReceiveContext,
+}
+
+pub trait HasCommon {
+    fn logs(&mut self) -> &mut Logs;
+    fn state(&mut self) -> &mut State;
+    fn param(&self) -> &[u8];
+    fn metadata(&self) -> &ChainMetadata;
+}
+
+impl<'a> HasCommon for InitHost<'a> {
+    fn logs(&mut self) -> &mut Logs { &mut self.logs }
+
+    fn state(&mut self) -> &mut State { &mut self.state }
+
+    fn param(&self) -> &[u8] { &self.param }
+
+    fn metadata(&self) -> &ChainMetadata { &self.init_ctx.metadata }
+}
+
+impl<'a> HasCommon for ReceiveHost<'a> {
+    fn logs(&mut self) -> &mut Logs { &mut self.logs }
+
+    fn state(&mut self) -> &mut State { &mut self.state }
+
+    fn param(&self) -> &[u8] { &self.param }
+
+    fn metadata(&self) -> &ChainMetadata { &self.receive_ctx.metadata }
+}
+
+fn call_common<C: HasCommon>(
+    host: &mut C,
+    f: CommonFunc,
+    memory: &mut Vec<u8>,
+    stack: &mut machine::RuntimeStack,
+) -> machine::RunResult<()> {
+    match f {
+        CommonFunc::GetParameterSize => {
+            stack.push_value(host.param().len() as u32);
         }
-        None => Err(()),
+        CommonFunc::GetParameterSection => {
+            let offset = unsafe { stack.pop_u32() } as usize;
+            let length = unsafe { stack.pop_u32() } as usize;
+            let start = unsafe { stack.pop_u32() } as usize;
+            let write_end = start + length; // this cannot overflow on 64-bit machines.
+            ensure!(write_end <= memory.len(), "Illegal memory access.");
+            let end = std::cmp::min(offset + length, host.param().len());
+            ensure!(offset <= end, "Attempting to read non-existent parameter.");
+            let amt = (&mut memory[start..write_end]).write(&host.param()[offset..end])?;
+            stack.push_value(amt as u32);
+        }
+        CommonFunc::LogEvent => {
+            let length = unsafe { stack.pop_u32() } as usize;
+            let start = unsafe { stack.pop_u32() } as usize;
+            let end = start + length;
+            ensure!(end <= memory.len(), "Illegal memory access.");
+            host.logs().log_event(memory[start..end].to_vec());
+        }
+        CommonFunc::LoadState => {
+            let offset = unsafe { stack.pop_u32() };
+            let length = unsafe { stack.pop_u32() } as usize;
+            let start = unsafe { stack.pop_u32() } as usize;
+            let end = start + length; // this cannot overflow on 64-bit machines.
+            ensure!(end <= memory.len(), "Illegal memory access.");
+            let res = host.state().load_state(offset, &mut memory[start..end])?;
+            stack.push_value(res);
+        }
+        CommonFunc::WriteState => {
+            let offset = unsafe { stack.pop_u32() };
+            let length = unsafe { stack.pop_u32() } as usize;
+            let start = unsafe { stack.pop_u32() } as usize;
+            let end = start + length; // this cannot overflow on 64-bit machines.
+            ensure!(end <= memory.len(), "Illegal memory access.");
+            let res = host.state().write_state(offset, &memory[start..end])?;
+            stack.push_value(res);
+        }
+        CommonFunc::ResizeState => {
+            let new_size = stack.pop();
+            let new_size = unsafe { new_size.short } as u32;
+            stack.push_value(host.state().resize_state(new_size));
+        }
+        CommonFunc::StateSize => {
+            stack.push_value(host.state().len());
+        }
+        CommonFunc::GetSlotNumber => {
+            stack.push_value(host.metadata().slot_number);
+        }
+        CommonFunc::GetSlotTime => {
+            stack.push_value(host.metadata().slot_time);
+        }
+        CommonFunc::GetBlockHeight => {
+            stack.push_value(host.metadata().block_height);
+        }
+        CommonFunc::GetFinalizedHeight => {
+            stack.push_value(host.metadata().finalized_height);
+        }
+    }
+    Ok(())
+}
+
+impl<'a> machine::Host<ProcessedImports> for InitHost<'a> {
+    #[inline(always)]
+    fn tick_energy(&mut self, x: u64) -> machine::RunResult<()> {
+        if self.energy.energy >= x {
+            self.energy.energy -= x;
+            Ok(())
+        } else {
+            self.energy.energy = 0;
+            bail!("Out of energy.")
+        }
+    }
+
+    #[inline]
+    fn call(
+        &mut self,
+        f: &ProcessedImports,
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+    ) -> machine::RunResult<()> {
+        match f.tag {
+            ImportFunc::ChargeEnergy => {
+                self.energy.tick_energy(unsafe { stack.pop_u64() })?;
+            }
+            ImportFunc::ChargeStackSize => {
+                self.energy.charge_stack(unsafe { stack.pop_u64() })?;
+            }
+            ImportFunc::ChargeMemoryAlloc => {
+                self.energy.charge_memory_alloc(unsafe { stack.peek_u32() })?;
+            }
+            ImportFunc::Common(cf) => call_common(self, cf, memory, stack)?,
+            ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
+                let start = unsafe { stack.pop_u32() } as usize;
+                ensure!(start <= memory.len(), "Illegal memory access for init origin.");
+                (&mut memory[start..start + 32]).write_all(self.init_ctx.init_origin.as_ref())?;
+            }
+            ImportFunc::ReceiveOnly(_) => {
+                bail!("Not implemented for init {:#?}.", f);
+            }
+        }
+        Ok(())
     }
 }
 
-pub fn make_imports(
-    which: Which,
-    parameter: Parameter,
-    energy: u64,
-) -> (ImportObject, Logs, Energy, State, Outcome) {
-    let logs = Logs::new();
-    let energy = Energy::new(energy);
-    let energy_clone = energy.clone();
-    let tick_energy =
-        move |e: u32| -> Result<(), error::RuntimeError> { energy_clone.tick_energy(e) };
-    let state = match which {
-        Which::Init {
-            ..
-        } => State::new(None),
-        Which::Receive {
-            current_state,
-            ..
-        } => State::new(Some(current_state)),
-    };
-    let event_logs = logs.clone();
-    let log_event = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, len: u32| {
-        let memory = ctx.memory(0);
-        if let Some(cells) = ptr.deref(memory, 0, len) {
-            let res = cells.iter().map(|x| x.get()).collect::<Vec<u8>>();
-            event_logs.log_event(res);
-            Ok(())
-        } else {
-            Err(())
-        }
-    };
-    let w_state = state.clone();
-    let g_state = state.clone();
-    let l_state = state.clone();
-    let s_state = state.clone();
-    let write_state = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, length: u32, offset: u32| {
-        let memory = ctx.memory(0);
-        match ptr.deref(memory, 0, length) {
-            Some(cells) => w_state.write_state(offset, cells),
-            _ => Err(()),
-        }
-    };
-    let load_state = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, length: u32, offset: u32| {
-        let memory = ctx.memory(0);
-        match unsafe { ptr.deref_mut(memory, 0, length) } {
-            Some(cells) => l_state.load_state(offset, cells),
-            None => Err(()),
-        }
-    };
-
-    let resize_state = move |new_size: u32| g_state.resize_state(new_size);
-    let state_size = move || s_state.len();
-
-    let outcome = Outcome::init();
-    let a_outcome = outcome.clone();
-    let simple_transfer_outcome = a_outcome.clone();
-    let send_outcome = a_outcome.clone();
-    let and_outcome = a_outcome.clone();
-    let accept = move || a_outcome.accept();
-
-    let parameter_size = parameter.len() as u32;
-    let get_parameter_size = move |_ctx: &mut Ctx| parameter_size;
-    let get_parameter_section =
-        move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, len: u32, offset: u32| -> Result<u32, _> {
-            let memory = ctx.memory(0);
-            if offset as usize >= parameter.len() {
-                return Ok(0u32);
+impl<'a> ReceiveHost<'a> {
+    pub fn call_receive_only(
+        &mut self,
+        rof: ReceiveOnlyFunc,
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+    ) -> ExecResult<()> {
+        match rof {
+            ReceiveOnlyFunc::Accept => {
+                stack.push_value(self.outcomes.accept());
             }
-            match unsafe { ptr.deref_mut(memory, 0, len) } {
-                Some(cells) => {
-                    // at this point offset < parameter.len()
-                    let offset = offset as usize;
-                    let end = std::cmp::min(offset + len as usize, parameter.len());
-                    for (place, byte) in cells.iter_mut().zip(&parameter[offset..end]) {
-                        place.set(*byte);
-                    }
-                    Ok((end - offset) as u32)
-                }
-                None => Err(error::RuntimeError::User(Box::new("Cannot get parameter."))),
+            ReceiveOnlyFunc::SimpleTransfer => {
+                let amount = unsafe { stack.pop_u64() };
+                let addr_start = unsafe { stack.pop_u32() } as usize;
+                // Overflow is not possible in the next line on 64-bit machines.
+                ensure!(addr_start + 32 <= memory.len(), "Illegal memory access.");
+                stack.push_value(
+                    self.outcomes.simple_transfer(&memory[addr_start..addr_start + 32], amount)?,
+                )
             }
-        };
-
-    let simple_transfer = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, amount: u64| {
-        let memory = ctx.memory(0);
-        match unsafe { ptr.deref_mut(memory, 0, 32) } {
-            Some(cells) => simple_transfer_outcome.simple_transfer(cells, amount),
-            None => {
-                Err(error::RuntimeError::User(Box::new("Cannot read address for simple transfer.")))
-            }
-        }
-    };
-
-    let send = move |ctx: &mut Ctx,
-                     addr_index: u64,
-                     addr_subindex: u64,
-                     receive_name_ptr: WasmPtr<u8, Array>,
-                     receive_name_len: u32,
-                     amount: u64,
-                     parameter_ptr: WasmPtr<u8, Array>,
-                     parameter_len: u32| {
-        let memory = ctx.memory(0);
-        match unsafe { receive_name_ptr.deref_mut(memory, 0, receive_name_len) } {
-            Some(receive_name_bytes) => match unsafe {
-                parameter_ptr.deref_mut(memory, 0, parameter_len)
-            } {
-                Some(parameter_bytes) => send_outcome.send(
+            ReceiveOnlyFunc::Send => {
+                let parameter_len = unsafe { stack.pop_u32() } as usize;
+                let parameter_start = unsafe { stack.pop_u32() } as usize;
+                // Overflow is not possible in the next line on 64-bit machines.
+                let parameter_end = parameter_start + parameter_len;
+                let amount = unsafe { stack.pop_u64() };
+                let receive_name_len = unsafe { stack.pop_u32() } as usize;
+                let receive_name_start = unsafe { stack.pop_u32() } as usize;
+                // Overflow is not possible in the next line on 64-bit machines.
+                let receive_name_end = receive_name_start + receive_name_len;
+                let addr_subindex = unsafe { stack.pop_u64() };
+                let addr_index = unsafe { stack.pop_u64() };
+                ensure!(parameter_end <= memory.len(), "Illegal memory access.");
+                ensure!(receive_name_end <= memory.len(), "Illegal memory access.");
+                let res = self.outcomes.send(
                     addr_index,
                     addr_subindex,
-                    receive_name_bytes,
+                    &memory[receive_name_start..receive_name_end],
                     amount,
-                    parameter_bytes,
-                ),
-                None => Err(error::RuntimeError::User(Box::new("Cannot read parameter for send."))),
-            },
-            None => Err(error::RuntimeError::User(Box::new(
-                "Cannot read receive function name for send.",
-            ))),
+                    &memory[parameter_start..parameter_end],
+                )?;
+                stack.push_value(res);
+            }
+            ReceiveOnlyFunc::CombineAnd => {
+                let right = unsafe { stack.pop_u32() };
+                let left = unsafe { stack.pop_u32() };
+                let res = self.outcomes.combine_and(left, right)?;
+                stack.push_value(res);
+            }
+            ReceiveOnlyFunc::CombineOr => {
+                let right = unsafe { stack.pop_u32() };
+                let left = unsafe { stack.pop_u32() };
+                let res = self.outcomes.combine_or(left, right)?;
+                stack.push_value(res);
+            }
+            ReceiveOnlyFunc::GetReceiveInvoker => {
+                let start = unsafe { stack.pop_u32() } as usize;
+                ensure!(start <= memory.len(), "Illegal memory access for receive owner.");
+                (&mut memory[start..start + 32]).write_all(self.receive_ctx.invoker.as_ref())?;
+            }
+            ReceiveOnlyFunc::GetReceiveSelfAddress => {
+                let start = unsafe { stack.pop_u32() } as usize;
+                ensure!(start + 16 <= memory.len(), "Illegal memory access for receive owner.");
+                (&mut memory[start..start + 8])
+                    .write_all(&self.receive_ctx.self_address.index.to_le_bytes())?;
+                (&mut memory[start + 8..start + 16])
+                    .write_all(&self.receive_ctx.self_address.subindex.to_le_bytes())?;
+            }
+            ReceiveOnlyFunc::GetReceiveSelfBalance => {
+                stack.push_value(self.receive_ctx.self_balance.micro_gtu);
+            }
+            ReceiveOnlyFunc::GetReceiveSender => {
+                let start = unsafe { stack.pop_u32() } as usize;
+                ensure!(start <= memory.len(), "Illegal memory access for receive owner.");
+                let bytes = to_bytes(self.receive_ctx.sender());
+                (&mut memory[start..]).write_all(&bytes)?;
+            }
+            ReceiveOnlyFunc::GetReceiveOwner => {
+                let start = unsafe { stack.pop_u32() } as usize;
+                ensure!(start <= memory.len(), "Illegal memory access for receive owner.");
+                (&mut memory[start..start + 32]).write_all(self.receive_ctx.owner.as_ref())?;
+            }
         }
-    };
+        Ok(())
+    }
+}
 
-    let or_outcome = and_outcome.clone();
-
-    let combine_and =
-        move |l: u32, r: u32| -> Result<u32, error::RuntimeError> { and_outcome.combine_and(l, r) };
-
-    let combine_or =
-        move |l: u32, r: u32| -> Result<u32, error::RuntimeError> { or_outcome.combine_or(l, r) };
-
-    match which {
-        Which::Init {
-            init_ctx,
-        } => {
-            let init_origin_bytes = to_bytes(&init_ctx.init_origin);
-            let get_init_origin = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
-                put_in_memory(ctx, ptr, &init_origin_bytes)
-            };
-
-            // Chain meta data getters
-            let slot_number = init_ctx.metadata.slot_number;
-            let get_slot_number = move || slot_number;
-            let block_height = init_ctx.metadata.block_height;
-            let get_block_height = move || block_height;
-            let finalized_height = init_ctx.metadata.finalized_height;
-            let get_finalized_height = move || finalized_height;
-            let slot_time = init_ctx.metadata.slot_time;
-            let get_slot_time = move || slot_time;
-
-            let err_func_u64 = || -> Result<u64, ()> { Err(()) };
-            let err_func_memory =
-                |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<(), ()> { Err(()) };
-
-            let imps = imports! {
-                "concordium" => {
-                    // NOTE: validation will only allow access to a given list of these functions (check to be added)
-                    "get_init_origin" => func!(get_init_origin),
-                    "get_receive_invoker" => func!(err_func_memory),
-                    "get_receive_self_address" => func!(err_func_memory),
-                    "get_receive_self_balance" => func!(err_func_u64),
-                    "get_receive_sender" => func!(err_func_memory),
-                    "get_receive_owner" => func!(err_func_memory),
-                    "get_slot_number" => func!(get_slot_number),
-                    "get_block_height" => func!(get_block_height),
-                    "get_finalized_height" => func!(get_finalized_height),
-                    "get_slot_time" => func!(get_slot_time),
-                    "get_parameter_section" => func!(get_parameter_section),
-                    "get_parameter_size" => func!(get_parameter_size),
-                    "combine_and" => func!(combine_and),
-                    "combine_or" => func!(combine_or),
-                    "accept" => func!(accept),
-                    "simple_transfer" => func!(simple_transfer),
-                    "send" => func!(send),
-                    "tick_energy" => func!(tick_energy),
-                    "log_event" => func!(log_event),
-                    "write_state" => func!(write_state),
-                    "load_state" => func!(load_state),
-                    "resize_state" => func!(resize_state),
-                    "state_size" => func!(state_size),
-                },
-            };
-            (imps, logs, energy, state, outcome)
+impl<'a> machine::Host<ProcessedImports> for ReceiveHost<'a> {
+    #[inline(always)]
+    fn tick_energy(&mut self, x: u64) -> machine::RunResult<()> {
+        if self.energy.energy >= x {
+            self.energy.energy -= x;
+            Ok(())
+        } else {
+            self.energy.energy = 0;
+            bail!("Out of energy.")
         }
-        Which::Receive {
-            receive_ctx,
-            ..
-        } => {
-            // Chain meta data getters
-            let slot_number = receive_ctx.metadata.slot_number;
-            let get_slot_number = move || slot_number;
-            let block_height = receive_ctx.metadata.block_height;
-            let get_block_height = move || block_height;
-            let finalized_height = receive_ctx.metadata.finalized_height;
-            let get_finalized_height = move || finalized_height;
-            let slot_time = receive_ctx.metadata.slot_time;
-            let get_slot_time = move || slot_time;
+    }
 
-            let invoker_bytes = to_bytes(&receive_ctx.invoker);
-            let get_receive_invoker = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
-                put_in_memory(ctx, ptr, &invoker_bytes)
-            };
-            let self_address_bytes = to_bytes(&receive_ctx.self_address);
-            let get_receive_self_address = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
-                put_in_memory(ctx, ptr, &self_address_bytes)
-            };
-            let receive_self_balance = receive_ctx.self_balance.micro_gtu;
-            let get_receive_self_balance = move || receive_self_balance;
-            let sender_bytes = to_bytes(&receive_ctx.sender);
-            let get_receive_sender = move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| {
-                put_in_memory(ctx, ptr, &sender_bytes)
-            };
-            let owner_bytes = to_bytes(&receive_ctx.owner);
-            let get_receive_owner =
-                move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>| put_in_memory(ctx, ptr, &owner_bytes);
-
-            let err_func = |_ctx: &mut Ctx, _ptr: WasmPtr<u8, Array>| -> Result<(), ()> { Err(()) };
-
-            let imps = imports! {
-                "concordium" => {
-                    "get_init_origin" => func!(err_func),
-                    "get_receive_invoker" => func!(get_receive_invoker),
-                    "get_receive_self_address" => func!(get_receive_self_address),
-                    "get_receive_self_balance" => func!(get_receive_self_balance),
-                    "get_receive_sender" => func!(get_receive_sender),
-                    "get_receive_owner" => func!(get_receive_owner),
-                    "get_slot_number" => func!(get_slot_number),
-                    "get_block_height" => func!(get_block_height),
-                    "get_finalized_height" => func!(get_finalized_height),
-                    "get_slot_time" => func!(get_slot_time),
-                    "get_parameter_section" => func!(get_parameter_section),
-                    "get_parameter_size" => func!(get_parameter_size),
-                    "combine_and" => func!(combine_and),
-                    "combine_or" => func!(combine_or),
-                    "accept" => func!(accept),
-                    "simple_transfer" => func!(simple_transfer),
-                    "send" => func!(send),
-                    "tick_energy" => func!(tick_energy),
-                    "log_event" => func!(log_event),
-                    "write_state" => func!(write_state),
-                    "load_state" => func!(load_state),
-                    "resize_state" => func!(resize_state),
-                    "state_size" => func!(state_size),
-                },
-            };
-            (imps, logs, energy, state, outcome)
+    #[inline]
+    fn call(
+        &mut self,
+        f: &ProcessedImports,
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+    ) -> machine::RunResult<()> {
+        match f.tag {
+            ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
+            ImportFunc::ChargeStackSize => self.energy.charge_stack(unsafe { stack.pop_u64() })?,
+            ImportFunc::ChargeMemoryAlloc => {
+                self.energy.charge_memory_alloc(unsafe { stack.peek_u32() })?
+            }
+            ImportFunc::Common(cf) => call_common(self, cf, memory, stack)?,
+            ImportFunc::ReceiveOnly(cro) => self.call_receive_only(cro, memory, stack)?,
+            ImportFunc::InitOnly(InitOnlyFunc::GetInitOrigin) => {
+                bail!("Not implemented for receive.");
+            }
         }
+        Ok(())
     }
 }
 
 type Parameter = Vec<u8>;
 
 pub fn invoke_init(
-    wasm: &[u8],
+    artifact_bytes: &[u8],
     amount: u64,
     init_ctx: InitContext,
     init_name: &str,
     parameter: Parameter,
     energy: u64,
-) -> Result<InitResult, error::CallError> {
-    let (import_obj, logs, energy, state, _) = make_imports(
-        Which::Init {
-            init_ctx: &init_ctx,
+) -> ExecResult<InitResult> {
+    let mut host = InitHost {
+        energy:   Energy {
+            energy,
         },
-        parameter,
-        energy,
-    );
-    // FIXME: We should cache instantiated modules, depending on how expensive
-    // instantiation actually is.
-    // Wasmer supports caching of modules into Artifacts.
-    let inst = instantiate(wasm, &import_obj)
-        .expect("Instantiation should always succeed for well-formed modules.");
-    let res = inst.call(init_name, &[Value::I64(amount as i64)])?;
-    let remaining_energy = energy.get_remaining_energy();
-    if let Some(wasmer_runtime::Value::I32(0)) = res.first() {
+        logs:     Logs::new(),
+        state:    State::new(None),
+        param:    &parameter,
+        init_ctx: &init_ctx,
+    };
+
+    let artifact = wasm_transform::artifact_input::parse_artifact(artifact_bytes)?;
+
+    let (res, _) = artifact.run(&mut host, init_name, &[Value::I64(amount as i64)])?;
+    let remaining_energy = host.energy.energy;
+    if let Some(Value::I32(0)) = res {
         Ok(InitResult::Success {
-            logs,
-            state,
+            logs: host.logs,
+            state: host.state,
             remaining_energy,
         })
     } else {
@@ -618,157 +562,114 @@ pub fn invoke_init(
 }
 
 pub fn invoke_receive(
-    wasm: &[u8],
+    artifact_bytes: &[u8],
     amount: u64,
     receive_ctx: ReceiveContext,
     current_state: &[u8],
     receive_name: &str,
     parameter: Parameter,
     energy: u64,
-) -> Result<ReceiveResult, error::CallError> {
-    // Make the imports (host functions), with shared variables for logs, energy,
-    // state, outcome.
-    let (import_obj, logs, energy, state, outcome) = make_imports(
-        Which::Receive {
-            receive_ctx: &receive_ctx,
-            current_state,
+) -> ExecResult<ReceiveResult> {
+    let mut host = ReceiveHost {
+        energy:      Energy {
+            energy,
         },
-        parameter,
-        energy,
-    );
-    // FIXME: We should cache instantiated modules, depending on how expensive
-    // instantiation actually is.
-    // Wasmer supports caching of modules into Artifacts.
-    let inst = instantiate(wasm, &import_obj)
-        .expect("Instantiation should always succeed for well-formed modules.");
-    let res = inst.call(receive_name, &[Value::I64(amount as i64)])?;
-    let remaining_energy = energy.get_remaining_energy();
-    if let Some(wasmer_runtime::Value::I32(n)) = res.first() {
+        logs:        Logs::new(),
+        state:       State::new(Some(current_state)),
+        param:       &parameter,
+        receive_ctx: &receive_ctx,
+        outcomes:    Outcome::new(),
+    };
+
+    let artifact = wasm_transform::artifact_input::parse_artifact(artifact_bytes)?;
+
+    let (res, _) = artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)])?;
+    let remaining_energy = host.energy.energy;
+    if let Some(Value::I32(n)) = res {
         // FIXME: We should filter out to only return the ones reachable from
         // the root.
-        let mut actions = outcome.get();
-        if *n >= 0 && (*n as usize) < actions.len() {
-            let n = *n as usize;
+        let mut actions = host.outcomes.cur_state;
+        if n >= 0 && (n as usize) < actions.len() {
+            let n = n as usize;
             actions.truncate(n + 1);
             Ok(ReceiveResult::Success {
-                logs,
-                state,
+                logs: host.logs,
+                state: host.state,
                 actions,
                 remaining_energy,
             })
-        } else if *n >= 0 {
-            Err(error::CallError::Runtime(error::RuntimeError::User(Box::new("Invalid return."))))
+        } else if n >= 0 {
+            bail!("Invalid return.")
         } else {
+            // TODO: Here we map all negative values to reject.
+            // This is a fine choice, but perhaps we should record
+            // the exact failure as well, so it can be inspected.
             Ok(ReceiveResult::Reject {
                 remaining_energy,
             })
         }
     } else {
-        Err(error::CallError::Runtime(error::RuntimeError::User(Box::new("Invalid return."))))
+        bail!(
+            "Invalid return. Expected a value, but receive nothing. This should not happen for \
+             well-formed modules"
+        );
     }
 }
 
-fn read_string(ctx: &Ctx, ptr: WasmPtr<u8, Array>, length: u32) -> Result<String, ()> {
-    let memory = ctx.memory(0);
-    match ptr.deref(memory, 0, length) {
-        Some(cells) => {
-            let bytes: Vec<_> = cells.iter().map(|c| c.get()).collect();
-            Ok(String::from_utf8(bytes).unwrap())
-        }
-        _ => Err(()),
+/// A host which traps for any function call.
+pub struct TrapHost;
+
+impl<I> machine::Host<I> for TrapHost {
+    fn tick_energy(&mut self, _x: u64) -> machine::RunResult<()> {
+        bail!("TrapHost tick_energy not implemented.")
     }
-}
 
-fn test_imports_object() -> ImportObject {
-    let err_func_res_u32 = || -> Result<u32, ()> { Err(()) };
-    let err_func_u32_u32 = |_: u32| -> Result<u32, ()> { Err(()) };
-    let err_func_res_u64 = || -> Result<u64, ()> { Err(()) };
-    let err_func_u32 = |_: u32| -> Result<(), ()> { Err(()) };
-    let err_func_2u32 = |_: u32, _: u32| -> Result<(), ()> { Err(()) };
-    let err_func_2u32_u32 = |_: u32, _: u32| -> Result<u32, ()> { Err(()) };
-    let err_func_u32u64_u32 = |_: u32, _: u64| -> Result<u32, ()> { Err(()) };
-    let err_func_3u32_u32 = |_: u32, _: u32, _: u32| -> Result<u32, ()> { Err(()) };
-    let send =
-        |_: u64, _: u64, _: u32, _: u32, _: u64, _: u32, _: u32| -> Result<u32, ()> { Err(()) };
-
-    let report_error = |ctx: &mut Ctx,
-                        msg_ptr: WasmPtr<u8, Array>,
-                        msg_length: u32,
-                        filename_ptr: WasmPtr<u8, Array>,
-                        filename_length: u32,
-                        line: u32,
-                        column: u32| {
-        let msg = read_string(ctx, msg_ptr, msg_length).unwrap();
-        let filename = read_string(ctx, filename_ptr, filename_length).unwrap();
-        let location = format!("{}:{}:{}", filename, line, column);
-        eprintln!("\nError: {}\n{}\n", msg, location);
-    };
-
-    imports! {
-        "concordium" => {
-            "accept" => func!(err_func_res_u32),
-            "simple_transfer" => func!(err_func_u32u64_u32),
-            "send" => func!(send),
-            "combine_and" => func!(err_func_2u32_u32),
-            "combine_or" => func!(err_func_2u32_u32),
-            "get_parameter_size" => func!(err_func_res_u32),
-            "get_parameter_section" => func!(err_func_3u32_u32),
-            "log_event" => func!(err_func_2u32),
-            "load_state" => func!(err_func_3u32_u32),
-            "write_state" => func!(err_func_3u32_u32),
-            "resize_state" => func!(err_func_u32_u32),
-            "state_size" => func!(err_func_res_u32),
-            "get_init_origin" => func!(err_func_u32),
-            "get_receive_invoker" => func!(err_func_u32),
-            "get_receive_self_address" => func!(err_func_u32),
-            "get_receive_self_balance" => func!(err_func_res_u64),
-            "get_receive_sender" => func!(err_func_u32),
-            "get_receive_owner" => func!(err_func_u32),
-            "get_slot_number" => func!(err_func_res_u64),
-            "get_block_height" => func!(err_func_res_u64),
-            "get_finalized_height" => func!(err_func_res_u64),
-            "get_slot_time" => func!(err_func_res_u64),
-            "report_error" => func!(report_error)
-        },
+    fn call(
+        &mut self,
+        _f: &I,
+        _memory: &mut Vec<u8>,
+        _stack: &mut machine::RuntimeStack,
+    ) -> machine::RunResult<()> {
+        bail!("TrapHost call not implemented.")
     }
 }
 
 /// Instantiates the module with an external function to report back errors.
 /// Then tries to run an exported 'main' function.
 /// The main function is present in the module if compile using 'cargo test'
-pub fn test_run(wasm: &[u8]) -> Result<(), ()> {
-    let import_object = test_imports_object();
-    println!("\nInstantiating WASM module.");
-    let instance = instantiate(wasm, &import_object)
-        .expect("Instantiation failed! It should always succeed for well-formed modules.");
-    println!("Running tests");
-    let test: Func<(u32, u32), u32> = instance.exports.get("main").expect("Tests are not provided");
-    // Unable to find a proper source, I'm assuming the two arguments for main are
-    // equal to `argc` and `argv` in a C program.
-    // Since we don't use `argc` and `argv` in the test, we can pass any u32.
-    test.call(0, 0).expect("Test result: failed.");
-    println!("Test result: ok.");
+pub fn test_run(artifact_bytes: &[u8]) -> ExecResult<()> {
+    let mut host = TrapHost;
+    eprintln!("\nInstantiating WASM module.");
+    let artifact =
+        wasm_transform::artifact_input::parse_artifact::<ArtifactNamedImport>(artifact_bytes)?;
+    eprintln!("Running tests");
+    // Unable to find a proper source, but it seems that the test main function
+    // takes two u32 arguments, which we assume are `argc` and `argv` in a C
+    // program. Since we don't use `argc` and `argv` in the test, we can pass
+    // any u32.
+    if let (Some(Value::I32(n)), _) =
+        artifact.run(&mut host, "main", &[Value::I32(0), Value::I32(0)])?
+    {
+        ensure!(n == 0, "Test failed.");
+    } else {
+        eprintln!("Test result: ok.");
+    }
     Ok(())
 }
 
 /// Instantiates the module with dummy external functions
 /// Tries to generate a state schema
 /// Generates schemas for methods
-pub fn generate_contract_schema(wasm: &[u8]) -> Result<schema::Contract, String> {
-    let import_object = test_imports_object();
-    let instance = instantiate(wasm, &import_object)
-        .expect("Instantiation failed! It should always succeed for well-formed modules.");
-
-    let state = generate_schema_run(&instance, "concordium_schema_state").ok();
+pub fn generate_contract_schema(artifact_bytes: &[u8]) -> ExecResult<schema::Contract> {
+    let artifact =
+        wasm_transform::artifact_input::parse_artifact::<ArtifactNamedImport>(artifact_bytes)?;
+    let state = generate_schema_run(&artifact, "concordium_schema_state").ok();
 
     let mut method_parameter = BTreeMap::new();
-    for (name, _) in instance.exports() {
-        let name_str = name.as_str();
-        if name_str.starts_with("concordium_schema_function_") {
-            let schema_type = generate_schema_run(&instance, name_str)?;
-            let mut name = name.clone();
-            name.drain(.."concordium_schema_function_".len());
-            method_parameter.insert(name, schema_type);
+    for name in artifact.export.keys() {
+        if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
+            let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+            method_parameter.insert(rest.to_string(), schema_type);
         }
     }
 
@@ -778,34 +679,42 @@ pub fn generate_contract_schema(wasm: &[u8]) -> Result<schema::Contract, String>
     })
 }
 
-/// Runs the given schema function and reads the resulting schema from memory
-fn generate_schema_run(instance: &Instance, schema_fn_name: &str) -> Result<schema::Type, String> {
-    let schema_fn: Func<(), WasmPtr<u8, Array>> =
-        instance.exports.get(schema_fn_name).map_err(|err| err.to_string())?;
-    let ptr =
-        schema_fn.call().map_err(|err| format!("Failed running '{}': {}", schema_fn_name, err))?;
-    let memory = instance.context().memory(0);
+/// Runs the given schema function and reads the resulting schema from memory,
+/// attempting to parse it as a type. If this fails, an error is returne.d
+fn generate_schema_run<I: TryFromImport, C: RunnableCode>(
+    artifact: &Artifact<I, C>,
+    schema_fn_name: &str,
+) -> ExecResult<schema::Type> {
+    let (ptr, memory) = if let (Some(Value::I32(ptr)), memory) =
+        artifact.run(&mut TrapHost, schema_fn_name, &[])?
+    {
+        (ptr as u32 as usize, memory)
+    } else {
+        bail!("Schema derivation function malformed.")
+    };
 
     // First we read an u32 which is the length of the serialized schema
-    let len_cells = ptr.deref(memory, 0, 4).ok_or("Failed reading length from memory.")?;
-    let len_in_bytes = len_cells.iter().map(|x| x.get()).collect::<Vec<u8>>();
-    let len = u32::deserial(&mut Cursor::new(len_in_bytes))
-        .map_err(|_| "Failed deserialising the schema length.")?;
+    ensure!(ptr + 4 <= memory.len(), "Illegal memory access.");
+    let len = u32::deserial(&mut Cursor::new(&memory[ptr..ptr + 4]))
+        .map_err(|_| anyhow!("Cannot read schema length."))?;
 
     // Read the schema with offset of the u32
-    let schema_cells = ptr.deref(memory, 4, len).ok_or("Failed reading schema from memory")?;
-    let schema_bytes = schema_cells.iter().map(|x| x.get()).collect::<Vec<u8>>();
+    ensure!(ptr + 4 + len as usize <= memory.len(), "Illegal memory access when reading schema.");
+    let schema_bytes = &memory[ptr + 4..ptr + 4 + len as usize];
     schema::Type::deserial(&mut Cursor::new(schema_bytes))
-        .map_err(|_| String::from("Failed deserialising the schema."))
+        .map_err(|_| anyhow!("Failed deserialising the schema."))
 }
 
 /// Get the init methods of the module.
-pub fn get_inits(module: &Module) -> Vec<String> {
+pub fn get_inits(module: &Module) -> Vec<&Name> {
     let mut out = Vec::new();
-    for export in module.exports() {
-        if export.name.starts_with("init") {
-            if let wasmer_types::ExternDescriptor::Function(_) = export.ty {
-                out.push(export.name.to_owned());
+    for export in module.export.exports.iter() {
+        if !export.name.as_ref().contains('.') {
+            if let ExportDescription::Func {
+                ..
+            } = export.description
+            {
+                out.push(&export.name);
             }
         }
     }
@@ -813,12 +722,15 @@ pub fn get_inits(module: &Module) -> Vec<String> {
 }
 
 /// Get the receive methods of the module.
-pub fn get_receives(module: &Module) -> Vec<String> {
+pub fn get_receives(module: &Module) -> Vec<&Name> {
     let mut out = Vec::new();
-    for export in module.exports() {
-        if export.name.starts_with("receive") {
-            if let wasmer_types::ExternDescriptor::Function(_) = export.ty {
-                out.push(export.name.to_owned());
+    for export in module.export.exports.iter() {
+        if export.name.as_ref().contains('.') {
+            if let ExportDescription::Func {
+                ..
+            } = export.description
+            {
+                out.push(&export.name);
             }
         }
     }
@@ -826,11 +738,17 @@ pub fn get_receives(module: &Module) -> Vec<String> {
 }
 
 /// Get the embedded schema if it exists
-pub fn get_embedded_schema(wasm: &[u8]) -> Result<schema::Contract, &str> {
-    let module = compile(wasm).expect("Invalid module");
-    let sections =
-        module.custom_sections("contract-schema").ok_or("No schema found in the module")?;
-    let section = sections.first().ok_or("No schema found in the module")?;
-    let source = &mut Cursor::new(section);
-    schema::Contract::deserial(source).map_err(|_| "Failed parsing schema")
+pub fn get_embedded_schema(bytes: &[u8]) -> ExecResult<schema::Contract> {
+    let skeleton = parse_skeleton(bytes)?;
+    let mut schema_sections = Vec::new();
+    for ucs in skeleton.custom.iter() {
+        let cs = parse_custom(ucs)?;
+        if cs.name.as_ref() == "contract-schema" {
+            schema_sections.push(cs)
+        }
+    }
+    let section =
+        schema_sections.first().ok_or_else(|| anyhow!("No schema found in the module"))?;
+    let source = &mut Cursor::new(section.contents);
+    schema::Contract::deserial(source).map_err(|_| anyhow!("Failed parsing schema"))
 }

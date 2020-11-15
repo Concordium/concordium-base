@@ -28,10 +28,11 @@ impl Output for GlobalInit {
     }
 }
 
-impl Output for (Name, Name) {
+impl Output for ArtifactNamedImport {
     fn output(&self, out: &mut impl Write) -> OutResult<()> {
-        self.0.output(out)?;
-        self.1.output(out)?;
+        self.mod_name.output(out)?;
+        self.item_name.output(out)?;
+        self.ty.output(out)?;
         Ok(())
     }
 }

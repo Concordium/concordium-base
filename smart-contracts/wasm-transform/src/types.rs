@@ -5,7 +5,7 @@ use std::{convert::TryFrom, rc::Rc};
 
 use anyhow::bail;
 
-#[derive(Debug, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Clone)]
 /// A webassembly Name. We choose to have it be an owned value rather than ar
 /// reference into the original module. Names are also used in the parsed AST,
 /// and we don't want to retain references to the original bytes just because of
@@ -13,6 +13,10 @@ use anyhow::bail;
 pub struct Name {
     /// Names in Wasm are utf8 encoded.
     pub name: String,
+}
+
+impl AsRef<str> for Name {
+    fn as_ref(&self) -> &str { &self.name }
 }
 
 /// The Display just uses the Display instance for the underlying String.
