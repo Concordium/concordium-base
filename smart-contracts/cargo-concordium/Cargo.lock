@@ -117,7 +117,7 @@ dependencies = [
  "hex",
  "serde_json",
  "structopt",
- "wasmer-interp",
+ "wasm-chain-integration",
 ]
 
 [[package]]
@@ -866,22 +866,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b6c0220ded549d63860c78c38f3bcc558d1ca3f4efa74942c536ddbbb55e87"
 
 [[package]]
-name = "wasm-transform"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "leb128",
- "num_enum",
-]
-
-[[package]]
-name = "wasmer-interp"
+name = "wasm-chain-integration"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "contracts-common",
  "libc",
  "wasm-transform",
+]
+
+[[package]]
+name = "wasm-transform"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "leb128",
+ "num_enum",
 ]
 
 [[package]]

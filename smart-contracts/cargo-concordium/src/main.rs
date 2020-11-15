@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
 };
 use structopt::StructOpt;
-use wasmer_interp::*;
+use wasm_chain_integration::*;
 
 mod build;
 

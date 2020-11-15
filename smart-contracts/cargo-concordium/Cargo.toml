@@ -16,9 +16,9 @@ anyhow = "1.0.33"
 
 [features]
 
-[dependencies.wasmer-interp]
+[dependencies.wasm-chain-integration]
 version = "0.1"
-path = "../wasmer-interp"
+path = "../wasm-chain-integration/"
 
 [dev-dependencies]
 criterion = "0.3"

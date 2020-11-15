@@ -4,7 +4,7 @@ use std::{
     fs::read,
     process::{Command, Stdio},
 };
-use wasmer_interp::generate_contract_schema;
+use wasm_chain_integration::generate_contract_schema;
 
 fn to_snake_case(string: String) -> String { string.to_lowercase().replace("-", "_") }
 
