@@ -268,6 +268,36 @@ impl<'a> Parseable<'a> for &'a [u8] {
     }
 }
 
+/// Special case of a vector where we only expect 0 or 1 elements.
+impl<'a, A: Parseable<'a>> Parseable<'a> for Option<A> {
+    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        match Byte::parse(cursor)? {
+            0u8 => Ok(None),
+            1u8 => Ok(Some(cursor.next()?)),
+            tag => bail!("Unsupported option tag: {:#04x}", tag),
+        }
+    }
+}
+
+/// Same as the instance for Vec<u8>, with the difference that no data is copied
+/// and the result is a reference to the initial byte array.
+impl<'a> Parseable<'a> for &'a [ValueType] {
+    fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
+        let len = u32::parse(cursor)?;
+        let pos = cursor.position() as usize;
+        let end = pos + len as usize;
+        ensure!(end <= cursor.get_ref().len(), "Malformed byte array");
+        cursor.seek(SeekFrom::Current(i64::from(len)))?;
+        let bytes = &cursor.get_ref()[pos..end];
+        for byte in bytes {
+            if let Err(e) = ValueType::try_from(*byte) {
+                bail!("Unknown value type array: {}", e)
+            }
+        }
+        Ok(unsafe { &*(bytes as *const [u8] as *const [ValueType]) })
+    }
+}
+
 /// Parse a section skeleton, which consists of parsing the section ID
 /// and recording the boundaries of it.
 impl<'a> Parseable<'a> for UnparsedSection<'a> {
@@ -397,11 +427,7 @@ impl<'a> Parseable<'a> for Byte {
 /// types, so we disallow them already at the parsing stage.
 impl<'a> Parseable<'a> for ValueType {
     fn parse(cursor: &mut Cursor<&'a [u8]>) -> ParseResult<Self> {
-        match Byte::parse(cursor)? {
-            0x7F => Ok(ValueType::I32),
-            0x7E => Ok(ValueType::I64),
-            x => bail!("Unsupported value type {:#04x}", x),
-        }
+        ValueType::try_from(Byte::parse(cursor)?)
     }
 }
 

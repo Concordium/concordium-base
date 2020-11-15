@@ -76,17 +76,34 @@ pub struct InstantiatedGlobals {
 }
 
 #[derive(Debug)]
+pub struct ArtifactData {
+    /// Where to start initializing.
+    pub offset: i32,
+    /// The bytes to initialize with.
+    pub init: Vec<u8>,
+}
+
+impl From<Data> for ArtifactData {
+    fn from(d: Data) -> Self {
+        Self {
+            offset: d.offset,
+            init:   d.init,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct ArtifactMemory {
     pub init_size: u32,
     pub max_size:  u32,
-    pub init:      Vec<Data>,
+    pub init:      Vec<ArtifactData>,
 }
 
 #[derive(Debug)]
 pub struct CompiledFunction {
     num_params: u32,
     type_idx: TypeIndex,
-    return_type: Option<ValueType>,
+    return_type: BlockType,
     /// Vector of types of locals. This includes function parameters at the
     /// beginning.
     locals: Vec<ValueType>,
@@ -97,7 +114,7 @@ pub struct CompiledFunction {
 pub struct CompiledFunctionBytes<'a> {
     pub num_params: u32,
     pub type_idx: TypeIndex,
-    pub return_type: Option<ValueType>,
+    pub return_type: BlockType,
     /// Vector of types of locals. This includes function parameters at the
     /// beginning.
     pub locals: &'a [ValueType],
@@ -144,10 +161,10 @@ impl<T: TryFrom<Import, Error = anyhow::Error>> TryFromImport for T {
     fn try_from_import(import: Import) -> CompileResult<Self> { Self::try_from(import) }
 }
 
-impl TryFrom<Import> for (String, String) {
+impl TryFrom<Import> for (Name, Name) {
     type Error = anyhow::Error;
 
-    fn try_from(i: Import) -> CompileResult<Self> { Ok((i.mod_name.name, i.item_name.name)) }
+    fn try_from(i: Import) -> CompileResult<Self> { Ok((i.mod_name, i.item_name)) }
 }
 
 impl TryFrom<Import> for ImportFunc {
@@ -198,7 +215,7 @@ impl TryFrom<Import> for ImportFunc {
 pub trait RunnableCode {
     fn num_params(&self) -> u32;
     fn type_idx(&self) -> TypeIndex;
-    fn return_type(&self) -> Option<ValueType>;
+    fn return_type(&self) -> BlockType;
     /// Vector of types of locals. This includes function parameters at the
     /// beginning.
     fn locals(&self) -> &[ValueType];
@@ -213,13 +230,30 @@ impl RunnableCode for CompiledFunction {
     fn type_idx(&self) -> TypeIndex { self.type_idx }
 
     #[inline(always)]
-    fn return_type(&self) -> Option<ValueType> { self.return_type }
+    fn return_type(&self) -> BlockType { self.return_type }
 
     #[inline(always)]
     fn locals(&self) -> &[ValueType] { &self.locals }
 
     #[inline(always)]
     fn code(&self) -> &[u8] { &self.code.bytes }
+}
+
+impl<'a> RunnableCode for CompiledFunctionBytes<'a> {
+    #[inline(always)]
+    fn num_params(&self) -> u32 { self.num_params }
+
+    #[inline(always)]
+    fn type_idx(&self) -> TypeIndex { self.type_idx }
+
+    #[inline(always)]
+    fn return_type(&self) -> BlockType { self.return_type }
+
+    #[inline(always)]
+    fn locals(&self) -> &[ValueType] { self.locals }
+
+    #[inline(always)]
+    fn code(&self) -> &[u8] { self.code }
 }
 
 /// A parsed Wasm module. This no longer has custom sections since they are not
@@ -241,7 +275,7 @@ pub struct Artifact<ImportFunc, CompiledCode> {
     /// Validation should ensure that an exported function is a defined one,
     /// and not one of the imported ones.
     /// Thus the index refers to the index in the code section.
-    pub export: BTreeMap<String, FuncIndex>,
+    pub export: BTreeMap<Name, FuncIndex>,
     pub code: Vec<CompiledCode>,
 }
 
@@ -1016,7 +1050,7 @@ pub fn compile_module<I: TryFromImport>(
             type_idx: code.ty_idx,
             locals,
             num_params: code.ty.parameters.len().try_into()?,
-            return_type: code.ty.result,
+            return_type: BlockType::from(code.ty.result),
             code: exec_code,
         };
         code_out.push(result)
@@ -1052,7 +1086,12 @@ pub fn compile_module<I: TryFromImport>(
                     .max
                     .map(|x| std::cmp::min(x, MAX_NUM_PAGES))
                     .unwrap_or(MAX_NUM_PAGES),
-                init:      input.data.sections,
+                init:      input
+                    .data
+                    .sections
+                    .into_iter()
+                    .map(ArtifactData::from)
+                    .collect::<Vec<_>>(),
             })
         } else {
             None
@@ -1070,7 +1109,7 @@ pub fn compile_module<I: TryFromImport>(
                 index,
             } = export.description
             {
-                Some((export.name.name, index))
+                Some((export.name, index))
             } else {
                 None
             }

@@ -1,69 +1,174 @@
 //! Functionality for outputting Wasm modules in binary format.
 
 use crate::{
-    parse::{SectionId, Skeleton, UnparsedSection, MAGIC_HASH, VERSION},
-    types::CustomSection,
+    parse::{Byte, SectionId, Skeleton, UnparsedSection, MAGIC_HASH, VERSION},
+    types::{BlockType, CustomSection, FunctionType, Name, ValueType},
 };
-use std::{convert::TryFrom, io::Write};
+use std::{
+    convert::{TryFrom, TryInto},
+    io::Write,
+};
 
 pub type OutResult<A> = anyhow::Result<A>;
 
-/// Write a u32 in LEB128 and return then number of bytes used.
-fn write_u32(out: &mut impl Write, x: u32) -> OutResult<usize> {
-    let num_bytes = leb128::write::unsigned(out, u64::from(x))?;
-    Ok(num_bytes)
+/// Output data in a format compatible with Parseable.
+pub trait Output {
+    fn output(&self, out: &mut impl Write) -> OutResult<()>;
 }
 
-fn write_section<'a>(out: &mut impl Write, sec: &UnparsedSection<'a>) -> OutResult<()> {
-    out.write_all(&[sec.section_id as u8])?;
-    let len = u32::try_from(sec.bytes.len())?;
-    write_u32(out, len)?;
-    out.write_all(sec.bytes)?;
-    Ok(())
+/// Output as little endian bytes.
+impl Output for Byte {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        out.write_all(&self.to_le_bytes())?;
+        Ok(())
+    }
+}
+
+impl Output for u32 {
+    /// Write a u32 in LEB128 and return then number of bytes used.
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        leb128::write::unsigned(out, u64::from(*self))?;
+        Ok(())
+    }
+}
+
+impl Output for u64 {
+    /// Write a u32 in LEB128 and return then number of bytes used.
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        leb128::write::unsigned(out, *self)?;
+        Ok(())
+    }
+}
+
+impl Output for i32 {
+    /// Write a u32 in LEB128 and return then number of bytes used.
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        leb128::write::signed(out, i64::from(*self))?;
+        Ok(())
+    }
+}
+
+impl Output for i64 {
+    /// Write a u32 in LEB128 and return then number of bytes used.
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        leb128::write::signed(out, *self)?;
+        Ok(())
+    }
+}
+
+impl Output for ValueType {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> { u8::from(*self).output(out) }
+}
+
+impl Output for FunctionType {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        0x60u8.output(out)?;
+        self.parameters.output(out)?;
+        self.result.output(out)
+    }
+}
+
+impl<'a> Output for UnparsedSection<'a> {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        out.write_all(&[self.section_id as u8])?;
+        let len = u32::try_from(self.bytes.len())?;
+        len.output(out)?;
+        out.write_all(self.bytes)?;
+        Ok(())
+    }
+}
+
+impl<'a, A: Output> Output for &'a [A] {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        let len: u32 = self.len().try_into()?;
+        len.output(out)?;
+        for a in self.iter() {
+            a.output(out)?;
+        }
+        Ok(())
+    }
+}
+
+/// This implem
+impl<'a, A: Output> Output for Vec<A> {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> { self.as_slice().output(out) }
+}
+
+impl Output for BlockType {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        match self {
+            BlockType::EmptyType => 0x40u8.output(out),
+            BlockType::ValueType(vt) => u8::from(*vt).output(out),
+        }
+    }
+}
+
+/// The instance for a byte array is a special case of the instance for generic
+/// A, but it is more efficient to do one write so we have a special case.
+impl<A: Output> Output for Option<A> {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        match self.as_ref() {
+            Some(v) => {
+                1u8.output(out)?;
+                v.output(out)?;
+            }
+            None => {
+                0u8.output(out)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Names are output as byte arrays.
+impl Output for Name {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> { self.name.as_bytes().output(out) }
 }
 
 /// Write out the skeleton. All the custom sections are written at the end.
 /// This makes it possible to output additional ones incrementally.
-pub fn write_skeleton<'a>(out: &mut impl Write, skeleton: &Skeleton<'a>) -> OutResult<()> {
-    out.write_all(&MAGIC_HASH)?;
-    out.write_all(&VERSION)?;
-    if let Some(ref tys) = skeleton.ty {
-        write_section(out, tys)?;
+impl<'a> Output for Skeleton<'a> {
+    fn output(&self, out: &mut impl Write) -> OutResult<()> {
+        out.write_all(&MAGIC_HASH)?;
+        out.write_all(&VERSION)?;
+        if let Some(ref tys) = self.ty {
+            tys.output(out)?;
+        }
+        if let Some(ref imports) = self.import {
+            imports.output(out)?;
+        }
+        if let Some(ref funcs) = self.func {
+            funcs.output(out)?;
+        }
+        if let Some(ref tables) = self.table {
+            tables.output(out)?;
+        }
+        if let Some(ref memories) = self.memory {
+            memories.output(out)?;
+        }
+        if let Some(ref globals) = self.global {
+            globals.output(out)?;
+        }
+        if let Some(ref exports) = self.export {
+            exports.output(out)?;
+        }
+        if let Some(ref start) = self.start {
+            start.output(out)?;
+        }
+        if let Some(ref element) = self.element {
+            element.output(out)?;
+        }
+        if let Some(ref code) = self.code {
+            code.output(out)?;
+        }
+        if let Some(ref data) = self.data {
+            data.output(out)?;
+        }
+        for cs in self.custom.iter() {
+            cs.output(out)?;
+        }
+        Ok(())
     }
-    if let Some(ref imports) = skeleton.import {
-        write_section(out, imports)?;
-    }
-    if let Some(ref funcs) = skeleton.func {
-        write_section(out, funcs)?;
-    }
-    if let Some(ref tables) = skeleton.table {
-        write_section(out, tables)?;
-    }
-    if let Some(ref memories) = skeleton.memory {
-        write_section(out, memories)?;
-    }
-    if let Some(ref globals) = skeleton.global {
-        write_section(out, globals)?;
-    }
-    if let Some(ref exports) = skeleton.export {
-        write_section(out, exports)?;
-    }
-    if let Some(ref start) = skeleton.start {
-        write_section(out, start)?;
-    }
-    if let Some(ref element) = skeleton.element {
-        write_section(out, element)?;
-    }
-    if let Some(ref code) = skeleton.code {
-        write_section(out, code)?;
-    }
-    if let Some(ref data) = skeleton.data {
-        write_section(out, data)?;
-    }
-    for cs in skeleton.custom.iter() {
-        write_section(out, cs)?;
-    }
-    Ok(())
 }
 
 /// Output a custom section into the given writer.
@@ -73,10 +178,13 @@ pub fn write_custom_section(out: &mut impl Write, cs: &CustomSection) -> OutResu
     // temporary buffer for writing length of the name so we can retrieve how many
     // bytes are needed.
     let mut tmp_out = Vec::with_capacity(5);
-    let num_bytes = write_u32(&mut tmp_out, name_len as u32)?;
+    let num_bytes = {
+        (name_len as u32).output(&mut tmp_out)?;
+        tmp_out.len()
+    };
     // total number of bytes for the contents of the custom section
-    let bytes_len = name_len as u32 + num_bytes as u32 + cs.contents.len() as u32;
-    write_u32(out, bytes_len)?;
+    let bytes_len: u32 = name_len as u32 + num_bytes as u32 + cs.contents.len() as u32;
+    bytes_len.output(out)?;
     // write out the name length
     out.write_all(&tmp_out)?;
     // write out the name bytes

@@ -1,7 +1,9 @@
 //! AST definition of Wasm modules, as well as supporting datatypes.
 //! Based on the [W3C Wasm specification](https://www.w3.org/TR/2019/REC-wasm-core-1-20191205/#syntax-import)
 
-use std::rc::Rc;
+use std::{convert::TryFrom, rc::Rc};
+
+use anyhow::bail;
 
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq)]
 /// A webassembly Name. We choose to have it be an owned value rather than ar
@@ -16,6 +18,18 @@ pub struct Name {
 /// The Display just uses the Display instance for the underlying String.
 impl std::fmt::Display for Name {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { self.name.fmt(f) }
+}
+
+impl<'a> From<&'a str> for Name {
+    fn from(s: &'a str) -> Self {
+        Self {
+            name: s.to_string(),
+        }
+    }
+}
+
+impl std::borrow::Borrow<str> for Name {
+    fn borrow(&self) -> &str { &self.name }
 }
 
 #[derive(Debug)]
@@ -296,12 +310,40 @@ pub type GlobalIndex = u32;
 pub type LocalIndex = u32;
 pub type LabelIndex = u32;
 
-/// We do not support floating point instructions, nor types.
+/// Supported Wasm value types (i.e., no floats). We use a very low-level
+/// encoding which we make use of to remove some needless allocations. In
+/// particular the tags must be as specified by the Wasm specification and must
+/// match the binary serialization.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum ValueType {
-    I32,
-    I64,
+    I32 = 0x7F,
+    I64 = 0x7E,
+}
+
+/// Try to decode a value type from a single byte, the bytes being as specified
+/// by the Wasm specification.
+impl TryFrom<u8> for ValueType {
+    type Error = anyhow::Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x7F => Ok(ValueType::I32),
+            0x7E => Ok(ValueType::I64),
+            _ => bail!("Unknown value type byte {:#04x}", value),
+        }
+    }
+}
+
+/// Try to decode a value type from a single byte, the bytes being as specified
+/// by the Wasm specification.
+impl From<ValueType> for u8 {
+    fn from(from: ValueType) -> Self {
+        match from {
+            ValueType::I32 => 0x7F,
+            ValueType::I64 => 0x7E,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -317,6 +359,16 @@ impl From<Option<ValueType>> for BlockType {
         match opt {
             Some(x) => BlockType::ValueType(x),
             None => BlockType::EmptyType,
+        }
+    }
+}
+
+impl BlockType {
+    #[inline(always)]
+    pub fn is_empty(self) -> bool {
+        match self {
+            BlockType::EmptyType => true,
+            BlockType::ValueType(_) => false,
         }
     }
 }

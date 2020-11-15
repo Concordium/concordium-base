@@ -1,4 +1,5 @@
 pub mod artifact;
+pub mod artifact_input;
 pub mod artifact_output;
 pub mod machine;
 pub mod output;

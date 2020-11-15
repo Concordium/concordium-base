@@ -34,7 +34,7 @@ struct FunctionState<'a> {
     /// Stack height
     height: usize,
     locals_base: usize,
-    return_type: Option<ValueType>,
+    return_type: BlockType,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -263,12 +263,14 @@ fn binary_i64_test(stack: &mut RuntimeStack, f: impl Fn(i64, i64) -> i32) {
 }
 
 impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
-    pub fn run(
+    pub fn run<Q: std::fmt::Display + Ord + ?Sized>(
         &self,
         host: &mut impl Host<I>,
-        name: &str,
+        name: &Q,
         args: &[Value],
-    ) -> RunResult<Option<Value>> {
+    ) -> RunResult<Option<Value>>
+    where
+        Name: std::borrow::Borrow<Q>, {
         let start = *self
             .export
             .get(name)
@@ -280,7 +282,13 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         );
         for (p, actual) in outer_function.locals().iter().zip(args.iter()) {
             // the first num_params locals are arguments
-            ensure!(*p == ValueType::from(*actual), "Argument of incorrect type.")
+            let actual_ty = ValueType::from(*actual);
+            ensure!(
+                *p == actual_ty,
+                "Argument of incorrect type: actual {:#?}, expected {:#?}.",
+                actual_ty,
+                *p
+            )
         }
 
         let mut globals =
@@ -406,7 +414,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 }
                 InternalOpcode::Return => {
                     if let Some(top_frame) = function_frames.pop() {
-                        if return_type.is_some() {
+                        if !return_type.is_empty() {
                             let top = stack.pop();
                             stack.set_pos(top_frame.height);
                             stack.push(top)
@@ -887,15 +895,15 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             }
         }
         match outer_function.return_type() {
-            Some(ValueType::I32) => {
+            BlockType::ValueType(ValueType::I32) => {
                 let val = stack.pop();
                 Ok(Some(Value::I32(unsafe { val.short })))
             }
-            Some(ValueType::I64) => {
+            BlockType::ValueType(ValueType::I64) => {
                 let val = stack.pop();
                 Ok(Some(Value::I64(unsafe { val.long })))
             }
-            None => Ok(None),
+            BlockType::EmptyType => Ok(None),
         }
     }
 }

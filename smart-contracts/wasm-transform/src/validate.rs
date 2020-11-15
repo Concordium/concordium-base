@@ -924,7 +924,6 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
             );
         }
     }
-
     Ok(Module {
         ty,
         import,
