@@ -146,6 +146,12 @@ pub struct ArtifactNamedImport {
     pub(crate) ty:        FunctionType,
 }
 
+impl ArtifactNamedImport {
+    pub fn matches(&self, mod_name: &str, item_name: &str) -> bool {
+        self.mod_name.as_ref() == mod_name && self.item_name.as_ref() == item_name
+    }
+}
+
 impl TryFromImport for ArtifactNamedImport {
     fn try_from_import(ty: &[FunctionType], import: Import) -> CompileResult<Self> {
         match import.description {

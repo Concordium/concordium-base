@@ -644,6 +644,14 @@ impl Module {
         });
         new_imports.append(&mut self.import.imports);
         self.import.imports = new_imports;
+        for export in self.export.exports.iter_mut() {
+            if let ExportDescription::Func {
+                ref mut index,
+            } = export.description
+            {
+                *index += NUM_ADDED_FUNCTIONS;
+            }
+        }
         Ok(())
     }
 }

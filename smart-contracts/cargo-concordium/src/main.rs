@@ -183,11 +183,7 @@ pub fn main() {
 
             let print_result = |state: State, logs: Logs| {
                 for (i, item) in logs.iterate().enumerate() {
-                    if let Ok(s) = std::str::from_utf8(item) {
-                        println!("{}: {}", i, s)
-                    } else {
-                        println!("{}: {:?}", i, item)
-                    }
+                    println!("{}: {:#?}", i, item)
                 }
                 let state = &state.state;
                 if runner.hex_state {
@@ -250,7 +246,7 @@ pub fn main() {
                         serde_json::from_reader(std::io::BufReader::new(ctx_file))
                             .expect("Could not parse init context")
                     };
-                    let res = invoke_init(
+                    let res = invoke_init_from_source(
                         &source,
                         runner.amount,
                         init_ctx,
@@ -305,7 +301,7 @@ pub fn main() {
                         file.read_to_end(&mut init_state).expect("Reading the state file failed.");
                         init_state
                     };
-                    let res = invoke_receive(
+                    let res = invoke_receive_from_source(
                         &source,
                         runner.amount,
                         receive_ctx,

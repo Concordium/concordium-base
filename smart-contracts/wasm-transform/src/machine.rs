@@ -296,10 +296,19 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             .export
             .get(name)
             .ok_or_else(|| anyhow!("Trying to invoke a method that does not exist: {}.", name))?;
-        let outer_function = &self.code[start as usize]; // safe because the artifact should be well-formed.
+        // FIXME: The next restriction could easily be lifted, but it is not a problem
+        // for now.
         ensure!(
-            outer_function.num_params() == args.len().try_into()?,
-            "The number of arguments does not match the number of parameters."
+            start as usize >= self.imports.len(),
+            "Calling an imported function directly is not supported."
+        );
+        let outer_function = &self.code[start as usize - self.imports.len()]; // safe because the artifact should be well-formed.
+        let num_args = args.len().try_into()?;
+        ensure!(
+            outer_function.num_params() == num_args,
+            "The number of arguments does not match the number of parameters {} != {}.",
+            num_args,
+            outer_function.num_params(),
         );
         for (p, actual) in outer_function.locals().iter().zip(args.iter()) {
             // the first num_params locals are arguments
@@ -347,14 +356,13 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
         let max_memory = self.memory.as_ref().map(|x| x.max_size).unwrap_or(MAX_NUM_PAGES) as usize;
 
         let mut pc = 0;
-        let mut instructions: &[u8] = self.code[start as usize].code();
+        let mut instructions: &[u8] = outer_function.code();
 
         let mut function_frames: Vec<FunctionState> = Vec::new();
-        let mut return_type = self.code[start as usize].return_type();
+        let mut return_type = outer_function.return_type();
         let mut locals_base = 0;
 
         'outer: loop {
-            assert!(pc < instructions.len(), "Out of bounds.");
             let instr = instructions[pc];
             pc += 1;
             // FIXME: The unsafe here is a bit wrong, but it is much faster than using
@@ -362,6 +370,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             // The ensure here guarantees that the transmute is safe, provided that
             // InternalOpcode stays as it is.
             // ensure!(instr <= InternalOpcode::I64ExtendI32U as u8, "Illegal opcode.");
+            // println!("{:#?}", unsafe { std::mem::transmute::<_,InternalOpcode>(instr) });
             match unsafe { std::mem::transmute(instr) } {
                 // InternalOpcode::try_from(instr)? {
                 InternalOpcode::Unreachable => bail!("Unreachable."),

@@ -37,7 +37,8 @@ pub unsafe extern "C" fn call_init(
             .expect("Precondition violation: invalid init ctx given by host.");
         match std::str::from_utf8(init_name) {
             Ok(name) => {
-                let res = invoke_init(wasm, amount, init_ctx, name, parameter, energy);
+                let res =
+                    invoke_init_from_artifact(wasm, amount, init_ctx, name, parameter, energy);
                 match res {
                     Ok(result) => {
                         let mut out = result.to_bytes();
@@ -81,7 +82,15 @@ pub unsafe extern "C" fn call_receive(
         let parameter = slice_from_c_bytes!(param_bytes, param_bytes_len as usize).to_vec();
         match std::str::from_utf8(receive_name) {
             Ok(name) => {
-                let res = invoke_receive(wasm, amount, receive_ctx, state, name, parameter, energy);
+                let res = invoke_receive_from_artifact(
+                    wasm,
+                    amount,
+                    receive_ctx,
+                    state,
+                    name,
+                    parameter,
+                    energy,
+                );
                 match res {
                     Ok(result) => {
                         let mut out = result.to_bytes();

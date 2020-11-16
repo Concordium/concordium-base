@@ -18,6 +18,7 @@ use wasm_transform::{
     machine,
     parse::{parse_custom, parse_skeleton},
     types::{ExportDescription, Module, Name},
+    utils,
 };
 
 pub type ExecResult<A> = anyhow::Result<A>;
@@ -525,10 +526,10 @@ impl<'a> machine::Host<ProcessedImports> for ReceiveHost<'a> {
     }
 }
 
-type Parameter = Vec<u8>;
+pub type Parameter = Vec<u8>;
 
-pub fn invoke_init(
-    artifact_bytes: &[u8],
+pub fn invoke_init<C: RunnableCode>(
+    artifact: Artifact<ProcessedImports, C>,
     amount: u64,
     init_ctx: InitContext,
     init_name: &str,
@@ -545,8 +546,6 @@ pub fn invoke_init(
         init_ctx: &init_ctx,
     };
 
-    let artifact = wasm_transform::artifact_input::parse_artifact(artifact_bytes)?;
-
     let (res, _) = artifact.run(&mut host, init_name, &[Value::I64(amount as i64)])?;
     let remaining_energy = host.energy.energy;
     if let Some(Value::I32(0)) = res {
@@ -562,8 +561,34 @@ pub fn invoke_init(
     }
 }
 
-pub fn invoke_receive(
+#[inline]
+pub fn invoke_init_from_artifact(
     artifact_bytes: &[u8],
+    amount: u64,
+    init_ctx: InitContext,
+    init_name: &str,
+    parameter: Parameter,
+    energy: u64,
+) -> ExecResult<InitResult> {
+    let artifact = wasm_transform::artifact_input::parse_artifact(artifact_bytes)?;
+    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
+}
+
+#[inline]
+pub fn invoke_init_from_source(
+    source_bytes: &[u8],
+    amount: u64,
+    init_ctx: InitContext,
+    init_name: &str,
+    parameter: Parameter,
+    energy: u64,
+) -> ExecResult<InitResult> {
+    let artifact = utils::instantiate(source_bytes)?;
+    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
+}
+
+pub fn invoke_receive<C: RunnableCode>(
+    artifact: Artifact<ProcessedImports, C>,
     amount: u64,
     receive_ctx: ReceiveContext,
     current_state: &[u8],
@@ -581,8 +606,6 @@ pub fn invoke_receive(
         receive_ctx: &receive_ctx,
         outcomes:    Outcome::new(),
     };
-
-    let artifact = wasm_transform::artifact_input::parse_artifact(artifact_bytes)?;
 
     let (res, _) = artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)])?;
     let remaining_energy = host.energy.energy;
@@ -617,6 +640,34 @@ pub fn invoke_receive(
     }
 }
 
+#[inline]
+pub fn invoke_receive_from_artifact(
+    artifact_bytes: &[u8],
+    amount: u64,
+    receive_ctx: ReceiveContext,
+    current_state: &[u8],
+    receive_name: &str,
+    parameter: Parameter,
+    energy: u64,
+) -> ExecResult<ReceiveResult> {
+    let artifact = wasm_transform::artifact_input::parse_artifact(artifact_bytes)?;
+    invoke_receive(artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
+}
+
+#[inline]
+pub fn invoke_receive_from_source(
+    source_bytes: &[u8],
+    amount: u64,
+    receive_ctx: ReceiveContext,
+    current_state: &[u8],
+    receive_name: &str,
+    parameter: Parameter,
+    energy: u64,
+) -> ExecResult<ReceiveResult> {
+    let artifact = utils::instantiate(source_bytes)?;
+    invoke_receive(artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
+}
+
 /// A host which traps for any function call.
 pub struct TrapHost;
 
@@ -631,39 +682,71 @@ impl<I> machine::Host<I> for TrapHost {
         _memory: &mut Vec<u8>,
         _stack: &mut machine::RuntimeStack,
     ) -> machine::RunResult<()> {
-        bail!("TrapHost call not implemented.")
+        bail!("TrapHost traps on all host calls.")
+    }
+}
+
+/// A host which traps for any function call apart from `report_error` which it
+/// prints to standard out.
+pub struct TestHost;
+
+impl machine::Host<ArtifactNamedImport> for TestHost {
+    fn tick_energy(&mut self, _x: u64) -> machine::RunResult<()> {
+        bail!("TrapHost tick_energy not implemented.")
+    }
+
+    fn call(
+        &mut self,
+        f: &ArtifactNamedImport,
+        memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+    ) -> machine::RunResult<()> {
+        if f.matches("concordium", "report_error") {
+            let column = unsafe { stack.pop_u32() };
+            let line = unsafe { stack.pop_u32() };
+            let filename_length = unsafe { stack.pop_u32() } as usize;
+            let filename_start = unsafe { stack.pop_u32() } as usize;
+            let msg_length = unsafe { stack.pop_u32() } as usize;
+            let msg_start = unsafe { stack.pop_u32() } as usize;
+            ensure!(filename_start + filename_length <= memory.len(), "Illegal memory access.");
+            ensure!(msg_start + msg_length <= memory.len(), "Illegal memory access.");
+            let msg = std::str::from_utf8(&memory[msg_start..msg_start + msg_length])?;
+            let filename =
+                std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?;
+            let location = format!("{}:{}:{}", filename, line, column);
+            eprintln!("\nError: {}\n{}\n", msg, location);
+        } else {
+            bail!("Unsupported host function call.")
+        }
+        Ok(())
     }
 }
 
 /// Instantiates the module with an external function to report back errors.
 /// Then tries to run an exported 'main' function.
 /// The main function is present in the module if compile using 'cargo test'
-pub fn test_run(artifact_bytes: &[u8]) -> ExecResult<()> {
-    let mut host = TrapHost;
+pub fn test_run(module_bytes: &[u8]) -> ExecResult<()> {
     eprintln!("\nInstantiating WASM module.");
-    let artifact =
-        wasm_transform::artifact_input::parse_artifact::<ArtifactNamedImport>(artifact_bytes)?;
+    let artifact = utils::instantiate::<ArtifactNamedImport>(module_bytes)?;
     eprintln!("Running tests");
     // Unable to find a proper source, but it seems that the test main function
     // takes two u32 arguments, which we assume are `argc` and `argv` in a C
     // program. Since we don't use `argc` and `argv` in the test, we can pass
     // any u32.
     if let (Some(Value::I32(n)), _) =
-        artifact.run(&mut host, "main", &[Value::I32(0), Value::I32(0)])?
+        artifact.run(&mut TestHost, "main", &[Value::I32(0), Value::I32(0)])?
     {
         ensure!(n == 0, "Test failed.");
+        eprintln!("Test result: ok.")
     } else {
-        eprintln!("Test result: ok.");
+        eprintln!("Test failed.");
     }
     Ok(())
 }
 
-/// Instantiates the module with dummy external functions
-/// Tries to generate a state schema
-/// Generates schemas for methods
-pub fn generate_contract_schema(artifact_bytes: &[u8]) -> ExecResult<schema::Contract> {
-    let artifact =
-        wasm_transform::artifact_input::parse_artifact::<ArtifactNamedImport>(artifact_bytes)?;
+/// Tries to generate a state schema and schemas for parameters of methods.
+pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Contract> {
+    let artifact = utils::instantiate::<ArtifactNamedImport>(module_bytes)?;
     let state = generate_schema_run(&artifact, "concordium_schema_state").ok();
 
     let mut method_parameter = BTreeMap::new();
@@ -681,7 +764,7 @@ pub fn generate_contract_schema(artifact_bytes: &[u8]) -> ExecResult<schema::Con
 }
 
 /// Runs the given schema function and reads the resulting schema from memory,
-/// attempting to parse it as a type. If this fails, an error is returne.d
+/// attempting to parse it as a type. If this fails, an error is returned.
 fn generate_schema_run<I: TryFromImport, C: RunnableCode>(
     artifact: &Artifact<I, C>,
     schema_fn_name: &str,
