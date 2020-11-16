@@ -19,15 +19,28 @@ pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
 /// The type of amounts on the chain
-#[cfg_attr(
-    feature = "derive-serde",
-    derive(SerdeSerialize, SerdeDeserialize),
-    serde(rename_all = "camelCase")
-)]
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Amount {
     pub micro_gtu: u64,
+}
+
+#[cfg(feature = "derive-serde")]
+impl SerdeSerialize for Amount {
+    fn serialize<S: serde::Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        ser.serialize_str(&self.micro_gtu.to_string())
+    }
+}
+
+#[cfg(feature = "derive-serde")]
+impl<'de> SerdeDeserialize<'de> for Amount {
+    fn deserialize<D: serde::de::Deserializer<'de>>(des: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(des)?;
+        let micro_gtu = s.parse::<u64>().map_err(|e| serde::de::Error::custom(format!("{}", e)))?;
+        Ok(Amount {
+            micro_gtu,
+        })
+    }
 }
 
 impl Amount {
@@ -223,7 +236,7 @@ pub struct InitContext {
 #[cfg_attr(
     feature = "derive-serde",
     derive(SerdeSerialize, SerdeDeserialize),
-    serde(tag = "type", content = "address")
+    serde(tag = "type", content = "address", rename_all = "lowercase")
 )]
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub enum Address {

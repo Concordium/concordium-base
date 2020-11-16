@@ -302,12 +302,12 @@ impl HasReceiveContext<()> for ReceiveContextExtern {
                 0u8 => {
                     match from_bytes(core::slice::from_raw_parts(ptr.add(1), ACCOUNT_ADDRESS_SIZE))
                     {
-                        Ok(v) => v,
+                        Ok(v) => Address::Account(v),
                         Err(_) => crate::trap(),
                     }
                 }
                 1u8 => match from_bytes(core::slice::from_raw_parts(ptr.add(1), 16)) {
-                    Ok(v) => v,
+                    Ok(v) => Address::Contract(v),
                     Err(_) => crate::trap(),
                 },
                 _ => crate::trap(), // unreachable!("Host violated precondition."),
