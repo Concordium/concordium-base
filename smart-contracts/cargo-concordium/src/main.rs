@@ -404,9 +404,9 @@ pub fn main() {
                     None => {
                         println!(
                             "No schema found for the contract state. Did you annotate the state \
-                             data with `#[contract_state]`?
+                             data with `#[contract_state(...)]`?
 
-        #[contract_state]
+        #[contract_state(contract = \"my-contract\")]
         struct State {{ ... }}
     "
                         );

@@ -39,7 +39,7 @@ struct InitParams {
     vesting_schedule: Vec<VestingEvent>,
 }
 
-#[contract_state]
+#[contract_state(contract = "lockup")]
 #[derive(Serialize, SchemaType)]
 struct State {
     // Who is authorised to withdraw funds from this lockup (must be non-empty)

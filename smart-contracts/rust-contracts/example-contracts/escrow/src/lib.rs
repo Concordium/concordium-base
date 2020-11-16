@@ -47,7 +47,7 @@ struct InitParams {
     arbiter:          AccountAddress,
 }
 
-#[contract_state]
+#[contract_state(contract = "escrow")]
 #[derive(Serialize, SchemaType)]
 struct State {
     mode:        Mode,

@@ -46,7 +46,7 @@ type Contribution = [u8; 32];
 type Prefix = [u8; 32];
 
 /// State of the smart contract instance.
-#[contract_state]
+#[contract_state(contract = "simple_game")]
 #[derive(Serialize, SchemaType)]
 struct State {
     /// Number of contributions. Could be different from the size of the map if

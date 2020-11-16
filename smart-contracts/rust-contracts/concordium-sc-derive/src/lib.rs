@@ -709,14 +709,14 @@ pub fn serialize_derive(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 /// ```rust
-/// #[contract_state]
+/// #[contract_state(contract = "my_contract")]
 /// #[derive(SchemaType)]
 /// struct MyContractState {
 ///      ...
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn contract_state(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn contract_state(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut out = proc_macro2::TokenStream::new();
 
     let data_ident = if let Ok(ast) = syn::parse::<syn::ItemStruct>(item.clone()) {
@@ -732,11 +732,20 @@ pub fn contract_state(_attr: TokenStream, item: TokenStream) -> TokenStream {
         unimplemented!("Only supports structs, enums and type aliases as contract state so far")
     };
 
+    let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
+    let attrs = parser.parse(attr).expect("Expect a comma-separated list of meta items.");
+
+    let contract_name = get_attribute_value(attrs.iter(), "contract").expect("A name of the contract must be provided, using the 'contract' attribute.");
+
+    let wasm_schema_name = format!("concordium_schema_state_{}", contract_name);
+    let rust_schema_name = format_ident!("concordium_schema_state_{}", data_ident);
+
     let generate_schema_tokens = quote! {
+        #[allow(non_snake_case)]
         #[cfg(target_arch = "wasm32")]
         #[cfg(feature = "build-schema")]
-        #[no_mangle]
-        pub extern "C" fn concordium_schema_state() -> *mut u8 {
+        #[export_name = #wasm_schema_name]
+        pub extern "C" fn #rust_schema_name() -> *mut u8 {
             let schema = <#data_ident as SchemaType>::get_type();
             let schema_bytes = concordium_sc_base::to_bytes(&schema);
             concordium_sc_base::put_in_memory(&schema_bytes)

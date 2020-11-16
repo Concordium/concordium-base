@@ -232,10 +232,10 @@ More technically the contract schema is serialized and embedded into the wasm mo
 
 
 ## Generating the schema in rust
-The schema itself is embedded as bytes, and to automate this process the user can annotate the contract state and which parameters to include in the schema using `#[contract_state]` and including an `parameter` attribute in the `#[init(...)]` and `#[receive(...)]` proc-macros.
+The schema itself is embedded as bytes, and to automate this process the user can annotate the contract state and which parameters to include in the schema using `#[contract_state(contract = "my-contract")]` and including an `parameter` attribute in the `#[init(...)]` and `#[receive(...)]` proc-macros.
 
 ```rust
-#[contract_state]
+#[contract_state(contract = "my-contract")]
 #[derive(SchemaType)]
 struct MyState {
     ...
@@ -247,7 +247,7 @@ enum MyParameter {
     ...
 }
 
-#[init(contract = "init", parameter = "MyParameter")]
+#[init(contract = "my-contract", parameter = "MyParameter")]
 fn contract_init<...> (...){
     ...
 }
