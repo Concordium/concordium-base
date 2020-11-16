@@ -1,29 +1,45 @@
+//! Utilities for Wasm module validation.
+//!
+//! The specification that is taken as the basis is [wasm-core-1-20191205](https://www.w3.org/TR/2019/REC-wasm-core-1-20191205/),
+//! but we have further restrictions to accommodate our use on the chain.
+//! Some of these are already ensured by parsing, others are ensured by
+//! validation.
+//!
+//! The basic code validation algorithm used here is a straighforward transcript
+//! of the validation algorithm described in the appendix of the linked Wasm
+//! specification.
+
 use crate::{
-    parse::{
-        parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult, Skeleton,
-        MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE, MAX_NUM_GLOBALS, MAX_SWITCH_SIZE, PAGE_SIZE,
+    constants::{
+        ALLOWED_LOCALS, MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE, MAX_NUM_GLOBALS,
+        MAX_SWITCH_SIZE, PAGE_SIZE,
     },
+    parse::{parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult, Skeleton},
     types::*,
 };
 use anyhow::{anyhow, bail, ensure};
 use std::{borrow::Borrow, collections::BTreeSet, convert::TryInto, rc::Rc};
 
-/// The number of allowed locals in a function.
-/// This includes parameters and declared locals.
-pub const ALLOWED_LOCALS: u32 = 1 << 15;
-
+/// Result type of validation.
 pub type ValidateResult<A> = anyhow::Result<A>;
 
 #[derive(Debug, Default)]
+/// The operand stack containing either known or unknown types.
+/// Unknown types appear on the stack by the use of parametric instructions
+/// after an unreachable section of the code.
+///
 /// The default instance produces an empty operator stack.
-pub struct OperandStack {
-    pub stack: Vec<MaybeKnown>,
+pub(crate) struct OperandStack {
+    pub(crate) stack: Vec<MaybeKnown>,
 }
 
 #[derive(Debug, Default)]
+/// The stack of "control frames". A control frame is a block of code, e.g., a
+/// `block ... end` section.
+///
 /// The default instance produces an empty control stack.
-pub struct ControlStack {
-    pub stack: Vec<ControlFrame>,
+pub(crate) struct ControlStack {
+    pub(crate) stack: Vec<ControlFrame>,
 }
 
 impl ControlStack {
@@ -37,42 +53,55 @@ impl ControlStack {
         }
     }
 
+    /// Get the label type of the `n`-th label. This is the type
+    /// that is used when jumping to the label.
     pub fn get_label(&self, n: u32) -> Option<BlockType> {
         self.get(n).map(|frame| frame.label_type)
     }
 
-    /// Get the outermost frame, target of the return.
+    /// Get the outermost frame, target of the return jump.
     pub fn outermost(&self) -> Option<&ControlFrame> { self.stack.first() }
 }
 
 #[derive(Debug)]
-pub struct ControlFrame {
+/// A single control frame. This indicates what the types are for jumping to the
+/// label of this block, or normally exiting the block, as well as some metadata
+/// with reference to the ControlStack
+pub(crate) struct ControlFrame {
     /// Label type of the block, this is the type that is used when
     /// jumping to the label of the block.
-    pub label_type: BlockType,
-    /// End type of the block, this is the type that is used when
+    pub(crate) label_type: BlockType,
+    /// end type of the block, this is the type that is used when
     /// ending the block in a normal way.
-    pub end_type: BlockType,
-    /// Height of the stack at the entry of this block.
-    pub height: usize,
-    /// Whether we are in the unreachable part of this block or not.
-    /// The unreachable part is any part after an unconditional jump or
+    pub(crate) end_type: BlockType,
+    /// height of the stack at the entry of this block.
+    pub(crate) height: usize,
+    /// whether we are in the unreachable part of this block or not.
+    /// the unreachable part is any part after an unconditional jump or
     /// a trap instruction.
-    pub unreachable: bool,
+    pub(crate) unreachable: bool,
 }
 
 #[derive(Debug)]
+/// The validation state contains the control frames and a stack of operands.
+/// this is the same state as described by the validation algorithm of the wasm
+/// specification appendix.
 pub struct ValidationState {
-    pub opds:  OperandStack,
-    pub ctrls: ControlStack,
+    pub(crate) opds:  OperandStack,
+    pub(crate) ctrls: ControlStack,
 }
 
 impl ValidationState {
+    /// Check whether we are done, meaning that the control stack is
+    /// exhausted.
     pub fn done(&self) -> bool { self.ctrls.stack.is_empty() }
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
-pub enum MaybeKnown {
+/// A possibly known type. Unknown types appear on the stack after
+/// we enter an unreachable part of the code. This part must still be
+/// type-checked, but the stack at that point is arbitrary.
+pub(crate) enum MaybeKnown {
     Unknown,
     Known(ValueType),
 }
@@ -80,15 +109,15 @@ pub enum MaybeKnown {
 use MaybeKnown::*;
 
 impl MaybeKnown {
-    pub fn is_unknown(self) -> bool { self == MaybeKnown::Unknown }
+    pub(crate) fn is_unknown(self) -> bool { self == MaybeKnown::Unknown }
 }
 
 impl ValidationState {
     /// Push a new type to the stack.
-    pub fn push_opd(&mut self, m_type: MaybeKnown) { self.opds.stack.push(m_type); }
+    fn push_opd(&mut self, m_type: MaybeKnown) { self.opds.stack.push(m_type); }
 
     /// Pop a type from the stack and, if successful, return it.
-    pub fn pop_opd(&mut self) -> ValidateResult<MaybeKnown> {
+    fn pop_opd(&mut self) -> ValidateResult<MaybeKnown> {
         match self.ctrls.stack.last() {
             None => bail!("Control frame exhausted."),
             Some(frame) => {
@@ -113,7 +142,7 @@ impl ValidationState {
     /// If successful, return the more precise type of the two, expected and
     /// actual. The type in the stack can be marked as unknown if it is in
     /// an unreachable part of the code.
-    pub fn pop_expect_opd(&mut self, expect: MaybeKnown) -> ValidateResult<MaybeKnown> {
+    fn pop_expect_opd(&mut self, expect: MaybeKnown) -> ValidateResult<MaybeKnown> {
         let actual = self.pop_opd()?;
         if actual.is_unknown() {
             return Ok(expect);
@@ -131,7 +160,7 @@ impl ValidationState {
     }
 
     /// Push zero or one operands to the current stack.
-    pub fn push_opds(&mut self, tys: BlockType) {
+    fn push_opds(&mut self, tys: BlockType) {
         if let BlockType::ValueType(ty) = tys {
             self.push_opd(Known(ty))
         }
@@ -139,7 +168,7 @@ impl ValidationState {
 
     /// Pop zero or one operands from the stack, and check that it
     /// has expected type.
-    pub fn pop_opds(&mut self, expected: BlockType) -> ValidateResult<()> {
+    fn pop_opds(&mut self, expected: BlockType) -> ValidateResult<()> {
         if let BlockType::ValueType(ty) = expected {
             self.pop_expect_opd(Known(ty))?;
         }
@@ -155,7 +184,7 @@ impl ValidationState {
     ///
     /// For blocks the label type and end type are the same, for loops the label
     /// type is empty, and the end type is potentially not.
-    pub fn push_ctrl(&mut self, label_type: BlockType, end_type: BlockType) {
+    fn push_ctrl(&mut self, label_type: BlockType, end_type: BlockType) {
         let frame = ControlFrame {
             label_type,
             end_type,
@@ -166,7 +195,7 @@ impl ValidationState {
     }
 
     /// Pop the current control frame and return its result type.
-    pub fn pop_ctrl(&mut self) -> ValidateResult<BlockType> {
+    fn pop_ctrl(&mut self) -> ValidateResult<BlockType> {
         // We first check for the last element, and use it without removing it.
         // This is so that pop_expect_opd, which pops elements from the stack, can see
         // whether we are in the unreachable state for the stack or not.
@@ -184,7 +213,7 @@ impl ValidationState {
         }
     }
 
-    pub fn mark_unreachable(&mut self) -> ValidateResult<()> {
+    fn mark_unreachable(&mut self) -> ValidateResult<()> {
         match self.ctrls.stack.last_mut() {
             None => bail!("Control stack exhausted."),
             Some(frame) => {
@@ -197,23 +226,23 @@ impl ValidationState {
 }
 
 /// The local types, at indices start, start+1,..<end (not including end).
-pub struct LocalsRange {
-    pub start: LocalIndex,
-    pub end:   LocalIndex,
-    pub ty:    ValueType,
+pub(crate) struct LocalsRange {
+    pub(crate) start: LocalIndex,
+    pub(crate) end:   LocalIndex,
+    pub(crate) ty:    ValueType,
 }
 
 /// Context for the validation of a function.
-pub struct FunctionContext<'a> {
-    pub return_type: BlockType,
-    pub globals:     &'a [Global],
-    pub funcs:       &'a [TypeIndex],
-    pub types:       &'a [Rc<FunctionType>],
-    pub locals:      Vec<LocalsRange>,
+pub(crate) struct FunctionContext<'a> {
+    pub(crate) return_type: BlockType,
+    pub(crate) globals:     &'a [Global],
+    pub(crate) funcs:       &'a [TypeIndex],
+    pub(crate) types:       &'a [Rc<FunctionType>],
+    pub(crate) locals:      Vec<LocalsRange>,
     // Whether memory exists or not.
-    pub memory: bool,
+    pub(crate) memory: bool,
     // Whether the table exists or not.
-    pub table: bool,
+    pub(crate) table: bool,
 }
 
 /// Make a locals structure used to validate a function body.
@@ -252,20 +281,32 @@ fn make_locals(ty: &FunctionType, locals: &[Local]) -> ValidateResult<(Vec<Local
     Ok((out, num_locals))
 }
 
+/// The trait used used to parametrize the validation algorithm so that it can
+/// be used for other applications than mere validation. In particular the
+/// validation algorithm maintains useful state during its run, e.g., current
+/// and maximum stack height, which is useful during compilation.
 pub trait HasValidationContext {
+    /// Get the local of a function at the given index.
+    /// Note that function parameters define implicit locals.
     fn get_local(&self, idx: LocalIndex) -> ValidateResult<ValueType>;
 
-    /// Get a global together with its mutability.
+    /// Get a global together with its mutability. `true` for mutable, `false`
+    /// for constant.
     fn get_global(&self, idx: GlobalIndex) -> ValidateResult<(ValueType, bool)>;
 
+    /// Return whether the module has memory.
     fn memory_exists(&self) -> bool;
 
+    /// Return whether the module has the table.
     fn table_exists(&self) -> bool;
 
+    /// Get the type of the function at the given index.
     fn get_func(&self, idx: FuncIndex) -> ValidateResult<&Rc<FunctionType>>;
 
+    /// Get the type at the given index.
     fn get_type(&self, idx: TypeIndex) -> ValidateResult<&Rc<FunctionType>>;
 
+    /// Return the return type of the function.
     fn return_type(&self) -> BlockType;
 }
 
@@ -314,12 +355,14 @@ impl<'a> HasValidationContext for FunctionContext<'a> {
     fn return_type(&self) -> BlockType { self.return_type }
 }
 
+/// A helper type used to ensure alignment.
 enum Type {
     I8,
     I16,
     I32,
     I64,
 }
+
 /// Ensure that the alignment is valid for the given type.
 fn ensure_alignment(num: u32, align: Type) -> ValidateResult<()> {
     match align {
@@ -340,11 +383,19 @@ fn ensure_alignment(num: u32, align: Type) -> ValidateResult<()> {
 }
 
 /// Trait to handle the results of validation.
+/// The type parameter should be instantiated with an opcode. The reason it is a
+/// type parameter is to support both opcodes and references to opcodes as
+/// parameters. The latter is useful because opcodes are not copyable.
 pub trait Handler<O> {
     type Outcome: Sized;
 
+    /// Handle the opcode. This function is called __after__ the `validate`
+    /// function itself processes the opcode. Hence the validation state is
+    /// already updated.
     fn handle_opcode(&mut self, state: &ValidationState, opcode: O) -> anyhow::Result<()>;
 
+    /// Finish processing the code. This function is called after the code body
+    /// has been successfully validated.
     fn finish(self) -> anyhow::Result<Self::Outcome>;
 }
 
@@ -361,6 +412,10 @@ impl Handler<OpCode> for Vec<OpCode> {
     fn finish(self) -> anyhow::Result<Self::Outcome> { Ok(self) }
 }
 
+/// Validate a single function. In order that this function is as flexible as
+/// possible it takes as input just an iterator over opcodes. The function will
+/// terminate at the first opcode it fails to read. Validation will ensure that
+/// the iterator is fully consumed and properly terminated by an `End` opcode.
 pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
     context: &impl HasValidationContext,
     opcodes: impl Iterator<Item = ParseResult<O>>,
@@ -712,6 +767,8 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
     }
 }
 
+/// Validate the module. This function parses and validates the module at the
+/// same time, failing at the first encountered error.
 pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
     // The type section is valid as long as it's well-formed.
     let ty: TypeSection = parse_sec_with_default(&skeleton.ty)?;

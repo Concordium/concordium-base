@@ -6,7 +6,7 @@
 //! deserialization are straightforward and cheap.
 
 use crate::{
-    parse::MAX_NUM_PAGES,
+    constants::MAX_NUM_PAGES,
     types::*,
     validate::{validate, Handler, HasValidationContext, ValidationState},
 };
@@ -80,16 +80,28 @@ impl From<GlobalInit> for StackValue {
 }
 
 #[derive(Debug)]
+/// A fully instantiated table. This is possible
+/// because in the Wasm specification we have the only way to write
+/// functions to the table is via the elements section of the module.
+/// Since we ensure the table is small enough we can afford to initialize
+/// it at compile time.
 pub struct InstantiatedTable {
     pub functions: Vec<Option<FuncIndex>>,
 }
 
 #[derive(Debug)]
+/// Fully instantiated globals with initial values.
 pub struct InstantiatedGlobals {
     pub inits: Vec<GlobalInit>,
 }
 
 #[derive(Debug)]
+/// The data segment of the artifact. This is a slightly processed
+/// data segment of the module. In contrast to the table we cannot use
+/// the same trick of initializing it here. In practice data segments
+/// are at high offsets, which would lead to big artifacts. Thus we
+/// store it pretty much in the same way that it was when it was part
+/// of the source, except we have resolved the offset.
 pub struct ArtifactData {
     /// Where to start initializing.
     pub offset: i32,
@@ -107,6 +119,9 @@ impl From<Data> for ArtifactData {
 }
 
 #[derive(Debug)]
+/// Memory of the artifact, with initial size, as well as maximum size set.
+/// If the maximum size is not part of the original module we set it to the
+/// [constants::MAX_NUM_PAGES](../constants/constant.MAX_NUM_PAGES.html)
 pub struct ArtifactMemory {
     pub init_size: u32,
     pub max_size:  u32,
@@ -114,6 +129,7 @@ pub struct ArtifactMemory {
 }
 
 #[derive(Debug)]
+/// A function which has been processed into a form suitable for execution.
 pub struct CompiledFunction {
     num_params: u32,
     type_idx: TypeIndex,
@@ -125,21 +141,28 @@ pub struct CompiledFunction {
 }
 
 #[derive(Debug)]
+/// A borrowed variant of [CompiledFunction](./struct.CompiledFunction.html)
+/// that does not own the body and locals. This is used to make deserialization
+/// of artifacts cheaper.
 pub struct CompiledFunctionBytes<'a> {
-    pub num_params: u32,
-    pub type_idx: TypeIndex,
-    pub return_type: BlockType,
+    pub(crate) num_params: u32,
+    pub(crate) type_idx: TypeIndex,
+    pub(crate) return_type: BlockType,
     /// Vector of types of locals. This includes function parameters at the
     /// beginning.
-    pub locals: &'a [ValueType],
-    pub code: &'a [u8],
+    pub(crate) locals: &'a [ValueType],
+    pub(crate) code: &'a [u8],
 }
 
+/// Try to process an import into something that is perhaps more suitable for
+/// execution, i.e., quicker to resolve.
 pub trait TryFromImport: Sized {
     fn try_from_import(ty: &[FunctionType], import: Import) -> CompileResult<Self>;
     fn ty(&self) -> &FunctionType;
 }
 
+/// An example of a processed import with minimal processing. Useful for testing
+/// an experimenting, but not for efficient execution.
 pub struct ArtifactNamedImport {
     pub(crate) mod_name:  Name,
     pub(crate) item_name: Name,
@@ -174,6 +197,7 @@ impl TryFromImport for ArtifactNamedImport {
     fn ty(&self) -> &FunctionType { &self.ty }
 }
 
+/// A trait encapsulating the properties that are needed to run a function.
 pub trait RunnableCode {
     fn num_params(&self) -> u32;
     fn type_idx(&self) -> TypeIndex;
@@ -363,43 +387,45 @@ pub enum InternalOpcode {
     I64ExtendI32U,
 }
 
+/// Result of compilation. Either Ok(_) or an error indicating the reason.
 pub type CompileResult<A> = anyhow::Result<A>;
 
 #[derive(Default, Debug)]
+/// A sequence of internal opcodes, followed by any immediate arguments.
 pub struct Instructions {
     pub(crate) bytes: Vec<u8>,
 }
 
 impl Instructions {
-    pub fn new() -> Self {
-        Self {
-            bytes: Vec::new(),
-        }
-    }
+    fn push(&mut self, opcode: InternalOpcode) { self.bytes.push(opcode as u8) }
 
-    pub fn push(&mut self, opcode: InternalOpcode) { self.bytes.push(opcode as u8) }
+    fn push_u16(&mut self, x: u16) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
 
-    pub fn push_u16(&mut self, x: u16) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
+    fn push_u32(&mut self, x: u32) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
 
-    pub fn push_u32(&mut self, x: u32) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
+    fn push_i32(&mut self, x: i32) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
 
-    pub fn push_i32(&mut self, x: i32) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
+    fn push_i64(&mut self, x: i64) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
 
-    pub fn push_i64(&mut self, x: i64) { self.bytes.extend_from_slice(&x.to_le_bytes()); }
+    fn current_offset(&self) -> usize { self.bytes.len() }
 
-    pub fn current_offset(&self) -> usize { self.bytes.len() }
-
-    pub fn back_patch(&mut self, back_loc: usize, to_write: u32) -> CompileResult<()> {
+    fn back_patch(&mut self, back_loc: usize, to_write: u32) -> CompileResult<()> {
         let mut place: &mut [u8] = &mut self.bytes[back_loc..];
         place.write_all(&to_write.to_le_bytes())?;
         Ok(())
     }
 }
 
+/// Target of a jump that we need to keep track of temporarily.
 enum JumpTarget {
+    /// We know the position in the instruction sequence where the jump should
+    /// resolve to. This is used in the case of loops.
     Known {
         pos: usize,
     },
+    /// We do not yet know where in the instruction sequence we will jump to.
+    /// We record the list of places at which we need to back-patch the location
+    /// when we get to it.
     Unknown {
         backpatch_locations: Vec<usize>,
     },
@@ -426,6 +452,7 @@ impl JumpTarget {
 }
 
 #[derive(Default)]
+/// Stack of jump targets
 struct BackPatchStack {
     stack: Vec<JumpTarget>,
 }
@@ -446,7 +473,8 @@ impl BackPatchStack {
         self.stack.get_mut(lookup_idx).ok_or_else(|| anyhow!("Attempt to access unknown label."))
     }
 }
-
+/// An intermediate structure of the instruction sequence plus any pending
+/// backpatch locations we need to resolve.
 struct BackPatch {
     out:       Instructions,
     backpatch: BackPatchStack,
@@ -985,111 +1013,114 @@ impl<'a> HasValidationContext for ModuleContext<'a> {
     fn return_type(&self) -> BlockType { BlockType::from(self.code.ty.result) }
 }
 
-pub fn compile_module<I: TryFromImport>(
-    input: Module,
-) -> CompileResult<Artifact<I, CompiledFunction>> {
-    let mut code_out = Vec::with_capacity(input.code.impls.len());
+/// Compile a module into an artifact, failing if there are problems.
+/// Problems should not arise if the module is well-formed, and all the imports
+/// are supported by the `I` type.
+impl Module {
+    pub fn compile<I: TryFromImport>(self) -> CompileResult<Artifact<I, CompiledFunction>> {
+        let mut code_out = Vec::with_capacity(self.code.impls.len());
 
-    for code in input.code.impls.iter() {
-        let mut locals = code.ty.parameters.iter().copied().collect::<Vec<_>>();
-        for local in code.locals.iter() {
-            locals.extend((0..local.multiplicity).map(|_| local.ty));
+        for code in self.code.impls.iter() {
+            let mut locals = code.ty.parameters.iter().copied().collect::<Vec<_>>();
+            for local in code.locals.iter() {
+                locals.extend((0..local.multiplicity).map(|_| local.ty));
+            }
+
+            let context = ModuleContext {
+                module: &self,
+                locals: &locals,
+                code,
+            };
+
+            let mut exec_code =
+                validate(&context, code.expr.instrs.iter().map(Result::Ok), BackPatch::new())?;
+            // We add a return instruction at the end so we have an easier time in the
+            // interpreter since there is no implicit return.
+            exec_code.push(InternalOpcode::Return);
+
+            let result = CompiledFunction {
+                type_idx: code.ty_idx,
+                locals,
+                num_params: code.ty.parameters.len().try_into()?,
+                return_type: BlockType::from(code.ty.result),
+                code: exec_code,
+            };
+            code_out.push(result)
         }
 
-        let context = ModuleContext {
-            module: &input,
-            locals: &locals,
-            code,
-        };
-
-        let mut exec_code =
-            validate(&context, code.expr.instrs.iter().map(Result::Ok), BackPatch::new())?;
-        // We add a return instruction at the end so we have an easier time in the
-        // interpreter since there is no implicit return.
-        exec_code.push(InternalOpcode::Return);
-
-        let result = CompiledFunction {
-            type_idx: code.ty_idx,
-            locals,
-            num_params: code.ty.parameters.len().try_into()?,
-            return_type: BlockType::from(code.ty.result),
-            code: exec_code,
-        };
-        code_out.push(result)
-    }
-
-    let ty = input.ty.types.into_iter().map(|x| (*x).clone()).collect::<Vec<FunctionType>>();
-    let table = {
-        if let Some(tt) = input.table.table_type {
-            let mut functions = vec![None; tt.limits.min as usize];
-            for init in input.element.elements.iter() {
-                // validation has already ensured that inits are within bounds.
-                for (place, value) in
-                    functions[init.offset as usize..].iter_mut().zip(init.inits.iter())
-                {
-                    *place = Some(*value)
+        let ty = self.ty.types.into_iter().map(|x| (*x).clone()).collect::<Vec<FunctionType>>();
+        let table = {
+            if let Some(tt) = self.table.table_type {
+                let mut functions = vec![None; tt.limits.min as usize];
+                for init in self.element.elements.iter() {
+                    // validation has already ensured that inits are within bounds.
+                    for (place, value) in
+                        functions[init.offset as usize..].iter_mut().zip(init.inits.iter())
+                    {
+                        *place = Some(*value)
+                    }
+                }
+                InstantiatedTable {
+                    functions,
+                }
+            } else {
+                InstantiatedTable {
+                    functions: Vec::new(),
                 }
             }
-            InstantiatedTable {
-                functions,
-            }
-        } else {
-            InstantiatedTable {
-                functions: Vec::new(),
-            }
-        }
-    };
-    let memory = {
-        if let Some(mt) = input.memory.memory_type {
-            Some(ArtifactMemory {
-                init_size: mt.limits.min,
-                max_size:  mt
-                    .limits
-                    .max
-                    .map(|x| std::cmp::min(x, MAX_NUM_PAGES))
-                    .unwrap_or(MAX_NUM_PAGES),
-                init:      input
-                    .data
-                    .sections
-                    .into_iter()
-                    .map(ArtifactData::from)
-                    .collect::<Vec<_>>(),
-            })
-        } else {
-            None
-        }
-    };
-    let global = InstantiatedGlobals {
-        inits: input.global.globals.iter().map(|x| x.init).collect::<Vec<_>>(),
-    };
-    let export = input
-        .export
-        .exports
-        .into_iter()
-        .filter_map(|export| {
-            if let ExportDescription::Func {
-                index,
-            } = export.description
-            {
-                Some((export.name, index))
+        };
+        let memory = {
+            if let Some(mt) = self.memory.memory_type {
+                Some(ArtifactMemory {
+                    init_size: mt.limits.min,
+                    max_size:  mt
+                        .limits
+                        .max
+                        .map(|x| std::cmp::min(x, MAX_NUM_PAGES))
+                        .unwrap_or(MAX_NUM_PAGES),
+                    init:      self
+                        .data
+                        .sections
+                        .into_iter()
+                        .map(ArtifactData::from)
+                        .collect::<Vec<_>>(),
+                })
             } else {
                 None
             }
+        };
+        let global = InstantiatedGlobals {
+            inits: self.global.globals.iter().map(|x| x.init).collect::<Vec<_>>(),
+        };
+        let export = self
+            .export
+            .exports
+            .into_iter()
+            .filter_map(|export| {
+                if let ExportDescription::Func {
+                    index,
+                } = export.description
+                {
+                    Some((export.name, index))
+                } else {
+                    None
+                }
+            })
+            .collect::<BTreeMap<_, _>>();
+        let imports = self
+            .import
+            .imports
+            .into_iter()
+            .map(|i| I::try_from_import(&ty, i))
+            .collect::<CompileResult<_>>()?;
+        Ok(Artifact {
+            imports,
+            ty,
+            table,
+            memory,
+            global,
+            export,
+            code: code_out,
         })
-        .collect::<BTreeMap<_, _>>();
-    let imports = input
-        .import
-        .imports
-        .into_iter()
-        .map(|i| I::try_from_import(&ty, i))
-        .collect::<CompileResult<_>>()?;
-    Ok(Artifact {
-        imports,
-        ty,
-        table,
-        memory,
-        global,
-        export,
-        code: code_out,
-    })
+    }
 }
