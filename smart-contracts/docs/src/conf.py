@@ -88,7 +88,7 @@ language = None
 exclude_patterns = []
 
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = "friendly" # "sphinx" # "lovelace" # None # "abap" # "sas" # "algol_nu"
+pygments_style = "sphinx" #"friendly" # "sphinx" # "lovelace" # None # "abap" # "sas" # "algol_nu"
 highlight_language = "rust"
 
 
