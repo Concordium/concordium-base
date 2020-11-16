@@ -153,13 +153,11 @@ pub fn make_transfer_data<C: Curve, R: Rng>(
     csprng: &mut R,
 ) -> Option<EncryptedAmountTransferData<C>> {
     let sender_pk = &PublicKey::from(sender_sk);
-    // FIXME: Put context into random oracle
     let mut ro = RandomOracle::domain("EncryptedTransfer");
     ro.append_message(b"ctx", &ctx);
     ro.append_message(b"receiver_pk", &receiver_pk);
     ro.append_message(b"sender_pk", &sender_pk);
 
-    // FIXME: Make arguments more in line between gen_enc_trans and this.
     generate_proofs::gen_enc_trans(
         ctx,
         &mut ro,
