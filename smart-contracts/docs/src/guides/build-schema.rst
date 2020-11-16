@@ -41,15 +41,16 @@ For most cases this can be done, using ``#[derive(SchemaType)]``::
         ...
     }
 
-.. todo::
-    Link documentation for SchemaType
+Implementing the ``SchemaType`` trait manually only requires specifying one
+function, which is a getter for a ``schema::Type``, which essentially describes
+how this type is represented as bytes and how to represent it.
 
 Including contract state
 -------------------------
 To generate and include the schema for the contract state we annotate the type
-with the ``#[contract-state]`` macro::
+with the ``#[contract-state(contract = ...)]`` macro::
 
-    #[contract-state]
+    #[contract-state(contract = "my_contract")]
     #[derive(SchemaType)]
     struct MyState {
         ...
@@ -80,8 +81,9 @@ Building the schema
 Now we are ready to build the actual schema using ``cargo-concordium``, and we
 have the options to embed the schema and/or write the schema to a file.
 
-.. todo::
-    Link to more details of why to choose either
+.. seealso::
+    For more on which to choose see
+    :ref:`here<contract-schema-which-to-choose>`.
 
 Embedding the schema
 -------------------------

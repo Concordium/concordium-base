@@ -20,8 +20,8 @@ structured representation.
 
 .. seealso::
 
-    For instructions on how to build the schema for a
-    smart contract in Rust, see :ref:`build-schema`.
+    For instructions on how to build the schema for a smart contract module in
+    Rust, see :ref:`build-schema`.
 
 Why use a contract schema
 =========================
@@ -104,6 +104,7 @@ reader to read the implementation.
 .. todo::
     Link implementation of schema::Type
 
+.. _contract-schema-which-to-choose:
 
 Should you embed or write to file?
 =====================================
@@ -113,9 +114,8 @@ your situation.
 
 Embedding the schema into the smart contract module, distributes the schema
 together with the contract ensuring the correct schema is being used and also
-allows anyone to use it directly.
-The downside is that the smart contract module becomes more expensive to deploy,
-depending on the size of the schema.
+allows anyone to use it directly. The downside is that the smart contract module
+becomes bigger in size and therefore more expensive to deploy.
 
 Having the schema in a separate file, allows you to have the schema without
 paying for the extra bytes, it might required to embed it.
@@ -126,13 +126,14 @@ smart contract.
 Embedding schemas on chain
 ==========================
 
-A contract schema is embedded into a smart contract module using the `custom
+Schemas are embedded into smart contract modules using the `custom
 section`_ feature of Wasm modules.
-
 This allows Wasm modules to include a named section of bytes, which does not
 affect the semantics of running the Wasm module.
 
-For every contract schema to embed into a module, we add as a custom section
-named after the smart contract, prefixed with ``concordium-schema-``
+Every contract schema to embed into a module, we add to a collection and add
+a custom section named ``concordium-schema``.
+This collection is a list of pairs, containing the name of the contract encoded
+in UTF-8 and the contract schema bytes.
 
 .. _`custom section`: https://webassembly.github.io/spec/core/appendix/custom.html
