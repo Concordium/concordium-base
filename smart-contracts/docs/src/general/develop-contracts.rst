@@ -1,3 +1,17 @@
+.. Should answer:
+    - Why write a smart contract using rust?
+    - What are the pieces needed to write a smart contract in rust?
+        - State
+            - Serialized
+            - Schema
+        - Init
+        - Receive
+    - What sort of testing is possible
+    - Best practices?
+        - Ensure 0 amount
+        - Don't panic
+        - Avoid heavy calculations
+
 .. _writing-smart-contracts:
 
 ====================================
@@ -36,9 +50,10 @@ A simple counter example would look like:
     #[init(contract = "counter")]
     fn counter_init(
         _ctx: &impl HasInitContext<()>,
-        _amount: Amount,
+        amount: Amount,
         _logger: &mut impl HasLogger,
     ) -> InitResult<State> {
+        ensure_eq!(amount.micro_gtu, 0); // Amount must be 0
         let state = 0;
         Ok(state)
     }
@@ -46,22 +61,23 @@ A simple counter example would look like:
     #[receive(contract = "counter", name = "increment")]
     fn contract_receive<A: HasActions>(
         ctx: &impl HasReceiveContext<()>,
-        _amount: Amount,
+        amount: Amount,
         _logger: &mut impl HasLogger,
         state: &mut State,
     ) -> ReceiveResult<A> {
+        ensure_eq!(amount.micro_gtu, 0); // Amount must be 0
         ensure!(ctx.sender().matches_account(&ctx.owner()); // Only the owner can increment
         *state += 1;
         Ok(A::accept())
     }
 
 Here ``#[init(contract = "counter")]`` sets up the exported ``init``-function
-for a contract we named ``"counter"``, it ensures the state is set properly
+for a contract we name ``"counter"``, it ensures the state is set properly
 using host functions and the exported function follows the contract naming
 convention.
 
-The ``#[receive(contract = "counter", name = "increment")]`` supplies the
-state to be manipulated directly.
+The ``#[receive(contract = "counter", name = "increment")]`` deserializes and
+supplies the state to be manipulated directly.
 
 
 .. _Rust: https://www.rust-lang.org/

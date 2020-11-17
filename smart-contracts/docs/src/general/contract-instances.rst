@@ -71,7 +71,8 @@ To summaries; the transaction includes:
 - Amount of GTU for the instance.
 
 If the ``init``-function is successful, it setups the initial state of the
-instance and balance and the instance is given an address on the chain.
+instance and balance. The instance is given an address on the chain and the
+account who send the transaction becomes the owner of the instance.
 If the function rejects, no instance is created and only the transaction for
 creating the instance is visible on chain.
 
@@ -134,6 +135,8 @@ To summaries; the transaction includes:
 - Name of the ``receive``-function.
 - Parameter for ``receive``-function.
 - Amount of GTU for the instance.
+
+.. _contract-instance-actions:
 
 Action description
 ------------------
