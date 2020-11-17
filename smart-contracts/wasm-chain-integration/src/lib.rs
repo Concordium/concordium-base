@@ -138,7 +138,10 @@ impl Outcome {
     ) -> ExecResult<u32> {
         let response = self.cur_state.len();
 
+        let name_str = std::str::from_utf8(receive_name_bytes)?;
+        ensure!(is_valid_receive_name(name_str), "Not a valid receive name.");
         let name = receive_name_bytes.to_vec();
+
         let parameter = parameter_bytes.to_vec();
 
         let to_addr = ContractAddress {
