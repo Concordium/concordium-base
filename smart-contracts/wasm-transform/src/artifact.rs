@@ -14,9 +14,7 @@ use anyhow::{anyhow, bail, ensure};
 use std::{collections::BTreeMap, convert::TryInto, io::Write};
 
 #[derive(Copy, Clone)]
-/// Either a short or long integer. The use of repr(C) is crucial to guarantee
-/// that offsets of both fields are 0, i.e., that we can read the short field if
-/// the long field is stored. This only works on little endian platforms.
+/// Either a short or long integer.
 pub union StackValue {
     pub short: i32,
     pub long:  i64,

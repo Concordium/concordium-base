@@ -45,6 +45,9 @@ pub const MAX_SWITCH_SIZE: usize = 1 << 16;
 /// validation. This is relied upon by the interpreter to be less than 2^31.
 pub const MAX_STACK_HEIGHT: usize = 1 << 24;
 
+/// Maximum number of exports from a module.
+pub const MAX_NUM_EXPORTS: usize = 100;
+
 /// The Wasm binary format magic hash.
 pub const MAGIC_HASH: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
 

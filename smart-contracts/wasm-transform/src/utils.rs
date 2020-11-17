@@ -4,24 +4,26 @@
 use crate::{
     artifact::{Artifact, CompiledFunction, CompiledFunctionBytes, TryFromImport},
     parse::{parse_skeleton, GetParseable, Parseable, Skeleton},
-    validate::validate_module,
+    validate::{validate_module, ValidateImportExport},
 };
 
 /// Strip the custom sections from the module.
 pub fn strip<'a>(skeleton: &mut Skeleton<'a>) { skeleton.custom = Vec::new(); }
 
 /// Parse, validate, and compile to a runnable artifact.
-pub fn instantiate<I: TryFromImport>(
+pub fn instantiate<I: TryFromImport, VI: ValidateImportExport>(
+    imp: &VI,
     bytes: &[u8],
 ) -> anyhow::Result<Artifact<I, CompiledFunction>> {
-    validate_module(&parse_skeleton(bytes)?)?.compile()
+    validate_module(imp, &parse_skeleton(bytes)?)?.compile()
 }
 
 /// Parse, validate, inject metering, and compile to a runnable artifact.
-pub fn instantiate_with_metering<I: TryFromImport>(
+pub fn instantiate_with_metering<I: TryFromImport, VI: ValidateImportExport>(
+    imp: &VI,
     bytes: &[u8],
 ) -> anyhow::Result<Artifact<I, CompiledFunction>> {
-    let mut module = validate_module(&parse_skeleton(bytes)?)?;
+    let mut module = validate_module(imp, &parse_skeleton(bytes)?)?;
     module.inject_metering()?;
     module.compile()
 }

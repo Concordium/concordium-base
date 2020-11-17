@@ -19,6 +19,7 @@ use wasm_transform::{
     parse::{parse_custom, parse_skeleton},
     types::{ExportDescription, Module, Name},
     utils,
+    validate::ValidateImportExport,
 };
 
 pub type ExecResult<A> = anyhow::Result<A>;
@@ -583,7 +584,7 @@ pub fn invoke_init_from_source(
     parameter: Parameter,
     energy: u64,
 ) -> ExecResult<InitResult> {
-    let artifact = utils::instantiate(source_bytes)?;
+    let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
 }
 
@@ -664,7 +665,7 @@ pub fn invoke_receive_from_source(
     parameter: Parameter,
     energy: u64,
 ) -> ExecResult<ReceiveResult> {
-    let artifact = utils::instantiate(source_bytes)?;
+    let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
 }
 
@@ -689,6 +690,29 @@ impl<I> machine::Host<I> for TrapHost {
 /// A host which traps for any function call apart from `report_error` which it
 /// prints to standard out.
 pub struct TestHost;
+
+impl ValidateImportExport for TestHost {
+    /// Simply ensure that there are no duplicates.
+    #[inline(always)]
+    fn validate_import_function(
+        &self,
+        duplicate: bool,
+        _mod_name: &Name,
+        _item_name: &Name,
+        _ty: &wasm_transform::types::FunctionType,
+    ) -> bool {
+        !duplicate
+    }
+
+    #[inline(always)]
+    fn validate_export_function(
+        &self,
+        _item_name: &Name,
+        _ty: &wasm_transform::types::FunctionType,
+    ) -> bool {
+        true
+    }
+}
 
 impl machine::Host<ArtifactNamedImport> for TestHost {
     fn tick_energy(&mut self, _x: u64) -> machine::RunResult<()> {
@@ -727,7 +751,7 @@ impl machine::Host<ArtifactNamedImport> for TestHost {
 /// The main function is present in the module if compile using 'cargo test'
 pub fn test_run(module_bytes: &[u8]) -> ExecResult<()> {
     eprintln!("\nInstantiating WASM module.");
-    let artifact = utils::instantiate::<ArtifactNamedImport>(module_bytes)?;
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
     eprintln!("Running tests");
     // Unable to find a proper source, but it seems that the test main function
     // takes two u32 arguments, which we assume are `argc` and `argv` in a C
@@ -746,7 +770,7 @@ pub fn test_run(module_bytes: &[u8]) -> ExecResult<()> {
 
 /// Tries to generate a state schema and schemas for parameters of methods.
 pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Contract> {
-    let artifact = utils::instantiate::<ArtifactNamedImport>(module_bytes)?;
+    let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
     let state = generate_schema_run(&artifact, "concordium_schema_state").ok();
 
     let mut method_parameter = BTreeMap::new();
@@ -793,7 +817,7 @@ fn generate_schema_run<I: TryFromImport, C: RunnableCode>(
 pub fn get_inits(module: &Module) -> Vec<&Name> {
     let mut out = Vec::new();
     for export in module.export.exports.iter() {
-        if !export.name.as_ref().contains('.') {
+        if export.name.as_ref().starts_with("init_") && !export.name.as_ref().contains('.') {
             if let ExportDescription::Func {
                 ..
             } = export.description

@@ -4,8 +4,11 @@ use wasm_transform::{
     artifact::TryFromImport,
     output::Output,
     parse::{Byte, GetParseable, Parseable},
-    types::{FunctionType, Import},
+    types::{FunctionType, Import, ValueType},
 };
+
+/// Maximum length, in bytes, of an export function name.
+pub const MAX_EXPORT_NAME_LEN: usize = 100;
 
 pub enum InitResult {
     Success {
@@ -336,6 +339,89 @@ impl Output for ProcessedImports {
     fn output(&self, out: &mut impl std::io::Write) -> wasm_transform::output::OutResult<()> {
         self.tag.output(out)?;
         self.ty.output(out)
+    }
+}
+
+macro_rules! type_matches {
+    ($goal:expr => $params:expr) => {
+        $goal.result.is_none() && $params == $goal.parameters.as_slice()
+    };
+    ($goal:expr => []; $result:expr) => {
+        $goal.result == Some($result) && $goal.parameters.is_empty()
+    };
+    ($goal:expr => $params:expr; $result:expr) => {
+        $goal.result == Some($result) && $params == $goal.parameters.as_slice()
+    };
+}
+
+pub struct ConcordiumAllowedImports;
+
+impl ValidateImportExport for ConcordiumAllowedImports {
+    fn validate_import_function(
+        &self,
+        duplicate: bool,
+        mod_name: &Name,
+        item_name: &Name,
+        ty: &FunctionType,
+    ) -> bool {
+        use ValueType::*;
+        if duplicate {
+            return false;
+        };
+        if mod_name.name == "concordium" {
+            match item_name.name.as_ref() {
+                "accept" => type_matches!(ty => []; I32),
+                "simple_transfer" => type_matches!(ty => [I32, I64]; I32),
+                "send" => type_matches!(ty => [I64, I64, I32, I32, I64, I32, I32]; I32),
+                "combine_and" => type_matches!(ty => [I32, I32]; I32),
+                "combine_or" => type_matches!(ty => [I32, I32]; I32),
+                "get_parameter_size" => type_matches!(ty => []; I32),
+                "get_parameter_section" => type_matches!(ty => [I32, I32, I32]; I32),
+                "log_event" => type_matches!(ty => [I32, I32]),
+                "load_state" => type_matches!(ty => [I32, I32, I32]; I32),
+                "write_state" => type_matches!(ty => [I32, I32, I32]; I32),
+                "resize_state" => type_matches!(ty => [I32]; I32),
+                "state_size" => type_matches!(ty => []; I32),
+                "get_init_origin" => type_matches!(ty => [I32]),
+                "get_receive_invoker" => type_matches!(ty => [I32]),
+                "get_receive_self_address" => type_matches!(ty => [I32]),
+                "get_receive_self_balance" => type_matches!(ty => []; I64),
+                "get_receive_sender" => type_matches!(ty => [I32]),
+                "get_receive_owner" => type_matches!(ty => [I32]),
+                "get_slot_number" => type_matches!(ty => []; I64),
+                "get_block_height" => type_matches!(ty => []; I64),
+                "get_finalized_height" => type_matches!(ty => []; I64),
+                "get_slot_time" => type_matches!(ty => []; I64),
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Validate that all the exported functions either
+    /// - start with `init_` and contain no `.`
+    /// - do not start with `init_` contain a `.`
+    ///
+    /// Names are already ensured to be valid ASCII sequences by parsing, here
+    /// we additionally ensure that they contain only alphanumeric and
+    /// punctuation characters.
+    fn validate_export_function(&self, item_name: &Name, ty: &FunctionType) -> bool {
+        let valid_name = item_name.as_ref().as_bytes().len() <= MAX_EXPORT_NAME_LEN
+            && item_name
+                .as_ref()
+                .as_bytes()
+                .iter()
+                .all(|c| c.is_ascii_alphanumeric() || c.is_ascii_punctuation());
+        let correct_type =
+            ty.parameters.as_slice() == [ValueType::I64] && ty.result == Some(ValueType::I32);
+        valid_name
+            && correct_type
+            && if item_name.as_ref().starts_with("init_") {
+                !item_name.as_ref().contains('.')
+            } else {
+                item_name.as_ref().contains('.')
+            }
     }
 }
 

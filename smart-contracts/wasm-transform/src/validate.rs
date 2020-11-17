@@ -11,8 +11,8 @@
 
 use crate::{
     constants::{
-        ALLOWED_LOCALS, MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE, MAX_NUM_GLOBALS,
-        MAX_SWITCH_SIZE, PAGE_SIZE,
+        ALLOWED_LOCALS, MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE, MAX_NUM_EXPORTS,
+        MAX_NUM_GLOBALS, MAX_SWITCH_SIZE, PAGE_SIZE,
     },
     parse::{parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult, Skeleton},
     types::*,
@@ -767,18 +767,51 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
     }
 }
 
+/// Validate an import according to the specific logic of the host.
+pub trait ValidateImportExport {
+    /// Validate an imported function signature.
+    /// The second argument indicates whether this import has a duplicate name.
+    fn validate_import_function(
+        &self,
+        duplicate: bool,
+        mod_name: &Name,
+        item_name: &Name,
+        ty: &FunctionType,
+    ) -> bool;
+
+    /// Validate an imported function signature.
+    /// The second argument indicates whether this import has a duplicate name.
+    fn validate_export_function(&self, item_name: &Name, ty: &FunctionType) -> bool;
+}
+
 /// Validate the module. This function parses and validates the module at the
 /// same time, failing at the first encountered error.
-pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
+pub fn validate_module<'a>(
+    imp: &impl ValidateImportExport,
+    skeleton: &Skeleton<'a>,
+) -> ValidateResult<Module> {
     // The type section is valid as long as it's well-formed.
     let ty: TypeSection = parse_sec_with_default(&skeleton.ty)?;
     // Imports are valid as long as they parse, and all the indices exist.
     let import: ImportSection = parse_sec_with_default(&skeleton.import)?;
-    for i in import.imports.iter() {
-        match i.description {
-            ImportDescription::Func {
-                type_idx,
-            } => ensure!(ty.get(type_idx).is_some(), "Import refers to a non-existent type."),
+    {
+        let mut seen_imports = BTreeSet::new();
+        for i in import.imports.iter() {
+            match i.description {
+                ImportDescription::Func {
+                    type_idx,
+                } => {
+                    if let Some(ty) = ty.get(type_idx) {
+                        let is_new = seen_imports.insert((&i.mod_name, &i.item_name));
+                        ensure!(
+                            imp.validate_import_function(!is_new, &i.mod_name, &i.item_name, &ty),
+                            "Disallowed import."
+                        );
+                    } else {
+                        bail!("Import refers to a non-existent type.");
+                    }
+                }
+            }
         }
     }
     // The table section is valid as long as it's well-formed.
@@ -869,6 +902,7 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
     // they are all distinct.
     let export: ExportSection = parse_sec_with_default(&skeleton.export)?;
     let mut export_names = BTreeSet::new();
+    ensure!(export.exports.len() <= MAX_NUM_EXPORTS, "Module exceeds maximum number of exports.");
     for e in export.exports.iter() {
         // ensure the name is unique.
         ensure!(export_names.insert(&e.name), "Duplicate exports {}.", e.name);
@@ -877,10 +911,11 @@ pub fn validate_module<'a>(skeleton: &Skeleton<'a>) -> ValidateResult<Module> {
             ExportDescription::Func {
                 index,
             } => {
-                ensure!(
-                    (index as usize) < total_funcs,
-                    "Trying to export a function that does not exist."
-                );
+                if let Some(ty) = funcs.get(index as usize).and_then(|ty_idx| ty.get(*ty_idx)) {
+                    ensure!(imp.validate_export_function(&e.name, ty), "Export function not valid.")
+                } else {
+                    bail!("Trying to export a function that does not exist.")
+                }
             }
             ExportDescription::Table => {
                 ensure!(
