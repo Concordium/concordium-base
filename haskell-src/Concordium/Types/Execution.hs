@@ -222,6 +222,11 @@ data Payload =
   | TransferToPublic {
       ttpData :: !SecToPubAmountTransferData
       }
+  -- | Send a transfer with an attached schedule.
+  | TransferWithSchedule {
+      twsTo :: !AccountAddress,
+      twsSchedule :: ![(Timestamp, Amount)]
+      }
   deriving(Eq, Show)
 
 $(genEnumerationType ''Payload "TransactionType" "TT" "getTransactionType")
@@ -319,6 +324,11 @@ putPayload TransferToPublic{ttpData = SecToPubAmountTransferData{..}, ..} =
     S.put stpatdTransferAmount <>
     S.put stpatdIndex <>
     putSecToPubAmountTransferProof stpatdProof
+putPayload TransferWithSchedule{..} =
+    S.putWord8 19 <>
+    S.put twsTo <>
+    P.putWord8 (fromIntegral (length twsSchedule)) <>
+    forM_ twsSchedule (\(a,b) -> S.put a >> S.put b)
 
 -- |Get the payload of the given size.
 getPayload :: PayloadSize -> S.Get Payload
@@ -415,6 +425,11 @@ getPayload size = S.isolate (fromIntegral size) (S.bytesRead >>= go)
               -- and bytesRead
               stpatdProof <- getSecToPubAmountTransferProof (thePayloadSize size - (fromIntegral $ cur - start))
               return TransferToPublic{ttpData = SecToPubAmountTransferData{..}}
+            19 -> do
+              twsTo <- S.get
+              len <- S.getWord8
+              twsSchedule <- replicateM (fromIntegral len) (S.get >>= \s -> S.get >>= \t -> return (s,t))
+              return TransferWithSchedule{..}
             n -> fail $ "unsupported transaction type '" ++ show n ++ "'"
 
 -- |Serialize a Maybe value
@@ -634,6 +649,11 @@ data Event =
              ueEffectiveTime :: !TransactionTime,
              uePayload :: !UpdatePayload
            }
+           | TransferredWithSchedule {
+               etwsFrom :: !AccountAddress,
+               etwsTo :: !AccountAddress,
+               etwsAmount :: ![(Timestamp, Amount)]
+               }
   deriving (Show, Generic, Eq)
 
 instance S.Serialize Event
@@ -715,6 +735,14 @@ data RejectReason = ModuleNotWF -- ^Error raised when validating the Wasm module
                   | EncryptedAmountSelfTransfer !AccountAddress
                   -- | The provided index is below the start index or above `startIndex + length incomingAmounts`
                   | InvalidIndexOnEncryptedTransfer
+                  -- | The transfer with schedule is going to send 0 tokens
+                  | ZeroScheduledAmount
+                  -- | The transfer with schedule has a non strictly increasing schedule
+                  | NonIncreasingSchedule
+                  -- | The first scheduled release in a transfer with schedule has already expired
+                  | FirstScheduledReleaseExpired
+                  -- | Account tried to transfer with schedule to itself, that's not allowed.
+                  | ScheduledSelfTransfer !AccountAddress
     deriving (Show, Eq, Generic)
 
 wasmRejectToRejectReason :: Wasm.ContractExecutionFailure -> RejectReason

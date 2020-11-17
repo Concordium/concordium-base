@@ -106,9 +106,12 @@ tests:
     - -Wall
 
     when:
-      condition: flag(static)
-      ld-options:
-      - -static
+      - condition: flag(static)
+        ld-options:
+          - -static
+
+      - condition: "!os(windows)"
+        ghc-options: -dynamic
 
     dependencies:
     - globalstate-types
