@@ -91,7 +91,7 @@ impl Action {
                 out.push(0);
                 out.extend_from_slice(&to_addr.index.to_be_bytes());
                 out.extend_from_slice(&to_addr.subindex.to_be_bytes());
-                out.extend_from_slice(&(name.len() as u32).to_be_bytes());
+                out.extend_from_slice(&(name.len() as u16).to_be_bytes());
                 out.extend_from_slice(&name);
                 out.extend_from_slice(&amount.to_be_bytes());
                 out.extend_from_slice(&(parameter.len() as u32).to_be_bytes());
