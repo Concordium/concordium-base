@@ -1,4 +1,4 @@
-{-# LANGUAGE DerivingVia, DeriveGeneric, ScopedTypeVariables #-}
+{-# LANGUAGE DerivingVia, DeriveGeneric, ScopedTypeVariables, OverloadedStrings #-}
 module Concordium.Wasm where
 
 import GHC.Generics
@@ -12,9 +12,12 @@ import qualified Data.ByteString.Base16 as BS16
 import qualified Data.ByteString.Short as BSS
 import Data.Serialize
 import qualified Data.Aeson as AE
+import Data.Char (isPunctuation, isAlphaNum, isAscii)
 import Data.Text(Text)
+import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Set as Set
+import qualified Data.Map.Strict as Map
 import Data.Hashable
 
 import Concordium.Crypto.ByteStringHelpers(ByteStringHex(..))
@@ -24,6 +27,18 @@ import Concordium.Types
 import Concordium.Types.HashableTo
 
 type ModuleSource = ByteString
+
+-- | A processed module artifact ready for execution.
+newtype ModuleArtifact = ModuleArtifact { artifact :: ByteString }
+    deriving(Eq, Show)
+
+instance Serialize ModuleArtifact where
+  put ma = putWord32be (fromIntegral (BS.length (artifact ma))) <>
+           putByteString (artifact ma)
+
+  get = do
+    len <- getWord32be
+    ModuleArtifact <$> getByteString (fromIntegral len)
 
 -- |Web assembly module in binary format.
 data WasmModule = WasmModule {
@@ -37,16 +52,47 @@ getModuleRef :: WasmModule -> ModuleRef
 getModuleRef wm = ModuleRef (getHash wm)
 
 -- |Name of an init method inside a module.
--- TODO: Naming scheme enforcement.
 newtype InitName = InitName { initName :: Text }
     deriving(Eq, Show, Ord)
-    deriving(AE.ToJSON, AE.FromJSON) via Text
+    deriving(AE.ToJSON) via Text
+
+-- |Check whether the given text is a valid init name.
+-- This is the case if
+--
+-- * all characters are valid ascii characters in alphanumeric or punctuation classes
+-- * the name does not contain @.@
+-- * the name starts with `init_`
+isValidInitName :: Text -> Bool
+isValidInitName proposal =
+  let hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
+      hasDot = Text.any (== '.') proposal
+  in "init_" `Text.isPrefixOf` proposal && hasValidCharacters && not hasDot
+
+instance AE.FromJSON InitName where
+  parseJSON = AE.withText "InitName" $ \initName -> do
+    if isValidInitName initName then return InitName{..}
+    else fail "Invalid init name."
 
 -- |Name of a receive method inside a module.
--- TODO: Naming scheme enforcement.
 newtype ReceiveName = ReceiveName { receiveName :: Text }
     deriving (Eq, Show, Ord)
-    deriving(AE.ToJSON, AE.FromJSON) via Text
+    deriving(AE.ToJSON) via Text
+
+-- |Check whether the given text is a valid init name.
+-- This is the case if
+--
+-- * all characters are valid ascii characters in alphanumeric or punctuation classes
+-- * the name does contains @.@
+isValidReceiveName :: Text -> Bool
+isValidReceiveName proposal =
+  let hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
+      hasDot = Text.any (== '.') proposal
+  in hasValidCharacters && hasDot
+
+instance AE.FromJSON ReceiveName where
+  parseJSON = AE.withText "ReceiveName" $ \receiveName -> do
+    if isValidReceiveName receiveName then return ReceiveName{..}
+    else fail "Invalid receive name."
 
 -- |Parameter to either an init method or to a receive method.
 newtype Parameter = Parameter { parameter :: ShortByteString }
@@ -56,16 +102,11 @@ newtype Parameter = Parameter { parameter :: ShortByteString }
 -- |Web assembly module in binary format, instrumented with whatever it needs to
 -- be instrumented with, and preprocessed to an executable format, ready to be instantiated
 -- and run.
--- 
--- TODO: In the current POC the module is in Wasm binary format, but that will
--- change to a different format when the interpreter is changed. Processing Wasm directly
--- can be expensive, and any implementation we use will likely have some intermediate format
--- to speed up invocations.
 data InstrumentedModule = InstrumentedWasmModule {
   -- |Version of the Wasm standard and on-chain API this module corresponds to.
-  imWasmVersion :: Word32,
+  imWasmVersion :: !Word32,
   -- |Source in binary wasm format.
-  imWasmSource :: ModuleSource
+  imWasmArtifact :: !ModuleArtifact
   } deriving(Eq, Show, Generic)
 
 
@@ -76,19 +117,19 @@ data ModuleInterface = ModuleInterface {
   -- |Init methods exposed by this module.
   -- They should each be exposed with a type Amount -> Word32
   miExposedInit :: !(Set.Set InitName),
-  -- |Receive methods exposed by this module.
+  -- |Receive methods exposed by this module, indexed by contract name.
   -- They should each be exposed with a type Amount -> Word32
-  miExposedReceive :: !(Set.Set ReceiveName),
+  miExposedReceive :: !(Map.Map InitName (Set.Set ReceiveName)),
   -- |Module source in binary format, instrumented with whatever it needs to be instrumented with.
   miModule :: !InstrumentedModule,
-  -- |Size of the module in bytes this interface is derived from.
+  -- |Size of the module this interface is derived from, in bytes.
   miSize :: !Word64
   } deriving(Eq, Show, Generic)
 
 -- |Additional data needed specifically by the init method of the contract.
-data InitContext = InitContext{
+newtype InitContext = InitContext{
   -- |Origin of the transaction; who is initializing the contract.
-  initOrigin :: !AccountAddress
+  initOrigin :: AccountAddress
   }
 
 -- |Additional data needed specifically by the receive method of the contract.
@@ -247,7 +288,9 @@ instance HashableTo H.Hash ContractState where
 -- * Implementation of instances and the like.
 
 instance Serialize InstrumentedModule where
--- FIXME: A more principled serialize method.
+  put InstrumentedWasmModule{..} =
+    putWord32be imWasmVersion <>
+    put imWasmArtifact
 
 instance Serialize ModuleInterface where
 -- FIXME: A more principled serialize method, order and ensure the order of sets.
@@ -267,20 +310,22 @@ instance HashableTo H.Hash WasmModule where
   getHash wm = H.hash (encode wm)
 
 instance Serialize InitName where
-  put = putByteStringWord32 . Text.encodeUtf8 . initName
+  put = putByteStringWord16 . Text.encodeUtf8 . initName
   get = do
-    bs <- getByteStringWord32
+    bs <- getByteStringWord16
     case Text.decodeUtf8' bs of
       Left _ -> fail "Not a valid utf-8 encoding."
-      Right t -> return (InitName t)
+      Right t | isValidInitName t -> return (InitName t)
+              | otherwise -> fail "Not a valid init name."
 
 instance Serialize ReceiveName where
-  put = putByteStringWord32 . Text.encodeUtf8 . receiveName
+  put = putByteStringWord16 . Text.encodeUtf8 . receiveName
   get = do
-    bs <- getByteStringWord32
+    bs <- getByteStringWord16
     case Text.decodeUtf8' bs of
       Left _ -> fail "Not a valid utf-8 encoding."
-      Right t -> return (ReceiveName t)
+      Right t | isValidReceiveName t -> return (ReceiveName t)
+              | otherwise -> fail $ "Not a valid receive name: " ++ Text.unpack t
 
 instance Serialize Parameter where
   put = putShortByteStringWord32 . parameter
@@ -326,6 +371,18 @@ putByteStringWord32 bs =
   let len = fromIntegral (BS.length bs)
   in putWord32be len <> putByteString bs
 
+-- |Get a bytestring with length serialized as big-endian 2 bytes.
+getByteStringWord16 :: Get ByteString
+getByteStringWord16 = do
+  len <- fromIntegral <$> getWord16be
+  getByteString len
+
+-- |Put a bytestring with length serialized as big-endian 2 bytes.
+-- This function assumes the string length fits into 2 bytes.
+putByteStringWord16 :: Putter ByteString
+putByteStringWord16 bs =
+  let len = fromIntegral (BS.length bs)
+  in putWord16be len <> putByteString bs
 
 -- |Get a bytestring with length serialized as big-endian 4 bytes.
 getShortByteStringWord32 :: Get ShortByteString
