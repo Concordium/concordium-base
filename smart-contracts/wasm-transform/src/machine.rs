@@ -1,19 +1,26 @@
+//! An implementatio of the abstract machine that can run artifacts.
+
 use crate::{
     artifact::{StackValue, *},
-    parse::{MAX_NUM_PAGES, PAGE_SIZE},
+    constants::{MAX_NUM_PAGES, PAGE_SIZE},
     types::*,
 };
 use anyhow::{anyhow, bail, ensure};
-
 use std::{convert::TryInto, io::Write};
 
 /// The host that can process external functions.
 pub trait Host<I> {
+    /// Charge the given amount of energy.
     fn tick_energy(&mut self, x: u64) -> RunResult<()>;
-    /// Call the host function.
+    /// Call the specified host function, giving it access to the current memory
+    /// and stack. The return value of `Ok(())` signifies that execution
+    /// succeeded and the machine should proceeed, the return value of
+    /// `Err(_)` signifies a trap.
     fn call(&mut self, f: &I, memory: &mut Vec<u8>, stack: &mut RuntimeStack) -> RunResult<()>;
 }
 
+/// Result of execution. Runtime exceptions are returned as `Err(_)`.
+/// This includes traps, illegal memory accesses, etc.
 pub type RunResult<A> = anyhow::Result<A>;
 
 struct FunctionState<'a> {
@@ -28,6 +35,10 @@ struct FunctionState<'a> {
 }
 
 #[derive(Clone, Copy, Debug)]
+/// A Wasm typed value. The values are not inherently signed or unsigned,
+/// but we choose signed integers as the representation type.
+///
+/// This works well on any two's complement platform.
 pub enum Value {
     I32(i32),
     I64(i64),
@@ -51,6 +62,8 @@ impl From<Value> for i64 {
     }
 }
 
+/// A runtime stack. This contains both the stack in a function, as well as all
+/// the function parameters and locals of the function.
 pub struct RuntimeStack {
     /// The vector containing the whole stack.
     stack: Vec<StackValue>,

@@ -1,5 +1,11 @@
 //! AST definition of Wasm modules, as well as supporting datatypes.
 //! Based on the [W3C Wasm specification](https://www.w3.org/TR/2019/REC-wasm-core-1-20191205/#syntax-import)
+//!
+//! The main type is [Module](./struct.Module.html), which defines a Wasm
+//! module, either validated or not validated. Some of the properties that are
+//! stated as validity conditions in the Wasm specification are already
+//! guaranteed automatically by the AST definition of the Module, and the
+//! parsing functions.
 
 use std::{convert::TryFrom, rc::Rc};
 

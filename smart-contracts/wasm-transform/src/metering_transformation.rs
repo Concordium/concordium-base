@@ -1,3 +1,6 @@
+//! A program transformation that inserts metering instructions into
+//! a Wasm module.
+
 use crate::types::*;
 use anyhow::{anyhow, bail};
 use std::{convert::TryInto, rc::Rc};
@@ -11,9 +14,13 @@ pub const FN_IDX_MEMORY_ALLOC: FuncIndex = 2;
 /// The number of added functions. All functions that are in the source module
 /// will have the indices shifted by this amount.
 /// The table as well must be updated by increasing all the function indices by
-/// 3.
+/// this constant.
 pub const NUM_ADDED_FUNCTIONS: FuncIndex = 3;
 
+/// Result of a transformation. The transformation should generally not fail on
+/// a well-formed module, i.e., one that has been validated. But we might want
+/// to put additional restrictions on a module, in which case we have the
+/// freedom to fail.
 pub type TransformationResult<A> = anyhow::Result<A>;
 
 /// Return the arity of the label, i.e., 0 or 1.
@@ -62,32 +69,32 @@ pub mod cost {
     pub const CONST: Energy = write_stack(1);
     pub const SIMPLE_UNOP: Energy = UNOP + 1;
     pub const SIMPLE_BINOP: Energy = BINOP + 1;
-    // See for example https://streamhpc.com/blog/2012-07-16/how-expensive-is-an-operation-on-a-cpu/
+    /// See for example https://streamhpc.com/blog/2012-07-16/how-expensive-is-an-operation-on-a-cpu/
     pub const MUL: Energy = BINOP + 4;
     pub const DIV: Energy = BINOP + 10;
     pub const REM: Energy = BINOP + 10;
 
-    // Parametric instructions
+    /// Parametric instructions
     pub const DROP: Energy = JUMP_STACK;
     pub const SELECT: Energy = TEST + JUMP_STACK + copy_stack(1);
 
-    // Variable instructions
+    /// Variable instructions
     pub const GET_LOCAL: Energy = read_stack(1) + write_stack(1);
     pub const SET_LOCAL: Energy = read_stack(1) + write_stack(1);
     pub const TEE_LOCAL: Energy = read_stack(1) + write_stack(1);
-    // TODO: The current specification distinguishes between 4 or 8 bytes, but to
-    // simplify implementation (we would need to lookup the type of the global
-    // index) we might not want to change this to not distinguish.
+    /// TODO: The current specification distinguishes between 4 or 8 bytes, but
+    /// to simplify implementation (we would need to lookup the type of the
+    /// global index) we might not want to change this to not distinguish.
     pub const GET_GLOBAL: Energy = read_mem(8);
     pub const SET_GLOBAL: Energy = write_mem(8); // NB: We do not distinguish between 4 or 8 bytes.
 
-    // Memory instructions
+    /// Memory instructions
     pub const fn load(n: usize) -> Energy { SIMPLE_BINOP + BOUNDS + read_mem(n) }
 
     pub const fn store(n: usize) -> Energy { SIMPLE_BINOP + BOUNDS + write_mem(n) }
 
     pub const MEMSIZE: Energy = 100;
-    // Constant part for the memory grow instruction.
+    /// Constant part for the memory grow instruction.
     pub const MEMGROW: Energy = 1000;
 
     // Control instructions
@@ -97,14 +104,14 @@ pub mod cost {
 
     pub const fn branch(label_arity: usize) -> Energy { JUMP + copy_stack(label_arity) }
 
-    // This is only the cost to be charged before the replacement instruction.
+    /// This is only the cost to be charged before the replacement instruction.
     pub const BR_IF: Energy = IF_STATEMENT;
 
     pub const fn br_table(label_arity: usize) -> Energy { BOUNDS + LOOKUP + branch(label_arity) }
 
-    // Cost for invoking a function (to be charged before invocation), excluding the
-    // cost incurred by the number of locals the function defines (for the latter,
-    // see `invoke_after`).
+    /// Cost for invoking a function (to be charged before invocation),
+    /// excluding the cost incurred by the number of locals the function
+    /// defines (for the latter, see `invoke_after`).
     pub const fn invoke_before(num_args: usize, num_res: usize) -> Energy {
         // Enter frame
         FUNC_FRAME_BASE + copy_stack(num_args) + JUMP
@@ -112,8 +119,8 @@ pub mod cost {
          + copy_stack(num_res) + JUMP
     }
 
-    // Cost incurred by the number of locals when invoking a function (to be charged
-    // after invocation).
+    /// Cost incurred by the number of locals when invoking a function (to be
+    /// charged after invocation).
     pub const fn invoke_after(num_locals: u32) -> Energy {
         // Enter frame
         write_stack(num_locals)
@@ -267,7 +274,7 @@ pub mod cost {
 
 use cost::Energy;
 
-// Add energy accounting instructions.
+///Add energy accounting instructions.
 fn account_energy(exp: &mut InstrSeq, e: Energy) {
     // TODO the current specification says we use an I64Const. Decide what is
     // actually the best also regarding conversion etc. Probably i64 is actually
@@ -283,7 +290,7 @@ fn account_energy(exp: &mut InstrSeq, e: Energy) {
 //     exp.push(OpCode::Call(FN_IDX_ACCOUNT_STACK_SIZE));
 // }
 
-// Metadata needed for transformation.
+///Metadata needed for transformation.
 struct InstrSeqTransformer<'a, C> {
     /// Reference to the original module to get the right context.
     module: &'a C,
@@ -342,9 +349,10 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
     /// Add the OpCode to the output sequence.
     fn add_to_new(&mut self, instr: &OpCode) { self.new_seq.push(instr.clone()); }
 
-    // Injects accounting instructions into a sequence of instructions, returning
-    // the energy to charge for the first instructions that will be unconditionally
-    // executed. This energy has to be charged for before.
+    /// Injects accounting instructions into a sequence of instructions,
+    /// returning the energy to charge for the first instructions that will
+    /// be unconditionally executed. This energy has to be charged for
+    /// before.
     fn run(
         &mut self,
         input_instructions: impl Iterator<Item = &'b OpCode>,
@@ -464,6 +472,9 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
     }
 }
 
+/// A helper trait so that we can use the transformation on different datatypes.
+/// In particular we use it in tests which have their own notion of context to
+/// make it possible to specify modules in a compact way.
 pub trait HasTransformationContext {
     /// Get the number of arguments and return values of a function type at the
     /// given index.
@@ -528,6 +539,7 @@ pub fn inject_accounting<C: HasTransformationContext>(
     })
 }
 
+/// A context derived from a Wasm module.
 struct ModuleContext<'a> {
     types:    &'a [Rc<FunctionType>],
     imported: &'a [Import],

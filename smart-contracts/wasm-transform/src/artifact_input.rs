@@ -1,3 +1,5 @@
+//! Utilities for parsing of artifacts from byte streams.
+
 use crate::{
     artifact::{
         Artifact, ArtifactData, ArtifactMemory, ArtifactNamedImport, CompiledFunctionBytes,
@@ -123,15 +125,4 @@ impl<'a, I: Parseable<'a>> Parseable<'a> for Artifact<I, CompiledFunctionBytes<'
             code,
         })
     }
-
-    fn parse_with_context(cursor: &mut Cursor<&'a [u8]>, _ctx: &()) -> ParseResult<Self> {
-        Self::parse(cursor)
-    }
-}
-
-#[inline]
-pub fn parse_artifact<'a, I: Parseable<'a>>(
-    bytes: &'a [u8],
-) -> ParseResult<Artifact<I, CompiledFunctionBytes<'a>>> {
-    (&mut Cursor::new(bytes)).next()
 }

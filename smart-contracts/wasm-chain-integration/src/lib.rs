@@ -570,7 +570,7 @@ pub fn invoke_init_from_artifact(
     parameter: Parameter,
     energy: u64,
 ) -> ExecResult<InitResult> {
-    let artifact = wasm_transform::artifact_input::parse_artifact(artifact_bytes)?;
+    let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
 }
 
@@ -650,7 +650,7 @@ pub fn invoke_receive_from_artifact(
     parameter: Parameter,
     energy: u64,
 ) -> ExecResult<ReceiveResult> {
-    let artifact = wasm_transform::artifact_input::parse_artifact(artifact_bytes)?;
+    let artifact = utils::parse_artifact(artifact_bytes)?;
     invoke_receive(artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
 }
 

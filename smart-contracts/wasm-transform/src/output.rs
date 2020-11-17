@@ -1,7 +1,8 @@
 //! Functionality for outputting Wasm modules in binary format.
 
 use crate::{
-    parse::{Byte, SectionId, Skeleton, UnparsedSection, MAGIC_HASH, VERSION},
+    constants::{MAGIC_HASH, VERSION},
+    parse::{Byte, SectionId, Skeleton, UnparsedSection},
     types::{BlockType, CustomSection, FunctionType, Name, ValueType},
 };
 use std::{
