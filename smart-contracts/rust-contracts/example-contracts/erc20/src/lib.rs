@@ -15,12 +15,16 @@ use concordium_sc_base::{collections::*, *};
 // Types
 type U999 = u64; // spec says u256 but we only have u64 at most
 
-#[derive(SchemaType)]
+#[derive(Serialize, SchemaType)]
 struct InitParams {
-    name:         String, // Name of the token
-    symbol:       String, // Symbol of the token
-    decimals:     u32,    // Number of decimals to show when displayed
-    total_supply: U999,   // Total supply of tokens created
+    /// Name of the token, encoded as UTF8
+    name: Vec<u8>,
+    /// Symbol of the token, encoded as UTF8
+    symbol: Vec<u8>,
+    /// Number of decimals to show when displayed
+    decimals: u32,
+    /// Total supply of tokens created
+    total_supply: U999,
 }
 
 #[contract_state]
@@ -49,10 +53,10 @@ enum Request {
 // Event printed in the log
 #[derive(Serialize)]
 enum Event {
-    // `amount` of tokens are tranfered `from_account` to `to_account`
+    // `amount` of tokens are transferred `from_account` to `to_account`
     // (from_account, to_account, amount)
     Transfer(AccountAddress, AccountAddress, U999),
-    // `amount` of tokens are allowed to be tranfered by `spender_account` from `owner_account`
+    // `amount` of tokens are allowed to be transferred by `spender_account` from `owner_account`
     // (owner_account, spender_account, amount)
     Approval(AccountAddress, AccountAddress, U999),
 }
@@ -149,47 +153,6 @@ fn contract_receive<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     Ok(A::accept())
 }
 
-// (de)serialization
-
-// Serializing the string by converting the string to a Vec of bytes, and use
-// `serial` defined for Vec
-fn serial_string<W: Write>(s: &str, out: &mut W) -> Result<(), W::Err> {
-    let bytes = s.bytes().collect::<Vec<_>>();
-    bytes.serial(out)
-}
-// Deserializing a string using deserial of Vec of bytes, and treat the byte
-// vector as utf8 encoding
-fn deserial_string<R: Read>(source: &mut R) -> ParseResult<String> {
-    let bytes = Vec::deserial(source)?;
-    let res = String::from_utf8(bytes).unwrap();
-    Ok(res)
-}
-
-impl Serial for InitParams {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
-        serial_string(&self.name, out)?;
-        serial_string(&self.symbol, out)?;
-        self.decimals.serial(out)?;
-        self.total_supply.serial(out)?;
-        Ok(())
-    }
-}
-
-impl Deserial for InitParams {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let name = deserial_string(source)?;
-        let symbol = deserial_string(source)?;
-        let decimals = u32::deserial(source)?;
-        let total_supply = U999::deserial(source)?;
-        Ok(InitParams {
-            name,
-            symbol,
-            decimals,
-            total_supply,
-        })
-    }
-}
-
 // Tests
 #[cfg(test)]
 pub mod tests {
@@ -204,8 +167,8 @@ pub mod tests {
         let init_origin = AccountAddress([1u8; 32]);
 
         let parameter = InitParams {
-            name:         "USD".to_string(),
-            symbol:       "$".to_string(),
+            name:         b"USD".to_vec(),
+            symbol:       b"$".to_vec(),
             decimals:     0,
             total_supply: 100,
         };
@@ -264,8 +227,8 @@ pub mod tests {
 
         // Setup state
         let init_params = InitParams {
-            name:         "USD".to_string(),
-            symbol:       "$".to_string(),
+            name:         b"USD".to_vec(),
+            symbol:       b"$".to_vec(),
             decimals:     0,
             total_supply: 100,
         };
@@ -326,8 +289,8 @@ pub mod tests {
 
         // Setup state
         let init_params = InitParams {
-            name:         "Dollars".to_string(),
-            symbol:       "$".to_string(),
+            name:         b"USD".to_vec(),
+            symbol:       b"$".to_vec(),
             decimals:     0,
             total_supply: 200,
         };
@@ -392,8 +355,8 @@ pub mod tests {
 
         // Setup state
         let init_params = InitParams {
-            name:         "Dollars".to_string(),
-            symbol:       "$".to_string(),
+            name:         b"USD".to_vec(),
+            symbol:       b"$".to_vec(),
             decimals:     0,
             total_supply: 200,
         };
@@ -447,8 +410,8 @@ pub mod tests {
 
         // Setup state
         let init_params = InitParams {
-            name:         "Dollars".to_string(),
-            symbol:       "$".to_string(),
+            name:         b"USD".to_vec(),
+            symbol:       b"$".to_vec(),
             decimals:     0,
             total_supply: 200,
         };
@@ -503,8 +466,8 @@ pub mod tests {
 
         // Setup state
         let init_params = InitParams {
-            name:         "Dollars".to_string(),
-            symbol:       "$".to_string(),
+            name:         b"USD".to_vec(),
+            symbol:       b"$".to_vec(),
             decimals:     0,
             total_supply: 100,
         };
@@ -552,8 +515,8 @@ pub mod tests {
         ctx.set_sender(Address::Account(spender_account));
 
         let init_params = InitParams {
-            name:         "Dollars".to_string(),
-            symbol:       "$".to_string(),
+            name:         b"USD".to_vec(),
+            symbol:       b"$".to_vec(),
             decimals:     0,
             total_supply: 100,
         };
