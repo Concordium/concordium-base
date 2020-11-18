@@ -1,4 +1,4 @@
-image: "192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base:0.13"
+image: "192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base:0.15"
 
 stages:
   - lint
@@ -26,6 +26,29 @@ stages:
   stage: test
   script:
     - cd cargo-concordium
+    - cargo test
+
+"wasm-transform lint:fmt":
+  extends: .generic-lint
+  stage: lint
+  image: 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base-rust-fmt:2019-11-13
+  script:
+    - cd wasm-transform
+    - cargo fmt -- --color=always
+    - test $(git ls-files --modified | grep -v ".dll$" | grep -v ".a$" | grep -v ".pc$" | grep -v ".def$" | grep -v "tar.gz" | wc -l) -eq 0 || (echo 'You have introduced some unformatted code:'; git ls-files --modified | grep -v ".dll$" | grep -v ".a$" | grep -v ".pc$" | grep -v ".def$" | grep -v "tar.gz" | sed 's/^/* /'; echo 'Please run `cargo fmt` and amend your MR.'; exit 1)
+
+"wasm-transform lint:clippy":
+  extends: .generic-lint
+  stage: lint
+  script:
+    - cd wasm-transform
+    - cargo clippy --color=always --tests -- -Dclippy::all
+
+"wasm-transform cargo:test":
+  extends: .generic
+  stage: test
+  script:
+    - cd wasm-transform
     - cargo test
 
 "concordium-sc-base cargo:test":
@@ -98,20 +121,20 @@ stages:
     - echo "Running clippy"
     - cargo clippy --color=always --tests -- -Dclippy::all
 
-"wasmer-interp lint:fmt":
+"wasm-chain-integration lint:fmt":
   extends: .generic-lint
   stage: lint
   image: 192549843005.dkr.ecr.eu-west-1.amazonaws.com/concordium/base-rust-fmt:2019-11-13
   script:
-    - cd wasmer-interp 
+    - cd wasm-chain-integration
     - cargo fmt -- --color=always
     - test $(git ls-files --modified | grep -v ".dll$" | grep -v ".a$" | grep -v ".pc$" | grep -v ".def$" | grep -v "tar.gz" | wc -l) -eq 0 || (echo 'You have introduced some unformatted code:'; git ls-files --modified | grep -v ".dll$" | grep -v ".a$" | grep -v ".pc$" | grep -v ".def$" | grep -v "tar.gz" | sed 's/^/* /'; echo 'Please run `cargo fmt` and amend your MR.'; exit 1)
 
-"wasmer-interp  lint:clippy":
+"wasm-chain-integration  lint:clippy":
   extends: .generic-lint
   stage: lint
   script:
-    - cd wasmer-interp 
+    - cd wasm-chain-integration
     - echo "Running clippy"
     - cargo clippy --color=always --tests -- -Dclippy::all
 

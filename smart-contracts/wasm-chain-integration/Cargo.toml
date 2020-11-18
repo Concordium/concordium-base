@@ -1,28 +1,28 @@
 [package]
-name = "wasmer-interp"
+name = "wasm-chain-integration"
 version = "0.1.0"
 authors = ["Concordium <info@concordium.com>"]
 edition = "2018"
 
 [features]
-default = ["cranelift"]
-
-cranelift = ["wasmer-runtime/default-backend-cranelift"]
-
-singlepass = ["wasmer-runtime/default-backend-singlepass"]
+# If this feature is enabled  the ffi exports are going to be produced
+# for use from Haskell.
+enable-ffi = []
+default=["enable-ffi"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 libc = "0.2"
+anyhow = "1.0.33"
+
+[dependencies.wasm-transform]
+path = "../wasm-transform"
+version = "0"
 
 [dependencies.contracts-common]
 version = "0.1"
 path = "../contracts-common"
 features = ["derive-serde"]
-
-[dependencies.wasmer-runtime]
-version="0.17.1"
-default-features = false
 
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
