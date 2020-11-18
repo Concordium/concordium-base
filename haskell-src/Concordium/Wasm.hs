@@ -48,6 +48,9 @@ data WasmModule = WasmModule {
   wasmSource :: ModuleSource
   } deriving(Eq, Show)
 
+moduleSize :: WasmModule -> Word64
+moduleSize = fromIntegral . BS.length . wasmSource
+
 getModuleRef :: WasmModule -> ModuleRef
 getModuleRef wm = ModuleRef (getHash wm)
 
@@ -122,8 +125,8 @@ data ModuleInterface = ModuleInterface {
   miExposedReceive :: !(Map.Map InitName (Set.Set ReceiveName)),
   -- |Module source in binary format, instrumented with whatever it needs to be instrumented with.
   miModule :: !InstrumentedModule,
-  -- |Size of the module this interface is derived from, in bytes.
-  miSize :: !Word64
+  -- |The source as deployed to the chain.
+  miSourceModule :: !WasmModule
   } deriving(Eq, Show, Generic)
 
 -- |Additional data needed specifically by the init method of the contract.
@@ -302,6 +305,7 @@ instance Serialize WasmModule where
 
   get = do
     wasmVersion <- getWord32be
+    unless (wasmVersion == 0) $ fail "Unsupported Wasm module version version."
     wasmSource <- getByteStringWord32
     return WasmModule{..}
 
