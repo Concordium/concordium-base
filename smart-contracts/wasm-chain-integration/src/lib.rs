@@ -778,13 +778,14 @@ pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Modul
     let mut contract_schemas = BTreeMap::new();
 
     for name in artifact.export.keys() {
-        if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_state_") {
-            let mut new_contract = schema::Contract::empty();
-            let contract_schema = contract_schemas.get_mut(&rest.to_string()).unwrap_or(&mut new_contract);
+        if let Some(contract_name) = name.as_ref().strip_prefix("concordium_schema_state_") {
+            if !contract_schemas.contains_key(contract_name) {
+                contract_schemas.insert(contract_name.to_string(), schema::Contract::empty());
+            }
+            let contract_schema = contract_schemas.get_mut(contract_name).unwrap(); // Safe since the entry was inserted above if empty
+
             let schema_type = generate_schema_run(&artifact, name.as_ref())?;
-
             contract_schema.state = Some(schema_type);
-
         } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
             let split_name: Vec<_> = rest.splitn(2, '.').collect();
             let contract_name = split_name[0];
@@ -802,7 +803,7 @@ pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Modul
     }
 
     Ok(schema::Module {
-        contracts: contract_schemas
+        contracts: contract_schemas,
     })
 }
 

@@ -795,7 +795,7 @@ impl Deserial for schema::Module {
         let len: u32 = source.get()?;
         let contracts = deserial_map_no_length_no_order_check(source, len as usize)?;
         Ok(schema::Module {
-            contracts
+            contracts,
         })
     }
 }

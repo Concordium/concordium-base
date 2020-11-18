@@ -410,7 +410,7 @@ pub mod schema {
     /// Contains all the contract schemas for a module
     #[derive(Debug, Clone)]
     pub struct Module {
-        pub contracts: BTreeMap<String, Contract>
+        pub contracts: BTreeMap<String, Contract>,
     }
 
     /// Describes all the schemas of a smart contract.
@@ -423,8 +423,8 @@ pub mod schema {
     impl Contract {
         pub fn empty() -> Contract {
             Contract {
-                state: None,
-                method_parameter: BTreeMap::new()
+                state:            None,
+                method_parameter: BTreeMap::new(),
             }
         }
     }

@@ -414,7 +414,10 @@ pub fn main() {
     }
 }
 
-fn print_contract_schema(contract_name: &str, contract_schema: &contracts_common::schema::Contract) {
+fn print_contract_schema(
+    contract_name: &str,
+    contract_schema: &contracts_common::schema::Contract,
+) {
     println!("\n Schema for contract: {}\n", contract_name);
     let contract_schema_bytes = to_bytes(contract_schema);
     match &contract_schema.state {
@@ -423,7 +426,8 @@ fn print_contract_schema(contract_name: &str, contract_schema: &contracts_common
         }
         None => {
             println!(
-                "No schema found for the contract state. Did you annotate the state data with `#[contract_state(...)]`?
+                "No schema found for the contract state. Did you annotate the state data with \
+                 `#[contract_state(...)]`?
 
 #[contract_state(contract = \"my-contract\")]
 struct State {{ ... }}
@@ -435,11 +439,13 @@ struct State {{ ... }}
     if contract_schema.method_parameter.is_empty() {
         println!(
             "No schemas found for method parameters.
-    To include a schema for a method parameter specify the parameter type as an attribute to \
-                            `#[init(..)]` or `#[receive(..)]`
+
+To include a schema for a method parameter specify the parameter type as an attribute to \
+             `#[init(..)]` or `#[receive(..)]`
             #[init(..., parameter = \"MyParamType\")]     or     #[receive(..., parameter = \
-                            \"MyParamType\")]"
-                )
+             \"MyParamType\")]
+"
+        )
     } else {
         println!("Found schemas for the following methods:\n");
         for (method_name, param_type) in contract_schema.method_parameter.iter() {
@@ -447,8 +453,5 @@ struct State {{ ... }}
         }
     }
 
-    println!(
-        "Size of this contract schema is {} bytes.\n",
-        contract_schema_bytes.len()
-    );
+    println!("Size of this contract schema is {} bytes.\n", contract_schema_bytes.len());
 }
