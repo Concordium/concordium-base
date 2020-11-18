@@ -407,11 +407,26 @@ mod serde_impl {
 pub mod schema {
     use std::collections::BTreeMap;
 
+    /// Contains all the contract schemas for a module
+    #[derive(Debug, Clone)]
+    pub struct Module {
+        pub contracts: BTreeMap<String, Contract>
+    }
+
     /// Describes all the schemas of a smart contract.
     #[derive(Debug, Clone)]
     pub struct Contract {
         pub state:            Option<Type>,
         pub method_parameter: BTreeMap<String, Type>,
+    }
+
+    impl Contract {
+        pub fn empty() -> Contract {
+            Contract {
+                state: None,
+                method_parameter: BTreeMap::new()
+            }
+        }
     }
 
     /// Schema for the fields of a struct or some enum variant.

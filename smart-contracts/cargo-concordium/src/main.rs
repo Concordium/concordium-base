@@ -385,54 +385,23 @@ pub fn main() {
         } => {
             let build_schema = schema_embed || schema_output.is_some();
             if build_schema {
-                let contract_schema = match build_contract_schema() {
+                let module_schema = match build_contract_schema() {
                     Ok(schema) => schema,
                     Err(err) => {
-                        println!("{}", err);
+                        println!("Failed building schema {}", err);
                         panic!()
                     }
                 };
-                let contract_schema_bytes = to_bytes(&contract_schema);
-                match contract_schema.state {
-                    Some(state_schema) => {
-                        println!("Found schema for the contract state:\n\n{:#?}\n", state_schema);
-                    }
-                    None => {
-                        println!(
-                            "No schema found for the contract state. Did you annotate the state \
-                             data with `#[contract_state(...)]`?
 
-        #[contract_state(contract = \"my-contract\")]
-        struct State {{ ... }}
-    "
-                        );
-                    }
+                for (contract_name, contract_schema) in module_schema.contracts.iter() {
+                    print_contract_schema(contract_name, contract_schema);
                 }
+                let module_schema_bytes = to_bytes(&module_schema);
+                println!("Total size of the module schema is: {} bytes", module_schema_bytes.len());
 
-                if contract_schema.method_parameter.is_empty() {
-                    println!(
-                        "No schemas found for method parameters.
-To include a schema for a method parameter specify the parameter type as an attribute to \
-                         `#[init(..)]` or `#[receive(..)]`
-        #[init(..., parameter = \"MyParamType\")]     or     #[receive(..., parameter = \
-                         \"MyParamType\")]"
-                    )
-                } else {
-                    println!("Found schemas for the following methods:\n");
-                    for (method_name, param_type) in contract_schema.method_parameter.iter() {
-                        println!("'{}': {:#?}\n", method_name, param_type);
-                    }
-                }
-                println!(
-                    "\nTotal size of contract schema is {} bytes.\n",
-                    contract_schema_bytes.len()
-                );
-                match schema_output {
-                    None => {}
-                    Some(schema_out) => {
-                        println!("Writing schema to {:?}.", schema_out);
-                        write(schema_out, &contract_schema_bytes).unwrap();
-                    }
+                if let Some(schema_out) = schema_output {
+                    println!("Writing schema to {:?}.", schema_out);
+                    write(schema_out, &module_schema_bytes).unwrap();
                 }
                 if schema_embed {
                     println!("Embedding schema into contract module.");
@@ -443,4 +412,43 @@ To include a schema for a method parameter specify the parameter type as an attr
             println!("\nDone building your smart contract.");
         }
     }
+}
+
+fn print_contract_schema(contract_name: &str, contract_schema: &contracts_common::schema::Contract) {
+    println!("\n Schema for contract: {}\n", contract_name);
+    let contract_schema_bytes = to_bytes(contract_schema);
+    match &contract_schema.state {
+        Some(state_schema) => {
+            println!("Contract state: {}:\n{:#?}\n", contract_name, state_schema);
+        }
+        None => {
+            println!(
+                "No schema found for the contract state. Did you annotate the state data with `#[contract_state(...)]`?
+
+#[contract_state(contract = \"my-contract\")]
+struct State {{ ... }}
+"
+            );
+        }
+    }
+
+    if contract_schema.method_parameter.is_empty() {
+        println!(
+            "No schemas found for method parameters.
+    To include a schema for a method parameter specify the parameter type as an attribute to \
+                            `#[init(..)]` or `#[receive(..)]`
+            #[init(..., parameter = \"MyParamType\")]     or     #[receive(..., parameter = \
+                            \"MyParamType\")]"
+                )
+    } else {
+        println!("Found schemas for the following methods:\n");
+        for (method_name, param_type) in contract_schema.method_parameter.iter() {
+            println!("'{}': {:#?}\n", method_name, param_type);
+        }
+    }
+
+    println!(
+        "Size of this contract schema is {} bytes.\n",
+        contract_schema_bytes.len()
+    );
 }

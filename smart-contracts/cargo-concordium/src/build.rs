@@ -10,7 +10,7 @@ fn to_snake_case(string: String) -> String { string.to_lowercase().replace("-", 
 
 /// Generates the contract schema by compiling with the 'build-schema' feature
 /// Then extracts the schema from the schema build
-pub fn build_contract_schema() -> anyhow::Result<schema::Contract> {
+pub fn build_contract_schema() -> anyhow::Result<schema::Module> {
     let manifest = Manifest::from_path("Cargo.toml")
         .map_err(|err| anyhow::anyhow!("Failed reading manifest: {}", err))?;
     let package =

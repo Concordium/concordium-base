@@ -209,8 +209,7 @@ fn contract_function_schema_tokens(
             let schema_name = format!("concordium_schema_function_{}", wasm_name);
             let schema_ident = format_ident!("concordium_schema_function_{}", rust_name);
             quote! {
-                #[cfg(target_arch = "wasm32")]
-                #[cfg(feature = "build-schema")]
+                #[cfg(all(target_arch = "wasm32", feature = "build-schema"))]
                 #[export_name = #schema_name]
                 pub extern "C" fn #schema_ident() -> *mut u8 {
                     let schema = <#parameter_ident as SchemaType>::get_type();
@@ -735,15 +734,15 @@ pub fn contract_state(attr: TokenStream, item: TokenStream) -> TokenStream {
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
     let attrs = parser.parse(attr).expect("Expect a comma-separated list of meta items.");
 
-    let contract_name = get_attribute_value(attrs.iter(), "contract").expect("A name of the contract must be provided, using the 'contract' attribute.");
+    let contract_name = get_attribute_value(attrs.iter(), "contract")
+        .expect("A name of the contract must be provided, using the 'contract' attribute.");
 
     let wasm_schema_name = format!("concordium_schema_state_{}", contract_name);
     let rust_schema_name = format_ident!("concordium_schema_state_{}", data_ident);
 
     let generate_schema_tokens = quote! {
         #[allow(non_snake_case)]
-        #[cfg(target_arch = "wasm32")]
-        #[cfg(feature = "build-schema")]
+        #[cfg(all(target_arch = "wasm32", feature = "build-schema"))]
         #[export_name = #wasm_schema_name]
         pub extern "C" fn #rust_schema_name() -> *mut u8 {
             let schema = <#data_ident as SchemaType>::get_type();

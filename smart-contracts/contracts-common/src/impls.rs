@@ -783,6 +783,23 @@ impl Deserial for schema::Fields {
     }
 }
 
+impl Serial for schema::Module {
+    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+        self.contracts.serial(out)?;
+        Ok(())
+    }
+}
+
+impl Deserial for schema::Module {
+    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+        let len: u32 = source.get()?;
+        let contracts = deserial_map_no_length_no_order_check(source, len as usize)?;
+        Ok(schema::Module {
+            contracts
+        })
+    }
+}
+
 impl Serial for schema::Contract {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.state.serial(out)?;

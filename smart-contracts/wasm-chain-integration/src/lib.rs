@@ -772,21 +772,37 @@ pub fn test_run(module_bytes: &[u8]) -> ExecResult<()> {
 }
 
 /// Tries to generate a state schema and schemas for parameters of methods.
-pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Contract> {
+pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Module> {
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
-    let state = generate_schema_run(&artifact, "concordium_schema_state").ok();
 
-    let mut method_parameter = BTreeMap::new();
+    let mut contract_schemas = BTreeMap::new();
+
     for name in artifact.export.keys() {
-        if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
+        if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_state_") {
+            let mut new_contract = schema::Contract::empty();
+            let contract_schema = contract_schemas.get_mut(&rest.to_string()).unwrap_or(&mut new_contract);
             let schema_type = generate_schema_run(&artifact, name.as_ref())?;
-            method_parameter.insert(rest.to_string(), schema_type);
+
+            contract_schema.state = Some(schema_type);
+
+        } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
+            let split_name: Vec<_> = rest.splitn(2, '.').collect();
+            let contract_name = split_name[0];
+            let function_name = split_name[1];
+
+            if !contract_schemas.contains_key(contract_name) {
+                contract_schemas.insert(contract_name.to_string(), schema::Contract::empty());
+            }
+
+            let contract_schema = contract_schemas.get_mut(contract_name).unwrap(); // Safe since the entry was inserted above if empty
+
+            let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+            contract_schema.method_parameter.insert(function_name.to_string(), schema_type);
         }
     }
 
-    Ok(schema::Contract {
-        state,
-        method_parameter,
+    Ok(schema::Module {
+        contracts: contract_schemas
     })
 }
 
