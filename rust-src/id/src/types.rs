@@ -1569,6 +1569,7 @@ pub struct GlobalContext<C: Curve> {
     bulletproof_generators: Generators<C>,
     #[string_size_length = 4]
     #[serde(rename = "genesisString")]
+    /// A free-form string used to distinguish between different chains.
     pub genesis_string: String,
 }
 
