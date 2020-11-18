@@ -7,7 +7,7 @@
 Concordium Smart Contract Documentation!
 ====================================================================
 
-Welcome to the official documentation of Concordium smart contracts!
+Welcome to the documentation of Concordium smart contracts!
 
 The documentation is split into four categories
 
@@ -73,12 +73,7 @@ The documentation is split into four categories
    references/host-fns
    concordium-sc-base (crate docs) <https://crates.io/crates/concordium-sc-base>
    Rust contract examples (repo) <https://gitlab.com/Concordium/smart-contracts/-/tree/master/rust-contracts/example-contracts>
+   Concordium user documentation <https://developers.concordium.com/testnet/docs>
 
-
-.. Indices and tables
-.. ==================
-
-.. * :ref:`genindex`
-.. * :ref:`modindex`
-.. * :ref:`search`
-
+.. todo::
+   Update user documentation link

@@ -3,7 +3,7 @@
 .. _first-contract:
 
 ===============================================
-My first smart contract: Hello Counter
+My first smart contract: Counter
 ===============================================
 
 In this tutorial, we are going to build a minimal smart contract.
@@ -315,13 +315,14 @@ It should run one test, and hopefully it succeeds.
 .. todo::
     Implement test for instantiation failing when amount > 0.
 
+``receive``-functions
+=====================
+
 We have now define how instances of our smart contract are created, and our
 smart contract is in principle a valid contract at this point, but we would like
 to define how to interact with instances of our contract, specifically a way to
-increment the counter.
-
-``receive``-functions
-=====================
+increment the counter, and recall the requirement of only allowing the contract
+owner to increment.
 
 A smart contract can expose zero or more functions for interacting with an
 instance. These functions are called ``receive``-functions, and can read and
@@ -332,7 +333,7 @@ returns a description of actions to be executed on chain.
     A continuation of the analogy to Object Oriented Programming;
     ``receive``-functions corresponds to object methods.
 
-There are only 3 types of actions possible in the description:
+There are 3 types of actions possible in the description:
 
     - **Accept**: A no-op action, which always succeeds.
     - **Simple Transfer**: Transfer some amount of GTU from the balance of the
@@ -340,7 +341,14 @@ There are only 3 types of actions possible in the description:
     - **Send**: Trigger ``receive``-function of a smart contract instance, with
       a parameter and an amount of GTU.
 
-Our simple counter contract is only going to use **Accept**, and we refer the
+and two ways to compose actions:
+
+    - **And**: Runs the first action, if it succeeds runs the second action,
+      otherwise results in rejection.
+    - **Or**: Runs the first action, if it fails, runs the second action,
+      otherwise results in success.
+
+Our simple counter contract is only going to use **Accept**, but we refer the
 reader to :ref:`contract-instance-actions` for more on this.
 
 Again, have a look at the code, before we start explaining things::
@@ -352,9 +360,15 @@ Again, have a look at the code, before we start explaining things::
         _logger: &mut impl HasLogger,
         state: &mut State,
     ) -> ReceiveResult<A> {
+        // Assertions
         ensure_eq!(amount.micro_gtu, 0); // The amount must be 0.
-        ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can increment.
+        let sender = ctx.sender();
+        let owner = ctx.owner();
+        ensure!(sender.matches_account(&owner)); // Only the owner can increment.
+
+        // Update the contract state
         *state += 1;
+
         Ok(A::accept())
     }
 
@@ -376,9 +390,82 @@ choose to be ``increment``::
 
     #[receive(contract = "counter", name = "increment")]
 
+The return type of the function is ``ReceiveResult<A>``, which is an alias for
+``Result<A, Reject>``.
+Here ``A`` implements ``HasActions``, which exposes functions for creating the
+different actions.
+
+Again we ensure that *no* amount of GTU was send to the balance of this
+contract::
+
+    ensure_eq!(amount.micro_gtu, 0); // The amount must be 0.
+
+Next we ensure only the owner can increment, by checking if the sender is the
+owner account.
+The sender can be accessed from the context parameter as ``ctx.sender()``, this
+returns an address, which is either the address of an account or the address of
+a smart contract instance::
+
+    let sender = ctx.sender();
+
+.. note::
+    The **Send** action allows contract instances to interact with each other.
+
+The owner can also be accessed through the context, this time as ``ctx.owner()``
+this will always return an account address, since only accounts create and own
+smart contract instances::
+
+    let owner = ctx.owner();
+
+Using the ``matches_account`` method on the sender address, we can compare it to
+an account; the owner, and if the sender is a contract or not the owner account
+it results in false, making ``ensure!`` reject the ``receive``-function
+invocation::
+
+    ensure!(sender.matches_account(&owner)); // Only the owner can increment.
+
+Now that we have ensured the context is right for incrementing the counter, we
+just need to update the state::
+
+    *state += 1;
+
+Since increment does not create any actions on chain, we just result in
+**Accept**, which we can create using the ``accept`` function on the generic
+``A``::
+
+    Ok(A::accept())
+
+Testing increment
+=================
+
+.. We extend the test submodule with a new unit test
 
 
-.. _Rust: https://www.rust-lang.org/
-.. _Cargo: https://doc.rust-lang.org/cargo/
-.. _rustup: https://rustup.rs/
-.. _crates.io: https://crates.io/
+
+::
+
+    #[test]
+    fn test_increment() {
+        // Setup
+        let mut ctx = ReceiveContextTest::empty();
+        let owner = AccountAddress([0u8; 32]);
+        ctx.set_owner(owner);
+        ctx.set_sender(Address::Account(owner));
+
+        let amount = Amount::zero();
+
+        let mut logger = LogRecorder::init();
+
+        let mut state = 0;
+
+        // Call the receive function
+        let result : ReceiveResult<ActionsTree> = counter_increment(&ctx, amount, &mut logger, &mut state);
+
+        // Inspect the result
+        let actions = match result {
+            Ok(actions) => actions,
+            Err(_) => fail!("Contract failed, when it should have succeeded."),
+        };
+        claim_eq!(actions, ActionsTree::Accept, "Contract should only accept");
+        claim_eq!(state, 1, "The state should be incremented");
+    }

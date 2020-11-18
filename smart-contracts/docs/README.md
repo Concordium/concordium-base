@@ -1,6 +1,8 @@
 # Concordium Smart Contract Developer Documentation
 
-The documentation is written in reStructuredText ([Link to the basics](https://www.sphinx-doc.org/en/master/usage/restructuredtext/basics.html)).
+The documentation is structured according to this [guide](https://documentation.divio.com/)
+
+It is written in reStructuredText ([Link to the basics](https://www.sphinx-doc.org/en/master/usage/restructuredtext/basics.html)).
 
 For building the documentation we use [Sphinx](https://www.sphinx-doc.org/en/master/index.html) and the [theme from ReadTheDocs](https://sphinx-rtd-theme.readthedocs.io/en/stable/) with minor design tweaks.
 
