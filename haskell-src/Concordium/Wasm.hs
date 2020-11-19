@@ -306,7 +306,7 @@ instance Serialize WasmModule where
 
   get = do
     wasmVersion <- getWord32be
-    unless (wasmVersion == 0) $ fail "Unsupported Wasm module version version."
+    unless (wasmVersion == 0) $ fail "Unsupported Wasm module version."
     wasmSource <- getByteStringWord32
     return WasmModule{..}
 
