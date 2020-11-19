@@ -25,6 +25,7 @@ import qualified Concordium.Crypto.SHA256 as H
 
 import Concordium.Types
 import Concordium.Types.HashableTo
+import Concordium.Utils.Serialization
 
 type ModuleSource = ByteString
 
@@ -361,43 +362,3 @@ getSuccessfulResultData messagesDecoder = do
   logs <- replicateM len get
   messages <- messagesDecoder
   return SuccessfulResultData{..}
-
--- |Get a bytestring with length serialized as big-endian 4 bytes.
-getByteStringWord32 :: Get ByteString
-getByteStringWord32 = do
-  len <- fromIntegral <$> getWord32be
-  getByteString len
-
--- |Put a bytestring with length serialized as big-endian 4 bytes.
--- This function assumes the string length fits into 4 bytes.
-putByteStringWord32 :: Putter ByteString
-putByteStringWord32 bs =
-  let len = fromIntegral (BS.length bs)
-  in putWord32be len <> putByteString bs
-
--- |Get a bytestring with length serialized as big-endian 2 bytes.
-getByteStringWord16 :: Get ByteString
-getByteStringWord16 = do
-  len <- fromIntegral <$> getWord16be
-  getByteString len
-
--- |Put a bytestring with length serialized as big-endian 2 bytes.
--- This function assumes the string length fits into 2 bytes.
-putByteStringWord16 :: Putter ByteString
-putByteStringWord16 bs =
-  let len = fromIntegral (BS.length bs)
-  in putWord16be len <> putByteString bs
-
--- |Get a bytestring with length serialized as big-endian 4 bytes.
-getShortByteStringWord32 :: Get ShortByteString
-getShortByteStringWord32 = do
-  len <- fromIntegral <$> getWord32be
-  getShortByteString len
-
--- |Put a bytestring with length serialized as big-endian 4 bytes.
--- This function assumes the string length fits into 4 bytes.
-putShortByteStringWord32 :: Putter ShortByteString
-putShortByteStringWord32 bs =
-  let len = fromIntegral (BSS.length bs)
-  in putWord32be len <> putShortByteString bs
-
