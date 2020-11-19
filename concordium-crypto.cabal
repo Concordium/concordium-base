@@ -1,11 +1,11 @@
 Name:           concordium-crypto
-version:         0.1
+version:        0.1
 Synopsis:       Crypto infrastructure for Concordium block chain
 Description:
 License:        BSD3
 Author:         Concordium.com
 Stability:      Experimental
-Cabal-Version:       >=1.18
+Cabal-Version:  >=1.18
 Build-Type:     Custom
 
 custom-setup
@@ -18,13 +18,8 @@ source-repository head
   type: git
   location: https://gitlab.com/Concordium/crypto
 
-Flag forced-static-linking
-    Description: Enable forced static linking
-    Manual: True
-    Default: False
-
-Flag link-with-musl
-    Description: Enable linking against Rust libraries built with Musl
+Flag static
+    Description: Produce static artifacts
     Manual: True
     Default: False
 
