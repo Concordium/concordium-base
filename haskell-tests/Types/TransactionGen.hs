@@ -11,7 +11,7 @@ import Data.Time.Clock
 
 import Concordium.Types
 import Concordium.ID.Types
-import Concordium.ID.Parameters
+import Concordium.ID.DummyData
 
 import Control.Monad
 import qualified Data.Map.Strict as Map

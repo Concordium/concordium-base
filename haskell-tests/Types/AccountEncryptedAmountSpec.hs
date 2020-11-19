@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-deprecations #-}
 module Types.AccountEncryptedAmountSpec where
 
 import qualified Data.Aeson as AE
@@ -7,7 +8,7 @@ import qualified Data.Sequence as Seq
 import Test.Hspec
 import Test.QuickCheck as QC
 
-import Concordium.ID.Parameters
+import Concordium.ID.DummyData
 import Concordium.Crypto.EncryptedTransfers
 import Concordium.Types
 

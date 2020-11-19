@@ -21,7 +21,7 @@ import qualified Concordium.Crypto.BlockSignature as BlockSig
 import qualified Concordium.Crypto.BlsSignature as Bls
 import Concordium.Crypto.SignatureScheme
 import Concordium.ID.Types
-import Concordium.ID.Parameters
+import Concordium.ID.DummyData
 import qualified Concordium.Crypto.VRF as VRF
 import Concordium.Crypto.EncryptedTransfers
 import Concordium.Crypto.FFIDataTypes
