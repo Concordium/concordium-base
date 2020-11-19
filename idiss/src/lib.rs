@@ -49,7 +49,7 @@ fn parse_exact_versioned_global_context(
     if v.version == VERSION_0 {
         Ok(v.value)
     } else {
-        Err(show_err("Incorrect IpInfo version."))
+        Err(show_err("Incorrect Global context version."))
     }
 }
 
