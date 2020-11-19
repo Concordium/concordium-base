@@ -1,5 +1,5 @@
 module Concordium.ID.Parameters
-  (GlobalContext, globalContextToJSON, jsonToGlobalContext, withGlobalContext, globalContext)
+  (GlobalContext, globalContextToJSON, jsonToGlobalContext, withGlobalContext, dummyGlobalContext)
   where
 
 import Concordium.Crypto.FFIHelpers
@@ -63,9 +63,10 @@ globalContextToJSON :: GlobalContext -> BS.ByteString
 globalContextToJSON (GlobalContext ip) = toJSONHelper globalContextToJSONFFI ip
 
 -- |Create a global context structure. This is a constant value, but quite expensive to generate.
-{-# NOINLINE globalContext #-}
-globalContext :: GlobalContext
-globalContext = GlobalContext $ unsafeDupablePerformIO (newForeignPtr freeGlobalContext =<< dummyGenerateGlobalContextPtr)
+{-# NOINLINE dummyGlobalContext #-}
+{-# WARNING dummyGlobalContext "Do not use in production." #-}
+dummyGlobalContext :: GlobalContext
+dummyGlobalContext = GlobalContext $ unsafeDupablePerformIO (newForeignPtr freeGlobalContext =<< dummyGenerateGlobalContextPtr)
 
 -- These JSON instances are very inefficient and should not be used in
 -- performance critical contexts, however they are fine for loading

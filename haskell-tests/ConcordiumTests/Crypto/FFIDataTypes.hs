@@ -2,7 +2,7 @@
 module ConcordiumTests.Crypto.FFIDataTypes where
 
 import Concordium.Crypto.FFIDataTypes
-import Concordium.ID.Parameters(globalContext)
+import Concordium.ID.DummyData(globalContext)
 
 import Data.Serialize
 import Test.QuickCheck.Monadic
