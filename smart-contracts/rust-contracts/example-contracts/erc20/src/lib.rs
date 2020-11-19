@@ -191,12 +191,12 @@ impl Deserial for InitParams {
 }
 
 // Tests
-#[cfg(test)]
+#[concordium_cfg_test]
 pub mod tests {
     use super::*;
     use concordium_sc_base::test_infrastructure::*;
 
-    #[test]
+    #[concordium_test]
     /// Initialise token/contract giving the owner
     fn test_init() {
         // Setup context
@@ -247,7 +247,7 @@ pub mod tests {
         );
     }
 
-    #[test]
+    #[concordium_test]
     /// Transfers tokens from the sender account
     fn test_receive_transfer_to() {
         // Setup context
@@ -306,7 +306,7 @@ pub mod tests {
         );
     }
 
-    #[test]
+    #[concordium_test]
     /// Sender transfer tokens between two other accounts
     ///
     /// - The amount is subtracted from the owners allowed funds
@@ -376,7 +376,7 @@ pub mod tests {
         );
     }
 
-    #[test]
+    #[concordium_test]
     /// Succeed, when allowing others to transfer
     fn test_receive_allow_transfer() {
         // Setup context
@@ -429,7 +429,7 @@ pub mod tests {
         );
     }
 
-    #[test]
+    #[concordium_test]
     /// Fail when attempting to transfer from account, without being allowed to
     /// the full amount
     fn test_receive_transfer_to_not_allowed() {
@@ -487,7 +487,7 @@ pub mod tests {
         claim_eq!(logger.logs.len(), 0, "Incorrect number of logs produced.");
     }
 
-    #[test]
+    #[concordium_test]
     /// Fail when attempting to transfer from account, with insufficient funds
     fn test_receive_transfer_to_insufficient() {
         // Setup context
@@ -535,7 +535,7 @@ pub mod tests {
         claim_eq!(logger.logs.len(), 0, "Incorrect number of logs produced.");
     }
 
-    #[test]
+    #[concordium_test]
     /// Fail when attempting to transfer from account with allowed amount, but
     /// insufficient funds
     fn test_receive_transfer_from_to_insufficient() {

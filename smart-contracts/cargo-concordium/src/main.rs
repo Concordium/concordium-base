@@ -27,16 +27,8 @@ enum Command {
     )]
     Run(RunCommand),
 
-    #[structopt(name = "test", about = "Run tests using the Wasm interpreter.")]
-    Test {
-        #[structopt(
-            name = "source",
-            long = "source",
-            default_value = "contract.wasm",
-            help = "Binary module source."
-        )]
-        source: PathBuf,
-    },
+    #[structopt(name = "test", about = "Build and run tests using a Wasm interpreter.")]
+    Test,
 
     #[structopt(name = "build", about = "Build a deployment ready smart-contract module.")]
     Build {
@@ -373,11 +365,12 @@ pub fn main() {
                 }
             }
         }
-        Command::Test {
-            source,
-        } => {
-            let source = read(&source).expect("Could not read file.");
-            test_run(&source).expect("Invocation failed.");
+        Command::Test => {
+            let res = build_and_run_wasm_test();
+            match res {
+                Ok(_) => {}
+                Err(err) => eprintln!("{}", err),
+            }
         }
         Command::Build {
             schema_embed,

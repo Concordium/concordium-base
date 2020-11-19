@@ -741,7 +741,7 @@ impl machine::Host<ArtifactNamedImport> for TestHost {
             let filename =
                 std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?;
             let location = format!("{}:{}:{}", filename, line, column);
-            eprintln!("\nError: {}\n{}\n", msg, location);
+            eprintln!("\n\n    Error: {}\n    {}", msg, location);
         } else {
             bail!("Unsupported host function call.")
         }
@@ -750,24 +750,24 @@ impl machine::Host<ArtifactNamedImport> for TestHost {
 }
 
 /// Instantiates the module with an external function to report back errors.
-/// Then tries to run an exported 'main' function.
-/// The main function is present in the module if compile using 'cargo test'
-pub fn test_run(module_bytes: &[u8]) -> ExecResult<()> {
+/// Then tries to run exported test-functions, which are present if compile with
+/// the wasm-test feature.
+pub fn run_module_tests(module_bytes: &[u8]) -> ExecResult<()> {
     eprintln!("\nInstantiating WASM module.");
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
     eprintln!("Running tests");
-    // Unable to find a proper source, but it seems that the test main function
-    // takes two u32 arguments, which we assume are `argc` and `argv` in a C
-    // program. Since we don't use `argc` and `argv` in the test, we can pass
-    // any u32.
-    if let (Some(Value::I32(n)), _) =
-        artifact.run(&mut TestHost, "main", &[Value::I32(0), Value::I32(0)])?
-    {
-        ensure!(n == 0, "Test failed.");
-        eprintln!("Test result: ok.")
-    } else {
-        eprintln!("Test failed.");
+    for name in artifact.export.keys() {
+        if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
+            eprint!("- {}: ", test_name);
+            let res = artifact.run(&mut TestHost, name, &[]);
+            let msg = match res {
+                Ok(_) => "ok.",
+                Err(_) => "",
+            };
+            eprintln!("{}", msg);
+        }
     }
+    eprintln!("Done");
     Ok(())
 }
 

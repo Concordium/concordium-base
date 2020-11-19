@@ -9,7 +9,7 @@ default = ["std"]
 
 std = ["concordium-sc-base/std"]
 build-schema = []
-
+wasm-test = []
 
 [dependencies]
 byteorder = "1.3"

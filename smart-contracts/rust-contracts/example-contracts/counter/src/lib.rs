@@ -76,12 +76,12 @@ fn contract_receive_optimized<
     Ok(A::accept())
 }
 
-#[cfg(test)]
+#[concordium_cfg_test]
 mod tests {
     use super::*;
     use concordium_sc_base::test_infrastructure::*;
 
-    #[test]
+    #[concordium_test]
     /// Test that init succeeds or fails based on what parameter and amount are.
     fn test_init() {
         // Setup our example state the contract is to be run in.
@@ -106,7 +106,7 @@ mod tests {
         claim_eq!(&logger.logs[0], &[0, 13], "Incorrect log produced.");
     }
 
-    #[test]
+    #[concordium_test]
     /// Basic functional correctness of receive.
     ///
     /// - step is maintained
@@ -137,9 +137,9 @@ mod tests {
         claim_eq!(state.current_count, 14, "Contract receive did not bump the step.");
     }
 
-    #[test]
+    #[concordium_test]
     /// Test receive fails a user which is not the owner increments
-    fn test_receive_fails_() {
+    fn test_receive_fails() {
         // Setup our example state the contract is to be run in.
         // First the context.
         let mut ctx = ReceiveContextTest::default();

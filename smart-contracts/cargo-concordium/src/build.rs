@@ -4,7 +4,7 @@ use std::{
     fs::read,
     process::{Command, Stdio},
 };
-use wasm_chain_integration::generate_contract_schema;
+use wasm_chain_integration::{generate_contract_schema, run_module_tests};
 
 fn to_snake_case(string: String) -> String { string.to_lowercase().replace("-", "_") }
 
@@ -40,7 +40,44 @@ pub fn build_contract_schema() -> anyhow::Result<schema::Contract> {
         format!("target/schema/wasm32-unknown-unknown/debug/{}.wasm", to_snake_case(package.name));
 
     let wasm = read(filename)
-        .map_err(|err| anyhow::anyhow!("Failed reading schema contract build:\n{}", err))?;
+        .map_err(|err| anyhow::anyhow!("Failed reading contract schema build:\n{}", err))?;
     let schema = generate_contract_schema(&wasm)?;
     Ok(schema)
+}
+
+pub fn build_and_run_wasm_test() -> anyhow::Result<()> {
+    let manifest = Manifest::from_path("Cargo.toml")
+        .map_err(|err| anyhow::anyhow!("Failed reading manifest: {}", err))?;
+    let package =
+        manifest.package.ok_or_else(|| anyhow::anyhow!("Manifest need to specify [package]"))?;
+
+    anyhow::ensure!(
+        manifest.features.contains_key("wasm-test"),
+        "Cargo.toml must contain the 'wasm-test' feature to construct the test build
+
+    [features]
+    wasm-test = []
+    ...
+"
+    );
+
+    Command::new("cargo")
+        .arg("build")
+        .args(&["--target", "wasm32-unknown-unknown"])
+        .args(&["--features", "wasm-test"])
+        .args(&["--target-dir", "target/wasm-test"])
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .output()
+        .map_err(|err| anyhow::anyhow!("Failed building contract tests:\n{}", err))?;
+
+    let filename = format!(
+        "target/wasm-test/wasm32-unknown-unknown/debug/{}.wasm",
+        to_snake_case(package.name)
+    );
+
+    let wasm = read(filename)
+        .map_err(|err| anyhow::anyhow!("Failed reading contract test build:\n{}", err))?;
+
+    run_module_tests(&wasm)
 }
