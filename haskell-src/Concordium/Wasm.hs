@@ -86,7 +86,7 @@ newtype ReceiveName = ReceiveName { receiveName :: Text }
 -- This is the case if
 --
 -- * all characters are valid ascii characters in alphanumeric or punctuation classes
--- * the name does contains @.@
+-- * the name contains @.@
 isValidReceiveName :: Text -> Bool
 isValidReceiveName proposal =
   let hasValidCharacters = Text.all (\c -> isAscii c && (isAlphaNum c || isPunctuation c)) proposal
