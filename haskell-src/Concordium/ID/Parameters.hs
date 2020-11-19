@@ -66,7 +66,7 @@ globalContextToJSON (GlobalContext ip) = toJSONHelper globalContextToJSONFFI ip
 {-# NOINLINE dummyGlobalContext #-}
 {-# WARNING dummyGlobalContext "Do not use in production." #-}
 dummyGlobalContext :: GlobalContext
-dummyGlobalContext = GlobalContext $ unsafeDupablePerformIO (newForeignPtr freeGlobalContext =<< dummyGenerateGlobalContextPtr)
+dummyGlobalContext = GlobalContext $ unsafePerformIO (newForeignPtr freeGlobalContext =<< dummyGenerateGlobalContextPtr)
 
 -- These JSON instances are very inefficient and should not be used in
 -- performance critical contexts, however they are fine for loading
