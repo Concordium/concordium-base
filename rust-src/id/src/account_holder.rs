@@ -260,8 +260,7 @@ pub fn generate_pio<P: Pairing, C: Curve<Scalar = P::ScalarField>>(
         bulletproofs.push(bulletproof);
     }
 
-    // Somewhere here we have to add a proof that
-    //  RegID_ACC = PRF(AHI.key_PRF ,0):
+    // Proof that RegID_ACC = PRF(AHI.key_PRF ,0):
     let prover_prf_regid = com_eq::ComEq {
         commitment: cmm_prf,
         y:          context.global_context.on_chain_commitment_key.g,
@@ -1194,7 +1193,8 @@ mod tests {
             },
             threshold: SignatureThreshold(2),
         };
-        let global_ctx = GlobalContext::generate();
+        let global_ctx = GlobalContext::<ExampleCurve>::generate(String::from("genesis_string"));
+
         let (ars_infos, _) =
             test_create_ars(&global_ctx.on_chain_commitment_key.g, num_ars, &mut csprng);
         let (context, pio, randomness) =
