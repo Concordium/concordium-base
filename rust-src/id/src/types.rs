@@ -1567,18 +1567,24 @@ pub struct GlobalContext<C: Curve> {
     /// dynamic generation.
     #[serde(rename = "bulletproofGenerators")]
     bulletproof_generators: Generators<C>,
+    #[string_size_length = 4]
+    #[serde(rename = "genesisString")]
+    /// A free-form string used to distinguish between different chains.
+    pub genesis_string: String,
 }
 
 impl<C: Curve> GlobalContext<C> {
     /// Generate a new global context.
-    pub fn generate() -> Self { Self::generate_size(NUM_BULLETPROOF_GENERATORS) }
+    pub fn generate(genesis_string: String) -> Self {
+        Self::generate_size(genesis_string, NUM_BULLETPROOF_GENERATORS)
+    }
 
     /// Generate a new global context with the given number of
     /// bulletproof generators.
     ///
     /// This is intended mostly for testing, on-chain there will be a fixed
     /// amount.
-    pub fn generate_size(n: usize) -> Self {
+    pub fn generate_size(genesis_string: String, n: usize) -> Self {
         // initialize the first generator from pi digits.
         let g = C::hash_to_group(&PI_DIGITS[0..1000]);
 
@@ -1599,7 +1605,8 @@ impl<C: Curve> GlobalContext<C> {
 
         GlobalContext {
             on_chain_commitment_key: cmm_key,
-            bulletproof_generators:  Generators { G_H: generators },
+            bulletproof_generators: Generators { G_H: generators },
+            genesis_string,
         }
     }
 

@@ -5,26 +5,26 @@
       "keys": [
         {
           "schemeId": "Ed25519",
-          "verifyKey": "1aead83cb20d5b6a28a9c33138fc088141d7d3b4fff502817c54ed9feba1182a"
+          "verifyKey": "a517502ee45ab19195f8b3dcb9a24eceb04c3f9ed68bff9c55bdc08d1aa9f114"
         },
         {
           "schemeId": "Ed25519",
-          "verifyKey": "7f813c91a8ce70d68414b0b7fa96d8ade08fb881dd7974164b82c24d378ffa0e"
+          "verifyKey": "e762f2fdb07cb01d4f20f26182c90e0b7a031be89a0f31e9eeabdeb7a41d4a02"
         },
         {
           "schemeId": "Ed25519",
-          "verifyKey": "d95ea958b2e0fac8a6fa90ce0915adaa003a2b3b1d2f0aeb5607b73d5bd3d42e"
+          "verifyKey": "c2c3c8e608c68d4de2898cdb3e304842acaf48aedc3697322c55d37dbd364655"
         }
       ],
       "threshold": 2
     },
-    "regId": "89995bff455991731c02a4014e61359bd18c3f7751ebe611217d10650ee6bda6172d59a600a5b2eae275a871812fbcb1",
+    "regId": "acf234a84b56e69f9c6736257341491c9552058b0e6e76a4e115679e0aa25af6492d62dc3659ef123469a97fbb2bc7ce",
     "ipIdentity": 0,
     "policy": {
       "validTo": "202205",
       "createdAt": "202005",
       "revealedAttributes": {}
     },
-    "sig": "efc0fb56c2047102297cf9926dcdfb743f7c0891eb81eef22e5abf8602ac9cfb545c4650814992e0b54c6c02e89bc29b0605bfcd0063a35eff2a69dc39a9fb07"
+    "sig": "916f3114bd6e5bc60b486be3c42a94c7a89802e526a6f69aadeb6891e5761f30472eb94aa23d2cef7487baf6b7e819e857d3c4929379c69ca36876c1026adb07"
   }
 }
