@@ -1,3 +1,6 @@
+# This file is intended to be used in an alpine-linux environment with an
+# appropriate GHC to generate static binaries.
+
 resolver: lts-16.20
 
 packages:
