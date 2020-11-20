@@ -82,8 +82,8 @@ unsafe fn set_string_property(
 }
 
 unsafe extern "C" fn validate_request_js(env: napi_env, info: napi_callback_info) -> napi_value {
-    let mut buffer: [napi_value; 3] = std::mem::MaybeUninit::zeroed().assume_init();
-    let mut argc = 3usize;
+    let mut buffer: [napi_value; 4] = std::mem::MaybeUninit::zeroed().assume_init();
+    let mut argc = 4usize;
     let mut this: napi_value = std::mem::zeroed();
     let ret = napi_get_cb_info(
         env,
@@ -96,25 +96,29 @@ unsafe extern "C" fn validate_request_js(env: napi_env, info: napi_callback_info
     if ret != napi_status::napi_ok {
         return create_error(env, "Cannot acquire context.");
     }
-    if argc != 3 {
+    if argc != 4 {
         return create_error(
             env,
-            &format!("Expected 3 arguments, but provided {}.", argc),
+            &format!("Expected 4 arguments, but provided {}.", argc),
         );
     }
-    let ip_info = match get_string_arg(env, buffer[0]) {
+    let global_context = match get_string_arg(env, buffer[0]) {
+        Some(arg1) => arg1,
+        None => return create_error(env, "GlobalContext must be given as a string."),
+    };
+    let ip_info = match get_string_arg(env, buffer[1]) {
         Some(arg1) => arg1,
         None => return create_error(env, "IpInfo must be given as a string."),
     };
-    let ars_info = match get_string_arg(env, buffer[1]) {
+    let ars_info = match get_string_arg(env, buffer[2]) {
         Some(arg1) => arg1,
         None => return create_error(env, "ArsInfo' must be given as a string."),
     };
-    let request = match get_string_arg(env, buffer[2]) {
+    let request = match get_string_arg(env, buffer[3]) {
         Some(arg) => arg,
         None => return create_error(env, "Argument should be a string."),
     };
-    let b = validate_request(&ip_info, &ars_info, &request);
+    let b = validate_request(&global_context, &ip_info, &ars_info, &request);
     let mut ret: napi_value = std::mem::zeroed();
     if napi_get_boolean(env, b, &mut ret) != napi_status::napi_ok {
         create_error(env, "[Internal error]: Cannot create a boolean.")

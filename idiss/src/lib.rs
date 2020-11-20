@@ -11,7 +11,7 @@ use id::{
     types::*,
 };
 use serde_json::{from_str, from_value, ser::to_string, Value};
-use std::{fmt::Display, io::Cursor};
+use std::fmt::Display;
 
 type ExampleCurve = G1;
 type ExampleAttributeList = AttributeList<<Bls12 as Pairing>::ScalarField, AttributeKind>;
@@ -38,12 +38,11 @@ fn parse_exact_versioned_ars_infos(ars_info_str: &str) -> Result<ArInfos<ArCurve
     }
 }
 
-
 // Parse an GlobalContext taking into account the version.
 // For now only version 0 is supported.
 fn parse_exact_versioned_global_context(
     global_context_str: &str,
-) -> Result<GlobalContext<ExampleCurve>, JsValue> {
+) -> Result<GlobalContext<ExampleCurve>, String> {
     let v: Versioned<GlobalContext<ExampleCurve>> =
         from_str(global_context_str).map_err(show_err)?;
     if v.version == VERSION_0 {
@@ -52,7 +51,6 @@ fn parse_exact_versioned_global_context(
         Err(show_err("Incorrect Global context version."))
     }
 }
-
 
 pub fn validate_request(
     global_context_str: &str,
