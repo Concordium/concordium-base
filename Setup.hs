@@ -6,9 +6,7 @@ import Distribution.Simple.Utils
 import Distribution.System
 import Distribution.Verbosity
 import Control.Monad
-import System.Directory
 import System.Environment
-import Data.Maybe
 
 concordiumLibs :: [String]
 concordiumLibs = [ "ecvrf"
@@ -25,9 +23,12 @@ type WithEnvAndVerbosity = [(String, String)] -> Verbosity -> IO ()
 -- |In linux, we will produce two kind of builds:
 -- - Static with musl: the rust libraries will only build static artifacts. Intended to be used inside alpine to produce a static binary.
 -- - With glibc: Normal compilation. Rust will produce static and dynamic artifacts.
+--
+-- The first argument chooses whether to build statically with musl or not.
 linuxBuild :: Bool -> WithEnvAndVerbosity
 linuxBuild True env verbosity = do
   noticeNoWrap verbosity "Static linking."
+  -- the target-feature=-crt-static is needed so that C symbols are not included in the generated rust libraries. For more information check https://rust-lang.github.io/rfcs/1721-crt-static.html
   rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml", "--target", "x86_64-unknown-linux-musl"]
     (("CARGO_NET_GIT_FETCH_WITH_CLI", "true") : ("RUSTFLAGS", "-C target-feature=-crt-static") : env)
   -- as I have not been able to modify the extra-lib-dirs based on the flag assignment, for now we will copy the musl libs onto the normal target libraries
@@ -37,7 +38,6 @@ linuxBuild False env verbosity = do
   noticeNoWrap verbosity "Dynamic linking."
   rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] (("CARGO_NET_GIT_FETCH_WITH_CLI", "true") : env)
 
--- |I honestly have no idea about what we should do on windows.
 windowsBuild :: WithEnvAndVerbosity
 windowsBuild env verbosity = do
   rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] (("CARGO_NET_GIT_FETCH_WITH_CLI", "true")  : env)
