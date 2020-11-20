@@ -40,13 +40,13 @@ linuxBuild False env verbosity = do
   noticeNoWrap verbosity "Dynamic linking."
   rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] (("CARGO_NET_GIT_FETCH_WITH_CLI", "true") : env)
   let copyLib lib = do
-        let source = "../rust-src/target/release/lib" ++ lib ++ ".so"
-            target = "./lib/lib" ++ lib ++ ".so"
-        rawSystemExit verbosity "ln" ["-s", "-f", source, target]
+        let source = "../rust-src/target/release/lib" ++ lib
+            target = "./lib/lib" ++ lib
+        rawSystemExit verbosity "ln" ["-s", "-f", source ++ ".a",  target ++ ".a"]
+        rawSystemExit verbosity "ln" ["-s", "-f", source ++ ".a", target ++ ".so"]
         noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
   notice verbosity "Linking libraries to ./lib"
   mapM_ copyLib concordiumLibs
-
 
 windowsBuild :: WithEnvAndVerbosity
 windowsBuild env verbosity = do
@@ -64,9 +64,9 @@ windowsBuild env verbosity = do
 osxBuild :: Bool -> WithEnvAndVerbosity
 osxBuild static env verbosity = do
   let copyLib lib = do
-        let source = "../rust-src/target/release/lib" ++ lib ++ ".dylib"
         if static
           then do
+            let source = "../rust-src/target/release/lib" ++ lib ++ ".a"
             let others = "./lib/lib" ++ lib ++ ".a"
                 target = "./lib/lib" ++ lib ++ ".dylib"
             rawSystemExit verbosity "rm" ["-f", others]
@@ -74,6 +74,7 @@ osxBuild static env verbosity = do
             noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
             noticeNoWrap verbosity $ "Removed: " ++ others
           else do
+            let source = "../rust-src/target/release/lib" ++ lib ++ ".dylib"
             let others = "./lib/lib" ++ lib ++ ".dylib"
                 target = "./lib/lib" ++ lib ++ ".a"
             rawSystemExit verbosity "rm" ["-f", others]
