@@ -11,13 +11,13 @@ stages:
     STACK_ROOT: "${CI_PROJECT_DIR}/.stack"
     RUSTFLAGS: -Dwarnings
   before_script:
-    - rustc --version && cargo --version && stack --version && ghc --version
+    - rustc --version && cargo --version
     - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/.insteadOf ssh://git@gitlab.com:22/
   cache:
     paths:
       - .stack
       - .stack-work
-      - rust-src/target
+      - target
 
 .generic-lint:
   extends: .generic
@@ -57,6 +57,7 @@ stages:
   extends: .generic-test
   stage: test
   script:
+    - ( cd rust-src && cargo build --release)
     - stack test
 
 "cargo:test":
