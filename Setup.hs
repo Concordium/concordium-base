@@ -43,7 +43,7 @@ linuxBuild False env verbosity = do
         let source = "../rust-src/target/release/lib" ++ lib
             target = "./lib/lib" ++ lib
         rawSystemExit verbosity "ln" ["-s", "-f", source ++ ".a",  target ++ ".a"]
-        rawSystemExit verbosity "ln" ["-s", "-f", source ++ ".a", target ++ ".so"]
+        rawSystemExit verbosity "ln" ["-s", "-f", source ++ ".so", target ++ ".so"]
         noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
   notice verbosity "Linking libraries to ./lib"
   mapM_ copyLib concordiumLibs
