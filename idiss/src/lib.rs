@@ -57,31 +57,31 @@ pub fn validate_request(
     ip_info_str: &str,
     ars_infos_str: &str,
     request_str: &str,
-) -> bool {
+) -> (bool, String) {
     let global_context = match parse_exact_versioned_global_context(global_context_str) {
         Ok(v) => v,
-        Err(_) => return false,
+        Err(_) => return (false, String::new()),
     };
 
     let ip_info = match parse_exact_versioned_ip_info(ip_info_str) {
         Ok(v) => v,
-        Err(_) => return false,
+        Err(_) => return (false, String::new()),
     };
 
     let ars_infos = match parse_exact_versioned_ars_infos(ars_infos_str) {
         Ok(v) => v,
-        Err(_) => return false,
+        Err(_) => return (false, String::new()),
     };
 
     let request: PreIdentityObject<Bls12, ExampleCurve> = {
         let v: Value = match from_str(request_str) {
             Ok(v) => v,
-            Err(_) => return false,
+            Err(_) => return (false, String::new()),
         };
         let pre_id_obj_value = {
             match v.get("idObjectRequest") {
                 Some(v) => v,
-                None => return false,
+                None => return (false, String::new()),
             }
         };
 
@@ -89,10 +89,10 @@ pub fn validate_request(
             if v.version == VERSION_0 {
                 v.value
             } else {
-                return false;
+                return (false, String::new());
             }
         } else {
-            return false;
+            return (false, String::new());
         }
     };
 
@@ -102,8 +102,16 @@ pub fn validate_request(
         global_context: &global_context,
     };
 
+    let addr = to_string(&serde_json::json!(AccountAddress::new(
+        &request.pub_info_for_ip.reg_id
+    )))
+    .expect("JSON serialization of accounts cannot fail.");
     let vf = ip_validate_request(&request, context);
-    vf.is_ok()
+    if let Ok(()) = vf {
+        (true, addr)
+    } else {
+        (false, addr)
+    }
 }
 
 fn show_err<D: Display>(err: D) -> String { format!("ERROR: {}", err) }

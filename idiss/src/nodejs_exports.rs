@@ -118,13 +118,25 @@ unsafe extern "C" fn validate_request_js(env: napi_env, info: napi_callback_info
         Some(arg) => arg,
         None => return create_error(env, "Argument should be a string."),
     };
-    let b = validate_request(&global_context, &ip_info, &ars_info, &request);
-    let mut ret: napi_value = std::mem::zeroed();
-    if napi_get_boolean(env, b, &mut ret) != napi_status::napi_ok {
-        create_error(env, "[Internal error]: Cannot create a boolean.")
-    } else {
-        ret
+    let (res, addr) = validate_request(&global_context, &ip_info, &ars_info, &request);
+    let mut ret_obj: napi_value = std::mem::zeroed();
+    if napi_create_object(env, &mut ret_obj) != napi_status::napi_ok {
+        return create_error(env, "Cannot make return object.");
+    };
+    let mut ret_b: napi_value = std::mem::zeroed();
+    if napi_get_boolean(env, res, &mut ret_b) != napi_status::napi_ok {
+        return create_error(env, "Cannot create a boolean.");
     }
+    let name = std::ffi::CString::new("result").unwrap();
+    if napi_set_named_property(env, ret_obj, name.as_ptr() as *const i8, ret_b)
+        != napi_status::napi_ok
+    {
+        return create_error(env, "Cannot set 'result' property");
+    }
+    if set_string_property(env, ret_obj, "accountAddress", &addr).is_none() {
+        return create_error(env, "Cannot set 'accountAddress' property");
+    }
+    ret_obj
 }
 
 #[no_mangle]
