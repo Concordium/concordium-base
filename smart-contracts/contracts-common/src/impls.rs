@@ -803,7 +803,8 @@ impl Deserial for schema::Module {
 impl Serial for schema::Contract {
     fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
         self.state.serial(out)?;
-        self.method_parameter.serial(out)?;
+        self.init.serial(out)?;
+        self.receive.serial(out)?;
         Ok(())
     }
 }
@@ -811,11 +812,13 @@ impl Serial for schema::Contract {
 impl Deserial for schema::Contract {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let state = source.get()?;
+        let init = source.get()?;
         let len: u32 = source.get()?;
-        let method_parameter = deserial_map_no_length_no_order_check(source, len as usize)?;
+        let receive = deserial_map_no_length_no_order_check(source, len as usize)?;
         Ok(schema::Contract {
             state,
-            method_parameter,
+            init,
+            receive,
         })
     }
 }

@@ -416,15 +416,17 @@ pub mod schema {
     /// Describes all the schemas of a smart contract.
     #[derive(Debug, Clone)]
     pub struct Contract {
-        pub state:            Option<Type>,
-        pub method_parameter: BTreeMap<String, Type>,
+        pub state:   Option<Type>,
+        pub init:    Option<Type>,
+        pub receive: BTreeMap<String, Type>,
     }
 
     impl Contract {
         pub fn empty() -> Contract {
             Contract {
-                state:            None,
-                method_parameter: BTreeMap::new(),
+                state:   None,
+                init:    None,
+                receive: BTreeMap::new(),
             }
         }
     }

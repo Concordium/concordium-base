@@ -199,26 +199,28 @@ pub fn main() {
                         }
                     }
                 } else {
-                    let output = match get_embedded_schema(&source) {
-                        Ok(contract_schema) => match contract_schema.state {
-                            Some(state_schema) => {
-                                let s = state_schema
-                                    .to_json_string_pretty(&state)
-                                    .expect("Deserializing using state schema failed");
-                                format!("(Using embedded schema)\n{}", s)
-                            }
-                            None => format!("(No schema found for contract state)\n{:?}", state),
-                        },
-                        Err(err) => format!("(Failed to get schema: {})\n{:?}", err, state),
-                    };
-                    match &runner.out {
-                        None => println!("The new state is: {}\n", output),
-                        Some(fp) => {
-                            let mut out_file =
-                                File::create(fp).expect("Could not create output file.");
-                            out_file.write_all(&state).expect("Could not write out the state.")
-                        }
-                    }
+
+                    // let output = match get_embedded_schema(&source) {
+                    //     Ok(contract_schema) => 
+                    //         match contract_schema.state {
+                    //         Some(state_schema) => {
+                    //             let s = state_schema
+                    //                 .to_json_string_pretty(&state)
+                    //                 .expect("Deserializing using state schema failed");
+                    //             format!("(Using embedded schema)\n{}", s)
+                    //         }
+                    //         None => format!("(No schema found for contract state)\n{:?}", state),
+                    //     },
+                    //     Err(err) => format!("(Failed to get schema: {})\n{:?}", err, state),
+                    // };
+                    // match &runner.out {
+                    //     None => println!("The new state is: {}\n", output),
+                    //     Some(fp) => {
+                    //         let mut out_file =
+                    //             File::create(fp).expect("Could not create output file.");
+                    //         out_file.write_all(&state).expect("Could not write out the state.")
+                    //     }
+                    // }
                 }
             };
 
@@ -384,11 +386,11 @@ pub fn main() {
             schema_output,
         } => {
             let build_schema = schema_embed || schema_output.is_some();
-            if build_schema {
+            let schema_to_embed = if build_schema {
                 let module_schema = match build_contract_schema() {
                     Ok(schema) => schema,
                     Err(err) => {
-                        println!("Failed building schema {}", err);
+                        eprintln!("Failed building schema {}", err);
                         panic!()
                     }
                 };
@@ -397,19 +399,29 @@ pub fn main() {
                     print_contract_schema(contract_name, contract_schema);
                 }
                 let module_schema_bytes = to_bytes(&module_schema);
-                println!("Total size of the module schema is: {} bytes", module_schema_bytes.len());
+                eprintln!(
+                    "Total size of the module schema is: {} bytes",
+                    module_schema_bytes.len()
+                );
 
                 if let Some(schema_out) = schema_output {
-                    println!("Writing schema to {:?}.", schema_out);
+                    eprintln!("Writing schema to {:?}.", schema_out);
                     write(schema_out, &module_schema_bytes).unwrap();
                 }
                 if schema_embed {
-                    println!("Embedding schema into contract module.");
-                    todo!("Embed the schema as a custom section in the wasm module");
+                    eprintln!("Embedding schema into contract module.");
+                    Some(module_schema)
+                } else {
+                    None
                 }
+            } else {
+                None
+            };
+            let res = build_contract(schema_to_embed);
+            match res {
+                Ok(_) => eprintln!("\nDone building your smart contract."),
+                Err(err) => eprintln!("\nFailed building your smart contract: {}", err),
             }
-            // TODO: Actually build the contract without the code for schema generation.
-            println!("\nDone building your smart contract.");
         }
     }
 }
@@ -436,7 +448,7 @@ struct State {{ ... }}
         }
     }
 
-    if contract_schema.method_parameter.is_empty() {
+    if contract_schema.receive.is_empty() {
         println!(
             "No schemas found for method parameters.
 
@@ -448,7 +460,7 @@ To include a schema for a method parameter specify the parameter type as an attr
         )
     } else {
         println!("Found schemas for the following methods:\n");
-        for (method_name, param_type) in contract_schema.method_parameter.iter() {
+        for (method_name, param_type) in contract_schema.receive.iter() {
             println!("'{}': {:#?}\n", method_name, param_type);
         }
     }

@@ -16,6 +16,10 @@ anyhow = "1.0.33"
 
 [features]
 
+[dependencies.wasm-transform]
+path = "../wasm-transform"
+version = "0"
+
 [dependencies.wasm-chain-integration]
 version = "0.1"
 path = "../wasm-chain-integration/"

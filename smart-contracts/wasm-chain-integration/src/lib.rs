@@ -779,6 +779,7 @@ pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Modul
 
     for name in artifact.export.keys() {
         if let Some(contract_name) = name.as_ref().strip_prefix("concordium_schema_state_") {
+            // Generates contract state schema type
             if !contract_schemas.contains_key(contract_name) {
                 contract_schemas.insert(contract_name.to_string(), schema::Contract::empty());
             }
@@ -787,18 +788,29 @@ pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Modul
             let schema_type = generate_schema_run(&artifact, name.as_ref())?;
             contract_schema.state = Some(schema_type);
         } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
-            let split_name: Vec<_> = rest.splitn(2, '.').collect();
-            let contract_name = split_name[0];
-            let function_name = split_name[1];
+            if let Some(contract_name) = rest.strip_prefix("init_") {
+                // Generates init-function parameter schema type
+                if !contract_schemas.contains_key(contract_name) {
+                    contract_schemas.insert(contract_name.to_string(), schema::Contract::empty());
+                }
+                let contract_schema = contract_schemas.get_mut(contract_name).unwrap(); // Safe since the entry was inserted above if empty
+                let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+                contract_schema.init = Some(schema_type);
+            } else {
+                // Generates receive-function parameter schema type
+                let split_name: Vec<_> = rest.splitn(2, '.').collect();
+                let contract_name = split_name[0];
+                let function_name = split_name[1];
 
-            if !contract_schemas.contains_key(contract_name) {
-                contract_schemas.insert(contract_name.to_string(), schema::Contract::empty());
+                if !contract_schemas.contains_key(contract_name) {
+                    contract_schemas.insert(contract_name.to_string(), schema::Contract::empty());
+                }
+
+                let contract_schema = contract_schemas.get_mut(contract_name).unwrap(); // Safe since the entry was inserted above if empty
+
+                let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+                contract_schema.receive.insert(function_name.to_string(), schema_type);
             }
-
-            let contract_schema = contract_schemas.get_mut(contract_name).unwrap(); // Safe since the entry was inserted above if empty
-
-            let schema_type = generate_schema_run(&artifact, name.as_ref())?;
-            contract_schema.method_parameter.insert(function_name.to_string(), schema_type);
         }
     }
 
@@ -866,17 +878,17 @@ pub fn get_receives(module: &Module) -> Vec<&Name> {
 }
 
 /// Get the embedded schema if it exists
-pub fn get_embedded_schema(bytes: &[u8]) -> ExecResult<schema::Contract> {
+pub fn get_embedded_schema(bytes: &[u8]) -> ExecResult<schema::Module> {
     let skeleton = parse_skeleton(bytes)?;
     let mut schema_sections = Vec::new();
     for ucs in skeleton.custom.iter() {
         let cs = parse_custom(ucs)?;
-        if cs.name.as_ref() == "contract-schema" {
+        if cs.name.as_ref() == "concordium-schema-v1" {
             schema_sections.push(cs)
         }
     }
     let section =
         schema_sections.first().ok_or_else(|| anyhow!("No schema found in the module"))?;
     let source = &mut Cursor::new(section.contents);
-    schema::Contract::deserial(source).map_err(|_| anyhow!("Failed parsing schema"))
+    source.get().map_err(|_| anyhow!("Failed parsing schema"))
 }
