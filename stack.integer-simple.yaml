@@ -4,7 +4,7 @@ packages:
 - .
 
 extra-lib-dirs:
-    - ./rust-src/target/release
+    - lib
 
 flags:
   hashable:

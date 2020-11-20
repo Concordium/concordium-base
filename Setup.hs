@@ -5,7 +5,6 @@ import Distribution.Simple.Setup
 import Distribution.Simple.Utils
 import Distribution.System
 import Distribution.Verbosity
-import Control.Monad
 import System.Environment
 
 concordiumLibs :: [String]
@@ -31,24 +30,59 @@ linuxBuild True env verbosity = do
   -- the target-feature=-crt-static is needed so that C symbols are not included in the generated rust libraries. For more information check https://rust-lang.github.io/rfcs/1721-crt-static.html
   rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml", "--target", "x86_64-unknown-linux-musl"]
     (("CARGO_NET_GIT_FETCH_WITH_CLI", "true") : ("RUSTFLAGS", "-C target-feature=-crt-static") : env)
-  -- as I have not been able to modify the extra-lib-dirs based on the flag assignment, for now we will copy the musl libs onto the normal target libraries
-  let copyLib lib = rawSystemExit verbosity "cp" ["rust-src/target/x86_64-unknown-linux-musl/release/lib" ++ lib ++ ".a", "rust-src/target/release"]
+  let copyLib lib = do
+        let source = "../rust-src/target/x86_64-unknown-linux-musl/release/lib" ++ lib ++ ".a"
+            target = "./lib/lib" ++ lib ++ ".a"
+        rawSystemExit verbosity "ln" ["-s", "-f", source, target]
+        noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
   mapM_ copyLib concordiumLibs
 linuxBuild False env verbosity = do
   noticeNoWrap verbosity "Dynamic linking."
   rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] (("CARGO_NET_GIT_FETCH_WITH_CLI", "true") : env)
+  let copyLib lib = do
+        let source = "../rust-src/target/release/lib" ++ lib ++ ".so"
+            target = "./lib/lib" ++ lib ++ ".so"
+        rawSystemExit verbosity "ln" ["-s", "-f", source, target]
+        noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
+  notice verbosity "Linking libraries to ./lib"
+  mapM_ copyLib concordiumLibs
+
 
 windowsBuild :: WithEnvAndVerbosity
 windowsBuild env verbosity = do
+  let copyLib lib = do
+        rawSystemExit verbosity "cp" ["rust-src/target/release/lib" ++ lib ++ ".a", "./lib/"]
+        rawSystemExit verbosity "cp" ["rust-src/target/release/" ++ lib ++ ".dll", "./lib/"]
+        notice verbosity $ "Copied " ++ lib ++ "."
   rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] (("CARGO_NET_GIT_FETCH_WITH_CLI", "true")  : env)
+  notice verbosity "Copying libraries to ./lib"
+  mapM_ copyLib concordiumLibs
 
 -- |On Mac, we will delete the dynamic artifacts if we want to create a static binary.
+--
+-- The flag tells whether we want a static compilation or not.
 osxBuild :: Bool -> WithEnvAndVerbosity
 osxBuild static env verbosity = do
+  let copyLib lib = do
+        let source = "../rust-src/target/release/lib" ++ lib ++ ".dylib"
+        if static
+          then do
+            let others = "./lib/lib" ++ lib ++ ".a"
+                target = "./lib/lib" ++ lib ++ ".dylib"
+            rawSystemExit verbosity "rm" ["-f", others]
+            rawSystemExit verbosity "ln" ["-s", "-f", source, target]
+            noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
+            noticeNoWrap verbosity $ "Removed: " ++ others
+          else do
+            let others = "./lib/lib" ++ lib ++ ".dylib"
+                target = "./lib/lib" ++ lib ++ ".a"
+            rawSystemExit verbosity "rm" ["-f", others]
+            rawSystemExit verbosity "ln" ["-s", "-f", source, target]
+            noticeNoWrap verbosity $ "Linked: " ++ target ++ " -> " ++ source
+            noticeNoWrap verbosity $ "Removed: " ++ others
   rawSystemExitWithEnv verbosity "cargo" ["build", "--release", "--manifest-path", "rust-src/Cargo.toml"] (("CARGO_NET_GIT_FETCH_WITH_CLI", "true")  : env)
-  when static $ do
-      let deleteDynLib lib = rawSystemExit verbosity "rm" ["-f", "rust-src/target/release/lib" ++ lib ++ ".dylib"]
-      mapM_ deleteDynLib concordiumLibs
+  notice verbosity "Linking libraries to ./lib"
+  mapM_ copyLib concordiumLibs
 
 makeRust :: Args -> ConfigFlags -> PackageDescription -> LocalBuildInfo -> IO ()
 makeRust _ flags _ lbi = do
@@ -59,6 +93,7 @@ makeRust _ flags _ lbi = do
           OSX -> osxBuild staticLinking
           Linux -> linuxBuild staticLinking
     env <- getEnvironment
+    rawSystemExit verbosity "mkdir" ["-p", "./lib"]
     build env verbosity
 
 main = defaultMainWithHooks simpleUserHooks
