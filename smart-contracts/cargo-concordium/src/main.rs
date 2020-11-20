@@ -107,15 +107,17 @@ enum RunCommand {
     #[structopt(name = "init", about = "Initialize a module.")]
     Init {
         #[structopt(
-            name = "name",
-            long = "name",
-            help = "Name of the method to invoke.",
+            name = "contract",
+            long = "contract",
+            short = "c",
+            help = "Name of the contract to instantiate.",
             default_value = "init"
         )]
-        name: String,
+        contract_name: String,
         #[structopt(
             name = "context",
             long = "context",
+            short = "t",
             default_value = "./init-context.json",
             help = "Path to the init context file."
         )]
@@ -126,12 +128,20 @@ enum RunCommand {
     #[structopt(name = "receive", about = "Invoke a receive method of a module.")]
     Receive {
         #[structopt(
-            name = "name",
-            long = "name",
-            help = "Name of the method to invoke.",
-            default_value = "receive"
+            name = "contract",
+            long = "contract",
+            short = "c",
+            help = "Name of the contract to receive message."
         )]
-        name: String,
+        contract_name: String,
+        #[structopt(
+            name = "function",
+            long = "func",
+            short = "f",
+            help = "Name of the receive-function to receive message."
+        )]
+        func: String,
+
         #[structopt(
             name = "state",
             long = "state",
@@ -148,7 +158,7 @@ enum RunCommand {
         #[structopt(
             name = "context",
             long = "context",
-            default_value = "./receive-context.json",
+            short = "t",
             help = "Path to the receive context file."
         )]
         context: PathBuf,
@@ -168,15 +178,17 @@ pub fn main() {
     };
     match cmd {
         Command::Run(run_cmd) => {
-            let runner = match run_cmd.clone() {
+            let (contract_name, runner) = match run_cmd.clone() {
                 RunCommand::Init {
                     runner,
+                    contract_name,
                     ..
-                } => runner,
+                } => (contract_name, runner),
                 RunCommand::Receive {
                     runner,
+                    contract_name,
                     ..
-                } => runner,
+                } => (contract_name, runner),
             };
             println!("runner {:?}", runner.source);
             let source = read(&runner.source).expect("Could not read file.");
@@ -199,28 +211,33 @@ pub fn main() {
                         }
                     }
                 } else {
-
-                    // let output = match get_embedded_schema(&source) {
-                    //     Ok(contract_schema) => 
-                    //         match contract_schema.state {
-                    //         Some(state_schema) => {
-                    //             let s = state_schema
-                    //                 .to_json_string_pretty(&state)
-                    //                 .expect("Deserializing using state schema failed");
-                    //             format!("(Using embedded schema)\n{}", s)
-                    //         }
-                    //         None => format!("(No schema found for contract state)\n{:?}", state),
-                    //     },
-                    //     Err(err) => format!("(Failed to get schema: {})\n{:?}", err, state),
-                    // };
-                    // match &runner.out {
-                    //     None => println!("The new state is: {}\n", output),
-                    //     Some(fp) => {
-                    //         let mut out_file =
-                    //             File::create(fp).expect("Could not create output file.");
-                    //         out_file.write_all(&state).expect("Could not write out the state.")
-                    //     }
-                    // }
+                    let output = match get_embedded_schema(&source) {
+                        Ok(module_schema) => {
+                            if let Some(contract_schema) =
+                                module_schema.contracts.get(&contract_name)
+                            {
+                                if let Some(state_schema) = &contract_schema.state {
+                                    let s = state_schema
+                                        .to_json_string_pretty(&state)
+                                        .expect("Deserializing using state schema failed");
+                                    format!("(Using embedded schema)\n{}", s)
+                                } else {
+                                    format!("(No schema found for contract state)\n{:?}", state)
+                                }
+                            } else {
+                                format!("(No schema found for contract)\n{:?}", state)
+                            }
+                        }
+                        Err(err) => format!("(Failed to get schema: {})\n{:?}", err, state),
+                    };
+                    match &runner.out {
+                        None => println!("The new state is: {}\n", output),
+                        Some(fp) => {
+                            let mut out_file =
+                                File::create(fp).expect("Could not create output file.");
+                            out_file.write_all(&state).expect("Could not write out the state.")
+                        }
+                    }
                 }
             };
 
@@ -239,7 +256,7 @@ pub fn main() {
 
             match run_cmd {
                 RunCommand::Init {
-                    ref name,
+                    ref contract_name,
                     ref context,
                     ..
                 } => {
@@ -248,6 +265,7 @@ pub fn main() {
                         serde_json::from_reader(std::io::BufReader::new(ctx_file))
                             .expect("Could not parse init context")
                     };
+                    let name = format!("init_{}", contract_name);
                     let res = invoke_init_from_source(
                         &source,
                         runner.amount,
@@ -279,7 +297,8 @@ pub fn main() {
                     };
                 }
                 RunCommand::Receive {
-                    ref name,
+                    ref contract_name,
+                    ref func,
                     ref state,
                     balance,
                     ref context,
@@ -303,6 +322,7 @@ pub fn main() {
                         file.read_to_end(&mut init_state).expect("Reading the state file failed.");
                         init_state
                     };
+                    let name = format!("{}.{}", contract_name, func);
                     let res = invoke_receive_from_source(
                         &source,
                         runner.amount,
