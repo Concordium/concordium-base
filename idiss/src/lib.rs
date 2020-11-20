@@ -58,17 +58,17 @@ pub fn validate_request(
     ars_infos_str: &str,
     request_str: &str,
 ) -> bool {
+    let global_context = match parse_exact_versioned_global_context(global_context_str) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
     let ip_info = match parse_exact_versioned_ip_info(ip_info_str) {
         Ok(v) => v,
         Err(_) => return false,
     };
 
     let ars_infos = match parse_exact_versioned_ars_infos(ars_infos_str) {
-        Ok(v) => v,
-        Err(_) => return false,
-    };
-
-    let global_context = match parse_exact_versioned_global_context(global_context_str) {
         Ok(v) => v,
         Err(_) => return false,
     };
