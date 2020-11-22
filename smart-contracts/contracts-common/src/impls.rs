@@ -13,6 +13,9 @@ use std::{collections::*, mem::MaybeUninit, slice};
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
+/// Apply the given macro to each of the elements in the list
+/// For example, `repeat_macro!(println, "foo", "bar")` is equivalent to
+/// `println!("foo"); println!("bar").
 macro_rules! repeat_macro {
     ($f:ident, $n:expr) => ($f!($n););
     ($f:ident, $n:expr, $($ns:expr),*) => {
@@ -207,8 +210,10 @@ impl Serial for AccountAddress {
 
 impl Deserial for AccountAddress {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        // let bytes = source.get()?;
         let bytes = {
+            // This deliberately does not initialize the array up-front.
+            // Initialization is not needed, and costs quite a bit of code space in the Wasm
+            // generated code. Since account addresses
             let mut bytes: MaybeUninit<[u8; 32]> = MaybeUninit::uninit();
             let write_bytes =
                 unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, 32) };
@@ -525,6 +530,9 @@ impl<K: Deserial + Ord + Copy> Deserial for BTreeSet<K> {
 
 macro_rules! serialize_array_x {
     ($x:expr) => {
+        /// Serialize the array by writing elements consecutively starting at 0.
+        /// Since the length of the array is known statically it is not written out
+        /// explicitly. Thus serialization of the array A and the slice &A[..] differ.
         impl<T: Serial> Serial for [T; $x] {
             fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
                 for elem in self.iter() {
