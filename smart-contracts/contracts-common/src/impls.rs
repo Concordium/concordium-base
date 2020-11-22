@@ -13,6 +13,17 @@ use std::{collections::*, mem::MaybeUninit, slice};
 
 static MAX_PREALLOCATED_CAPACITY: usize = 4096;
 
+/// Apply the given macro to each of the elements in the list
+/// For example, `repeat_macro!(println, "foo", "bar")` is equivalent to
+/// `println!("foo"); println!("bar").
+macro_rules! repeat_macro {
+    ($f:ident, $n:expr) => ($f!($n););
+    ($f:ident, $n:expr, $($ns:expr),*) => {
+        $f!($n);
+        repeat_macro!($f, $($ns),*);
+    };
+}
+
 // Implementations of Serialize
 
 impl<X: Serial, Y: Serial> Serial for (X, Y) {
@@ -94,22 +105,6 @@ impl Deserial for i64 {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> { source.read_i64() }
 }
 
-impl Serial for [u8; 32] {
-    fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> { out.write_all(self) }
-}
-
-impl Deserial for [u8; 32] {
-    fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        // This deliberately does not initialize the array up-front.
-        // Initialization is not needed, and costs quite a bit of code space.
-        // FIXME: Put this behind a feature flag to only enable for Wasm.
-        // I don't think it has any meaningful effect on normal platforms.
-        let mut bytes: MaybeUninit<[u8; 32]> = MaybeUninit::uninit();
-        let write_bytes = unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, 32) };
-        source.read_exact(write_bytes)?;
-        Ok(unsafe { bytes.assume_init() })
-    }
-}
 /// Serialization of `bool` encodes it as a single byte, `false` is represented
 /// by `0u8` and `true` is _only_ represented by `1u8`.
 impl Serial for bool {
@@ -215,7 +210,16 @@ impl Serial for AccountAddress {
 
 impl Deserial for AccountAddress {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
-        let bytes = source.get()?;
+        let bytes = {
+            // This deliberately does not initialize the array up-front.
+            // Initialization is not needed, and costs quite a bit of code space in the Wasm
+            // generated code. Since account addresses
+            let mut bytes: MaybeUninit<[u8; 32]> = MaybeUninit::uninit();
+            let write_bytes =
+                unsafe { slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut u8, 32) };
+            source.read_exact(write_bytes)?;
+            unsafe { bytes.assume_init() }
+        };
         Ok(AccountAddress(bytes))
     }
 }
@@ -524,6 +528,70 @@ impl<K: Deserial + Ord + Copy> Deserial for BTreeSet<K> {
     }
 }
 
+macro_rules! serialize_array_x {
+    ($x:expr) => {
+        /// Serialize the array by writing elements consecutively starting at 0.
+        /// Since the length of the array is known statically it is not written out
+        /// explicitly. Thus serialization of the array A and the slice &A[..] differ.
+        impl<T: Serial> Serial for [T; $x] {
+            fn serial<W: Write>(&self, out: &mut W) -> Result<(), W::Err> {
+                for elem in self.iter() {
+                    elem.serial(out)?;
+                }
+                Ok(())
+            }
+        }
+
+        impl<T: Deserial> Deserial for [T; $x] {
+            fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
+                let mut data: MaybeUninit<[T; $x]> = MaybeUninit::uninit();
+                let ptr = data.as_mut_ptr();
+                for i in 0..$x {
+                    let item = T::deserial(source)?;
+                    unsafe { (*ptr)[i] = item };
+                }
+                Ok(unsafe { data.assume_init() })
+            }
+        }
+    };
+}
+
+repeat_macro!(
+    serialize_array_x,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32
+);
+
 impl InitContext {
     pub fn init_origin(&self) -> &AccountAddress { &self.init_origin }
 
@@ -705,14 +773,6 @@ macro_rules! schema_type_array_x {
         impl<A: SchemaType> SchemaType for [A; $x] {
             fn get_type() -> schema::Type { schema::Type::Array($x, Box::new(A::get_type())) }
         }
-    };
-}
-
-macro_rules! repeat_macro {
-    ($f:ident, $n:expr) => ($f!($n););
-    ($f:ident, $n:expr, $($ns:expr),*) => {
-        $f!($n);
-        repeat_macro!($f, $($ns),*);
     };
 }
 
