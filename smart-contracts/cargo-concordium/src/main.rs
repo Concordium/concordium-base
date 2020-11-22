@@ -2,7 +2,8 @@ use crate::build::*;
 use clap::AppSettings;
 use contracts_common::to_bytes;
 use std::{
-    fs::{read, write, File},
+    fs,
+    fs::File,
     io::{Read, Write},
     path::PathBuf,
 };
@@ -192,8 +193,7 @@ pub fn main() {
                     ..
                 } => (contract_name, runner),
             };
-            println!("runner {:?}", runner.source);
-            let source = read(&runner.source).expect("Could not read file.");
+            let source = fs::read(&runner.source).expect("Could not read file.");
 
             let print_result = |state: State, logs: Logs| {
                 for (i, item) in logs.iterate().enumerate() {
@@ -352,11 +352,21 @@ pub fn main() {
                                         name,
                                         amount,
                                         parameter,
-                                    } => println!(
-                                        "{}: send a message to contract at ({}, {}), calling \
-                                         method {:?} with amount {} and parameter {:?}",
-                                        i, to_addr.index, to_addr.subindex, name, amount, parameter
-                                    ),
+                                    } => {
+                                        // Contract validation ensures that names are valid
+                                        // ascii sequences, so unwrap is OK.
+                                        let name_str = std::str::from_utf8(name).unwrap();
+                                        println!(
+                                            "{}: send a message to contract at ({}, {}), calling \
+                                             method {} with amount {} and parameter {:?}",
+                                            i,
+                                            to_addr.index,
+                                            to_addr.subindex,
+                                            name_str,
+                                            amount,
+                                            parameter
+                                        )
+                                    }
                                     Action::SimpleTransfer {
                                         to_addr,
                                         amount,
@@ -430,8 +440,8 @@ pub fn main() {
                 );
 
                 if let Some(schema_out) = schema_output {
-                    eprintln!("Writing schema to {:?}.", schema_out);
-                    write(schema_out, &module_schema_bytes).unwrap();
+                    eprintln!("Writing schema to {}.", schema_out.to_string_lossy());
+                    fs::write(schema_out, &module_schema_bytes).unwrap();
                 }
                 if schema_embed {
                     eprintln!("Embedding schema into contract module.");
