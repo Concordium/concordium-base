@@ -76,7 +76,7 @@ pub fn build_contract(embed_schema: Option<schema::Module>) -> anyhow::Result<()
 
 /// Generates the contract schema by compiling with the 'build-schema' feature
 /// Then extracts the schema from the schema build
-pub fn build_contract_schema() -> anyhow::Result<schema::Contract> {
+pub fn build_contract_schema() -> anyhow::Result<schema::Module> {
     let manifest =
         Manifest::from_path("Cargo.toml").context("Failed reading Cargo.toml manifest.")?;
 

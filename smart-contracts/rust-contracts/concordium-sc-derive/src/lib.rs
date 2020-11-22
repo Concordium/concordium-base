@@ -212,7 +212,7 @@ fn contract_function_schema_tokens(
                 #[cfg(all(target_arch = "wasm32", feature = "build-schema"))]
                 #[export_name = #schema_name]
                 pub extern "C" fn #schema_ident() -> *mut u8 {
-                    let schema = <#parameter_ident as SchemaType>::get_type();
+                    let schema = <#parameter_ident as schema::SchemaType>::get_type();
                     let schema_bytes = concordium_sc_base::to_bytes(&schema);
                     concordium_sc_base::put_in_memory(&schema_bytes)
                 }
@@ -745,7 +745,7 @@ pub fn contract_state(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[cfg(all(target_arch = "wasm32", feature = "build-schema"))]
         #[export_name = #wasm_schema_name]
         pub extern "C" fn #rust_schema_name() -> *mut u8 {
-            let schema = <#data_ident as SchemaType>::get_type();
+            let schema = <#data_ident as schema::SchemaType>::get_type();
             let schema_bytes = concordium_sc_base::to_bytes(&schema);
             concordium_sc_base::put_in_memory(&schema_bytes)
         }
@@ -792,7 +792,7 @@ pub fn schema_type_derive(input: TokenStream) -> TokenStream {
 
     let out = quote! {
         #[automatically_derived]
-        impl SchemaType for #data_name {
+        impl schema::SchemaType for #data_name {
             fn get_type() -> schema::Type {
                 #body
             }
@@ -810,11 +810,11 @@ fn schema_type_field_type(field: &syn::Field) -> proc_macro2::TokenStream {
     {
         let size = format_ident!("U{}", 8 * l);
         quote! {
-            <#field_type as SchemaType>::get_type().set_size_length(concordium_sc_base::schema::SizeLength::#size)
+            <#field_type as schema::SchemaType>::get_type().set_size_length(concordium_sc_base::schema::SizeLength::#size)
         }
     } else {
         quote! {
-            <#field_type as SchemaType>::get_type()
+            <#field_type as schema::SchemaType>::get_type()
         }
     }
 }

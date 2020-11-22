@@ -830,37 +830,39 @@ pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Modul
 
     for name in artifact.export.keys() {
         if let Some(contract_name) = name.as_ref().strip_prefix("concordium_schema_state_") {
-            // Generates contract state schema type
-            if !contract_schemas.contains_key(contract_name) {
-                contract_schemas.insert(contract_name.to_string(), schema::Contract::empty());
-            }
-            let contract_schema = contract_schemas.get_mut(contract_name).unwrap(); // Safe since the entry was inserted above if empty
-
             let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+
+            // Get the mutable reference to the contract schema, or make a new empty one if
+            // an entry does not yet exist.
+            let contract_schema = contract_schemas
+                .entry(contract_name.to_owned())
+                .or_insert_with(schema::Contract::empty);
+
             contract_schema.state = Some(schema_type);
         } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
             if let Some(contract_name) = rest.strip_prefix("init_") {
-                // Generates init-function parameter schema type
-                if !contract_schemas.contains_key(contract_name) {
-                    contract_schemas.insert(contract_name.to_string(), schema::Contract::empty());
-                }
-                let contract_schema = contract_schemas.get_mut(contract_name).unwrap(); // Safe since the entry was inserted above if empty
                 let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::Contract::empty);
                 contract_schema.init = Some(schema_type);
-            } else {
+            } else if rest.contains('.') {
+                let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+
                 // Generates receive-function parameter schema type
                 let split_name: Vec<_> = rest.splitn(2, '.').collect();
                 let contract_name = split_name[0];
                 let function_name = split_name[1];
 
-                if !contract_schemas.contains_key(contract_name) {
-                    contract_schemas.insert(contract_name.to_string(), schema::Contract::empty());
-                }
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::Contract::empty);
 
-                let contract_schema = contract_schemas.get_mut(contract_name).unwrap(); // Safe since the entry was inserted above if empty
-
-                let schema_type = generate_schema_run(&artifact, name.as_ref())?;
-                contract_schema.receive.insert(function_name.to_string(), schema_type);
+                contract_schema.receive.insert(function_name.to_owned(), schema_type);
+            } else {
+                // do nothing, some other function that is neither init nor
+                // receive.
             }
         }
     }
