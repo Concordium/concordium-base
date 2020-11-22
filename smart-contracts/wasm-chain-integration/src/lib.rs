@@ -823,21 +823,52 @@ pub fn run_module_tests(module_bytes: &[u8]) -> ExecResult<Vec<(String, Option<R
 }
 
 /// Tries to generate a state schema and schemas for parameters of methods.
-pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Contract> {
+pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Module> {
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
-    let state = generate_schema_run(&artifact, "concordium_schema_state").ok();
 
-    let mut method_parameter = BTreeMap::new();
+    let mut contract_schemas = BTreeMap::new();
+
     for name in artifact.export.keys() {
-        if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
+        if let Some(contract_name) = name.as_ref().strip_prefix("concordium_schema_state_") {
             let schema_type = generate_schema_run(&artifact, name.as_ref())?;
-            method_parameter.insert(rest.to_string(), schema_type);
+
+            // Get the mutable reference to the contract schema, or make a new empty one if
+            // an entry does not yet exist.
+            let contract_schema = contract_schemas
+                .entry(contract_name.to_owned())
+                .or_insert_with(schema::Contract::empty);
+
+            contract_schema.state = Some(schema_type);
+        } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
+            if let Some(contract_name) = rest.strip_prefix("init_") {
+                let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::Contract::empty);
+                contract_schema.init = Some(schema_type);
+            } else if rest.contains('.') {
+                let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+
+                // Generates receive-function parameter schema type
+                let split_name: Vec<_> = rest.splitn(2, '.').collect();
+                let contract_name = split_name[0];
+                let function_name = split_name[1];
+
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::Contract::empty);
+
+                contract_schema.receive.insert(function_name.to_owned(), schema_type);
+            } else {
+                // do nothing, some other function that is neither init nor
+                // receive.
+            }
         }
     }
 
-    Ok(schema::Contract {
-        state,
-        method_parameter,
+    Ok(schema::Module {
+        contracts: contract_schemas,
     })
 }
 
@@ -900,17 +931,17 @@ pub fn get_receives(module: &Module) -> Vec<&Name> {
 }
 
 /// Get the embedded schema if it exists
-pub fn get_embedded_schema(bytes: &[u8]) -> ExecResult<schema::Contract> {
+pub fn get_embedded_schema(bytes: &[u8]) -> ExecResult<schema::Module> {
     let skeleton = parse_skeleton(bytes)?;
     let mut schema_sections = Vec::new();
     for ucs in skeleton.custom.iter() {
         let cs = parse_custom(ucs)?;
-        if cs.name.as_ref() == "contract-schema" {
+        if cs.name.as_ref() == "concordium-schema-v1" {
             schema_sections.push(cs)
         }
     }
     let section =
         schema_sections.first().ok_or_else(|| anyhow!("No schema found in the module"))?;
     let source = &mut Cursor::new(section.contents);
-    schema::Contract::deserial(source).map_err(|_| anyhow!("Failed parsing schema"))
+    source.get().map_err(|_| anyhow!("Failed parsing schema"))
 }

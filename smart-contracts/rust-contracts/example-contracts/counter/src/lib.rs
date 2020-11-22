@@ -1,9 +1,9 @@
 #![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
 use concordium_sc_base::*;
 
-#[contract_state]
+#[contract_state(contract = "counter")]
 #[derive(Serialize, SchemaType)]
-pub struct State {
+struct State {
     step:          u8,
     current_count: u32,
 }

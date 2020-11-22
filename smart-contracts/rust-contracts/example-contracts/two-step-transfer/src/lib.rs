@@ -81,7 +81,7 @@ struct InitParams {
     transfer_request_ttl: TransferRequestTimeToLiveMilliseconds,
 }
 
-#[contract_state]
+#[contract_state(contract = "two-step-transfer")]
 #[derive(Serialize, SchemaType)]
 pub struct State {
     // The initial configuration of the contract
@@ -116,7 +116,7 @@ impl From<ParseError> for InitError {
     fn from(_: ParseError) -> Self { InitError::ParseParams }
 }
 
-#[init(contract = "two_step_transfer")]
+#[init(contract = "two-step-transfer")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
@@ -176,7 +176,7 @@ impl From<ParseError> for ReceiveError {
     fn from(_: ParseError) -> Self { ReceiveError::ParseParams }
 }
 
-#[receive(contract = "two_step_transfer", name = "receive")]
+#[receive(contract = "two-step-transfer", name = "receive")]
 #[inline(always)]
 fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,

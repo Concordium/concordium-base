@@ -206,7 +206,7 @@ impl<A: Deserial + Serial> Serialize for A {}
 /// serialize pair. The key idea is that the type to deserialize is inferred
 /// from the context, enabling one to write, for example,
 ///
-/// ```rust
+/// ```ignore
 ///   let x = source.get()?;
 ///   let y = source.get()?;
 ///   ...
@@ -219,15 +219,4 @@ pub trait Get<T> {
 impl<R: Read, T: Deserial> Get<T> for R {
     #[inline(always)]
     fn get(&mut self) -> ParseResult<T> { T::deserial(self) }
-}
-
-/// The `SchemaType` trait provides means to generate a schema for structures.
-/// Schemas used to make structures human readable and to avoid dealing directly
-/// with bytes, such as the contract state or parameters for contract
-/// interaction.
-///
-/// Can be derived using `#[derive(SchemaType)]` for most cases of structs and
-/// enums.
-pub trait SchemaType {
-    fn get_type() -> crate::schema::Type;
 }

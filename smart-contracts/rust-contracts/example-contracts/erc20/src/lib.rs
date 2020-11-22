@@ -27,7 +27,7 @@ struct InitParams {
     total_supply: U999,
 }
 
-#[contract_state]
+#[contract_state(contract = "erc20")]
 #[derive(Serialize, SchemaType)]
 pub struct State {
     init_params: InitParams,

@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 use concordium_sc_base::*;
 
-#[contract_state]
+#[contract_state(contract = "fib")]
 #[derive(Serialize, SchemaType)]
 pub struct State {
     result: u64,

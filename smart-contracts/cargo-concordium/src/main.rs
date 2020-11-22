@@ -2,7 +2,8 @@ use crate::build::*;
 use clap::AppSettings;
 use contracts_common::to_bytes;
 use std::{
-    fs::{read, write, File},
+    fs,
+    fs::File,
     io::{Read, Write},
     path::PathBuf,
 };
@@ -104,15 +105,17 @@ enum RunCommand {
     #[structopt(name = "init", about = "Initialize a module.")]
     Init {
         #[structopt(
-            name = "name",
-            long = "name",
-            help = "Name of the method to invoke.",
+            name = "contract",
+            long = "contract",
+            short = "c",
+            help = "Name of the contract to instantiate.",
             default_value = "init"
         )]
-        name: String,
+        contract_name: String,
         #[structopt(
             name = "context",
             long = "context",
+            short = "t",
             default_value = "./init-context.json",
             help = "Path to the init context file."
         )]
@@ -123,12 +126,20 @@ enum RunCommand {
     #[structopt(name = "receive", about = "Invoke a receive method of a module.")]
     Receive {
         #[structopt(
-            name = "name",
-            long = "name",
-            help = "Name of the method to invoke.",
-            default_value = "receive"
+            name = "contract",
+            long = "contract",
+            short = "c",
+            help = "Name of the contract to receive message."
         )]
-        name: String,
+        contract_name: String,
+        #[structopt(
+            name = "function",
+            long = "func",
+            short = "f",
+            help = "Name of the receive-function to receive message."
+        )]
+        func: String,
+
         #[structopt(
             name = "state",
             long = "state",
@@ -145,7 +156,7 @@ enum RunCommand {
         #[structopt(
             name = "context",
             long = "context",
-            default_value = "./receive-context.json",
+            short = "t",
             help = "Path to the receive context file."
         )]
         context: PathBuf,
@@ -170,18 +181,19 @@ pub fn main() {
     };
     match cmd {
         Command::Run(run_cmd) => {
-            let runner = match run_cmd.clone() {
+            let (contract_name, runner) = match run_cmd.clone() {
                 RunCommand::Init {
                     runner,
+                    contract_name,
                     ..
-                } => runner,
+                } => (contract_name, runner),
                 RunCommand::Receive {
                     runner,
+                    contract_name,
                     ..
-                } => runner,
+                } => (contract_name, runner),
             };
-            println!("runner {:?}", runner.source);
-            let source = read(&runner.source).expect("Could not read file.");
+            let source = fs::read(&runner.source).expect("Could not read file.");
 
             let print_result = |state: State, logs: Logs| {
                 for (i, item) in logs.iterate().enumerate() {
@@ -202,15 +214,22 @@ pub fn main() {
                     }
                 } else {
                     let output = match get_embedded_schema(&source) {
-                        Ok(contract_schema) => match contract_schema.state {
-                            Some(state_schema) => {
-                                let s = state_schema
-                                    .to_json_string_pretty(&state)
-                                    .expect("Deserializing using state schema failed");
-                                format!("(Using embedded schema)\n{}", s)
+                        Ok(module_schema) => {
+                            if let Some(contract_schema) =
+                                module_schema.contracts.get(&contract_name)
+                            {
+                                if let Some(state_schema) = &contract_schema.state {
+                                    let s = state_schema
+                                        .to_json_string_pretty(&state)
+                                        .expect("Deserializing using state schema failed");
+                                    format!("(Using embedded schema)\n{}", s)
+                                } else {
+                                    format!("(No schema found for contract state)\n{:?}", state)
+                                }
+                            } else {
+                                format!("(No schema found for contract)\n{:?}", state)
                             }
-                            None => format!("(No schema found for contract state)\n{:?}", state),
-                        },
+                        }
                         Err(err) => format!("(Failed to get schema: {})\n{:?}", err, state),
                     };
                     match &runner.out {
@@ -239,7 +258,7 @@ pub fn main() {
 
             match run_cmd {
                 RunCommand::Init {
-                    ref name,
+                    ref contract_name,
                     ref context,
                     ..
                 } => {
@@ -248,6 +267,7 @@ pub fn main() {
                         serde_json::from_reader(std::io::BufReader::new(ctx_file))
                             .expect("Could not parse init context")
                     };
+                    let name = format!("init_{}", contract_name);
                     let res = invoke_init_from_source(
                         &source,
                         runner.amount,
@@ -279,7 +299,8 @@ pub fn main() {
                     };
                 }
                 RunCommand::Receive {
-                    ref name,
+                    ref contract_name,
+                    ref func,
                     ref state,
                     balance,
                     ref context,
@@ -303,6 +324,7 @@ pub fn main() {
                         file.read_to_end(&mut init_state).expect("Reading the state file failed.");
                         init_state
                     };
+                    let name = format!("{}.{}", contract_name, func);
                     let res = invoke_receive_from_source(
                         &source,
                         runner.amount,
@@ -330,11 +352,21 @@ pub fn main() {
                                         name,
                                         amount,
                                         parameter,
-                                    } => println!(
-                                        "{}: send a message to contract at ({}, {}), calling \
-                                         method {:?} with amount {} and parameter {:?}",
-                                        i, to_addr.index, to_addr.subindex, name, amount, parameter
-                                    ),
+                                    } => {
+                                        // Contract validation ensures that names are valid
+                                        // ascii sequences, so unwrap is OK.
+                                        let name_str = std::str::from_utf8(name).unwrap();
+                                        println!(
+                                            "{}: send a message to contract at ({}, {}), calling \
+                                             method {} with amount {} and parameter {:?}",
+                                            i,
+                                            to_addr.index,
+                                            to_addr.subindex,
+                                            name_str,
+                                            amount,
+                                            parameter
+                                        )
+                                    }
                                     Action::SimpleTransfer {
                                         to_addr,
                                         amount,
@@ -389,63 +421,84 @@ pub fn main() {
             schema_output,
         } => {
             let build_schema = schema_embed || schema_output.is_some();
-            if build_schema {
-                let contract_schema = match build_contract_schema() {
+            let schema_to_embed = if build_schema {
+                let module_schema = match build_contract_schema() {
                     Ok(schema) => schema,
                     Err(err) => {
-                        println!("{}", err);
+                        eprintln!("Failed building schema {}", err);
                         panic!()
                     }
                 };
-                let contract_schema_bytes = to_bytes(&contract_schema);
-                match contract_schema.state {
-                    Some(state_schema) => {
-                        println!("Found schema for the contract state:\n\n{:#?}\n", state_schema);
-                    }
-                    None => {
-                        println!(
-                            "No schema found for the contract state. Did you annotate the state \
-                             data with `#[contract_state]`?
 
-        #[contract_state]
-        struct State {{ ... }}
-    "
-                        );
-                    }
+                for (contract_name, contract_schema) in module_schema.contracts.iter() {
+                    print_contract_schema(contract_name, contract_schema);
                 }
-
-                if contract_schema.method_parameter.is_empty() {
-                    println!(
-                        "No schemas found for method parameters.
-To include a schema for a method parameter specify the parameter type as an attribute to \
-                         `#[init(..)]` or `#[receive(..)]`
-        #[init(..., parameter = \"MyParamType\")]     or     #[receive(..., parameter = \
-                         \"MyParamType\")]"
-                    )
-                } else {
-                    println!("Found schemas for the following methods:\n");
-                    for (method_name, param_type) in contract_schema.method_parameter.iter() {
-                        println!("'{}': {:#?}\n", method_name, param_type);
-                    }
-                }
-                println!(
-                    "\nTotal size of contract schema is {} bytes.\n",
-                    contract_schema_bytes.len()
+                let module_schema_bytes = to_bytes(&module_schema);
+                eprintln!(
+                    "Total size of the module schema is: {} bytes",
+                    module_schema_bytes.len()
                 );
-                match schema_output {
-                    None => {}
-                    Some(schema_out) => {
-                        println!("Writing schema to {:?}.", schema_out);
-                        write(schema_out, &contract_schema_bytes).unwrap();
-                    }
+
+                if let Some(schema_out) = schema_output {
+                    eprintln!("Writing schema to {}.", schema_out.to_string_lossy());
+                    fs::write(schema_out, &module_schema_bytes).unwrap();
                 }
                 if schema_embed {
-                    println!("Embedding schema into contract module.");
-                    todo!("Embed the schema as a custom section in the wasm module");
+                    eprintln!("Embedding schema into contract module.");
+                    Some(module_schema)
+                } else {
+                    None
                 }
+            } else {
+                None
+            };
+            let res = build_contract(schema_to_embed);
+            match res {
+                Ok(_) => eprintln!("\nDone building your smart contract."),
+                Err(err) => eprintln!("\nFailed building your smart contract: {}", err),
             }
-            // TODO: Actually build the contract without the code for schema generation.
-            println!("\nDone building your smart contract.");
         }
     }
+}
+
+fn print_contract_schema(
+    contract_name: &str,
+    contract_schema: &contracts_common::schema::Contract,
+) {
+    println!("\n Schema for contract: {}\n", contract_name);
+    let contract_schema_bytes = to_bytes(contract_schema);
+    match &contract_schema.state {
+        Some(state_schema) => {
+            println!("Contract state: {}:\n{:#?}\n", contract_name, state_schema);
+        }
+        None => {
+            println!(
+                "No schema found for the contract state. Did you annotate the state data with \
+                 `#[contract_state(...)]`?
+
+#[contract_state(contract = \"my-contract\")]
+struct State {{ ... }}
+"
+            );
+        }
+    }
+
+    if contract_schema.receive.is_empty() {
+        println!(
+            "No schemas found for method parameters.
+
+To include a schema for a method parameter specify the parameter type as an attribute to \
+             `#[init(..)]` or `#[receive(..)]`
+            #[init(..., parameter = \"MyParamType\")]     or     #[receive(..., parameter = \
+             \"MyParamType\")]
+"
+        )
+    } else {
+        println!("Found schemas for the following methods:\n");
+        for (method_name, param_type) in contract_schema.receive.iter() {
+            println!("'{}': {:#?}\n", method_name, param_type);
+        }
+    }
+
+    println!("Size of this contract schema is {} bytes.\n", contract_schema_bytes.len());
 }

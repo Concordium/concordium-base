@@ -13,6 +13,8 @@ use core::iter::Sum;
 #[cfg(feature = "std")]
 use std::iter::Sum;
 
+/// Size of an account address when serialized in binary.
+/// NB: This is different from the Base58 representation.
 pub const ACCOUNT_ADDRESS_SIZE: usize = 32;
 
 #[cfg(feature = "derive-serde")]
@@ -301,7 +303,7 @@ pub struct Cursor<T> {
 /// using the `?` operator when deserializing bytes, such as the contract state
 /// or parameters.
 ///
-/// ```rust
+/// ```ignore
 /// enum MyCustomReceiveError {
 ///     Parsing
 /// }
@@ -325,6 +327,8 @@ pub struct Cursor<T> {
 #[derive(Debug, Default)]
 pub struct ParseError {}
 
+/// A type alias used to indicate that the value is a result
+/// of parsing from binary via the `Serial` instance.
 pub type ParseResult<A> = Result<A, ParseError>;
 
 #[cfg(feature = "derive-serde")]
@@ -399,80 +403,6 @@ mod serde_impl {
 
         fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
             v.parse::<AccountAddress>().map_err(|_| de::Error::custom("Wrong Base58 version."))
-        }
-    }
-}
-
-/// Contract schema related types
-pub mod schema {
-    use std::collections::BTreeMap;
-
-    /// Describes all the schemas of a smart contract.
-    #[derive(Debug, Clone)]
-    pub struct Contract {
-        pub state:            Option<Type>,
-        pub method_parameter: BTreeMap<String, Type>,
-    }
-
-    /// Schema for the fields of a struct or some enum variant.
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    #[cfg_attr(test, derive(arbitrary::Arbitrary))]
-    pub enum Fields {
-        Named(Vec<(String, Type)>),
-        Unnamed(Vec<Type>),
-        /// No fields
-        Unit,
-    }
-
-    // TODO: Extend with LEB128
-    /// Type of the variable used to encode the length of Sets, List, Maps
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    #[cfg_attr(test, derive(arbitrary::Arbitrary))]
-    pub enum SizeLength {
-        U8,
-        U16,
-        U32,
-        U64,
-    }
-
-    /// Schema type used to describe the different types in a rust smart
-    /// contract.
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    #[cfg_attr(test, derive(arbitrary::Arbitrary))]
-    pub enum Type {
-        Unit,
-        Bool,
-        U8,
-        U16,
-        U32,
-        U64,
-        I8,
-        I16,
-        I32,
-        I64,
-        Amount,
-        AccountAddress,
-        ContractAddress,
-        Pair(Box<Type>, Box<Type>),
-        List(SizeLength, Box<Type>),
-        Set(SizeLength, Box<Type>),
-        Map(SizeLength, Box<Type>, Box<Type>),
-        Array(u32, Box<Type>),
-        Struct(Fields),
-        Enum(Vec<(String, Fields)>),
-    }
-
-    impl Type {
-        #[doc(hidden)]
-        /// Sets the size_length of schema types, with variable size otherwise
-        /// it is a noop. Used when deriving SchemaType.
-        pub fn set_size_length(self, size_len: SizeLength) -> Type {
-            match self {
-                Type::List(_, ty) => Type::List(size_len, ty),
-                Type::Set(_, ty) => Type::Set(size_len, ty),
-                Type::Map(_, key_ty, val_ty) => Type::Map(size_len, key_ty, val_ty),
-                t => t,
-            }
         }
     }
 }
