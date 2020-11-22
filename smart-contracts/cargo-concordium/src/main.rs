@@ -28,8 +28,13 @@ enum Command {
     Run(RunCommand),
 
     #[structopt(name = "test", about = "Build and run tests using a Wasm interpreter.")]
-    Test,
-
+    Test {
+        #[structopt(
+            raw = true,
+            help = "Extra arguments passed to `cargo build` when building the test Wasm module."
+        )]
+        args: Vec<String>,
+    },
     #[structopt(name = "build", about = "Build a deployment ready smart-contract module.")]
     Build {
         #[structopt(
@@ -150,9 +155,14 @@ enum RunCommand {
 }
 
 pub fn main() {
+    #[cfg(target_os = "windows")]
+    {
+        ansi_term::enable_ansi_support();
+    }
     let cmd = {
         let app = CargoCommand::clap()
             .setting(AppSettings::ArgRequiredElseHelp)
+            .global_setting(AppSettings::TrailingVarArg)
             .global_setting(AppSettings::ColoredHelp);
         let matches = app.get_matches();
         let CargoCommand::Concordium(cmd) = CargoCommand::from_clap(&matches);
@@ -365,8 +375,10 @@ pub fn main() {
                 }
             }
         }
-        Command::Test => {
-            let res = build_and_run_wasm_test();
+        Command::Test {
+            args,
+        } => {
+            let res = build_and_run_wasm_test(&args);
             match res {
                 Ok(_) => {}
                 Err(err) => eprintln!("{}", err),

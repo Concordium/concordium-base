@@ -717,6 +717,41 @@ impl ValidateImportExport for TestHost {
     }
 }
 
+#[derive(Debug, Clone)]
+/// An auxiliary datatype used by `report_error` to be able to
+/// retain the structured information in case we want to use it later
+/// to insert proper links to the file, or other formatting.
+pub enum ReportError {
+    /// An error reported by `report_error`
+    Reported {
+        filename: String,
+        line:     u32,
+        column:   u32,
+        msg:      String,
+    },
+    /// Some other source of error. We only have the description, and no
+    /// location.
+    Other {
+        msg: String,
+    },
+}
+
+impl std::fmt::Display for ReportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReportError::Reported {
+                filename,
+                line,
+                column,
+                msg,
+            } => write!(f, "{}, {}:{}:{}", msg, filename, line, column),
+            ReportError::Other {
+                msg,
+            } => msg.fmt(f),
+        }
+    }
+}
+
 impl machine::Host<ArtifactNamedImport> for TestHost {
     fn tick_energy(&mut self, _x: u64) -> machine::RunResult<()> {
         bail!("TrapHost tick_energy not implemented.")
@@ -737,38 +772,54 @@ impl machine::Host<ArtifactNamedImport> for TestHost {
             let msg_start = unsafe { stack.pop_u32() } as usize;
             ensure!(filename_start + filename_length <= memory.len(), "Illegal memory access.");
             ensure!(msg_start + msg_length <= memory.len(), "Illegal memory access.");
-            let msg = std::str::from_utf8(&memory[msg_start..msg_start + msg_length])?;
+            let msg = std::str::from_utf8(&memory[msg_start..msg_start + msg_length])?.to_owned();
             let filename =
-                std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?;
-            let location = format!("{}:{}:{}", filename, line, column);
-            eprintln!("\n\n    Error: {}\n    {}", msg, location);
+                std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?
+                    .to_owned();
+            bail!(ReportError::Reported {
+                filename,
+                line,
+                column,
+                msg
+            })
         } else {
             bail!("Unsupported host function call.")
         }
-        Ok(())
     }
 }
 
 /// Instantiates the module with an external function to report back errors.
 /// Then tries to run exported test-functions, which are present if compile with
 /// the wasm-test feature.
-pub fn run_module_tests(module_bytes: &[u8]) -> ExecResult<()> {
-    eprintln!("\nInstantiating WASM module.");
+///
+/// The return value is a list of pairs (test_name, result)
+/// The result is None if the test passed, or an error message
+/// if it failed. The error message is the one reported to by report_error, or
+/// some internal invariant violation.
+pub fn run_module_tests(module_bytes: &[u8]) -> ExecResult<Vec<(String, Option<ReportError>)>> {
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
-    eprintln!("Running tests");
+    let mut out = Vec::with_capacity(artifact.export.len());
     for name in artifact.export.keys() {
         if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
-            eprint!("- {}: ", test_name);
             let res = artifact.run(&mut TestHost, name, &[]);
-            let msg = match res {
-                Ok(_) => "ok.",
-                Err(_) => "",
+            match res {
+                Ok(_) => out.push((test_name.to_owned(), None)),
+                Err(msg) => {
+                    if let Some(err) = msg.downcast_ref::<ReportError>() {
+                        out.push((test_name.to_owned(), Some(err.clone())));
+                    } else {
+                        out.push((
+                            test_name.to_owned(),
+                            Some(ReportError::Other {
+                                msg: msg.to_string(),
+                            }),
+                        ))
+                    }
+                }
             };
-            eprintln!("{}", msg);
         }
     }
-    eprintln!("Done");
-    Ok(())
+    Ok(out)
 }
 
 /// Tries to generate a state schema and schemas for parameters of methods.
