@@ -57,7 +57,7 @@ stages:
   extends: .generic-test
   stage: test
   script:
-    - ( cd rust-src && cargo build --release )
+    - ( cd rust-src && cargo build --release)
     - stack test
 
 "cargo:test":
