@@ -737,15 +737,17 @@ impl SchemaType for ContractAddress {
     fn get_type() -> schema::Type { schema::Type::ContractAddress }
 }
 impl<T: SchemaType> SchemaType for Option<T> {
-    fn get_type() -> schema::Type { schema::Type::Option(Box::new(T::get_type())) }
+    fn get_type() -> schema::Type {
+        schema::Type::Enum(vec![
+            ("None".to_string(), schema::Fields::Unit),
+            ("Some".to_string(), schema::Fields::Unnamed(vec![T::get_type()])),
+        ])
+    }
 }
 impl<L: SchemaType, R: SchemaType> SchemaType for (L, R) {
     fn get_type() -> schema::Type {
         schema::Type::Pair(Box::new(L::get_type()), Box::new(R::get_type()))
     }
-}
-impl SchemaType for String {
-    fn get_type() -> schema::Type { schema::Type::String(schema::SizeLength::U32) }
 }
 impl<T: SchemaType> SchemaType for Vec<T> {
     fn get_type() -> schema::Type {
@@ -931,46 +933,38 @@ impl Serial for schema::Type {
             Type::ContractAddress => {
                 out.write_u8(12)?;
             }
-            Type::Option(ty) => {
-                out.write_u8(13)?;
-                ty.serial(out)?;
-            }
             Type::Pair(left, right) => {
-                out.write_u8(14)?;
+                out.write_u8(13)?;
                 left.serial(out)?;
                 right.serial(out)?;
             }
-            Type::String(len_size) => {
-                out.write_u8(15)?;
-                len_size.serial(out)?;
-            }
             Type::List(len_size, ty) => {
-                out.write_u8(16)?;
+                out.write_u8(14)?;
                 len_size.serial(out)?;
                 ty.serial(out)?;
             }
             Type::Set(len_size, ty) => {
-                out.write_u8(17)?;
+                out.write_u8(15)?;
                 len_size.serial(out)?;
                 ty.serial(out)?;
             }
             Type::Map(len_size, key, value) => {
-                out.write_u8(18)?;
+                out.write_u8(16)?;
                 len_size.serial(out)?;
                 key.serial(out)?;
                 value.serial(out)?;
             }
             Type::Array(len, ty) => {
-                out.write_u8(19)?;
+                out.write_u8(17)?;
                 len.serial(out)?;
                 ty.serial(out)?;
             }
             Type::Struct(fields) => {
-                out.write_u8(20)?;
+                out.write_u8(18)?;
                 fields.serial(out)?;
             }
             Type::Enum(fields) => {
-                out.write_u8(21)?;
+                out.write_u8(19)?;
                 fields.serial(out)?;
             }
         }
@@ -997,44 +991,36 @@ impl Deserial for schema::Type {
             11 => Ok(Type::AccountAddress),
             12 => Ok(Type::ContractAddress),
             13 => {
-                let ty = Type::deserial(source)?;
-                Ok(Type::Option(Box::new(ty)))
-            }
-            14 => {
                 let left = Type::deserial(source)?;
                 let right = Type::deserial(source)?;
                 Ok(Type::Pair(Box::new(left), Box::new(right)))
             }
-            15 => {
-                let len_size = SizeLength::deserial(source)?;
-                Ok(Type::String(len_size))
-            }
-            16 => {
+            14 => {
                 let len_size = SizeLength::deserial(source)?;
                 let ty = Type::deserial(source)?;
                 Ok(Type::List(len_size, Box::new(ty)))
             }
-            17 => {
+            15 => {
                 let len_size = SizeLength::deserial(source)?;
                 let ty = Type::deserial(source)?;
                 Ok(Type::Set(len_size, Box::new(ty)))
             }
-            18 => {
+            16 => {
                 let len_size = SizeLength::deserial(source)?;
                 let key = Type::deserial(source)?;
                 let value = Type::deserial(source)?;
                 Ok(Type::Map(len_size, Box::new(key), Box::new(value)))
             }
-            19 => {
+            17 => {
                 let len = u32::deserial(source)?;
                 let ty = Type::deserial(source)?;
                 Ok(Type::Array(len, Box::new(ty)))
             }
-            20 => {
+            18 => {
                 let fields = source.get()?;
                 Ok(Type::Struct(fields))
             }
-            21 => {
+            19 => {
                 let variants = source.get()?;
                 Ok(Type::Enum(variants))
             }
@@ -1169,33 +1155,10 @@ impl schema::Type {
                 let address = ContractAddress::deserial(source)?;
                 Ok(Value::String(address.to_string()))
             }
-            Type::Option(ty) => {
-                let idx = u8::deserial(source)?;
-                let some = match idx {
-                    0 => Ok(false),
-                    1 => Ok(true),
-                    _ => Err(ParseError::default()),
-                }?;
-                let value = if some {
-                    ty.to_json(source)
-                } else {
-                    Ok(Value::Null)
-                }?;
-                Ok(value)
-            }
             Type::Pair(left_type, right_type) => {
                 let left = left_type.to_json(source)?;
                 let right = right_type.to_json(source)?;
                 Ok(Value::Array(vec![left, right]))
-            }
-            Type::String(size_len) => {
-                let len = deserial_length(source, size_len)?;
-                let mut bytes = Vec::with_capacity(len);
-                for _ in 0..len {
-                    bytes.push(source.read_u8()?);
-                }
-                let string = String::from_utf8(bytes)?;
-                Ok(Value::String(string))
             }
             Type::List(size_len, ty) => {
                 let values = item_list_to_json(source, size_len, |s| ty.to_json(s))?;

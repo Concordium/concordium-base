@@ -453,9 +453,7 @@ pub mod schema {
         Amount,
         AccountAddress,
         ContractAddress,
-        Option(Box<Type>),
         Pair(Box<Type>, Box<Type>),
-        String(SizeLength),
         List(SizeLength, Box<Type>),
         Set(SizeLength, Box<Type>),
         Map(SizeLength, Box<Type>, Box<Type>),
@@ -470,7 +468,6 @@ pub mod schema {
         /// it is a noop. Used when deriving SchemaType.
         pub fn set_size_length(self, size_len: SizeLength) -> Type {
             match self {
-                Type::String(_) => Type::String(size_len),
                 Type::List(_, ty) => Type::List(size_len, ty),
                 Type::Set(_, ty) => Type::Set(size_len, ty),
                 Type::Map(_, key_ty, val_ty) => Type::Map(size_len, key_ty, val_ty),
