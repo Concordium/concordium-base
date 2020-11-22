@@ -139,12 +139,12 @@ fn contract_receive_transfer<R: HasReceiveContext<()>, L: HasLogger, A: HasActio
     ))
 }
 
-#[cfg(test)]
+#[concordium_cfg_test]
 mod tests {
     use super::*;
     use concordium_sc_base::test_infrastructure::*;
 
-    #[test]
+    #[concordium_test]
     /// Test that a valid transfer request is accepted
     ///
     ///  - Removes outdated recent_transfers
@@ -232,7 +232,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[concordium_test]
     /// Test that a request fails when the rate limit is exceeded\
     ///
     /// - Request is denied
@@ -313,7 +313,7 @@ mod tests {
         )
     }
 
-    #[test]
+    #[concordium_test]
     /// Test that an underflow does not occur when the time_limit is larger than
     /// the current time
     ///

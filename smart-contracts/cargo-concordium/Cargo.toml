@@ -13,6 +13,7 @@ hex = "0.4"
 serde_json="1.0.56"
 cargo_toml = "0.8.1"
 anyhow = "1.0.33"
+ansi_term = "0.12"
 
 [features]
 

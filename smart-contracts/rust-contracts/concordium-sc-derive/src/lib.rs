@@ -816,3 +816,46 @@ fn schema_type_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
         syn::Fields::Unit => quote! { schema::Fields::Unit },
     }
 }
+
+/// Derive the appropriate export for an annotated test function, when targeting
+/// wasm32, otherwise behaves like #[test].
+#[proc_macro_attribute]
+pub fn concordium_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let test_fn_ast: syn::ItemFn =
+        syn::parse(item).expect("#[concordium_test] can only be applied to functions.");
+
+    let test_fn_name = &test_fn_ast.sig.ident;
+    let rust_export_fn_name = format_ident!("concordium_test_{}", test_fn_name);
+    let wasm_export_fn_name = format!("concordium_test {}", test_fn_name);
+
+    let test_fn = quote! {
+
+        // Fallback to regular #[test]
+        #[cfg(not(feature = "wasm-test"))]
+        #[test]
+        #test_fn_ast
+
+        // Setup test function
+        #[cfg(feature = "wasm-test")]
+        #test_fn_ast
+
+        // Export test function in wasm
+        #[cfg(feature = "wasm-test")]
+        #[export_name = #wasm_export_fn_name]
+        pub extern "C" fn #rust_export_fn_name() {
+            #test_fn_name()
+        }
+    };
+    test_fn.into()
+}
+
+/// Sets the cfg for testing targeting either Wasm and native.
+#[proc_macro_attribute]
+pub fn concordium_cfg_test(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let item = proc_macro2::TokenStream::from(item);
+    let out = quote! {
+        #[cfg(any(test, feature = "wasm-test"))]
+        #item
+    };
+    out.into()
+}

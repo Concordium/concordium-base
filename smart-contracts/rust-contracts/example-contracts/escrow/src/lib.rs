@@ -194,12 +194,12 @@ fn try_send_both<A: HasActions>(a: A, b: A) -> A {
 
 // Tests
 
-#[cfg(test)]
+#[concordium_cfg_test]
 pub mod tests {
     use super::*;
     use concordium_sc_base::test_infrastructure::*;
 
-    #[test]
+    #[concordium_test]
     #[no_mangle]
     fn test_init_rejects_non_zero_amounts() {
         let buyer = AccountAddress([0; ACCOUNT_ADDRESS_SIZE]);
@@ -227,19 +227,19 @@ pub mod tests {
         }
     }
 
-    #[test]
+    #[concordium_test]
     #[no_mangle]
     fn test_init_rejects_same_buyer_and_seller() {
         fail!("implement me");
     }
 
-    #[test]
+    #[concordium_test]
     #[no_mangle]
     fn test_init_builds_corresponding_state_from_init_params() {
         fail!("implement me");
     }
 
-    #[test]
+    #[concordium_test]
     #[no_mangle]
     fn test_receive_happy_path() {
         fail!("implement me");
