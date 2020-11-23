@@ -412,8 +412,12 @@ pub fn main() {
         } => {
             let res = build_and_run_wasm_test(&args);
             match res {
-                Ok(_) => {}
-                Err(err) => eprintln!("{}", err),
+                Ok(true) => {}
+                Ok(false) => std::process::exit(1),
+                Err(err) => {
+                    eprintln!("{}", err);
+                    std::process::exit(1)
+                }
             }
         }
         Command::Build {
