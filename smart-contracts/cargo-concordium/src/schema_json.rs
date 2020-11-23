@@ -258,14 +258,22 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
             }
         }
         Type::Struct(fields_ty) => write_bytes_from_json_schema_fields(fields_ty, json, out),
-        Type::Enum(fields_ty) => {
+        Type::Enum(variants_ty) => {
             if let Value::Object(map) = json {
                 ensure!(map.len() == 1, "Only one variant allowed");
                 let (variant_name, fields_value) = map.iter().next().unwrap(); // Safe since we already checked the length
-                let schema_fields_opt = fields_ty
+                let schema_fields_opt = variants_ty
                     .iter()
-                    .find(|(variant_name_schema, _)| variant_name_schema == variant_name);
-                if let Some((_, variant_fields)) = schema_fields_opt {
+                    .enumerate()
+                    .find(|(_, (variant_name_schema, _))| variant_name_schema == variant_name);
+                if let Some((i, (_, variant_fields))) = schema_fields_opt {
+                    if variants_ty.len() <= 256 {
+                        out.write_u8(i as u8).map_err(|_| anyhow!("Failed writing"))?;
+                    } else if variants_ty.len() <= 256 * 256 {
+                        out.write_u16(i as u16).map_err(|_| anyhow!("Failed writing"))?;
+                    } else {
+                        bail!("Enums with more than 65536 variants are not supported.");
+                    };
                     write_bytes_from_json_schema_fields(variant_fields, fields_value, out)
                 } else {
                     // Non-existing variant

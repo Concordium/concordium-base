@@ -125,8 +125,7 @@ enum RunCommand {
             name = "contract",
             long = "contract",
             short = "c",
-            help = "Name of the contract to instantiate.",
-            default_value = "init"
+            help = "Name of the contract to instantiate."
         )]
         contract_name: String,
         #[structopt(
@@ -254,7 +253,11 @@ pub fn main() {
                         let s = state_schema
                             .to_json_string_pretty(&state)
                             .expect("Deserializing using state schema failed");
-                        format!("(Using embedded schema)\n{}", s)
+                        if runner.schema_path.is_some() {
+                            format!("(Using provided schema)\n{}", s)
+                        } else {
+                            format!("(Using embedded schema)\n{}", s)
+                        }
                     }
                     _ => format!("(No schema found for contract state)\n{:?}", state),
                 };
