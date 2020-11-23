@@ -26,3 +26,10 @@ features = ["derive-serde"]
 
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dev-dependencies]
+criterion="0.3"
+
+[[bench]]
+name = "wasm"
+harness = false
