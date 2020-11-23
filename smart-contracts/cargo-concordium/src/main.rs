@@ -3,7 +3,7 @@ use clap::AppSettings;
 use contracts_common::{from_bytes, to_bytes};
 use std::{
     fs,
-    fs::{read, write, File},
+    fs::File,
     io::{Read, Write},
     path::PathBuf,
     process::exit,
@@ -218,10 +218,10 @@ pub fn main() {
                 } => (contract_name, runner),
             };
             println!("runner {:?}", runner.source);
-            let source = read(&runner.source).expect("Could not read module file.");
+            let source = fs::read(&runner.source).expect("Could not read module file.");
 
             let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
-                let bytes = read(schema_path).expect("Failed reading schema file");
+                let bytes = fs::read(schema_path).expect("Failed reading schema file");
                 let schema = from_bytes(&bytes).expect("Failed to parse schema file");
                 Some(schema)
             } else {
@@ -277,7 +277,7 @@ pub fn main() {
                     let json_string = schema_state
                         .to_json_string_pretty(&state)
                         .expect("Failed encoding state to JSON.");
-                    write(file_path, json_string).expect("Could not write out the state.");
+                    fs::write(file_path, json_string).expect("Could not write out the state.");
                 }
             };
 
@@ -287,7 +287,7 @@ pub fn main() {
             }
 
             let parameter = if let Some(param_file) = &runner.parameter_bin_path {
-                read(&param_file).expect("Could read parameter file.")
+                fs::read(&param_file).expect("Could read parameter file.")
             } else if let Some(param_file) = &runner.parameter_json_path {
                 // Find the right schema type
                 if contract_schema_opt.is_none() {
@@ -300,7 +300,7 @@ pub fn main() {
                 let parameter_schema = contract_schema_func_opt
                     .expect("Contract schema did not contain a schema for this parameter.");
 
-                let file = read(&param_file).expect("Could read parameter file.");
+                let file = fs::read(&param_file).expect("Could read parameter file.");
                 let parameter_json: serde_json::Value =
                     serde_json::from_slice(&file).expect("Failed parsing json");
                 let mut parameter_bytes = Vec::new();
@@ -327,7 +327,7 @@ pub fn main() {
                             .expect("Could not parse init context")
                     };
                     let name = format!("init_{}", contract_name);
-                    let res = invoke_init_from_source(
+                    let res = invoke_init_with_metering_from_source(
                         &source,
                         runner.amount,
                         init_ctx,
@@ -398,7 +398,7 @@ pub fn main() {
                             let schema_state = contract_schema_state_opt
                                 .as_ref()
                                 .expect("A schema for the state must be present to use JSON.");
-                            let file = read(&file_path).expect("Could read parameter file.");
+                            let file = fs::read(&file_path).expect("Could read parameter file.");
                             let state_json: serde_json::Value =
                                 serde_json::from_slice(&file).expect("Failed parsing json");
                             let mut state_bytes = Vec::new();
@@ -413,7 +413,7 @@ pub fn main() {
                     };
 
                     let name = format!("{}.{}", contract_name, func);
-                    let res = invoke_receive_from_source(
+                    let res = invoke_receive_with_metering_from_source(
                         &source,
                         runner.amount,
                         receive_ctx,
@@ -489,7 +489,7 @@ pub fn main() {
                             println!("Remaining energy is {}.", remaining_energy)
                         }
                         ReceiveResult::OutOfEnergy => {
-                            println!("Receive call terminated with out of energy.")
+                            println!("Receive call terminated with: out of energy.")
                         }
                     }
                 }

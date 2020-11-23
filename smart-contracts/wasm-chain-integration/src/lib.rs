@@ -591,6 +591,19 @@ pub fn invoke_init_from_source(
     invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
 }
 
+#[inline]
+pub fn invoke_init_with_metering_from_source(
+    source_bytes: &[u8],
+    amount: u64,
+    init_ctx: InitContext,
+    init_name: &str,
+    parameter: Parameter,
+    energy: u64,
+) -> ExecResult<InitResult> {
+    let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
+    invoke_init(artifact, amount, init_ctx, init_name, parameter, energy)
+}
+
 pub fn invoke_receive<C: RunnableCode>(
     artifact: Artifact<ProcessedImports, C>,
     amount: u64,
@@ -669,6 +682,20 @@ pub fn invoke_receive_from_source(
     energy: u64,
 ) -> ExecResult<ReceiveResult> {
     let artifact = utils::instantiate(&ConcordiumAllowedImports, source_bytes)?;
+    invoke_receive(artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
+}
+
+#[inline]
+pub fn invoke_receive_with_metering_from_source(
+    source_bytes: &[u8],
+    amount: u64,
+    receive_ctx: ReceiveContext,
+    current_state: &[u8],
+    receive_name: &str,
+    parameter: Parameter,
+    energy: u64,
+) -> ExecResult<ReceiveResult> {
+    let artifact = utils::instantiate_with_metering(&ConcordiumAllowedImports, source_bytes)?;
     invoke_receive(artifact, amount, receive_ctx, current_state, receive_name, parameter, energy)
 }
 
