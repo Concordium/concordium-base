@@ -282,7 +282,7 @@ fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasAction
 
 // Tests
 
-#[cfg(test)]
+#[concordium_cfg_test]
 mod tests {
     use super::*;
     use concordium_sc_base::test_infrastructure::*;
@@ -291,7 +291,7 @@ mod tests {
         state.requests.iter().map(|(_, req)| req.transfer_amount).sum()
     }
 
-    #[test]
+    #[concordium_test]
     /// Initialise contract with account holders
     fn test_init() {
         // Setup context
@@ -341,7 +341,7 @@ mod tests {
         claim_eq!(state.requests.len(), 0, "No transfer request at initialisation");
     }
 
-    #[test]
+    #[concordium_test]
     /// Creates the request
     ///
     /// - Mutates the state with the request
@@ -404,7 +404,7 @@ mod tests {
         claim!(request.supporters.contains(&account1), "The request sender supports the request");
     }
 
-    #[test]
+    #[concordium_test]
     /// Support a request without entering the threshold
     ///
     /// - Mutates the request in the state by adding the supporter
@@ -484,7 +484,7 @@ mod tests {
         claim!(request.supporters.contains(&account2), "The support sender supports the request");
     }
 
-    #[test]
+    #[concordium_test]
     /// Support a request triggering the transfer
     ///
     /// - Results in the transfer

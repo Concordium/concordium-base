@@ -2,6 +2,7 @@ use crate::{build::*, schema_json::*};
 use clap::AppSettings;
 use contracts_common::{from_bytes, to_bytes};
 use std::{
+    fs,
     fs::{read, write, File},
     io::{Read, Write},
     path::PathBuf,
@@ -29,17 +30,14 @@ enum Command {
     )]
     Run(RunCommand),
 
-    #[structopt(name = "test", about = "Run tests using the Wasm interpreter.")]
+    #[structopt(name = "test", about = "Build and run tests using a Wasm interpreter.")]
     Test {
         #[structopt(
-            name = "source",
-            long = "source",
-            default_value = "contract.wasm",
-            help = "Binary module source."
+            raw = true,
+            help = "Extra arguments passed to `cargo build` when building the test Wasm module."
         )]
-        source: PathBuf,
+        args: Vec<String>,
     },
-
     #[structopt(name = "build", about = "Build a deployment ready smart-contract module.")]
     Build {
         #[structopt(
@@ -192,9 +190,14 @@ enum RunCommand {
 }
 
 pub fn main() {
+    #[cfg(target_os = "windows")]
+    {
+        ansi_term::enable_ansi_support();
+    }
     let cmd = {
         let app = CargoCommand::clap()
             .setting(AppSettings::ArgRequiredElseHelp)
+            .global_setting(AppSettings::TrailingVarArg)
             .global_setting(AppSettings::ColoredHelp);
         let matches = app.get_matches();
         let CargoCommand::Concordium(cmd) = CargoCommand::from_clap(&matches);
@@ -437,11 +440,21 @@ pub fn main() {
                                         name,
                                         amount,
                                         parameter,
-                                    } => println!(
-                                        "{}: send a message to contract at ({}, {}), calling \
-                                         method {:?} with amount {} and parameter {:?}",
-                                        i, to_addr.index, to_addr.subindex, name, amount, parameter
-                                    ),
+                                    } => {
+                                        // Contract validation ensures that names are valid
+                                        // ascii sequences, so unwrap is OK.
+                                        let name_str = std::str::from_utf8(name).unwrap();
+                                        println!(
+                                            "{}: send a message to contract at ({}, {}), calling \
+                                             method {} with amount {} and parameter {:?}",
+                                            i,
+                                            to_addr.index,
+                                            to_addr.subindex,
+                                            name_str,
+                                            amount,
+                                            parameter
+                                        )
+                                    }
                                     Action::SimpleTransfer {
                                         to_addr,
                                         amount,
@@ -483,10 +496,17 @@ pub fn main() {
             }
         }
         Command::Test {
-            source,
+            args,
         } => {
-            let source = read(&source).expect("Could not read file.");
-            test_run(&source).expect("Invocation failed.");
+            let res = build_and_run_wasm_test(&args);
+            match res {
+                Ok(true) => {}
+                Ok(false) => std::process::exit(1),
+                Err(err) => {
+                    eprintln!("{}", err);
+                    std::process::exit(1)
+                }
+            }
         }
         Command::Build {
             schema_embed,
@@ -512,8 +532,8 @@ pub fn main() {
                 );
 
                 if let Some(schema_out) = schema_output {
-                    eprintln!("Writing schema to {:?}.", schema_out);
-                    write(schema_out, &module_schema_bytes).unwrap();
+                    eprintln!("Writing schema to {}.", schema_out.to_string_lossy());
+                    fs::write(schema_out, &module_schema_bytes).unwrap();
                 }
                 if schema_embed {
                     eprintln!("Embedding schema into contract module.");

@@ -275,7 +275,6 @@ pub fn write_bytes_from_json_schema_type<W: Write>(
                 bail!("JSON Object with one field required for an Enum")
             }
         }
-        ty => bail!("Schema type is not supported in JSON {:?}", ty),
     }
 }
 

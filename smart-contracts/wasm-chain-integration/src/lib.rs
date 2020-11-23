@@ -717,6 +717,41 @@ impl ValidateImportExport for TestHost {
     }
 }
 
+#[derive(Debug, Clone)]
+/// An auxiliary datatype used by `report_error` to be able to
+/// retain the structured information in case we want to use it later
+/// to insert proper links to the file, or other formatting.
+pub enum ReportError {
+    /// An error reported by `report_error`
+    Reported {
+        filename: String,
+        line:     u32,
+        column:   u32,
+        msg:      String,
+    },
+    /// Some other source of error. We only have the description, and no
+    /// location.
+    Other {
+        msg: String,
+    },
+}
+
+impl std::fmt::Display for ReportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReportError::Reported {
+                filename,
+                line,
+                column,
+                msg,
+            } => write!(f, "{}, {}:{}:{}", msg, filename, line, column),
+            ReportError::Other {
+                msg,
+            } => msg.fmt(f),
+        }
+    }
+}
+
 impl machine::Host<ArtifactNamedImport> for TestHost {
     fn tick_energy(&mut self, _x: u64) -> machine::RunResult<()> {
         bail!("TrapHost tick_energy not implemented.")
@@ -737,38 +772,54 @@ impl machine::Host<ArtifactNamedImport> for TestHost {
             let msg_start = unsafe { stack.pop_u32() } as usize;
             ensure!(filename_start + filename_length <= memory.len(), "Illegal memory access.");
             ensure!(msg_start + msg_length <= memory.len(), "Illegal memory access.");
-            let msg = std::str::from_utf8(&memory[msg_start..msg_start + msg_length])?;
+            let msg = std::str::from_utf8(&memory[msg_start..msg_start + msg_length])?.to_owned();
             let filename =
-                std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?;
-            let location = format!("{}:{}:{}", filename, line, column);
-            eprintln!("\nError: {}\n{}\n", msg, location);
+                std::str::from_utf8(&memory[filename_start..filename_start + filename_length])?
+                    .to_owned();
+            bail!(ReportError::Reported {
+                filename,
+                line,
+                column,
+                msg
+            })
         } else {
             bail!("Unsupported host function call.")
         }
-        Ok(())
     }
 }
 
 /// Instantiates the module with an external function to report back errors.
-/// Then tries to run an exported 'main' function.
-/// The main function is present in the module if compile using 'cargo test'
-pub fn test_run(module_bytes: &[u8]) -> ExecResult<()> {
-    eprintln!("\nInstantiating WASM module.");
+/// Then tries to run exported test-functions, which are present if compile with
+/// the wasm-test feature.
+///
+/// The return value is a list of pairs (test_name, result)
+/// The result is None if the test passed, or an error message
+/// if it failed. The error message is the one reported to by report_error, or
+/// some internal invariant violation.
+pub fn run_module_tests(module_bytes: &[u8]) -> ExecResult<Vec<(String, Option<ReportError>)>> {
     let artifact = utils::instantiate::<ArtifactNamedImport, _>(&TestHost, module_bytes)?;
-    eprintln!("Running tests");
-    // Unable to find a proper source, but it seems that the test main function
-    // takes two u32 arguments, which we assume are `argc` and `argv` in a C
-    // program. Since we don't use `argc` and `argv` in the test, we can pass
-    // any u32.
-    if let (Some(Value::I32(n)), _) =
-        artifact.run(&mut TestHost, "main", &[Value::I32(0), Value::I32(0)])?
-    {
-        ensure!(n == 0, "Test failed.");
-        eprintln!("Test result: ok.")
-    } else {
-        eprintln!("Test failed.");
+    let mut out = Vec::with_capacity(artifact.export.len());
+    for name in artifact.export.keys() {
+        if let Some(test_name) = name.as_ref().strip_prefix("concordium_test ") {
+            let res = artifact.run(&mut TestHost, name, &[]);
+            match res {
+                Ok(_) => out.push((test_name.to_owned(), None)),
+                Err(msg) => {
+                    if let Some(err) = msg.downcast_ref::<ReportError>() {
+                        out.push((test_name.to_owned(), Some(err.clone())));
+                    } else {
+                        out.push((
+                            test_name.to_owned(),
+                            Some(ReportError::Other {
+                                msg: msg.to_string(),
+                            }),
+                        ))
+                    }
+                }
+            };
+        }
     }
-    Ok(())
+    Ok(out)
 }
 
 /// Tries to generate a state schema and schemas for parameters of methods.
@@ -779,37 +830,39 @@ pub fn generate_contract_schema(module_bytes: &[u8]) -> ExecResult<schema::Modul
 
     for name in artifact.export.keys() {
         if let Some(contract_name) = name.as_ref().strip_prefix("concordium_schema_state_") {
-            // Generates contract state schema type
-            if !contract_schemas.contains_key(contract_name) {
-                contract_schemas.insert(contract_name.to_string(), schema::Contract::empty());
-            }
-            let contract_schema = contract_schemas.get_mut(contract_name).unwrap(); // Safe since the entry was inserted above if empty
-
             let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+
+            // Get the mutable reference to the contract schema, or make a new empty one if
+            // an entry does not yet exist.
+            let contract_schema = contract_schemas
+                .entry(contract_name.to_owned())
+                .or_insert_with(schema::Contract::empty);
+
             contract_schema.state = Some(schema_type);
         } else if let Some(rest) = name.as_ref().strip_prefix("concordium_schema_function_") {
             if let Some(contract_name) = rest.strip_prefix("init_") {
-                // Generates init-function parameter schema type
-                if !contract_schemas.contains_key(contract_name) {
-                    contract_schemas.insert(contract_name.to_string(), schema::Contract::empty());
-                }
-                let contract_schema = contract_schemas.get_mut(contract_name).unwrap(); // Safe since the entry was inserted above if empty
                 let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::Contract::empty);
                 contract_schema.init = Some(schema_type);
-            } else {
+            } else if rest.contains('.') {
+                let schema_type = generate_schema_run(&artifact, name.as_ref())?;
+
                 // Generates receive-function parameter schema type
                 let split_name: Vec<_> = rest.splitn(2, '.').collect();
                 let contract_name = split_name[0];
                 let function_name = split_name[1];
 
-                if !contract_schemas.contains_key(contract_name) {
-                    contract_schemas.insert(contract_name.to_string(), schema::Contract::empty());
-                }
+                let contract_schema = contract_schemas
+                    .entry(contract_name.to_owned())
+                    .or_insert_with(schema::Contract::empty);
 
-                let contract_schema = contract_schemas.get_mut(contract_name).unwrap(); // Safe since the entry was inserted above if empty
-
-                let schema_type = generate_schema_run(&artifact, name.as_ref())?;
-                contract_schema.receive.insert(function_name.to_string(), schema_type);
+                contract_schema.receive.insert(function_name.to_owned(), schema_type);
+            } else {
+                // do nothing, some other function that is neither init nor
+                // receive.
             }
         }
     }

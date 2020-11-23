@@ -11,7 +11,7 @@
 //!
 //! To use this library without the `std` feature you have to disable it, which
 //! can be done, for example, as follows.
-//! ```
+//! ```ignore
 //! [dependencies.concordium-sc-base]
 //! default-features = false
 //! ```
@@ -22,7 +22,9 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+#[macro_use]
 mod impls;
+pub mod schema;
 mod traits;
 mod types;
 pub use impls::*;

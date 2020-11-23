@@ -157,10 +157,12 @@ fn make_vested_funds_available(time_now: u64, state: &mut State) {
 }
 
 // Tests
-#[cfg(test)]
+#[concordium_cfg_test]
 pub mod tests {
-    #[test]
+    use super::*;
+
+    #[concordium_test]
     fn test() {
-        todo!("implement tests");
+        fail!("implement tests");
     }
 }
