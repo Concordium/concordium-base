@@ -19,8 +19,8 @@ fn scalar_from_bytes_helper<A: AsRef<[u8]>>(bytes: A) -> Fr {
     // Traverse at most 4 8-byte chunks, for a total of 256 bits.
     // The top-most two bits in the last chunk are set to 0.
     let mut fr = [0u64; 4];
-    let mut v = [0; 8];
     for (i, chunk) in bytes.as_ref().chunks(8).take(4).enumerate() {
+        let mut v = [0u8; 8];
         v[..chunk.len()].copy_from_slice(&chunk);
         fr[i] = u64::from_le_bytes(v);
     }
