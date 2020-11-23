@@ -745,7 +745,7 @@ pub fn contract_state(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[cfg(all(target_arch = "wasm32", feature = "build-schema"))]
         #[export_name = #wasm_schema_name]
         pub extern "C" fn #rust_schema_name() -> *mut u8 {
-            let schema = <#data_ident as schema::SchemaType>::get_type();
+            let schema = <#data_ident as concordium_sc_base::schema::SchemaType>::get_type();
             let schema_bytes = concordium_sc_base::to_bytes(&schema);
             concordium_sc_base::put_in_memory(&schema_bytes)
         }
@@ -768,7 +768,7 @@ pub fn schema_type_derive(input: TokenStream) -> TokenStream {
         syn::Data::Struct(ref data) => {
             let fields_tokens = schema_type_fields(&data.fields);
             quote! {
-                schema::Type::Struct(#fields_tokens)
+                concordium_sc_base::schema::Type::Struct(#fields_tokens)
             }
         }
         syn::Data::Enum(ref data) => {
@@ -784,7 +784,7 @@ pub fn schema_type_derive(input: TokenStream) -> TokenStream {
                 })
                 .collect();
             quote! {
-                schema::Type::Enum(vec! [ #(#variant_tokens),* ])
+                concordium_sc_base::schema::Type::Enum(vec! [ #(#variant_tokens),* ])
             }
         }
         _ => unimplemented!("Union is not supported"),
@@ -792,8 +792,8 @@ pub fn schema_type_derive(input: TokenStream) -> TokenStream {
 
     let out = quote! {
         #[automatically_derived]
-        impl schema::SchemaType for #data_name {
-            fn get_type() -> schema::Type {
+        impl concordium_sc_base::schema::SchemaType for #data_name {
+            fn get_type() -> concordium_sc_base::schema::Type {
                 #body
             }
         }
@@ -810,11 +810,11 @@ fn schema_type_field_type(field: &syn::Field) -> proc_macro2::TokenStream {
     {
         let size = format_ident!("U{}", 8 * l);
         quote! {
-            <#field_type as schema::SchemaType>::get_type().set_size_length(concordium_sc_base::schema::SizeLength::#size)
+            <#field_type as concordium_sc_base::schema::SchemaType>::get_type().set_size_length(concordium_sc_base::schema::SizeLength::#size)
         }
     } else {
         quote! {
-            <#field_type as schema::SchemaType>::get_type()
+            <#field_type as concordium_sc_base::schema::SchemaType>::get_type()
         }
     }
 }
@@ -832,13 +832,13 @@ fn schema_type_fields(fields: &syn::Fields) -> proc_macro2::TokenStream {
                     }
                 })
                 .collect();
-            quote! { schema::Fields::Named(vec![ #(#fields_tokens),* ]) }
+            quote! { concordium_sc_base::schema::Fields::Named(vec![ #(#fields_tokens),* ]) }
         }
         syn::Fields::Unnamed(_) => {
             let fields_tokens: Vec<_> = fields.iter().map(schema_type_field_type).collect();
-            quote! { schema::Fields::Unnamed(vec![ #(#fields_tokens),* ]) }
+            quote! { concordium_sc_base::schema::Fields::Unnamed(vec![ #(#fields_tokens),* ]) }
         }
-        syn::Fields::Unit => quote! { schema::Fields::Unit },
+        syn::Fields::Unit => quote! { concordium_sc_base::schema::Fields::Unit },
     }
 }
 

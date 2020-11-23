@@ -111,7 +111,13 @@ pub fn build_contract_schema() -> anyhow::Result<schema::Module> {
     Ok(schema)
 }
 
-pub fn build_and_run_wasm_test(extra_args: &[String]) -> anyhow::Result<()> {
+/// Build tests and run them. If errors occur in building the tests, or there
+/// are runtime exceptions that are not expected then this function returns
+/// Err(...).
+///
+/// Otherwise a boolean is returned, signifying whether the tests succeeded or
+/// failed.
+pub fn build_and_run_wasm_test(extra_args: &[String]) -> anyhow::Result<bool> {
     let manifest =
         Manifest::from_path("Cargo.toml").context("Failed reading Cargo.toml manifest.")?;
     let package =
@@ -189,8 +195,9 @@ pub fn build_and_run_wasm_test(extra_args: &[String]) -> anyhow::Result<()> {
 
     if num_failed == 0 {
         eprintln!("Test result: {}", Color::Green.bold().paint("ok"));
+        Ok(true)
     } else {
         eprintln!("Test result: {}", Color::Red.bold().paint("FAILED"));
+        Ok(false)
     }
-    Ok(())
 }
