@@ -405,7 +405,7 @@ impl ValidateImportExport for ConcordiumAllowedImports {
 
     /// Validate that all the exported functions either
     /// - start with `init_` and contain no `.`
-    /// - do not start with `init_` contain a `.`
+    /// - do contain a `.`
     ///
     /// Names are already ensured to be valid ASCII sequences by parsing, here
     /// we additionally ensure that they contain only alphanumeric and
