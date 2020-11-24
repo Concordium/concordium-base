@@ -33,7 +33,7 @@ You add the library by opening ``Cargo.toml`` and just below the line saying
 
 .. note::
     Until the dependency is release on crates.io_, you will also have to clone
-    the repo with ``concordium-sc-base`` and have the dependency to point at
+    the repo_ with ``concordium-sc-base`` and have the dependency to point at
     the directory instead, by adding the following to ``Cargo.toml``::
 
         [dependencies]
@@ -50,5 +50,7 @@ You add the library by opening ``Cargo.toml`` and just below the line saying
 .. _Cargo: https://doc.rust-lang.org/cargo/
 .. _rustup: https://rustup.rs/
 .. _crates.io: https://crates.io/
+.. _repo: https://gitlab.com/Concordium/smart-contracts
+
 
 That is it! You are now ready to develop your own smart contract.

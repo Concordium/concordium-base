@@ -101,11 +101,13 @@ Since a smart contract module can export functions for multiple different smart
 contract, we associate the functions using a naming scheme:
 
 - ``init_<contract-name>``: The function for initializing a smart contract must
-  start with ``init_`` followed by a name of the smart contract.
+  start with ``init_`` followed by a name of the smart contract. The contract
+  name is not allowed to contain the `.` symbol.
 
-- ``receive_<contract-name>_<receive-function-name>``: Functions for interacting
-  with a smart contract are prefixed with ``receive_``, followed by the contract
-  name and a name for the function.
+- ``<contract-name>.<receive-function-name>``: Functions for interacting
+  with a smart contract are prefixed with the contract name, followed by a `.`
+  and a name for the function. Again the contract name is not allowed to contain
+  the `.` symbol.
 
 .. note::
     If you develop smart contracts using Rust and ``concordium-sc-base``, the

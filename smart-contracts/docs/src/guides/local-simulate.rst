@@ -14,6 +14,9 @@ scenarios.
 
     For a guide on automated unit tests see :ref:`unit-test-contract`.
 
+Preparation
+===========
+
 Make sure you have ``cargo-concordium`` installed, if not follow the guide
 :ref:`setup-tools`.
 You will also need a smart contract module in Wasm to simulate.
@@ -21,23 +24,32 @@ You will also need a smart contract module in Wasm to simulate.
 .. todo::
     Write the rest, when the schema stuff is in place
 
+Simulating instantiation
+========================
+
+To simulate the instantiation of a smart contract instance using
+``cargo-concordium``,
 
 .. code-block:: sh
 
     cargo concordium run init --source contract.wasm \
-                              --name "some_init" \
+                              --contract "my_contract" \
                               --context init-context.json \
-                              --amount 123 \
-                              --parameter parameter.bin \
-                              --out state.bin
+                              --amount 12345 \
+                              --parameter-bin parameter.bin \
+                              --out-bin state.bin
+
+Simulating updates
+==================
 
 
 .. code-block:: sh
 
     cargo concordium run receive --source contract.wasm \
+                                 --contract "my_contract" \
                                  --name "some_receive" \
                                  --context receive-context.json \
-                                 --amount 123 \
-                                 --parameter parameter.bin \
-                                 --state state-in.bin \
-                                 --out state-out.bin
+                                 --amount 12345 \
+                                 --parameter-bin parameter.bin \
+                                 --state-bin state-in.bin \
+                                 --out-bin state-out.bin

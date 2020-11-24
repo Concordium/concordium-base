@@ -78,8 +78,7 @@ Running tests in Wasm
 ======================
 
 Compiling the tests to machine code is sufficient for most cases, but it is also
-possible to compile the tests to Wasm and use a custom test runner for running
-the Wasm code.
+possible to compile the tests to Wasm and run them using an interpreter.
 This makes the test environment closer to the run environment on chain and could
 in some cases catch more bugs.
 
@@ -90,18 +89,46 @@ uses the same Wasm interpreter as the one shipped in the Concordium nodes.
 
     For a guide of how to install ``cargo-concordium`` see :ref:`setup-tools`.
 
-To set ``cargo-concordium`` as the test runner, create the file
-``.cargo/config`` and add the following::
+First we need to add a ``wasm-test`` feature to the ``Cargo.toml``::
 
-    [target.wasm32-unknown-unknown]
-    runner = ["cargo", "concordium", "test", "--source"]
+    ...
+    [features]
+    wasm-test = []
+    ...
 
-Now you can run the test with Wasm as the target::
+The unit test have to be annotated with ``#[concordium_test]`` instead of
+``#[test]`` and we use ``#[concordium_cfg_test]`` instead of ``#[cfg(test)]``:
 
-    cargo test --target=wasm32-unknown-unknown
+.. code-block:: rust
 
-Which compiles the tests for Wasm and uses the test runner from
-``cargo-concordium``.
+    // contract code
+    ...
+
+    #[concordium_cfg_test]
+    mod test {
+
+        #[concordium_test]
+        fn some_test() { ... }
+
+        #[concordium_test]
+        fn another_test() { ... }
+    }
+
+The ``#[concordium_test]`` macro sets up our tests to be run in Wasm, when
+compiled with the ``wasm-test`` feature, and otherwise fallbacks to behave just
+like ``#[test]``, meaning it is still possible to run unit tests targeting
+native code using ``cargo test``.
+
+The macro ``#[concordium_cfg_test]`` is just an alias for ``#[cfg(any(test,
+feature="wasm-test))]``, allowing us to control when to include tests in the
+build.
+
+Tests can now be build and run using::
+
+    cargo concordium test
+
+Which compiles the tests for Wasm with the ``wasm-test`` feature enabled and
+uses the test runner from ``cargo-concordium``.
 
 .. warning::
 

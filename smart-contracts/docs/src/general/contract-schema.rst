@@ -16,7 +16,7 @@ Smart contract schema
 A smart contract schema is a description of how to represented bytes in a more
 structured representation, it can be used by external tools when displaying the
 state of a smart contract instance and for specifying parameters using a
-structured representation.
+structured representation, such as JSON.
 
 .. seealso::
 
@@ -29,26 +29,49 @@ Why use a contract schema
 On the blockchain; data, such as the state of an instance and parameters passed
 to ``init`` and ``receive``-functions, are represented as sequences of bytes.
 
-Usually these bytes have structure, and this structure is known to the smart
-contract and is part of contract functions, but outside of the functions it can
-be difficult to make sense of these bytes.
+Usually these bytes have structure and this structure is known to the smart
+contract as part of the contract functions, but outside of these functions it
+can be difficult to make sense of the bytes.
 
-When inspecting the state of a smart contract instance with a complex state
-bytes can be difficult read and likewise is it difficult to pass complex
-parameters to smart contract functions by writing bytes by hand.
+When inspecting the state of a smart contract instance with complex state;
+bytes are difficult to read and likewise is it difficult to pass complex
+parameters to smart contract functions, if they have to be bytes written by
+hand.
 The solution is to capture this information in a *Smart contract schema*, which
 describes how to make structure from the bytes, and can be used by external
 tools.
 
-The contract schema is either embedded into the smart contract module deployed
+The schema is then either embedded into the smart contract module deployed
 to the chain, or is written to a file and passed around off-chain.
 
-The contract schema format
-==========================
+Should you embed or write to file?
+==================================
 
-Ironically, the contract schema itself is represented as bytes, and *may*
-include how to represent the type of the contract state and types for any number
-of parameters for contract functions.
+Whether a contract schema should be embedded or written to a file, depends on
+your situation.
+
+Embedding the schema into the smart contract module, distributes the schema
+together with the contract ensuring the correct schema is being used and also
+allows anyone to use it directly. The downside is that the smart contract module
+becomes bigger in size and therefore more expensive to deploy. But unless the
+smart contract uses very complex types for the state and parameters, this will
+not be a real issue for most users.
+
+Having the schema in a separate file, allows you to have the schema without
+paying for the extra bytes when deploying.
+The downside is that you instead have to distribute the schema file through some
+other channel and ensure contract users are using the correct file with your
+smart contract.
+
+The schema format
+=================
+
+Ironically, the schema itself is represented as bytes.
+A schema can contain the structure information for a smart contract module
+and for each contract it can contain the description of the state and
+parameters for ``init`` and each of the ``receive``-functions.
+Each of these descriptions are referred to as a *schema type* and are always
+optional to include in the schema.
 
 Currently the supported schema types are inspired by what is possible in the
 Rust programming language:
@@ -70,7 +93,6 @@ Rust programming language:
         AccountAddress,
         ContractAddress,
         Pair(Type, Type),
-        String(SizeLength),
         List(SizeLength, Type),
         Set(SizeLength, Type),
         Map(SizeLength, Type, Type),
@@ -99,29 +121,12 @@ of a variable length type, such as ``List``.
     }
 
 For a reference to how a schema type is serialized into bytes, we refer the
-reader to read the implementation.
+reader to the `implementation in Rust`_.
 
 .. todo::
     Link implementation of schema::Type
 
 .. _contract-schema-which-to-choose:
-
-Should you embed or write to file?
-=====================================
-
-Whether a contract schema should be embedded or written to a file, depends on
-your situation.
-
-Embedding the schema into the smart contract module, distributes the schema
-together with the contract ensuring the correct schema is being used and also
-allows anyone to use it directly. The downside is that the smart contract module
-becomes bigger in size and therefore more expensive to deploy.
-
-Having the schema in a separate file, allows you to have the schema without
-paying for the extra bytes, it might required to embed it.
-The downside it that you instead have to distribute the schema file through some
-other channel and ensure contract users are using the correct file with your
-smart contract.
 
 Embedding schemas on chain
 ==========================
@@ -132,8 +137,9 @@ This allows Wasm modules to include a named section of bytes, which does not
 affect the semantics of running the Wasm module.
 
 Every contract schema to embed into a module, we add to a collection and add
-a custom section named ``concordium-schema``.
+a custom section named ``concordium-schema-v1``.
 This collection is a list of pairs, containing the name of the contract encoded
 in UTF-8 and the contract schema bytes.
 
 .. _`custom section`: https://webassembly.github.io/spec/core/appendix/custom.html
+.. _`implementation in Rust`: https://gitlab.com/Concordium/smart-contracts/-/blob/master/contracts-common/src/schema.rs
