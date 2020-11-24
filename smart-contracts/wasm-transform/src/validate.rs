@@ -11,8 +11,8 @@
 
 use crate::{
     constants::{
-        ALLOWED_LOCALS, MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE, MAX_NUM_EXPORTS,
-        MAX_NUM_GLOBALS, MAX_SWITCH_SIZE, PAGE_SIZE,
+        ALLOWED_LOCALS, MAX_ALLOWED_STACK_HEIGHT, MAX_INIT_MEMORY_SIZE, MAX_INIT_TABLE_SIZE,
+        MAX_NUM_EXPORTS, MAX_NUM_GLOBALS, MAX_SWITCH_SIZE, PAGE_SIZE,
     },
     parse::{parse_sec_with_default, CodeSkeletonSection, OpCodeIterator, ParseResult, Skeleton},
     types::*,
@@ -87,8 +87,10 @@ pub(crate) struct ControlFrame {
 /// this is the same state as described by the validation algorithm of the wasm
 /// specification appendix.
 pub struct ValidationState {
-    pub(crate) opds:  OperandStack,
+    pub(crate) opds: OperandStack,
     pub(crate) ctrls: ControlStack,
+    /// Maximum reachable stack height.
+    pub(crate) max_reachable_height: usize,
 }
 
 impl ValidationState {
@@ -114,7 +116,15 @@ impl MaybeKnown {
 
 impl ValidationState {
     /// Push a new type to the stack.
-    fn push_opd(&mut self, m_type: MaybeKnown) { self.opds.stack.push(m_type); }
+    fn push_opd(&mut self, m_type: MaybeKnown) {
+        self.opds.stack.push(m_type);
+        if let Some(ur) = self.ctrls.stack.last().map(|frame| frame.unreachable) {
+            if !ur {
+                self.max_reachable_height =
+                    std::cmp::max(self.max_reachable_height, self.opds.stack.len());
+            }
+        }
+    }
 
     /// Pop a type from the stack and, if successful, return it.
     fn pop_opd(&mut self) -> ValidateResult<MaybeKnown> {
@@ -396,11 +406,11 @@ pub trait Handler<O> {
 
     /// Finish processing the code. This function is called after the code body
     /// has been successfully validated.
-    fn finish(self) -> anyhow::Result<Self::Outcome>;
+    fn finish(self, state: &ValidationState) -> anyhow::Result<Self::Outcome>;
 }
 
 impl Handler<OpCode> for Vec<OpCode> {
-    type Outcome = Self;
+    type Outcome = (Self, usize);
 
     #[inline(always)]
     fn handle_opcode(&mut self, _state: &ValidationState, opcode: OpCode) -> anyhow::Result<()> {
@@ -409,21 +419,26 @@ impl Handler<OpCode> for Vec<OpCode> {
     }
 
     #[inline(always)]
-    fn finish(self) -> anyhow::Result<Self::Outcome> { Ok(self) }
+    fn finish(self, state: &ValidationState) -> anyhow::Result<Self::Outcome> {
+        Ok((self, state.max_reachable_height))
+    }
 }
 
 /// Validate a single function. In order that this function is as flexible as
 /// possible it takes as input just an iterator over opcodes. The function will
 /// terminate at the first opcode it fails to read. Validation will ensure that
 /// the iterator is fully consumed and properly terminated by an `End` opcode.
+/// The return value is the outcome determined by the handler, as well as
+/// the maximum reachable stack height in this function.
 pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
     context: &impl HasValidationContext,
     opcodes: impl Iterator<Item = ParseResult<O>>,
     mut handler: H,
 ) -> ValidateResult<H::Outcome> {
     let mut state = ValidationState {
-        opds:  OperandStack::default(),
-        ctrls: ControlStack::default(),
+        opds:                 OperandStack::default(),
+        ctrls:                ControlStack::default(),
+        max_reachable_height: 0,
     };
     state.push_ctrl(context.return_type(), context.return_type());
     for opcode in opcodes {
@@ -761,7 +776,7 @@ pub fn validate<O: Borrow<OpCode>, H: Handler<O>>(
         handler.handle_opcode(&state, next_opcode)?;
     }
     if state.done() {
-        handler.finish()
+        handler.finish(&state)
     } else {
         bail!("Improperly terminated instruction sequence.")
     }
@@ -882,7 +897,12 @@ pub fn validate_module<'a>(
                     memory: memory.memory_type.is_some(),
                     table: table.table_type.is_some(),
                 };
-                let opcodes = validate(&ctx, &mut OpCodeIterator::new(c.expr_bytes), Vec::new())?;
+                let (opcodes, max_height) =
+                    validate(&ctx, &mut OpCodeIterator::new(c.expr_bytes), Vec::new())?;
+                ensure!(
+                    num_locals as usize + max_height <= MAX_ALLOWED_STACK_HEIGHT,
+                    "Stack height would exceed allowed limits."
+                );
 
                 let code = Code {
                     ty: func_ty.clone(),
