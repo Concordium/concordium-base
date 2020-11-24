@@ -309,3 +309,18 @@ pub fn generate_ed_sk(seed: &[u8]) -> Result<ed25519_dalek::SecretKey, ed25519_d
     let sk = ed25519_dalek::SecretKey::from_bytes(&keygen_ed(&seed))?;
     Ok(sk)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    pub fn testvector() {
+        let v1 = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
+        println!("{:?}", keygen_ed(&v1));
+        let v2 = hex::decode("fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542").unwrap();
+        println!("{:?}", hex::encode(keygen_ed(&v2)));
+
+    }
+
+}
