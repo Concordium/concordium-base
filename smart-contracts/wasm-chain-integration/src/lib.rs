@@ -4,7 +4,7 @@ mod ffi;
 mod types;
 
 use anyhow::{anyhow, bail, ensure};
-use constants::{MAX_ACTIVATION_FRAMES, MAX_CONTRACT_STATE};
+use constants::{MAX_ACTIVATION_FRAMES, MAX_CONTRACT_STATE, MAX_PARAMETER_SIZE};
 use contracts_common::*;
 use machine::Value;
 use std::{
@@ -141,6 +141,8 @@ impl Outcome {
         let name_str = std::str::from_utf8(receive_name_bytes)?;
         ensure!(is_valid_receive_name(name_str), "Not a valid receive name.");
         let name = receive_name_bytes.to_vec();
+
+        ensure!(parameter_bytes.len() < MAX_PARAMETER_SIZE, "Parameter exceeds max size.");
 
         let parameter = parameter_bytes.to_vec();
 
