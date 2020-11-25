@@ -59,13 +59,17 @@ struct State {
     prefix: Prefix,
     /// Stored contributions. The Hash is the lowest per account, and the amount
     /// is the total amount contributed by this account.
+    #[concordium(skip_order_check, map_size_length = 4)]
     contributions: collections::BTreeMap<AccountAddress, (Amount, Hash)>,
 }
+
+#[derive(Serialize, SchemaType)]
+struct InitParameter(u64, Prefix);
 
 /// Initialize a smart contract.
 /// This method expects as parameter a pair of (u64, Prefix), the expiry and the
 /// prefix.
-#[init(contract = "simple_game", low_level)]
+#[init(contract = "simple_game", low_level, parameter = "InitParameter")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
@@ -74,7 +78,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     state: &mut ContractState,
 ) -> InitResult<()> {
     let initializer = ctx.init_origin();
-    let (expiry, prefix): (u64, Prefix) = ctx.parameter_cursor().get()?;
+    let InitParameter(expiry, prefix) = ctx.parameter_cursor().get()?;
     let ct = ctx.metadata().slot_time();
     ensure!(expiry > ct); // Expiry must be strictly in the future.
                           // Compute the initial hash contribution.
@@ -107,7 +111,12 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
 
 /// Contribute to the game. The parameter to this method is a single byte-array
 /// of length 32.
-#[receive(contract = "simple_game", name = "receive_contribute", low_level)]
+#[receive(
+    contract = "simple_game",
+    name = "receive_contribute",
+    low_level,
+    parameter = "Contribution"
+)]
 #[inline(always)]
 fn contribute<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,
@@ -227,10 +236,11 @@ fn finalize<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ensure!(ct >= state.expiry); // Cannot finalize before expiry time.
     ensure!(!state.contributions.is_empty()); // Already finalized.
     ensure!(ctx.sender().matches_account(&ctx.owner())); // Only the owner can finalize.
-                                                         // sort the btreemap by the second key.
-                                                         // This would be unnecessary if we swapped the values in the BTreeMap so that
-                                                         // the hash would come first, the iterator would then give ordered values
-                                                         // already.
+
+    // Sort the btreemap by the second key.
+    // This would be unnecessary if we swapped the values in the BTreeMap so that
+    // the hash would come first, the iterator would then give ordered values
+    // already.
     let mut v = state.contributions.iter().collect::<Vec<_>>();
     v.sort_by_key(|triple| &(triple.1).1);
     // Split the first element off from the rest. The first element has the lowest
