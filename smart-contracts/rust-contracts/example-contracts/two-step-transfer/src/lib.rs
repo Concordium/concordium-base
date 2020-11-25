@@ -139,7 +139,7 @@ fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     Ok(state)
 }
 
-#[receive(contract = "two_step_transfer", name = "deposit")]
+#[receive(contract = "two-step-transfer", name = "deposit")]
 #[inline(always)]
 fn contract_receive_deposit<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     _ctx: &R,

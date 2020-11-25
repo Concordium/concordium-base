@@ -1,0 +1,36 @@
+[package]
+name = "every-example"
+version = "0.1.0"
+authors = ["Concordium AG <info@concordium.com>"]
+edition = "2018"
+
+[features]
+build-schema = [
+    "counter/build-schema",
+    "erc20/build-schema",
+    "escrow/build-schema",
+    "rate-limited/build-schema",
+    "fib/build-schema",
+    "lockup/build-schema",
+    "two-step-transfer/build-schema",
+    "simple-game/build-schema"
+]
+
+[dependencies]
+counter = {path = "../counter"}
+erc20 = {path = "../erc20"}
+escrow = {path = "../escrow"}
+rate-limited = {path = "../rate-limited"}
+fib = {path = "../fib"}
+lockup = {path = "../lockup"}
+two-step-transfer = {path = "../two-step-transfer"}
+simple-game = {path = "../simple-game"}
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+# Tell `rustc` to optimize for small code size.
+opt-level = 3
+# Don't unwind on panics, just trap.
+# panic = "abort"
