@@ -1,4 +1,4 @@
-mod constants;
+pub mod constants;
 #[cfg(feature = "enable-ffi")]
 mod ffi;
 mod types;

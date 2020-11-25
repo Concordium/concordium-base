@@ -1,15 +1,136 @@
-use std::time::Duration;
-
+use anyhow::bail;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-
-use wasm_chain_integration::{ConcordiumAllowedImports, ProcessedImports, TestHost};
-use wasm_transform::{artifact::ArtifactNamedImport, machine::Value, *};
+use std::time::Duration;
+use wasm_chain_integration::{
+    constants::MAX_ACTIVATION_FRAMES, ConcordiumAllowedImports, Energy, ProcessedImports, TestHost,
+};
+use wasm_transform::{
+    artifact::{ArtifactNamedImport, TryFromImport},
+    machine::{Host, Value},
+    types::{FunctionType, ValueType},
+    *,
+};
 
 static CONTRACT_BYTES_SIMPLE_GAME: &[u8] = include_bytes!("./simple_game.wasm");
 static CONTRACT_BYTES_COUNTER: &[u8] = include_bytes!("./counter.wasm");
 static CONTRACT_BYTES_MINIMAL: &[u8] = include_bytes!("./code/minimal.wasm");
 static CONTRACT_BYTES_INSTRUCTIONS: &[u8] = include_bytes!("./code/instruction.wasm");
 static CONTRACT_BYTES_MEMORY_INSTRUCTIONS: &[u8] = include_bytes!("./code/memory-instruction.wasm");
+static CONTRACT_BYTES_LOOP: &[u8] = include_bytes!("./code/loop-energy.wasm");
+
+struct MeteringHost {
+    energy:            Energy,
+    activation_frames: u32,
+}
+
+struct MeteringImport {
+    tag: MeteringFunc,
+    ty:  FunctionType,
+}
+
+enum MeteringFunc {
+    ChargeEnergy,
+    TrackCall,
+    TrackReturn,
+    ChargeMemoryAlloc,
+}
+
+impl TryFromImport for MeteringImport {
+    // NB: This does not check whether the types are correct.
+    fn try_from_import(
+        _ty: &[types::FunctionType],
+        import: types::Import,
+    ) -> artifact::CompileResult<Self> {
+        let m = &import.mod_name;
+        if m.name == "concordium_metering" {
+            match import.item_name.name.as_ref() {
+                "account_energy" => {
+                    let tag = MeteringFunc::ChargeEnergy;
+                    let ty = FunctionType {
+                        parameters: vec![ValueType::I64],
+                        result:     None,
+                    };
+                    Ok(MeteringImport {
+                        tag,
+                        ty,
+                    })
+                }
+                "track_call" => {
+                    let tag = MeteringFunc::TrackCall;
+                    let ty = FunctionType {
+                        parameters: vec![],
+                        result:     None,
+                    };
+                    Ok(MeteringImport {
+                        tag,
+                        ty,
+                    })
+                }
+                "track_return" => {
+                    let tag = MeteringFunc::TrackReturn;
+                    let ty = FunctionType {
+                        parameters: vec![],
+                        result:     None,
+                    };
+                    Ok(MeteringImport {
+                        tag,
+                        ty,
+                    })
+                }
+                "account_memory" => {
+                    let tag = MeteringFunc::ChargeMemoryAlloc;
+                    let ty = FunctionType {
+                        parameters: vec![ValueType::I32],
+                        result:     Some(ValueType::I32),
+                    };
+                    Ok(MeteringImport {
+                        tag,
+                        ty,
+                    })
+                }
+                name => bail!("Unsupported import {}.", name),
+            }
+        } else {
+            bail!("Unsupported import.")
+        }
+    }
+
+    fn ty(&self) -> &types::FunctionType { &self.ty }
+}
+
+impl Host<MeteringImport> for MeteringHost {
+    #[inline(always)]
+    fn tick_initial_memory(&mut self, num_pages: u32) -> machine::RunResult<()> {
+        self.energy.charge_memory_alloc(num_pages)
+    }
+
+    #[inline]
+    fn call(
+        &mut self,
+        f: &MeteringImport,
+        _memory: &mut Vec<u8>,
+        stack: &mut machine::RuntimeStack,
+    ) -> machine::RunResult<()> {
+        match f.tag {
+            MeteringFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() }),
+            MeteringFunc::TrackCall => {
+                if let Some(fr) = self.activation_frames.checked_sub(1) {
+                    self.activation_frames = fr;
+                    Ok(())
+                } else {
+                    bail!("Too many nested functions.")
+                }
+            }
+            MeteringFunc::TrackReturn => {
+                self.activation_frames += 1;
+                Ok(())
+            }
+            MeteringFunc::ChargeMemoryAlloc => {
+                self.energy.charge_memory_alloc(unsafe { stack.peek_u32() })
+            }
+        }
+    }
+}
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     {
@@ -208,6 +329,40 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     )
                 })
             });
+        }
+
+        group.finish();
+    }
+
+    {
+        let mut group = c.benchmark_group("Exhaust energy");
+
+        group.measurement_time(Duration::from_secs(20));
+
+        let skeleton = parse::parse_skeleton(black_box(CONTRACT_BYTES_LOOP)).unwrap();
+        let mut module = validate::validate_module(&TestHost, &skeleton).unwrap();
+        module.inject_metering().unwrap();
+        let artifact = module.compile::<MeteringImport>().unwrap();
+        for energy in [1000, 10000, 100000, 1000000].iter() {
+            group.bench_with_input(
+                format!("execute with energy n = {}", energy),
+                energy,
+                |b, &energy| {
+                    b.iter(|| {
+                        let mut host = MeteringHost {
+                            energy:            Energy {
+                                energy,
+                            },
+                            activation_frames: MAX_ACTIVATION_FRAMES,
+                        };
+                        assert!(
+                            // Should fail due to out of energy.
+                            artifact.run(&mut host, "loop", &[Value::I32(0)]).is_err(),
+                            "Precondition violation."
+                        )
+                    })
+                },
+            );
         }
 
         group.finish();
