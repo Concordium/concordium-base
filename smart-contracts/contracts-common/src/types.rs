@@ -45,6 +45,114 @@ impl<'de> SerdeDeserialize<'de> for Amount {
     }
 }
 
+#[cfg(feature = "std")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AmountParseError {
+    Overflow,
+    ExpectedDot,
+    ExpectedDigit,
+    ExpectedMore,
+    ExpectedDigitOrDot,
+    AtMostSixDecimals,
+}
+
+#[cfg(feature = "std")]
+impl std::fmt::Display for AmountParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use AmountParseError::*;
+        match self {
+            Overflow => write!(f, "Amount overflow."),
+            ExpectedDot => write!(f, "Expected dot."),
+            ExpectedDigit => write!(f, "Expected digit."),
+            ExpectedMore => write!(f, "Expected more input."),
+            ExpectedDigitOrDot => write!(f, "Expected digit or dot."),
+            AtMostSixDecimals => write!(f, "Amounts can have at most six decimals."),
+        }
+    }
+}
+
+/// Parse from string in GTU units. The input string must be of the form
+/// `n[.m]` where `n` and `m` are both digits. The notation `[.m]` indicates
+/// that that part is optional.
+///
+/// - if `n` starts with 0 then it must be 0l
+/// - `m` can have at most 6 digits, and must have at least 1
+/// - both `n` and `m` must be non-negative.
+#[cfg(feature = "std")]
+impl std::str::FromStr for Amount {
+    type Err = AmountParseError;
+
+    fn from_str(v: &str) -> Result<Self, Self::Err> {
+        let mut micro_gtu: u64 = 0;
+        let mut after_dot = 0;
+        let mut state = 0;
+        for c in v.chars() {
+            match state {
+                0 => {
+                    // looking at the first character.
+                    if let Some(d) = c.to_digit(10) {
+                        if d == 0 {
+                            state = 1;
+                        } else {
+                            micro_gtu = u64::from(d);
+                            state = 2;
+                        }
+                    } else {
+                        return Err(AmountParseError::ExpectedDigit);
+                    }
+                }
+                1 => {
+                    // we want to be looking at a dot now (unless we reached the end, in which case
+                    // this is not reachable anyhow)
+                    if c != '.' {
+                        return Err(AmountParseError::ExpectedDot);
+                    } else {
+                        state = 3;
+                    }
+                }
+                2 => {
+                    // we are reading a normal number until we hit the dot.
+                    if let Some(d) = c.to_digit(10) {
+                        micro_gtu = micro_gtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
+                        micro_gtu = micro_gtu
+                            .checked_add(u64::from(d))
+                            .ok_or(AmountParseError::Overflow)?;
+                    } else if c == '.' {
+                        state = 3;
+                    } else {
+                        return Err(AmountParseError::ExpectedDigitOrDot);
+                    }
+                }
+                3 => {
+                    // we're reading after the dot.
+                    if after_dot >= 6 {
+                        return Err(AmountParseError::AtMostSixDecimals);
+                    }
+                    if let Some(d) = c.to_digit(10) {
+                        micro_gtu = micro_gtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
+                        micro_gtu = micro_gtu
+                            .checked_add(u64::from(d))
+                            .ok_or(AmountParseError::Overflow)?;
+                        after_dot += 1;
+                    } else {
+                        return Err(AmountParseError::ExpectedDigit);
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+        if state == 0 || state >= 3 && after_dot == 0 {
+            return Err(AmountParseError::ExpectedMore);
+        }
+        for _ in 0..6 - after_dot {
+            micro_gtu = micro_gtu.checked_mul(10).ok_or(AmountParseError::Overflow)?;
+        }
+        Ok(Amount {
+            micro_gtu,
+        })
+    }
+}
+
 impl Amount {
     /// Create amount from a number of microGTU
     #[inline(always)]

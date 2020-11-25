@@ -31,4 +31,4 @@ criterion = "0.3"
 [dependencies.contracts-common]
 version = "0.1"
 path = "../contracts-common"
-features = ["derive-serde"]
+features = ["derive-serde", "std"]

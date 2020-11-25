@@ -7,6 +7,7 @@ use std::{
     io::{Read, Write},
     path::PathBuf,
     process::exit,
+    str::FromStr,
 };
 use structopt::StructOpt;
 use wasm_chain_integration::*;
@@ -84,10 +85,10 @@ struct Runner {
     #[structopt(
         name = "amount",
         long = "amount",
-        help = "The amount of micro GTU to invoke the method with.",
+        help = "The amount of GTU to invoke the method with.",
         default_value = "0"
     )]
-    amount: u64,
+    amount: String,
     #[structopt(
         name = "schema",
         long = "schema",
@@ -222,6 +223,8 @@ pub fn main() {
                 println!("Error: Only one parameter is allowed.");
                 exit(1);
             }
+            let amount =
+                contracts_common::Amount::from_str(&runner.amount).expect("Invalid amount");
 
             let module = fs::read(&runner.module).expect("Could not read module file.");
 
@@ -333,7 +336,7 @@ pub fn main() {
                     let name = format!("init_{}", contract_name);
                     let res = invoke_init_with_metering_from_source(
                         &module,
-                        runner.amount,
+                        amount.micro_gtu,
                         init_ctx,
                         &name,
                         parameter,
@@ -419,7 +422,7 @@ pub fn main() {
                     let name = format!("{}.{}", contract_name, func);
                     let res = invoke_receive_with_metering_from_source(
                         &module,
-                        runner.amount,
+                        amount.micro_gtu,
                         receive_ctx,
                         &init_state,
                         &name,
