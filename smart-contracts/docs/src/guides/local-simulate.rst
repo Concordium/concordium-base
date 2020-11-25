@@ -28,28 +28,73 @@ Simulating instantiation
 ========================
 
 To simulate the instantiation of a smart contract instance using
-``cargo-concordium``,
+``cargo-concordium``.
 
 .. code-block:: sh
 
-    cargo concordium run init --source contract.wasm \
+    cargo concordium run init --module contract.wasm \
                               --contract "my_contract" \
                               --context init-context.json \
                               --amount 12345 \
                               --parameter-bin parameter.bin \
                               --out-bin state.bin
 
+``--context``: Here the ``init-context.json`` is a file containing context such
+as the current state of the chain and the sender of the transaction and which
+account invoked this function. An example of this context could be:
+
+.. code-block:: json
+
+    {
+        "metadata": {
+            "slotNumber": 1,
+            "blockHeight": 1,
+            "finalizedHeight": 1,
+            "slotTime": 0
+        },
+        "initOrigin": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
+    }
+
+
 Simulating updates
 ==================
 
+To simulate an update to a contract smart contract instance using
+``cargo-concordium``.
 
 .. code-block:: sh
 
-    cargo concordium run receive --source contract.wasm \
-                                 --contract "my_contract" \
-                                 --name "some_receive" \
-                                 --context receive-context.json \
-                                 --amount 12345 \
-                                 --parameter-bin parameter.bin \
-                                 --state-bin state-in.bin \
-                                 --out-bin state-out.bin
+    cargo concordium run update --module contract.wasm \
+                                --contract "my_contract" \
+                                --func "some_receive" \
+                                --context receive-context.json \
+                                --amount 12345 \
+                                --parameter-bin parameter.bin \
+                                --state-bin state-in.bin \
+                                --out-bin state-out.bin
+
+``--context``: Here the ``receive-context.json`` is a file containing context
+such as the current state of the chain and the sender of the transaction, which
+account invoked this function and which account or address is send the current
+message.
+An example of this context could be:
+
+.. code-block:: json
+
+    {
+        "metadata": {
+            "slotNumber": 1,
+            "blockHeight": 1,
+            "finalizedHeight": 1,
+            "slotTime": 0
+        },
+        "invoker": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF",
+        "selfAddress": {"index": 0, "subindex": 0},
+        "selfBalance": "0",
+        "sender": {
+            "type": "account",
+            "address": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
+        },
+        "owner": "3uxeCZwa3SxbksPWHwXWxCsaPucZdzNaXsRbkztqUUYRo1MnvF"
+    }
+
