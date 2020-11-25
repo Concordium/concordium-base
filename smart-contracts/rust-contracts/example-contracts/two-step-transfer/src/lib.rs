@@ -32,7 +32,7 @@ use concordium_sc_base::{collections::*, *};
  */
 
 // Types
-#[derive(Serialize)]
+#[derive(Serialize, SchemaType)]
 enum Message {
     // Indicates that the user sending the message would like to make a request
     // to send funds to the given address with the given ID and amount.
@@ -116,7 +116,7 @@ impl From<ParseError> for InitError {
     fn from(_: ParseError) -> Self { InitError::ParseParams }
 }
 
-#[init(contract = "two-step-transfer")]
+#[init(contract = "two-step-transfer", parameter = "InitParams")]
 #[inline(always)]
 fn contract_init<I: HasInitContext<()>, L: HasLogger>(
     ctx: &I,
@@ -176,7 +176,7 @@ impl From<ParseError> for ReceiveError {
     fn from(_: ParseError) -> Self { ReceiveError::ParseParams }
 }
 
-#[receive(contract = "two-step-transfer", name = "receive")]
+#[receive(contract = "two-step-transfer", name = "receive", parameter = "Message")]
 #[inline(always)]
 fn contract_receive_message<R: HasReceiveContext<()>, L: HasLogger, A: HasActions>(
     ctx: &R,

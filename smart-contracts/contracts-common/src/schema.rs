@@ -568,7 +568,7 @@ mod impls {
                 }
                 Type::Amount => {
                     let n = Amount::deserial(source)?;
-                    Ok(Value::String(n.to_string()))
+                    Ok(Value::String(n.micro_gtu.to_string()))
                 }
                 Type::AccountAddress => {
                     let address = AccountAddress::deserial(source)?;

@@ -1,16 +1,18 @@
-use crate::build::*;
+use crate::{build::*, schema_json::*};
 use clap::AppSettings;
-use contracts_common::to_bytes;
+use contracts_common::{from_bytes, to_bytes};
 use std::{
     fs,
     fs::File,
     io::{Read, Write},
     path::PathBuf,
+    process::exit,
 };
 use structopt::StructOpt;
 use wasm_chain_integration::*;
 
 mod build;
+mod schema_json;
 
 #[derive(Debug, StructOpt)]
 #[structopt(bin_name = "cargo")]
@@ -58,25 +60,26 @@ enum Command {
 #[derive(Debug, StructOpt, Clone)]
 #[structopt(name = "runner")]
 struct Runner {
-    #[structopt(
-        name = "source",
-        long = "source",
-        // default_value = "contract.wasm",
-        help = "Binary module source."
-    )]
+    #[structopt(name = "source", long = "source", help = "Binary module source.")]
     source: PathBuf,
     #[structopt(
-        name = "out",
-        long = "out",
-        help = "Where to write the new contract state to. Defaults to stdout if not given."
+        name = "out-bin",
+        long = "out-bin",
+        help = "Where to write the new contract state to in binary format."
     )]
-    out: Option<PathBuf>,
+    out_bin: Option<PathBuf>,
     #[structopt(
-        name = "hex",
-        long = "hex",
-        help = "Whether to write the state as a hex string or not. Defaults to binary."
+        name = "out-json",
+        long = "out-json",
+        help = "Where to write the new contract state to in JSON format."
     )]
-    hex_state: bool,
+    out_json: Option<PathBuf>,
+    #[structopt(
+        name = "ignore-state-schema",
+        long = "ignore-state-schema",
+        help = "Disable displaying the state as JSON when a schema for the state is present."
+    )]
+    ignore_state_schema: bool,
     #[structopt(
         name = "amount",
         long = "amount",
@@ -85,12 +88,26 @@ struct Runner {
     )]
     amount: u64,
     #[structopt(
-        name = "parameter",
-        long = "parameter",
-        help = "Path to a file with a parameter to invoke the method with. Parameter defaults to \
-                an empty array if this is not given."
+        name = "schema",
+        long = "schema",
+        help = "Path to a file with a schema for parsing parameter or state in JSON"
     )]
-    parameter: Option<PathBuf>,
+    schema_path: Option<PathBuf>,
+    #[structopt(
+        name = "parameter-bin",
+        long = "parameter-bin",
+        help = "Path to a binary file with a parameter to invoke the method with. Parameter \
+                defaults to an empty array if this is not given."
+    )]
+    parameter_bin_path: Option<PathBuf>,
+    #[structopt(
+        name = "parameter-json",
+        long = "parameter-json",
+        help = "Path to a JSON file with a parameter to invoke the method with. The JSON is \
+                parsed using a schema, requiring the module to have an appropriate schema \
+                embedded or otherwise provided by --schema."
+    )]
+    parameter_json_path: Option<PathBuf>,
     #[structopt(
         name = "energy",
         long = "energy",
@@ -108,8 +125,7 @@ enum RunCommand {
             name = "contract",
             long = "contract",
             short = "c",
-            help = "Name of the contract to instantiate.",
-            default_value = "init"
+            help = "Name of the contract to instantiate."
         )]
         contract_name: String,
         #[structopt(
@@ -141,11 +157,18 @@ enum RunCommand {
         func: String,
 
         #[structopt(
-            name = "state",
-            long = "state",
-            help = "File with existing state of the contract."
+            name = "state-json",
+            long = "state-json",
+            help = "File with existing state of the contract in JSON, requires a schema is \
+                    present either embedded or using --schema."
         )]
-        state: PathBuf,
+        state_json_path: Option<PathBuf>,
+        #[structopt(
+            name = "state-bin",
+            long = "state-bin",
+            help = "File with existing state of the contract in binary."
+        )]
+        state_bin_path: Option<PathBuf>,
         #[structopt(
             name = "balance",
             long = "balance",
@@ -193,67 +216,106 @@ pub fn main() {
                     ..
                 } => (contract_name, runner),
             };
-            let source = fs::read(&runner.source).expect("Could not read file.");
+
+            if runner.parameter_bin_path.is_some() && runner.parameter_json_path.is_some() {
+                println!("Error: Only one parameter is allowed.");
+                exit(1);
+            }
+
+            let source = fs::read(&runner.source).expect("Could not read module file.");
+
+            let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
+                let bytes = fs::read(schema_path).expect("Failed reading schema file");
+                let schema = from_bytes(&bytes).expect("Failed to parse schema file");
+                Some(schema)
+            } else {
+                get_embedded_schema(&source).ok()
+            };
+
+            let contract_schema_opt = module_schema_opt
+                .as_ref()
+                .and_then(|module_schema| module_schema.contracts.get(&contract_name));
+            let contract_schema_state_opt =
+                contract_schema_opt.and_then(|contract_schema| contract_schema.state.clone());
+            let contract_schema_func_opt =
+                contract_schema_opt.and_then(|contract_schema| match run_cmd.clone() {
+                    RunCommand::Init {
+                        ..
+                    } => contract_schema.init.as_ref(),
+                    RunCommand::Receive {
+                        func,
+                        ..
+                    } => contract_schema.receive.get(&func),
+                });
 
             let print_result = |state: State, logs: Logs| {
                 for (i, item) in logs.iterate().enumerate() {
                     println!("{}: {:#?}", i, item)
                 }
                 let state = &state.state;
-                if runner.hex_state {
-                    let output = hex::encode(state);
-                    match &runner.out {
-                        None => println!("The new state is: {}", output),
-                        Some(fp) => {
-                            let mut out_file =
-                                File::create(fp).expect("Could not create output file.");
-                            out_file
-                                .write_all(output.as_bytes())
-                                .expect("Could not write out the state.");
+                let output = match (runner.ignore_state_schema, &contract_schema_state_opt) {
+                    (false, Some(state_schema)) => {
+                        let s = state_schema
+                            .to_json_string_pretty(&state)
+                            .expect("Deserializing using state schema failed");
+                        if runner.schema_path.is_some() {
+                            format!("(Using provided schema)\n{}", s)
+                        } else {
+                            format!("(Using embedded schema)\n{}", s)
                         }
                     }
-                } else {
-                    let output = match get_embedded_schema(&source) {
-                        Ok(module_schema) => {
-                            if let Some(contract_schema) =
-                                module_schema.contracts.get(&contract_name)
-                            {
-                                if let Some(state_schema) = &contract_schema.state {
-                                    let s = state_schema
-                                        .to_json_string_pretty(&state)
-                                        .expect("Deserializing using state schema failed");
-                                    format!("(Using embedded schema)\n{}", s)
-                                } else {
-                                    format!("(No schema found for contract state)\n{:?}", state)
-                                }
-                            } else {
-                                format!("(No schema found for contract)\n{:?}", state)
-                            }
-                        }
-                        Err(err) => format!("(Failed to get schema: {})\n{:?}", err, state),
-                    };
-                    match &runner.out {
-                        None => println!("The new state is: {}\n", output),
-                        Some(fp) => {
-                            let mut out_file =
-                                File::create(fp).expect("Could not create output file.");
-                            out_file.write_all(&state).expect("Could not write out the state.")
-                        }
-                    }
+                    _ => format!("(No schema found for contract state)\n{:?}", state),
+                };
+                println!("The new state is: {}\n", output);
+
+                if let Some(file_path) = &runner.out_bin {
+                    let mut out_file =
+                        File::create(file_path).expect("Could not create output file.");
+                    out_file.write_all(&state).expect("Could not write out the state.")
+                }
+                if let Some(file_path) = &runner.out_json {
+                    contract_schema_opt.expect(
+                        "Schema is required for outputting state in JSON. No schema found for \
+                         this contract.",
+                    );
+                    let schema_state = contract_schema_state_opt.as_ref().expect(
+                        "Schema is required for outputting state in JSON. No schema found the \
+                         state in this contract.",
+                    );
+                    let json_string = schema_state
+                        .to_json_string_pretty(&state)
+                        .expect("Failed encoding state to JSON.");
+                    fs::write(file_path, json_string).expect("Could not write out the state.");
                 }
             };
 
-            let parameter = match &runner.parameter {
-                None => Vec::new(),
-                Some(param_file) => {
-                    let mut param_file =
-                        File::open(&param_file).expect("Could not open parameter file.");
-                    let mut input = Vec::new();
-                    param_file
-                        .read_to_end(&mut input)
-                        .expect("Could not read from parameter file.");
-                    input
+            let parameter = if let Some(param_file) = &runner.parameter_bin_path {
+                fs::read(&param_file).expect("Could read parameter file.")
+            } else if let Some(param_file) = &runner.parameter_json_path {
+                // Find the right schema type
+                if contract_schema_opt.is_none() {
+                    println!(
+                        "Error: No schema found for contract, the schema is required for \
+                         inputting JSON."
+                    );
+                    exit(1);
                 }
+                let parameter_schema = contract_schema_func_opt
+                    .expect("Contract schema did not contain a schema for this parameter.");
+
+                let file = fs::read(&param_file).expect("Could read parameter file.");
+                let parameter_json: serde_json::Value =
+                    serde_json::from_slice(&file).expect("Failed parsing json");
+                let mut parameter_bytes = Vec::new();
+                write_bytes_from_json_schema_type(
+                    &parameter_schema,
+                    &parameter_json,
+                    &mut parameter_bytes,
+                )
+                .expect("Failed parsing bytes");
+                parameter_bytes
+            } else {
+                Vec::new()
             };
 
             match run_cmd {
@@ -268,7 +330,7 @@ pub fn main() {
                             .expect("Could not parse init context")
                     };
                     let name = format!("init_{}", contract_name);
-                    let res = invoke_init_from_source(
+                    let res = invoke_init_with_metering_from_source(
                         &source,
                         runner.amount,
                         init_ctx,
@@ -301,7 +363,8 @@ pub fn main() {
                 RunCommand::Receive {
                     ref contract_name,
                     ref func,
-                    ref state,
+                    ref state_bin_path,
+                    ref state_json_path,
                     balance,
                     ref context,
                     ..
@@ -309,23 +372,51 @@ pub fn main() {
                     let mut receive_ctx: contracts_common::ReceiveContext = {
                         let ctx_file = File::open(context).expect("Could not open context file.");
                         serde_json::from_reader(std::io::BufReader::new(ctx_file))
-                            .expect("Could not parse init context")
+                            .expect("Could not parse receive context")
                     };
                     if let Some(balance) = balance {
                         receive_ctx.self_balance =
                             contracts_common::Amount::from_micro_gtu(balance);
                     }
 
-                    // initial state of the smart contract, read from a file.
-                    let init_state = {
-                        let mut file = File::open(&state).expect("Could not read state file.");
-                        let metadata = file.metadata().expect("Could not read file metadata.");
-                        let mut init_state = Vec::with_capacity(metadata.len() as usize);
-                        file.read_to_end(&mut init_state).expect("Reading the state file failed.");
-                        init_state
+                    // initial state of the smart contract, read from either a binary or json file.
+                    let init_state = match (state_bin_path, state_json_path) {
+                        (None, None) => panic!(
+                            "The current state is required for simulating an update to a contract \
+                             instance. Use either --state-bin or --state-json."
+                        ),
+                        (Some(_), Some(_)) => panic!(
+                            "Only one state is allowed, choose either --state-bin or --state-json."
+                        ),
+                        (Some(file_path), None) => {
+                            let mut file =
+                                File::open(&file_path).expect("Could not read state file.");
+                            let metadata = file.metadata().expect("Could not read file metadata.");
+                            let mut init_state = Vec::with_capacity(metadata.len() as usize);
+                            file.read_to_end(&mut init_state)
+                                .expect("Reading the state file failed.");
+                            init_state
+                        }
+                        (None, Some(file_path)) => {
+                            let schema_state = contract_schema_state_opt
+                                .as_ref()
+                                .expect("A schema for the state must be present to use JSON.");
+                            let file = fs::read(&file_path).expect("Could read parameter file.");
+                            let state_json: serde_json::Value =
+                                serde_json::from_slice(&file).expect("Failed parsing json");
+                            let mut state_bytes = Vec::new();
+                            write_bytes_from_json_schema_type(
+                                &schema_state,
+                                &state_json,
+                                &mut state_bytes,
+                            )
+                            .expect("Failed parsing bytes");
+                            state_bytes
+                        }
                     };
+
                     let name = format!("{}.{}", contract_name, func);
-                    let res = invoke_receive_from_source(
+                    let res = invoke_receive_with_metering_from_source(
                         &source,
                         runner.amount,
                         receive_ctx,
@@ -401,7 +492,7 @@ pub fn main() {
                             println!("Remaining energy is {}.", remaining_energy)
                         }
                         ReceiveResult::OutOfEnergy => {
-                            println!("Receive call terminated with out of energy.")
+                            println!("Receive call terminated with: out of energy.")
                         }
                     }
                 }
