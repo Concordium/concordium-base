@@ -29,6 +29,16 @@ import Concordium.Utils.Serialization
 
 type ModuleSource = ByteString
 
+-- * Constants
+
+-- |Maximum length of the parameter to init and receive methods.
+maxParameterLen :: Word16
+maxParameterLen = 1024
+
+-- |Maximum module size.
+maxWasmModuleSize :: Word32
+maxWasmModuleSize = 65536 -- 65kB
+
 -- | A processed module artifact ready for execution.
 newtype ModuleArtifact = ModuleArtifact { artifact :: ByteString }
     deriving(Eq, Show)
@@ -99,6 +109,8 @@ instance AE.FromJSON ReceiveName where
     else fail "Invalid receive name."
 
 -- |Parameter to either an init method or to a receive method.
+-- The parameter is limited to 1kB in size. This is ensured
+-- by deserialization methods.
 newtype Parameter = Parameter { parameter :: ShortByteString }
     deriving(Eq, Show)
     deriving(AE.ToJSON, AE.FromJSON) via ByteStringHex
@@ -307,7 +319,9 @@ instance Serialize WasmModule where
   get = do
     wasmVersion <- getWord32be
     unless (wasmVersion == 0) $ fail "Unsupported Wasm module version."
-    wasmSource <- getByteStringWord32
+    len <- getWord32be
+    unless (len <= maxWasmModuleSize) $ fail "Maximum module size exceeded."
+    wasmSource <- getByteString (fromIntegral len)
     return WasmModule{..}
 
 instance HashableTo H.Hash WasmModule where
@@ -333,8 +347,11 @@ instance Serialize ReceiveName where
               | otherwise -> fail $ "Not a valid receive name: " ++ Text.unpack t
 
 instance Serialize Parameter where
-  put = putShortByteStringWord32 . parameter
-  get = Parameter <$> getShortByteStringWord32
+  put = putShortByteStringWord16 . parameter
+  get = do
+    len <- getWord16be
+    unless (len <= maxParameterLen) $ fail "Parameter size exceeds limits."
+    Parameter <$> getShortByteString (fromIntegral len)
 
 instance Serialize InitContext where
   put (InitContext origin) = put origin

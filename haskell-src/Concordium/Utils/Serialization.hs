@@ -182,3 +182,16 @@ putShortByteStringWord32 :: Putter ShortByteString
 putShortByteStringWord32 bs =
   let len = fromIntegral (BSS.length bs)
   in putWord32be len <> putShortByteString bs
+
+-- |Get a bytestring with length serialized as big-endian 2 bytes.
+getShortByteStringWord16 :: Get ShortByteString
+getShortByteStringWord16 = do
+  len <- fromIntegral <$> getWord16be
+  getShortByteString len
+
+-- |Put a bytestring with length serialized as big-endian 2 bytes.
+-- This function assumes the string length fits into 2 bytes.
+putShortByteStringWord16 :: Putter ShortByteString
+putShortByteStringWord16 bs =
+  let len = fromIntegral (BSS.length bs)
+  in putWord16be len <> putShortByteString bs
