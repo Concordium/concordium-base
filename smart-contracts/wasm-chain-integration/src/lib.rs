@@ -1,10 +1,10 @@
-mod constants;
+pub mod constants;
 #[cfg(feature = "enable-ffi")]
 mod ffi;
 mod types;
 
 use anyhow::{anyhow, bail, ensure};
-use constants::MAX_CONTRACT_STATE;
+use constants::{MAX_ACTIVATION_FRAMES, MAX_CONTRACT_STATE};
 use contracts_common::*;
 use machine::Value;
 use std::{
@@ -243,6 +243,9 @@ impl State {
 struct InitHost<'a> {
     /// Remaining energy for execution.
     energy: Energy,
+    /// Remaining amount of activation frames.
+    /// In other words, how many more functions can we call in a nested way.
+    activation_frames: u32,
     /// Logs produced during execution.
     logs: Logs,
     /// The contract's state.
@@ -256,6 +259,9 @@ struct InitHost<'a> {
 struct ReceiveHost<'a> {
     /// Remaining energy for execution.
     energy: Energy,
+    /// Remaining amount of activation frames.
+    /// In other words, how many more functions can we call in a nested way.
+    activation_frames: u32,
     /// Logs produced during execution.
     logs: Logs,
     /// The contract's state.
@@ -367,14 +373,8 @@ fn call_common<C: HasCommon>(
 
 impl<'a> machine::Host<ProcessedImports> for InitHost<'a> {
     #[inline(always)]
-    fn tick_energy(&mut self, x: u64) -> machine::RunResult<()> {
-        if self.energy.energy >= x {
-            self.energy.energy -= x;
-            Ok(())
-        } else {
-            self.energy.energy = 0;
-            bail!("Out of energy.")
-        }
+    fn tick_initial_memory(&mut self, num_pages: u32) -> machine::RunResult<()> {
+        self.energy.charge_memory_alloc(num_pages)
     }
 
     #[inline]
@@ -388,9 +388,14 @@ impl<'a> machine::Host<ProcessedImports> for InitHost<'a> {
             ImportFunc::ChargeEnergy => {
                 self.energy.tick_energy(unsafe { stack.pop_u64() })?;
             }
-            ImportFunc::ChargeStackSize => {
-                self.energy.charge_stack(unsafe { stack.pop_u64() })?;
+            ImportFunc::TrackCall => {
+                if let Some(fr) = self.activation_frames.checked_sub(1) {
+                    self.activation_frames = fr
+                } else {
+                    bail!("Too many nested functions.")
+                }
             }
+            ImportFunc::TrackReturn => self.activation_frames += 1,
             ImportFunc::ChargeMemoryAlloc => {
                 self.energy.charge_memory_alloc(unsafe { stack.peek_u32() })?;
             }
@@ -497,14 +502,8 @@ impl<'a> ReceiveHost<'a> {
 
 impl<'a> machine::Host<ProcessedImports> for ReceiveHost<'a> {
     #[inline(always)]
-    fn tick_energy(&mut self, x: u64) -> machine::RunResult<()> {
-        if self.energy.energy >= x {
-            self.energy.energy -= x;
-            Ok(())
-        } else {
-            self.energy.energy = 0;
-            bail!("Out of energy.")
-        }
+    fn tick_initial_memory(&mut self, num_pages: u32) -> machine::RunResult<()> {
+        self.energy.charge_memory_alloc(num_pages)
     }
 
     #[inline]
@@ -516,7 +515,14 @@ impl<'a> machine::Host<ProcessedImports> for ReceiveHost<'a> {
     ) -> machine::RunResult<()> {
         match f.tag {
             ImportFunc::ChargeEnergy => self.energy.tick_energy(unsafe { stack.pop_u64() })?,
-            ImportFunc::ChargeStackSize => self.energy.charge_stack(unsafe { stack.pop_u64() })?,
+            ImportFunc::TrackCall => {
+                if let Some(fr) = self.activation_frames.checked_sub(1) {
+                    self.activation_frames = fr
+                } else {
+                    bail!("Too many nested functions.")
+                }
+            }
+            ImportFunc::TrackReturn => self.activation_frames += 1,
             ImportFunc::ChargeMemoryAlloc => {
                 self.energy.charge_memory_alloc(unsafe { stack.peek_u32() })?
             }
@@ -542,13 +548,14 @@ pub fn invoke_init<C: RunnableCode>(
     energy: u64,
 ) -> ExecResult<InitResult> {
     let mut host = InitHost {
-        energy:   Energy {
+        energy:            Energy {
             energy,
         },
-        logs:     Logs::new(),
-        state:    State::new(None),
-        param:    &parameter,
-        init_ctx: &init_ctx,
+        activation_frames: MAX_ACTIVATION_FRAMES,
+        logs:              Logs::new(),
+        state:             State::new(None),
+        param:             &parameter,
+        init_ctx:          &init_ctx,
     };
 
     let (res, _) = artifact.run(&mut host, init_name, &[Value::I64(amount as i64)])?;
@@ -620,14 +627,15 @@ pub fn invoke_receive<C: RunnableCode>(
     energy: u64,
 ) -> ExecResult<ReceiveResult> {
     let mut host = ReceiveHost {
-        energy:      Energy {
+        energy:            Energy {
             energy,
         },
-        logs:        Logs::new(),
-        state:       State::new(Some(current_state)),
-        param:       &parameter,
-        receive_ctx: &receive_ctx,
-        outcomes:    Outcome::new(),
+        activation_frames: MAX_ACTIVATION_FRAMES,
+        logs:              Logs::new(),
+        state:             State::new(Some(current_state)),
+        param:             &parameter,
+        receive_ctx:       &receive_ctx,
+        outcomes:          Outcome::new(),
     };
 
     let (res, _) = artifact.run(&mut host, receive_name, &[Value::I64(amount as i64)])?;
@@ -713,9 +721,7 @@ pub fn invoke_receive_with_metering_from_source(
 pub struct TrapHost;
 
 impl<I> machine::Host<I> for TrapHost {
-    fn tick_energy(&mut self, _x: u64) -> machine::RunResult<()> {
-        bail!("TrapHost tick_energy not implemented.")
-    }
+    fn tick_initial_memory(&mut self, _num_pages: u32) -> machine::RunResult<()> { Ok(()) }
 
     fn call(
         &mut self,
@@ -790,8 +796,9 @@ impl std::fmt::Display for ReportError {
 }
 
 impl machine::Host<ArtifactNamedImport> for TestHost {
-    fn tick_energy(&mut self, _x: u64) -> machine::RunResult<()> {
-        bail!("TrapHost tick_energy not implemented.")
+    fn tick_initial_memory(&mut self, _num_pages: u32) -> machine::RunResult<()> {
+        // The test host does not count energy.
+        Ok(())
     }
 
     fn call(

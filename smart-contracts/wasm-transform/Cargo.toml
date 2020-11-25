@@ -12,6 +12,3 @@ num_enum = "0.5"
 
 [lib]
 crate-type = ["rlib"]
-
-[profile.release]
-debug=true

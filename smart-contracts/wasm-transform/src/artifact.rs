@@ -951,7 +951,7 @@ impl Handler<&OpCode> for BackPatch {
         Ok(())
     }
 
-    fn finish(self) -> CompileResult<Self::Outcome> {
+    fn finish(self, _state: &ValidationState) -> CompileResult<Self::Outcome> {
         ensure!(self.backpatch.stack.is_empty(), "There are still jumps to backpatch.");
         Ok(self.out)
     }

@@ -136,7 +136,7 @@ stages:
   script:
     - cd wasm-chain-integration
     - echo "Running clippy"
-    - cargo clippy --color=always --tests -- -Dclippy::all
+    - cargo clippy --color=always --tests --benches -- -Dclippy::all
 
 "contracts-common lint:fmt":
   extends: .generic-lint

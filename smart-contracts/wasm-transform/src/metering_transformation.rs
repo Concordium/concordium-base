@@ -7,15 +7,24 @@ use std::{convert::TryInto, rc::Rc};
 
 /// TODO set these indices to the imports of the respective accounting host
 /// functions. They should be given by the specification.
+/// The type of this function should be i64 -> ()
 pub const FN_IDX_ACCOUNT_ENERGY: FuncIndex = 0;
-pub const FN_IDX_ACCOUNT_STACK_SIZE: FuncIndex = 1;
-pub const FN_IDX_MEMORY_ALLOC: FuncIndex = 2;
+/// Dynamically track calls to enable us to limit the number of active
+/// frames.
+/// The type of this function should be unit to unit.
+pub const FN_IDX_TRACK_CALL: FuncIndex = 1;
+/// Track returns so that we can keep the count correctly.
+/// The type of this function should be () -> ().
+pub const FN_IDX_TRACK_RETURN: FuncIndex = 2;
+/// Charge for memory allocation. The type of this
+/// function should be i32 -> i32.
+pub const FN_IDX_MEMORY_ALLOC: FuncIndex = 3;
 
 /// The number of added functions. All functions that are in the source module
 /// will have the indices shifted by this amount.
 /// The table as well must be updated by increasing all the function indices by
 /// this constant.
-pub const NUM_ADDED_FUNCTIONS: FuncIndex = 3;
+pub const NUM_ADDED_FUNCTIONS: FuncIndex = 4;
 
 /// Result of a transformation. The transformation should generally not fail on
 /// a well-formed module, i.e., one that has been validated. But we might want
@@ -41,76 +50,114 @@ fn lookup_label(labels: &[BlockType], idx: LabelIndex) -> TransformationResult<u
 /// specification yet, and the values chosen here are rather exemplary; they
 /// still have to be carefully determined.
 pub mod cost {
-    pub type Energy = u64; // TODO import type from elsewhere
+    pub type Energy = u64;
     use super::*;
 
-    // General costs
-    pub const FUNC_FRAME_BASE: Energy = 10;
-    pub const LOOKUP: Energy = 10;
-    pub const JUMP: Energy = 1;
+    /// Part of a cost of a function call related to allocating
+    /// a new function frame and storing values of locals, etc.
+    pub const FUNC_FRAME_BASE: Energy = 1000;
+
+    /// Cost of a jump (either Br, Loop, or analogous)
+    /// Jumps are simply setting the instruction pointer, so
+    /// they are priced cheaply.
+    pub const JUMP: Energy = 2;
     pub const JUMP_STACK: Energy = 1;
 
+    /// Read n elements from the stack.
     pub const fn read_stack(n: usize) -> Energy { (n as Energy) * 2 }
 
+    /// Write n elements to the stack.
     pub const fn write_stack(n: u32) -> Energy { (n as Energy) * 2 }
 
-    pub const fn copy_stack(n: usize) -> Energy { (n as Energy) * 8 }
+    /// Copy n elements from one place in the stack to another.
+    /// Used by jumps and function returns.
+    pub const fn copy_stack(n: usize) -> Energy { n as Energy }
 
+    /// Cost of a boolean test.
     pub const TEST: Energy = 2;
+    /// Cost of a bounds check in, for example, BrTable, and memory loads
+    /// and stores.
     pub const BOUNDS: Energy = 10;
 
-    pub const fn read_mem(n: usize) -> Energy { 100 + (n as Energy) * 5 }
+    /// Cost of reading n bytes from linear memory.
+    pub const fn read_mem(n: usize) -> Energy { 10 + (n as Energy) * 5 }
 
-    pub const fn write_mem(n: usize) -> Energy { 100 + (n as Energy) * 5 }
+    /// Cost of writing n bytes to linear memory.
+    pub const fn write_mem(n: usize) -> Energy { 10 + (n as Energy) * 5 }
 
-    // Numeric instructions
+    /// # Numeric instructions
+    /// Base cost of a unary instruction.
     pub const UNOP: Energy = read_stack(1) + write_stack(1);
-    pub const BINOP: Energy = read_stack(1) + write_stack(1);
+    /// Base cost of a binary instruction.
+    pub const BINOP: Energy = read_stack(2) + write_stack(1);
+    /// Cost of a `const` instruction.
     pub const CONST: Energy = write_stack(1);
+
+    /// Cost of a simple unary instruction. Which at present contains
+    /// all unary numeric instructions.
     pub const SIMPLE_UNOP: Energy = UNOP + 1;
+
+    /// Cost of a simple binary instruction. This includes all bit
+    /// operations, and addition and subtraction.
     pub const SIMPLE_BINOP: Energy = BINOP + 1;
     /// See for example https://streamhpc.com/blog/2012-07-16/how-expensive-is-an-operation-on-a-cpu/
+    /// The cost of `MUL`, `DIV` and `REM` is in general more, so we account for
+    /// that.
     pub const MUL: Energy = BINOP + 4;
     pub const DIV: Energy = BINOP + 10;
     pub const REM: Energy = BINOP + 10;
 
     /// Parametric instructions
-    pub const DROP: Energy = JUMP_STACK;
-    pub const SELECT: Energy = TEST + JUMP_STACK + copy_stack(1);
+    pub const DROP: Energy = 1;
+    pub const SELECT: Energy = TEST + copy_stack(1);
 
-    /// Variable instructions
+    /// Local variable instructions are cheap. We treat them as stack
+    /// operations.
     pub const GET_LOCAL: Energy = read_stack(1) + write_stack(1);
     pub const SET_LOCAL: Energy = read_stack(1) + write_stack(1);
     pub const TEE_LOCAL: Energy = read_stack(1) + write_stack(1);
-    /// TODO: The current specification distinguishes between 4 or 8 bytes, but
-    /// to simplify implementation (we would need to lookup the type of the
-    /// global index) we might not want to change this to not distinguish.
-    pub const GET_GLOBAL: Energy = read_mem(8);
-    pub const SET_GLOBAL: Energy = write_mem(8); // NB: We do not distinguish between 4 or 8 bytes.
+    /// Looking up globals is cheap compared to linear memory.
+    /// So we price it analogously.
+    pub const GET_GLOBAL: Energy = read_stack(1) + 10;
+    pub const SET_GLOBAL: Energy = read_stack(1) + 10;
 
-    /// Memory instructions
-    pub const fn load(n: usize) -> Energy { SIMPLE_BINOP + BOUNDS + read_mem(n) }
+    /// # Memory instructions.
+    /// Load n bytes from linear memoryl
+    pub const fn load(n: usize) -> Energy { BOUNDS + read_mem(n) }
 
-    pub const fn store(n: usize) -> Energy { SIMPLE_BINOP + BOUNDS + write_mem(n) }
+    /// Store n bytes in linear memory.
+    pub const fn store(n: usize) -> Energy { BOUNDS + write_mem(n) }
 
-    pub const MEMSIZE: Energy = 100;
+    /// Checking memory size is reasonably expensive and should not be used
+    /// much. So we price it quite high.
+    pub const MEMSIZE: Energy = write_stack(1) + 100;
     /// Constant part for the memory grow instruction.
-    pub const MEMGROW: Energy = 1000;
+    pub const MEMGROW: Energy = read_stack(1) + write_stack(1) + 100;
 
-    // Control instructions
-    pub const NOP: Energy = JUMP;
+    /// Control instructions
+    ///
+    /// A Nop really does not cost anything, but it does take up space, so we
+    /// give it the least possible cost
+    pub const NOP: Energy = 1;
 
+    /// The if statement boils down to a test and a jump afterwards.
+    /// Jumps are simply setting the instruction pointer.
     pub const IF_STATEMENT: Energy = TEST + JUMP;
 
+    /// Cost of an unconditional jump with the given label arity.
+    /// The label arity for us is either 0 or 1, since we do not support
+    /// multiple return values.
     pub const fn branch(label_arity: usize) -> Energy { JUMP + copy_stack(label_arity) }
 
-    /// This is only the cost to be charged before the replacement instruction.
+    /// BR_IF is almost the same as an IF statement, so we price it the same.
     pub const BR_IF: Energy = IF_STATEMENT;
 
-    pub const fn br_table(label_arity: usize) -> Energy { BOUNDS + LOOKUP + branch(label_arity) }
+    /// Cost of a branch with table (switch statement). This involves bounds
+    /// checking on the array of labels, and then a normal branch.
+    pub const fn br_table(label_arity: usize) -> Energy { BOUNDS + branch(label_arity) }
 
-    /// Cost for invoking a function (to be charged before invocation),
-    /// excluding the cost incurred by the number of locals the function
+    /// Cost for invoking a function __before__ the entering the function.
+    /// This excludes the cost incurred by the number of locals the function
     /// defines (for the latter, see `invoke_after`).
     pub const fn invoke_before(num_args: usize, num_res: usize) -> Energy {
         // Enter frame
@@ -122,16 +169,24 @@ pub mod cost {
     /// Cost incurred by the number of locals when invoking a function (to be
     /// charged after invocation).
     pub const fn invoke_after(num_locals: u32) -> Energy {
-        // Enter frame
-        write_stack(num_locals)
+        // Enter frame and allocate the given number of locals.
+        // We want to charge for this quite steeply since it can lead
+        // to a lot of memory use.
+        100 * (num_locals as Energy)
     }
 
+    /// Cost of call_indirect with the given number of arguments and results.
+    /// This is expensive since it involves a dynamic type check.
     pub const fn call_indirect(num_args: usize, num_res: usize) -> Energy {
-        BOUNDS + LOOKUP + type_check(num_args + num_res) + invoke_before(num_args, num_res)
+        BOUNDS + type_check(num_args + num_res) + invoke_before(num_args, num_res)
     }
 
-    pub const fn type_check(len: usize) -> Energy { 5 + ((2 * len) as Energy) }
+    /// Cost of a dynamic type check. The argument is the number of types
+    /// i.e., parameters + results that need to be checked.
+    pub const fn type_check(len: usize) -> Energy { 500 + ((2 * len) as Energy) }
 
+    /// Get the cost of the given instruction in the context of the stack of
+    /// labels, and the module.
     pub fn get_cost<C: HasTransformationContext>(
         instr: &OpCode,
         labels: &[BlockType],
@@ -153,7 +208,19 @@ pub mod cost {
                 default,
                 ..
             } => br_table(lookup_label(labels, *default)?),
-            Return => 0,
+            Return => {
+                // Return has the same cost as Br to the outermost branch.
+                let return_ty = labels
+                    .first()
+                    .ok_or_else(|| anyhow!("Invariant violation, labels should not be empty."))?;
+                branch(
+                    if *return_ty == BlockType::EmptyType {
+                        0
+                    } else {
+                        1
+                    },
+                )
+            }
             Call(idx) => {
                 let (num_args, num_res) = module.get_func_type_len(*idx)?;
                 invoke_before(num_args, num_res)
@@ -162,7 +229,7 @@ pub mod cost {
                 let (num_args, num_res) = module.get_type_len(*ty_idx)?;
                 call_indirect(num_args, num_res)
             }
-            End => 0, // FIXME: Perhapse we could charge for cleanup.
+            End => 0,
             Else => 0,
 
             // Parametric instructions
@@ -177,26 +244,25 @@ pub mod cost {
             GlobalSet(_) => SET_GLOBAL,
 
             // Memory instructions
-            // NB: The cost is currently always based on whether it is an I32 or an I64 instruction.
             I32Load(_) => load(4),
             I64Load(_) => load(8),
-            I32Load8S(_) => load(4),
-            I32Load8U(_) => load(4),
-            I32Load16S(_) => load(4),
-            I32Load16U(_) => load(4),
-            I64Load8S(_) => load(8),
-            I64Load8U(_) => load(8),
-            I64Load16S(_) => load(8),
-            I64Load16U(_) => load(8),
-            I64Load32S(_) => load(8),
-            I64Load32U(_) => load(8),
+            I32Load8S(_) => load(1),
+            I32Load8U(_) => load(1),
+            I32Load16S(_) => load(2),
+            I32Load16U(_) => load(2),
+            I64Load8S(_) => load(1),
+            I64Load8U(_) => load(1),
+            I64Load16S(_) => load(2),
+            I64Load16U(_) => load(2),
+            I64Load32S(_) => load(4),
+            I64Load32U(_) => load(4),
             I32Store(_) => store(4),
             I64Store(_) => store(8),
-            I32Store8(_) => store(4),
-            I32Store16(_) => store(4),
-            I64Store8(_) => store(8),
-            I64Store16(_) => store(8),
-            I64Store32(_) => store(8),
+            I32Store8(_) => store(1),
+            I32Store16(_) => store(2),
+            I64Store8(_) => store(1),
+            I64Store16(_) => store(2),
+            I64Store32(_) => store(4),
             MemorySize => MEMSIZE,
             MemoryGrow => MEMGROW,
 
@@ -455,10 +521,17 @@ impl<'b, C: HasTransformationContext> InstrSeqTransformer<'b, C> {
                 } => self.add_instr_account_energy(instr),
                 // We need to change which function we call since we've inserted NUM_ADDED_FUNCTIONS
                 // functions at the beginning of the module, for cost accounting.
-                Call(idx) => self.add_instr_account_energy(&Call(idx + NUM_ADDED_FUNCTIONS)),
+                Call(idx) => {
+                    self.add_to_pending(&Call(FN_IDX_TRACK_CALL));
+                    self.add_instr_account_energy(&Call(idx + NUM_ADDED_FUNCTIONS));
+                    self.add_to_new(&Call(FN_IDX_TRACK_RETURN));
+                }
                 // The call indirect function does not have to be reindexed since the table is.
-                CallIndirect(_) => self.add_instr_account_energy(instr),
-
+                CallIndirect(_) => {
+                    self.add_to_pending(&Call(FN_IDX_TRACK_CALL));
+                    self.add_instr_account_energy(instr);
+                    self.add_to_new(&Call(FN_IDX_TRACK_RETURN));
+                }
                 _ => {
                     // In all other cases, just add the instruction to the pending instructions.
                     self.add_to_pending(instr);
@@ -606,9 +679,9 @@ impl Module {
             parameters: vec![ValueType::I64],
             result:     None,
         }));
-        // account stack size
+        // account call/return
         new_types.push(Rc::new(FunctionType {
-            parameters: vec![ValueType::I32],
+            parameters: Vec::new(),
             result:     None,
         }));
         // account memory alloc
@@ -637,7 +710,18 @@ impl Module {
                 name: "concordium_metering".to_owned(),
             },
             item_name:   Name {
-                name: "account_stack".to_owned(),
+                name: "track_call".to_owned(),
+            },
+            description: ImportDescription::Func {
+                type_idx: num_types_originally + 1,
+            },
+        });
+        new_imports.push(Import {
+            mod_name:    Name {
+                name: "concordium_metering".to_owned(),
+            },
+            item_name:   Name {
+                name: "track_return".to_owned(),
             },
             description: ImportDescription::Func {
                 type_idx: num_types_originally + 1,

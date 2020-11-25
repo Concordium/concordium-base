@@ -10,8 +10,9 @@ use std::{convert::TryInto, io::Write};
 
 /// The host that can process external functions.
 pub trait Host<I> {
-    /// Charge the given amount of energy.
-    fn tick_energy(&mut self, x: u64) -> RunResult<()>;
+    /// Charge the given amount of energy for the initial memory.
+    /// The argument is the number of pages.
+    fn tick_initial_memory(&mut self, num_pages: u32) -> RunResult<()>;
     /// Call the specified host function, giving it access to the current memory
     /// and stack. The return value of `Ok(())` signifies that execution
     /// succeeded and the machine should proceeed, the return value of
@@ -352,11 +353,14 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                 ValueType::I64 => stack.push(StackValue::from(0i64)),
             }
         }
-        // FIXME: Charge for initial memory allocation.
         let mut memory = {
             if let Some(m) = self.memory.as_ref() {
+                host.tick_initial_memory(m.init_size)?;
                 // This is safe since maximum initial memory is limited to 32 pages.
-                let mut memory = vec![0u8; (m.init_size * PAGE_SIZE) as usize];
+                let mut memory = vec![0u8; (MAX_NUM_PAGES * PAGE_SIZE) as usize];
+                unsafe {
+                    memory.set_len((m.init_size * PAGE_SIZE) as usize);
+                }
                 for data in m.init.iter() {
                     (&mut memory[data.offset as usize..]).write_all(&data.init)?;
                 }
@@ -366,7 +370,7 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
             }
         };
 
-        let max_memory = self.memory.as_ref().map(|x| x.max_size).unwrap_or(MAX_NUM_PAGES) as usize;
+        let max_memory = self.memory.as_ref().map(|x| x.max_size).unwrap_or(0) as usize;
 
         let mut pc = 0;
         let mut instructions: &[u8] = outer_function.code();
@@ -708,7 +712,9 @@ impl<I: TryFromImport, R: RunnableCode> Artifact<I, R> {
                     if sz + n as usize > max_memory {
                         val.short = -1i32;
                     } else {
-                        memory.resize((sz + n as usize) * PAGE_SIZE as usize, 0);
+                        if n != 0 {
+                            unsafe { memory.set_len((sz + n as usize) * PAGE_SIZE as usize) }
+                        }
                         val.short = sz as i32;
                     }
                 }

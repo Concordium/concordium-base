@@ -224,7 +224,7 @@ fn test_num_1() {
         FunctionType::empty(),
         vec![I64Const(1234567890), I32Const(43), I32Const(50), I32DivS, I32WrapI64, I64Sub],
         flatten![
-            energy!(ENTRY + 3 * CONST + 2 * SIMPLE_BINOP + DIV),
+            energy!(ENTRY + 3 * CONST + SIMPLE_UNOP + SIMPLE_BINOP + DIV),
             stack!(S),
             [I64Const(1234567890), I32Const(43), I32Const(50), I32DivS, I32WrapI64, I64Sub],
             stack!(-S)
@@ -268,7 +268,7 @@ fn test_return() {
         FunctionType::empty(),
         vec![I32Const(10), I32Const(20), I32Add, Return, I32Const(30), End],
         flatten![
-            energy!(ENTRY + 2 * CONST + SIMPLE_BINOP),
+            energy!(ENTRY + 2 * CONST + SIMPLE_BINOP + branch(0)),
             stack!(S),
             [I32Const(10), I32Const(20), I32Add],
             stack!(-S),
@@ -296,7 +296,13 @@ fn test_call() {
         flatten![
             energy!(ENTRY + 2 * CONST + invoke_before(2, 1)),
             stack!(S),
-            [I32Const(10), I32Const(20), Call(NUM_ADDED_FUNCTIONS)],
+            [
+                I32Const(10),
+                I32Const(20),
+                Call(FN_IDX_TRACK_CALL),
+                Call(NUM_ADDED_FUNCTIONS),
+                Call(FN_IDX_TRACK_RETURN)
+            ],
             energy!(CONST + SIMPLE_BINOP),
             [I32Const(40), I32Sub],
             stack!(-S),
@@ -326,7 +332,14 @@ fn test_call_indirect() {
         flatten![
             energy!(ENTRY + 3 * CONST + call_indirect(2, 1)),
             stack!(S),
-            [I32Const(10), I32Const(20), I32Const(0), CallIndirect(1)],
+            [
+                I32Const(10),
+                I32Const(20),
+                I32Const(0),
+                Call(FN_IDX_TRACK_CALL),
+                CallIndirect(1),
+                Call(FN_IDX_TRACK_RETURN)
+            ],
             energy!(CONST + SIMPLE_BINOP),
             [I32Const(40), I32Sub],
             stack!(-S),
