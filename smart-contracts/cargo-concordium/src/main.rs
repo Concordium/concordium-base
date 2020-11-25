@@ -216,7 +216,12 @@ pub fn main() {
                     ..
                 } => (contract_name, runner),
             };
-            println!("runner {:?}", runner.source);
+
+            if runner.parameter_bin_path.is_some() && runner.parameter_json_path.is_some() {
+                println!("Error: Only one parameter is allowed.");
+                exit(1);
+            }
+
             let source = fs::read(&runner.source).expect("Could not read module file.");
 
             let module_schema_opt = if let Some(schema_path) = &runner.schema_path {
@@ -283,11 +288,6 @@ pub fn main() {
                     fs::write(file_path, json_string).expect("Could not write out the state.");
                 }
             };
-
-            if runner.parameter_bin_path.is_some() && runner.parameter_json_path.is_some() {
-                println!("Error: Only one parameter is allowed.");
-                exit(1);
-            }
 
             let parameter = if let Some(param_file) = &runner.parameter_bin_path {
                 fs::read(&param_file).expect("Could read parameter file.")
