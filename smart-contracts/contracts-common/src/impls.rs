@@ -498,11 +498,13 @@ impl<K: Serial + Ord, V: Serial> Serial for BTreeMap<K, V> {
 }
 
 /// The deserialization of maps assumes their size as a u32.
-/// Deserialization will only succeed if the key-value pairs are ordered.
-impl<K: Deserial + Ord + Copy, V: Deserial> Deserial for BTreeMap<K, V> {
+///
+/// <b style="color: darkred">WARNING</b>: Deserialization does ensure the
+/// ordering of the keys is correct.
+impl<K: Deserial + Ord, V: Deserial> Deserial for BTreeMap<K, V> {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
-        deserial_map_no_length(source, len as usize)
+        deserial_map_no_length_no_order_check(source, len as usize)
     }
 }
 
@@ -518,11 +520,13 @@ impl<K: Serial + Ord> Serial for BTreeSet<K> {
 }
 
 /// The deserialization of sets assumes their size as a u32.
-/// Deserialization will only succeed if the keys are ordered.
-impl<K: Deserial + Ord + Copy> Deserial for BTreeSet<K> {
+///
+/// <b style="color: darkred">WARNING</b>: Deserialization does ensure the
+/// ordering of the items is correct.
+impl<K: Deserial + Ord> Deserial for BTreeSet<K> {
     fn deserial<R: Read>(source: &mut R) -> ParseResult<Self> {
         let len: u32 = source.get()?;
-        deserial_set_no_length(source, len as usize)
+        deserial_set_no_length_no_order_check(source, len as usize)
     }
 }
 
