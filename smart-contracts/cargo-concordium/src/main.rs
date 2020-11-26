@@ -54,6 +54,18 @@ enum Command {
             help = "Builds the contract schema and writes it to file at specified location."
         )]
         schema_out: Option<PathBuf>,
+        #[structopt(
+            name = "out",
+            long = "out",
+            short = "o",
+            help = "Writes the resulting module to file at specified location."
+        )]
+        out: Option<PathBuf>,
+        #[structopt(
+            raw = true,
+            help = "Extra arguments passed to `cargo build` when building Wasm module."
+        )]
+        cargo_args: Vec<String>,
     },
 }
 
@@ -515,23 +527,29 @@ pub fn main() {
         Command::Build {
             schema_embed,
             schema_out,
+            out,
+            cargo_args
         } => {
             let build_schema = schema_embed || schema_out.is_some();
             let schema_to_embed = if build_schema {
-                let module_schema = match build_contract_schema() {
-                    Ok(schema) => schema,
+                match build_contract_schema(&cargo_args) {
+                    Ok(schema) => Some(schema),
                     Err(err) => {
                         eprintln!("Failed building schema {}", err);
-                        panic!()
+                        exit(1)
                     }
-                };
-
-                for (contract_name, contract_schema) in module_schema.contracts.iter() {
-                    print_contract_schema(contract_name, contract_schema);
                 }
-                let module_schema_bytes = to_bytes(&module_schema);
+            } else {
+                None
+            };
+            let res = build_contract(&schema_to_embed, out, &cargo_args);
+            if let Some(module_schema) = &schema_to_embed {
+                for (contract_name, contract_schema) in module_schema.contracts.iter() {
+                    print_contract_schema(&contract_name, &contract_schema);
+                }
+                let module_schema_bytes = to_bytes(module_schema);
                 eprintln!(
-                    "Total size of the module schema is: {} bytes",
+                    "\nTotal size of the module schema is: {} bytes",
                     module_schema_bytes.len()
                 );
 
@@ -541,14 +559,8 @@ pub fn main() {
                 }
                 if schema_embed {
                     eprintln!("Embedding schema into contract module.");
-                    Some(module_schema)
-                } else {
-                    None
                 }
-            } else {
-                None
-            };
-            let res = build_contract(schema_to_embed);
+            }
             match res {
                 Ok(_) => eprintln!("\nDone building your smart contract."),
                 Err(err) => eprintln!("\nFailed building your smart contract: {}", err),
@@ -561,40 +573,18 @@ fn print_contract_schema(
     contract_name: &str,
     contract_schema: &contracts_common::schema::Contract,
 ) {
-    println!("\n Schema for contract: {}\n", contract_name);
-    let contract_schema_bytes = to_bytes(contract_schema);
-    match &contract_schema.state {
-        Some(state_schema) => {
-            println!("Contract state: {}:\n{:#?}\n", contract_name, state_schema);
-        }
-        None => {
-            println!(
-                "No schema found for the contract state. Did you annotate the state data with \
-                 `#[contract_state(...)]`?
-
-#[contract_state(contract = \"my-contract\")]
-struct State {{ ... }}
-"
-            );
-        }
+    println!("\nContract schema: '{}' in total {} bytes", contract_name, to_bytes(contract_schema).len());
+    if let Some(state_schema) = &contract_schema.state {
+        println!("  state: {} bytes", to_bytes(state_schema).len());
+    }
+    if let Some(init_schema) = &contract_schema.init {
+        println!("  init: {} bytes", to_bytes(init_schema).len())
     }
 
-    if contract_schema.receive.is_empty() {
-        println!(
-            "No schemas found for method parameters.
-
-To include a schema for a method parameter specify the parameter type as an attribute to \
-             `#[init(..)]` or `#[receive(..)]`
-            #[init(..., parameter = \"MyParamType\")]     or     #[receive(..., parameter = \
-             \"MyParamType\")]
-"
-        )
-    } else {
-        println!("Found schemas for the following methods:\n");
+    if !contract_schema.receive.is_empty() {
+        println!("  receive:");
         for (method_name, param_type) in contract_schema.receive.iter() {
-            println!("'{}': {:#?}\n", method_name, param_type);
+            println!("   - '{}': {} bytes", method_name, to_bytes(param_type).len());
         }
     }
-
-    println!("Size of this contract schema is {} bytes.\n", contract_schema_bytes.len());
 }

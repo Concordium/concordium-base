@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use ansi_term::{Color, Style};
 use anyhow::Context;
 use cargo_toml::Manifest;
@@ -20,7 +21,7 @@ use wasm_transform::{
 
 fn to_snake_case(string: String) -> String { string.to_lowercase().replace("-", "_") }
 
-pub fn build_contract(embed_schema: Option<schema::Module>) -> anyhow::Result<()> {
+pub fn build_contract(embed_schema: &Option<schema::Module>, out: Option<PathBuf>, cargo_args: &Vec<String>) -> anyhow::Result<()> {
     let manifest = Manifest::from_path("Cargo.toml")
         .map_err(|err| anyhow::anyhow!("Failed reading manifest: {}", err))?;
     let package =
@@ -31,6 +32,7 @@ pub fn build_contract(embed_schema: Option<schema::Module>) -> anyhow::Result<()
         .args(&["--target", "wasm32-unknown-unknown"])
         .args(&["--release"])
         .args(&["--target-dir", "target/concordium"])
+        .args(cargo_args)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output()
@@ -53,11 +55,13 @@ pub fn build_contract(embed_schema: Option<schema::Module>) -> anyhow::Result<()
 
     validate_module(&ConcordiumAllowedImports, &skeleton)?;
 
-    let mut wasm_file = File::create(&filename)?;
+    let out_filename = out.unwrap_or(PathBuf::from(filename));
+
+    let mut wasm_file = File::create(&out_filename)?;
 
     // Embed schema custom section
     if let Some(schema) = embed_schema {
-        let schema_bytes = to_bytes(&schema);
+        let schema_bytes = to_bytes(schema);
 
         let custom_section = CustomSection {
             name:     Name {
@@ -71,12 +75,13 @@ pub fn build_contract(embed_schema: Option<schema::Module>) -> anyhow::Result<()
     } else {
         skeleton.output(&mut wasm_file)?;
     }
+
     Ok(())
 }
 
 /// Generates the contract schema by compiling with the 'build-schema' feature
 /// Then extracts the schema from the schema build
-pub fn build_contract_schema() -> anyhow::Result<schema::Module> {
+pub fn build_contract_schema(cargo_args: &Vec<String>) -> anyhow::Result<schema::Module> {
     let manifest =
         Manifest::from_path("Cargo.toml").context("Failed reading Cargo.toml manifest.")?;
 
@@ -98,14 +103,15 @@ pub fn build_contract_schema() -> anyhow::Result<schema::Module> {
         .args(&["--target", "wasm32-unknown-unknown"])
         .arg("--release")
         .args(&["--features", "build-schema"])
-        .args(&["--target-dir", "target/schema"])
+        .args(&["--target-dir", "target/concordium"])
+        .args(cargo_args)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output()
         .with_context(|| "Failed building contract schemas.")?;
 
     let filename = format!(
-        "target/schema/wasm32-unknown-unknown/release/{}.wasm",
+        "target/concordium/wasm32-unknown-unknown/release/{}.wasm",
         to_snake_case(package.name)
     );
 
