@@ -96,6 +96,7 @@ pub fn build_contract_schema() -> anyhow::Result<schema::Module> {
     Command::new("cargo")
         .arg("build")
         .args(&["--target", "wasm32-unknown-unknown"])
+        .arg("--release")
         .args(&["--features", "build-schema"])
         .args(&["--target-dir", "target/schema"])
         .stdout(Stdio::inherit())
@@ -103,8 +104,10 @@ pub fn build_contract_schema() -> anyhow::Result<schema::Module> {
         .output()
         .with_context(|| "Failed building contract schemas.")?;
 
-    let filename =
-        format!("target/schema/wasm32-unknown-unknown/debug/{}.wasm", to_snake_case(package.name));
+    let filename = format!(
+        "target/schema/wasm32-unknown-unknown/release/{}.wasm",
+        to_snake_case(package.name)
+    );
 
     let wasm = std::fs::read(filename).context("Failed reading contract schema output artifact")?;
     let schema = generate_contract_schema(&wasm)?;
