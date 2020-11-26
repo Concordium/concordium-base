@@ -70,6 +70,7 @@ The documentation is split into four categories
    :maxdepth: 1
    :caption: References
 
+   references/schema-json
    references/host-fns
    concordium-sc-base (crate docs) <https://crates.io/crates/concordium-sc-base>
    Rust contract examples (repo) <https://gitlab.com/Concordium/smart-contracts/-/tree/master/rust-contracts/example-contracts>

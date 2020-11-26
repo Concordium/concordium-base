@@ -35,7 +35,7 @@ To simulate the instantiation of a smart contract instance using
     cargo concordium run init --module contract.wasm \
                               --contract "my_contract" \
                               --context init-context.json \
-                              --amount 12345 \
+                              --amount 123456.789 \
                               --parameter-bin parameter.bin \
                               --out-bin state.bin
 
@@ -68,7 +68,7 @@ To simulate an update to a contract smart contract instance using
                                 --contract "my_contract" \
                                 --func "some_receive" \
                                 --context receive-context.json \
-                                --amount 12345 \
+                                --amount 123456.789 \
                                 --parameter-bin parameter.bin \
                                 --state-bin state-in.bin \
                                 --out-bin state-out.bin

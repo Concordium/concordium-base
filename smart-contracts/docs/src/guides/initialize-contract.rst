@@ -30,10 +30,24 @@ the transaction.
 Initializing
 ============
 
-To initialize an instance of a smart contract from a deployed module, run the
-following command:
+To create an instance of a smart contract from a deployed module, we need a
+reference to the deployed module.
 
 .. code-block:: sh
 
-    concordium-client contract init <module-tbd> --energy <max-energy> [--func <init-name>] [--params <binary-file>] [--path] [--name <name>]
+    concordium-client contract init <module-reference-or-name> \
+                                    --contract <name-of-contract>
 
+.. _init-passing-parameters:
+
+Passing parameter
+-----------------
+
+To pass a parameter to the ``init``-function we can use ``--parameter-bin
+<binary-file>`` or if a contract schema is present, either embedded in the
+module or provided with ``--schema <schema-file>``, we can use
+``--parameter-json <json-file>``.
+
+.. seealso::
+
+    For a reference on how the schema is used with JSON see :ref:`schema-json`.

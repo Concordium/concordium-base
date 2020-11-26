@@ -41,6 +41,12 @@ The solution is to capture this information in a *Smart contract schema*, which
 describes how to make structure from the bytes, and can be used by external
 tools.
 
+.. note::
+
+    Tools like ``concordium-client`` can use a schema to serialize JSON into bytes
+    for when :ref:`specifying a parameter<init-passing-parameters>`, and deserialize the
+    state of contract instances to JSON.
+
 The schema is then either embedded into the smart contract module deployed
 to the chain, or is written to a file and passed around off-chain.
 
@@ -104,7 +110,7 @@ Rust programming language:
     enum Fields {
         Named(List (String, Type)),
         Unnamed(List Type),
-        Unit,
+        Empty,
     }
 
 
@@ -122,9 +128,6 @@ of a variable length type, such as ``List``.
 
 For a reference to how a schema type is serialized into bytes, we refer the
 reader to the `implementation in Rust`_.
-
-.. todo::
-    Link implementation of schema::Type
 
 .. _contract-schema-which-to-choose:
 

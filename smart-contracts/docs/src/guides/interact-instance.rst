@@ -31,13 +31,23 @@ enough GTU to pay for the transaction.
 Interaction
 ===========
 
-To interact with a smart contract instance, run the following command
+A smart contract instance can be updated using the following command:
 
 .. code-block:: sh
 
-    concordium-client contract update <index-or-name> --energy <max-energy> [--func <receive-name>] [--params <binary-file>] [--subindex <address-subindex>]
+    concordium-client contract update <index-or-local-name> \
+                                      [--subindex <address-subindex>] \
+                                      --contract <name-of-contract> \
+                                      --func <function-to-invoke>
 
-- <index-or-name> can be either an index or a contract name.
-- Similar to init, it takes an optional --func flag, which defaults to
-  "receive".
-- Parameters work in the same way as with init.
+Passing parameter
+-----------------
+
+To pass a parameter to the ``init``-function we can use ``--parameter-bin
+<binary-file>`` or if a contract schema is present, either embedded in the
+module or provided with ``--schema <schema-file>``, we can use
+``--parameter-json <json-file>``.
+
+.. seealso::
+
+    For a reference on how the schema is used with JSON see :ref:`schema-json`.
